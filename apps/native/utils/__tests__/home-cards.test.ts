@@ -18,7 +18,7 @@ import {
     invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
     joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
-    askedFacts, addCard, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
+    askedFacts, addCard, listOf, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
     MARK_SENT_MAX, layoutPrint, ownMarkedSave, readMarkSent, rememberMarkSent, sameList, searchCardFor, skyOf,
     homeCrowdFor, isHomeDoorbellFor,
     type HomeAnswer, type HomeCards, type HomeLayout,
@@ -767,6 +767,84 @@ describe('the safety card\'s schedule (two-doors §2.5) with the account\'s dism
         expect(cardsToAsk(defaultHomeLayout(), [], d1)).toContain('safety');
         expect(cardsToAsk(defaultHomeLayout(), [], inviteOnly)).not.toContain('safety');
         expect(cardOnNode('safety', { ...inviteOnly, me: { ...inviteOnly.me!, wayBack: 'covered' as const } })).toBe(true);
+    });
+
+    // Review of #3114, round 2: core's catalogue gate takes the answer's `me` (home-frame.ts `HomeNodeFacts.me`), and the
+    // phone hands it over wherever it reads that gate: the picker, Arrange and the drawn cards (slice D2b).
+    it('on an invite-only community (features.wordsDoor false) the picker, Arrange and the drawn cards read core\'s gate with the answer\'s me', () => {
+        const base = answer();
+        const inviteOnly = { ...base, features: { ...base.features, wordsDoor: false } };
+        const words = { ...inviteOnly, me: { ...inviteOnly.me!, wayBack: 'words' as const } };
+        // Core's own gate, given `me`, is what the phone says for every type (a covered member's ask is the phone's own: below).
+        for (const a of [inviteOnly, words, { ...inviteOnly, me: null }, { ...words, profile: 'global' }]) {
+            for (const entry of HOME_DRAWN) {
+                const core = homeCardType(entry)!.onNode({ profile: a.profile, features: a.features, cards: a.cards as Record<string, unknown>, me: a.me });
+                expect(cardOnNode(entry, a), `${entry} ${a.me?.wayBack ?? 'no wayBack'} ${a.profile}`).toBe(core);
+            }
+        }
+        expect(homeCardType('safety')!.onNode({ profile: 'local', features: { wordsDoor: false }, me: { wayBack: 'words' } })).toBe(true);
+        // Add a card offers it to a member whose list doesn't have it; not without `me.wayBack`.
+        const less = removeCard(defaultHomeLayout(), 'safety', NOW) ?? defaultHomeLayout();
+        expect(listOf(less).map(c => c.type)).not.toContain('safety');
+        const offered = (a: HomeAnswer) => pickerGroups(a, less, null).groups.flatMap(g => g.rows.map(r => r.type));
+        expect(offered(words)).toContain('safety');
+        expect(offered(inviteOnly)).not.toContain('safety');
+        // Arrange lists it among the cards that could show, and it is asked and drawn when its schedule says.
+        expect(ids(arrangeCards(EVERY.cards, [], type => cardOnNode(type, words)))).toContain('safety');
+        expect(ids(arrangeCards(EVERY.cards, [], type => cardOnNode(type, inviteOnly)))).not.toContain('safety');
+        expect(cardsToAsk(EVERY, [], words)).toContain('safety');
+        expect(draw(words, EVERY, ctx({ safetyUp: true }))).toContain('safety');
+        expect(draw(inviteOnly, EVERY, ctx({ safetyUp: true }))).not.toContain('safety');
+        // A covered member is still asked for it: the phone's card is mounted from the list and only Home's word ("covered",
+        // words false) marks its record linked and puts it away (OneWayBackCard, utils/one-way-back.ts oneWayBackFromNode).
+        const covered = { ...inviteOnly, me: { ...inviteOnly.me!, wayBack: 'covered' as const } };
+        expect(cardsToAsk(EVERY, [], covered)).toContain('safety');
+        expect(safetyWord(covered, ['safety'])).toEqual({ words: false, joinedAt: NOW - 2 * 24 * H });
+    });
+
+    // Review of #3114, round 2, finding 2: the account's say-so (`me.wordsKept`, sent on every answer of the member's own)
+    // outlives First steps, whose `steps` the node stops sending once every line is done or its days are up.
+    it('a kept say-so on the account (me.wordsKept) ends the card with no First steps sent: day 15 on global, every line done on a local community', () => {
+        const base = answer({ features: { ...answer().features, wordsDoor: false } });
+        const day15 = { ...base, profile: 'global', me: { ...base.me!, joinedAt: iso(NOW - 15 * 24 * H), wayBack: 'words' as const, wordsKept: true } };
+        expect(day15.cards.steps).toBeUndefined();
+        expect(safetyWord(day15, ['safety'])).toEqual({ words: true, joinedAt: NOW - 15 * 24 * H, door: false, kept: true });
+        expect(safetyWord({ ...day15, me: { ...day15.me, wordsKept: false } }, ['safety'])).toMatchObject({ words: true, kept: false });
+        expect(safetyWord({ ...day15, me: { ...day15.me, wordsKept: undefined } }, ['safety'])).toMatchObject({ words: true, kept: false });
+        const allDone = { ...base, me: { ...base.me!, wayBack: 'words' as const, wordsKept: true } };
+        expect(safetyWord(allDone, ['safety'])).toMatchObject({ words: true, kept: true });
+        // Only `true` says so: anything else off the network is not a say-so.
+        expect(safetyWord({ ...allDone, me: { ...allDone.me, wordsKept: 'yes' as never } }, ['safety'])).toMatchObject({ kept: false });
+        // The 12-words door's own member too (the node's card, "Add a sign-in" offered).
+        const door = { ...day15, cards: { ...day15.cards, safety: { words: true as const, signInLinked: false as const } } };
+        expect(safetyWord(door, ['safety'])).toMatchObject({ words: true, door: true, kept: true });
+        // It comes through the phone's reading of the answer, and a covered account has no reminder whatever it said.
+        const read = readHomeAnswer(JSON.parse(JSON.stringify(day15)))!;
+        expect(read.me?.wordsKept).toBe(true);
+        expect(safetyWord(read, ['safety'])).toMatchObject({ kept: true });
+        expect(safetyWord({ ...day15, me: { ...day15.me, wayBack: 'covered' as const } }, ['safety'])).toEqual({ words: false, joinedAt: NOW - 15 * 24 * H });
+    });
+
+    it('a kept say-so on the account (me.wordsKept) ticks First steps\' "Keep your 12 words safe", so the card ends when it was the last line', () => {
+        const lastLine = steps({ firstOffer: true, photo: true, interests: true, invited: true, firstNeed: true, words: false });
+        const me = { ...answer().me!, wayBack: 'words' as const };
+        const notSaid = answer({ me: { ...me, wordsKept: false }, cards: { steps: lastLine } });
+        expect(firstSteps(notSaid, { interests: [], now: NOW }).left.map(l => l.id)).toEqual(['words']);
+        expect(firstSteps(notSaid, { interests: [], now: NOW }).show).toBe(true);
+        const said = answer({ me: { ...me, wordsKept: true }, cards: { steps: lastLine } });
+        expect(firstSteps(said, { interests: [], now: NOW }).lines.find(l => l.id === 'words')?.done).toBe(true);
+        expect(firstSteps(said, { interests: [], now: NOW }).left).toEqual([]);
+        expect(firstSteps(said, { interests: [], now: NOW }).show).toBe(false);
+        // A line still open elsewhere keeps the card; the words line alone is ticked, and the count says so.
+        const open = answer({ me: { ...me, wordsKept: true }, cards: { steps: steps({ words: false }) } });
+        expect(firstSteps(open, { interests: [], now: NOW }).left.map(l => l.id)).not.toContain('words');
+        expect(firstSteps(open, { interests: [], now: NOW }).show).toBe(true);
+        // The global first week's last line too.
+        const global = answer({ profile: 'global', me: { ...me, wordsKept: true }, cards: { steps: steps({ words: false }) } });
+        expect(firstSteps(global, { interests: [], now: NOW }).lines.find(l => l.id === 'words')?.done).toBe(true);
+        // A covered account has no such line (`steps.words` null), whatever it said.
+        const covered = answer({ me: { ...me, wayBack: 'covered' as const, wordsKept: true }, cards: { steps: steps({ words: null }) } });
+        expect(firstSteps(covered, { interests: [], now: NOW }).lines.some(l => l.id === 'words')).toBe(false);
     });
 });
 

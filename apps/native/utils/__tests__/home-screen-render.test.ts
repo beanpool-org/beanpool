@@ -2109,6 +2109,89 @@ describe('Arrange offers only the cards this node can show', () => {
         await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
         expect(editRows()[0]).toBe('safety');
     });
+
+    // Review of #3114, round 2, finding 1 (slice D2b): an invite-only local node sends `wordsDoor: false`; core's gate now
+    // passes a member whose 12 words are the only way back (`me.wayBack` 'words'), and the phone hands it the answer's `me`.
+    it('an invite-only local community (wordsDoor false): "Your way back in" is asked, given Home\'s word, listed in Arrange and offered by Add a card to a member with me.wayBack words', async () => {
+        const a = everyCard('local', 1);
+        expect(a.features.wordsDoor).toBe(false);
+        node.answer = { ...a, me: { ...a.me!, wayBack: 'words' } };
+        await render();
+        expect(homeCards().at(-1)).toContain('safety');
+        // No sign-in can be added here (no `cards.safety`), and nothing said yet.
+        expect(safety.props.homeWord).toEqual({ url: NODE, standing: { words: true, joinedAt: Date.parse(a.me!.joinedAt!), door: false, kept: false } });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
+        expect(editRows()).toContain('safety');
+        expect(offeredText()).toContain('Your way back in');
+    });
+
+    it('an invite-only local community (wordsDoor false): Add a card offers "Your way back in" to a member with me.wayBack words whose list lacks it, and not to one whose node says nothing', async () => {
+        const base = everyCard('local', 1);
+        const listed = base.layout!;
+        const less = { ...listed, cards: listed.cards.filter(c => c.type !== 'safety') };
+        const offered = async (me: HomeAnswer['me']) => {
+            node.answer = { ...base, me, layout: less };
+            node.requests = [];
+            await render();
+            await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
+            await act(async () => { (document.querySelector('[data-testid="home-arrange-add"]') as HTMLElement).click(); });
+            await settle(2);
+            const rows = pickerRows();
+            act(() => root?.unmount());
+            host?.remove();
+            root = null;
+            host = null;
+            return rows;
+        };
+        const rows = await offered({ ...base.me!, wayBack: 'words' });
+        expect(rows.length).toBeGreaterThan(5);
+        expect(rows).toContain('safety');
+        expect(await offered(base.me)).not.toContain('safety');
+    });
+
+    // Review of #3114, round 2, finding 2: the node stops sending `steps` once First steps' days are up or every line is
+    // done; the account's say-so comes on every answer of the member's own (`me.wordsKept`) and still ends the card.
+    it('day 15 on global, First steps no longer sent: the account\'s say-so (me.wordsKept) reaches the card as kept', async () => {
+        const a = globalMember(15);
+        const noSteps = { ...a.cards, steps: undefined };
+        node.answer = { ...a, me: { ...a.me!, wayBack: 'words', wordsKept: true }, cards: { ...noSteps, safety: { words: true, signInLinked: false } } };
+        await render();
+        expect(homeCards().at(-1)).toContain('safety');
+        expect(safety.props.homeWord).toEqual({ url: NODE, standing: { words: true, joinedAt: Date.parse(a.me!.joinedAt!), door: true, kept: true } });
+        expect(document.querySelector('[data-testid="home-card-steps"]')).toBeNull();
+    });
+
+    it('a local member whose every First steps line is done (none sent): the account\'s say-so (me.wordsKept) reaches the card as kept; not said, it is not', async () => {
+        const a = localMember();
+        const noSteps = { ...a.cards, steps: undefined };
+        node.answer = { ...a, features: { ...a.features, wordsDoor: false }, me: { ...a.me!, wayBack: 'words', wordsKept: true }, cards: noSteps };
+        await render();
+        expect(safety.props.homeWord).toEqual({ url: NODE, standing: { words: true, joinedAt: Date.parse(a.me!.joinedAt!), door: false, kept: true } });
+        act(() => root?.unmount());
+        host?.remove();
+        root = null;
+        host = null;
+        safety.props = null;
+        node.answer = { ...node.answer, me: { ...node.answer.me!, wordsKept: false } };
+        await render();
+        expect(safety.props.homeWord.standing.kept).toBe(false);
+    });
+
+    it('First steps\' "Keep your 12 words safe": drawn while not said, gone with the card when the account\'s say-so (me.wordsKept) is its last line', async () => {
+        const a = localMember();
+        const lastLine = { ...a.cards.steps!, firstOffer: true, firstPost: true, photo: true, interests: true, invited: true, firstNeed: true, words: false };
+        node.answer = { ...a, me: { ...a.me!, wayBack: 'words', firstOffer: true, wordsKept: false }, cards: { ...a.cards, steps: lastLine } };
+        await render();
+        expect(document.querySelector('[data-testid="home-step-words"]')).not.toBeNull();
+        act(() => root?.unmount());
+        host?.remove();
+        root = null;
+        host = null;
+        node.answer = { ...node.answer, me: { ...node.answer.me!, wordsKept: true } };
+        await render();
+        expect(document.querySelector('[data-testid="home-step-words"]')).toBeNull();
+        expect(cards()).not.toContain('steps');
+    });
 });
 
 // ── The account leaving while Home's read is out (PR #1483 review 4166559191) ─────────────────────────────────────────

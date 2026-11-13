@@ -276,8 +276,8 @@ export interface HomeMe {
     invitedBy: InvitedBy | null;
     /**
      * `covered` when a sign-in's copy of the account is linked here, else `words` (engine/way-back.ts, §2.5): what First
-     * steps' `words` line goes by, never how they joined. The new-account limits don't read it, and the safety card does
-     * not yet: until slices D2 and D3 it keeps the 12-words door's rule (`safetyCard`).
+     * steps' `words` line and both apps' "Your way back in" go by (slices D2 and D3), never how they joined. The new-account
+     * limits don't read it, and neither does the `safety` body, which keeps the 12-words door's rule (`safetyCard`).
      */
     wayBack: WayBack;
     /**
@@ -365,8 +365,9 @@ export interface HomeCards {
         invited: boolean | null; area: boolean; knocked: null; saidHello?: boolean; watch?: boolean; sawLedger?: boolean;
         /**
          * "Keep your 12 words safe" (DESIGN-home-default-fable.md §2.4, slice D1): null when a sign-in's copy is linked here
-         * (no such line), false while the words are the only way back, true once the member said they still have them or
-         * saved the recovery kit (`words_kept`).
+         * (no such line), false while the words are the only way back, true once the member said they still have them
+         * (`words_kept`: on the card, or their Yes after the recovery kit; the kit alone never counts). `me.wordsKept` says
+         * the same on every answer of their own, after this card has gone.
          */
         words: boolean | null;
     };
@@ -831,15 +832,17 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
 
 /**
  * A member who came in by the 12-words door and has added no sign-in (two-doors §2.5: their `open_joins` row still says
- * `words`, the rule `/api/community/me` gives as `rules`), until they say they still have their words or save the kit.
- * The apps keep its schedule (shown once after the first post, once after a week, then Settings).
+ * `words`, the rule `/api/community/me` gives as `rules`), until they say they still have their words (`words_kept`: on
+ * the card, or their Yes to "Did you keep it somewhere safe?" after the recovery kit; the kit alone never counts, the
+ * director's rule in the reviews of #3113 and #3114). The apps keep its schedule (shown once after the first post, once
+ * after a week, then Settings).
  *
- * Not by `wayBack` yet (review of #3110, round 2): the card both apps draw today offers "Add a sign-in", which the node
+ * Not by `wayBack` (review of #3110, round 2): this body is what makes the card offer "Add a sign-in", which the node
  * takes from this member alone (routes/open-join.ts `linkState`). An invited member, the genesis owner, or a sign-in
- * joiner with no copy kept here is refused it (404 invite_only, 409 not_words_member). The card for every member whose
- * words are the only way back waits for slices D2 (the record started as put away at an invite sign-up) and D3 (the
- * card offering only what works); until then D1 carries that rule in `me.wayBack` and First steps' `words` line only.
- * One rule with `/me` also keeps the web's card from being drawn by Home's word and pulled by `/me`'s (round 1).
+ * joiner with no copy kept here is refused it (404 invite_only, 409 not_words_member). Every other member whose words
+ * are the only way back gets the card from `me.wayBack` instead, offering only what works (slices D2 and D3, and core's
+ * catalogue gate, home-frame.ts, for an invite-only node). One rule with `/me` also keeps the web's card from being
+ * drawn by Home's word and pulled by `/me`'s (round 1).
  */
 function safetyCard(c: Ctx): HomeCards['safety'] | undefined {
     built('safety');

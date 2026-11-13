@@ -13,14 +13,16 @@
  *                 through A; 7d her own community B still relays for her
  *           10a/10b the operator corrects a peer's public URL: its members' next line and purchase still go through
  *           a peer's refusal of a relayed line is logged by relayLineToPeer (the send route's relay), with the line's
- *           id and the reason and never its text; a stored line logs nothing
+ *           id and the reason and never its text; a stored line logs nothing. The same when the request, and the close
+ *           of its write side, are both in before the peer's handler reads (`late`: the reader used to miss that close,
+ *           time out at 5 s and reset the stream, so the line was lost; red on main fa076db5, CI run 43470982789)
  *   FED-09  a relayed line longer than the send route's 64 KB is refused with words, and not stored.
  *   FED-03  a reservation whose reserved_until has passed holds no headroom.
  *   FED-01  writeVisitorRow never stamps a home on a local member.
  *   FED-06  (run `peers-off`, ENABLE_PEER_CONNECTORS unset) a configured peer's verify_member, relay_message,
  *           list_listings and settle_purchase are refused, nothing stored; settle_receipt_status is still answered.
  *           Over real libp2p, the node's handshake answer no longer calls it active (N3), and the relaying node logs
- *           the refusal (N2). The plain run holds the controls: a configured peer's answer says active.
+ *           the refusal (N2), late or not. The plain run holds the controls: a configured peer's answer says active.
  *
  * FED-10 (/api/federation/links members-only) is measured through the real middleware in test-federation-link (5a0, 5a)
  * and test-read-auth-default.
@@ -126,38 +128,61 @@ async function main(): Promise<void> {
 
     /**
      * A configured peer (a connector here) talking to this node over real libp2p, both in this process: the answer to
-     * its handshake, and for each recipient what relayLineToPeer (the send route's relay) logs for one line to it.
+     * its handshake, and for each line what relayLineToPeer (the send route's relay) logs for it.
+     *
+     * A `late` exchange is one whose request, and the close of its write side, have both reached this node before its
+     * handler starts reading. libp2p starts a handler only after its own work on the new stream (protocol negotiation,
+     * a peer-store write), and on a busy machine the request lands in that gap: main fa076db5's CI run 43470982789 (and
+     * runs on 3 and 10 Nov) logged "Failed to relay line <id> to Peer F: The stream has been reset" here, because the
+     * reader missed the close it waits for, gave up at its 5 s timeout and reset the stream. Here the handler is held
+     * until the close has arrived, so that order happens every time instead of on a slow CI box.
      */
-    async function asConfiguredPeer(recipients: string[]): Promise<{
-        hs: any; relays: { lineId: string; ciphertext: string; logged: string[] }[]; noHelper: boolean;
+    type Exchange = { lineId: string; sender: string; ciphertext: string; logged: string[] };
+    async function asConfiguredPeer(lines: { to: string; late?: boolean }[]): Promise<{
+        hs: any; hsLate: any; relays: Exchange[]; noHelper: boolean;
     }> {
         const here = await p2pNode();
-        registerHandshakeHandler(here);
-        fp.registerFederationHandler(here);
+        let late = false;
+        /** `here`, except that a handler it runs for a late exchange starts only once the request is wholly in. */
+        const holding = {
+            handle: (protocol: string, fn: (stream: any, connection: any) => Promise<void>) =>
+                here.handle(protocol, async (stream: any, connection: any) => {
+                    const until = Date.now() + 5000;
+                    while (late && stream.remoteWriteStatus !== 'closed' && Date.now() < until) await sleep(5);
+                    return fn(stream, connection);
+                }),
+        } as any;
+        registerHandshakeHandler(holding);
+        fp.registerFederationHandler(holding);
         const peer = await p2pNode();
         cm.addConnector(`/ip4/127.0.0.3/tcp/4001/p2p/${peer.peerId}`, 'peer', 'Peer F', 'https://f.example');
         await peer.dial(here.getMultiaddrs());
         const hs = await sendHandshake(peer, here.peerId);
-        const relays: { lineId: string; ciphertext: string; logged: string[] }[] = [];
+        late = true;
+        // Caught, so a reset fails its rows instead of ending the run.
+        const hsLate = await sendHandshake(peer, here.peerId).catch((e: any) => ({ error: String(e?.message || e) }));
+        const relays: Exchange[] = [];
         // A function, so a run against code without it fails its rows instead of throwing.
         const relayLineToPeer = (fp as any).relayLineToPeer;
         const noHelper = typeof relayLineToPeer !== 'function';
-        for (const recipient of noHelper ? [] : recipients) {
+        for (const { to, late: lateLine } of noHelper ? [] : lines) {
+            late = lateLine === true;
             const lineId = crypto.randomUUID();
+            const sender = keyOf();
             const line = lockedDm();
             const logged: string[] = [];
             const warn = console.warn;
             console.warn = (...args: any[]) => { logged.push(args.map(String).join(' ')); };
             try {
-                await relayLineToPeer(peer, here.peerId, 'Peer F', { id: lineId, senderPublicKey: keyOf(), recipientPublicKey: recipient, ...line });
+                await relayLineToPeer(peer, here.peerId, 'Peer F', { id: lineId, senderPublicKey: sender, recipientPublicKey: to, ...line });
             } finally {
                 console.warn = warn;
             }
-            relays.push({ lineId, ciphertext: line.ciphertext, logged });
+            relays.push({ lineId, sender, ciphertext: line.ciphertext, logged });
         }
         await peer.stop();
         await here.stop();
-        return { hs, relays, noHelper };
+        return { hs, hsLate, relays, noHelper };
     }
     /** The relaying side's line for a refusal, as relayLineToPeer writes it. */
     const refusalLine = (r: { lineId: string; logged: string[] } | undefined) =>
@@ -183,12 +208,17 @@ async function main(): Promise<void> {
             `settle_receipt_status is still answered, as under FEDERATION_SETTLEMENT (got ${JSON.stringify(status)})`);
 
         console.log('\n=== N3 / N2: over real libp2p, a peers-off node says so, and its refusal is heard ===\n');
-        const off = await asConfiguredPeer([carol]);
+        const off = await asConfiguredPeer([{ to: carol }, { to: carol, late: true }]);
         assert(off.hs.mutualTrust === true && off.hs.remoteActive === false,
             `a configured peer's handshake to it: still trusted, but not active (got ${JSON.stringify(off.hs)})`);
+        assert(off.hsLate?.mutualTrust === true && off.hsLate?.remoteActive === false,
+            `the same answer when the handshake is wholly in before this node reads it (got ${JSON.stringify(off.hsLate)})`);
         const heard = refusalLine(off.relays[0]);
         assert(!off.noHelper && !!heard && heard.includes(fp.PEERS_OFF_ERROR) && !heard.includes(off.relays[0].ciphertext),
             `the relaying node logs the refusal with the line's id and the reason, never its text (got ${off.noHelper ? 'no relayLineToPeer' : JSON.stringify(off.relays[0]?.logged)})`);
+        const heardLate = refusalLine(off.relays[1]);
+        assert(!off.noHelper && !!heardLate && heardLate.includes(fp.PEERS_OFF_ERROR) && !heardLate.includes(off.relays[1].ciphertext),
+            `and so for a line wholly in before this node reads it: the refusal, not a reset stream (got ${off.noHelper ? 'no relayLineToPeer' : JSON.stringify(off.relays[1]?.logged)})`);
 
         console.log(`\n${passed}/${run} passed`);
         process.exit(passed === run ? 0 : 1);
@@ -316,7 +346,7 @@ async function main(): Promise<void> {
 
     console.log('\n=== B1 (#2039 review): a peer\'s refusal of a relayed line is logged ===\n');
     const nobody = keyOf();
-    const configured = await asConfiguredPeer([nobody, carol]);
+    const configured = await asConfiguredPeer([{ to: nobody }, { to: carol }, { to: nobody, late: true }, { to: carol, late: true }]);
     const refused = configured.relays[0];
     const refusedLine = refusalLine(refused);
     assert(!configured.noHelper && !!refusedLine && refusedLine.includes('Recipient not found on this node') && !refusedLine.includes(refused.ciphertext),
@@ -326,6 +356,16 @@ async function main(): Promise<void> {
         `a line the peer stores logs nothing (got ${JSON.stringify(stored?.logged)})`);
     assert(configured.hs.mutualTrust === true && configured.hs.remoteActive === true,
         `control for N3: with peer connectors on, a configured peer's handshake answer says active (got ${JSON.stringify(configured.hs)})`);
+    // The same three, when the request is wholly in (and its write side closed) before this node's handler reads it.
+    const refusedLate = configured.relays[2];
+    const refusedLateLine = refusalLine(refusedLate);
+    assert(!configured.noHelper && !!refusedLateLine && refusedLateLine.includes('Recipient not found on this node') && !refusedLateLine.includes(refusedLate.ciphertext),
+        `a refused line wholly in before the peer reads it: still its id and the peer's reason, not a reset stream (got ${configured.noHelper ? 'no relayLineToPeer' : JSON.stringify(refusedLate?.logged)})`);
+    const storedLate = configured.relays[3];
+    assert(!configured.noHelper && !!storedLate && !storedLate.logged.some(l => l.includes(storedLate.lineId)) && linesBy(storedLate.sender) === 1,
+        `a line wholly in before the peer reads it is stored, and logs nothing (got ${JSON.stringify(storedLate?.logged)}, lines ${storedLate ? linesBy(storedLate.sender) : '-'})`);
+    assert(configured.hsLate?.mutualTrust === true && configured.hsLate?.remoteActive === true,
+        `and a handshake wholly in before the peer reads it is answered as active (got ${JSON.stringify(configured.hsLate)})`);
 
     // ── FED-09 ──────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n=== FED-09: a relayed line takes the send route\'s 64 KB ===\n');

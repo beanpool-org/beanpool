@@ -153,8 +153,16 @@ describe('Settings: sign-in recovery', () => {
     // copies, its sign-in only lifts the limits, as the phone's add-a-sign-in sheet says.
     it("a community that keeps no copies: the one-way-back card's sign-in promises no copy and no way back", async () => {
         const NONE = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global' as const, recoveryCopies: 'none' as const };
-        const wordsOnly = { publicKey: 'me-pk', probation: { rules: 'words', keptPosts: 0, ageEndsAt: null }, mute: { muted: false, until: null } } as unknown as api.CommunityStanding;
-        const me = vi.spyOn(api, 'getCommunityMe').mockResolvedValue(wordsOnly);
+        // The card's word is the node's Home answer (components/OneWayBack.tsx useWayBackWord): the 12-words door's own member, no sign-in.
+        const wordsOnly = {
+            notModified: false, etag: null,
+            answer: {
+                generatedAt: new Date().toISOString(), profile: 'global', features: {}, layout: null, cards: { safety: { words: true, signInLinked: false } },
+                me: { joinedAt: null, isKeeper: false, interests: [], area: null, firstOffer: false, standing: 'member', wayBack: 'words', wordsKept: false,
+                    probation: { onProbation: true, rules: 'words', keptPosts: 0, keptPostsNeeded: 3, ageEndsAt: null } },
+            },
+        } as unknown as api.HomeRead;
+        const me = vi.spyOn(api, 'getHome').mockResolvedValue(wordsOnly);
         try {
             vi.mocked(api.getCommunityInfo).mockResolvedValue(NONE);
             vi.mocked(api.getSignInRecovery).mockResolvedValue([]);

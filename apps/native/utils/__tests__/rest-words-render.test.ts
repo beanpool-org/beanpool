@@ -126,7 +126,8 @@ import { RepaymentCard } from '../../components/RepaymentCard';
 import PayCommonsScreen from '../../app/pay-commons';
 import GroupInviteLanding from '../../app/group/[id]';
 import { HelpSheet } from '../../components/HelpSheet';
-import { OneWayBackCard, ONE_WAY_BACK_LINES } from '../../components/OneWayBackCard';
+import { OneWayBackCard, ONE_WAY_BACK_LINES, WORDS_HOW_BACK_LINES } from '../../components/OneWayBackCard';
+import { GLOBAL_NODE_URL } from '../global-node-url';
 import { SavedNodePicker } from '../../components/SavedNodePicker';
 import { SyncStatus } from '../../components/SyncStatus';
 import { beansWords, linkLeftWords, paidWords, payConfirmWords, repaymentBannerWords, repaymentLineWords, REPAYMENT_LINES } from '../../components/repayment-lines';
@@ -156,7 +157,8 @@ beforeEach(() => {
     grp.joinError = null;
     grp.left = [];
     grp.leaveGate = null;
-    oneWay.record = { url: 'https://global.example', joinedAt: Date.now() - 86_400_000, done: null };
+    // The global community's 12-words door: the one place its card says "one way back" (DESIGN-home-default-fable.md §2.5).
+    oneWay.record = { url: GLOBAL_NODE_URL, joinedAt: Date.now() - 86_400_000, done: null };
     oneWay.vault = false;
     globalThis.fetch = vi.fn(async () => { throw new TypeError('offline'); }) as typeof fetch;
 });
@@ -506,6 +508,18 @@ describe('the small ones in the pseudo-locale', () => {
         oneWay.record = { ...oneWay.record, done: 'checked' };
         await renderIn('xx', createElement(OneWayBackCard, { place: 'settings', colors: lightColors }));
         expect(host.textContent).toContain(xx('A sign-in can be a second way back, and it lifts the limits on new 12-words accounts.'));
+        expect(bypassing(host)).toEqual([]);
+    });
+
+    it('a local community\'s 12-words door: "how you get back in", never "one way back", its name for TalkBack the same, on Home with I still have my 12 words', async () => {
+        oneWay.record = { url: 'https://mullum.example', joinedAt: Date.now() - 86_400_000, done: null };
+        await renderIn('xx', createElement(OneWayBackCard, { place: 'landing', colors: lightColors }));
+        expect(host.textContent).toContain(xx(WORDS_HOW_BACK_LINES.withSignIn));
+        expect(host.textContent).not.toContain(xx(ONE_WAY_BACK_LINES.body));
+        expect(byLabel(xx(WORDS_HOW_BACK_LINES.withSignIn))).not.toBeNull();
+        expect(byLabel(xx(ONE_WAY_BACK_LINES.title))).toBeNull();
+        expect(host.textContent).toContain(xx(ONE_WAY_BACK_LINES.addSignIn));
+        expect(host.textContent).toContain(xx(ONE_WAY_BACK_LINES.checked));
         expect(bypassing(host)).toEqual([]);
     });
 

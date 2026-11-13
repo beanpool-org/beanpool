@@ -23,6 +23,8 @@ vi.mock('../lib/api', () => ({
     saveHomePreferences: vi.fn(async (_pk: string, prefs: { 'home.layout'?: HomeLayout; interests?: string[] }) => ({ success: true, ...prefs })),
     markNoticesSeen: vi.fn(async () => ({ success: true, marked: 1 })),
     getCommunityMe: vi.fn(async () => ({ probation: { rules: 'ordinary', keptPosts: 0, ageEndsAt: null } })),
+    // The reader's role, asked only for Welcome's "Invite someone ›" where only admins invite (core readerMayInvite).
+    myNodeRoleOnce: vi.fn(async () => null),
     // A chosen chat's list (read as its settings open) and the group keys' transport (never called by the card: no read).
     getConversations: vi.fn(async () => ({ conversations: [], totalUnread: 0 })),
     getYourGroups: vi.fn(async () => ({ items: [] })),
@@ -3203,6 +3205,66 @@ describe('Welcome in the web app (DESIGN-home-default-fable.md §2.3): first on 
         expect(onNavigate).toHaveBeenCalledWith('people-invites');
     });
 
+    // One wording per case on both apps (core home-welcome.ts welcomeFacts; the parity read of D2 against D3, rows 14-16).
+    it('on the global community: "You\'re in the global community", the phone\'s sentence, never "You\'re in The global community."', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer({ profile: 'global' })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-start');
+        expect(within(card).getByTestId('home-welcome-where').textContent).toBe("You're in the global community");
+    });
+
+    it('an inviter with no name to say: no line at all (§2.3), never "Someone invited you."; and not "the first one here" either', async () => {
+        const base = newcomer({}, { invitedBy: { key: 'ana-key', name: null } });
+        vi.mocked(api.getHome).mockResolvedValue(fresh({ ...base, cards: { ...base.cards, community: { ...base.cards.community!, members: 1 } } } as HomeAnswer));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-start');
+        expect(within(card).queryByTestId('home-welcome-invited')).toBeNull();
+        expect(within(card).queryByTestId('home-welcome-first')).toBeNull();
+        expect(card.textContent).not.toContain('invited you');
+    });
+
+    it('"You\'re the first one here." only where nobody invited them; "Invite someone ›" only where the reader can invite', async () => {
+        const onNavigate = vi.fn();
+        const alone = (features: Partial<HomeAnswer['features']>, me: Partial<NonNullable<HomeAnswer['me']>> = { invitedBy: null }) => {
+            const base = newcomer({}, me);
+            return fresh({ ...base, features: { ...base.features, ...features }, cards: { ...base.cards, community: { ...base.cards.community!, members: 1 } } } as HomeAnswer);
+        };
+        // Someone invited them: whoever did is here too, so the inviter's line, never "the first one here".
+        vi.mocked(api.getHome).mockResolvedValue(alone({}, { invitedBy: { key: 'ana-key', name: 'Ana' } }));
+        render(<HomePage identity={ME} onNavigate={onNavigate} />);
+        let card = await screen.findByTestId('home-card-start');
+        expect(within(card).getByTestId('home-welcome-invited')).toHaveTextContent('Ana invited you.');
+        expect(within(card).queryByTestId('home-welcome-first')).toBeNull();
+        cleanup();
+
+        // Invites off: the sentence stands alone, with no link that can't work.
+        vi.mocked(api.getHome).mockResolvedValue(alone({ invites: false }));
+        render(<HomePage identity={ME} onNavigate={onNavigate} />);
+        card = await screen.findByTestId('home-card-start');
+        expect(within(card).getByTestId('home-welcome-first')).toHaveTextContent("You're the first one here.");
+        expect(within(card).queryByTestId('home-welcome-invite')).toBeNull();
+        cleanup();
+
+        // Only admins invite here, and the node says this reader is no admin: no link.
+        vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
+        vi.mocked(api.getHome).mockResolvedValue(alone({ door: 'admins' }));
+        render(<HomePage identity={ME} onNavigate={onNavigate} />);
+        card = await screen.findByTestId('home-card-start');
+        await pause();
+        expect(api.myNodeRoleOnce).toHaveBeenCalled();
+        expect(within(card).getByTestId('home-welcome-first')).toBeInTheDocument();
+        expect(within(card).queryByTestId('home-welcome-invite')).toBeNull();
+        cleanup();
+
+        // The owner: the link, as on the phone.
+        vi.mocked(api.myNodeRoleOnce).mockResolvedValue('owner');
+        vi.mocked(api.getHome).mockResolvedValue(alone({ door: 'admins' }));
+        render(<HomePage identity={ME} onNavigate={onNavigate} />);
+        card = await screen.findByTestId('home-card-start');
+        fireEvent.click(await within(card).findByTestId('home-welcome-invite'));
+        expect(onNavigate).toHaveBeenCalledWith('people-invites');
+    });
+
     it('Take the tour again (the "?"), past Welcome\'s seven days: writes "open", starts at step 1, and adds no card it would not draw', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(settled('done')));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
@@ -3543,6 +3605,41 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         await waitFor(() => expect(vi.mocked(api.saveHomePreferences).mock.calls.map(c => c[1])).toContainEqual({ words_kept: true }));
         expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
         expect(screen.queryByRole('button', { name: 'To do: Keep your 12 words safe' })).toBeNull();
+        vi.mocked(Date.now).mockRestore();
+    });
+
+    // Parity with the phone (apps/native/utils/words-kept.ts, resent at its Home landing): before, the web only logged a
+    // write that failed, so the account, the phone and the next browser kept saying "not kept".
+    it('"I still have my 12 words" the node didn\'t take (offline) is sent again at the next Home landing, then never again', async () => {
+        nodeV2(invited({}), null);
+        const layoutOnly = vi.mocked(api.saveHomePreferences).getMockImplementation()!;
+        let offline = true;
+        vi.mocked(api.saveHomePreferences).mockImplementation(async (pk, prefs) => {
+            if ('words_kept' in prefs && offline) throw new TypeError('Failed to fetch');
+            return layoutOnly(pk, prefs);
+        });
+        const keptWrites = () => vi.mocked(api.saveHomePreferences).mock.calls.filter(c => (c[1] as { words_kept?: boolean }).words_kept === true).length;
+        vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-01-20T00:00:00.000Z'));
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(within(await screen.findByTestId('one-way-back-landing')).getByTestId('one-way-back-kept'));
+        await waitFor(() => expect(keptWrites()).toBe(1));
+        await pause();
+        expect(keptWrites()).toBe(1);
+        cleanup();
+
+        // Back online, the next landing: sent again.
+        offline = false;
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        await waitFor(() => expect(keptWrites()).toBe(2));
+        cleanup();
+
+        // It landed: the landing after sends nothing.
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        await pause();
+        expect(keptWrites()).toBe(2);
         vi.mocked(Date.now).mockRestore();
     });
 

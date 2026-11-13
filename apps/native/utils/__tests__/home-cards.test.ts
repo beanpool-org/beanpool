@@ -15,7 +15,7 @@ vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((n: number) => new Uint8Ar
 import {
     HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canRemoveCard, cardCaption, cardLabelName, cardName, cardRowName, cardOrder, cardsToAsk, cardsToDraw, communityLines,
     DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, decideOnNode, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
-    invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
+    invitesForReader, welcomeFacts, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
     joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
     askedFacts, addCard, listOf, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
@@ -1943,5 +1943,39 @@ describe('A chat (DESIGN-home-chosen-chat-fable.md slice C2): the phone draws it
         const view = await draw(inst('dm'), dmCard([line]), deps({ judgeDm: unsigned }));
         if (view.state !== 'chat') throw new Error('drawn');
         expect(view.lines[0]).toEqual({ id: line.id, at: line.at, who: null, text: "🔒 This message couldn't be verified, so it isn't shown." });
+    });
+});
+
+// Welcome's lines, one wording per case on the phone and the web (core home-welcome.ts welcomeFacts; the parity read of D2
+// against D3, rows 14-16). The phone's own rule before let "the first one here" win over an inviter, and drew it for a
+// member whose inviter had no name.
+describe('Welcome says where you are and who brought you, by core\'s one rule (DESIGN-home-default-fable.md §2.3)', () => {
+    const alone = (me: Partial<NonNullable<HomeAnswer['me']>>) => answer({
+        me: { ...answer().me!, ...me } as HomeAnswer['me'],
+        cards: { community: { name: 'Mullumbimby', members: 1 } },
+    });
+
+    it('a local community by its name; the global community by its own sentence; a nameless local one: no line', () => {
+        expect(welcomeFacts(answer()).place).toBe("You're in Mullumbimby.");
+        expect(welcomeFacts(answer({ profile: 'global', cards: {} })).place).toBe("You're in the global community");
+        expect(welcomeFacts(answer({ cards: { community: { name: '  ', members: 4 } } })).place).toBeNull();
+    });
+
+    it('someone invited them: their line, never "the first one here" (whoever invited them is here too)', () => {
+        const f = welcomeFacts(alone({ invitedBy: { key: 'aa'.repeat(32), name: 'Ana' } }));
+        expect(f.inviter).toEqual({ key: 'aa'.repeat(32), name: 'Ana' });
+        expect(f.firstHere).toBe(false);
+    });
+
+    it('an inviter with no name to say: no inviter line, and not "the first one here" either', () => {
+        const f = welcomeFacts(alone({ invitedBy: { key: 'aa'.repeat(32), name: null } }));
+        expect(f.inviter).toBeNull();
+        expect(f.firstHere).toBe(false);
+    });
+
+    it('an owner alone, nobody\'s invitee, on a local community: the first one here; never on the global community', () => {
+        expect(welcomeFacts(alone({ invitedBy: null })).firstHere).toBe(true);
+        expect(welcomeFacts({ ...alone({ invitedBy: null }), profile: 'global' }).firstHere).toBe(false);
+        expect(welcomeFacts(answer({ me: { ...answer().me!, invitedBy: null } as HomeAnswer['me'] })).firstHere).toBe(false);
     });
 });

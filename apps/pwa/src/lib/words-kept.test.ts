@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./api', () => ({ saveHomePreferences: vi.fn() }));
+vi.mock('./api', () => ({ saveHomePreferences: vi.fn(), getNodeApiUrl: vi.fn(() => '') }));
 
 import * as api from './api';
 import { keepWordsOnAccount, resendWordsKept, wordsKeptOwed } from './words-kept';
@@ -17,6 +17,7 @@ const sent = () => vi.mocked(api.saveHomePreferences).mock.calls.map((c) => [c[0
 
 beforeEach(() => {
     localStorage.clear();
+    vi.mocked(api.getNodeApiUrl).mockReturnValue('');
     vi.mocked(api.saveHomePreferences).mockReset();
     vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -64,6 +65,24 @@ describe('a say-so that does not land is not lost', () => {
         expect(wordsKeptOwed(PK)).toBe(false);
         expect(await resendWordsKept(PK)).toBe(true);
         expect(sent()).toHaveLength(1);
+    });
+
+    // As the phone's (utils/words-kept.ts resendWordsKept: `sameUrl(owed, url)`): owed to the community it was said to.
+    it('owed to the community it was said to: a web app pointed at another one sends nothing there, and sends it back home', async () => {
+        vi.mocked(api.getNodeApiUrl).mockReturnValue('https://mullum.example');
+        vi.mocked(api.saveHomePreferences).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        keepWordsOnAccount(PK, 'Settings');
+        await settle();
+        vi.mocked(api.getNodeApiUrl).mockReturnValue('https://castlemaine.example');
+        expect(wordsKeptOwed(PK)).toBe(false);
+        expect(await resendWordsKept(PK)).toBe(true);
+        expect(sent()).toHaveLength(1);
+        vi.mocked(api.getNodeApiUrl).mockReturnValue('https://Mullum.example/');
+        vi.mocked(api.saveHomePreferences).mockResolvedValueOnce({ success: true });
+        expect(wordsKeptOwed(PK)).toBe(true);
+        expect(await resendWordsKept(PK)).toBe(true);
+        expect(sent()).toHaveLength(2);
+        expect(wordsKeptOwed(PK)).toBe(false);
     });
 
     it("one account's owed say-so is never sent for another", async () => {

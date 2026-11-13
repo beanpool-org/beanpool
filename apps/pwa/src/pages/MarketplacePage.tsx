@@ -4017,6 +4017,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 {/* Row 2.5: Secondary Action & Filter Chips. Under Events only the group choice stays: beans only,
                     new members and the pricing guide are about listings. */}
                 <div className="flex flex-wrap items-center gap-2 my-1.5">
+                    {/* The Pulse's door, first in this row under every pill (DESIGN-pulse-home-fable.md §3.1, P3; Marty's
+                        pick 1 of 14 Nov 2026): the phone's is in its title row, which the web's Market has none of. Blue,
+                        the Pulse card's band on Home; it asks the node for nothing until tapped. Members only, as reading is. */}
+                    {!isVisitor && (
+                        <button
+                            type="button"
+                            data-testid="market-pulse-door"
+                            aria-label={t('Open the Pulse')}
+                            onClick={() => onNavigate?.('pulse')}
+                            className="min-h-[44px] px-3.5 rounded-full text-xs font-black cursor-pointer border-0 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-accent-fill"
+                            style={{ backgroundColor: 'var(--bp-card-blue-tint)', color: 'var(--bp-card-blue-ink)' }}
+                        >
+                            {t('📡 Pulse ›')}
+                        </button>
+                    )}
                     {typeFilter !== 'event' && !isVisitor && (<>
                     {!priceMarked && (
                     <button

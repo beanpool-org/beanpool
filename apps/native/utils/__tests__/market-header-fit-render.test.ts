@@ -186,7 +186,9 @@ vi.mock('../../app/ThemeContext', async () => {
 });
 
 const ME = { publicKey: 'me-key', callsign: 'Ana' };
-vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME }) }));
+/** Who is looking: a member, or (null) a visitor looking in. */
+const who = vi.hoisted(() => ({ member: true }));
+vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: who.member ? ME : null }) }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/NewPollModal', () => ({ NewPollModal: () => null }));
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
@@ -439,6 +441,18 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
             expect(mockRouter.push).toHaveBeenCalledWith('/pulse');
             await act(async () => { root.unmount(); });
             root = createRoot(host);
+        }
+    });
+
+    it('7. a visitor looking in, who cannot read the Pulse, has no door; the title keeps its row', async () => {
+        who.member = false;
+        try {
+            await act(async () => { root.render(createElement(MarketScreen) as any); });
+            await act(async () => { await Promise.resolve(); });
+            expect(host.querySelector('[data-testid="page-title-market"]')).not.toBeNull();
+            expect(host.querySelector('[data-testid="market-pulse-door"]')).toBeNull();
+        } finally {
+            who.member = true;
         }
     });
 });

@@ -2066,8 +2066,9 @@ export default function MarketScreen() {
             {/* The feed and, riding over its top, the controls. Clipped, so the block slides up under the tab bar. */}
             <View style={{ flex: 1, overflow: 'hidden' }}>
             {/* The Pulse's door rides on the title's line, in a slot that is empty otherwise (DESIGN-pulse-home-fable.md §3.1,
-                Marty's pick 1 of 14 Nov 2026). The Market's own feed, its pills and its filters are not touched. */}
-            <QuickReturnBlock qr={qr} title={<PageTitle title={t('Market')} testID="page-title-market" right={
+                Marty's pick 1 of 14 Nov 2026). The Market's own feed, its pills and its filters are not touched. Members only,
+                as reading the Pulse is: a visitor looking in has no door. */}
+            <QuickReturnBlock qr={qr} title={<PageTitle title={t('Market')} testID="page-title-market" right={identity ? (
                 <Pressable
                     testID="market-pulse-door"
                     accessibilityRole="button"
@@ -2079,7 +2080,7 @@ export default function MarketScreen() {
                         {t('📡 Pulse ›')}
                     </Text>
                 </Pressable>
-            } />} below={categoryPanelOverlay}>
+            ) : undefined} />} below={categoryPanelOverlay}>
                 {controls}
             </QuickReturnBlock>
             <Animated.FlatList

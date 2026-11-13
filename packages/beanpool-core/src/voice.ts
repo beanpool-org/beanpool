@@ -31,6 +31,8 @@
  * whose chat you accepted.
  */
 
+import { word } from './words.js';
+
 /** The part name a voice message is sealed as: bound into the seal and the signature. */
 export const VOICE_PART = 'voice' as const;
 /** The sound's type, as the node stores it beside the sealed part (DESIGN §5.2: AAC in .m4a). */
@@ -55,6 +57,22 @@ export const VOICE_PART_VERSION = 1;
 export const VOICE_SERVER_KEEP_DAYS = 30;
 /** The code a voice part's read answers with once the server no longer keeps it (VOICE_SERVER_KEEP_DAYS). */
 export const VOICE_EXPIRED_CODE = 'voice_expired';
+
+/**
+ * Whether a community takes voice messages: only where its features say `voiceLines: true` outright (apps/server
+ * config/node-profile.ts, on every node from voice V2). A node from before it says nothing, and stores a voice line as a
+ * text line carrying a sound no one can play (Byron, 14 Nov); its version can't tell it apart. Both apps offer the
+ * microphone only where this is true, and send no recording where it isn't (VOICE_LINES_WORDS.notTaken).
+ */
+export function voiceLinesOn(features: { voiceLines?: unknown } | null | undefined): boolean {
+    return features?.voiceLines === true;
+}
+
+/** The words both apps show about where voice messages go: word() keys, shown through t(). */
+export const VOICE_LINES_WORDS = {
+    /** Above the box when a recording would go to a community that doesn't take voice messages (voiceLinesOn): kept, not sent. */
+    notTaken: word("This community doesn't take voice messages yet. Nothing was sent."),
+} as const;
 
 /** Bytes before the sound: version, length, bar count, bars. */
 const VOICE_HEADER_BYTES = 1 + 4 + 1 + VOICE_BARS;

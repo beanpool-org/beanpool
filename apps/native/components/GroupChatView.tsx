@@ -84,8 +84,9 @@ import { ChatMessageRow } from './chat/ChatMessageRow';
 import { ChatComposer, type ChatComposerHandle } from './chat/ChatComposer';
 import { VoiceBubble } from './chat/VoiceBubble';
 import { VoicePlaybackProvider } from './chat/VoicePlayback';
-import type { VoiceInput } from '@beanpool/core';
+import { VOICE_LINES_WORDS, voiceLinesOn, type VoiceInput } from '@beanpool/core';
 import { VoiceNotSentError, voiceSendWithin } from '../utils/voice-recorder';
+import { useNodeProfile } from '../utils/use-node-profile';
 import { newVoiceAudioOwner } from '../utils/voice-audio';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from './chat/ChatBanners';
 import { yourGroupsStore } from './useYourGroups';
@@ -166,6 +167,12 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const [securing, setSecuring] = useState<{ done: number; total: number } | null>(null);
     // Why this phone will not send right now (GroupChatKeyError's sentence), until the next send goes through.
     const [keyNotice, setKeyNotice] = useState<string | null>(null);
+    // Voice messages only where the community says it takes them (core voiceLinesOn; Byron, 14 Nov): a node from before
+    // voice V2 stores one as words with a sound no one can play. Read at send time from the ref, as the recorder holds the
+    // onVoice it was given while a recording waits.
+    const voiceHere = voiceLinesOn(useNodeProfile()?.features);
+    const voiceHereRef = useRef(voiceHere);
+    voiceHereRef.current = voiceHere;
     // This phone has held a key of this group: the chat is locked here whatever the node says (group-chat-lines).
     const [seenLocked, setSeenLocked] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
@@ -565,6 +572,12 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
      * try, and the 60 s gives the send up for real, so a Send after a timeout is the node's duplicate, never a second line.
      */
     const sendVoice = async (voice: VoiceInput, lineId: string) => {
+        // The community no longer says it takes voice messages (asked again since the recording began): kept, not sent.
+        if (!voiceHereRef.current) {
+            const why = t(VOICE_LINES_WORDS.notTaken);
+            setKeyNotice(why);
+            throw new VoiceNotSentError(why);
+        }
         if (sending) throw new Error(t('Wait for the last message to go.'));
         setSending(true);
         try {
@@ -1056,8 +1069,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     accessibilityLabel={t('Message {name}', { name })}
                     bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}
                     onAttach={photoButton ? pickPhoto : undefined}
-                    // Voice messages only where lines are sealed on this phone (§5.4): a locked group's chat.
-                    onVoice={photoButton && !photo ? sendVoice : undefined}
+                    // Voice messages only where lines are sealed on this phone (§5.4), a locked group's chat, on a community
+                    // that says it takes them (features.voiceLines).
+                    onVoice={voiceHere && photoButton && !photo ? sendVoice : undefined}
                     voiceOwner={voiceOwner}
                     attachment={photo && !editingMessage ? (
                         <ChatWaitingPhoto uri={photo.uri} styles={chat} disabled={sending} onRemove={() => setPhoto(null)} />

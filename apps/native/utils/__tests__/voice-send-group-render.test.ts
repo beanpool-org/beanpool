@@ -10,6 +10,11 @@
  *     after setting the notice: the recorder keeps it (voice-composer-render.test.ts) and adds no word of its own.
  *   - db.ts:7490: each try made a new clientId, so a Send after the 60 s timeout was a second line. The recording's own line
  *     id is the clientId on every try, and the node's duplicate guard (engine/group-thread.ts) answers the line it stored.
+ *
+ * Byron, 14 Nov: a voice message sent to a node from before voice V2 was stored as a text line carrying a sound. The
+ * microphone shows only where the community says `features.voiceLines: true` (core voiceLinesOn, through useNodeProfile,
+ * stood in for here so the test can change what the community says); a recording that would still go where it isn't said
+ * is kept, not sent, and the chat says so.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // The shipped pictures' requires (utils/bundled-avatars.ts, through MemberAvatar and the picture sheet) load as a number.
@@ -131,6 +136,12 @@ vi.mock('../db', async (orig) => ({
     }),
 }));
 vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn(), addSavedNode: vi.fn() }));
+// This phone's copy of the community (utils/use-node-profile.ts): what the community says now, and a way to change it.
+const community = vi.hoisted(() => ({ now: null as null | { profile: string; features: Record<string, unknown> }, set: null as null | ((p: unknown) => void) }));
+vi.mock('../use-node-profile', async () => {
+    const R = await import('react');
+    return { useNodeProfile: () => { const [p, set] = R.useState(community.now); community.set = set as (p: unknown) => void; return p; } };
+});
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(), saveCanonicalProfile: vi.fn() }));
 
 import { GroupChatView } from '../../components/GroupChatView';
@@ -149,6 +160,8 @@ beforeEach(() => {
     node.asked.length = 0;
     node.refuse = null;
     composer.props = null;
+    // A community that takes voice messages (features.voiceLines).
+    community.now = { profile: 'local', features: { voiceLines: true } };
     vi.mocked(Alert.alert).mockClear();
 });
 afterEach(async () => {
@@ -220,5 +233,56 @@ describe('a locked group\'s voice message sent twice is one line (PR #3112 revie
         expect(node.asked.every(a => a.signal instanceof AbortSignal)).toBe(true);
         // Sent: the notice is cleared.
         expect(said()).toEqual([]);
+    });
+});
+
+describe('the microphone only where the group\'s community takes voice messages (features.voiceLines; Byron, 14 Nov)', () => {
+    const NOT_TAKEN = "This community doesn't take voice messages yet. Nothing was sent.";
+    async function draw(): Promise<void> {
+        host = document.createElement('div');
+        document.body.appendChild(host);
+        root = createRoot(host);
+        await act(async () => {
+            root.render(createElement(GroupChatView, { kind: 'group', id: G, initialName: 'Bakers' }) as unknown as Parameters<Root['render']>[0]);
+        });
+        await settle();
+        expect(composer.props, 'the locked group\'s composer is drawn').not.toBeNull();
+    }
+
+    for (const [what, profile] of [
+        ['says nothing of it (a node from before voice V2, as Byron was)', { profile: 'local', features: {} }],
+        ['says voiceLines: false', { profile: 'local', features: { voiceLines: false } }],
+        ['isn\'t known on this phone yet', null],
+    ] as const) {
+        it(`a community that ${what}: no microphone, the composer as before voice`, async () => {
+            community.now = profile as typeof community.now;
+            await draw();
+            expect(composer.props.onVoice).toBeUndefined();
+            // The photo button is the locked group's as before.
+            expect(composer.props.onAttach).toBeTypeOf('function');
+        });
+    }
+
+    it('a community that says voiceLines: true: the microphone', async () => {
+        await draw();
+        expect(composer.props.onVoice).toBeTypeOf('function');
+    });
+
+    it('a community that stops saying it: the microphone goes, and a recording already waiting is kept, not sent, and the chat says why', async () => {
+        await openGroup();
+        // The recorder holds the onVoice it was given while a recording waits (ChatComposer lastOnVoice).
+        const waiting = composer.props.onVoice;
+        await act(async () => { community.set!({ profile: 'local', features: {} }); });
+        await settle();
+        expect(composer.props.onVoice).toBeUndefined();
+
+        let outcome: unknown = 'sent';
+        await act(async () => { try { await waiting(VOICE, LINE); } catch (e) { outcome = e; } });
+        await settle();
+        expect(isVoiceNotSent(outcome), 'the recorder keeps the recording').toBe(true);
+        expect((outcome as Error).message).toBe(NOT_TAKEN);
+        expect(said()).toEqual([NOT_TAKEN]);
+        expect(node.asked, 'nothing went to the node').toEqual([]);
+        expect(Alert.alert).not.toHaveBeenCalled();
     });
 });

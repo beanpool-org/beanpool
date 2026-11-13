@@ -7,6 +7,7 @@ import { reportSubject } from '../../lib/node-client';
 import { t } from '../../lib/fresh-proof';
 import { FLAG_WORDS as W, flagAction, flagHeading, flagMembers, flagOffersFreeze } from '../../lib/flag-words';
 import type { RolesViewer } from './NodeRolesPanel';
+import { beansFigure } from '../../lib/beans';
 
 export interface ThreatItem {
     id?: string;
@@ -24,6 +25,22 @@ export interface ThreatItem {
     /** A report on a Pulse item: about the item's owner, whatever post id it carries. */
     targetPulseItemId?: string;
     pulseItem?: unknown;
+    /** cohort_velocity: each named member's allowance, as the node sends it (server state-engine CohortAllowance). */
+    allowances?: unknown;
+}
+
+interface AllowanceLine { member: string; allowance_c: number; daysAfterJoining: number; parts: Array<{ kind: string; from: string | null; amount_c: number; counted: boolean }> }
+
+/** The allowances a cohort flag carries, by member; anything not in the node's shape is left out. */
+function allowancesByMember(threat: ThreatItem | null | undefined): Map<string, AllowanceLine> {
+    const out = new Map<string, AllowanceLine>();
+    const list = threat?.type === 'cohort_velocity' && Array.isArray(threat.allowances) ? threat.allowances : [];
+    for (const a of list as AllowanceLine[]) {
+        if (a && typeof a.member === 'string' && Number.isInteger(a.allowance_c) && Number.isInteger(a.daysAfterJoining)) {
+            out.set(a.member, { ...a, parts: Array.isArray(a.parts) ? a.parts.filter(p => p && Number.isInteger(p.amount_c)) : [] });
+        }
+    }
+    return out;
 }
 
 export interface MemberItem {
@@ -145,6 +162,19 @@ export function ThreatReviewModal({
     };
 
     const involvedPubkeys = extractPubkeys();
+    const allowances = allowancesByMember(threat);
+    const nameOf = (pub: string | null) => getMemberDisplayName(membersMap.get(pub || '') || { pubkey: pub || '', publicKey: pub || '' }, profiles);
+    // One line per part of a member's allowance: who gave it and how much; an owner's or admin's grant says it isn't counted.
+    const partLine = (p: AllowanceLine['parts'][number]): string => {
+        const amount = beansFigure(p.amount_c);
+        const name = nameOf(p.from);
+        const line = p.kind === 'earned' ? t(W.partEarned, { amount })
+            : p.kind === 'vouch' ? t(p.counted ? W.partVouch : W.partOwnerVouch, { name, amount })
+            : p.kind === 'gift' ? t(p.counted ? W.partGift : W.partOwnerGift, { name, amount })
+            : p.kind === 'known' ? t(W.partKnown, { amount })
+            : t(W.partGranted, { amount });
+        return p.counted ? line : t(W.notCounted, { part: line });
+    };
     // Who Freeze acts on: the members named, less those the viewer may not freeze. Named members and none of them left:
     // no Freeze at all.
     const freezablePubkeys = involvedPubkeys.filter((pub) => !cantFreezeReason(viewer, pub, membersMap.get(pub)));
@@ -169,11 +199,6 @@ export function ThreatReviewModal({
             if (insularityMatch) metrics.push({ label: 'Cluster Insularity', value: insularityMatch[1], highlight: true });
             if (newMemberMatch) metrics.push({ label: 'New Accounts', value: newMemberMatch[1] });
             if (countMatch) metrics.push({ label: 'Ring Size', value: `${countMatch[1]} Nodes` });
-        } else if (desc.includes('cohort')) {
-            const cohortMatch = desc.match(/(\d+) cohort/);
-            if (cohortMatch) metrics.push({ label: 'Affected Cohorts', value: cohortMatch[1], highlight: true });
-            metrics.push({ label: 'Evaluation Window', value: '14 Days' });
-            metrics.push({ label: 'Floor Depth', value: 'Anomaly' });
         }
 
         return metrics;
@@ -317,9 +342,20 @@ export function ThreatReviewModal({
                                             <div className="w-6 h-6 shrink-0 rounded-full bg-nature-900 border border-nature-700 flex items-center justify-center text-[10px] text-nature-300 font-bold group-hover:scale-105 transition-transform">
                                                 👤
                                             </div>
-                                            <span className="font-bold text-white leading-tight break-words min-w-0 group-hover:text-bp-ink-terra transition-colors">
-                                                {displayName}
-                                            </span>
+                                            <div className="min-w-0">
+                                                <span className="block font-bold text-white leading-tight break-words group-hover:text-bp-ink-terra transition-colors">
+                                                    {displayName}
+                                                </span>
+                                                {allowances.has(pub) && (() => {
+                                                    const a = allowances.get(pub)!;
+                                                    return (
+                                                        <div className="mt-1 space-y-0.5 text-[10px] text-nature-300 leading-snug break-words">
+                                                            <p className="m-0">{t(W.allowanceReached, { amount: beansFigure(a.allowance_c), days: String(a.daysAfterJoining) })}</p>
+                                                            {a.parts.map((p, i) => <p key={i} className="m-0">{partLine(p)}</p>)}
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
                                         </div>
                                         <div className="flex items-center gap-2 shrink-0">
                                             {notYours && canFreeze && (

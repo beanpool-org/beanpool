@@ -284,11 +284,12 @@ describe('ThreatReviewModal', () => {
         expect(screen.getByText('Ring Size')).toBeInTheDocument();
         expect(screen.getByText('8 Nodes')).toBeInTheDocument();
 
+        // The old cohort numbers ("Affected Cohorts", "Floor Depth: Anomaly") are gone (Marty, 14 Nov 2026: the flag names
+        // each member's allowance instead, ThreatReviewModal.cohort.test.tsx): a description that mentions cohorts shows none.
         rerender(<ThreatReviewModal threat={cohortThreat} onClose={vi.fn()} />);
 
-        expect(screen.getByText('Affected Cohorts')).toBeInTheDocument();
-        expect(screen.getByText('3')).toBeInTheDocument();
-        expect(screen.getByText('Evaluation Window')).toBeInTheDocument();
+        expect(screen.queryByText('Affected Cohorts')).not.toBeInTheDocument();
+        expect(screen.queryByText('Floor Depth')).not.toBeInTheDocument();
     });
 
     it('handles report dismissal via onDismissReport and displays error when report dismissal fails', async () => {

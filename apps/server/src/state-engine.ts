@@ -8342,6 +8342,19 @@ export function getPublicCommunityHealth(now = Date.now()): Omit<CommunityHealth
     return health;
 }
 
+/**
+ * The fewest members a "tight ring of mostly new accounts" (sybil_ring) can have. Two new members who trade only with each
+ * other are how every community starts (Marty, 14 Nov 2026: the owner and an admin were named as a ring): a pair is no
+ * ring. Two accounts moving Beans between them are the wash-trading rule's (flaggedPairs, the reciprocal flow), and each
+ * partner already counts for at most PER_COUNTERPARTY_VOLUME_CAP of the other's earned credit. A ring takes a third.
+ */
+export const SYBIL_RING_MIN_MEMBERS = 3;
+
+/** Whether a component of the wash analysis is a ring the owners are told about: insular, mostly new, and three or more. */
+function isSybilRingFlag(d: { size: number; insularity: number; newRatio: number }): boolean {
+    return d.size >= SYBIL_RING_MIN_MEMBERS && d.insularity >= 0.8 && d.newRatio >= 0.5;
+}
+
 export function getCommunityHealth(): CommunityHealth {
     const now = Date.now();
     const t = getThresholds();
@@ -8358,7 +8371,7 @@ export function getCommunityHealth(): CommunityHealth {
         const enforcement = getWashTradingEnforcement();
         // Callsigns only for members who can appear in a flag. A healthy community has none, so
         // the common path reads no member rows at all (#673); a flagged one reads just those keys.
-        const ringsToName = enforcement.clusterDetails.filter(d => d.insularity >= 0.8 && d.newRatio >= 0.5);
+        const ringsToName = enforcement.clusterDetails.filter(isSybilRingFlag);
         const keysToName = new Set<string>([
             ...[...enforcement.flaggedPairs].flatMap(pairKey => pairKey.split('|')),
             ...ringsToName.flatMap(d => d.members),
@@ -8385,7 +8398,7 @@ export function getCommunityHealth(): CommunityHealth {
             });
         }
         for (const detail of enforcement.clusterDetails) {
-            if (detail.insularity >= 0.8 && detail.newRatio >= 0.5) {
+            if (isSybilRingFlag(detail)) {
                 // Skip if all members of the ring are already credit-frozen by admin
                 const placeholders = detail.members.map(() => '?').join(',');
                 const frozenCount = (db.prepare(`SELECT COUNT(*) as cnt FROM members WHERE public_key IN (${placeholders}) AND credit_frozen = 1`).get(...detail.members) as any)?.cnt || 0;

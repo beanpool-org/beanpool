@@ -7,7 +7,8 @@
  *   2. POST /api/community/register: a member re-registering under a link is 400 `callsign_link`, name unchanged;
  *   3. POST /api/profile/update: a rename to a web address is 400 `callsign_link`, name unchanged; a member whose name
  *      already is a link (hers, written as it was) still saves a bio with it, and keeps it (no conversion code);
- *   4. POST /api/join (the open door, words and sign-in): 400 `callsign_link` before any work or sign-in is read;
+ *   4. POST /api/join (the open door, words and sign-in): 400 `callsign_link` before any work or sign-in is read, and
+ *      POST /api/join/knock (asking to join: a yes joins under that name) the same, no request kept;
  *   5. POST /api/local/update-identity: the node's own name as a link is 400 `callsign_link`, nothing stored.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-callsign-not-a-link.ts
@@ -136,14 +137,23 @@ async function main(): Promise<void> {
     assert(nameOf(walker.pk) === undefined, 'and nobody joined');
     delete process.env.NODE_PROFILE;
 
+    console.log('\n── 4b. asking to join ──');
+    const knocker = keypair();
+    const knock = await call('POST', knocker, '/api/join/knock', { callsign: HER_LINK, message: 'Hello, I live nearby.' });
+    assert(refusedAs(knock, NAME_BOX_WORDS.inviteLink), `a knock under her link: 400 callsign_link (got ${knock.status} ${JSON.stringify(knock.body)})`);
+    const knocked = (db.prepare('SELECT COUNT(*) AS n FROM join_requests WHERE pubkey = ?').get(knocker.pk) as { n: number }).n;
+    assert(knocked === 0, 'and no request to join is kept');
+    const named = await call('POST', knocker, '/api/join/knock', { callsign: 'Dee Dee', message: 'Hello, I live nearby.' });
+    assert(named.status === 201, `a knock under a name is taken (got ${named.status} ${JSON.stringify(named.body)})`);
+
     console.log('\n── 5. the node\'s own name ──');
     const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
     const before = getLocalConfig().callsign;
     const identity = await call('POST', null, '/api/local/update-identity', { callsign: 'http://192.168.1.20' }, ownerSessionHeaders(founder.pk));
     assert(refusedAs(identity, NAME_BOX_WORDS.webLink), `update-identity with a link as the callsign: 400 callsign_link (got ${identity.status} ${JSON.stringify(identity.body)})`);
     assert(getLocalConfig().callsign === before, 'and nothing is stored');
-    const named = await call('POST', null, '/api/local/update-identity', { callsign: 'Mullum' }, ownerSessionHeaders(founder.pk));
-    assert(named.status === 200 && getLocalConfig().callsign === 'Mullum', `a name is stored (got ${named.status})`);
+    const nodeNamed = await call('POST', null, '/api/local/update-identity', { callsign: 'Mullum' }, ownerSessionHeaders(founder.pk));
+    assert(nodeNamed.status === 200 && getLocalConfig().callsign === 'Mullum', `a name is stored (got ${nodeNamed.status})`);
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exitCode = 1;

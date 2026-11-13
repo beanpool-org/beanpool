@@ -89,7 +89,7 @@ import { assertMayStorePhotoBytes, incomingPhotoBytes } from '../engine/photo-up
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { audienceStanding, isLocalNetworkHost, normalizeAddress } from '../engine/own-addresses.js';
 import type { RouteDeps } from './types.js';
-import { word, wordsFor } from '@beanpool/core';
+import { word, wordsFor, CALLSIGN_LINK_CODE, notANameIn, notANameWords } from '@beanpool/core';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
 const { t: tr } = wordsFor('en');
@@ -280,6 +280,10 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         if (refusal) return refuseKnock(ctx, refusal);
 
         const body = (ctx as any).requestBody || {};
+        // The name a yes joins with (the app redeems its invite under it): an invite or a web address is no name, refused here
+        // as the redeem would refuse it (core name-box.ts), read whole before its length (a pasted link is longer than a name).
+        const notAName = typeof body.callsign === 'string' ? notANameIn(body.callsign) : null;
+        if (notAName) return answer(ctx, 400, notANameWords(notAName), CALLSIGN_LINK_CODE);
         const callsign = parseCallsign(body.callsign);
         if (!callsign.ok) return answer(ctx, 400, callsign.error, 'bad_request');
         const message = parseMessage(body.message);

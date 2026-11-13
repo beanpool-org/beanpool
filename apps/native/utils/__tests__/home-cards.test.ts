@@ -744,6 +744,30 @@ describe('the safety card\'s schedule (two-doors §2.5) with the account\'s dism
         expect(safetyWord(words, ['community'])).toBeNull();
         expect(safetyWord({ ...words, me: null }, ['safety'])).toBeNull();
     });
+
+    // DESIGN-home-default-fable.md §2.5 (slice D2): who the reminder is for is what the account has (`me.wayBack`, the node's
+    // D1), and "Add a sign-in" only where the node takes one from them (`cards.safety`, review of #3110 round 2).
+    it('the word by me.wayBack: words for every member with no sign-in here (door only with the node\'s card), covered for none, kept from First steps', () => {
+        const base = answer();
+        const invited = { ...base, me: { ...base.me!, wayBack: 'words' as const }, cards: { ...base.cards, steps: { ...base.cards.steps!, words: false } } };
+        expect(safetyWord(invited, ['safety'])).toEqual({ words: true, joinedAt: NOW - 2 * 24 * H, door: false, kept: false });
+        const door = { ...invited, cards: { ...invited.cards, safety: { words: true as const, signInLinked: false as const } } };
+        expect(safetyWord(door, ['safety'])).toMatchObject({ words: true, door: true });
+        const kept = { ...invited, cards: { ...invited.cards, steps: { ...invited.cards.steps!, words: true } } };
+        expect(safetyWord(kept, ['safety'])).toMatchObject({ words: true, kept: true });
+        expect(safetyWord({ ...invited, me: { ...invited.me, wayBack: 'covered' as const } }, ['safety'])).toEqual({ words: false, joinedAt: NOW - 2 * 24 * H });
+    });
+
+    it('an invite-only community (no 12-words door) whose node says me.wayBack: Your way back in is asked and may be drawn; a node before D1 keeps core\'s rule', () => {
+        const base = answer();
+        const inviteOnly = { ...base, features: { ...base.features, wordsDoor: false } };
+        expect(cardOnNode('safety', inviteOnly)).toBe(false);
+        const d1 = { ...inviteOnly, me: { ...inviteOnly.me!, wayBack: 'words' as const } };
+        expect(cardOnNode('safety', d1)).toBe(true);
+        expect(cardsToAsk(defaultHomeLayout(), [], d1)).toContain('safety');
+        expect(cardsToAsk(defaultHomeLayout(), [], inviteOnly)).not.toContain('safety');
+        expect(cardOnNode('safety', { ...inviteOnly, me: { ...inviteOnly.me!, wayBack: 'covered' as const } })).toBe(true);
+    });
 });
 
 describe('deep links and doorbells', () => {

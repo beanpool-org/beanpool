@@ -766,7 +766,11 @@ export const removedLine = (name: string) => t('{card} removed. Add a card bring
  * sent one), and only for a type this build draws. Home draws only these whatever an answer holds, the picker lists only
  * these, and Arrange's "Nothing to show now" is said of a card that could show, never of one that can't.
  */
-export function cardOnNode(type: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards }, role?: HomeRole): boolean {
+export function cardOnNode(type: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards; me?: HomeMe | null }, role?: HomeRole): boolean {
+    // Your way back in is for every member whose 12 words are their only way back, on every community (DESIGN-home-default-
+    // fable.md §2.5, slice D2): wherever the node says `me.wayBack` (D1 on), it is asked and drawn when its schedule says,
+    // an invite-only community's included. Core's rule (the 12-words door, or the node's card) stays for a node before D1.
+    if (type === 'safety' && (answer.me?.wayBack === 'words' || answer.me?.wayBack === 'covered')) return true;
     const t = homeCardType(type);
     return !!t && HOME_DRAWN.has(type) && t.onNode({ profile: answer.profile, features: answer.features, cards: answer.cards as Record<string, unknown> | undefined }, role);
 }

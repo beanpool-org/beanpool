@@ -31,8 +31,8 @@
  * keeper's.
  *
  * An owner or admin (their role now) is held to that same setting in place of a member's posts a day, groups a day,
- * enterprises a day and running, invites a day and unused, and Pulse links by hand a day (engine/owner-admin-limit.ts;
- * Marty, 31 Oct), and its refusals name it.
+ * enterprises a day and running, invites a day and unused, Pulse links by hand a day (engine/owner-admin-limit.ts;
+ * Marty, 31 Oct) and forum edits a day, and its refusals name it.
  */
 import { INVITE_LIFE_DAYS } from '@beanpool/core';
 import { db } from '../db/db.js';
@@ -418,19 +418,19 @@ export function pulseHarvestAllowance(member: string, now = Date.now()): number 
 
 /**
  * The edits `member` made in the day to their own forum posts: each edit's earlier wording (forum_post_edits, keyed on the
- * post and when it was edited), and those deleted since, read from their tombstones (`<post id>|<edited at>`). So the oldest
- * wording an edit drops past the 10 kept (engine/forum.ts), and a removal's, never free a place. A tombstone is written at
- * or after its edit, so `deleted_at` bounds the read to the day's.
+ * post and when it was edited), and those deleted since, read from their tombstones. So the oldest wording an edit drops
+ * past the 10 kept (engine/forum.ts), and a removal's, never free a place. A tombstone's key is `<post id>|<edited at>`, so
+ * one post's edits in the day are the keys between `<post id>|<the day's start>` and `<post id>}` ('}' sorts just after
+ * '|'), a range of the tombstones' primary key for each of the member's posts, as the friends' count reads its own.
  */
 function forumEditTimes(member: string, now: number): string[] {
     return column(db.prepare(`
-        SELECT e.edited_at AS t FROM forum_post_edits e JOIN forum_posts p ON p.id = e.post_id
-         WHERE p.writer_pubkey = @member AND e.edited_at > @since
+        SELECT e.edited_at AS t FROM forum_posts p JOIN forum_post_edits e ON e.post_id = p.id AND e.edited_at > @since
+         WHERE p.writer_pubkey = @member
         UNION ALL
-        SELECT substr(s.row_key, instr(s.row_key, '|') + 1) AS t FROM tombstones s
-          JOIN forum_posts p ON p.id = substr(s.row_key, 1, instr(s.row_key, '|') - 1)
-         WHERE s.table_name = 'forum_post_edits' AND s.deleted_at > @since AND p.writer_pubkey = @member
-           AND substr(s.row_key, instr(s.row_key, '|') + 1) > @since`).all({ member, since: since(now) }));
+        SELECT substr(s.row_key, length(p.id) + 2) AS t FROM forum_posts p
+          JOIN tombstones s ON s.table_name = 'forum_post_edits' AND s.row_key > p.id || '|' || @since AND s.row_key < p.id || '}'
+         WHERE p.writer_pubkey = @member`).all({ member, since: since(now) }));
 }
 
 /** Before `member` edits one of their forum posts: 100 edits in any 24 hours; an owner's or admin's, the owners' setting. */

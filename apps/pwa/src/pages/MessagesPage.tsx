@@ -3594,10 +3594,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             placeholder={editingMessage ? t('Edit message...') : t('Message...')}
                             disabled={sending}
                             rows={1}
-                            // The hint stays on the box's one line, however long its translation.
-                            className="placeholder:truncate"
+                            // The hint stays on the box's one line, however long its translation. The box's fill and words
+                            // come from the colour tokens here, as classes, not inputStyle's inline copies of the same
+                            // tokens: the dark-mode check (e2e/dark-class-check.mjs) reads classes only, and with the fill
+                            // inline it measured the dark hint on a white box (2.31:1) that no member ever sees.
+                            className="placeholder:truncate bg-bg-secondary text-text-primary"
                             style={{
                                 ...inputStyle,
+                                background: undefined,
+                                color: undefined,
                                 // Height and overflow are useGrowingComposer's: one line up to five, then a scrollbar.
                                 height: undefined,
                                 resize: 'none',

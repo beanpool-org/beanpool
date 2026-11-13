@@ -239,6 +239,18 @@ describe('Web chat composer: grows with its words, no scrollbar until five lines
         expect(composer.value).toBe('first line');
     });
 
+    it('the box takes its fill and words from the colour tokens as classes, where the dark-mode check can read them', async () => {
+        // An inline fill is invisible to e2e/dark-class-check.mjs, which then measured the dark hint on a white box
+        // (2.31:1, CI on #3125). The classes carry the same tokens the inline style did.
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-dm-1" />);
+        const composer = await composerOpen();
+        expect(composer.classList.contains('bg-bg-secondary')).toBe(true);
+        expect(composer.classList.contains('text-text-primary')).toBe(true);
+        expect(composer.style.background).toBe('');
+        expect(composer.style.backgroundColor).toBe('');
+        expect(composer.style.color).toBe('');
+    });
+
     it('a group chat uses the same box: empty with no scrollbar, growing a line at a time', async () => {
         mockConversations = [{
             id: 'conv-group-1',

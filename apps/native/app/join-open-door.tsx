@@ -40,7 +40,7 @@ import {
 import { askCommunityName } from '../utils/community-name';
 import { getSavedNodes } from '../utils/nodes';
 import { plainOriginOf } from '../utils/node-url';
-import { t, tn } from '@beanpool/core';
+import { notANameIn, notANameWords, t, tn } from '@beanpool/core';
 
 export { ErrorBoundary };
 
@@ -435,6 +435,12 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
             setError(tn(2, 'Please choose a name of at least {n} characters.', 'Please choose a name of at least {n} characters.'));
             return;
         }
+        // An invite or a web address is no name (core name-box.ts; card callsign-link-guard): the door refuses it too.
+        const notAName = notANameIn(name);
+        if (notAName) {
+            setError(t(notANameWords(notAName)));
+            return;
+        }
         setLoading(true);
         setError(null);
         nameCheckRef.current?.abort();
@@ -477,6 +483,12 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         const typed = name.trim().slice(0, MAX_JOIN_NAME).trim();
         if (typed.length < 2) {
             setError(tn(2, 'Please choose a name of at least {n} characters.', 'Please choose a name of at least {n} characters.'));
+            return;
+        }
+        // An invite or a web address is no name (core name-box.ts; card callsign-link-guard): the door refuses it too.
+        const notAName = notANameIn(name);
+        if (notAName) {
+            setError(t(notANameWords(notAName)));
             return;
         }
         setLoading(true);

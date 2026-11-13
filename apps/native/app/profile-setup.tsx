@@ -28,7 +28,7 @@ import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
 import { AreaPicker } from '../components/AreaPicker';
 import { profileSteps, rememberAreaPlace, type ProfileStep } from '../utils/member-area';
-import { t } from '@beanpool/core';
+import { notANameIn, notANameWords, t } from '@beanpool/core';
 
 type Step = ProfileStep;
 
@@ -190,7 +190,10 @@ export default function ProfileSetupScreen() {
 
     // Block "Next" on a taken/too-short/checking name; allow 'available' and also
     // 'unknown' (offline) so an unreachable node never traps the user.
-    const canProceedName = nameOk && (nameStatus === 'available' || nameStatus === 'unknown');
+    // An invite or a web address is no name (core name-box.ts; card callsign-link-guard): said on the step, and Next waits.
+    // The name the wizard started with is left as it is, whatever it is (no conversion code).
+    const notAName = callsign.trim() !== (nameStartedWith.current ?? joinedAs ?? '') ? notANameIn(callsign) : null;
+    const canProceedName = nameOk && !notAName && (nameStatus === 'available' || nameStatus === 'unknown');
 
     const goBackStep = () => {
         if (stepIndex <= 0) { router.back(); return; }
@@ -338,7 +341,10 @@ export default function ProfileSetupScreen() {
                             {nameOk && nameStatus === 'checking' && (
                                 <Text style={styles.hintMuted}>{t('Checking availability…')}</Text>
                             )}
-                            {nameOk && nameStatus === 'available' && (
+                            {notAName && (
+                                <Text style={styles.hintTaken} accessibilityLiveRegion="polite">{t(notANameWords(notAName))}</Text>
+                            )}
+                            {nameOk && !notAName && nameStatus === 'available' && (
                                 <Text style={styles.hintOk}>{t('✓ Available on this community')}</Text>
                             )}
                             {nameOk && nameStatus === 'unknown' && (

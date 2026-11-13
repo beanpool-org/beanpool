@@ -557,11 +557,11 @@ async function main() {
     };
     // Linear, measured against itself: the guard over a body against the guard over a sixteenth of the same body, so the
     // runner's speed, its load and the timer's grain are on both sides. A walk that looks at each value once costs about
-    // 16× (measured 14.9–16.1× on all four bodies); one that looks back over what came before costs about 256× (measured
-    // 204–234×). 48× sits three times from the first and over four from the second; the 1 ms is the timer's grain, which
-    // matters only where the guard skips everything (the 0s). It replaces "at most 4× the parse" on each body, which went
-    // red on a run that changed nothing it reads (merge-queue run 43450708369): the ids' parse took 9.6 ms there and 22.7
-    // where it was measured, while the guard's walk did not move with it, so that ratio swung with the runner.
+    // 16× (measured 14.9–17.2× on all four bodies, six runs); one that looks back over what came before costs about 256×
+    // (measured 197–234×). 48× sits about three times from each; the 1 ms is the timer's grain, which matters only where
+    // the guard skips everything (the 0s). It replaces "at most 4× the parse" on each body, which went red on a run that
+    // changed nothing it reads (merge-queue run 43450708369): the ids' parse took 9.6 ms there against 22.7 ms where the
+    // bound was set, while the guard went only from 55.6 to 39.9 ms, so that ratio swung with the runner, not the guard.
     const SCALE = 16;
     const scales = (walk: (body: unknown) => boolean, whole: unknown, part: unknown) => {
         const [all, sixteenth] = race([() => walk(whole), () => walk(part)]);
@@ -585,8 +585,9 @@ async function main() {
         parseSum += parse;
     }
     // Cheap next to the parse, over the four bodies together: the guard has measured under 0.6× the parse on three of them
-    // and 1.9–4.2× on the ids (whose parse alone is fast and swings), about 0.6× all told; at most 2× still fails a guard
-    // four times as slow, and no one body's parse can swing the sum by much.
+    // and 1.9–4.2× on the ids (whose parse alone is fast and swings), 0.50–0.59× all told on a Mac; at most 2× is over
+    // three times from that (a guard five times as slow sums to 2.5–3.0× there and fails), and no one body's parse can
+    // swing the sum the way the ids' parse swung its own ratio.
     assert(guardSum <= 2 * parseSum, `the guard over the four bodies ${guardSum.toFixed(1)} ms against their parse's ${parseSum.toFixed(1)} ms (at most 2×; medians of 15, interleaved)`);
     // The bound can fail: the same walk that also looks back over the elements before each one (a duplicate check, say)
     // is refused by it, on 12,800 ids against 800, small enough to stay quick.

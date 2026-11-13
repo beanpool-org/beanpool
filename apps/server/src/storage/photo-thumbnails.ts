@@ -215,6 +215,38 @@ export async function resizeToStoredPhoto(photo: Buffer, format: 'jpeg' | 'webp'
 }
 
 /**
+ * Someone else's picture with more pixels than a node keeps, made one it keeps (the Pulse's thumbnails,
+ * engine/pulse-thumbnail.ts: a podcast or SoundCloud cover is 3000 × 3000): at most {@link PHOTO_MAX_SIDE} on its longest
+ * side, turned upright from its EXIF orientation, re-encoded with no metadata, quality 70. A JPEG, or a WebP when it has
+ * transparency, which a JPEG would lose. Decoded only within `ceiling`: the header is read first and a side over
+ * `ceiling.maxSide` is never decoded, and the decoder itself refuses more than `ceiling.maxPixels`. Null when sharp won't
+ * load or the bytes can't be read within that. One resize at a time, in the small copies' queue.
+ */
+export async function shrinkToPhotoSize(photo: Buffer, ceiling: { maxSide: number; maxPixels: number }):
+    Promise<{ bytes: Buffer; mime: 'image/jpeg' | 'image/webp' } | null> {
+    const lib = await loadSharp();
+    if (!lib) return null;
+    return oneAtATime(async () => {
+        activeResizes++;
+        if (activeResizes > peakResizes) peakResizes = activeResizes;
+        try {
+            const head = await lib(photo, { limitInputPixels: ceiling.maxPixels }).metadata();
+            if (!head.width || !head.height || head.width > ceiling.maxSide || head.height > ceiling.maxSide
+                || head.width * head.height > ceiling.maxPixels) return null;
+            const image = lib(photo, { limitInputPixels: ceiling.maxPixels, failOn: 'error' })
+                .rotate()
+                .resize({ width: PHOTO_MAX_SIDE, height: PHOTO_MAX_SIDE, fit: 'inside', withoutEnlargement: true });
+            if (head.hasAlpha) return { bytes: await image.webp({ quality: 70, effort: 4 }).toBuffer(), mime: 'image/webp' };
+            return { bytes: await image.jpeg({ quality: 70, mozjpeg: true }).toBuffer(), mime: 'image/jpeg' };
+        } catch {
+            return null;
+        } finally {
+            activeResizes--;
+        }
+    });
+}
+
+/**
  * Make the small copy of the photo whose object is `photoKey` and whose bytes are `photo`, and keep it. Its bytes, or
  * null when it can't be made; a store that refuses the write still gets the bytes served this once.
  *

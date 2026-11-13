@@ -46,6 +46,7 @@ import {
     type SsrfSafeResponse,
 } from './engine/pulse-resolver.js';
 import type { RouteDeps } from './routes/types.js';
+import { MAX_STORED_PIXELS } from './storage/image-metadata.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -179,6 +180,29 @@ async function main(): Promise<void> {
     const pixelBomb = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), pngChunk('IHDR', bombIhdr),
         pngChunk('IDAT', zlib.deflateSync(Buffer.alloc((1 + 2500) * 20000), { level: 9 })), pngChunk('IEND', Buffer.alloc(0))]);
 
+    // Covers as podcasts and SoundCloud serve them: 3000 x 3000, under the 2 MB download cap (Damo, 13 Nov). The JPEG
+    // is photo-like (64 x 64 noise blown up) and carries EXIF the node must not pass on.
+    const sharp = (await import('sharp')).default;
+    const noise = Buffer.alloc(64 * 64 * 3);
+    for (let i = 0; i < noise.length; i++) noise[i] = (i * 2654435761) >>> 24;
+    const coverJpeg = await sharp(noise, { raw: { width: 64, height: 64, channels: 3 } }).resize(3000, 3000)
+        .withExif({ IFD0: { Copyright: 'exif-must-not-survive', Artist: 'exif-must-not-survive' } })
+        .jpeg({ quality: 85 }).toBuffer();
+    const coverPng = await sharp({ create: { width: 3000, height: 3000, channels: 3, background: { r: 200, g: 120, b: 40 } } })
+        .png().toBuffer();
+    const coverPngAlpha = await sharp({ create: { width: 3000, height: 3000, channels: 4, background: { r: 20, g: 120, b: 200, alpha: 0.5 } } })
+        .png().toBuffer();
+    // Real images past the decoder's ceiling: a side over 4,096 (5,000 x 1,000), and more pixels than 3,072 x 3,072.
+    const wideBanner = await sharp({ create: { width: 5000, height: 1000, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+    const overCeiling = await sharp({ create: { width: 3100, height: 3100, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+    const bigImages: Record<string, { bytes: Buffer; type: string }> = {
+        'cover-3000.jpg': { bytes: coverJpeg, type: 'image/jpeg' },
+        'cover-3000.png': { bytes: coverPng, type: 'image/png' },
+        'cover-3000-alpha.png': { bytes: coverPngAlpha, type: 'image/png' },
+        'banner-5000x1000.png': { bytes: wideBanner, type: 'image/png' },
+        'cover-3100.png': { bytes: overCeiling, type: 'image/png' },
+    };
+
     let lastEmbedUserAgent: string | undefined;
     let tombstoneMidRecoveryId = '';
 
@@ -188,6 +212,19 @@ async function main(): Promise<void> {
         // Simulate over-size response
         if (url.includes('oversize.jpg')) {
             throw new PayloadTooLargeError('Response exceeded maximum size limit');
+        }
+
+        const big = Object.entries(bigImages).find(([name]) => url.endsWith(`/${name}`));
+        if (big) {
+            return {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': big[1].type },
+                url,
+                buffer: async () => big[1].bytes,
+                text: async () => '',
+                json: async <T = any>(): Promise<T> => ({} as T),
+            };
         }
 
         // A 20000 x 20000 PNG in 49 KB: a channel owner's thumbnail every member's phone would decode whole (#2079 review NB1)
@@ -431,6 +468,61 @@ async function main(): Promise<void> {
     const bmpItemId = makePulseItem(chan, alice, { thumbnailUrl: `data:image/png;base64,${bmpHeader.toString('base64')}` });
     const resBmp = await callRouter(router, 'GET', `/api/pulse/items/${bmpItemId}/thumbnail`);
     assert(resBmp.status === 413 && thumbnailService.cache.get(bmpItemId) === null, `A BMP sent as image/png is refused and not cached (got ${resBmp.status})`);
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // A real picture too big to keep is shrunk to the photo size, not refused (Damo, 13 Nov: SoundCloud's 3000 x 3000 art)
+    // ──────────────────────────────────────────────────────────────────────────
+    const shrunkOk = async (body: unknown, type: string, label: string, wantType: string): Promise<void> => {
+        if (!Buffer.isBuffer(body)) { assert(false, `${label}: the body is image bytes`); return; }
+        const m = await sharp(body).metadata();
+        const w = m.width ?? 0, h = m.height ?? 0;
+        assert(type === wantType && m.format === wantType.slice('image/'.length),
+            `${label}: served as ${wantType} (got ${type}, ${m.format})`);
+        assert(Math.max(w, h) === 800 && w * h <= MAX_STORED_PIXELS && body.length <= MAX_THUMBNAIL_BYTES,
+            `${label}: 800 px on its longest side, no more pixels than a node stores (got ${w} x ${h}, ${body.length} bytes)`);
+        assert(m.exif === undefined && m.icc === undefined && m.xmp === undefined, `${label}: no metadata kept`);
+    };
+    for (const [name, wantType] of [['cover-3000.jpg', 'image/jpeg'], ['cover-3000.png', 'image/jpeg'], ['cover-3000-alpha.png', 'image/webp']] as const) {
+        const coverItemId = makePulseItem(chan, alice, { thumbnailUrl: `https://images.example.org/${name}` });
+        const resCover = await callRouter(router, 'GET', `/api/pulse/items/${coverItemId}/thumbnail`);
+        assert(resCover.status === 200, `A 3000 x 3000 thumbnail (${name}) is served (got ${resCover.status} ${resCover.body?.error ?? ''})`);
+        await shrunkOk(resCover.body, resCover.type, `${name} through the route`, wantType);
+        const fetchesBeforeCached = upstreamFetchCount;
+        const resCoverAgain = await callRouter(router, 'GET', `/api/pulse/items/${coverItemId}/thumbnail`);
+        assert(resCoverAgain.status === 200 && Buffer.isBuffer(resCoverAgain.body) && resCoverAgain.body.equals(resCover.body)
+            && upstreamFetchCount === fetchesBeforeCached, `${name}: asked again, the shrunk copy is served from the cache`);
+        const ingestedCover = await thumbnailService.ingestThumbnail(`item_ingest_${name}`, `https://images.example.org/${name}`);
+        assert(ingestedCover.status === 200, `${name}: ingested, it is kept (got ${ingestedCover.status} ${ingestedCover.error ?? ''})`);
+        await shrunkOk(ingestedCover.buffer, ingestedCover.contentType ?? '', `${name} at ingest`, wantType);
+    }
+    const dataCoverId = makePulseItem(chan, alice, { thumbnailUrl: `data:image/jpeg;base64,${coverJpeg.toString('base64')}` });
+    const resDataCover = await callRouter(router, 'GET', `/api/pulse/items/${dataCoverId}/thumbnail`);
+    assert(resDataCover.status === 200, `A 3000 x 3000 data URI thumbnail is served (got ${resDataCover.status})`);
+    await shrunkOk(resDataCover.body, resDataCover.type, 'a 3000 x 3000 data URI', 'image/jpeg');
+    // Past the decoder's ceiling it is still refused, from its header: a side over 4,096, or more than 3,072 x 3,072 pixels.
+    for (const name of ['banner-5000x1000.png', 'cover-3100.png']) {
+        const overItemId = makePulseItem(chan, alice, { thumbnailUrl: `https://images.example.org/${name}` });
+        const resOver = await callRouter(router, 'GET', `/api/pulse/items/${overItemId}/thumbnail`);
+        assert(resOver.status === 413 && thumbnailService.cache.get(overItemId) === null,
+            `${name}, past the decoder's ceiling, is refused (413) and not cached (got ${resOver.status})`);
+    }
+    // An item backed off with the old 413 is fetched again when its backoff ends, and then kept; one still inside it is not.
+    const backedOffItemId = makePulseItem(chan, alice, { thumbnailUrl: 'https://images.example.org/cover-3000.jpg' });
+    const waitingItemId = makePulseItem(chan, alice, { thumbnailUrl: 'https://images.example.org/cover-3000.jpg' });
+    const hourAgo = new Date(Date.now() - 3_600_000).toISOString();
+    const insertBackoff = db.prepare(
+        `INSERT INTO pulse_thumbnail_backoff (item_id, thumbnail_url, failure_count, status, error, last_failed_at, retry_after)
+         VALUES (?, ?, 1, 413, 'Thumbnail has more pixels than a node stores (3000 x 3000)', ?, ?)`);
+    insertBackoff.run(backedOffItemId, 'https://images.example.org/cover-3000.jpg', hourAgo, new Date(Date.now() - 1000).toISOString());
+    insertBackoff.run(waitingItemId, 'https://images.example.org/cover-3000.jpg', hourAgo, new Date(Date.now() + 3_600_000).toISOString());
+    const fetchesBeforeRetry = upstreamFetchCount;
+    const resRetried = await callRouter(router, 'GET', `/api/pulse/items/${backedOffItemId}/thumbnail`);
+    assert(resRetried.status === 200 && upstreamFetchCount === fetchesBeforeRetry + 1,
+        `An item backed off with the old 413 is fetched again once its backoff ends, and served (got ${resRetried.status})`);
+    assert(!db.prepare('SELECT 1 FROM pulse_thumbnail_backoff WHERE item_id = ?').get(backedOffItemId), 'and its backoff row is cleared');
+    const resWaiting = await callRouter(router, 'GET', `/api/pulse/items/${waitingItemId}/thumbnail`);
+    assert(resWaiting.status === 413 && upstreamFetchCount === fetchesBeforeRetry + 1,
+        `One still inside its backoff waits for it to end, without a fetch (got ${resWaiting.status})`);
 
     // ──────────────────────────────────────────────────────────────────────────
     // Strict Content-Type enforcement (refuses non-image types)

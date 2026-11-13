@@ -78,6 +78,7 @@ import { ListPhoto } from '../components/ListPhoto';
 import { bundledGroupEmblem, dealMoves, dealStep, dealsNeedingMe, formatDate, itemTrustLine, groupClosedShown, groupNameShown, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn, useCommunityInfo } from '../lib/features';
+import { useGrowingComposer } from '../lib/use-growing-composer';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -678,16 +679,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         return byPeer;
     }, [userTransactions, identity.publicKey]);
 
-    // Auto-grow the composer with the draft (up to ~4 lines), collapsing back
-    // to one line when the draft is cleared on send.
-    useEffect(() => {
-        const el = draftRef.current;
-        if (!el) return;
-        el.style.height = 'auto';
-        // +2 accounts for the 1px top/bottom border under border-box sizing,
-        // otherwise the content sits 2px short and shows a scrollbar.
-        el.style.height = Math.min(el.scrollHeight + 2, 100) + 'px';
-    }, [draft]);
+    // The composer grows with the draft up to five lines and is one line again after a send; a scrollbar
+    // only past five (lib/use-growing-composer.ts). It is fitted the moment a chat opens, too.
+    useGrowingComposer(draftRef);
 
     useEffect(() => {
         const handleGlobalClick = () => {
@@ -3602,10 +3596,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             rows={1}
                             style={{
                                 ...inputStyle,
-                                height: '40px',
-                                maxHeight: '100px',
+                                // Height and overflow are useGrowingComposer's: one line up to five, then a scrollbar.
+                                height: undefined,
                                 resize: 'none',
-                                overflowY: 'auto',
                                 lineHeight: 1.4,
                                 paddingTop: '0.55rem',
                                 paddingBottom: '0.55rem',

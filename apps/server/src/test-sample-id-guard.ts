@@ -16,7 +16,8 @@
  *   5. every body field the server's routes read (a static walk of src/, aliases, getters and helpers included): sent a
  *      sample id under that field, each route answers 400 `sample_id`, unless the field is free text; every free-text
  *      key is one some route reads, and none names an id
- *   6. the guard costs about what the JSON parse did, on bodies of up to 3 MB (it runs before the signature check)
+ *   6. over bodies of up to 3 MB the guard costs no more than twice their JSON parse (it runs before the signature
+ *      check), a bound that a quadratic walk, one that looks back over the values before each one, fails
  *   7. the Start a community owner route refuses an unsigned caller (and the address stays)
  *
  * Local only: it talks to the server it starts on localhost and nothing else.
@@ -541,37 +542,68 @@ async function main() {
         const s = [...xs].sort((a, b) => a - b);
         return s[Math.floor(s.length / 2)];
     };
-    for (const [label, text] of [
-        ['2 MB array of 0s', JSON.stringify({ a: new Array(1_000_000).fill(0) })],
-        ['2 MB array of short strings', JSON.stringify({ a: new Array(400_000).fill('x') })],
-        ['3 MB array of {id}', JSON.stringify({ items: Array.from({ length: 200_000 }, (_, k) => ({ id: 'x' + k })) })],
-        ['2 MB of ids under an id key', JSON.stringify({ postIds: Array.from({ length: 150_000 }, (_, k) => 'post-' + k.toString(36).padStart(6, '0')) })],
-    ] as const) {
-        const parsed = JSON.parse(text);
-        // Warm up JIT and ICs so cold start doesn't skew early runs.
-        JSON.parse(text);
-        bodyCarriesSampleId(parsed);
-        const parses: number[] = [];
-        const guards: number[] = [];
+    /** Each function's median time over 15 rounds, interleaved (the order turns round each round), after a warm-up call. */
+    const race = (fns: Array<() => unknown>): number[] => {
+        for (const fn of fns) fn();
+        const times: number[][] = fns.map(() => []);
         for (let r = 0; r < 15; r++) {
-            if (r % 2 === 0) {
-                const t0 = performance.now(); JSON.parse(text); const t1 = performance.now();
-                const t2 = performance.now(); bodyCarriesSampleId(parsed); const t3 = performance.now();
-                parses.push(t1 - t0); guards.push(t3 - t2);
-            } else {
-                const t0 = performance.now(); bodyCarriesSampleId(parsed); const t1 = performance.now();
-                const t2 = performance.now(); JSON.parse(text); const t3 = performance.now();
-                guards.push(t1 - t0); parses.push(t3 - t2);
+            for (let i = 0; i < fns.length; i++) {
+                const at = r % 2 === 0 ? i : fns.length - 1 - i;
+                const t0 = performance.now(); fns[at](); times[at].push(performance.now() - t0);
             }
         }
-        // A bound in proportion to the parse, so it holds on a machine of any speed: measured on Node 22 the guard over 2 MB
-        // of ids costs 2.45× the parse (here and on a CI runner ten times slower, 55.6 against 22.7 ms) and the other bodies
-        // under 0.6×. The 2× + 10 ms it replaced passed only where 10 ms was large beside the parse (on a fast machine it let
-        // the ids through at 6×). A guard ten times as slow fails on the bodies of strings; the 1 ms is the timer's grain.
-        const parse = median(parses);
-        const guard = median(guards);
-        assert(guard <= 4 * parse + 1, `${label}: the guard ${guard.toFixed(1)} ms against the parse's ${parse.toFixed(1)} ms (at most 4× + 1 ms; median of 15, interleaved)`);
-    }
+        return times.map(median);
+    };
+    // The four bodies: 2 MB of 0s, 2 MB of short strings, 3 MB of {id} and 2 MB of ids under an id key.
+    const ids = (n: number) => ({ postIds: Array.from({ length: n }, (_, k) => 'post-' + k.toString(36).padStart(6, '0')) });
+    const PERF_BODIES = [
+        ['0s', (n: number) => ({ a: new Array(n).fill(0) }), 1_000_000],
+        ['short strings', (n: number) => ({ a: new Array(n).fill('x') }), 400_000],
+        ['{id}', (n: number) => ({ items: Array.from({ length: n }, (_, k) => ({ id: 'x' + k })) }), 200_000],
+        ['ids', ids, 150_000],
+    ] as const;
+    /** A walk's median time on each body cut to 1/`share` of its size, summed, against the same for the bodies' JSON parse. */
+    const cost = (walk: (body: unknown) => boolean, share: number) => {
+        let walked = 0, parsed = 0;
+        const each: string[] = [];
+        for (const [label, make, n] of PERF_BODIES) {
+            const text = JSON.stringify(make(n / share));
+            const body = JSON.parse(text);
+            const [w, p] = race([() => walk(body), () => JSON.parse(text)]);
+            walked += w;
+            parsed += p;
+            each.push(`${label} ${w.toFixed(2)}/${p.toFixed(2)}`);
+        }
+        return { walked, parsed, each: each.join(', '), ok: walked <= 2 * parsed };
+    };
+    // Cheap next to the parse, over the four bodies together. Both sides take milliseconds and run interleaved, so the
+    // runner's speed and its load fall on both, and no one body's parse can swing the sum the way the ids' parse swung its
+    // own ratio. Measured 0.54–0.57× in this suite on a Mac (Node 26, six runs at load averages 3–15) and 0.31× and 0.37×
+    // on CI runners (runs 43456378701 and 43450708369): at most 2× is over three times from the Mac and over five from CI,
+    // and a guard five times as slow fails on the Mac. Two per-body checks before it went red on runners where the guard
+    // had not changed: "at most 4× the parse" (the ids' parse took 9.6 ms on run 43450708369 against 22.7 ms where the
+    // bound was set), then "the whole body at most 48× a sixteenth of it" (81× on the 0s and the short strings on run
+    // 43456378701, where the walk over each whole body cost 25–67 ns a value against 5–13 ns over its sixteenth: a short
+    // walk did not stand for a long one there, so a ratio of sizes can't tell linear from quadratic on such a runner).
+    const guard = cost(bodyCarriesSampleId, 1);
+    assert(guard.ok, `the guard over the four bodies ${guard.walked.toFixed(1)} ms against their parse's ${guard.parsed.toFixed(1)} ms (at most 2×; medians of 15, interleaved; guard/parse ms: ${guard.each})`);
+    // The bound can fail: the same walk that also looks back over the values before each one (a duplicate check, say)
+    // costs 79–121× the parse over a hundredth of each body on a Mac (six runs), and an estimated 12× or more on a CI
+    // runner (on run 43456378701 that walk took 2.1–3.5 times the Mac's time, the parse 8–12 times), so the bound refuses
+    // it six times over or more; over the whole bodies it would cost about a hundred times that again.
+    const lookingBack = (v: unknown): boolean => {
+        if (!Array.isArray(v)) {
+            if (v !== null && typeof v === 'object') { for (const k in v) if (lookingBack((v as Record<string, unknown>)[k])) return true; return false; }
+            return bodyCarriesSampleId(v);
+        }
+        for (let i = 0; i < v.length; i++) {
+            for (let j = 0; j < i; j++) if (v[j] === undefined) return true;
+            if (bodyCarriesSampleId(v[i])) return true;
+        }
+        return false;
+    };
+    const probe = cost(lookingBack, 100);
+    assert(!probe.ok, `a quadratic walk fails the same bound: ${probe.walked.toFixed(1)} ms against the parse's ${probe.parsed.toFixed(2)} ms over a hundredth of each body (${(probe.walked / probe.parsed).toFixed(0)}×; walk/parse ms: ${probe.each})`);
 
     console.log('\n── 7. the Start a community owner route ──');
     const { getStartCommunityUrl } = await import('./config/start-community.js');

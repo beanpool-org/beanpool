@@ -993,6 +993,29 @@ function extractAllTags(
     return results;
 }
 
+/** Query parameters that only say where a link was shared from or who shared it, never which page it is. */
+export const SHARE_TRACKING_PARAM = /^(utm_[a-z0-9_]*|fbclid|gclid|dclid|gbraid|wbraid|msclkid|mc_cid|mc_eid|igshid|igsh|si|feature|ref|ref_src|ref_url|share_id|is_from_webapp|sender_device|_r|_t)$/i;
+
+/**
+ * Which page a Pulse link names, to tell when a feed item is one a member already added by hand (one track, one item:
+ * Damo, 13 Nov). The same for the link the member pasted (routes/pulse-submit.ts normalisePulseUrl) and the feed's own
+ * link to it: http or https, a `www.` or `m.` host, a trailing slash, a fragment and share-tracking parameters say
+ * nothing about which page it is. The path keeps its case. Null for anything that is not an http(s) address.
+ */
+export function pulseLinkKey(raw: string | null | undefined): string | null {
+    if (!raw || typeof raw !== 'string') return null;
+    try {
+        const u = new URL(raw.trim());
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+        const host = u.hostname.toLowerCase().replace(/^(?:www|m)\./, '');
+        const query = [...u.searchParams].filter(([name]) => !SHARE_TRACKING_PARAM.test(name))
+            .map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(value)}`).sort().join('&');
+        return `${host}${u.port ? `:${u.port}` : ''}${u.pathname.replace(/\/+$/, '')}${query ? `?${query}` : ''}`;
+    } catch {
+        return null;
+    }
+}
+
 export function validateWebUrl(raw: string | null | undefined, baseUrl?: string | null): string | null {
     if (!raw || typeof raw !== 'string') return null;
     const trimmed = raw.trim();
@@ -1967,6 +1990,26 @@ export async function resolveChannel(channelId: string, options: ResolveChannelO
         const isListed = db.prepare(
             'SELECT 1 FROM pulse_items WHERE channel_id = ? AND external_id = ? AND deleted_at IS NULL'
         );
+        // One track, one item (Damo, 13 Nov: a track he added by its link came back from his SoundCloud feed 33 s later as a
+        // second item). A link added by hand is stored under its address, the feed's copy under the feed's guid
+        // (`tag:soundcloud,2010:tracks/…`), so the guid dedupe above never meets it. A new feed item whose own link names
+        // the same page as one of this member's live items added by hand (or by an account sync) is that item, and is not
+        // added again. Only those: feed items are never matched against each other (the guid does that), and a link more
+        // than one item of this feed points at (a podcast whose every item links its home page) names no one item.
+        const linkKeysInFeed = new Map<string, number>();
+        for (const item of intake) {
+            const key = pulseLinkKey(item.url);
+            if (key) linkKeysInFeed.set(key, (linkKeysInFeed.get(key) ?? 0) + 1);
+        }
+        const addedByHand = new Set(
+            (db.prepare(
+                `SELECT url FROM pulse_items WHERE owner_pubkey = ? AND deleted_at IS NULL AND source != 'autolist' AND url IS NOT NULL`
+            ).all(channel.owner_pubkey) as { url: string }[]).map(r => pulseLinkKey(r.url)).filter((k): k is string => k !== null)
+        );
+        const alreadyAddedByHand = (url: string | null): boolean => {
+            const key = pulseLinkKey(url);
+            return key !== null && linkKeysInFeed.get(key) === 1 && addedByHand.has(key);
+        };
 
         const insertItem = db.prepare(
             `INSERT INTO pulse_items
@@ -1987,6 +2030,7 @@ export async function resolveChannel(channelId: string, options: ResolveChannelO
             for (const item of intake) {
                 const listed = item.externalId !== null && !!isListed.get(channel.id, item.externalId);
                 if (!listed) {
+                    if (alreadyAddedByHand(item.url)) continue;
                     if (allowance <= 0) { leftForLater++; continue; }
                     allowance--;
                 }

@@ -29,6 +29,7 @@ import { addChannel } from './engine/creator-channels.js';
 import { createPulseSubmitRoutes, identifyPlatformAndExternalId } from './routes/pulse-submit.js';
 import type { PulseSubmitRouteDeps } from './routes/pulse-submit.js';
 import { PulseThumbnailService } from './engine/pulse-thumbnail.js';
+import { resolveChannel } from './engine/pulse-resolver.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -613,6 +614,77 @@ async function main(): Promise<void> {
     assert(probeCalls.length === 1, 'dismiss-nudge without a seenCount goes through the injected probe');
     assert(dismissNoCount.body.postCountSeen === STUBBED_IG_POST_COUNT,
         'and the watermark is set from the probed count');
+
+    // ── 6. One track, one item: a track added by its link, then seen in the channel's feed ─────
+    // Damo, 13 Nov: 'Château Margaux' was on Byron twice, the item he added by its link and the same track from his
+    // SoundCloud feed 33 s later. A SoundCloud feed item's guid is `tag:soundcloud,2010:tracks/<id>`, never the link, so
+    // the guid dedupe missed it. The shape of a SoundCloud item (guid, link, an audio enclosure, a 3000 x 3000
+    // itunes:image), with neutral names.
+    console.log('\n--- 6. One track, one item ---');
+    db.prepare('UPDATE creator_channels SET url = ? WHERE id = ?')
+        .run('https://feeds.soundcloud.com/users/soundcloud:users:1000/sounds.rss', chKaylaSc.id);
+    const scItem = (track: number, slug: string, title: string, link = `https://soundcloud.com/djcool/${slug}`) => `
+    <item>
+      <guid isPermaLink="false">tag:soundcloud,2010:tracks/${track}</guid>
+      <title>${title}</title>
+      <pubDate>Thu, 12 Nov 2026 22:58:51 +0000</pubDate>
+      <link>${link}</link>
+      <itunes:duration>00:03:30</itunes:duration>
+      <itunes:author>djcool</itunes:author>
+      <description>A track.</description>
+      <enclosure type="audio/mpeg" url="https://feeds.soundcloud.com/stream/${track}-djcool-${slug}.mp3" length="0"/>
+      <itunes:image href="https://i1.sndcdn.com/artworks-${track}-t3000x3000.jpg"/>
+    </item>`;
+    let feedXml = '';
+    const feedFetch = (async (rawUrl: string) => ({
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'application/rss+xml' },
+        url: rawUrl,
+        buffer: async () => Buffer.from(feedXml),
+        text: async () => feedXml,
+        json: async () => ({}),
+    })) as any;
+    const scLive = () => db.prepare(
+        `SELECT id, source, external_id, url FROM pulse_items WHERE channel_id = ? AND deleted_at IS NULL ORDER BY created_at`
+    ).all(chKaylaSc.id) as { id: string; source: string; external_id: string; url: string }[];
+    const summerMixRows = () => scLive().filter(r => r.url?.includes('summer-mix-2026'));
+    assert(summerMixRows().length === 1 && summerMixRows()[0].source === 'manual', 'Before the feed: the track added by its link is one item');
+    // The feed spells the same page as the member's link (no www, no tracking); one feed item is a new track.
+    feedXml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"><channel>
+    <title>djcool's sounds</title><link>https://soundcloud.com/djcool</link>
+    ${scItem(1000000001, 'summer-mix-2026', 'Summer Mix 2026')}
+    ${scItem(1000000002, 'winter-mix-2026', 'Winter Mix 2026')}
+</channel></rss>`;
+    const firstVisit = await resolveChannel(chKaylaSc.id, { fetchFn: feedFetch });
+    assert(!firstVisit.error, `The feed is read (${firstVisit.error ?? 'no error'})`);
+    assert(summerMixRows().length === 1 && summerMixRows()[0].source === 'manual',
+        `After the feed: the track added by its link is still ONE item (got ${summerMixRows().length}: ${summerMixRows().map(r => r.source).join(', ')})`);
+    assert(scLive().some(r => r.external_id === 'tag:soundcloud,2010:tracks/1000000002'), 'and the feed\'s new track is added');
+    const afterFirst = scLive().length;
+    await resolveChannel(chKaylaSc.id, { fetchFn: feedFetch });
+    assert(scLive().length === afterFirst && summerMixRows().length === 1, 'A second visit of the feed adds nothing again');
+    // The link the member pasted carried share tracking and a www host; the feed links the plain page: still one track.
+    const autumn = await call('POST', '/api/member/pulse/submit', {
+        actor: kayla,
+        body: { url: 'https://www.soundcloud.com/djcool/autumn-mix-2026?si=abc123&utm_source=clipboard', title: 'Autumn Mix 2026', category: 'art' },
+    });
+    assert(autumn.status === 200, `A track added by a link with tracking on it (got ${autumn.status})`);
+    feedXml = feedXml.replace('</channel>', `${scItem(1000000003, 'autumn-mix-2026', 'Autumn Mix 2026')}</channel>`);
+    await resolveChannel(chKaylaSc.id, { fetchFn: feedFetch });
+    const autumnRows = scLive().filter(r => r.url?.includes('autumn-mix-2026'));
+    assert(autumnRows.length === 1 && autumnRows[0].source === 'manual', `is one item after the feed too (got ${autumnRows.length})`);
+    // A link more than one feed item points at names no single item: a profile link the member added by hand does not
+    // swallow two feed items that both link the profile.
+    const profileAdded = await call('POST', '/api/member/pulse/submit', {
+        actor: kayla, body: { url: 'https://soundcloud.com/djcool', title: 'djcool', category: 'art' },
+    });
+    assert(profileAdded.status === 200, `The profile link added by hand (got ${profileAdded.status})`);
+    feedXml = feedXml.replace('</channel>', `${scItem(1000000004, 'p1', 'Shared link one', 'https://soundcloud.com/djcool')}${scItem(1000000005, 'p2', 'Shared link two', 'https://soundcloud.com/djcool')}</channel>`);
+    await resolveChannel(chKaylaSc.id, { fetchFn: feedFetch });
+    assert(['1000000004', '1000000005'].every(t => scLive().some(r => r.external_id === `tag:soundcloud,2010:tracks/${t}`)),
+        'Two feed items that share one link are both added: that link names no one track');
 
     console.log(`\nResults: ${passed}/${run} tests passed.`);
     process.exit(passed === run ? 0 : 1);

@@ -486,7 +486,7 @@ async function main(): Promise<void> {
         const coverItemId = makePulseItem(chan, alice, { thumbnailUrl: `https://images.example.org/${name}` });
         const resCover = await callRouter(router, 'GET', `/api/pulse/items/${coverItemId}/thumbnail`);
         assert(resCover.status === 200, `A 3000 x 3000 thumbnail (${name}) is served (got ${resCover.status} ${resCover.body?.error ?? ''})`);
-        await shrunkOk(resCover.body, resCover.type, `${name} through the route`, wantType);
+        await shrunkOk(resCover.body, resCover.type ?? '', `${name} through the route`, wantType);
         const fetchesBeforeCached = upstreamFetchCount;
         const resCoverAgain = await callRouter(router, 'GET', `/api/pulse/items/${coverItemId}/thumbnail`);
         assert(resCoverAgain.status === 200 && Buffer.isBuffer(resCoverAgain.body) && resCoverAgain.body.equals(resCover.body)
@@ -498,7 +498,7 @@ async function main(): Promise<void> {
     const dataCoverId = makePulseItem(chan, alice, { thumbnailUrl: `data:image/jpeg;base64,${coverJpeg.toString('base64')}` });
     const resDataCover = await callRouter(router, 'GET', `/api/pulse/items/${dataCoverId}/thumbnail`);
     assert(resDataCover.status === 200, `A 3000 x 3000 data URI thumbnail is served (got ${resDataCover.status})`);
-    await shrunkOk(resDataCover.body, resDataCover.type, 'a 3000 x 3000 data URI', 'image/jpeg');
+    await shrunkOk(resDataCover.body, resDataCover.type ?? '', 'a 3000 x 3000 data URI', 'image/jpeg');
     // Past the decoder's ceiling it is still refused, from its header: a side over 4,096, or more than 3,072 x 3,072 pixels.
     for (const name of ['banner-5000x1000.png', 'cover-3100.png']) {
         const overItemId = makePulseItem(chan, alice, { thumbnailUrl: `https://images.example.org/${name}` });

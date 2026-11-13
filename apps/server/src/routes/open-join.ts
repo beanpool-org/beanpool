@@ -188,6 +188,7 @@ import {
     type OpenJoinOutcome,
     type OpenJoinRefusal,
 } from '../engine/open-join.js';
+import { CallsignNotANameError } from '../engine/members.js';
 import { doorCeilingReached, doorLevel, doorNumbers, noteWordsJoin, WORDS_PROVIDER, type DoorCeiling } from '../engine/door-signal.js';
 import { checkDoorWork, issueDoorWork, type DoorWorkRefusal } from '../services/door-work.js';
 import { doorCheckAsked, doorCheckPassed, forgetDoorCheckPass, siteverifyUp, verifyDoorCheck, type DoorCheckPage } from '../services/door-check.js';
@@ -665,6 +666,9 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
         try {
             outcome = registerOpenJoin(broadcast, { publicKey: actor, callsign, provider: WORDS_PROVIDER, joinHash: wordsJoinHash(), ipHash });
         } catch (e) {
+            // The name as the door cut it (20) is an address where the whole was not ("ann.comet" → "ann.com"): refused, and
+            // nothing was written. Never the 503's "try again", which would be refused the same way.
+            if (e instanceof CallsignNotANameError) return badRequest(ctx, e.message, e.code);
             console.error('[OpenJoin] join could not be recorded:', (e as Error)?.message || e);
             recordFunnelEvent('open_join_failed', 'join_failed');
             ctx.status = 503;
@@ -750,6 +754,8 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
         } catch (e) {
             // The key went between the check above and the hash: refused as above, and nothing was written.
             if (e instanceof OpenJoinKeyMissing) return doorKeyMissing(ctx, provider);
+            // The cut name is an address where the whole was not (as the 12-words door above): refused, nothing written.
+            if (e instanceof CallsignNotANameError) return badRequest(ctx, e.message, e.code);
             // Nothing was kept: the member row and the open_joins row roll back together (engine/open-join.ts). The
             // exception's text names tables and constraints, so it goes to the log and never into the answer.
             console.error('[OpenJoin] join could not be recorded:', (e as Error)?.message || e);

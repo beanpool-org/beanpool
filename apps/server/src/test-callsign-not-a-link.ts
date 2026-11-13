@@ -18,7 +18,7 @@ delete process.env.CF_RECORD_NAME; // self-signed / LAN mode
 delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
-import { NAME_BOX_WORDS } from '@beanpool/core';
+import { NAME_BOX_WORDS, solveDoorWorkSync } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, generateInvite } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
@@ -135,6 +135,14 @@ async function main(): Promise<void> {
     const signIn = await call('POST', walker, '/api/join', { callsign: 'INV-K7Q2-BSXA', provider: 'google', idToken: 'not-read', nonce: 'not-read' });
     assert(refusedAs(signIn, NAME_BOX_WORDS.inviteCode), `the sign-in door: 400 callsign_link before the sign-in is read (got ${signIn.status} ${JSON.stringify(signIn.body)})`);
     assert(nameOf(walker.pk) === undefined, 'and nobody joined');
+    // The door keeps 20 characters, and "x.comet" cut there is "x.com": the engine refuses the cut name, after the work,
+    // as 400 callsign_link, never the 503 "try again" that would be refused the same way.
+    const cutter = keypair();
+    const handed = await call('POST', cutter, '/api/join/work', { door: 'words' });
+    const challenge = String(handed.body?.work?.challenge ?? '');
+    const cut = await call('POST', cutter, '/api/join', { door: 'words', callsign: 'Rowan at Byron x.comet', work: { challenge, counters: solveDoorWorkSync(challenge) } });
+    assert(refusedAs(cut, NAME_BOX_WORDS.webLink) && nameOf(cutter.pk) === undefined,
+        `a name that is an address only once the door cuts it: 400 callsign_link, nobody joined (got ${cut.status} ${JSON.stringify(cut.body)})`);
     delete process.env.NODE_PROFILE;
 
     console.log('\n── 4b. asking to join ──');

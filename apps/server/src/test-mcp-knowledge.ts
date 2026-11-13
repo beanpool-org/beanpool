@@ -191,6 +191,14 @@ async function main(): Promise<void> {
         assert(/Find out about the bus timetable for .+ from public pages, with your own web search: this server reaches no other server\./.test(dpText)
             && /Check knowledge_list first/.test(dpText) && /Give 1 to 5 sources\. Nothing about private people\. File it with knowledge_draft and tell me it is waiting for me in the app\./.test(dpText),
             `1. draft-local-knowledge asks for the assistant's own search, sources, no private people (${dpText.slice(0, 160)}…)`);
+        // Who else: a member with no role, or a moderator, has no assistant at all (agent/mcp-route.ts: 401), so none of the five.
+        const melToken = issueAutomationToken({ name: "Mel's Claude", scope: 'agent', expiresAt: Date.now() + 86_400_000, createdBy: mel.pk });
+        const melList = melToken.ok ? await fetch(`${BASE}/mcp`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${melToken.token}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+        }) : null;
+        assert(melList?.status === 401, `1. a member with no role has no assistant: 401, no tool (${melList?.status})`);
         const info = structured(await b.callTool({ name: 'connection_info', arguments: {} }));
         assert(info?.knowledge?.waiting === 0 && info?.knowledge?.today === 0 && info?.knowledge?.perDay === 20 && info?.cannot?.includes('publish Local knowledge'),
             `1. connection_info carries knowledge { waiting, today, perDay } and says it cannot publish (${JSON.stringify(info?.knowledge)})`);
@@ -396,6 +404,11 @@ async function main(): Promise<void> {
         const filtered = async (args: Record<string, unknown>) => (structured(await c.callTool({ name: 'knowledge_list', arguments: args }))?.pages ?? []).map((p: any) => p.id).sort().join();
         assert(await filtered({ topic: 'emergencies' }) === old.id && await filtered({ out_of_date_only: true }) === tip.id && await filtered({ older_than_days: 365 }) === old.id,
             '7. the filters: topic, out_of_date_only, older_than_days');
+        const zeroDays = await c.callTool({ name: 'knowledge_list', arguments: { older_than_days: 0 } });
+        const badTopic = await c.callTool({ name: 'knowledge_list', arguments: { topic: 'gossip' } });
+        assert(zeroDays.isError === true && /older_than_days is a whole number of days, 1 or more/.test(errorText(zeroDays))
+            && badTopic.isError === true && /topic must be one of/.test(errorText(badTopic)),
+            `7. a filter it can't read is refused in words, never read as another (${errorText(zeroDays)} | ${errorText(badTopic)})`);
         const got = await c.callTool({ name: 'knowledge_get', arguments: { post_id: tip.id } });
         const g = structured(got)?.page;
         const fenceOf = (x: any) => /^<<<MEMBER-TEXT ([0-9a-f]{8}): [^\n]+>>>\n([\s\S]*)\n<<<END \1>>>$/.exec(x?.text ?? '');

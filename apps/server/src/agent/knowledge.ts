@@ -137,7 +137,9 @@ export const KNOWLEDGE_TOOLS: AgentTool[] = [
             if (!knowledgeOn()) return { ok: false, error: KNOWLEDGE_OFF_WORDS };
             if (args.topic !== undefined && !isKnowledgeTopic(args.topic)) return { ok: false, error: `topic must be one of ${TOPIC_IDS.join(', ')}.` };
             const now = Date.now();
-            const days = args.older_than_days === undefined ? null : whole(args.older_than_days, 365, 1, 36_500);
+            const asked = args.older_than_days === undefined ? null : Math.floor(Number(args.older_than_days));
+            if (asked !== null && !(Number.isFinite(asked) && asked >= 1)) return { ok: false, error: 'older_than_days is a whole number of days, 1 or more (365: a year).' };
+            const days = asked === null ? null : Math.min(asked, 36_500);
             const before = days === null ? null : now - days * DAY_MS;
             const pages = showingTo(grant.member)
                 .filter((p) => args.topic === undefined || p.category === args.topic)

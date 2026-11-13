@@ -58,16 +58,16 @@ import {
     NOTICES_SEEN_EVENT, beansAmount, beansLines, cardTitle, closesIn, closesWords, communityFacts, communityLine, communityName, dealStatusLine, dealTitleLine,
     askedFacts, dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, homeEventWhere, isHomeCardId,
     joinedLine, monthSummaryLine, nearbyLine, notAnsweringLine, probationSentence, promiseLine, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
-    pinnedFirst, starredFirst, stepLines, tierWords, toggleInterest, usePhoneAppCardDue, SKY_NO_PLACE_LINE,
+    pinnedFirst, starredFirst, stepLines, tierWords, toggleInterest, tourOverFor, usePhoneAppCardDue, wayBackOf, SKY_NO_PLACE_LINE, WELCOME_WORDS,
     CHAT_CARD_WORDS, chatCardFor, chatLineText, chatLinesShown, type ChatOpeners,
     type HomeAnswer, type HomeCardId, type HomeCards, type HomeMarketItem, type HomeNeedItem, type NeedsItem, type StepLine,
     type HomeFind,
 } from '../lib/home-cards';
 import {
-    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, SEARCH_OFFLINE_LINE, addCard, addedLine, arrangeCards, askPinned, canMoveCard, moveCardTo, reorderIds,
-    canRemoveCard, cardLabelName, cardName, cardOnNode, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews,
+    FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, SEARCH_OFFLINE_LINE, addCard, addedLine, arrangeCards, askPinned, canMoveCard, moveCardTo, reorderIds,
+    canRemoveCard, cardLabelName, cardName, cardOnNode, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings,
     listOf, moveCard, packHome, pickLayout, pickerGroups, placeLifted, pinnedCards, readLayout, removeCard, removedLine,
-    resetLayout, sameList, settleHeights, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type PackHeight, type PackableCard,
+    resetLayout, undoResetLayout, RESET_DONE_LINE, sameList, settleHeights, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from '../lib/home-layout';
 import { useArrangeDrag, type HeldPress } from '../lib/arrange-drag';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
@@ -91,8 +91,9 @@ import type { ShopHomeCard } from '../lib/shop';
 import { standingFromRefusal } from '../lib/standing-refusal';
 import { isNodeTooOldError } from '../lib/node-version-gate';
 import {
-    START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, type TourProgress,
+    endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, type TourProgress,
 } from '@beanpool/core';
+import { defaultHomeLayout, firstStepsCount, firstStepsLeft, welcomeDrawn } from '@beanpool/core';
 import {
     keepPendingTourRecord, lendTourHome, offerTour, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, tourRecordRefused, useTour,
 } from '../lib/tour-store';
@@ -109,6 +110,7 @@ import { composerDraft, type ComposerDraft } from '../tools/builder';
 import { readPricingGuide } from '../lib/starter-offers';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { OneWayBackCard } from '../components/OneWayBack';
+import { keepWordsOnAccount } from '../lib/words-kept';
 import { UsePhoneAppCard, isUsePhoneAppDismissed } from '../components/UsePhoneAppCard';
 import { ToolHomeCard } from '../tools/home-card';
 import { YourToolsCard } from '../tools/your-tools-card';
@@ -163,8 +165,8 @@ export const TIPS_DONE_WORDS = HOME_WORDS.tipsDone;
  * where Home draws them.
  */
 const LIB_LINES = {
-    skyNoPlace: SKY_NO_PLACE_LINE, fewerCards: FEWER_CARDS_LINE, hint: HOME_HINT_LINE, searchOffline: SEARCH_OFFLINE_LINE,
-    typeYourTown: TYPE_YOUR_TOWN, notHereTypeYourTown: NOT_HERE_TYPE_YOUR_TOWN, startCard: START_CARD_WORDS,
+    skyNoPlace: SKY_NO_PLACE_LINE, hint: HOME_HINT_LINE, resetDone: RESET_DONE_LINE, searchOffline: SEARCH_OFFLINE_LINE,
+    typeYourTown: TYPE_YOUR_TOWN, notHereTypeYourTown: NOT_HERE_TYPE_YOUR_TOWN,
     tipsDontShow: TIPS_DONT_SHOW, tipsDontShowLabel: TIPS_DONT_SHOW_LABEL, saveSearchNotNow: SAVE_SEARCH_NOT_NOW,
 } as const;
 /** Core's FIND_TOWN_SEARCH_WORDS as the town search draws them, in the member's language (made where drawn). */
@@ -182,7 +184,6 @@ const yesOf = (st: KnockStatusResult | null | undefined): boolean => !!st?.ok &&
 
 const revealKey = (pk: string) => `beanpool_home_revealed_${pk}`;
 const hintKey = (pk: string) => `beanpool_home_hint_closed_${pk}`;
-const fewerKey = (pk: string) => `beanpool_home_fewer_seen_${pk}`;
 /** The Tips card's record (@beanpool/core home-tips.ts), per account in this browser, never on the account. */
 export const tipsKey = (pk: string) => `beanpool_home_tips_${pk}`;
 
@@ -214,8 +215,7 @@ function reducedMotion(): boolean {
 const FULL_ROW: React.CSSProperties = { gridColumn: '1 / -1' };
 /** Needs you and the community card are full rows of the grid; every other card is one cell (D1, D3). */
 const spansRow = (type: string) => type === FIXED_FIRST || type === FIXED_LAST;
-/** The two one-time notes, when they stand in the grid, packed as full rows of it. */
-const NOTE_FEWER = 'note-fewer';
+/** The one-time hint, when it stands in the grid, packed as a full row of it. */
 const NOTE_HINT = 'note-hint';
 /** Arrange's + Add a card tile, packed as a full row under the strip. */
 const ARRANGE_ADD = 'arrange-add';
@@ -226,7 +226,6 @@ const ARRANGE_CLEAR_PX = 8;
 /** Which packed child a child of the grid is, by the testids the page gives them; an element that is none has no id. */
 function packIdOf(el: Element): string | null {
     const testId = el.getAttribute('data-testid') ?? '';
-    if (testId === 'home-fewer') return NOTE_FEWER;
     if (testId === 'home-hint') return NOTE_HINT;
     if (testId === 'home-arrange-tile') return ARRANGE_ADD;
     if (testId === 'home-arrange-strip') return ARRANGE_STRIP;
@@ -1251,7 +1250,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const [settingsFor, setSettingsFor] = useState<HomeCardInstance | null>(null);
     // A chat card picked again takes a new id in the same place (home-layout changeCardSettings): its settings' close finds it by that.
     const settingsMovedTo = useRef<{ from: string; to: string } | null>(null);
-    const [fewerOpen, setFewerOpen] = useState(false);
     const [point, setPoint] = useState<HomePoint | null>(() => marketPoint());
     const [pointProblem, setPointProblem] = useState<string | null>(null);
     // "Or type your town" (Marty, 14 Oct): the shared address search, open; and the town picked, by its short name.
@@ -1430,6 +1428,10 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const [hintOpen, setHintOpen] = useState(false);
     /** The tour ended in this browser (Done or Skip) before the account's answer says so (DESIGN-getting-started-fable.md §2). */
     const [tourOver, setTourOver] = useState(false);
+    // "I still have my 12 words" said on this page, before the node's answer says so (lib/home-cards.ts wayBackOf).
+    const [wordsKeptHere, setWordsKeptHere] = useState(false);
+    // Reset to defaults' Undo (DESIGN-home-default-fable.md §3): the list as it was, while Arrange stays open.
+    const [resetUndo, setResetUndo] = useState<HomeLayoutV2 | null>(null);
     const tourOverRef = useRef(false);
     tourOverRef.current = tourOver;
     /** A tour part way in this browser, for "Pick up the tour at step n ›". */
@@ -1632,10 +1634,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
             const pick = member ? pickLayout(account, local) : { layout: null, push: false };
             unsavedRef.current = !!pick.layout && pick.layout === local && (pick.push || unsavedRef.current);
             layoutRef.current = pick.layout;
-            if (member && publicKey && fewerCardsNews(account, local, a.me, Date.now()) && !readFlag(fewerKey(publicKey))) {
-                writeFlag(fewerKey(publicKey));
-                setFewerOpen(true);
-            }
             if (publicKey && a.me) {
                 // The account's interests are this browser's Market favourites too; a change made here that never reached
                 // the account (while it is unchanged since), and ones an older build kept only here, are sent up instead.
@@ -1884,7 +1882,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const now = Date.now();
     const myInterests = interests ?? answer?.me?.interests ?? [];
     const hasOpenKnock = knocks.some(k => !k.cancelledAt && knockStillAnswerable(k, now));
-    const shown = answer ? shownFrame(answer, layout, { now, interests: myInterests, interestsOpen, tipsUp: !!tipsView, tourOver, hasOpenKnock, knocks }) : [];
+    const shown = answer ? shownFrame(answer, layout, { now, interests: myInterests, interestsOpen, tipsUp: !!tipsView, tourOver, hasOpenKnock, knocks, wordsKeptHere }) : [];
     /** The layout edits start from: the one drawn, or the starter set for a Home never saved once the tour has ended. */
     const drawnBase = () => shownLayout(answerRef.current, drawnRef.current, { tourOver: tourOverRef.current });
     const startUp = shown.some(c => c.type === 'start');
@@ -1925,7 +1923,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         }
         const now = Date.now();
         setCardHeights(prev => settleHeights(prev, seen, now));
-    }, [cols, shownKey, inArrange, idleKey, notesUnderFirst, fewerOpen, hintOpen, safetyDrawn]);
+    }, [cols, shownKey, inArrange, idleKey, notesUnderFirst, hintOpen, safetyDrawn]);
 
     /**
      * The grid's children in packing order, for the cards in `cards`' order: what Home packs, and what a held card's place is
@@ -1946,7 +1944,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
             if (inArrange && card.type === FIXED_LAST) items.push(...extras);
             items.push({ id: card.id, height: heightOf(card.id), fullRow: spansRow(card.type) });
             if (i === 0 && notesUnderFirst) {
-                if (fewerOpen && !isVisitor) items.push({ id: NOTE_FEWER, height: heightOf(NOTE_FEWER), fullRow: true });
                 if (hintOpen && !isVisitor && !startUp) items.push({ id: NOTE_HINT, height: heightOf(NOTE_HINT), fullRow: true });
             }
         }
@@ -1958,7 +1955,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         if (cols <= 1 || typeof ResizeObserver === 'undefined') return [];
         if (Object.keys(cardHeights).length === 0) return [];
         return packHome(packItems(liveShown, (id) => cardHeights[id]?.height ?? 0), cols);
-    }, [cols, shownKey, inArrange, idleKey, cardHeights, notesUnderFirst, fewerOpen, hintOpen, isVisitor, startUp, safetyDrawn]);
+    }, [cols, shownKey, inArrange, idleKey, cardHeights, notesUnderFirst, hintOpen, isVisitor, startUp, safetyDrawn]);
 
     const packedMap = useMemo(() => new Map(packedList.map(p => [p.id, p])), [packedList]);
     const isPacked = typeof ResizeObserver !== 'undefined' && cols > 1 && packedList.length > 0;
@@ -2160,6 +2157,16 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
             keepPendingTourRecord(pk, tourRecordRefused(err) ? null : record);
         }
     }
+    /**
+     * "I still have my 12 words" (DESIGN-home-default-fable.md §2.5): kept on the account, so the phone and the web agree, and
+     * First steps' line and the card end here at once. Offline, this browser's record of the card keeps it put away.
+     */
+    function keepWords() {
+        if (!publicKey) return;
+        setWordsKeptHere(true);
+        keepWordsOnAccount(publicKey, 'Home');
+    }
+    useEffect(() => { if (!inArrange) setResetUndo(null); }, [inArrange]);
     function applyTourEnd(kind: 'done' | 'skipped') {
         if (!publicKey) return;
         const answered = answerRef.current;
@@ -2178,8 +2185,9 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         const answered = answerRef.current;
         tourOverRef.current = false;
         setTourOver(false);
-        // The card returns until the tour ends again: on a Home already set up it is put back on top (the end takes it off).
-        if (answered?.me && drawnRef.current) {
+        // The card returns until the tour ends again: on a Home already set up it is put back on top (the end takes it off),
+        // inside Welcome's seven days only (§2.3): past them it would never be drawn, and the tour starts all the same.
+        if (answered?.me && drawnRef.current && welcomeDrawn(false, answered.me.joinedAt)) {
             const r = addCard(drawnRef.current, 'start', Date.now(), { pinned: currentPins(frameOf(answered)) });
             if (r.ok) changeLayout(() => r.layout);
         }
@@ -2235,6 +2243,9 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         const before = shownLayout(answered, drawnRef.current, { tourOver: tourOverRef.current });
         const next = make(before);
         if (!next) return false;
+        // Reset's Undo is offered only until the next edit (the director's rule, review of #3114): its line says "Home is back
+        // to how it started", true no longer once a card has moved, gone or come since. Reset itself offers it again after this.
+        setResetUndo(null);
         unsavedRef.current = true;
         layoutRef.current = next;
         draw(next);
@@ -2617,13 +2628,15 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     </HomeCard>
                 );
             case 'safety':
-                // The two-doors card, with its own ✕ and schedule kept in this browser (components/OneWayBack.tsx).
+                // The 12-words card, with its own ✕ and schedule kept in this browser (components/OneWayBack.tsx).
                 // Its "…" (Arrange · Remove) sits over the card's own ✕. The cell comes with the card: put away
-                // or checked, it has nothing to say and takes no cell (PR #2411 review). `c.safety` is the node's word that the
-                // member has only their 12 words, so a card not yet put away is drawn with the answer, not a request later
-                // (arriving second in the order, it moved every card after it to another cell).
+                // or checked, it has nothing to say and takes no cell (PR #2411 review). Who it is for, what works for them
+                // and its schedule's counts are all read from this answer (lib/home-cards.ts wayBackOf), never a request
+                // later, so the card is in its cell at the first paint or not at all (arriving late in the order, it moved
+                // every card after it to another cell).
                 return identity && (
-                    <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} known={!!c.safety} onDrawn={setSafetyDrawn}
+                    <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} onDrawn={setSafetyDrawn}
+                        home={{ ...wayBackOf(a, wordsKeptHere), global: a.profile === 'global' }} onKept={keepWords}
                         keepsNoCopies={communityInfo?.recoveryCopies === 'none'} frame={(oneWayBack) => {
                             const band = inArrange ? arrangeBandFor(card) : undefined;
                             return (
@@ -2889,6 +2902,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     area: () => onNavigate('settings-area'),
                     sawLedger: () => onNavigate('ledger'),
                     saidHello: () => onNavigate('people-community'),
+                    // Keep your 12 words safe: the words themselves, in Settings (the kit and "I still have them" are there).
+                    words: onSeeWords,
                     watch: () => {
                         document.querySelector('[data-testid="home-card-find"]')?.scrollIntoView({ behavior: 'smooth' });
                     },
@@ -2896,7 +2911,9 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 // The first Offer (and the global community's first post, free or for swap) starts from a dialog of drafts drawn from
                 // what the member starred; a step already done goes to the blank composer as it always did.
                 const firstPostOpens = (key: StepLine['key'], done: boolean) => (key === 'firstOffer' || key === 'firstPost') && !done;
-                const lines = stepLines(a, myInterests).map(l => ({ ...l, go: firstPostOpens(l.key, l.done) ? () => setStarterOpen(true) : goes[l.key] }));
+                // Only what is left is drawn, under one quiet line of progress (DESIGN-home-default-fable.md §2.4).
+                const all = stepLines(a, myInterests, wordsKeptHere);
+                const lines = firstStepsLeft(all).map(l => ({ ...l, go: firstPostOpens(l.key, l.done) ? () => setStarterOpen(true) : goes[l.key] }));
                 const limits = probationSentence(a.me?.probation);
                 return (
                     <HomeCard key={id} {...common}>
@@ -2912,25 +2929,48 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                                 ? <HomeLine key={l.text} href={l.href} external label={label}>{body}</HomeLine>
                                 : <HomeLine key={l.text} onClick={l.go} label={label}>{body}</HomeLine>;
                         })}
+                        <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words" data-testid="home-steps-count">{firstStepsCount(all)}</p>
                         {limits && <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words" data-testid="home-steps-limits">{limits}</p>}
                     </HomeCard>
                 );
             }
             case 'start': {
-                // Getting started (DESIGN-getting-started-fable.md §1): no "…", Skip is its remove; it blocks nothing.
-                const btn = 'min-h-[44px] px-4 rounded-xl text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2';
+                // Welcome (DESIGN-home-default-fable.md §2.3): where you are, who brought you, and the tour. No "…": Not now is
+                // its way out. It hides nothing, and two plain links (not a filled button) keep the Market on the first screen.
+                const invitedBy = a.me?.invitedBy;
+                const where = c.community ? communityName(c.community, String(a.profile)) : null;
+                // An owner alone on a new community: nobody invited them, and they are its one member.
+                const alone = !invitedBy && a.profile !== 'global' && c.community?.members === 1 && a.features.invites !== false;
+                const link = 'min-h-[44px] px-1 -mx-1 bg-transparent border-0 rounded-lg text-sm font-bold text-emerald-800 dark:text-emerald-300 cursor-pointer text-left break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
+                const said = 'm-0 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words';
                 return (
                     <HomeCard key={id} {...common} menu={undefined}>
-                        <p data-testid="home-start-words" className="m-0 mb-2 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words">{t(LIB_LINES.startCard)}</p>
-                        <div className="flex flex-wrap items-center gap-2">
+                        {where && <p data-testid="home-welcome-where" className={said}>{t(WELCOME_WORDS.where, { community: where })}</p>}
+                        {invitedBy ? (
+                            <p data-testid="home-welcome-invited" className={`${said} flex flex-wrap items-center gap-x-2`}>
+                                <span className="min-w-0 break-words">{t(WELCOME_WORDS.invitedYou, { name: invitedBy.name || t('Someone') })}</span>
+                                <button type="button" data-testid="home-welcome-hello" onClick={() => onNavigate('messages', invitedBy.key)} className={link}>
+                                    {t(WELCOME_WORDS.sayHello)}
+                                </button>
+                            </p>
+                        ) : alone ? (
+                            <p data-testid="home-welcome-first" className={`${said} flex flex-wrap items-center gap-x-2`}>
+                                <span className="min-w-0 break-words">{t(WELCOME_WORDS.firstHere)}</span>
+                                <button type="button" data-testid="home-welcome-invite" onClick={() => onNavigate('people-invites')} className={link}>
+                                    {t(WELCOME_WORDS.inviteSomeone)}
+                                </button>
+                            </p>
+                        ) : null}
+                        <div className="flex flex-wrap items-center justify-between gap-x-4">
                             <button type="button" data-testid="home-start-look"
                                 onClick={() => { if (publicKey) startTour(publicKey, tourNode, resumeStep(tourProgress, tourTotal)); }}
-                                className={`${btn} border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on focus-visible:ring-emerald-400`}>
-                                {startCardButton(tourProgress, tourTotal)}
+                                className={link}>
+                                {tourProgress && tourProgress.step > 0 ? startCardButton(tourProgress, tourTotal) : t(WELCOME_WORDS.tour)}
                             </button>
-                            <button type="button" data-testid="home-start-skip" aria-label={t('Skip the tour')} onClick={() => applyTourEnd('skipped')}
-                                className={`${btn} border-0 bg-transparent text-emerald-800 dark:text-emerald-300 focus-visible:ring-emerald-500`}>
-                                {t('Skip')}
+                            {/* Its name is its words (WCAG 2.5.3 Label in Name, review of #3114 finding 3): next to "Take the tour ›" they say what it skips. */}
+                            <button type="button" data-testid="home-start-skip" onClick={() => applyTourEnd('skipped')}
+                                className={`${link} text-nature-700 dark:text-nature-200`}>
+                                {t('Not now')}
                             </button>
                         </div>
                     </HomeCard>
@@ -3262,14 +3302,20 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         }),
         load: () => loadChatRows(publicKey),
     } : undefined;
-    const picker = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), shownLayout(a, layout, { tourOver }), null, pins, tipsAllSeen ? { tips: t('All tips seen') } : {}) : null;
-    // The fewer-cards note and the one-time hint go under the first card, the row's full width. Side by side that holds
+    const offered = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), shownLayout(a, layout, { tourOver }), null, pins, tipsAllSeen ? { tips: t('All tips seen') } : {}) : null;
+    // Welcome is offered only while it can be drawn (DESIGN-home-default-fable.md §2.3: until the tour is taken or Not now,
+    // seven days at most): a card added that never shows is a promise the picker doesn't keep (review B2).
+    const welcomeCan = !!a.me && welcomeDrawn(tourOverFor(a, { tourOver }), a.me.joinedAt, now);
+    const picker = offered && !welcomeCan
+        ? { ...offered, groups: offered.groups.map(g => ({ ...g, rows: g.rows.filter(r => r.type !== 'start') })).filter(g => g.rows.length > 0) }
+        : offered;
+    // The one-time hint goes under the first card, the row's full width. Side by side that holds
     // only when the first card is a full row itself: with nothing waiting there is no Needs you, and a full-row note after
     // a one-cell card would push the cards beside it to the next row, leaving the first row empty (PR #2411 review). There
     // the notes stand above the grid, as wide as it. One column keeps them under the first card, as before.
     const notePacking = (id: string): React.CSSProperties => {
         // While a card is in the air (Arrange) the notes stay under the first place, whichever card is there.
-        const order = noteOrder(id === NOTE_FEWER ? 1 : 2);
+        const order = noteOrder(2);
         const packed = packedMap.get(id);
         if (!packed) return { ...FULL_ROW, ...order };
         return {
@@ -3284,15 +3330,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     };
     const firstNotes = (under: boolean) => (
         <>
-            {fewerOpen && !isVisitor && (
-                <PackedBlock tag="p" onHeight={under ? reportHeight(NOTE_FEWER) : undefined} data-testid="home-fewer" style={under ? notePacking(NOTE_FEWER) : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
-                    <span className="min-w-0 flex-1 break-words">{t(LIB_LINES.fewerCards)}</span>
-                    <button type="button" aria-label={t('Close this note')} onClick={() => setFewerOpen(false)}
-                        className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                        ✕
-                    </button>
-                </PackedBlock>
-            )}
             {hintOpen && !isVisitor && !startUp && (
                 <PackedBlock tag="p" onHeight={under ? reportHeight(NOTE_HINT) : undefined} data-testid="home-hint" style={under ? notePacking(NOTE_HINT) : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
                     <span className="min-w-0 flex-1 break-words">{t(LIB_LINES.hint)}</span>
@@ -3419,16 +3456,37 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 {ghost}
                 {inArrange && (
                     <div className="flex justify-center">
-                        <button type="button" data-testid="home-arrange-reset"
-                            // Reset brings Tips back when they were off, so then the tips start over (PR #1694 review 3); a member
-                            // part-way through keeps their place (confirmation 1, finding 2).
-                            onClick={() => {
-                                const tipsOff = !!tipsRef.current?.dismissedAt || !listOf(drawnRef.current).some(c => c.type === 'tips');
-                                if (changeLayout((l) => resetLayout(l, Date.now()), { reread: true }) && tipsOff) keepTips(restartTips(tipsList, localDay()));
-                            }}
-                            className="min-h-[44px] px-3 bg-transparent border-0 text-sm font-bold text-text-secondary hover:text-text-primary cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                            {t('Reset to defaults')}
-                        </button>
+                        {resetUndo ? (
+                            // No confirm box: the line says what happened and Undo puts the list back (DESIGN-home-default-fable.md §3).
+                            <p role="status" data-testid="home-reset-done" className="m-0 flex flex-wrap items-center justify-center gap-x-2 text-sm text-text-primary">
+                                <span className="min-w-0 break-words">{t(LIB_LINES.resetDone)}</span>
+                                <button type="button" data-testid="home-reset-undo"
+                                    onClick={() => {
+                                        const before = resetUndo;
+                                        setResetUndo(null);
+                                        changeLayout((current) => undoResetLayout(before, current, Date.now()), { reread: true });
+                                    }}
+                                    className="min-h-[44px] px-3 bg-transparent border-0 text-sm font-bold text-emerald-800 dark:text-emerald-300 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                    {t('Undo')}
+                                </button>
+                            </p>
+                        ) : (
+                            <button type="button" data-testid="home-arrange-reset"
+                                // Reset brings Tips back when they were off, so then the tips start over (PR #1694 review 3); a member
+                                // part-way through keeps their place (confirmation 1, finding 2).
+                                onClick={() => {
+                                    const tipsOff = !!tipsRef.current?.dismissedAt || !listOf(drawnRef.current).some(c => c.type === 'tips');
+                                    const answered = answerRef.current;
+                                    const before = (answered && shownLayout(answered, drawnRef.current, { tourOver: tourOverRef.current })) ?? defaultHomeLayout();
+                                    if (changeLayout((l) => resetLayout(l, Date.now()), { reread: true })) {
+                                        setResetUndo(before);
+                                        if (tipsOff) keepTips(restartTips(tipsList, localDay()));
+                                    }
+                                }}
+                                className="min-h-[44px] px-3 bg-transparent border-0 text-sm font-bold text-text-secondary hover:text-text-primary cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                {t('Reset to defaults')}
+                            </button>
+                        )}
                     </div>
                 )}
                 {picker && (

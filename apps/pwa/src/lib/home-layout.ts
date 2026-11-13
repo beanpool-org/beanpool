@@ -56,7 +56,8 @@ const DAY_MS = 86_400_000;
 export interface FrameAnswer {
     profile: string;
     features: { [k: string]: unknown };
-    me?: { joinedAt: string | null } | null;
+    /** `wayBack` (slice D1): core's catalogue keeps Your way back in for a member whose 12 words are the only way back. */
+    me?: { joinedAt: string | null; wayBack?: string | null } | null;
     cards?: { [k: string]: unknown };
 }
 
@@ -69,7 +70,15 @@ export type HomeRole = 'owner' | 'admin' | 'moderator' | null | undefined;
  * A type's name: its caption, its row in the picker and its band in Arrange. Fixed words, never a member's: core's word() keys, in
  * the member's language (the phone's utils/home-cards.ts cardName).
  */
+/**
+ * Welcome's caption (DESIGN-home-default-fable.md §2.3, §5.1): the `start` card's name on the web, on the card, in Add a card
+ * and in Arrange. "Getting started" stays the picker group's name. Core's catalogue still says "Getting started" until the
+ * phone's slice D2 takes the new caption with its own body (its tests pick the card by that name).
+ */
+export const WELCOME_WORDS_CAPTION = { caption: word('Welcome') } as const;
+
 export function cardName(type: HomeCardType, profile?: string): string {
+    if (type === 'start') return t(WELCOME_WORDS_CAPTION.caption);
     const entry = homeCardType(type);
     if (!entry) return type;
     return profile === 'global' && entry.globalName ? t(entry.globalName) : t(entry.name);
@@ -350,6 +359,16 @@ export function moveCardTo(
  */
 export const resetLayout = (layout: HomeLayoutV2 | null, now: number): HomeLayoutV2 => resetHomeLayout(layout, editAt(layout, now));
 
+/**
+ * Reset's Undo (DESIGN-home-default-fable.md §3, "Home is back to how it started. Undo"): the list as it was before the
+ * reset, stamped after the reset's own write so it wins on the account and in this browser alike.
+ */
+export const undoResetLayout = (before: HomeLayoutV2, current: HomeLayoutV2 | null, now: number): HomeLayoutV2 =>
+    ({ ...before, updatedAt: iso(editAt(current, now)) });
+
+/** Said once Reset has put the default list back, with Undo beside it. */
+export const RESET_DONE_LINE = word('Home is back to how it started.');
+
 /** The `safety` card was put away: when, on the account too. */
 export function dismissSafety(layout: HomeLayoutV2 | null, now: number): HomeLayoutV2 {
     const l = layout ?? defaultHomeLayout();
@@ -357,17 +376,7 @@ export function dismissSafety(layout: HomeLayoutV2 | null, now: number): HomeLay
     return { ...l, dismissed: { ...l.dismissed, safety: at }, updatedAt: at };
 }
 
-/**
- * The one-time line {@link FEWER_CARDS_LINE} is said to nobody now (DESIGN-home-default-fable.md §2.8, review of #3110):
- * since D0 a Home never saved starts with the whole default list, so it is longer, not shorter. D3 deletes the line and
- * this; until then it says no to everyone.
- */
-export function fewerCardsNews(_account: HomeLayoutV2 | null, _local: HomeLayoutV2 | null, _me: { joinedAt: string | null } | null | undefined, _now: number): boolean {
-    return false;
-}
-
-/** These three are word() keys: Home shows them through t(). */
-export const FEWER_CARDS_LINE = word('Home now starts with fewer cards. Add a card brings the rest back.');
+/** These two are word() keys: Home shows them through t(). */
 /** The one-time hint (§1.3), as the web says it: its cards can be dragged (DESIGN-home-arrange-in-place-fable.md §2.9). The phone's own line says "hold a card to arrange" until its drag lands. */
 export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom. Hold a card to drag it, or use the arrows.');
 /** A saved search's body before the node has answered for these words: added or changed offline (CARD-FRAME §2.4). */
@@ -408,9 +417,10 @@ export interface PickerGroup { id: HomeCardGroup; name: string; rows: PickerRow[
  * Whether a node of this kind can show the card to this reader: core's one rule (`onNode`, per type), and only for a
  * type this build draws. Home draws only these, the picker lists only these, and cardsToAsk asks only these.
  */
-export function cardOnNode(type: HomeCardType, answer: Pick<FrameAnswer, 'profile' | 'features' | 'cards'>, role?: HomeRole): boolean {
+export function cardOnNode(type: HomeCardType, answer: Pick<FrameAnswer, 'profile' | 'features' | 'cards' | 'me'>, role?: HomeRole): boolean {
     const t = homeCardType(type);
-    return !!t && HOME_DRAWN.has(type) && t.onNode({ profile: answer.profile, features: answer.features, cards: answer.cards }, role);
+    // `me` too: Your way back in is on any node for a member whose 12 words are the only way back (review of #3114, finding 1).
+    return !!t && HOME_DRAWN.has(type) && t.onNode({ profile: answer.profile, features: answer.features, cards: answer.cards, me: answer.me }, role);
 }
 
 /**
@@ -419,7 +429,7 @@ export function cardOnNode(type: HomeCardType, answer: Pick<FrameAnswer, 'profil
  * and not listed. `full`: Home holds 24 cards, so every Add goes.
  */
 export function pickerGroups(
-    answer: Pick<FrameAnswer, 'profile' | 'features' | 'cards'>, layout: HomeLayoutV2 | null, role: HomeRole,
+    answer: Pick<FrameAnswer, 'profile' | 'features' | 'cards' | 'me'>, layout: HomeLayoutV2 | null, role: HomeRole,
     pinned: readonly string[] = [], status: Partial<Record<string, string>> = {},
 ): { groups: PickerGroup[]; full: boolean } {
     const list = listOf(layout);
@@ -457,7 +467,7 @@ export const removedLine = (name: string) => t('{card} removed. Add a card bring
  * before, so a local member's address stays what their first read's was.
  */
 export function cardsToAsk(
-    layout: HomeLayoutV2 | null, pinned: readonly string[] = [], answer?: Pick<FrameAnswer, 'profile' | 'features' | 'cards'> | null,
+    layout: HomeLayoutV2 | null, pinned: readonly string[] = [], answer?: Pick<FrameAnswer, 'profile' | 'features' | 'cards' | 'me'> | null,
 ): string[] {
     // A Home never saved is the default list (DESIGN-home-default-fable.md §2.2), asked in the one first read. Before the node
     // has answered, the app can't tell which of them it shows: the node builds none it doesn't (routes/home-answer.ts

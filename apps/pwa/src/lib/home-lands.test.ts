@@ -19,7 +19,7 @@ describe('GET /api/home names the landings this app opens', () => {
     });
     afterEach(() => { globalThis.fetch = realFetch; });
 
-    it('lands=enterprise,group,invite,people,asks,first-need, with or without the cards and a point', async () => {
+    it('lands=enterprise,group,invite,people,asks,first-need,words, with or without the cards and a point', async () => {
         const { getHome } = await import('./api');
         await getHome({ cards: ['needs', 'decide'] }).catch(() => undefined);
         await getHome({}).catch(() => undefined);
@@ -29,8 +29,9 @@ describe('GET /api/home names the landings this app opens', () => {
         // (PR #2625 review: before, the web never got the line, and an owner's count sat in the admin line, landing on settings).
         // `first-need`: First steps' line "Ask for one thing you'd pay a neighbour for" opens the composer on a Need (cold-start N2); the node keeps
         // First steps up for that line alone only for an app that says it draws it (routes/home-answer.ts parseLands).
-        expect(new URL(calls[0], 'https://node.example').searchParams.get('lands')).toBe('enterprise,group,invite,people,asks,first-need');
+        // `words`: First steps' line "Keep your 12 words safe" (DESIGN-home-default-fable.md §2.4, slice D3), the same rule.
+        expect(new URL(calls[0], 'https://node.example').searchParams.get('lands')).toBe('enterprise,group,invite,people,asks,first-need,words');
         expect(new URL(calls[0], 'https://node.example').searchParams.get('cards')).toBe('needs,decide');
-        expect(new URL(calls[1], 'https://node.example').searchParams.get('lands')).toBe('enterprise,group,invite,people,asks,first-need');
+        expect(new URL(calls[1], 'https://node.example').searchParams.get('lands')).toBe('enterprise,group,invite,people,asks,first-need,words');
     });
 });

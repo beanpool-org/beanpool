@@ -142,155 +142,113 @@ describe('on the landing screen: put away, it comes back twice, then lives in Se
     });
 });
 
-// Home's answer already holds the node's word (`cards.safety`), so Home passes it as `known`: the card is drawn with the
-// answer, not when its own request comes back, which moved every card after it on a wide screen (PR #2411 review).
-describe("on Home, the node's word is already in the answer (`known`)", () => {
-    const pending = () => {
-        const answers: Array<(s: api.CommunityStanding) => void> = [];
-        vi.mocked(api.getCommunityMe).mockImplementation(() => new Promise((r) => { answers.push(r); }));
-        return async (s: api.CommunityStanding) => {
-            await waitFor(() => expect(answers.length).toBeGreaterThan(0));
-            await act(async () => { for (const r of answers) r(s); });
-        };
-    };
-    const landing = () => render(<OneWayBackCard identity={identity} placement="landing" onSeeWords={() => {}} known />);
+// On Home the Home answer alone says who the card is for, what works for them and its schedule's counts
+// (lib/home-cards.ts wayBackOf, DESIGN-home-default-fable.md §2.5, slice D3), passed as `home`. `/me` is never asked there,
+// so the card's first paint is what it settles on: no draw-then-pull (onDrawn [true, false], the jump PR #2411 fixed),
+// no pop-in.
+describe("on Home, the Home answer is the one word (`home`), and `/me` is never asked", () => {
+    type Home = { forThem: boolean; canAddSignIn: boolean; startsAway: boolean; keptPosts: number; weekOverAt: number | null; global: boolean };
+    const DOOR: Home = { forThem: true, canAddSignIn: true, startsAway: false, keptPosts: 0, weekOverAt: Date.now() + 6 * DAY, global: true };
+    // A member who came by invite (or the genesis owner, or a sign-in joiner with no copy kept here): words only, no link.
+    const INVITED: Home = { forThem: true, canAddSignIn: false, startsAway: true, keptPosts: 0, weekOverAt: Date.now() + 6 * DAY, global: false };
     const schedule = () => JSON.parse(localStorage.getItem(`beanpool_one_way_back_${identity.publicKey}`) || 'null');
+    const landing = (home: Home, more: { onKept?: () => void; onDrawn?: (d: boolean) => void } = {}) =>
+        render(<OneWayBackCard identity={identity} placement="landing" onSeeWords={() => {}} home={home} {...more} />);
+    const card = () => screen.queryByTestId('one-way-back-landing');
+    const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 20)); });
 
-    it('not yet put away: drawn at once, while its own request is still on its way', async () => {
-        const answer = pending();
-        landing();
-        expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
-        await answer(standing('words'));
-        expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
-    });
-
-    it('✕ before the node answers: put away at once, and kept with the posts the node then counts', async () => {
-        const answer = pending();
-        landing();
-        fireEvent.click(screen.getByRole('button', { name: 'Hide this for now' }));
-        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
-        await answer(standing('words', 2));
-        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
-        expect(schedule()).toMatchObject({ dismissed: true, keptPostsAtDismissal: 2, postReturnShown: false });
-        // The two posts already up don't bring it back; the next one that stays up does.
-        cleanup();
-        vi.mocked(api.getCommunityMe).mockResolvedValue(standing('words', 2));
-        landing();
-        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalledTimes(2));
-        await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
-        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
-        cleanup();
-        vi.mocked(api.getCommunityMe).mockResolvedValue(standing('words', 3));
-        landing();
-        expect(await screen.findByTestId('one-way-back-landing')).toBeInTheDocument();
-    });
-
-    it('put away before: nothing until the node answers, since a return goes by its counts', async () => {
-        localStorage.setItem(`beanpool_one_way_back_${identity.publicKey}`, JSON.stringify({ dismissed: true, keptPostsAtDismissal: 0 }));
-        const answer = pending();
-        landing();
-        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
-        await answer(standing('words', 1));
-        expect(await screen.findByTestId('one-way-back-landing')).toBeInTheDocument();
-    });
-
-    it('its 12 words already looked at: never, answer or not', async () => {
-        localStorage.setItem(`beanpool_one_way_back_${identity.publicKey}`, JSON.stringify({ checked: true }));
-        const answer = pending();
-        landing();
-        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
-        await answer(standing('words', 1, true));
-        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
-    });
-
-    // One word on who it is for (review of #3110). The node builds Home's `safety` by `/me`'s rule, less a member who said
-    // they still have their words (round 2: the wider rule waits for slices D2/D3), but the two reads can still differ: the
-    // 12 words kept (`/me` still 'words'), or a sign-in linked since Home's answer (`/me` now 'ordinary'). Letting `/me`
-    // overrule drew the card at the first paint and pulled it when `/me` answered, re-packing every card after it:
-    // onDrawn [true, false], the jump PR #2411 fixed; or popped it in late: [false, true].
-    it("`/me` says otherwise: the answer's word stands, at the first paint and after, and Home is told once", async () => {
-        for (const [known, rules] of [[true, 'ordinary'], [false, 'words']] as const) {
-            const drawn: boolean[] = [];
-            const answer = pending();
-            render(<OneWayBackCard identity={identity} placement="landing" onSeeWords={() => {}} known={known} onDrawn={(d) => drawn.push(d)} />);
-            const atFirstPaint = !!screen.queryByTestId('one-way-back-landing');
-            await answer(standing(rules));
-            await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
-            expect([atFirstPaint, !!screen.queryByTestId('one-way-back-landing')], `known ${known}, /me ${rules}`).toEqual([known, known]);
-            expect(drawn, `known ${known}, /me ${rules}`).toEqual([known]);
-            cleanup();
-            localStorage.clear();
-        }
-    });
-
-    it("Home's answer then says the member has a sign-in now: it goes", async () => {
-        const answer = pending();
-        const { rerender } = landing();
-        expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
-        await answer(standing('ordinary'));
-        expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
-        rerender(<OneWayBackCard identity={identity} placement="landing" onSeeWords={() => {}} known={false} />);
-        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
-    });
-
-    it("its own request fails (Home is showing what it had): the answer's word keeps it", async () => {
-        vi.mocked(api.getCommunityMe).mockRejectedValue(new Error('offline'));
-        landing();
-        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
-        await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
-        expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
-    });
-
-    // A ✕ while the card's own request has failed was kept for this visit only: nothing was written, so it came back on
-    // the next one (PR #2411 review).
-    it('its own request fails, then ✕: put away for good, and settled by the counts when the node next answers', async () => {
-        const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 20)); });
-        vi.mocked(api.getCommunityMe).mockRejectedValue(new Error('offline'));
-        landing();
-        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
+    it("the 12-words door's own member: drawn at the first paint, with a sign-in, in the open door's words", async () => {
+        const drawn: boolean[] = [];
+        landing(DOOR, { onDrawn: (d) => drawn.push(d) });
+        expect(card()).toBeInTheDocument();
+        expect(screen.getByTestId('one-way-back-text')).toHaveTextContent(ONE_WAY_BACK);
+        expect(screen.getByTestId('add-sign-in')).toBeInTheDocument();
         await settle();
-        fireEvent.click(screen.getByRole('button', { name: 'Hide this for now' }));
-        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
-        expect(schedule()).toMatchObject({ dismissed: true });
-        // Home again, the node still out of reach: it stays away.
-        cleanup();
-        landing();
-        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalledTimes(2));
-        await settle();
-        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
-        // The node answers on a later visit: the posts up then don't bring it back, nor a week that was over at the ✕.
-        cleanup();
-        vi.mocked(api.getCommunityMe).mockResolvedValue(standing('words', 2, true));
-        landing();
-        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalledTimes(3));
-        await settle();
-        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
-        expect(schedule()).toMatchObject({ dismissed: true, keptPostsAtDismissal: 2, postReturnShown: false });
-        // The next post that stays up does.
-        cleanup();
-        vi.mocked(api.getCommunityMe).mockResolvedValue(standing('words', 3, true));
-        landing();
-        expect(await screen.findByTestId('one-way-back-landing')).toBeInTheDocument();
+        expect(drawn).toEqual([true]);
+        expect(api.getCommunityMe).not.toHaveBeenCalled();
     });
 
-    it('✕ with no answer, in the first week: the week ending before the node next answers still brings it back, once', async () => {
-        vi.mocked(api.getCommunityMe).mockRejectedValue(new Error('offline'));
-        landing();
-        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
-        await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
-        // ✕ two days ago, offline.
-        const twoDaysAgo = Date.now() - 2 * DAY;
-        const clock = vi.spyOn(Date, 'now').mockReturnValue(twoDaysAgo);
+    it('the same member on a local community: "how you get back in", not "one way back" (an admin can set them up again)', () => {
+        landing({ ...DOOR, global: false });
+        expect(screen.getByTestId('one-way-back-text')).toHaveTextContent(ONE_WAY_BACK_WORDS.lineLocal);
+        expect(screen.getByRole('heading')).toHaveTextContent('Your way back in');
+        expect(screen.getByTestId('add-sign-in')).toBeInTheDocument();
+    });
+
+    it('an invited member on day one: not on Home (sign-up was its first showing; First steps says it), and /me is never asked', async () => {
+        const drawn: boolean[] = [];
+        landing(INVITED, { onDrawn: (d) => drawn.push(d) });
+        expect(card()).toBeNull();
+        await settle();
+        expect(card()).toBeNull();
+        expect(drawn).toEqual([false]);
+        expect(api.getCommunityMe).not.toHaveBeenCalled();
+        // Nothing is written for a card never shown.
+        expect(schedule()).toBeNull();
+    });
+
+    it('an invited member: once after their first post, once when the first week is over, then never; and never a sign-in', async () => {
+        const drawn: boolean[] = [];
+        landing({ ...INVITED, keptPosts: 1 }, { onDrawn: (d) => drawn.push(d) });
+        // At the first paint, not later: the counts are in Home's answer.
+        expect(card()).toBeInTheDocument();
+        expect(drawn).toEqual([true]);
+        expect(screen.getByTestId('one-way-back-text')).toHaveTextContent(ONE_WAY_BACK_WORDS.lineShort);
+        expect(screen.getByTestId('one-way-back-text')).not.toHaveTextContent('one way back');
+        expect(screen.getByRole('heading')).toHaveTextContent('Your way back in');
+        // "Add a sign-in" would be refused (404 invite_only, 409 not_words_member): never offered.
+        expect(screen.queryByTestId('add-sign-in')).toBeNull();
+        expect(screen.queryByText('Add a sign-in')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Hide this for now' }));
-        clock.mockRestore();
-        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
-        // The node first answers now, its week over since yesterday: not over at the ✕, so that return is still due.
+        expect(card()).toBeNull();
+        expect(schedule()).toMatchObject({ dismissed: true, keptPostsAtDismissal: 0, postReturnShown: true, weekReturnShown: false });
         cleanup();
-        vi.mocked(api.getCommunityMe).mockResolvedValue(standing('words', 0, true));
-        landing();
-        expect(await screen.findByTestId('one-way-back-landing')).toBeInTheDocument();
+        // More posts: no third showing for posts.
+        landing({ ...INVITED, keptPosts: 4 });
+        expect(card()).toBeNull();
+        cleanup();
+        // The week is over: once more.
+        landing({ ...INVITED, keptPosts: 4, weekOverAt: Date.now() - DAY });
+        expect(card()).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Hide this for now' }));
-        expect(schedule()).toMatchObject({ dismissed: true, weekReturnShown: true, postReturnShown: false });
+        cleanup();
+        landing({ ...INVITED, keptPosts: 9, weekOverAt: Date.now() - DAY });
+        expect(card()).toBeNull();
+        expect(api.getCommunityMe).not.toHaveBeenCalled();
+    });
+
+    it('"I still have my 12 words": kept on the account (onKept), and the card is done here at once', () => {
+        const onKept = vi.fn();
+        landing({ ...INVITED, keptPosts: 1 }, { onKept });
+        fireEvent.click(screen.getByTestId('one-way-back-kept'));
+        expect(onKept).toHaveBeenCalledTimes(1);
+        expect(card()).toBeNull();
+        expect(schedule()).toMatchObject({ checked: true });
+        cleanup();
+        landing({ ...INVITED, keptPosts: 3, weekOverAt: Date.now() - DAY }, { onKept });
+        expect(card()).toBeNull();
+    });
+
+    it("Home's answer then says it is not for them (a sign-in linked, the words kept elsewhere): it goes", () => {
+        const { rerender } = landing(DOOR);
+        expect(card()).toBeInTheDocument();
+        rerender(<OneWayBackCard identity={identity} placement="landing" onSeeWords={() => {}} home={{ ...DOOR, forThem: false, canAddSignIn: false }} />);
+        expect(card()).toBeNull();
+    });
+
+    it('not for them: nothing, first paint and after', async () => {
+        const drawn: boolean[] = [];
+        landing({ ...INVITED, forThem: false, keptPosts: 3, weekOverAt: Date.now() - DAY }, { onDrawn: (d) => drawn.push(d) });
+        await settle();
+        expect(card()).toBeNull();
+        expect(drawn).toEqual([false]);
+    });
+
+    it('a ✕ an earlier visit kept before the counts came is settled by the counts in Home\'s answer', () => {
+        localStorage.setItem(`beanpool_one_way_back_${identity.publicKey}`, JSON.stringify({ dismissed: true, awayBeforeCounts: Date.now() - DAY }));
+        landing({ ...DOOR, keptPosts: 2 });
+        expect(card()).toBeNull();
+        expect(schedule()).toMatchObject({ dismissed: true, keptPostsAtDismissal: 2, awayBeforeCounts: null });
     });
 });
 

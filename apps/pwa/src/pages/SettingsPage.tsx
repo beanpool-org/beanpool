@@ -22,6 +22,7 @@ import {
     getNodeApiUrl, getStoredNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
     updateNotificationPreferences, getNodeStats, getSignInRecovery, request, getCommunityMe,
 } from '../lib/api';
+import { keepWordsOnAccount } from '../lib/words-kept';
 import { signInNames } from '../lib/join-recovery';
 import { useCommunityInfo, useReaderFeatures } from '../lib/features';
 import { globalCommunityLink, isAppsGlobal, phoneLaterLines, usePhoneBrowser } from '../lib/global-entry';
@@ -1590,7 +1591,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     )}
                                 </div>
 
-                                <RecoveryKitButton words={seedWords} />
+                                {/* Yes to the kit's one question counts as "I still have my 12 words", on the account (lib/words-kept.ts). */}
+                                <RecoveryKitButton words={seedWords} onKept={() => keepWordsOnAccount(identity.publicKey, 'Settings')} />
 
                                 <button
                                     onClick={handleCopySeed}

@@ -98,8 +98,18 @@ export type VoiceRecorderEffect = 'ask' | 'start' | 'send' | 'keep' | 'discard' 
 
 export const VOICE_IDLE: VoiceRecorderState = { phase: 'idle', hint: null };
 
+/**
+ * One step: the state after it, what the component must do, and for 'send' and 'keep' the recording's length in ms, which
+ * the state after a send (idle) no longer holds.
+ */
+export interface VoiceRecorderStep {
+    state: VoiceRecorderState;
+    effect: VoiceRecorderEffect;
+    ms?: number;
+}
+
 /** One step of the recorder. Pure: the same state and event always answer the same. */
-export function voiceRecorderStep(state: VoiceRecorderState, event: VoiceRecorderEvent): { state: VoiceRecorderState; effect: VoiceRecorderEffect } {
+export function voiceRecorderStep(state: VoiceRecorderState, event: VoiceRecorderEvent): VoiceRecorderStep {
     const same = { state, effect: null };
     switch (event.type) {
         case 'hold':
@@ -114,7 +124,7 @@ export function voiceRecorderStep(state: VoiceRecorderState, event: VoiceRecorde
         case 'tick': {
             if (state.phase !== 'recording') return same;
             const ms = Math.max(state.ms, Math.floor(event.ms));
-            if (ms >= VOICE_MAX_MS) return { state: { phase: 'review', ms: VOICE_MAX_MS, limit: true }, effect: 'keep' };
+            if (ms >= VOICE_MAX_MS) return { state: { phase: 'review', ms: VOICE_MAX_MS, limit: true }, effect: 'keep', ms: VOICE_MAX_MS };
             return { state: { ...state, ms }, effect: null };
         }
         case 'move':
@@ -127,7 +137,7 @@ export function voiceRecorderStep(state: VoiceRecorderState, event: VoiceRecorde
             return finish(state.ms);
         case 'stop':
             if (state.phase !== 'recording' || !state.locked) return same;
-            return { state: { phase: 'review', ms: state.ms, limit: false }, effect: 'keep' };
+            return { state: { phase: 'review', ms: state.ms, limit: false }, effect: 'keep', ms: state.ms };
         case 'cancel':
             if (state.phase !== 'recording' && state.phase !== 'review') return same;
             return { state: VOICE_IDLE, effect: 'discard' };
@@ -143,9 +153,9 @@ export function voiceRecorderStep(state: VoiceRecorderState, event: VoiceRecorde
 }
 
 /** Let go or Send: under a second is nothing, and says "Hold to record"; else it goes. */
-function finish(ms: number): { state: VoiceRecorderState; effect: VoiceRecorderEffect } {
+function finish(ms: number): VoiceRecorderStep {
     if (ms < VOICE_MIN_MS) return { state: { phase: 'idle', hint: 'hold' }, effect: 'discard' };
-    return { state: VOICE_IDLE, effect: 'send' };
+    return { state: VOICE_IDLE, effect: 'send', ms };
 }
 
 /** The quietest level drawn as more than nothing, in dBFS (expo-audio's metering: -160 to 0). */

@@ -120,22 +120,26 @@ export function VoiceBubble({ messageId, load, isMe }: Props) {
                         />
                     ))}
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-                    <Text testID="voice-time" style={{ color: ink, fontSize: 12, fontVariant: ['tabular-nums'] }}>{voiceClock(shownMs || lengthS * 1000)}</Text>
-                    {current && playback ? (
-                        <Pressable
-                            testID="voice-speed"
-                            accessibilityRole="button"
-                            accessibilityLabel={t('Playback speed {speed}', { speed: voiceSpeedLabel(playback.speed) })}
-                            onPress={playback.cycleSpeed}
-                            hitSlop={8}
-                            style={{ minWidth: 40, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10, borderWidth: 1, borderColor: ink, alignItems: 'center' }}
-                        >
-                            <Text style={{ color: ink, fontSize: 12, fontWeight: '700' }}>{voiceSpeedLabel(playback.speed)}</Text>
-                        </Pressable>
-                    ) : null}
-                </View>
+                <Text testID="voice-time" style={{ color: ink, fontSize: 12, fontVariant: ['tabular-nums'], marginTop: 2 }}>{voiceClock(shownMs || lengthS * 1000)}</Text>
             </View>
+            {/* The speed, in a 48 dp slot of its own: shown while this one is the player's; a microphone otherwise. */}
+            {current && playback ? (
+                <Pressable
+                    testID="voice-speed"
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Playback speed {speed}', { speed: voiceSpeedLabel(playback.speed) })}
+                    onPress={playback.cycleSpeed}
+                    style={{ width: 48, height: 48, marginRight: -6, justifyContent: 'center', alignItems: 'center' }}
+                >
+                    <View style={{ minWidth: 38, paddingHorizontal: 4, paddingVertical: 2, borderRadius: 10, borderWidth: 1, borderColor: ink, alignItems: 'center' }}>
+                        <Text style={{ color: ink, fontSize: 12, fontWeight: '700' }}>{voiceSpeedLabel(playback.speed)}</Text>
+                    </View>
+                </Pressable>
+            ) : (
+                <View accessible={false} importantForAccessibility="no-hide-descendants" style={{ width: 48, height: 48, marginRight: -6, justifyContent: 'center', alignItems: 'center' }}>
+                    <MaterialCommunityIcons name="microphone" size={20} color={ink} />
+                </View>
+            )}
         </View>
     );
 }

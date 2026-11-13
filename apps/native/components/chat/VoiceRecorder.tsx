@@ -11,8 +11,8 @@
  *
  * `bar` is drawn by ChatComposer in the box's place while a recording runs or waits; `mic` is drawn in Send's place.
  */
-import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { AccessibilityInfo, Alert, AppState, Linking, PanResponder, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { AccessibilityInfo, Alert, AppState, Linking, Pressable, Text, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
     getRecordingPermissionsAsync, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus,
@@ -45,10 +45,10 @@ async function readRecording(uri: string): Promise<Uint8Array> {
     return decodeBase64(await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 }));
 }
 
-function reducer(s: { state: VoiceRecorderState; effect: VoiceRecorderEffect; n: number }, e: VoiceRecorderEvent) {
+function reducer(s: { state: VoiceRecorderState; effect: VoiceRecorderEffect; ms: number; n: number }, e: VoiceRecorderEvent) {
     const next = voiceRecorderStep(s.state, e);
     // Every effect is a new number, so the same effect twice in a row still runs twice.
-    return next.state === s.state && !next.effect ? s : { ...next, n: s.n + 1 };
+    return next.state === s.state && !next.effect ? s : { state: next.state, effect: next.effect, ms: next.ms ?? 0, n: s.n + 1 };
 }
 
 export interface VoiceRecorderParts {
@@ -67,7 +67,7 @@ export function useVoiceRecorder({ styles, onSend, disabled }: { styles: ChatSty
     const live = useAudioRecorderState(recorder, 100);
     const preview = useAudioPlayer(null);
     const previewStatus = useAudioPlayerStatus(preview);
-    const [{ state, effect, n }, dispatch] = useReducer(reducer, { state: VOICE_IDLE, effect: null, n: 0 });
+    const [{ state, effect, ms: effectMs, n }, dispatch] = useReducer(reducer, { state: VOICE_IDLE, effect: null, ms: 0, n: 0 });
     const [screenReader, setScreenReader] = useState(false);
     const permission = useRef<VoicePermission>('ask');
     const levels = useRef<number[]>([]);
@@ -104,9 +104,12 @@ export function useVoiceRecorder({ styles, onSend, disabled }: { styles: ChatSty
         });
         return () => {
             sub.remove();
-            if (recorder.isRecording) recorder.stop().catch(() => {});
-            const uri = recorder.uri;
-            if (uri) deleteRecording(uri).catch(() => {});
+            // Leaving the chat throws an unsent recording away. expo-audio may have released the recorder already.
+            try {
+                if (recorder.isRecording) recorder.stop().catch(() => {});
+                const uri = recorder.uri;
+                if (uri) deleteRecording(uri).catch(() => {});
+            } catch { /* released: its file goes with the app's cache */ }
         };
     }, [recorder]);
 
@@ -120,8 +123,9 @@ export function useVoiceRecorder({ styles, onSend, disabled }: { styles: ChatSty
         try {
             const sound = await readRecording(uri);
             await onSend({ durationMs: Math.min(VOICE_MAX_MS, Math.max(1, Math.round(ms))), bars: voiceBarsFromLevels(levels.current), sound });
-        } catch (e: any) {
-            Alert.alert(t(VOICE_RECORDER_WORDS.notSent), typeof e?.message === 'string' && e.message ? e.message : undefined);
+        } catch (e) {
+            const why = e instanceof Error && e.message ? e.message : undefined;
+            Alert.alert(t(VOICE_RECORDER_WORDS.notSent), why);
         } finally {
             deleteRecording(uri).catch(() => {});
         }
@@ -130,7 +134,7 @@ export function useVoiceRecorder({ styles, onSend, disabled }: { styles: ChatSty
     // Carry out each step's effect, one after another, so a quick tap can't stop a recorder that hasn't started yet.
     useEffect(() => {
         if (!effect) return;
-        const ms = state.phase === 'recording' || state.phase === 'review' ? state.ms : 0;
+        const ms = effectMs;
         const run = async () => {
             switch (effect) {
                 case 'ask': {
@@ -180,7 +184,7 @@ export function useVoiceRecorder({ styles, onSend, disabled }: { styles: ChatSty
             }
         };
         work.current = work.current.then(run, run);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // Runs once per step (n), with what that step answered.
     }, [n]);
 
     // "Hold to record" goes after a moment.
@@ -190,17 +194,25 @@ export function useVoiceRecorder({ styles, onSend, disabled }: { styles: ChatSty
         return () => clearTimeout(timer);
     }, [state]);
 
-    const pan = useMemo(() => PanResponder.create({
-        onStartShouldSetPanResponder: () => !tapMode && !disabled,
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderGrant: () => dispatch({ type: 'hold', permission: permission.current }),
-        onPanResponderMove: (_e, g) => dispatch({ type: 'move', dx: g.dx, dy: g.dy }),
-        onPanResponderRelease: () => dispatch({ type: 'release' }),
-        onPanResponderTerminate: () => dispatch({ type: 'release' }),
-    }), [tapMode, disabled]);
+    // The hold, through the View's own touch responder: where the finger went down, and how far it has slid from there.
+    const downAt = useRef({ x: 0, y: 0 });
+    const holdHandlers = {
+        onStartShouldSetResponder: () => !disabled,
+        onResponderTerminationRequest: () => false,
+        onResponderGrant: (e: GestureResponderEvent) => {
+            downAt.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
+            dispatch({ type: 'hold', permission: permission.current });
+        },
+        onResponderMove: (e: GestureResponderEvent) => dispatch({ type: 'move', dx: e.nativeEvent.pageX - downAt.current.x, dy: e.nativeEvent.pageY - downAt.current.y }),
+        onResponderRelease: () => dispatch({ type: 'release' }),
+        onResponderTerminate: () => dispatch({ type: 'release' }),
+    };
 
     const ink = colors.text.body;
     const iconBtn = { width: 48, height: 48, justifyContent: 'center' as const, alignItems: 'center' as const, flexShrink: 0 };
+    // A 48 dp target around Send's 40 dp circle, in Send's place: the row keeps its height (the margins give the 8 dp back).
+    const target = { width: 48, height: 48, marginVertical: -4, marginLeft: 4, marginRight: -4, justifyContent: 'center' as const, alignItems: 'center' as const, flexShrink: 0 };
+    const circle = [styles.sendBtn, { marginLeft: 0 }];
     const recording = state.phase === 'recording';
     const review = state.phase === 'review';
     const locked = (recording && state.locked) || review;
@@ -211,10 +223,11 @@ export function useVoiceRecorder({ styles, onSend, disabled }: { styles: ChatSty
             accessibilityRole="button"
             accessibilityLabel={t('Send voice message')}
             onPress={() => dispatch({ type: 'send' })}
-            hitSlop={4}
-            style={[styles.sendBtn, styles.sendBtnActive]}
+            style={target}
         >
-            <MaterialCommunityIcons name="send" size={20} color={colors.text.onAccent} />
+            <View style={[...circle, styles.sendBtnActive]}>
+                <MaterialCommunityIcons name="send" size={20} color={colors.text.onAccent} />
+            </View>
         </Pressable>
     ) : tapMode ? (
         // A screen reader or the largest text: a tap starts a locked recording (§5.3).
@@ -225,10 +238,11 @@ export function useVoiceRecorder({ styles, onSend, disabled }: { styles: ChatSty
             accessibilityState={{ disabled: !!disabled }}
             disabled={!!disabled}
             onPress={() => dispatch({ type: 'hold', permission: permission.current, tap: true })}
-            hitSlop={4}
-            style={[styles.sendBtn, styles.sendBtnActive]}
+            style={target}
         >
-            <MaterialCommunityIcons name="microphone" size={22} color={colors.text.onAccent} />
+            <View style={[...circle, styles.sendBtnActive]}>
+                <MaterialCommunityIcons name="microphone" size={22} color={colors.text.onAccent} />
+            </View>
         </Pressable>
     ) : (
         <View
@@ -237,11 +251,12 @@ export function useVoiceRecorder({ styles, onSend, disabled }: { styles: ChatSty
             accessibilityRole="button"
             accessibilityLabel={t('Hold to record a voice message')}
             accessibilityState={{ disabled: !!disabled }}
-            hitSlop={4}
-            style={[styles.sendBtn, recording ? { backgroundColor: colors.feedback.danger.solid } : styles.sendBtnActive]}
-            {...pan.panHandlers}
+            style={target}
+            {...holdHandlers}
         >
-            <MaterialCommunityIcons name="microphone" size={22} color={recording ? colors.text.onDanger : colors.text.onAccent} />
+            <View style={[...circle, recording ? { backgroundColor: colors.feedback.danger.solid } : styles.sendBtnActive]}>
+                <MaterialCommunityIcons name="microphone" size={22} color={recording ? colors.text.onDanger : colors.text.onAccent} />
+            </View>
             {recording && !state.locked ? (
                 // Slide up to lock: shown above the held microphone.
                 <View pointerEvents="none" style={{ position: 'absolute', bottom: 52, alignItems: 'center', padding: 6, borderRadius: 16, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default }}>
@@ -265,7 +280,7 @@ export function useVoiceRecorder({ styles, onSend, disabled }: { styles: ChatSty
             <View testID="voice-bar" style={{ flex: 1, minWidth: 0, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 {clock(state.ms)}
                 <Text testID="voice-slide" numberOfLines={2} style={{ flex: 1, minWidth: 0, color: colors.text.muted, fontSize: 14, textAlign: 'right' }}>
-                    {'‹ '}{t(VOICE_RECORDER_WORDS.slide)}
+                    <Text aria-hidden={true} importantForAccessibility="no">‹ </Text>{t(VOICE_RECORDER_WORDS.slide)}
                 </Text>
             </View>
         );

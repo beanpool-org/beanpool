@@ -68,7 +68,7 @@ import {
 } from './group-chat-lines';
 import { sealDmVoice, VoiceRefusedError, VOICE_MIME, type VoiceInput } from '@beanpool/core';
 import { openDmVoiceWithFormer } from './dm-voice';
-import { keepVoice, keptVoice, type KeptVoice } from './voice-cache';
+import { forgetRemovedVoices, forgetVoice, keepVoice, keptVoice, type KeptVoice } from './voice-cache';
 import { groupPhotoCache, forgetGroupPhotos, forgetRemovedGroupPhotos } from './group-photo-cache';
 import type { GroupLineView, ServedGroupLine } from './group-line-display';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
@@ -94,6 +94,8 @@ async function forgetCachedChatImage(messageId: string): Promise<void> {
     try {
         await FileSystem.deleteAsync(`${CHAT_IMAGE_CACHE_DIR}${messageId}.jpg`, { idempotent: true });
     } catch { /* nothing to do: the message is gone either way */ }
+    // A voice message's kept sound goes the same way (utils/voice-cache.ts; it never throws).
+    await forgetVoice(messageId);
 }
 
 /**
@@ -1371,6 +1373,11 @@ export async function getConversations(myPubkey: string) {
                 // Only a line that opened (format 4, signed by its author, or a line from before 1.4.0 opened as it was then)
                 // holds their words; a deleted line's text is fixed. (The old line: conversion code, log row OLDCHAT, remove after 12 Dec 2026.)
                 fromApp = lastView.format === null && !dmLineIsOld(lastView);
+                // A voice message's words are empty: the list says what it is (slice V3), in the member's language.
+                if (row.lastMsgType === 'voice' && lastView.format !== null) {
+                    displayMsg = '🎤 Voice message';
+                    fromApp = true;
+                }
             }
         } else if (row.lastNonce && row.lastNonce.startsWith('plaintext')) {
             try {
@@ -7413,7 +7420,7 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
 /** A chat the node reads by design (an event's, an enterprise's) takes no voice message yet (§5.3: direct and group chats first). */
 const VOICE_NOT_IN_THIS_CHAT_TEXT = "Voice messages can't be sent in this chat.";
 /** The recording didn't pass core's checks (a file that isn't an .m4a, too long, too big): nothing was sent. */
-export const VOICE_CANT_SEND_TEXT = "This voice message can't be sent. Record it again.";
+const VOICE_CANT_SEND_TEXT = "This voice message can't be sent. Record it again.";
 
 /**
  * Send a voice message (DESIGN-cross-chat-voice-fable.md §5.4, slice V3): sealed on this phone as its message's own part
@@ -9796,6 +9803,7 @@ export async function getGroupChat(groupId: string, limit = 50, offset = 0): Pro
         throw Object.assign(new Error(body?.error || 'Could not open this group chat.'), { status: res.status });
     }
     forgetRemovedGroupPhotos(groupId, body?.messages);
+    forgetRemovedVoices(body?.messages);
     return body;
 }
 

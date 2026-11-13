@@ -12,7 +12,8 @@ import { encodeBase64 } from './crypto';
 import { VOICE_BARS, VOICE_MAX_MS } from '@beanpool/core';
 import { voiceCacheToEvict, voiceFileId, type VoiceCacheEntry } from './voice-playback';
 
-const VOICE_DIR = `${FileSystem.documentDirectory}voice/`;
+/** Read when used, never at import: a test's stand-in file system need not have it. */
+const voiceDir = () => `${FileSystem.documentDirectory}voice/`;
 
 /** A voice message the player can open: its file, its length and its waveform. */
 export interface KeptVoice {
@@ -21,8 +22,8 @@ export interface KeptVoice {
     bars: number[];
 }
 
-const soundOf = (id: string) => `${VOICE_DIR}${id}.m4a`;
-const factsOf = (id: string) => `${VOICE_DIR}${id}.json`;
+const soundOf = (id: string) => `${voiceDir()}${id}.m4a`;
+const factsOf = (id: string) => `${voiceDir()}${id}.json`;
 
 function factsFrom(raw: string): { durationMs: number; bars: number[]; at: number } | null {
     try {
@@ -56,7 +57,7 @@ export async function keepVoice(messageId: string, voice: { durationMs: number; 
     const id = voiceFileId(messageId);
     if (!id) return null;
     try {
-        await FileSystem.makeDirectoryAsync(VOICE_DIR, { intermediates: true }).catch(() => {});
+        await FileSystem.makeDirectoryAsync(voiceDir(), { intermediates: true }).catch(() => {});
         await FileSystem.writeAsStringAsync(soundOf(id), encodeBase64(voice.sound), { encoding: FileSystem.EncodingType.Base64 });
         await FileSystem.writeAsStringAsync(factsOf(id), JSON.stringify({ durationMs: voice.durationMs, bars: Array.from(voice.bars), at: Date.now() }));
     } catch {
@@ -77,16 +78,35 @@ export async function touchVoice(messageId: string): Promise<void> {
     } catch { /* not kept */ }
 }
 
-/** Take one voice message off this phone (a line deleted for everyone, a file that failed to write). */
+/** Take one voice message off this phone (a line deleted for everyone, a file that failed to write). Never throws. */
 export async function forgetVoice(messageId: string): Promise<void> {
     const id = voiceFileId(messageId);
     if (!id) return;
-    await FileSystem.deleteAsync(soundOf(id), { idempotent: true }).catch(() => {});
-    await FileSystem.deleteAsync(factsOf(id), { idempotent: true }).catch(() => {});
+    try { await FileSystem.deleteAsync(soundOf(id), { idempotent: true }); } catch { /* the message is gone either way */ }
+    try { await FileSystem.deleteAsync(factsOf(id), { idempotent: true }); } catch { /* as above */ }
+}
+
+/** The removed lines this session already took the sound of: each is asked once, not on every poll. */
+const removedVoices = new Set<string>();
+
+/**
+ * A line the node now serves as removed (deleted by its author, removed by a convenor) takes its kept sound with it, as a
+ * group photo does (utils/group-photo-cache.ts forgetRemovedGroupPhotos). Not waited on.
+ */
+export function forgetRemovedVoices(messages: unknown): void {
+    if (!Array.isArray(messages)) return;
+    for (const m of messages) {
+        if (m?.type !== 'removed') continue;
+        const id = voiceFileId(String(m.id));
+        if (!id || removedVoices.has(id)) continue;
+        if (removedVoices.size >= 5000) removedVoices.clear();
+        removedVoices.add(id);
+        forgetVoice(id).catch(() => { removedVoices.delete(id); });
+    }
 }
 
 async function trimVoiceCache(keep: string): Promise<void> {
-    const names = await FileSystem.readDirectoryAsync(VOICE_DIR);
+    const names = await FileSystem.readDirectoryAsync(voiceDir());
     const entries: VoiceCacheEntry[] = [];
     for (const name of names) {
         const m = name.match(/^(.+)\.m4a$/);

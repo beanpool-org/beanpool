@@ -25,8 +25,9 @@
  * from its store; a store that can't be read refuses, and a chat answer that can't be read refuses too (a never-held
  * browser sends readable words only when the chat answer says unlocked).
  */
-import { isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, toBase64, type RemovedLineKind } from '@beanpool/core';
-import { detectMentions, groupMessageKey, sealLine, openLine, type GroupEpochProgress } from './group-chat-crypto';
+import { isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, toBase64, VOICE_MIME, type RemovedLineKind, type VoiceInput } from '@beanpool/core';
+import type { VoiceOpenResult } from './voice';
+import { detectMentions, groupMessageKey, sealLine, openLine, sealVoice, openVoice, type GroupEpochProgress } from './group-chat-crypto';
 import {
     groupKeyring, GroupKeysRequestError, GroupChatKeyError, GROUP_CHAT_NOT_MEMBER_TEXT,
     type GroupKeyring, type GroupKeysTransport, type GroupLockStore,
@@ -121,6 +122,14 @@ export interface SendGroupLineInput {
      * the same message key, epoch and reply as the words, on every attempt, and sent beside them as type 'image'.
      */
     photo?: string;
+    /**
+     * A voice line's sound (DESIGN-cross-chat-voice-fable.md §5.4, V4): sealed as bytes as part `voice` under the same message
+     * key, epoch and reply as the words (core sealGroupVoice), on every attempt, and sent beside them as type 'voice' with the
+     * mime VOICE_MIME, as the phone sends it. Never with a photo.
+     */
+    voice?: VoiceInput;
+    /** The caller giving up (a voice send's 60 s): the POST is aborted. */
+    signal?: AbortSignal;
     /** The client's own UUID v4: the id the line is sealed under and stored as. */
     clientId: string;
     replyToId?: string | null;
@@ -144,12 +153,15 @@ export async function sendSealedGroupLine(net: GroupKeysTransport, identity: Me,
         const sealed = sealLine(input.text, { ...binding, after: input.after ?? null });
         // A photo goes with its words or not at all: sealed again with them on a re-seal, so both parts carry one epoch.
         const photo = input.photo === undefined ? null : sealLine(input.photo, { ...binding, part: 'attachment', after: null });
+        const voice = input.voice === undefined || photo ? null : sealVoice(input.voice, { ...binding, after: null });
         const metadata: Record<string, unknown> = { epoch };
         if (input.replyToId) metadata.replyToId = input.replyToId;
         if (mentions.length) metadata.mentions = mentions;
         const line: Record<string, unknown> = { ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata, clientId: messageId };
         if (photo) Object.assign(line, { type: 'image', attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' } });
-        const res = await net.post(`/api/groups/${encodeURIComponent(input.groupId)}/chat/message`, line);
+        else if (voice) Object.assign(line, { type: 'voice', attachment: { data: voice.ciphertext, nonce: voice.nonce, mime: VOICE_MIME } });
+        const path = `/api/groups/${encodeURIComponent(input.groupId)}/chat/message`;
+        const res = input.signal ? await net.post(path, line, input.signal) : await net.post(path, line);
         const body = await res.json().catch(() => ({}));
         if (res.ok) return body;
         if (attempt === 0 && res.status === 409 && UPDATE_REFUSALS.has(body?.code)) continue;
@@ -295,6 +307,40 @@ export async function getDecryptedGroupAttachment(
         return PHOTO_DATA_URI.test(photo) ? photo : null;
     } catch {
         return null;
+    }
+}
+
+/**
+ * A group voice line's sound (voice messages V4), in getDecryptedGroupAttachment's order: only as part of its message (a line
+ * hidden, waiting for its key or unverified plays nothing and asks the node for nothing), then GET /api/messages/:id/attachment
+ * opened as part `voice` under the line's epoch key, its group, its signer, its id and its reply (core openGroupVoice). 'gone'
+ * when the node no longer has it (the 30-day expiry answers 410 voice_expired). The web keeps no copy: it lives in the page.
+ */
+export async function getDecryptedGroupVoice(
+    net: GroupKeysTransport, identity: Me, store: GroupLockStore,
+    input: { groupId: string; line: ServedGroupLine; view: GroupLineView | undefined },
+): Promise<VoiceOpenResult> {
+    const { line, view } = input;
+    if (line.type !== 'voice' || !view || view.hidden || view.waitingKey || view.unverified || !view.signer || view.epoch === null) return { kind: 'refused' };
+    const ring = groupKeyring(net, identity, input.groupId, store);
+    const messageId = String(line.id);
+    let key: Uint8Array | null | undefined;
+    try { key = ring.openedKey(view.epoch) ?? await ring.keyFor(view.epoch); } catch { return { kind: 'unavailable' }; }
+    if (!key) return { kind: 'refused' };
+    let res: Response;
+    try { res = await net.get(`/api/messages/${encodeURIComponent(messageId)}/attachment`); } catch { return { kind: 'unavailable' }; }
+    if (res.status === 404 || res.status === 410) return { kind: 'gone' };
+    if (!res.ok) return { kind: 'unavailable' };
+    try {
+        const { data, nonce } = await res.json();
+        const replyTo = metadataOf(line.metadata).replyToId;
+        const opened = openVoice({ ciphertext: data, nonce }, {
+            groupId: input.groupId, epoch: view.epoch, senderPubHex: view.signer, messageId,
+            replyToId: typeof replyTo === 'string' && replyTo ? replyTo : null,
+        }, key, ring.memo);
+        return { kind: 'ok', voice: { durationMs: opened.durationMs, bars: opened.bars, sound: opened.sound } };
+    } catch {
+        return { kind: 'refused' };
     }
 }
 

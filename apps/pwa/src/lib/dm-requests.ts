@@ -56,6 +56,8 @@ export interface RequestPreviewLine {
     words: string;
     /** A photo: shown as a placeholder until Accept, never fetched. */
     photo: boolean;
+    /** A voice message: shown as a placeholder until Accept, never fetched (voice messages V4). */
+    voice?: boolean;
 }
 
 /**
@@ -81,9 +83,11 @@ export function requestPreviewLines(
         .map((m) => {
             const view = views.get(m.id);
             const photo = m.type === 'image';
+            // A voice message from a request (none should come, §3.5 of the voice design): closed, never fetched; its words are empty.
+            const voice = m.type === 'voice';
             // A photo's body is its caption, usually empty: shown only when its words opened.
-            const text = photo ? (view?.text ?? '') : dmLineShownText(view);
-            return { id: m.id, text, words: view?.text ?? '', photo };
+            const text = photo || voice ? (view?.text ?? '') : dmLineShownText(view);
+            return { id: m.id, text, words: view?.text ?? '', photo, ...(voice ? { voice } : {}) };
         });
 }
 

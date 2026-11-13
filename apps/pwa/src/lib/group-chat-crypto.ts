@@ -44,6 +44,12 @@ import {
     type GroupTopUp,
     type MakeGroupEpochInput,
     type OpenedGroupLine,
+    sealGroupVoice,
+    openGroupVoice,
+    type OpenedGroupVoice,
+    type SealGroupVoiceInput,
+    type GroupVoiceBinding,
+    type VoiceInput,
 } from '@beanpool/core';
 
 export {
@@ -74,6 +80,16 @@ export function sealLine(text: string, input: Parameters<typeof sealGroupLine>[1
 /** Open a line under an epoch key and verify its signer; `memo` keeps verdicts for the page's life. */
 export function openLine(payload: GroupLinePayload, ref: GroupLineBinding, groupKey: Uint8Array, memo?: GroupLineVerifyMemo): OpenedGroupLine {
     return openGroupLine(payload, ref, groupKey, memo);
+}
+
+/** Seal a voice message as its line's part `voice`, as bytes, under the message's own key (voice messages, V4). */
+export function sealVoice(voice: VoiceInput, input: SealGroupVoiceInput): GroupLinePayload {
+    return sealGroupVoice(voice, input);
+}
+
+/** Open a line's voice part under its epoch key, its sender's signature verified, then core's checks (VoiceRefusedError). */
+export function openVoice(payload: GroupLinePayload, ref: GroupVoiceBinding, groupKey: Uint8Array, memo?: GroupLineVerifyMemo): OpenedGroupVoice {
+    return openGroupVoice(payload, ref, groupKey, memo);
 }
 
 /** Hand a key I hold to a member who lacks a wrap for it, signed as me. */

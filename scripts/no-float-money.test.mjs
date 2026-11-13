@@ -112,7 +112,7 @@ export const PHONE_ALLOWED = new Map([
     ['apps/native/utils/community-directory.ts', ['return [`lat=${point.lat.toFixed(2)}`, `lng=${point.lng.toFixed(2)}`];']],
     ['apps/native/utils/home-store.ts', [
         'const two = (n: number) => Math.round(n * 100) / 100;',
-        "return `/api/home?cards=${asked.join(',')}&lands=enterprise,group,invite,people,asks,first-need${p ? `&lat=${p.lat.toFixed(2)}&lng=${p.lng.toFixed(2)}",
+        'const pointParams = (p: HomePoint) => `&lat=${p.lat.toFixed(2)}&lng=${p.lng.toFixed(2)}`;',
     ]],
     ['apps/native/utils/market-global.ts', ['return `&lat=${point.lat.toFixed(2)}&lng=${point.lng.toFixed(2)}&sort=distance`;']],
     ['apps/native/utils/typed-place.ts', ['const two = (n: number) => Math.round(n * 100) / 100;']],

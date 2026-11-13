@@ -78,6 +78,9 @@ export function coarseHomePoint(point: HomePoint | null | undefined): HomePoint 
     return { lat: two(point.lat), lng: two(point.lng) };
 }
 
+/** A coarse point as the address carries it, `&lat=…&lng=…` to two places (a coordinate, not money). */
+const pointParams = (p: HomePoint) => `&lat=${p.lat.toFixed(2)}&lng=${p.lng.toFixed(2)}`;
+
 /**
  * The address: the cards in the catalogue's order and, on the global node, the coarse point "near you" is measured from
  * (GET /api/home's `lat`/`lng`; without one the node uses the member's own area), and the landings it can open
@@ -92,7 +95,7 @@ export function homePath(asked: readonly HomeCardId[], point?: HomePoint | null)
     // `first-need`: and First steps' line "Ask for one thing you'd pay a neighbour for", which opens the composer on a Need (cold-start N2):
     // the node keeps First steps up for that line alone only for an app that says it draws it (home-answer.ts HomeLanding).
     // `words`: and First steps' "Keep your 12 words safe" (DESIGN-home-default-fable.md §2.4, slice D2), the same way.
-    return `/api/home?cards=${asked.join(',')}&lands=enterprise,group,invite,people,asks,first-need,words${p ? `&lat=${p.lat.toFixed(2)}&lng=${p.lng.toFixed(2)}` : ''}`;
+    return `/api/home?cards=${asked.join(',')}&lands=enterprise,group,invite,people,asks,first-need,words${p ? pointParams(p) : ''}`;
 }
 
 export async function readStoredHome(publicKey: string, url: string): Promise<StoredHome | null> {

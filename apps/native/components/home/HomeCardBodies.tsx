@@ -85,7 +85,8 @@ export function StepsBody({ left, count, note, colors, onStep }: {
                     left={<Text style={[s.trailing, { fontSize: 18, color: colors.text.secondary }]} importantForAccessibility="no">☐</Text>}
                 />
             ))}
-            {!!count && <Text style={[s.note, { marginTop: 4 }]} testID="home-steps-count">{count}</Text>}
+            {/* Its colours inline, where the contrast check reads them (s.* from homeStyles is a table it cannot follow). */}
+            {!!count && <Text style={{ fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginTop: 4, marginBottom: 6 }} testID="home-steps-count">{count}</Text>}
             {!!note && <Text style={[s.note, { marginTop: 4 }]} testID="home-steps-limits">{note}</Text>}
             {offerUndone && (
                 <FabAware id="steps:offer" style={s.buttonRow}>
@@ -914,7 +915,7 @@ export function WelcomeBody({ place, inviter, firstHere, tourLabel, colors, onSa
     const link = (text: string, onPress: () => void, testID: string, a11y?: string) => (
         <Pressable
             onPress={onPress}
-            style={({ pressed }) => [{ minHeight: HOME_TARGET_DP, justifyContent: 'center' }, pressed && s.pressed]}
+            style={({ pressed }) => [{ minHeight: HOME_TARGET_DP, justifyContent: 'center' }, pressed && { backgroundColor: colors.surface.subtle }]}
             accessibilityRole="button"
             accessibilityLabel={a11y ?? text}
             testID={testID}

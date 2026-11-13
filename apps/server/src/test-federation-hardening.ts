@@ -13,14 +13,16 @@
  *                 through A; 7d her own community B still relays for her
  *           10a/10b the operator corrects a peer's public URL: its members' next line and purchase still go through
  *           a peer's refusal of a relayed line is logged by relayLineToPeer (the send route's relay), with the line's
- *           id and the reason and never its text; a stored line logs nothing
+ *           id and the reason and never its text; a stored line logs nothing. The same when the request, and the close
+ *           of its write side, are both in before the peer's handler reads (`late`: the reader used to miss that close,
+ *           time out at 5 s and reset the stream, so the line was lost; red on main fa076db5, CI run 43470982789)
  *   FED-09  a relayed line longer than the send route's 64 KB is refused with words, and not stored.
  *   FED-03  a reservation whose reserved_until has passed holds no headroom.
  *   FED-01  writeVisitorRow never stamps a home on a local member.
  *   FED-06  (run `peers-off`, ENABLE_PEER_CONNECTORS unset) a configured peer's verify_member, relay_message,
  *           list_listings and settle_purchase are refused, nothing stored; settle_receipt_status is still answered.
  *           Over real libp2p, the node's handshake answer no longer calls it active (N3), and the relaying node logs
- *           the refusal (N2). The plain run holds the controls: a configured peer's answer says active.
+ *           the refusal (N2), late or not. The plain run holds the controls: a configured peer's answer says active.
  *
  * FED-10 (/api/federation/links members-only) is measured through the real middleware in test-federation-link (5a0, 5a)
  * and test-read-auth-default.

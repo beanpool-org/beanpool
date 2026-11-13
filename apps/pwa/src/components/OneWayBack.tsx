@@ -352,7 +352,6 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
     // Only what works for this member (§2.5): a sign-in where the node's link route takes them; "one way back" where true.
     const signIn = home ? home.canAddSignIn : true;
     const oneWayBack = home ? home.global && signIn : true;
-    const line = oneWayBack ? ONE_WAY_BACK_WORDS.line : signIn ? ONE_WAY_BACK_WORDS.lineLocal : ONE_WAY_BACK_WORDS.lineShort;
     const shown = forThem && (placement === 'settings' || landingDue(schedule, standing));
 
     function update(next: Schedule) {
@@ -393,7 +392,7 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
                             </button>
                         )}
                     </div>
-                    <p data-testid="one-way-back-text" className="text-sm text-nature-700 dark:text-nature-200 mt-1 mb-3 leading-relaxed break-words">{t(line)}</p>
+                    <p data-testid="one-way-back-text" className="text-sm text-nature-700 dark:text-nature-200 mt-1 mb-3 leading-relaxed break-words">{oneWayBack ? t(ONE_WAY_BACK_WORDS.line) : signIn ? t(ONE_WAY_BACK_WORDS.lineLocal) : t(ONE_WAY_BACK_WORDS.lineShort)}</p>
                     <div className="space-y-2">
                         {onSeeWords && hasMnemonic(identity) && (
                             <button type="button" data-testid="one-way-back-words"

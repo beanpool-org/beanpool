@@ -359,8 +359,8 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
     },
     { id: 'find', hue: 'sage', name: word('Find your community'), line: word('Communities near you, to join.'), group: 'start', asks: 'node', onNode: (a) => a.profile === 'global' },
     // Welcome (DESIGN-home-default-fable.md §2.3), first in the default list: drawn by the apps while `welcomeDrawn` says.
-    // It hides nothing. "Getting started" stays the picker group's name (§5.1).
-    { id: 'start', hue: 'sky', name: word('Welcome'), line: word('A one-minute look at the other tabs.'), group: 'start', asks: 'none', onNode: everywhere },
+    // It hides nothing. Its caption becomes "Welcome" with its body (slice D2) and the words' drafts (D4).
+    { id: 'start', hue: 'sky', name: word('Getting started'), line: word('A one-minute look at the other tabs.'), group: 'start', asks: 'none', onNode: everywhere },
     { id: 'steps', hue: 'sky', name: word('First steps'), globalName: word('Your first week'), line: word('Things to do in your first weeks.'), group: 'start', asks: 'node', onNode: everywhere },
     { id: 'tips', hue: 'indigo', name: word('Tips'), line: word('One tip at a time on how things work.'), group: 'start', asks: 'none', onNode: everywhere },
     { id: 'interests', hue: 'pink', name: word('What are you into?'), line: word('Star what you like to see it first.'), group: 'start', asks: 'none', onNode: everywhere },

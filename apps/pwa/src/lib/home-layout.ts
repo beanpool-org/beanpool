@@ -69,7 +69,15 @@ export type HomeRole = 'owner' | 'admin' | 'moderator' | null | undefined;
  * A type's name: its caption, its row in the picker and its band in Arrange. Fixed words, never a member's: core's word() keys, in
  * the member's language (the phone's utils/home-cards.ts cardName).
  */
+/**
+ * Welcome's caption (DESIGN-home-default-fable.md §2.3, §5.1): the `start` card's name on the web, on the card, in Add a card
+ * and in Arrange. "Getting started" stays the picker group's name. Core's catalogue still says "Getting started" until the
+ * phone's slice D2 takes the new caption with its own body (its tests pick the card by that name).
+ */
+export const WELCOME_WORDS_CAPTION = { caption: word('Welcome') } as const;
+
 export function cardName(type: HomeCardType, profile?: string): string {
+    if (type === 'start') return t(WELCOME_WORDS_CAPTION.caption);
     const entry = homeCardType(type);
     if (!entry) return type;
     return profile === 'global' && entry.globalName ? t(entry.globalName) : t(entry.name);

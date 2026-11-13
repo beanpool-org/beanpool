@@ -165,7 +165,7 @@ export const TIPS_DONE_WORDS = HOME_WORDS.tipsDone;
  * where Home draws them.
  */
 const LIB_LINES = {
-    skyNoPlace: SKY_NO_PLACE_LINE, hint: HOME_HINT_LINE, searchOffline: SEARCH_OFFLINE_LINE,
+    skyNoPlace: SKY_NO_PLACE_LINE, hint: HOME_HINT_LINE, resetDone: RESET_DONE_LINE, searchOffline: SEARCH_OFFLINE_LINE,
     typeYourTown: TYPE_YOUR_TOWN, notHereTypeYourTown: NOT_HERE_TYPE_YOUR_TOWN,
     tipsDontShow: TIPS_DONT_SHOW, tipsDontShowLabel: TIPS_DONT_SHOW_LABEL, saveSearchNotNow: SAVE_SEARCH_NOT_NOW,
 } as const;
@@ -3455,7 +3455,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                         {resetUndo ? (
                             // No confirm box: the line says what happened and Undo puts the list back (DESIGN-home-default-fable.md §3).
                             <p role="status" data-testid="home-reset-done" className="m-0 flex flex-wrap items-center justify-center gap-x-2 text-sm text-text-primary">
-                                <span className="min-w-0 break-words">{t(RESET_DONE_LINE)}</span>
+                                <span className="min-w-0 break-words">{t(LIB_LINES.resetDone)}</span>
                                 <button type="button" data-testid="home-reset-undo"
                                     onClick={() => {
                                         const before = resetUndo;

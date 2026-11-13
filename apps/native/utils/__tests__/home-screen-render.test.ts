@@ -4073,6 +4073,30 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         expect(tourStore.currentTour()).toBeNull();
     });
 
+    // DESIGN-home-default-fable.md §6, slice D2's first test. The window is 320 x 569 dp with text at 1.3x (this file's
+    // useWindowDimensions); nothing here lays out a frame, so what is checked is what decides the first screen: nothing
+    // above Welcome but the page title (no notifications card, no 12-words card on day one, no one-time line), New in
+    // the Market straight under it with its first row, and Welcome's actions as links, never a filled button. Its height
+    // at 320 x 1.3 is home-layout-320.test.ts's; the pixels are the emulator's (the PR's screenshots).
+    it('320 x 569 x 1.3: the first screen holds Welcome and the first Market row', async () => {
+        await render();
+        const scroll = document.querySelector('[data-testid="home-scroll"]')!;
+        const firstSlot = scroll.querySelector('[data-testid^="home-slot-"]')!;
+        // Everything drawn before the first card: the title and nothing that takes a row.
+        const before = Array.from(scroll.querySelectorAll('[data-testid]')).filter(e => e.compareDocumentPosition(firstSlot) & Node.DOCUMENT_POSITION_FOLLOWING && !firstSlot.contains(e) && !e.contains(firstSlot))
+            .map(e => e.getAttribute('data-testid'));
+        expect(before.filter(id => !/^page-title-home/.test(id!))).toEqual([]);
+        expect(document.body.textContent).not.toContain('Turn on notifications?');
+        // The slots that draw something (Your way back in keeps an empty slot while its card is put away: no row).
+        const slots = Array.from(scroll.querySelectorAll('[data-testid^="home-slot-"]')).filter(e => e.childElementCount > 0).map(e => e.getAttribute('data-testid'));
+        expect(slots.slice(0, 2)).toEqual(['home-slot-start', 'home-slot-market']);
+        expect(document.querySelector('[data-testid="home-slot-market"] [data-testid^="home-market-p"]')).not.toBeNull();
+        // Two plain links, each its own 44 dp target (HomeParts' filled HomeButton is not used: home-layout-320.test.ts).
+        const welcome = document.querySelector('[data-testid="home-card-start"]')!;
+        expect(Array.from(welcome.querySelectorAll('[role="button"]')).map(b => b.getAttribute('data-testid')).filter(Boolean))
+            .toEqual(['home-start-look', 'home-start-skip']);
+    });
+
     it('Look around starts the tour for this account at step 1 and sends nothing; the bar is the tab layout\'s, Home stays live', async () => {
         await render();
         const before = node.requests.length;

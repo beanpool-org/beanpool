@@ -76,7 +76,7 @@ vi.mock('../../components/LinkSignInSheet', () => ({
 }));
 
 import { OneWayBackCard } from '../../components/OneWayBackCard';
-import { ONE_WAY_BACK_TEXT, finishOneWayBack, readOneWayBack, startOneWayBack } from '../one-way-back';
+import { ONE_WAY_BACK_TEXT, finishOneWayBack, readOneWayBack, startOneWayBack, startOneWayBackPutAway } from '../one-way-back';
 import { draftIdentity } from '../identity';
 
 const GLOBAL = 'https://global.beanpool.org';
@@ -304,5 +304,130 @@ describe('Home\'s Arrange band: the card\'s inside is not rebuilt when the band 
         expect(document.querySelector('[data-testid="band"]')).toBeNull();
         expect(before.filter(e => !e.isConnected).map(e => e.textContent)).toEqual([]);
         expect(warning()).toBe(true);
+    });
+});
+
+// DESIGN-home-default-fable.md §2.5 (Marty's pick 2, 13 Nov 2026; slice D2): the reminder for every member whose 12 words
+// are their only way back, by what the account has (Home's `me.wayBack`), not how it joined. Sign-up counts as the first
+// showing: day one is First steps' line only, the card comes once after the first post and once after a week, then
+// Settings. Where the node takes no sign-in from them (review of #3110, round 2: `linkState` refuses an invited member),
+// the card offers none.
+describe('an invite sign-up that carried on: no card on day one, card after the first post, card after a week, then Settings', () => {
+    const SIGNED_UP = Date.parse('2026-10-02T08:00:00Z');
+    const kept: unknown[] = [];
+    /** Home's word for an invited member with no sign-in: the words are the only way back, and the node takes no sign-in from them. */
+    const homeWord = (over: Partial<{ words: boolean; door: boolean; kept: boolean }> = {}) => ({
+        url: OTHER, standing: { words: true, joinedAt: SIGNED_UP, door: false, kept: false, ...over },
+    });
+    async function drawCard(place: 'landing' | 'settings', word = homeWord()) {
+        host = document.createElement('div');
+        document.body.appendChild(host);
+        root = createRoot(host);
+        await act(async () => { root!.render(createElement(OneWayBackCard, { place, homeWord: word }) as unknown as Parameters<Root['render']>[0]); });
+        await settle();
+    }
+    const again = async (place: 'landing' | 'settings' = 'landing', word = homeWord()) => {
+        act(() => root?.unmount());
+        host?.remove();
+        await drawCard(place, word);
+    };
+    const short = () => text().includes('Your 12 words are how you get back in. Check you still have them.');
+    const posted = async (yes: boolean) => {
+        const db = await import('../db');
+        (db.getMyPosts as ReturnType<typeof vi.fn>).mockResolvedValue(yes ? [{ id: 'p1' }] : []);
+    };
+
+    beforeEach(async () => {
+        mem.anchor = OTHER;
+        kept.length = 0;
+        await posted(false);
+        const nodeFetch = globalThis.fetch;
+        globalThis.fetch = vi.fn(async (url: any, init?: any) => {
+            const u = new URL(String(url));
+            if (u.pathname === '/api/members/preferences' && init?.method === 'POST') {
+                kept.push(JSON.parse(String(init.body)).preferences);
+                return new Response(JSON.stringify({}), { status: 200 });
+            }
+            return (nodeFetch as any)(url, init);
+        }) as any;
+        // The invite sign-up's end (app/welcome.tsx): the reminder starts put away.
+        await startOneWayBackPutAway(who.identity.publicKey, OTHER, SIGNED_UP);
+    });
+
+    it('day one: no card on Home, the record is put away and only Home\'s word moves it (/api/community/me is never asked)', async () => {
+        await drawCard('landing');
+        expect(short()).toBe(false);
+        expect(warning()).toBe(false);
+        expect(await readOneWayBack(who.identity.publicKey)).toMatchObject({ url: OTHER, by: 'wayBack', dismissedAt: SIGNED_UP });
+        expect(node.asks).toBe(0);
+    });
+
+    it('after the first post: the card once, with its own words, no "Add a sign-in", and Show my 12 words / I still have my 12 words', async () => {
+        await posted(true);
+        vi.setSystemTime(SIGNED_UP + 2 * 3600_000);
+        await drawCard('landing');
+        expect(short()).toBe(true);
+        expect(warning()).toBe(false);
+        expect(text()).not.toContain('Add a sign-in');
+        expect(text()).toContain('Show my 12 words');
+        expect(text()).toContain('I still have my 12 words');
+        await act(async () => { button('✕').click(); });
+        await settle();
+        expect(short()).toBe(false);
+        await again();
+        expect(short()).toBe(false);
+        expect(node.asks).toBe(0);
+    });
+
+    it('after a week: once more; then Settings only', async () => {
+        vi.setSystemTime(SIGNED_UP + 8 * 24 * 3600_000);
+        await drawCard('landing');
+        expect(short()).toBe(true);
+        await act(async () => { button('✕').click(); });
+        await settle();
+        await again();
+        expect(short()).toBe(false);
+        vi.setSystemTime(SIGNED_UP + 40 * 24 * 3600_000);
+        await again();
+        expect(short()).toBe(false);
+        await again('settings');
+        expect(short()).toBe(true);
+        expect(text()).not.toContain('Add a sign-in');
+    });
+
+    it('"I still have my 12 words" is kept on the account (words_kept), and the card is done on this phone', async () => {
+        await posted(true);
+        await drawCard('landing');
+        await act(async () => { button('I still have my 12 words').click(); });
+        await settle();
+        expect(kept).toEqual([{ words_kept: true }]);
+        expect(await readOneWayBack(who.identity.publicKey)).toMatchObject({ done: 'checked' });
+        expect(short()).toBe(false);
+    });
+
+    it('said on another device (Home\'s word kept) or a sign-in linked there (wayBack covered): done here too', async () => {
+        await posted(true);
+        await drawCard('landing', homeWord({ kept: true }));
+        expect(short()).toBe(false);
+        expect(await readOneWayBack(who.identity.publicKey)).toMatchObject({ done: 'checked' });
+        mem.async.clear();
+        await startOneWayBackPutAway(who.identity.publicKey, OTHER, SIGNED_UP);
+        await again('landing', homeWord({ words: false }));
+        expect(await readOneWayBack(who.identity.publicKey)).toMatchObject({ done: 'linked' });
+    });
+
+    it('no record on this phone (signed up elsewhere): Home\'s word starts it put away at the join date, never at once', async () => {
+        mem.async.clear();
+        await drawCard('landing');
+        expect(short()).toBe(false);
+        expect(await readOneWayBack(who.identity.publicKey)).toMatchObject({ url: OTHER, by: 'wayBack', joinedAt: SIGNED_UP, dismissedAt: SIGNED_UP });
+    });
+
+    it('where the node takes a sign-in from them (Home\'s safety card: the 12-words door), the door\'s card and Add a sign-in, as decided', async () => {
+        mem.async.clear();
+        await startOneWayBack(who.identity.publicKey, OTHER, SIGNED_UP);
+        await drawCard('landing', homeWord({ door: true }));
+        expect(warning()).toBe(true);
+        expect(text()).toContain('Add a sign-in');
     });
 });

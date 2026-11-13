@@ -649,3 +649,48 @@ describe('"A chat" at 320dp × 1.3 (DESIGN-home-chosen-chat-fable.md §2, slice 
         for (const right of ['On Home', '15 Oct', '59m ago']) expect(textWidth(right, num(c.pickWhen.fontSize)), right).toBeLessThanOrEqual(room);
     });
 });
+
+// DESIGN-home-default-fable.md §2.3, §5.3, §6 (slice D2): Welcome at the floor. Two plain links, never a filled button
+// (in the mock-up a button and a Not now under it pushed the Market off the first screen at 320 dp x 1.3); each link
+// keeps a 44 dp row and wraps whole to its own row where the two don't fit. The model below is this file's (glyph widths
+// at 1.3x); the first screen's pixels are the emulator's.
+describe('Welcome at 320dp × 1.3 (DESIGN-home-default-fable.md §2.3)', () => {
+    const bodies = read('components/home/HomeCardBodies.tsx');
+    const welcome = bodies.slice(bodies.indexOf('export function WelcomeBody('), bodies.indexOf('\n}\n', bodies.indexOf('export function WelcomeBody(')));
+
+    it('its actions are links in rows that wrap, each a 44 dp target; no filled button', () => {
+        expect(welcome.length).toBeGreaterThan(100);
+        expect(welcome).not.toMatch(/<HomeButton\b/);
+        expect(welcome).toMatch(/minHeight: HOME_TARGET_DP/);
+        expect(welcome.match(/flexWrap: 'wrap'/g)!.length).toBeGreaterThanOrEqual(3);
+        expect(HOME_TARGET_DP).toBeGreaterThanOrEqual(44);
+    });
+
+    it('Welcome, the Market\'s band and the top of its first row are on the first screen at 320 x 569 with text at 1.3x', () => {
+        const line = 21 * FONT_SCALE;
+        const rows = (text: string, size = 15) => Math.ceil(textWidth(text, size) / CARD_INNER);
+        // The design's own example (§2.3): "You're in Byron Shire BeanPool." and "Ana invited you. Say hello ›".
+        const place = rows("You're in Byron Shire BeanPool.") * line;
+        const inviter = textWidth('Ana invited you.', 15) + 8 + textWidth('Say hello ›', 15) <= CARD_INNER ? line : line + HOME_TARGET_DP;
+        const links = textWidth('Take the tour ›', 15) + 20 + textWidth('Not now', 15) <= CARD_INNER ? HOME_TARGET_DP : 2 * HOME_TARGET_DP;
+        const chrome = num(s.card.paddingTop) + num(s.card.paddingBottom) + 2 * num(s.card.borderWidth) + num(s.captionRow.minHeight) + num(s.captionRow.marginBottom) + num(s.captionRow.marginTop);
+        const welcomeH = chrome + place + inviter + links + num(s.card.marginBottom);
+        // New in the Market's band, then its first row's title line (the row's padding and one line at 1.3x).
+        const marketTitleAt = welcomeH + chrome + 6 + 20 * FONT_SCALE;
+        // Above and below the list, from the code: the status bar (24 dp on Android 8, assumed), the header's row
+        // (GlobalHeader.tsx HEADER_ROW_HEIGHT), the page title (PageTitle.tsx, its 36 dp line at 1.3x and its padding),
+        // and the tab strip ((tabs)/_layout.tsx TAB_BAR_HEIGHT).
+        const header = 24 + Number(/HEADER_ROW_HEIGHT = (\d+)/.exec(read('components/GlobalHeader.tsx'))![1]);
+        const titleSrc = read('components/PageTitle.tsx');
+        const title = Number(/PAGE_TITLE_TOP = (\d+)/.exec(titleSrc)![1]) + 36 * FONT_SCALE + Number(/PAGE_TITLE_BOTTOM = (\d+)/.exec(titleSrc)![1]);
+        const tabs = Number(/TAB_BAR_HEIGHT = (\d+)/.exec(read('app/(tabs)/_layout.tsx'))![1]);
+        const list = 569 - header - title - tabs;
+        // This file's glyph widths are generous (0.62em at a full 1.3x), so Welcome's links take two rows here. By it the first
+        // row starts about 42 dp above the tab strip and its title line ends about 2 dp under it (marketTitleAt 387.9 of
+        // 386.2 on 14 Nov 2026): the row is on the first screen, its price line just under, as the design inferred (§8).
+        // The emulator's screenshots are the pixels.
+        const marketRowAt = welcomeH + chrome;
+        expect(marketRowAt + HOME_TARGET_DP / 2).toBeLessThanOrEqual(list);
+        expect(marketTitleAt - list).toBeLessThan(HOME_TARGET_DP / 2);
+    });
+});

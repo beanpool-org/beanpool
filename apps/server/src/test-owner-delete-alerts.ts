@@ -693,7 +693,14 @@ async function main(): Promise<void> {
     alerts.resetAlertsForTests();
     const r9 = received.length;
     await call('/api/local/update-identity', asOwner, { communityName: '' });
-    const hostile = await call('/api/local/update-identity', asAdmin, { callsign: '\u001b[2J\u0007\u202eEVIL https://x.y' });
+    // A hostile callsign with a link in it is no name (core name-box.ts, card callsign-link-guard): refused before it is
+    // stored, so it never stands in for the community's name, and no alert is written of it.
+    const callsign9 = getLocalConfig().callsign;
+    const hostileLink = await call('/api/local/update-identity', asAdmin, { callsign: '\u001b[2J\u0007\u202eEVIL https://x.y' });
+    assert(hostileLink.status === 400 && hostileLink.json?.code === 'callsign_link' && getLocalConfig().callsign === callsign9 && lines('sec.settings').length === 0,
+        `9. a hostile callsign with a link in it is refused (400 callsign_link), kept out, and told to no one (${hostileLink.status} ${JSON.stringify(hostileLink.json)}; ${lines('sec.settings').length} alerts)`);
+    // The same control and bidi characters in a name that is no link: stored, and cleaned out of every title and body.
+    const hostile = await call('/api/local/update-identity', asAdmin, { callsign: '\u001b[2J\u0007\u202eEVIL\u202d Vale' });
     await until(() => received.length > r9, 3000);
     const msgs9 = received.slice(r9);
     // eslint-disable-next-line no-control-regex -- the control characters are what is looked for

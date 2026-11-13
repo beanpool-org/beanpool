@@ -23,7 +23,7 @@
  */
 
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { t, tn, word } from '@beanpool/core';
+import { notANameIn, notANameWords, t, tn, word } from '@beanpool/core';
 import { keyLineWords, twoSentences } from './key-lines';
 import { joinHeading, ownCommunityAddress } from '../lib/join-names';
 import { Sentence } from './Sentence';
@@ -1189,6 +1189,12 @@ export function WebJoin({
         const trimmed = name.trim().slice(0, MAX_JOIN_CALLSIGN).trim();
         if (trimmed.length < 2) {
             setNotice({ tone: 'error', text: () => t('Please choose a name of at least 2 letters.') });
+            return;
+        }
+        // An invite or a web address is no name (core name-box.ts; card callsign-link-guard): the node refuses it too.
+        const notAName = notANameIn(name);
+        if (notAName) {
+            setNotice({ tone: 'error', text: () => t(notANameWords(notAName)) });
             return;
         }
         setBusy(true);

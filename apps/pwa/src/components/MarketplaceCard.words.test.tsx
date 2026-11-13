@@ -125,6 +125,31 @@ describe('a Market card in the pseudo-locale', () => {
         expect(screen.queryByRole('button', { name: /enlarged/ })).toBeNull();
     });
 
+    // Marty, 14 Nov 2026: on a Need the poster is the one who would pay, so the same flag's chip says the cash is offered.
+    // The chip's own words (💸 CASH TOO) are the same on both; an Offer's title is as it was.
+    it('a Need with cash too: the chip says the cash is offered, in English and in the pseudo-locale', async () => {
+        const needCash = { ...need, id: 'p6', cashAlsoNeeded: true } as MarketplacePost;
+        const { unmount } = render(
+            <div>
+                <MarketplaceCard post={needCash} viewMode="list" />
+            </div>,
+        );
+        expect(screen.getByText('💸 CASH TOO')).toHaveAttribute('title', 'Cash offered too for fuel or materials — agreed in chat');
+        unmount();
+        await showIn('xx');
+        render(
+            <div>
+                <MarketplaceCard post={needCash} viewMode="list" />
+                <MarketplaceCard post={marked} viewMode="list" />
+            </div>,
+        );
+        expect(screen.getAllByText(xx('💸 CASH TOO')).map((c) => c.getAttribute('title'))).toEqual([
+            xx('Cash offered too for fuel or materials — agreed in chat'),
+            xx('Cash also needed for fuel or materials — agreed in chat'),
+        ]);
+        expect(bypassing(document.body, { others })).toEqual([]);
+    });
+
     it('every category reads lib/marketplace.ts\'s own name, as before', () => {
         render(
             <div>

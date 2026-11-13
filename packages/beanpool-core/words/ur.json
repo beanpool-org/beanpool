@@ -2540,5 +2540,10 @@
     "one": "آپ کے ترمیم کرتے وقت کسی نے کچھ لے لیے۔ اب {n} باقی ہے۔ تعداد دیکھ کر دوبارہ محفوظ کریں۔",
     "other": "آپ کے ترمیم کرتے وقت کسی نے کچھ لے لیے۔ اب {n} باقی ہیں۔ تعداد دیکھ کر دوبارہ محفوظ کریں۔"
   },
-  "To stop selling, pause or remove the listing.": "بیچنا روکنے کے لیے لسٹنگ کو روکیں یا ہٹائیں۔"
+  "To stop selling, pause or remove the listing.": "بیچنا روکنے کے لیے لسٹنگ کو روکیں یا ہٹائیں۔",
+  "Newest\u0004member sort": "تازہ ترین",
+  "Name\u0004member sort": "نام",
+  "Friends\u0004member sort": "دوست",
+  "Trusted\u0004member sort": "قابل اعتماد",
+  "Active\u0004member sort": "فعال"
 }

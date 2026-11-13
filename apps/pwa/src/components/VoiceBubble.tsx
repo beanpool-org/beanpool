@@ -92,6 +92,7 @@ export function VoiceBubble({ messageId, load }: { messageId: string; load: () =
                     aria-valuenow={Math.round(positionMs / 1000)}
                     aria-valuetext={voiceClock(positionMs)}
                     data-testid="voice-wave"
+                    data-position-ms={positionMs}
                     onClick={(e) => {
                         const box = e.currentTarget.getBoundingClientRect();
                         if (box.width > 0) seekTo((e.clientX - box.left) / box.width);

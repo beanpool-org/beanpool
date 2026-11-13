@@ -70,6 +70,11 @@
       "import": "./dist/voice-vectors.js",
       "default": "./dist/voice-vectors.js"
     },
+    "./forum-vectors": {
+      "types": "./dist/forum-vectors.d.ts",
+      "import": "./dist/forum-vectors.js",
+      "default": "./dist/forum-vectors.js"
+    },
     "./words-check": {
       "types": "./dist/words-check.d.ts",
       "import": "./dist/words-check.js",

@@ -425,6 +425,7 @@ export const SUITES = [
     'test-trust-mutuals',
     'test-friends-added-you',
     'test-message-attachment',
+    withTimeout('test-voice-line', 600),
     'test-social-ratings',
     'test-app-store-versions',
     'test-app-store-check-switch',

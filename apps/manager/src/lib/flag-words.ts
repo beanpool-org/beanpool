@@ -66,6 +66,9 @@ export const FLAG_WORDS = {
     dismissing: word('Dismissing...'),
     freeze: word('🛑 Freeze Accounts'),
     freezing: word('Freezing...'),
+    // Beside a member Freeze leaves out: the node refuses your own account, and an owner to anyone but an owner.
+    cantFreezeSelf: word("Can't be frozen by you: this is you"),
+    cantFreezeOwner: word("Can't be frozen by you: an owner"),
     exportEvidence: word('📄 Export Evidence'),
     copied: word('📋 Copied!'),
     frozenTag: word('🛑 FROZEN'),

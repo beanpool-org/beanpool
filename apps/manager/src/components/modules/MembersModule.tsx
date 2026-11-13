@@ -961,6 +961,7 @@ export function MembersModule({
                     } : undefined}
                     onFreezePubkeys={handleFreezePubkeys}
                     onInspectMember={(m) => setSelectedMember(m as MemberItem)}
+                    viewer={rolesViewer}
                 />
             )}
 

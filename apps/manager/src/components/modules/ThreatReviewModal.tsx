@@ -6,6 +6,7 @@ import { ModalBackdrop } from '../common/ModalBackdrop';
 import { reportSubject } from '../../lib/node-client';
 import { t } from '../../lib/fresh-proof';
 import { FLAG_WORDS as W, flagAction, flagHeading, flagMembers, flagOffersFreeze } from '../../lib/flag-words';
+import type { RolesViewer } from './NodeRolesPanel';
 
 export interface ThreatItem {
     id?: string;
@@ -49,6 +50,21 @@ interface ThreatReviewModalProps {
      */
     onFreezePubkeys?: (pubkeys: string[]) => void | Promise<unknown>;
     onInspectMember?: (member: MemberItem) => void;
+    /**
+     * Who is looking. A key session is told, per member, who the node won't let them freeze (never their own account, and
+     * only an owner an owner: server state-engine creditFreezeRefusal), and Freeze sends only the others. Unknown (a test,
+     * a caller that doesn't say): the node decides alone, as before.
+     */
+    viewer?: RolesViewer;
+}
+
+/** Why the viewer can't freeze this member, or null when they can (or the window doesn't know who is looking). */
+function cantFreezeReason(viewer: RolesViewer | undefined, pubkey: string, member: MemberItem | undefined): 'self' | 'owner' | null {
+    if (viewer?.kind !== 'key') return null;
+    if (pubkey === viewer.memberPubkey) return 'self';
+    const role = member?.nodeRole ?? member?.role;
+    if (role === 'owner' && viewer.role !== 'owner') return 'owner';
+    return null;
 }
 
 export function ThreatReviewModal({
@@ -60,7 +76,8 @@ export function ThreatReviewModal({
     onDismiss,
     onDismissReport,
     onFreezePubkeys,
-    onInspectMember
+    onInspectMember,
+    viewer
 }: ThreatReviewModalProps) {
     const [actionState, setActionState] = useState<string | null>(null);
     const [dismissing, setDismissing] = useState(false);
@@ -128,6 +145,10 @@ export function ThreatReviewModal({
     };
 
     const involvedPubkeys = extractPubkeys();
+    // Who Freeze acts on: the members named, less those the viewer may not freeze. Named members and none of them left:
+    // no Freeze at all.
+    const freezablePubkeys = involvedPubkeys.filter((pub) => !cantFreezeReason(viewer, pub, membersMap.get(pub)));
+    const offerFreeze = canFreeze && !(involvedPubkeys.length > 0 && freezablePubkeys.length === 0);
 
     // Parse structured metrics from string if available
     const parseMetrics = () => {
@@ -162,7 +183,7 @@ export function ThreatReviewModal({
 
     const handleAction = async (action: string) => {
         // Nothing freezes for a flag that does not show real harm.
-        if (action === 'freeze' && !canFreeze) return;
+        if (action === 'freeze' && !offerFreeze) return;
         // A report lives on the node: dismissing it only here would leave it pending for everyone else.
         if (action === 'dismiss' && isReport && threat?.id && onDismissReport) {
             setDismissing(true);
@@ -180,7 +201,7 @@ export function ThreatReviewModal({
             setFreezing(true);
             setDismissError(null);
             try {
-                await onFreezePubkeys(involvedPubkeys);
+                await onFreezePubkeys(freezablePubkeys);
             } catch (e: unknown) {
                 setDismissError(e instanceof Error ? e.message : t(W.freezeFailed));
                 return;
@@ -283,7 +304,8 @@ export function ThreatReviewModal({
                             involvedPubkeys.map((pub, idx) => {
                                 const matchedMember = membersMap.get(pub) || { pubkey: pub, publicKey: pub };
                                 const displayName = getMemberDisplayName(matchedMember, profiles);
-                                const isItemFrozen = (frozenPubkeys instanceof Set ? frozenPubkeys.has(pub) : (frozenPubkeys || []).includes(pub)) || actionState === 'freeze';
+                                const notYours = cantFreezeReason(viewer, pub, membersMap.get(pub));
+                                const isItemFrozen = (frozenPubkeys instanceof Set ? frozenPubkeys.has(pub) : (frozenPubkeys || []).includes(pub)) || (actionState === 'freeze' && !notYours);
 
                                 return (
                                     <div
@@ -300,6 +322,11 @@ export function ThreatReviewModal({
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-2 shrink-0">
+                                            {notYours && canFreeze && (
+                                                <span className="text-[10px] text-nature-300 text-right">
+                                                    {t(notYours === 'self' ? W.cantFreezeSelf : W.cantFreezeOwner)}
+                                                </span>
+                                            )}
                                             {isItemFrozen && (
                                                 <span className="px-2 py-0.5 rounded font-mono text-[10px] border bg-bp-danger-fill text-bp-danger-on border-bp-danger-fill font-bold">
                                                     {t(W.frozenTag)}
@@ -360,7 +387,7 @@ export function ThreatReviewModal({
                         >
                             {dismissing ? t(W.dismissing) : t(W.dismiss)}
                         </button>
-                        {canFreeze && (
+                        {offerFreeze && (
                             <button
                                 onClick={() => handleAction('freeze')}
                                 disabled={freezing || involvedPubkeys.length === 0}

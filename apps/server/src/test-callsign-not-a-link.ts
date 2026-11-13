@@ -117,6 +117,10 @@ async function main(): Promise<void> {
         `the profile route's refusal has error "callsign_link" and the line in message (got ${JSON.stringify(rename.body)})`);
     const renameInvite = await call('POST', dee, '/api/profile/update', { callsign: HER_LINK });
     assert(refusedAs(renameInvite, NAME_BOX_WORDS.inviteLink), `a rename to her invite link, read whole before the 32-character cut, says invite link (got ${renameInvite.status} ${JSON.stringify(renameInvite.body)})`);
+    // The profile keeps 32 characters, and this name is an address only once cut there ("… x.comet" kept as "… x.com"):
+    // refused as the door refuses one, never kept.
+    const cutRename = await call('POST', dee, '/api/profile/update', { callsign: 'Rowan at Byron Bay NSW, AU x.comet' });
+    assert(refusedAs(cutRename, NAME_BOX_WORDS.webLink), `a rename that is an address only once cut to 32: 400 callsign_link (got ${cutRename.status} ${JSON.stringify(cutRename.body)})`);
     assert(nameOf(dee.pk) === 'Dee Dee', 'and the name is unchanged');
     const renamed = await call('POST', dee, '/api/profile/update', { callsign: 'Dee' });
     assert(renamed.status === 200 && nameOf(dee.pk) === 'Dee', `a rename to a name still saves (got ${renamed.status})`);

@@ -538,8 +538,10 @@ export function updateProfile(
         const requested = update.callsign.trim().slice(0, 32);
         if (requested !== existing.callsign) {
             if (requested.length < 2) throw new Error('CALLSIGN_TOO_SHORT');
-            // Read whole, before the cut: a link cut at 32 may no longer say it was an invite.
+            // Read whole, before the cut: a link cut at 32 may no longer say it was an invite. And as kept, as
+            // registerMemberInternal reads it: a name can be an address only once cut ("… x.comet" kept as "… x.com").
             assertCallsignIsAName(update.callsign);
+            assertCallsignIsAName(requested);
             // Any change, a change of case included: the member's own row is left out of the check, so "marty" →
             // "Marty" is free, but where a node already holds two names that fold the same,
             // one of them may not take the other's spelling exactly (the unique index on lower(callsign) would refuse

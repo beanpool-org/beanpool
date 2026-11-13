@@ -474,7 +474,7 @@ export const HOME_V1_CARD_IDS: readonly string[] = [
  * | Card | Drawn when |
  * |---|---|
  * | `start` (Welcome) | Until the tour is taken or Not now, seven days at most ({@link welcomeDrawn}) |
- * | `safety` (Your way back in) | On its schedule only, for an account with no second way back (the node's `me.wayBack`) |
+ * | `safety` (Your way back in) | On its schedule only, for an account with no second way back (the node's `me.wayBack`); until slices D2 and D3, for a 12-words joiner with no sign-in alone |
  * | `market` (New in the Market) | A listing exists, or the community's examples |
  * | `steps` (First steps) | A line is left, in the first 30 days (first-steps.ts `FIRST_STEPS_DAYS`) |
  * | `interests` (What are you into?) | Until the first star |

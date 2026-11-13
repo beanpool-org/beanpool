@@ -11,8 +11,10 @@
  * Who it is for is the node's word, never a guess. In Settings, `GET /api/community/me` says `rules: 'words'` for a
  * member who came in with 12 words and has added no sign-in; nothing is drawn while it has not answered, for an older
  * node that does not say, or offline. On Home, the answer's `safety` card (passed as `known`) is the only word on who it
- * is for (by what the account has, not how they joined), so the card not yet put away is drawn with the answer, its
- * cell is there from the first paint, and `/me` arriving later never pulls it; a return after ✕ waits for the node's
+ * is for: the node builds it by the same rule as `/me`'s `rules` (until slices D2 and D3, which bring the card to every
+ * member whose 12 words are the only way back, offering only what works for them: review of #3110), less a member who
+ * said they still have their words. So the card not yet put away is drawn with the answer, its cell is there from the
+ * first paint, and `/me` arriving later never pulls it nor pops it in; a return after ✕ waits for the node's
  * counts. A ✕ before they have come (still asking, or the request failed) is written at once and settled by the counts
  * when the node next answers, on this visit or a later one; Home is told whether the card is drawn (`onDrawn`).
  *
@@ -307,11 +309,12 @@ interface CardProps {
     /** What the card stands in (Home's cell, with its "…"): drawn only with the card, so a card with nothing to say takes no place. */
     frame?: (card: ReactNode) => ReactNode;
     /**
-     * Home's answer (its `safety` card): whether this member's 12 words are the only way back, by what the account has
-     * (DESIGN-home-default-fable.md §2.5). Given, it is the one word on who the card is for, at the first paint and after
-     * (review of #3110): `/api/community/me` then gives only the counts its schedule goes by, since its `rules` reads how
-     * the member joined, and letting it overrule drew the card and pulled it again (the jump PR #2411 fixed). Not given
-     * (Settings), `/api/community/me` says.
+     * Home's answer (its `safety` card): a member who came in with 12 words, has added no sign-in and has not said they
+     * still have their words, the rule `/me`'s `rules` goes by less that last (routes/home-answer.ts `safetyCard`; the
+     * wider rule of DESIGN-home-default-fable.md §2.5 waits for slices D2 and D3, review of #3110). Given, it is the one
+     * word on who the card is for, at the first paint and after: `/api/community/me` then gives only the counts its
+     * schedule goes by, and letting it overrule a word that differed (a sign-in just linked, the words just kept) drew the
+     * card and pulled it again, or popped it in late (the jump PR #2411 fixed). Not given (Settings), `/me` says.
      */
     known?: boolean;
     /** Told whether the card is drawn, before the page paints (Home: a card not drawn is not a place to move another to). */

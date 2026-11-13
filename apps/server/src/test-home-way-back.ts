@@ -1,12 +1,14 @@
 /**
  * Test Suite: the default Home's node half (scratch/fable-design/DESIGN-home-default-fable.md §2.4, §2.5, §2.7, §5.3, slice D1;
  * Marty's picks of 13 Nov 2026), over REAL HTTPS through the real signature middleware, on a local community:
- *   1. `me.wayBack` and the safety card: an invited member with no sign-in gets `wayBack: 'words'` and the card (asked for
- *      by `cards=safety`, as the default list asks); one with a sign-in's copy linked here gets `covered` and no card,
- *      however they joined. A sign-in's copy of an older generation is no way back.
+ *   1. `me.wayBack`: an invited member, a member nobody invited, or a sign-in joiner with no copy here gets `words`; one
+ *      with a sign-in's copy linked here gets `covered`, however they joined. A copy of an older generation is no way back.
+ *      The safety card (asked for by `cards=safety`, as the default list asks) keeps the 12-words door's rule until slices
+ *      D2 and D3 (review of #3110, round 2): a 12-words joiner with no sign-in, and nobody else, so Home's word and
+ *      /api/community/me's `rules` agree for every one of them.
  *   2. "I still have my 12 words" kept on the account (`words_kept`, one way: a false never un-sets it), and the recovery
- *      kit saved writing the same record: the safety card goes, First steps' `words` line is ticked, `wayBack` stays what
- *      the node can see.
+ *      kit saved writing the same record: First steps' `words` line is ticked, a 12-words joiner's safety card goes,
+ *      `wayBack` stays what the node can see.
  *   3. `me.invitedBy`: the name and key of whoever's invite they used, in the invitee's own answer and no one else's; none
  *      for a member nobody invited, nor once the inviter has gone.
  *   4. The new-account limits for an invited member are unchanged: their own rule (ordinary), not `wayBack`.
@@ -85,6 +87,11 @@ function linkSignIn(pk: string, generation = 1): void {
                 VALUES (?, 'sso', 'google', 1, 'x', 'x', 'x', ?)`).run(pk, generation);
 }
 
+/** A join through the open door with 12 words alone: its open-joins row says `words` (engine/open-join.ts). */
+function wordsJoin(pk: string): void {
+    db.prepare("INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at) VALUES (?, 'words', ?, ?)").run(pk, `words:${crypto.randomUUID()}`, new Date().toISOString());
+}
+
 async function main() {
     console.log('=== The default Home, node half (D1): wayBack, invitedBy, First steps 30 days, zero figures ===\n');
     await initTls();
@@ -98,11 +105,25 @@ async function main() {
     const dev = makeMember('WayBackDev');
 
     // ── 1. wayBack and the safety card ─────────────────────────────────────────────────────────────────────────────
-    console.log('── 1. wayBack and the safety card, by what the account has, not how it joined ──');
+    console.log('── 1. wayBack by what the account has; the safety card by the 12-words door until D2/D3 ──');
     const b0 = await home(ben);
     assert(b0.status === 200, `setup: Ben (invited) reads Home (${b0.status})`);
     assert(b0.json?.me?.wayBack === 'words', `an invited member with no sign-in gets wayBack words (${b0.json?.me?.wayBack})`);
-    assert(b0.json?.cards?.safety?.words === true, `and the safety card (${JSON.stringify(b0.json?.cards?.safety)})`);
+    // The card both apps draw today offers "Add a sign-in", which the node takes from a 12-words joiner alone
+    // (routes/open-join.ts linkState: 404 invite_only on an invite-only community, 409 not_words_member where the door is
+    // open). So, until slices D2 and D3, the card keeps that door's rule, the one /api/community/me's `rules` says
+    // (review of #3110, round 2): an invited member gets none, whatever wayBack says.
+    assert(b0.json?.cards?.safety === undefined, `but no safety card: an invited member's waits for D2/D3 (${JSON.stringify(b0.json?.cards?.safety)})`);
+    const a0safety = await home(ana);
+    assert(a0safety.json?.me?.wayBack === 'words' && a0safety.json?.cards?.safety === undefined,
+        `a member nobody invited, with no 12-words row (the genesis owner's case): wayBack words, no card (${a0safety.json?.me?.wayBack}, ${JSON.stringify(a0safety.json?.cards?.safety)})`);
+    // Joined with a sign-in, its copy not kept here (a community that keeps none, or a copy that failed to store): the
+    // open-joins row names the sign-in, so the link route says already_linked. Words by wayBack, no card.
+    const hal = makeMember('WayBackHal');
+    db.prepare("INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at) VALUES (?, 'google', ?, ?)").run(hal.pk, `google:${crypto.randomUUID()}`, new Date().toISOString());
+    const h0 = await home(hal);
+    assert(h0.json?.me?.wayBack === 'words' && h0.json?.cards?.safety === undefined,
+        `a sign-in joiner with no copy here: wayBack words, no card (${h0.json?.me?.wayBack}, ${JSON.stringify(h0.json?.cards?.safety)})`);
     linkSignIn(cleo.pk);
     const c0 = await home(cleo);
     assert(c0.json?.me?.wayBack === 'covered', `one with a sign-in's copy linked here gets wayBack covered (${c0.json?.me?.wayBack})`);
@@ -112,16 +133,28 @@ async function main() {
     db.prepare(`INSERT INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, generation)
                 VALUES (?, 'hub', 'self', 2, 'x', 'x', 'x', 2)`).run(dev.pk);
     const d0 = await home(dev);
-    assert(d0.json?.me?.wayBack === 'words' && d0.json?.cards?.safety?.words === true,
-        `a sign-in's copy of an older generation is no way back: words, and the card (${d0.json?.me?.wayBack})`);
-    // An open-door words member is covered by the same rule (two-doors §2.5): words until a sign-in, then covered.
+    assert(d0.json?.me?.wayBack === 'words' && d0.json?.cards?.safety === undefined,
+        `a sign-in's copy of an older generation is no way back: words (no 12-words row, so no card yet) (${d0.json?.me?.wayBack})`);
+    // A 12-words joiner: the card, and words, until they link a sign-in (the link moves the open-joins row to the
+    // sign-in, engine/open-join.ts linkOpenJoin, and keeps its copy here); then covered, and no card.
     const eve = makeMember('WayBackEve', { invitedBy: ana.pk });
-    db.prepare("INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at) VALUES (?, 'words', ?, ?)").run(eve.pk, `words:${crypto.randomUUID()}`, new Date().toISOString());
+    wordsJoin(eve.pk);
     const e0 = await home(eve);
+    db.prepare("UPDATE open_joins SET provider = 'google', join_hash = ? WHERE member_pubkey = ?").run(`google:${crypto.randomUUID()}`, eve.pk);
     linkSignIn(eve.pk);
     const e1 = await home(eve);
-    assert(e0.json?.cards?.safety?.words === true && e1.json?.cards?.safety === undefined && e1.json?.me?.wayBack === 'covered',
+    assert(e0.json?.cards?.safety?.words === true && e0.json?.me?.wayBack === 'words' && e1.json?.cards?.safety === undefined && e1.json?.me?.wayBack === 'covered',
         `a 12-words joiner: the card until a sign-in is linked, then covered and none (${e0.json?.me?.wayBack} → ${e1.json?.me?.wayBack})`);
+    // Home's word and /me's agree for every one of them (the web draws by Home's, and /me's arriving later never
+    // pulled a card drawn at the first paint only because the two agree: review of #3110, round 1).
+    const fay0 = makeMember('WayBackFayWords');
+    wordsJoin(fay0.pk);
+    for (const [who, id] of [['Ben (invited)', ben], ['Ana (nobody invited)', ana], ['Hal (sign-in, no copy)', hal], ['Cleo (covered)', cleo], ['Dev (old copy)', dev], ['Eve (linked)', eve], ['Fay (12 words)', fay0]] as const) {
+        const h = await home(id);
+        const me = await signed('GET', '/api/community/me', id);
+        assert(me.status === 200 && (h.json?.cards?.safety?.words === true) === (me.json?.probation?.rules === 'words'),
+            `${who}: Home's safety card and /me's rules agree (${JSON.stringify(h.json?.cards?.safety)} / ${me.json?.probation?.rules})`);
+    }
     // With no cards= at all (an older app), wayBack is in `me` all the same.
     const bAll = await signed('GET', '/api/home', ben);
     assert(bAll.json?.me?.wayBack === 'words', `wayBack is in me with no cards= too (${bAll.json?.me?.wayBack})`);
@@ -133,7 +166,7 @@ async function main() {
     const kept = await savePrefs(ben, { words_kept: true });
     assert(kept.status === 200, `saying "I still have my 12 words" is saved (${kept.status} ${kept.text.slice(0, 120)})`);
     const after = await home(ben);
-    assert(after.json?.cards?.safety === undefined, `the safety card goes once the words are kept (${JSON.stringify(after.json?.cards?.safety)})`);
+    assert(after.json?.cards?.safety === undefined, `still no safety card (${JSON.stringify(after.json?.cards?.safety)})`);
     assert(after.json?.cards?.steps?.words === true, `First steps' words line is ticked (${after.json?.cards?.steps?.words})`);
     assert(after.json?.me?.wayBack === 'words', `wayBack stays what the node can see: words (${after.json?.me?.wayBack})`);
     const unkept = await savePrefs(ben, { words_kept: false });
@@ -143,16 +176,20 @@ async function main() {
     assert(own.status === 200 && own.json?.words_kept === true, `the record is the member's own to read back (${own.status} ${own.text.slice(0, 160)})`);
     const other = await signed('GET', `/api/members/preferences?publicKey=${ben.pk}`, dev);
     assert(other.status === 403 && !other.text.includes('words_kept'), `and nobody else's: Dev asking for Ben's is refused (${other.status})`);
-    // The kit saved writes the same record: the phone's half sends it (slice D2); here the record a kit save sends.
-    const kit = makeMember('WayBackKit', { invitedBy: ana.pk });
+    // The kit saved writes the same record: the phone's half sends it (slice D2); here the record a kit save sends, by a
+    // 12-words joiner, who has the card.
+    const kit = makeMember('WayBackKit');
+    wordsJoin(kit.pk);
     const k0 = await home(kit);
     await savePrefs(kit, { words_kept: true });
     const k1 = await home(kit);
     assert(k0.json?.cards?.safety?.words === true && k1.json?.cards?.safety === undefined && k1.json?.cards?.steps?.words === true,
         'the kit saved, sent as the same record: the card goes and the line is ticked');
-    // Nobody else's write reaches it: Dev keeps his card.
-    const d1 = await home(dev);
-    assert(d1.json?.cards?.safety?.words === true, 'another member\'s record changes nothing of Dev\'s');
+    // Nobody else's write reaches it: Fay (12 words) keeps her card, and Dev his open line.
+    const f1 = await home(fay0);
+    assert(f1.json?.cards?.safety?.words === true, 'another member\'s record changes nothing of Fay\'s: her card stays');
+    const d1 = await home(dev, 'steps');
+    assert(d1.json?.cards?.steps?.words === false, `nor of Dev's: his words line is still open (${d1.json?.cards?.steps?.words})`);
     const c1 = await home(cleo, 'steps');
     assert(c1.json?.cards?.steps?.words === null, `the words line is not there for a covered account: null (${c1.json?.cards?.steps?.words})`);
 

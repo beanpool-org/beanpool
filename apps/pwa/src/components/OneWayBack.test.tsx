@@ -203,11 +203,11 @@ describe("on Home, the node's word is already in the answer (`known`)", () => {
         expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
     });
 
-    // One word on who it is for (review of #3110). Home's answer goes by what the account has (DESIGN-home-default-fable.md
-    // §2.5); `/me`'s `rules` by how the member joined, so an invited member with no sign-in reads 'ordinary' there. Letting
-    // `/me` overrule drew the card at the first paint and pulled it when `/me` answered, re-packing every card after it:
-    // onDrawn [true, false], the jump PR #2411 fixed. The other way round (the 12 words kept, `/me` still 'words') it
-    // popped in late: [false, true].
+    // One word on who it is for (review of #3110). The node builds Home's `safety` by `/me`'s rule, less a member who said
+    // they still have their words (round 2: the wider rule waits for slices D2/D3), but the two reads can still differ: the
+    // 12 words kept (`/me` still 'words'), or a sign-in linked since Home's answer (`/me` now 'ordinary'). Letting `/me`
+    // overrule drew the card at the first paint and pulled it when `/me` answered, re-packing every card after it:
+    // onDrawn [true, false], the jump PR #2411 fixed; or popped it in late: [false, true].
     it("`/me` says otherwise: the answer's word stands, at the first paint and after, and Home is told once", async () => {
         for (const [known, rules] of [[true, 'ordinary'], [false, 'words']] as const) {
             const drawn: boolean[] = [];

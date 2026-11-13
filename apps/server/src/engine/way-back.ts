@@ -4,7 +4,8 @@
  *
  * - **wayBack** — `covered` when a sign-in's copy of the account is linked here (a current-generation `sso` share in
  *   recovery_shares, the row a link writes; engine/recovery-shares.ts), else `words`: the 12 words are the only way back
- *   this server can see. What the account HAS, not how it joined (the safety card read the open-joins door before). A
+ *   this server can see. What the account HAS, not how it joined: First steps' `words` line goes by it. The safety card
+ *   keeps the open-joins door's rule until slices D2 and D3 (routes/home-answer.ts `safetyCard`, review of #3110). A
  *   copy for the community's admins (VR3) is not counted: telling whether this server can open it means opening the
  *   seal, which a Home read never does; "I still have my 12 words" is not counted either, it is a say-so, not a way back
  *   (engine/home-preferences.ts `words_kept`).
@@ -12,7 +13,8 @@
  *   active member here: none for the genesis owner, an open-door join, a visitor's row, or an inviter pruned since. The
  *   member's own fact, so it is in their answer whatever the "Invited by" switch says to others, and in no one else's.
  *
- * The new-account limits keep reading their own rule (engine/probation.ts probationRuleSet), untouched by either.
+ * The new-account limits keep reading their own rule (engine/probation.ts probationRuleSet), untouched by either; so,
+ * for now, does the safety card.
  */
 import { isMemberKeySpelling } from '@beanpool/engine';
 import { db } from '../db/db.js';

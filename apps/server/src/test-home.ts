@@ -502,10 +502,11 @@ async function main(): Promise<void> {
         assert(typeof c.community?.members === 'number' && c.community.members >= 5
             && (c.community?.tradesThisMonth === undefined || (typeof c.community.tradesThisMonth === 'number' && c.community.tradesThisMonth > 0)),
             `community: counts, no zero written (${JSON.stringify(c.community)})`);
-        // The safety card goes by what the account has, not how it joined (DESIGN-home-default-fable.md §2.5, slice D1):
-        // Alice came in by invite and has linked no sign-in, so her 12 words are her only way back here.
-        assert(c.find === undefined && c.safety?.words === true && r.body?.me?.wayBack === 'words' && c.interests === undefined && c.invite === undefined,
-            `no find on a local node, the safety card for a member who came in by invite with no sign-in (${JSON.stringify(c.safety)}, ${r.body?.me?.wayBack}), and nothing for the two cards with no data of their own`);
+        // Alice came in by invite and has linked no sign-in: her 12 words are her only way back here (`me.wayBack`,
+        // DESIGN-home-default-fable.md §2.5, slice D1), but the safety card keeps the 12-words door's rule until slices D2
+        // and D3: the card both apps draw offers "Add a sign-in", which the node refuses an invited member (review of #3110).
+        assert(c.find === undefined && c.safety === undefined && r.body?.me?.wayBack === 'words' && c.interests === undefined && c.invite === undefined,
+            `no find on a local node, no safety for a member who came in by invite though wayBack is words (${JSON.stringify(c.safety)}, ${r.body?.me?.wayBack}), and nothing for the two cards with no data of their own`);
         assert(JSON.stringify(r.body?.me?.interests) === '["garden"]' && JSON.stringify(r.body?.layout?.order) === '["needs","market"]',
             `me.interests and the layout, unknown ids dropped (${JSON.stringify(r.body?.me?.interests)} ${JSON.stringify(r.body?.layout)})`);
         // The node's stamp beside them (PR #1479 round 2): interests kept before it read as stamped at 1970; none kept, null.
@@ -1511,10 +1512,10 @@ async function main(): Promise<void> {
                 && JSON.stringify(mktIds) === JSON.stringify([nearOld.id, farNew.id]),
                 `global: a saved search is nearest first, as the Market's search is here (${JSON.stringify(card?.items?.map((i: { title: string }) => i.title))}, Market ${mktIds.length})`);
         }
-        // By what the account has, not how it joined (DESIGN-home-default-fable.md §2.5, slice D1): no 12-words row and no
-        // sign-in linked is the words alone, a card; a 12-words row is the same; a sign-in's copy linked here ends it.
+        // The safety card by the 12-words door's rule until slices D2 and D3 (review of #3110): no 12-words row is no card,
+        // though with no sign-in linked `me.wayBack` is words (slice D1); a 12-words row is the card.
         const words = await get('/api/home?cards=safety', alice);
-        assert(words.body?.cards?.safety?.words === true && words.body?.me?.wayBack === 'words', `a member with no 12-words row and no sign-in gets the safety card (${JSON.stringify(words.body?.cards?.safety)})`);
+        assert(words.body?.cards?.safety === undefined && words.body?.me?.wayBack === 'words', `no safety card for a member with no 12-words row, wayBack words all the same (${JSON.stringify(words.body?.cards?.safety)}, ${words.body?.me?.wayBack})`);
         db.prepare("INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at) VALUES (?, 'words', ?, ?)").run(alice.pk, `words:${crypto.randomUUID()}`, new Date().toISOString());
         const words2 = await get('/api/home?cards=safety', alice);
         assert(words2.body?.cards?.safety?.words === true, `a 12-words member gets the safety card (${JSON.stringify(words2.body?.cards)})`);

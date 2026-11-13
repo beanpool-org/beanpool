@@ -99,7 +99,7 @@ import { actionableKnockCount, actionableKnocksWaitingDays } from '../engine/kno
 import { inviteAskCount } from '../engine/invite-asks.js';
 import { knowledgeDraftCount } from '../engine/knowledge-drafts.js';
 import { listKeptNotices } from '../engine/kept-notices.js';
-import { probationSummary, type ProbationSummary } from '../engine/probation.js';
+import { probationRuleSet, probationSummary, type ProbationSummary } from '../engine/probation.js';
 import { readMemberArea } from '../engine/member-area.js';
 import { getInterestsUpdatedAt, getTourRecord, hasKeptWords, hasSawLedger } from '../engine/home-preferences.js';
 import { invitedByOf, wayBackOf, type InvitedBy, type WayBack } from '../engine/way-back.js';
@@ -275,8 +275,9 @@ export interface HomeMe {
      */
     invitedBy: InvitedBy | null;
     /**
-     * `covered` when a sign-in's copy of the account is linked here, else `words` (engine/way-back.ts, §2.5): what the
-     * 12-words card and First steps' `words` line go by, never how they joined. The new-account limits don't read it.
+     * `covered` when a sign-in's copy of the account is linked here, else `words` (engine/way-back.ts, §2.5): what First
+     * steps' `words` line goes by, never how they joined. The new-account limits don't read it, and the safety card does
+     * not yet: until slices D2 and D3 it keeps the 12-words door's rule (`safetyCard`).
      */
     wayBack: WayBack;
 }
@@ -494,7 +495,7 @@ interface Ctx {
     pinnedChats?: string[];
     /** Read once per answer, for `steps` and `me`. */
     firstOffer?: boolean;
-    /** Read once per answer, for `safety`, `steps` and `me` (engine/way-back.ts). */
+    /** Read once per answer, for `steps` and `me` (engine/way-back.ts). */
     wayBack?: WayBack;
     /** Read once per answer, for the Market, Coming up and Decide cards: the live pins, newest pin first (pinnedPosts). */
     pinned?: MarketplacePost[];
@@ -822,16 +823,23 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
 }
 
 /**
- * A member whose 12 words are the only way back this server can see, however they joined (DESIGN-home-default-fable.md
- * §2.5, slice D1: by `wayBack`, no longer by the open-joins door), until they say they still have them or save the kit.
+ * A member who came in by the 12-words door and has added no sign-in (two-doors §2.5: their `open_joins` row still says
+ * `words`, the rule `/api/community/me` gives as `rules`), until they say they still have their words or save the kit.
  * The apps keep its schedule (shown once after the first post, once after a week, then Settings).
+ *
+ * Not by `wayBack` yet (review of #3110, round 2): the card both apps draw today offers "Add a sign-in", which the node
+ * takes from this member alone (routes/open-join.ts `linkState`). An invited member, the genesis owner, or a sign-in
+ * joiner with no copy kept here is refused it (404 invite_only, 409 not_words_member). The card for every member whose
+ * words are the only way back waits for slices D2 (the record started as put away at an invite sign-up) and D3 (the
+ * card offering only what works); until then D1 carries that rule in `me.wayBack` and First steps' `words` line only.
+ * One rule with `/me` also keeps the web's card from being drawn by Home's word and pulled by `/me`'s (round 1).
  */
 function safetyCard(c: Ctx): HomeCards['safety'] | undefined {
     built('safety');
-    return wayBackFor(c) === 'words' && !hasKeptWords(c.me!) ? { words: true, signInLinked: false } : undefined;
+    return probationRuleSet(c.me!) === 'words' && !hasKeptWords(c.me!) ? { words: true, signInLinked: false } : undefined;
 }
 
-/** The reader's way back, read once per answer (`me` and two cards want it). */
+/** The reader's way back, read once per answer (`me` and First steps want it). */
 function wayBackFor(c: Ctx): WayBack {
     return c.wayBack ??= wayBackOf(c.me!);
 }

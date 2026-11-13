@@ -3349,21 +3349,38 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(cardIds().slice(0, 2)).toEqual(['needs', 'tips']);
     });
 
-    // One word on who it is for (review of #3110): Home's safety card goes by what the account has (wayBack), `/me`'s
-    // `rules` by how the member joined, so an invited member with no sign-in has the card in the answer and reads
-    // 'ordinary' on `/me`. The card is drawn with the answer and stays when `/me` answers: nothing after it moves.
-    it('"Your way back in" by Home\'s word alone: in its cell at the first paint, still there once /me says "ordinary", and no card moves', async () => {
+    // One word on who it is for (review of #3110). Round 2 had the node send `safety` to every member with no sign-in, so
+    // an invited member got the card and its "Add a sign-in", which the node refuses them (404 invite_only, 409
+    // not_words_member); this test then pinned the card drawn for `safety` beside `/me` 'ordinary'. Until slices D2 and D3
+    // the node sends `safety` by `/me`'s own rule (routes/home-answer.ts safetyCard), so an invited member's answer has
+    // none: the card is not mounted for them (shownFrame draws a card the answer holds), so nothing asks `/me` for it, it
+    // is never drawn, not at the first paint and not after, and nothing moves. Were anything to ask, `/me` says 'ordinary'.
+    it('"Your way back in" for an invited member with no sign-in (no `safety` in the answer): never drawn, and no card moves', async () => {
         const meAnswers: Array<(v: unknown) => void> = [];
         vi.mocked(api.getCommunityMe).mockImplementation(() => new Promise((r) => { meAnswers.push(r); }) as never);
-        await landAt(1400, SAFETY);
-        const atFirstPaint = cardIds();
-        expect(atFirstPaint.slice(0, 3)).toEqual(['needs', 'safety', 'tips']);
-        expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
-        await waitFor(() => expect(meAnswers.length).toBeGreaterThan(0));
-        await act(async () => { for (const r of meAnswers) r({ probation: { rules: 'ordinary', keptPosts: 0, ageEndsAt: null } }); });
-        await pause();
-        expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
-        expect(cardIds()).toEqual(atFirstPaint);
+        // Every node added to the page, from before the first paint: a card drawn and pulled again in one turn is caught too.
+        const drawn: string[] = [];
+        const watch = new MutationObserver((records) => {
+            for (const r of records) for (const n of Array.from(r.addedNodes)) {
+                if (n instanceof Element && (n.matches('[data-testid="one-way-back-landing"], [data-testid="home-card-safety"]')
+                    || n.querySelector('[data-testid="one-way-back-landing"], [data-testid="home-card-safety"]'))) drawn.push(n.getAttribute('data-testid') ?? n.tagName);
+            }
+        });
+        watch.observe(document.body, { childList: true, subtree: true });
+        try {
+            await landAt(1400, { needs: NEEDS });
+            const atFirstPaint = cardIds();
+            expect(atFirstPaint).toEqual(['needs', 'tips', 'events', 'market', 'pulse', 'beans', 'community']);
+            expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+            if (meAnswers.length) await act(async () => { for (const r of meAnswers) r({ probation: { rules: 'ordinary', keptPosts: 0, ageEndsAt: null } }); });
+            await pause();
+            expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+            expect(screen.queryByTestId('home-card-safety')).toBeNull();
+            expect(cardIds()).toEqual(atFirstPaint);
+            expect(drawn).toEqual([]);
+        } finally {
+            watch.disconnect();
+        }
     });
 
     it('"Your way back in" with something to say is still drawn in Arrange, in its own cell: arrows on its row, its body quiet; it is not in the strip, and is the same card after Done', async () => {

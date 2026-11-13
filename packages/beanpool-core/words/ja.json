@@ -2430,5 +2430,10 @@
   "Someone took some while you were editing. There is {n} left now. Check the number and save again.|Someone took some while you were editing. There are {n} left now. Check the number and save again.": {
     "other": "編集中に他の人が引き受けました。今は残り{n}つです。数を確認して、もう一度保存してください。"
   },
-  "To stop selling, pause or remove the listing.": "販売をやめるには、投稿を一時停止するか削除してください。"
+  "To stop selling, pause or remove the listing.": "販売をやめるには、投稿を一時停止するか削除してください。",
+  "Newest\u0004member sort": "新着順",
+  "Name\u0004member sort": "名前順",
+  "Friends\u0004member sort": "友達",
+  "Trusted\u0004member sort": "信頼",
+  "Active\u0004member sort": "アクティブ"
 }

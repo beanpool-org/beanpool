@@ -2540,5 +2540,10 @@
     "one": "আপনি সম্পাদনা করার সময় কেউ কিছু নিয়েছেন। এখন {n}টি বাকি আছে। সংখ্যাটি দেখে আবার সংরক্ষণ করুন।",
     "other": "আপনি সম্পাদনা করার সময় কেউ কিছু নিয়েছেন। এখন {n}টি বাকি আছে। সংখ্যাটি দেখে আবার সংরক্ষণ করুন।"
   },
-  "To stop selling, pause or remove the listing.": "বিক্রি বন্ধ করতে তালিকাটি বিরতিতে রাখুন বা সরিয়ে দিন।"
+  "To stop selling, pause or remove the listing.": "বিক্রি বন্ধ করতে তালিকাটি বিরতিতে রাখুন বা সরিয়ে দিন।",
+  "Newest\u0004member sort": "নতুন",
+  "Name\u0004member sort": "নাম",
+  "Friends\u0004member sort": "বন্ধু",
+  "Trusted\u0004member sort": "বিশ্বস্ত",
+  "Active\u0004member sort": "সক্রিয়"
 }

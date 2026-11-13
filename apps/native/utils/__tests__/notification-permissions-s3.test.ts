@@ -73,6 +73,8 @@ import {
     askNotificationPermissionOnAction,
     NOTIFICATIONS_OFF_IN_SETTINGS,
     registerWhenNotificationsAllowed,
+    notificationsOffHere,
+    notifyStep,
     type NotificationPermissionRecord,
 } from '../notification-permission';
 
@@ -153,16 +155,15 @@ describe('S3: notification permission at the tap, never at account creation', ()
             expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
         });
 
-        it('after restore, nothing is asked automatically; card is shown on Home until answered', async () => {
+        it('after restore, nothing is asked automatically; the record is unanswered until a tap or a first action', async () => {
             // A restored account has no prior local permission record on this phone
             const record = await readNotificationPermissionRecord();
             expect(record.state).toBe('unanswered');
             expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
-
-            // The card is shown on Home until answered
+            // How it Works' card would still show it (Home has none: DESIGN-home-default-fable.md §2.5).
             expect(shouldShowNotificationCard(record, false)).toBe(true);
 
-            // Tapping Turn on on Home asks for permission
+            // A tap on Turn on (How it Works, First steps' line, the bell's line) asks for permission
             await turnOnNotifications('restored-pubkey');
             expect(notificationsMock.requestPermissionsAsync).toHaveBeenCalledTimes(1);
 
@@ -170,107 +171,54 @@ describe('S3: notification permission at the tap, never at account creation', ()
             expect(shouldShowNotificationCard(after, false)).toBe(false);
         });
 
-        it('if declined, asks again at the first knock with one-line reason, but not on second knock', async () => {
-            await declineNotifications();
-
-            // First knock: should prompt with reason and buttons
-            const askPromise = askNotificationPermissionOnAction('knock', 'test-pubkey', {
-                promptUser: vi.fn(async () => 'turn_on' as const),
+        // DESIGN-home-default-fable.md §2.5 (Marty's pick 3, 13 Nov 2026): after one "Not now", nothing asks again. The
+        // old rule asked once more at the first knock and the first message even after a Not now.
+        for (const action of ['post', 'message', 'knock'] as const) {
+            it(`after Not now nothing asks again: the first ${action} asks nothing`, async () => {
+                await declineNotifications();
+                const promptUser = vi.fn(async () => 'turn_on' as const);
+                const res = await askNotificationPermissionOnAction(action, 'test-pubkey', { promptUser });
+                expect(promptUser).not.toHaveBeenCalled();
+                expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
+                expect(res).toBe('declined');
             });
-            const res1 = await askPromise;
-            expect(res1).toBe('granted');
-            expect(notificationsMock.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+        }
 
-            // Record should now have knockRetried: true
-            const rec1 = await readNotificationPermissionRecord();
-            expect(rec1.knockRetried).toBe(true);
-
-            // Second knock: should not prompt again
-            const promptMock2 = vi.fn();
-            const res2 = await askNotificationPermissionOnAction('knock', 'test-pubkey', {
-                promptUser: promptMock2,
+        // §2.5: the same pop-up at the FIRST of the first post, the first message and the first ask to join. Once in all.
+        for (const [first, ...later] of [['post', 'message', 'knock'], ['message', 'knock', 'post'], ['knock', 'post', 'message']] as const) {
+            it(`unanswered: the first ${first} asks once with the one-line reason; no later post, message or ask to join asks again`, async () => {
+                const promptUser = vi.fn(async () => 'turn_on' as const);
+                expect(await askNotificationPermissionOnAction(first, 'test-pubkey', { promptUser })).toBe('granted');
+                expect(promptUser).toHaveBeenCalledTimes(1);
+                expect(promptUser).toHaveBeenCalledWith('ask');
+                expect(notificationsMock.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+                expect((await readNotificationPermissionRecord()).actionAsked).toBe(true);
+                for (const next of [...later, first]) {
+                    await askNotificationPermissionOnAction(next, 'test-pubkey', { promptUser });
+                }
+                expect(promptUser).toHaveBeenCalledTimes(1);
             });
-            expect(promptMock2).not.toHaveBeenCalled();
-            expect(res2).toBe('granted');
-        });
 
-        it('if declined, asks again at the first message with one-line reason, but not on second message', async () => {
-            await declineNotifications();
-
-            // First message: should prompt with reason
-            const promptMock1 = vi.fn(async () => 'not_now' as const);
-            const res1 = await askNotificationPermissionOnAction('message', 'test-pubkey', {
-                promptUser: promptMock1,
+            it(`unanswered: Not now at the first ${first} is final, for every kind`, async () => {
+                const promptUser = vi.fn(async () => 'not_now' as const);
+                expect(await askNotificationPermissionOnAction(first, 'test-pubkey', { promptUser })).toBe('declined');
+                expect((await readNotificationPermissionRecord()).state).toBe('declined');
+                for (const next of [...later, first]) {
+                    expect(await askNotificationPermissionOnAction(next, 'test-pubkey', { promptUser })).toBe('declined');
+                }
+                expect(promptUser).toHaveBeenCalledTimes(1);
+                expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
             });
-            expect(promptMock1).toHaveBeenCalledTimes(1);
-            expect(res1).toBe('declined');
-
-            // Record should have messageRetried: true
-            const rec1 = await readNotificationPermissionRecord();
-            expect(rec1.messageRetried).toBe(true);
-
-            // Second message: should not prompt again
-            const promptMock2 = vi.fn();
-            const res2 = await askNotificationPermissionOnAction('message', 'test-pubkey', {
-                promptUser: promptMock2,
-            });
-            expect(promptMock2).not.toHaveBeenCalled();
-            expect(res2).toBe('declined');
-        });
-
-        it('if unanswered, asks at the first knock with one-line reason, but not on second knock', async () => {
-            // Fresh state is unanswered
-            const askPromise = askNotificationPermissionOnAction('knock', 'test-pubkey', {
-                promptUser: vi.fn(async () => 'turn_on' as const),
-            });
-            const res1 = await askPromise;
-            expect(res1).toBe('granted');
-            expect(notificationsMock.requestPermissionsAsync).toHaveBeenCalledTimes(1);
-
-            // Record should now have knockRetried: true
-            const rec1 = await readNotificationPermissionRecord();
-            expect(rec1.knockRetried).toBe(true);
-
-            // Second knock: should not prompt again
-            const promptMock2 = vi.fn();
-            const res2 = await askNotificationPermissionOnAction('knock', 'test-pubkey', {
-                promptUser: promptMock2,
-            });
-            expect(promptMock2).not.toHaveBeenCalled();
-            expect(res2).toBe('granted');
-        });
-
-        it('if unanswered, asks at the first message with one-line reason, but not on second message', async () => {
-            // Fresh state is unanswered
-            const promptMock1 = vi.fn(async () => 'not_now' as const);
-            const res1 = await askNotificationPermissionOnAction('message', 'test-pubkey', {
-                promptUser: promptMock1,
-            });
-            expect(promptMock1).toHaveBeenCalledTimes(1);
-            expect(res1).toBe('declined');
-
-            // Record should have messageRetried: true
-            const rec1 = await readNotificationPermissionRecord();
-            expect(rec1.messageRetried).toBe(true);
-
-            // Second message: should not prompt again
-            const promptMock2 = vi.fn();
-            const res2 = await askNotificationPermissionOnAction('message', 'test-pubkey', {
-                promptUser: promptMock2,
-            });
-            expect(promptMock2).not.toHaveBeenCalled();
-            expect(res2).toBe('declined');
-        });
+        }
 
         it('if already granted, action never prompts user', async () => {
             await turnOnNotifications('test-pubkey');
 
             const promptMock = vi.fn();
-            const res = await askNotificationPermissionOnAction('knock', 'test-pubkey', {
-                promptUser: promptMock,
-            });
+            for (const action of ['post', 'message', 'knock'] as const) {
+                expect(await askNotificationPermissionOnAction(action, 'test-pubkey', { promptUser: promptMock })).toBe('granted');
+            }
             expect(promptMock).not.toHaveBeenCalled();
-            expect(res).toBe('granted');
         });
     });
 
@@ -278,7 +226,7 @@ describe('S3: notification permission at the tap, never at account creation', ()
     // phone that already allows notifications while this record is new (unanswered). They are never asked.
     describe('the phone already allows notifications', () => {
         for (const state of ['unanswered', 'declined'] as const) {
-            for (const action of ['knock', 'message'] as const) {
+            for (const action of ['post', 'knock', 'message'] as const) {
                 it(`record ${state}, first ${action}: no prompt, the token is registered silently, nothing stored as declined`, async () => {
                     if (state === 'declined') {
                         notificationsMock.getPermissionsAsync.mockResolvedValueOnce({ status: 'undetermined' } as any);
@@ -375,8 +323,9 @@ describe('S3: notification permission at the tap, never at account creation', ()
             expect(shouldShowNotificationCard(rec, true)).toBe(false);
         });
 
+        // Unanswered here (a Not now is final since DESIGN-home-default-fable.md §2.5, so a declined record is never asked):
+        // the phone's settings say off, as after iOS's Don't Allow.
         it("first message: one prompt that says they're off in settings; its button opens the settings, with no second dialog", async () => {
-            await declineNotifications();
             const promptUser = vi.fn(async (_kind: 'ask' | 'settings') => 'turn_on' as const);
             const openSettings = vi.fn(async () => {});
             const rn = await import('react-native');
@@ -388,8 +337,9 @@ describe('S3: notification permission at the tap, never at account creation', ()
             expect(openSettings).toHaveBeenCalledTimes(1);
             expect(rn.Alert.alert).not.toHaveBeenCalled();
             expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
-            expect(res).toBe('declined');
-            expect((await readNotificationPermissionRecord()).messageRetried).toBe(true);
+            // The settings opened; nothing is answered yet, and the one ask is spent.
+            expect(res).toBe('unanswered');
+            expect((await readNotificationPermissionRecord()).actionAsked).toBe(true);
         });
 
         it('while the phone can still ask, the first-message prompt is the plain ask', async () => {
@@ -445,7 +395,8 @@ describe('S3: notification permission at the tap, never at account creation', ()
         const root = path.resolve(__dirname, '../..');
         const welcome = fs.readFileSync(path.join(root, 'app/welcome.tsx'), 'utf8');
         const card = welcome.slice(welcome.indexOf('testID="guide-notification-card"'), welcome.indexOf('testID="guide-notification-not-now"') + 40);
-        const home = fs.readFileSync(path.join(root, 'components/NotificationPermissionCard.tsx'), 'utf8');
+        const home = fs.readFileSync(path.join(root, 'app/(tabs)/index.tsx'), 'utf8');
+        const bellLine = fs.readFileSync(path.join(root, 'components/NotificationsOffLine.tsx'), 'utf8');
 
         it("How it Works' card: the title is a header; both buttons are 48 dp, busy-guarded and say so", () => {
             expect(card).toMatch(/accessibilityRole="header">\{t\('Turn on notifications\?'\)\}/);
@@ -456,14 +407,37 @@ describe('S3: notification permission at the tap, never at account creation', ()
             expect(card.match(/accessibilityState=\{\{ busy: notifBusy, disabled: notifBusy \}\}/g)).toHaveLength(2);
         });
 
-        it("Home's card: Not now says it is busy, as Turn on does", () => {
-            const notNow = home.slice(home.lastIndexOf('<Pressable', home.indexOf('testID="notification-card-not-now"')), home.indexOf('testID="notification-card-not-now"'));
-            expect(notNow).toContain('accessibilityState={{ busy, disabled: busy }}');
+        // DESIGN-home-default-fable.md §2.5 (Marty's pick 3): no card at the top of Home; the card component is gone.
+        it('Home draws no notifications card', () => {
+            // No card and no card rule; the phone's own question only at First steps' tap (turnOnNotifications in onStep).
+            expect(home).not.toMatch(/NotificationPermissionCard|shouldShowNotificationCard|declineNotifications/);
+            expect(home.match(/turnOnNotifications\(/g)).toHaveLength(1);
+            expect(home).toMatch(/else if \(step === 'notify'\) \{\s*void turnOnNotifications\(/);
+            expect(fs.existsSync(path.join(root, 'components/NotificationPermissionCard.tsx'))).toBe(false);
         });
 
-        it('neither card shows where expo-notifications cannot load: there is nothing to turn on', () => {
-            expect(home).toContain('setVisible(os.available && shouldShowNotificationCard(record, os.granted))');
+        it("the bell's line: Turn on says it is busy, and shows only where notifications can load and are off", () => {
+            expect(bellLine).toContain('accessibilityState={{ busy, disabled: busy }}');
+            expect(notificationsOffHere({ available: true, granted: false, canAskAgain: true })).toBe(true);
+            expect(notificationsOffHere({ available: true, granted: false, canAskAgain: false })).toBe(true);
+            expect(notificationsOffHere({ available: true, granted: true, canAskAgain: true })).toBe(false);
+            expect(notificationsOffHere({ available: false, granted: false, canAskAgain: false })).toBe(false);
+        });
+
+        it("How it Works' card doesn't show where expo-notifications cannot load: there is nothing to turn on", () => {
             expect(welcome).toContain('setNotifVisible(os.available && shouldShowNotificationCard(record, os.granted))');
+        });
+
+        // §2.4: First steps' line "Hear when someone answers you", from this phone alone.
+        it("First steps' notifications line: only on a phone that has to ask, ticked when allowed through it, gone after Not now", () => {
+            const os = (granted: boolean, available = true) => ({ available, granted, canAskAgain: true });
+            const rec = (state: NotificationPermissionRecord['state']): NotificationPermissionRecord => ({ state, updatedAt: 1 });
+            expect(notifyStep(rec('unanswered'), os(false))).toBe(false);
+            expect(notifyStep(rec('granted'), os(true))).toBe(true);
+            // Android 8 to 12: allowed without asking, so no line at all.
+            expect(notifyStep(rec('unanswered'), os(true))).toBeNull();
+            expect(notifyStep(rec('declined'), os(false))).toBeNull();
+            expect(notifyStep(rec('unanswered'), os(false, false))).toBeNull();
         });
     });
 

@@ -18,7 +18,7 @@ import {
     invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
     joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
-    askedFacts, addCard, fewerCardsNews, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
+    askedFacts, addCard, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
     MARK_SENT_MAX, layoutPrint, ownMarkedSave, readMarkSent, rememberMarkSent, sameList, searchCardFor, skyOf,
     homeCrowdFor, isHomeDoorbellFor,
     type HomeAnswer, type HomeCards, type HomeLayout,
@@ -533,18 +533,6 @@ describe('the frame: the picker, adding, and the members who were here before (C
         expect(draw(a, fixed, ctx({ interests: ['food'] }))).toEqual(['market', 'community']);
     });
 
-    // Since D0 a Home never saved starts with the whole default list, longer than before: the line is said to nobody, the
-    // member who never edited and joined over a week ago included (DESIGN-home-default-fable.md §2.8; review of #3110).
-    it('the one-time "fewer cards" line: to nobody, not even a member who never edited and joined over a week ago', () => {
-        const old = { joinedAt: iso(NOW - 30 * 24 * H) };
-        expect(fewerCardsNews(null, null, old, NOW)).toBe(false);
-        expect(fewerCardsNews(null, null, { joinedAt: iso(NOW - 365 * 24 * H) }, NOW)).toBe(false);
-        expect(fewerCardsNews(null, null, { joinedAt: iso(NOW - 2 * 24 * H) }, NOW)).toBe(false);
-        expect(fewerCardsNews(EVERY, null, old, NOW)).toBe(false);
-        expect(fewerCardsNews(null, EVERY, old, NOW)).toBe(false);
-        expect(fewerCardsNews(null, null, null, NOW)).toBe(false);
-    });
-
     it('the picker\'s words are fixed and say nothing locked, earned or tiered, and Beans by name', () => {
         const g = pickerGroups(LOCAL_NODE, null, 'admin');
         for (const r of g.groups.flatMap(x => x.rows)) {
@@ -755,6 +743,30 @@ describe('the safety card\'s schedule (two-doors §2.5) with the account\'s dism
         expect(safetyWord(answer(), ['safety', 'community'])).toEqual({ words: false, joinedAt: NOW - 2 * 24 * H });
         expect(safetyWord(words, ['community'])).toBeNull();
         expect(safetyWord({ ...words, me: null }, ['safety'])).toBeNull();
+    });
+
+    // DESIGN-home-default-fable.md §2.5 (slice D2): who the reminder is for is what the account has (`me.wayBack`, the node's
+    // D1), and "Add a sign-in" only where the node takes one from them (`cards.safety`, review of #3110 round 2).
+    it('the word by me.wayBack: words for every member with no sign-in here (door only with the node\'s card), covered for none, kept from First steps', () => {
+        const base = answer();
+        const invited = { ...base, me: { ...base.me!, wayBack: 'words' as const }, cards: { ...base.cards, steps: { ...base.cards.steps!, words: false } } };
+        expect(safetyWord(invited, ['safety'])).toEqual({ words: true, joinedAt: NOW - 2 * 24 * H, door: false, kept: false });
+        const door = { ...invited, cards: { ...invited.cards, safety: { words: true as const, signInLinked: false as const } } };
+        expect(safetyWord(door, ['safety'])).toMatchObject({ words: true, door: true });
+        const kept = { ...invited, cards: { ...invited.cards, steps: { ...invited.cards.steps!, words: true } } };
+        expect(safetyWord(kept, ['safety'])).toMatchObject({ words: true, kept: true });
+        expect(safetyWord({ ...invited, me: { ...invited.me, wayBack: 'covered' as const } }, ['safety'])).toEqual({ words: false, joinedAt: NOW - 2 * 24 * H });
+    });
+
+    it('an invite-only community (no 12-words door) whose node says me.wayBack: Your way back in is asked and may be drawn; a node before D1 keeps core\'s rule', () => {
+        const base = answer();
+        const inviteOnly = { ...base, features: { ...base.features, wordsDoor: false } };
+        expect(cardOnNode('safety', inviteOnly)).toBe(false);
+        const d1 = { ...inviteOnly, me: { ...inviteOnly.me!, wayBack: 'words' as const } };
+        expect(cardOnNode('safety', d1)).toBe(true);
+        expect(cardsToAsk(defaultHomeLayout(), [], d1)).toContain('safety');
+        expect(cardsToAsk(defaultHomeLayout(), [], inviteOnly)).not.toContain('safety');
+        expect(cardOnNode('safety', { ...inviteOnly, me: { ...inviteOnly.me!, wayBack: 'covered' as const } })).toBe(true);
     });
 });
 
@@ -1190,7 +1202,12 @@ describe('the global node\'s Home (H4)', () => {
         expect(probationSentence({ ...ordinary, endsWhen: { hours: 'x' } } as never)).toBeNull();
         // On the card: under the lines, and the card stays while young and lines are undone.
         const posted = member(1, { me: { ...member(1).me!, probation: words }, cards: { steps: steps({ firstPost: true }), find: find(), community: { name: 'G', members: 9 } } });
-        expect(firstSteps(posted, { interests: ['food'], knocked: true, now: NOW })).toEqual({ lines: globalStepLines(steps({ firstPost: true })), note: 'For your first 7 days: 2 posts and 3 new chats a day.', show: true });
+        const lines = globalStepLines(steps({ firstPost: true }));
+        // Only what is left is drawn, with "n of m done" (DESIGN-home-default-fable.md §2.4, slice D2).
+        expect(firstSteps(posted, { interests: ['food'], knocked: true, now: NOW })).toEqual({
+            lines, left: lines.filter(l => !l.done), count: `${lines.filter(l => l.done).length} of ${lines.length} done`,
+            note: 'For your first 7 days: 2 posts and 3 new chats a day.', show: true,
+        });
         expect(draw(posted, EVERY, ctx({ interests: ['food'], knocked: true, now: NOW }))).toContain('steps');
         // The steps all done: card ends after 14 days or all done (§3.2, L3).
         const allDoneSteps = steps({ area: true, photo: true, sawLedger: true, firstPost: true, saidHello: true, watch: true });

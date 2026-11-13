@@ -347,6 +347,14 @@ export function copyListsCommunitiesStoreKey(publicKey: string): string {
     return `beanpool_copy_lists_communities:${publicKey.toLowerCase()}`;
 }
 
+/**
+ * A "words_kept" say-so (utils/words-kept.ts) that didn't reach the account yet: the community's address it is owed to.
+ * Sent again at the next Home landing there, then removed.
+ */
+export function wordsKeptOwedStoreKey(publicKey: string): string {
+    return `beanpool_words_kept_owed:${publicKey.toLowerCase()}`;
+}
+
 /** The last time the "one way back" card asked the global community about this account, and its answer (one-way-back.ts). */
 export function oneWayBackAskedStoreKey(publicKey: string): string {
     return `beanpool_one_way_back_asked:${publicKey.toLowerCase()}`;
@@ -413,10 +421,6 @@ export function homeHintStoreKey(publicKey: string): string {
     return `${HOME_STORE_PREFIX}hint:${publicKey.toLowerCase()}`;
 }
 
-/** The one-time line "Home now starts with fewer cards" (CARD-FRAME §2.6), per account, like the hint. */
-export function homeFewerStoreKey(publicKey: string): string {
-    return `${HOME_STORE_PREFIX}fewer:${publicKey.toLowerCase()}`;
-}
 
 /**
  * The Tips card's record, per account (@beanpool/core home-tips.ts `TipsRecord`: the tips seen, the one on the card and

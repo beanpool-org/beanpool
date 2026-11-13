@@ -59,29 +59,34 @@ export function NeedsBody({ entries, colors, onOpen }: { entries: NeedsYouEntry[
     );
 }
 
-export function StepsBody({ lines, note, colors, onStep }: {
-    lines: StepLine[];
+export function StepsBody({ left, count, note, colors, onStep }: {
+    /** Only the lines left (DESIGN-home-default-fable.md §2.4): a finished row is never drawn, the count says it. */
+    left: StepLine[];
+    /** "2 of 5 done" (core `firstStepsCount`), one quiet line under the rows. */
+    count: string;
     /** The global node's new-account limits in a sentence (utils/home-cards.ts `probationSentence`), under the lines. */
     note?: string | null;
     colors: AppColors;
     onStep: (id: StepLine['id']) => void;
 }) {
     const s = homeStyles(colors);
-    const offerUndone = lines.some(l => l.id === 'offer' && !l.done);
+    const offerUndone = left.some(l => l.id === 'offer');
     return (
         <>
-            {lines.map(l => (
+            {left.map(l => (
                 <HomeRow
                     key={l.id}
                     colors={colors}
                     text={l.text}
-                    a11y={l.done ? t('{step}, done', { step: l.text }) : t('{step}, not done yet', { step: l.text })}
-                    onPress={l.done ? undefined : () => onStep(l.id)}
+                    a11y={t('{step}, not done yet', { step: l.text })}
+                    onPress={() => onStep(l.id)}
                     testID={`home-step-${l.id}`}
                     lines={4}
-                    left={<Text style={[s.trailing, { fontSize: 18, color: l.done ? colors.brand.primary : colors.text.secondary }]} importantForAccessibility="no">{l.done ? '☑' : '☐'}</Text>}
+                    left={<Text style={[s.trailing, { fontSize: 18, color: colors.text.secondary }]} importantForAccessibility="no">☐</Text>}
                 />
             ))}
+            {/* Its colours inline, where the contrast check reads them (s.* from homeStyles is a table it cannot follow). */}
+            {!!count && <Text style={{ fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginTop: 4, marginBottom: 6 }} testID="home-steps-count">{count}</Text>}
             {!!note && <Text style={[s.note, { marginTop: 4 }]} testID="home-steps-limits">{note}</Text>}
             {offerUndone && (
                 <FabAware id="steps:offer" style={s.buttonRow}>
@@ -885,32 +890,57 @@ export function SearchBody({ settings, card, nodeUrl, showsBeans, colors, onMore
 }
 
 /**
- * Getting started (scratch/global-node/DESIGN-getting-started-fable.md §1): a newcomer's Home until the tour ends. Its
- * words, Look around › (or "Pick up the tour at step 3 ›" while one is part way) and Skip. It blocks nothing: every tab,
- * Add a card and Arrange work with it sitting there. No "…": Skip is its remove.
+ * Welcome (DESIGN-home-default-fable.md §2.3, the Getting started card re-cut): where you are, who brought you, and the
+ * one-minute tour, as plain links, never a filled button (that pushed the Market off the first screen at 320 dp x 1.3,
+ * and a filled button says "do this first" about the one thing that is optional). Each link keeps a 44 dp row and wraps
+ * whole to its own row where the two don't fit. No "…": Not now is its way out.
+ *
+ * - `place`: "You're in Byron Shire BeanPool." (null when the community's name isn't known: the line isn't drawn).
+ * - `inviter`: "Ana invited you. Say hello ›", opening the chat with them (the node's `me.invitedBy`; none, not drawn).
+ * - `firstHere`: an owner alone on a new community: "You're the first one here." with "Invite someone ›" where they can.
  */
-export function StartBody({ words, button, colors, onLookAround, onSkip }: {
-    words: string;
-    button: string;
+export function WelcomeBody({ place, inviter, firstHere, tourLabel, colors, onSayHello, onInvite, onTour, onNotNow }: {
+    place: string | null;
+    inviter: string | null;
+    firstHere: boolean;
+    tourLabel: string;
     colors: AppColors;
-    onLookAround: () => void;
-    onSkip: () => void;
+    onSayHello: () => void;
+    /** Absent: the reader can't invite here, so "You're the first one here." stands alone. */
+    onInvite?: () => void;
+    onTour: () => void;
+    onNotNow: () => void;
 }) {
     const s = homeStyles(colors);
+    const link = (text: string, onPress: () => void, testID: string, a11y?: string) => (
+        <Pressable
+            onPress={onPress}
+            style={({ pressed }) => [{ minHeight: HOME_TARGET_DP, justifyContent: 'center' }, pressed && { backgroundColor: colors.surface.subtle }]}
+            accessibilityRole="button"
+            accessibilityLabel={a11y ?? text}
+            testID={testID}
+        >
+            <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text.link }}>{text}</Text>
+        </Pressable>
+    );
+    const say = { fontSize: 15, lineHeight: 21, color: colors.text.body } as const;
     return (
         <View>
-            <Text style={{ fontSize: 15, lineHeight: 21, color: colors.text.body }} testID="home-start-words">{words}</Text>
-            <View style={[s.buttonRow, { flexWrap: 'wrap', alignItems: 'center' }]}>
-                <HomeButton colors={colors} primary text={button} onPress={onLookAround} testID="home-start-look" />
-                <Pressable
-                    onPress={onSkip}
-                    style={{ minHeight: HOME_TARGET_DP, minWidth: HOME_TARGET_DP, paddingHorizontal: 12, justifyContent: 'center' }}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('Skip the tour')}
-                    testID="home-start-skip"
-                >
-                    <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text.link }}>{t('Skip')}</Text>
-                </Pressable>
+            {!!place && <Text style={[say, { fontWeight: '700', color: colors.text.heading }]} testID="home-start-words">{place}</Text>}
+            {firstHere ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8 }}>
+                    <Text style={say} testID="home-start-first">{t("You're the first one here.")}</Text>
+                    {onInvite && link(t('Invite someone ›'), onInvite, 'home-start-invite')}
+                </View>
+            ) : inviter ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8 }}>
+                    <Text style={say} testID="home-start-inviter">{t('{name} invited you.', { name: inviter })}</Text>
+                    {link(t('Say hello ›'), onSayHello, 'home-start-hello', t('Say hello to {name}', { name: inviter }))}
+                </View>
+            ) : null}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: 20 }}>
+                {link(tourLabel, onTour, 'home-start-look')}
+                {link(t('Not now'), onNotNow, 'home-start-skip', t('Skip the tour'))}
             </View>
         </View>
     );

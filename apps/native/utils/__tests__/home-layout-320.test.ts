@@ -28,7 +28,7 @@ import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, 
 import { sheetStyles } from '../../components/home/sheet-parts';
 import { STRIP_NAME_BASIS_DP, st as arrangeStyles } from '../../components/home/ArrangeParts';
 import { ADD_CARD_DOT_DP, ADD_CARD_DOT_GAP_DP, ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
-import { cardRowName, FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, SKY_NO_PLACE_LINE, SKY_PLACE_CHIPS, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
+import { cardRowName, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, SKY_NO_PLACE_LINE, SKY_PLACE_CHIPS, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
 import { ARRANGE_WORDS, HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest, PRICING_CATEGORIES, STARTER_OFFERS, starterSheet, t } from '@beanpool/core';
 import { starter } from '../../components/home/StarterOffersSheet';
 import { FAB_BAND_DP } from '../fab-band';
@@ -424,7 +424,7 @@ describe('the frame\'s words on Home at 320dp × 1.3', () => {
         const home = read('app/(tabs)/index.tsx');
         const hintText = Number(/hintText: \{ flex: 1, fontSize: (\d+)/.exec(home)?.[1]);
         const room = SCREEN - 2 * 16 - 12 - HOME_TARGET_DP;
-        for (const t of [HOME_HINT_LINE, FEWER_CARDS_LINE]) expect(longestWord(t, hintText), t).toBeLessThan(room);
+        for (const t of [HOME_HINT_LINE]) expect(longestWord(t, hintText), t).toBeLessThan(room);
         // The offline and empty lines are notes; the first line is a strong row of at most 40 characters of words plus the
         // distance, which wraps at word breaks: its longest word (40 characters with no space is the worst case) still
         // has to be readable, so it is bounded like any row (HomeRow's two lines) and never put in the caption.

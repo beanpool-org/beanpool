@@ -154,7 +154,6 @@ export default function TabLayout() {
     }, []);
     const [unread, setUnread] = useState(0);
     const [dealsCount, setDealsCount] = useState(0);
-    const [needsBackup, setNeedsBackup] = useState(false);
     // When the last network read of the messages started (the doorbell's 10 s gap), and when the last read that worked
     // and the last that failed started: only one that worked counts for the backstop (review of #2558).
     const lastNetSyncAtRef = useRef(0);
@@ -195,24 +194,6 @@ export default function TabLayout() {
     useEffect(() => {
         if (!identity?.publicKey) return;
 
-        const checkBackup = async () => {
-            try {
-                const backedUp = await AsyncStorage.getItem('beanpool_identity_backed_up');
-                if (backedUp !== 'true') {
-                    // Check if identity is older than 24 hours
-                    const createdAt = new Date(identity.createdAt).getTime();
-                    const now = new Date().getTime();
-                    if (now - createdAt > 24 * 60 * 60 * 1000) {
-                        setNeedsBackup(true);
-                    } else {
-                        setNeedsBackup(false);
-                    }
-                } else {
-                    setNeedsBackup(false);
-                }
-            } catch (e) {}
-        };
-        checkBackup();
         // Badge math is all local reads and safe to run often. syncMessages is NOT:
         // it hits the network and takes the DB write lock per changed conversation,
         // and running it here every 5s (this layout stays mounted under pushed
@@ -508,9 +489,6 @@ export default function TabLayout() {
                                 icon="⚙️"
                                 focused={focused}
                                 color={color}
-                                badge={needsBackup ? (
-                                    <View style={{ position: 'absolute', top: 4, right: '30%', backgroundColor: colors.feedback.danger.solid, width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, borderColor: colors.surface.app }} />
-                                ) : null}
                             />
                         )
                     }} 

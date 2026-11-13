@@ -615,17 +615,7 @@ export function dismissSafety(layout: HomeLayout | null, now: number): HomeLayou
     return { ...l, dismissed: { ...l.dismissed, safety: at(now) }, updatedAt: at(now) };
 }
 
-/**
- * The one-time line "Home now starts with fewer cards. Add a card brings the rest back." is said to nobody now
- * (DESIGN-home-default-fable.md §2.8, review of #3110): since D0 a Home never saved starts with the whole default list, so
- * it is longer, not shorter. D2 deletes the line and this; until then it says no to everyone.
- */
-export function fewerCardsNews(_account: HomeLayout | null, _phone: HomeLayout | null, _me: Pick<HomeMe, 'joinedAt'> | null | undefined, _now: number): boolean {
-    return false;
-}
-
 // Lines kept here and shown through t() where they are drawn (app/(tabs)/index.tsx, components/home).
-export const FEWER_CARDS_LINE = word('Home now starts with fewer cards. Add a card brings the rest back.');
 /** The one-time hint (§1.3). */
 export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom. Hold a card to drag it, or use the arrows.');
 /** A saved search's kinds, as its settings sheet offers them (CARD-FRAME §4). */

@@ -33,7 +33,7 @@ import { signedGet, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 import { homeAccount, homeGeneration, onHomeAccountChange, resetHomeAccountForTests, stillOnPhone, type HomeAccount } from './home-account';
 import {
-    FAV_CATEGORIES_STORE_KEY, homeAnswerStoreKey, homeFewerStoreKey, homeHintStoreKey, homeTipsStoreKey, homeInterestsOwedStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey,
+    FAV_CATEGORIES_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeTipsStoreKey, homeInterestsOwedStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey,
     homeRevealStoreKey,
 } from './storage-keys';
 import {
@@ -443,9 +443,9 @@ export async function saveHomePreferences(
 
 // ── The one-time reveal and its hint (§6.2) ───────────────────────────────────────────────────────────────────────
 
-export type HomeOnce = 'reveal' | 'hint' | 'fewer';
+export type HomeOnce = 'reveal' | 'hint';
 const onceKey = (which: HomeOnce, publicKey: string) => (
-    which === 'reveal' ? homeRevealStoreKey(publicKey) : which === 'fewer' ? homeFewerStoreKey(publicKey) : homeHintStoreKey(publicKey)
+    which === 'reveal' ? homeRevealStoreKey(publicKey) : homeHintStoreKey(publicKey)
 );
 
 /** Whether the account has seen the reveal or the hint here. A phone that can't say counts as seen: never shown twice. */

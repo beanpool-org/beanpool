@@ -18,7 +18,7 @@ import {
     invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
     joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
-    askedFacts, addCard, fewerCardsNews, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
+    askedFacts, addCard, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
     MARK_SENT_MAX, layoutPrint, ownMarkedSave, readMarkSent, rememberMarkSent, sameList, searchCardFor, skyOf,
     homeCrowdFor, isHomeDoorbellFor,
     type HomeAnswer, type HomeCards, type HomeLayout,
@@ -531,18 +531,6 @@ describe('the frame: the picker, adding, and the members who were here before (C
         // A fixed type in the list is drawn once, in its own place.
         const fixed = { ...crowd, cards: [{ id: 'community', type: 'community' }, { id: 'needs', type: 'needs' }, { id: 'market', type: 'market' }] };
         expect(draw(a, fixed, ctx({ interests: ['food'] }))).toEqual(['market', 'community']);
-    });
-
-    // Since D0 a Home never saved starts with the whole default list, longer than before: the line is said to nobody, the
-    // member who never edited and joined over a week ago included (DESIGN-home-default-fable.md §2.8; review of #3110).
-    it('the one-time "fewer cards" line: to nobody, not even a member who never edited and joined over a week ago', () => {
-        const old = { joinedAt: iso(NOW - 30 * 24 * H) };
-        expect(fewerCardsNews(null, null, old, NOW)).toBe(false);
-        expect(fewerCardsNews(null, null, { joinedAt: iso(NOW - 365 * 24 * H) }, NOW)).toBe(false);
-        expect(fewerCardsNews(null, null, { joinedAt: iso(NOW - 2 * 24 * H) }, NOW)).toBe(false);
-        expect(fewerCardsNews(EVERY, null, old, NOW)).toBe(false);
-        expect(fewerCardsNews(null, EVERY, old, NOW)).toBe(false);
-        expect(fewerCardsNews(null, null, null, NOW)).toBe(false);
     });
 
     it('the picker\'s words are fixed and say nothing locked, earned or tiered, and Beans by name', () => {

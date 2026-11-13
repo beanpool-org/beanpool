@@ -198,7 +198,7 @@ import { HOME_TIPS, localDay, skyToday, translateV1 } from '@beanpool/core';
 import { setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import { AccessibilityInfo, Alert, AppState, DeviceEventEmitter } from 'react-native';
-import { FEWER_CARDS_LINE, HOME_SAFETY_POLL_MS, SKY_NO_PLACE_LINE, decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
+import { HOME_SAFETY_POLL_MS, SKY_NO_PLACE_LINE, decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
 import { decisionsOn, hiddenTabsFor } from '../node-profile';
 import { commonsSectionFor } from '../commons-sections';
 import { marketFilterFromLink } from '../market-filters';
@@ -3604,6 +3604,9 @@ describe('Save this search to Home from the Market: the saved search\'s sheet op
         }
     });
 });
+
+/** The one-time line D2 deleted (DESIGN-home-default-fable.md §2.8): checked as words that must never show. */
+const FEWER_CARDS_LINE = 'Home now starts with fewer cards. Add a card brings the rest back.';
 
 describe('the frame on screen: the fewer-cards line, the standby tie, a newer app\'s card, Settings… (CARD-FRAME §1.3, §2.6; review of #1697)', () => {
     const DAY = 24 * H;

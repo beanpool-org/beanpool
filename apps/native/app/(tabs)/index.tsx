@@ -23,7 +23,6 @@ import { AddressFollowCard } from '../../components/AddressFollowCard';
 import { AddressFallbackCard } from '../../components/AddressFallbackCard';
 import { CopiesRuleCard } from '../../components/CopiesRuleCard';
 import { BringListingsSheet } from '../../components/BringListingsSheet';
-import { NotificationPermissionCard } from '../../components/NotificationPermissionCard';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { NewPollModal } from '../../components/NewPollModal';
 import { NewEventModal } from '../../components/NewEventModal';
@@ -51,9 +50,9 @@ import {
     AskedBody, MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StartBody, StepsBody, TipsBody,
 } from '../../components/home/HomeCardBodies';
 import {
-    FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, listOf, moveCardTo, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName,
+    HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, listOf, moveCardTo, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, homeCrowdFor, isHomeDoorbellFor,
-    effectiveInterests, fewerCardsNews, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
+    effectiveInterests, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, resetLayout, safetyWord, sameList, skyOf, starredFirst, tourOverFor,
     type HomeAnswer, type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
@@ -125,7 +124,7 @@ type Status = 'loading' | 'ok' | 'offline' | 'members_only' | 'no_community' | '
 
 /** Lines kept as word() in utils/home-cards.ts and core, shown here in the member's language. */
 const LINES = {
-    hint: HOME_HINT_LINE, fewer: FEWER_CARDS_LINE, saveNotNow: SAVE_SEARCH_NOT_NOW, start: START_CARD_WORDS, notOnAccount: NOT_ON_ACCOUNT_LINE,
+    hint: HOME_HINT_LINE, saveNotNow: SAVE_SEARCH_NOT_NOW, start: START_CARD_WORDS, notOnAccount: NOT_ON_ACCOUNT_LINE,
     skyNoPlace: SKY_NO_PLACE_LINE, tipsAllSeen: TIPS_ALL_SEEN,
 };
 
@@ -228,8 +227,6 @@ export default function HomeScreen() {
     const [chatRows, setChatRows] = useState<{ rows: ChatChoice[] | null; failed: boolean }>({ rows: null, failed: false });
     /** A node from before the frame refused the member's cards: they stay on the phone and are sent again (§2.3). */
     const [notOnAccount, setNotOnAccount] = useState(false);
-    /** The one-time "Home now starts with fewer cards" line (§2.6). */
-    const [fewer, setFewer] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [offlineNote, setOfflineNote] = useState(false);
     const [postPicker, setPostPicker] = useState(false);
@@ -427,14 +424,6 @@ export default function HomeScreen() {
         Animated.timing(reveal, { toValue: 1, duration: REVEAL_MS, useNativeDriver: true }).start(() => setBandVersion(v => v + 1));
     }, [reveal]);
 
-    // A member who never edited, here before the frame: one line, once (§2.6).
-    const maybeFewer = useCallback(async (whose: HomeAccount) => {
-        if (await seenOnce(whose.publicKey, 'fewer')) return;
-        if (!stillOnPhone(whose) || identityRef.current?.publicKey !== whose.publicKey) return;
-        setFewer(true);
-        void markSeenOnce(whose, 'fewer');
-    }, []);
-
     // ── The phone's own Needs you lines: its database, no request ──
     const readLocal = useCallback(async (me: string) => {
         const settle = <T,>(p: Promise<T>) => p.catch(() => null);
@@ -582,7 +571,6 @@ export default function HomeScreen() {
             setStored(copy);
             setLayout(canTailor(copy?.answer) ? pickLayout(copy!.answer.layout, mine, copy!.answer.layoutV1, phoneOver.current).layout : null);
             setNotOnAccount(false);
-            setFewer(false);
             setInterests(effectiveInterests(copy?.answer.me?.interests, phoneStars));
             setStatus(copy ? 'ok' : 'loading');
         }
@@ -629,11 +617,6 @@ export default function HomeScreen() {
                 clearPhoneOnly(phoneOver, phoneSent, id.publicKey, u, whose);
             }
             setLayout(pick.layout);
-            // An empty version-1 list with no copy here moved or hid nothing (a way-back dismissal or a Reset on an older app):
-            // the newcomer's list is drawn, so the line is theirs as for one who never edited (review of #1699 confirmation,
-            // finding 2). On a standby it can't be told from a real list; the line is still true of what is drawn.
-            const fewerFrom = answered.layoutV1?.empty && !phoneLayout.current ? null : answered.layout;
-            if (member && fewerCardsNews(fewerFrom, phoneLayout.current, answered.me, Date.now())) void maybeFewer(whose);
             // The phone's newer list is sent, but one the node refused as a shape it doesn't know yet only at a landing
             // (CARD-FRAME §2.3: "sent again each time you open Home").
             const resend = why === 'focus' || refusedShape.current !== `${id.publicKey}|${u}`;
@@ -690,7 +673,7 @@ export default function HomeScreen() {
         }
         // No answer this time (offline, members only, needs an update): land from what the phone holds.
         if (why === 'focus' && !tipsLandNow && read.kind !== 'answer') await landTips(whose);
-    }, [readLocal, pushLayout, maybeReveal, maybeFewer, landTips, refreshAsVisitor, askPins]);
+    }, [readLocal, pushLayout, maybeReveal, landTips, refreshAsVisitor, askPins]);
 
     const refreshRef = useRef(refresh);
     refreshRef.current = refresh;
@@ -750,7 +733,6 @@ export default function HomeScreen() {
         setStored(null);
         setLayout(null);
         setNotOnAccount(false);
-        setFewer(false);
         setArranging(false);
         setRole(undefined);
         setPlace(null);
@@ -1437,14 +1419,6 @@ export default function HomeScreen() {
                     </Pressable>
                 </View>
             )}
-            {fewer && tailor && c.id === firstDrawn?.id && (
-                <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-fewer">
-                    <Text style={[st.hintText, { color: colors.text.body }]}>{t(LINES.fewer)}</Text>
-                    <Pressable onPress={() => setFewer(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel={t('Got it, hide this line')}>
-                        <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
-                    </Pressable>
-                </View>
-            )}
             {c.id === beansCardUnder && <YourBeansPreviewCard colors={colors} quiet={arrangeOn} />}
             {held && <View pointerEvents="none" style={[st.liftedRing, { borderColor: colors.card[homeCardHue(c)].ink }]} testID={`home-lifted-${c.id}`} />}
         </View>
@@ -1533,7 +1507,8 @@ export default function HomeScreen() {
                     <AddressFallbackCard colors={colors} />
                     {/* The community changed where members' copies go since this account last saw it (vault rethink VR2). */}
                     {!lookingAround && <CopiesRuleCard colors={colors} />}
-                    <NotificationPermissionCard colors={colors} />
+                    {/* No notifications card here (DESIGN-home-default-fable.md §2.5): First steps has the line, the first post,
+                        message or ask to join asks once, and the bell's sheet says so while this phone can't buzz. */}
                     {offlineNote && (
                         <Text style={[st.offline, { color: colors.text.secondary }]} accessibilityLiveRegion="polite" testID="home-offline-note">
                             {t("Couldn't reach your community; showing what we had.")}

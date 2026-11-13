@@ -64,7 +64,8 @@ describe('MemberDetailModal', () => {
         );
 
         await userEvent.click(screen.getByText('🛑 Freeze'));
-        expect(handleToggleFreeze).toHaveBeenCalledWith('pubkey-1234567890-abcdef');
+        // Which way, said: freeze, since the node holds it unfrozen.
+        expect(handleToggleFreeze).toHaveBeenCalledWith('pubkey-1234567890-abcdef', true);
     });
 
     it('handles the operator toggle when provided, and has no voucher switch (the reset, R0)', async () => {

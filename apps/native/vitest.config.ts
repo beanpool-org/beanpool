@@ -30,6 +30,8 @@ export default defineConfig({
             // don't load outside a device, imported by Home, which a dozen tests render. A test can still mock either itself.
             'react-native-reanimated': fileURLToPath(new URL('./utils/__tests__/reanimated-stub.ts', import.meta.url).href),
             'expo-haptics': fileURLToPath(new URL('./utils/__tests__/haptics-stub.ts', import.meta.url).href),
+            // The composer's microphone and the voice bubble (slice V3): a native module every chat test would otherwise mock.
+            'expo-audio': fileURLToPath(new URL('./utils/__tests__/expo-audio-stub.ts', import.meta.url).href),
         },
     },
     test: {

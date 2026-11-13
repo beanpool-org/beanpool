@@ -131,7 +131,7 @@ export function dmQuoteFor(parent: ChatMessage | null | undefined, myPubkey: str
     // A line that isn't its named author's: the label and the words its layer wrote, in the member's language. The
     // admins' message is their words, quoted as written.
     if (from !== 'author') return { author: chatLineWords(dmQuoteLabel(from)), text: from === 'admins' ? parent.text : chatLineWords(parent.text), note: null };
-    const text = isTombstone(parent) ? tombstoneWords(parent, 'dm') : parent.type === 'image' ? t('🔒 Photo') : parent.text;
+    const text = isTombstone(parent) ? tombstoneWords(parent, 'dm') : parent.type === 'image' ? t('🔒 Photo') : parent.type === 'voice' ? t('🎤 Voice message') : parent.text;
     return { author: parent.senderId === myPubkey ? t('You') : (peerName || t('Someone')), text, note: chatLineWords(parent.integrityNote ?? null) ?? null };
 }
 
@@ -245,7 +245,8 @@ export function canEditMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     if (!authorVerbsAllowed(viewer.kind)) return false;
     if (!isMine(m, viewer) || !viewer.canPost) return false;
     if (isSystemLine(m) || isTombstone(m) || m.oldLine) return false;
-    if (m.type === 'image') return false;
+    // A photo, or a voice message (its words are empty and sealed beside the sound: nothing to edit).
+    if (m.type === 'image' || m.type === 'voice') return false;
     if (inFlight(m)) return false;
     if (!m.rawTimestamp) return false;
     const sentAt = new Date(m.rawTimestamp).getTime();
@@ -261,7 +262,8 @@ export function isEditClosed(m: ChatMessage, viewer: ChatViewer): boolean {
     if (!authorVerbsAllowed(viewer.kind)) return false;
     if (!isMine(m, viewer) || !viewer.canPost) return false;
     if (isSystemLine(m) || isTombstone(m) || m.oldLine) return false;
-    if (m.type === 'image') return false;
+    // A photo, or a voice message (its words are empty and sealed beside the sound: nothing to edit).
+    if (m.type === 'image' || m.type === 'voice') return false;
     if (inFlight(m)) return false;
     if (!m.rawTimestamp) return false;
     const sentAt = new Date(m.rawTimestamp).getTime();

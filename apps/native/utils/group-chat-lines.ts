@@ -27,7 +27,7 @@
 import type { BeanPoolIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
 import { detectMentions, groupMessageKey, sealLine, openLine, type GroupEpochProgress } from './group-chat-crypto';
-import { toBase64 } from '@beanpool/core';
+import { toBase64, sealGroupVoice, openGroupVoice, VOICE_MIME, type VoiceInput } from '@beanpool/core';
 import { groupKeyring, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
 import {
     groupLineView, isSealedGroupLine, GROUP_LINE_UNVERIFIED_NAME, GROUP_LINE_UNVERIFIED_TEXT,
@@ -83,6 +83,12 @@ export interface SendGroupLineInput {
      * the same message key, epoch and reply as the words, on every attempt, and sent beside them as type 'image'.
      */
     photo?: string;
+    /**
+     * A voice line's sound (DESIGN-cross-chat-voice-fable.md §5.4, slice V3): sealed as bytes as part `voice` under the same
+     * message key, epoch and reply as the words (core sealGroupVoice), on every attempt, and sent beside them as type
+     * 'voice' with the mime VOICE_MIME. Never with a photo.
+     */
+    voice?: VoiceInput;
     /** The client's own UUID v4: the id the line is sealed under and stored as. */
     clientId: string;
     replyToId?: string | null;
@@ -91,6 +97,8 @@ export interface SendGroupLineInput {
     /** Roster members with their callsigns, for the @mentions this phone declares. */
     mentionCandidates?: { pubkey: string; callsign: string | null | undefined }[];
     progress?: GroupEpochProgress;
+    /** The caller giving up (a voice send's 60 s, utils/voice-recorder.ts voiceSendWithin): the POST is aborted. */
+    signal?: AbortSignal;
 }
 
 /**
@@ -108,12 +116,14 @@ export async function sendSealedGroupLine(nodeUrl: string, identity: BeanPoolIde
         const sealed = sealLine(input.text, { ...binding, after: input.after ?? null });
         // A photo goes with its words or not at all: sealed again with them on a re-seal, so both parts carry one epoch.
         const photo = input.photo === undefined ? null : sealLine(input.photo, { ...binding, part: 'attachment', after: null });
+        const voice = input.voice === undefined ? null : sealGroupVoice(input.voice, { ...binding, after: null });
         const metadata: Record<string, unknown> = { epoch };
         if (input.replyToId) metadata.replyToId = input.replyToId;
         if (mentions.length) metadata.mentions = mentions;
         const line: Record<string, unknown> = { ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata, clientId: messageId };
         if (photo) Object.assign(line, { type: 'image', attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' } });
-        const res = await signedPost(nodeUrl, `/api/groups/${encodeURIComponent(ring.groupId)}/chat/message`, line, identity);
+        else if (voice) Object.assign(line, { type: 'voice', attachment: { data: voice.ciphertext, nonce: voice.nonce, mime: VOICE_MIME } });
+        const res = await signedPost(nodeUrl, `/api/groups/${encodeURIComponent(ring.groupId)}/chat/message`, line, identity, input.signal);
         const body = await res.json().catch(() => ({}));
         if (res.ok) return body;
         if (attempt === 0 && res.status === 409 && UPDATE_REFUSALS.has(body?.code)) continue;
@@ -239,6 +249,49 @@ export async function getDecryptedGroupAttachment(
         return await cache.put(ring.groupId, messageId, photo);
     } catch {
         return null;
+    }
+}
+
+/** Where the phone keeps the voice messages it opened (utils/voice-cache.ts), handed in so nothing here touches the device. */
+export interface GroupVoiceCache {
+    kept(messageId: string): Promise<{ uri: string; durationMs: number; bars: number[] } | null>;
+    keep(messageId: string, voice: { durationMs: number; bars: ArrayLike<number>; sound: Uint8Array }): Promise<{ uri: string; durationMs: number; bars: number[] } | null>;
+}
+
+/**
+ * A group voice line's sound, in getDecryptedGroupAttachment's order: only as part of its message (a line hidden, waiting
+ * for its key or unverified plays nothing and asks the node for nothing), then the phone's own copy, else GET
+ * /api/messages/:id/attachment opened as part `voice` under the line's epoch key, its group, its signer, its id and its
+ * reply (core openGroupVoice), and kept. 'gone' when the node no longer has it (the 30-day expiry, §5.4).
+ */
+export async function getDecryptedGroupVoiceLine(
+    nodeUrl: string, identity: BeanPoolIdentity, store: GroupKeyStore,
+    input: { groupId: string; line: ServedGroupLine; view: GroupLineView }, cache: GroupVoiceCache,
+): Promise<{ kind: 'ok'; voice: { uri: string; durationMs: number; bars: number[] } } | { kind: 'gone' } | { kind: 'refused' } | { kind: 'unavailable' }> {
+    const { line, view } = input;
+    if (line.type !== 'voice' || view.hidden || view.waitingKey || view.unverified || !view.signer || view.epoch === null) return { kind: 'refused' };
+    const ring = groupKeyring(nodeUrl, identity, input.groupId, store);
+    const messageId = String(line.id);
+    const kept = await cache.kept(messageId).catch(() => null);
+    if (kept) return { kind: 'ok', voice: kept };
+    let key: Uint8Array | null;
+    try { key = ring.openedKey(view.epoch) ?? await ring.keyFor(view.epoch); } catch { return { kind: 'unavailable' }; }
+    if (!key) return { kind: 'refused' };
+    let res: Response;
+    try { res = await signedGet(nodeUrl, `/api/messages/${encodeURIComponent(messageId)}/attachment`, identity); } catch { return { kind: 'unavailable' }; }
+    if (res.status === 404 || res.status === 410) return { kind: 'gone' };
+    if (!res.ok) return { kind: 'unavailable' };
+    try {
+        const { data, nonce } = await res.json();
+        const meta = typeof line.metadata === 'string' ? JSON.parse(line.metadata) : line.metadata;
+        const replyToId = typeof meta?.replyToId === 'string' && meta.replyToId ? meta.replyToId : null;
+        const opened = openGroupVoice({ ciphertext: data, nonce }, {
+            groupId: ring.groupId, epoch: view.epoch, senderPubHex: view.signer, messageId, replyToId,
+        }, key, ring.memo);
+        const voice = await cache.keep(messageId, opened);
+        return voice ? { kind: 'ok', voice } : { kind: 'unavailable' };
+    } catch {
+        return { kind: 'refused' };
     }
 }
 

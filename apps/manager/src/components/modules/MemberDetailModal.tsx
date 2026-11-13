@@ -55,7 +55,11 @@ interface MemberDetailModalProps {
     ownerCount?: number;
     /** True if this member is the community's only owner. */
     isSoleOwner?: boolean;
-    onToggleFreeze: (pubkey: string) => void;
+    /**
+     * Freeze (`freeze` true) or unfreeze the member's credit. Answers the freeze the node holds once it is done, read back
+     * from the node (null when it could not be read); rejects with the node's words when it refuses.
+     */
+    onToggleFreeze: (pubkey: string, freeze: boolean) => Promise<boolean | null> | void;
     onToggleOperator?: (pubkey: string, isCurrentlyOperator: boolean) => void;
     /** `code`: an owner's fresh proof, when the node asked it for an owner's or admin's role (FreshProofRequiredError). */
     onGrantNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
@@ -81,7 +85,7 @@ export function MemberDetailModal({
     profiles = [],
     flags = [],
     members = [],
-    isFrozen,
+    isFrozen: isFrozenProp,
     isOperator,
     nodeRole,
     viewerRole,
@@ -122,6 +126,14 @@ export function MemberDetailModal({
     const [suspendError, setSuspendError] = useState<string | null>(null);
     const [suspendDone, setSuspendDone] = useState<string | null>(null);
     const [localStatus, setLocalStatus] = useState<string | undefined>(undefined);
+    // The credit freeze as the node last said (the roster's, then each change's read-back), never flipped on a press.
+    const [isFrozen, setIsFrozen] = useState(isFrozenProp);
+    useEffect(() => setIsFrozen(isFrozenProp), [isFrozenProp]);
+    const [freezeBusy, setFreezeBusy] = useState(false);
+    const [freezeNote, setFreezeNote] = useState<string | null>(null);
+    const [freezeError, setFreezeError] = useState<string | null>(null);
+    // Freezing an owner from a stale phone hand-off asks the phone's unlock again (server stepUpIfOwnerOnly 'freeze').
+    const freezeProof = useFreshProof();
 
     const pubkey = member?.publicKey || member?.pubkey || '';
     const memberStatus = localStatus ?? (member?.status ? String(member.status) : 'active');
@@ -227,6 +239,33 @@ export function MemberDetailModal({
             setSuspendError(e instanceof Error ? e.message : 'Failed to lift the suspension');
         } finally {
             setSuspendBusy(false);
+        }
+    };
+
+    // Freeze / Unfreeze: disabled while the node answers, then the freeze the node holds and one line saying so; a refusal
+    // in the node's words (your own account, an owner), and the phone's unlock again in the fresh-proof box. A refusal
+    // changes nothing on the page (the deciding review of #3121: a refused freeze showed as "Frozen").
+    const handleFreeze = async () => {
+        const want = !isFrozen;
+        setFreezeBusy(true);
+        setFreezeError(null);
+        setFreezeNote(null);
+        freezeProof.close();
+        try {
+            const now = await onToggleFreeze(pubkey, want);
+            if (now === true || now === false) {
+                setIsFrozen(now);
+                setFreezeNote(now
+                    ? `Frozen: ${displayName} can't use credit until someone unfreezes it.`
+                    : `Unfrozen: ${displayName} can use their credit again.`);
+            } else if (now === null) {
+                setFreezeNote('Sent. The node’s answer could not be read back; refresh to see it.');
+            }
+        } catch (e: unknown) {
+            if (freezeProof.checkError(e, () => handleFreeze())) return;
+            setFreezeError(e instanceof Error && e.message ? e.message : 'The freeze was not changed.');
+        } finally {
+            setFreezeBusy(false);
         }
     };
     const [localRole, setLocalRole] = useState<MemberNodeRole | null>(
@@ -792,14 +831,16 @@ export function MemberDetailModal({
                             )}
 
                             <button
-                                onClick={() => onToggleFreeze(pubkey)}
-                                className={`px-3 py-2 rounded-xl font-bold transition-all border text-[11px] ${
+                                onClick={() => { void handleFreeze(); }}
+                                disabled={freezeBusy || !pubkey}
+                                data-testid="freeze-button"
+                                className={`px-3 py-2 rounded-xl font-bold transition-all border text-[11px] disabled:opacity-50 disabled:cursor-wait ${
                                     isFrozen
                                         ? 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-bp-commit-fill'
                                         : 'bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on border-bp-gold-fill'
                                 }`}
                             >
-                                <span>{isFrozen ? '🟢 Unfreeze' : '🛑 Freeze'}</span>
+                                <span>{freezeBusy ? (isFrozen ? 'Unfreezing…' : 'Freezing…') : isFrozen ? '🟢 Unfreeze' : '🛑 Freeze'}</span>
                             </button>
 
                             <button
@@ -863,6 +904,9 @@ export function MemberDetailModal({
                             )}
                         </div>
                     )}
+                    {freezeNote && <p className="m-0 text-[11px] text-emerald-300 font-semibold" data-testid="freeze-note">{freezeNote}</p>}
+                    {freezeError && <p className="m-0 text-[11px] text-red-300 font-semibold" role="alert" data-testid="freeze-error">{freezeError}</p>}
+                    <FreshProofBox proof={freezeProof} testId="freeze-proof" />
                     {broughtBackHere !== null && (
                         <p className="m-0 text-[11px] text-nature-400" data-testid="can-be-brought-back">
                             {broughtBackHere ? 'Can be brought back by this community: yes.' : 'Can be brought back by this community: no.'}

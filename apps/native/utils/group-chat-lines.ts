@@ -97,6 +97,8 @@ export interface SendGroupLineInput {
     /** Roster members with their callsigns, for the @mentions this phone declares. */
     mentionCandidates?: { pubkey: string; callsign: string | null | undefined }[];
     progress?: GroupEpochProgress;
+    /** The caller giving up (a voice send's 60 s, utils/voice-recorder.ts voiceSendWithin): the POST is aborted. */
+    signal?: AbortSignal;
 }
 
 /**
@@ -121,7 +123,7 @@ export async function sendSealedGroupLine(nodeUrl: string, identity: BeanPoolIde
         const line: Record<string, unknown> = { ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata, clientId: messageId };
         if (photo) Object.assign(line, { type: 'image', attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' } });
         else if (voice) Object.assign(line, { type: 'voice', attachment: { data: voice.ciphertext, nonce: voice.nonce, mime: VOICE_MIME } });
-        const res = await signedPost(nodeUrl, `/api/groups/${encodeURIComponent(ring.groupId)}/chat/message`, line, identity);
+        const res = await signedPost(nodeUrl, `/api/groups/${encodeURIComponent(ring.groupId)}/chat/message`, line, identity, input.signal);
         const body = await res.json().catch(() => ({}));
         if (res.ok) return body;
         if (attempt === 0 && res.status === 409 && UPDATE_REFUSALS.has(body?.code)) continue;

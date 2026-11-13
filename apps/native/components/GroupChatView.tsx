@@ -85,6 +85,8 @@ import { ChatComposer, type ChatComposerHandle } from './chat/ChatComposer';
 import { VoiceBubble } from './chat/VoiceBubble';
 import { VoicePlaybackProvider } from './chat/VoicePlayback';
 import type { VoiceInput } from '@beanpool/core';
+import { VoiceNotSentError, voiceSendWithin } from '../utils/voice-recorder';
+import { newVoiceAudioOwner } from '../utils/voice-audio';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from './chat/ChatBanners';
 import { yourGroupsStore } from './useYourGroups';
 import { hapticTick, hapticSuccess, hapticWarning } from '../utils/haptics';
@@ -173,6 +175,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     // The node refused the chat as to someone not in the group now (403 or 404), not a read that failed.
     const [refused, setRefused] = useState(false);
     const [sending, setSending] = useState(false);
+    // This screen's owner of the audio session's holds (utils/voice-audio.ts): its player and its recorder share it, so a
+    // recording waiting here never stops play in a chat opened on top of this one.
+    const [voiceOwner] = useState(() => newVoiceAudioOwner(id));
     const [pending, setPending] = useState<PendingMessage[]>([]);
     // A photo picked and fitted to 800 px, waiting above the box until Send (DESIGN-group-chat-photos-fable.md §5 S3), with
     // the id it goes under: kept while it waits, so a Send retried after a lost answer is stored once.
@@ -555,15 +560,18 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     /**
      * A voice message in a locked group chat (DESIGN-cross-chat-voice-fable.md §5.4, slice V3): sealed on this phone under the
      * line's message key (utils/db.ts postGroupChatVoice). Not optimistic, as a photo isn't. A refusal says why above the
-     * box, as a photo's does; anything else the recorder says.
+     * box, as a photo's does; anything else the recorder says. Either way it throws, so the recorder keeps the recording for
+     * another try (PR #3112 review, round 2): the same line id (`lineId`, the recording's own) as the node's clientId on every
+     * try, and the 60 s gives the send up for real, so a Send after a timeout is the node's duplicate, never a second line.
      */
-    const sendVoice = async (voice: VoiceInput) => {
+    const sendVoice = async (voice: VoiceInput, lineId: string) => {
         if (sending) throw new Error(t('Wait for the last message to go.'));
         setSending(true);
         try {
             const lastSealed = [...rawMessages].reverse().find(m => isSealedGroupLine(m));
-            await withinMs(postGroupChatVoice(id, { voice, replyToId: replyToMessage?.id ?? null, after: lastSealed ? String(lastSealed.id) : null }),
-                60_000, t('Sending the voice message is taking too long — please try again.'));
+            await voiceSendWithin(60_000, t('Sending the voice message is taking too long — please try again.'), (signal) => postGroupChatVoice(id, {
+                voice, clientId: lineId, replyToId: replyToMessage?.id ?? null, after: lastSealed ? String(lastSealed.id) : null, signal,
+            }));
             setReplyToMessage(null);
             setKeyNotice(null);
             hapticSuccess();
@@ -573,7 +581,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         } catch (e: any) {
             hapticWarning();
             const why = e instanceof GroupChatKeyError ? e.message : refusedSendNotice(e);
-            if (why) { setKeyNotice(why); return; }
+            // Said above the box ("… Nothing was sent; try again in a moment."): not sent, so the recorder keeps it, quietly.
+            if (why) { setKeyNotice(why); throw new VoiceNotSentError(why); }
             throw new Error(e?.message ? chatLineWords(e.message) : t('Could not send the voice message.'));
         } finally {
             setSending(false);
@@ -982,7 +991,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 </View>
             )}
 
-            <VoicePlaybackProvider voices={rawMessages.filter(m => m?.type === 'voice').map(m => ({ id: String(m.id), mine: !!me && thread?.views.get(String(m.id))?.signer === me }))}>
+            <VoicePlaybackProvider owner={voiceOwner} voices={rawMessages.filter(m => m?.type === 'voice').map(m => ({ id: String(m.id), mine: !!me && thread?.views.get(String(m.id))?.signer === me }))}>
             <ChatMessageList
                 listRef={listRef}
                 items={listItems}
@@ -1049,6 +1058,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     onAttach={photoButton ? pickPhoto : undefined}
                     // Voice messages only where lines are sealed on this phone (§5.4): a locked group's chat.
                     onVoice={photoButton && !photo ? sendVoice : undefined}
+                    voiceOwner={voiceOwner}
                     attachment={photo && !editingMessage ? (
                         <ChatWaitingPhoto uri={photo.uri} styles={chat} disabled={sending} onRemove={() => setPhoto(null)} />
                     ) : null}

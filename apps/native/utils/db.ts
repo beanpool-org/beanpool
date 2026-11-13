@@ -7421,6 +7421,11 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
 const VOICE_NOT_IN_THIS_CHAT_TEXT = "Voice messages can't be sent in this chat.";
 /** The recording didn't pass core's checks (a file that isn't an .m4a, too long, too big): nothing was sent. */
 const VOICE_CANT_SEND_TEXT = "This voice message can't be sent. Record it again.";
+/**
+ * The caller gave up on a send (the screen's 60 s) before its answer came, and has already said so: the word for an answer
+ * that came too late.
+ */
+const VOICE_GIVEN_UP_TEXT = 'Sending the voice message is taking too long — please try again.';
 
 /**
  * Send a voice message (DESIGN-cross-chat-voice-fable.md §5.4, slice V3): sealed on this phone as its message's own part
@@ -7431,21 +7436,27 @@ const VOICE_CANT_SEND_TEXT = "This voice message can't be sent. Record it again.
  *
  * A group's chat goes as a group's voice line (postGroupChatVoice), decided as sendImageMessage decides; an event's or an
  * enterprise's chat is refused, nothing sent.
+ *
+ * Idempotent on the line's id (PR #3112 review, round 2): `opts.messageId` is the recording's own, the same on every try, so
+ * a Send after a try that timed out but landed is the node's duplicate (engine/messaging.ts answers the line it stored), one
+ * line, never two. The local row is written only if it isn't there yet. `opts.signal` is the caller giving up (the screen's
+ * 60 s): it aborts the POST, and an answer that comes after it writes nothing here, so a late first try never shows its line
+ * while the recorder says it wasn't sent.
  */
-export async function sendVoiceMessage(conversationId: string, voice: VoiceInput, metadata?: string): Promise<void> {
+export async function sendVoiceMessage(conversationId: string, voice: VoiceInput, metadata?: string, opts: { messageId?: string; signal?: AbortSignal } = {}): Promise<void> {
     const database = await getDb();
     const nodeReadable = await isNodeReadableConversation(conversationId);
     const groupChat = await isHeldGroupChat(conversationId)
         || (nodeReadable && (await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]))?.type === 'group_thread');
     if (groupChat) {
-        await postGroupChatVoice(conversationId, { voice, replyToId: replyToIdOf(metadata) });
+        await postGroupChatVoice(conversationId, { voice, replyToId: replyToIdOf(metadata), clientId: opts.messageId, signal: opts.signal });
         return;
     }
     if (nodeReadable) throw new Error(VOICE_NOT_IN_THIS_CHAT_TEXT);
     const dmCtx = await requireDmKeyContext(conversationId);
     const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
-    const messageId = Crypto.randomUUID().toLowerCase();
+    const messageId = (opts.messageId && UUID_V4_RE.test(opts.messageId) ? opts.messageId : Crypto.randomUUID()).toLowerCase();
     const line = { senderPubHex: identity.publicKey, messageId, replyToId: replyToIdOf(metadata) };
     let encVoice: { ciphertext: string; nonce: string };
     try {
@@ -7454,7 +7465,8 @@ export async function sendVoiceMessage(conversationId: string, voice: VoiceInput
         if (e instanceof VoiceRefusedError) throw new Error(VOICE_CANT_SEND_TEXT);
         throw new DmNotLockedError();
     }
-    const encBody = lockWith(dmCtx, '', { ...line, part: 'body', after: await lineToWriteAfter(conversationId) });
+    // Never after itself: a try that landed may already be on this phone.
+    const encBody = lockWith(dmCtx, '', { ...line, part: 'body', after: await lineToWriteAfter(conversationId, messageId) });
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to send messages.');
@@ -7463,17 +7475,22 @@ export async function sendVoiceMessage(conversationId: string, voice: VoiceInput
         type: 'voice', attachment: { data: encVoice.ciphertext, nonce: encVoice.nonce, mime: VOICE_MIME }, metadata,
     });
     const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/messages/send`, bodyString, identity.privateKey, identity.publicKey);
-    const res = await fetch(`${anchorUrl}/api/messages/send`, { method: 'POST', headers, body: bodyString });
+    const res = await fetch(`${anchorUrl}/api/messages/send`, { method: 'POST', headers, body: bodyString, ...(opts.signal ? { signal: opts.signal } : {}) });
     if (!res.ok) {
         let errMsg = 'Failed to send the voice message.';
         try { const j = JSON.parse(await res.text()); if (j.error) errMsg = j.error; } catch {}
         throw new Error(errMsg);
     }
-    ownLineTaken(conversationId);
     const serverMsg = (await res.json()).message;
+    // Given up while the answer came: nothing written here; the recorder holds the recording for Send, the same line again.
+    if (opts.signal?.aborted) throw new Error(VOICE_GIVEN_UP_TEXT);
+    ownLineTaken(conversationId);
+    // A retry the node answered with the line it stored: that line's own seal, and a row already here (the sync's) stays.
+    const stored = typeof serverMsg?.ciphertext === 'string' && typeof serverMsg?.nonce === 'string';
     await database.runAsync(
-        'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [serverMsg.id, conversationId, identity.publicKey, encBody.ciphertext, encBody.nonce, 'voice', metadata || null, serverMsg.timestamp]
+        'INSERT OR IGNORE INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [serverMsg.id, conversationId, identity.publicKey, stored ? serverMsg.ciphertext : encBody.ciphertext, stored ? serverMsg.nonce : encBody.nonce,
+            'voice', (stored ? (typeof serverMsg.metadata === 'string' ? serverMsg.metadata : null) : metadata) || null, serverMsg.timestamp]
     );
     await requestLineTaken(database, conversationId, identity.publicKey);
     await keepVoice(serverMsg.id, voice);
@@ -7482,20 +7499,27 @@ export async function sendVoiceMessage(conversationId: string, voice: VoiceInput
 /**
  * Send a voice message in a group's chat: sealed under the group line's own message key as part `voice` (core
  * sealGroupVoice), beside empty words, through the group's sealed-line path (utils/group-chat-lines.ts), then kept here.
+ *
+ * `clientId` is the recording's own line id, the same on every try, so a Send after a try that timed out but landed is the
+ * node's duplicate (engine/group-thread.ts answers the line it stored): one line. `signal` is the caller giving up: it aborts
+ * the POST, and an answer after it keeps nothing here (PR #3112 review, round 2).
  */
-export async function postGroupChatVoice(groupId: string, input: { voice: VoiceInput; clientId?: string; replyToId?: string | null; after?: string | null }): Promise<any> {
+export async function postGroupChatVoice(groupId: string, input: { voice: VoiceInput; clientId?: string; replyToId?: string | null; after?: string | null; signal?: AbortSignal }): Promise<any> {
     const { nodeUrl, identity } = await groupKeyContext();
     const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
     await refuseGroupKeysForDm(ring);
-    const clientId = (input.clientId || Crypto.randomUUID()).toLowerCase();
+    const clientId = (input.clientId && UUID_V4_RE.test(input.clientId) ? input.clientId : Crypto.randomUUID()).toLowerCase();
     let answer: any;
     try {
-        answer = await sendSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), { groupId, text: '', voice: input.voice, clientId, replyToId: input.replyToId, after: input.after });
+        answer = await sendSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), {
+            groupId, text: '', voice: input.voice, clientId, replyToId: input.replyToId, after: input.after, signal: input.signal,
+        });
     } catch (e) {
         if (e instanceof VoiceRefusedError) throw new Error(VOICE_CANT_SEND_TEXT);
         if (e instanceof GroupKeysRequestError && e.status === 404 && await ring.seenLocked()) throw await heldGroupRefusal(groupId);
         throw e;
     }
+    if (input.signal?.aborted) throw new Error(VOICE_GIVEN_UP_TEXT);
     await keepVoice(clientId, input.voice);
     return answer;
 }

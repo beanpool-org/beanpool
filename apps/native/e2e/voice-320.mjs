@@ -145,7 +145,7 @@ const ROWS = [
 ];
 
 const Bubbles = () => (
-    <VoicePlaybackProvider voices={ROWS.map((r) => ({ id: r.id, mine: r.me }))}>
+    <VoicePlaybackProvider owner="voice-320" voices={ROWS.map((r) => ({ id: r.id, mine: r.me }))}>
         <View style={[chat.listContent, { backgroundColor: colors.surface.page, flex: 1 }]}>
             {ROWS.map((r) => (
                 <View key={r.id} style={[chat.messageRowContainer, r.me ? chat.messageRowMe : chat.messageRowOther]}>

@@ -192,3 +192,37 @@ export function voiceClock(ms: number): string {
     const s = Math.max(0, Math.floor(ms / 1000));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
+
+/**
+ * A voice message the chat refused and has already said why above the box (the DM screen's refusedSendNotice, every
+ * GroupChatKeyError: "This message couldn't be locked yet.", "… Nothing was sent; try again in a moment."). Not sent: the
+ * screen's onVoice throws it after setting its notice, and the recorder keeps the recording, back for play, bin and Send, and
+ * adds no alert of its own (PR #3112 review, round 2). A refusal that came back as a normal return deleted the recording.
+ */
+export class VoiceNotSentError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'VoiceNotSentError';
+    }
+}
+
+/** The recorder's word that a send didn't go and the screen already said why, so it says nothing more. */
+export function isVoiceNotSent(e: unknown): boolean {
+    return e instanceof VoiceNotSentError || (e as { name?: unknown } | null)?.name === 'VoiceNotSentError';
+}
+
+/**
+ * A voice send bounded at `ms`, so a hung one never leaves the recorder waiting (the screens' 60 s). Unlike a plain race, the
+ * send is told it was given up: `send` gets an AbortSignal that aborts at `ms`, which aborts its POST and stops it writing
+ * anything on this phone after an answer that comes too late (utils/db.ts sendVoiceMessage, postGroupChatVoice). The
+ * recording is then back for review under the same line id, and a Send again is the node's duplicate (it answers with the
+ * line it stored), never a second voice message (PR #3112 review, round 2).
+ */
+export function voiceSendWithin<T>(ms: number, tooLong: string, send: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const giveUp = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => { giveUp.abort(); reject(new Error(tooLong)); }, ms);
+    });
+    return Promise.race([send(giveUp.signal), late]).finally(() => clearTimeout(timer));
+}

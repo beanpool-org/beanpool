@@ -43,6 +43,8 @@ import { ChatComposer, type ChatComposerHandle } from '../../components/chat/Cha
 import { VoiceBubble } from '../../components/chat/VoiceBubble';
 import { VoicePlaybackProvider } from '../../components/chat/VoicePlayback';
 import type { VoiceInput } from '@beanpool/core';
+import { VoiceNotSentError, voiceSendWithin } from '../../utils/voice-recorder';
+import { newVoiceAudioOwner } from '../../utils/voice-audio';
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
 import { refusedSendNotice, restoredDraft, dmKeyChangedLine, dmLineSlotText, DM_LOCK_WORDS } from '../../utils/dm-lock';
 import {
@@ -163,6 +165,9 @@ function ChatScreen({ id }: { id: string }) {
     const [loadError, setLoadError] = useState<string | null>(null);
     // A DM line that couldn't be locked was not sent (utils/dm-lock): one plain line above the box, until a send goes.
     const [lockNotice, setLockNotice] = useState<string | null>(null);
+    // This screen's owner of the audio session's holds (utils/voice-audio.ts): its player and its recorder share it, so a
+    // recording waiting here never stops play in a chat opened on top of this one.
+    const [voiceOwner] = useState(() => newVoiceAudioOwner(String(id)));
     // The node lists another key in place of the one this phone pinned for the chat (utils/dm-peer-pins.ts): the box is
     // disabled, with one line, until the member decides on the banner below the header. Every send refuses meanwhile (db.ts).
     // First sight that found lines it couldn't place (rule 5 of the §3.4 amendment) has the banner too, with the listed
@@ -869,13 +874,17 @@ function ChatScreen({ id }: { id: string }) {
     };
 
     // A voice message (DESIGN-cross-chat-voice-fable.md §5.3, slice V3): only in a chat both have accepted, never as a
-    // request (§3.5). Awaits the node as a photo does; a refusal shows as the photo's does, anything else the recorder says.
-    const sendVoice = async (voice: VoiceInput) => {
+    // request (§3.5). Awaits the node as a photo does; a refusal shows above the box as the photo's does, anything else the
+    // recorder says. Either way it throws, so the recorder keeps the recording for another try (PR #3112 review, round 2):
+    // the same line id (`lineId`, the recording's own) on every try, and the 60 s gives the send up for real (its POST
+    // aborted, nothing written here after), so a Send after a timeout is the node's duplicate, never a second message.
+    const sendVoice = async (voice: VoiceInput, lineId: string) => {
         if (!identity?.publicKey || sendingRef.current) throw new Error(t('Wait for the last message to go.'));
         sendingRef.current = true;
         try {
             const metadata = replyToMessage ? JSON.stringify({ replyToId: replyToMessage.id }) : undefined;
-            await withTimeout(sendVoiceMessage(id as string, voice, metadata), 60_000, t('Sending the voice message is taking too long — please try again.'));
+            await voiceSendWithin(60_000, t('Sending the voice message is taking too long — please try again.'),
+                (signal) => sendVoiceMessage(id as string, voice, metadata, { messageId: lineId, signal }));
             setReplyToMessage(null);
             setLockNotice(null);
             hapticSuccess();
@@ -883,7 +892,8 @@ function ChatScreen({ id }: { id: string }) {
         } catch (err: any) {
             hapticWarning();
             const refused = refusedSendNotice(err, peerPubkey ? peerName : null);
-            if (refused) { setLockNotice(refused); return; }
+            // Said above the box; not sent, so the recorder keeps it and says nothing more.
+            if (refused) { setLockNotice(refused); throw new VoiceNotSentError(refused); }
             throw new Error(err?.message ? chatLineWords(err.message) : t('Could not send the voice message.'));
         } finally {
             sendingRef.current = false;
@@ -1710,7 +1720,7 @@ function ChatScreen({ id }: { id: string }) {
                         ))}
                     </View>
                 ) : (
-                    <VoicePlaybackProvider voices={messages.filter((m: any) => m?.type === 'voice').map((m: any) => ({ id: String(m.id), mine: !!identity?.publicKey && m.senderId === identity.publicKey }))}>
+                    <VoicePlaybackProvider owner={voiceOwner} voices={messages.filter((m: any) => m?.type === 'voice').map((m: any) => ({ id: String(m.id), mine: !!identity?.publicKey && m.senderId === identity.publicKey }))}>
                     <ChatMessageList
                         listRef={flatListRef}
                         items={listItems}
@@ -1861,6 +1871,7 @@ function ChatScreen({ id }: { id: string }) {
                         accessibilityLabel={t('Message', undefined, 'message box')}
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}
                         onVoice={requestMode === 'none' && !requestLineId && !editingMessage ? sendVoice : undefined}
+                        voiceOwner={voiceOwner}
                         leading={
                             <Pressable accessibilityRole="button" accessibilityLabel={t('Attach image')} style={chat.attachBtn} onPress={pickAndSendImage}>
                                 <MaterialCommunityIcons name="plus-circle-outline" size={26} color={colors.text.muted} />

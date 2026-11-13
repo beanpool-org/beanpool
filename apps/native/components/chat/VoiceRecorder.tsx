@@ -15,7 +15,13 @@
  * the composer's own tree (and its uncontrolled box) is the same before and after the microphone arrives.
  *
  * The audio mode is utils/voice-audio.ts's: a recording pauses the chat's player and holds it paused until the recording is
- * sent, binned or left. A send that didn't go keeps the recording, back for play, bin or Send.
+ * sent, binned or left. Its holds are `owner`'s, the chat screen's own (the same one its player has), so a recording waiting
+ * here never holds a chat opened on top, and that chat's send or bin never lets go of this one.
+ *
+ * A send that didn't go keeps the recording, back for play, bin or Send: one that threw (the recorder says "Voice message not
+ * sent" and why), and one the screen refused and already said why above the box (VoiceNotSentError: nothing more is said).
+ * Each recording has ONE line id, made at its first send and kept with it, so a Send after a timeout is the node's duplicate
+ * (it answers with the line it stored), never the voice message twice (PR #3112 review, round 2).
  */
 import React, { memo, useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Alert, AppState, Linking, Pressable, Text, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
@@ -28,7 +34,7 @@ import { t, word, VOICE_MAX_MS, type VoiceInput } from '@beanpool/core';
 import { useTheme } from '../../app/ThemeContext';
 import {
     voiceBarsFromLevels, voiceClock, voiceRecorderStep, VOICE_IDLE, VOICE_LOCK_DY, VOICE_RECORDING_OPTIONS, VOICE_TAP_MODE_FONT_SCALE,
-    type VoicePermission, type VoiceRecorderEffect, type VoiceRecorderEvent, type VoiceRecorderState,
+    isVoiceNotSent, type VoicePermission, type VoiceRecorderEffect, type VoiceRecorderEvent, type VoiceRecorderState,
 } from '../../utils/voice-recorder';
 import { holdAudioForRecording, holdAudioForReview, releaseAudio } from '../../utils/voice-audio';
 
@@ -45,6 +51,11 @@ export const VOICE_RECORDER_WORDS = {
 async function deleteRecording(uri: string): Promise<void> {
     const FileSystem = await import('expo-file-system/legacy');
     await FileSystem.deleteAsync(uri, { idempotent: true });
+}
+/** A recording's line id: a UUID v4, lower case, as the node keeps it. Loaded when first sent, so a chat test needs no crypto. */
+async function newLineId(): Promise<string> {
+    const Crypto = await import('expo-crypto');
+    return Crypto.randomUUID().toLowerCase();
 }
 async function readRecording(uri: string): Promise<Uint8Array> {
     const [FileSystem, { decodeBase64 }] = await Promise.all([import('expo-file-system/legacy'), import('../../utils/crypto')]);
@@ -66,8 +77,16 @@ export interface VoiceRecorderParts {
     hint: string | null;
 }
 
+/**
+ * Send one recording as the line `lineId`: the same id on every try of the same recording. Resolve when it went; throw when it
+ * didn't (VoiceNotSentError when the screen has already said why).
+ */
+export type VoiceSend = (voice: VoiceInput, lineId: string) => Promise<void>;
+
 interface HostProps {
-    onSend: (voice: VoiceInput) => Promise<void>;
+    onSend: VoiceSend;
+    /** The chat screen's owner of its audio holds (utils/voice-audio.ts newVoiceAudioOwner), the one its player has. */
+    owner: string;
     disabled: boolean;
     /** Where the parts go, after every render of the recorder, and null when it unmounts. A state setter: it never changes. */
     onParts: (parts: VoiceRecorderParts | null) => void;
@@ -77,14 +96,14 @@ interface HostProps {
  * The recorder as a leaf of ChatComposer's tree: it draws nothing itself and hands its parts up. Memoised on props that don't
  * change (a stable onSend and onParts, a boolean), so the composer's render after a hand-up doesn't render it again.
  */
-export const VoiceRecorderHost = memo(function VoiceRecorderHost({ onSend, disabled, onParts }: HostProps) {
-    const parts = useVoiceRecorder({ onSend, disabled });
+export const VoiceRecorderHost = memo(function VoiceRecorderHost({ onSend, owner, disabled, onParts }: HostProps) {
+    const parts = useVoiceRecorder({ onSend, owner, disabled });
     useLayoutEffect(() => { onParts(parts); });
     useLayoutEffect(() => () => onParts(null), [onParts]);
     return null;
 });
 
-export function useVoiceRecorder({ onSend, disabled }: { onSend: (voice: VoiceInput) => Promise<void>; disabled?: boolean }): VoiceRecorderParts {
+export function useVoiceRecorder({ onSend, owner, disabled }: { onSend: VoiceSend; owner: string; disabled?: boolean }): VoiceRecorderParts {
     const { colors } = useTheme();
     const { fontScale } = useWindowDimensions();
     const recorder = useAudioRecorder(VOICE_RECORDING_OPTIONS as unknown as RecordingOptions);
@@ -95,7 +114,8 @@ export function useVoiceRecorder({ onSend, disabled }: { onSend: (voice: VoiceIn
     const [screenReader, setScreenReader] = useState(false);
     const permission = useRef<VoicePermission>('ask');
     const levels = useRef<number[]>([]);
-    const kept = useRef<{ uri: string; ms: number } | null>(null);
+    /** The recording waiting for play, bin or Send, and its line id once a send has been tried. */
+    const kept = useRef<{ uri: string; ms: number; lineId?: string } | null>(null);
     const work = useRef<Promise<void>>(Promise.resolve());
     /** A voice message on its way: nothing new records until it went or came back. */
     const [sending, setSending] = useState(false);
@@ -154,34 +174,39 @@ export function useVoiceRecorder({ onSend, disabled }: { onSend: (voice: VoiceIn
             // Let go of the audio session only once the recorder has stopped: the playback mode cuts a live microphone on iOS.
             if (holdsAudio.current) {
                 holdsAudio.current = false;
-                stopped.then(() => releaseAudio()).catch(() => {});
+                stopped.then(() => releaseAudio(owner)).catch(() => {});
             }
         };
-    }, [recorder, readPermission]);
+    }, [recorder, readPermission, owner]);
 
     const stopRecorder = useCallback(async (): Promise<string | null> => {
         if (recorder.isRecording) await recorder.stop();
         return recorder.uri ?? null;
     }, [recorder]);
 
-    const sendFile = useCallback(async (uri: string | null, ms: number) => {
+    const sendFile = useCallback(async (uri: string | null, ms: number, lineId: string | undefined) => {
         if (!uri) return;
         sendingRef.current = true;
         setSending(true);
         try {
+            // One id per recording, made at its first send: every later try of it is the same line to the node.
+            lineId ??= await newLineId();
             const sound = await readRecording(uri);
-            await onSend({ durationMs: Math.min(VOICE_MAX_MS, Math.max(1, Math.round(ms))), bars: voiceBarsFromLevels(levels.current), sound });
+            await onSend({ durationMs: Math.min(VOICE_MAX_MS, Math.max(1, Math.round(ms))), bars: voiceBarsFromLevels(levels.current), sound }, lineId);
         } catch (e) {
             // Not sent, whatever the reason (the node refused it, the 60 s timeout, offline, the screen's "Wait for the last
-            // message to go."): the recording stays, back for play, bin or Send, so Send tries again. Only a send that went,
-            // the bin or leaving the chat deletes it. The chat already left: the file goes, and the session is never taken
-            // again by a recorder that can no longer let it go.
+            // message to go.", a refusal the screen shows above the box): the recording stays, with its line id, back for
+            // play, bin or Send, so Send tries the same line again. Only a send that went, the bin or leaving the chat deletes
+            // it. The chat already left: the file goes, and the session is never taken again by a recorder that can no longer
+            // let it go.
             if (!mounted.current) { deleteRecording(uri).catch(() => {}); return; }
-            kept.current = { uri, ms };
+            kept.current = { uri, ms, lineId };
             try { preview.replace({ uri }); } catch { /* the preview's play then does nothing; Send and the bin still work */ }
             holdsAudio.current = true;
-            await holdAudioForReview().catch(() => {});
+            await holdAudioForReview(owner).catch(() => {});
             dispatch({ type: 'unsent', ms });
+            // The screen already says why above the box: no second word for it.
+            if (isVoiceNotSent(e)) return;
             const why = e instanceof Error && e.message ? e.message : undefined;
             Alert.alert(t(VOICE_RECORDER_WORDS.notSent), why);
             return;
@@ -190,7 +215,7 @@ export function useVoiceRecorder({ onSend, disabled }: { onSend: (voice: VoiceIn
             setSending(false);
         }
         deleteRecording(uri).catch(() => {});
-    }, [onSend, preview]);
+    }, [onSend, preview, owner]);
 
     // Carry out each step's effect, one after another, so a quick tap can't stop a recorder that hasn't started yet.
     useEffect(() => {
@@ -216,7 +241,7 @@ export function useVoiceRecorder({ onSend, disabled }: { onSend: (voice: VoiceIn
                     try {
                         // The chat's player paused first: nothing plays into the new message.
                         holdsAudio.current = true;
-                        await holdAudioForRecording();
+                        await holdAudioForRecording(owner);
                         await recorder.prepareToRecordAsync();
                         recorder.record();
                     } catch {
@@ -227,16 +252,17 @@ export function useVoiceRecorder({ onSend, disabled }: { onSend: (voice: VoiceIn
                 case 'keep':
                     kept.current = { uri: (await stopRecorder().catch(() => null)) ?? '', ms };
                     // Stopped: the playback mode is safe now, for the preview; the chat's player stays paused.
-                    await holdAudioForReview().catch(() => {});
+                    await holdAudioForReview(owner).catch(() => {});
                     if (kept.current.uri) preview.replace({ uri: kept.current.uri });
                     return;
                 case 'send': {
+                    const lineId = kept.current?.lineId;
                     const uri = kept.current?.uri || (await stopRecorder().catch(() => null));
                     kept.current = null;
                     preview.pause();
                     holdsAudio.current = false;
-                    await releaseAudio().catch(() => {});
-                    await sendFile(uri, ms);
+                    await releaseAudio(owner).catch(() => {});
+                    await sendFile(uri, ms, lineId);
                     return;
                 }
                 case 'discard': {
@@ -244,7 +270,7 @@ export function useVoiceRecorder({ onSend, disabled }: { onSend: (voice: VoiceIn
                     kept.current = null;
                     preview.pause();
                     holdsAudio.current = false;
-                    await releaseAudio().catch(() => {});
+                    await releaseAudio(owner).catch(() => {});
                     if (uri) await deleteRecording(uri).catch(() => {});
                     return;
                 }

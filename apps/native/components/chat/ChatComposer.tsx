@@ -20,8 +20,9 @@ import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-nativ
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../app/ThemeContext';
 import { CHAT_INPUT_MAX_HEIGHT, CHAT_INPUT_MIN_HEIGHT, CHAT_INPUT_V_PADDING, type ChatStyles } from './styles';
-import { t, type VoiceInput } from '@beanpool/core';
-import { VoiceRecorderHost, type VoiceRecorderParts } from './VoiceRecorder';
+import { t } from '@beanpool/core';
+import { VoiceRecorderHost, type VoiceRecorderParts, type VoiceSend } from './VoiceRecorder';
+import { newVoiceAudioOwner } from '../../utils/voice-audio';
 
 export interface ChatComposerHandle {
     /** Put text in the box and in both mirrors — the way an Edit fills it. */
@@ -64,13 +65,19 @@ interface Props {
     /**
      * Voice messages (DESIGN-cross-chat-voice-fable.md §5.3, slice V3): with the box empty and no photo waiting, Send becomes a
      * microphone; while a recording runs or waits, it takes the box's place. Absent (an event's or enterprise's chat, a
-     * request), no microphone. Throw and the recorder says the voice message wasn't sent.
+     * request), no microphone. Each recording comes with its one line id, the same on every try of it. Throw and the recorder
+     * keeps the recording and says the voice message wasn't sent (VoiceNotSentError: the screen already said why).
      */
-    onVoice?: (voice: VoiceInput) => Promise<void>;
+    onVoice?: VoiceSend;
+    /**
+     * The chat screen's owner of its audio holds (utils/voice-audio.ts newVoiceAudioOwner), the one its VoicePlaybackProvider
+     * has, so a recording waiting here holds that chat's player and no other. Absent: the composer's own.
+     */
+    voiceOwner?: string;
 }
 
 export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer(
-    { styles, onSend, placeholder, accessibilityLabel, leading, onAttach, attachment, notice, busy, disabled, maxLength, canSend: canSendNow, bottomPadding, onVoice }, ref,
+    { styles, onSend, placeholder, accessibilityLabel, leading, onAttach, attachment, notice, busy, disabled, maxLength, canSend: canSendNow, bottomPadding, onVoice, voiceOwner }, ref,
 ) {
     const { colors } = useTheme();
     const inputRef = useRef<TextInput>(null);
@@ -166,9 +173,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
     // last onVoice given. The recorder is a leaf (VoiceRecorderHost) that hands its parts up: the tree below is the same
     // element from the first render, so the box, which is uncontrolled, is never remounted and never drops its words when the
     // microphone arrives (in a DM that is when the conversation row or the node's answer comes in; PR #3112 review).
-    const lastOnVoice = useRef<((voice: VoiceInput) => Promise<void>) | null>(null);
+    const lastOnVoice = useRef<VoiceSend | null>(null);
     if (onVoice) lastOnVoice.current = onVoice;
-    const sendVoice = useCallback((voice: VoiceInput) => lastOnVoice.current!(voice), []);
+    const sendVoice = useCallback<VoiceSend>((voice, lineId) => lastOnVoice.current!(voice, lineId), []);
+    const [ownVoiceOwner] = useState(() => newVoiceAudioOwner('composer'));
     const [voice, setVoice] = useState<VoiceRecorderParts | null>(null);
 
     return (
@@ -221,7 +229,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
                     </Pressable>
                 )}
             </View>
-            {lastOnVoice.current ? <VoiceRecorderHost onSend={sendVoice} disabled={!!disabled || !onVoice} onParts={setVoice} /> : null}
+            {lastOnVoice.current ? <VoiceRecorderHost onSend={sendVoice} owner={voiceOwner ?? ownVoiceOwner} disabled={!!disabled || !onVoice} onParts={setVoice} /> : null}
         </View>
     );
 });

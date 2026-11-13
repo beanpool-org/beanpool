@@ -6,7 +6,9 @@
  * goes to the background. Nothing about playing is sent anywhere: no "played" tick.
  *
  * Nothing plays while the composer records or holds a recording for review: utils/voice-audio.ts owns the audio mode, pauses
- * this player when a recording starts, and refuses a start, a resume or the next message until the recorder lets go.
+ * this player when a recording starts, and refuses a start, a resume or the next message until the recorder lets go. `owner`
+ * is the chat screen's (newVoiceAudioOwner), the same one its composer's recorder is given: a recording waiting for review
+ * holds only this chat's player, never a chat opened on top of it.
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
@@ -44,7 +46,7 @@ export function useVoicePlayback(): VoicePlaybackApi | null {
     return useContext(VoicePlaybackContext);
 }
 
-export function VoicePlaybackProvider({ voices, children }: { voices: readonly VoiceInChat[]; children: React.ReactNode }) {
+export function VoicePlaybackProvider({ owner, voices, children }: { owner: string; voices: readonly VoiceInChat[]; children: React.ReactNode }) {
     const player = useAudioPlayer(null, { updateInterval: 100 });
     const status = useAudioPlayerStatus(player);
     const [currentId, setCurrentId] = useState<string | null>(null);
@@ -73,27 +75,27 @@ export function VoicePlaybackProvider({ voices, children }: { voices: readonly V
 
     const start = useCallback(async (id: string, uri: string, at = 0) => {
         // Out of the speaker, even with the phone on silent: never while the composer records or holds a recording.
-        if (!(await audioForPlaying())) return;
+        if (!(await audioForPlaying(owner))) return;
         player.replace({ uri });
         player.setPlaybackRate(speed, 'high');
         if (at > 0) await player.seekTo(at).catch(() => {});
-        if (voiceAudioHold()) return; // a recording began while it was being moved
+        if (voiceAudioHold(owner)) return; // a recording began while it was being moved
         player.play();
         setCurrentId(id);
         notePlayed(id);
-    }, [player, speed, notePlayed]);
+    }, [owner, player, speed, notePlayed]);
 
     const toggle = useCallback((id: string, uri: string) => {
         uris.current.set(id, uri);
         if (id !== currentId) { start(id, uri).catch(() => {}); return; }
         if (status.playing) { player.pause(); return; }
         const fromStart = status.duration > 0 && status.currentTime >= status.duration - 0.05;
-        audioForPlaying().then((ok) => {
+        audioForPlaying(owner).then((ok) => {
             if (!ok) return;
             if (fromStart) player.seekTo(0).catch(() => {});
             player.play();
         }).catch(() => {});
-    }, [currentId, status.playing, status.duration, status.currentTime, player, start]);
+    }, [owner, currentId, status.playing, status.duration, status.currentTime, player, start]);
 
     const seek = useCallback((id: string, uri: string, share: number) => {
         uris.current.set(id, uri);
@@ -118,8 +120,8 @@ export function VoicePlaybackProvider({ voices, children }: { voices: readonly V
         if (next && uri) start(next, uri).catch(() => {});
     }, [status.didJustFinish, currentId, start]);
 
-    // The composer starts a recording: the sound stops, so it never goes into the new message.
-    useEffect(() => onAudioHeld(() => player.pause()), [player]);
+    // A recording starts (any chat's), or this chat's waits for review: the sound stops, so it never goes into the new message.
+    useEffect(() => onAudioHeld(owner, () => player.pause()), [owner, player]);
 
     // The app to the background: the sound stops (no background playback, app.json's expo-audio plugin).
     useEffect(() => {

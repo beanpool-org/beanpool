@@ -9,7 +9,9 @@
  *      already is a link (hers, written as it was) still saves a bio with it, and keeps it (no conversion code);
  *   4. POST /api/join (the open door, words and sign-in): 400 `callsign_link` before any work or sign-in is read, and
  *      POST /api/join/knock (asking to join: a yes joins under that name) the same, no request kept;
- *   5. POST /api/local/update-identity: the node's own name as a link is 400 `callsign_link`, nothing stored.
+ *   5. POST /api/local/update-identity: the node's own name as a link is 400 `callsign_link`, nothing stored;
+ *   6. a 150,000-character and a 2 MB name on /api/join, /api/join/knock, /api/profile/update and
+ *      /api/community/register are each answered well under 1 s, and a knock's link padded past the read is refused.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-callsign-not-a-link.ts
  */
@@ -18,7 +20,7 @@ delete process.env.CF_RECORD_NAME; // self-signed / LAN mode
 delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
-import { NAME_BOX_WORDS, solveDoorWorkSync } from '@beanpool/core';
+import { NAME_BOX_READ_CHARS, NAME_BOX_WORDS, solveDoorWorkSync } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, generateInvite } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
@@ -168,8 +170,74 @@ async function main(): Promise<void> {
     const nodeNamed = await call('POST', null, '/api/local/update-identity', { callsign: 'Mullum' }, ownerSessionHeaders(founder.pk));
     assert(nodeNamed.status === 200 && getLocalConfig().callsign === 'Mullum', `a name is stored (got ${nodeNamed.status})`);
 
+    await hugeNames(founder);
+
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exitCode = 1;
+}
+
+/**
+ * 6. A huge name is answered at once, on all four routes that read a name before cutting it (review of #3122, core
+ * name-box.ts:35: the scheme pattern had no bound, so its time grew with the square of the name's length, and one
+ * POST /api/join with a 150,000-character name, from any new key, held every request to the node for 11.9 s). Fixed,
+ * each answer takes milliseconds; unfixed, the first takes over 10 s and a 2 MB one about half an hour. So 1 s is far
+ * from both, and the first slow answer ends the section: the rest would only stall the run.
+ */
+async function hugeNames(founder: Id): Promise<void> {
+    console.log('\n── 6. a huge name is answered at once ──');
+    const SLOW_MS = 1000;
+    const N150K = 150_000;
+    const N2MB = 2 * 1024 * 1024 - 1024; // fills the 2 MB body cap (https-server.ts MAX_JSON_BODY_BYTES), with its JSON around it
+    const member = keypair();
+    const joined = await call('POST', member, '/api/invite/redeem', { code: generateInvite(founder.pk)!.code, publicKey: member.pk, callsign: 'Long Names' });
+    assert(joined.status === 200, `a member to rename joins (got ${joined.status})`);
+    const knocks = (pk: string) => (db.prepare('SELECT COUNT(*) AS n FROM join_requests WHERE pubkey = ?').get(pk) as { n: number }).n;
+
+    type Case = { label: string; send: () => Promise<Res>; ok: (r: Res) => boolean };
+    const cases = (n: number, size: string, first: string): Case[] => {
+        const walker = keypair(), knocker = keypair();
+        return [{
+            // No address in it, so every start is tried: the slowest name there is. The door refuses the missing work after.
+            label: `POST /api/join (the 12-words door), a ${size} name, from a new key`,
+            send: async () => { process.env.NODE_PROFILE = 'global'; try { return await call('POST', walker, '/api/join', { door: 'words', callsign: `${first} ${'a'.repeat(n)}`, work: {} }); } finally { delete process.env.NODE_PROFILE; } },
+            ok: (r) => r.status === 400 && r.body?.code !== 'callsign_link' && nameOf(walker.pk) === undefined,
+        }, {
+            // A knock body is capped at 192 KiB, so the 2 MB one is refused (413) before it is read.
+            label: `POST /api/join/knock, a ${size} name`,
+            send: () => call('POST', knocker, '/api/join/knock', { callsign: `${first} ${'a'.repeat(n)}`, message: 'Hello, I live nearby.' }),
+            ok: (r) => (r.status === 400 || r.status === 413) && r.body?.code !== 'callsign_link' && knocks(knocker.pk) === 0,
+        }, {
+            // A name: kept as its first 32 characters.
+            label: `POST /api/profile/update, a ${size} name`,
+            send: () => call('POST', member, '/api/profile/update', { callsign: `${first} ${'a'.repeat(n)}` }),
+            ok: (r) => r.status === 200 && nameOf(member.pk) === `${first} ${'a'.repeat(32 - first.length - 1)}`,
+        }, {
+            // Its first 20 characters are an address ("x.com"), so the route reads the whole to say which; the whole,
+            // "x.comeee…", is none, so every start after it is tried.
+            label: `POST /api/community/register, a ${size} name whose first 20 characters are an address`,
+            send: () => call('POST', member, '/api/community/register', { publicKey: member.pk, callsign: `Rowan at Byron x.com${'e'.repeat(n)}` }),
+            ok: (r) => refusedAs(r, NAME_BOX_WORDS.webLink) && nameOf(member.pk)?.startsWith(first) === true,
+        }];
+    };
+    for (const c of [...cases(N150K, '150,000-character', 'Ann'), ...cases(N2MB, '2 MB', 'Bea')]) {
+        const t0 = performance.now();
+        const r = await c.send();
+        const ms = performance.now() - t0;
+        assert(ms < SLOW_MS && c.ok(r), `${c.label}: answered in ${ms.toFixed(0)} ms, under ${SLOW_MS} ms (got ${r.status} ${JSON.stringify(r.body)?.slice(0, 160)})`);
+        if (ms >= SLOW_MS) { console.error('  a name held the node: the rest are not sent'); return; }
+    }
+
+    // What asking to join keeps of a name drops control characters and runs of spaces from inside it, so a link padded
+    // with them past the part the name box reads (NAME_BOX_READ_CHARS) comes out of that cleaning whole: refused too.
+    for (const [label, padded] of [
+        ['control characters', `A${'\u0001'.repeat(NAME_BOX_READ_CHARS + 500)}https://x.co`],
+        ['spaces', `Ann${' '.repeat(NAME_BOX_READ_CHARS + 500)}www.x.org`],
+    ] as const) {
+        const knocker = keypair();
+        const r = await call('POST', knocker, '/api/join/knock', { callsign: padded, message: 'Hello, I live nearby.' });
+        assert(refusedAs(r, NAME_BOX_WORDS.webLink) && knocks(knocker.pk) === 0,
+            `a knock under a link padded past the read with ${label}: 400 callsign_link, no request kept (got ${r.status} ${JSON.stringify(r.body)})`);
+    }
 }
 
 main().then(() => process.exit(process.exitCode ?? 0)).catch((e) => { console.error(e); process.exit(1); });

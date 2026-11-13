@@ -30,20 +30,45 @@ export type NotAName = keyof typeof NAME_BOX_WORDS;
 /** Endings a name never has after a dot, so a host on one reads as an address. Short on purpose: no `.me` or `.de`. */
 const HOST_ENDINGS = 'com|org|net|io|app|dev|info|biz|xyz|site|online|link|au|nz|uk';
 
-/** What makes text an address rather than a name (see the header). Read case-insensitively. */
+/**
+ * How much of a name box's text {@link notANameIn} reads, after its leading spaces. That covers the longest name a node
+ * keeps (32 characters), with room to spare for a whole Share message pasted into the box, in any language (its link,
+ * code and community address, so a pasted invite is still found and moved). A node reads a name from a request body of
+ * up to 2 MB, from anyone who may join, so no pattern ever reads more than this (review of #3122: a 150,000-character
+ * name held one node's every request for 11.9 s). A node keeps at most 32 characters of a name, from its first one or
+ * from after its leading spaces, so what it keeps lies within what was read. Asking to join also drops control
+ * characters and runs of spaces from inside a name, so it reads the name it keeps again (routes/knocks.ts).
+ */
+export const NAME_BOX_READ_CHARS = 2000;
+
+/**
+ * What makes text an address rather than a name (see the header). Read case-insensitively. Every part reads a bounded
+ * number of characters from where it starts, so the time grows with the text's length, never its square. A scheme is
+ * read for at most 32 characters, where an unbounded one read each run of letters to its end from every letter in it.
+ * A longer scheme is still found, by its last 32 characters, as every start is tried.
+ */
 const WEB_ADDRESS = new RegExp([
-    String.raw`[a-z][a-z0-9+.-]*:\/\/`,
+    String.raw`[a-z][a-z0-9+.-]{0,31}:\/\/`,
     String.raw`(?:^|[^a-z0-9])www\.`,
     String.raw`[a-z0-9-]\.[a-z]{2,}(?::\d{1,5})?\/`,
     String.raw`[a-z0-9-]\.(?:${HOST_ENDINGS})(?![a-z0-9])`,
     String.raw`(?:^|[^0-9.])\d{1,3}(?:\.\d{1,3}){3}(?![0-9])`,
 ].join('|'), 'i');
 
-/** Whether `raw` holds an invite or a web address instead of a name, and which; null for a name (or nothing typed). */
+/** Whether `text` has a web address in it, read whole: in time that grows with its length (a name box cuts it first). */
+export function hasWebAddress(text: string): boolean {
+    return WEB_ADDRESS.test(text);
+}
+
+/**
+ * Whether `raw` holds an invite or a web address instead of a name, and which; null for a name (or nothing typed). Reads
+ * its first {@link NAME_BOX_READ_CHARS} characters after any leading spaces, so a huge paste or request costs no more
+ * than that.
+ */
 export function notANameIn(raw: string | null | undefined): NotAName | null {
-    const text = String(raw ?? '');
+    const text = String(raw ?? '').trimStart().slice(0, NAME_BOX_READ_CHARS);
     if (!text.trim()) return null;
-    const address = WEB_ADDRESS.test(text);
+    const address = hasWebAddress(text);
     if (inviteCodeIn(text) !== null) return address ? 'inviteLink' : 'inviteCode';
     return address ? 'webLink' : null;
 }

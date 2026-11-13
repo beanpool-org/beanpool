@@ -286,6 +286,11 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         if (notAName) return answer(ctx, 400, notANameWords(notAName), CALLSIGN_LINK_CODE);
         const callsign = parseCallsign(body.callsign);
         if (!callsign.ok) return answer(ctx, 400, callsign.error, 'bad_request');
+        // And the name as it is kept: notANameIn reads only the first part of a long text (NAME_BOX_READ_CHARS), and this
+        // cleaning drops control characters and runs of spaces from inside a name, so a link padded with them past that
+        // part would come out of it whole ("A", 2,500 of them, "https://x.co" is kept as "Ahttps://x.co").
+        const keptNotAName = notANameIn(callsign.value);
+        if (keptNotAName) return answer(ctx, 400, notANameWords(keptNotAName), CALLSIGN_LINK_CODE);
         const message = parseMessage(body.message);
         if (!message.ok) return answer(ctx, 400, message.error, 'bad_request');
         const avatar = parseAvatar(body.avatar);

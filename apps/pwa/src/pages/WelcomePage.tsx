@@ -31,6 +31,7 @@ import {
     recordOnboardingEvent, initPairingApi, pollPairingApi, confirmPairingApi, cancelPairingApi, getNodeApiUrl,
     getCommunityCard, getCommunityInfo, signedFetchWithKey, type CommunityInfo,
 } from '../lib/api';
+import { keepWordsOnAccount } from '../lib/words-kept';
 import { CommunityCardPanel } from '../components/CommunityCardPanel';
 import { takeWelcomeDoor } from '../lib/community-card';
 import { inviteHeading, ownCommunityAddress } from '../lib/join-names';
@@ -2322,7 +2323,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                 }).map((line) => <p key={line} style={{ margin: '0 0 0.4rem' }}><BoldWords text={line} /></p>)}
                             </div>
 
-                            <RecoveryKitButton words={pendingWords} />
+                            <RecoveryKitButton words={pendingWords} onKept={() => { if (pendingIdentity) keepWordsOnAccount(pendingIdentity.publicKey, 'Welcome'); }} />
 
                             {/*
                               Says out loud that this is not the only chance. Removing the
@@ -2376,6 +2377,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                         // stop being read. Only on confirm: skipping leaves it showing.
                                         if (seedConfirmed && pendingIdentity) {
                                             localStorage.setItem(seedViewedKey(pendingIdentity.publicKey), 'true');
+                                            // And on the account (the account exists by this step): the phone and the web
+                                            // agree that the words are kept, and Home reminds them of nothing (§2.5).
+                                            keepWordsOnAccount(pendingIdentity.publicKey, 'Welcome');
                                         }
                                         setShowOnboardingGuide(true);
                                         setError(null);

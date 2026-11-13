@@ -371,11 +371,12 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
                 return !!answer.cards.steps && stepsSaySomething(answer, opts.interests ?? me.interests, now, opts.wordsKeptHere);
             case 'tips':
                 return !!opts.tipsUp;
-            // Welcome (DESIGN-home-default-fable.md §2.3), a member's only: until the tour is taken or Not now, and seven
-            // days after joining at most (core welcomeDrawn), on a saved list or not. Done or Not now also takes it off a
-            // saved list (endTourLayout).
+            // Welcome (DESIGN-home-default-fable.md §2.3), a member's only, seven days after joining at most (core
+            // welcomeDrawn). The tour's end takes it off: a Home never saved by shownLayout, a saved one by endTourLayout,
+            // and this browser's own Done or Not now at once (`tourOver`). The account's record is not read again here, so
+            // "Take the tour again" (which writes `open` and puts it back) draws it before the answer says `open`.
             case 'start':
-                return me.standing === 'member' && welcomeDrawn(tourOverFor(answer, opts), me.joinedAt, now);
+                return me.standing === 'member' && welcomeDrawn(!!opts.tourOver, me.joinedAt, now);
             // Your way back in: for a member whose 12 words are the only way back (wayBackOf, §2.5); the card itself then
             // goes by its schedule (components/OneWayBack.tsx).
             case 'safety':

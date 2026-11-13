@@ -322,11 +322,41 @@ describe('The first week on the web (L3, §3.2)', () => {
         expect(shown(oldAllDone, { now: NOW })).not.toContain('steps');
     });
 
+    // Inside First steps' 30 days (DESIGN-home-default-fable.md §2.4; the node sends no card after them, D1).
     it('locally, by the same lines: a chip tapped ticks "Pick a few things you like" at once', () => {
-        const a = answer({ steps: { ...steps, joinedAt: august, firstOffer: true, photo: true, interests: false, invited: true }, community },
-            { me: me({ joinedAt: august, firstOffer: true }) });
+        const a = answer({ steps: { ...steps, joinedAt: daysAgo(20), firstOffer: true, photo: true, interests: false, invited: true }, community },
+            { me: me({ joinedAt: daysAgo(20), firstOffer: true }) });
         expect(shown(a, { now: NOW, interests: [] })).toContain('steps');
         expect(shown(a, { now: NOW, interests: ['food'] })).not.toContain('steps');
+    });
+
+    it('locally: every line done leaves at once, young or not; a line left stays until day 30, then the card goes (§2.4)', () => {
+        const allDone = { ...steps, firstOffer: true, firstNeed: true, photo: true, interests: true, invited: true };
+        const young = answer({ steps: { ...allDone, joinedAt: daysAgo(2) }, community }, { me: me({ joinedAt: daysAgo(2), firstOffer: true }) });
+        expect(shown(young, { now: NOW })).not.toContain('steps');
+        const left = (days: number) => answer({ steps: { ...allDone, photo: false, joinedAt: daysAgo(days) }, community }, { me: me({ joinedAt: daysAgo(days), firstOffer: true }) });
+        expect(shown(left(29), { now: NOW })).toContain('steps');
+        expect(shown(left(30), { now: NOW })).not.toContain('steps');
+    });
+
+    it('"Keep your 12 words safe": last, where the node says the words are the only way back; ticked when kept; none when covered', () => {
+        const base = { ...steps, joinedAt: daysAgo(3) };
+        const keys = (words: boolean | null | undefined, kept = false) =>
+            stepLines(answer({ steps: { ...base, words } as never }), [], kept).map(l => `${l.key}:${l.done}`);
+        expect(keys(false)).toEqual(['firstOffer:false', 'photo:false', 'interests:false', 'words:false']);
+        expect(keys(true).at(-1)).toBe('words:true');
+        // Said on this page before the node's answer says so.
+        expect(keys(false, true).at(-1)).toBe('words:true');
+        expect(keys(null).some(k => k.startsWith('words'))).toBe(false);
+        expect(keys(undefined).some(k => k.startsWith('words'))).toBe(false);
+        // On global's first week too, after its seven.
+        const g = answer({ steps: { ...base, words: false } as never, find }, { profile: 'global', features: GLOBAL_FEATURES });
+        expect(stepLines(g, []).map(l => l.key)).toEqual(['name', 'area', 'photo', 'sawLedger', 'firstPost', 'saidHello', 'watch', 'words']);
+        // The words line alone keeps the card up; kept, it goes.
+        const onlyWords = { ...steps, joinedAt: daysAgo(3), firstOffer: true, firstNeed: true, photo: true, interests: true, invited: true };
+        expect(stepsSaySomething(answer({ steps: { ...onlyWords, words: false } as never }, { me: me({ firstOffer: true }) }), [], NOW)).toBe(true);
+        expect(stepsSaySomething(answer({ steps: { ...onlyWords, words: true } as never }, { me: me({ firstOffer: true }) }), [], NOW)).toBe(false);
+        expect(stepsSaySomething(answer({ steps: { ...onlyWords, words: false } as never }, { me: me({ firstOffer: true }) }), [], NOW, true)).toBe(false);
     });
 });
 
@@ -543,7 +573,8 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
     });
 
     it('First steps stays up for the Need line alone, only for a node that sent the fact', () => {
-        const old = { ...steps, joinedAt: daysAgo(40), firstOffer: true, photo: true, interests: true, invited: true };
+        // Inside First steps' 30 days (§2.4): past them the card goes whatever is left.
+        const old = { ...steps, joinedAt: daysAgo(20), firstOffer: true, photo: true, interests: true, invited: true };
         const may = (s: object) => stepsSaySomething(answer({ steps: { ...old, ...s } }, { me: me({ firstOffer: true, interests: ['food'] }) }), ['food'], NOW);
         expect(may({ firstNeed: false })).toBe(true);
         expect(may({ firstNeed: true })).toBe(false);

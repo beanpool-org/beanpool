@@ -58,7 +58,7 @@ import {
     NOTICES_SEEN_EVENT, beansAmount, beansLines, cardTitle, closesIn, closesWords, communityFacts, communityLine, communityName, dealStatusLine, dealTitleLine,
     askedFacts, dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, homeEventWhere, isHomeCardId,
     joinedLine, monthSummaryLine, nearbyLine, notAnsweringLine, probationSentence, promiseLine, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
-    pinnedFirst, starredFirst, stepLines, tierWords, toggleInterest, usePhoneAppCardDue, wayBackOf, SKY_NO_PLACE_LINE, WELCOME_WORDS,
+    pinnedFirst, starredFirst, stepLines, tierWords, toggleInterest, tourOverFor, usePhoneAppCardDue, wayBackOf, SKY_NO_PLACE_LINE, WELCOME_WORDS,
     CHAT_CARD_WORDS, chatCardFor, chatLineText, chatLinesShown, type ChatOpeners,
     type HomeAnswer, type HomeCardId, type HomeCards, type HomeMarketItem, type HomeNeedItem, type NeedsItem, type StepLine,
     type HomeFind,
@@ -93,7 +93,7 @@ import { isNodeTooOldError } from '../lib/node-version-gate';
 import {
     endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, type TourProgress,
 } from '@beanpool/core';
-import { defaultHomeLayout, firstStepsCount, firstStepsLeft } from '@beanpool/core';
+import { defaultHomeLayout, firstStepsCount, firstStepsLeft, welcomeDrawn } from '@beanpool/core';
 import {
     keepPendingTourRecord, lendTourHome, offerTour, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, tourRecordRefused, useTour,
 } from '../lib/tour-store';
@@ -110,6 +110,7 @@ import { composerDraft, type ComposerDraft } from '../tools/builder';
 import { readPricingGuide } from '../lib/starter-offers';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { OneWayBackCard } from '../components/OneWayBack';
+import { keepWordsOnAccount } from '../lib/words-kept';
 import { UsePhoneAppCard, isUsePhoneAppDismissed } from '../components/UsePhoneAppCard';
 import { ToolHomeCard } from '../tools/home-card';
 import { YourToolsCard } from '../tools/your-tools-card';
@@ -2163,7 +2164,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     function keepWords() {
         if (!publicKey) return;
         setWordsKeptHere(true);
-        void saveHomePreferences(publicKey, { words_kept: true }).catch((err) => console.warn('[Home] could not keep "I still have my 12 words" on the account:', err));
+        keepWordsOnAccount(publicKey, 'Home');
     }
     useEffect(() => { if (!inArrange) setResetUndo(null); }, [inArrange]);
     function applyTourEnd(kind: 'done' | 'skipped') {
@@ -2184,8 +2185,9 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         const answered = answerRef.current;
         tourOverRef.current = false;
         setTourOver(false);
-        // The card returns until the tour ends again: on a Home already set up it is put back on top (the end takes it off).
-        if (answered?.me && drawnRef.current) {
+        // The card returns until the tour ends again: on a Home already set up it is put back on top (the end takes it off),
+        // inside Welcome's seven days only (§2.3): past them it would never be drawn, and the tour starts all the same.
+        if (answered?.me && drawnRef.current && welcomeDrawn(false, answered.me.joinedAt)) {
             const r = addCard(drawnRef.current, 'start', Date.now(), { pinned: currentPins(frameOf(answered)) });
             if (r.ok) changeLayout(() => r.layout);
         }
@@ -3296,7 +3298,13 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         }),
         load: () => loadChatRows(publicKey),
     } : undefined;
-    const picker = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), shownLayout(a, layout, { tourOver }), null, pins, tipsAllSeen ? { tips: t('All tips seen') } : {}) : null;
+    const offered = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), shownLayout(a, layout, { tourOver }), null, pins, tipsAllSeen ? { tips: t('All tips seen') } : {}) : null;
+    // Welcome is offered only while it can be drawn (DESIGN-home-default-fable.md §2.3: until the tour is taken or Not now,
+    // seven days at most): a card added that never shows is a promise the picker doesn't keep (review B2).
+    const welcomeCan = !!a.me && welcomeDrawn(tourOverFor(a, { tourOver }), a.me.joinedAt, now);
+    const picker = offered && !welcomeCan
+        ? { ...offered, groups: offered.groups.map(g => ({ ...g, rows: g.rows.filter(r => r.type !== 'start') })).filter(g => g.rows.length > 0) }
+        : offered;
     // The one-time hint goes under the first card, the row's full width. Side by side that holds
     // only when the first card is a full row itself: with nothing waiting there is no Needs you, and a full-row note after
     // a one-cell card would push the cards beside it to the next row, leaving the first row empty (PR #2411 review). There

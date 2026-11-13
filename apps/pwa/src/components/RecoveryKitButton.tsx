@@ -13,14 +13,20 @@ const target = {
     cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.3,
 } as const;
 
-export function RecoveryKitButton({ words, print }: { words: readonly string[] | null | undefined; print?: (w: Window) => void }) {
+/**
+ * `onKept`: the kit was printed or saved (the print dialog opened): the member has their words somewhere safe, and the page
+ * keeps that on the account as "I still have my 12 words" (DESIGN-home-default-fable.md §2.5; the node's `words_kept`).
+ */
+export function RecoveryKitButton({ words, print, onKept }: { words: readonly string[] | null | undefined; print?: (w: Window) => void; onKept?: () => void }) {
     const [asking, setAsking] = useState(false);
     const [failed, setFailed] = useState(false);
     if (!words || words.length !== 12) return null;
 
     async function onContinue() {
         setAsking(false);
-        setFailed((await printRecoveryKit(words!, print)) === 'failed');
+        const failed = (await printRecoveryKit(words!, print)) === 'failed';
+        setFailed(failed);
+        if (!failed) onKept?.();
     }
 
     return (

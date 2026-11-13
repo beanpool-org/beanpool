@@ -287,6 +287,12 @@ export interface HomeMe {
      * node can see (§2.5). What the 12-words reminder goes by, never how they joined. Absent from a node before D1.
      */
     wayBack?: 'words' | 'covered';
+    /**
+     * They said "I still have my 12 words" (on the card, or Yes after the kit; the account's `words_kept`, one way), on any
+     * device. Sent on every answer of their own, so it outlives First steps' `steps.words`, which goes with that card's
+     * days or its last line (review of #3114, round 2). Only `true` is a say-so. Absent from a node before it.
+     */
+    wordsKept?: boolean;
 }
 
 /**
@@ -727,7 +733,7 @@ export interface PickerGroup { id: HomeCardGroup; name: string; rows: PickerRow[
  * and not listed. `full`: Home holds 24 cards, so every Add goes.
  */
 export function pickerGroups(
-    answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards }, layout: HomeLayout | null, role: HomeRole,
+    answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards; me?: HomeMe | null }, layout: HomeLayout | null, role: HomeRole,
     pinned: readonly HomeCardId[] = [], status: Partial<Record<HomeCardId, WordKey>> = {},
     /** Types not offered here: Welcome once it would not be drawn ({@link welcomeUp}), so nothing added sits unseen. */
     skip: readonly HomeCardId[] = [],
@@ -762,17 +768,21 @@ export const removedLine = (name: string) => t('{card} removed. Add a card bring
 /**
  * Whether a node of this kind can show the card to this reader: core's one rule (home-frame.ts `onNode`, per type: no
  * Beans, deals, enterprise, Decide or invites on the worldwide community; Grow your community only where the reader can
- * invite; Find your community only on the global node; "Your way back in" only where the 12-words door is open or the node
- * sent one), and only for a type this build draws. Home draws only these whatever an answer holds, the picker lists only
- * these, and Arrange's "Nothing to show now" is said of a card that could show, never of one that can't.
+ * invite; Find your community only on the global node; "Your way back in" where the 12-words door is open, where the node
+ * sent one, or for a member whose 12 words are their only way back, `me.wayBack` 'words', an invite-only community's
+ * included), and only for a type this build draws. The answer's `me` goes to core with it (review of #3114, round 2), so
+ * the picker, Arrange, what is asked and what is drawn all read the one rule. Home draws only these whatever an answer
+ * holds, the picker lists only these, and Arrange's "Nothing to show now" is said of a card that could show, never of one
+ * that can't.
  */
 export function cardOnNode(type: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards; me?: HomeMe | null }, role?: HomeRole): boolean {
-    // Your way back in is for every member whose 12 words are their only way back, on every community (DESIGN-home-default-
-    // fable.md §2.5, slice D2): wherever the node says `me.wayBack` (D1 on), it is asked and drawn when its schedule says,
-    // an invite-only community's included. Core's rule (the 12-words door, or the node's card) stays for a node before D1.
-    if (type === 'safety' && (answer.me?.wayBack === 'words' || answer.me?.wayBack === 'covered')) return true;
+    // A member with a sign-in's copy linked here (`covered`) is still asked for it: the phone's card is mounted from the
+    // list (index.tsx), and only Home's word ("covered": words false) marks its record linked and puts it away
+    // (OneWayBackCard, utils/one-way-back.ts `oneWayBackFromNode`), a record started while the words were the only way back
+    // included. Core's catalogue has no such rule: the web reads `me.wayBack` from any answer.
+    if (type === 'safety' && answer.me?.wayBack === 'covered') return true;
     const t = homeCardType(type);
-    return !!t && HOME_DRAWN.has(type) && t.onNode({ profile: answer.profile, features: answer.features, cards: answer.cards as Record<string, unknown> | undefined }, role);
+    return !!t && HOME_DRAWN.has(type) && t.onNode({ profile: answer.profile, features: answer.features, cards: answer.cards as Record<string, unknown> | undefined, me: answer.me }, role);
 }
 
 /** The reader's role on this node as the node said it (GET /api/node-admin/me, utils/node-admin.ts): null for none, undefined not heard. */
@@ -810,7 +820,7 @@ export const canTailor = (answer: Pick<HomeAnswer, 'me'> | null | undefined): bo
  * its directory is, and keeping it keeps a local member's address what their first read's was, so a return is a 304.
  */
 export function cardsToAsk(
-    layout: HomeLayout | null, pinned: readonly HomeCardId[] = [], answer?: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards } | null,
+    layout: HomeLayout | null, pinned: readonly HomeCardId[] = [], answer?: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards; me?: HomeMe | null } | null,
 ): string[] {
     // A Home never saved is the default list (DESIGN-home-default-fable.md §2.2), asked in the one first read. Before the node
     // has answered, the caller passes the global node's profile when the phone's copy says it is that one (index.tsx
@@ -1057,8 +1067,11 @@ export function probationSentence(p: HomeProbation | null | undefined): string |
 export function firstSteps(
     answer: HomeAnswer, ctx: Pick<HomeDrawContext, 'interests' | 'role' | 'knocked' | 'now' | 'notify'>,
 ): { lines: StepLine[]; left: StepLine[]; count: string; note: string | null; show: boolean } {
-    const s = answer.cards.steps;
-    if (!s) return { lines: [], left: [], count: '', note: null, show: false };
+    const sent = answer.cards.steps;
+    if (!sent) return { lines: [], left: [], count: '', note: null, show: false };
+    // "Keep your 12 words safe" is ticked by the account's say-so as the card is ({@link wordsKeptOn}); a sign-in's copy
+    // linked here (`words` null) stays no line.
+    const s = sent.words === false && wordsKeptOn(answer) ? { ...sent, words: true } : sent;
     const global = answer.profile === 'global';
     const lines = global
         ? globalStepLines(s, answer.cards.find, !!ctx.knocked, ctx.notify)
@@ -1189,7 +1202,9 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
  *   joined.
  * - `door`: whether the node takes a sign-in from them, which is `cards.safety` (the 12-words door's rule, the only one
  *   routes/open-join.ts `linkState` accepts): the card offers "Add a sign-in" only then (review of #3110, round 2).
- * - `kept`: First steps' `steps.words` true, the member said they still have their words (on the card, or Yes after the kit), anywhere.
+ * - `kept`: the member said they still have their words (on the card, or Yes after the kit), anywhere ({@link wordsKeptOn}):
+ *   the account's `me.wordsKept`, so it holds once First steps has gone (day 15 on global, day 30 on a local community,
+ *   or every line done: the node then sends no `steps`).
  * - A node from before D1 sends no `wayBack`: `cards.safety` alone, as before.
  */
 export function safetyWord(answer: HomeAnswer, asked: readonly string[]): { words: boolean; joinedAt: number | null; door?: boolean; kept?: boolean } | null {
@@ -1200,7 +1215,15 @@ export function safetyWord(answer: HomeAnswer, asked: readonly string[]): { word
     const way = answer.me.wayBack;
     if (way !== 'words' && way !== 'covered') return { words: door, joinedAt };
     if (way === 'covered') return { words: false, joinedAt };
-    return { words: true, joinedAt, door, kept: answer.cards.steps?.words === true };
+    return { words: true, joinedAt, door, kept: wordsKeptOn(answer) };
+}
+
+/**
+ * Whether the account says the member still has their 12 words: `me.wordsKept`, on every answer of their own (review of
+ * #3114, round 2), or First steps' `steps.words` true (a node from before `wordsKept`). One way: only `true` counts.
+ */
+export function wordsKeptOn(answer: Pick<HomeAnswer, 'me' | 'cards'>): boolean {
+    return answer.me?.wordsKept === true || answer.cards.steps?.words === true;
 }
 
 // ── Needs you: the phone's own lines, and the node's ──────────────────────────────────────────────────────────────

@@ -2496,14 +2496,15 @@ export function openPauseVotes(subjectPubkey?: string): Decision[] {
     return (rows as any[]).map(rowToDecision).filter(d => d.effect === 'keep_suspension' || isPauseVote(d));
 }
 
-export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate' | 'prune' | 'prune-branch' | 'report-suspend' | 'rekey';
+export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate' | 'prune' | 'prune-branch' | 'report-suspend' | 'rekey' | 'freeze';
 
 /**
  * Whether this admin action on this member (suspend, lift, prune, prune-branch: its root), Decision (halt,
  * accelerate) or report (report-suspend: actioning it with suspendUser, whose pause holds the subject's role aside) is one only an
  * owner may make: the conditions on which the engine refuses it to an admin
  * (adminEmergencySuspend, adminLiftSuspension, adminHaltDecision, adminAccelerateDecision, state-engine assertMayPrune
- * for adminPruneUser, adminPruneBranch and member-wizards executeOffboard, member-wizards assertMayRekey for rekey),
+ * for adminPruneUser, adminPruneBranch and member-wizards executeOffboard, member-wizards assertMayRekey for rekey,
+ * state-engine creditFreezeRefusal for freeze: an owner's credit line, frozen or unfrozen),
  * whoever is acting. A re-key of an owner or admin is asked even of themselves: the code it answers binds a key of the
  * caller's choosing to that role. A pause (suspend, report-suspend) is one too while the chain rules keep it for an owner,
  * within 30 days of a vote on removing its member that ended without removing them (repauseNeedsOwner, the window
@@ -2520,6 +2521,8 @@ export function adminActionNeedsOwner(action: OwnerOnlyAdminAction, target: stri
     if (action === 'prune-branch') return inviteBranchOf(target).some(pk => pruneNeedsOwner(pk, actor));
     if (action === 'report-suspend') return reportSuspensionTakesPrivilegedRole(target) || reportPauseNeedsOwner(target);
     if (action === 'rekey') return !!heldPrivilegedRole(target);
+    // Freezing or unfreezing an owner's credit line (state-engine creditFreezeRefusal refuses it to an admin).
+    if (action === 'freeze') return heldPrivilegedRole(target) === 'owner';
     if (action === 'lift') return !!heldRoleFor(openPauseVotes(target).map(k => k.id));
     const decision = getDecision(target);
     if (!decision) return false;

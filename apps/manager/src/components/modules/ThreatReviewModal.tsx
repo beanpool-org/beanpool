@@ -6,6 +6,8 @@ import { ModalBackdrop } from '../common/ModalBackdrop';
 import { reportSubject } from '../../lib/node-client';
 import { t } from '../../lib/fresh-proof';
 import { FLAG_WORDS as W, flagAction, flagHeading, flagMembers, flagOffersFreeze } from '../../lib/flag-words';
+import type { RolesViewer } from './NodeRolesPanel';
+import { beansFigure } from '../../lib/beans';
 
 export interface ThreatItem {
     id?: string;
@@ -23,6 +25,22 @@ export interface ThreatItem {
     /** A report on a Pulse item: about the item's owner, whatever post id it carries. */
     targetPulseItemId?: string;
     pulseItem?: unknown;
+    /** cohort_velocity: each named member's allowance, as the node sends it (server state-engine CohortAllowance). */
+    allowances?: unknown;
+}
+
+interface AllowanceLine { member: string; allowance_c: number; daysAfterJoining: number; parts: Array<{ kind: string; from: string | null; amount_c: number; counted: boolean }> }
+
+/** The allowances a cohort flag carries, by member; anything not in the node's shape is left out. */
+function allowancesByMember(threat: ThreatItem | null | undefined): Map<string, AllowanceLine> {
+    const out = new Map<string, AllowanceLine>();
+    const list = threat?.type === 'cohort_velocity' && Array.isArray(threat.allowances) ? threat.allowances : [];
+    for (const a of list as AllowanceLine[]) {
+        if (a && typeof a.member === 'string' && Number.isInteger(a.allowance_c) && Number.isInteger(a.daysAfterJoining)) {
+            out.set(a.member, { ...a, parts: Array.isArray(a.parts) ? a.parts.filter(p => p && Number.isInteger(p.amount_c)) : [] });
+        }
+    }
+    return out;
 }
 
 export interface MemberItem {
@@ -49,6 +67,21 @@ interface ThreatReviewModalProps {
      */
     onFreezePubkeys?: (pubkeys: string[]) => void | Promise<unknown>;
     onInspectMember?: (member: MemberItem) => void;
+    /**
+     * Who is looking. A key session is told, per member, who the node won't let them freeze (never their own account, and
+     * only an owner an owner: server state-engine creditFreezeRefusal), and Freeze sends only the others. Unknown (a test,
+     * a caller that doesn't say): the node decides alone, as before.
+     */
+    viewer?: RolesViewer;
+}
+
+/** Why the viewer can't freeze this member, or null when they can (or the window doesn't know who is looking). */
+function cantFreezeReason(viewer: RolesViewer | undefined, pubkey: string, member: MemberItem | undefined): 'self' | 'owner' | null {
+    if (viewer?.kind !== 'key') return null;
+    if (pubkey === viewer.memberPubkey) return 'self';
+    const role = member?.nodeRole ?? member?.role;
+    if (role === 'owner' && viewer.role !== 'owner') return 'owner';
+    return null;
 }
 
 export function ThreatReviewModal({
@@ -60,7 +93,8 @@ export function ThreatReviewModal({
     onDismiss,
     onDismissReport,
     onFreezePubkeys,
-    onInspectMember
+    onInspectMember,
+    viewer
 }: ThreatReviewModalProps) {
     const [actionState, setActionState] = useState<string | null>(null);
     const [dismissing, setDismissing] = useState(false);
@@ -128,6 +162,23 @@ export function ThreatReviewModal({
     };
 
     const involvedPubkeys = extractPubkeys();
+    const allowances = allowancesByMember(threat);
+    const nameOf = (pub: string | null) => getMemberDisplayName(membersMap.get(pub || '') || { pubkey: pub || '', publicKey: pub || '' }, profiles);
+    // One line per part of a member's allowance: who gave it and how much; an owner's or admin's grant says it isn't counted.
+    const partLine = (p: AllowanceLine['parts'][number]): string => {
+        const amount = beansFigure(p.amount_c);
+        const name = nameOf(p.from);
+        const line = p.kind === 'earned' ? t(W.partEarned, { amount })
+            : p.kind === 'vouch' ? (p.counted ? t(W.partVouch, { name, amount }) : t(W.partOwnerVouch, { name, amount }))
+            : p.kind === 'gift' ? (p.counted ? t(W.partGift, { name, amount }) : t(W.partOwnerGift, { name, amount }))
+            : p.kind === 'known' ? t(W.partKnown, { amount })
+            : t(W.partGranted, { amount });
+        return p.counted ? line : t(W.notCounted, { part: line });
+    };
+    // Who Freeze acts on: the members named, less those the viewer may not freeze. Named members and none of them left:
+    // no Freeze at all.
+    const freezablePubkeys = involvedPubkeys.filter((pub) => !cantFreezeReason(viewer, pub, membersMap.get(pub)));
+    const offerFreeze = canFreeze && !(involvedPubkeys.length > 0 && freezablePubkeys.length === 0);
 
     // Parse structured metrics from string if available
     const parseMetrics = () => {
@@ -148,11 +199,6 @@ export function ThreatReviewModal({
             if (insularityMatch) metrics.push({ label: 'Cluster Insularity', value: insularityMatch[1], highlight: true });
             if (newMemberMatch) metrics.push({ label: 'New Accounts', value: newMemberMatch[1] });
             if (countMatch) metrics.push({ label: 'Ring Size', value: `${countMatch[1]} Nodes` });
-        } else if (desc.includes('cohort')) {
-            const cohortMatch = desc.match(/(\d+) cohort/);
-            if (cohortMatch) metrics.push({ label: 'Affected Cohorts', value: cohortMatch[1], highlight: true });
-            metrics.push({ label: 'Evaluation Window', value: '14 Days' });
-            metrics.push({ label: 'Floor Depth', value: 'Anomaly' });
         }
 
         return metrics;
@@ -162,7 +208,7 @@ export function ThreatReviewModal({
 
     const handleAction = async (action: string) => {
         // Nothing freezes for a flag that does not show real harm.
-        if (action === 'freeze' && !canFreeze) return;
+        if (action === 'freeze' && !offerFreeze) return;
         // A report lives on the node: dismissing it only here would leave it pending for everyone else.
         if (action === 'dismiss' && isReport && threat?.id && onDismissReport) {
             setDismissing(true);
@@ -180,7 +226,7 @@ export function ThreatReviewModal({
             setFreezing(true);
             setDismissError(null);
             try {
-                await onFreezePubkeys(involvedPubkeys);
+                await onFreezePubkeys(freezablePubkeys);
             } catch (e: unknown) {
                 setDismissError(e instanceof Error ? e.message : t(W.freezeFailed));
                 return;
@@ -283,7 +329,8 @@ export function ThreatReviewModal({
                             involvedPubkeys.map((pub, idx) => {
                                 const matchedMember = membersMap.get(pub) || { pubkey: pub, publicKey: pub };
                                 const displayName = getMemberDisplayName(matchedMember, profiles);
-                                const isItemFrozen = (frozenPubkeys instanceof Set ? frozenPubkeys.has(pub) : (frozenPubkeys || []).includes(pub)) || actionState === 'freeze';
+                                const notYours = cantFreezeReason(viewer, pub, membersMap.get(pub));
+                                const isItemFrozen = (frozenPubkeys instanceof Set ? frozenPubkeys.has(pub) : (frozenPubkeys || []).includes(pub)) || (actionState === 'freeze' && !notYours);
 
                                 return (
                                     <div
@@ -295,11 +342,27 @@ export function ThreatReviewModal({
                                             <div className="w-6 h-6 shrink-0 rounded-full bg-nature-900 border border-nature-700 flex items-center justify-center text-[10px] text-nature-300 font-bold group-hover:scale-105 transition-transform">
                                                 👤
                                             </div>
-                                            <span className="font-bold text-white leading-tight break-words min-w-0 group-hover:text-bp-ink-terra transition-colors">
-                                                {displayName}
-                                            </span>
+                                            <div className="min-w-0">
+                                                <span className="block font-bold text-white leading-tight break-words group-hover:text-bp-ink-terra transition-colors">
+                                                    {displayName}
+                                                </span>
+                                                {allowances.has(pub) && (() => {
+                                                    const a = allowances.get(pub)!;
+                                                    return (
+                                                        <div className="mt-1 space-y-0.5 text-[10px] text-nature-300 leading-snug break-words">
+                                                            <p className="m-0">{t(W.allowanceReached, { amount: beansFigure(a.allowance_c), days: String(a.daysAfterJoining) })}</p>
+                                                            {a.parts.map((p, i) => <p key={i} className="m-0">{partLine(p)}</p>)}
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
                                         </div>
                                         <div className="flex items-center gap-2 shrink-0">
+                                            {notYours && canFreeze && (
+                                                <span className="text-[10px] text-nature-300 text-right">
+                                                    {notYours === 'self' ? t(W.cantFreezeSelf) : t(W.cantFreezeOwner)}
+                                                </span>
+                                            )}
                                             {isItemFrozen && (
                                                 <span className="px-2 py-0.5 rounded font-mono text-[10px] border bg-bp-danger-fill text-bp-danger-on border-bp-danger-fill font-bold">
                                                     {t(W.frozenTag)}
@@ -360,7 +423,7 @@ export function ThreatReviewModal({
                         >
                             {dismissing ? t(W.dismissing) : t(W.dismiss)}
                         </button>
-                        {canFreeze && (
+                        {offerFreeze && (
                             <button
                                 onClick={() => handleAction('freeze')}
                                 disabled={freezing || involvedPubkeys.length === 0}

@@ -3269,13 +3269,6 @@
   "Beans from a member you blocked": "Maharagwe kutoka kwa mwanachama uliyemzuia",
   "GUEST": "MGENI",
   "BEANS": "MAHARAGWE",
-  "No credit line yet": "Bado huna mstari wa mkopo",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Unaweza kufanya biashara sasa hivi na maharagwe uliyonayo. Kamilisha biashara yako ya kwanza na mstari wako wa mkopo utafunguka kiotomatiki — kadiri unavyofanya biashara ya thamani zaidi, ndivyo unavyozidi kukua. (Mthibitishaji wa jumuiya anaweza pia kukupa mstari wa kuanzia.)",
-  "Credit position — tap to learn how it works": "Hali ya mkopo — gusa ili kujifunza jinsi inavyofanya kazi",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️ Matumizi yamesitishwa — salio lako liko chini ya kile ambacho ofa yako {n} inayotumika inafungua (−{limit}). Chapisha Ofa au fanya biashara ili kuliondoa. Bado unaweza kupokea na kuuza.",
-    "other": "⚠️ Matumizi yamesitishwa — salio lako liko chini ya kile ambacho ofa zako {n} zinazotumika zinafungua (−{limit}). Chapisha Ofa au fanya biashara ili kuliondoa. Bado unaweza kupokea na kuuza."
-  },
   "Levels": "Viwango",
   "Wallet": "Mkoba",
   "Ledger": "Leja",
@@ -5305,32 +5298,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (akaunti iliyothibitishwa)",
   "Opens external channel link": "Inafungua kiungo cha nje cha mawasiliano",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate}%/mwezi",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "Salio la mkopo ni Maharagwe {balance}, kikomo cha mkopo ni Maharagwe {floor}, kiwango cha juu kisicho na ada ni Maharagwe {max}.",
-  "fee/mo": "ada/mwezi",
-  "your limit": "kikomo chako",
-  "sweet spot": "kiwango bora",
-  "fee-free": "bila ada",
-  "← carry credit": "← tumia mkopo",
-  "hold credit →": "weka salio →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} inafungua −{depth} · {more} → −{next}",
-    "other": "🎣 {offers} zinafungua −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} inafungua −{depth}",
-    "other": "🎣 {offers} zinafungua −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "one": "ofa {n}",
-    "other": "ofa {n}"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 {post} ili kufungua kikomo chako cha mkopo — ofa {count} inafungua kiwango chako kamili cha −{floor}.",
-    "other": "🎣 {post} ili kufungua kikomo chako cha mkopo — ofa {count} zinafungua kiwango chako kamili cha −{floor}."
-  },
-  "Post an offer": "Weka ofa",
   "No maps app": "Hakuna programu ya ramani",
   "The event is at {lat}, {lng}.": "Tukio lipo katika {lat}, {lng}.",
   "Cancel this event?": "Ghairi tukio hili?",

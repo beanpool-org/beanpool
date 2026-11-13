@@ -3269,13 +3269,6 @@
   "Beans from a member you blocked": "Munggo mula sa miyembrong na-block mo",
   "GUEST": "BISITA",
   "BEANS": "MUNGGO",
-  "No credit line yet": "Wala pang credit line",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Maaari kang makipagkalakalan ngayon gamit ang hawak mong munggo. Tapusin ang iyong unang kalakalan at kusang magbubukas ang iyong credit line — habang mas marami kang ikinakalakal, lalo itong lumalalim. (Maaari ka ring bigyan ng voucher ng komunidad ng paunang line.)",
-  "Credit position — tap to learn how it works": "Katayuan ng kredito — i-tap para malaman kung paano ito gumagana",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️  Nakahinto ang paggastos — mas mababa ang iyong balanse kaysa sa ina-unlock ng iyong {n} aktibong alok (−{limit}). Mag-post ng Alok o makipagkalakalan pabalik para maalis ito. Maaari ka pa ring tumanggap at magbenta.",
-    "other": "⚠️  Nakahinto ang paggastos — mas mababa ang iyong balanse kaysa sa ina-unlock ng iyong {n} aktibong alok (−{limit}). Mag-post ng Alok o makipagkalakalan pabalik para maalis ito. Maaari ka pa ring tumanggap at magbenta."
-  },
   "Levels": "Mga Antas",
   "Wallet": "Wallet",
   "Ledger": "Talaan",
@@ -5311,32 +5304,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (beripikadong account)",
   "Opens external channel link": "Binubuksan ang panlabas na link ng channel",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate}%/buwan",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "Balanse ng credit {balance} munggo, limitasyon sa credit {floor} munggo, fee-free ceiling {max} munggo.",
-  "fee/mo": "bayad/buwan",
-  "your limit": "iyong limitasyon",
-  "sweet spot": "tamang punto",
-  "fee-free": "walang bayad",
-  "← carry credit": "← magdala ng credit",
-  "hold credit →": "humawak ng credit →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 binubuksan ng {offers} ang −{depth} · {more} → −{next}",
-    "other": "🎣 binubuksan ng {offers} ang −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 binubuksan ng {offers} ang −{depth}",
-    "other": "🎣 binubuksan ng {offers} ang −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} alok",
-    "other": "{n} alok"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 {post} para buksan ang iyong credit line — binubuksan ng {count} alok ang iyong buong −{floor}.",
-    "other": "🎣 {post} para buksan ang iyong credit line — binubuksan ng {count} alok ang iyong buong −{floor}."
-  },
-  "Post an offer": "Mag-post ng alok",
   "Unknown\u0004a host with no name": "Hindi kilala",
   "No maps app": "Walang maps app",
   "The event is at {lat}, {lng}.": "Ang kaganapan ay nasa {lat}, {lng}.",

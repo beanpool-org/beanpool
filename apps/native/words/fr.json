@@ -3434,13 +3434,6 @@
   "Beans from a member you blocked": "Haricots d'un membre que vous avez bloqué",
   "GUEST": "INVITÉ",
   "BEANS": "HARICOTS",
-  "No credit line yet": "Pas encore de ligne de crédit",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Vous pouvez échanger dès maintenant avec les haricots dont vous disposez. Réalisez votre premier échange et votre ligne de crédit s'ouvrira automatiquement — plus vous échangez de valeur, plus elle grandit. (Un parrainage de la communauté peut aussi vous ouvrir une ligne de départ).",
-  "Credit position — tap to learn how it works": "Situation de crédit — appuyez pour comprendre son fonctionnement",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️  Dépenses suspendues — votre solde est inférieur à ce que votre {n} offre active débloque (−{limit}). Publiez une offre ou échangez pour repasser au-dessus. Vous pouvez toujours recevoir et vendre.",
-    "other": "⚠️  Dépenses suspendues — votre solde est inférieur à ce que vos {n} offres actives débloquent (−{limit}). Publiez une offre ou échangez pour repasser au-dessus. Vous pouvez toujours recevoir et vendre."
-  },
   "Levels": "Niveaux",
   "Wallet": "Portefeuille",
   "Ledger": "Registre",
@@ -5311,32 +5304,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (compte vérifié)",
   "Opens external channel link": "Ouvre le lien du canal externe",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate} %/mois",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "Solde de crédit {balance} haricots, limite de crédit {floor} haricots, plafond sans frais {max} haricots.",
-  "fee/mo": "frais/mois",
-  "your limit": "votre limite",
-  "sweet spot": "zone idéale",
-  "fee-free": "sans frais",
-  "← carry credit": "← crédit utilisé",
-  "hold credit →": "crédit détenu →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} débloque −{depth} · {more} → −{next}",
-    "other": "🎣 {offers} débloquent −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} débloque −{depth}",
-    "other": "🎣 {offers} débloquent −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} offre",
-    "other": "{n} offres"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 {post} pour ouvrir votre ligne de crédit — {count} offre débloque votre plafond −{floor}.",
-    "other": "🎣 {post} pour ouvrir votre ligne de crédit — {count} offres débloquent votre plafond −{floor}."
-  },
-  "Post an offer": "Publier une offre",
   "Unknown\u0004a host with no name": "Inconnu",
   "No maps app": "Pas d'application de cartes",
   "The event is at {lat}, {lng}.": "L'événement est à {lat}, {lng}.",

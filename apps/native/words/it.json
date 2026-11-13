@@ -3269,13 +3269,6 @@
   "Beans from a member you blocked": "Fagioli da un membro che hai bloccato",
   "GUEST": "OSPITE",
   "BEANS": "FAGIOLI",
-  "No credit line yet": "Nessuna linea di credito al momento",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Puoi scambiare subito con i fagioli che possiedi. Completa il tuo primo scambio e la tua linea di credito si aprirà automaticamente — più valore scambi, più si amplia. (Anche un garante della comunità può darti una linea iniziale.)",
-  "Credit position — tap to learn how it works": "Posizione di credito — tocca per scoprire come funziona",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️  Spesa in pausa — il tuo saldo è inferiore a quanto sbloccato dalla tua {n} offerta attiva (−{limit}). Pubblica un'offerta o scambia per ripristinarlo. Puoi comunque ricevere e vendere.",
-    "other": "⚠️  Spesa in pausa — il tuo saldo è inferiore a quanto sbloccato dalle tue {n} offerte attive (−{limit}). Pubblica un'offerta o scambia per ripristinarlo. Puoi comunque ricevere e vendere."
-  },
   "Levels": "Livelli",
   "Wallet": "Portafoglio",
   "Ledger": "Mastro",
@@ -5311,32 +5304,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (account verificato)",
   "Opens external channel link": "Apre il link al canale esterno",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate}%/mese",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "Saldo crediti {balance} fagioli, limite di credito {floor} fagioli, soglia senza commissioni {max} fagioli.",
-  "fee/mo": "comm./mese",
-  "your limit": "il tuo limite",
-  "sweet spot": "zona ideale",
-  "fee-free": "senza commissioni",
-  "← carry credit": "← credito concesso",
-  "hold credit →": "credito trattenuto →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} sblocca −{depth} · {more} → −{next}",
-    "other": "🎣 {offers} sbloccano −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} sblocca −{depth}",
-    "other": "🎣 {offers} sbloccano −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} offerta",
-    "other": "{n} offerte"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 {post} per aprire la tua linea di credito — {count} offerta sblocca il tuo intero −{floor}.",
-    "other": "🎣 {post} per aprire la tua linea di credito — {count} offerte sbloccano il tuo intero −{floor}."
-  },
-  "Post an offer": "Pubblica un'offerta",
   "Unknown\u0004a host with no name": "Sconosciuto",
   "No maps app": "Nessuna app di mappe",
   "The event is at {lat}, {lng}.": "L'evento è a {lat}, {lng}.",

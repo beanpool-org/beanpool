@@ -3132,12 +3132,6 @@
   "Beans from a member you blocked": "Đậu từ một thành viên bạn đã chặn",
   "GUEST": "KHÁCH",
   "BEANS": "ĐẬU",
-  "No credit line yet": "Chưa có hạn mức tín dụng",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Bạn có thể giao dịch ngay lúc này bằng số đậu đang có. Khi hoàn tất giao dịch đầu tiên, hạn mức tín dụng sẽ tự động mở — bạn giao dịch càng nhiều giá trị, hạn mức càng lớn. (Lời bảo lãnh từ cộng đồng cũng có thể mang lại cho bạn hạn mức khởi đầu.)",
-  "Credit position — tap to learn how it works": "Vị thế tín dụng — nhấn để tìm hiểu cơ chế hoạt động",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "other": "⚠️ Chi tiêu tạm dừng — số dư của bạn thấp hơn mức mở khóa của {n} ưu đãi đang hoạt động (−{limit}). Hãy đăng Ưu đãi hoặc giao dịch để nâng số dư lên. Bạn vẫn có thể nhận và bán hàng."
-  },
   "Levels": "Cấp bậc",
   "Wallet": "Ví",
   "Ledger": "Sổ cái",
@@ -5108,28 +5102,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (tài khoản đã xác minh)",
   "Opens external channel link": "Mở liên kết kênh bên ngoài",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate}%/tháng",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "Số dư tín dụng {balance} đậu, hạn mức tín dụng {floor} đậu, trần miễn phí {max} đậu.",
-  "fee/mo": "phí/tháng",
-  "your limit": "hạn mức của bạn",
-  "sweet spot": "điểm tối ưu",
-  "fee-free": "miễn phí",
-  "← carry credit": "← nợ tín dụng",
-  "hold credit →": "giữ tín dụng →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "other": "🎣 {offers} mở khóa −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "other": "🎣 {offers} mở khóa −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "other": "{n} chia sẻ"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "other": "🎣 {post} để mở hạn mức tín dụng của bạn — {count} chia sẻ mở khóa toàn bộ −{floor}."
-  },
-  "Post an offer": "Đăng một bài chia sẻ",
   "Unknown\u0004a host with no name": "Không rõ",
   "No maps app": "Không có ứng dụng bản đồ",
   "The event is at {lat}, {lng}.": "Sự kiện diễn ra tại {lat}, {lng}.",

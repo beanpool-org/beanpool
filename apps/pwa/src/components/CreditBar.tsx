@@ -105,7 +105,7 @@ export function CreditBar({ answer, onOpen, className = '' }: Props) {
                 {/* The figures at their marks, then a word or two under each (and each mark's line from 640 px wide). */}
                 <span className="block relative h-4 mt-[3px] text-[12px] leading-4 font-bold tabular-nums whitespace-nowrap">
                     {limit.figure && <span className="absolute top-0 left-0" style={{ color: METER.limitInk }}>{limit.figure}</span>}
-                    <span className="absolute top-0 -translate-x-1/2" style={{ left: `${zero.at}%`, color: METER.zeroInk }}>{`⚖️ ${zero.figure}`}</span>
+                    <span className="absolute top-0 -translate-x-1/2" style={{ left: `${zero.at}%`, color: METER.zeroInk }}>⚖️ {zero.figure}</span>
                     <span className="absolute top-0 -translate-x-1/2" style={{ left: `${fee.at}%`, color: METER.feeInk }}>{fee.figure}</span>
                 </span>
                 <span className="grid grid-cols-[36%_28%_36%] mt-px text-[12px] leading-tight text-nature-600 dark:text-nature-300">

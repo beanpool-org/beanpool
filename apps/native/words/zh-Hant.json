@@ -3132,12 +3132,6 @@
   "Beans from a member you blocked": "來自被你封鎖成員的豆子",
   "GUEST": "訪客",
   "BEANS": "豆子",
-  "No credit line yet": "尚無信用額度",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "你現在就可以使用持有的豆子進行交易。完成首筆交易後，你的信用額度將自動開啟 — 交易的價值越多，額度就越深。（社群擔保人也可以為你提供初始額度。）",
-  "Credit position — tap to learn how it works": "信用狀況 — 點一下瞭解運作機制",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "other": "⚠️ 支出已暫停 — 你的餘額低於 {n} 個有效供應所解鎖的額度（−{limit}）。發布供應或透過交易回升即可解除。你仍然可以收款和出售。"
-  },
   "Levels": "等級",
   "Wallet": "錢包",
   "Ledger": "帳本",
@@ -5104,28 +5098,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform}（已驗證帳號）",
   "Opens external channel link": "開啟外部管道連結",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈每月 {rate}%",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "信用餘額 {balance} 顆豆子，信用額度 {floor} 顆豆子，免手續費上限 {max} 顆豆子。",
-  "fee/mo": "費用/月",
-  "your limit": "你的額度",
-  "sweet spot": "最佳區間",
-  "fee-free": "免手續費",
-  "← carry credit": "← 承擔信用赤字",
-  "hold credit →": "持有信用盈餘 →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "other": "🎣 {offers} 開啟 −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "other": "🎣 {offers} 開啟 −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "other": "{n} 則提供"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "other": "🎣 {post} 以開啟你的信用額度 — {count} 則提供可開啟你的完整 −{floor}。"
-  },
-  "Post an offer": "發布一則提供",
   "No maps app": "未安裝地圖應用程式",
   "The event is at {lat}, {lng}.": "活動地點為 {lat}, {lng}。",
   "Cancel this event?": "要取消此活動嗎？",

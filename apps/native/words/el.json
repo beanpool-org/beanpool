@@ -3269,13 +3269,6 @@
   "Beans from a member you blocked": "Φασόλια από μέλος που έχετε αποκλείσει",
   "GUEST": "ΕΠΙΣΚΕΠΤΗΣ",
   "BEANS": "ΦΑΣΟΛΙΑ",
-  "No credit line yet": "Δεν υπάρχει πιστωτικό όριο ακόμα",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Μπορείτε να συναλλαχθείτε τώρα με τα φασόλια που διαθέτετε. Ολοκληρώστε την πρώτη σας συναλλαγή και το πιστωτικό σας όριο ανοίγει αυτόματα — όσο περισσότερη αξία συναλλάσσεστε, τόσο περισσότερο αυξάνεται. (Μια εγγύηση μέλους μπορεί επίσης να σας δώσει ένα αρχικό όριο.)",
-  "Credit position — tap to learn how it works": "Πιστωτική θέση — πατήστε για να μάθετε πώς λειτουργεί",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️ Οι δαπάνες ανεστάλησαν — το υπόλοιπό σας είναι κάτω από αυτό που ξεκλειδώνει η {n} ενεργή προσφορά σας (−{limit}). Δημοσιεύστε μια προσφορά ή κάντε συναλλαγές για να το επαναφέρετε. Μπορείτε ακόμα να λαμβάνετε και να πουλάτε.",
-    "other": "⚠️ Οι δαπάνες ανεστάλησαν — το υπόλοιπό σας είναι κάτω από αυτό που ξεκλειδώνουν οι {n} ενεργές προσφορές σας (−{limit}). Δημοσιεύστε μια προσφορά ή κάντε συναλλαγές για να το επαναφέρετε. Μπορείτε ακόμα να λαμβάνετε και να πουλάτε."
-  },
   "Levels": "Επίπεδα",
   "Wallet": "Πορτοφόλι",
   "Ledger": "Καθολικό",
@@ -5311,32 +5304,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (επαληθευμένος λογαριασμός)",
   "Opens external channel link": "Ανοίγει σύνδεσμο εξωτερικού καναλιού",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate}%/μήνα",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "Πιστωτικό υπόλοιπο {balance} φασόλια, πιστωτικό όριο {floor} φασόλια, ανώτατο όριο χωρίς τέλη {max} φασόλια.",
-  "fee/mo": "τέλος/μήνα",
-  "your limit": "το όριό σου",
-  "sweet spot": "ιδανικό σημείο",
-  "fee-free": "χωρίς τέλη",
-  "← carry credit": "← μεταφορά πίστωσης",
-  "hold credit →": "διακράτηση πίστωσης →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 Οι {offers} ξεκλειδώνουν −{depth} · {more} → −{next}",
-    "other": "🎣 Οι {offers} ξεκλειδώνουν −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 Οι {offers} ξεκλειδώνουν −{depth}",
-    "other": "🎣 Οι {offers} ξεκλειδώνουν −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} προσφορά",
-    "other": "{n} προσφορές"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 {post} για να ανοίξεις το πιστωτικό σου όριο — {count} προσφορά ξεκλειδώνει το πλήρες σου −{floor}.",
-    "other": "🎣 {post} για να ανοίξεις το πιστωτικό σου όριο — {count} προσφορές ξεκλειδώνουν το πλήρες σου −{floor}."
-  },
-  "Post an offer": "Δημοσίευση προσφοράς",
   "Unknown\u0004a host with no name": "Άγνωστος",
   "No maps app": "Καμία εφαρμογή χαρτών",
   "The event is at {lat}, {lng}.": "Η εκδήλωση είναι στο {lat}, {lng}.",

@@ -3271,13 +3271,6 @@
   "Beans from a member you blocked": "Bohnen von einem blockierten Mitglied",
   "GUEST": "GAST",
   "BEANS": "BOHNEN",
-  "No credit line yet": "Noch kein Kreditrahmen",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Du kannst jetzt mit den Bohnen handeln, die du besitzt. Schließe deinen ersten Handel ab und dein Kreditrahmen öffnet sich automatisch – je mehr Wert du handelst, desto weiter wächst er. (Eine Bürgschaft kann dir auch einen Startrahmen geben.)",
-  "Credit position — tap to learn how it works": "Kreditposition – tippen, um mehr zu erfahren",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️ Ausgaben pausiert – dein Guthaben liegt unter dem, was dein {n} aktives Angebot freischaltet (−{limit}). Erstelle ein Angebot oder handle dich hoch, um dies aufzuheben. Du kannst weiterhin empfangen und verkaufen.",
-    "other": "⚠️ Ausgaben pausiert – dein Guthaben liegt unter dem, was deine {n} aktiven Angebote freischalten (−{limit}). Erstelle ein Angebot oder handle dich hoch, um dies aufzuheben. Du kannst weiterhin empfangen und verkaufen."
-  },
   "Levels": "Stufen",
   "Wallet": "Wallet",
   "Ledger": "Buch",
@@ -5324,32 +5317,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (verifiziertes Konto)",
   "Opens external channel link": "Öffnet externen Kanal-Link",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate} %/Mo.",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "Guthaben {balance} Bohnen, Kreditrahmen {floor} Bohnen, gebührenfreie Grenze {max} Bohnen.",
-  "fee/mo": "Gebühr/Mo.",
-  "your limit": "Dein Limit",
-  "sweet spot": "Idealbereich",
-  "fee-free": "gebührenfrei",
-  "← carry credit": "← Kredit beanspruchen",
-  "hold credit →": "Guthaben halten →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} schaltet −{depth} frei · {more} → −{next}",
-    "other": "🎣 {offers} schalten −{depth} frei · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} schaltet −{depth} frei",
-    "other": "🎣 {offers} schalten −{depth} frei"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} Angebot",
-    "other": "{n} Angebote"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 {post}, um deinen Kreditrahmen zu öffnen — {count} Angebot schaltet dein volles −{floor} frei.",
-    "other": "🎣 {post}, um deinen Kreditrahmen zu öffnen — {count} Angebote schalten dein volles −{floor} frei."
-  },
-  "Post an offer": "Ein Angebot erstellen",
   "Unknown\u0004a host with no name": "Unbekannt",
   "No maps app": "Keine Karten-App",
   "The event is at {lat}, {lng}.": "Die Veranstaltung ist bei {lat}, {lng}.",

@@ -3271,13 +3271,6 @@
   "Beans from a member you blocked": "لوبیا از طرف عضوی که مسدود کرده‌اید",
   "GUEST": "مهمان",
   "BEANS": "لوبیا",
-  "No credit line yet": "هنوز خط اعتباری ندارید",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "همین حالا می‌توانید با لوبیایی که در دست دارید معامله کنید. نخستین معامله خود را تکمیل کنید تا خط اعتباری‌تان خودبه‌خود باز شود — هر چه ارزش بیشتری معامله کنید، عمیق‌تر می‌شود. (یک ضامن در جامعه نیز می‌تواند خط اولیه به شما بدهد.)",
-  "Credit position — tap to learn how it works": "وضعیت اعتبار — برای دانستن نحوه کار ضربه بزنید",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️ خرج کردن متوقف شد — موجودی شما کمتر از مقداری است که {n} پیشنهاد فعالتان آزاد می‌کند (−{limit}). پیشنهادی ثبت کنید یا با معامله آن را بالا ببرید. همچنان می‌توانید دریافت کنید و بفروشید.",
-    "other": "⚠️ خرج کردن متوقف شد — موجودی شما کمتر از مقداری است که {n} پیشنهاد فعالتان آزاد می‌کنند (−{limit}). پیشنهادی ثبت کنید یا با معامله آن را بالا ببرید. همچنان می‌توانید دریافت کنید و بفروشید."
-  },
   "Levels": "سطوح",
   "Wallet": "کیف پول",
   "Ledger": "دفتر کل",
@@ -5325,32 +5318,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (حساب تأییدشده)",
   "Opens external channel link": "پیوند کانال خارجی را باز می‌کند",
-  "{balance} B · ≈{rate}%/mo": "{balance} لوبیا · ≈{rate}٪/ماه",
-  "{balance} B": "{balance} لوبیا",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "موجودی اعتباری {balance} لوبیا، سقف اعتبار {floor} لوبیا، سقف بدون کارمزد {max} لوبیا.",
-  "fee/mo": "کارمزد/ماه",
-  "your limit": "سقف شما",
-  "sweet spot": "نقطه بهینه",
-  "fee-free": "بدون کارمزد",
-  "← carry credit": "← انتقال اعتبار",
-  "hold credit →": "نگهداری اعتبار →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} −{depth} را باز می‌کند · {more} → −{next}",
-    "other": "🎣 {offers} −{depth} را باز می‌کند · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} −{depth} را باز می‌کند",
-    "other": "🎣 {offers} −{depth} را باز می‌کند"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} پیشنهاد",
-    "other": "{n} پیشنهاد"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 برای باز کردن سقف اعتبارتان {post} — {count} پیشنهاد تمام −{floor} شما را آزاد می‌کند.",
-    "other": "🎣 برای باز کردن سقف اعتبارتان {post} — {count} پیشنهاد تمام −{floor} شما را آزاد می‌کند."
-  },
-  "Post an offer": "ثبت یک پیشنهاد",
   "Unknown\u0004a host with no name": "ناشناس",
   "No maps app": "برنامه نقشه‌ای وجود ندارد",
   "The event is at {lat}, {lng}.": "رویداد در {lat}، {lng} است.",

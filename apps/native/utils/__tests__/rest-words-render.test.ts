@@ -224,29 +224,29 @@ describe('the Community Pricing Guide in the pseudo-locale', () => {
     });
 });
 
-describe('the credit bar in the pseudo-locale, and its offer ladder\'s English word for word', () => {
-    const bar = (props: Record<string, unknown>) => createElement(CreditBar, { colors: lightColors, ...props } as any);
+describe('the credit card in the pseudo-locale, and its English word for word (slice R1: the words are core\'s)', () => {
+    const bar = (answer: Record<string, unknown>) => createElement(CreditBar, { colors: lightColors, set: 'light', answer } as any);
 
-    it('its spoken line, the bubble, the anchors, the hints and the ladder', async () => {
-        // Whole hundredths of a Bean, as the node sends them (balance_c …): 12.50 Beans, written as every figure is (two
-        // decimals when not whole; "+12.5" before).
-        await renderIn('xx', bar({ balance_c: 1250, floor_c: -10000, usableFloor_c: -2500, liveOffers: 1, knownGrant_c: 0 }));
-        expect(host.querySelector('[aria-label]')!.getAttribute('aria-label')).toMatch(/^\[.*\]$/s);
-        expect(host.querySelector('[data-testid="credit-bar-label"]')!.textContent).toBe(xx('{balance} B').replace('{balance}', '+12.50'));
-        for (const english of ['your limit', 'sweet spot', 'fee-free', '← carry credit', 'hold credit →']) expect(host.textContent, english).toContain(xx(english));
+    it('the headline, the sentence, the label, the marks, the note and the parts line', async () => {
+        // Whole hundredths of a Bean, as the node sends them (balance_c …): 12.50 Beans held, a line of 100 of which one
+        // live Offer opens 25.
+        await renderIn('xx', bar({ balance_c: 1250, floor_c: -10000, usableFloor_c: -2500, liveOffers: 1, knownGrant_c: 0, earnedCredit_c: 10000 }));
+        expect(host.querySelector('[data-testid="credit-bar-label"]')!.textContent).toBe(xx('{amount} Beans').replace('{amount}', '+12.50'));
+        for (const english of ['your limit', 'balanced', 'monthly fee starts']) expect(host.textContent, english).toContain(xx(english));
+        for (const old of ['sweet spot', 'fee-free', '← carry credit', 'hold credit →']) expect(host.textContent, old).not.toContain(old);
         expect(bypassing(host)).toEqual([]);
     });
 
-    it('in English, as before: the ladder\'s two sentences with their bold parts and non-breaking spaces', async () => {
-        await renderIn('en', bar({ balance_c: -1000, floor_c: -10000, usableFloor_c: -2500, liveOffers: 1, knownGrant_c: 0 }));
-        const ladder = Array.from(host.querySelectorAll('span')).find((s) => (s.textContent ?? '').startsWith('🎣'))!;
-        expect(ladder.textContent).toMatch(/^🎣 1 offer unlocks\u00A0−25( · 2 offers\u00A0→\u00A0−\d+)?$/);
+    it('in English: the sentences of core, the closed part and its note', async () => {
+        await renderIn('en', bar({ balance_c: -1000, floor_c: -10000, usableFloor_c: -2500, liveOffers: 1, knownGrant_c: 0, earnedCredit_c: 10000 }));
+        expect(host.querySelector('[data-testid="credit-headline"]')!.textContent).toBe('You owe 10 Beans');
+        expect(host.querySelector('[data-testid="credit-sentence"]')!.textContent).toBe('You can spend 15 more: your live Offer opens 25 of your 100 credit line.');
+        expect(host.querySelector('[data-testid="credit-note"]')!.textContent).toBe('🔒75 is closed for now. One more live Offer opens all of it.');
         act(() => root.unmount());
         root = createRoot(host);
-        await renderIn('en', bar({ balance_c: 0, floor_c: -10000, usableFloor_c: 0, liveOffers: 0, knownGrant_c: 0 }));
-        const post = Array.from(host.querySelectorAll('span')).find((s) => (s.textContent ?? '').startsWith('🎣'))!;
-        expect(post.textContent).toMatch(/^🎣 Post an offer to open your credit line — \d+ offers? unlocks? your\u00A0full\u00A0−100\.$/);
-        expect(host.querySelector('[data-testid="credit-bar-label"]')!.textContent).toBe('+0 B');
+        await renderIn('en', bar({ balance_c: 0, floor_c: -10000, usableFloor_c: 0, liveOffers: 0, knownGrant_c: 0, earnedCredit_c: 10000 }));
+        expect(host.querySelector('[data-testid="credit-note"]')!.textContent).toBe('🔒Your 100 credit line is asleep. Post one Offer and all of it opens.');
+        expect(host.querySelector('[data-testid="credit-bar-label"]')!.textContent).toBe('0 Beans');
         expect(bracketed(host)).toBe(0);
     });
 });

@@ -304,13 +304,15 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         expect(text()).toContain(xx('Reach {min} trust ({left} to go) from the real value you trade.').replace('{min}', '600').replace('{left}', '400'));
     });
 
-    it('the credit card: the bar\'s label, the known part frozen, spending paused; Credit Slider Info with its three tabs', async () => {
+    it('the credit card: one button labelled with core\'s spoken sentence, the known part frozen; Credit Slider Info with its three tabs', async () => {
         await renderIn('xx');
         expect(host.querySelector('[data-later-sweep="CreditBar"]')).not.toBeNull();
         expect(text()).toContain(xx(KNOWN_FROZEN.part));
-        expect(text()).toContain(xx('⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.').replace('{n}', '1').replace('{limit}', '150'));
+        // Slice R1: the card's sentences (spending paused among them) are core's, drawn by CreditBar (credit-bar-bubble-dark,
+        // rest-words-render); the button's label is core's spoken sentence, through the words layer.
+        expect(byTestId('credit-card')!.getAttribute('aria-label')).toMatch(/^\[.*\]$/s);
         expect(bypassing(), 'the card').toEqual([]);
-        await click(byLabel(xx('Credit position — tap to learn how it works')), 'the credit position');
+        await click(byTestId('credit-card'), 'the credit card');
         expect(text()).toContain(xx('Credit Slider Info'));
         expect(text()).toContain(xx('Zero is the Sweet Spot'));
         expect(bypassing(), 'Credit Slider').toEqual([]);
@@ -418,7 +420,8 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         ledger.rows = [];
         ledger.escrow = 0;
         await renderIn('xx');
-        expect(text()).toContain(xx('No credit line yet'));
+        // Slice R1: a newcomer sees the credit card too (its left half striped, "no credit line yet": CreditBar's own tests).
+        expect(byTestId('credit-card')).not.toBeNull();
         expect(text()).toContain(xx('no reviews yet'));
         await click(row('Send (needs 1st trade)'), 'Send (needs 1st trade)');
         expect(alerts.said).toEqual([xx('First trade required'), xx('Direct sends are unlocked after your first completed trade on the Marketplace, and require a positive balance.'), xx('OK')]);
@@ -528,7 +531,7 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         for (const english of ['YOUR TRUST LEVEL', 'Resident', 'Level 2 of 4 · credit line 200 Beans', '400 more trust to 🏛️ Steward', 'Send Beans', 'Invite Members', 'ALL LEVELS',
             "You're here", '600 trust', 'Your current floor', 'Recognised as a community Resident', 'Invite others to join', '🚀 Reach 🏛️ Steward', 'Trust Manual', '400 trust to go',
             'beans of value to trade', 'THE LEVER', 'new partners (roughly)', 'WHAT BUILDS YOUR TRUST', 'VALUE TRADED', '+150 trust', '3 reviews', 'diverse = faster', 'BEANS', 'Levels', 'Wallet',
-            KNOWN_FROZEN.part, '⚠️  Spending paused — your balance is below what your 1 active offer unlock (−150). Post an Offer or trade back up to lift it. You can still receive and sell.']) {
+            KNOWN_FROZEN.part]) {
             expect(text(), english).toContain(english);
         }
         await click(byTestId('ledger-wallet-tab'), 'Wallet');
@@ -622,7 +625,7 @@ describe('the Ledger at 320 dp with 1.3× text, in the pseudo-locale', () => {
 
     it('the Credit Slider\'s bracket rows wrap each side, the rate kept to the right', async () => {
         await renderIn('xx');
-        await click(byLabel(xx('Credit position — tap to learn how it works')), 'the credit position');
+        await click(byTestId('credit-card'), 'the credit card');
         await click(row('Idle Balance Tiers'), 'Idle Balance Tiers');
         const rate = spanSaying(xx('{rate}% (Fee-Free Zone)').replace('{rate}', '0.0'))!;
         expect(styleOf(rate)).toMatchObject({ flexShrink: 1, textAlign: 'right' });

@@ -3132,12 +3132,6 @@
   "Beans from a member you blocked": "ブロックしたメンバーからの豆",
   "GUEST": "ゲスト",
   "BEANS": "豆",
-  "No credit line yet": "信用枠はまだありません",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "現在保有している豆を使ってすぐに取引できます。最初の取引を完了すると自動的に信用枠が開きます。取引額が増えるほど枠も拡大します（コミュニティの推薦者から初期枠を受け取ることもできます）。",
-  "Credit position — tap to learn how it works": "信用状況 — タップして仕組みを確認",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "other": "⚠️  利用一時停止中 — 残高が{n}件の有効な提案で開放されている制限（−{limit}）を下回っています。提案を投稿するか、取引して残高を戻してください。受け取りと販売は引き続き可能です。"
-  },
   "Levels": "レベル",
   "Wallet": "ウォレット",
   "Ledger": "台帳",
@@ -4998,28 +4992,6 @@
   "Can't open {name}'s settings": "{name}の設定を開けません",
   "Open settings": "設定を開く",
   "{provider} sign-in timed out.": "{provider}のサインインがタイムアウトしました。",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · 約{rate}%/月",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "信用残高 {balance}豆、信用限度額 {floor}豆、手数料無料上限 {max}豆。",
-  "fee/mo": "手数料/月",
-  "your limit": "利用限度額",
-  "sweet spot": "適正水準",
-  "fee-free": "手数料無料",
-  "← carry credit": "← マイナス残高",
-  "hold credit →": "プラス残高 →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "other": "🎣 {offers}で−{depth}が開放 · {more}で→−{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "other": "🎣 {offers}で−{depth}が開放"
-  },
-  "{n} offer|{n} offers": {
-    "other": "{n}件の提供"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "other": "🎣 信用枠を開設するには{post}してください — {count}件の提供で上限−{floor}まで全額開放されます。"
-  },
-  "Post an offer": "提供を投稿",
   "BeanPool: your community and help, not connected": "BeanPool：コミュニティと助け合い（未接続）",
   "BeanPool: your community and help, offline": "BeanPool：コミュニティと助け合い（オフライン）",
   "BeanPool: your community and help, guest": "BeanPool：コミュニティと助け合い（ゲスト）",

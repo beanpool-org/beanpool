@@ -50,7 +50,7 @@ import * as api from '../lib/api';
 import { readPricingGuide } from '../lib/starter-offers';
 import { HomePage, HOME_FAILED, HOME_HINT, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
 import { NodeTooOldError } from '../lib/node-version-gate';
-import { ARRANGE_WORDS, DEFAULT_PRICING_CATALOG, FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
+import { ARRANGE_WORDS, DEFAULT_PRICING_CATALOG, HOME_DEFAULT_LIST, FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 import * as tourStore from '../lib/tour-store';
 import { HOLD_MS } from '../components/HomeCard';
@@ -986,8 +986,9 @@ describe('a card removed on an earlier visit comes back at once when added (PR #
         expect(lastCall(vi.mocked(api.getHome))).toBeGreaterThan(lastCall(vi.mocked(api.saveHomePreferences)));
         expect(node.reads()[2]).toEqual(expect.arrayContaining(['market', 'events']));
         expect(node.reads()[2]).not.toContain('pulse');
-        expect(node.reads()[2]).not.toContain('beans');
-        await waitFor(() => expect(screen.queryByTestId('home-card-beans')).toBeNull());
+        // Your Beans is in the default list (DESIGN-home-default-fable.md §2.2): Reset asks for it; The Pulse it leaves out.
+        expect(node.reads()[2]).toContain('beans');
+        await waitFor(() => expect(screen.queryByTestId('home-card-pulse')).toBeNull());
         doneArrange();
         expect(screen.getByTestId('home-card-market')).toBeInTheDocument();
     });
@@ -2031,11 +2032,12 @@ const savedLayouts = () => vi.mocked(api.saveHomePreferences).mock.calls.map(c =
 const lastCall = (m: { mock: { invocationCallOrder: number[] } }) => m.mock.invocationCallOrder.at(-1) ?? 0;
 
 describe('the card frame (F3)', () => {
-    it('a newcomer with no layout gets the newcomer list: no Beans or Pulse card until added', async () => {
+    it('a newcomer with no layout gets the default list: Your Beans in it, no Pulse card until added', async () => {
         nodeV2(answer(), null);
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-market');
-        expect(cardIds()).not.toContain('beans');
+        // DESIGN-home-default-fable.md §2.2: Your Beans is #7 of the fifteen; The Pulse is left out on purpose.
+        expect(cardIds()).toContain('beans');
         expect(cardIds()).not.toContain('pulse');
         expect(cardIds().at(-1)).toBe('community');
         expect(api.saveHomePreferences).not.toHaveBeenCalled();
@@ -2231,9 +2233,9 @@ describe('what a never-edited member asks (review of #1701, finding 6)', () => {
         expect(later.length).toBeGreaterThanOrEqual(1);
         for (const l of later) {
             const asked = l.slice(4).split(',');
-            expect(asked).toEqual(expect.arrayContaining(['needs', 'market', 'events', 'community']));
+            // The default list's cards (DESIGN-home-default-fable.md §2.2), Your Beans among them; never The Pulse.
+            expect(asked).toEqual(expect.arrayContaining(['needs', 'market', 'events', 'beans', 'community']));
             expect(asked).not.toContain('pulse');
-            expect(asked).not.toContain('beans');
         }
         expect(node.log).not.toContain('POST');
     });
@@ -2928,7 +2930,7 @@ describe('the Decide card shows just the votes that are yours: one setting on th
 });
 
 // ── Getting started (scratch/global-node/DESIGN-getting-started-fable.md §1–§3) ──────────────────────────────────────
-describe('Getting started in the web app: a newcomer\'s Home is the card alone, the tour is theirs to start, its end is kept on the account', () => {
+describe('Welcome in the web app (DESIGN-home-default-fable.md §2.3): first on a newcomer\'s Home with the cards from the first second, the tour is theirs to start, its end is kept on the account', () => {
     /** A member here for the first time: never saved a Home, never ended the tour. */
     const newcomer = (over: Partial<HomeAnswer> = {}) => {
         const a = answer({ layout: null });
@@ -2939,11 +2941,15 @@ describe('Getting started in the web app: a newcomer\'s Home is the card alone, 
     const layoutWrites = () => vi.mocked(api.saveHomePreferences).mock.calls.map(c => c[1] as Record<string, unknown>).filter(p => 'home.layout' in p).map(p => (p['home.layout'] as { cards: { id: string }[] }).cards.map(c => c.id));
     beforeEach(() => { tourStore.closeTour(); });
 
-    it('a newcomer sees Getting started and Your community, Look around and Skip, no "…"; it never starts by itself', async () => {
+    it('a newcomer sees Welcome first and the default list under it, Look around and Skip, no "…"; it never starts by itself', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-start');
-        expect(cardIds()).toEqual(['start', 'community']);
+        // Nothing folds behind it any more: the Market and the rest are there from the first second, the community card last.
+        expect(cardIds()[0]).toBe('start');
+        expect(cardIds()).toEqual(expect.arrayContaining(['market', 'events', 'beans']));
+        expect(cardIds().indexOf('market')).toBeLessThan(cardIds().indexOf('events'));
+        expect(cardIds().at(-1)).toBe('community');
         expect(screen.getByTestId('home-start-words')).toHaveTextContent(START_CARD_WORDS);
         expect(screen.getByTestId('home-start-look')).toHaveTextContent('Look around ›');
         expect(within(screen.getByTestId('home-card-start')).queryByTestId('home-card-menu')).toBeNull();
@@ -2957,8 +2963,8 @@ describe('Getting started in the web app: a newcomer\'s Home is the card alone, 
         fireEvent.click(await screen.findByTestId('home-start-look'));
         expect(tourStore.currentTour()).toMatchObject({ publicKey: ME.publicKey, step: 0, node: { global: false, beans: true } });
         expect(api.saveHomePreferences).not.toHaveBeenCalled();
-        // The last step's chips, lent while Home is open: local, Beans on.
-        expect(tourStore.tourHome()!.chips).toEqual(['steps', 'market', 'beans']);
+        // The last step offers no chips any more (DESIGN-home-default-fable.md §2.3): Home already holds the default list.
+        expect(tourStore.tourHome()!.chips).toEqual([]);
     });
 
     it('on global with the showcase on, the tour has the Commons and Ledger preview steps, as the phone\'s does (T5): 9 steps, not 7', async () => {
@@ -2984,27 +2990,26 @@ describe('Getting started in the web app: a newcomer\'s Home is the card alone, 
         expect(api.saveHomePreferences).not.toHaveBeenCalled();
     });
 
-    it('Skip on the card: one layout write with the starter set, the record "skipped", the card gone and the five drawn', async () => {
+    it('Skip on the card: one layout write, the default list less Welcome (nothing added), the record "skipped", the card gone', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         fireEvent.click(await screen.findByTestId('home-start-skip'));
         await waitFor(() => expect(tourWrites()).toEqual([expect.objectContaining({ state: 'skipped' })]));
-        expect(layoutWrites().at(-1)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'asked', 'events', 'notices']);
+        expect(layoutWrites().at(-1)).toEqual(HOME_DEFAULT_LIST.filter(id => id !== 'start'));
         await waitFor(() => expect(cardIds()).not.toContain('start'));
         expect(cardIds()).toEqual(expect.arrayContaining(['market', 'community']));
     });
 
-    it('Done made on another tab is applied as Home opens: a chip picked stays alone, the record says "done"', async () => {
+    it('Done made on another tab is applied as Home opens: Welcome goes and nothing is added, the record says "done"', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer()));
         const view = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         fireEvent.click(await screen.findByTestId('home-start-look'));
-        await act(async () => { tourStore.tourHome()!.addChip('beans'); });
-        await waitFor(() => expect(layoutWrites().at(-1)).toEqual(['beans', 'start']));
+        expect(layoutWrites()).toEqual([]);
         view.unmount();
         act(() => { tourStore.endTour('done'); });
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await waitFor(() => expect(tourWrites()).toEqual([expect.objectContaining({ state: 'done' })]));
-        expect(layoutWrites().at(-1)).toEqual(['beans']);
+        expect(layoutWrites().at(-1)).toEqual(HOME_DEFAULT_LIST.filter(id => id !== 'start'));
     });
 
     it('a tour ended on another device: no card, the starter set; a member with a saved Home sees no change', async () => {

@@ -5,7 +5,7 @@
  * (apps/native utils/__tests__/home-cards.test.ts), held to the same rules here.
  */
 import { describe, expect, it } from 'vitest';
-import { HOME_FRAME_LIMITS, starterCards, translateV1 } from '@beanpool/core';
+import { HOME_DEFAULT_LIST, HOME_FRAME_LIMITS, starterCards, translateV1 } from '@beanpool/core';
 /** The starter set as a saved Home (DESIGN-getting-started-fable.md §1): the list a newcomer's Home was before Getting started, and what Skip or Done leaves. */
 const starterLayout = () => ({ v: 2 as const, cards: starterCards(), dismissed: {}, updatedAt: null as string | null });
 import {
@@ -32,7 +32,9 @@ describe('the picker (§1.2)', () => {
         expect(groups.map(g => g.name)).toEqual(['For you', 'Around you', 'Getting started']);
         const rows = groups.flatMap(g => g.rows);
         expect(rows.find(r => r.type === 'market')).toMatchObject({ state: 'on-home', count: null });
-        expect(rows.find(r => r.type === 'beans')).toMatchObject({ name: 'Your Beans', state: 'add' });
+        // The Pulse is the one left out of the default list on purpose (DESIGN-home-default-fable.md §2.2).
+        expect(rows.find(r => r.type === 'pulse')).toMatchObject({ name: 'The Pulse', state: 'add' });
+        expect(rows.find(r => r.type === 'beans')).toMatchObject({ name: 'Your Beans', state: 'on-home' });
         expect(rows.find(r => r.type === 'search')).toMatchObject({ state: 'add', count: '2 of 5 on Home', hasSettings: true });
         // Never the fixed two, never Find your community on a local node.
         expect(rows.map(r => r.type)).not.toContain('needs');
@@ -63,15 +65,17 @@ describe('the picker (§1.2)', () => {
 
 describe('adding, removing, moving, resetting (§1.3)', () => {
     it('Add puts the card first, under a pinned Find your community; a saved search keeps its settings; a sixth is refused', () => {
-        const added = addCard(null, 'beans', NOW);
-        expect(added.ok && added.layout.cards[0]).toEqual({ id: 'beans', type: 'beans' });
+        // A card the default list leaves out (DESIGN-home-default-fable.md §2.2): Your Beans is in it now.
+        const added = addCard(null, 'pulse', NOW);
+        expect(added.ok && added.layout.cards[0]).toEqual({ id: 'pulse', type: 'pulse' });
         expect(added.ok && added.layout.updatedAt).toBe(iso(NOW));
         const pinnedFirst: HomeLayoutV2 = { ...starterLayout(), cards: [{ id: 'find', type: 'find' }, ...starterCards()] };
         const under = addCard(pinnedFirst, 'pulse', NOW, { pinned: ['find'] });
         expect(under.ok && ids(under.layout)!.slice(0, 2)).toEqual(['find', 'pulse']);
         const search = addCard(null, 'search', NOW, { settings: { q: '  eggs  ', km: 5 }, random: () => 0 });
         expect(search.ok && search.layout.cards[0]).toEqual({ id: 'search-aaaa', type: 'search', settings: { q: 'eggs', kind: 'any', km: 5 } });
-        expect(addCard(added.ok ? added.layout : null, 'beans', NOW)).toEqual({ ok: false, refused: 'on-home' });
+        expect(addCard(added.ok ? added.layout : null, 'pulse', NOW)).toEqual({ ok: false, refused: 'on-home' });
+        expect(addCard(null, 'beans', NOW)).toEqual({ ok: false, refused: 'on-home' });
         let l: HomeLayoutV2 | null = null;
         for (let i = 0; i < 5; i++) { const r = addCard(l, 'search', NOW, { settings: { q: `w${i}` } }); if (r.ok) l = r.layout; }
         expect(addCard(l, 'search', NOW)).toEqual({ ok: false, refused: 'type-full' });
@@ -81,7 +85,7 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
 
     it('an edit\'s date is after its base, even on a browser whose clock runs slow', () => {
         const base: HomeLayoutV2 = { ...starterLayout(), updatedAt: iso(NOW + H) };
-        const r = addCard(base, 'beans', NOW);
+        const r = addCard(base, 'pulse', NOW);
         expect(r.ok && Date.parse(r.layout.updatedAt!)).toBe(NOW + H + 1);
         expect(removeCard(base, 'tips', NOW)!.updatedAt).toBe(iso(NOW + H + 1));
     });
@@ -178,7 +182,8 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
         expect(l.view).toEqual(view);
         const reset = resetLayout(l, NOW + 1);
         expect(JSON.stringify(reset.view)).toBe(JSON.stringify(view));
-        expect(reset.cards).toEqual([...starterCards(), NEWER]);
+        // Reset keeps the member's own cards, the saved search and the newer app's, after the defaults (DESIGN-home-default-fable.md §3).
+        expect(reset.cards).toEqual([...starterCards(), l.cards.find(c => c.id === 'search-aaaa'), NEWER]);
         expect(resetLayout({ ...starterLayout(), cards: [] }, NOW)).not.toHaveProperty('view');
     });
 
@@ -268,8 +273,8 @@ describe('what is drawn and asked', () => {
         const answer = { profile: 'global', me: { joinedAt: iso(NOW - 2 * 24 * H) } };
         expect(pinnedCards(answer, NOW)).toEqual(['find']);
         expect(cardOrder(starterLayout(), ['find']).map(c => c.id).slice(0, 3)).toEqual(['needs', 'safety', 'find']);
-        // A newcomer's Home (Getting started alone): the pin under Needs you, then the card.
-        expect(cardOrder(null, ['find']).map(c => c.id)).toEqual(['needs', 'find', 'start', 'community']);
+        // A newcomer's Home (the default list, Welcome first; DESIGN-home-default-fable.md §2.9): the pin under Needs you, then the list.
+        expect(cardOrder(null, ['find']).map(c => c.id)).toEqual(['needs', 'find', ...HOME_DEFAULT_LIST, 'community']);
         expect(pinnedCards({ profile: 'local', me: null }, NOW)).toEqual([]);
     });
 
@@ -385,11 +390,14 @@ describe("a saved search's words on its card and in Arrange (CARD-FRAME §4, §5
 
 describe('sun and moon in the picker and the list (CARD-FRAME §4, slice F5)', () => {
     it('is offered under Around you on a local community and the worldwide one, with settings, one of a kind', () => {
+        const none: HomeLayoutV2 = { ...starterLayout(), cards: [] };
         for (const node of [LOCAL, GLOBAL]) {
-            const around = pickerGroups(node, null, null).groups.find(g => g.id === 'around')!;
+            const around = pickerGroups(node, none, null).groups.find(g => g.id === 'around')!;
             expect(around.rows.find(r => r.type === 'sky'), node.profile).toMatchObject({ name: 'Sun and moon', line: 'Sunrise, sunset and the moon tonight.', state: 'add', hasSettings: true });
+            // In the default list (DESIGN-home-default-fable.md §2.2): on a newcomer's Home already.
+            expect(pickerGroups(node, null, null).groups.find(g => g.id === 'around')!.rows.find(r => r.type === 'sky')!.state, node.profile).toBe('on-home');
         }
-        const added = addCard(null, 'sky', NOW, { settings: { place: 'me' } });
+        const added = addCard(none, 'sky', NOW, { settings: { place: 'me' } });
         expect(added.ok && added.layout.cards[0]).toEqual({ id: 'sky', type: 'sky', settings: { place: 'me' } });
         expect(added.ok && pickerGroups(LOCAL, added.layout, null).groups.flatMap(g => g.rows).find(r => r.type === 'sky')!.state).toBe('on-home');
         expect(added.ok && cardsToAsk(added.layout, [], LOCAL)).not.toContain('sky');

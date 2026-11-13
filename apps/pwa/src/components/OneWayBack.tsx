@@ -6,22 +6,26 @@
  *   - on the landing screen, a plain card (not a dot) until they have looked at their 12 words from it or added a
  *     sign-in. It can be put away; it comes back once after their next post that stays up, and once when their first
  *     week is over, then lives in Settings only;
- *   - in Settings, the same card for as long as the account has no sign-in, with the sign-ins to add.
+ *   - in Settings, the same card for as long as the account has no sign-in and the words aren't said to be kept, with
+ *     the sign-ins to add where they work.
  *
- * Who it is for is the node's word, never a guess. In Settings, `GET /api/community/me` says `rules: 'words'` for a
- * member who came in with 12 words and has added no sign-in; nothing is drawn while it has not answered, for an older
- * node that does not say, or offline. On Home (DESIGN-home-default-fable.md §2.5, slice D3) the Home answer alone says,
- * read by lib/home-cards.ts `wayBackOf` and passed as `home`: every member whose 12 words are the only way back
- * (`me.wayBack`), however they joined, with the counts its schedule goes by. Home never asks `/me`, so the card's first
- * paint is what it settles on: nothing drawn and pulled, nothing popped in late (the jump PR #2411 fixed). Home is told
- * whether the card is drawn (`onDrawn`).
+ * Who it is for is the node's word, never a guess: its Home answer, read by lib/home-cards.ts `wayBackOf`
+ * (DESIGN-home-default-fable.md §2.5): every member whose 12 words are the only way back (`me.wayBack`), however they
+ * joined, until they say they still have them, with the counts its schedule goes by. On Home it is passed as `home`, so
+ * the card's first paint is what it settles on: nothing drawn and pulled, nothing popped in late (the jump PR #2411
+ * fixed); Home is told whether the card is drawn (`onDrawn`). In Settings the card asks for the same answer itself
+ * (`GET /api/home?cards=safety`, {@link useWayBackWord}), so a member who came by invite and whose words are their only
+ * way back has the reminder there too once Home's two returns are over, as on the phone. Nothing is drawn while it has
+ * not answered, or offline.
  *
  * What it offers is only what works for that member: "Add a sign-in" only where the node's link route takes them (the
  * 12-words door's own, `cards.safety`; anyone else is refused with 404 invite_only or 409 not_words_member), and "one
  * way back" only where it is true (the worldwide community; on a local one an admin can set a member up again with a new
- * key, recovery model point 3). Sign-up counts as the first showing for everyone but the 12-words door's own: their
- * schedule starts as put away, so on day one First steps' line says it, and the card comes once after a post and once
- * when the first week is over. "I still have my 12 words" is kept on the account (`onKept`), as Yes after the kit is.
+ * key, recovery model point 3), on Home and in Settings alike, as the phone says it. Sign-up counts as the first showing
+ * for everyone but the 12-words door's own: their schedule starts as put away, so on day one First steps' line says it,
+ * and the card comes once after a post and once when the first week is over. "I still have my 12 words" is kept on the
+ * account (`onKept`), as Yes after the kit is, from the card on Home and in Settings; in Settings a member the node still
+ * takes a sign-in from is then offered one quietly, with no warning, as the phone's Settings does.
  *
  * Adding a sign-in (lib/link-signin.ts) leaves the page for the provider, as joining with one does; App.tsx finishes it
  * on the way back and shows the result here (`result`). Where the community keeps no copies of members' accounts (its
@@ -30,7 +34,8 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { t, word } from '@beanpool/core';
-import { getCommunityMe } from '../lib/api';
+import { getHome } from '../lib/api';
+import { wayBackOf, type HomeAnswer, type WayBackOnHome } from '../lib/home-cards';
 import { hasMnemonic, type BeanPoolIdentity } from '../lib/identity';
 import { NONCE_FRESH_MS, offeredProviders, providerLabel, type JoinNonce } from '../lib/web-join';
 import { leaveForLink, linkResultMessage, requestLinkNonce, type LinkResult } from '../lib/link-signin';
@@ -61,24 +66,42 @@ interface Standing {
     weekOverAt: number | null;
 }
 
-/** The node's word on whether this member has only their 12 words: null while asking, or when it could not be asked. */
-export function useOneWayBack(publicKey: string, refreshKey?: unknown, ask = true): Standing | null {
-    const [standing, setStanding] = useState<Standing | null>(null);
+/** What the card goes by: Home's own answer, read by lib/home-cards.ts `wayBackOf`, and where it is. */
+export interface WayBackWord extends WayBackOnHome {
+    /** The worldwide community, where no admin can set a member up again: the one place "one way back" is true (§2.5). */
+    global: boolean;
+    /**
+     * The words are said to be kept, but the node still takes a sign-in from this member (the 12-words door's own, while
+     * their probation says so): Settings offers one quietly, with no warning, as the phone's Settings does.
+     */
+    quietSignIn?: boolean;
+}
+
+/** The card's word from a Home answer (Settings' own read of it; Home builds its `home` from the same `wayBackOf`). */
+export function wayBackWordOf(answer: HomeAnswer): WayBackWord {
+    const w = wayBackOf(answer);
+    const me = answer.me;
+    const quietSignIn = !w.forThem && !!me && !answer.welcome && me.standing === 'member'
+        && me.probation?.rules === 'words' && me.wayBack !== 'covered';
+    return { ...w, global: answer.profile === 'global', quietSignIn };
+}
+
+/**
+ * The node's word on this member where Home's answer isn't handed in (Settings): the same answer, built for this card
+ * alone (`GET /api/home?cards=safety`, a read that changes nothing). null while asking, or when it could not be asked.
+ */
+export function useWayBackWord(publicKey: string, refreshKey?: unknown, ask = true): WayBackWord | null {
+    const [found, setFound] = useState<WayBackWord | null>(null);
     useEffect(() => {
         if (!ask) return;
         let cancelled = false;
         Promise.resolve()
-            .then(() => getCommunityMe())
-            .then((me) => {
-                if (cancelled) return;
-                const p = me?.probation;
-                const ends = p?.ageEndsAt ? Date.parse(p.ageEndsAt) : NaN;
-                setStanding({ words: p?.rules === 'words', keptPosts: Number(p?.keptPosts) || 0, weekOverAt: Number.isFinite(ends) ? ends : null });
-            })
-            .catch(() => { if (!cancelled) setStanding(null); });
+            .then(() => getHome({ cards: ['safety'] }))
+            .then((read) => { if (!cancelled) setFound(read.notModified ? null : wayBackWordOf(read.answer)); })
+            .catch(() => { if (!cancelled) setFound(null); });
         return () => { cancelled = true; };
     }, [publicKey, refreshKey, ask]);
-    return standing;
+    return found;
 }
 
 // ---------- the landing card's schedule, kept in this browser for this account ----------
@@ -326,11 +349,11 @@ interface CardProps {
     frame?: (card: ReactNode) => ReactNode;
     /**
      * Home's own answer, read by lib/home-cards.ts `wayBackOf`: who the card is for, what works for them, and the counts
-     * its schedule goes by. Given, it is the one word, at the first paint and after, and `/api/community/me` is never
-     * asked. Not given (Settings), `/me` says.
+     * its schedule goes by. Given, it is the one word, at the first paint and after, and nothing is asked. Not given
+     * (Settings), the card asks for the same answer itself ({@link useWayBackWord}).
      */
-    home?: { forThem: boolean; canAddSignIn: boolean; startsAway: boolean; keptPosts: number; weekOverAt: number | null; global: boolean };
-    /** "I still have my 12 words": kept on the account (Home sends `words_kept`). The card is done here at once. */
+    home?: WayBackWord;
+    /** "I still have my 12 words": kept on the account (lib/words-kept.ts sends `words_kept`). The card is done here at once. */
     onKept?: () => void;
     /** Told whether the card is drawn, before the page paints (Home: a card not drawn is not a place to move another to). */
     onDrawn?: (drawn: boolean) => void;
@@ -339,20 +362,26 @@ interface CardProps {
 }
 
 export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey, frame = (card) => card, home, onKept, onDrawn, keepsNoCopies = false }: CardProps) {
-    const asked = useOneWayBack(identity.publicKey, `${String(refreshKey)}:${result?.kind ?? ''}`, !home);
-    const standing: Standing | null = home ? { words: home.forThem, keptPosts: home.keptPosts, weekOverAt: home.weekOverAt } : asked;
-    const startsAway = !!home?.startsAway;
+    const asked = useWayBackWord(identity.publicKey, `${String(refreshKey)}:${result?.kind ?? ''}`, !home);
+    const wayBack = home ?? asked;
+    const standing: Standing | null = wayBack ? { words: wayBack.forThem, keptPosts: wayBack.keptPosts, weekOverAt: wayBack.weekOverAt } : null;
+    const startsAway = !!wayBack?.startsAway;
+    // Said here just now: the card is done at once, before any answer says so.
+    const [keptNow, setKeptNow] = useState(false);
     const [schedule, setSchedule] = useState(() => readSchedule(identity.publicKey, startsAway));
     useEffect(() => { setSchedule(readSchedule(identity.publicKey, startsAway)); }, [identity.publicKey, startsAway]);
     // A sign-in that just came back: its result is the first thing read on the page that opened for it.
     const resultRef = useRef<HTMLParagraphElement | null>(null);
     useEffect(() => { if (result) resultRef.current?.scrollIntoView?.({ block: 'center' }); }, [result]);
 
-    const forThem = !!standing?.words;
-    // Only what works for this member (§2.5): a sign-in where the node's link route takes them; "one way back" where true.
-    const signIn = home ? home.canAddSignIn : true;
-    const oneWayBack = home ? home.global && signIn : true;
+    const forThem = !!standing?.words && !keptNow;
+    // Only what works for this member (§2.5): a sign-in where the node's link route takes them; "one way back" only on the
+    // worldwide community, where no admin can set them up again (the phone's rule too, components/OneWayBackCard.tsx).
+    const signIn = !!wayBack?.canAddSignIn;
+    const oneWayBack = !!wayBack?.global && signIn;
     const shown = forThem && (placement === 'settings' || landingDue(schedule, standing));
+    // Settings, once the words are said to be kept: a sign-in still offered, quietly, where the node takes one.
+    const quietOffer = placement === 'settings' && !shown && (keptNow ? signIn : !!wayBack?.quietSignIn);
 
     function update(next: Schedule) {
         setSchedule(next);
@@ -401,9 +430,9 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
                                 {t('See my 12 words')}
                             </button>
                         )}
-                        {onKept && placement === 'landing' && (
+                        {onKept && (
                             <button type="button" data-testid="one-way-back-kept"
-                                onClick={() => { update({ ...schedule, checked: true }); onKept(); }}
+                                onClick={() => { if (placement === 'landing') update({ ...schedule, checked: true }); setKeptNow(true); onKept(); }}
                                 className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-transparent text-nature-900 dark:text-white border border-nature-300 dark:border-nature-700 cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                 {t(ONE_WAY_BACK_WORDS.kept)}
                             </button>
@@ -411,6 +440,11 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
                         {signIn && <AddSignIn identity={identity} navigate={navigate} origin={origin} keepsNoCopies={keepsNoCopies} />}
                     </div>
                 </section>
+            )}
+            {quietOffer && (
+                <div data-testid="one-way-back-quiet" className="min-w-0">
+                    <AddSignIn identity={identity} navigate={navigate} origin={origin} keepsNoCopies={keepsNoCopies} />
+                </div>
             )}
         </>
     );

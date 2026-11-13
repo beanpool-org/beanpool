@@ -27,7 +27,7 @@ import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.tes
 
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
-    return { ...actual, request: vi.fn(), getNodeApiUrl: vi.fn(() => ''), getCommunityMe: vi.fn() };
+    return { ...actual, request: vi.fn(), getNodeApiUrl: vi.fn(() => ''), getCommunityMe: vi.fn(), getHome: vi.fn() };
 });
 
 const WORDS = 'abandon ability able about above absent absorb abstract absurd abuse access accident'.split(' ');
@@ -212,10 +212,18 @@ describe('the recovery kit (RecoveryKitButton) and "one way back" (OneWayBackCar
     it('the card on the landing screen, with a sign-in that came back added', async () => {
         await showIn('xx');
         const identity = await generateIdentity('Bea');
-        vi.mocked(api.getCommunityMe).mockResolvedValue({
-            publicKey: 'x', probation: { onProbation: true, keptPosts: 0, ageEndsAt: new Date(Date.now() + 86_400_000).toISOString(), rules: 'words' },
-            mute: { muted: false, until: null },
-        } as unknown as api.CommunityStanding);
+        // The node's Home answer (the card reads it where Home doesn't hand it in): the global community's 12-words door, no sign-in yet.
+        vi.mocked(api.getHome).mockResolvedValue({
+            notModified: false, etag: null,
+            answer: {
+                generatedAt: new Date().toISOString(), profile: 'global', features: {}, layout: null,
+                me: {
+                    joinedAt: new Date().toISOString(), isKeeper: false, interests: [], area: null, firstOffer: false, standing: 'member', wayBack: 'words', wordsKept: false,
+                    probation: { onProbation: true, keptPosts: 0, keptPostsNeeded: 3, ageEndsAt: new Date(Date.now() + 86_400_000).toISOString(), rules: 'words' },
+                },
+                cards: { safety: { words: true, signInLinked: false } },
+            },
+        } as unknown as api.HomeRead);
         render(<OneWayBackCard identity={identity} placement="landing" onSeeWords={() => {}} result={{ kind: 'linked', provider: 'google', recoveryStored: true }} />);
         expect(await screen.findByTestId('one-way-back-text')).toHaveTextContent(xx('Your account has one way back: your 12 words. Check you still have them, or add a sign-in.'));
         expect(screen.getByTestId('link-result').textContent).toBe(xx('{provider} is added. Signing in with it also brings this account back, and your new-account limits are now the usual ones.').replace('{provider}', 'Google'));

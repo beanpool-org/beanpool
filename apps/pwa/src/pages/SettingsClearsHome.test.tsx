@@ -188,18 +188,23 @@ describe('a Home still open when each path runs (another tab of this browser) dr
         await screen.findByText('Unread message from Kofi');
         await waitFor(() => expect(idb.peek('beanpool-home', 'answers', key)).toBeDefined());
     }
+    /**
+     * Home's own reads. Settings' 12-words card asks the node for its one card (`{ cards: ['safety'] }`, never cached,
+     * components/OneWayBack.tsx useWayBackWord): not Home's read, so not counted here.
+     */
+    const homeReads = () => vi.mocked(api.getHome).mock.calls.filter(([params]) => !(params?.cards?.length === 1 && params.cards[0] === 'safety'));
     /** That Home, after the path: signed out, it reads nothing more however it is asked, and shows nothing of hers. */
     async function expectHomeSignedOut() {
         await waitFor(() => expect(screen.queryByText('Unread message from Kofi')).toBeNull(), { timeout: 2_000 });
         expect(screen.getByTestId('home-signed-out')).toBeInTheDocument();
-        const reads = vi.mocked(api.getHome).mock.calls.length;
+        const reads = homeReads().length;
         await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
-        expect(vi.mocked(api.getHome).mock.calls.length).toBe(reads);
+        expect(homeReads().length).toBe(reads);
     }
     /** That Home, after a clear that keeps the account: read afresh, with no tag. */
     async function expectHomeReadAfresh() {
-        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2), { timeout: 2_000 });
-        expect(vi.mocked(api.getHome).mock.calls[1][1]).toBeNull();
+        await waitFor(() => expect(homeReads()).toHaveLength(2), { timeout: 2_000 });
+        expect(homeReads()[1][1]).toBeNull();
     }
 
     it('Sign Out (Device Only)', async () => {

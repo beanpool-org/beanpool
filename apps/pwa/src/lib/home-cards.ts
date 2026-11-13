@@ -475,7 +475,12 @@ export function stepLines(answer: HomeAnswer, interests: readonly string[], word
 export function stepsSaySomething(answer: HomeAnswer, interests: readonly string[], now: number = Date.now(), wordsKeptHere = false): boolean {
     const s = answer.cards.steps;
     if (!s) return false;
-    if (firstStepsOver(s.joinedAt ?? answer.me?.joinedAt, now, answer.profile)) return false;
+    const joinedAt = s.joinedAt ?? answer.me?.joinedAt;
+    // Global's "Your first week" is for the first 14 days, so a join date not heard or unreadable is not new there: the card
+    // is not drawn, as on the phone (apps/native/utils/home-cards.ts firstSteps, its `young` rule). A local community's
+    // card stays while a line is left (core firstStepsOver).
+    if (answer.profile === 'global' && !Number.isFinite(Date.parse(joinedAt ?? ''))) return false;
+    if (firstStepsOver(joinedAt, now, answer.profile)) return false;
     const left = firstStepsLeft(stepLines(answer, interests, wordsKeptHere)).filter(l => !l.untracked);
     if (left.length > 0) return true;
     return answer.profile !== 'global' && probationSentence(answer.me?.probation) !== null;
@@ -484,11 +489,11 @@ export function stepsSaySomething(answer: HomeAnswer, interests: readonly string
 // ── Welcome ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Welcome's words (DESIGN-home-default-fable.md §2.3, §5.1): where you are, who invited you and the way to say hello, or
- * for an owner alone on a new community the way to invite someone; then the tour and Not now. Shown through t().
+ * Welcome's words (DESIGN-home-default-fable.md §2.3, §5.1): who invited you and the way to say hello, or for an owner
+ * alone on a new community the way to invite someone; then the tour and Not now. Shown through t(). Where you are is
+ * core's (home-welcome.ts `welcomeFacts`, the phone's too), with the global community's own sentence.
  */
 export const WELCOME_WORDS = {
-    where: word("You're in {community}."),
     invitedYou: word('{name} invited you.'),
     sayHello: word('Say hello ›'),
     firstHere: word("You're the first one here."),

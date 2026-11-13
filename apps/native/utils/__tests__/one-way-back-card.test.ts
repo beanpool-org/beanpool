@@ -442,12 +442,36 @@ describe('an invite sign-up that carried on: no card on day one, card after the 
         expect(await readOneWayBack(who.identity.publicKey)).toMatchObject({ url: OTHER, by: 'wayBack', joinedAt: SIGNED_UP, dismissedAt: SIGNED_UP });
     });
 
-    it('where the node takes a sign-in from them (Home\'s safety card: the 12-words door), the door\'s card and Add a sign-in, as decided', async () => {
+    // The parity read of D2 against D3 (rows 9 and 10), one rule with the web (components/OneWayBack.tsx): "one way back"
+    // only on the global community's door, where no admin can set a member up again (§2.5); before, the phone said it to the
+    // door's members of a local community too. And "I still have my 12 words" on the door's own Home card, as the web's has
+    // it: before, the phone offered it there only where no sign-in could be added.
+    it('the 12-words door of a local community (Home\'s safety card): Add a sign-in, I still have my 12 words, and never "one way back"', async () => {
         mem.async.clear();
         await startOneWayBack(who.identity.publicKey, OTHER, SIGNED_UP);
         await drawCard('landing', homeWord({ door: true }));
-        expect(warning()).toBe(true);
+        expect(warning()).toBe(false);
+        expect(text()).toContain('Your 12 words are how you get back in. Check you still have them, or add a sign-in.');
+        const labels = Array.from(document.querySelectorAll('[aria-label]')).map(e => e.getAttribute('aria-label'));
+        expect(labels).toContain('Your 12 words are how you get back in. Check you still have them, or add a sign-in.');
+        expect(labels.join('\n')).not.toContain('one way back');
         expect(text()).toContain('Add a sign-in');
+        expect(text()).toContain('I still have my 12 words');
+        expect(text()).toContain('Show my 12 words');
+    });
+
+    it('the global community\'s door: "one way back" (no admin there can set a member up again), with I still have my 12 words beside the sign-in', async () => {
+        mem.async.clear();
+        mem.anchor = GLOBAL;
+        await startOneWayBack(who.identity.publicKey, GLOBAL, SIGNED_UP);
+        await drawCard('landing', { url: GLOBAL, standing: { words: true, joinedAt: SIGNED_UP, door: true, kept: false } });
+        expect(warning()).toBe(true);
         expect(Array.from(document.querySelectorAll('[aria-label]')).map(e => e.getAttribute('aria-label'))).toContain('Your account has one way back');
+        expect(text()).toContain('Add a sign-in');
+        await act(async () => { button('I still have my 12 words').click(); });
+        await settle();
+        expect(kept).toEqual([{ words_kept: true }]);
+        expect(await readOneWayBack(who.identity.publicKey)).toMatchObject({ done: 'checked' });
+        expect(warning()).toBe(false);
     });
 });

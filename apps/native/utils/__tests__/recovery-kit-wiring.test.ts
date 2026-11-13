@@ -79,6 +79,20 @@ describe('every entry to the kit records a Yes the same way', () => {
         expect(slice(settings, 'const keptFromKit = () => {', '};')).toContain('keepWords(u, who)');
     });
 
+    // The parity read of D2 against D3 (row 3): the web's tick "I've saved these words" records words_kept when the member
+    // carries it past Next (pages/WelcomePage.tsx); the phone's set only an analytics value, so a member who ticked on the
+    // phone was still "not kept" on the account, and the reminder ran on every device.
+    it('the tick "I\'ve saved these words", carried past Next, records it on the account the same way, and only when ticked', () => {
+        const welcome = slice(read('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'onboardingGuide'");
+        const next = slice(welcome, "recordOnboardingEvent('protection_choice'", "setMode('onboardingGuide')");
+        const ticked = slice(next, 'if (seedConfirmed) {', '}');
+        expect(ticked).toContain("AsyncStorage.getItem('beanpool_anchor_url')");
+        expect(ticked).toContain('keepWords(u, who)');
+        expect(count(next, 'keepWords(')).toBe(1);
+        // The tick itself only ticks: nothing is said until Next, so unticking first says nothing.
+        expect(slice(welcome, 'onPress={() => setSeedConfirmed(!seedConfirmed)}', 'accessibilityRole')).not.toContain('keepWords');
+    });
+
     it('the buttons call onKept only from the Yes, never from the kit\'s own result', () => {
         const buttons = read('components/RecoveryKitButtons.tsx');
         expect(count(buttons, 'onKept?.()')).toBe(1);

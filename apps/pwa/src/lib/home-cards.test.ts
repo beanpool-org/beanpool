@@ -357,6 +357,20 @@ describe('The first week on the web (L3, §3.2)', () => {
         expect(shown(oldAllDone, { now: NOW })).not.toContain('steps');
     });
 
+    // Parity with the phone (apps/native/utils/home-cards.ts firstSteps, its `young` rule): "Your first week" is for the
+    // first 14 days, so a join date not heard, or one that can't be read, is not new there; the web kept it up for good.
+    it('on global, a join date not heard or unreadable: the card is not drawn, lines left or not; a local one keeps its card', () => {
+        for (const joinedAt of [null, 'not a date']) {
+            const undone = globalMember({ firstPost: true, joinedAt: joinedAt as string }, find, { joinedAt });
+            expect(stepsSaySomething(undone, ['food'], NOW), String(joinedAt)).toBe(false);
+            expect(shown(undone, { now: NOW }), String(joinedAt)).not.toContain('steps');
+        }
+        // Control: the same member with a readable date inside the 14 days has the card.
+        expect(stepsSaySomething(globalMember({ firstPost: true, joinedAt: daysAgo(3) }, find, { joinedAt: daysAgo(3) }), ['food'], NOW)).toBe(true);
+        const local = answer({ steps: { ...steps, joinedAt: null as never } }, { me: me({ joinedAt: null }) });
+        expect(stepsSaySomething(local, [], NOW)).toBe(true);
+    });
+
     // Inside First steps' 30 days (DESIGN-home-default-fable.md §2.4; the node sends no card after them, D1).
     it('locally, by the same lines: a chip tapped ticks "Pick a few things you like" at once', () => {
         const a = answer({ steps: { ...steps, joinedAt: daysAgo(20), firstOffer: true, photo: true, interests: false, invited: true }, community },

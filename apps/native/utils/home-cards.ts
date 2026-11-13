@@ -30,7 +30,8 @@ import {
     knockStillAnswerable, capitalFirst, inviteAskNeedsLine, freePriceWords,
     copyFromLine, eventCopyOf, type ShownFromLine, reorderIds, newInstanceId, readChatSettings, homeChatPicked,
     HOME_BELL_SETTLE_MS, crowdBellDelayMs, createHomeBellSettle, isCrowdDoorbell, type HomeBellTimers,
-    FIRST_STEPS_WORDS, firstStepsCount, firstStepsLeft, firstStepsOver, welcomeDrawn,
+    FIRST_STEPS_WORDS, firstStepsCount, firstStepsLeft, firstStepsOver, welcomeDrawn, welcomeFacts as coreWelcomeFacts, type WelcomeFacts,
+    readerMayInvite,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { TIER_WORDS } from './trust-tier';
@@ -793,12 +794,11 @@ export type HomeRole = 'owner' | 'admin' | 'moderator' | null | undefined;
  * admins invite (`features.door === 'admins'`, utils/invite-entries.ts `onlyAdminsInvite`) the node has said they are an
  * owner or admin. People → Invites' own rule for a role the node has said (invite-entries.ts `mayInviteHere`, said again
  * here so this file stays pure; a test holds the two together). A role not heard yet counts as no here: Home never asks
- * a member for something they may not be able to do, nor keeps First steps open on it (design §6.3).
+ * a member for something they may not be able to do, nor keeps First steps open on it (design §6.3). Core's
+ * `readerMayInvite`, the one rule the web's Welcome reads too.
  */
 export function invitesForReader(features: HomeAnswer['features'], role: HomeRole): boolean {
-    if (features.invites !== true) return false;
-    if (features.door !== 'admins') return true;
-    return role === 'owner' || role === 'admin';
+    return readerMayInvite(features, role);
 }
 
 /**
@@ -918,21 +918,13 @@ export const welcomeUp = (answer: Pick<HomeAnswer, 'me'>, ctx: Pick<HomeDrawCont
     !!answer.me && welcomeDrawn(!ctx.tourOpen && tourOverFor(answer, ctx), answer.me.joinedAt, ctx.now ?? Date.now());
 
 /**
- * Welcome's lines (§2.3), from the one Home answer: "You're in {community}." (none when the name isn't known), whose invite
+ * Welcome's lines (§2.3), from the one Home answer, by core's one rule for both apps (`welcomeFacts`, home-welcome.ts):
+ * "You're in {community}." (none when the name isn't known; the global community's own sentence there), whose invite
  * brought the reader (`me.invitedBy`, with a name to say), and whether they are the first one here (an owner alone on a new
- * local community: "You're the first one here.", in place of the inviter's line).
+ * local community that nobody invited: "You're the first one here.", in place of the inviter's line).
  */
-export function welcomeFacts(answer: Pick<HomeAnswer, 'me' | 'profile' | 'cards'>): {
-    place: string | null; inviter: { key: string; name: string } | null; firstHere: boolean;
-} {
-    const global = answer.profile === 'global';
-    const name = answer.cards.community?.name?.trim();
-    const place = global ? t("You're in the global community") : name ? t("You're in {community}.", { community: name }) : null;
-    const by = answer.me?.invitedBy;
-    const inviter = by && typeof by.key === 'string' && typeof by.name === 'string' && by.name.trim() ? { key: by.key, name: by.name.trim() } : null;
-    const members = answer.cards.community?.members;
-    const firstHere = !global && typeof members === 'number' && members <= 1;
-    return { place, inviter, firstHere };
+export function welcomeFacts(answer: Pick<HomeAnswer, 'me' | 'profile' | 'cards'>): WelcomeFacts {
+    return coreWelcomeFacts({ profile: String(answer.profile), me: answer.me, cards: answer.cards });
 }
 
 /**

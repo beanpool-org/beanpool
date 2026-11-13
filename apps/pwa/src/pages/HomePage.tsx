@@ -41,7 +41,7 @@ import { useKnockStatuses } from '../lib/use-knock-statuses';
 import { YesJoin } from '../components/YesJoin';
 import { forgetHandedOver, handedOverHere } from '../lib/handoff';
 import { isPhoneBrowser } from '../lib/global-entry';
-import { getConversations, getHome, getNodeApiUrl, getYourGroups, groupKeysNet, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
+import { getConversations, getHome, getNodeApiUrl, getYourGroups, groupKeysNet, markNoticesSeen, myNodeRoleOnce, saveHomePreferences, watchPlace } from '../lib/api';
 import { groupKeyring } from '../lib/group-chat-keys';
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
 import { groupIdKey, lockedGroupsOrNull } from '../lib/group-hold';
@@ -93,7 +93,7 @@ import { isNodeTooOldError } from '../lib/node-version-gate';
 import {
     endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, type TourProgress,
 } from '@beanpool/core';
-import { defaultHomeLayout, firstStepsCount, firstStepsLeft, welcomeDrawn } from '@beanpool/core';
+import { defaultHomeLayout, firstStepsCount, firstStepsLeft, readerMayInvite, welcomeDrawn, welcomeFacts } from '@beanpool/core';
 import {
     keepPendingTourRecord, lendTourHome, offerTour, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, tourRecordRefused, useTour,
 } from '../lib/tour-store';
@@ -110,7 +110,7 @@ import { composerDraft, type ComposerDraft } from '../tools/builder';
 import { readPricingGuide } from '../lib/starter-offers';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { OneWayBackCard } from '../components/OneWayBack';
-import { keepWordsOnAccount } from '../lib/words-kept';
+import { keepWordsOnAccount, resendWordsKept } from '../lib/words-kept';
 import { UsePhoneAppCard, isUsePhoneAppDismissed } from '../components/UsePhoneAppCard';
 import { ToolHomeCard } from '../tools/home-card';
 import { YourToolsCard } from '../tools/your-tools-card';
@@ -2211,6 +2211,21 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         const pending = pendingTourRecord(publicKey);
         if (pending && !tourRun) void sendTourRecord(publicKey, pending);
     }, [publicKey, member, landing, !!tourRun]);
+    // "I still have my 12 words" (or Yes after the kit, or the sign-up tick) said where the node couldn't hear it is sent
+    // again at each landing until it lands (lib/words-kept.ts), as the phone does at its Home landing.
+    useEffect(() => {
+        if (publicKey && member) void resendWordsKept(publicKey);
+    }, [publicKey, member, landing]);
+    // Welcome's "Invite someone ›" for an owner alone where only admins invite: the reader's role, asked once a page load
+    // (lib/api.ts myNodeRoleOnce) and only then, as the phone holds it (core readerMayInvite). Not heard: no link.
+    const [inviteRole, setInviteRole] = useState<string | null | undefined>(undefined);
+    const roleForWelcome = !!answer && member && answer.features.invites === true && answer.features.door === 'admins' && welcomeFacts(answer).firstHere;
+    useEffect(() => {
+        if (!roleForWelcome) return;
+        let live = true;
+        void myNodeRoleOnce().then((role) => { if (live) setInviteRole(role); });
+        return () => { live = false; };
+    }, [roleForWelcome]);
     const chipsKey = chips.join(',');
     useEffect(() => {
         if (!member || !answer) { lendTourHome(null); return; }
@@ -2937,27 +2952,31 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
             case 'start': {
                 // Welcome (DESIGN-home-default-fable.md §2.3): where you are, who brought you, and the tour. No "…": Not now is
                 // its way out. It hides nothing, and two plain links (not a filled button) keep the Market on the first screen.
-                const invitedBy = a.me?.invitedBy;
-                const where = c.community ? communityName(c.community, String(a.profile)) : null;
-                // An owner alone on a new community: nobody invited them, and they are its one member.
-                const alone = !invitedBy && a.profile !== 'global' && c.community?.members === 1 && a.features.invites !== false;
+                // What it says is core's one rule for both apps (home-welcome.ts welcomeFacts): the global community's own
+                // sentence, no line for an inviter with no name, and "the first one here" only for an owner nobody invited.
+                const welcome = welcomeFacts(a);
+                const inviter = welcome.inviter;
                 const link = 'min-h-[44px] px-1 -mx-1 bg-transparent border-0 rounded-lg text-sm font-bold text-emerald-800 dark:text-emerald-300 cursor-pointer text-left break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
                 const said = 'm-0 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words';
                 return (
                     <HomeCard key={id} {...common} menu={undefined}>
-                        {where && <p data-testid="home-welcome-where" className={said}>{t(WELCOME_WORDS.where, { community: where })}</p>}
-                        {invitedBy ? (
-                            <p data-testid="home-welcome-invited" className={`${said} flex flex-wrap items-center gap-x-2`}>
-                                <span className="min-w-0 break-words">{t(WELCOME_WORDS.invitedYou, { name: invitedBy.name || t('Someone') })}</span>
-                                <button type="button" data-testid="home-welcome-hello" onClick={() => onNavigate('messages', invitedBy.key)} className={link}>
-                                    {t(WELCOME_WORDS.sayHello)}
-                                </button>
-                            </p>
-                        ) : alone ? (
+                        {welcome.place && <p data-testid="home-welcome-where" className={said}>{welcome.place}</p>}
+                        {welcome.firstHere ? (
                             <p data-testid="home-welcome-first" className={`${said} flex flex-wrap items-center gap-x-2`}>
                                 <span className="min-w-0 break-words">{t(WELCOME_WORDS.firstHere)}</span>
-                                <button type="button" data-testid="home-welcome-invite" onClick={() => onNavigate('people-invites')} className={link}>
-                                    {t(WELCOME_WORDS.inviteSomeone)}
+                                {/* Only where the reader can invite (core readerMayInvite, the phone's rule): where only admins
+                                    invite, once the node has said they are an owner or admin. */}
+                                {readerMayInvite(a.features, inviteRole) && (
+                                    <button type="button" data-testid="home-welcome-invite" onClick={() => onNavigate('people-invites')} className={link}>
+                                        {t(WELCOME_WORDS.inviteSomeone)}
+                                    </button>
+                                )}
+                            </p>
+                        ) : inviter ? (
+                            <p data-testid="home-welcome-invited" className={`${said} flex flex-wrap items-center gap-x-2`}>
+                                <span className="min-w-0 break-words">{t(WELCOME_WORDS.invitedYou, { name: inviter.name })}</span>
+                                <button type="button" data-testid="home-welcome-hello" onClick={() => onNavigate('messages', inviter.key)} className={link}>
+                                    {t(WELCOME_WORDS.sayHello)}
                                 </button>
                             </p>
                         ) : null}

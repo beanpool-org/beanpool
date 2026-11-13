@@ -271,6 +271,9 @@ async function main(): Promise<void> {
         && (staffFront.body?.sections as any[]).some((s) => s.name === 'Notices' && s.archived) && !titles(await topics(mel)).includes('Welcome: start here'),
         '8. archived: out of members\' lists, owners and admins still see it');
     assert((await reply(mel, notice.body?.topic?.id, { words: 'Again' })).body?.code === 'closed', '8. a topic in an archived section takes no reply');
+    const byId = [await topics(mel, `?section=${news.body?.section?.id}`), await topics(ada, `?section=${news.body?.section?.id}`)];
+    assert(byId[0].status === 404 && byId[1].status === 200 && titles(byId[1]).includes('Welcome: start here'),
+        `8. an archived section's list by its id: 404 to a member, there for an admin (${byId.map((r) => r.status).join()})`);
     assert((await call(owen, 'POST', '/api/forum/sections', { name: 'Room again' })).status === 201, '8. archiving one made room');
 
     // ── 9. Daily limits ───────────────────────────────────────────────────────────────────────────
@@ -298,6 +301,9 @@ async function main(): Promise<void> {
     const muted = [await start(gus, { sectionId: ideas, title: 'x', words: 'y' }), await reply(gus, tb, { words: 'y' })];
     assert(muted.every((r) => r.status === 403 && r.body?.code === 'moderation_muted'), `10. a muted member starts and replies nothing (${muted.map((r) => r.body?.code).join()})`);
     assert((await topics(gus)).status === 200, '10. and still reads');
+    const gusOwn = (db.prepare('SELECT id FROM forum_posts WHERE topic_id = ? AND number = 1').get(tc) as { id: string }).id;
+    const mutedRemove = await call(gus, 'POST', `/api/forum/posts/${gusOwn}/remove`, {});
+    assert(mutedRemove.status === 200, `10. but may take his own words down: a mute blocks posting, not removing (${show(mutedRemove)})`);
     db.prepare('UPDATE members SET moderation_muted_until = NULL WHERE public_key = ?').run(gus.pk);
     setUserStatusRow(gus.pk, 'disabled');
     const paused = await reply(gus, tb, { words: 'y' });

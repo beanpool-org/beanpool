@@ -210,7 +210,7 @@ export function compareForumTopics(a: ForumTopicOrder, b: ForumTopicOrder): numb
  * answer without being added here fails it, so nothing new becomes public by a missed filter.
  */
 export const FORUM_PUBLIC_FIELDS = Object.freeze({
-    section: Object.freeze(['id', 'starter', 'name', 'position', 'topicCount'] as const),
+    section: Object.freeze(['id', 'starter', 'name', 'about', 'position', 'topicCount'] as const),
     topic: Object.freeze(['id', 'sectionId', 'title', 'writer', 'createdAt', 'lastActivityAt', 'replyCount', 'pinned', 'closed', 'place', 'lang', 'indexable'] as const),
     post: Object.freeze(['id', 'topicId', 'number', 'writer', 'words', 'quotes', 'createdAt', 'edited', 'removed', 'photos', 'lang', 'proof'] as const),
     /** A writer on a public page: a name, and the community label they switched on (slice F10), else null. */

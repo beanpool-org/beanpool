@@ -221,7 +221,11 @@ export function forumFront(reader: string): { sections: ForumSection[]; public: 
 /** Topics, pinned first and then the newest activity (@beanpool/core compareForumTopics), 30 a page. */
 export function forumTopics(reader: string, opts: { sectionId?: string; offset: number }): { topics: ForumTopic[]; next: number | null } {
     ensureForumStarters();
-    if (opts.sectionId !== undefined && !sectionRow(opts.sectionId)) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.sectionNotFound);
+    if (opts.sectionId !== undefined) {
+        // An archived section is out of members' lists, by its id too; owners and admins still list it.
+        const section = sectionRow(opts.sectionId);
+        if (!section || (section.archived_at && !isStaff(reader))) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.sectionNotFound);
+    }
     const where = [
         "COALESCE(t.closed_by, '') != 'removed'",
         NOT_BLOCKED('t.writer_pubkey'),
@@ -307,7 +311,8 @@ function storePhotos(member: string, postId: string, photos: string[], now: numb
     if (photos.length > 0) recordStoredPhotoBytes(member, incomingPhotosBytes(photos), now);
 }
 
-/** What every write checks first: the main server, a member who isn't muted. */
+/** What every write of words checks first: the main server, a member who isn't muted. Removing or closing their own takes no
+ *  words to anyone, so a muted member may still do it (assertPlainTablesWritable alone). */
 function writable(member: string, now: number): void {
     assertPlainTablesWritable();
     assertNotMuted(member, now);
@@ -437,7 +442,7 @@ function blankTopic(topic: TopicRow, at: string): void {
 
 /** The writer removes their own post: a reply leaves a marker; an opening post takes its topic's title with it. */
 export function removeForumPost(member: string, postId: string, now = Date.now()): void {
-    writable(member, now);
+    assertPlainTablesWritable();
     const { post, topic } = ownPost(member, postId);
     const at = iso(now);
     db.transaction(() => {
@@ -455,7 +460,7 @@ export function removeForumPost(member: string, postId: string, now = Date.now()
 
 /** Its writer, an owner or an admin closes a topic: still readable, no new replies. */
 export function closeForumTopic(member: string, topicId: string, now = Date.now()): ForumTopic {
-    writable(member, now);
+    assertPlainTablesWritable();
     const topic = visibleTopic(member, topicId);
     const staff = isStaff(member);
     if (topic.writer_pubkey !== member && !staff) throw new ForumRefusal(403, 'not_yours', FORUM_WORDS.closeNotYours);

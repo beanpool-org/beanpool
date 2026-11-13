@@ -1574,6 +1574,38 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         expect(record()).toEqual({ v: 1, seen: [], current: LOCAL[0].id, currentShownOn: localDay(), dismissedAt: null });
     });
 
+    // DESIGN-home-default-fable.md §3: Reset needs no confirm box; it says what it did and offers Undo, which puts the list
+    // back as it was (on the account too). Closing Arrange ends the offer.
+    it('Reset to defaults says "Home is back to how it started." with Undo; Undo puts the list back as it was, on the account too', async () => {
+        const mine = { v: 2, cards: [{ id: 'pulse', type: 'pulse' }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: '2026-10-01T00:00:00.000Z' };
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: mine as never })));
+        vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => ({ success: true, 'home.layout': prefs['home.layout'] }) as never);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-reset'));
+        const said = await screen.findByTestId('home-reset-done');
+        expect(said).toHaveTextContent('Home is back to how it started.');
+        expect(said).toHaveAttribute('role', 'status');
+        expect(screen.queryByTestId('home-arrange-reset')).toBeNull();
+        const saved = () => vi.mocked(api.saveHomePreferences).mock.calls.map(c => (c[1] as Record<string, unknown>)['home.layout'] as { cards: { type: string }[]; updatedAt: string } | undefined).filter(Boolean);
+        // The default list less Welcome; the Pulse was the catalogue's, so it goes with the reset.
+        await waitFor(() => expect(saved().at(-1)!.cards.map(c => c.type)).not.toContain('pulse'));
+        const reset = saved().at(-1)!;
+        expect(reset.cards.map(c => c.type)).toContain('market');
+        fireEvent.click(within(said).getByRole('button', { name: 'Undo' }));
+        await waitFor(() => expect(saved().at(-1)!.cards.map(c => c.type)).toEqual(['pulse', 'market']));
+        // Stamped after the reset, so it wins on the account and here alike.
+        expect(Date.parse(saved().at(-1)!.updatedAt)).toBeGreaterThan(Date.parse(reset.updatedAt));
+        expect(screen.queryByTestId('home-reset-done')).toBeNull();
+        expect(screen.getByTestId('home-arrange-reset')).toBeInTheDocument();
+        // A second reset offers Undo again; Done closes Arrange and the offer with it.
+        fireEvent.click(screen.getByTestId('home-arrange-reset'));
+        expect(await screen.findByTestId('home-reset-done')).toBeInTheDocument();
+        doneArrange();
+        await waitFor(() => expect(screen.queryByTestId('home-reset-done')).toBeNull());
+    });
+
     // PR #1694 review 4: the tip follows the reader's text size (a rem size, as every other line on Home), never fixed px.
     it("the tip's text is sized in rem, so it grows with the reader's text size", async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));

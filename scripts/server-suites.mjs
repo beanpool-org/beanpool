@@ -154,6 +154,7 @@ export const SUITES = [
     'test-badge-earned-only-http',
     'test-invited-by-http',
     'test-balance-tier-credit-http',
+    'test-credit-freeze-rules',
     'test-names-debts-http',
     'test-commons-pay-idempotent-http',
     'test-community-health-http',

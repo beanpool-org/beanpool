@@ -8701,6 +8701,27 @@ export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabl
     broadcast({ type: 'profile_updated', publicKey });
 }
 
+/**
+ * Who may freeze or unfreeze a member's whole credit line by hand (the manager's "Freeze", POST
+ * /api/local/admin/users/:pubkey/freeze; Marty, 14 Nov 2026: an admin could freeze the owner and himself). Nobody their
+ * own account, either way: a frozen admin can't lift it himself. Only an owner an owner (one whose role acts or is held
+ * aside by a suspension, heldPrivilegedRole), either way; an admin freezes a member or another admin. The route asks
+ * this of the person's own key session only (no automation token), and the phone's step-up on an owner
+ * (decisions-engine adminActionNeedsOwner 'freeze'). A community vote's freeze (decisions-engine) asks none of it.
+ */
+export const CREDIT_FREEZE_WORDS = {
+    own: word("You can't freeze or unfreeze your own account. Another owner or admin can."),
+    owner: word('Only an owner can freeze or unfreeze an owner.'),
+    keyOnly: word('Sign in with your own key to freeze or unfreeze a member, so it is logged in your name.'),
+} as const;
+
+export function creditFreezeRefusal(actor: string, target: string): { status: number; code: string; error: string } | null {
+    const { t } = wordsFor('en');
+    if (actor === target) return { status: 403, code: 'own_account', error: t(CREDIT_FREEZE_WORDS.own) };
+    if (heldPrivilegedRole(target) === 'owner' && !isNodeOwner(actor)) return { status: 403, code: 'owner_only', error: t(CREDIT_FREEZE_WORDS.owner) };
+    return null;
+}
+
 export function adminSetCreditFrozen(publicKey: string, frozen: boolean): boolean {
     const res = db.prepare("UPDATE members SET credit_frozen=? WHERE public_key=?").run(frozen ? 1 : 0, publicKey);
     if (res.changes === 0) return false;

@@ -10,6 +10,7 @@ import {
     reconcileLedgerFromDb, washAnalysisCount
 } from './state-engine.js';
 import { db } from './db/db.js';
+import { grantNodeRole } from './engine/node-roles.js';
 /** A floor set by hand in the granted lane (members.earned_credit_c): a tier badge gives no credit (engine/badges.ts). */
 const grantLine = (pk: string, c: number) => { db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(c, pk); };
 
@@ -96,25 +97,65 @@ async function main() {
         assert(metricsResidents.cohortAnomalies === 0,
             `a week's cohort of new members at a -200 Beans floor is not fast-growing: the line is -600 Beans (got ${metricsResidents.cohortAnomalies})`);
 
-        // --- Test 3: Cohort Velocity Report ---
-        // Let's seed a cohort of new accounts created on the same week.
-        // We'll join them 2 days ago.
+        // --- Test 3b: an allowance an owner or admin gave on purpose is never counted (Marty, 14 Nov 2026: the flag fired on
+        // presets and grants the owners gave, and named nobody) ---
+        const owner = `ownr-${Date.now()}`;
+        seedMember(owner, 0, 60);
+        grantNodeRole(owner, 'owner', 'SYSTEM');
+        const voucher = `vouc-${Date.now()}`;
+        seedMember(voucher, 0, 60); // a voucher who is no owner or admin
+        const vouch = (from: string, to: string, c: number) => db.prepare(`INSERT INTO room_gifts (id, from_pubkey, to_pubkey, root_pubkey, kind, amount_c)
+            VALUES (?, ?, ?, ?, 'vouch', ?)`).run('rg' + (seq++), from, to, from, c);
+        const given = Array.from({ length: 4 }, (_, i) => `givn${i}-${Date.now()}`);
+        given.forEach((u, i) => {
+            seedMember(u, 0, 9); // 9 days old: Test 3a's week, where 4 of its 7 now stand at 600 Beans
+            if (i % 2 === 0) grantLine(u, hc(600)); // granted by hand: 600 Beans
+            else vouch(owner, u, hc(600)); // the owner's vouch (a preset): 600 Beans
+        });
+        const metricsGiven = runWashSybilMetricsAudit()!;
+        assert(metricsGiven.cohortAnomalies === 0 && metricsGiven.cohortMembers.length === 0,
+            `four of a week's seven new members at a 600-Bean allowance an owner gave are no anomaly (${metricsGiven.cohortAnomalies}, ${JSON.stringify(metricsGiven.cohortMembers)})`);
+        assert(!getCommunityHealth().flags.some(f => f.type === 'cohort_velocity'), 'and raise no flag');
+
+        // --- Test 3: Cohort Velocity Report: who, how deep, when, and what gave it ---
+        // Four new accounts of one week, each vouched 600 Beans by a voucher who is no owner or admin: the line reached by a
+        // route other than an owner's grant.
         const cohortUsers = Array.from({ length: 4 }, (_, i) => `coh${i}-${Date.now()}`);
         for (const u of cohortUsers) {
             seedMember(u, 0, 2); // 2 days old (new member)
-            grantLine(u, hc(600)); // floor -600 (reached Steward's line in under 14 days)
+            vouch(voucher, u, hc(600)); // floor -600, from a voucher
         }
-
-        // Run metrics audit. Since all 4 accounts in the same week cohort reached floor <= -600 in <14 days,
-        // cohortAnomalies should be flagged.
         const metrics4 = runWashSybilMetricsAudit()!;
         assert(metrics4.cohortAnomalies === 1, `Cohort velocity anomaly detected (got ${metrics4.cohortAnomalies})`);
+        const named = new Set(metrics4.cohortMembers.map(m => m.pubkey));
+        assert(named.size === 4 && cohortUsers.every(u => named.has(u)) && given.every(u => !named.has(u)),
+            `the check keeps WHO: the four the voucher vouched, none of those the owner gave to (${[...named].join(', ')})`);
+        const one = metrics4.cohortMembers.find(m => m.pubkey === cohortUsers[0]);
+        assert(!!one && one.allowance_c === hc(600) && one.counted_c === hc(600) && one.daysAfterJoining === 2
+            && JSON.stringify(one.parts) === JSON.stringify([{ kind: 'vouch', from: voucher, amount_c: hc(600), counted: true }]),
+            `per member: how deep (600 Beans), days after joining (2), and who gave it (the voucher's vouch) (${JSON.stringify(one)})`);
 
         // --- Test 4: getCommunityHealth Alerts ---
-        // Verify that the health flags show the cohort anomaly and delinquency
         const health1 = getCommunityHealth();
-        const cohortFlag = health1.flags.find(f => f.type === 'cohort_velocity' && f.description.includes('Cohort Velocity Anomaly'));
-        assert(!!cohortFlag, 'Cohort Velocity Anomaly flag was raised in community health report');
+        const cohortFlag = health1.flags.find(f => f.type === 'cohort_velocity');
+        assert(!!cohortFlag, 'the cohort flag was raised in community health report');
+        assert(!!cohortFlag && cohortFlag.members.length === 4 && cohortUsers.every(u => cohortFlag.members.includes(u)),
+            `it names the four members (${cohortFlag?.members.length})`);
+        assert(!!cohortFlag && cohortFlag.allowances?.length === 4 && cohortFlag.allowances.every(a => a.allowance_c === hc(600) && a.daysAfterJoining === 2 && a.parts[0]?.from === voucher),
+            `with each one's allowance, days after joining and giver (${JSON.stringify(cohortFlag?.allowances?.[0])})`);
+        assert(!!cohortFlag && /allowance/.test(cohortFlag.description) && /not what they spent/.test(cohortFlag.description) && !/floor/i.test(cohortFlag.description),
+            `in plain words: allowance, not spending, never "floor" (${cohortFlag?.description})`);
+        // The day it got there is the day the check first found it, not the account's age at each run.
+        db.prepare('DELETE FROM room_gifts WHERE to_pubkey = ?').run(cohortUsers[3]);
+        runWashSybilMetricsAudit();
+        const kept = db.prepare('SELECT member_pubkey FROM cohort_allowance_members').pluck().all() as string[];
+        assert(!kept.includes(cohortUsers[3]), `a member no longer past the line goes at the next run (${kept.length} kept)`);
+        vouch(voucher, cohortUsers[3], hc(600));
+        runWashSybilMetricsAudit();
+        db.prepare('UPDATE cohort_allowance_members SET days_after_joining = 1 WHERE member_pubkey = ?').run(cohortUsers[0]);
+        runWashSybilMetricsAudit();
+        const days0 = (db.prepare('SELECT days_after_joining AS d FROM cohort_allowance_members WHERE member_pubkey = ?').get(cohortUsers[0]) as { d: number } | undefined)?.d;
+        assert(days0 === 1, `a member found before keeps the day it was first found on the next run (${days0})`);
 
         // --- Test 4b: the invite-funnel alert's line is the owner's Beans (100 by default), the sums whole hundredths ---
         // (the deciding review of #3033, state-engine.ts: it compared hundredths with Beans, so it fired at 1 Bean, and its

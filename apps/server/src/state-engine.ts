@@ -5,7 +5,7 @@ import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOS
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
-import type { WashAnalysis } from '@beanpool/engine';
+import type { WashAnalysis, AllowancePart } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
 import { assertLedgerWritable, assertPlainTablesWritable, standbyWritesNothing, onNodeRoleChange } from './config/node-role.js';
@@ -8204,7 +8204,18 @@ export function adminBulkDeletePosts(postIds: string[], opts?: { onRefundShortfa
 
 // ===================== COMMUNITY HEALTH =====================
 
-export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down' | 'unhandled_rejections'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
+/**
+ * A new member the cohort_velocity flag names: their whole credit allowance, the part counted (not an owner's or admin's
+ * grant), the whole days after joining the check first saw it past the line, and what gave it (engine audit.ts
+ * AllowancePart: earned, vouch, gift, known, granted, with `from` the giver's key for a vouch or gift). Hundredths.
+ */
+export interface CohortAllowance { member: string; allowance_c: number; counted_c: number; daysAfterJoining: number; parts: AllowancePart[] }
+export interface HealthFlag {
+    type: 'wash_trading' | 'isolated_branch' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down' | 'unhandled_rejections';
+    severity: 'warning' | 'alert' | 'critical'; description: string; members: string[];
+    /** cohort_velocity only: each named member's allowance, one per `members` entry. Dropped with the names (alertsSummary). */
+    allowances?: CohortAllowance[];
+}
 export interface WatchdogStatus { present: boolean; lastSeenAt: string | null; status: string | null; recoveries: number; lastRecoveryAt: string | null; healthy: boolean; }
 export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; minAppVersionFrom: string | null; appFloors: Record<AppPlatform, PlatformFloor>; appVersions: AppStoreVersions; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; watchdog: WatchdogStatus; }
 
@@ -8554,19 +8565,25 @@ export function getCommunityHealth(): CommunityHealth {
         }
     } catch (e) { console.error('Health flag check (aggregate credit spike) failed:', e); }
 
-    // 5. Cohort Velocity Anomaly
+    // 5. New members whose credit allowance reached the line within two weeks of joining: who, from the metrics audit's last
+    // cohort check (cohort_allowance_members; engine audit.ts), each with how deep, when, and what gave it. Only owners and
+    // admins read flags (the admin routes; a look at one that names members is logged). About the allowance, not spending;
+    // an owner's or admin's grant is never counted. The old count rows (system_metrics 'cohort_anomalies') are not read.
     try {
-        const cohortAnomalyRow = db.prepare(`
-            SELECT metric_value FROM system_metrics 
-            WHERE metric_key = 'cohort_anomalies' 
-            ORDER BY timestamp DESC, id DESC LIMIT 1
-        `).get() as any;
-        if (cohortAnomalyRow && cohortAnomalyRow.metric_value > 0) {
+        const rows = db.prepare(`SELECT member_pubkey, allowance_c, counted_c, days_after_joining, parts FROM cohort_allowance_members
+            ORDER BY counted_c DESC, member_pubkey ASC`).all() as { member_pubkey: string; allowance_c: number; counted_c: number; days_after_joining: number; parts: string }[];
+        if (rows.length > 0) {
+            const allowances: CohortAllowance[] = rows.map(r => {
+                let parts: CohortAllowance['parts'] = [];
+                try { const p = JSON.parse(r.parts); if (Array.isArray(p)) parts = p; } catch { /* a row that can't be read names its member with no parts */ }
+                return { member: r.member_pubkey, allowance_c: r.allowance_c, counted_c: r.counted_c, daysAfterJoining: r.days_after_joining, parts };
+            });
             flags.push({
                 type: 'cohort_velocity',
                 severity: 'warning',
-                description: `Cohort Velocity Anomaly: ${cohortAnomalyRow.metric_value} cohort(s) reached deep floors within 14 days of creation`,
-                members: []
+                description: `${rows.length} new member${rows.length === 1 ? '' : 's'} reached a credit allowance of ${formatHundredths(-PROTOCOL_CONSTANTS.RESIDENT_THRESHOLD, 'en')} Beans or more within 14 days of joining, not counting what an owner or admin gave. This is about how much credit they may use, not what they spent.`,
+                members: rows.map(r => r.member_pubkey),
+                allowances,
             });
         }
     } catch (e) { console.error('Health flag check (cohort velocity) failed:', e); }

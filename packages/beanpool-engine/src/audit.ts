@@ -184,7 +184,70 @@ export function runConservationCheck(db: Db): { sumBalances: number; baseline: n
     return { sumBalances, baseline, drift, strandedEscrows, badBalances, ok };
 }
 
-export interface WashSybilMetrics { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number }
+/**
+ * One part of a new member's credit allowance, as the cohort check read it: what gave it and how much (whole hundredths).
+ * `counted` is false for what an owner or admin gave on purpose (the known floor, the granted lane, or a vouch or gift
+ * from one of them): the check is about allowance that grew by other routes (Marty, 14 Nov 2026).
+ *   earned   real trades (from: null)
+ *   vouch    a voucher's vouch (from: the voucher)
+ *   gift     a member passed on part of their line (from: that member)
+ *   known    the known floor an owner or admin set when confirming them (from: null)
+ *   granted  credit granted by hand in the granted lane, members.earned_credit_c (from: null)
+ */
+export interface AllowancePart { kind: 'earned' | 'vouch' | 'gift' | 'known' | 'granted'; from: string | null; amount_c: number; counted: boolean }
+
+/**
+ * A new member the cohort check found past the line: their whole allowance, the part of it counted (not given by an owner
+ * or admin), how many whole days after joining the check saw it there, and its parts. Hundredths, like every floor.
+ */
+export interface CohortAllowanceMember { pubkey: string; allowance_c: number; counted_c: number; daysAfterJoining: number; parts: AllowancePart[] }
+
+export interface WashSybilMetrics {
+    totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number;
+    /** The members past the line in the cohorts counted in cohortAnomalies (the flag names them: owners and admins only). */
+    cohortMembers: CohortAllowanceMember[];
+}
+
+/** Whether this key holds an owner or admin role here (node_roles; none on a database without the table). */
+function isOwnerOrAdmin(db: Db, publicKey: string): boolean {
+    try {
+        return !!db.prepare("SELECT 1 FROM node_roles WHERE member_pubkey = ? AND role IN ('owner', 'admin') LIMIT 1").get(publicKey);
+    } catch (e) {
+        if (/no such table/i.test((e as Error)?.message ?? '')) return false;
+        throw e;
+    }
+}
+
+/**
+ * The parts of a member's allowance from their trust profile, and the part counted: real trades, and the line a voucher or
+ * a member who is no owner or admin gave them (room held, less what an owner or admin gave of it; what they passed on comes
+ * out of the counted part first). Never more than the whole allowance, which the community's cap and a freeze bound.
+ */
+export function allowanceParts(db: Db, publicKey: string, profile: { floor: number; earnedCredit: number; grantedCredit: number; knownGrant: number; roomHeld: number; creditFrozen: boolean }): { allowance_c: number; counted_c: number; parts: AllowancePart[] } {
+    const allowance_c = Math.max(0, -profile.floor);
+    const parts: AllowancePart[] = [];
+    if (profile.earnedCredit > 0) parts.push({ kind: 'earned', from: null, amount_c: profile.earnedCredit, counted: true });
+    let fromOwnersAdmins = 0;
+    if (profile.roomHeld > 0) {
+        let rows: { from_pubkey: string; kind: 'vouch' | 'gift'; amount_c: number }[] = [];
+        try {
+            rows = db.prepare(`SELECT from_pubkey, kind, SUM(amount_c) AS amount_c FROM room_gifts WHERE to_pubkey = ?
+                GROUP BY from_pubkey, kind ORDER BY MIN(at) ASC, from_pubkey ASC`).all(publicKey) as typeof rows;
+        } catch (e) {
+            if (!/no such table/i.test((e as Error)?.message ?? '')) throw e;
+        }
+        for (const r of rows) {
+            const counted = !isOwnerOrAdmin(db, r.from_pubkey);
+            if (!counted) fromOwnersAdmins += r.amount_c;
+            parts.push({ kind: r.kind, from: r.from_pubkey, amount_c: r.amount_c, counted });
+        }
+    }
+    if (profile.knownGrant > 0) parts.push({ kind: 'known', from: null, amount_c: profile.knownGrant, counted: false });
+    if (profile.grantedCredit > 0 && !profile.creditFrozen) parts.push({ kind: 'granted', from: null, amount_c: profile.grantedCredit, counted: false });
+    const countedRoom = Math.max(0, profile.roomHeld - fromOwnersAdmins);
+    const counted_c = Math.min(allowance_c, profile.earnedCredit + countedRoom);
+    return { allowance_c, counted_c, parts };
+}
 
 /**
  * Computes metrics for wash trading, Sybil rings, and delinquency.
@@ -236,15 +299,16 @@ function* washSybilMetricsSteps(db: Db): Generator<void, WashSybilMetrics> {
     let delinquentCount = 0;
 
     const wash = yield* washTradingAnalysisStepsOnSnapshot(db);
-    const floors = new Map<string, number>();
-    const floorOf = (key: string): number => {
-        let floor = floors.get(key);
-        if (floor === undefined) {
-            floor = getMemberTrustProfile(db, key, 0, wash).floor;
-            floors.set(key, floor);
+    const profiles = new Map<string, ReturnType<typeof getMemberTrustProfile>>();
+    const profileOf = (key: string) => {
+        let profile = profiles.get(key);
+        if (profile === undefined) {
+            profile = getMemberTrustProfile(db, key, 0, wash);
+            profiles.set(key, profile);
         }
-        return floor;
+        return profile;
     };
+    const floorOf = (key: string): number => profileOf(key).floor;
 
     try {
         // The active members a page of rows at a time, in rowid order, so no one query holds the loop for long: all
@@ -292,8 +356,12 @@ function* washSybilMetricsSteps(db: Db): Generator<void, WashSybilMetrics> {
         console.error('[MetricsAudit] Failed to compute near-floor/delinquent stats:', e);
     }
 
-    // 3. Cohort Velocity Report
+    // 3. Cohort Velocity Report: a join week where half or more of the new members reached an allowance of 600 Beans (the
+    // Resident line) within 14 days of joining, counting only what grew by routes other than an owner's or admin's grant
+    // (Marty, 14 Nov 2026: allowances an owner or admin gave on purpose tripped it, and it named nobody). About the
+    // allowance, never spending. Who they are is kept (cohortMembers), for the flag the owners and admins read.
     let cohortAnomalies = 0;
+    const cohortMembers: CohortAllowanceMember[] = [];
     try {
         const cohorts = db.prepare(`
             SELECT strftime('%Y-%W', joined_at) as cohort_week, GROUP_CONCAT(public_key) as keys
@@ -306,33 +374,36 @@ function* washSybilMetricsSteps(db: Db): Generator<void, WashSybilMetrics> {
             const keys = c.keys.split(',');
             if (keys.length === 0) continue;
 
-            let fastGrowingCount = 0;
+            const fastGrowing: CohortAllowanceMember[] = [];
             for (const key of keys) {
                 yield;
-                const floor = floorOf(key);
-                // A floor at or past the Resident line (-600 Beans, in hundredths like every floor).
-                if (floor <= PROTOCOL_CONSTANTS.RESIDENT_THRESHOLD) {
-                    const memberRow = db.prepare("SELECT joined_at FROM members WHERE public_key = ?").get(key) as any;
-                    if (memberRow?.joined_at) {
-                        const joined = new Date(memberRow.joined_at);
-                        const ageDays = (Date.now() - joined.getTime()) / (1000 * 60 * 60 * 24);
-                        if (ageDays < 14) {
-                            fastGrowingCount++;
-                        }
+                // Only the floor's line counts first (cheap, and most members never come near it): the counted part is
+                // never more than the whole allowance.
+                if (floorOf(key) > PROTOCOL_CONSTANTS.RESIDENT_THRESHOLD) continue;
+                const { allowance_c, counted_c, parts } = allowanceParts(db, key, profileOf(key));
+                // The counted part at or past the Resident line (600 Beans, in hundredths like every floor).
+                if (-counted_c > PROTOCOL_CONSTANTS.RESIDENT_THRESHOLD) continue;
+                const memberRow = db.prepare("SELECT joined_at FROM members WHERE public_key = ?").get(key) as any;
+                if (memberRow?.joined_at) {
+                    const joined = new Date(memberRow.joined_at);
+                    const ageDays = (Date.now() - joined.getTime()) / (1000 * 60 * 60 * 24);
+                    if (ageDays < 14) {
+                        fastGrowing.push({ pubkey: key, allowance_c, counted_c, daysAfterJoining: Math.max(0, Math.floor(ageDays)), parts });
                     }
                 }
             }
 
-            const ratio = fastGrowingCount / keys.length;
+            const ratio = fastGrowing.length / keys.length;
             if (keys.length >= 2 && ratio >= 0.5) {
                 cohortAnomalies++;
+                cohortMembers.push(...fastGrowing);
             }
         }
     } catch (e) {
         console.error('[MetricsAudit] Failed to compute cohort velocity anomalies:', e);
     }
 
-    return { totalNegative, accountsNearFloor, delinquentCount, cohortAnomalies };
+    return { totalNegative, accountsNearFloor, delinquentCount, cohortAnomalies, cohortMembers };
 }
 
 /** A member's preferences as the copy carries them (`preferences`, an object), or undefined. */

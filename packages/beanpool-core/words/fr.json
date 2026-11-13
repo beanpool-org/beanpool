@@ -2540,5 +2540,10 @@
     "one": "Quelqu'un en a pris pendant que vous modifiiez. Il en reste {n} maintenant. Vérifiez le nombre et enregistrez à nouveau.",
     "other": "Quelqu'un en a pris pendant que vous modifiiez. Il en reste {n} maintenant. Vérifiez le nombre et enregistrez à nouveau."
   },
-  "To stop selling, pause or remove the listing.": "Pour arrêter de vendre, mettez l'annonce en pause ou retirez-la."
+  "To stop selling, pause or remove the listing.": "Pour arrêter de vendre, mettez l'annonce en pause ou retirez-la.",
+  "Newest\u0004member sort": "Récents",
+  "Name\u0004member sort": "Nom",
+  "Friends\u0004member sort": "Amis",
+  "Trusted\u0004member sort": "De confiance",
+  "Active\u0004member sort": "Actifs"
 }

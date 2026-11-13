@@ -423,6 +423,13 @@ export interface Member {
     homeNodeUrl?: string;   // for federation visitors: their home node URL
     avatarUrl?: string | null;
     profileUpdatedAt?: string | null;
+    /** The last-active DAY (midnight UTC) the node serves to anyone but the member (server lastActiveForViewer); null if never. */
+    lastActiveAt?: string | null;
+    /**
+     * members.earned_credit_c in hundredths: the granted-credit lane, a part of the credit line (engine trust.ts). Read only by
+     * the Trusted sort, which only an owner or admin is offered (lib/member-sort.ts); never shown.
+     */
+    earnedCredit?: number;
 }
 
 /**

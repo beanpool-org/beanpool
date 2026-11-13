@@ -44,6 +44,12 @@ export interface CreditPeoplePanelProps {
     onShowing?: (showing: boolean) => void;
     /** Called once `start` has switched credit on: the page then stops handing it over (credit is off at every visit). */
     onStartUsed?: (nonce: number) => void;
+    /**
+     * Whether this viewer's credit view is an owner's or admin's (it shows what each line is made of), from this panel's own
+     * read: the page offers its Trusted sort only then (lib/member-sort.ts). False until the node has said, and again the
+     * moment it ends the sight.
+     */
+    onFullSight?: (full: boolean) => void;
 }
 
 const FILTER_WORDS: Readonly<Record<CreditFilter, typeof W[keyof typeof W]>> = {
@@ -87,7 +93,7 @@ export function VoucherBudgetLines({ b }: { b: VoucherBudgetLine }) {
     );
 }
 
-export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShowing, onStartUsed }: CreditPeoplePanelProps) {
+export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShowing, onStartUsed, onFullSight }: CreditPeoplePanelProps) {
     const [giver, setGiver] = useState<GiverFacts | null | 'loading'>('loading');
     const [on, setOn] = useState(false);
     const [chip, setChip] = useState<CreditFilter>('all');
@@ -135,6 +141,9 @@ export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShow
     }, [start?.nonce]);
 
     useEffect(() => { onShowing?.(may && on); }, [may, on]);
+    useEffect(() => { onFullSight?.(full); }, [full]);
+    // Leaving the pane takes the sight with it: the page's next Community starts without it until this panel reads again.
+    useEffect(() => () => onFullSight?.(false), []);
 
     // The community's known floor, for the sheet's Confirm line: the node's rule, only where the community confirms its members.
     useEffect(() => {

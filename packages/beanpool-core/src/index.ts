@@ -161,6 +161,8 @@ export * from './messaging.js';
 export * from './community-shape-card.js';
 export * from './use-on-computer.js';
 export * from './credit-sight.js';
+// The member's own credit card on the Ledger: the sentences, the parts of the line and the rainbow's picture (both apps).
+export * from './credit-standing.js';
 export * from './known-rule.js';
 // People → Community: the list's five sorts and their words, one set for the phone and the web app.
 export * from './member-sort.js';

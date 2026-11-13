@@ -1,7 +1,9 @@
 /**
  * "I still have my 12 words", kept on the account (DESIGN-home-default-fable.md §2.5, the node's D1 `words_kept`): said on
- * the 12-words card, or by saving or printing the recovery kit (the director's addition to D1, Marty's report of 13 Nov
- * 2026). It ends the Home card and ticks First steps' "Keep your 12 words safe" on every device, the web's too, where
+ * the 12-words card, or by a Yes to "Did you keep it somewhere safe?" after the recovery kit (components/RecoveryKitButtons.tsx).
+ * The kit alone never counts, since the phone cannot see a print or a save (the director's rule, review of #3113; the kit was
+ * the director's addition to D1, Marty's report of 13 Nov 2026). It ends the Home card and ticks First steps' "Keep your 12
+ * words safe" on every device, the web's too, where
  * the phone's own record (utils/one-way-back.ts) only ever spoke for this phone.
  *
  * One signed write, `POST /api/members/preferences` `{ words_kept: true }` (one way: the node never clears it). A write
@@ -27,8 +29,9 @@ async function send(url: string, identity: BeanPoolIdentity): Promise<boolean> {
 }
 
 /**
- * The member said they still have their 12 words, or saved the kit, for the community at `url`: the phone's record is
- * done ("checked"; started done where there was none, so a later start keeps it), and the account is told. Never throws.
+ * The member said they still have their 12 words (on the card, or Yes after the kit), for the community at `url`: the
+ * phone's record is done ("checked"; started done where there was none, so a later start keeps it), and the account is
+ * told. Never throws.
  */
 export async function keepWords(url: string | null, identity: BeanPoolIdentity, now: number = Date.now()): Promise<void> {
     try {

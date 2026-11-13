@@ -1585,7 +1585,7 @@ export default function WelcomeScreen() {
             await AsyncStorage.setItem('beanpool_identity_backed_up', 'true');
             // The 12-words reminder (DESIGN-home-default-fable.md §2.5): carrying on past the backup step counts as its first
             // showing, so it starts put away (First steps' line on day one, the card after the first post and after a week).
-            // A record already there (the kit saved just now, or a 12-words join) is kept; a sign-in added ends it at Home.
+            // A record already there (a Yes after the kit just now, or a 12-words join) is kept; a sign-in added ends it at Home.
             const joinedHere = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
             if (joinedHere) await startOneWayBackPutAway(pendingIdentity.publicKey, joinedHere.replace(/\/+$/, '')).catch(() => undefined);
 
@@ -2592,6 +2592,12 @@ export default function WelcomeScreen() {
 
     // --- STEP 3: SAFETY BACKUP (seed phrase — reframed) ---
     if (mode === 'seedBackup' && pendingIdentity) {
+        // The member's Yes after the kit (components/RecoveryKitButtons.tsx asks it; the kit alone never counts) is "I still
+        // have my 12 words", kept on the account (DESIGN-home-default-fable.md §2.5).
+        const keptFromKit = () => {
+            const who = pendingIdentity;
+            void AsyncStorage.getItem('beanpool_anchor_url').catch(() => null).then(u => keepWords(u, who));
+        };
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
@@ -2756,15 +2762,7 @@ export default function WelcomeScreen() {
                         <CopyClearsNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} />
 
                         {/* Optional, like the tickbox below: Next never waits on the kit (utils/recovery-kit.ts). */}
-                        <RecoveryKitButtons
-                            words={pendingWords}
-                            colors={colors}
-                            // The kit printed or saved counts as "I still have my 12 words" (DESIGN-home-default-fable.md §2.5).
-                            onKept={() => {
-                                const who = pendingIdentity;
-                                if (who) void AsyncStorage.getItem('beanpool_anchor_url').catch(() => null).then(u => keepWords(u, who));
-                            }}
-                        />
+                        <RecoveryKitButtons words={pendingWords} colors={colors} onKept={keptFromKit} />
 
                         {/*
                           The tick is now a claim the user makes, not a toll they pay.

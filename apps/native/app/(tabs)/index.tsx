@@ -1168,7 +1168,7 @@ export default function HomeScreen() {
         void readProgress(pk).then(p => { if (identityRef.current?.publicKey === pk) setTourProgress(p); });
     }, [identity?.publicKey, tourRun]);
     // A Done or Skip the node didn't take (offline) is sent again on the next Home open, and so is "I still have my 12 words"
-    // (or the kit saved) said where the node couldn't hear it (utils/words-kept.ts).
+    // (or Yes after the kit) said where the node couldn't hear it (utils/words-kept.ts).
     useEffect(() => {
         if (!url || !identity) return;
         void resendTourRecord(url, identity);

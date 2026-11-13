@@ -229,7 +229,7 @@ export interface HomeCards {
         /**
          * "Keep your 12 words safe" (DESIGN-home-default-fable.md §2.4, the node's D1): null when a sign-in's copy is linked
          * there (no such line), false while the words are the only way back, true once the member said they still have them
-         * or saved the recovery kit, on any device. Absent from a node before D1: no such line.
+         * (on the card, or Yes after the recovery kit), on any device. Absent from a node before D1: no such line.
          */
         words?: boolean | null;
     };
@@ -1189,7 +1189,7 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
  *   joined.
  * - `door`: whether the node takes a sign-in from them, which is `cards.safety` (the 12-words door's rule, the only one
  *   routes/open-join.ts `linkState` accepts): the card offers "Add a sign-in" only then (review of #3110, round 2).
- * - `kept`: First steps' `steps.words` true, the member said they still have their words or saved the kit, anywhere.
+ * - `kept`: First steps' `steps.words` true, the member said they still have their words (on the card, or Yes after the kit), anywhere.
  * - A node from before D1 sends no `wayBack`: `cards.safety` alone, as before.
  */
 export function safetyWord(answer: HomeAnswer, asked: readonly string[]): { words: boolean; joinedAt: number | null; door?: boolean; kept?: boolean } | null {

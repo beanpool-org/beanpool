@@ -134,7 +134,7 @@ export const putAwayRecord = (url: string, joinedAt: number): OneWayBack => ({ u
 
 /**
  * An invite sign-up ended (app/welcome.tsx): the reminder starts put away. One that is done or already running is kept
- * (the recovery kit saved during sign-up has already marked it done).
+ * (a Yes after the recovery kit during sign-up has already marked it done).
  */
 export async function startOneWayBackPutAway(publicKey: string, url: string, now: number = Date.now()): Promise<void> {
     if (await readOneWayBack(publicKey)) return;
@@ -168,7 +168,7 @@ export interface OneWayBackStanding {
      * so the card offers none and its record is `by: 'wayBack'`. Absent: the 12-words door's word, as before.
      */
     door?: boolean;
-    /** Home's word only: the member said they still have their 12 words, or saved the kit, on any device (`words_kept`). */
+    /** Home's word only: the member said they still have their 12 words (on the card, or Yes after the kit), on any device (`words_kept`). */
     kept?: boolean;
 }
 
@@ -227,7 +227,7 @@ export async function oneWayBackFromNode(
         await write(publicKey, done);
         return done;
     }
-    // "I still have my 12 words" said on another device, or the kit saved there (kept on the account): done here too.
+    // "I still have my 12 words" said on another device, or Yes after the kit there (kept on the account): done here too.
     if (standing.kept && record?.done !== 'linked') {
         if (record?.done === 'checked') return record;
         const checked: OneWayBack = { ...(record ?? (standing.door === false ? putAwayRecord(url, standing.joinedAt ?? now) : { url, joinedAt: standing.joinedAt ?? now })), done: 'checked' };

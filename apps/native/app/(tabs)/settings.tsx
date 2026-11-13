@@ -1037,7 +1037,8 @@ export default function SettingsScreen() {
     usePutAwayAfterLeave(revealWords, putProtectionWordsAway);
     usePutAwayAfterLeave(seedWords !== null, putSeedWordsAway);
 
-    // The recovery kit printed or saved counts as "I still have my 12 words", kept on the account (DESIGN-home-default-fable.md §2.5).
+    // The member's Yes after the recovery kit (RecoveryKitButtons asks it; the kit alone never counts) is "I still have my 12
+    // words", kept on the account (DESIGN-home-default-fable.md §2.5).
     const keptFromKit = () => {
         const who = identity;
         if (who) void getAnchorUrl().catch(() => null).then(u => keepWords(u, who));

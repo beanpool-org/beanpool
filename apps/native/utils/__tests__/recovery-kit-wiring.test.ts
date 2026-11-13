@@ -65,6 +65,28 @@ describe("Settings: both reveals of the 12 words", () => {
     });
 });
 
+// Review of #3113 (tier A; the director's rule): the kit coming back is never "kept" (components/RecoveryKitButtons.tsx asks
+// "Did you keep it somewhere safe?", and only Yes calls onKept: onboarding-components-words-render.test.ts). Every entry
+// to the kit hands it a Yes that records "I still have my 12 words" for its account (utils/words-kept.ts keepWords).
+describe('every entry to the kit records a Yes the same way', () => {
+    it('the joining step, and both of Settings\' reveals (where the Home card\'s Show my 12 words lands), pass onKept to keepWords', () => {
+        const welcome = slice(read('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'onboardingGuide'");
+        expect(welcome).toContain('<RecoveryKitButtons words={pendingWords} colors={colors} onKept={keptFromKit} />');
+        expect(slice(welcome, 'const keptFromKit = () => {', '};')).toContain('keepWords(u, who)');
+        const settings = read('app/(tabs)/settings.tsx');
+        expect(count(settings, 'onKept={keptFromKit}')).toBe(2);
+        expect(count(settings, '<RecoveryKitButtons')).toBe(2);
+        expect(slice(settings, 'const keptFromKit = () => {', '};')).toContain('keepWords(u, who)');
+    });
+
+    it('the buttons call onKept only from the Yes, never from the kit\'s own result', () => {
+        const buttons = read('components/RecoveryKitButtons.tsx');
+        expect(count(buttons, 'onKept?.()')).toBe(1);
+        expect(slice(buttons, 'testID="kit-kept-ask"', 'testID="kit-kept-yes"')).toContain('onKept?.()');
+        expect(slice(buttons, 'const run = async', 'return (')).not.toContain('onKept?.(');
+    });
+});
+
 describe('the buttons themselves', () => {
     it('log nothing and write nothing of their own: the file is made and deleted in utils/recovery-kit.ts', () => {
         const buttons = read('components/RecoveryKitButtons.tsx');

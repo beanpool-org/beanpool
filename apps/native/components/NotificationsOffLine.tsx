@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet, AppState } from 'react-native';
 import { t } from '@beanpool/core';
 import { type AppColors } from '../constants/colors';
 import {
-    NOTIFICATIONS_OFF_HERE, NOTIFICATION_CARD_WORDS, notificationsOffHere, readOsNotificationPermission, turnOnNotifications,
+    NOTIFICATION_CARD_WORDS, notificationsOffHere, readOsNotificationPermission, turnOnNotifications,
 } from '../utils/notification-permission';
 
 /**
@@ -29,7 +29,7 @@ export function NotificationsOffLine({ publicKey, colors }: { publicKey: string 
     const turnOn = t(NOTIFICATION_CARD_WORDS.turnOn);
     return (
         <View style={s.row} testID="bell-notifications-off">
-            <Text style={[s.words, { color: colors.text.secondary }]}>{t(NOTIFICATIONS_OFF_HERE)}</Text>
+            <Text style={[s.words, { color: colors.text.secondary }]}>{t('Notifications are off on this phone.')}</Text>
             <Pressable
                 onPress={async () => {
                     if (busy) return;

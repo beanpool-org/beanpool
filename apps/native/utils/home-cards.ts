@@ -79,14 +79,12 @@ export const STEPS_NEW_DAYS = 14;
 const DAY_MS = 86_400_000;
 
 /**
- * Welcome's name (DESIGN-home-default-fable.md §2.3, §5.1): the `start` card's caption, picker row and band on the phone.
- * "Getting started" stays the picker group's name.
+ * A type's name: its caption, its row in the picker and its band in Arrange, and the screen reader's words for its menu.
+ * The `start` card is "Welcome" on the phone (DESIGN-home-default-fable.md §2.3, §5.1); "Getting started" stays the picker
+ * group's name.
  */
-export const WELCOME_NAME = word('Welcome');
-
-/** A type's name: its caption, its row in the picker and its band in Arrange, and the screen reader's words for its menu. */
 export function cardName(type: HomeCardId, profile?: string): string {
-    if (type === 'start') return t(WELCOME_NAME);
+    if (type === 'start') return t('Welcome');
     const entry = homeCardType(type);
     if (!entry) return type;
     return profile === 'global' && entry.globalName ? t(entry.globalName) : t(entry.name);

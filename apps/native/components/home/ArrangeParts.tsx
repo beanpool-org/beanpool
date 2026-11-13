@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { ARRANGE_WORDS, t, word } from '@beanpool/core';
+import { ARRANGE_WORDS, t } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { HOME_GUTTER_DP, HOME_TARGET_DP } from './HomeParts';
 
@@ -81,17 +81,15 @@ export function ArrangeReset({ colors, onPress }: { colors: AppColors; onPress: 
     );
 }
 
-/** "Home is back to how it started." (DESIGN-home-default-fable.md §3 "Restore default?"): said after Reset, no confirm box. */
-export const RESET_DONE_LINE = word('Home is back to how it started.');
-
 /**
- * The line Reset leaves under itself, with Undo: the Home from before the reset comes back, saved as any edit is. It stays
+ * "Home is back to how it started." (DESIGN-home-default-fable.md §3 "Restore default?"): the line Reset leaves under
+ * itself, no confirm box, with Undo: the Home from before the reset comes back, saved as any edit is. It stays
  * until Undo, its ✕, or Done; the words and the link wrap whole at 320 dp and 1.3x text.
  */
 export function ArrangeResetUndo({ colors, onUndo, onClose }: { colors: AppColors; onUndo: () => void; onClose: () => void }) {
     return (
         <View style={st.undoRow} accessibilityLiveRegion="polite" testID="home-reset-undo-line">
-            <Text style={[st.undoText, { color: colors.text.body }]}>{t(RESET_DONE_LINE)}</Text>
+            <Text style={[st.undoText, { color: colors.text.body }]}>{t('Home is back to how it started.')}</Text>
             <Pressable onPress={onUndo} style={st.word} accessibilityRole="button" accessibilityLabel={t('Undo')} testID="home-reset-undo">
                 <Text style={[st.wordText, { color: colors.text.link }]}>{t('Undo')}</Text>
             </Pressable>

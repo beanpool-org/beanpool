@@ -409,7 +409,10 @@ describe('S3: notification permission at the tap, never at account creation', ()
 
         // DESIGN-home-default-fable.md §2.5 (Marty's pick 3): no card at the top of Home; the card component is gone.
         it('Home draws no notifications card', () => {
-            expect(home).not.toMatch(/NotificationPermissionCard|shouldShowNotificationCard|turnOnNotifications/);
+            // No card and no card rule; the phone's own question only at First steps' tap (turnOnNotifications in onStep).
+            expect(home).not.toMatch(/NotificationPermissionCard|shouldShowNotificationCard|declineNotifications/);
+            expect(home.match(/turnOnNotifications\(/g)).toHaveLength(1);
+            expect(home).toMatch(/else if \(step === 'notify'\) \{\s*void turnOnNotifications\(/);
             expect(fs.existsSync(path.join(root, 'components/NotificationPermissionCard.tsx'))).toBe(false);
         });
 

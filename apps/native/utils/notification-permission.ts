@@ -326,8 +326,5 @@ export function notifyStep(record: NotificationPermissionRecord, os: OsNotificat
     return false;
 }
 
-/** The bell's line while this phone can't buzz (§2.5 "How to turn on later"): Turn on (a word already kept) follows it. */
-export const NOTIFICATIONS_OFF_HERE = word('Notifications are off on this phone.');
-
 /** Whether the bell's sheet says notifications are off here: the phone can have them and doesn't allow them now. */
 export const notificationsOffHere = (os: OsNotificationPermission): boolean => os.available && !os.granted;

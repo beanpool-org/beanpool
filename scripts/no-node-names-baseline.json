@@ -28,7 +28,7 @@
  "apps/manager/src/components/modules/LightsOutCard.test.tsx": 1,
  "apps/manager/src/components/modules/MemberKnownFloorPanel.test.tsx": 3,
  "apps/manager/src/components/modules/ModeratorView.test.tsx": 7,
- "apps/manager/src/components/modules/NodeIdentityPanel.test.tsx": 31,
+ "apps/manager/src/components/modules/NodeIdentityPanel.test.tsx": 29,
  "apps/manager/src/components/modules/OwnerWordsChecksPanel.test.tsx": 2,
  "apps/manager/src/components/modules/PeerConnectorsPanel.test.tsx": 11,
  "apps/manager/src/components/modules/PostModerationPanel.test.tsx": 2,

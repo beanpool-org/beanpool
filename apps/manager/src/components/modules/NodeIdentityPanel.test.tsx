@@ -129,7 +129,7 @@ describe('NodeIdentityPanel Component', () => {
         const callsignInput = screen.getByLabelText(/Callsign \(Short Name\)/i);
         expect(callsignInput).toBeInTheDocument();
         expect(callsignInput).toHaveAttribute('maxLength', '20');
-        expect(callsignInput).toHaveAttribute('placeholder', 'e.g. mullum');
+        expect(callsignInput).toHaveAttribute('placeholder', 'e.g. riverside');
         expect(screen.getByText('This is the name members see.')).toBeInTheDocument();
         expect(screen.getByText('Only used where no Community Name is set.')).toBeInTheDocument();
 
@@ -187,7 +187,7 @@ describe('NodeIdentityPanel Component', () => {
         expect(callsignInput).toBeInTheDocument();
         expect(communityNameInput).toHaveAttribute('maxLength', '60');
         expect(callsignInput).toHaveAttribute('maxLength', '20');
-        expect(callsignInput).toHaveAttribute('placeholder', 'e.g. mullum');
+        expect(callsignInput).toHaveAttribute('placeholder', 'e.g. riverside');
 
         // Explanatory lines under the inputs
         expect(screen.getByText('This is the name members see.')).toBeInTheDocument();

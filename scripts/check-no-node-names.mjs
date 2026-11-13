@@ -19,7 +19,8 @@
  *
  * THE BASELINE (scripts/no-node-names-baseline.json) is what is left today, per file, while later slices clear the tests
  * and comments. A file over its count, or a file not listed, fails: name a made-up place (riverside, Riverside Exchange,
- * riverside.example.org) instead. A file under its count also fails, so the room is not reused: lower it with
+ * riverside.example.org) instead. A file under its count passes with a note, so a PR that swaps one of our names for
+ * riverside is never turned red for it (733 test files hold names today; every lane touches some); lock the fall in with
  * `node scripts/check-no-node-names.mjs --update`, which only ever lowers counts and drops files that reach 0.
  *
  * Usage: node scripts/check-no-node-names.mjs [--list | --update]    (--list prints every counted site)
@@ -94,7 +95,7 @@ export function scan(root, files) {
     return { counts, sites };
 }
 
-/** What fails against the baseline: `over` (new names) and `lowered` (fewer than recorded: lower the baseline). */
+/** Against the baseline: `over` (new names: fails) and `lowered` (fewer than recorded: passes; --update lowers it). */
 export function judge(counts, baseline) {
     const over = [];
     for (const [rel, n] of Object.entries(counts)) {
@@ -142,12 +143,10 @@ function main() {
         console.log(`   global community's address is ${DEFAULTS_FILE}'s DEFAULT_GLOBAL_COMMUNITY_URL. \`--list\` shows every site.`);
         return 1;
     }
-    if (lowered.length) {
-        console.log('❌ Fewer node names than the baseline allows: lower it so the room is not reused (`node scripts/check-no-node-names.mjs --update`).');
-        for (const l of lowered) console.log(`     ${l}`);
-        return 1;
-    }
     console.log(`✓ no new node names in the code (${sites.length} left to clear, in ${Object.keys(counts).length} files)`);
+    if (lowered.length) {
+        console.log(`  ${lowered.length} file(s) under their baseline: \`node scripts/check-no-node-names.mjs --update\` locks the fall in.`);
+    }
     return 0;
 }
 

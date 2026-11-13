@@ -88,7 +88,7 @@ test('recorded fixtures, migrations and out-of-scope pages are not read', () => 
     assert.deepEqual(r.counts, {});
 });
 
-test('the baseline: a file over its count fails, a file under it fails until lowered, and --update only lowers', () => {
+test('the baseline: a file over its count fails, a file under it is reported, and --update only lowers', () => {
     const base = { 'apps/server/src/a.ts': 2, 'apps/server/src/gone.ts': 1 };
     const over = check({ 'apps/server/src/a.ts': 'mullum mullum mullum\n' }, base);
     assert.deepEqual(over.over, ['apps/server/src/a.ts: 3 node name(s), 2 allowed']);

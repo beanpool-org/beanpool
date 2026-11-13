@@ -3619,28 +3619,32 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
             return layoutOnly(pk, prefs);
         });
         const keptWrites = () => vi.mocked(api.saveHomePreferences).mock.calls.filter(c => (c[1] as { words_kept?: boolean }).words_kept === true).length;
-        vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-01-20T00:00:00.000Z'));
-        vi.spyOn(console, 'warn').mockImplementation(() => {});
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        fireEvent.click(within(await screen.findByTestId('one-way-back-landing')).getByTestId('one-way-back-kept'));
-        await waitFor(() => expect(keptWrites()).toBe(1));
-        await pause();
-        expect(keptWrites()).toBe(1);
-        cleanup();
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-01-20T00:00:00.000Z'));
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            fireEvent.click(within(await screen.findByTestId('one-way-back-landing')).getByTestId('one-way-back-kept'));
+            await waitFor(() => expect(keptWrites()).toBe(1));
+            await pause();
+            expect(keptWrites()).toBe(1);
+            cleanup();
 
-        // Back online, the next landing: sent again.
-        offline = false;
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-market');
-        await waitFor(() => expect(keptWrites()).toBe(2));
-        cleanup();
+            // Back online, the next landing: sent again.
+            offline = false;
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            await waitFor(() => expect(keptWrites()).toBe(2));
+            cleanup();
 
-        // It landed: the landing after sends nothing.
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-market');
-        await pause();
-        expect(keptWrites()).toBe(2);
-        vi.mocked(Date.now).mockRestore();
+            // It landed: the landing after sends nothing.
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            await pause();
+            expect(keptWrites()).toBe(2);
+        } finally {
+            clock.mockRestore();
+            warn.mockRestore();
+        }
     });
 
     it('"Your way back in" for a member with a sign-in linked here (wayBack covered): never drawn, and nothing asks `/me`', async () => {

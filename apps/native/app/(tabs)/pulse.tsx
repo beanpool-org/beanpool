@@ -11,7 +11,10 @@
  *   other platform opens its own app. This screen owns only one part of that: a video scrolled out
  *   of sight stops, which needs the list's viewability and so cannot live in the card.
  * - Prioritizes creator attribution: "my neighbour made this".
- * - Honest empty states for newly syndicated nodes.
+ * - Honest empty states. A quiet week asks nothing: two plain sentences, the one add button in the middle, and the Learn
+ *   lane (DESIGN-pulse-home-fable.md §3.4).
+ * - One add button, Add to Pulse, bottom right as the Market's ADD POST; none on the worldwide community until adding
+ *   there has rules for new people (§3.2, §3.8; core pulseAddsHere).
  * - Responsive at 320dp and 1.3x font scale with pull-to-refresh & infinite cursor scroll.
  */
 
@@ -31,7 +34,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { CATEGORIES, formatNumber, t, tn, word, type ChannelCategory, type WordKey } from '@beanpool/core';
+import { CATEGORIES, PULSE_PAGE_WORDS, formatNumber, pulseAddsHere, t, tn, word, type ChannelCategory, type WordKey } from '@beanpool/core';
 import { useIdentity } from '../IdentityContext';
 import { useTheme, useStyles } from '../ThemeContext';
 import {
@@ -46,6 +49,8 @@ import { pulseLineWords } from '../../components/pulse-lines';
 import { pulseVideoViewabilityChanged } from '../../utils/pulse-video-player';
 import { anchorUrl } from '../../utils/node-post';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
+import { useNodeProfile } from '../../utils/use-node-profile';
+import { FAB_BAND_DP } from '../../utils/fab-band';
 import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 
 type LaneId = 'neighbours' | 'local' | 'learn';
@@ -70,6 +75,8 @@ export default function PulseScreen() {
     const { colors, theme } = useTheme();
     const { identity } = useIdentity();
     const styles = useStyles(makeStyles);
+    // Add to Pulse waits on the worldwide community (Marty's pick 3 of 14 Nov 2026); a local community adds at once.
+    const addsHere = pulseAddsHere(useNodeProfile()?.profile);
     // The rule the feed card's header uses: under 360 dp of room once text is scaled, the lane names need the icons' room.
     const { width: windowWidth, fontScale } = useWindowDimensions();
     const compactLanes = windowWidth / fontScale < 360;
@@ -250,6 +257,9 @@ export default function PulseScreen() {
         }
     };
 
+    // The quiet week's page (below): no item in this lane under All, outside the Learn lane.
+    const quiet = !loading && activeLane !== 'learn' && selectedCategory === 'all' && visibleItems.length === 0;
+
     const renderEmptyState = () => {
         if (loading) return null;
 
@@ -285,20 +295,28 @@ export default function PulseScreen() {
             );
         }
 
+        // A quiet week (§3.4): what there is to do, said plainly, and nothing asked. The add button steps into the middle so
+        // there is still only one; on the worldwide community there is none yet and the Learn lane leads.
         return (
             <View style={styles.emptyContainer}>
                 <Text style={styles.emptyIcon}>🗞️</Text>
-                <Text style={styles.emptyTitle}>{t('The Pulse is quiet right now')}</Text>
-                <Text style={styles.emptyBody}>
-                    {t("Items from neighbours' YouTube channels and blogs appear here automatically once syndicated. As more members connect their channels, this feed will fill up.")}
-                </Text>
-                <Pressable
-                    onPress={() => router.push('/channels')}
-                    style={styles.emptyPrimaryBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('Connect your channels')}
-                >
-                    <Text style={styles.emptyPrimaryBtnText}>{t('+ Connect your channels')}</Text>
+                <Text style={styles.emptyTitle}>{t(PULSE_PAGE_WORDS.quietTitle)}</Text>
+                {addsHere ? (
+                    <>
+                        <Text style={styles.emptyBody}>{t(PULSE_PAGE_WORDS.quietBody)}</Text>
+                        <Pressable
+                            testID="pulse-add-quiet"
+                            onPress={() => router.push('/pulse-intake')}
+                            style={styles.emptyPrimaryBtn}
+                            accessibilityRole="button"
+                            accessibilityLabel={t(PULSE_PAGE_WORDS.add)}
+                        >
+                            <Text style={styles.emptyPrimaryBtnText}>{t(PULSE_PAGE_WORDS.add)}</Text>
+                        </Pressable>
+                    </>
+                ) : null}
+                <Pressable onPress={() => setLane('learn')} accessibilityRole="link" style={styles.learnLink}>
+                    <Text style={styles.learnLinkText}>{addsHere ? t(PULSE_PAGE_WORDS.learnLine) : t(PULSE_PAGE_WORDS.learnGlobal)}</Text>
                 </Pressable>
             </View>
         );
@@ -336,7 +354,7 @@ export default function PulseScreen() {
     return (
         <SafeAreaView style={styles.screen} edges={['left', 'right']}>
             <View style={{ flex: 1, overflow: 'hidden' }}>
-            {/* + Channels rides on the title's line rather than costing a row of its own. */}
+            {/* Your channels rides on the title's line rather than costing a row of its own (§3.2: it was "+ Channels"). */}
             <QuickReturnBlock qr={qr} title={<>
                 <PageTitle title={t('Pulse')} testID="page-title-pulse" right={
                     <Pressable
@@ -345,7 +363,7 @@ export default function PulseScreen() {
                         accessibilityRole="button"
                         accessibilityLabel={t('Manage your channels')}
                     >
-                        <Text style={styles.channelsBtnText}>{t('+ Channels')}</Text>
+                        <Text style={styles.channelsBtnText}>{t(PULSE_PAGE_WORDS.yourChannels)}</Text>
                     </Pressable>
                 } />
                 {/* Back and the subtitle belong to the title: they go with it and do not come back with the
@@ -527,6 +545,19 @@ export default function PulseScreen() {
                     ListEmptyComponent={renderEmptyState}
                     ListFooterComponent={renderFooter}
                 />
+            )}
+            {/* The one add button, the Market's ADD POST in shape and place (§3.2). On a quiet week it is in the middle of
+                the page instead, so there is still one. */}
+            {addsHere && !quiet && (
+                <Pressable
+                    testID="pulse-add"
+                    accessibilityRole="button"
+                    accessibilityLabel={t(PULSE_PAGE_WORDS.add)}
+                    onPress={() => router.push('/pulse-intake')}
+                    style={styles.fab}
+                >
+                    <Text style={styles.fabText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t(PULSE_PAGE_WORDS.add)}</Text>
+                </Pressable>
             )}
             </View>
         </SafeAreaView>
@@ -710,9 +741,17 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
         },
         listContent: {
             padding: 16,
-            paddingBottom: 36,
+            // The last card clears the add button's band (utils/fab-band.ts), as the Market's does.
+            paddingBottom: FAB_BAND_DP,
             flexGrow: 1,
         },
+        fab: {
+            position: 'absolute', bottom: 32, right: 24, maxWidth: '70%', backgroundColor: colors.action.fab, paddingVertical: 14, paddingHorizontal: 20,
+            borderRadius: 28, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 8, zIndex: 100,
+        },
+        fabText: { color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 },
+        learnLink: { marginTop: 20, minHeight: 44, justifyContent: 'center' },
+        learnLinkText: { fontSize: 14, lineHeight: 21, color: colors.text.link, textAlign: 'center' },
         footerLoader: {
             flexDirection: 'row',
             justifyContent: 'center',

@@ -301,6 +301,10 @@ export default function MarketScreen() {
         // The grid tile's photo, its type chip and its foot row of pills are the style box's (shell.gridImageWrapper and the
         // rest, components/market-card-shell.ts), shared with the event tile (EventCard, slice P3').
         price: { fontSize: 16, fontWeight: '800', color: colors.text.body },
+        // The Pulse's door (DESIGN-pulse-home-fable.md §3.1, P2): the blue of the Pulse card's band on Home, so the Pulse has one
+        // colour everywhere and is never mistaken for the amber Your deals beside the search. 44 dp, no badge, no count.
+        pulseDoor: { minHeight: 44, flexShrink: 1, maxWidth: '45%', marginLeft: 8, paddingHorizontal: 12, borderRadius: 22, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.card.blue.tint },
+        pulseDoorText: { fontSize: 14, fontWeight: '800', color: colors.card.blue.ink },
         fab: { position: 'absolute', bottom: 32, right: 24, backgroundColor: colors.action.fab, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 28, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 8, zIndex: 100 },
         elderCompactRow: {
             borderLeftWidth: 3,
@@ -2061,7 +2065,21 @@ export default function MarketScreen() {
         <View style={styles.safeArea} onLayout={e => setScreenH(e.nativeEvent.layout.height)}>
             {/* The feed and, riding over its top, the controls. Clipped, so the block slides up under the tab bar. */}
             <View style={{ flex: 1, overflow: 'hidden' }}>
-            <QuickReturnBlock qr={qr} title={<PageTitle title={t('Market')} testID="page-title-market" />} below={categoryPanelOverlay}>
+            {/* The Pulse's door rides on the title's line, in a slot that is empty otherwise (DESIGN-pulse-home-fable.md §3.1,
+                Marty's pick 1 of 14 Nov 2026). The Market's own feed, its pills and its filters are not touched. */}
+            <QuickReturnBlock qr={qr} title={<PageTitle title={t('Market')} testID="page-title-market" right={
+                <Pressable
+                    testID="market-pulse-door"
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Open the Pulse')}
+                    onPress={() => router.push('/pulse')}
+                    style={styles.pulseDoor}
+                >
+                    <Text style={styles.pulseDoorText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.3}>
+                        {t('📡 Pulse ›')}
+                    </Text>
+                </Pressable>
+            } />} below={categoryPanelOverlay}>
                 {controls}
             </QuickReturnBlock>
             <Animated.FlatList

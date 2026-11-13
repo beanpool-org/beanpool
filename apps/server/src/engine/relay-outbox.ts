@@ -243,8 +243,10 @@ export async function sendRelayItems(member: string, items: unknown, now = Date.
     if (sentToday + fresh.length > OUTBOX_PER_MEMBER_DAY) throw new OutboxError(429, 'rate_limited', OUTBOX_RATE_ERROR);
     if (fresh.some((c) => c.envelope.kind === 'dm-blob')) assertFolderFloorSpace(relayMailDir());
 
-    const insert = db.prepare(`INSERT OR IGNORE INTO relay_outbox (sender_key, item_id, kind, recipient, recipient_home, state, item, attempts, next_try_at, created_at, updated_at)
-                               VALUES (?, ?, ?, ?, ?, 'queued', ?, 0, ?, ?, ?)`);
+    // ON CONFLICT, not OR IGNORE: a send of the same item at the same moment is skipped, and nothing else is ever quietly lost
+    // (OR IGNORE also skips a row its CHECKs refuse, and the item would vanish with a 200).
+    const insert = db.prepare(`INSERT INTO relay_outbox (sender_key, item_id, kind, recipient, recipient_home, state, item, attempts, next_try_at, created_at, updated_at)
+                               VALUES (?, ?, ?, ?, ?, 'queued', ?, 0, ?, ?, ?) ON CONFLICT (sender_key, item_id) DO NOTHING`);
     for (const c of fresh) {
         const e = c.envelope;
         const blob = e.kind === 'dm-blob';

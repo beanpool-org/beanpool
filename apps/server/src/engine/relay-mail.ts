@@ -223,7 +223,7 @@ export function receiveRelayItems(origin: string, items: unknown, now = Date.now
 /** One new item: its id spent, then held, applied (a receipt) or dropped. True when it was held. */
 function takeItem(origin: string, item: RelayItem, now: number): boolean {
     const env = item.envelope;
-    const spent = db.prepare('INSERT OR IGNORE INTO relay_mail_seen (sender_key, item_id, sender_home, seen_at) VALUES (?, ?, ?, ?)')
+    const spent = db.prepare('INSERT INTO relay_mail_seen (sender_key, item_id, sender_home, seen_at) VALUES (?, ?, ?, ?) ON CONFLICT (sender_key, item_id) DO NOTHING')
         .run(env.senderKey, env.itemId, origin, now).changes === 1;
     if (!spent) return false;
     if (env.kind === 'receipt') {
@@ -235,8 +235,8 @@ function takeItem(origin: string, item: RelayItem, now: number): boolean {
     const file = blob ? relayBlobFile('in', env.senderKey, env.itemId) : null;
     try {
         if (file) writeRelayBlob(file, item.payload);
-        const stored = db.prepare(`INSERT OR IGNORE INTO relay_mail (sender_key, item_id, kind, recipient, sender_home, envelope, payload, bytes, received_at)
-                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        const stored = db.prepare(`INSERT INTO relay_mail (sender_key, item_id, kind, recipient, sender_home, envelope, payload, bytes, received_at)
+                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (sender_key, item_id) DO NOTHING`)
             .run(env.senderKey, env.itemId, env.kind, env.recipient, env.senderHome, JSON.stringify(env), blob ? null : item.payload, item.payload.length, now).changes === 1;
         if (!stored && file) removeRelayBlob(file);
         return stored;

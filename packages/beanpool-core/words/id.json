@@ -2430,5 +2430,10 @@
   "Someone took some while you were editing. There is {n} left now. Check the number and save again.|Someone took some while you were editing. There are {n} left now. Check the number and save again.": {
     "other": "Seseorang mengambil sebagian saat kamu mengedit. Sekarang tersisa {n}. Periksa jumlahnya lalu simpan lagi."
   },
-  "To stop selling, pause or remove the listing.": "Untuk berhenti menjual, jeda atau hapus iklan."
+  "To stop selling, pause or remove the listing.": "Untuk berhenti menjual, jeda atau hapus iklan.",
+  "Newest\u0004member sort": "Terbaru",
+  "Name\u0004member sort": "Nama",
+  "Friends\u0004member sort": "Teman",
+  "Trusted\u0004member sort": "Tepercaya",
+  "Active\u0004member sort": "Aktif"
 }

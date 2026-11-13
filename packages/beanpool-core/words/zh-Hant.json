@@ -2430,5 +2430,10 @@
   "Someone took some while you were editing. There is {n} left now. Check the number and save again.|Someone took some while you were editing. There are {n} left now. Check the number and save again.": {
     "other": "你編輯期間有人接下了一些。現在剩 {n} 個。請核對數量後重新儲存。"
   },
-  "To stop selling, pause or remove the listing.": "要停止出售，請暫停或移除這則刊登。"
+  "To stop selling, pause or remove the listing.": "要停止出售，請暫停或移除這則刊登。",
+  "Newest\u0004member sort": "最新",
+  "Name\u0004member sort": "姓名",
+  "Friends\u0004member sort": "好友",
+  "Trusted\u0004member sort": "受信任",
+  "Active\u0004member sort": "活躍"
 }

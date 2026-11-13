@@ -15,8 +15,9 @@ import {
 import {
     looksLikeM4a, readVoicePart, voicePartBytes, voiceSealedTooBig, VoiceRefusedError,
     VOICE_BARS, VOICE_MAX_MS, VOICE_MIME, VOICE_PART, VOICE_PART_VERSION, VOICE_SEALED_MAX_BYTES, VOICE_SERVER_KEEP_DAYS,
-    VOICE_SOUND_MAX_BYTES, type VoiceRefusal,
+    VOICE_SOUND_MAX_BYTES, VOICE_LINES_WORDS, voiceLinesOn, type VoiceRefusal,
 } from '../voice.js';
+import { t } from '../words.js';
 import * as barrel from '../index.js';
 import { checkVoiceVectors, VOICE_VECTOR_SOUND, VOICE_DM_VECTOR, VOICE_GROUP_VECTOR } from '../voice-vectors.js';
 
@@ -471,6 +472,22 @@ describe('the frozen voice vectors', () => {
         expect(part[5]).toBe(48);
         expect(Array.from(part.subarray(6, 54))).toEqual(v.bars);
         expect(bytesToHex(part.subarray(54))).toBe(bytesToHex(VOICE_VECTOR_SOUND));
+    });
+});
+
+describe('where a community takes voice messages (the node says features.voiceLines; Byron, 14 Nov)', () => {
+    it('only where the features say voiceLines: true, outright: absent, false, a string or no features at all is no', () => {
+        expect(voiceLinesOn({ voiceLines: true })).toBe(true);
+        // A node from before voice V2 says nothing: it stores a voice line as words with a sound no one can play.
+        for (const f of [{}, { voiceLines: false }, { voiceLines: 'true' }, { voiceLines: 1 }, null, undefined]) {
+            expect(voiceLinesOn(f as never), JSON.stringify(f)).toBe(false);
+        }
+        expect(barrel).toHaveProperty('voiceLinesOn');
+    });
+
+    it('a recording a community doesn\'t take is not sent, and the chat says so plainly', () => {
+        expect(t(VOICE_LINES_WORDS.notTaken)).toBe("This community doesn't take voice messages yet. Nothing was sent.");
+        expect(barrel).toHaveProperty('VOICE_LINES_WORDS');
     });
 });
 

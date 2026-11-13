@@ -164,6 +164,8 @@ export * from './community-shape-card.js';
 export * from './use-on-computer.js';
 export * from './credit-sight.js';
 export * from './known-rule.js';
+// People → Community: the list's five sorts and their words, one set for the phone and the web app.
+export * from './member-sort.js';
 // Group locks: named, not `export *`, so the raw wrap opener (openGroupKeyWrapUnverified, which checks neither who made
 // a wrap nor the key inside it) stays out of the apps' reach; openGroupKeyWrap checks the key against its record's
 // commitment. A new export from group-crypto.ts is added here on purpose or not at all.

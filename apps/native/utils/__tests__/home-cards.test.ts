@@ -86,10 +86,10 @@ const find = (over: Partial<NonNullable<HomeCards['find']>> = {}): NonNullable<H
 describe('the catalogue and the newcomer\'s Home (CARD-FRAME §2.2, §3)', () => {
     it('one catalogue, core\'s: every type this build draws is in the registry; a newcomer starts with the default list, Welcome first, and the starter set is that list less Welcome', () => {
         for (const t of HOME_DRAWN) expect(homeCardType(t)).toBeDefined();
-        // DESIGN-home-default-fable.md §2.2: the fifteen, between the fixed two.
+        // DESIGN-home-default-fable.md §2.2: the sixteen (the Pulse after Coming up, DESIGN-pulse-home-fable.md §3.5), between the fixed two.
         expect(ids(cardOrder(null))).toEqual(['needs', ...HOME_DEFAULT_LIST, 'community']);
         // "Asked near you" comes after the Market (cold-start N1); this build draws it since N2.
-        expect(ids(cardOrder(STARTER))).toEqual(['needs', 'safety', 'market', 'steps', 'interests', 'events', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky', 'community']);
+        expect(ids(cardOrder(STARTER))).toEqual(['needs', 'safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky', 'community']);
         expect(HOME_DEFAULT_LIST.every(id => HOME_DRAWN.has(id as never))).toBe(true);
         expect(HOME_DRAWN.has('asked')).toBe(true);
     });
@@ -262,7 +262,7 @@ describe('the layout (§4)', () => {
 
     it('cards= is catalogue order then id, the same each time; no data-less cards; a move doesn\'t change it', () => {
         // A never-saved Home asks for every default card the node builds (DESIGN-home-default-fable.md §2.2).
-        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'events', 'market', 'asked', 'decide', 'groups', 'joined', 'beans', 'notices', 'community']);
+        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'events', 'market', 'asked', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
         expect(cardsToAsk(EVERY)).toEqual(['needs', 'safety', 'find', 'steps', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
         expect(cardsToAsk(layout({ order: ['beans', 'market'] }))).toEqual(cardsToAsk(EVERY));
     });
@@ -425,9 +425,11 @@ describe('the frame: the picker, adding, and the members who were here before (C
         expect(types(g)).not.toContain('community');
         expect(types(g)).not.toContain('find');
         expect(types(g)).toEqual(expect.arrayContaining(['beans', 'deals', 'enterprise', 'decide', 'invite', 'search']));
-        // Your Beans is in the default list (DESIGN-home-default-fable.md §2.2); The Pulse is the one it leaves out.
+        // Your Beans is in the default list (DESIGN-home-default-fable.md §2.2), and The Pulse since DESIGN-pulse-home-fable.md §3.5;
+        // Your enterprise is one it leaves out.
         expect(row(g, 'beans')).toMatchObject({ state: 'on-home', count: null, name: 'Your Beans' });
-        expect(row(g, 'pulse')).toMatchObject({ state: 'add', count: null, name: 'The Pulse' });
+        expect(row(g, 'pulse')).toMatchObject({ state: 'on-home', count: null, name: 'The Pulse' });
+        expect(row(g, 'enterprise')).toMatchObject({ state: 'add', count: null, name: 'Your enterprise' });
         expect(row(g, 'market')!.state).toBe('on-home');
         expect(row(g, 'search')).toMatchObject({ state: 'add', count: null, hasSettings: true });
         const two = { v: 2 as const, cards: [...defaultCards(), { id: 'search-aaaa', type: 'search' }, { id: 'search-bbbb', type: 'search' }], dismissed: {}, updatedAt: iso(NOW) };
@@ -457,11 +459,12 @@ describe('the frame: the picker, adding, and the members who were here before (C
 
     it('Add puts the card first, under a pinned Find your community; a saved search keeps its settings; the sixth is refused', () => {
         const pinnedFirst = { v: 2 as const, cards: [{ id: 'find', type: 'find' }, ...defaultCards()], dismissed: {}, updatedAt: iso(NOW) };
-        // The Pulse: a card the default list leaves out (DESIGN-home-default-fable.md §2.2).
-        const a = addCard(pinnedFirst, 'pulse', NOW, { pinned: ['find'] });
+        // Your enterprise: a card the default list leaves out (DESIGN-home-default-fable.md §2.2; the Pulse is in it since
+        // DESIGN-pulse-home-fable.md §3.5).
+        const a = addCard(pinnedFirst, 'enterprise', NOW, { pinned: ['find'] });
         if (!a.ok) throw new Error('not added');
-        expect(ids(a.layout.cards).slice(0, 2)).toEqual(['find', 'pulse']);
-        expect(a.id).toBe('pulse');
+        expect(ids(a.layout.cards).slice(0, 2)).toEqual(['find', 'enterprise']);
+        expect(a.id).toBe('enterprise');
         const s1 = addCard(null, 'search', NOW, { settings: { q: 'eggs', kind: 'any', km: 5 } });
         if (!s1.ok) throw new Error('not added');
         expect(s1.id).toMatch(/^search-[a-z2-7]{4}$/);
@@ -1219,7 +1222,7 @@ describe('the global node\'s Home (H4)', () => {
         const moved = moveCard(STARTER, 'market', 'up', inst('find', 'events', 'market'), NOW, pins)!;
         // First steps and What are you into? are in the starter set but not among the cards this test draws (inst(...) above):
         // they stay where they were, between the two (the default list, DESIGN-home-default-fable.md §2.2).
-        expect(ids(moved.cards)).toEqual(['safety', 'events', 'steps', 'interests', 'market', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky']);
+        expect(ids(moved.cards)).toEqual(['safety', 'events', 'steps', 'interests', 'market', 'pulse', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky']);
         // The newcomer's list doesn't hold `find`: once the pin ends, the picker brings it back (CARD-FRAME §1.2, §3).
         expect(ids(cardOrder(moved))).not.toContain('find');
         expect(ids(cardOrder(EVERY))).toContain('find');

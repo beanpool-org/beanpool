@@ -15,6 +15,10 @@
  *   - a recording pauses the chat's player, and nothing plays, moves on or flips the audio mode until it is sent;
  *   - a send that didn't go keeps the recording, back for play, bin and Send, and nothing new records while one is going;
  *   - the microphone turned on in Settings reaches the open chat when the app comes back to the front.
+ * And its round 2:
+ *   - a refusal the screen shows above the box (VoiceNotSentError) keeps the recording, back for review, with no second word;
+ *   - one line id per recording, the same on every try of it, a new one for the next recording;
+ *   - a recording waiting in one chat holds only that chat's player, and another chat's send never lets go of it.
  * The 320 dp layout itself (nothing past the edge, 44 dp targets) is measured in Chromium by e2e/voice-320.mjs.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -80,6 +84,8 @@ vi.mock('expo-file-system/legacy', () => ({
 vi.mock('../crypto', () => ({
     decodeBase64: (b64: string) => Uint8Array.from(Buffer.from(b64, 'base64')),
 }));
+// A recording's line id, made at its first send.
+vi.mock('expo-crypto', async () => ({ randomUUID: (await import('node:crypto')).randomUUID }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors, darkColors } = await import('../../constants/colors');
     return { useTheme: () => ({ theme: theme.scheme, colors: theme.scheme === 'dark' ? darkColors : lightColors }) };
@@ -91,15 +97,22 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { expoAudioStub } from './expo-audio-stub';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { VoicePlaybackProvider, useVoicePlayback, type VoicePlaybackApi } from '../../components/chat/VoicePlayback';
-import { voiceAudioHold } from '../voice-audio';
+import { holdAudioForReview, releaseAudio, voiceAudioHold } from '../voice-audio';
+import { VoiceNotSentError } from '../voice-recorder';
 import { makeChatStyles } from '../../components/chat/styles';
 import { lightColors, darkColors } from '../../constants/colors';
 
 let root: Root;
 let host: HTMLDivElement;
 const sent: any[] = [];
+/** Every try's line id, sent or not: the recording's own, the same on every try of it. */
+const tries: string[] = [];
 /** The screen's onVoice refuses the next send with these words (as `sendVoice` does while a text is still going). */
 let refuseNext: string | null = null;
+/** The screen's onVoice refuses the next send as one it shows above the box (refusedSendNotice, GroupChatKeyError). */
+let shownNext: string | null = null;
+/** This chat screen's owner of its audio holds: its composer's and its player's. */
+const OWNER = 'chat-under-test';
 /** A send held open until the test lets it go. */
 let holdSend: Promise<void> | null = null;
 
@@ -125,9 +138,12 @@ function composer(withVoice = true) {
         ref: composerRef as any,
         styles: makeChatStyles({ theme: theme.scheme, colors } as any), onSend: async () => { }, placeholder: 'Message', accessibilityLabel: 'Message',
         bottomPadding: 12,
-        onVoice: withVoice ? async (v: any) => {
+        voiceOwner: OWNER,
+        onVoice: withVoice ? async (v: any, lineId: string) => {
+            tries.push(lineId);
             if (holdSend) await holdSend;
             if (refuseNext) { const why = refuseNext; refuseNext = null; throw new Error(why); }
+            if (shownNext) { const why = shownNext; shownNext = null; throw new VoiceNotSentError(why); }
             sent.push(v);
         } : undefined,
     }) as any;
@@ -147,7 +163,9 @@ beforeEach(async () => {
     expoAudioStub.reset();
     expoAudioStub.permission = { granted: true, canAskAgain: true, status: 'granted' };
     sent.length = 0;
+    tries.length = 0;
     refuseNext = null;
+    shownNext = null;
     holdSend = null;
     vi.mocked(Alert.alert).mockClear();
     vi.mocked(FileSystem.deleteAsync).mockClear();
@@ -161,6 +179,7 @@ beforeEach(async () => {
 afterEach(async () => {
     await act(async () => { root.unmount(); });
     host.remove();
+    await releaseAudio('chat-underneath');
 });
 
 describe('ChatComposer: the microphone in Send\'s place', () => {
@@ -321,7 +340,7 @@ describe('ChatComposer: a send that didn\'t go keeps the recording (PR #3112 rev
         for (let i = 0; i < 4; i++) await act(async () => { await Promise.resolve(); });
         expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file:///rec/voice.m4a', expect.anything());
         // Nothing left holding the session: every other chat's voice messages still play.
-        expect(voiceAudioHold()).toBeNull();
+        expect(voiceAudioHold(OWNER)).toBeNull();
         root = createRoot(host);   // for afterEach
     });
 
@@ -366,7 +385,7 @@ describe('ChatComposer with the chat\'s player: one owner of the audio mode (PR 
         const api: { current: VoicePlaybackApi | null } = { current: null };
         const Probe = () => { api.current = useVoicePlayback(); return null; };
         const voices = [{ id: 'a', mine: false }, { id: 'b', mine: false }];
-        await act(async () => { root.render(createElement(VoicePlaybackProvider as any, { voices }, createElement(Probe), composer()) as any); });
+        await act(async () => { root.render(createElement(VoicePlaybackProvider as any, { owner: OWNER, voices }, createElement(Probe), composer()) as any); });
         await flush();
         // A voice message plays.
         await act(async () => { api.current!.toggle('a', 'file:///a.m4a'); });
@@ -412,6 +431,113 @@ describe('ChatComposer with the chat\'s player: one owner of the audio mode (PR 
         await act(async () => { api.current!.toggle('b', 'file:///b.m4a'); });
         await flush();
         expect(expoAudioStub.player.played).toBe(played + 1);
+    });
+});
+
+describe('ChatComposer: a refusal the screen shows above the box keeps the recording (PR #3112 review, round 2: [id].tsx:886, GroupChatView.tsx:576)', () => {
+    it('VoiceNotSentError: not deleted, back for play, bin and Send, and no second word; Send then sends it', async () => {
+        shownNext = 'Nothing was sent; try again in a moment.';
+        await hold();
+        await clock(2300);
+        await release();
+        expect(sent).toEqual([]);
+        // The screen already said why above the box: the recorder adds no alert.
+        expect(Alert.alert).not.toHaveBeenCalled();
+        expect(FileSystem.deleteAsync).not.toHaveBeenCalledWith('file:///rec/voice.m4a', expect.anything());
+        expect(q('voice-preview')).not.toBeNull();
+        expect(q('voice-bin')).not.toBeNull();
+        expect(q('voice-clock')?.textContent).toBe('0:02');
+        // Still this chat's: its player stays quiet while the recording waits.
+        expect(voiceAudioHold(OWNER)).toBe('review');
+        await act(async () => { q('voice-send')!.click(); });
+        await flush();
+        expect(sent).toHaveLength(1);
+        expect(sent[0].durationMs).toBe(2300);
+        expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file:///rec/voice.m4a', expect.anything());
+        expect(q('voice-bar')).toBeNull();
+        expect(voiceAudioHold(OWNER)).toBeNull();
+    });
+});
+
+describe('ChatComposer: one line id per recording (PR #3112 review, round 2: db.ts:7448)', () => {
+    it('every try of one recording is the same line; the next recording is a new one', async () => {
+        refuseNext = 'Sending the voice message is taking too long — please try again.';
+        await hold();
+        await clock(2300);
+        await release();
+        expect(q('voice-send')).not.toBeNull();
+        refuseNext = 'The node could not be reached.';
+        await act(async () => { q('voice-send')!.click(); });
+        await flush();
+        await act(async () => { q('voice-send')!.click(); });
+        await flush();
+        expect(sent).toHaveLength(1);
+        expect(tries).toHaveLength(3);
+        expect(tries[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+        expect(new Set(tries).size).toBe(1);
+        // A new recording, sent at once: its own id.
+        await hold();
+        await clock(1800);
+        await release();
+        expect(sent).toHaveLength(2);
+        expect(tries).toHaveLength(4);
+        expect(tries[3]).not.toBe(tries[0]);
+    });
+
+    it('a recording binned after a failed try, and a new one: a new id', async () => {
+        refuseNext = 'The node could not be reached.';
+        await hold();
+        await clock(2300);
+        await release();
+        await act(async () => { q('voice-bin')!.click(); });
+        await flush();
+        await hold();
+        await clock(2000);
+        await release();
+        expect(tries).toHaveLength(2);
+        expect(tries[1]).not.toBe(tries[0]);
+    });
+});
+
+describe('ChatComposer: a hold reaches its own chat only (PR #3112 review, round 2: voice-audio.ts:65)', () => {
+    it('a recording waiting in this chat never stops the player of a chat opened on top', async () => {
+        const api: { current: VoicePlaybackApi | null } = { current: null };
+        const Probe = () => { api.current = useVoicePlayback(); return null; };
+        const voices = [{ id: 'a', mine: false }];
+        // The chat on top's player (another screen's owner) beside this chat's composer.
+        await act(async () => { root.render(createElement(VoicePlaybackProvider as any, { owner: 'chat-on-top', voices }, createElement(Probe), composer()) as any); });
+        await flush();
+        await hold();
+        await clock(3000);
+        await move(0, -100);
+        await release();
+        await act(async () => { q('voice-stop')!.click(); });
+        await flush();
+        expect(voiceAudioHold(OWNER)).toBe('review');
+        const played = expoAudioStub.player.played;
+        await act(async () => { api.current!.toggle('a', 'file:///a.m4a'); });
+        await flush();
+        expect(expoAudioStub.player.played).toBe(played + 1);
+        await act(async () => { q('voice-bin')!.click(); });
+        await flush();
+    });
+
+    it('this chat sends its recording: a recording waiting in the chat underneath stays held', async () => {
+        await holdAudioForReview('chat-underneath');
+        await hold();
+        await clock(2300);
+        await release();
+        expect(sent).toHaveLength(1);
+        expect(voiceAudioHold(OWNER)).toBeNull();
+        expect(voiceAudioHold('chat-underneath')).toBe('review');
+        // And the bin, the same.
+        await hold();
+        await clock(2300);
+        await move(0, -100);
+        await release();
+        await act(async () => { q('voice-bin')!.click(); });
+        await flush();
+        expect(voiceAudioHold('chat-underneath')).toBe('review');
     });
 });
 

@@ -50,6 +50,7 @@ import {
     AGENT_POSTS_PER_DAY_DEFAULT, AGENT_POSTS_PER_DAY_MAX, AGENT_POSTS_PER_DAY_MIN,
 } from './limits.js';
 import { dropSuggestionsOf } from './suggestions.js';
+import { assistantKnowledgeCounts, dropAssistantKnowledgeDrafts } from '../engine/knowledge-drafts.js';
 import { dropUploadedPhotosOf } from './owner-photos.js';
 import { aiAssistantsAllowed, MCP_PATH, nodeUrlFor } from './mcp-route.js';
 import { offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
@@ -131,6 +132,7 @@ function oauthGrantView(g: OAuthGrantView, me: string | null, now = Date.now()) 
         takedownsHeld: takedownsHeldBy(g.id),
         postsToday: agentCreatesToday(g.id, now),
         madePosts: madePostsCount(g.id),
+        knowledgeDraftsWaiting: assistantKnowledgeCounts(g.id, now).waiting,
     };
 }
 
@@ -158,6 +160,8 @@ function grantView(t: AutomationTokenView, me: string | null, now = Date.now()) 
         postsToday: agentCreatesToday(t.id, now),
         /** Its live posts (created_via), which "Remove its posts" takes down. */
         madePosts: madePostsCount(t.id),
+        /** Its drafts of Local knowledge waiting for an owner or admin (Local knowledge K6), which Disconnect drops. */
+        knowledgeDraftsWaiting: assistantKnowledgeCounts(t.id, now).waiting,
     };
 }
 
@@ -360,6 +364,8 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         if (oauth && revokeOAuthGrant(id)) {
             forgetAgentGrant(id);
             dropSuggestionsOf(id);
+            // Local knowledge K6: its drafts still waiting go with it (engine/knowledge-drafts.ts); what a person approved stays.
+            dropAssistantKnowledgeDrafts(id);
             dropUploadedPhotosOf(id);
             const by = actorOf(ctx) ?? 'owner:password';
             const role = roleOf(ctx);
@@ -377,6 +383,8 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         }
         forgetAgentGrant(id);
         dropSuggestionsOf(id);
+        // Local knowledge K6: its drafts still waiting go with it (engine/knowledge-drafts.ts); what a person approved stays.
+        dropAssistantKnowledgeDrafts(id);
         dropUploadedPhotosOf(id);
         const by = actorOf(ctx) ?? 'owner:password';
         const role = roleOf(ctx);

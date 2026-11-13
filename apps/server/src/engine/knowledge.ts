@@ -303,9 +303,16 @@ export function knowledgeRowOf(p: MarketplacePost, now = Date.now()): KnowledgeR
  * Its writer's holiday never takes a page out: holiday is a pause of trade, and a page is none (@beanpool/engine posts.ts
  * NOT_ON_HOLIDAY_SQL, the review of #3063), so Emergencies keeps its pages while their writer is away.
  */
-function showingTo(reader: string, query?: string): MarketplacePost[] {
+export function showingTo(reader: string, query?: string): MarketplacePost[] {
     return getPosts(db, { type: 'knowledge', withKnowledge: true, viewerPubkey: reader, query, limit: KNOWLEDGE_READ_MAX })
         .filter((p) => !p.hiddenByReportsAt);
+}
+
+/** One page showing to this reader, by the same rules as showingTo (an assistant's knowledge_get, agent/knowledge.ts); else null. */
+export function pageShowingTo(reader: string, postId: unknown): MarketplacePost | null {
+    if (typeof postId !== 'string' || !postId || postId.length > 200) return null;
+    const p = getPosts(db, { id: postId, type: 'knowledge', withKnowledge: true, viewerPubkey: reader })[0];
+    return p && p.type === 'knowledge' && !p.hiddenByReportsAt && p.status === 'active' ? p : null;
 }
 
 const byLearnOrder = (a: KnowledgeRow, b: KnowledgeRow) => compareKnowledge(a, b);

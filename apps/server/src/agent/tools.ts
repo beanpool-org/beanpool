@@ -20,6 +20,8 @@
  * and it moves no Bean. It still can't dismiss a report, put a post back, lift a mute, or remove or suspend a member.
  * MCP-MODERATION S3: an admin's grant ticked the same way (on the OAuth consent page) has `take_down`, one post a call, and never
  * `take_down_many` or `takedowns_list`, the line Settings draws (only an owner deletes many). The role is the member's at each call.
+ * Local knowledge K6: every owner's and admin's grant, with no tick, while Learn is on, drafts Local knowledge and reads what shows
+ * (agent/knowledge.ts): a draft waits for a person to approve it in the app, so the assistant still publishes nothing.
  */
 import os from 'node:os';
 import { db } from '../db/db.js';
@@ -55,6 +57,7 @@ import { PHOTO_UPLOAD_PATH, PHOTO_WAYS } from './owner-photos.js';
 import { OWNER_READ_TOOLS } from './owner-reads.js';
 import { OWNER_TAKEDOWN_TOOLS, takedownsSummary } from './owner-takedowns.js';
 import { OWNER_SEED_TOOLS } from './owner-seeds.js';
+import { KNOWLEDGE_TOOLS, knowledgeOn, knowledgeSummary } from './knowledge.js';
 import { serverAddresses, NOT_CHECKED_STEP, SERVER_ADDRESS_KINDS, SERVER_ADDRESS_STANDINGS } from './server-addresses.js';
 import {
     fileSuggestion, SUGGESTION_KINDS, SUGGESTION_REASON_MAX_BYTES, suggestionAsks, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY,
@@ -102,6 +105,8 @@ export interface AgentTool {
     moderates?: boolean;
     /** A `posts` read a grant ticked "May take down posts for me" has too (listings_search, categories: MCP-MODERATION S2). */
     alsoModerates?: boolean;
+    /** Local knowledge (agent/knowledge.ts): every owner's and admin's grant has it, with no tick, while Learn is on here. */
+    knowledge?: boolean;
     write?: boolean;
     /** Takes something down (remove_post, remove_all_i_made, take_down, take_down_many): the MCP annotation says so. */
     destructive?: boolean;
@@ -284,6 +289,8 @@ export const AGENT_CANNOT = [
     'read messages, balances, keys, addresses, photos or logs',
     'approve a suggestion, or act on a report itself (the admin approves on their phone or in Settings)',
     'answer a join request or send an announcement',
+    // Local knowledge K6: it drafts; an owner or admin approves each draft in the app (agent/knowledge.ts).
+    'publish Local knowledge',
     'reach another server',
 ];
 
@@ -601,6 +608,7 @@ export const AGENT_TOOLS: AgentTool[] = [
             posts: OBJ({ today: NUM, perDay: NUM, photoRoom: STR }), canPost: { type: 'boolean' }, canModerate: { type: 'boolean' },
             takedowns: OBJ({ today: NUM, perDay: NUM, perCall: NUM }),
             photos: OBJ({ today: NUM, perDay: NUM, uploadPath: STR, ways: STR }),
+            knowledge: OBJ({ waiting: NUM, waitingMax: NUM, today: NUM, perDay: NUM }),
         }, ['name', 'member', 'role', 'via', 'createdAt', 'expiresAt', 'calls', 'backups', 'tools', 'cannot', 'canPost']),
         run: (grant) => ({
             ok: true, rows: 1,
@@ -623,6 +631,8 @@ export const AGENT_TOOLS: AgentTool[] = [
                 // "May take down posts for me", and the posts it took down today against the same limit, on their own count.
                 canModerate: grantModerates(grant),
                 ...(grantModerates(grant) ? { takedowns: takedownsSummary(grant) } : {}),
+                // Local knowledge K6: its drafts waiting and sent in 24 hours, against its limits, while Learn is on here.
+                ...(knowledgeOn() ? { knowledge: knowledgeSummary(grant) } : {}),
                 tools: toolsFor(grant).map((t) => t.name),
                 cannot: agentCannot(grantModerates(grant), grant.role),
             },
@@ -731,12 +741,21 @@ AGENT_TOOLS.push({
 // Slice S3: groups, a group's post and enterprises, content only (agent/owner-seeds.ts). MCP-MODERATION S1: its takedowns
 // (agent/owner-takedowns.ts).
 AGENT_TOOLS.push(...OWNER_POST_TOOLS, ...OWNER_SEED_TOOLS, ...OWNER_READ_TOOLS, ...OWNER_TAKEDOWN_TOOLS);
+// Local knowledge K6: drafts and reads, every owner's and admin's grant while Learn is on (agent/knowledge.ts).
+AGENT_TOOLS.push(...KNOWLEDGE_TOOLS);
 
-/** The tools this grant has: an admin's grant has no owner-only tool. */
+/** The tools this grant has: an admin's grant has no owner-only tool; none has Local knowledge's while Learn is off here. */
 export function toolsFor(grant: AgentGrant): AgentTool[] {
+    const learn = knowledgeOn();
     return AGENT_TOOLS.filter((t) => (!t.ownerOnly || grant.role === 'owner')
         && (!t.posts || grant.canPost || (t.alsoModerates === true && grant.canModerate === true))
-        && (!t.moderates || grant.canModerate));
+        && (!t.moderates || grant.canModerate)
+        && (!t.knowledge || learn));
+}
+
+/** Whether this grant drafts Local knowledge now (agent/knowledge.ts): Learn on here; the welcome and prompts say so only then. */
+export function grantDraftsKnowledge(grant: AgentGrant): boolean {
+    return toolsFor(grant).some((t) => t.name === 'knowledge_draft');
 }
 
 /** Whether this grant posts: an owner's, ticked "May post for me" (agent/owner-posts.ts). */

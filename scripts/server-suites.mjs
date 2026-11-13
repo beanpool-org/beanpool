@@ -608,6 +608,7 @@ export const SUITES = [
     'test-knowledge-publish',
     'test-knowledge-reads',
     'test-knowledge-drafts',
+    'test-mcp-knowledge',
     'test-names-copy',
     'test-contact-copies',
     'test-balance-rule-boot',

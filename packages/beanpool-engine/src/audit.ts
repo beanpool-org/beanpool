@@ -359,14 +359,16 @@ function* washSybilMetricsSteps(db: Db): Generator<void, WashSybilMetrics> {
     // 3. Cohort Velocity Report: a join week where half or more of the new members reached an allowance of 600 Beans (the
     // Resident line) within 14 days of joining, counting only what grew by routes other than an owner's or admin's grant
     // (Marty, 14 Nov 2026: allowances an owner or admin gave on purpose tripped it, and it named nobody). About the
-    // allowance, never spending. Who they are is kept (cohortMembers), for the flag the owners and admins read.
+    // allowance, never spending. Who they are is kept (cohortMembers), for the flag the owners and admins read. Members'
+    // accounts only: a community enterprise or project (is_treasury = 1) is no new member, and its line is its keepers'
+    // pledges (trust.ts enterpriseAllowance), an owner's or admin's among them, never trades (the deciding review of #3121).
     let cohortAnomalies = 0;
     const cohortMembers: CohortAllowanceMember[] = [];
     try {
         const cohorts = db.prepare(`
             SELECT strftime('%Y-%W', joined_at) as cohort_week, GROUP_CONCAT(public_key) as keys
             FROM members
-            WHERE joined_at IS NOT NULL AND status = 'active' AND invited_by IS NOT 'genesis'
+            WHERE joined_at IS NOT NULL AND status = 'active' AND invited_by IS NOT 'genesis' AND COALESCE(is_treasury, 0) = 0
             GROUP BY cohort_week
         `).all() as { cohort_week: string; keys: string }[];
 

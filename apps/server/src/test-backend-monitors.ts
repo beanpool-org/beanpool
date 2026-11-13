@@ -7,7 +7,7 @@
 import {
     initStateEngine,
     runWashSybilMetricsAudit, runWashSybilMetricsAuditSliced, getCommunityHealth,
-    reconcileLedgerFromDb, washAnalysisCount
+    reconcileLedgerFromDb, washAnalysisCount, createTreasury, getMemberTrustProfile
 } from './state-engine.js';
 import { db } from './db/db.js';
 import { grantNodeRole } from './engine/node-roles.js';
@@ -83,6 +83,33 @@ async function main() {
         tx(user1, user2, hc(5), 0); // 0 days ago (recent)
         const metrics3 = runWashSybilMetricsAudit()!;
         assert(metrics3.delinquentCount === 0, `0 delinquent accounts after recent transaction (got ${metrics3.delinquentCount})`);
+
+        // --- Test 3c: a new community enterprise is no new member, even one an owner's pledge funds (the deciding review of
+        // #3121, engine audit.ts: two enterprises an owner pledged 800 and 700 Beans to were named as new members whose
+        // allowance came from "Trades", counted, and the flag said "not counting what an owner or admin gave") ---
+        // One new person and two new enterprises of one join week, two days old, before any other cohort of these 14 days
+        // exists (Test 3's members join this week later, so they meet the same three).
+        const pledger = `plgo-${Date.now()}`;
+        seedMember(pledger, 0, 60);
+        grantNodeRole(pledger, 'owner', 'SYSTEM');
+        const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+        const newPerson = `newp-${Date.now()}`;
+        seedMember(newPerson, 0, 2);
+        const enterprises = [hc(800), hc(700)].map((amount, i) => {
+            const { publicKey } = createTreasury(`Pledged Enterprise ${i}`, '', 0, { systemCreated: true });
+            db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(twoDaysAgo, publicKey);
+            // The owner's pledge as the node keeps it (enterprise_pledges, which the enterprise's line reads: engine trust.ts
+            // enterpriseAllowance); pledgeEnterpriseBacking's own rules are test-derived-enterprise-floor's.
+            db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES (?, ?, ?, ?)').run('pl' + (seq++), pledger, publicKey, amount);
+            return publicKey;
+        });
+        assert(enterprises.every((e, i) => getMemberTrustProfile(e).earnedCredit === [hc(800), hc(700)][i]),
+            `each enterprise's line is the owner's pledge (${enterprises.map(e => getMemberTrustProfile(e).earnedCredit).join(', ')})`);
+        const metricsEnterprises = runWashSybilMetricsAudit()!;
+        assert(!metricsEnterprises.cohortMembers.some(m => enterprises.includes(m.pubkey)),
+            `no enterprise is named as a new member (${JSON.stringify(metricsEnterprises.cohortMembers)})`);
+        assert(metricsEnterprises.cohortAnomalies === 0, `one new person and two enterprises are no cohort anomaly (${metricsEnterprises.cohortAnomalies})`);
+        assert(!getCommunityHealth().flags.some(f => f.type === 'cohort_velocity'), 'and raise no flag');
 
         // --- Test 3a: a cohort on the Resident tier's floor is no velocity anomaly ---
         // Floors are whole hundredths: a Resident's -200 Beans is -20000. The line is the Resident threshold (-600 Beans),

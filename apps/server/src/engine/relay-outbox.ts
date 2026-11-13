@@ -146,18 +146,22 @@ async function forwardTo(home: string, rows: OutboxRow[], now: number): Promise<
     }
 }
 
-/** Forward these rows, one request per home and per RELAY_ITEMS_PER_REQUEST, a blob on its own. */
+/**
+ * Forward these rows, one request per home and per RELAY_ITEMS_PER_REQUEST, a blob on its own. The homes at once, each
+ * home's requests one after another: a member's send to several homes waits for the slowest one (FORWARD_TIMEOUT_MS at
+ * most a request), never for their sum.
+ */
 async function forwardRows(rows: OutboxRow[], now: number): Promise<void> {
     const byHome = new Map<string, OutboxRow[]>();
     for (const r of rows) byHome.set(r.recipient_home, [...(byHome.get(r.recipient_home) ?? []), r]);
-    for (const [home, list] of byHome) {
+    await Promise.all([...byHome].map(async ([home, list]) => {
         const blobs = list.filter((r) => r.kind === 'dm-blob');
         const small = list.filter((r) => r.kind !== 'dm-blob');
         const batches: OutboxRow[][] = [];
         for (let i = 0; i < small.length; i += RELAY_ITEMS_PER_REQUEST) batches.push(small.slice(i, i + RELAY_ITEMS_PER_REQUEST));
         for (const b of blobs) batches.push([b]);
         for (const batch of batches) await forwardTo(home, batch, now);
-    }
+    }));
 }
 
 let retrying = false;

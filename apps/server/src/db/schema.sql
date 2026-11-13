@@ -3650,7 +3650,8 @@ CREATE TABLE IF NOT EXISTS relay_outbox (
     recipient      TEXT NOT NULL CHECK (length(recipient) = 64),
     recipient_home TEXT NOT NULL CHECK (length(recipient_home) BETWEEN 1 AND 260),
     state          TEXT NOT NULL CHECK (state IN ('queued', 'sent', 'delivered', 'failed', 'expired')),
-    item           TEXT CHECK (item IS NULL OR length(item) <= 72000),
+    -- JSON: a line's 65,536 characters may escape to six each (\u0000), so room for that and the envelope.
+    item           TEXT CHECK (item IS NULL OR length(item) <= 400000),
     attempts       INTEGER NOT NULL DEFAULT 0,
     next_try_at    INTEGER,
     created_at     INTEGER NOT NULL,

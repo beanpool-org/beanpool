@@ -85,7 +85,7 @@ async function main(): Promise<void> {
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { __useNodeKeyFetchForTests } = await import('./engine/node-signature.js');
-    const { setSwitchOverride } = await import('./config/node-profile.js');
+    const { applyShapeChanges } = await import('./config/community-shape-write.js');
     const mail = await import('./engine/relay-mail.js');
     const outbox = await import('./engine/relay-outbox.js');
     const { TABLES: REPLICATION_TABLES } = await import('./engine/replication-manifest.js');
@@ -127,8 +127,10 @@ async function main(): Promise<void> {
     const forwards: Forward[] = [];
     let aAnswers = 202;
     let aUnreachable = false;
+    let answerAfterMs = 0;
     outbox.__useRelayTransportForTests(async (url, init) => {
         if (aUnreachable) throw new Error('connect ECONNREFUSED');
+        if (answerAfterMs) await new Promise((r) => setTimeout(r, answerAfterMs));
         const header = parseNodeRequestHeader(init.headers[NODE_REQUEST_HEADER] ?? '');
         const signed = !!header && header.key === bDoc.key && header.destination === 'a.example'
             && nodeRequestSignatureVerifies(header, { method: 'POST', path: new URL(url).pathname, body: init.body });
@@ -290,14 +292,16 @@ async function main(): Promise<void> {
     console.log('\n9. The owner\'s switch, Messages from other communities');
     const info9 = await (await fetch(`${BASE}/api/community/info`)).json();
     assert(info9?.features?.outsideMessages === true, `9a. on by default: features say outsideMessages (got ${JSON.stringify(info9?.features?.outsideMessages)})`);
-    setSwitchOverride('outsideMessages', false);
+    const offWrite = applyShapeChanges({ actor: olive.key, actorRole: 'owner' }, { changes: { outsideMessages: false } });
+    assert(offWrite.changed.includes('outsideMessages') && offWrite.told === 'nobody' && offWrite.shape.settings.outsideMessages.value === false,
+        `9a2. Olive, an owner, turns it off under How this community works; members are not told (no app shows an outside chat yet) (changed ${offWrite.changed.join(', ')}; told ${offWrite.told})`);
     const off = await bring([await item(ana, 'a.example', ben.key, 'b.example')]);
     assert(shape(off) === shape(heldAnswer) && heldCount() === before8, '9b. off: an item for Ben is answered the same, and dropped');
     const offSend = await asMember(ben, 'POST', '/api/mail/send', { items: [await item(ben, 'b.example', ana.key, 'a.example')] });
     assert(offSend.status === 403 && offSend.body?.code === 'outside_messages_off', `9c. off: Ben's send is refused (got ${offSend.status} ${offSend.body?.code})`);
     const info9off = await (await fetch(`${BASE}/api/community/info`)).json();
     assert(!('outsideMessages' in (info9off?.features ?? {})), '9d. off: features no longer say it');
-    setSwitchOverride('outsideMessages', true);
+    applyShapeChanges({ actor: olive.key, actorRole: 'owner' }, { changes: { outsideMessages: true } });
     const onAgain = await bring([await item(ana, 'a.example', ben.key, 'b.example')]);
     assert(onAgain.status === 202 && heldCount('recipient = ?', ben.key) === 1, '9e. on again: held');
     const shapeRead = await import('./config/community-shape.js');
@@ -392,6 +396,13 @@ async function main(): Promise<void> {
     assert(notMember.status === 403 || notMember.status === 401, `12b. a key that is no member here: refused (got ${notMember.status})`);
     assert((db.prepare('SELECT COUNT(*) AS n FROM relay_outbox').get() as { n: number }).n === outBefore, '12c. no outbox row for any of them');
 
+    const quotes = await item(ben, 'b.example', ana.key, 'a.example', { payload: '"'.repeat(mail.RELAY_LINE_MAX_CHARS) });
+    aAnswers = 503;
+    const q12 = await asMember(ben, 'POST', '/api/mail/send', { items: [quotes] });
+    aAnswers = 202;
+    assert(q12.status === 200 && q12.body?.items?.[0]?.state === 'queued' && JSON.parse(outRow(ben.key, quotes.envelope.itemId).item).payload === quotes.payload,
+        `12d. a line of ${mail.RELAY_LINE_MAX_CHARS} quotes (twice that, escaped) waits queued with its sealed copy whole (got ${q12.status} ${JSON.stringify(q12.body)?.slice(0, 120)})`);
+
     // ── 13. Forward failures ──────────────────────────────────────────────────────────────
     console.log('\n13. A forward that fails');
     aAnswers = 503;
@@ -418,6 +429,13 @@ async function main(): Promise<void> {
     aAnswers = 202;
     outbox.sweepRelayOutbox(Date.now() + outbox.OUTBOX_KEPT_MS + 1);
     assert(outRow(ben.key, out2.envelope.itemId).state === 'expired', '13f. sent and never confirmed in 30 days: expired');
+    answerAfterMs = 400;
+    const t13 = Date.now();
+    const twoHomes = await asMember(ben, 'POST', '/api/mail/send', { items: [await item(ben, 'b.example', ana.key, 'a.example'), await item(ben, 'b.example', cara.key, 'c.example')] });
+    const took = Date.now() - t13;
+    answerAfterMs = 0;
+    assert(twoHomes.status === 200 && twoHomes.body?.items?.every((i: any) => i.state === 'sent') && took < 750,
+        `13h. a send to two homes, each answering after 400 ms, waits for the slower, not their sum (${took} ms)`);
     outbox.sweepRelayOutbox(Date.now() + 2 * outbox.OUTBOX_KEPT_MS + 2);
     assert(!outRow(ben.key, out2.envelope.itemId) && !outRow(ben.key, out1.envelope.itemId), '13g. 30 days after their last change, settled rows go');
 

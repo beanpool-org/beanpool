@@ -8,10 +8,11 @@
  *     week is over, then lives in Settings only;
  *   - in Settings, the same card for as long as the account has no sign-in, with the sign-ins to add.
  *
- * Who it is for is the node's word, never a guess: `GET /api/community/me` says `rules: 'words'` for a member who came
- * in with 12 words and has added no sign-in. Nothing is drawn while it has not answered, for an older node that does
- * not say, or offline. Home's answer says it too (its `safety` card, passed as `known`), so there the card not yet put
- * away is drawn with the answer, and its cell is there from the first paint; a return after ✕ waits for the node's
+ * Who it is for is the node's word, never a guess. In Settings, `GET /api/community/me` says `rules: 'words'` for a
+ * member who came in with 12 words and has added no sign-in; nothing is drawn while it has not answered, for an older
+ * node that does not say, or offline. On Home, the answer's `safety` card (passed as `known`) is the only word on who it
+ * is for (by what the account has, not how they joined), so the card not yet put away is drawn with the answer, its
+ * cell is there from the first paint, and `/me` arriving later never pulls it; a return after ✕ waits for the node's
  * counts. A ✕ before they have come (still asking, or the request failed) is written at once and settled by the counts
  * when the node next answers, on this visit or a later one; Home is told whether the card is drawn (`onDrawn`).
  *
@@ -305,7 +306,13 @@ interface CardProps {
     refreshKey?: unknown;
     /** What the card stands in (Home's cell, with its "…"): drawn only with the card, so a card with nothing to say takes no place. */
     frame?: (card: ReactNode) => ReactNode;
-    /** The node has already said this member has only their 12 words (Home's answer): drawn without waiting for it again. */
+    /**
+     * Home's answer (its `safety` card): whether this member's 12 words are the only way back, by what the account has
+     * (DESIGN-home-default-fable.md §2.5). Given, it is the one word on who the card is for, at the first paint and after
+     * (review of #3110): `/api/community/me` then gives only the counts its schedule goes by, since its `rules` reads how
+     * the member joined, and letting it overrule drew the card and pulled it again (the jump PR #2411 fixed). Not given
+     * (Settings), `/api/community/me` says.
+     */
     known?: boolean;
     /** Told whether the card is drawn, before the page paints (Home: a card not drawn is not a place to move another to). */
     onDrawn?: (drawn: boolean) => void;
@@ -313,7 +320,7 @@ interface CardProps {
     keepsNoCopies?: boolean;
 }
 
-export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey, frame = (card) => card, known = false, onDrawn, keepsNoCopies = false }: CardProps) {
+export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey, frame = (card) => card, known, onDrawn, keepsNoCopies = false }: CardProps) {
     const standing = useOneWayBack(identity.publicKey, `${String(refreshKey)}:${result?.kind ?? ''}`);
     const [schedule, setSchedule] = useState(() => readSchedule(identity.publicKey));
     useEffect(() => { setSchedule(readSchedule(identity.publicKey)); }, [identity.publicKey]);
@@ -321,7 +328,8 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
     const resultRef = useRef<HTMLParagraphElement | null>(null);
     useEffect(() => { if (result) resultRef.current?.scrollIntoView?.({ block: 'center' }); }, [result]);
 
-    const shown = (standing?.words ?? known) && (placement === 'settings' || landingDue(schedule, standing));
+    const forThem = known ?? !!standing?.words;
+    const shown = forThem && (placement === 'settings' || landingDue(schedule, standing));
 
     function update(next: Schedule) {
         setSchedule(next);

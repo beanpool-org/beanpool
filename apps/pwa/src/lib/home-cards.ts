@@ -261,10 +261,11 @@ export interface HomeCards {
         tradesThisMonth?: number;
         communities?: number;
         place?: { lat: number; lng: number };
-        joined7d?: number;
-        eventsSoon?: number;
+        /** A member's three figures are null when they are zero: not written (home-answer.ts communityCard, §2.7). */
+        joined7d?: number | null;
+        eventsSoon?: number | null;
         /** The Commons pot, whole hundredths of a Bean (home-answer.ts memberFigures). */
-        commonsPot_c?: number;
+        commonsPot_c?: number | null;
     };
 }
 

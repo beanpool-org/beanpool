@@ -12,7 +12,8 @@
  *   4. The new-account limits for an invited member are unchanged: their own rule (ordinary), not `wayBack`.
  *   5. First steps on a local community: there on day 29 with a line left, absent on day 31, absent once every line is done;
  *      its `words` line: null when the account is covered, false while the words are the only way back, true once kept.
- *   6. The community card writes no zero figure: no trades, events or Commons pot of 0.
+ *   6. The community card writes no zero figure: no trades, events or Commons pot of 0. Trades of 0 are left out; a
+ *      member's who-joined, events and pot of 0 are sent as null, so the phone's card keeps its rows on a quiet week.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-home-way-back.ts
@@ -211,8 +212,21 @@ async function main() {
     for (const key of ['tradesThisMonth', 'eventsSoon', 'commonsPot_c', 'communities']) {
         assert(com[key] !== 0, `no ${key} of 0 (${JSON.stringify(com[key])})`);
     }
-    assert(com.tradesThisMonth === undefined && com.eventsSoon === undefined, `a fresh community has no trades or events this month: left out (${JSON.stringify(com)})`);
+    assert(com.tradesThisMonth === undefined && 'eventsSoon' in com && com.eventsSoon === null,
+        `a fresh community has no trades or events this month: trades left out, events sent empty (${JSON.stringify(com)})`);
     assert(typeof com.joined7d === 'number' && com.joined7d > 0, `a figure that is not zero is still written: joined this week ${com.joined7d}`);
+    // A quiet week (review of #3110): nobody joined, no event, no trade, a pot under a Bean. The phone's community card
+    // (HomeCardBodies.tsx CommunityBody, every installed build) draws its rows, listings among them, only when one of
+    // joined7d, eventsSoon or commonsPot_c is THERE, and writes each only when it is a number. So each is sent as null:
+    // there, and not a zero. Left out, the card fell back to one line and "N listings" went.
+    db.prepare('UPDATE members SET joined_at = ?').run(new Date(Date.now() - 30 * DAY).toISOString());
+    const quiet = (await home(ben, 'community')).json?.cards?.community ?? {};
+    assert(typeof quiet.listings === 'number' && ['tradesThisMonth', 'communities', 'joined7d', 'eventsSoon', 'commonsPot_c'].every(k => quiet[k] !== 0),
+        `a quiet week: listings still counted, and no other figure of 0 (${JSON.stringify(quiet)})`);
+    assert(['joined7d', 'eventsSoon'].every(k => k in quiet && quiet[k] === null) && quiet.tradesThisMonth === undefined,
+        `a quiet week: who joined and events coming up are sent as null (present, not written), no trades (${JSON.stringify(quiet)})`);
+    assert(!('commonsPot_c' in quiet) || quiet.commonsPot_c === null || (typeof quiet.commonsPot_c === 'number' && quiet.commonsPot_c > 0),
+        `a quiet week: the Commons pot, where Beans are on, is a figure above zero or null (${JSON.stringify(quiet.commonsPot_c)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

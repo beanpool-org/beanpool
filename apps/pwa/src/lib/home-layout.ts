@@ -358,13 +358,12 @@ export function dismissSafety(layout: HomeLayoutV2 | null, now: number): HomeLay
 }
 
 /**
- * Whether a member who never edited sees the one-time line {@link FEWER_CARDS_LINE} (§2.6): neither the account nor this
- * browser holds a layout, and they joined more than a week ago (a newcomer never saw the longer Home).
+ * The one-time line {@link FEWER_CARDS_LINE} is said to nobody now (DESIGN-home-default-fable.md §2.8, review of #3110):
+ * since D0 a Home never saved starts with the whole default list, so it is longer, not shorter. D3 deletes the line and
+ * this; until then it says no to everyone.
  */
-export function fewerCardsNews(account: HomeLayoutV2 | null, local: HomeLayoutV2 | null, me: { joinedAt: string | null } | null | undefined, now: number): boolean {
-    if (account || local || !me) return false;
-    const joined = me.joinedAt ? Date.parse(me.joinedAt) : NaN;
-    return Number.isFinite(joined) && now - joined > 7 * DAY_MS;
+export function fewerCardsNews(_account: HomeLayoutV2 | null, _local: HomeLayoutV2 | null, _me: { joinedAt: string | null } | null | undefined, _now: number): boolean {
+    return false;
 }
 
 /** These three are word() keys: Home shows them through t(). */

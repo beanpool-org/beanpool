@@ -1068,10 +1068,11 @@ async function main(): Promise<void> {
         const info = se.getPublicCommunityInfo();
         const joined7d = (db.prepare(`SELECT COUNT(*) AS c FROM members WHERE joined_at >= ? AND status = 'active' AND COALESCE(is_treasury, 0) = 0 AND COALESCE(is_visitor, 0) = 0
                                          AND length(public_key) = 64 AND public_key NOT GLOB '*[^0-9a-f]*'`).get(new Date(Date.now() - 7 * DAY).toISOString()) as { c: number }).c;
-        // A pot under one whole Bean is 0, and a zero figure is left out (DESIGN-home-default-fable.md §2.7).
+        // A pot under one whole Bean is 0, and a member's figure of 0 is sent as null: there, so the phone's card keeps its
+        // rows, and not written (DESIGN-home-default-fable.md §2.7; review of #3110).
         const pot = wholeBeans(info.commonsBalance_c) * 100;
         assert(c.community?.listings === info.postCount && c.community.joined7d === joined7d && joined7d === 1 && c.community.eventsSoon === 1
-            && (pot === 0 ? !('commonsPot_c' in c.community) : c.community.commonsPot_c === pot && c.community.commonsPot_c % 100 === 0),
+            && (pot === 0 ? c.community.commonsPot_c === null : c.community.commonsPot_c === pot && c.community.commonsPot_c % 100 === 0),
             `community: ${info.postCount} listings, ${joined7d} joined this week (Carol), one event in the fortnight, the Commons pot in whole Beans, as hundredths (${JSON.stringify(c.community)}; pot ${info.commonsBalance_c} hundredths)`);
         const d = await get(`/api/home?${ALL}`, dan);
         assert(d.status === 200 && d.body?.cards?.community?.listings === info.postCount

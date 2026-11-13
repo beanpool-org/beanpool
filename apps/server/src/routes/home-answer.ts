@@ -395,12 +395,13 @@ export interface HomeCards {
      * The community's figures, totals public by rule: `listings` (the public board's live listings) to anyone answered;
      * to a member who reads as one, on a local community, who joined this week, the events coming up in the next fortnight
      * (running now or starting by then, as the Events card lists them)
-     * and the Commons pot in whole Beans (where Beans are on). `place`: the node's own place (local-config `location`) to
-     * two decimals, for a member; absent when the node has none and on the global profile.
+     * and the Commons pot in whole Beans (where Beans are on), each null when it is zero (written by no app; §2.7).
+     * `place`: the node's own place (local-config `location`) to two decimals, for a member; absent when the node has none
+     * and on the global profile.
      */
     community?: {
         name: string | null; members: number; listings: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number };
-        joined7d?: number; eventsSoon?: number; commonsPot_c?: number;
+        joined7d?: number | null; eventsSoon?: number | null; commonsPot_c?: number | null;
     };
     /**
      * A card of a type that comes in many is keyed by its instance id (`search-k7mq`), not its type; so is any card the
@@ -1521,14 +1522,21 @@ function communityCard(c: Ctx): HomeCards['community'] {
     // reads as one on a local community (the global profile's figures are members, communities and listings), the rest.
     const card: NonNullable<HomeCards['community']> = { ...out, listings: counts.postCount, ...(c.member && !c.switches.guestListingsOnly ? memberFigures(c, counts.commonsBalance_c) : {}) };
     // A figure that is zero is not written (DESIGN-home-default-fable.md §2.7): "0 joined this week", "Commons pot 0 Beans"
-    // and "0 trades this month" go, as on a node that has no such figure at all. `members` and `listings` stay: every app
-    // reads them, and a community of one has its own words.
+    // and "0 trades this month" go. `members` and `listings` stay: every app reads them, and a community of one has its
+    // own words. Trades and communities of 0 are left out, as on a node that has no such figure at all. A member's three
+    // (who joined, events, the pot) are sent as null instead: present, so the phone's community card, which picks its
+    // rows by whether any of the three is there (HomeCardBodies.tsx CommunityBody, in every installed build), keeps its
+    // rows and its "12 listings"; and written by no app, each of which writes a figure only when it is a number. Left
+    // out, a quiet week dropped that card to one line with no listings (review of #3110).
     for (const key of ZERO_LEFT_OUT) if (card[key] === 0) delete card[key];
+    for (const key of ZERO_SENT_EMPTY) if (card[key] === 0) card[key] = null;
     return card;
 }
 
 /** The community card's figures left out when they are zero (§2.7). */
-const ZERO_LEFT_OUT = ['tradesThisMonth', 'communities', 'joined7d', 'eventsSoon', 'commonsPot_c'] as const;
+const ZERO_LEFT_OUT = ['tradesThisMonth', 'communities'] as const;
+/** A member's figures sent as null when they are zero (§2.7): the phone's card picks its rows by their presence. */
+const ZERO_SENT_EMPTY = ['joined7d', 'eventsSoon', 'commonsPot_c'] as const;
 
 /**
  * A local community's figures for a member (W3, §2): who joined this week by Who joined's rules (no enterprise, no

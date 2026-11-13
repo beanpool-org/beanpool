@@ -40,6 +40,16 @@ vi.mock('../components/AddressSearch', () => ({
 }));
 // The community's price guide the starter dialog reads as it opens (slice O2): stood in for, so a test says what the guide holds.
 vi.mock('../lib/starter-offers', () => ({ readPricingGuide: vi.fn(async () => null) }));
+/**
+ * The one-time "fewer cards" note is said to nobody since D0 (lib/home-layout.ts fewerCardsNews, DESIGN-home-default-fable.md
+ * §2.8; review of #3110), but HomePage still draws and packs it until D3 deletes it: the tests of that drawing turn it on
+ * here (`fewerNote.on`), and every other test reads the real answer.
+ */
+const fewerNote = vi.hoisted(() => ({ on: false }));
+vi.mock('../lib/home-layout', async () => {
+    const actual = await vi.importActual<typeof import('../lib/home-layout')>('../lib/home-layout');
+    return { ...actual, fewerCardsNews: (...args: Parameters<typeof actual.fewerCardsNews>) => fewerNote.on || actual.fewerCardsNews(...args) };
+});
 vi.mock('../lib/sync', () => ({
     onSyncActivity: vi.fn((cb: () => unknown) => { hooks.sync.push(cb); return () => { hooks.sync = hooks.sync.filter(c => c !== cb); }; }),
     onSocketOpen: vi.fn((cb: () => void) => { hooks.open.push(cb); return () => { hooks.open = hooks.open.filter(c => c !== cb); }; }),
@@ -132,6 +142,7 @@ afterEach(() => {
     cleanup();
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    fewerNote.on = false;
 });
 
 describe('one request, the cached answer first (§5)', () => {
@@ -2108,10 +2119,15 @@ describe('the card frame (F3)', () => {
         for (const c of vi.mocked(api.getHome).mock.calls) expect(c[0]?.cards ?? []).not.toContain('fut1');
     });
 
-    it('a member here before the frame who never edited sees the fewer-cards line once', async () => {
+    // It said so once to a member here before the frame who never edited. Since D0 their Home starts with the whole
+    // default list, longer than before, so it is said to nobody (DESIGN-home-default-fable.md §2.8; review of #3110).
+    it('a member here before the frame who never edited sees no "fewer cards" line: their Home is longer now', async () => {
         nodeV2(answer(), null);
         const first = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        expect(await screen.findByTestId('home-fewer')).toHaveTextContent('Home now starts with fewer cards. Add a card brings the rest back.');
+        await screen.findByTestId('home-card-market');
+        await pause();
+        expect(screen.queryByTestId('home-fewer')).toBeNull();
+        expect(document.body.textContent).not.toContain('Home now starts with fewer cards');
         first.unmount();
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-market');
@@ -3333,6 +3349,23 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(cardIds().slice(0, 2)).toEqual(['needs', 'tips']);
     });
 
+    // One word on who it is for (review of #3110): Home's safety card goes by what the account has (wayBack), `/me`'s
+    // `rules` by how the member joined, so an invited member with no sign-in has the card in the answer and reads
+    // 'ordinary' on `/me`. The card is drawn with the answer and stays when `/me` answers: nothing after it moves.
+    it('"Your way back in" by Home\'s word alone: in its cell at the first paint, still there once /me says "ordinary", and no card moves', async () => {
+        const meAnswers: Array<(v: unknown) => void> = [];
+        vi.mocked(api.getCommunityMe).mockImplementation(() => new Promise((r) => { meAnswers.push(r); }) as never);
+        await landAt(1400, SAFETY);
+        const atFirstPaint = cardIds();
+        expect(atFirstPaint.slice(0, 3)).toEqual(['needs', 'safety', 'tips']);
+        expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
+        await waitFor(() => expect(meAnswers.length).toBeGreaterThan(0));
+        await act(async () => { for (const r of meAnswers) r({ probation: { rules: 'ordinary', keptPosts: 0, ageEndsAt: null } }); });
+        await pause();
+        expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
+        expect(cardIds()).toEqual(atFirstPaint);
+    });
+
     it('"Your way back in" with something to say is still drawn in Arrange, in its own cell: arrows on its row, its body quiet; it is not in the strip, and is the same card after Done', async () => {
         wordsOnly();
         await landAt(1400, SAFETY);
@@ -3425,6 +3458,7 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
     });
 
     it('with no Needs you, the fewer-cards note also stands above the grid, and so does the hint with it', async () => {
+        fewerNote.on = true;
         width = 800;
         nodeV2(answer(), null);
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
@@ -3451,6 +3485,7 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
     });
 
     it("the fewer-cards note and the hint in the member's language, above the grid and under the first card (pseudo-locale)", async () => {
+        fewerNote.on = true;
         await showIn('xx');
         width = 800;
         nodeV2(answer(), null);
@@ -4037,6 +4072,7 @@ describe('a card that changes height really re-packs (PR #2748, DESIGN-home-layo
     });
 
     it('every packed child is watched: the fewer-cards note too, by its own observer and before the paint', async () => {
+        fewerNote.on = true;
         heights = { ...CARDS, 'home-fewer': 44 };
         nodeV2(answer({}, { needs: NEEDS }), null);
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);

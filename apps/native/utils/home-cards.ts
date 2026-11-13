@@ -247,8 +247,11 @@ export interface HomeCards {
     /** `place`: the community's own, to two decimals (a member's answer on a local community that has one). */
     community?: {
         name: string | null; members: number; listings?: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number };
-        /** `commonsPot_c`: the pot, whole hundredths of a Bean that are always whole Beans (the node drops its hundredths). */
-        joined7d?: number; eventsSoon?: number; commonsPot_c?: number;
+        /**
+         * `commonsPot_c`: the pot, whole hundredths of a Bean that are always whole Beans (the node drops its hundredths).
+         * Each of the three is null when it is zero: there, so the card keeps its rows, and not written (§2.7).
+         */
+        joined7d?: number | null; eventsSoon?: number | null; commonsPot_c?: number | null;
     };
 }
 
@@ -613,14 +616,12 @@ export function dismissSafety(layout: HomeLayout | null, now: number): HomeLayou
 }
 
 /**
- * Whether a member who never edited sees the one-time line "Home now starts with fewer cards. Add a card brings the rest
- * back." (§2.6): neither the account nor the phone holds a layout, and they joined more than a week ago (a newcomer never
- * saw the longer Home, so has nothing to miss).
+ * The one-time line "Home now starts with fewer cards. Add a card brings the rest back." is said to nobody now
+ * (DESIGN-home-default-fable.md §2.8, review of #3110): since D0 a Home never saved starts with the whole default list, so
+ * it is longer, not shorter. D2 deletes the line and this; until then it says no to everyone.
  */
-export function fewerCardsNews(account: HomeLayout | null, phone: HomeLayout | null, me: Pick<HomeMe, 'joinedAt'> | null | undefined, now: number): boolean {
-    if (account || phone || !me) return false;
-    const joined = me.joinedAt ? Date.parse(me.joinedAt) : NaN;
-    return Number.isFinite(joined) && now - joined > 7 * DAY_MS;
+export function fewerCardsNews(_account: HomeLayout | null, _phone: HomeLayout | null, _me: Pick<HomeMe, 'joinedAt'> | null | undefined, _now: number): boolean {
+    return false;
 }
 
 // Lines kept here and shown through t() where they are drawn (app/(tabs)/index.tsx, components/home).

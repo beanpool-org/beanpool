@@ -3619,18 +3619,16 @@ describe('the frame on screen: the fewer-cards line, the standby tie, a newer ap
     /** A member here a month, before the frame: the node keeps no list for them (they never edited). */
     const longStanding = (layout: unknown): HomeAnswer => ({ ...localMember(), me: { ...localMember().me!, joinedAt: iso(Date.now() - 30 * DAY) }, layout: layout as never });
 
-    it('a member who never edited: "Home now starts with fewer cards" shows once, under the first card, and never on a later landing', async () => {
+    // It said so once to a member here before the frame who never edited. Since D0 their Home starts with the whole
+    // default list, longer than before, so it is said to nobody (DESIGN-home-default-fable.md §2.8; review of #3110).
+    it('a member who never edited, here a month: no "Home now starts with fewer cards", on the first landing or a later one', async () => {
         node.answer = longStanding(null);
         mem.store.delete(phoneKey());
         await render();
-        expect(fewerLines()).toHaveLength(1);
-        expect(fewerLines()[0].textContent).toContain(FEWER_CARDS_LINE);
-        // Drawn with the newcomer's list (§3), under the first card (where the one-time hint goes).
+        expect(fewerLines()).toHaveLength(0);
+        expect(document.body.textContent).not.toContain(FEWER_CARDS_LINE);
+        // Drawn with the newcomer's list (§3), New in the Market first (DESIGN-home-default-fable.md §2.2).
         expect(cards()).toEqual(NEWCOMER_DRAWN);
-        // The first card is New in the Market now (DESIGN-home-default-fable.md §2.2), First steps the second.
-        const first = document.querySelector('[data-testid="home-card-market"]')!;
-        expect(first.compareDocumentPosition(fewerLines()[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(document.querySelector('[data-testid="home-card-steps"]')!.compareDocumentPosition(fewerLines()[0]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
         // Nothing is written for them: they still never edited.
         expect(mem.store.has(phoneKey())).toBe(false);
         expect(posts()).toHaveLength(0);
@@ -3642,14 +3640,15 @@ describe('the frame on screen: the fewer-cards line, the standby tie, a newer ap
     });
 
     // Review of #1699 (confirmation), finding 2: an empty version-1 list (a way-back dismissal on an older app, the web's
-    // Reset) is unknown, so the newcomer's list is drawn; such a member never moved or hid a card, so the line is theirs.
-    it('P2: a member whose account list is an empty version 1 (only a way-back dismissal) and who has no copy here sees the line once', async () => {
+    // Reset) is unknown, so the newcomer's list is drawn. Such a member never moved or hid a card; the line was theirs
+    // once, and since D0 it is nobody's (§2.8; review of #3110).
+    it('P2: a member whose account list is an empty version 1 (only a way-back dismissal) and who has no copy here: the newcomer\'s list, no "fewer cards" line', async () => {
         node.answer = longStanding({ v: 1, order: [], hidden: [], dismissed: { safety: iso(Date.now() - 20 * DAY) }, updatedAt: iso(Date.now() - 20 * DAY) });
         mem.store.delete(phoneKey());
         await render();
         expect(cards()).toEqual(NEWCOMER_DRAWN);
-        expect(fewerLines()).toHaveLength(1);
-        expect(fewerLines()[0].textContent).toContain(FEWER_CARDS_LINE);
+        expect(fewerLines()).toHaveLength(0);
+        expect(document.body.textContent).not.toContain(FEWER_CARDS_LINE);
         expect(posts()).toHaveLength(0);
         await again();
         expect(fewerLines()).toHaveLength(0);

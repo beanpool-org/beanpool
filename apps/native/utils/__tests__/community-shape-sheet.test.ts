@@ -292,6 +292,50 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
         expect(onOpenShape).toHaveBeenCalled();
     });
 
+    // A quiet week (review of #3110; DESIGN-home-default-fable.md §2.7): nobody joined, no event coming up, a pot under a
+    // Bean. The node sends those three as null (routes/home-answer.ts communityCard): there, because this card picks its
+    // rows by whether any of them is present (in every installed build), and not written, because it writes each only
+    // when it is a number. Left out instead, the card fell back to one line and the listings count went with it.
+    describe("CommunityBody on a quiet week, as the node sends it: its rows, the listings, and no zero", () => {
+        const rows = () => Array.from(host.querySelectorAll('[data-testid^="home-community-row-"]')).map(r => r.textContent);
+        const fallback = () => host.querySelector('[data-testid="home-community-line"]')?.textContent ?? null;
+        const local = (card: Record<string, unknown>) => render(createElement(CommunityBody, {
+            card: { name: 'Riverside Commons', members: 15, listings: 12, ...card } as never,
+            profile: 'local', invitesOn: true, features: {}, colors: lightColors,
+        }));
+
+        it('trades this month, nothing else: members, trades, listings, and not one 0', async () => {
+            await local({ tradesThisMonth: 3, joined7d: null, eventsSoon: null, commonsPot_c: null });
+            expect(rows()).toEqual(['15 members', '3 trades this month', '12 listings']);
+            expect(fallback()).toBeNull();
+            expect(host.textContent).not.toMatch(/\b0\b/);
+        });
+
+        it('no trades either (left out): members and listings, and not one 0', async () => {
+            await local({ joined7d: null, eventsSoon: null, commonsPot_c: null });
+            expect(rows()).toEqual(['15 members', '12 listings']);
+            expect(host.textContent).not.toMatch(/\b0\b/);
+        });
+
+        it('Beans off (no pot at all): the same', async () => {
+            await local({ tradesThisMonth: 3, joined7d: null, eventsSoon: null });
+            expect(rows()).toEqual(['15 members', '3 trades this month', '12 listings']);
+        });
+
+        it('a figure above zero beside the empty ones is written as before', async () => {
+            await local({ tradesThisMonth: 3, joined7d: 2, eventsSoon: null, commonsPot_c: 31000 });
+            expect(rows()).toEqual(['15 members · 2 joined this week', '3 trades this month · Commons pot 310 Beans', '12 listings']);
+        });
+
+        // Why null and not left out: the shape round 1 sent. This card is in phones already installed, so it can't change.
+        it('the three left out instead: one line, and "12 listings" is gone', async () => {
+            await local({ tradesThisMonth: 3 });
+            expect(rows()).toEqual([]);
+            expect(fallback()).toBe('15 members · 3 trades this month.');
+            expect(host.textContent).not.toContain('12 listings');
+        });
+    });
+
     it('CommunityBody does NOT render summary row for an old node that says nothing', async () => {
         await render(createElement(CommunityBody, {
             card: {

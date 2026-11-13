@@ -9,10 +9,12 @@
  * as the recipient's, its kind and size; then writes an **outbox row** and forwards it at once to
  * `https://<recipient home>/api/relay/mail`, in a request it signs (engine/node-key.ts ownNodeRequestHeaders), one
  * request per home. The outbox row keeps no words: the sealed item only while it is `queued` (the other server has not
- * taken it), and goes at the first 2xx (`sent`). A forward that fails is tried again with backoff (RETRY_BACKOFF_MS) for
+ * taken it), and goes at the first 2xx: `sent`, or `failed` for an item that 2xx's own answer refuses (wrong home, not for
+ * here, stale ...), so its sender sees Not delivered. A forward that fails is tried again with backoff (RETRY_BACKOFF_MS) for
  * OUTBOX_QUEUE_MS, then `failed`. A receipt from the recipient's device (engine/relay-mail.ts applyReceipt) makes it
  * `delivered`; one `sent` and never confirmed within the 30 days the other server holds mail is `expired`. The member's
- * device reads each row's state in its fetch (`GET /api/mail`). A row goes OUTBOX_KEPT_MS after its last change.
+ * device reads each row's state in its fetch (`GET /api/mail`, paged by time and id: outboxStatesFor). A row goes
+ * OUTBOX_KEPT_MS after its last change.
  *
  * Receipts go out the same way: the recipient's device signs one (kind `receipt`, its payload the ids it has) and sends it
  * through this route to the sender's home.
@@ -64,15 +66,37 @@ export class OutboxError extends Error {
 
 // ── The forward ─────────────────────────────────────────────────────────────────────────────
 
-/** What a forward got back: the other server's status, or 0 when it could not be reached. */
-type Transport = (url: string, init: { headers: Record<string, string>; body: string }) => Promise<{ status: number }>;
+/**
+ * What a forward got back: the other server's status (0 when it could not be reached) and, on a 2xx, its answer when it
+ * could be read: `{ items: [{ itemId, received: true } | { itemId, refused }] }`, one per item in the order sent
+ * (engine/relay-mail.ts receiveRelayItems).
+ */
+type Transport = (url: string, init: { headers: Record<string, string>; body: string }) => Promise<{ status: number; body?: unknown }>;
 
-async function postOverTls(url: string, init: { headers: Record<string, string>; body: string }): Promise<{ status: number }> {
+async function postOverTls(url: string, init: { headers: Record<string, string>; body: string }): Promise<{ status: number; body?: unknown }> {
     const res = await ssrfSafeFetch(url, {
         method: 'POST', body: init.body, headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...init.headers },
         timeoutMs: FORWARD_TIMEOUT_MS, maxBytes: ANSWER_MAX_BYTES, maxRedirects: 0, allowedContentTypes: ['application/json'],
     });
-    return { status: res.status };
+    if (res.status < 200 || res.status >= 300) return { status: res.status };
+    try {
+        return { status: res.status, body: await res.json() };
+    } catch {
+        return { status: res.status };   // taken, its answer unread: the items count as sent
+    }
+}
+
+/**
+ * Whether the other server refused the item at `index` of a request inside its 2xx (wrong home, not for here, stale ...):
+ * its answer at that place names the same item and says `refused`. The answers are read by place, not by id, because one
+ * request may carry two members' items that share an id; answers that don't line up with the items count as none.
+ */
+function refusedInAnswer(body: unknown, index: number, itemId: string, sent: number): string | null {
+    const answers = (body as { items?: unknown } | null | undefined)?.items;
+    if (!Array.isArray(answers) || answers.length !== sent) return null;
+    const a = answers[index] as { itemId?: unknown; refused?: unknown } | null;
+    if (a?.itemId !== itemId || typeof a.refused !== 'string') return null;
+    return /^[a-z-]{1,40}$/.test(a.refused) ? a.refused : 'refused';   // its words go to the log: core's reasons only
 }
 
 let transport: Transport = postOverTls;
@@ -129,20 +153,30 @@ async function forwardTo(home: string, rows: OutboxRow[], now: number): Promise<
     const body = JSON.stringify({ items: going.map((s) => s.item) });
     const url = `https://${home}${RELAY_MAIL_PATH}`;
     let status = 0;
+    let answer: unknown;
     try {
         const headers = await ownNodeRequestHeaders({ method: 'POST', url, body });
-        status = (await transport(url, { headers, body })).status;
+        ({ status, body: answer } = await transport(url, { headers, body }));
     } catch (e) {
         logger.warn('SYS', `Mail to another community: ${home} could not be reached (${e instanceof Error ? e.message.slice(0, 120) : String(e)}); `
             + `${going.length} item(s) wait to be tried again.`);
     }
     const at = Date.now();
-    for (const { r } of going) {
-        // Taken (202), or never to be taken: a request it refuses as not one, or too large. Anything else is tried again.
-        if (status >= 200 && status < 300) settle(r, 'sent', at);
-        else if (status === 400 || status === 413) settle(r, 'failed', at);
+    const refusals = new Map<string, number>();
+    going.forEach(({ r }, i) => {
+        // Taken (2xx): sent, unless its own answer inside says refused, which is as final as a 400 and the sender must see
+        // it (Not delivered). Never to be taken: a request it refuses as not one, or too large. Anything else is tried again.
+        if (status >= 200 && status < 300) {
+            const refused = refusedInAnswer(answer, i, r.item_id, going.length);
+            if (refused) refusals.set(refused, (refusals.get(refused) ?? 0) + 1);
+            settle(r, refused ? 'failed' : 'sent', at);
+        } else if (status === 400 || status === 413) settle(r, 'failed', at);
         else if (at - r.created_at >= OUTBOX_QUEUE_MS) settle(r, 'failed', at);
         else tryLater(r, at);
+    });
+    if (refusals.size) {
+        logger.warn('SYS', `Mail to another community: ${home} took the request and refused ${[...refusals].map(([why, n]) => `${n} as ${why}`).join(', ')}; `
+            + 'their senders see Not delivered.');
     }
 }
 
@@ -270,10 +304,28 @@ function statesOf(member: string, ids: string[]): SentState[] {
     return ids.filter((id) => of.has(id)).map((id) => ({ itemId: id, state: of.get(id)! }));
 }
 
-/** What became of `member`'s items changed after `since` (ms), oldest change first, at most 200: their device's ticks. */
-export function outboxStatesFor(member: string, since = 0): Array<{ itemId: string; kind: string; recipient: string; recipientHome: string; state: OutboxState; at: number }> {
+/** Ticks one fetch gives. */
+export const OUTBOX_TICKS_PAGE = 200;
+
+export interface OutboxTick { itemId: string; kind: string; recipient: string; recipientHome: string; state: OutboxState; at: number }
+
+/**
+ * What became of `member`'s items, oldest change first, OUTBOX_TICKS_PAGE at a time, after the cursor (`since`, `sinceId`):
+ * the last tick the device has, by its `at` and `itemId`. Many rows change at one moment (a forward's batch, the sweep), so
+ * the cursor is the pair, never the time alone, and `more` says whether a full page ends before the last. A time with no
+ * id reads from the start of that moment: a tick read twice is harmless, one skipped is lost.
+ */
+export function outboxStatesFor(member: string, since = 0, sinceId = ''): { ticks: OutboxTick[]; more: boolean } {
     const rows = db.prepare(`SELECT item_id, kind, recipient, recipient_home, state, updated_at FROM relay_outbox
-                             WHERE sender_key = ? AND kind != 'receipt' AND updated_at > ? ORDER BY updated_at, item_id LIMIT 200`)
-        .all(member, since) as Array<{ item_id: string; kind: string; recipient: string; recipient_home: string; state: OutboxState; updated_at: number }>;
-    return rows.map((r) => ({ itemId: r.item_id, kind: r.kind, recipient: r.recipient, recipientHome: r.recipient_home, state: r.state, at: r.updated_at }));
+                             WHERE sender_key = ? AND kind != 'receipt' AND (updated_at > ? OR (updated_at = ? AND item_id > ?))
+                             ORDER BY updated_at, item_id LIMIT ?`)
+        .all(member, since, since, sinceId, OUTBOX_TICKS_PAGE + 1) as Array<{
+            item_id: string; kind: string; recipient: string; recipient_home: string; state: OutboxState; updated_at: number;
+        }>;
+    return {
+        ticks: rows.slice(0, OUTBOX_TICKS_PAGE).map((r) => ({
+            itemId: r.item_id, kind: r.kind, recipient: r.recipient, recipientHome: r.recipient_home, state: r.state, at: r.updated_at,
+        })),
+        more: rows.length > OUTBOX_TICKS_PAGE,
+    };
 }

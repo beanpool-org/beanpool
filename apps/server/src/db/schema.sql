@@ -3624,17 +3624,20 @@ CREATE INDEX IF NOT EXISTS idx_relay_mail_recipient ON relay_mail(recipient, rec
 CREATE INDEX IF NOT EXISTS idx_relay_mail_received ON relay_mail(received_at);
 
 -- relay_mail_seen: every item another server brought here that passed its envelope's checks, held or dropped alike, by its
--- sender and id, for 7 days: a replay is dropped, and the caps on a sending server and a sender key count from it, so what
--- they answer never depends on whether the recipient is a member here.
+-- sender and id, for 7 days: a replay is dropped, and the caps on a sending server and on this server count from it, so
+-- what they answer never depends on whether the recipient is a member here. `stranger_to` is the member an item was held
+-- for while its sender was a stranger to them (they had never written to that key): the stranger's caps, 5 a day to one
+-- member and 50 a day across this server, count those (engine/relay-mail.ts MAIL_STRANGER_*); NULL for every other item.
 CREATE TABLE IF NOT EXISTS relay_mail_seen (
     sender_key  TEXT NOT NULL,
     item_id     TEXT NOT NULL,
     sender_home TEXT NOT NULL,
     seen_at     INTEGER NOT NULL,
+    stranger_to TEXT CHECK (stranger_to IS NULL OR length(stranger_to) = 64),
     PRIMARY KEY (sender_key, item_id)
 );
 CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_home ON relay_mail_seen(sender_home, seen_at);
-CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_key ON relay_mail_seen(sender_key, seen_at);
+CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_stranger ON relay_mail_seen(sender_key, stranger_to, seen_at);
 CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_at ON relay_mail_seen(seen_at);
 
 -- relay_outbox: an item a member here sent to someone in another community, and what became of it: `queued` (the other
@@ -3659,5 +3662,7 @@ CREATE TABLE IF NOT EXISTS relay_outbox (
     PRIMARY KEY (sender_key, item_id)
 );
 CREATE INDEX IF NOT EXISTS idx_relay_outbox_due ON relay_outbox(state, next_try_at);
-CREATE INDEX IF NOT EXISTS idx_relay_outbox_sender ON relay_outbox(sender_key, updated_at);
+-- A member's ticks, paged by (updated_at, item_id); and whether a member has written to a key (a stranger's caps).
+CREATE INDEX IF NOT EXISTS idx_relay_outbox_sender ON relay_outbox(sender_key, updated_at, item_id);
+CREATE INDEX IF NOT EXISTS idx_relay_outbox_pair ON relay_outbox(sender_key, recipient);
 CREATE INDEX IF NOT EXISTS idx_relay_outbox_updated ON relay_outbox(updated_at);

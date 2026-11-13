@@ -23,14 +23,17 @@
  *      answered exactly as a held item is, and nothing is stored
  *   9  the owner's switch: off, every item from outside is answered 202 and dropped, and a member's send is refused; on again
  *  10  caps: a blob over 1,200,000 characters is refused (413) and nothing stored or spent; two blobs, 17 items: 400; a
- *      member past 200 items or 20 MB waiting: dropped; a sending server past 300 an hour, a sender key past 200 a day: 429;
- *      the mailbox past 500 MB or the disk past its floor: 503; a member's send of a blob over the cap: 413
+ *      member past 200 items or 20 MB waiting: dropped; a sending server past 300 an hour: 429; a sender the member has
+ *      never written to, past 5 a day to them or 50 a day across this server: dropped, answered the same; the mailbox past
+ *      500 MB or the disk past its floor: 503; a member's send of a blob over the cap: 413
  *  11  envelopes: wrong home, a changed payload, stale: refused, nothing stored
  *  12  a member's send refused: not their envelope, not this home, a recipient here, not a member, a bad signature
- *  13  a forward that fails is queued and tried again; 24 hours untaken is failed; 30 days unconfirmed is expired
+ *  13  a forward that fails is queued and tried again; 24 hours untaken is failed; 30 days unconfirmed is expired; an item
+ *      the other server refuses inside its 202 is failed (Not delivered), each row by its own answer
  *  14  hygiene: held mail goes after 30 days, and when its recipient is no member here; seen ids after 8 days
  *  15  never copied: a standby's whole copy and a snapshot file hold no mail, no outbox, no ids; the blob is not in the images
  *  16  the door: unsigned, or a member's signature, at /api/relay/mail is refused
+ *  17  the ticks page by (time, id) with `outboxMore`: rows settled at one moment across a page's edge are each read once
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) BEANPOOL_SSRF_TEST_HOOK=1 pnpm exec tsx src/test-relay-mail.ts
  */
@@ -122,26 +125,39 @@ async function main(): Promise<void> {
     const bDoc = readNodeKeyDocument(await (await fetch(`${BASE}/api/node/key`)).json());
     if (!bDoc) throw new Error('b.example has no key document');
 
-    // a.example's own /api/relay/mail: what the node's forwards reach. It checks each as a real server's door would.
+    // a.example's (and c.example's) own /api/relay/mail: what the node's forwards reach. It checks each as a real server's
+    // door would, and answers each item inside its 202 as engine/relay-mail.ts does: received, or refused with the reason.
     interface Forward { url: string; origin: string | null; signed: boolean; items: RelayItem[]; refused: string[] }
     const forwards: Forward[] = [];
     let aAnswers = 202;
     let aUnreachable = false;
     let answerAfterMs = 0;
+    /** The names the other servers answer to (a community that moved no longer lists its old one), and their clocks. */
+    const otherNames = new Set(['a.example', 'c.example']);
+    let otherClockAheadMs = 0;
     outbox.__useRelayTransportForTests(async (url, init) => {
         if (aUnreachable) throw new Error('connect ECONNREFUSED');
         if (answerAfterMs) await new Promise((r) => setTimeout(r, answerAfterMs));
+        const host = new URL(url).host;
         const header = parseNodeRequestHeader(init.headers[NODE_REQUEST_HEADER] ?? '');
-        const signed = !!header && header.key === bDoc.key && header.destination === 'a.example'
+        const signed = !!header && header.key === bDoc.key && header.destination === host
             && nodeRequestSignatureVerifies(header, { method: 'POST', path: new URL(url).pathname, body: init.body });
         const items: RelayItem[] = [];
         const refused: string[] = [];
+        const answers: Array<{ itemId: string | null; received?: true; refused?: string }> = [];
         for (const raw of (JSON.parse(init.body).items ?? []) as unknown[]) {
-            const v = checkRelayItem(raw, { signedBy: header?.origin ?? '', isHere: (h) => h === 'a.example' });
-            if (v.ok) items.push(v.item); else refused.push(v.reason);
+            const v = checkRelayItem(raw, { signedBy: header?.origin ?? '', isHere: (h) => h === host && otherNames.has(h) });
+            if (!v.ok) {
+                refused.push(v.reason);
+                answers.push({ itemId: (raw as any)?.envelope?.itemId ?? null, refused: v.reason });
+                continue;
+            }
+            items.push(v.item);
+            const stale = v.item.envelope.at < Date.now() + otherClockAheadMs - mail.MAIL_ITEM_MAX_AGE_MS;
+            answers.push(stale ? { itemId: v.item.envelope.itemId, refused: 'stale' } : { itemId: v.item.envelope.itemId, received: true });
         }
         forwards.push({ url, origin: header?.origin ?? null, signed, items, refused });
-        return { status: aAnswers };
+        return aAnswers >= 200 && aAnswers < 300 ? { status: aAnswers, body: { items: answers } } : { status: aAnswers };
     });
 
     // ── Helpers ───────────────────────────────────────────────────────────────────────────
@@ -342,7 +358,7 @@ async function main(): Promise<void> {
         '10g. Bea with 20 MB waiting: a line more is answered the same and dropped');
     db.prepare('DELETE FROM relay_mail WHERE sender_key = ?').run(filler);
 
-    // A sending server past 300 in the hour, a sender key past 200 in the day: 429, whoever they are for.
+    // A sending server past 300 in the hour: 429, whoever its items are for.
     const spend = db.prepare('INSERT INTO relay_mail_seen (sender_key, item_id, sender_home, seen_at) VALUES (?, ?, ?, ?)');
     const someone = keys().key;
     for (let i = 0; i < mail.MAIL_PER_ORIGIN_HOUR; i++) spend.run(someone, `spent-${String(i).padStart(6, '0')}`, 'c.example', Date.now());
@@ -351,11 +367,41 @@ async function main(): Promise<void> {
         `10h. c.example past ${mail.MAIL_PER_ORIGIN_HOUR} items in the hour: 429 with Retry-After, for an item to nobody here too (got ${busyC.status})`);
     assert((await bring([await item(ana, 'a.example', ben.key, 'b.example')])).status === 202, '10i. a.example meanwhile: taken');
     db.prepare('DELETE FROM relay_mail_seen WHERE sender_key = ?').run(someone);
+
+    // A sender a member here has never written to (design §3.7, 30 Oct §2.5): 5 a day to that member, 50 a day across
+    // this server; past either, answered exactly as a held item is, and dropped (whether they are known is the member's).
+    const pest = keys();
+    const fromPest = (to: Keys, count: number) => Promise.all(Array.from({ length: count }, () => item(pest, 'a.example', to.key, 'b.example')));
+    const pestHeld = (to: Keys) => heldCount('recipient = ? AND sender_key = ?', to.key, pest.key);
+    const fivePest = await bring(await fromPest(bea, mail.MAIL_STRANGER_PER_RECIPIENT_DAY));
+    assert(fivePest.status === 202 && pestHeld(bea) === mail.MAIL_STRANGER_PER_RECIPIENT_DAY,
+        `10j. a sender Bea has never written to: ${mail.MAIL_STRANGER_PER_RECIPIENT_DAY} items in a day are held for her (got ${pestHeld(bea)})`);
+    const sixthPest = await bring(await fromPest(bea, 1));
+    assert(shape(sixthPest) === shape(heldAnswer) && pestHeld(bea) === mail.MAIL_STRANGER_PER_RECIPIENT_DAY,
+        `10j2. the next that day is answered exactly as a held one (${shape(sixthPest)}), and dropped (Bea holds ${pestHeld(bea)})`);
+    const beaWrites = await asMember(bea, 'POST', '/api/mail/send', { items: [await item(bea, 'b.example', pest.key, 'a.example')] });
+    const afterReply = await bring(await fromPest(bea, 1));
+    assert(beaWrites.body?.items?.[0]?.state === 'sent' && afterReply.status === 202 && pestHeld(bea) === mail.MAIL_STRANGER_PER_RECIPIENT_DAY + 1,
+        `10j3. once Bea has written to them, they are no stranger to her: their next is held (Bea holds ${pestHeld(bea)})`);
+    const crowd: Keys[] = [];
+    const othersNeeded = mail.MAIL_STRANGER_SERVER_DAY / mail.MAIL_STRANGER_PER_RECIPIENT_DAY;   // Bea's 5 count already
+    for (let i = 0; i < othersNeeded; i++) { const m = keys(); addLocal(m, `Crowd ${i}`); crowd.push(m); }
+    const toCrowd = (await Promise.all(crowd.slice(0, -1).map((m) => fromPest(m, mail.MAIL_STRANGER_PER_RECIPIENT_DAY)))).flat();
+    for (let i = 0; i < toCrowd.length; i += 16) await bring(toCrowd.slice(i, i + 16));
+    const crowdHeld = crowd.slice(0, -1).reduce((sum, m) => sum + pestHeld(m), 0);
+    const lastOfCrowd = await bring(await fromPest(crowd.at(-1)!, 1));
+    assert(crowdHeld + mail.MAIL_STRANGER_PER_RECIPIENT_DAY === mail.MAIL_STRANGER_SERVER_DAY && shape(lastOfCrowd) === shape(heldAnswer) && pestHeld(crowd.at(-1)!) === 0,
+        `10j4. ${mail.MAIL_STRANGER_SERVER_DAY} items held across this server from that stranger in a day: their next, to anyone new, is answered the same and dropped (held ${crowdHeld} + ${mail.MAIL_STRANGER_PER_RECIPIENT_DAY}; the last ${pestHeld(crowd.at(-1)!)})`);
+    const sixFromAna = await bring(await Promise.all(Array.from({ length: 6 }, () => item(ana, 'a.example', ben.key, 'b.example'))));
+    const anaToBen = sixFromAna.body?.items?.map((i: any) => i.itemId) ?? [];
+    assert(anaToBen.length === 6 && anaToBen.every((id: string) => heldCount('item_id = ? AND recipient = ?', id, ben.key) === 1),
+        `10j5. Ana, whom Ben has written to, brings him 6 at once: all held (no stranger's cap on her)`);
     const loud = keys();
-    for (let i = 0; i < mail.MAIL_PER_SENDER_DAY; i++) spend.run(loud.key, `loud-${String(i).padStart(6, '0')}`, 'a.example', Date.now() - 2 * 60 * 60_000);
+    for (let i = 0; i < 200; i++) spend.run(loud.key, `loud-${String(i).padStart(6, '0')}`, 'a.example', Date.now() - 2 * 60 * 60_000);
     const loudAgain = await bring([await item(loud, 'a.example', ben.key, 'b.example')]);
-    assert(loudAgain.status === 429, `10j. a sender key past ${mail.MAIL_PER_SENDER_DAY} items in the day: 429 (got ${loudAgain.status})`);
+    assert(loudAgain.status === 202, `10j6. a sender key with 200 items in the day and none held: no cap of its own past the design's (got ${loudAgain.status})`);
     db.prepare('DELETE FROM relay_mail_seen WHERE sender_key = ?').run(loud.key);
+    db.prepare('DELETE FROM relay_mail WHERE sender_key = ?').run(pest.key);
 
     // The whole mailbox past 500 MB, and the disk past its floor: 503.
     fill.run(filler, 'fill-server-0001', bea.key, Date.now());
@@ -439,6 +485,30 @@ async function main(): Promise<void> {
     outbox.sweepRelayOutbox(Date.now() + 2 * outbox.OUTBOX_KEPT_MS + 2);
     assert(!outRow(ben.key, out2.envelope.itemId) && !outRow(ben.key, out1.envelope.itemId), '13g. 30 days after their last change, settled rows go');
 
+    // The other server takes the request (202) but refuses an item inside it: the sender is told Not delivered.
+    otherNames.delete('a.example');   // a.example has moved, and its server no longer answers to its old name
+    const moved = await item(ben, 'b.example', ana.key, 'a.example');
+    const s13i = await asMember(ben, 'POST', '/api/mail/send', { items: [moved] });
+    otherNames.add('a.example');
+    const movedTick = ((await asMember(ben, 'GET', '/api/mail')).body?.outbox ?? []).find((o: any) => o.itemId === moved.envelope.itemId);
+    assert(s13i.status === 200 && s13i.body?.items?.[0]?.state === 'failed' && outRow(ben.key, moved.envelope.itemId)?.state === 'failed'
+        && outRow(ben.key, moved.envelope.itemId)?.item === null && movedTick?.state === 'failed' && forwards.at(-1)?.refused[0] === 'not-for-here',
+        `13i. a.example answers 202 and refuses the item inside it (not for here): failed, so Ben sees Not delivered, never sent (got ${s13i.body?.items?.[0]?.state}; tick ${movedTick?.state})`);
+    aAnswers = 503;
+    const sharedId = newId();
+    const benFresh = await item(ben, 'b.example', ana.key, 'a.example', { itemId: sharedId });
+    const beaOld = await item(bea, 'b.example', ana.key, 'a.example', { itemId: sharedId, at: Date.now() - 6.9 * DAY });
+    await asMember(ben, 'POST', '/api/mail/send', { items: [benFresh] });
+    await asMember(bea, 'POST', '/api/mail/send', { items: [beaOld] });
+    aAnswers = 202;
+    otherClockAheadMs = 0.2 * DAY;
+    const forwardsBefore = forwards.length;
+    await outbox.retryRelayOutbox(Math.max(outRow(ben.key, sharedId).next_try_at, outRow(bea.key, sharedId).next_try_at) + 1);
+    otherClockAheadMs = 0;
+    const oneRequest = forwards.length === forwardsBefore + 1 && forwards.at(-1)!.items.length === 2;
+    assert(oneRequest && outRow(ben.key, sharedId).state === 'sent' && outRow(bea.key, sharedId).state === 'failed',
+        `13j. one retry carries Ben's line and Bea's (signed 6.9 days ago, the same id): a.example takes his and refuses hers as stale; each row follows its own answer (Ben ${outRow(ben.key, sharedId).state}, Bea ${outRow(bea.key, sharedId).state}; one request: ${oneRequest})`);
+
     // ── 14. Hygiene ───────────────────────────────────────────────────────────────────────
     console.log('\n14. Hygiene');
     assert(heldCount('recipient = ?', ben.key) > 0, '14a. Ben has mail waiting');
@@ -495,6 +565,38 @@ async function main(): Promise<void> {
     assert(unsigned.status === 401 && unsigned.body?.code === 'node_signature_missing', `16a. unsigned: refused (got ${unsigned.status})`);
     const memberSigned = await asMember(ben, 'POST', '/api/relay/mail', { items: [keep1] });
     assert(memberSigned.status === 401 && memberSigned.body?.code === 'node_signature_missing', `16b. a member's signature is no server's: refused (got ${memberSigned.status})`);
+
+    // ── 17. The ticks, page by page ───────────────────────────────────────────────────────
+    console.log('\n17. A device reads its ticks page by page');
+    const pat = keys();
+    addLocal(pat, 'Pat');
+    const tickRow = db.prepare(`INSERT INTO relay_outbox (sender_key, item_id, kind, recipient, recipient_home, state, item, attempts, next_try_at, created_at, updated_at)
+                                VALUES (?, ?, 'dm-line', ?, 'a.example', 'sent', NULL, 1, NULL, ?, ?)`);
+    const t17 = Date.now() - 60_000;
+    const ids17: string[] = [];
+    const addTick = (id: string, at: number) => { tickRow.run(pat.key, id, ana.key, t17, at); ids17.push(id); };
+    // 150 settled each at its own moment, then 120 at one moment (a forward's batch, or the sweep's), then 5 more.
+    for (let i = 0; i < 150; i++) addTick(`tick-a-${String(i).padStart(4, '0')}`, t17 + i);
+    for (let i = 0; i < 120; i++) addTick(`tick-b-${String(i).padStart(4, '0')}`, t17 + 1_000);
+    for (let i = 0; i < 5; i++) addTick(`tick-c-${String(i).padStart(4, '0')}`, t17 + 2_000 + i);
+    const seen17 = new Map<string, number>();
+    const pages17: string[] = [];
+    let cursor: { at: number; itemId: string } | null = null;
+    for (let page = 0; page < 10; page++) {
+        const q = cursor ? `?since=${cursor.at}&sinceId=${encodeURIComponent(cursor.itemId)}` : '';
+        const got = await asMember(pat, 'GET', `/api/mail${q}`);
+        const list: Array<{ itemId: string; at: number }> = got.body?.outbox ?? [];
+        for (const o of list) seen17.set(o.itemId, (seen17.get(o.itemId) ?? 0) + 1);
+        pages17.push(`${list.length}${got.body?.outboxMore === true ? '+' : ''}`);
+        if (got.body?.outboxMore !== true || !list.length) break;
+        cursor = { at: list.at(-1)!.at, itemId: list.at(-1)!.itemId };
+    }
+    assert(seen17.size === ids17.length && [...seen17.values()].every((c) => c === 1),
+        `17a. ${ids17.length} ticks, 120 of them at one moment across the page's edge, read by the last one's time and id: each exactly once (seen ${seen17.size}; pages ${pages17.join(', ')})`);
+    assert(pages17.join(',') === '200+,75', `17b. the first page says there is more, the last says there is not (pages ${pages17.join(', ')})`);
+    const bareSince = await asMember(pat, 'GET', `/api/mail?since=${t17 + 1_000}`);
+    assert((bareSince.body?.outbox ?? []).length === 125 && bareSince.body?.outboxMore === false,
+        `17c. a time with no id reads from the start of that moment: the 120 at it again, and the 5 after (got ${(bareSince.body?.outbox ?? []).length})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

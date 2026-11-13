@@ -14,13 +14,14 @@
  * Every other kind (group items, a call signal, a complaint) is answered 202 and dropped until the slice that owns it.
  *
  * **202 and drop.** Whether an item is held or dropped is never in the answer: an item for a key that is no member here,
- * for a member who blocked its sender, past a member's caps, of another kind, a replay, or with the owner's switch off
+ * for a member who blocked its sender, past a member's caps, past a stranger's (a sender the member has never written to:
+ * 5 a day to them, 50 a day across this server), of another kind, a replay, or with the owner's switch off
  * (`outsideMessages`), each is answered `{ itemId, received: true }` exactly as one held is, so no server can learn who is
- * a member here. What the answer does say depends on nothing about the members: a request that is not one (400), an item
- * too large for its kind (413, the whole request, nothing stored), an envelope that fails its checks (`refused`, with
- * core's reason: its form, the home rule, not for here, a changed payload, a bad signature; or `stale`), the caps on a
- * sending server, a sender key and this server (429, counted over every item that passed its checks, held or not), and a
- * full mailbox or disk (503).
+ * a member here, nor whom they write to. What the answer does say depends on nothing about the members: a request that is
+ * not one (400), an item too large for its kind (413, the whole request, nothing stored), an envelope that fails its
+ * checks (`refused`, with core's reason: its form, the home rule, not for here, a changed payload, a bad signature; or
+ * `stale`), the caps on a sending server and on this server (429, counted over every item that passed its checks, held or
+ * not), and a full mailbox or disk (503).
  *
  * **Held, then deleted.** The recipient's device fetches what waits (`GET /api/mail`, oldest first, 50 at a time; a blob's
  * bytes by `GET /api/mail/blob/:itemId`) and confirms what it has written (`POST /api/mail/confirm`), which deletes the rows
@@ -91,11 +92,18 @@ export const MAIL_PER_MEMBER_ITEMS = 200;
 export const MAIL_PER_MEMBER_BYTES = 20 * 1024 * 1024;
 /** Waiting for everyone here together; past it, and past the free-disk floor photos keep (2 GB), 503 `mailbox_full`. */
 export const MAIL_SERVER_BYTES = 500 * 1024 * 1024;
-/** Items taken from one sending server (design 30 Oct §2.5), from one sender key, and from every server together. */
+/** Items taken from one sending server (design 30 Oct §2.5), and from every server together: past either, 429. */
 export const MAIL_PER_ORIGIN_HOUR = 300;
 export const MAIL_PER_ORIGIN_DAY = 2_000;
-export const MAIL_PER_SENDER_DAY = 200;
 export const MAIL_SERVER_DAY = 20_000;
+/**
+ * Items held from a sender a member here has never written to (design §3.7, "unchanged" from 30 Oct §2.5: "per unknown
+ * sender key, not yet accepted by that recipient"): in any 24 hours, this many for that member, and this many across this
+ * server. Past either, dropped and answered as held (whether a sender is known to a member is the member's). The server's
+ * only sign of acceptance is the member's own reply: an outbox row from them to that key (hasWrittenTo).
+ */
+export const MAIL_STRANGER_PER_RECIPIENT_DAY = 5;
+export const MAIL_STRANGER_SERVER_DAY = 50;
 /** What one fetch gives. */
 export const MAIL_FETCH_PAGE = 50;
 export const MAIL_RETRY_AFTER_SEC = 3_600;
@@ -194,12 +202,8 @@ export function receiveRelayItems(origin: string, items: unknown, now = Date.now
     if (newItems.length) {
         const overOrigin = count('SELECT COUNT(*) AS n FROM relay_mail_seen WHERE sender_home = ? AND seen_at > ?', origin, now - 60 * 60_000) + newItems.length > MAIL_PER_ORIGIN_HOUR
             || count('SELECT COUNT(*) AS n FROM relay_mail_seen WHERE sender_home = ? AND seen_at > ?', origin, now - DAY_MS) + newItems.length > MAIL_PER_ORIGIN_DAY;
-        const senders = new Map<string, number>();
-        for (const i of newItems) senders.set(i.envelope.senderKey, (senders.get(i.envelope.senderKey) ?? 0) + 1);
-        const overSender = [...senders].some(([key, n]) =>
-            count('SELECT COUNT(*) AS n FROM relay_mail_seen WHERE sender_key = ? AND seen_at > ?', key, now - DAY_MS) + n > MAIL_PER_SENDER_DAY);
         const overServer = count('SELECT COUNT(*) AS n FROM relay_mail_seen WHERE seen_at > ?', now - DAY_MS) + newItems.length > MAIL_SERVER_DAY;
-        if (overOrigin || overSender || overServer) {
+        if (overOrigin || overServer) {
             return { status: 429, body: { error: MAIL_RATE_ERROR, code: 'rate_limited' }, retryAfterSec: MAIL_RETRY_AFTER_SEC };
         }
         const incoming = newItems.reduce((sum, i) => sum + (HELD_KINDS.has(i.envelope.kind) ? i.payload.length : 0), 0);
@@ -230,7 +234,8 @@ function takeItem(origin: string, item: RelayItem, now: number): boolean {
         applyReceipt(env, item.payload, now);
         return false;
     }
-    if (!HELD_KINDS.has(env.kind) || !mayHoldFor(env, item.payload.length)) return false;
+    const hold = HELD_KINDS.has(env.kind) ? mayHoldFor(env, item.payload.length, now) : null;
+    if (!hold) return false;
     const blob = env.kind === 'dm-blob';
     const file = blob ? relayBlobFile('in', env.senderKey, env.itemId) : null;
     try {
@@ -239,6 +244,10 @@ function takeItem(origin: string, item: RelayItem, now: number): boolean {
                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (sender_key, item_id) DO NOTHING`)
             .run(env.senderKey, env.itemId, env.kind, env.recipient, env.senderHome, JSON.stringify(env), blob ? null : item.payload, item.payload.length, now).changes === 1;
         if (!stored && file) removeRelayBlob(file);
+        // Held from a stranger to them: counted against the stranger's caps (MAIL_STRANGER_*), from the id's own row.
+        if (stored && hold.stranger) {
+            db.prepare('UPDATE relay_mail_seen SET stranger_to = ? WHERE sender_key = ? AND item_id = ?').run(env.recipient, env.senderKey, env.itemId);
+        }
         return stored;
     } catch (e) {
         if (file) removeRelayBlob(file);
@@ -247,16 +256,30 @@ function takeItem(origin: string, item: RelayItem, now: number): boolean {
     }
 }
 
-/** Whether an item may wait here for its recipient: a member here who reads as one, who has not blocked its sender, within their caps. */
-function mayHoldFor(env: RelayEnvelope, bytes: number): boolean {
+/** Whether `member` here has written to `key` (any item but a receipt, in the outbox's 30 days): the sender is no stranger to them. */
+function hasWrittenTo(member: string, key: string): boolean {
+    return !!db.prepare("SELECT 1 FROM relay_outbox WHERE sender_key = ? AND recipient = ? AND kind != 'receipt' LIMIT 1").get(member, key);
+}
+
+/**
+ * Whether an item may wait here for its recipient: a member here who reads as one, who has not blocked its sender, within
+ * their caps and, when its sender is a stranger to them, within the stranger's (`stranger` then says so); else null.
+ */
+function mayHoldFor(env: RelayEnvelope, bytes: number, now: number): { stranger: boolean } | null {
     const to = env.recipient;
-    if (!/^[0-9a-f]{64}$/.test(to) || to === env.senderKey) return false;
-    if (!isNodeMember(to) || !readsAsMember(to)) return false;
-    if (hasBlocked(to, env.senderKey)) return false;
+    if (!/^[0-9a-f]{64}$/.test(to) || to === env.senderKey) return null;
+    if (!isNodeMember(to) || !readsAsMember(to)) return null;
+    if (hasBlocked(to, env.senderKey)) return null;
     // One recipient, one item id: their device confirms and fetches by it.
-    if (db.prepare('SELECT 1 FROM relay_mail WHERE recipient = ? AND item_id = ?').get(to, env.itemId)) return false;
-    if (count('SELECT COUNT(*) AS n FROM relay_mail WHERE recipient = ?', to) >= MAIL_PER_MEMBER_ITEMS) return false;
-    return heldBytes('recipient = ?', to) + bytes <= MAIL_PER_MEMBER_BYTES;
+    if (db.prepare('SELECT 1 FROM relay_mail WHERE recipient = ? AND item_id = ?').get(to, env.itemId)) return null;
+    const stranger = !hasWrittenTo(to, env.senderKey);
+    if (stranger) {
+        const since = now - DAY_MS;
+        if (count('SELECT COUNT(*) AS n FROM relay_mail_seen WHERE sender_key = ? AND stranger_to = ? AND seen_at > ?', env.senderKey, to, since) >= MAIL_STRANGER_PER_RECIPIENT_DAY) return null;
+        if (count('SELECT COUNT(*) AS n FROM relay_mail_seen WHERE sender_key = ? AND stranger_to IS NOT NULL AND seen_at > ?', env.senderKey, since) >= MAIL_STRANGER_SERVER_DAY) return null;
+    }
+    if (count('SELECT COUNT(*) AS n FROM relay_mail WHERE recipient = ?', to) >= MAIL_PER_MEMBER_ITEMS) return null;
+    return heldBytes('recipient = ?', to) + bytes <= MAIL_PER_MEMBER_BYTES ? { stranger } : null;
 }
 
 // ── Receipts ────────────────────────────────────────────────────────────────────────────────

@@ -5,8 +5,10 @@
  *   POST /api/relay/mail            another community's server's signed request only (engine/node-signature.ts)
  *                                   { items: RelayItem[] } → 202 { items: [{ itemId, received: true } | { itemId, refused }] }
  *   POST /api/mail/send             a member here       { items: RelayItem[] } → { items: [{ itemId, state }] }
- *   GET  /api/mail?since=<ms>       a member here       → { items: HeldItem[], more, outbox: [{ itemId, kind, recipient,
- *                                                          recipientHome, state, at }] }
+ *   GET  /api/mail?since=<ms>&sinceId=<itemId>
+ *                                   a member here       → { items: HeldItem[], more, outbox: [{ itemId, kind, recipient,
+ *                                                          recipientHome, state, at }], outboxMore }: the ticks after the
+ *                                                          last one the device has (its `at` and `itemId`), 200 a page
  *   GET  /api/mail/blob/:itemId     a member here       → { itemId, payload } (a blob held for them)
  *   POST /api/mail/confirm          a member here       { ids: string[] } → { confirmed }
  *
@@ -76,8 +78,10 @@ export function createRelayRoutes(): Router {
         const member = memberHere(ctx);
         if (!member) return;
         const since = Number(ctx.query.since ?? 0);
+        const sinceId = typeof ctx.query.sinceId === 'string' ? ctx.query.sinceId.slice(0, 64) : '';
         const held = heldMailFor(member);
-        ctx.body = { ...held, page: MAIL_FETCH_PAGE, outbox: outboxStatesFor(member, Number.isSafeInteger(since) && since > 0 ? since : 0) };
+        const ticks = outboxStatesFor(member, Number.isSafeInteger(since) && since > 0 ? since : 0, sinceId);
+        ctx.body = { ...held, page: MAIL_FETCH_PAGE, outbox: ticks.ticks, outboxMore: ticks.more };
     });
 
     router.get('/api/mail/blob/:itemId', async (ctx) => {

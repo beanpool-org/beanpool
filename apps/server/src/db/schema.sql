@@ -1869,6 +1869,20 @@ CREATE TABLE IF NOT EXISTS system_metrics (
 );
 CREATE INDEX IF NOT EXISTS idx_system_metrics_key_time ON system_metrics(metric_key, timestamp DESC);
 
+-- The new members the cohort check found on its last run (engine audit.ts cohortMembers): their credit ALLOWANCE (never
+-- spending) reached 600 Beans within 14 days of joining, counting only what grew by routes other than an owner's or admin's
+-- grant, in a join week where half or more did. Each run rewrites it (a member no longer past the line goes);
+-- days_after_joining is kept from the run that first found them. `parts` is JSON: what gave the allowance (AllowancePart[]).
+-- Read only by the cohort_velocity health flag, which owners and admins read. Nothing here is a Bean.
+CREATE TABLE IF NOT EXISTS cohort_allowance_members (
+    member_pubkey      TEXT PRIMARY KEY,
+    allowance_c        INTEGER NOT NULL,
+    counted_c          INTEGER NOT NULL,
+    days_after_joining INTEGER NOT NULL,
+    parts              TEXT NOT NULL,
+    audited_at         DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- 20. Treasury keepership (#106)
 -- Binds a member to ONE community enterprise (a members row with is_treasury=1).
 -- Before this table, members.can_operate was a node-wide boolean: granting someone

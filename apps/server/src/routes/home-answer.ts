@@ -73,7 +73,7 @@ import {
     NEAR_COMMUNITY_KM, PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, homeChatPicked, normalizeCategory, readChatSettings, readDecideSettings,
     readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor, HOME_DECIDE_ROWS, HOME_FRAME_LIMITS, dealsNeedingMe, standingNeedsLines,
     openDeals as coreOpenDeals, pinLive, PINS_MAX, type HomeCardInstance, type HomeChatCard, type HomeChatLine, type HomeLayoutV2, type HomeSearchSettings,
-    type ShopCounts, type TourRecord, HUNDREDTHS_PER_BEAN, knowledgeToCheckLine, wordsFor, decidePollOrder,
+    type ShopCounts, type TourRecord, HUNDREDTHS_PER_BEAN, knowledgeToCheckLine, wordsFor, decidePollOrder, firstStepsOver,
 } from '@beanpool/core';
 import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, livePinIds, ON_HOLIDAY_SQL, UNNAMED_COPY_SQL, guestPost, haversineKm, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -99,9 +99,10 @@ import { actionableKnockCount, actionableKnocksWaitingDays } from '../engine/kno
 import { inviteAskCount } from '../engine/invite-asks.js';
 import { knowledgeDraftCount } from '../engine/knowledge-drafts.js';
 import { listKeptNotices } from '../engine/kept-notices.js';
-import { probationRuleSet, probationSummary, type ProbationSummary } from '../engine/probation.js';
+import { probationSummary, type ProbationSummary } from '../engine/probation.js';
 import { readMemberArea } from '../engine/member-area.js';
-import { getInterestsUpdatedAt, getTourRecord, hasSawLedger } from '../engine/home-preferences.js';
+import { getInterestsUpdatedAt, getTourRecord, hasKeptWords, hasSawLedger } from '../engine/home-preferences.js';
+import { invitedByOf, wayBackOf, type InvitedBy, type WayBack } from '../engine/way-back.js';
 import { standbyWritesNothing } from '../config/node-role.js';
 import { canReadEventThread, chatHiddenFrom, getEventThreadMessages, loadEventForThread } from '../engine/event-thread.js';
 import { pendingGroupInvites } from '../engine/group-invites.js';
@@ -150,7 +151,6 @@ const MARKET_DAYS = 14;
 const EVENT_DAYS = 14;
 const JOINED_DAYS = 7;
 const PULSE_DAYS = 7;
-const STEPS_DAYS = 14;
 /** How many of each a card shows (§3.1, §5.1). */
 const MARKET_ITEMS = 4;
 const VISITOR_MARKET_ITEMS = 3;
@@ -268,6 +268,17 @@ export interface HomeMe {
      * community as a visitor does (readsAsMember), and an app says so in plain words rather than inviting them to join.
      */
     standing: 'member' | 'suspended';
+    /**
+     * Whose invite they used (engine/way-back.ts), for Welcome's "Ana invited you. Say hello ›" (DESIGN-home-default-fable.md
+     * §2.3): the reader's own fact, in their answer alone, whatever the "Invited by" switch says to others; null when no
+     * active member here invited them.
+     */
+    invitedBy: InvitedBy | null;
+    /**
+     * `covered` when a sign-in's copy of the account is linked here, else `words` (engine/way-back.ts, §2.5): what the
+     * 12-words card and First steps' `words` line go by, never how they joined. The new-account limits don't read it.
+     */
+    wayBack: WayBack;
 }
 
 export interface MarketItem {
@@ -344,6 +355,12 @@ export interface HomeCards {
         firstNeed: boolean;
         firstPost: boolean; photo: boolean; interests: boolean;
         invited: boolean | null; area: boolean; knocked: null; saidHello?: boolean; watch?: boolean; sawLedger?: boolean;
+        /**
+         * "Keep your 12 words safe" (DESIGN-home-default-fable.md §2.4, slice D1): null when a sign-in's copy is linked here
+         * (no such line), false while the words are the only way back, true once the member said they still have them or
+         * saved the recovery kit (`words_kept`).
+         */
+        words: boolean | null;
     };
     deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null; items: DealItem[] };
     /**
@@ -475,6 +492,8 @@ interface Ctx {
     pinnedChats?: string[];
     /** Read once per answer, for `steps` and `me`. */
     firstOffer?: boolean;
+    /** Read once per answer, for `safety`, `steps` and `me` (engine/way-back.ts). */
+    wayBack?: WayBack;
     /** Read once per answer, for the Market, Coming up and Decide cards: the live pins, newest pin first (pinnedPosts). */
     pinned?: MarketplacePost[];
 }
@@ -800,10 +819,19 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
     return items.length ? { items } : undefined;
 }
 
-/** A member who came in by 12 words and has added no sign-in: their words are the only way back (two-doors §2.5). */
+/**
+ * A member whose 12 words are the only way back this server can see, however they joined (DESIGN-home-default-fable.md
+ * §2.5, slice D1: by `wayBack`, no longer by the open-joins door), until they say they still have them or save the kit.
+ * The apps keep its schedule (shown once after the first post, once after a week, then Settings).
+ */
 function safetyCard(c: Ctx): HomeCards['safety'] | undefined {
     built('safety');
-    return probationRuleSet(c.me!) === 'words' ? { words: true, signInLinked: false } : undefined;
+    return wayBackFor(c) === 'words' && !hasKeptWords(c.me!) ? { words: true, signInLinked: false } : undefined;
+}
+
+/** The reader's way back, read once per answer (`me` and two cards want it). */
+function wayBackFor(c: Ctx): WayBack {
+    return c.wayBack ??= wayBackOf(c.me!);
 }
 
 function findCard(c: Ctx): HomeCards['find'] | undefined {
@@ -889,19 +917,25 @@ function stepsCard(c: Ctx): HomeCards['steps'] | undefined {
         saidHello: isHello,
         watch: isWatch,
         sawLedger: isLedger,
+        words: wayBackFor(c) === 'covered' ? null : hasKeptWords(me),
     };
-    const joinedMs = steps.joinedAt ? Date.parse(steps.joinedAt) : NaN;
-    const young = Number.isFinite(joinedMs) && c.now - joinedMs < STEPS_DAYS * DAY_MS;
+    const global = c.switches.guestListingsOnly;
+    // Its days (core first-steps.ts): 30 after joining on a local community (DESIGN-home-default-fable.md §2.4), global's
+    // first week its 14. A join date not heard is never over.
+    const over = firstStepsOver(steps.joinedAt, c.now, global ? 'global' : 'local');
     // The lines a member sees (§3.1, §3.2): local — first Offer, a photo, interests, asking for one thing (once they have an
     // Offer, and only for an app that says it draws that line, `lands=first-need`: an older app has no such line, and would
     // draw this card with every line it knows ticked), an invite (once they have an Offer); global — the seven steps of §3.2
     // (name, area, photo, sawLedger, post, saidHello, watch).
     const needLine = steps.firstOffer && !steps.firstNeed && c.lands.has('first-need');
-    const undone = c.switches.guestListingsOnly
+    // "Keep your 12 words safe" is a line on both (§2.4, §2.9), open while the words are the only way back and not kept.
+    // "Hear when someone answers you" is the phone's own (it alone knows its permission) and keeps no card up here.
+    const undone = steps.words === false || (global
         ? (!steps.area || !steps.photo || !steps.sawLedger || !steps.firstPost || !steps.saidHello || !steps.watch)
-        : (!steps.firstOffer || !steps.photo || !steps.interests || needLine || (steps.invited === false && steps.firstOffer));
-    // The card ends after 14 days or all done on global (§3.2, §6); local keeps young || undone.
-    return c.switches.guestListingsOnly ? (young && undone ? steps : undefined) : (young || undone ? steps : undefined);
+        : (!steps.firstOffer || !steps.photo || !steps.interests || needLine || (steps.invited === false && steps.firstOffer)));
+    // The card leaves when every line is done or its days are up, on both (DESIGN-home-default-fable.md §2.4; global's
+    // §3.2 rule, now local's too: a finished First steps no longer sits on Home ticked).
+    return !over && undone ? steps : undefined;
 }
 
 /** H0b: the signer's own open trades, where escrow is on. */
@@ -1481,8 +1515,16 @@ function communityCard(c: Ctx): HomeCards['community'] {
     // W3 (§2): the public board's live listings (getActivePostCount, the same count /api/community/info gives), to anyone
     // answered, after every field above, so a visitor's answer is what it was with this one added; then, to a member who
     // reads as one on a local community (the global profile's figures are members, communities and listings), the rest.
-    return { ...out, listings: counts.postCount, ...(c.member && !c.switches.guestListingsOnly ? memberFigures(c, counts.commonsBalance_c) : {}) };
+    const card: NonNullable<HomeCards['community']> = { ...out, listings: counts.postCount, ...(c.member && !c.switches.guestListingsOnly ? memberFigures(c, counts.commonsBalance_c) : {}) };
+    // A figure that is zero is not written (DESIGN-home-default-fable.md §2.7): "0 joined this week", "Commons pot 0 Beans"
+    // and "0 trades this month" go, as on a node that has no such figure at all. `members` and `listings` stay: every app
+    // reads them, and a community of one has its own words.
+    for (const key of ZERO_LEFT_OUT) if (card[key] === 0) delete card[key];
+    return card;
 }
+
+/** The community card's figures left out when they are zero (§2.7). */
+const ZERO_LEFT_OUT = ['tradesThisMonth', 'communities', 'joined7d', 'eventsSoon', 'commonsPot_c'] as const;
 
 /**
  * A local community's figures for a member (W3, §2): who joined this week by Who joined's rules (no enterprise, no
@@ -1637,6 +1679,8 @@ export function buildHome(reader: HomeReader): HomeBuilt {
             area: area ? { lat: area.lat, lng: area.lng } : null,
             firstOffer: firstOfferOf(c),
             standing: member ? 'member' : 'suspended',
+            invitedBy: invitedByOf(me!),
+            wayBack: wayBackFor(c),
         };
     }
     const removalRule = removalDeciderFor(me);

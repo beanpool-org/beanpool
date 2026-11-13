@@ -875,6 +875,8 @@ export interface HomeDrawContext {
     place?: { lat: number; lng: number } | null;
     /** The tour ended on this phone (Done or Skip) before the account's answer says so; absent: the answer's word. */
     tourOver?: boolean;
+    /** The tour was started again on this phone (Take the tour again) before the account's answer says "open". */
+    tourOpen?: boolean;
     /** First steps' "Hear when someone answers you" (utils/notification-permission.ts `notifyStep`); absent or null: no such line. */
     notify?: boolean | null;
 }
@@ -900,8 +902,8 @@ export const tourOverFor = (answer: Pick<HomeAnswer, 'me'>, ctx: Pick<HomeDrawCo
  * tour ends (on the account, or on this phone just now), and at most seven days after joining. A join date not heard leaves
  * it to the tour alone.
  */
-export const welcomeUp = (answer: Pick<HomeAnswer, 'me'>, ctx: Pick<HomeDrawContext, 'tourOver' | 'now'> = {}): boolean =>
-    !!answer.me && welcomeDrawn(tourOverFor(answer, ctx), answer.me.joinedAt, ctx.now ?? Date.now());
+export const welcomeUp = (answer: Pick<HomeAnswer, 'me'>, ctx: Pick<HomeDrawContext, 'tourOver' | 'tourOpen' | 'now'> = {}): boolean =>
+    !!answer.me && welcomeDrawn(!ctx.tourOpen && tourOverFor(answer, ctx), answer.me.joinedAt, ctx.now ?? Date.now());
 
 /**
  * Welcome's lines (§2.3), from the one Home answer: "You're in {community}." (none when the name isn't known), whose invite

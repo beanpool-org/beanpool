@@ -1178,7 +1178,12 @@ describe('the global node\'s Home (H4)', () => {
         expect(probationSentence({ ...ordinary, endsWhen: { hours: 'x' } } as never)).toBeNull();
         // On the card: under the lines, and the card stays while young and lines are undone.
         const posted = member(1, { me: { ...member(1).me!, probation: words }, cards: { steps: steps({ firstPost: true }), find: find(), community: { name: 'G', members: 9 } } });
-        expect(firstSteps(posted, { interests: ['food'], knocked: true, now: NOW })).toEqual({ lines: globalStepLines(steps({ firstPost: true })), note: 'For your first 7 days: 2 posts and 3 new chats a day.', show: true });
+        const lines = globalStepLines(steps({ firstPost: true }));
+        // Only what is left is drawn, with "n of m done" (DESIGN-home-default-fable.md §2.4, slice D2).
+        expect(firstSteps(posted, { interests: ['food'], knocked: true, now: NOW })).toEqual({
+            lines, left: lines.filter(l => !l.done), count: `${lines.filter(l => l.done).length} of ${lines.length} done`,
+            note: 'For your first 7 days: 2 posts and 3 new chats a day.', show: true,
+        });
         expect(draw(posted, EVERY, ctx({ interests: ['food'], knocked: true, now: NOW }))).toContain('steps');
         // The steps all done: card ends after 14 days or all done (§3.2, L3).
         const allDoneSteps = steps({ area: true, photo: true, sawLedger: true, firstPost: true, saidHello: true, watch: true });

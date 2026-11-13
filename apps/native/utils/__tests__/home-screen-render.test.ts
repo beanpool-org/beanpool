@@ -165,7 +165,12 @@ vi.mock('../../components/ExampleListings', () => ({
         return createElement('div', { 'data-testid': 'example-listings' }, 'Examples of what people post');
     },
 }));
-vi.mock('../db', () => ({ getMarketplaceTransactions: vi.fn(async () => []), getUnreadByConversation: vi.fn(async () => []) }));
+/** Welcome's "Say hello ›" (DESIGN-home-default-fable.md §2.3): each DM it starts, by its participants. */
+const dmStarts = vi.hoisted(() => [] as string[][]);
+vi.mock('../db', () => ({
+    getMarketplaceTransactions: vi.fn(async () => []), getUnreadByConversation: vi.fn(async () => []),
+    createConversationApi: vi.fn(async (_type: string, participants: string[]) => { dmStarts.push(participants); return { id: 'dm-with-inviter' }; }),
+}));
 // The sheet of starter drafts (slice O2): the community's price guide it reads as it opens, and the composer door a row calls.
 // Their own tests: tools-template.test.ts (the door), starter-offers.test.ts (the guide read).
 const starterWorld = vi.hoisted(() => ({ guide: null as unknown, opened: [] as unknown[], opens: true, hold: Promise.resolve() as Promise<void> }));
@@ -555,13 +560,14 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
         expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/new-listing', params: { newPost: 'need' } });
     });
 
-    it('First steps: once a Need is posted the line is ticked and opens nothing; before the first Offer, or from a node that sent no fact, there is no line', async () => {
+    // DESIGN-home-default-fable.md §2.4 (slice D2): only what is left is drawn; the count says what is done. The done line
+    // used to stay as a ticked row that opened nothing.
+    it('First steps: once a Need is posted the line leaves and the count says it; before the first Offer, or from a node that sent no fact, there is no line', async () => {
         node.answer = withAsked({ firstNeed: true });
         await render();
-        expect(byLabel("Ask for one thing you'd pay a neighbour for, done")).not.toBeNull();
-        Object.values(nav.router).forEach(f => f.mockClear());
-        await act(async () => { (document.querySelector('[data-testid="home-step-need"]') as HTMLElement).click(); });
-        expect(nav.router.push).not.toHaveBeenCalled();
+        expect(document.querySelector('[data-testid="home-step-need"]')).toBeNull();
+        expect(byLabel("Ask for one thing you'd pay a neighbour for, done")).toBeNull();
+        expect(document.querySelector('[data-testid="home-steps-count"]')!.textContent).toMatch(/^\d+ of \d+ done$/);
         await act(async () => { root!.unmount(); });
         host!.remove();
         node.answer = withAsked({ firstOffer: false, firstNeed: false });
@@ -1180,7 +1186,9 @@ describe('every line on Home opens a screen this node shows, with what the line 
         mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
         await render();
         expect(cards()).toContain('steps');
-        expect(document.querySelector('[data-testid="home-card-steps"]')!.textContent).toContain('Post something free or for swap');
+        // The post made is a line done: not drawn, counted (DESIGN-home-default-fable.md §2.4, §2.9; slice D2).
+        expect(document.querySelector('[data-testid="home-card-steps"]')!.textContent).not.toContain('Post something free or for swap');
+        expect(document.querySelector('[data-testid="home-steps-count"]')!.textContent).toMatch(/^[1-9]\d* of \d+ done$/);
         expect(document.querySelector('[data-testid="home-step-watch"]')).not.toBeNull();
         expect(document.querySelector('[data-testid="home-step-ask"]')).toBeNull();
     });
@@ -2390,9 +2398,9 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
         await render();
         const steps = document.querySelector('[data-testid="home-card-steps"]')!;
-        expect(Array.from(steps.querySelectorAll('[data-testid^="home-step-"]')).map(e => e.getAttribute('aria-label')))
+        // Only what is left is drawn ("Choose a name" is done from the start), and the count says it (§2.4, §2.9; slice D2).
+        expect(Array.from(steps.querySelectorAll('[data-testid^="home-step-"]')).filter(e => e.getAttribute('data-testid') !== 'home-step-post-offer').map(e => e.getAttribute('aria-label')))
             .toEqual([
-                'Choose a name, done',
                 'Say roughly where you are, not done yet',
                 'Add a picture (a preset counts), not done yet',
                 'Look at an example Ledger, not done yet',
@@ -2400,6 +2408,7 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
                 'Say hello to someone near you, not done yet',
                 "Tell me when a community starts here, or say you'd help start one, not done yet",
             ]);
+        expect(steps.querySelector('[data-testid="home-steps-count"]')?.textContent).toBe('1 of 7 done');
         expect(steps.querySelector('[data-testid="home-steps-limits"]')?.textContent).toBe('For your first 7 days: 2 posts and 3 new chats a day.');
         expect(steps.textContent).not.toMatch(/Post your first Offer|Add a photo|Invite someone/);
         await act(async () => { (steps.querySelector('[data-testid="home-step-area"]') as HTMLElement).click(); });
@@ -3630,8 +3639,9 @@ describe('the frame on screen: the fewer-cards line, the standby tie, a newer ap
         await render();
         expect(fewerLines()).toHaveLength(0);
         expect(document.body.textContent).not.toContain(FEWER_CARDS_LINE);
-        // Drawn with the newcomer's list (§3), New in the Market first (DESIGN-home-default-fable.md §2.2).
-        expect(cards()).toEqual(NEWCOMER_DRAWN);
+        // Drawn with the newcomer's list (§3), New in the Market first (DESIGN-home-default-fable.md §2.2); First steps has
+        // ended at 30 days (§2.4, slice D2: the phone keeps the node's own rule for an answer it holds).
+        expect(cards()).toEqual(NEWCOMER_DRAWN.filter(id => id !== 'steps'));
         // Nothing is written for them: they still never edited.
         expect(mem.store.has(phoneKey())).toBe(false);
         expect(posts()).toHaveLength(0);
@@ -3649,7 +3659,7 @@ describe('the frame on screen: the fewer-cards line, the standby tie, a newer ap
         node.answer = longStanding({ v: 1, order: [], hidden: [], dismissed: { safety: iso(Date.now() - 20 * DAY) }, updatedAt: iso(Date.now() - 20 * DAY) });
         mem.store.delete(phoneKey());
         await render();
-        expect(cards()).toEqual(NEWCOMER_DRAWN);
+        expect(cards()).toEqual(NEWCOMER_DRAWN.filter(id => id !== 'steps'));
         expect(fewerLines()).toHaveLength(0);
         expect(document.body.textContent).not.toContain(FEWER_CARDS_LINE);
         expect(posts()).toHaveLength(0);
@@ -4043,13 +4053,19 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
     });
 
-    it('a newcomer sees Welcome first and the default list under it, with Look around and Skip, no "…"; nothing folds behind it', async () => {
+    it('a newcomer sees Welcome first and the default list under it: where they are, Take the tour and Not now as links, no "…"; nothing folds behind it', async () => {
         await render();
         // DESIGN-home-default-fable.md §2.2: the cards are there from the first second.
         expect(cards()).toEqual(['start', ...NEWCOMER_DRAWN]);
-        expect(document.querySelector('[data-testid="home-start-words"]')!.textContent).toBe(START_CARD_WORDS);
-        expect(document.querySelector('[data-testid="home-start-look"]')!.textContent).toBe('Look around ›');
+        // §2.3 (slice D2): Welcome's body. Its caption is "Welcome"; the old instruction and its filled button are gone.
+        expect(document.querySelector('[data-testid="home-card-start"]')!.textContent).toContain('Welcome');
+        expect(document.querySelector('[data-testid="home-start-words"]')!.textContent).toBe("You're in Mullumbimby.");
+        expect(document.body.textContent).not.toContain(START_CARD_WORDS);
+        expect(document.querySelector('[data-testid="home-start-look"]')!.textContent).toBe('Take the tour ›');
+        expect(document.querySelector('[data-testid="home-start-skip"]')!.textContent).toBe('Not now');
         expect(byLabel('Skip the tour')).not.toBeNull();
+        // No inviter heard (this answer names none): no "Say hello" line.
+        expect(document.querySelector('[data-testid="home-start-hello"]')).toBeNull();
         expect(document.querySelector('[data-testid="home-card-start-menu"]')).toBeNull();
         // The default list's bodies come with the first read.
         expect(new URL(homeReads()[0].url).searchParams.get('cards')!.split(',')).toEqual(expect.arrayContaining(['steps', 'events', 'market', 'notices']));
@@ -4135,18 +4151,58 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(node.answer.layout));
     };
 
+    // DESIGN-home-default-fable.md §2.3 (slice D2): Welcome leaves when the tour is done or Not now and is never drawn after,
+    // so the picker no longer offers it then (review B2's "drawn, as the picker says" holds the other way round: what the
+    // picker offers is what is drawn). "Take the tour again" in Settings is the way back to the tour.
     for (const state of ['done', 'skipped'] as const) {
-        it(`tour ${state}, Home saved: Getting started from Add a card is drawn, as the picker says (review B2)`, async () => {
+        it(`tour ${state}, Home saved: the picker offers no Welcome, as it would never be drawn`, async () => {
             settled(state);
             await render();
             expect(cards()).not.toContain('start');
             await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
-            await act(async () => { byLabel('Add Getting started to Home')!.click(); });
             await settle(2);
-            expect(cards()).toContain('start');
-            expect(cards()).toEqual(expect.arrayContaining(['market', 'pulse']));
+            expect(document.querySelector('[data-testid="add-card-sheet"]')).not.toBeNull();
+            expect(byLabel('Add Welcome to Home')).toBeNull();
+            expect(byLabel('Add Getting started to Home')).toBeNull();
+            expect(byLabel('Add Coming up to Home') ?? byLabel('Add The Pulse to Home')).toBeDefined();
         });
     }
+
+    it('a newcomer 8 days in who never took the tour: no Welcome (seven days at most), the rest of the default list as it was', async () => {
+        node.answer = { ...newcomer(), me: { ...newcomer().me!, joinedAt: iso(Date.now() - 8 * 24 * H) } };
+        await render();
+        expect(cards()).not.toContain('start');
+        expect(cards()).toEqual(NEWCOMER_DRAWN);
+        // Inside the seven days it is there.
+        act(() => root?.unmount());
+        host?.remove();
+        node.answer = { ...newcomer(), me: { ...newcomer().me!, joinedAt: iso(Date.now() - 6 * 24 * H) } };
+        await render();
+        expect(cards()[0]).toBe('start');
+    });
+
+    it('Welcome says who invited them, and "Say hello ›" opens the chat with that person', async () => {
+        const inviter = 'aa'.repeat(32);
+        node.answer = { ...newcomer(), me: { ...newcomer().me!, invitedBy: { key: inviter, name: 'Ana' } } };
+        await render();
+        expect(document.querySelector('[data-testid="home-start-inviter"]')!.textContent).toBe('Ana invited you.');
+        expect(document.querySelector('[data-testid="home-start-hello"]')!.textContent).toBe('Say hello ›');
+        expect(byLabel('Say hello to Ana')).not.toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="home-start-hello"]') as HTMLElement).click(); });
+        await settle(3);
+        expect(dmStarts).toEqual([[who.identity.publicKey, inviter]]);
+        expect(nav.router.push).toHaveBeenCalledWith('/chat/dm-with-inviter');
+    });
+
+    it('an owner alone on a new community: "You\'re the first one here." with Invite someone, in place of an inviter', async () => {
+        const a = newcomer();
+        node.answer = { ...a, me: { ...a.me!, invitedBy: null }, cards: { ...a.cards, community: { name: 'Mullumbimby', members: 1 } } };
+        await render();
+        expect(document.querySelector('[data-testid="home-start-first"]')!.textContent).toBe("You're the first one here.");
+        expect(document.querySelector('[data-testid="home-start-hello"]')).toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="home-start-invite"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/(tabs)/people', params: { view: 'invites' } });
+    });
 
     it('Take the tour again (the "?"): writes "open" to the account, puts the card back on top, starts at step 1 (review B4)', async () => {
         settled('done');
@@ -4156,8 +4212,22 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         await act(async () => { tourStore.tourHome()!.restart!(); });
         await settle(4);
         expect(prefsPosts(from).map(r => JSON.parse(r.body).preferences).some(p => p.tour?.state === 'open')).toBe(true);
+        // Inside the member's first seven days (this one joined 3 days ago), before the account's answer says "open".
         expect(cards()[0]).toBe('start');
         expect(tourStore.currentTour()).toMatchObject({ publicKey: who.identity.publicKey, step: 0 });
+    });
+
+    it('Take the tour again after the first week: the tour starts, and no Welcome is added (it would not be drawn)', async () => {
+        settled('done');
+        node.answer = { ...node.answer, me: { ...node.answer.me!, joinedAt: iso(Date.now() - 30 * 24 * H) } };
+        await render();
+        const from = node.requests.length;
+        await act(async () => { tourStore.tourHome()!.restart!(); });
+        await settle(4);
+        expect(tourStore.currentTour()).toMatchObject({ publicKey: who.identity.publicKey, step: 0 });
+        expect(cards()).not.toContain('start');
+        const layouts = prefsPosts(from).map(r => JSON.parse(r.body).preferences).filter(p => 'home.layout' in p);
+        expect(layouts.every(p => !p['home.layout'].cards.some((c: { type: string }) => c.type === 'start'))).toBe(true);
     });
 
     // The card counts the tour's steps as the tab layout builds it: on the worldwide community with its showcase on,
@@ -5147,12 +5217,16 @@ describe('What could you offer? (cold start O2): the sheet First steps opens, th
         expect(starterWorld.opened).toEqual([expect.objectContaining({ category: 'labour', credits: 0, priceType: 'fixed' })]);
     });
 
-    it('a step already done is not a button, so it opens nothing', async () => {
+    // DESIGN-home-default-fable.md §2.4 (slice D2): a step already done is not drawn at all (it used to be a ticked row
+    // that opened nothing); the count says it.
+    it('a step already done is not drawn, so it opens nothing; the count says it', async () => {
         const a = localMember();
         node.answer = { ...a, cards: { ...a.cards, steps: { ...a.cards.steps!, firstOffer: true, firstPost: true, photo: false, invited: false } } };
         await render();
         expect(document.querySelector('[data-testid="home-step-post-offer"]')).toBeNull();
-        expect(byLabel('Post your first Offer, done')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-step-offer"]')).toBeNull();
+        expect(byLabel('Post your first Offer, done')).toBeNull();
+        expect(document.querySelector('[data-testid="home-steps-count"]')!.textContent).toMatch(/^1 of \d+ done$/);
         expect(sheet()).toBeNull();
     });
 });

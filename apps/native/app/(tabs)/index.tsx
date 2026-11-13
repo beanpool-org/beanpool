@@ -243,6 +243,8 @@ export default function HomeScreen() {
     const [saveNote, setSaveNote] = useState<string | null>(null);
     /** The tour ended on this phone (Done or Skip) before the account's answer says so (DESIGN-getting-started-fable.md §2). */
     const [tourOver, setTourOver] = useState(false);
+    /** The tour was started again here (Take the tour again) before the account's answer says "open": Welcome is back meanwhile. */
+    const [tourOpen, setTourOpen] = useState(false);
     /** A tour part way on this phone, for "Pick up the tour at step n ›". */
     const [tourProgress, setTourProgress] = useState<TourProgress | null>(null);
     const { run: tourRun } = useTour();
@@ -1022,7 +1024,7 @@ export default function HomeScreen() {
     // Tips: the node's list, from the answer in hand; the card only once the record is read, and never advanced here.
     const tipsList = answer ? tipsFor(answer, role) : [];
     const tipsView = tips && answer?.me ? tipNow(tips, tipsList, localDay()).view : null;
-    const drawn = answer ? cardsToDraw(answer, shown, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, hasOpenKnock, hasOpenWatch, now, tipsUp: !!tipsView, place, tourOver, notify }) : [];
+    const drawn = answer ? cardsToDraw(answer, shown, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, hasOpenKnock, hasOpenWatch, now, tipsUp: !!tipsView, place, tourOver, tourOpen, notify }) : [];
     // Find your community's pin (the global node: a member's first 30 days, then while a knock or watch is open): no "…", no move, at the top.
     const pins = currentPins(answer, now);
     const interestsUp = drawn.some(c => c.type === 'interests');
@@ -1108,7 +1110,7 @@ export default function HomeScreen() {
     const idle = arrangeOn && answer ? arrangeCards(ordered, drawn, type => cardOnNode(type, answer, role), pins).filter(c => !drawn.some(d => d.id === c.id)) : [];
     const tipsAllSeen = !!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList);
     const picker = answer && tailor && addOpen
-        ? pickerGroups(answer, shown, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}, welcomeUp(answer, { tourOver, now }) ? [] : ['start'])
+        ? pickerGroups(answer, shown, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}, welcomeUp(answer, { tourOver, tourOpen, now }) ? [] : ['start'])
         : null;
 
     // ── The tour's Home side (DESIGN-getting-started-fable.md §2–§3) ──
@@ -1123,6 +1125,7 @@ export default function HomeScreen() {
         if (!id) return;
         const whose = homeAccount(id.publicKey);
         setTourOver(true);
+        setTourOpen(false);
         setTourProgress(null);
         const ans = storedRef.current?.answer;
         if (canTailor(ans)) changeLayout(endTourLayout(layoutRef.current), { reread: true });
@@ -1140,6 +1143,7 @@ export default function HomeScreen() {
         const u = storedRef.current?.url ?? url;
         if (!id) return;
         setTourOver(false);
+        setTourOpen(true);
         // Welcome returns until the tour ends again, inside the member's first seven days (core `welcomeDrawn`): on a Home
         // already set up it is put back on top (the end takes it off). After those days the tour starts and nothing is added.
         const ans = storedRef.current?.answer;
@@ -1170,7 +1174,7 @@ export default function HomeScreen() {
     }, [answer, tailor, layout, chipsKey, profile, tourAddChip, tourEnd, tourRestart]);
     useEffect(() => () => lendTourHome(null), []);
     // Another account on the phone: this one's tour words go; a tour part way here is read again whenever the bar closes.
-    useEffect(() => { setTourOver(false); }, [identity?.publicKey]);
+    useEffect(() => { setTourOver(false); setTourOpen(false); }, [identity?.publicKey]);
     useEffect(() => {
         const pk = identity?.publicKey;
         if (!pk || tourRun) return;

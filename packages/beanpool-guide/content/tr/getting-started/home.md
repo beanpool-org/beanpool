@@ -99,7 +99,7 @@ Ana Sayfa'nın en altında, topluluğunuzun kartında **Ana Sayfayı düzenle**'
 - İlk olarak **＋ Bir kart ekle** gelir. Ana Sayfa'daki **Kart ekle** ile aynı listeyi açar.
 - Ardından kendi sıranızla Ana Sayfanızdaki kartlar gelir. Her birinin yukarı ve aşağı okları ve kendi **…** menüsü vardır (Ayarlar…, Yukarı taşı, Aşağı taşı, Kaldır). Kayıtlı bir arama, kelimelerine göre ve yalnızca birini aradığında **Teklifler** veya **İhtiyaçlar**'a göre listelenir, örneğin "yumurta" veya "İhtiyaçlar · yumurta", böylece iki arama iki farklı satır olur.
 - Şu anda gösterecek bir şeyi olmayan kart **Şu anda gösterilecek bir şey yok** der. Her ipucunu gördüğünüzde **İpuçları** kartı **Tüm ipuçları görüldü** der ve üzerinde çalışılacak bir yer yokken **Güneş ve ay** kartı **Şimdi gösterilecek bir şey yok: bilinen bir yer yok.** der.
-- Her zamanki beş karta geri dönmek için **Varsayılanlara sıfırla**'ya dokunun.
+- Son kartın altındaki **Varsayılanlara sıfırla**, yeni bir üyenin başladığı listeyi (**Hoş geldin** hariç), ardından kayıtlı bir arama, bir sohbet ya da **Araçların** gibi kendi oluşturduğunuz kartları sizin sıranızla geri getirir. Ana Sayfa **Geri al** ile birlikte "Ana Sayfa başladığı hâline döndü." der; **Geri al** önceki Ana Sayfanızı geri getirir.
 - Anahtar ve gizli liste yoktur: kaldırdığınız bir kart **Kart ekle** içindedir.
 - Telefonda ve web uygulamasında yalnızca topluluğunuzun gösterebileceği kartlar listelenir. Örneğin küresel topluluğun listesinde **Fasulyelerin** veya **Anlaşmaların** yoktur: orada Defter ve **Takaslarım** bunun yerine yerel bir topluluktan örnekler gösterir.
 - **Sana ihtiyacı var** her zaman en üstte kalır ve **Topluluğun** her zaman en altta kalır.

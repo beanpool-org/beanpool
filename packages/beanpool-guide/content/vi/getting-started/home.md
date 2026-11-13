@@ -99,7 +99,7 @@ Tùy chọn di chuyển sẽ chuyển sang màu xám khi không còn nơi nào �
 - **＋ Thêm thẻ** xuất hiện đầu tiên. Nút này mở danh sách tương tự như **Thêm thẻ** trên Trang chủ.
 - Sau đó là các thẻ trên Trang chủ của bạn, theo thứ tự của bạn. Mỗi thẻ có các mũi tên lên và xuống cùng nút **…** riêng (Cài đặt…, Di chuyển lên, Di chuyển xuống, Xóa). Một tìm kiếm đã lưu được liệt kê theo từ khóa của nó, và theo **Lời đề nghị** hoặc **Nhu cầu** khi nó chỉ tìm kiếm một loại, chẳng hạn như "trứng" hoặc "Nhu cầu · trứng", do đó hai tìm kiếm sẽ là hai hàng khác nhau.
 - Thẻ hiện không có gì để hiển thị sẽ báo **Hiện không có gì để hiển thị**. **Mẹo hữu ích** sẽ báo **Đã xem hết mẹo** khi bạn đã xem hết mọi mẹo, và **Mặt trời và mặt trăng** sẽ báo **Hiện không có gì để hiển thị: chưa xác định được địa điểm.** trong khi chưa có địa điểm để xử lý.
-- Nhấn **Đặt lại về mặc định** để quay lại năm thẻ thông thường.
+- **Đặt lại về mặc định**, bên dưới thẻ cuối cùng, đưa lại danh sách mà thành viên mới bắt đầu (trừ **Chào mừng**), rồi đến các thẻ do chính bạn tạo, như một tìm kiếm đã lưu, một cuộc trò chuyện hoặc **Công cụ của bạn**, theo thứ tự của bạn. Trang chủ báo "Trang chủ đã trở lại như lúc đầu." kèm **Hoàn tác**, giúp đưa Trang chủ trước đó của bạn trở lại.
 - Không có công tắc nào và không có danh sách ẩn: thẻ bạn đã xóa sẽ nằm trong **Thêm thẻ**.
 - Chỉ những thẻ mà cộng đồng của bạn có thể hiển thị mới được liệt kê, trên điện thoại và trong ứng dụng web. Ví dụ: danh sách của cộng đồng toàn cầu không có **Đậu của bạn** hoặc **Giao dịch của bạn**: ở đó, Sổ cái và **Giao dịch của tôi** sẽ hiển thị các ví dụ từ một cộng đồng địa phương thay thế.
 - **Cần bạn xử lý** luôn ở trên cùng, và **Cộng đồng của bạn** luôn ở dưới cùng.

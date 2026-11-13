@@ -99,7 +99,7 @@ Chini ya Nyumbani, kwenye kadi ya jumuiya yako, gusa **Hariri nyumbani**.
 - **＋ Ongeza kadi** huja kwanza. Hufungua orodha ileile kama **Ongeza kadi** kwenye Nyumbani.
 - Kisha hufuata kadi zilizo kwenye Nyumbani yako, kwa mpangilio wako. Kila moja ina mishale ya juu na chini na **…** yake yenyewe (Mipangilio…, Sogeza juu, Sogeza chini, Ondoa). Utafutaji uliohifadhiwa huorodheshwa kwa maneno yake, na kwa **Ofa** au **Mahitaji** unapotafuta moja tu, kama vile "mayai" au "Mahitaji · mayai", kwa hivyo utafutaji miwili ni safu mbili tofauti.
 - Kadi isiyo na chochote cha kuonyesha hivi sasa inasema **Hakuna cha kuonyesha sasa**. **Vidokezo** inasema **Vidokezo vyote vimeonekana** mara tu unapoona kila kidokezo, na **Jua na mwezi** inasema **Hakuna cha kuonyesha sasa: hakuna eneo linalojulikana.** wakati hakuna eneo la kuanzia kufanya kazi.
-- Gusa **Rudisha ya kawaida** ili kurudi kwenye kadi tano za kawaida.
+- **Rudisha ya kawaida**, chini ya kadi ya mwisho, hurudisha orodha ambayo mwanachama mpya huanza nayo (bila **Karibu**), kisha kadi ulizotengeneza mwenyewe, kama utafutaji uliohifadhiwa, gumzo au **Zana zako**, kwa mpangilio wako. Nyumbani husema "Nyumbani imerudi kama ilivyoanza." pamoja na **Tendua**, inayorudisha Nyumbani uliyokuwa nayo awali.
 - Hakuna swichi na hakuna orodha iliyofichwa: kadi uliyoiondoa iko kwenye **Ongeza kadi**.
 - Kadi ambazo jumuiya yako inaweza kuonyesha pekee ndizo zilizoorodheshwa, kwenye simu na kwenye programu ya wavuti. Kwa mfano, orodha ya jumuiya ya kimataifa haina **Maharagwe yako** au **Makubaliano yako**: huko, Leja na **Biashara Zangu** huonyesha mifano kutoka jumuiya ya eneo badala yake.
 - **Inakuhitaji** daima inabaki juu, na **Jumuiya yako** daima inabaki chini.

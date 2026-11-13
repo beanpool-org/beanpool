@@ -99,7 +99,7 @@ In fondo alla Home, sulla scheda della tua comunità, tocca **Modifica home**.
 - **＋ Aggiungi una scheda** viene per prima. Apre lo stesso elenco di **Aggiungi una scheda** sulla Home.
 - Poi arrivano le schede sulla tua Home, nel tuo ordine. Ciascuna ha frecce su e giù e il proprio **…** (Impostazioni…, Sposta su, Sposta giù, Rimuovi). Una ricerca salvata è elencata con le sue parole, e da **Offerte** o **Richieste** quando cerca solo una delle due categorie, come "uova" o "Richieste · uova", quindi due ricerche sono due righe distinte.
 - Una scheda che al momento non ha nulla da mostrare dice **Nulla da mostrare adesso**. **Consigli** indica **Hai visto tutti i suggerimenti** una volta che hai visto ogni consiglio, e **Sole e luna** indica **Nulla da mostrare per ora: nessun luogo noto.** finché non c'è un luogo da cui partire.
-- Tocca **Ripristina ai valori predefiniti** per tornare alle solite cinque schede.
+- **Ripristina ai valori predefiniti**, sotto l'ultima scheda, rimette l'elenco con cui inizia un nuovo membro (senza **Benvenuti**), poi le schede che hai creato tu, come una ricerca salvata, una chat o **I tuoi strumenti**, nel tuo ordine. La Home dice "La Home è tornata com'era all'inizio." con **Annulla**, che riporta la Home che avevi prima.
 - Non ci sono interruttori né elenchi nascosti: una scheda rimossa si trova in **Aggiungi una scheda**.
 - Vengono elencate solo le schede che la tua comunità può mostrare, sul telefono e nell'app web. Ad esempio, l'elenco della comunità globale non include **I tuoi fagioli** o **I tuoi accordi**: lì, il Mastro e **I miei accordi** mostrano invece esempi da una comunità locale.
 - **Richiede il tuo intervento** rimane sempre in alto, e **La tua comunità** rimane sempre in fondo.

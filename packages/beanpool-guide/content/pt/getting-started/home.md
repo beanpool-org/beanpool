@@ -99,7 +99,7 @@ Na parte inferior do Início, no cartão da sua comunidade, toque em **Editar in
 - **＋ Adicionar um cartão** vem primeiro. Ele abre a mesma lista que **Adicionar um cartão** no Início.
 - Depois vêm os cartões do seu Início, na sua ordem. Cada um possui setas para cima e para baixo e o seu próprio **…** (Ajustes…, Mover para cima, Mover para baixo, Remover). Uma busca salva é listada por suas palavras e por **Ofertas** ou **Pedidos** quando busca apenas um deles, como "ovos" ou "Pedidos · ovos", de modo que duas buscas formam duas linhas diferentes.
 - Um cartão sem nada a exibir no momento diz **Nada para mostrar agora**. **Dicas** diz **Você viu todas as dicas** depois de você ter visto todas as dicas, e **Sol e lua** diz **Nada para mostrar agora: nenhum local conhecido.** enquanto não houver um local de referência.
-- Toque em **Redefinir para o padrão** para voltar aos cinco cartões habituais.
+- **Redefinir para o padrão**, abaixo do último cartão, traz de volta a lista com que um novo membro começa (sem **Boas-vindas**) e depois os cartões criados por você, como uma busca salva, uma conversa ou **Suas ferramentas**, na sua ordem. O Início diz "O Início voltou a ser como era no começo." com **Desfazer**, que traz de volta o Início que você tinha antes.
 - Não existem interruptores nem listas ocultas: um cartão removido fica em **Adicionar um cartão**.
 - Apenas os cartões que sua comunidade pode exibir são listados, no celular e no aplicativo web. Por exemplo, a lista da comunidade global não possui **Seus feijões** nem **Seus acordos**: lá, o Registro e **Meus acordos** exibem exemplos de uma comunidade local.
 - **Precisa de você** fica sempre no topo e **Sua comunidade** fica sempre na parte inferior.

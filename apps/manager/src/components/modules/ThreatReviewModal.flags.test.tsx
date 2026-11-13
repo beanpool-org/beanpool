@@ -40,7 +40,7 @@ const TYPES: Array<{ type: string; heading: string; freeze: boolean; members: st
     { type: 'isolated_branch', heading: 'A branch of invited members who only trade with each other', freeze: false, members: [KEY_A], severity: 'warning' },
     { type: 'invite_spam', heading: 'A member inviting far more people than usual', freeze: false, members: [KEY_A], severity: 'warning' },
     { type: 'aggregate_spike', heading: 'Beans owed grew fast in one day', freeze: false, members: [], severity: 'alert' },
-    { type: 'cohort_velocity', heading: 'New accounts went deep into credit within two weeks', freeze: false, members: [], severity: 'warning' },
+    { type: 'cohort_velocity', heading: 'New members reached a large credit allowance within two weeks', freeze: false, members: [KEY_A], severity: 'warning' },
     { type: 'delinquency', heading: 'Members who owe Beans have gone quiet', freeze: false, members: [], severity: 'warning' },
     { type: 'watchdog_recovery', heading: 'The server restarted itself after freezing', freeze: false, members: [], severity: 'critical' },
     { type: 'watchdog_down', heading: "The server's watchdog has gone quiet", freeze: false, members: [], severity: 'alert' },

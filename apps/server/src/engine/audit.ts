@@ -283,12 +283,30 @@ function metricsAuditRuns(): boolean {
     return true;
 }
 
+/**
+ * Who the cohort check found, as its last run left them (cohort_allowance_members, a table of this server's own): this run's
+ * members replace the last run's, in one transaction; a member found before keeps the day it was first found
+ * (days_after_joining), so the flag says when the allowance got there, not how old the account is now.
+ */
+function saveCohortAllowanceMembers(members: WashSybilMetrics['cohortMembers']): void {
+    db.transaction(() => {
+        const keys = JSON.stringify(members.map(m => m.pubkey));
+        db.prepare('DELETE FROM cohort_allowance_members WHERE member_pubkey NOT IN (SELECT value FROM json_each(?))').run(keys);
+        const upsert = db.prepare(`INSERT INTO cohort_allowance_members (member_pubkey, allowance_c, counted_c, days_after_joining, parts, audited_at)
+            VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            ON CONFLICT(member_pubkey) DO UPDATE SET allowance_c = excluded.allowance_c, counted_c = excluded.counted_c,
+                parts = excluded.parts, audited_at = excluded.audited_at`);
+        for (const m of members) upsert.run(m.pubkey, m.allowance_c, m.counted_c, m.daysAfterJoining, JSON.stringify(m.parts));
+    })();
+}
+
 function saveWashSybilMetrics(metrics: WashSybilMetrics): WashSybilMetrics {
     try {
         db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('total_negative_balance', metrics.totalNegative);
         db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('accounts_near_floor', metrics.accountsNearFloor);
         db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('delinquent_accounts', metrics.delinquentCount);
         db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('cohort_anomalies', metrics.cohortAnomalies);
+        saveCohortAllowanceMembers(metrics.cohortMembers);
         console.log(`✅ [MetricsAudit] Metrics saved: negative_bal=${String(metrics.totalNegative)} hundredths, near_floor=${metrics.accountsNearFloor}, delinquent=${metrics.delinquentCount}, cohort_anomalies=${metrics.cohortAnomalies}`);
     } catch (e) {
         console.error('[MetricsAudit] Failed to persist system metrics:', e);

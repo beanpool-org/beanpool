@@ -733,6 +733,7 @@ export function PeopleSafetySection({
             {selectedThreat && (
                 <ThreatReviewModal
                     threat={selectedThreat}
+                    viewer={rolesViewer}
                     members={Array.isArray(nodeData?.members) ? (nodeData.members as MemberItem[]) : undefined}
                     onClose={() => setSelectedThreat(null)}
                     onDismiss={() => {

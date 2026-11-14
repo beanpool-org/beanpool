@@ -166,13 +166,13 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
                         <Text style={styles.tierTitle}>{t('🔑 Founding Status (before 1st trade)')}</Text>
                         <ListItem>{richWords(t('A starting state that lasts until you complete your **very first trade**'), bold)}</ListItem>
                         <ListItem>{richWords(t('Shows as **🔑 FOUNDING** so members know to help you get started'), bold)}</ListItem>
-                        <ListItem>{richWords(t('Your credit line stays at **{line}** until that first trade, unless someone vouches for you', { line: 0 }), bold)}</ListItem>
+                        <ListItem>{richWords(t('Your credit line stays at **{line}** until that first trade, unless someone vouches for you, a member gives you part of the credit line someone gave them, or your community’s admins confirm you (the known floor)', { line: 0 }), bold)}</ListItem>
                         <ListItem>{richWords(t('Graduates to **{tier}** automatically once you trade', { tier: t(TIER_WORDS.Newcomer) }), bold)}</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.newcomer.fg }]}>
                         <Text style={styles.tierTitle}>{tierHeading(NEWCOMER)}</Text>
-                        <ListItem>{t('Your credit line opens with your first completed trade, or when someone vouches for you (25, 50, 75 or 100 Beans)')}</ListItem>
+                        <ListItem>{t('Your credit line opens with your first completed trade, or sooner when someone vouches for you, a member gives you part of the credit line someone gave them, or your community’s admins confirm you (the known floor)')}</ListItem>
                         <ListItem>{t('Browse & trade the marketplace, receive credits')}</ListItem>
                         <ListItem>{richWords(t('**Sending credits** unlocks the moment you complete that first trade'), bold)}</ListItem>
                     </View>

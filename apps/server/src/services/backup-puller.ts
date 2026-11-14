@@ -57,6 +57,7 @@ import {
 import { getImageStore, headObject, readObject, writeObject, MAX_OBJECT_BYTES } from '../storage/image-store.js';
 import {
     StagedCopy, StagedCopyRefused, roomForStaging, stagingDir, READY_FILE, PREVIOUS_DB, SWAPPED_COPY_KEY, keepFetchedObjects, releaseFetchedObjects, fetchedObjectsKept,
+    stagedVerdictInWords,
 } from './stager.js';
 import { COPY_MAX_MS } from '../engine/copy-pages.js';
 import { deletePreviousDatabase as deletePreviousFile, previousDatabaseThere, takeoverUnderWay } from '../db/swap-at-boot.js';
@@ -961,7 +962,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             const restarting = swapRestart !== null;
             swapReady = restarting;
             logger.sync('P2P', `[Backup] ⬇️ ${fresh ? 'Re-seeded' : 'Whole copy'} from primary in ${checked.pages} page(s), ${checked.rows} rows, `
-                + `${checked.exact ? 'exact' : checked.hashed ? `not exact (${checked.differs.join(', ')}: values this server's tables refuse)` : 'not compared'}: `
+                + `${stagedVerdictInWords(checked)}: `
                 + (restarting ? 'restarting to swap it in.' : 'ready in data/staging; this process registered no restart, so the next start swaps it in.'));
             if (restarting) swapRestart!();
             return { ok: true, staged: true, restarting };
@@ -1397,15 +1398,17 @@ export function checkWholeCopy(
     if (ledgerDiffering > 0) differs.add(LEDGER_DIFFERS.ledger);
     // Everything in it is something a force-resync can mend.
     const wrong = differs.size > 0;
-    // Schema drift: never exact, and named, so its main server tells the owners at once (nothing mends it by itself), but
-    // no force-resync, which brings rows and never a schema: after `wrong`.
-    const drift = (contents?.drift ?? []).filter((t) => !tablesOut.has(t));
-    for (const t of drift) differs.add(t);
     // Values of this copy's members rows this standby's table refuses, left out by the import (#1276): the copy isn't the
     // main server's, so never exact, but no force-resync mends it (one would leave the same values out): after `wrong`.
     if (c.valuesLeftOut) differs.add('members');
     // And each plain table a row or value of the copy was left out of, the same way (review 4123472786).
     for (const t of plainLeftOut) differs.add(t);
+    // Something other than drift differs: the operator's "differs" line below. Drift has its own line, which names it.
+    const differsButDrift = differs.size > 0;
+    // Schema drift: never exact, and named, so its main server tells the owners at once (nothing mends it by itself), but
+    // no force-resync, which brings rows and never a schema: after `wrong`.
+    const drift = (contents?.drift ?? []).filter((t) => !tablesOut.has(t));
+    for (const t of drift) differs.add(t);
     // A verdict only from a check that compared everything: each table's content (a copy the main server sent without its
     // hashes, one written to while it was being made, can't show it differing) and every account. Finding nothing short
     // of that is no "exact": it neither ends nor starts anything the last verdict says, and the last exact copy's time
@@ -1420,7 +1423,7 @@ export function checkWholeCopy(
         logger.warn('P2P', `[Backup] ⚠️ This whole copy left out ${[...tablesOut].sort().join(', ')} (more rows than one copy carries): not compared, `
             + 'and no force-resync asked for them, which would read the same rows.');
     }
-    if (differs.size > 0) {
+    if (differsButDrift) {
         const bad = c.tables.filter(t => !t.match && !tablesOut.has(t.name)).map(t => `${t.name} ${t.backup}/${t.primary}`);
         if (c.ledger && !c.ledger.match) bad.push(`${c.ledger.differing} account(s) differ`);
         for (const d of contents?.differing ?? []) if (!bad.some((b) => b.startsWith(`${d.table} `))) bad.push(`${d.table} content`);
@@ -1435,8 +1438,8 @@ export function checkWholeCopy(
     const resync = wrong && askMismatchResync(now);
     const lastResyncAt = lastLedgerResyncAt;
     if (drift.length > 0) {
-        logger.warn('P2P', `[Backup] ⚠️ ${drift.join(', ')} ${drift.length === 1 ? 'is' : 'are'} hashed another way here than on the main server, or on one of `
-            + 'the two alone, with the same release\'s definitions: one database\'s schema is not its code\'s. Not exact, and no force-resync asked for it.');
+        logger.warn('P2P', `[Backup] ⚠️ Schema drift: ${drift.join(', ')} ${drift.length === 1 ? 'is' : 'are'} hashed another way here than on the main server, or `
+            + 'on one of the two alone, with the same release\'s definitions: one database\'s schema is not its code\'s. Not exact, and no force-resync asked for it.');
     }
     if (verdict === 'uncompared') {
         logger.info('P2P', `[Backup] This whole copy could not be compared in full (${notCompared.map((n) => (n === 'content'

@@ -106,14 +106,30 @@ export class StagedCopyRefused extends Error {
     }
 }
 
+/** The closing check's verdict on a copy's table hashes (closingHashVerdict). */
+export interface ClosingHashVerdict {
+    /** `uncompared`: nothing compared differs, but not every table either side hashes was compared (`notCompared`). */
+    verdict: 'exact' | 'inexact' | 'uncompared';
+    /** Every table that makes the copy not exact: `refused`, `mendable` and `drift` together. */
+    differs: string[];
+    /** The tables whose values or rows this database's rules refused (reported, never refused). */
+    refused: string[];
+    /** The tables whose count or content differs, which the held force-resync mends (accounts as the ledger's). */
+    mendable: string[];
+    /** Schema drift: tables hashed another way here, or on one side alone, with the same release's definitions. */
+    drift: string[];
+    /** Tables another release hashes another way, or hashes and this one doesn't, or the other way round: not compared. */
+    otherRelease: string[];
+    /** What was not compared: each table's content (`content`, no hashes), or tables of another release's (`release`). */
+    notCompared: NotCompared[];
+}
+
 /** What the stager's closing checks found in a copy they let through. */
-export interface StagedCopyChecked {
+export interface StagedCopyChecked extends ClosingHashVerdict {
     pages: number;
     rows: number;
     /** Every table hashed as the copy's hashes say: its tables and its values, but the photos the main server left out. */
     exact: boolean;
-    /** The tables whose values this database's rules refused (reported, never refused). */
-    differs: string[];
     /** The copy carried table hashes. */
     hashed: boolean;
     photosLeftOut: number;
@@ -134,14 +150,37 @@ export interface StagedCopyChecked {
  */
 export function closingHashVerdict(
     sent: unknown, found: HashComparison | null, valuesDiffer: ReadonlySet<string>, plainLeftOut: ReadonlySet<string>,
-): { verdict: 'exact' | 'inexact' | 'uncompared'; differs: string[]; mendable: string[]; drift: string[]; otherRelease: string[]; notCompared: NotCompared[] } {
+): ClosingHashVerdict {
     const mendable = (found?.differing ?? []).filter((d) => !plainLeftOut.has(d.table)).map((d) => (d.table === 'accounts' ? 'ledger' : d.table));
     const drift = found?.drift ?? [];
     const otherRelease = found?.otherRelease ?? [];
-    const differs = [...new Set([...valuesDiffer, ...mendable, ...drift])].sort();
+    const refused = [...valuesDiffer].sort();
+    const differs = [...new Set([...refused, ...mendable, ...drift])].sort();
     const notCompared: NotCompared[] = found ? (otherRelease.length > 0 ? ['release'] : []) : [sent === undefined || sent === null ? 'content' : 'release'];
     const verdict = differs.length > 0 ? 'inexact' : notCompared.length > 0 ? 'uncompared' : 'exact';
-    return { verdict, differs, mendable, drift, otherRelease, notCompared };
+    return { verdict, differs, refused, mendable, drift, otherRelease, notCompared };
+}
+
+/**
+ * A staged copy's closing check in the operator's words, for the puller's log: the verdict's own words, each table named
+ * under what it is (drift, differing, values refused, another release's), never one verdict's words for another's.
+ */
+export function stagedVerdictInWords(c: ClosingHashVerdict): string {
+    const release = c.otherRelease.length > 0
+        ? `the main server runs another release, which hashes ${c.otherRelease.join(', ')} another way`
+        : 'the main server runs another release, whose table hashes this one does not read';
+    if (c.verdict === 'exact') return 'exact';
+    if (c.verdict === 'uncompared') {
+        return `not compared (${c.notCompared.map((n) => (n === 'content' ? 'no table hashes: the main server was written to while making it'
+            : n === 'release' ? release : 'accounts this server cannot hold')).join('; ')})`;
+    }
+    const parts = [
+        c.drift.length > 0 ? `schema drift: ${c.drift.join(', ')} hashed another way here, with the same release's definitions` : null,
+        c.mendable.length > 0 ? `${c.mendable.join(', ')} differing` : null,
+        c.refused.length > 0 ? `${c.refused.join(', ')}: values this server's tables refuse` : null,
+        c.otherRelease.length > 0 ? `${c.otherRelease.join(', ')} not compared: ${release}` : null,
+    ].filter((p): p is string => p !== null);
+    return `not exact (${parts.join('; ')})`;
 }
 
 let current: StagedCopy | null = null;
@@ -823,10 +862,11 @@ async function stagerChild(): Promise<void> {
                 }));
             })();
             live.exec('COMMIT');
-            return {
-                pages, rows, exact: check.verdict === 'exact', differs: [...differs].sort(), hashed: !!theirs, photosLeftOut: photosOmitted.length,
+            const done: StagedCopyChecked = {
+                pages, rows, exact: check.verdict === 'exact', ...check, differs: [...differs].sort(), hashed: !!theirs, photosLeftOut: photosOmitted.length,
                 generatedAt: opening.generatedAt ?? null, cursor: opening.cursor ?? null,
             };
+            return done as unknown as Record<string, unknown>;
         } finally {
             live.close();
         }

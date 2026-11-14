@@ -10,12 +10,13 @@
  *
  * Nothing here is edited for a new table, column, row rule or boot stamp (DECISION-table-hashes-version, 15 Nov 2026): each
  * table's hash carries the fingerprint of how it was made (`d`), and each payload the fingerprint of the definitions it was
- * made from (`def`), and compareTableHashes reads them. What an older importer drops of a new table is said in its
- * manifest entry (engine/replication-manifest.ts), beside the REPLICA_FORMAT reasoning it belongs to.
+ * made from (`def`), and compareTableHashes reads them. Both take the fingerprint of this code's way of hashing any table
+ * (hasherFingerprint, `how`), so a change to that code moves them by construction. What an older importer drops of a new
+ * table is said in its manifest entry (engine/replication-manifest.ts), beside the REPLICA_FORMAT reasoning it belongs to.
  */
 
 import crypto from 'node:crypto';
-import type Database from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import { db } from '../db/db.js';
 import { TABLES, BOOT_STAMPED, travellingRows } from './replication-manifest.js';
 import { afterRow, rowBytes, rowTiebreak, sqlColumn } from './keyset.js';
@@ -26,18 +27,24 @@ export interface TableHash {
     hash: string;
     /**
      * The fingerprint of how this table was hashed on the server that hashed it (16 hex of sha256): the table, the select
-     * list with its boot-stamp cases, the row rule and the order, as tableHasher runs them on that database. Equal on two
-     * servers, they hashed the table the same way, by construction, so its count and hash are compared.
+     * list with its boot-stamp cases, the row rule and the order, as tableHasher runs them on that database, and how that
+     * server's code hashes any table (hasherFingerprint). Equal on two servers, they hashed the table the same way, by
+     * construction, so its count and hash are compared.
      */
     d: string;
 }
 
 /**
- * How the hashes are made, as a payload names it: the payload's shape and the bytes a row is turned into (rowLine), nothing
- * else. A table, a column, a row rule or a boot stamp changes no `v`: each table carries its own recipe's fingerprint (`d`),
- * and the payload the fingerprint of the definitions it was made from (`def`). Raise it ('d2', …) only when rowLine's bytes
- * or the payload's shape change: test-replica-hashes pins golden rows for each `v`. A release that reads another `v` (a
- * number, before this one) reads none of the hashes, and gives no content verdict; no conversion code reads the old shape.
+ * How the hashes are made, as a payload names it. A table, a column, a row rule or a boot stamp changes no `v`: each table
+ * carries its own recipe's fingerprint (`d`), and the payload the fingerprint of the definitions it was made from (`def`).
+ * Raise it ('d2', …) on any change to the bytes a table hashes to or to how its `d` is made, apart from the manifest inputs
+ * `def` covers: the payload's shape; rowLine's bytes; selectOf's boot-stamp CASE and its placeholder; the order rule; how
+ * the row rule and the columns left out are applied; what `d` takes; tableHasher's handling of the photos and members
+ * values left out. Each of those also moves hasherFingerprint, and with it every table's `d` and the payload's `def`, by
+ * construction: two releases that differ there read each other as another release (not compared), never as drift or as
+ * a table that differs. test-replica-hashes pins, for each `v`, hasherFingerprint, golden rows and a made-up table's `d`
+ * and hash, so such a change turns the suite red until `v` is raised and its line added. A release that reads another `v`
+ * (a number, before this one) reads none of the hashes, and gives no content verdict; no conversion code reads the old shape.
  */
 export const TABLE_HASHES_VERSION = 'd1';
 
@@ -75,26 +82,42 @@ const fingerprint = (v: unknown) => crypto.createHash('sha256').update(JSON.stri
 const FINGERPRINT = /^[0-9a-f]{16}$/;
 const TABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-/** The tables whose hashes are made: every copied one, but those NOT_HASHED. */
-function isHashed(table: string): boolean {
-    const entry = TABLES[table];
-    return !!entry && (entry.kind === 'replicated' || entry.kind === 'replicated-except') && !NOT_HASHED[table];
+/** What the hasher reads of its definitions: the manifest's (manifestDefinitions), or the probe's (hasherFingerprint). */
+interface HashDefinitions {
+    /** Each table hashed: its columns in their order, its key when the manifest names one, its row rule's condition. */
+    tables: Record<string, { columns: readonly string[]; key?: readonly string[]; where: string | null }>;
+    /** Columns every server writes again at its own boot, and on which rows (the manifest's BOOT_STAMPED). */
+    stamps: readonly { table: string; column: string; where: string }[];
+    /** Columns left out, per table (COLUMNS_NOT_HASHED). */
+    columnsLeftOut: Readonly<Record<string, Readonly<Record<string, string>>>>;
+}
+
+/** This code's definitions, as the manifest holds them now: every copied table but those NOT_HASHED. */
+function manifestDefinitions(): HashDefinitions {
+    const tables: HashDefinitions['tables'] = {};
+    for (const [table, entry] of Object.entries(TABLES)) {
+        if ((entry.kind !== 'replicated' && entry.kind !== 'replicated-except') || NOT_HASHED[table]) continue;
+        tables[table] = { columns: entry.columns, ...(entry.key ? { key: entry.key } : {}), where: travellingRows(table) };
+    }
+    return { tables, stamps: BOOT_STAMPED, columnsLeftOut: COLUMNS_NOT_HASHED };
 }
 
 /**
  * The definitions every table's hash is made from, as this server's code holds them: each hashed table's manifest columns,
- * key, row rule and boot stamps, and the tables and columns left out (NOT_HASHED, COLUMNS_NOT_HASHED). From code alone,
- * never the database: two servers with equal ones run the same definitions, so a table one of them hashes another way, or
- * alone, is that server's schema (compareTableHashes: drift).
+ * key, row rule and boot stamps, the tables and columns left out (NOT_HASHED, COLUMNS_NOT_HASHED), and how this code
+ * hashes any table (hasherFingerprint). From code alone, never this server's database: two servers with equal ones run the
+ * same definitions the same way, so a table one of them hashes another way, or alone, is that server's schema
+ * (compareTableHashes: drift).
  */
 export function definitionFingerprint(): string {
-    const tables = Object.keys(TABLES).filter(isHashed).sort().map((table) => {
-        const entry = TABLES[table] as Extract<(typeof TABLES)[string], { columns: string[] }>;
-        const stamps = BOOT_STAMPED.filter((b) => b.table === table).map((b) => [b.column, b.where]);
-        return [table, entry.columns, entry.key ?? null, travellingRows(table), stamps];
+    const defs = manifestDefinitions();
+    const tables = Object.keys(defs.tables).sort().map((table) => {
+        const { columns, key, where } = defs.tables[table];
+        const stamps = defs.stamps.filter((b) => b.table === table).map((b) => [b.column, b.where]);
+        return [table, columns, key ?? null, where, stamps];
     });
     const columnsLeftOut = Object.keys(COLUMNS_NOT_HASHED).sort().map((t) => [t, Object.keys(COLUMNS_NOT_HASHED[t]).sort()]);
-    return fingerprint([tables, Object.keys(NOT_HASHED).sort(), columnsLeftOut]);
+    return fingerprint([hasherFingerprint(), tables, Object.keys(NOT_HASHED).sort(), columnsLeftOut]);
 }
 
 export interface HashOptions {
@@ -119,36 +142,43 @@ export interface HashOptions {
  * The columns selected for one table's hash: a boot-stamped row's stamp (the manifest's BOOT_STAMPED: every server writes it
  * again at its own boot) as a placeholder, every other column as it is.
  */
-function selectOf(table: string, columns: string[]): string {
+function selectOf(table: string, columns: readonly string[], stamps: HashDefinitions['stamps']): string {
     return columns.map((c) => {
-        const stamped = BOOT_STAMPED.filter((b) => b.table === table && b.column === c);
+        const stamped = stamps.filter((b) => b.table === table && b.column === c);
         return stamped.length === 0 ? q(c)
             : `CASE WHEN ${stamped.map((b) => `(${b.where})`).join(' OR ')} THEN '<stamped at boot>' ELSE ${q(c)} END`;
     }).join(', ');
 }
 
+/** How one table is hashed on one database (hashedTables). */
+export interface TableRecipe { table: string; columns: string[]; order: string[]; where: string | null; select: string; d: string }
+
 /**
- * Every copied table this server has, with the columns hashed, the order its rows are hashed in, the condition on the rows
- * that travel when not all do (the manifest's RowRule): the rest are hashed on neither server, the select list, and the
- * fingerprint of all four with the table's name (TableHash `d`).
+ * Every table of `defs` that `conn` has, with the columns hashed, the order its rows are hashed in, the condition on the
+ * rows that travel when not all do (the manifest's RowRule): the rest are hashed on neither server, the select list, and
+ * the fingerprint of all four with the table's name and `how` (TableHash `d`).
  */
-export function hashedTables(conn: Database.Database): { table: string; columns: string[]; order: string[]; where: string | null; select: string; d: string }[] {
-    const out: { table: string; columns: string[]; order: string[]; where: string | null; select: string; d: string }[] = [];
-    for (const [table, entry] of Object.entries(TABLES)) {
-        if ((entry.kind !== 'replicated' && entry.kind !== 'replicated-except') || NOT_HASHED[table]) continue;
+function recipesOf(conn: Database.Database, defs: HashDefinitions, how: string): TableRecipe[] {
+    const out: TableRecipe[] = [];
+    for (const [table, entry] of Object.entries(defs.tables)) {
         const info = conn.prepare('SELECT name, pk FROM pragma_table_info(?)').all(table) as { name: string; pk: number }[];
         if (info.length === 0) continue;
         const have = new Set(info.map((c) => c.name));
-        const columns = entry.columns.filter((c) => have.has(c) && !COLUMNS_NOT_HASHED[table]?.[c]);
+        const columns = entry.columns.filter((c) => have.has(c) && !defs.columnsLeftOut[table]?.[c]);
         const key = entry.key ?? info.filter((c) => c.pk > 0).sort((x, y) => x.pk - y.pk).map((c) => c.name);
         // By its key when the key is among the columns hashed (a total order); otherwise by every column hashed, so two
         // servers' rows come in the same order whatever local ids they carry.
-        const order = key.length > 0 && key.every((c) => columns.includes(c)) ? key : columns;
-        const where = travellingRows(table);
-        const select = selectOf(table, columns);
-        out.push({ table, columns, order, where, select, d: fingerprint([table, select, where, order]) });
+        const order = key.length > 0 && key.every((c) => columns.includes(c)) ? [...key] : columns;
+        const where = entry.where;
+        const select = selectOf(table, columns, defs.stamps);
+        out.push({ table, columns, order, where, select, d: fingerprint([how, table, select, where, order]) });
     }
     return out;
+}
+
+/** Every copied table this server has (the manifest's, but those NOT_HASHED), each with how it is hashed on `conn`. */
+export function hashedTables(conn: Database.Database): TableRecipe[] {
+    return recipesOf(conn, manifestDefinitions(), hasherFingerprint());
 }
 
 /**
@@ -184,20 +214,82 @@ function tableHasher(table: string, columns: string[], d: string, opts: HashOpti
     };
 }
 
+/** One table's count and hash on `conn`, as its recipe says, in one read. */
+function hashTable(conn: Database.Database, r: TableRecipe, opts: HashOptions): TableHash {
+    const hasher = tableHasher(r.table, r.columns, r.d, opts);
+    const held = r.where ? ` WHERE (${r.where})` : '';
+    for (const row of conn.prepare(`SELECT ${r.select} FROM ${q(r.table)}${held} ORDER BY ${r.order.map(q).join(', ')}`).raw().iterate() as Iterable<unknown[]>) {
+        hasher.add(row);
+    }
+    return hasher.done();
+}
+
+/**
+ * Made-up definitions and rows that take every path from a table's definitions to its `d` and hash: a column with two
+ * boot stamps (the CASE, its OR and its placeholder) and one with one; a row rule; a column left out, and a column the
+ * database lacks; a table with no key (ordered by every column), one keyed in its database alone (its primary key), one
+ * whose key is not among the columns hashed; the photos and the members values a copy left out; every kind of value a
+ * row holds. Nothing in it is the manifest's: a real table's change moves `def`, never hasherFingerprint.
+ */
+const PROBE = {
+    defs: {
+        tables: {
+            probe_rows: { columns: ['a', 'b', 'c', 'e', 'f', 'g'], where: "a <> 'not travelling'" },
+            probe_keyed: { columns: ['n', 'm', 'absent'], key: ['id'], where: null },
+            post_photos: { columns: ['post_id', 'order_num', 'ref'], where: null },
+            members: { columns: ['public_key', 'standing'], key: ['public_key'], where: null },
+        },
+        stamps: [
+            { table: 'probe_rows', column: 'b', where: "a = 'x'" },
+            { table: 'probe_rows', column: 'b', where: "a = 'y'" },
+            { table: 'probe_rows', column: 'c', where: "a = 'y'" },
+        ],
+        columnsLeftOut: { probe_rows: { f: 'a column left out' } },
+    } satisfies HashDefinitions,
+    schema: `CREATE TABLE probe_rows (a, b, c, e, f, g);
+        INSERT INTO probe_rows VALUES ('y', 'stamped', 'stamped', 1.5, 'left out', x'00ff'), ('x', 'stamped', 'kept', NULL, 'left out', ''),
+            ('not travelling', 'b', 'c', 7, 'f', 'g'), ('w', 'b', NULL, -9007199254740991, 'f', 'naïve "quoted"');
+        CREATE TABLE probe_keyed (id INTEGER PRIMARY KEY, n, m);
+        INSERT INTO probe_keyed VALUES (1, 'z', 2), (2, 'a', 1);
+        CREATE TABLE post_photos (post_id, order_num, ref, PRIMARY KEY (post_id, order_num));
+        INSERT INTO post_photos VALUES ('p', 2, 'two'), ('p', 1, 'one'), ('q', 1, 'left out by the copy');
+        CREATE TABLE members (public_key PRIMARY KEY, standing, local);
+        INSERT INTO members VALUES ('k2', 'its own', 'x'), ('k1', 'refused here', 'y');`,
+    opts: { photosLeftOut: new Set(['q|1']), membersLeftOut: new Map([['k1', { standing: "the copy's" }]]) } satisfies HashOptions,
+    /** A row no database gives back (a bigint), through rowLine alone. */
+    row: [null, 0, -42, 1n << 62n, 1.5, 'text', Buffer.from([0, 1, 254, 255]), Buffer.alloc(0), ''] as unknown[],
+};
+let hasherMemo: string | null = null;
+
+/**
+ * How this code hashes any table (16 hex of sha256): what it makes of PROBE, each probe table's `d` (made with no
+ * fingerprint of its own), count and hash, and rowLine's bytes of a row no database gives back. Part of every table's `d`
+ * and of `def`, so a change to any path from a table's definitions to its `d` or hash (TABLE_HASHES_VERSION says which)
+ * moves both on the release that makes it, and two releases that hash another way read each other as another release:
+ * never as drift, nor as a table that differs. Made once per process, in a database of its own.
+ */
+export function hasherFingerprint(): string {
+    if (hasherMemo !== null) return hasherMemo;
+    const conn = new Database(':memory:');
+    try {
+        conn.exec(PROBE.schema);
+        const probed = recipesOf(conn, PROBE.defs, '').map((r) => [r.table, hashTable(conn, r, PROBE.opts)]);
+        hasherMemo = fingerprint([probed, rowLine(PROBE.row)]);
+    } finally {
+        conn.close();
+    }
+    return hasherMemo;
+}
+
 /**
  * This server's copied tables, each as a row count and a hash, on `conn` (this server's database unless another
  * connection is given). Only reads, and nothing else runs between them: better-sqlite3 is synchronous.
  */
 export function tableContentHashes(opts: HashOptions = {}, conn: Database.Database = db): TableHashes {
     const tables: Record<string, TableHash> = {};
-    for (const { table, columns, order, where, select, d } of hashedTables(conn)) {
-        if (opts.only && !opts.only.includes(table)) continue;
-        const hasher = tableHasher(table, columns, d, opts);
-        const held = where ? ` WHERE (${where})` : '';
-        for (const row of conn.prepare(`SELECT ${select} FROM ${q(table)}${held} ORDER BY ${order.map(q).join(', ')}`).raw().iterate() as Iterable<unknown[]>) {
-            hasher.add(row);
-        }
-        tables[table] = hasher.done();
+    for (const r of hashedTables(conn)) {
+        if (opts.only && !opts.only.includes(r.table)) continue;
+        tables[r.table] = hashTable(conn, r, opts);
     }
     return { v: TABLE_HASHES_VERSION, def: definitionFingerprint(), tables };
 }

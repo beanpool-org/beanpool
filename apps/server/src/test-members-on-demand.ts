@@ -27,9 +27,10 @@
  *      the switch off, a rename leaves the plain delta byte for byte as it was.
  *   9. Faces heal: once the face URLs change shape (engine/avatar-keys.ts), a `keys=` delta from before is answered with
  *      every key asked, and a by-area delta from before is the whole set; one from after is as before.
- *  10. At 30,000 more members: `q` and `keys` p95 ≤ 5 ms, `near` ≤ 20 ms over HTTP (×3 on a loaded machine; the load is
- *      printed), and the whole directory and the old delta still answer (their bytes are test-members-snapshot's and
- *      test-members-directory-cost's to prove).
+ *  10. At 30,000 more members, over HTTP: each form's p95 against a plain signed read timed in the same round (the
+ *      floor: GET /api/profile/privacy), `q` at most 3.8x it, `keys` 4.5x, `near` 8x (the milliseconds and the
+ *      load are printed); and the whole directory and the old delta still answer (their bytes are
+ *      test-members-snapshot's and test-members-directory-cost's to prove).
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-members-on-demand)
  */
@@ -572,11 +573,26 @@ async function main() {
         }
     })();
     bumpMembersVersion();
-    // Over HTTP, signed, through the middleware. The Mac these run on is shared with other runs, so a round taken while
-    // it is busy is taken again, up to three: each gate holds on the best round's p95, and every round's load is printed.
+    // Over HTTP, signed, through the middleware: what a phone's read costs. The design's figures (q and keys 5 ms, near
+    // 20 ms) are the droplet's, and no machine these run on is the droplet: a GitHub runner answers every request about
+    // twice as slowly as the Mac, and a gate held on milliseconds failed there on PRs that never touched these forms
+    // (14 Nov 2026: q 10.09-11.76 ms against 10; main measured the same as 626e4cf9, from earlier that evening). So
+    // each round also times the floor: a signed read of the reader's own privacy switch (GET /api/profile/privacy),
+    // through the same TLS, middleware, signature check and nonce store, one member looked up, a few bytes out, nothing
+    // of the directory. Each form is gated on its p95 over that round's floor p95: a slower or busier machine raises
+    // both alike, and what the form adds to a plain signed read, the part 30,000 members could make costly, stays in it.
+    // Every round's milliseconds and load are printed, and kept in MEMBERS_ON_DEMAND_REPORT when it is set.
+    // The bounds sit halfway (geometrically) between healthy and broken, measured on the Mac at load 3-19 on 12 cores:
+    // healthy rounds q 1.65-3.10x the floor, keys 1.53-2.91x, near 3.79-6.83x (25-28 rounds each); with the search, or
+    // the keys read that near uses too, reading the whole directory first (the cost these forms exist to avoid), the
+    // best round of a run was q 4.80x and 7.19x, keys 7.13x, near 9.56x. A lost index is the plan check's (section 3):
+    // at 30,000 members a scan costs about what the 3,000 names that start "ka" do, inside the healthy spread.
+    const BOUND = { q: 3.8, keys: 4.5, near: 8 };
     const round = async () => {
-        const times = { q: [] as number[], keys: [] as number[], near: [] as number[] };
+        const times = { q: [] as number[], keys: [] as number[], near: [] as number[], floor: [] as number[] };
         for (let i = 0; i < 60; i++) {
+            const f = await get('/api/profile/privacy', i % 2 ? second : reader);
+            if (f.status === 200 && typeof f.body?.inviterShown === 'boolean') times.floor.push(f.ms);
             const qs = ['ka', 'mito', 'Rule', 'sano1', 'abab'][i % 5];
             const q = await get(`/api/members?q=${qs}`, reader);
             if (q.status === 200) times.q.push(q.ms);
@@ -587,27 +603,30 @@ async function main() {
             const n = await get(`/api/members?lat=${c.lat}&lng=${c.lng}&limit=50`, reader);
             if (n.status === 200 && n.body.length === 50) times.near.push(n.ms);
         }
-        return { load: os.loadavg()[0], all: times.q.length === 60 && times.keys.length === 60 && times.near.length === 60,
-            q: p95(times.q), keys: p95(times.keys), near: p95(times.near) };
+        const floor = p95(times.floor);
+        return { load: os.loadavg()[0], floor,
+            all: times.q.length === 60 && times.keys.length === 60 && times.near.length === 60 && times.floor.length === 60,
+            q: p95(times.q), keys: p95(times.keys), near: p95(times.near),
+            x: { q: p95(times.q) / floor, keys: p95(times.keys) / floor, near: p95(times.near) / floor } };
     };
+    // The Mac is shared with other runs, so a round is taken again, up to three: each gate holds on its best round.
     const best = { q: Infinity, keys: Infinity, near: Infinity, all: true };
-    // x2 on CI even when the runner is quiet: alone in the serial tail (load ~1.4) a GitHub runner measured q 5.47-6.06 ms
-    // and near 22.9 ms against the 5/20 ms budgets set for the droplet (21 Oct 2026, #2305 #2313 #2314). A real 2x
-    // regression (q ~11 ms, near ~46 ms there) still fails.
-    let slack = process.env.CI ? 2 : 1;
+    const at = { q: '', keys: '', near: '' };
     for (let r = 1; r <= 3; r++) {
         const t = await round();
-        best.q = Math.min(best.q, t.q); best.keys = Math.min(best.keys, t.keys); best.near = Math.min(best.near, t.near); best.all &&= t.all;
-        // ×3 where the machine is busier than half its cores (the design's allowance for the droplet).
-        if (t.load > os.cpus().length / 2) slack = 3;
-        note(`   round ${r}: load ${t.load.toFixed(1)} on ${os.cpus().length} cores; p95 q ${t.q.toFixed(2)} ms, keys ${t.keys.toFixed(2)} ms, near ${t.near.toFixed(2)} ms`);
+        for (const form of ['q', 'keys', 'near'] as const) {
+            if (t.x[form] < best[form]) { best[form] = t.x[form]; at[form] = `${t[form].toFixed(2)} ms against the floor's ${t.floor.toFixed(2)} ms`; }
+        }
+        best.all &&= t.all;
+        note(`   round ${r}: load ${t.load.toFixed(1)} on ${os.cpus().length} cores; p95 floor ${t.floor.toFixed(2)} ms; q ${t.q.toFixed(2)} ms (${t.x.q.toFixed(2)}x), keys ${t.keys.toFixed(2)} ms (${t.x.keys.toFixed(2)}x), near ${t.near.toFixed(2)} ms (${t.x.near.toFixed(2)}x)`);
         // A round whose forms did not answer as asked (a server from before them) is not taken again.
-        if (!t.all || (best.q <= 5 && best.keys <= 5 && best.near <= 20)) break;
+        if (!t.all || (best.q <= BOUND.q && best.keys <= BOUND.keys && best.near <= BOUND.near)) break;
     }
     const load = os.loadavg().map(x => x.toFixed(1)).join(' ');
-    assert(best.all && best.q <= 5 * slack, `q at ${W.size + 30_000} members: p95 ${best.q.toFixed(2)} ms ≤ ${5 * slack} ms (load ${load})`);
-    assert(best.all && best.keys <= 5 * slack, `keys (100) at ${W.size + 30_000} members: p95 ${best.keys.toFixed(2)} ms ≤ ${5 * slack} ms`);
-    assert(best.all && best.near <= 20 * slack, `near (50) at ${W.size + 30_000} members: p95 ${best.near.toFixed(2)} ms ≤ ${20 * slack} ms`);
+    if (!best.all) note('   a form or the floor did not answer as asked in every read of a round: no ratio is taken from it');
+    assert(best.all && best.q <= BOUND.q, `q at ${W.size + 30_000} members: p95 ${best.q.toFixed(2)}x a plain signed read ≤ ${BOUND.q}x (${at.q}; load ${load})`);
+    assert(best.all && best.keys <= BOUND.keys, `keys (100) at ${W.size + 30_000} members: p95 ${best.keys.toFixed(2)}x a plain signed read ≤ ${BOUND.keys}x (${at.keys})`);
+    assert(best.all && best.near <= BOUND.near, `near (50) at ${W.size + 30_000} members: p95 ${best.near.toFixed(2)}x a plain signed read ≤ ${BOUND.near}x (${at.near})`);
     const bigToday = await get(`/api/members?lat=${BUSY.lat}&lng=${BUSY.lng}`, reader);
     const bigCut = await get(`/api/members?lat=${BUSY.lat}&lng=${BUSY.lng}&limit=50`, reader);
     note(`   at 30k: today's whole nearest-first list ${(bigToday.text.length / 1e6).toFixed(1)} MB in ${bigToday.ms.toFixed(0)} ms; limit=50 ${bigCut.text.length} bytes in ${bigCut.ms.toFixed(1)} ms`);

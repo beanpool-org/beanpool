@@ -4,8 +4,10 @@
  * relay.ts); this browser only ever talks to its own community's server. The phone's utils/outside-mail.ts is the same
  * round, and this keeps what its three review rounds (#3168) fixed:
  *
- * - **A deadline on every round** ({@link syncOutsideMailNow}): every request carries the round's `signal`; at the deadline
- *   they are aborted, the round answers null and is let go, so one stalled request never stops the rounds after it.
+ * - **A deadline on every round** ({@link syncOutsideMailNow}): every request carries the round's `signal`, and every other
+ *   wait in it (this browser's store, the block list, the community's info, the account, a signature) is raced against it
+ *   ({@link untilDeadline}); at the deadline the round answers null and lets go of all of them, and of the lock it holds
+ *   across tabs, so one stalled wait never stops the rounds after it, here or in another tab.
  * - **A refused batch fails per line** (resendUnsent): my server takes a batch whole or refuses it at its first bad item, so
  *   a refused batch is sent again line by line and only the lines refused on their own fail, each with my server's words.
  *   A 403 (the switch off, a suspended member) fails them all. Anything else waits for the next round.
@@ -76,8 +78,47 @@ async function answerOf(res: Response): Promise<any> {
     return body;
 }
 
-const get = async (ctx: OutsideMailContext, path: string) => answerOf(await signedMailFetch('GET', ctx.nodeUrl, path, undefined, ctx.identity as BeanPoolIdentity, ctx.signal));
-const post = async (ctx: OutsideMailContext, path: string, body: unknown) => answerOf(await signedMailFetch('POST', ctx.nodeUrl, path, body, ctx.identity as BeanPoolIdentity, ctx.signal));
+const ranOut = () => Object.assign(new Error('This round ran out of time.'), { name: 'AbortError' });
+
+/**
+ * `p`'s answer, or the round's AbortError the moment `signal` aborts (at once when it has): a wait the deadline ends, whatever
+ * `p` itself waits on. What `p` was doing carries on unheard; nothing here waits for it any more.
+ */
+export function untilDeadline<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (!signal) return p;
+    if (signal.aborted) {
+        p.catch(() => {});
+        return Promise.reject(ranOut());
+    }
+    return new Promise<T>((resolve, reject) => {
+        const stop = () => reject(ranOut());
+        signal.addEventListener('abort', stop, { once: true });
+        p.then((v) => { signal.removeEventListener('abort', stop); resolve(v); }, (e) => { signal.removeEventListener('abort', stop); reject(e); });
+    });
+}
+
+/**
+ * `ctx` with every wait that carries no signal of its own bounded by its `signal`: each read and write of its store and its
+ * block check, none of them started once the signal has aborted. A write let go at the deadline may still land; every write
+ * here is one transaction and can be made again, and an item is confirmed only after its write answered.
+ */
+function boundedBySignal(ctx: OutsideMailContext): OutsideMailContext {
+    const signal = ctx.signal;
+    if (!signal) return ctx;
+    const bound = <A extends unknown[], R>(run: (...a: A) => Promise<R>) => (...a: A): Promise<R> =>
+        (signal.aborted ? Promise.reject(ranOut()) : untilDeadline(run(...a), signal));
+    const store = Object.fromEntries(Object.entries(ctx.store).map(([k, v]) =>
+        [k, typeof v === 'function' ? bound((...a: unknown[]) => (v as (...a: unknown[]) => Promise<unknown>).apply(ctx.store, a)) : v]));
+    return { ...ctx, store: store as OutsideChatStore, isBlocked: bound(ctx.isBlocked) };
+}
+
+/** A request my server is asked with the round's signal; none is started once the round has run out of time. */
+const mailFetch = (ctx: OutsideMailContext, method: 'GET' | 'POST', path: string, body?: unknown) => {
+    if (ctx.signal?.aborted) return Promise.reject(ranOut());
+    return signedMailFetch(method, ctx.nodeUrl, path, body, ctx.identity as BeanPoolIdentity, ctx.signal);
+};
+const get = async (ctx: OutsideMailContext, path: string) => answerOf(await mailFetch(ctx, 'GET', path));
+const post = async (ctx: OutsideMailContext, path: string, body: unknown) => answerOf(await mailFetch(ctx, 'POST', path, body));
 
 /**
  * This community's home as other servers name it (its primary address, on the port this browser reaches it at when the two
@@ -121,7 +162,8 @@ export async function setDoor(ctx: Pick<OutsideMailContext, 'store' | 'identity'
 async function envelopeFor(ctx: OutsideMailContext, fields: Omit<RelayEnvelopeFields, 'senderKey' | 'senderHome' | 'payloadHash'>, payload: string): Promise<RelayEnvelope> {
     const home = await myHome(ctx);
     if (!home) throw new OutsideMailError(503, t("This community's server knows none of its own names yet, so it can't send to another community."), 'no_home');
-    return signRelayEnvelopeFor({ ...fields, senderKey: ctx.identity.publicKey, senderHome: home, payloadHash: relayPayloadHash(payload) }, ctx.identity as BeanPoolIdentity);
+    if (ctx.signal?.aborted) throw ranOut();
+    return untilDeadline(signRelayEnvelopeFor({ ...fields, senderKey: ctx.identity.publicKey, senderHome: home, payloadHash: relayPayloadHash(payload) }, ctx.identity as BeanPoolIdentity), ctx.signal);
 }
 
 async function postItems(ctx: OutsideMailContext, items: RelayItem[]): Promise<Array<{ itemId: string; state: string }>> {
@@ -236,7 +278,7 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
     const tried = new Set<string>();
     const owe = (env: RelayEnvelope) => ctx.store.oweReceipt(me, { id: env.itemId, key: env.senderKey, home: env.senderHome }, now);
     for (let page = 0; page < PAGES_MAX; page++) {
-        if (ctx.signal?.aborted) throw Object.assign(new Error('This round ran out of time.'), { name: 'AbortError' });
+        if (ctx.signal?.aborted) throw ranOut();
         const cursor = (await ctx.store.getMeta(me, CURSOR_META)) ?? '0:';
         const [since, sinceId] = [cursor.slice(0, cursor.indexOf(':')), cursor.slice(cursor.indexOf(':') + 1)];
         const answer = await get(ctx, `/api/mail?since=${encodeURIComponent(since)}&sinceId=${encodeURIComponent(sinceId)}`);
@@ -345,6 +387,9 @@ async function applyTicks(ctx: OutsideMailContext, ticks: any[], now: number): P
 
 /** A round's deadline: well over a healthy one (a page, its confirm, a receipt to each sender, each forwarded up to 10 s). */
 export const OUTSIDE_ROUND_MS = 45_000;
+/** Past the deadline, how long a round waits for the browser to hand back the lock before it answers anyway. */
+const LOCK_GRACE_MS = 1_000;
+const ROUND_LOCK = 'beanpool-outside-mail';
 /** How long a send from the box waits for my server before its line is left `sending`, for the next round. */
 export const OUTSIDE_SEND_MS = 20_000;
 
@@ -371,8 +416,9 @@ let running: Promise<SyncOutcome | null> | null = null;
 
 /**
  * One round, never two at once in this tab (nor in two tabs, where the browser can say: navigator.locks), with a deadline:
- * at `budgetMs` every request still out is aborted and the round answers null and is let go. A caller that finds a round
- * running shares it, waiting no longer than its own budget. Null too when nothing was asked.
+ * at `budgetMs` every request still out is aborted, every other wait is let go, the lock is handed back, and the round
+ * answers null. A caller that finds a round running shares it, waiting no longer than its own budget. Null too when
+ * nothing was asked.
  */
 export function syncOutsideMailNow(budgetMs: number = OUTSIDE_ROUND_MS): Promise<SyncOutcome | null> {
     if (running) return atMost(running, budgetMs);
@@ -384,33 +430,35 @@ export function syncOutsideMailNow(budgetMs: number = OUTSIDE_ROUND_MS): Promise
 
 function roundWithDeadline(deadlineMs: number): Promise<SyncOutcome | null> {
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timedOut = new Promise<null>((resolve) => {
-        timer = setTimeout(() => { controller.abort(); resolve(null); }, deadlineMs);
-    });
+    const signal = controller.signal;
+    const timer = setTimeout(() => controller.abort(), deadlineMs);
     const work = async (): Promise<SyncOutcome | null> => {
         try {
-            const ctx = await outsideContext();
-            if (!ctx) return null;
-            const on = await outsideMessagesHere();
+            const found = await untilDeadline(outsideContext(), signal);
+            if (!found) return null;
+            const ctx = boundedBySignal({ ...found, signal });
+            const on = await untilDeadline(outsideMessagesHere(), signal);
             if (on !== true) {
                 // Read, and off: my server would refuse my waiting lines (403) and no round runs to send them; they fail now, saying why.
                 if (on === false && await failUnsent(ctx, t("This community doesn't take messages from other communities.")) > 0) ring();
                 return null;
             }
-            const out = await syncOutsideMail({ ...ctx, signal: controller.signal });
+            const out = await syncOutsideMail(ctx);
             if (out.written || out.requests || out.ticks) ring();
             return out;
         } catch (e) {
-            if (!controller.signal.aborted) console.warn('[OutsideMail] This round did not finish:', (e as Error)?.message ?? e);
+            if (!signal.aborted) console.warn('[OutsideMail] This round did not finish:', (e as Error)?.message ?? e);
             return null;
         }
     };
+    // Whatever work() is still waiting on at the deadline, the round lets go of it there, and so the lock, which the browser
+    // holds until this settles: the next round, in this tab or another, starts afresh.
+    const run = () => untilDeadline(work(), signal).catch(() => null);
     const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
     const guarded: Promise<SyncOutcome | null> = locks?.request
-        ? locks.request('beanpool-outside-mail', { ifAvailable: true }, (lock) => (lock ? work() : null)) as Promise<SyncOutcome | null>
-        : work();
-    return Promise.race([guarded, timedOut]).finally(() => clearTimeout(timer));
+        ? (locks.request(ROUND_LOCK, { ifAvailable: true }, (lock) => (lock ? run() : null)) as Promise<SyncOutcome | null>).catch(() => null)
+        : run();
+    return atMost(guarded, deadlineMs + LOCK_GRACE_MS).finally(() => clearTimeout(timer));
 }
 
 function atMost<T>(p: Promise<T | null>, ms: number): Promise<T | null> {

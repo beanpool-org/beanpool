@@ -12,7 +12,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 import { BRAND_SETS, contrastRatio } from '@beanpool/core';
 
 (globalThis as any).__DEV__ = false;
@@ -77,7 +77,7 @@ async function render(set: Set): Promise<HTMLElement> {
     // The card's own ground: Home's card frame draws on surface.card.
     host.setAttribute('data-style', JSON.stringify({ backgroundColor: COLOUR_SETS[set].surface.card }));
     document.body.appendChild(host);
-    await act(async () => { createRoot(host).render(createElement(ForumHomeBody, { colors: COLOUR_SETS[set], now: NOW })); });
+    await act(async () => { createRoot(host).render(createElement(ForumHomeBody, { colors: COLOUR_SETS[set], now: NOW }) as unknown as Parameters<Root["render"]>[0]); });
     await act(async () => {});
     return host;
 }

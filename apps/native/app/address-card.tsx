@@ -132,7 +132,7 @@ export default function AddressCardScreen() {
                     <Pressable style={styles.backBtn} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={t('Go back')}>
                         <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text.body} />
                     </Pressable>
-                    <Text style={styles.title} numberOfLines={1}>{t('People in other communities')}</Text>
+                    <Text style={styles.title} numberOfLines={2}>{t('People in other communities')}</Text>
                 </View>
                 <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
                     {here === false ? (

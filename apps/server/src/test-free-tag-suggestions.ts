@@ -248,7 +248,9 @@ async function main(): Promise<void> {
         assert(r.status === 400 && r.body?.code === code && typeof r.body?.error === 'string' && r.body.error.length > 10, `${label}: 400 ${code}, in words (${show(r)})`);
     }
     const wrongAction = await rule('limones', 'promote');
-    assert(wrongAction.status === 404, `an action that is none: 404 (${show(wrongAction)})`);
+    assert(wrongAction.status === 400 && wrongAction.body?.code === 'bad_action', `an action that is none: 400 bad_action, in words (${show(wrongAction)})`);
+    const wrongUnsigned = await call('POST', null, '/api/local/admin/free-tags/limones/promote', {});
+    assert(wrongUnsigned.status === 401, `and without a session it is the sign-in that answers, before the action is read (${show(wrongUnsigned)})`);
     const byToken = await rule('retro', 'hide', {}, ownerTokenHeaders('admin', owner.pk));
     assert(byToken.status === 403 && byToken.body?.code === 'key_session_only', `an automation token cannot set one (${show(byToken)})`);
     const modRule = await rule('retro', 'hide', {}, session(mo, 'moderator'));

@@ -1969,10 +1969,10 @@ router.get('/api/local/admin/free-tags', async (ctx) => {
     ctx.body = { tags: freeTagCounts(), offerAuthors: FREE_TAG_OFFER_AUTHORS, offerDays: FREE_TAG_OFFER_DAYS };
 });
 
-// Hide a typed tag from what members are offered, merge it into a library tag ({ into }), or clear its rule. Admin level, as
-// hiding a post is; a key session only, so each rule is in someone's name. Listings keep their text either way.
+// Hide a typed tag from what members are offered, merge it into a library tag ({ into }), or clear its rule; any other
+// action is 400 `bad_action` (after the sign-in check, as every admin route). Admin level, as hiding a post is; a key session
+// only, so each rule is in someone's name. Listings keep their text either way.
 router.post('/api/local/admin/free-tags/:key/:action', async (ctx) => {
-    if (!['hide', 'merge', 'clear'].includes(ctx.params.action)) { ctx.status = 404; return; }
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can change how a tag is offered.')) return;
     const actor = (ctx.state as any)?.actor;

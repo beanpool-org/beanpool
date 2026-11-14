@@ -334,11 +334,12 @@ describe('Sign Out forgets this phone\'s mail from other communities (X2b, DECIS
 
     it('hands the open community\'s store and the leaving key over before the tables go, and ends only once the forget has settled', async () => {
         await kimsPhone();
+        const openCommunity = mem.async.get(ANCHOR)!;
         nodes();
         let ended = false;
         await signOutOfThisPhone(kim).then(() => { ended = true; });
         expect(forgetThisPhoneForMail).toHaveBeenCalledTimes(1);
-        expect(vi.mocked(forgetThisPhoneForMail).mock.calls[0][0]).toEqual({ nodeUrl: MULLUM, identity: kim, store: { storeOf: MULLUM } });
+        expect(vi.mocked(forgetThisPhoneForMail).mock.calls[0][0]).toEqual({ nodeUrl: openCommunity, identity: kim, store: { storeOf: openCommunity } });
         expect(callOrder(forgetThisPhoneForMail)).toBeLessThan(callOrder(clearDB));
         expect(ended).toBe(true);
         expect(mailForget.settled).toHaveBeenCalledTimes(1);
@@ -346,7 +347,7 @@ describe('Sign Out forgets this phone\'s mail from other communities (X2b, DECIS
 
     it('its 4 s overlap the push unregisters\' 4 s: a community that answers neither keeps Sign Out within one wait, not two', async () => {
         await kimsPhone();
-        // Mullum never answers its push unregister, and its forget takes its whole 4 s.
+        // No community answers its push unregister, and the open one's forget takes its whole 4 s.
         mailForget.takesMs = FORGET_DEVICE_MS;
         const sent = nodes(() => 'silent');
         const started = Date.now();

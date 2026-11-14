@@ -25,17 +25,20 @@ import {
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { makeInviteForShare } from '../utils/invite-and-share';
 import { ADMINS_ONLY_FALLBACK, communityLinkMessage, invitesOffFallback, mayInviteHere, onlyAdminsInvite, type InviteRole } from '../utils/invite-entries';
-import { invitesOn, type NodeFeatures } from '../utils/node-profile';
+import { invitesOn } from '../utils/node-profile';
+import { useNodeProfile } from '../utils/use-node-profile';
 import { editContacts } from '../utils/contacts-sync';
 import type { BeanPoolIdentity } from '../utils/identity';
 import { AskSheet } from './InviteAsks';
 
 type How = 'share' | 'text' | 'copy';
 
-export function ContactInviteSheet({ contact, anchor, community, identity, features, onClose }: {
-    contact: Contact; anchor: string; community: string; identity: BeanPoolIdentity; features: NodeFeatures | null | undefined; onClose: () => void;
+export function ContactInviteSheet({ contact, anchor, community, identity, onClose }: {
+    contact: Contact; anchor: string; community: string; identity: BeanPoolIdentity; onClose: () => void;
 }) {
     const styles = useStyles(makeStyles);
+    // The community in use's features (its invites switch and its door), as People reads them.
+    const features = useNodeProfile()?.features;
     const [role, setRole] = useState<InviteRole | undefined>(undefined);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);

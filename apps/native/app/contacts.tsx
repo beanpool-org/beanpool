@@ -11,7 +11,7 @@
  * A list on this phone that can't be opened says so; a damaged one is set aside and brought back from the copies the
  * member's communities keep, when the member asks (contacts-store.ts `setAsideDamaged`).
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, DeviceEventEmitter, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -36,9 +36,9 @@ import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser } from '../utils/
 import { createConversationApi } from '../utils/db';
 import { switchCommunity } from '../utils/use-communities';
 import { signedRequestWords } from '../components/signed-request-lines';
-import { ContactInviteSheet } from '../components/ContactInviteSheet';
+// Loaded when a row's Invite is tapped: the sheet brings the clipboard and the ask, which the list itself never needs.
+const ContactInviteSheet = lazy(() => import('../components/ContactInviteSheet').then((m) => ({ default: m.ContactInviteSheet })));
 import { cancelContactInvite, readMyInvites } from '../utils/contact-invites';
-import { useNodeProfile } from '../utils/use-node-profile';
 
 export { ErrorBoundary };
 
@@ -61,13 +61,12 @@ export default function ContactsScreen() {
     const [inviting, setInviting] = useState<Contact | null>(null);
     const [mine, setMine] = useState<MyInviteSeen[] | null>(null);
     const [cancelToo, setCancelToo] = useState(false);
-    const profile = useNodeProfile();
     // The community in use is asked for its copy as the screen opens (design §4.5), at most once a minute.
     useEffect(() => { if (identity) void checkContactsHere(identity); }, [identity?.publicKey]);
     const anchor = view?.anchor ?? null;
     const isHere = (c: string) => !!anchor && sameCommunity(c, anchor);
     const invitedHere = contactsOf(view).some((c) => !!c.invite && isHere(c.invite.community));
-    // Read only while some contact holds an invite made here, and again after the sheet closes.
+    // Read only while some contact holds an invite made here (a first invite made sets it, and so reads).
     const readMine = () => { if (identity && anchor) void readMyInvites(anchor, identity).then((m) => { if (m) setMine(m); }); };
     useEffect(() => { if (invitedHere) readMine(); }, [invitedHere, anchor, identity?.publicKey]);
     // "Add a contact" and a contact's page are this one route's own pages: Android's Back returns to the list from them, as
@@ -244,8 +243,10 @@ export default function ContactsScreen() {
             onRemoveAll={() => change((l) => removeEveryContact(l))}
             onInvite={anchor ? setInviting : null} ask={(c) => (anchor ? contactInviteAsk(c, mine ?? [], isHere) : null)} onAnswer={(c, used, yes) => void answer(c, used, yes)} />
         {inviting && anchor && (
-            <ContactInviteSheet contact={inviting} anchor={anchor} community={communityLabel(view, anchor)} identity={identity} features={profile?.features}
-                onClose={() => { setInviting(null); readMine(); }} />
+            <Suspense fallback={null}>
+                <ContactInviteSheet contact={inviting} anchor={anchor} community={communityLabel(view, anchor)} identity={identity}
+                    onClose={() => setInviting(null)} />
+            </Suspense>
         )}
     </>);
 }

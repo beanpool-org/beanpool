@@ -143,6 +143,12 @@ export interface NodeFeatures {
      * with a sound no one can play (a live community, 14 Nov): off, the composer exactly as before voice.
      */
     voiceLines?: boolean;
+    /**
+     * This community has a forum (apps/server engine/forum.ts; core forumOn): on from the start, members only, until its
+     * owners switch it off. The Chat tab's top is then Chats · Forum (core chatSides, slice T0). A node that doesn't say has
+     * none, or is from before it: the title "Chat", as before.
+     */
+    forum?: boolean;
 }
 
 export type NodeDoor = 'open' | 'members' | 'admins';
@@ -157,7 +163,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
-    'askedPush', 'knowledge', 'perItem', 'voiceLines',
+    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forum',
 ];
 
 export interface NodeProfile {

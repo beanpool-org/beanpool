@@ -33,8 +33,10 @@ import { switchCommunity, communitySwitchUnderWay } from '../../utils/use-commun
 import { getPendingOnboarding } from '../../utils/onboarding-state';
 import { useOtherCommunitiesNotices } from '../../utils/use-notice-counts';
 import { OtherCommunityNotices } from '../../components/OtherCommunityNotices';
-import { formatHundredths, t, tn, word, type WordKey } from '@beanpool/core';
+import { chatSides, chatSideShown, formatHundredths, t, tn, word, type ChatSide, type WordKey } from '@beanpool/core';
 import { ListPhoto } from '../../components/ListPhoto';
+import { ChatFrameSwitch } from '../../components/ChatFrameSwitch';
+import { ForumPane } from '../../components/forum/ForumPane';
 
 /** Talk's three panes: word() keys, shown through t() where the switch is drawn. */
 const TALK_PANES: ReadonlyArray<{ id: TalkView; label: WordKey }> = [
@@ -51,19 +53,30 @@ export default function ChatsScreen() {
     // and PeopleScreen reads that param off whichever route it is mounted on.
     const talkParams = useLocalSearchParams<{ view?: string; filter?: string }>();
     const [talkView, setTalkView] = useState<TalkView>(initialTalkView(talkParams.view));
-    // The "?" names Groups' and People's own guide pages while Talk shows them (DESIGN-getting-started-fable.md §4).
+    const nodeProfile = useNodeProfile();
+    // The tab's top (slice T0, DESIGN-forums-messaging-joint-fable.md §2.1): where this community's forum is on, Chats · Forum
+    // takes the title's place (core chatSides); Messages · Groups · People are the Chats side. No forum: the title, as before.
+    const sides = chatSides(nodeProfile?.features);
+    const [pickedSide, setPickedSide] = useState<ChatSide>('chats');
+    const side = chatSideShown(pickedSide, nodeProfile?.features);
+    // The "?" names Groups' and People's own guide pages while Talk shows them (DESIGN-getting-started-fable.md §4); the
+    // Forum side has none yet.
     useFocusEffect(React.useCallback(() => {
-        setHelpContext(talkView === 'messages' ? null : talkView);
+        setHelpContext(side === 'forum' || talkView === 'messages' ? null : talkView);
         return () => setHelpContext(null);
-    }, [talkView]));
+    }, [talkView, side]));
 
     React.useEffect(() => {
+        // A way in that names a pane (a notice, the header's icons, a deep link) means Chats.
         if (talkParams.view === 'people') {
             setTalkView('people');
+            setPickedSide('chats');
         } else if (talkParams.view === 'groups') {
             setTalkView('groups');
+            setPickedSide('chats');
         } else if (talkParams.view === 'messages') {
             setTalkView('messages');
+            setPickedSide('chats');
         }
     }, [talkParams.view]);
 
@@ -78,7 +91,6 @@ export default function ChatsScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<'recent' | 'unread' | 'credits_desc' | 'credits_asc'>('recent');
     // Sorting by Beans is not offered on a community with Beans off (the worldwide one): every figure there is 0.
-    const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
     // Where the Commons tab is hidden (Beans off: the worldwide community), Groups offers "Find groups", which opens the
     // groups there are to join. Elsewhere the Commons tab has them, and Talk is as it was (utils/commons-sections.ts).
@@ -132,11 +144,13 @@ export default function ChatsScreen() {
     React.useEffect(() => {
         if (talkParams.filter === 'requests') {
             setTalkView('messages');
+            setPickedSide('chats');
             setMessagesFilter('requests');
             router.setParams({ filter: '', view: '' });
             return;
         }
         if (talkParams.filter !== 'unread') return;
+        setPickedSide('chats');
         setReadFilter('unread');
         router.setParams({ filter: '', view: '' });
     }, [talkParams.filter]);
@@ -147,7 +161,7 @@ export default function ChatsScreen() {
     // The title, the Messages/People switch and the search row ride away as the list scrolls down and come
     // back on any scroll up (components/QuickReturn); they stay while the sort/filter drawer is open or the
     // search field is in use.
-    const qr = useQuickReturn({ pinned: showOptions || searchFocused, resetKey: talkView });
+    const qr = useQuickReturn({ pinned: showOptions || searchFocused, resetKey: `${side}:${talkView}` });
     const listRef = useRef<FlatList>(null);
     useTabRetapScrollTop(listRef, qr.show);
     const createGroup = useCreateGroupFlow();
@@ -834,6 +848,22 @@ export default function ChatsScreen() {
         </View>
     ) : null;
 
+    // The tab's top: the Chats · Forum switch in the title's place where this community's forum is on (no height added:
+    // components/ChatFrameSwitch.tsx), else the title "Chat". The smoke flow finds either by the same selector.
+    const tabTop = (testID?: string) => (sides.length
+        ? <ChatFrameSwitch sides={sides} side={side} onChange={setPickedSide} testID="page-title-talk" />
+        : <PageTitle title={t('Chat')} testID={testID} />);
+
+    if (side === 'forum') {
+        // The Forum side: the forum's own pane (slice F3 fills it), under the same switch.
+        return (
+            <View style={styles.safeArea}>
+                {tabTop('page-title-talk')}
+                <ForumPane />
+            </View>
+        );
+    }
+
     if (talkView === 'groups') {
         const paneState = yourGroupsPaneState(yourGroups, yourGroupsLive.error);
         const hasAny = paneState === 'list';
@@ -845,7 +875,7 @@ export default function ChatsScreen() {
                     contentContainerStyle={{ paddingBottom: 100 }}
                     refreshControl={<RefreshControl refreshing={false} onRefresh={yourGroupsLive.refresh} tintColor={colors.brand.primary} colors={[colors.brand.primary]} />}
                 >
-                    <PageTitle title={t('Chat')} />
+                    {tabTop()}
                     {talkSwitch}
                     {/* The empty state has its own "Find a group to join". */}
                     {(hasAny || (findGroups && paneState !== 'empty')) && (
@@ -867,7 +897,7 @@ export default function ChatsScreen() {
     if (talkView === 'people') {
         return (
             <View style={styles.safeArea}>
-                <PageTitle title={t('Chat')} testID="page-title-talk" />
+                {tabTop('page-title-talk')}
                 {talkSwitch}
                 <PeopleScreen />
             </View>
@@ -880,7 +910,7 @@ export default function ChatsScreen() {
                 and the search row sit over the list and ride away with it (QuickReturnBlock); the
                 compose button lives in the search row, so it comes back with the first scroll up. */}
             <View style={{ flex: 1, overflow: 'hidden' }}>
-            <QuickReturnBlock qr={qr} title={<PageTitle title={t('Chat')} testID="page-title-talk" />} below={optionsDrawer}>
+            <QuickReturnBlock qr={qr} title={tabTop('page-title-talk')} below={optionsDrawer}>
             {talkSwitch}
             {/* Search, Sort, and Filter row */}
             <View style={styles.searchBarRow}>

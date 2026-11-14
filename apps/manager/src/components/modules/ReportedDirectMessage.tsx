@@ -89,7 +89,9 @@ export function ReportedDirectMessage({ nodeUrl, reportId, credential }: {
                         // A line from another community (server: engine/relay-complaint.ts): no server keeps it, and only its own
                         // community can act on its sender.
                         <p className="text-xs text-nature-400 m-0" data-testid="report-outside-line">
-                            {`It came from another community, ${message.from}. Its sender is blocked for the member who reported it. `}
+                            {`It came from another community, ${message.from}. `}
+                            {message.blocked ? 'Its sender is blocked for the member who reported it. '
+                                : "Its sender isn't blocked for the member who reported it (their block list was full, or they unblocked them since). "}
                             {message.told === 'sent' ? 'Their community has been told, without who reported it.'
                                 : message.told === 'failed' ? "Their community's server didn't take the complaint."
                                 : 'Their community is being told, without who reported it.'}

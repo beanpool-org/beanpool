@@ -93,4 +93,22 @@ describe('ReportedDirectMessage', () => {
         render(<ReportedDirectMessage nodeUrl="https://node.example" reportId="r1" />);
         expect(await screen.findByRole('alert')).toHaveTextContent('Could not open the reported message: This report does not name a message');
     });
+
+    it('a line from another community says its sender is blocked only when the server says the block holds (X5)', async () => {
+        const outside = { ...base, sentAt: null, authorCallsign: null, line: 'gone', from: 'riverside.example', told: 'sent' };
+        for (const [blocked, says, never] of [
+            [true, /Its sender is blocked for the member who reported it\./, /isn't blocked/],
+            [false, /Its sender isn't blocked for the member who reported it \(their block list was full/, /Its sender is blocked/],
+            [undefined, /Its sender isn't blocked/, /Its sender is blocked/],
+        ] as Array<[boolean | undefined, RegExp, RegExp]>) {
+            serve(blocked === undefined ? outside : { ...outside, blocked });
+            const { unmount } = render(<ReportedDirectMessage nodeUrl="https://node.example" reportId="r1" />);
+            const note = await screen.findByTestId('report-outside-line');
+            expect(note).toHaveTextContent(says);
+            expect(note).not.toHaveTextContent(never);
+            expect(note).toHaveTextContent(/Their community has been told, without who reported it\./);
+            unmount();
+            vi.unstubAllGlobals();
+        }
+    });
 });

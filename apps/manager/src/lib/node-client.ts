@@ -1511,6 +1511,8 @@ export interface ReportedDirectLine {
     /** A line from another community: that community, and whether it has the complaint ('queued' still trying, 'sent', 'failed'). */
     from?: string | null;
     told?: 'queued' | 'sent' | 'failed' | null;
+    /** A line from another community: whether the member who reported it has its sender blocked now. */
+    blocked?: boolean;
 }
 
 /** A complaint from another community, opened (the server's engine/relay-complaint.ts openReportedComplaint). */
@@ -1559,7 +1561,7 @@ export async function fetchReportedDirectMessage(
         authorPubkey: str(m.authorPubkey), authorCallsign: str(m.authorCallsign), signer: signature === 'verified' ? signer : null, signature,
         words: { state: 'reported', text: typeof m.words?.text === 'string' ? m.words.text : '' }, photo: m.photo === true,
         line: m.line === 'changed' || m.line === 'gone' ? m.line : 'same',
-        from: str(m.from), told: m.told === 'queued' || m.told === 'sent' || m.told === 'failed' ? m.told : null,
+        from: str(m.from), told: m.told === 'queued' || m.told === 'sent' || m.told === 'failed' ? m.told : null, blocked: m.blocked === true,
     };
 }
 

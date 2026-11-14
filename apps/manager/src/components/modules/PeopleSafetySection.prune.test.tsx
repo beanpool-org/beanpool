@@ -19,6 +19,8 @@ vi.mock('./AgentSuggestionsPanel', () => ({ AgentSuggestionsPanel: () => null })
 vi.mock('./RequestLimitsCard', () => ({ RequestLimitsCard: () => null }));
 // So does "Taken down by assistants" (its own tests: AssistantTakedownsPanel.test.tsx).
 vi.mock('./AssistantTakedownsPanel', () => ({ AssistantTakedownsPanel: () => null }));
+// So does "Tags members typed" (its own tests: FreeTagsPanel.test.tsx).
+vi.mock('./FreeTagsPanel', () => ({ FreeTagsPanel: () => null }));
 
 const TOKEN = 'bp_' + 'a'.repeat(12) + '_' + 'b'.repeat(64);
 const mockProfile: NodeProfile = {

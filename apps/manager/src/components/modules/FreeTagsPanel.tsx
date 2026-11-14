@@ -47,6 +47,8 @@ export function freeTagsAsText(tags: readonly FreeTagLine[]): string {
 
 export function FreeTagsPanel({ activeNode, viewer = { kind: 'token' } }: FreeTagsPanelProps) {
     const drawn = viewer.kind === 'token' || viewer.role === 'owner' || viewer.role === 'admin';
+    // A rule is set with a key sign-in only (the server answers a token key_session_only): a token reads the list.
+    const maySet = viewer.kind === 'key';
     const [data, setData] = useState<Answer | null>(null);
     const [message, setMessage] = useState('');
     const [busy, setBusy] = useState(false);
@@ -120,7 +122,12 @@ export function FreeTagsPanel({ activeNode, viewer = { kind: 'token' } }: FreeTa
                 {' '}{plural(data.offerDays, 'day')} with no report. Hide keeps a tag out of what members are offered; merge offers it as a library tag.
                 Listings keep their words either way.
             </p>
-            {message && <p className="text-sm text-terra-300 m-0" role="status">{message}</p>}
+            {!maySet && (
+                <p className="text-xs text-nature-300 m-0 break-words" data-testid="free-tags-key-only">
+                    To hide or merge a tag, sign in to this Manager with your own key: a rule is logged in your name, and this token can only read the list.
+                </p>
+            )}
+            {message &&<p className="text-sm text-nature-200 m-0 break-words" role="status">{message}</p>}
             {data.tags.length === 0 ? (
                 <p className="text-sm text-nature-400 m-0">No typed tags on live listings yet.</p>
             ) : (
@@ -137,7 +144,7 @@ export function FreeTagsPanel({ activeNode, viewer = { kind: 'token' } }: FreeTa
                                 {t.rule === 'hide' ? 'Hidden: not offered' : t.rule === 'merge' ? `Merged into ${index.label(t.mergeInto ?? '') || t.mergeInto}`
                                     : t.offered ? 'Offered to members' : 'Not offered yet'}
                             </div>
-                            <div className="flex flex-wrap gap-2">
+                            {maySet && <div className="flex flex-wrap gap-2">
                                 {t.rule !== 'hide' && (
                                     <button type="button" disabled={busy} onClick={() => setRule(t.tag, 'hide')}
                                         className="min-h-[44px] px-3 rounded-lg text-sm font-semibold border border-nature-700 text-nature-100 hover:bg-nature-800 disabled:opacity-50">
@@ -155,8 +162,8 @@ export function FreeTagsPanel({ activeNode, viewer = { kind: 'token' } }: FreeTa
                                         Clear the rule
                                     </button>
                                 )}
-                            </div>
-                            {merging === t.tag && (
+                            </div>}
+                            {maySet && merging === t.tag && (
                                 <div className="space-y-2">
                                     <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a library tag"
                                         aria-label="Find a library tag"

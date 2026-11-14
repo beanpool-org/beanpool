@@ -10,6 +10,8 @@ const TAGS: FreeTagLine[] = [
     { tag: 'shed', listings: 1, authors: 1, firstSeen: '2026-11-12T10:00:00.000Z', offered: false, rule: null, mergeInto: null },
     { tag: 'retro', listings: 0, authors: 0, firstSeen: null, offered: false, rule: 'hide', mergeInto: null },
 ];
+/** An admin signed in with their own key: the only viewer who may set a rule (the server answers a token key_session_only). */
+const ADMIN = { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' } as const;
 
 function serve(answer: unknown, ruleAnswer: { status?: number; body?: unknown } = {}) {
     const calls: { url: string; body: any }[] = [];
@@ -49,9 +51,28 @@ describe('Tags members typed (tags F3)', () => {
         expect(old.container.textContent).toBe('');
     });
 
+    it('an automation token reads the list, is told a rule needs a key sign-in, and is offered no Hide, Merge or Clear', async () => {
+        const calls = serve({ tags: TAGS, offerAuthors: 2, offerDays: 7 });
+        render(<FreeTagsPanel activeNode={NODE} viewer={{ kind: 'token' }} />);
+        const rows = await screen.findAllByTestId('free-tag-row');
+        expect(rows).toHaveLength(4);
+        expect(rows.flatMap((r) => [...r.querySelectorAll('button')])).toHaveLength(0);
+        expect(screen.getByTestId('free-tags-key-only').textContent).toContain('sign in to this Manager with your own key');
+        expect(screen.getByRole('button', { name: 'Copy as text' })).toBeInTheDocument();
+        expect(calls).toHaveLength(0);
+    });
+
+    it('an owner or admin signed in with a key is offered them, with no key-only line', async () => {
+        serve({ tags: TAGS, offerAuthors: 2, offerDays: 7 });
+        render(<FreeTagsPanel activeNode={NODE} viewer={ADMIN} />);
+        const rows = await screen.findAllByTestId('free-tag-row');
+        expect([...rows[0].querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Hide', 'Merge into a library tag']);
+        expect(screen.queryByTestId('free-tags-key-only')).toBeNull();
+    });
+
     it('Hide, Clear and Merge send the rule for that tag', async () => {
         const calls = serve({ tags: TAGS, offerAuthors: 2, offerDays: 7 });
-        render(<FreeTagsPanel activeNode={NODE} />);
+        render(<FreeTagsPanel activeNode={NODE} viewer={ADMIN} />);
         const rows = await screen.findAllByTestId('free-tag-row');
         fireEvent.click(rows[0].querySelector('button')!);
         await waitFor(() => expect(calls.at(-1)?.url).toContain('/api/local/admin/free-tags/vintage/hide'));
@@ -67,7 +88,7 @@ describe('Tags members typed (tags F3)', () => {
 
     it("a refusal is shown in the server's words", async () => {
         serve({ tags: TAGS }, { status: 403, body: { error: 'Sign in with your own key to change how a tag is offered, so it is logged in your name.' } });
-        render(<FreeTagsPanel activeNode={NODE} />);
+        render(<FreeTagsPanel activeNode={NODE} viewer={ADMIN} />);
         const rows = await screen.findAllByTestId('free-tag-row');
         fireEvent.click(rows[0].querySelector('button')!);
         expect(await screen.findByText('Sign in with your own key to change how a tag is offered, so it is logged in your name.')).toBeInTheDocument();

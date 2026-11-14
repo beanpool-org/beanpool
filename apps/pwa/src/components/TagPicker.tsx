@@ -348,7 +348,7 @@ export function TagPicker({
                                                             className="min-h-[44px] max-w-full break-words px-3.5 py-1.5 rounded-2xl text-sm font-semibold flex flex-col items-start text-left transition-colors bg-nature-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700"
                                                         >
                                                             <span className="min-w-0">{label}</span>
-                                                            <span className="text-xs font-normal text-nature-600 dark:text-nature-300">
+                                                            <span className="text-xs font-normal text-nature-600 dark:text-nature-200">
                                                                 {[c.mergeInto ? `#${c.tag}` : '', c.listings > 0 ? tn(c.listings, 'Used on {n} listing', 'Used on {n} listings') : '']
                                                                     .filter(Boolean).join(' · ')}
                                                             </span>

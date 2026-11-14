@@ -55,3 +55,5 @@ When repeat offender rules are active, an account that has posts removed three t
 ## Questions about rules
 
 Your community's owners can update these settings to suit how the community evolves. Whenever a structural rule changes, members are notified on Home. If you have questions about how your community is run, ask the admins.
+
+Your community's owners set its core settings (who can join, Beans, votes, sharing outside, where copies go) once, when they start it, and lock them. To change one later an owner unlocks it, and you are told on Home.

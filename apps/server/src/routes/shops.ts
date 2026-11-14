@@ -65,7 +65,6 @@ import { StandbyLedgerError } from '../config/node-role.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
-import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import {
     ShopRefusal, shopOf, shopById, changeShop, closeShop, addOffersToShop, memberShop, visitorShop, featureOffer,
     enterpriseShopRefusal, type ShopChanges, type ShopRow,
@@ -156,7 +155,6 @@ function newPhoto(photo: unknown): boolean {
 /** The apps hear each listing a shop's change moved, as a member's own pause or resume tells them. */
 function tellListingsMoved(ids: string[]): void {
     for (const id of ids) broadcast({ type: 'post_updated', id });
-    if (ids.length > 0) syncPulseMarketplaceGate();
 }
 
 /** Who is reading a shop: a visitor (undefined, the visitors' view) or the member reading it (their key). */

@@ -360,8 +360,7 @@ export function knowledgeSearch(reader: string, q: string, now = Date.now()): Kn
 const DAY_MS = 86_400_000;
 
 /**
- * The node's own day, YYYY-MM-DD in its local time, as the Daily Pulse dates its item (daily-pulse.ts rotateDailyPulse):
- * the day the Home card's pick belongs to.
+ * The node's own day, YYYY-MM-DD in its local time: the day the Home card's pick and a Pulse knowledge card belong to.
  */
 export function nodeLocalDay(now: number): string {
     return new Date(now - new Date(now).getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
@@ -411,7 +410,7 @@ function clipLine(s: string, max: number): string {
  * The Pulse's knowledge cards (amended §2.12, §3.8), worked out from `pages`, the pages showing to the reader (showingTo,
  * Learn's own rule: a page that leaves Learn, taken down, hidden by reports, its writer removed or paused, leaves the Pulse
  * at the same read, with no write of its own). Those first shown in the last PULSE_KNOWLEDGE_DAYS days, the newest
- * PULSE_KNOWLEDGE_MAX_PAGES of them, make one card per node local day (as the Daily Pulse dates its item), newest first:
+ * PULSE_KNOWLEDGE_MAX_PAGES of them, make one card per node local day (nodeLocalDay), newest first:
  * id `know_<day>`, placed at the day's newest page's time, titled with its title, its rows the newest
  * PULSE_KNOWLEDGE_ROWS of the day. "First shown" is when the post was made: an owner's or admin's own page at Publish, a
  * member's suggestion and an assistant's draft at approval (publishKnowledge makes the post then). A fix, "Still right", a

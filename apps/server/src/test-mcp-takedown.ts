@@ -23,8 +23,8 @@
  *      person: first in the queue, its reporter told nothing, and the post left hidden past the 7 days until a person acts on it.
  *      What a person is told of a post on hold: the moderators' queue and an assistant's card carry the flag and don't promise "kept",
  *      a dismissal tells the reporter it is no longer up and doesn't count against them as kept, and Settings' line says an open
- *      Child safety report on the first days of the hold, not only past them. A Daily Pulse post a moderator removed and that was
- *      revived is up, so it is not on hold.
+ *      Child safety report on the first days of the hold, not only past them. A post that is up with a moderator's removal stamp
+ *      on and no hide is not on hold.
  *   7. Caps: 200 a call, the owners' limit a day on its own count, and what is over comes back in `kept`, and a restart keeps the day.
  *   8. A stolen token's day undone in one call; an injected report's text changes nothing beyond one logged takedown.
  *   9. The record: an ADMIN line, an AGENT line, the owners' daily count and the sec.agent alert; `why` in no log line.
@@ -61,7 +61,6 @@ import { forgetTakedownsOf, sweepTakedowns, takedownsToday, TAKEDOWN } from './e
 import { hideTally, muteOf, MUTED_UNTIL_LIFTED } from './engine/auto-moderation.js';
 import { reportedPostGoneBody, reportedPostKeptBody } from './engine/moderation-notices.js';
 import { rollDueSeries } from './engine/event-series-roll.js';
-import { deactivatePulseMarketplacePost, ensurePulseMarketplacePost, rotateDailyPulse } from './daily-pulse.js';
 import { resetAgentLimits, setAgentPostsPerDay } from './agent/limits.js';
 import { OWNER_TAKEDOWN_TOOLS } from './agent/owner-takedowns.js';
 import type { AgentGrant, ToolResult } from './agent/tools.js';
@@ -170,23 +169,20 @@ async function main(): Promise<void> {
         resetAdminAuthTarpit();
         const session = ownerSessionHeaders(owner.pub), phone = ownerPhoneSessionHeaders(owner.pub);
 
-        // First, because the Daily Pulse only comes back to a quiet node (fewer than 2 listings). A moderator's removal stamps it, and its
-        // revival the same day leaves that stamp on a post everyone can see: that is not a takedown on hold, and nobody may be told it is.
+        // First, before anything else is reported. A post that is up with a moderator's removal stamp still on and no hide (the
+        // removed Daily Pulse could revive one so) is not a takedown on hold, and nobody may be told it is: the hide is part of it.
         {
-            const pulseHeaders = ownerSessionHeaders(moderator.pub);
-            const pulsePost = rotateDailyPulse().post.id as string;
-            const pulseBy = (db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(pulsePost) as { author_pubkey: string }).author_pubkey;
-            const removedPulse = submitReport(rae.pub, pulseBy, 'Spam or scam', pulsePost)!.id;
-            const removal = await call('POST', `/api/local/admin/reports/${removedPulse}/action`, { headers: pulseHeaders, body: { deletePost: true } });
-            ensurePulseMarketplacePost();
-            assert(removal.status === 200 && row(pulsePost).active === 1 && !row(pulsePost).hidden_by_reports_at && !!row(pulsePost).removed_by_moderator_at,
-                `set up: a Pulse post removed by a moderator and revived the same day is up, with the stamp on (${show(removal)})`);
-            const lateReport = submitReport(goer.pub, pulseBy, 'Spam or scam', pulsePost)!.id;
-            const pulseEntry = (await call('GET', '/api/local/admin/reports?status=open&limit=500', { headers: pulseHeaders })).body?.reports?.find((r: any) => r.id === lateReport);
-            assert(pulseEntry?.postOnHold === false && pulseEntry?.postHiddenByReports === false, `a report on it doesn't say the post is on hold (${JSON.stringify([pulseEntry?.postOnHold, pulseEntry?.postHiddenByReports])})`);
-            const pulseDismissal = await call('POST', `/api/local/admin/reports/${lateReport}/dismiss`, { headers: pulseHeaders, body: {} });
-            assert(pulseDismissal.status === 200 && noticesOf(goer.pub).at(-1)?.body === reportedPostKeptBody(), `and its reporter is told it was kept, which is true (${noticesOf(goer.pub).at(-1)?.body})`);
-            deactivatePulseMarketplacePost();
+            const upHeaders = ownerSessionHeaders(moderator.pub);
+            const upPost = post('Up with a removal stamp on', mia.pub);
+            db.prepare('UPDATE posts SET removed_by_moderator_at = ? WHERE id = ?').run(new Date().toISOString(), upPost);
+            assert(row(upPost).active === 1 && !row(upPost).hidden_by_reports_at && !!row(upPost).removed_by_moderator_at,
+                'set up: a post up, with a removal stamp on and no hide');
+            const lateReport = submitReport(goer.pub, mia.pub, 'Spam or scam', upPost)!.id;
+            const upEntry = (await call('GET', '/api/local/admin/reports?status=open&limit=500', { headers: upHeaders })).body?.reports?.find((r: any) => r.id === lateReport);
+            assert(upEntry?.postOnHold === false && upEntry?.postHiddenByReports === false, `a report on it doesn't say the post is on hold (${JSON.stringify([upEntry?.postOnHold, upEntry?.postHiddenByReports])})`);
+            const upDismissal = await call('POST', `/api/local/admin/reports/${lateReport}/dismiss`, { headers: upHeaders, body: {} });
+            assert(upDismissal.status === 200 && noticesOf(goer.pub).at(-1)?.body === reportedPostKeptBody(), `and its reporter is told it was kept, which is true (${noticesOf(goer.pub).at(-1)?.body})`);
+            db.prepare("UPDATE posts SET active = 0, status = 'cancelled' WHERE id = ?").run(upPost);
         }
 
         // ── 1. Off by default ────────────────────────────────────────────────────────────────────────

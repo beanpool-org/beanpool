@@ -122,7 +122,6 @@ import {
     type PutBackResult, type PutBackScope, type TakeDownInput, type TakeDownResult,
 } from './engine/agent-takedowns.js';
 import { seedPulseCurated, getBeanPoolPubkey } from './engine/pulse-seed.js';
-import { getPulseTreasuryPubkey } from './daily-pulse.js';
 import {
     nodeRoleOf,
     heldNodeRoleOf,
@@ -849,8 +848,8 @@ export function initStateEngine(): void {
     setMoneyGuardHook(() => assertBeansOn());
     // The BeanPool enterprise and its learn channel, on a main server only. A standby holds its main server's, copied
     // (G9): one of its own, made under its own key at every boot, met the main server's on the callsign index and refused
-    // a new standby's first copy, and at a later boot renamed the copied one and put the channel under its own. The Daily
-    // Pulse skips a standby the same way (daily-pulse.ts scheduleDailyPulse). A take-over's restart runs as a main server.
+    // a new standby's first copy, and at a later boot renamed the copied one and put the channel under its own. A
+    // take-over's restart runs as a main server.
     if (getNodeRole() !== 'backup') seedPulseCurated();
     
     // Seed SYSTEM user securely
@@ -1678,8 +1677,8 @@ let listingDoorbellsDue: Set<ListingDoorbell> | null = null;
 /**
  * The listings changed with no post event to say so, and every socket that gets public doorbells must hear it: a member
  * removed (their posts cancelled), an enterprise paused or winding up (the board leaves its posts out) or back, a member
- * on holiday or back, a report's suspension (their posts paused), a trade that took a listing or put it back, the
- * Daily Pulse listing, a peer's listings. Its member-feed sockets get that change's own events (profile_updated,
+ * on holiday or back, a report's suspension (their posts paused), a trade that took a listing or put it back, a peer's
+ * listings. Its member-feed sockets get that change's own events (profile_updated,
  * user_pruned, a trade's) as before, and the open feed gets every event; every other socket has had none of those, and
  * its app kept the listings as they were: a bare `post_removed` (the listings went) or `post_updated` (they came back,
  * or changed) is a doorbell each app reads the listings again on (@beanpool/core livePostChange takes one with no id or
@@ -2273,16 +2272,17 @@ export type { InviteCheckResult, InviteTreeNode };
 // ===================== PROFILES =====================
 
 /**
- * The node's own accounts: BeanPool, which owns the curated learn channel and every channel an admin adds
- * (engine/pulse-seed.ts), and Daily Pulse (daily-pulse.ts). They are treasury rows, so the People directory leaves them
- * out, but neither is an enterprise or a project (no keepers, no purpose): their profile and trust profile carry no
- * `isTreasury`, so both apps open the profile, with its channels, and not an empty enterprise page (review of #2367).
- * Found by the same lookups their owners use, and never created here. Not `createTreasury`'s `systemCreated`: a
+ * The node's own account: BeanPool, which owns the curated learn channel and every channel an admin adds
+ * (engine/pulse-seed.ts). It is a treasury row, so the People directory leaves it out, but it is no enterprise or project
+ * (no keepers, no purpose): its profile and trust profile carry no `isTreasury`, so both apps open the profile, with its
+ * channels, and not an empty enterprise page (review of #2367). Found by the same lookup its owner uses, and never
+ * created here. Not `createTreasury`'s `systemCreated`: a
  * member's enterprise made without a photo passes it too (routes/treasury.ts), and so does a federation link.
  */
 function nodeOwnAccountKeys(): Set<string> {
     const keys = new Set<string>();
-    for (const pk of [getBeanPoolPubkey(), getPulseTreasuryPubkey()]) if (pk) keys.add(pk);
+    const beanpool = getBeanPoolPubkey();
+    if (beanpool) keys.add(beanpool);
     return keys;
 }
 
@@ -2707,7 +2707,7 @@ export interface ViewerTrustProfile {
     /**
      * Present, and true, only for an enterprise's or a project's key: the phone's profile screen reads this trust profile
      * and replaces itself with the enterprise page on it (MemberProfile.isTreasury, slice E0). A member's has no such key,
-     * nor has the node's own BeanPool or Daily Pulse account (nodeOwnAccountKeys).
+     * nor has the node's own BeanPool account (nodeOwnAccountKeys).
      */
     isTreasury?: true;
 }
@@ -5827,7 +5827,7 @@ export function createPost(
         tags?: unknown;
         /** The tags its author typed (engine/post-fields.ts assertFreeTags). */
         freeTags?: unknown;
-        /** Allowed only for system-created internal posts like Daily Pulse. */
+        /** No photo needed: for the server's own callers only (tests); no route passes it. */
         allowNoPhoto?: boolean;
         shownCopy?: CopyColumns | null;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */

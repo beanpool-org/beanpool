@@ -13,10 +13,13 @@
  *   A conversation opened from elsewhere (a notice, a profile's Message) shows Chats.
  */
 import { useEffect, useState, type ComponentProps } from 'react';
-import { chatSides, chatSideShown, t, type ChatSide, type ChatSideEntry } from '@beanpool/core';
+import { chatSides, chatSideShown, t, word, type ChatSide, type ChatSideEntry } from '@beanpool/core';
 import { useCommunityInfo } from '../lib/features';
 import { MessagesPage } from './MessagesPage';
 import { ForumPage } from './ForumPage';
+
+/** The switch's spoken name: the Chat tab's own word on the web (App.tsx's tab list; the web's catalogs hold it with this context). */
+const CHAT_TAB = word('Chat', 'tab');
 
 /** Two tabs across, as the phone's: the side shown underlined, the other in the accent's ink (4.5:1 or more in Light and
  *  Dark; --text-muted is 4.3:1 on Light's page, short for words this size at 1280 px); each a 44 px target. Long names
@@ -27,7 +30,7 @@ export function ChatFrameSwitch({ sides, side, onChange }: {
     onChange: (side: ChatSide) => void;
 }) {
     return (
-        <div role="tablist" aria-label={t('Chat')} data-testid="chat-frame-switch" style={{ display: 'flex', marginBottom: '1rem', borderBottom: '1px solid var(--border-primary)' }}>
+        <div role="tablist" aria-label={t(CHAT_TAB)} data-testid="chat-frame-switch" style={{ display: 'flex', marginBottom: '1rem', borderBottom: '1px solid var(--border-primary)' }}>
             {sides.map((entry) => {
                 const active = entry.id === side;
                 return (

@@ -8,6 +8,8 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { backToEnglish, showIn, xx } from '../words-xx.test-support';
 
 const info = vi.hoisted(() => ({ now: null as null | { features?: Record<string, unknown> } }));
@@ -88,6 +90,17 @@ describe('the Chat tab where the forum is on', () => {
         render(<ChatTabPage identity={ME} />);
         expect(tabs().map((tb) => tb.textContent)).toEqual([xx('Chats'), xx('Forum')]);
         expect(tablist()).toHaveAttribute('aria-label', xx('Chat'));
+    });
+
+    it('in a real language: the names from core\'s catalog, the spoken name the Chat tab\'s own word from the web\'s', async () => {
+        const read = (file: string) => JSON.parse(readFileSync(path.resolve(__dirname, file), 'utf8')) as Record<string, string>;
+        const core = read('../../../../packages/beanpool-core/words/ar.json');
+        const web = read('../../words/ar.json');
+        await act(async () => { await showIn('ar'); });
+        render(<ChatTabPage identity={ME} />);
+        expect(tabs().map((tb) => tb.textContent)).toEqual([core['Chats\u0004chat tab side'], core['Forum\u0004chat tab side']]);
+        expect(web['Chat\u0004tab']).toBeTruthy();
+        expect(tablist()).toHaveAttribute('aria-label', web['Chat\u0004tab']);
     });
 });
 

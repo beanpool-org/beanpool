@@ -19,9 +19,10 @@
 #
 # Time (Opus review of #3180, 15 Nov: the slowest plans overran a lane's 600 s Bash call). Each plan line carries the
 # planner's estimate in seconds; the planner keeps the plan under 330 s (PREFLIGHT_PLAN_SECS). Replayed over the last 120
-# merges (15 Nov): estimates p50 203 s, p90 270 s, max 331 s. The lock gets what is left of an 8-minute budget (at least
-# 60 s), and a step whose estimate would end past 570 s is not started. A lane's Bash call is capped at 600 s: give this
-# call that whole timeout.
+# merges (15 Nov): estimates p50 210 s, p90 277 s, max 330 s; the phone step at most 80 files (it was 279). Measured:
+# #3123's vitest steps 204 s at load 12-13 against 208 s estimated; this branch's checks + words 2m04s. The lock gets what
+# is left of an 8-minute budget (at least 60 s), and a step whose estimate would end past 570 s is not started. A lane's
+# Bash call is capped at 600 s: give this call that whole timeout.
 #
 # Environment (tests and odd cases): PREFLIGHT_PLAN_FILE (a plan to run instead of planning: name TAB est-seconds TAB why
 # TAB command per line), PREFLIGHT_LOCK (the lock dir, default ~/.cache/heavy-test.lock), PREFLIGHT_BUDGET_SECS (the

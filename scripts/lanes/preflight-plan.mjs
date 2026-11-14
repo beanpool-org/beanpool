@@ -144,9 +144,9 @@ export const GUARD_TESTS = [
 export const PLAN_SECS = Number(process.env.PREFLIGHT_PLAN_SECS || 330);
 /** Past the guards and the changed tests, at most this many pins, scanners and importers in one package (closest first). */
 export const MAX_EXTRA = Number(process.env.PREFLIGHT_MAX_EXTRA || 60);
-/** Estimates of the fixed steps, seconds (the Mac, 15 Nov: checks 68-114 s, words 6 s, guest-view 41 s, health-cors 3 s,
+/** Estimates of the fixed steps, seconds (the Mac, 15 Nov: checks 68-118 s, words 6 s, guest-view 41 s, health-cors 3 s,
  *  standby-health 29 s, replica-hashes under 1 s, each plus the suite runner's start). */
-export const EST = { checks: 115, words: 8, 'test-guest-view': 45, 'test-health-cors': 8, 'test-standby-health': 32,
+export const EST = { checks: 120, words: 8, 'test-guest-view': 45, 'test-health-cors': 8, 'test-standby-health': 32,
   'test-replica-hashes': 5, scriptTests: 10 };
 
 const SOURCE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/;

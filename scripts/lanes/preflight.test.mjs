@@ -390,15 +390,16 @@ test('a plan line whose estimate is not whole seconds is red, never a free step'
 
 test('a step whose estimate would end past the hard limit is not started: exit 75, named, the steps before it ran', () => {
   const d = tmpdir();
-  const rows = [['one', '1', 'first', `sleep 2; touch ${d}/one-ran`], ['two', '5', 'second', `touch ${d}/two-ran`]];
+  // Step two alone (3 s) fits the 4 s limit; after step one's 2 s it does not: the time already spent counts.
+  const rows = [['one', '1', 'first', `sleep 2; touch ${d}/one-ran`], ['two', '3', 'second', `touch ${d}/two-ran`]];
   const r = run(planFile(d, rows), { PREFLIGHT_HARD_SECS: '4' });
   assert.equal(r.rc, 75, r.out);
-  assert.match(r.out, /^TIME  step 2 \(two, about 5s\) would end past 4s/m);
+  assert.match(r.out, /^TIME  step 2 \(two, about 3s\) would end past 4s at [2-9]s in/m);
   assert.match(r.out, /1 of 2 steps passed .* 1 NOT RUN/);
   assert.ok(fs.existsSync(`${d}/one-ran`));
   assert.ok(!fs.existsSync(`${d}/two-ran`));
   // A red before the stop still reads as red.
-  const red = run(planFile(d, [['bad', '1', 'red', 'sleep 2; exit 3'], ['two', '5', 'second', 'true']]), { PREFLIGHT_HARD_SECS: '4' });
+  const red = run(planFile(d, [['bad', '1', 'red', 'exit 3'], ['two', '5', 'second', 'true']]), { PREFLIGHT_HARD_SECS: '4' });
   assert.equal(red.rc, 1, red.out);
   assert.match(red.out, /1 of 1 steps RED .*not run: step 2/);
 });
@@ -411,7 +412,7 @@ test('MUTANT: a runner without the hard-limit check starts the late step, so the
   fs.mkdirSync(path.join(d, 'scripts/lanes'), { recursive: true });
   const mutant = path.join(d, 'scripts/lanes/preflight.sh');
   fs.writeFileSync(mutant, src.replace(check, 'if false; then'));
-  const r = run(planFile(d, [['one', '1', 'first', 'sleep 2'], ['two', '5', 'second', `touch ${d}/two-ran`]]),
+  const r = run(planFile(d, [['one', '1', 'first', 'true'], ['two', '5', 'second', `touch ${d}/two-ran`]]),
     { PREFLIGHT_HARD_SECS: '4' }, mutant);
   assert.equal(r.rc, 0, r.out);
   assert.ok(fs.existsSync(`${d}/two-ran`), 'the mutant ran the step that would end past the limit');

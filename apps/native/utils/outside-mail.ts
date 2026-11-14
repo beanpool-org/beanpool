@@ -34,6 +34,8 @@ export const DOOR_META = 'door';
 /** The outbox cursor: the last tick this phone has, `<at>:<itemId>`. */
 export const CURSOR_META = 'outbox-cursor';
 const HOME_META = 'home';
+/** How long the home read from the community is used before it is read again. */
+const HOME_FRESH_MS = 60 * 60_000;
 /** The pages one sync reads at most, of held items and of ticks each. */
 const PAGES_MAX = 10;
 /** A line the server never answered is sent again while this fresh (the server refuses one older than 7 days). */
@@ -67,16 +69,23 @@ async function answerOf(res: Response): Promise<any> {
  * This community's home as other servers name it: its primary address (GET /api/community/info), on the port this phone
  * reaches it at when the two hosts agree. Kept once read. Null while the community knows none of its names.
  */
-export async function myHome(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'store'>): Promise<string | null> {
-    const kept = await ctx.store.getMeta(HOME_META);
-    if (kept) return kept;
-    const res = await fetch(`${ctx.nodeUrl.replace(/\/+$/, '')}/api/community/info`);
-    const info: any = res.ok ? await res.json().catch(() => null) : null;
-    const primary = typeof info?.primaryAddress === 'string' ? info.primaryAddress : null;
-    if (!primary) return null;
+export async function myHome(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'store'>, now = Date.now()): Promise<string | null> {
+    // Kept as `<home> <when read>`, and read again after HOME_FRESH_MS: a community that moves to a new address signs its
+    // requests as the new home, and an envelope naming the old one would be refused (relay-outbox.ts itemProblem).
+    const kept = (await ctx.store.getMeta(HOME_META))?.split(' ');
+    if (kept?.[0] && now - Number(kept[1]) < HOME_FRESH_MS) return kept[0];
+    let primary: string | null = null;
+    try {
+        const res = await fetch(`${ctx.nodeUrl.replace(/\/+$/, '')}/api/community/info`);
+        const info: any = res.ok ? await res.json().catch(() => null) : null;
+        primary = typeof info?.primaryAddress === 'string' ? info.primaryAddress : null;
+    } catch {
+        primary = null;
+    }
+    if (!primary) return kept?.[0] || null;   // unreachable now: the home read before, if any
     const reached = nodeHomeOf(ctx.nodeUrl);
     const home = reached && audienceOf(reached) === audienceOf(primary) ? reached : nodeHomeOf(primary);
-    if (home) await ctx.store.setMeta(HOME_META, home);
+    if (home) await ctx.store.setMeta(HOME_META, `${home} ${now}`);
     return home;
 }
 

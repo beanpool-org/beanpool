@@ -69,7 +69,7 @@ vi.mock('../member-statements', async () => {
 });
 
 import { outsideChatStore, gateIncoming, OUTSIDE_CHAT_TABLES_SQL, type OutsideChatState } from '../outside-chat-store';
-import { syncOutsideMail, sendOutsideLine, setDoor, type OutsideMailContext } from '../outside-mail';
+import { myHome, syncOutsideMail, sendOutsideLine, setDoor, type OutsideMailContext } from '../outside-mail';
 
 const seedKey = () => { const seed = randomBytes(32); return { seed: bytesToHex(seed), key: bytesToHex(ed25519.getPublicKey(seed)) }; };
 const BEN = seedKey(), ANA = seedKey(), SOL = seedKey(), CY = seedKey();
@@ -98,7 +98,7 @@ beforeEach(async () => {
     sql = s.sql;
     blocked = new Set();
     ctx = { nodeUrl: 'https://127.0.0.1:1', identity: { publicKey: BEN.key, privateKey: BEN.seed, callsign: 'Ben' }, store: s.store, isBlocked: async (k) => blocked.has(k) };
-    await s.store.setMeta('home', HOME);
+    await s.store.setMeta('home', `${HOME} ${Date.now()}`);
 });
 
 /** A line `from` writes Ben, as their phone seals it and their server brings it: held for Ben. */
@@ -308,5 +308,27 @@ describe('7  ticks', () => {
         // Her next line goes straight into it, never behind the requests row: Ben wrote to her.
         await heldLine(ANA, 'Did you get my last one?');
         expect(await syncOutsideMail(ctx)).toMatchObject({ written: 1, requests: 0 });
+    });
+});
+
+describe('8  my home', () => {
+    it('is read again from the community after an hour: one that moved to a new address names its new home', async () => {
+        const realFetch = globalThis.fetch;
+        const asked: string[] = [];
+        globalThis.fetch = (async (url: string) => {
+            asked.push(String(url));
+            return new Response(JSON.stringify({ primaryAddress: 'coop.example.org' }), { status: 200 });
+        }) as any;
+        try {
+            expect(await myHome(ctx)).toBe(HOME);
+            expect(asked).toEqual([]);
+            expect(await myHome(ctx, Date.now() + 61 * 60_000)).toBe('coop.example.org');
+            expect(asked).toEqual(['https://127.0.0.1:1/api/community/info']);
+            // Unreachable: the home read before.
+            globalThis.fetch = (async () => { throw new TypeError('Network request failed'); }) as any;
+            expect(await myHome(ctx, Date.now() + 3 * 60 * 60_000)).toBe('coop.example.org');
+        } finally {
+            globalThis.fetch = realFetch;
+        }
     });
 });

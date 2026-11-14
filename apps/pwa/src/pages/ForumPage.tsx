@@ -7,6 +7,8 @@
  *   own first topic while it waits (with the measured wait, and Withdraw), then the topics: pinned first, then the newest
  *   activity, each row opening its topic on a tap anywhere (a person's card opens only from inside the topic), ● where a
  *   followed topic has a reply they haven't opened. ＋ New topic.
+ * - **Search** (slice F6, components/forum/ForumSearch.tsx): a box at the top; its hits replace the topic list while they show,
+ *   each opening its topic at the post found.
  * - **A topic, a new topic, the first looks** are views in place (components/forum/), each with its own ‹ back to the list.
  * - **Kept copies:** what was last read draws at once from the page's own copies, then the node is asked again (§18: the web
  *   reads "while the page is open"; nothing is written to the browser's storage).
@@ -17,11 +19,12 @@ import { useEffect, useRef, useState } from 'react';
 import { forumSectionName, t, timeAgo, tn, word, wordn } from '@beanpool/core';
 import { myNodeRoleOnce } from '../lib/api';
 import {
-    getForumFront, getForumTopics, keepForumFor, keptFront, keptList, myFirstLook, withdrawFirstLook, type ForumFront, type ForumTopic, type ForumWaiting,
+    getForumFront, getForumTopics, keepForumFor, keptFront, keptList, keptSearch, myFirstLook, withdrawFirstLook, type ForumFront, type ForumTopic, type ForumWaiting,
 } from '../lib/forum';
 import { ForumTopicView, TOPIC_WORDS } from '../components/forum/ForumTopicView';
 import { ForumNewTopic } from '../components/forum/ForumNewTopic';
 import { ForumFirstLooks } from '../components/forum/ForumFirstLooks';
+import { ForumSearch } from '../components/forum/ForumSearch';
 
 export const FORUM_WORDS = {
     allSections: word('All sections'),
@@ -41,7 +44,8 @@ export const FORUM_WORDS = {
     archived: word('{name} (archived)'),
 };
 
-type View = { kind: 'list' } | { kind: 'topic'; id: string } | { kind: 'new' } | { kind: 'firstLooks' };
+/** `at`: a search's hit opens the topic at that post. */
+type View = { kind: 'list' } | { kind: 'topic'; id: string; at?: number } | { kind: 'new' } | { kind: 'firstLooks' };
 
 export function ForumPage({ me, onOpenProfile }: { me: string; onOpenProfile?: (pubkey: string) => void }) {
     // Before any kept copy is read: another account in this tab never sees the last one's forum, not even for a moment.
@@ -56,6 +60,8 @@ export function ForumPage({ me, onOpenProfile }: { me: string; onOpenProfile?: (
     const [staff, setStaff] = useState(false);
     // A topic the member's own action took away (or one gone meanwhile): the one line the list says on their way back.
     const [gone, setGone] = useState<string | null>(null);
+    // A search's hits show in the topic list's place (kept for the page's life, so back from a hit they still do).
+    const [searching, setSearching] = useState(() => keptSearch() !== null);
     // The section picked now: a slower answer for one picked before it is dropped, never drawn under the newer pick.
     const picked = useRef(section);
     useEffect(() => { picked.current = section; }, [section]);
@@ -96,7 +102,7 @@ export function ForumPage({ me, onOpenProfile }: { me: string; onOpenProfile?: (
     const told = () => setFront((f) => (f ? { ...f, told: true } : f));
     if (view.kind === 'topic') {
         return (
-            <ForumTopicView topicId={view.id} front={front} me={me} onBack={toList} onTold={told} onOpenProfile={onOpenProfile}
+            <ForumTopicView topicId={view.id} at={view.at} front={front} me={me} onBack={toList} onTold={told} onOpenProfile={onOpenProfile}
                 onGone={(words) => { setGone(words); toList(); }} />
         );
     }
@@ -134,6 +140,8 @@ export function ForumPage({ me, onOpenProfile }: { me: string; onOpenProfile?: (
                 )}
             </div>
 
+            <ForumSearch sections={sections} onShowing={setSearching} onOpen={(id, at) => open({ kind: 'topic', id, at })} />
+
             {failed && (
                 <div className="flex flex-col items-start gap-2">
                     <p role="alert" className="m-0 text-sm" style={{ color: 'var(--text-secondary)' }}>{failed}</p>
@@ -159,11 +167,13 @@ export function ForumPage({ me, onOpenProfile }: { me: string; onOpenProfile?: (
                 </div>
             )}
 
-            {list && list.topics.length === 0 && !failed && <p className="m-0 text-sm" style={{ color: 'var(--text-secondary)' }}>{t(FORUM_WORDS.none)}</p>}
-            <ul className="m-0 p-0 list-none flex flex-col" data-testid="forum-topics">
-                {list?.topics.map((topic) => <TopicRow key={topic.id} topic={topic} sectionName={section ? '' : nameOf(topic.sectionId)} onOpen={() => open({ kind: 'topic', id: topic.id })} />)}
-            </ul>
-            {list?.next != null && <button type="button" onClick={() => void loadList(list.next!)} className={button} style={quiet}>{t(FORUM_WORDS.more)}</button>}
+            {!searching && list && list.topics.length === 0 && !failed && <p className="m-0 text-sm" style={{ color: 'var(--text-secondary)' }}>{t(FORUM_WORDS.none)}</p>}
+            {!searching && (
+                <ul className="m-0 p-0 list-none flex flex-col" data-testid="forum-topics">
+                    {list?.topics.map((topic) => <TopicRow key={topic.id} topic={topic} sectionName={section ? '' : nameOf(topic.sectionId)} onOpen={() => open({ kind: 'topic', id: topic.id })} />)}
+                </ul>
+            )}
+            {!searching && list?.next != null && <button type="button" onClick={() => void loadList(list.next!)} className={button} style={quiet}>{t(FORUM_WORDS.more)}</button>}
         </div>
     );
 }

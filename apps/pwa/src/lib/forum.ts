@@ -34,6 +34,11 @@ export interface ForumWaiting {
     writer: ForumWriter; createdAt: string;
 }
 export interface ForumTopicPage { topic: ForumTopic; posts: ForumPost[]; next: number | null; lastRead: number }
+/** A search's hit (slice F6): the post, its topic's title ('' for a topic its writer removed, its replies kept), its words around the find. */
+export interface ForumSearchHit {
+    topicId: string; sectionId: string; title: string; postId: string; number: number; writer: ForumWriter; createdAt: string; excerpt: string;
+}
+export interface ForumSearchAnswer { q: string; hits: ForumSearchHit[]; next: number | null }
 
 /** The five reasons a moderator's No gives, as the node takes them (engine/moderation-notices.ts normaliseRemovalReason). */
 export const FIRST_LOOK_NO_REASONS = ['spam', 'offensive', 'misleading', 'unsafe', 'rules'] as const;
@@ -45,12 +50,19 @@ const kept = {
     front: null as ForumFront | null,
     lists: new Map<string, { topics: ForumTopic[]; next: number | null }>(),
     topics: new Map<string, ForumTopicPage>(),
+    /** The last search and what it found, so back from a hit it shows again without asking (each search counts, 100 a day). */
+    search: null as ForumSearchAnswer | null,
 };
 /** The key a section's list is kept under: '' for every section. */
 const listKey = (sectionId: string | null) => sectionId ?? '';
 export const keptFront = (): ForumFront | null => kept.front;
 export const keptList = (sectionId: string | null) => kept.lists.get(listKey(sectionId)) ?? null;
 export const keptTopic = (id: string): ForumTopicPage | null => kept.topics.get(id) ?? null;
+export const keptSearch = (): ForumSearchAnswer | null => kept.search;
+/** The member cleared the search: the list shows again, and nothing of it is kept. */
+export function forgetForumSearch(): void {
+    kept.search = null;
+}
 /** Whose copies these are: another account in this tab starts with none (keepForumFor). */
 let keptFor: string | null = null;
 /** The copies are this member's: when the account in this tab changed, the last one's are dropped first. Idempotent. */
@@ -70,6 +82,7 @@ export function forgetForum(): void {
     kept.front = null;
     kept.lists.clear();
     kept.topics.clear();
+    kept.search = null;
     for (const url of photoUrls.values()) void url.then((u) => { if (u) URL.revokeObjectURL(u); });
     photoUrls.clear();
 }
@@ -101,6 +114,18 @@ export async function getForumTopic(id: string, after = 0): Promise<ForumTopicPa
     const merged = { ...page, posts: [...before.filter((p) => p.number <= after), ...page.posts] };
     kept.topics.set(id, merged);
     return merged;
+}
+
+/**
+ * A search of the forum (slice F6): every word typed, newest first, 20 a page; `offset` 0 replaces the kept search, a later
+ * page adds its hits. Each call is one of the member's 100 searches a day (the node refuses past them with 429), so the page
+ * asks only when they press Search, never as they type.
+ */
+export async function searchForum(q: string, offset = 0): Promise<ForumSearchAnswer> {
+    const page = await request<{ hits: ForumSearchHit[]; next: number | null }>('GET', `/api/forum/search?q=${encodeURIComponent(q)}${offset ? `&offset=${offset}` : ''}`);
+    const before = offset && kept.search?.q === q ? kept.search.hits : [];
+    kept.search = { q, hits: [...before.filter((h) => !page.hits.some((x) => x.postId === h.postId)), ...page.hits], next: page.next };
+    return kept.search;
 }
 
 const photoUrls = new Map<string, Promise<string | null>>();

@@ -208,7 +208,8 @@ export function withPeopleAdded(list: ContactsList, people: readonly BeanPoolPer
     if (add.length === 0) return list;
     const at = now.toISOString();
     const contacts = add.map((p) => {
-        const callsign = cleanContactName(p.callsign).slice(0, CONTACTS_LIMITS.callsignChars);
+        // Core cuts a link's callsign to its limit by characters (contacts-list.ts readLink), never by halves of one.
+        const callsign = cleanContactName(p.callsign);
         return { id: newId(), name: callsign || `@${p.key.slice(0, 8)}`, phones: [], emails: [], note: '', links: [{ key: p.key, community, callsign, how: 'hand' as const, at }], invite: null, clock: 0 };
     });
     return mergeContactsLists(list, { v: list.v, contacts, removed: [] });

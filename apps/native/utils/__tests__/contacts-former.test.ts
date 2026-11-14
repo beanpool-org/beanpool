@@ -227,6 +227,14 @@ describe('"Add people I\'ve chatted with and my friends"', () => {
         // Mutation: compare links by callsign instead of key → a renamed member added twice.
     });
 
+    it('a callsign as long as a link holds, ending in an emoji, is kept whole (cut by characters, never by halves of one)', () => {
+        const long = `${'a'.repeat(CONTACTS_LIMITS.callsignChars - 1)}😀`;
+        const out = withPeopleAdded(emptyContactsList(), [{ key: k(), callsign: long }], me, RIVERSIDE);
+        expect(out.contacts[0]?.links[0]?.callsign).toBe(long);
+        expect(out.contacts[0]?.name).toBe(long);
+        // Mutation: cut with String.slice(0, 64) → the emoji's second half is cut, core drops the first: one character short.
+    });
+
     it("stops at the list's limit", () => {
         let full = emptyContactsList();
         full = { ...full, contacts: Array.from({ length: CONTACTS_LIMITS.contacts - 1 }, (_, i) => ({ ...contact(`P${i}`), id: i.toString(16).padStart(32, '0'), clock: 0 })) };

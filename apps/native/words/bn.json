@@ -3270,13 +3270,6 @@
   "Beans from a member you blocked": "আপনার ব্লক করা কোনো সদস্যের কাছ থেকে শিম",
   "GUEST": "অতিথি",
   "BEANS": "শিম",
-  "No credit line yet": "এখনও কোনো ক্রেডিট সীমা নেই",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "আপনার কাছে থাকা শিম দিয়ে আপনি এখনই বাণিজ্য করতে পারেন। আপনার প্রথম বাণিজ্য সম্পন্ন করুন এবং আপনার ক্রেডিট সীমা স্বয়ংক্রিয়ভাবে খুলে যাবে — আপনি যত বেশি মূল্য বিনিময় করবেন, এটি তত গভীর হবে। (একটি সম্প্রদায় ভাউচারও আপনাকে একটি প্রাথমিক সীমা দিতে পারে।)",
-  "Credit position — tap to learn how it works": "ক্রেডিট অবস্থান — এটি কীভাবে কাজ করে তা জানতে ট্যাপ করুন",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️ খরচ স্থগিত করা হয়েছে — আপনার ব্যালেন্স আপনার {n}টি সক্রিয় অফার যা আনলক করে (−{limit}) তার নিচে নেমে গেছে। এটি তুলতে একটি অফার পোস্ট করুন বা বাণিজ্য করে ফিরে আসুন। আপনি এখনও গ্রহণ এবং বিক্রি করতে পারেন।",
-    "other": "⚠️ খরচ স্থগিত করা হয়েছে — আপনার ব্যালেন্স আপনার {n}টি সক্রিয় অফার যা আনলক করে (−{limit}) তার নিচে নেমে গেছে। এটি তুলতে একটি অফার পোস্ট করুন বা বাণিজ্য করে ফিরে আসুন। আপনি এখনও গ্রহণ এবং বিক্রি করতে পারেন।"
-  },
   "Levels": "স্তরসমূহ",
   "Wallet": "ওয়ালেট",
   "Ledger": "খতিয়ান",
@@ -5313,32 +5306,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (যাচাইকৃত অ্যাকাউন্ট)",
   "Opens external channel link": "বাহ্যিক চ্যানেলের লিংক খোলে",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate}%/মাস",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "ক্রেডিট ব্যালেন্স {balance} শিম, ক্রেডিট সীমা {floor} শিম, ফি-মুক্ত সর্বোচ্চ সীমা {max} শিম।",
-  "fee/mo": "ফি/মাস",
-  "your limit": "আপনার সীমা",
-  "sweet spot": "আদর্শ সীমা",
-  "fee-free": "ফি-মুক্ত",
-  "← carry credit": "← ঋণ বহন",
-  "hold credit →": "ক্রেডিট সংরক্ষণ →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} −{depth} আনলক করে · {more} → −{next}",
-    "other": "🎣 {offers} −{depth} আনলক করে · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} −{depth} আনলক করে",
-    "other": "🎣 {offers} −{depth} আনলক করে"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n}টি প্রস্তাব",
-    "other": "{n}টি প্রস্তাব"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 আপনার ক্রেডিট লাইন খুলতে {post} করুন — {count}টি প্রস্তাব আপনার সম্পূর্ণ −{floor} আনলক করে।",
-    "other": "🎣 আপনার ক্রেডিট লাইন খুলতে {post} করুন — {count}টি প্রস্তাব আপনার সম্পূর্ণ −{floor} আনলক করে।"
-  },
-  "Post an offer": "একটি প্রস্তাব পোস্ট করুন",
   "Unknown\u0004a host with no name": "অজানা",
   "No maps app": "কোনো মানচিত্র অ্যাপ নেই",
   "The event is at {lat}, {lng}.": "ইভেন্টটি {lat}, {lng}-এ অবস্থিত।",

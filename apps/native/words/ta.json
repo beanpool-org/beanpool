@@ -3272,13 +3272,6 @@
   "Beans from a member you blocked": "நீங்கள் முடக்கிய உறுப்பினரிடமிருந்து வந்த பயறு",
   "GUEST": "விருந்தினர்",
   "BEANS": "பயறு",
-  "No credit line yet": "இன்னும் கடன் வரம்பு இல்லை",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "உங்களிடம் உள்ள பயறைக் கொண்டு நீங்கள் இப்போதே வர்த்தகம் செய்யலாம். உங்கள் முதல் வர்த்தகத்தை முடிக்கவும், உங்கள் கடன் வரம்பு தானாகவே திறக்கும் — நீங்கள் அதிக மதிப்பை வர்த்தகம் செய்யும்போது, அது மேலும் ஆழமாகிறது. (ஒரு சமூக உத்தரவாதமளிப்பவரும் உங்களுக்கு ஒரு தொடக்க வரம்பை வழங்க முடியும்.)",
-  "Credit position — tap to learn how it works": "கடன் நிலை — இது எவ்வாறு செயல்படுகிறது என்பதை அறிய தட்டவும்",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️ செலவழிப்பது இடைநிறுத்தப்பட்டது — உங்கள் இருப்பு உங்கள் {n} செயலில் உள்ள வழங்கல் திறக்கும் வரம்பிற்குக் கீழே உள்ளது (−{limit}). இதை நீக்க ஒரு வழங்கலை இடுகையிடவும் அல்லது மீண்டும் வர்த்தகம் செய்யவும். நீங்கள் இன்னும் பெறலாம் மற்றும் விற்கலாம்.",
-    "other": "⚠️ செலவழிப்பது இடைநிறுத்தப்பட்டது — உங்கள் இருப்பு உங்கள் {n} செயலில் உள்ள வழங்கல்கள் திறக்கும் வரம்பிற்குக் கீழே உள்ளது (−{limit}). இதை நீக்க ஒரு வழங்கலை இடுகையிடவும் அல்லது மீண்டும் வர்த்தகம் செய்யவும். நீங்கள் இன்னும் பெறலாம் மற்றும் விற்கலாம்."
-  },
   "Levels": "நிலைகள்",
   "Wallet": "பணப்பை",
   "Ledger": "பேரேடு",
@@ -5327,32 +5320,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (சரிபார்க்கப்பட்ட கணக்கு)",
   "Opens external channel link": "வெளிப்புறத் தள இணைப்பைத் திறக்கும்",
-  "{balance} B · ≈{rate}%/mo": "{balance} பயறு · ≈{rate}%/மாதம்",
-  "{balance} B": "{balance} பயறு",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "கடன் இருப்பு {balance} பயறு, கடன் வரம்பு {floor} பயறு, கட்டணமில்லா உச்சவரம்பு {max} பயறு.",
-  "fee/mo": "கட்டணம்/மாதம்",
-  "your limit": "உங்கள் வரம்பு",
-  "sweet spot": "சரியான நிலை",
-  "fee-free": "கட்டணமில்லா",
-  "← carry credit": "← கடன் எடு",
-  "hold credit →": "கடன் வை →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} −{depth} கடன் வரம்பைத் திறக்கிறது · {more} → −{next}",
-    "other": "🎣 {offers} −{depth} கடன் வரம்பைத் திறக்கின்றன · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} −{depth} கடன் வரம்பைத் திறக்கிறது",
-    "other": "🎣 {offers} −{depth} கடன் வரம்பைத் திறக்கின்றன"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} சலுகை",
-    "other": "{n} சலுகைகள்"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 உங்கள் கடன் வரம்பைத் திறக்க {post} — {count} சலுகை உங்கள் முழுமையான −{floor} வரம்பைத் திறக்கிறது.",
-    "other": "🎣 உங்கள் கடன் வரம்பைத் திறக்க {post} — {count} சலுகைகள் உங்கள் முழுமையான −{floor} வரம்பைத் திறக்கின்றன."
-  },
-  "Post an offer": "ஒரு சலுகையைப் பதிவிடு",
   "Unknown\u0004a host with no name": "தெரியாதவர்",
   "No maps app": "வரைபடச் செயலி இல்லை",
   "The event is at {lat}, {lng}.": "நிகழ்வு {lat}, {lng}-இல் நடைபெறுகிறது.",

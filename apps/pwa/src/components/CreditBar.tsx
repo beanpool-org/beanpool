@@ -1,309 +1,135 @@
 /**
- * CreditBar (PWA) — zero-centred "sweet spot" indicator.
+ * CreditBar (web): the member's own credit card on the Ledger (DESIGN-credit-bar-amend-fable.md, slice R1; Marty, 14 Nov
+ * 2026). The rainbow stays: same track, same dot, same label above it. Around it: two sentences with the totals, the limit
+ * at the bar's left end, "+200" at its own place, a word or two under each mark (and its one line from 640 px wide), the
+ * strip under the left half that shows what the line is made of (solid: earned by trading; outlined: someone stands
+ * behind it), stripes over the part Offers have not opened, one note, and the parts line, always the whole line.
  *
- * Direct port of the native CreditBar. Same anchored (non-linear) scale:
- * zero pinned at 50%, ±200 comfort band owns the centre, deep floors and
- * big balances compress into the tails. Four strict non-overlapping lanes
- * (tag → track → anchors → hint) so nothing ever collides.
- *
- * Uses CSS linear-gradient instead of expo-linear-gradient.
- *
- * Its words are in the member's language (words S3, web sweep W2): each caption one sentence through t()/tn(), the
- * bold parts marked **so** in it (a translator moves them where the language puts them), the numbers in the
- * language's digits and decimal mark (formatNumber).
+ * Every figure and sentence comes from core's credit-standing.ts, the same as the phone's card: nothing is composed here.
+ * The whole card is one button, never a meter (F11): its label is core's spoken sentence; the drawing is hidden from screen
+ * readers. Colours: the rainbow is core's picture (CREDIT_RAINBOW); everything else a library role as a CSS variable.
  */
+import {
+    CREDIT_RAINBOW,
+    creditBarPicture,
+    creditLabelColours,
+    creditMeterCss,
+    creditNoteColours,
+    creditStandingCard,
+    type CreditStandingAnswer,
+} from '@beanpool/core';
 
-import { Fragment } from 'react';
-import { formatHundredths, formatNumber, splitBold, t, tn } from '@beanpool/core';
+const METER = creditMeterCss();
+/** The rainbow as a CSS background (CreditBarUnread draws the same track, faded, while the balance is read). */
+export const RAINBOW = `linear-gradient(90deg, ${CREDIT_RAINBOW.stops.map((c, i) => `${c} ${Math.round(CREDIT_RAINBOW.at[i]! * 100)}%`).join(', ')})`;
+/** The closed part: stripes in the card's own colour, with one edge. */
+const STRIPES = 'repeating-linear-gradient(45deg, var(--bg-card) 0 5px, transparent 5px 10px)';
 
-const RED = '#bb4b32';
-const WARM_BG = '#e9a23e';
-const WARM = '#c07d2a';
-const MARK = '#38bdf8';
-const BEAN = '#2f9e44';
-const BEAN_DEEP = '#1c6e30';
-// Inks for words and numbers on the card: the same colours in light; dark tokens (index.css) lift them off the dark card.
-const RED_INK = 'var(--credit-red, #bb4b32)';
-const WARM_INK = 'var(--credit-warm, #c07d2a)';
-const BEAN_INK = 'var(--credit-bean, #1c6e30)';
-const MUTED_INK = 'var(--credit-muted, #64748b)';
-
-function marginalRate(b: number): number {
-    if (b <= 200) return 0;
-    if (b <= 500) return 1;
-    if (b <= 1000) return 1.5;
-    if (b <= 2000) return 2;
-    return 2.5;
-}
-
-function toPct(v: number, floor: number): number {
-    const F = Math.min(floor, 0);
-    let pct: number;
-    if (v >= 0) {
-        const pos: [number, number][] = [[0, 50], [200, 68], [500, 80], [1000, 90], [2000, 98]];
-        pct = 99;
-        for (let i = 0; i < pos.length - 1; i++) {
-            const [v0, p0] = pos[i], [v1, p1] = pos[i + 1];
-            if (v <= v1) { pct = p0 + (v - v0) / (v1 - v0) * (p1 - p0); break; }
-        }
-    } else if (F === 0) {
-        pct = 50;
-    } else if (F >= -200) {
-        pct = 6 + (v - F) / (0 - F) * (50 - 6);
-    } else if (v <= -200) {
-        pct = 6 + (v - F) / (-200 - F) * (34 - 6);
-    } else {
-        pct = 34 + (v + 200) / 200 * (50 - 34);
-    }
-    return Math.max(3, Math.min(98, pct));
-}
-
-/** A balance in words, from whole hundredths: "+49.25", "−9.82", "+500" (core formatHundredths, a sign always). */
-const fmt = (c: number) => `${c >= 0 ? '+' : ''}${formatHundredths(c)}`;
-/** A ladder figure in Beans (the gauge's own geometry) back to words, as every figure is written. */
-const beansText = (beans: number) => formatHundredths(Math.round(beans * 100));
-
-/** A translated sentence with **bold** parts, each drawn in the caption's warm ink. */
-function Bold({ text }: { text: string }) {
-    return <>{splitBold(text).map((s, i) => (s.bold ? <b key={i} style={{ color: WARM_INK }}>{s.text}</b> : <Fragment key={i}>{s.text}</Fragment>))}</>;
-}
-
-// Offer-covenant bands - a faithful copy of @beanpool/core's OFFER_BANDS, where the array INDEX is
-// the live-offer count (index 0 = 0 offers → 0 unlocked, index 3 = 3 offers → -1000).
-// Kept local rather than imported because core's barrel pulls Node/libp2p modules that don't belong
-// in the web bundle (the PWA mirrors core constants throughout). Keep in sync with core if the bands change.
-const OFFER_BANDS = [0, 200, 500, 1000, 1500, 2000];
-
-/**
- * The offer ladder's numbers. `knownGrant` (a confirmed member in a known community, slice 4) is unlocked whole by one live
- * offer; the rest of the limit keeps the bands. Mirrors @beanpool/core usableAllowance.
- */
-export function offerLadder(floor: number, knownGrant = 0): { usableAt: (n: number) => number; offersForFull: number; rungs: number[] } {
-    const limit = Math.abs(floor);
-    const known = Math.max(0, Math.min(limit, knownGrant));
-    const other = limit - known;
-    const usableAt = (n: number) => {
-        const i = Math.max(0, Math.min(OFFER_BANDS.length - 1, Math.floor(n)));
-        return Math.min(limit, (i >= 1 ? known : 0) + Math.min(other, OFFER_BANDS[i]));
-    };
-    let offersForFull = OFFER_BANDS.length - 1;
-    for (let n = 0; n < OFFER_BANDS.length; n++) if (usableAt(n) >= limit) { offersForFull = n; break; }
-    const rungs = [...new Set(OFFER_BANDS.map((_, n) => usableAt(n)))].filter(b => b > 0 && b < limit);
-    return { usableAt, offersForFull, rungs };
-}
-
-/** Every money prop is whole hundredths of a Bean (the node's `*_c` fields); the gauge draws in Beans. */
 interface Props {
-    balance_c: number;
-    floor_c: number;               // earned credit LIMIT (deepest the floor could ever reach)
-    usableFloor_c?: number;        // v3: how deep offers currently unlock (≥ floor, ≤ 0). Omit → no ladder.
-    knownGrant_c?: number;         // the known floor's part of the limit: one live offer unlocks all of it
-    liveOffers?: number;           // v3: current live-offer count (for the ladder caption)
-    feeFreeMax?: number;
+    /** The member's own balance answer (every money field whole hundredths), and `vouchedBy` beside it. */
+    answer: CreditStandingAnswer;
+    /** What a tap opens. */
+    onOpen?: () => void;
     className?: string;
 }
 
-export function CreditBar({ balance_c, floor_c, usableFloor_c, liveOffers = 0, knownGrant_c = 0, feeFreeMax = 200, className = '' }: Props) {
-    // The gauge's geometry (zones, rungs, percentages) is drawn in Beans; every figure it writes is the hundredths' own.
-    const balance = balance_c / 100;
-    const floor = floor_c / 100;
-    const usableFloor = usableFloor_c === undefined ? undefined : usableFloor_c / 100;
-    const knownGrant = knownGrant_c / 100;
-    const pct = toPct(balance, floor);
-    const overFeeFree = balance > feeFreeMax;
-    const nearLimit = floor < 0 && balance - floor < Math.abs(floor) * 0.12;
-    const rate = marginalRate(balance);
-    const tagBg = nearLimit ? RED : overFeeFree ? WARM_BG : '#16211b';
-    const tagLabel = overFeeFree ? t('{amount} B · ≈{rate}%/mo', { amount: fmt(balance_c), rate: formatNumber(rate) }) : t('{amount} B', { amount: fmt(balance_c) });
-
-    // Offer ladder — the negative side mirrors the fee ladder above zero. `usableFloor` is the depth
-    // your live Offers currently unlock; anything deeper (usableFloor → floor) is LOCKED until you
-    // post more Offers. Only drawn when usableFloor is provided and the member has an earned line.
-    const uFloor = usableFloor ?? floor;
-    const showLadder = usableFloor !== undefined && floor < 0;
-    const hasLocked = showLadder && uFloor > floor;          // some earned depth is offer-locked
-    const usablePct = toPct(uFloor, floor);                   // right edge of the unlocked (reachable) zone
-    const floorPct = toPct(floor, floor);                     // left edge (earned limit)
-    // Band rungs that fall within the earned limit (skip the outermost = the limit itself, and 0).
-    const ladder = offerLadder(floor, knownGrant);
-    const rungs = showLadder ? ladder.rungs.map(b => ({ b, pct: toPct(-b, floor) })) : [];
-    // Next unlock = the next band above what you've unlocked, capped at your earned limit
-    // (a 4th offer on a −1400 limit unlocks −1400, not −1500).
-    const nextOffers = liveOffers + 1;
-    const nextDepth = ladder.usableAt(nextOffers);
-    const nextUnlock = hasLocked && nextDepth > Math.abs(uFloor) ? nextDepth : undefined;
-    // Total live Offers needed to unlock the FULL earned floor (band index, capped at 5).
-    const offersForFull = ladder.offersForFull;
-
-    // Fee ladder — the monthly circulation-fee brackets above the fee-free ceiling. Opens up as the
-    // balance climbs past halfway: revealT ramps 0→1 between feeFreeMax/2 and the ceiling, then
-    // stays 1. Positions mirror the anchored scale (500→80%, 1000→90%, 2000→98%).
-    const revealT = Math.max(0, Math.min(1, (balance - feeFreeMax / 2) / (feeFreeMax / 2)));
-    const showFees = revealT > 0;
-    const FEE_ZONES = [
-        { label: `${formatNumber(1)}%`, mid: 74, lo: 200, hi: 500 },
-        { label: `${formatNumber(1.5)}%`, mid: 85, lo: 500, hi: 1000 },
-        { label: `${formatNumber(2)}%`, mid: 94, lo: 1000, hi: 2000 },
-    ];
-    const FEE_TICKS = [80, 90, 98]; // 500 / 1000 / 2000 boundaries
-
-    const valuemin = floor;
-    const valuemax = feeFreeMax;
-    const valuenow = Math.min(valuemax, Math.max(valuemin, balance));
-
+export function CreditBar({ answer, onOpen, className = '' }: Props) {
+    const card = creditStandingCard(answer);
+    const pic = creditBarPicture(answer);
+    const label = creditLabelColours(pic.tone, METER);
+    const note = card.note ? { ...card.note, ...creditNoteColours(card.note.tone, METER) } : null;
+    const { limit, zero, fee } = pic.marks;
     return (
-        <div
-            role="meter"
-            aria-label={t('Credit balance gauge')}
-            aria-valuenow={valuenow}
-            aria-valuemin={valuemin}
-            aria-valuemax={valuemax}
-            aria-valuetext={t('{amount} Beans', { amount: fmt(balance_c) })}
-            className={`select-none ${className}`}
-            style={{ paddingTop: 28, position: 'relative' }}
+        <button
+            type="button"
+            onClick={onOpen}
+            aria-label={card.spoken}
+            data-testid="credit-card"
+            className={`block w-full min-h-[44px] text-left bg-transparent border-0 p-0 m-0 cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${className}`}
         >
+            <span className="flex items-start justify-between gap-2">
+                <span className="text-base leading-tight font-extrabold text-nature-950 dark:text-white" data-testid="credit-headline">{card.headline}</span>
+                {/* The small "i": the card is a button. Drawn by CSS, so no letter sits outside the words layer. */}
+                <span aria-hidden="true" data-testid="credit-info" className="shrink-0 w-5 h-5 rounded-full border-[1.5px] border-solid border-nature-600 dark:border-nature-300 text-nature-600 dark:text-nature-300 text-xs leading-[1.0625rem] text-center italic font-bold font-serif after:content-['i']" />
+            </span>
+            <span className="block mt-1 text-[0.84375rem] leading-snug text-nature-700 dark:text-nature-200" data-testid="credit-sentence">{card.sentence}</span>
 
-            {/* Lane 2 — gradient track */}
-            <div style={{
-                height: 15,
-                borderRadius: 9,
-                position: 'relative',
-                overflow: 'visible',
-                background: `linear-gradient(90deg, ${RED} 4%, #cf6a3f 17%, #e0a35a 29%, #7ccb90 40%, ${BEAN} 50%, #7ccb90 60%, #e0a35a 74%, ${WARM} 96%)`,
-            }}>
-                {/* zero line */}
-                <div style={{
-                    position: 'absolute',
-                    left: '50%',
-                    top: -3,
-                    bottom: -3,
-                    width: 2,
-                    marginLeft: -1,
-                    backgroundColor: '#fff',
-                    boxShadow: '0 0 0 1px rgba(0,0,0,0.18)',
-                }} />
-                {/* Offer-locked zone: earned depth your live Offers haven't unlocked yet (hatched) */}
-                {hasLocked && (
-                    <div style={{
-                        position: 'absolute',
-                        left: `${floorPct}%`,
-                        width: `${usablePct - floorPct}%`,
-                        top: 0, bottom: 0,
-                        background: 'repeating-linear-gradient(45deg, rgba(15,23,42,0.55) 0 5px, rgba(15,23,42,0.30) 5px 10px)',
-                    }} />
-                )}
-                {/* Offer-band rungs (the "ladder") */}
-                {rungs.map((r) => (
-                    <div key={r.b} style={{ position: 'absolute', left: `${r.pct}%`, top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff', opacity: 0.4 }} />
-                ))}
-                {/* Current usable-floor marker — how deep you can actually spend right now */}
-                {hasLocked && uFloor <= 0 && (
-                    <div style={{ position: 'absolute', left: `${usablePct}%`, top: -10, bottom: -2, width: 4, marginLeft: -2, backgroundColor: MARK, boxShadow: '0 0 0 2px rgba(255,255,255,0.8), 0 0 8px 1px rgba(56,189,248,0.55)', zIndex: 1 }} />
-                )}
-                {/* bead */}
-                <div style={{
-                    position: 'absolute',
-                    left: `${pct}%`,
-                    top: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    width: 18,
-                    height: 18,
-                    borderRadius: '50%',
-                    backgroundColor: '#fff',
-                    border: '4px solid #16211b',
-                    boxShadow: '0 2px 5px rgba(0,0,0,0.28)',
-                    zIndex: 2,
-                }} />
-                {/* fee-bracket ticks (500 / 1000 / 2000) */}
-                {showFees && FEE_TICKS.map((t) => (
-                    <div key={t} style={{ position: 'absolute', left: `${t}%`, top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff', opacity: 0.5 * revealT }} />
-                ))}
-            </div>
+            {/* The drawing: hidden from screen readers, whose label above says it all. */}
+            <span aria-hidden="true" className="block relative mt-2 pt-7 select-none" data-testid="credit-drawing">
+                <span className="block relative h-[15px] rounded-[9px]" style={{ background: RAINBOW }}>
+                    <span className="absolute inset-0 rounded-[9px] overflow-hidden">
+                        {pic.stripes && (
+                            <span
+                                className="absolute top-0 bottom-0"
+                                data-testid="credit-stripes"
+                                style={{ left: `${pic.stripes.from}%`, width: `${pic.stripes.width}%`, background: STRIPES, borderRight: '2px solid var(--bg-card)' }}
+                            />
+                        )}
+                    </span>
+                    <span className="absolute top-[-3px] bottom-[-3px] w-[2px] -ml-px" style={{ left: '50%', background: CREDIT_RAINBOW.zeroLine }} />
+                    <span
+                        className="absolute top-1/2 w-[18px] h-[18px] -mt-[9px] -ml-[9px] rounded-full border-4 border-solid z-[2] motion-safe:transition-[left] motion-safe:duration-300"
+                        style={{ left: `${pic.dot}%`, background: CREDIT_RAINBOW.dot, borderColor: CREDIT_RAINBOW.ring, boxShadow: '0 2px 5px rgba(0,0,0,0.28)' }}
+                    />
+                </span>
 
-            {/* Lane 1 — your position tag (sits above the track). Anchored at the same fraction of its own width as the bead's
-                place on the track: centred at the middle as before, and never past either end, however long the language
-                writes "B · ≈1%/mo" (a centred tag ran off a 320 px screen near the right end). The pointer stays over the bead. */}
-            <div
-                style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: `${pct}%`,
-                    transform: `translateX(-${pct}%)`,
-                    backgroundColor: tagBg,
-                    color: '#fff',
-                    padding: '3px 8px',
-                    borderRadius: 7,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    whiteSpace: 'nowrap',
-                    fontVariantNumeric: 'tabular-nums',
-                    zIndex: 3,
-                }}
-            >
-                {tagLabel}
-                {/* pointer: over the bead, kept off the tag's rounded corners */}
-                <span style={{
-                    position: 'absolute',
-                    left: `clamp(8px, ${pct}%, calc(100% - 8px))`,
-                    bottom: -4,
-                    transform: 'translateX(-50%)',
-                    width: 0,
-                    height: 0,
-                    borderLeft: '4px solid transparent',
-                    borderRight: '4px solid transparent',
-                    borderTop: `5px solid ${tagBg}`,
-                }} />
-            </div>
+                {/* The label above the dot, kept inside the card at either end; its pointer stays over the dot. */}
+                <span
+                    className="absolute top-0 px-2 py-[3px] rounded-[7px] text-xs font-bold whitespace-nowrap tabular-nums z-[3]"
+                    style={{ left: `${pic.dot}%`, transform: `translateX(-${pic.dot}%)`, background: label.fill, color: label.on }}
+                    data-testid="credit-label"
+                >
+                    {pic.label}
+                    <span
+                        className="absolute bottom-[-4px] w-0 h-0"
+                        style={{ left: `clamp(8px, ${pic.dot}%, calc(100% - 8px))`, transform: 'translateX(-50%)', borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderTop: `5px solid ${label.fill}` }}
+                    />
+                </span>
 
-            {/* Offer ladder caption — what your live Offers unlock, and how many reach your full line */}
-            {showLadder && hasLocked && (
-                <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.4, color: MUTED_INK, fontWeight: 500, display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                    <span aria-hidden="true">🎣</span>
-                    {uFloor < 0 ? (
-                        <span>
-                            <Bold text={tn(liveOffers, '**{n} offer** unlocks\u00A0−{limit}', '**{n} offers** unlock\u00A0−{limit}', { limit: beansText(Math.abs(uFloor)) })} />
-                            {nextUnlock ? <> · <Bold text={tn(nextOffers, '**{n} offer**\u00A0→\u00A0−{limit}', '**{n} offers**\u00A0→\u00A0−{limit}', { limit: beansText(nextUnlock) })} /></> : ''}
-                        </span>
-                    ) : (
-                        <span><Bold text={tn(offersForFull, '**Post an Offer** to open your credit line — **{n}** offer unlocks your\u00A0full\u00A0−{limit}.', '**Post an Offer** to open your credit line — **{n}** offers unlock your\u00A0full\u00A0−{limit}.', { limit: formatHundredths(Math.abs(floor_c)) })} /></span>
-                    )}
-                </div>
+                {/* The strip under the left half, to scale; the +200 stem under the right. */}
+                <span className="block relative h-[9px] mt-[5px]" data-testid="credit-strip">
+                    {pic.blocks.map((b, i) => (
+                        <span
+                            key={i}
+                            data-kind={b.kind}
+                            className="absolute top-0 bottom-0 rounded-sm"
+                            style={{
+                                left: `calc(${b.from}% + 1px)`,
+                                width: `calc(${b.width}% - 2px)`,
+                                ...(b.solid ? { background: METER.strip } : { border: `1.5px solid ${METER.strip}` }),
+                            }}
+                        />
+                    ))}
+                    <span className="absolute top-[-5px] h-[14px] w-[2px] -ml-px" style={{ left: `${fee.at}%`, background: METER.feeInk }} />
+                </span>
+
+                {/* The figures at their marks, then a word or two under each (and each mark's line from 640 px wide). */}
+                <span className="block relative h-4 mt-[3px] text-xs leading-4 font-bold tabular-nums whitespace-nowrap">
+                    {limit.figure && <span className="absolute top-0 left-0" style={{ color: METER.limitInk }}>{limit.figure}</span>}
+                    <span className="absolute top-0 -translate-x-1/2" style={{ left: `${zero.at}%`, color: METER.zeroInk }}>⚖️ {zero.figure}</span>
+                    <span className="absolute top-0 -translate-x-1/2" style={{ left: `${fee.at}%`, color: METER.feeInk }}>{fee.figure}</span>
+                </span>
+                {/* Narrow: the middle word takes its own width, up to 40 % (so "balanced" is never cut inside the word),
+                    and the sides share the rest equally, so it stays under 0. From 640 px wide: fixed columns, each with
+                    its mark's line. */}
+                <span className="grid grid-cols-[minmax(0,1fr)_fit-content(40%)_minmax(0,1fr)] sm:grid-cols-[36%_28%_36%] mt-px text-xs leading-tight text-nature-600 dark:text-nature-300">
+                    <span className="min-w-0 [overflow-wrap:break-word] pr-1">{limit.words}<span className="hidden sm:block mt-[3px]">{limit.line}</span></span>
+                    <span className="min-w-0 [overflow-wrap:break-word] text-center px-1.5">{zero.words}<span className="hidden sm:block mt-[3px]">{zero.line}</span></span>
+                    <span className="min-w-0 [overflow-wrap:break-word] pl-1.5">{fee.words}<span className="hidden sm:block mt-[3px]">{fee.line}</span></span>
+                </span>
+            </span>
+
+            {note && (
+                <span className="flex gap-2 items-start mt-2.5 px-2.5 py-2 rounded-[9px] text-[0.78125rem] leading-snug" style={{ background: note.tint, color: note.ink }} data-testid="credit-note">
+                    <span aria-hidden="true" className="shrink-0 font-extrabold min-w-[1.1em] text-center">{note.icon}</span>
+                    <span>{note.text}</span>
+                </span>
             )}
-
-            {/* Fee ladder — circulation-fee brackets above +feeFreeMax, revealed as you climb */}
-            {showFees && (
-                <div style={{ position: 'relative', height: 12, marginTop: 4, opacity: revealT }}>
-                    <span style={{ position: 'absolute', left: 0, top: 1, fontSize: 8, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{t('fee/mo')}</span>
-                    {FEE_ZONES.map((z) => {
-                        const active = balance > z.lo && balance <= z.hi;
-                        return (
-                            <span key={z.label} style={{ position: 'absolute', left: `${z.mid}%`, top: 0, transform: 'translateX(-50%)', fontSize: 9, fontVariantNumeric: 'tabular-nums', color: active ? WARM : 'var(--text-muted)', fontWeight: active ? 800 : 600 }}>{z.label}</span>
-                        );
-                    })}
-                </div>
+            {card.parts && (
+                <span className="block mt-2.5 pt-2 border-0 border-t border-solid border-nature-200 dark:border-nature-800 text-[0.78125rem] leading-normal text-nature-700 dark:text-nature-200" data-testid="credit-parts">
+                    {card.parts}
+                </span>
             )}
-
-            {/* Lane 3 — anchors (space-between, can't collide) */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
-                <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: RED_INK, fontVariantNumeric: 'tabular-nums' }}>{formatHundredths(floor_c)}</div>
-                    <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>{t('your limit')}</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: BEAN_INK }}><span aria-hidden="true">⚖️ </span>0</div>
-                    <div style={{ fontSize: 9, color: BEAN_INK, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>{t('sweet spot')}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: WARM_INK }}>+{formatNumber(feeFreeMax)}</div>
-                    <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>{t('fee-free')}</div>
-                </div>
-            </div>
-
-            {/* Lane 4 — directional hint */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t('← carry credit')}</span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t('hold credit →')}</span>
-            </div>
-        </div>
+        </button>
     );
 }

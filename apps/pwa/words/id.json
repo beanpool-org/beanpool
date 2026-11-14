@@ -17,15 +17,6 @@
   "(100% community owned)": "(100% milik komunitas)",
   "(You)": "(Kamu)",
   "(You)\u0004roster: the viewer": "(Kamu)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "other": "**Pasang Penawaran** untuk membuka batas kreditmu — **{n}** penawaran membuka penuh −{limit}."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "other": "**{n} penawaran** membuka −{limit}"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "other": "**{n} penawaran** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "other": "**{n}** kepercayaan lagi menuju {emoji} {tier}"
   },
@@ -631,7 +622,6 @@
   "Creating...": "Membuat...",
   "Creator account linking:": "Penautan akun kreator:",
   "Credit Line": "Batas Kredit",
-  "Credit balance gauge": "Pengukur saldo kredit",
   "Credits (B)": "Kredit (kacang)",
   "Credits (🫘 Beans)": "Kredit (🫘 Kacang)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "Kredit adalah mata uang kredit bersama. Saat kamu bertransaksi, kredit berpindah antaranggota. Setiap anggota mulai dari nol. Sistem ini dirancang untuk mendorong timbal balik dan menjaga nilai tetap beredar di lingkungan sendiri.",
@@ -1324,7 +1314,6 @@
   "No bond required.": "Tidak memerlukan jaminan.",
   "No comment provided.": "Tidak ada komentar yang diberikan.",
   "No conversations yet.": "Belum ada obrolan.",
-  "No credit line yet": "Belum ada jalur kredit",
   "No deals in progress": "Tidak ada kesepakatan yang sedang berjalan",
   "No friends yet": "Belum ada teman",
   "No groups found": "Grup tidak ditemukan",
@@ -2015,9 +2004,6 @@
   "Spam or scam": "Spam atau penipuan",
   "Specific Action / Effect": "Tindakan / Dampak Khusus",
   "Specific Action or Effect": "Tindakan atau Dampak Khusus",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "other": "Pengeluaran dijeda — saldomu berada di bawah apa yang dibuka oleh {n} penawaran aktifmu (−{limit}). Pasang Penawaran atau bertransaksilah kembali untuk mengangkatnya. Kamu masih dapat menerima dan menjual."
-  },
   "Sprout": "Tunas",
   "Square — nothing owed either way": "Lunas — tidak ada yang berhutang di kedua pihak",
   "Start": "Mulai",
@@ -2701,7 +2687,6 @@
   "You can propose a Decision once you have completed a trade.": "Kamu dapat mengajukan Keputusan setelah menyelesaikan transaksi.",
   "You can propose once you have completed a trade.": "Kamu dapat mengajukan usulan setelah menyelesaikan sebuah transaksi.",
   "You can still read, edit your profile and leave.": "Kamu masih bisa membaca, mengedit profilmu, dan keluar.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Anda dapat bertransaksi sekarang dengan kacang yang Anda miliki. Selesaikan transaksi pertama Anda dan jalur kredit akan terbuka secara otomatis — makin banyak nilai yang Anda transaksikan, makin dalam batasnya. (Voucher komunitas juga dapat memberi Anda jalur awal.)",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "Kamu mengubah waktu atau tempat. Acara akan menampilkan DIPERBARUI dan semua orang yang akan hadir akan diberi tahu.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "Kamu sendiri, di perangkatmu atau yang kamu sewa. Tidak memerlukan beanpool.org: alamat web milikmu sendiri juga berfungsi.",
   "You have already rated this trade.": "Kamu sudah menilai transaksi ini.",
@@ -2888,8 +2873,6 @@
   "execution pending grace\u0004Decision status": "eksekusi menunggu tenggang",
   "execution void\u0004Decision status": "eksekusi batal",
   "failed\u0004Decision status": "gagal",
-  "fee-free": "bebas biaya",
-  "fee/mo": "biaya/bln",
   "for {n} day|for {n} days": {
     "other": "selama {n} hari"
   },
@@ -2904,7 +2887,6 @@
   "from {who} · {when}": "dari {who} · {when}",
   "general\u0004group category": "Umum",
   "guild\u0004group category": "Serikat",
-  "hold credit →": "simpan kredit →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... atau tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -2950,7 +2932,6 @@
   "request to join\u0004join policy": "Minta bergabung",
   "requested\u0004deal status": "diminta",
   "social\u0004group category": "Sosial",
-  "sweet spot": "titik ideal",
   "the account saved from the other tab": "akun yang disimpan dari tab lain",
   "the lever": "tuas",
   "them\u0004the other member of a trade, name unknown": "mereka",
@@ -2967,7 +2948,6 @@
   "working group\u0004group category": "Kelompok kerja",
   "yesterday": "kemarin",
   "you": "Anda",
-  "your limit": "batasmu",
   "{actor} completed a trade with {target}": "{actor} menyelesaikan transaksi dengan {target}",
   "{actor} joined": "{actor} bergabung",
   "{actor} joined the community": "{actor} bergabung dengan komunitas",
@@ -2983,8 +2963,6 @@
   "{actor} traded with {target}": "{actor} bertransaksi dengan {target}",
   "{actor} traded with {target}: {title}": "{actor} bertransaksi dengan {target}: {title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈{rate}%/bln",
-  "{amount} Beans": "{amount} Kacang",
   "{amount} Beans from the pool: {what}.": "{amount} kacang dari dana bersama: {what}.",
   "{amount} raised of {goal} 🫘": "{amount} terkumpul dari {goal} 🫘",
   "{amount} · held in trust": "{amount} · dalam jaminan",
@@ -3276,7 +3254,6 @@
   "← Choose another way": "← Pilih cara lain",
   "← Keep it": "← Pertahankan",
   "← Start again": "← Mulai lagi",
-  "← carry credit": "← gunakan kredit",
   "↑ Sent": "↑ Terkirim",
   "↓ Received": "↓ Diterima",
   "↻ RECURRING": "↻ BERULANG",

@@ -17,15 +17,6 @@
   "(100% community owned)": "（100%コミュニティ所有）",
   "(You)": "（あなた）",
   "(You)\u0004roster: the viewer": "（あなた）",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "other": "信用枠を開設するには**提供を投稿**してください — **{n}**件の提供で上限−{limit}まで全額開放されます。"
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "other": "**{n}件の提供**で−{limit}が開放"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "other": "**{n}件の提供** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "other": "{emoji} {tier}まであと信用**{n}**"
   },
@@ -631,7 +622,6 @@
   "Creating...": "作成中...",
   "Creator account linking:": "クリエイターアカウントの連携:",
   "Credit Line": "信用枠",
-  "Credit balance gauge": "信用残高ゲージ",
   "Credits (B)": "クレジット（豆）",
   "Credits (🫘 Beans)": "対価（🫘 豆）",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "クレジットは相互信用の通貨です。取引すると、クレジットがメンバー間で移動します。全員がゼロからスタートします。お互いさまの関係を促し、価値が地域の中で巡り続けるように設計されています。",
@@ -1324,7 +1314,6 @@
   "No bond required.": "保証金は不要です。",
   "No comment provided.": "コメントはありません。",
   "No conversations yet.": "会話はまだありません。",
-  "No credit line yet": "信用枠はまだありません",
   "No deals in progress": "進行中の取引はありません",
   "No friends yet": "友達はまだいません",
   "No groups found": "グループが見つかりません",
@@ -2015,9 +2004,6 @@
   "Spam or scam": "スパムまたは詐欺",
   "Specific Action / Effect": "具体的なアクション / 効果",
   "Specific Action or Effect": "具体的なアクションまたは効果",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "other": "利用が一時停止されています — 残高が{n}件の有効な提供で開放される上限（−{limit}）を下回っています。制限を解除するには提供を出品するか取引を行ってください。受け取りや販売は引き続き可能です。"
-  },
   "Sprout": "芽",
   "Square — nothing owed either way": "精算済み — 双方に貸し借りなし",
   "Start": "開始",
@@ -2701,7 +2687,6 @@
   "You can propose a Decision once you have completed a trade.": "取引を1回完了すると、決定を提案できるようになります。",
   "You can propose once you have completed a trade.": "取引を完了すると提案できるようになります。",
   "You can still read, edit your profile and leave.": "閲覧、プロフィールの編集、退出は引き続き可能です。",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "現在保有している豆を使ってすぐに取引できます。最初の取引を完了すると自動的に信用枠が開きます。取引額が増えるほど枠も拡大します（コミュニティの推薦者から初期枠を受け取ることもできます）。",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "日時または場所を変更しました。イベントに「更新済み」と表示され、参加予定者全員に通知されます。",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "ご自身のパソコンまたはレンタルサーバーで運用します。beanpool.orgは不要で、独自のアドレスでも動作します。",
   "You have already rated this trade.": "この取引はすでに評価済みです。",
@@ -2888,8 +2873,6 @@
   "execution pending grace\u0004Decision status": "実行待ち（猶予期間中）",
   "execution void\u0004Decision status": "無効",
   "failed\u0004Decision status": "否決",
-  "fee-free": "手数料無料",
-  "fee/mo": "手数料/月",
   "for {n} day|for {n} days": {
     "other": "{n}日間"
   },
@@ -2904,7 +2887,6 @@
   "from {who} · {when}": "{who}から · {when}",
   "general\u0004group category": "一般",
   "guild\u0004group category": "ギルド",
-  "hold credit →": "プラス残高 →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... または tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -2950,7 +2932,6 @@
   "request to join\u0004join policy": "参加リクエスト",
   "requested\u0004deal status": "リクエスト済",
   "social\u0004group category": "交流",
-  "sweet spot": "適正水準",
   "the account saved from the other tab": "別のタブから保存されたアカウント",
   "the lever": "レバー",
   "them\u0004the other member of a trade, name unknown": "相手",
@@ -2967,7 +2948,6 @@
   "working group\u0004group category": "ワーキンググループ",
   "yesterday": "昨日",
   "you": "あなた",
-  "your limit": "利用限度額",
   "{actor} completed a trade with {target}": "{actor}が{target}との取引を完了しました",
   "{actor} joined": "{actor}が参加しました",
   "{actor} joined the community": "{actor}さんがコミュニティに参加しました",
@@ -2983,8 +2963,6 @@
   "{actor} traded with {target}": "{actor}さんが{target}さんと取引しました",
   "{actor} traded with {target}: {title}": "{actor}が{target}と取引しました: {title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · 約{rate}%/月",
-  "{amount} Beans": "{amount}豆",
   "{amount} Beans from the pool: {what}.": "プールから{amount}豆：{what}。",
   "{amount} raised of {goal} 🫘": "目標 {goal} 🫘中、{amount}を調達",
   "{amount} · held in trust": "{amount} · エスクロー中",
@@ -3276,7 +3254,6 @@
   "← Choose another way": "← 別の方法を選択",
   "← Keep it": "← 保持する",
   "← Start again": "← 最初からやり直す",
-  "← carry credit": "← マイナス残高",
   "↑ Sent": "↑ 送金",
   "↓ Received": "↓ 受取",
   "↻ RECURRING": "↻ 定期",

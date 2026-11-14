@@ -17,18 +17,6 @@
   "(100% community owned)": "(100% pag-aari ng komunidad)",
   "(You)": "(Ikaw)",
   "(You)\u0004roster: the viewer": "(Ikaw)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "one": "**Mag-post ng Alok** para buksan ang iyong credit line — binubuksan ng **{n}** alok ang iyong buong −{limit}.",
-    "other": "**Mag-post ng Alok** para buksan ang iyong credit line — binubuksan ng **{n}** alok ang iyong buong −{limit}."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "one": "Binubuksan ng **{n} alok** ang −{limit}",
-    "other": "Binubuksan ng **{n} alok** ang −{limit}"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "one": "**{n} alok** → −{limit}",
-    "other": "**{n} alok** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "**{n}** pang tiwala patungo sa {emoji} {tier}",
     "other": "**{n}** pang tiwala patungo sa {emoji} {tier}"
@@ -644,7 +632,6 @@
   "Creating...": "Ginagawa...",
   "Creator account linking:": "Pag-link ng creator account:",
   "Credit Line": "Credit Line",
-  "Credit balance gauge": "Sukat ng balanse ng credit",
   "Credits (B)": "Kredito (munggo)",
   "Credits (🫘 Beans)": "Mga Credit (🫘 Munggo)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "Ang credits ay isang mutual credit na pera. Kapag nakipagpalitan ka, lumilipat ang credits sa pagitan ng mga miyembro. Nagsisimula sa zero ang bawat miyembro. Idinisenyo ang sistema para hikayatin ang pagtutulungan at panatilihing umiikot ang halaga sa lokal.",
@@ -1344,7 +1331,6 @@
   "No bond required.": "Hindi kailangan ng lagak.",
   "No comment provided.": "Walang ibinigay na komento.",
   "No conversations yet.": "Wala pang mga pag-uusap.",
-  "No credit line yet": "Wala pang credit line",
   "No deals in progress": "Walang kasunduang kasalukuyang ginagawa",
   "No friends yet": "Wala pang mga kaibigan",
   "No groups found": "Walang natagpuang grupo",
@@ -2053,10 +2039,6 @@
   "Spam or scam": "Spam o scam",
   "Specific Action / Effect": "Tiyak na Pagkilos / Epekto",
   "Specific Action or Effect": "Tiyak na Pagkilos o Epekto",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "Naka-pause ang paggastos — ang iyong balanse ay mas mababa kaysa sa binubuksan ng iyong {n} aktibong alok (−{limit}). Mag-post ng Alok o makipagpalitan pabalik upang maalis ito. Maaari ka pa ring tumanggap at magbenta.",
-    "other": "Naka-pause ang paggastos — ang iyong balanse ay mas mababa kaysa sa binubuksan ng iyong {n} aktibong alok (−{limit}). Mag-post ng Alok o makipagpalitan pabalik upang maalis ito. Maaari ka pa ring tumanggap at magbenta."
-  },
   "Sprout": "Usbong",
   "Square — nothing owed either way": "Pantay — walang utang sa alinmang panig",
   "Start": "Magsimula",
@@ -2762,7 +2744,6 @@
   "You can propose a Decision once you have completed a trade.": "Maaari kang magmungkahi ng Desisyon kapag nakatapos ka na ng isang palitan.",
   "You can propose once you have completed a trade.": "Maaari kang magmungkahi kapag nakakumpleto ka na ng palitan.",
   "You can still read, edit your profile and leave.": "Maaari ka pa ring magbasa, mag-edit ng iyong profile at umalis.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Maaari kang makipagkalakalan ngayon gamit ang hawak mong munggo. Tapusin ang iyong unang kalakalan at kusang magbubukas ang iyong credit line — habang mas marami kang ikinakalakal, lalo itong lumalalim. (Maaari ka ring bigyan ng voucher ng komunidad ng paunang line.)",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "Binago mo ang oras o lugar. Ipapakita ng event ang Na-update at ipapaalam ito sa lahat ng pupunta.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "Ikaw, sa iyong makina o sa inuupahan mo. Hindi nito kailanman kailangan ang beanpool.org: gumagana rin ang sarili mong web address.",
   "You have already rated this trade.": "Na-rate mo na ang palitang ito.",
@@ -2956,8 +2937,6 @@
   "execution pending grace\u0004Decision status": "Nakabinbing pagpapatupad sa palugit",
   "execution void\u0004Decision status": "Pawalang-bisa ang pagpapatupad",
   "failed\u0004Decision status": "Bumagsak",
-  "fee-free": "walang bayad",
-  "fee/mo": "bayad/buwan",
   "for {n} day|for {n} days": {
     "one": "para sa {n} araw",
     "other": "para sa {n} araw"
@@ -2975,7 +2954,6 @@
   "from {who} · {when}": "mula kay {who} · {when}",
   "general\u0004group category": "Pangkalahatan",
   "guild\u0004group category": "Guild",
-  "hold credit →": "humawak ng credit →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... o tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -3024,7 +3002,6 @@
   "request to join\u0004join policy": "Humiling na sumali",
   "requested\u0004deal status": "hiniling",
   "social\u0004group category": "Panlipunan",
-  "sweet spot": "tamang punto",
   "the account saved from the other tab": "ang account na na-save mula sa kabilang tab",
   "the lever": "ang lever",
   "them\u0004the other member of a trade, name unknown": "kanila",
@@ -3041,7 +3018,6 @@
   "working group\u0004group category": "Working group",
   "yesterday": "kahapon",
   "you": "ikaw",
-  "your limit": "iyong limitasyon",
   "{actor} completed a trade with {target}": "nakumpleto ni {actor} ang trade kay {target}",
   "{actor} joined": "sumali si {actor}",
   "{actor} joined the community": "Sumali si {actor} sa komunidad",
@@ -3057,8 +3033,6 @@
   "{actor} traded with {target}": "Nakipagpalitan si {actor} kay {target}",
   "{actor} traded with {target}: {title}": "nakipag-trade si {actor} kay {target}: {title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈{rate}%/buwan",
-  "{amount} Beans": "{amount} Munggo",
   "{amount} Beans from the pool: {what}.": "{amount} munggo mula sa pondo: {what}.",
   "{amount} raised of {goal} 🫘": "{amount} ang nalikom mula sa {goal} 🫘",
   "{amount} · held in trust": "{amount} · nasa escrow",
@@ -3399,7 +3373,6 @@
   "← Choose another way": "← Pumili ng ibang paraan",
   "← Keep it": "← Panatilihin ito",
   "← Start again": "← Magsimula muli",
-  "← carry credit": "← magdala ng credit",
   "↑ Sent": "↑ Naipadala",
   "↓ Received": "↓ Natanggap",
   "↻ RECURRING": "↻ PAULIT-ULIT",

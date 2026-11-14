@@ -17,15 +17,6 @@
   "(100% community owned)": "（100% 社群所有）",
   "(You)": "（你）",
   "(You)\u0004roster: the viewer": "（你）",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "other": "**發布一則提供**以開啟你的信用額度 — **{n}** 則提供可開啟你的完整 −{limit}。"
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "other": "**{n} 則提供**可開啟 −{limit}"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "other": "**{n} 則提供** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "other": "距離 {emoji} {tier} 還差 **{n}** 信任分"
   },
@@ -631,7 +622,6 @@
   "Creating...": "建立中...",
   "Creator account linking:": "創作者帳號連結：",
   "Credit Line": "信用額度",
-  "Credit balance gauge": "信用餘額量表",
   "Credits (B)": "信用額度（豆子）",
   "Credits (🫘 Beans)": "點數 (🫘 豆子)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "信用點是一種互助信用貨幣。交易時，信用點會在成員之間轉移。每位成員都從零開始。這套系統旨在鼓勵互惠，讓價值在在地流動。",
@@ -1324,7 +1314,6 @@
   "No bond required.": "無需保證金。",
   "No comment provided.": "未提供評論。",
   "No conversations yet.": "尚無任何對話。",
-  "No credit line yet": "尚無信用額度",
   "No deals in progress": "尚無進行中的交易",
   "No friends yet": "尚無好友",
   "No groups found": "找不到群組",
@@ -2015,9 +2004,6 @@
   "Spam or scam": "垃圾訊息或詐騙",
   "Specific Action / Effect": "具體行動／成效",
   "Specific Action or Effect": "具體行動或成效",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "other": "支出功能已暫停 — 你的餘額低於你 {n} 則有效提供所開啟的額度 (−{limit})。請發布一則提供或透過交易賺取豆子以解除暫停。你仍可接收款項與銷售物品。"
-  },
   "Sprout": "嫩芽",
   "Square — nothing owed either way": "結清 — 雙方互不相欠",
   "Start": "開始",
@@ -2701,7 +2687,6 @@
   "You can propose a Decision once you have completed a trade.": "完成一筆交易後，你就可以發起決策提案。",
   "You can propose once you have completed a trade.": "完成一筆交易後即可發起提議。",
   "You can still read, edit your profile and leave.": "你仍可瀏覽內容、編輯個人檔案以及退出社群。",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "你現在就可以使用持有的豆子進行交易。完成首筆交易後，你的信用額度將自動開啟 — 交易的價值越多，額度就越深。（社群擔保人也可以為你提供初始額度。）",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "你更改了時間或地點。活動會顯示「已更新」,所有要參加的人都會收到通知。",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "由你本人主辦，運作於你自己的機器或租用的伺服器上。完全不需要依賴 beanpool.org：你自己的網址也可以使用。",
   "You have already rated this trade.": "你已對這筆交易進行評價。",
@@ -2888,8 +2873,6 @@
   "execution pending grace\u0004Decision status": "寬限期待執行",
   "execution void\u0004Decision status": "執行作廢",
   "failed\u0004Decision status": "未通過",
-  "fee-free": "免手續費",
-  "fee/mo": "費用/月",
   "for {n} day|for {n} days": {
     "other": "借用 {n} 天"
   },
@@ -2904,7 +2887,6 @@
   "from {who} · {when}": "來自 {who} · {when}",
   "general\u0004group category": "綜合",
   "guild\u0004group category": "公會",
-  "hold credit →": "持有信用盈餘 →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... 或 tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -2950,7 +2932,6 @@
   "request to join\u0004join policy": "申請加入",
   "requested\u0004deal status": "已請求",
   "social\u0004group category": "社交",
-  "sweet spot": "最佳區間",
   "the account saved from the other tab": "從另一個分頁儲存的帳號",
   "the lever": "調節槓桿",
   "them\u0004the other member of a trade, name unknown": "對方",
@@ -2967,7 +2948,6 @@
   "working group\u0004group category": "工作小組",
   "yesterday": "昨天",
   "you": "你",
-  "your limit": "你的額度",
   "{actor} completed a trade with {target}": "{actor} 與 {target} 完成了交易",
   "{actor} joined": "{actor} 已加入",
   "{actor} joined the community": "{actor} 加入了社群",
@@ -2983,8 +2963,6 @@
   "{actor} traded with {target}": "{actor} 與 {target} 進行了交易",
   "{actor} traded with {target}: {title}": "{actor} 與 {target} 進行了交易：{title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈每月 {rate}%",
-  "{amount} Beans": "{amount} 顆豆子",
   "{amount} Beans from the pool: {what}.": "從公共資金池支出的 {amount} 顆豆子：{what}。",
   "{amount} raised of {goal} 🫘": "已籌集 {amount} 🫘（目標：{goal} 🫘）",
   "{amount} · held in trust": "{amount} · 託管中",
@@ -3276,7 +3254,6 @@
   "← Choose another way": "← 選擇其他方式",
   "← Keep it": "← 保留",
   "← Start again": "← 重新開始",
-  "← carry credit": "← 承擔信用赤字",
   "↑ Sent": "↑ 已傳送",
   "↓ Received": "↓ 已收到",
   "↻ RECURRING": "↻ 定期",

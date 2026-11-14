@@ -17,15 +17,6 @@
   "(100% community owned)": "（100% 社区所有）",
   "(You)": "（你）",
   "(You)\u0004roster: the viewer": "（你）",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "other": "**发布一项提供**以开启你的授信额度 — **{n}** 项提供可解锁完整的 −{limit}。"
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "other": "**{n} 项提供**解锁 −{limit}"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "other": "**{n} 项提供** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "other": "距离 {emoji} {tier} 还差 **{n}** 信任分"
   },
@@ -631,7 +622,6 @@
   "Creating...": "正在创建...",
   "Creator account linking:": "创作者账号关联：",
   "Credit Line": "授信额度",
-  "Credit balance gauge": "信用余额仪表",
   "Credits (B)": "信用额度（豆子）",
   "Credits (🫘 Beans)": "信用额度（🫘 豆子）",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "信用点是一种互助信用货币。交易时，信用点会在成员之间转移。每位成员都从零开始。这套系统旨在鼓励互惠，让价值在本地流动。",
@@ -1324,7 +1314,6 @@
   "No bond required.": "无需保证金。",
   "No comment provided.": "未提供评语。",
   "No conversations yet.": "暂无对话。",
-  "No credit line yet": "暂无信用额度",
   "No deals in progress": "暂无进行中的交易",
   "No friends yet": "暂无好友",
   "No groups found": "未找到群组",
@@ -2015,9 +2004,6 @@
   "Spam or scam": "垃圾信息或诈骗",
   "Specific Action / Effect": "具体行动 / 影响",
   "Specific Action or Effect": "具体行动或影响",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "other": "支出已暂停 — 你的余额低于你 {n} 项有效提供所解锁的额度 (−{limit})。发布一项“提供”或通过交易回升额度以解除暂停。你仍可接收豆子和出售物品。"
-  },
   "Sprout": "嫩芽",
   "Square — nothing owed either way": "结清 — 双方互不相欠",
   "Start": "开始",
@@ -2701,7 +2687,6 @@
   "You can propose a Decision once you have completed a trade.": "完成一笔交易后，你即可发起决策。",
   "You can propose once you have completed a trade.": "完成一笔交易后即可发起提案。",
   "You can still read, edit your profile and leave.": "你仍可以浏览内容、编辑个人资料以及退出社区。",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "你现在就可以使用持有的豆子进行交易。完成首笔交易后，你的信用额度将自动开启 — 交易的价值越多，额度就越深。（社区担保人也可以为你提供初始额度。）",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "你更改了时间或地点。活动会显示“已更新”，并通知所有参加的人。",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "由你来托管，在你的机器或租用的服务器上。它绝不需要依赖 beanpool.org：使用你自己的网址也可以。",
   "You have already rated this trade.": "你已对这笔交易进行了评价。",
@@ -2888,8 +2873,6 @@
   "execution pending grace\u0004Decision status": "待执行（宽限期）",
   "execution void\u0004Decision status": "执行作废",
   "failed\u0004Decision status": "未通过",
-  "fee-free": "免手续费",
-  "fee/mo": "手续费/月",
   "for {n} day|for {n} days": {
     "other": "借用 {n} 天"
   },
@@ -2904,7 +2887,6 @@
   "from {who} · {when}": "来自 {who} · {when}",
   "general\u0004group category": "综合",
   "guild\u0004group category": "公会",
-  "hold credit →": "持有额度 →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... 或 tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -2950,7 +2932,6 @@
   "request to join\u0004join policy": "申请加入",
   "requested\u0004deal status": "已请求",
   "social\u0004group category": "社交",
-  "sweet spot": "最佳区间",
   "the account saved from the other tab": "从另一个标签页保存的账户",
   "the lever": "调节杠杆",
   "them\u0004the other member of a trade, name unknown": "对方",
@@ -2967,7 +2948,6 @@
   "working group\u0004group category": "工作组",
   "yesterday": "昨天",
   "you": "你",
-  "your limit": "你的额度",
   "{actor} completed a trade with {target}": "{actor} 与 {target} 完成了交易",
   "{actor} joined": "{actor} 已加入",
   "{actor} joined the community": "{actor} 加入了社区",
@@ -2983,8 +2963,6 @@
   "{actor} traded with {target}": "{actor} 与 {target} 进行了交易",
   "{actor} traded with {target}: {title}": "{actor} 与 {target} 进行了交易：{title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈{rate}%/月",
-  "{amount} Beans": "{amount} 颗豆子",
   "{amount} Beans from the pool: {what}.": "从公共资金池支出的 {amount} 颗豆子：{what}。",
   "{amount} raised of {goal} 🫘": "已筹集 {amount} 🫘（目标 {goal} 🫘）",
   "{amount} · held in trust": "{amount} · 托管中",
@@ -3276,7 +3254,6 @@
   "← Choose another way": "← 选择其他方式",
   "← Keep it": "← 保留它",
   "← Start again": "← 重新开始",
-  "← carry credit": "← 使用额度",
   "↑ Sent": "↑ 已发出",
   "↓ Received": "↓ 已收到",
   "↻ RECURRING": "↻ 循环",

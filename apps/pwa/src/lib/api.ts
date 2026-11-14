@@ -1614,6 +1614,8 @@ export interface BalanceInfo {
     liveOffers?: number;
     /** The known floor's part of the limit (community modes slice 4): one live Offer unlocks all of it. Absent from an older node. */
     knownGrant_c?: number;
+    /** The credit line people gave you (a vouch, a member's gift), less what you passed on: one live Offer opens it. Absent from an older node. */
+    roomHeld_c?: number;
     /** Trust Model v3 — true when your debt is below your usable floor (spending is frozen until you recover or post Offers). */
     frozen?: boolean;
     /** The community's admins froze your known floor (an exception) / your whole line (the manager's Freeze). Absent from an older node. */

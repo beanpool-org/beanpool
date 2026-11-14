@@ -17,18 +17,6 @@
   "(100% community owned)": "(۱۰۰٪ متعلق به جامعه)",
   "(You)": "(شما)",
   "(You)\u0004roster: the viewer": "(شما)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "one": "**ثبت یک پیشنهاد** برای باز کردن سقف اعتبارتان — **{n}** پیشنهاد کل سقف −{limit} شما را آزاد می‌کند.",
-    "other": "**ثبت یک پیشنهاد** برای باز کردن سقف اعتبارتان — **{n}** پیشنهاد کل سقف −{limit} شما را آزاد می‌کند."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "one": "**{n} پیشنهاد** −{limit} را باز می‌کند",
-    "other": "**{n} پیشنهاد** −{limit} را باز می‌کند"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "one": "**{n} پیشنهاد** → −{limit}",
-    "other": "**{n} پیشنهاد** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "**{n}** اعتماد دیگر تا {emoji} {tier}",
     "other": "**{n}** اعتماد دیگر تا {emoji} {tier}"
@@ -644,7 +632,6 @@
   "Creating...": "در حال ساخت...",
   "Creator account linking:": "اتصال حساب سازنده:",
   "Credit Line": "سقف اعتبار",
-  "Credit balance gauge": "نشانگر موجودی اعتباری",
   "Credits (B)": "اعتبار (لوبیا)",
   "Credits (🫘 Beans)": "اعتبار (🫘 لوبیا)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "اعتبارها یک پول مبتنی بر اعتبار متقابل‌اند. وقتی معامله می‌کنید، اعتبار بین اعضا جابه‌جا می‌شود. هر عضو از صفر شروع می‌کند. این سامانه برای تشویق به داد و ستد متقابل و گردش محلی ارزش طراحی شده است.",
@@ -1344,7 +1331,6 @@
   "No bond required.": "نیازی به وثیقه نیست.",
   "No comment provided.": "نظری ثبت نشده است.",
   "No conversations yet.": "هنوز گفتگویی نیست.",
-  "No credit line yet": "هنوز خط اعتباری ندارید",
   "No deals in progress": "هیچ معامله‌ای در جریان نیست",
   "No friends yet": "هنوز دوستی ندارید",
   "No groups found": "گروهی یافت نشد",
@@ -2053,10 +2039,6 @@
   "Spam or scam": "هرزنامه یا کلاهبرداری",
   "Specific Action / Effect": "اقدام / اثر مشخص",
   "Specific Action or Effect": "اقدام یا اثر مشخص",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "خرج کردن متوقف شد — موجودی شما کمتر از مقداری است که {n} پیشنهاد فعال شما آزاد می‌کند (−{limit}). برای رفع آن، پیشنهادی ثبت کنید یا دوباره معامله کنید. همچنان می‌توانید لوبیا دریافت کنید و بفروشید.",
-    "other": "خرج کردن متوقف شد — موجودی شما کمتر از مقداری است که {n} پیشنهاد فعال شما آزاد می‌کند (−{limit}). برای رفع آن، پیشنهادی ثبت کنید یا دوباره معامله کنید. همچنان می‌توانید لوبیا دریافت کنید و بفروشید."
-  },
   "Sprout": "جوانه",
   "Square — nothing owed either way": "بی‌حساب — هیچ بدهی یا طلبی وجود ندارد",
   "Start": "شروع",
@@ -2762,7 +2744,6 @@
   "You can propose a Decision once you have completed a trade.": "پس از تکمیل یک مبادله، می‌توانید یک تصمیم پیشنهاد دهید.",
   "You can propose once you have completed a trade.": "پس از انجام یک معامله می‌توانید پیشنهاد دهید.",
   "You can still read, edit your profile and leave.": "همچنان می‌توانید بخوانید، پروفایل خود را ویرایش کنید و خارج شوید.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "همین حالا می‌توانید با لوبیایی که در دست دارید معامله کنید. نخستین معامله خود را تکمیل کنید تا خط اعتباری‌تان خودبه‌خود باز شود — هر چه ارزش بیشتری معامله کنید، عمیق‌تر می‌شود. (یک ضامن در جامعه نیز می‌تواند خط اولیه به شما بدهد.)",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "شما زمان یا مکان را تغییر دادید. رویداد «به‌روز شد» را نشان می‌دهد و به همهٔ کسانی که می‌آیند خبر داده می‌شود.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "شما، روی رایانه خودتان یا سروری که اجاره کرده‌اید. هرگز به beanpool.org نیازی نیست: نشانی وب خودتان نیز کار می‌کند.",
   "You have already rated this trade.": "شما قبلاً به این معامله امتیاز داده‌اید.",
@@ -2956,8 +2937,6 @@
   "execution pending grace\u0004Decision status": "اجرا در انتظار مهلت",
   "execution void\u0004Decision status": "اجرا باطل شد",
   "failed\u0004Decision status": "ردشده",
-  "fee-free": "بدون کارمزد",
-  "fee/mo": "کارمزد/ماه",
   "for {n} day|for {n} days": {
     "one": "برای {n} روز",
     "other": "برای {n} روز"
@@ -2975,7 +2954,6 @@
   "from {who} · {when}": "از {who} · {when}",
   "general\u0004group category": "عمومی",
   "guild\u0004group category": "انجمن صنف",
-  "hold credit →": "نگهداری اعتبار →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... یا tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -3024,7 +3002,6 @@
   "request to join\u0004join policy": "درخواست پیوستن",
   "requested\u0004deal status": "درخواست‌شده",
   "social\u0004group category": "اجتماعی",
-  "sweet spot": "نقطه بهینه",
   "the account saved from the other tab": "حسابی که از زبانهٔ دیگر ذخیره شده بود",
   "the lever": "اهرم",
   "them\u0004the other member of a trade, name unknown": "طرف مقابل",
@@ -3041,7 +3018,6 @@
   "working group\u0004group category": "گروه کاری",
   "yesterday": "دیروز",
   "you": "شما",
-  "your limit": "سقف شما",
   "{actor} completed a trade with {target}": "{actor} مبادله‌ای را با {target} تکمیل کرد",
   "{actor} joined": "{actor} پیوست",
   "{actor} joined the community": "{actor} به جامعه پیوست",
@@ -3057,8 +3033,6 @@
   "{actor} traded with {target}": "{actor} با {target} معامله کرد",
   "{actor} traded with {target}: {title}": "{actor} با {target} مبادله کرد: {title}",
   "{amount} B": "{amount} لوبیا",
-  "{amount} B · ≈{rate}%/mo": "{amount} لوبیا · ≈{rate}٪/ماه",
-  "{amount} Beans": "{amount} لوبیا",
   "{amount} Beans from the pool: {what}.": "{amount} لوبیا از صندوق مشترک: {what}.",
   "{amount} raised of {goal} 🫘": "{amount} از {goal} 🫘 جمع‌آوری شد",
   "{amount} · held in trust": "{amount} · در امانت",
@@ -3399,7 +3373,6 @@
   "← Choose another way": "← انتخاب روش دیگر",
   "← Keep it": "← نگه داشتن آن",
   "← Start again": "← شروع دوباره",
-  "← carry credit": "← انتقال اعتبار",
   "↑ Sent": "↑ ارسالی",
   "↓ Received": "↓ دریافتی",
   "↻ RECURRING": "↻ تکرارشونده",

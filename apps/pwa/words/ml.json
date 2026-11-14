@@ -17,18 +17,6 @@
   "(100% community owned)": "(100% കമ്മ്യൂണിറ്റി ഉടമസ്ഥതയിലുള്ളത്)",
   "(You)": "(നിങ്ങൾ)",
   "(You)\u0004roster: the viewer": "(നിങ്ങൾ)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "one": "ക്രെഡിറ്റ് ലൈൻ തുറക്കാൻ **ഒരു ഓഫർ പോസ്റ്റ് ചെയ്യുക** — **{n}** ഓഫർ നിങ്ങളുടെ പൂർണ്ണ −{limit} അൺലോക്ക് ചെയ്യുന്നു.",
-    "other": "ക്രെഡിറ്റ് ലൈൻ തുറക്കാൻ **ഒരു ഓഫർ പോസ്റ്റ് ചെയ്യുക** — **{n}** ഓഫറുകൾ നിങ്ങളുടെ പൂർണ്ണ −{limit} അൺലോക്ക് ചെയ്യുന്നു."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "one": "**{n} ഓഫർ** −{limit} അൺലോക്ക് ചെയ്യുന്നു",
-    "other": "**{n} ഓഫറുകൾ** −{limit} അൺലോക്ക് ചെയ്യുന്നു"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "one": "**{n} ഓഫർ** → −{limit}",
-    "other": "**{n} ഓഫറുകൾ** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "{emoji} {tier}-ലേക്ക് ഇനി **{n}** വിശ്വാസം കൂടി",
     "other": "{emoji} {tier}-ലേക്ക് ഇനി **{n}** വിശ്വാസം കൂടി"
@@ -644,7 +632,6 @@
   "Creating...": "ഉണ്ടാക്കുന്നു...",
   "Creator account linking:": "ക്രിയേറ്റർ അക്കൗണ്ട് ലിങ്കിംഗ്:",
   "Credit Line": "ക്രെഡിറ്റ് ലൈൻ",
-  "Credit balance gauge": "ക്രെഡിറ്റ് ബാലൻസ് ഗേജ്",
   "Credits (B)": "ക്രെഡിറ്റുകൾ (B)",
   "Credits (🫘 Beans)": "ക്രെഡിറ്റുകൾ (🫘 പയർ)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "ക്രെഡിറ്റുകൾ ഒരു പരസ്പര ക്രെഡിറ്റ് കറൻസിയാണ്. നിങ്ങൾ ഇടപാട് നടത്തുമ്പോൾ ക്രെഡിറ്റുകൾ അംഗങ്ങൾക്കിടയിൽ കൈമാറ്റം ചെയ്യപ്പെടും. ഓരോ അംഗവും പൂജ്യത്തിൽ തുടങ്ങുന്നു. പരസ്പരമുള്ള കൊടുക്കൽവാങ്ങലിനെ പ്രോത്സാഹിപ്പിക്കാനും മൂല്യം പ്രാദേശികമായി ചുറ്റിക്കൊണ്ടിരിക്കാനും വേണ്ടിയാണ് ഈ സംവിധാനം രൂപകൽപ്പന ചെയ്തിരിക്കുന്നത്.",
@@ -1344,7 +1331,6 @@
   "No bond required.": "ബോണ്ട് ആവശ്യമില്ല.",
   "No comment provided.": "അഭിപ്രായങ്ങളൊന്നും രേഖപ്പെടുത്തിയിട്ടില്ല.",
   "No conversations yet.": "സംഭാഷണങ്ങളൊന്നുമില്ല.",
-  "No credit line yet": "ഇതുവരെ ക്രെഡിറ്റ് ലൈൻ ഇല്ല",
   "No deals in progress": "നിലവിൽ ഇടപാടുകളൊന്നുമില്ല",
   "No friends yet": "സുഹൃത്തുക്കളൊന്നും ഇതുവരെയുമില്ല",
   "No groups found": "ഗ്രൂപ്പുകളൊന്നും കണ്ടെത്തിയില്ല",
@@ -2053,10 +2039,6 @@
   "Spam or scam": "സ്പാം അല്ലെങ്കിൽ തട്ടിപ്പ്",
   "Specific Action / Effect": "പ്രത്യേക നടപടി / ഫലം",
   "Specific Action or Effect": "പ്രത്യേക നടപടി അല്ലെങ്കിൽ ഫലം",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "ചെലവഴിക്കൽ താൽക്കാലികമായി നിർത്തി — നിങ്ങളുടെ ബാലൻസ് നിങ്ങളുടെ {n} സജീവ ഓഫർ അൺലോക്ക് ചെയ്യുന്ന (−{limit}) തുകയേക്കാൾ താഴെയാണ്. ഇത് മാറ്റാൻ ഒരു ഓഫർ പോസ്റ്റ് ചെയ്യുക അല്ലെങ്കിൽ വ്യാപാരം നടത്തുക. നിങ്ങൾക്ക് ഇപ്പോഴും സ്വീകരിക്കാനും വിൽക്കാനും കഴിയും.",
-    "other": "ചെലവഴിക്കൽ താൽക്കാലികമായി നിർത്തി — നിങ്ങളുടെ ബാലൻസ് നിങ്ങളുടെ {n} സജീവ ഓഫറുകൾ അൺലോക്ക് ചെയ്യുന്ന (−{limit}) തുകയേക്കാൾ താഴെയാണ്. ഇത് മാറ്റാൻ ഒരു ഓഫർ പോസ്റ്റ് ചെയ്യുക അല്ലെങ്കിൽ വ്യാപാരം നടത്തുക. നിങ്ങൾക്ക് ഇപ്പോഴും സ്വീകരിക്കാനും വിൽക്കാനും കഴിയും."
-  },
   "Sprout": "മുള",
   "Square — nothing owed either way": "തുല്യം — പരസ്പരം ഒന്നും നൽകാനില്ല",
   "Start": "ആരംഭിക്കുക",
@@ -2762,7 +2744,6 @@
   "You can propose a Decision once you have completed a trade.": "ഒരു ഇടപാട് പൂർത്തിയാക്കിയ ശേഷം നിങ്ങൾക്ക് ഒരു തീരുമാനം നിർദ്ദേശിക്കാം.",
   "You can propose once you have completed a trade.": "ഒരു വ്യാപാരം പൂർത്തിയാക്കിയ ശേഷം നിങ്ങൾക്ക് നിർദ്ദേശിക്കാം.",
   "You can still read, edit your profile and leave.": "നിങ്ങൾക്ക് ഇപ്പോഴും വായിക്കാനും പ്രൊഫൈൽ തിരുത്താനും പുറത്തുപോകാനും കഴിയും.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "നിങ്ങളുടെ കൈവശമുള്ള പയർ ഉപയോഗിച്ച് നിങ്ങൾക്ക് ഇപ്പോൾ തന്നെ വ്യാപാരം നടത്താം. നിങ്ങളുടെ ആദ്യ വ്യാപാരം പൂർത്തിയാക്കുക, നിങ്ങളുടെ ക്രെഡിറ്റ് ലൈൻ സ്വയമേവ തുറക്കും — നിങ്ങൾ കൂടുതൽ മൂല്യം വ്യാപാരം ചെയ്യുന്തോറും അത് കൂടുതൽ വികസിക്കും. (ഒരു കമ്മ്യൂണിറ്റി വൗച്ചറിനും നിങ്ങൾക്ക് ഒരു പ്രാരംഭ ലൈൻ നൽകാൻ കഴിയും.)",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "നിങ്ങൾ സമയമോ സ്ഥലമോ മാറ്റി. ഇവന്റ് UPDATED എന്ന് കാണിക്കും, പോകുന്ന എല്ലാവരെയും അറിയിക്കും.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "നിങ്ങൾ തന്നെ, നിങ്ങളുടെ കമ്പ്യൂട്ടറിലോ നിങ്ങൾ വാടകയ്‌ക്കെടുത്തതിലോ. ഇതിന് beanpool.org ഒരിക്കലും ആവശ്യമില്ല: നിങ്ങളുടെ സ്വന്തം വെബ് വിലാസവും പ്രവർത്തിക്കും.",
   "You have already rated this trade.": "നിങ്ങൾ ഈ ഇടപാട് ഇതിനകം റേറ്റുചെയ്തു.",
@@ -2956,8 +2937,6 @@
   "execution pending grace\u0004Decision status": "നടപ്പിലാക്കൽ കാത്തിരിക്കുന്നു",
   "execution void\u0004Decision status": "റദ്ദാക്കിയത്",
   "failed\u0004Decision status": "പരാജയപ്പെട്ടത്",
-  "fee-free": "ഫീസില്ലാത്തത്",
-  "fee/mo": "ഫീസ്/മാസം",
   "for {n} day|for {n} days": {
     "one": "{n} ദിവസത്തേക്ക്",
     "other": "{n} ദിവസത്തേക്ക്"
@@ -2975,7 +2954,6 @@
   "from {who} · {when}": "{who}-ൽ നിന്ന് · {when}",
   "general\u0004group category": "പൊതുവായത്",
   "guild\u0004group category": "ഗിൽഡ്",
-  "hold credit →": "ക്രെഡിറ്റ് നീക്കിയിരിപ്പ് →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... അല്ലെങ്കിൽ tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -3024,7 +3002,6 @@
   "request to join\u0004join policy": "ചേരാൻ അഭ്യർത്ഥിക്കുക",
   "requested\u0004deal status": "അഭ്യർത്ഥിച്ചു",
   "social\u0004group category": "സാമൂഹികം",
-  "sweet spot": "അനുയോജ്യമായ പരിധി",
   "the account saved from the other tab": "മറ്റേ ടാബിൽ നിന്ന് സേവ് ചെയ്ത അക്കൗണ്ട്",
   "the lever": "നിയന്ത്രണം",
   "them\u0004the other member of a trade, name unknown": "അവർ",
@@ -3041,7 +3018,6 @@
   "working group\u0004group category": "വർക്കിംഗ് ഗ്രൂപ്പ്",
   "yesterday": "ഇന്നലെ",
   "you": "നിങ്ങൾ",
-  "your limit": "നിങ്ങളുടെ പരിധി",
   "{actor} completed a trade with {target}": "{actor}, {target}-മായി ഒരു വ്യാപാരം പൂർത്തിയാക്കി",
   "{actor} joined": "{actor} ചേർന്നു",
   "{actor} joined the community": "{actor} കമ്മ്യൂണിറ്റിയിൽ ചേർന്നു",
@@ -3057,8 +3033,6 @@
   "{actor} traded with {target}": "{actor} {target}-മായി ഇടപാട് നടത്തി",
   "{actor} traded with {target}: {title}": "{actor}, {target}-മായി വ്യാപാരം നടത്തി: {title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈{rate}%/മാസം",
-  "{amount} Beans": "{amount} പയർ",
   "{amount} Beans from the pool: {what}.": "പൂളിൽ നിന്ന് {amount} പയർ: {what}.",
   "{amount} raised of {goal} 🫘": "{goal} 🫘-ൽ {amount} ശേഖരിച്ചു",
   "{amount} · held in trust": "{amount} · എസ്ക്രോയിൽ",
@@ -3399,7 +3373,6 @@
   "← Choose another way": "← മറ്റൊരു വഴി തിരഞ്ഞെടുക്കുക",
   "← Keep it": "← നിലനിർത്തുക",
   "← Start again": "← വീണ്ടും ആരംഭിക്കുക",
-  "← carry credit": "← ക്രെഡിറ്റ് കടം",
   "↑ Sent": "↑ അയച്ചവ",
   "↓ Received": "↓ ലഭിച്ചവ",
   "↻ RECURRING": "↻ ആവർത്തിക്കുന്നത്",

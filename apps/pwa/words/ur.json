@@ -17,18 +17,6 @@
   "(100% community owned)": "(100% کمیونٹی کی ملکیت)",
   "(You)": "(آپ)",
   "(You)\u0004roster: the viewer": "(آپ)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "one": "اپنی کریڈٹ لائن کھولنے کے لیے **پیشکش پوسٹ کریں** — **{n}** پیشکش آپ کی مکمل −{limit} حد کھولتی ہے۔",
-    "other": "اپنی کریڈٹ لائن کھولنے کے لیے **پیشکش پوسٹ کریں** — **{n}** پیشکشیں آپ کی مکمل −{limit} حد کھولتی ہے۔"
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "one": "**{n} پیشکش** کھولتی ہے −{limit}",
-    "other": "**{n} پیشکشیں** کھولتی ہیں −{limit}"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "one": "**{n} پیشکش** → −{limit}",
-    "other": "**{n} پیشکشیں** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "{emoji} {tier} تک مزید **{n}** اعتماد درکار ہے",
     "other": "{emoji} {tier} تک مزید **{n}** اعتماد درکار ہے"
@@ -644,7 +632,6 @@
   "Creating...": "بن رہا ہے...",
   "Creator account linking:": "تخلیق کار کا اکاؤنٹ لنک کرنا:",
   "Credit Line": "کریڈٹ لائن",
-  "Credit balance gauge": "کریڈٹ بیلنس گیج",
   "Credits (B)": "کریڈٹس (پھلیاں)",
   "Credits (🫘 Beans)": "کریڈٹس (🫘 پھلیاں)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "کریڈٹ ایک باہمی کریڈٹ کرنسی ہیں۔ جب آپ لین دین کرتے ہیں تو کریڈٹ اراکین کے درمیان منتقل ہوتے ہیں۔ ہر رکن صفر سے شروع کرتا ہے۔ یہ نظام باہمی لین دین کی حوصلہ افزائی اور قدر کو مقامی طور پر گردش میں رکھنے کے لیے بنایا گیا ہے۔",
@@ -1344,7 +1331,6 @@
   "No bond required.": "کسی ضمانت کی ضرورت نہیں ہے۔",
   "No comment provided.": "کوئی تبصرہ فراہم نہیں کیا گیا۔",
   "No conversations yet.": "ابھی تک کوئی گفتگو نہیں۔",
-  "No credit line yet": "ابھی تک کوئی کریڈٹ لائن نہیں",
   "No deals in progress": "کوئی معاہدہ جاری نہیں ہے",
   "No friends yet": "ابھی تک کوئی دوست نہیں",
   "No groups found": "کوئی گروپ نہیں ملا",
@@ -2053,10 +2039,6 @@
   "Spam or scam": "سپیم یا دھوکہ دہی",
   "Specific Action / Effect": "مخصوص کارروائی / اثر",
   "Specific Action or Effect": "مخصوص کارروائی یا اثر",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "خرچ معطل ہے — آپ کا بیلنس آپ کی {n} فعال پیشکش کے انلاک کردہ لمٹ (−{limit}) سے کم ہے۔ اسے بحال کرنے کے لیے پیشکش پوسٹ کریں یا لین دین کریں۔ آپ اب بھی رقم وصول اور فروخت کر سکتے ہیں۔",
-    "other": "خرچ معطل ہے — آپ کا بیلنس آپ کی {n} فعال پیشکشوں کے انلاک کردہ لمٹ (−{limit}) سے کم ہے۔ اسے بحال کرنے کے لیے پیشکش پوسٹ کریں یا لین دین کریں۔ آپ اب بھی رقم وصول اور فروخت کر سکتے ہیں۔"
-  },
   "Sprout": "کونپل",
   "Square — nothing owed either way": "برابر — کسی طرف کچھ واجب الادا نہیں",
   "Start": "شروع کریں",
@@ -2762,7 +2744,6 @@
   "You can propose a Decision once you have completed a trade.": "ایک تبادلہ مکمل کرنے کے بعد آپ کسی فیصلے کی تجویز پیش کر سکتے ہیں۔",
   "You can propose once you have completed a trade.": "آپ ایک لین دین مکمل کرنے کے بعد تجویز پیش کر سکتے ہیں۔",
   "You can still read, edit your profile and leave.": "آپ اب بھی مواد پڑھ سکتے ہیں، اپنے پروفائل میں ترمیم کر سکتے ہیں اور چھوڑ سکتے ہیں۔",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "آپ اپنے پاس موجود پھلیوں کے ساتھ ابھی لین دین کر سکتے ہیں۔ اپنی پہلی ٹریڈ مکمل کریں اور آپ کی کریڈٹ لائن خود بخود کھل جائے گی — آپ جتنی زیادہ قدر کا تبادلہ کریں گے، یہ اتنی ہی گہری ہوگی۔ (کمیونٹی کا کوئی ضامن بھی آپ کو ابتدائی لائن دے سکتا ہے۔)",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "آپ نے وقت یا جگہ بدلی ہے۔ تقریب پر اپ ڈیٹ شدہ لکھا آئے گا اور جانے والے ہر فرد کو بتایا جائے گا۔",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "آپ خود، اپنی مشین پر یا جسے آپ کرائے پر لیتے ہیں۔ اسے کبھی beanpool.org کی ضرورت نہیں ہوتی: آپ کا اپنا ویب ایڈریس بھی کام کرتا ہے۔",
   "You have already rated this trade.": "آپ پہلے ہی اس لین دین کی درجہ بندی کر چکے ہیں۔",
@@ -2956,8 +2937,6 @@
   "execution pending grace\u0004Decision status": "نفاذ مہلت کا منتظر",
   "execution void\u0004Decision status": "نفاذ باطل",
   "failed\u0004Decision status": "مسترد",
-  "fee-free": "بغیر فیس",
-  "fee/mo": "فیس/ماہ",
   "for {n} day|for {n} days": {
     "one": "{n} دن کے لیے",
     "other": "{n} دن کے لیے"
@@ -2975,7 +2954,6 @@
   "from {who} · {when}": "از {who} · {when}",
   "general\u0004group category": "عام",
   "guild\u0004group category": "گلڈ",
-  "hold credit →": "بیلنس رکھیں →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... یا tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -3024,7 +3002,6 @@
   "request to join\u0004join policy": "شمولیت کی درخواست",
   "requested\u0004deal status": "درخواست شدہ",
   "social\u0004group category": "سماجی",
-  "sweet spot": "بہترین توازن",
   "the account saved from the other tab": "دوسرے ٹیب سے محفوظ کیا گیا اکاؤنٹ",
   "the lever": "لیور",
   "them\u0004the other member of a trade, name unknown": "وہ",
@@ -3041,7 +3018,6 @@
   "working group\u0004group category": "ورکنگ گروپ",
   "yesterday": "کل",
   "you": "آپ",
-  "your limit": "آپ کی حد",
   "{actor} completed a trade with {target}": "{actor} نے {target} کے ساتھ لین دین مکمل کیا",
   "{actor} joined": "{actor} شامل ہو گئے",
   "{actor} joined the community": "{actor} کمیونٹی میں شامل ہوئے",
@@ -3057,8 +3033,6 @@
   "{actor} traded with {target}": "{actor} نے {target} کے ساتھ تبادلہ کیا",
   "{actor} traded with {target}: {title}": "{actor} نے {target} کے ساتھ لین دین کیا: {title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈{rate}%/ماہ",
-  "{amount} Beans": "{amount} پھلیاں",
   "{amount} Beans from the pool: {what}.": "پول سے {amount} پھلیاں: {what}۔",
   "{amount} raised of {goal} 🫘": "{goal} 🫘 میں سے {amount} جمع ہوئے",
   "{amount} · held in trust": "{amount} · امانت میں",
@@ -3399,7 +3373,6 @@
   "← Choose another way": "← کوئی دوسرا طریقہ چنیں",
   "← Keep it": "← اسے رکھیں",
   "← Start again": "← دوبارہ شروع کریں",
-  "← carry credit": "← ادھار پر چلیں",
   "↑ Sent": "↑ بھیجی گئی",
   "↓ Received": "↓ موصول ہوئی",
   "↻ RECURRING": "↻ بار بار ہونے والا",

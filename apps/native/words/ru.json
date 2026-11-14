@@ -3715,15 +3715,6 @@
   "Beans from a member you blocked": "Бобы от заблокированного участника",
   "GUEST": "ГОСТЬ",
   "BEANS": "БОБЫ",
-  "No credit line yet": "Пока нет кредитной линии",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Вы можете обмениваться прямо сейчас на имеющиеся бобы. Совершите первую сделку, и кредитная линия откроется автоматически: чем больше объём обмена, тем глубже лимит. (Поручитель из сообщества также может открыть стартовую линию).",
-  "Credit position — tap to learn how it works": "Состояние кредита — нажмите, чтобы узнать подробнее",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️  Расходы приостановлены — ваш баланс ниже лимита, который открывает ваше {n} активное предложение (−{limit}). Опубликуйте предложение или совершите сделку, чтобы снять ограничение. Вы по-прежнему можете получать переводы и продавать.",
-    "few": "⚠️  Расходы приостановлены — ваш баланс ниже лимита, который открывают ваши {n} активных предложения (−{limit}). Опубликуйте предложение или совершите сделку, чтобы снять ограничение. Вы по-прежнему можете получать переводы и продавать.",
-    "many": "⚠️  Расходы приостановлены — ваш баланс ниже лимита, который открывают ваши {n} активных предложений (−{limit}). Опубликуйте предложение или совершите сделку, чтобы снять ограничение. Вы по-прежнему можете получать переводы и продавать.",
-    "other": "⚠️  Расходы приостановлены — ваш баланс ниже лимита, который открывают ваши {n} активных предложений (−{limit}). Опубликуйте предложение или совершите сделку, чтобы снять ограничение. Вы по-прежнему можете получать переводы и продавать."
-  },
   "Levels": "Уровни",
   "Wallet": "Кошелёк",
   "Ledger": "Реестр",
@@ -5718,40 +5709,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (подтверждённый аккаунт)",
   "Opens external channel link": "Открывает ссылку на внешний канал",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate}%/мес",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "Кредитный баланс {balance} бобов, кредитный лимит {floor} бобов, потолок без комиссии {max} бобов.",
-  "fee/mo": "комиссия/мес",
-  "your limit": "ваш лимит",
-  "sweet spot": "оптимальная зона",
-  "fee-free": "без комиссии",
-  "← carry credit": "← взять кредит",
-  "hold credit →": "держать кредит →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} открывает −{depth} · {more} → −{next}",
-    "few": "🎣 {offers} открывают −{depth} · {more} → −{next}",
-    "many": "🎣 {offers} открывают −{depth} · {more} → −{next}",
-    "other": "🎣 {offers} открывают −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} открывает −{depth}",
-    "few": "🎣 {offers} открывают −{depth}",
-    "many": "🎣 {offers} открывают −{depth}",
-    "other": "🎣 {offers} открывают −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} предложение",
-    "few": "{n} предложения",
-    "many": "{n} предложений",
-    "other": "{n} предложения"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 {post}, чтобы открыть кредитную линию — {count} предложение открывает полный −{floor}.",
-    "few": "🎣 {post}, чтобы открыть кредитную линию — {count} предложения открывают полный −{floor}.",
-    "many": "🎣 {post}, чтобы открыть кредитную линию — {count} предложений открывают полный −{floor}.",
-    "other": "🎣 {post}, чтобы открыть кредитную линию — {count} предложения открывают полный −{floor}."
-  },
-  "Post an offer": "Создать предложение",
   "Unknown\u0004a host with no name": "Неизвестно",
   "No maps app": "Нет приложения карт",
   "The event is at {lat}, {lng}.": "Событие проходит по координатам: {lat}, {lng}.",

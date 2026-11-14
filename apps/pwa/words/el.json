@@ -17,18 +17,6 @@
   "(100% community owned)": "(100% ιδιοκτησία της κοινότητας)",
   "(You)": "(Εσύ)",
   "(You)\u0004roster: the viewer": "(Εσύ)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "one": "**Δημοσίευσε μια Προσφορά** για να ανοίξεις το πιστωτικό σου όριο — **{n}** προσφορά ξεκλειδώνει το πλήρες σου −{limit}.",
-    "other": "**Δημοσίευσε μια Προσφορά** για να ανοίξεις το πιστωτικό σου όριο — **{n}** προσφορές ξεκλειδώνουν το πλήρες σου −{limit}."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "one": "**{n} προσφορά** ξεκλειδώνει −{limit}",
-    "other": "**{n} προσφορές** ξεκλειδώνουν −{limit}"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "one": "**{n} προσφορά** → −{limit}",
-    "other": "**{n} προσφορές** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "Απομένει **{n}** εμπιστοσύνη για το {emoji} {tier}",
     "other": "Απομένουν **{n}** εμπιστοσύνη για το {emoji} {tier}"
@@ -643,7 +631,6 @@
   "Creating...": "Δημιουργία...",
   "Creator account linking:": "Σύνδεση λογαριασμού δημιουργού:",
   "Credit Line": "Πιστωτικό όριο",
-  "Credit balance gauge": "Δείκτης πιστωτικού υπολοίπου",
   "Credits (B)": "Πιστώσεις (φασόλια)",
   "Credits (🫘 Beans)": "Πιστώσεις (🫘 φασόλια)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "Οι πιστώσεις είναι ένα νόμισμα αμοιβαίας πίστωσης. Όταν ανταλλάσσετε, οι πιστώσεις μεταφέρονται ανάμεσα στα μέλη. Κάθε μέλος ξεκινά από το μηδέν. Το σύστημα έχει σχεδιαστεί για να ενθαρρύνει την αμοιβαιότητα και να κρατά την αξία να κυκλοφορεί τοπικά.",
@@ -1343,7 +1330,6 @@
   "No bond required.": "Δεν απαιτείται εγγύηση.",
   "No comment provided.": "Δεν δόθηκε σχόλιο.",
   "No conversations yet.": "Δεν υπάρχουν συνομιλίες ακόμα.",
-  "No credit line yet": "Δεν υπάρχει πιστωτικό όριο ακόμα",
   "No deals in progress": "Δεν υπάρχουν συμφωνίες σε εξέλιξη",
   "No friends yet": "Δεν υπάρχουν φίλοι ακόμα",
   "No groups found": "Δεν βρέθηκαν ομάδες",
@@ -2052,10 +2038,6 @@
   "Spam or scam": "Spam ή απάτη",
   "Specific Action / Effect": "Συγκεκριμένη ενέργεια / Αποτέλεσμα",
   "Specific Action or Effect": "Συγκεκριμένη ενέργεια ή αποτέλεσμα",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "Οι δαπάνες ανεστάλησαν — το υπόλοιπό σου είναι κάτω από αυτό που ξεκλειδώνει η {n} ενεργή προσφορά σου (−{limit}). Δημοσίευσε μια Προσφορά ή συναλλάξου για να το αυξήσεις. Μπορείς ακόμα να λαμβάνεις και να πουλάς.",
-    "other": "Οι δαπάνες ανεστάλησαν — το υπόλοιπό σου είναι κάτω από αυτό που ξεκλειδώνουν οι {n} ενεργές προσφορές σου (−{limit}). Δημοσίευσε μια Προσφορά ή συναλλάξου για να το αυξήσεις. Μπορείς ακόμα να λαμβάνεις και να πουλάς."
-  },
   "Sprout": "Βλαστάρι",
   "Square — nothing owed either way": "Στα ίσια — καμία οφειλή εκατέρωθεν",
   "Start": "Έναρξη",
@@ -2761,7 +2743,6 @@
   "You can propose a Decision once you have completed a trade.": "Μπορείς να προτείνεις μια Απόφαση μόλις ολοκληρώσεις μια συναλλαγή.",
   "You can propose once you have completed a trade.": "Μπορείς να υποβάλεις πρόταση μόλις ολοκληρώσεις μια συναλλαγή.",
   "You can still read, edit your profile and leave.": "Μπορείς ακόμα να διαβάζεις, να επεξεργάζεσαι το προφίλ σου και να αποχωρήσεις.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Μπορείτε να συναλλαχθείτε τώρα με τα φασόλια που διαθέτετε. Ολοκληρώστε την πρώτη σας συναλλαγή και το πιστωτικό σας όριο ανοίγει αυτόματα — όσο περισσότερη αξία συναλλάσσεστε, τόσο περισσότερο αυξάνεται. (Μια εγγύηση μέλους μπορεί επίσης να σας δώσει ένα αρχικό όριο.)",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "Αλλάξατε την ώρα ή το μέρος. Η εκδήλωση θα εμφανίζεται ΕΝΗΜΕΡΩΜΕΝΗ και όλοι όσοι πάνε θα ειδοποιηθούν.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "Εσύ, στο μηχάνημά σου ή σε αυτό που νοικιάζεις. Δεν χρειάζεται ποτέ το beanpool.org: η δική σου ιστοδιεύθυνση λειτουργεί επίσης.",
   "You have already rated this trade.": "Έχετε ήδη αξιολογήσει αυτή τη συναλλαγή.",
@@ -2955,8 +2936,6 @@
   "execution pending grace\u0004Decision status": "εκτέλεση, σε περίοδο χάριτος",
   "execution void\u0004Decision status": "εκτέλεση, άκυρη",
   "failed\u0004Decision status": "απορρίφθηκε",
-  "fee-free": "χωρίς τέλη",
-  "fee/mo": "τέλος/μήνα",
   "for {n} day|for {n} days": {
     "one": "για {n} ημέρα",
     "other": "για {n} ημέρες"
@@ -2974,7 +2953,6 @@
   "from {who} · {when}": "από {who} · {when}",
   "general\u0004group category": "Γενική",
   "guild\u0004group category": "Συντεχνία",
-  "hold credit →": "διακράτηση πίστωσης →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... ή tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -3023,7 +3001,6 @@
   "request to join\u0004join policy": "Αίτημα συμμετοχής",
   "requested\u0004deal status": "ζητήθηκε",
   "social\u0004group category": "Κοινωνική",
-  "sweet spot": "ιδανικό σημείο",
   "the account saved from the other tab": "ο λογαριασμός που αποθηκεύτηκε από την άλλη καρτέλα",
   "the lever": "ο μοχλός",
   "them\u0004the other member of a trade, name unknown": "άλλο μέλος",
@@ -3040,7 +3017,6 @@
   "working group\u0004group category": "Ομάδα εργασίας",
   "yesterday": "χθες",
   "you": "εσείς",
-  "your limit": "το όριό σου",
   "{actor} completed a trade with {target}": "Ο/Η {actor} ολοκλήρωσε συναλλαγή με {target}",
   "{actor} joined": "Ο/Η {actor} συνδέθηκε",
   "{actor} joined the community": "Ο/Η {actor} εντάχθηκε στην κοινότητα",
@@ -3056,8 +3032,6 @@
   "{actor} traded with {target}": "Ο/Η {actor} αντάλλαξε με τον/την {target}",
   "{actor} traded with {target}: {title}": "Ο/Η {actor} συναλλάχθηκε με {target}: {title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈{rate}%/μήνα",
-  "{amount} Beans": "{amount} φασόλια",
   "{amount} Beans from the pool: {what}.": "{amount} φασόλια από το κοινό ταμείο: {what}.",
   "{amount} raised of {goal} 🫘": "Συγκεντρώθηκαν {amount} από {goal} 🫘",
   "{amount} · held in trust": "{amount} · σε καταπίστευμα",
@@ -3398,7 +3372,6 @@
   "← Choose another way": "← Επιλογή άλλου τρόπου",
   "← Keep it": "← Διατήρηση",
   "← Start again": "← Έναρξη ξανά",
-  "← carry credit": "← μεταφορά πίστωσης",
   "↑ Sent": "↑ Στάλθηκαν",
   "↓ Received": "↓ Λήφθηκαν",
   "↻ RECURRING": "↻ ΕΠΑΝΑΛΑΜΒΑΝΟΜΕΝΟ",

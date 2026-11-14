@@ -304,13 +304,15 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         expect(text()).toContain(xx('Reach {min} trust ({left} to go) from the real value you trade.').replace('{min}', '600').replace('{left}', '400'));
     });
 
-    it('the credit card: the bar\'s label, the known part frozen, spending paused; Credit Slider Info with its three tabs', async () => {
+    it('the credit card: one button labelled with core\'s spoken sentence, the known part frozen; Credit Slider Info with its three tabs', async () => {
         await renderIn('xx');
         expect(host.querySelector('[data-later-sweep="CreditBar"]')).not.toBeNull();
         expect(text()).toContain(xx(KNOWN_FROZEN.part));
-        expect(text()).toContain(xx('⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.').replace('{n}', '1').replace('{limit}', '150'));
+        // Slice R1: the card's sentences (spending paused among them) are core's, drawn by CreditBar (credit-bar-bubble-dark,
+        // rest-words-render); the button's label is core's spoken sentence, through the words layer.
+        expect(byTestId('credit-card')!.getAttribute('aria-label')).toMatch(/^\[.*\]$/s);
         expect(bypassing(), 'the card').toEqual([]);
-        await click(byLabel(xx('Credit position — tap to learn how it works')), 'the credit position');
+        await click(byTestId('credit-card'), 'the credit card');
         expect(text()).toContain(xx('Credit Slider Info'));
         expect(text()).toContain(xx('Zero is the Sweet Spot'));
         expect(bypassing(), 'Credit Slider').toEqual([]);
@@ -418,7 +420,8 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         ledger.rows = [];
         ledger.escrow = 0;
         await renderIn('xx');
-        expect(text()).toContain(xx('No credit line yet'));
+        // Slice R1: a newcomer sees the credit card too (its left half striped, "no credit line yet": CreditBar's own tests).
+        expect(byTestId('credit-card')).not.toBeNull();
         expect(text()).toContain(xx('no reviews yet'));
         await click(row('Send (needs 1st trade)'), 'Send (needs 1st trade)');
         expect(alerts.said).toEqual([xx('First trade required'), xx('Direct sends are unlocked after your first completed trade on the Marketplace, and require a positive balance.'), xx('OK')]);
@@ -528,7 +531,7 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         for (const english of ['YOUR TRUST LEVEL', 'Resident', 'Level 2 of 4 · credit line 200 Beans', '400 more trust to 🏛️ Steward', 'Send Beans', 'Invite Members', 'ALL LEVELS',
             "You're here", '600 trust', 'Your current floor', 'Recognised as a community Resident', 'Invite others to join', '🚀 Reach 🏛️ Steward', 'Trust Manual', '400 trust to go',
             'beans of value to trade', 'THE LEVER', 'new partners (roughly)', 'WHAT BUILDS YOUR TRUST', 'VALUE TRADED', '+150 trust', '3 reviews', 'diverse = faster', 'BEANS', 'Levels', 'Wallet',
-            KNOWN_FROZEN.part, '⚠️  Spending paused — your balance is below what your 1 active offer unlock (−150). Post an Offer or trade back up to lift it. You can still receive and sell.']) {
+            KNOWN_FROZEN.part]) {
             expect(text(), english).toContain(english);
         }
         await click(byTestId('ledger-wallet-tab'), 'Wallet');
@@ -622,7 +625,7 @@ describe('the Ledger at 320 dp with 1.3× text, in the pseudo-locale', () => {
 
     it('the Credit Slider\'s bracket rows wrap each side, the rate kept to the right', async () => {
         await renderIn('xx');
-        await click(byLabel(xx('Credit position — tap to learn how it works')), 'the credit position');
+        await click(byTestId('credit-card'), 'the credit card');
         await click(row('Idle Balance Tiers'), 'Idle Balance Tiers');
         const rate = spanSaying(xx('{rate}% (Fee-Free Zone)').replace('{rate}', '0.0'))!;
         expect(styleOf(rate)).toMatchObject({ flexShrink: 1, textAlign: 'right' });
@@ -865,5 +868,83 @@ describe("the member's balance on the Ledger is whole hundredths, written as eve
         ledger.balance = { ...RESIDENT, balance_c, frozen: false, knownFrozen: false };
         await renderIn('en');
         expect(heroBalance()).toBe(shown);
+    });
+});
+
+describe('the credit card before the member\'s own line is in (round 2 of #3134): never a credit fact from an answer that isn\'t there', () => {
+    /** Words the card would say from an empty answer: the starter card's, untrue for a member with a line. */
+    const EMPTY_ANSWER_WORDS = /no credit line yet|nothing to spend|You are at zero|Your credit line opens with/i;
+    /** Every word on the screen and in every screen-reader label. */
+    const allSaid = () => [text(), ...Array.from(host.querySelectorAll('[aria-label]')).map((e) => e.getAttribute('aria-label') ?? '')].join('\n');
+    /** The node client answers as the default, but for the calls given here. */
+    const answering = (over: Record<string, (args: unknown[]) => Promise<unknown> | undefined>) => {
+        const base = net.answer!;
+        net.answer = (name, args) => (name in over ? over[name]!(args) : base(name, args));
+    };
+    const calls = (name: string) => net.calls.filter((c) => c === `db.${name}`).length;
+    /** A fresh screen in the same host, after the one drawn. */
+    const again = () => { act(() => root.unmount()); root = createRoot(host); };
+
+    it('while the balance is being read: the card\'s shape and "Loading…", no figure, no sentence, no note', async () => {
+        answering({ getBalance: () => new Promise(() => {}) });
+        await renderIn('en');
+        const reading = byTestId('credit-card-reading');
+        expect(reading).not.toBeNull();
+        expect(reading!.getAttribute('aria-label')).toBe('Loading…');
+        expect(byTestId('credit-card')).toBeNull();
+        expect(byTestId('credit-card-unread')).toBeNull();
+        expect(allSaid()).not.toMatch(EMPTY_ANSWER_WORDS);
+    });
+
+    it('a balance that could not be read: the card says so, and Try again reads it again and draws the card', async () => {
+        let first = true;
+        answering({ getBalance: () => { if (first) { first = false; return Promise.reject(new Error('disk')); } return Promise.resolve(ledger.balance); } });
+        const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+        await renderIn('en');
+        quiet.mockRestore();
+        const unread = byTestId('credit-card-unread');
+        expect(unread).not.toBeNull();
+        expect(unread!.textContent).toContain('Your credit line couldn’t be read just now.');
+        expect(byTestId('credit-card')).toBeNull();
+        expect(allSaid()).not.toMatch(EMPTY_ANSWER_WORDS);
+        const before = calls('getBalance');
+        await click(byTestId('credit-card-retry'), 'Try again');
+        expect(calls('getBalance')).toBeGreaterThan(before);
+        expect(byTestId('credit-card')).not.toBeNull();
+        expect(byTestId('credit-card-unread')).toBeNull();
+        expect(byTestId('credit-card')!.getAttribute('aria-label')).toMatch(/^You hold 1,200 Beans\./);
+    });
+
+    it('a first open, none of the node\'s figures on this phone yet: asks the node, waits, and says so if the node can\'t be read', async () => {
+        // db.ts getBalance with no cached line: floor 0 and `lineKnown: false`, which is not "no credit line".
+        const firstOpen = { balance_c: 0, floor_c: 0, tier: { name: 'Newcomer', emoji: '🌱' }, earnedCredit_c: 0, commons_c: 0, trustStats: null, activated: false, lineKnown: false };
+        answering({ getBalance: () => Promise.resolve(firstOpen), refreshBalanceFromServer: () => new Promise(() => {}) });
+        await renderIn('en');
+        expect(calls('refreshBalanceFromServer')).toBeGreaterThan(0);
+        expect(byTestId('credit-card-reading')).not.toBeNull();
+        expect(byTestId('credit-card')).toBeNull();
+        expect(allSaid()).not.toMatch(EMPTY_ANSWER_WORDS);
+        again();
+
+        answering({ refreshBalanceFromServer: () => Promise.resolve(null) });
+        await renderIn('en');
+        expect(byTestId('credit-card-unread')).not.toBeNull();
+        expect(byTestId('credit-card')).toBeNull();
+        expect(allSaid()).not.toMatch(EMPTY_ANSWER_WORDS);
+    });
+
+    it('in the pseudo-locale: the reading and the unread card through t()', async () => {
+        answering({ getBalance: () => Promise.reject(new Error('disk')) });
+        const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+        await renderIn('xx');
+        quiet.mockRestore();
+        expect(byTestId('credit-card-unread')!.textContent).toBe(`${xx('Your credit line couldn’t be read just now.')}${xx('Try again')}`);
+        expect(bypassing(), 'the unread card').toEqual([]);
+        again();
+
+        answering({ getBalance: () => new Promise(() => {}) });
+        await renderIn('xx');
+        expect(byTestId('credit-card-reading')!.getAttribute('aria-label')).toBe(xx('Loading…'));
+        expect(bypassing(), 'the reading card').toEqual([]);
     });
 });

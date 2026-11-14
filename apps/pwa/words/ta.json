@@ -17,18 +17,6 @@
   "(100% community owned)": "(100% சமூகம் சார்ந்தது)",
   "(You)": "(நீங்கள்)",
   "(You)\u0004roster: the viewer": "(நீங்கள்)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "one": "உங்கள் கடன் வரம்பைத் திறக்க **ஒரு சலுகையைப் பதிவிடுங்கள்** — **{n}** சலுகை உங்கள் முழுமையான −{limit} வரம்பைத் திறக்கிறது.",
-    "other": "உங்கள் கடன் வரம்பைத் திறக்க **ஒரு சலுகையைப் பதிவிடுங்கள்** — **{n}** சலுகைகள் உங்கள் முழுமையான −{limit} வரம்பைத் திறக்கின்றன."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "one": "**{n} சலுகை** −{limit} வரம்பைத் திறக்கிறது",
-    "other": "**{n} சலுகைகள்** −{limit} வரம்பைத் திறக்கின்றன"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "one": "**{n} சலுகை** → −{limit}",
-    "other": "**{n} சலுகைகள்** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "{emoji} {tier}-ஐ எட்ட மேலும் **{n}** நம்பிக்கை",
     "other": "{emoji} {tier}-ஐ எட்ட மேலும் **{n}** நம்பிக்கை"
@@ -643,7 +631,6 @@
   "Creating...": "உருவாக்குகிறது...",
   "Creator account linking:": "உருவாக்குநர் கணக்கு இணைப்பு:",
   "Credit Line": "கடன் வரம்பு",
-  "Credit balance gauge": "கடன் இருப்பு மானி",
   "Credits (B)": "வரவுகள் (பயறு)",
   "Credits (🫘 Beans)": "வரவுகள் (🫘 பயறுகள்)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "கிரெடிட்கள் என்பவை பரஸ்பரக் கடன் நாணயம். நீங்கள் பரிமாற்றம் செய்யும்போது கிரெடிட்கள் உறுப்பினர்களுக்கு இடையே மாறுகின்றன. ஒவ்வொரு உறுப்பினரும் பூஜ்ஜியத்தில் தொடங்குகிறார். பரஸ்பரப் பகிர்வை ஊக்குவிக்கவும் மதிப்பு உள்ளூரிலேயே சுற்றிவரவும் இந்த அமைப்பு வடிவமைக்கப்பட்டுள்ளது.",
@@ -1343,7 +1330,6 @@
   "No bond required.": "பிணையத் தொகை தேவையில்லை.",
   "No comment provided.": "கருத்து எதுவும் வழங்கப்படவில்லை.",
   "No conversations yet.": "இன்னும் உரையாடல்கள் எதுவும் இல்லை.",
-  "No credit line yet": "இன்னும் கடன் வரம்பு இல்லை",
   "No deals in progress": "செயலில் உள்ள ஒப்பந்தங்கள் எதுவும் இல்லை",
   "No friends yet": "இன்னும் நண்பர்கள் இல்லை",
   "No groups found": "குழுக்கள் எதுவும் இல்லை",
@@ -2052,10 +2038,6 @@
   "Spam or scam": "ஸ்பேம் அல்லது மோசடி",
   "Specific Action / Effect": "குறிப்பிட்ட நடவடிக்கை / விளைவு",
   "Specific Action or Effect": "குறிப்பிட்ட நடவடிக்கை அல்லது விளைவு",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "செலவழிப்பது இடைநிறுத்தப்பட்டுள்ளது — உங்கள் இருப்பு உங்கள் {n} செயலில் உள்ள சலுகை திறக்கும் வரம்பிற்குக் கீழே (−{limit}) உள்ளது. அதை உயர்த்த ஒரு சலுகையைப் பதிவிடுங்கள் அல்லது பரிவர்த்தனை செய்யுங்கள். நீங்கள் இன்னமும் பெறவும் விற்கவும் முடியும்.",
-    "other": "செலவழிப்பது இடைநிறுத்தப்பட்டுள்ளது — உங்கள் இருப்பு உங்கள் {n} செயலில் உள்ள சலுகைகள் திறக்கும் வரம்பிற்குக் கீழே (−{limit}) உள்ளது. அதை உயர்த்த ஒரு சலுகையைப் பதிவிடுங்கள் அல்லது பரிவர்த்தனை செய்யுங்கள். நீங்கள் இன்னமும் பெறவும் விற்கவும் முடியும்."
-  },
   "Sprout": "முளை",
   "Square — nothing owed either way": "சமம் — இரு தரப்பிலும் பாக்கி எதுவும் இல்லை",
   "Start": "தொடங்கு",
@@ -2761,7 +2743,6 @@
   "You can propose a Decision once you have completed a trade.": "நீங்கள் ஒரு வர்த்தகத்தை முடித்தவுடன் ஒரு முடிவை முன்மொழியலாம்.",
   "You can propose once you have completed a trade.": "ஒரு பரிவர்த்தனையை முடித்த பிறகு நீங்கள் முன்மொழியலாம்.",
   "You can still read, edit your profile and leave.": "நீங்கள் இன்னமும் வாசிக்கலாம், உங்கள் சுயவிவரத்தைத் திருத்தலாம் மற்றும் வெளியேறலாம்.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "உங்களிடம் உள்ள பயறைக் கொண்டு நீங்கள் இப்போதே வர்த்தகம் செய்யலாம். உங்கள் முதல் வர்த்தகத்தை முடிக்கவும், உங்கள் கடன் வரம்பு தானாகவே திறக்கும் — நீங்கள் அதிக மதிப்பை வர்த்தகம் செய்யும்போது, அது மேலும் ஆழமாகிறது. (ஒரு சமூக உத்தரவாதமளிப்பவரும் உங்களுக்கு ஒரு தொடக்க வரம்பை வழங்க முடியும்.)",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "நீங்கள் நேரத்தை அல்லது இடத்தை மாற்றினீர்கள். நிகழ்வு புதுப்பிக்கப்பட்டது எனக் காட்டும், வருபவர்கள் அனைவருக்கும் தெரிவிக்கப்படும்.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "நீங்கள் உங்கள் கணினியிலோ அல்லது வாடகைக்கு எடுத்ததிலோ இதைச் செய்கிறீர்கள். இதற்கு ஒருபோதும் beanpool.org தேவையில்லை: உங்கள் சொந்த வலை முகவரியும் செயல்படும்.",
   "You have already rated this trade.": "நீங்கள் ஏற்கெனவே இந்த வர்த்தகத்தை மதிப்பிட்டுள்ளீர்கள்.",
@@ -2955,8 +2936,6 @@
   "execution pending grace\u0004Decision status": "செயல்படுத்தல் அவகாச நிலுவையில்",
   "execution void\u0004Decision status": "செயல்படுத்தல் செல்லாது",
   "failed\u0004Decision status": "தோல்வியடைந்தது",
-  "fee-free": "கட்டணமில்லா",
-  "fee/mo": "கட்டணம்/மாதம்",
   "for {n} day|for {n} days": {
     "one": "{n} நாளுக்கு",
     "other": "{n} நாட்களுக்கு"
@@ -2974,7 +2953,6 @@
   "from {who} · {when}": "{who} இடமிருந்து · {when}",
   "general\u0004group category": "பொது",
   "guild\u0004group category": "தொழிற்கூட்டம்",
-  "hold credit →": "கடன் வை →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... அல்லது tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -3023,7 +3001,6 @@
   "request to join\u0004join policy": "இணையக் கோரிக்கை",
   "requested\u0004deal status": "கோரப்பட்டது",
   "social\u0004group category": "சமூக",
-  "sweet spot": "சரியான நிலை",
   "the account saved from the other tab": "மற்றொரு தாவலிலிருந்து சேமிக்கப்பட்ட கணக்கு",
   "the lever": "நெம்புகோல்",
   "them\u0004the other member of a trade, name unknown": "அவர்கள்",
@@ -3040,7 +3017,6 @@
   "working group\u0004group category": "பணிக் குழு",
   "yesterday": "நேற்று",
   "you": "நீங்கள்",
-  "your limit": "உங்கள் வரம்பு",
   "{actor} completed a trade with {target}": "{actor}, {target}-உடன் ஒரு வர்த்தகத்தை முடித்தார்",
   "{actor} joined": "{actor} இணைந்தார்",
   "{actor} joined the community": "{actor} சமூகத்தில் இணைந்தார்",
@@ -3056,8 +3032,6 @@
   "{actor} traded with {target}": "{actor}, {target}-உடன் பரிமாறிக்கொண்டார்",
   "{actor} traded with {target}: {title}": "{actor}, {target}-உடன் பரிமாற்றம் செய்தார்: {title}",
   "{amount} B": "{amount} பயறு",
-  "{amount} B · ≈{rate}%/mo": "{amount} பயறு · ≈{rate}%/மாதம்",
-  "{amount} Beans": "{amount} பயறுகள்",
   "{amount} Beans from the pool: {what}.": "நிதியிலிருந்து {amount} பயறுகள்: {what}.",
   "{amount} raised of {goal} 🫘": "{goal} 🫘-இல் {amount} திரட்டப்பட்டது",
   "{amount} · held in trust": "{amount} · எஸ்க்ரோவில் உள்ளது",
@@ -3398,7 +3372,6 @@
   "← Choose another way": "← வேறு வழியைத் தேர்ந்தெடு",
   "← Keep it": "← அதை வைத்திரு",
   "← Start again": "← மீண்டும் தொடங்கு",
-  "← carry credit": "← கடன் எடு",
   "↑ Sent": "↑ அனுப்பப்பட்டது",
   "↓ Received": "↓ பெறப்பட்டது",
   "↻ RECURRING": "↻ தொடர்ச்சியானது",

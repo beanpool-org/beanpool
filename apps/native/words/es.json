@@ -3435,13 +3435,6 @@
   "Beans from a member you blocked": "Frijoles de un miembro que bloqueaste",
   "GUEST": "INVITADO",
   "BEANS": "FRIJOLES",
-  "No credit line yet": "Sin línea de crédito aún",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Puedes intercambiar ahora mismo con los frijoles que tienes. Completa tu primer intercambio y tu línea de crédito se abrirá automáticamente; cuanto más valor intercambies, más se ampliará. (Un aval comunitario también puede darte una línea inicial).",
-  "Credit position — tap to learn how it works": "Posición de crédito: toca para ver cómo funciona",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️  Gastos pausados: tu saldo está por debajo de lo que habilita tu {n} oferta activa (−{limit}). Publica una oferta o vuelve a intercambiar para reactivarlo. Aún puedes recibir y vender.",
-    "other": "⚠️  Gastos pausados: tu saldo está por debajo de lo que habilitan tus {n} ofertas activas (−{limit}). Publica una oferta o vuelve a intercambiar para reactivarlo. Aún puedes recibir y vender."
-  },
   "Levels": "Niveles",
   "Wallet": "Billetera",
   "Ledger": "Registro",
@@ -5309,32 +5302,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (cuenta verificada)",
   "Opens external channel link": "Abre enlace al canal externo",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate}%/mes",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "Saldo de crédito: {balance} frijoles, límite de crédito: {floor} frijoles, tope sin comisiones: {max} frijoles.",
-  "fee/mo": "comisión/mes",
-  "your limit": "tu límite",
-  "sweet spot": "punto ideal",
-  "fee-free": "sin comisión",
-  "← carry credit": "← usar crédito",
-  "hold credit →": "acumular crédito →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} desbloquea −{depth} · {more} → −{next}",
-    "other": "🎣 {offers} desbloquean −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} desbloquea −{depth}",
-    "other": "🎣 {offers} desbloquean −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} oferta",
-    "other": "{n} ofertas"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 {post} para abrir tu línea de crédito — {count} oferta desbloquea tu total de −{floor}.",
-    "other": "🎣 {post} para abrir tu línea de crédito — {count} ofertas desbloquean tu total de −{floor}."
-  },
-  "Post an offer": "Publicar una oferta",
   "No maps app": "Sin app de mapas",
   "The event is at {lat}, {lng}.": "El evento es en {lat}, {lng}.",
   "Cancel this event?": "¿Cancelar este evento?",

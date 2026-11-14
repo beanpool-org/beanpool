@@ -313,9 +313,25 @@ export function keepCard(layout: HomeLayoutV2 | null, id: string, now: number): 
     return isArrivingCard(layout, id) ? keepArrivedCard(layout, id, editAt(layout, now)) : null;
 }
 
-/** A move of a card drawn as arriving keeps it first (core `keepArrivedCard`), so the move has a place on the list and writes its stamp. */
-const keptFirst = (layout: HomeLayoutV2 | null, id: string, now: number): HomeLayoutV2 | null =>
-    isArrivingCard(layout, id) ? keepArrivedCard(layout, id, editAt(layout, now)) : null;
+/** The cards Arrange moves: those of `among` that move and stand on the list, and those drawn as arriving (slice K7). */
+const movableOf = <T extends Pick<HomeCardInstance, 'id' | 'type'>>(layout: HomeLayoutV2 | null, among: readonly T[], pinned: readonly string[]): T[] => {
+    const list = listOf(layout);
+    return among.filter(c => canMoveCard(c.type, pinned) && (list.some(l => l.id === c.id) || isArrivingCard(layout, c.id)));
+};
+
+/**
+ * A move that reaches a card drawn as arriving keeps it first (core `keepArrivedCard`: on the list, its stamp written), so the
+ * move has a place on the list for it and writes its stamp, as core's own move does (review of #3154). `reached` is the card
+ * moved and every card whose place the move changes; each arriving one among them is kept, with any drawn before it, in the
+ * order Home draws them, so the list holds them in the order shown. Null when the move reaches none.
+ */
+function keepReached(layout: HomeLayoutV2 | null, id: string, movable: readonly Pick<HomeCardInstance, 'id'>[], reached: readonly string[], now: number): HomeLayoutV2 | null {
+    const drawn = arrivingOn(layout).filter(c => c.id === id || movable.some(m => m.id === c.id));
+    const last = drawn.reduce((upTo, c, k) => (reached.includes(c.id) ? k : upTo), -1);
+    let kept: HomeLayoutV2 | null = null;
+    for (const c of drawn.slice(0, last + 1)) kept = keepArrivedCard(kept ?? layout, c.id, editAt(layout, now));
+    return kept;
+}
 
 /** A card's settings changed in place (Settings… → Save): it keeps its place. Null when it isn't there or has none. */
 export function changeCardSettings(layout: HomeLayoutV2 | null, id: string, settings: unknown, now: number): HomeLayoutV2 | null {
@@ -336,22 +352,22 @@ export function changeCardSettings(layout: HomeLayoutV2 | null, id: string, sett
 
 /**
  * Up or down past the card next to it in `among` (every card Arrange folds), so a move always shows. Every other card keeps its place in the list. Null when it can't move that way;
- * a card drawn as arriving is kept first (on the list, stamped), so even a move that can't go further saves that.
+ * a card drawn as arriving is kept first (on the list, stamped), whether it is the one moved or the one passed, so even a move
+ * of it that can't go further saves that.
  */
 export function moveCard(
     layout: HomeLayoutV2 | null, id: string, dir: 'up' | 'down', among: readonly Pick<HomeCardInstance, 'id' | 'type'>[], now: number,
     pinned: readonly string[] = [],
 ): HomeLayoutV2 | null {
-    const kept = keptFirst(layout, id, now);
-    const base = kept ?? layout;
-    const list = listOf(base);
-    const movable = among.filter(c => canMoveCard(c.type, pinned) && list.some(l => l.id === c.id));
+    const movable = movableOf(layout, among, pinned);
     const from = movable.findIndex(c => c.id === id);
     const other = from < 0 ? undefined : movable[dir === 'up' ? from - 1 : from + 1];
-    if (!other) return kept;
-    const cards = [...list];
+    const kept = keepReached(layout, id, movable, other ? [id, other.id] : [id], now);
+    const base = kept ?? layout;
+    const cards = [...listOf(base)];
     const i = cards.findIndex(c => c.id === id);
-    const j = cards.findIndex(c => c.id === other.id);
+    const j = other ? cards.findIndex(c => c.id === other.id) : -1;
+    if (i < 0 || j < 0) return kept;
     [cards[i], cards[j]] = [cards[j], cards[i]];
     return { ...(base ?? defaultHomeLayout()), cards, updatedAt: iso(editAt(layout, now)) };
 }
@@ -366,21 +382,26 @@ export function reorderAmong<T extends Pick<HomeCardInstance, 'id' | 'type'>>(it
 
 /**
  * A drag's drop (L3): the card to place `to` among the movable cards of `among` (every card Arrange folds), saved as the
- * same list an arrow makes, in the slots those cards already hold. Null when it would not move.
+ * same list an arrow makes, in the slots those cards already hold. Null when it would not move. `to` counts the cards drawn
+ * as arriving too, as the drag's preview does; each one the drop moves is kept first (on the list, stamped).
  */
 export function moveCardTo(
     layout: HomeLayoutV2 | null, id: string, to: number, among: readonly Pick<HomeCardInstance, 'id' | 'type'>[], now: number,
     pinned: readonly string[] = [],
 ): HomeLayoutV2 | null {
-    const kept = keptFirst(layout, id, now);
+    const movable = movableOf(layout, among, pinned);
+    const placed = reorderAmong(movable, id, to, pinned);
+    const kept = keepReached(layout, id, movable, [id, ...movable.filter((c, k) => placed[k].id !== c.id).map(c => c.id)], now);
+    if (placed.every((c, k) => c.id === movable[k].id)) return kept;
     const base = kept ?? layout;
     const list = listOf(base);
-    const movable = among.filter(c => canMoveCard(c.type, pinned) && list.some(l => l.id === c.id));
-    const placed = reorderAmong(movable, id, to, pinned);
-    if (placed.every((c, k) => c.id === movable[k].id)) return kept;
-    const slots = movable.map(c => list.findIndex(l => l.id === c.id)).sort((x, y) => x - y);
+    // The cards now on the list, before and after: an arriving card the drop doesn't reach stays drawn after them, unmoved.
+    const onList = (c: Pick<HomeCardInstance, 'id'>) => list.some(l => l.id === c.id);
+    const from = movable.filter(onList);
+    const order = placed.filter(onList);
+    const slots = from.map(c => list.findIndex(l => l.id === c.id)).sort((x, y) => x - y);
     const cards = [...list];
-    slots.forEach((slot, k) => { cards[slot] = list.find(l => l.id === placed[k].id)!; });
+    slots.forEach((slot, k) => { cards[slot] = list.find(l => l.id === order[k].id)!; });
     return { ...(base ?? defaultHomeLayout()), cards, updatedAt: iso(editAt(layout, now)) };
 }
 

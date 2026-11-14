@@ -7,7 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import type { HomeAnswer } from '../lib/home-cards';
+import type { HomeAnswer, HomeLayoutV2 } from '../lib/home-cards';
 import type { HomeRead } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
@@ -17,7 +17,8 @@ const hooks = vi.hoisted(() => ({ sync: [] as Array<() => unknown>, open: [] as 
 vi.mock('../lib/api', () => ({
     getNodeApiUrl: vi.fn(() => ''),
     getHome: vi.fn(),
-    saveHomePreferences: vi.fn(async (_pk: string, prefs: { 'home.layout'?: HomeLayout; interests?: string[] }) => ({ success: true, ...prefs })),
+    // This file saves version-2 lists only (the v2() layouts below).
+    saveHomePreferences: vi.fn(async (_pk: string, prefs: { 'home.layout'?: HomeLayoutV2; interests?: string[] }) => ({ success: true, ...prefs })),
     markNoticesSeen: vi.fn(async () => ({ success: true, marked: 1 })),
     getCommunityMe: vi.fn(async () => ({ probation: { rules: 'ordinary', keptPosts: 0, ageEndsAt: null } })),
     // The reader's role, asked only for Welcome's "Invite someone ›" where only admins invite (core readerMayInvite).
@@ -182,6 +183,23 @@ describe('the Learn card on an arranged Home', () => {
         expect(cardIds()).not.toContain('learn');
         fireEvent.click(screen.getByTestId('home-arrange-open'));
         expect(screen.queryByText('Learn something local')).toBeNull();
+    });
+
+    it('in Arrange, ↓ on the card above it moves that card under it: Learn kept first with its stamp, in one save, and said', async () => {
+        const node = nodeV2(answer(), v2(['market', 'beans']));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-learn');
+        fireEvent.click(screen.getByTestId('home-arrange-open'));
+        // Learn is among the cards that move, so the card above it has a ↓ that is on, and it does what it shows.
+        const down = await screen.findByTestId('home-arrange-down-beans');
+        expect(down).not.toBeDisabled();
+        fireEvent.click(down);
+        await waitFor(() => expect(savedLayouts()).toHaveLength(1));
+        expect(savedLayouts()[0].cards.map(c => c.id)).toEqual(['market', 'learn', 'beans']);
+        expect(Object.keys(savedLayouts()[0].dismissed)).toEqual(['new:learn']);
+        await waitFor(() => expect(cardIds()).toEqual(['market', 'learn', 'beans', 'community']));
+        expect(screen.getByTestId('home-live').textContent).toMatch(/ moved to 3 of 3$/);
+        expect(node.account()!.cards.map(c => c.id)).toEqual(['market', 'learn', 'beans']);
     });
 });
 

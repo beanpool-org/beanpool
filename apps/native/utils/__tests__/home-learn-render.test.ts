@@ -359,4 +359,38 @@ describe('the card that arrives on an arranged Home', () => {
         expect(ids(same.cards)).toEqual(['market', 'beans', 'groups', 'learn']);
         expect(same.dismissed[STAMP]).toBe(new Date(NOW + 1).toISOString());
     });
+
+    // Review of #3154: Learn is among Arrange's moving cards, so the card above it has a ↓ that is on, and a drop can land in its place.
+    it('↓ on the card above it goes under it: Learn is kept first (on the list, stamped), then the two swap, as drawn', () => {
+        const home = arranged();
+        const among = cardOrder(home).filter((c) => c.type !== 'needs' && c.type !== 'community');
+        expect(ids(among)).toEqual(['market', 'beans', 'groups', 'learn']);
+        const down = moveCard(home, 'groups', 'down', among, NOW + 1)!;
+        expect(down).not.toBeNull();
+        expect(ids(down.cards)).toEqual(['market', 'beans', 'learn', 'groups']);
+        expect(down.dismissed).toEqual({ [STAMP]: new Date(NOW + 1).toISOString() });
+        expect(ids(cardOrder(down))).toEqual(['needs', 'market', 'beans', 'learn', 'groups', 'community']);
+    });
+
+    it('a drop into its place lands there, as the drag showed it: Learn kept first and moved up one', () => {
+        const home = arranged();
+        const among = cardOrder(home).filter((c) => c.type !== 'needs' && c.type !== 'community');
+        const dropped = moveCardTo(home, 'market', 3, among, NOW + 1)!;
+        expect(dropped).not.toBeNull();
+        expect(ids(dropped.cards)).toEqual(['beans', 'groups', 'learn', 'market']);
+        expect(dropped.dismissed).toEqual({ [STAMP]: new Date(NOW + 1).toISOString() });
+        expect(ids(cardOrder(dropped))).toEqual(['needs', 'beans', 'groups', 'learn', 'market', 'community']);
+    });
+
+    it("a move that doesn't reach it leaves it arriving, unstamped; one Home doesn't draw is never kept by a move past its place", () => {
+        const home = arranged();
+        const among = cardOrder(home).filter((c) => c.type !== 'needs' && c.type !== 'community');
+        const dropped = moveCardTo(home, 'market', 2, among, NOW + 1)!;
+        expect(ids(dropped.cards)).toEqual(['beans', 'groups', 'market']);
+        expect(dropped.dismissed).toEqual({});
+        expect(ids(cardOrder(dropped))).toEqual(['needs', 'beans', 'groups', 'market', 'learn', 'community']);
+        const drawn = among.filter((c) => c.id !== 'learn');
+        expect(moveCard(home, 'groups', 'down', drawn, NOW + 1)).toBeNull();
+        expect(moveCardTo(home, 'market', 3, drawn, NOW + 1)).toBeNull();
+    });
 });

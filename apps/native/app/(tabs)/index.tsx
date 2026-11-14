@@ -1092,8 +1092,10 @@ export default function HomeScreen() {
         save: (id, to) => {
             const c = dragMovable.find(m => m.id === id);
             // No slide here: the list already stands in the order saved (the preview), so nothing moves on the drop.
-            changeLayout(moveCardTo(layoutRef.current, id, to, dragMovable, Date.now(), pins));
-            if (c) AccessibilityInfo.announceForAccessibility(arrangeMovedLine(cardLabelName(c, answer?.profile), to + 1, dragMovable.length));
+            const next = moveCardTo(layoutRef.current, id, to, dragMovable, Date.now(), pins);
+            changeLayout(next);
+            // Said only when it moved (review of #3154): a drop that saves nothing says nothing.
+            if (c && next) AccessibilityInfo.announceForAccessibility(arrangeMovedLine(cardLabelName(c, answer?.profile), to + 1, dragMovable.length));
         },
         motion: slideMotion,
     });
@@ -1190,8 +1192,11 @@ export default function HomeScreen() {
     /** ↑ or ↓ in Arrange: saved at once through `moveCard`; the place is said, and focus stays on the arrow or its twin. */
     const moveInArrange = (c: HomeCardInstance, dir: 'up' | 'down') => {
         const at = movable.findIndex(m => m.id === c.id) + (dir === 'up' ? -1 : 1);
+        const next = moveCard(layoutRef.current, c.id, dir, movable, Date.now(), pins);
+        // Nothing moved, nothing saved: no slide and nothing said (review of #3154), as on the web.
+        if (!next) return;
         slide();
-        changeLayout(moveCard(layoutRef.current, c.id, dir, movable, Date.now(), pins));
+        changeLayout(next);
         AccessibilityInfo.announceForAccessibility(arrangeMovedLine(cardLabelName(c, answer?.profile), at + 1, movable.length));
         const end = dir === 'up' ? at === 0 : at === movable.length - 1;
         const keep = arrowRefs.current.get(`${c.id}:${end ? (dir === 'up' ? 'down' : 'up') : dir}`);

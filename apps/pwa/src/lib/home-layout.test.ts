@@ -124,8 +124,10 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
 
     it('move up and down past the card next to it on screen, keeping every other card\'s place', () => {
         const l: HomeLayoutV2 = { ...starterLayout(), cards: ['steps', 'tips', 'market', 'events', 'notices'].map(id => ({ id, type: id })) };
-        // On screen: tips isn't drawn (no tip to show), so market moves up past steps.
-        const shown = cardOrder(l).filter(c => c.id !== 'tips');
+        // On screen: tips isn't drawn (no tip to show), so market moves up past steps. Learn something local arrives on this
+        // list (slice K7) and has nothing to show here either, so notices is the last card on screen; a move past an arriving
+        // card that is drawn: 'Arrange with a card that arrives among the moving ones' below.
+        const shown = cardOrder(l).filter(c => c.id !== 'tips' && c.id !== 'learn');
         expect(ids(moveCard(l, 'market', 'up', shown, NOW))).toEqual(['market', 'tips', 'steps', 'events', 'notices']);
         expect(ids(moveCard(l, 'events', 'down', shown, NOW))).toEqual(['steps', 'tips', 'market', 'notices', 'events']);
         expect(moveCard(l, 'steps', 'up', shown, NOW)).toBeNull();
@@ -797,5 +799,65 @@ describe('the cards Arrange folds (DESIGN-home-layout-fable.md §3.2)', () => {
     it("a folded card's line is the catalogue's; a type nobody knows has none", () => {
         expect(cardLine('events')).toBe('Events coming up soon.');
         expect(cardLine('future-card')).toBe('');
+    });
+});
+
+describe('Arrange with a card that arrives among the moving ones (slice K7, review of #3154)', () => {
+    // A Home arranged before Learn something local: Learn arrives after the member's own cards, and Arrange moves it with them.
+    const arranged = (): HomeLayoutV2 => ({ v: 2, cards: ['market', 'beans', 'groups'].map(id => ({ id, type: id })), dismissed: {}, updatedAt: iso(NOW - H) });
+    const among = (l: HomeLayoutV2) => cardOrder(l).filter(c => c.type !== 'needs' && c.type !== 'community');
+    const STAMP = 'new:learn';
+
+    it('↓ on the card above it goes under it: Learn is kept first (on the list, stamped), then the two swap, as drawn', () => {
+        const home = arranged();
+        expect(among(home).map(c => c.id)).toEqual(['market', 'beans', 'groups', 'learn']);
+        const down = moveCard(home, 'groups', 'down', among(home), NOW)!;
+        expect(down).not.toBeNull();
+        expect(ids(down)).toEqual(['market', 'beans', 'learn', 'groups']);
+        expect(Object.keys(down.dismissed)).toEqual([STAMP]);
+        expect(cardOrder(down).map(c => c.id)).toEqual(['needs', 'market', 'beans', 'learn', 'groups', 'community']);
+        // ↑ on Learn from there moves it as any card on the list.
+        expect(ids(moveCard(down, 'learn', 'up', among(down), NOW + 1))).toEqual(['market', 'learn', 'beans', 'groups']);
+    });
+
+    it('a drop into its place lands there, where the preview showed it: Learn kept first and moved up one', () => {
+        const home = arranged();
+        const preview = reorderAmong(among(home), 'market', 3).map(c => c.id);
+        expect(preview).toEqual(['beans', 'groups', 'learn', 'market']);
+        const dropped = moveCardTo(home, 'market', 3, among(home), NOW)!;
+        expect(dropped).not.toBeNull();
+        expect(ids(dropped)).toEqual(preview);
+        expect(Object.keys(dropped.dismissed)).toEqual([STAMP]);
+        expect(cardOrder(dropped).map(c => c.id)).toEqual(['needs', ...preview, 'community']);
+    });
+
+    it("a move that doesn't reach it leaves it arriving, unstamped, after the member's cards", () => {
+        const home = arranged();
+        const up = moveCard(home, 'groups', 'up', among(home), NOW)!;
+        expect(ids(up)).toEqual(['market', 'groups', 'beans']);
+        expect(up.dismissed).toEqual({});
+        expect(cardOrder(up).map(c => c.id)).toEqual(['needs', 'market', 'groups', 'beans', 'learn', 'community']);
+        const dropped = moveCardTo(home, 'market', 2, among(home), NOW)!;
+        expect(ids(dropped)).toEqual(['beans', 'groups', 'market']);
+        expect(dropped.dismissed).toEqual({});
+    });
+
+    it('moves of Learn itself keep it first, as before: ↑, a drag to the top, and ↓ or a drop from where it stands', () => {
+        const home = arranged();
+        const up = moveCard(home, 'learn', 'up', among(home), NOW)!;
+        expect(ids(up)).toEqual(['market', 'beans', 'learn', 'groups']);
+        expect(Object.keys(up.dismissed)).toEqual([STAMP]);
+        expect(ids(moveCardTo(home, 'learn', 0, among(home), NOW))).toEqual(['learn', 'market', 'beans', 'groups']);
+        expect(ids(moveCard(home, 'learn', 'down', among(home), NOW))).toEqual(['market', 'beans', 'groups', 'learn']);
+        expect(ids(moveCardTo(home, 'learn', 3, among(home), NOW))).toEqual(['market', 'beans', 'groups', 'learn']);
+    });
+
+    it('an arriving card Home does not draw (nothing to show) is never kept by a move past its place', () => {
+        const home = arranged();
+        const drawn = among(home).filter(c => c.id !== 'learn');
+        expect(moveCard(home, 'groups', 'down', drawn, NOW)).toBeNull();
+        const dropped = moveCardTo(home, 'market', 2, drawn, NOW)!;
+        expect(ids(dropped)).toEqual(['beans', 'groups', 'market']);
+        expect(dropped.dismissed).toEqual({});
     });
 });

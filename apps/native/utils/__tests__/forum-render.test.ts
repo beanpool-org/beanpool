@@ -10,11 +10,14 @@
  * - **A topic**: the title, the opening and the replies in order, the member's own reply tinted, a quote line, a new writer's
  *   links plain text; each post's ⋯ offers what the web's does, only where it applies; a closed topic takes no reply.
  * - **Kept copies**: with no connection the list and the topic draw from this phone's copy, with the node's words and Try again.
+ * - **Part 2:** the search box under ＋ New topic (its hits take the topic list's place); the reply box's photo button where the
+ *   forum takes the member's photos, the photos waiting with ✕; a draft put back in the box, kept when a send fails and when the
+ *   member leaves with words in the box; New topic's photo row.
  * - **Every look, 320 dp, 1.3x:** every word in readable ink on its own ground (4.5:1), every button 48 dp tall, nothing
  *   fixed-width and no title cut to a line count.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, createElement, useEffect } from 'react';
+import { act, createElement, useEffect, useImperativeHandle, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { BRAND_SETS, contrastRatio } from '@beanpool/core';
 
@@ -41,7 +44,7 @@ vi.mock('react-native', () => {
     return {
         Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
         StyleSheet: { create: (s: unknown) => s },
-        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), Modal: el('div'), Image: el('img'), TextInput: el('input'),
+        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), Modal: el('div'), Image: el('img'), TextInput: el('input'), ActivityIndicator: el('i'),
         Linking: { openURL: vi.fn(async () => true) },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
@@ -69,17 +72,39 @@ vi.mock('../blocklist', () => ({ blockUser: vi.fn(async () => true) }));
 vi.mock('../identity', () => ({ loadIdentity: async () => ({ publicKey: ME }) }));
 vi.mock('../use-pin-role', () => ({ usePinRole: () => null }));
 vi.mock('../../components/chat/styles', () => ({ makeChatStyles: () => ({}) }));
+// The chat's composer, as far as the forum uses it: its handle (setText, currentText), the photo button where onAttach is
+// given, the waiting photos above the box, and Send (asking canSend first, emptying the box, then onSend), as the real one does.
 vi.mock('../../components/chat/ChatComposer', async () => {
     const { forwardRef } = await import('react');
-    return { ChatComposer: forwardRef((props: { placeholder: string }, _ref) => createElement('textarea', { 'data-testid': 'forum-reply-box', placeholder: props.placeholder })) };
+    type P = { placeholder: string; onSend: (w: string) => unknown; canSend?: () => boolean; onAttach?: () => void; attachment?: unknown };
+    return {
+        ChatComposer: forwardRef((props: P, ref) => {
+            const [text, setText] = useState('');
+            useImperativeHandle(ref, () => ({ setText, reset: () => setText(''), focus: () => {}, currentText: () => text.trim() }), [text]);
+            return createElement('div', { 'data-testid': 'forum-composer' },
+                props.attachment as any,
+                props.onAttach ? createElement('button', { 'data-testid': 'forum-composer-attach', onClick: props.onAttach }) : null,
+                createElement('textarea', { 'data-testid': 'forum-reply-box', placeholder: props.placeholder, value: text, onChange: (e: { target: { value: string } }) => setText(e.target.value) }),
+                createElement('button', { 'data-testid': 'forum-composer-send', onClick: async () => { if (props.canSend && !props.canSend()) return; const w = text; setText(''); await props.onSend(w); } }));
+        }),
+    };
 });
+const picker = vi.hoisted(() => ({ next: null as string | null, asked: 0 }));
+vi.mock('expo-image-picker', () => ({}));
+vi.mock('../chat-photo', () => ({ chatPhotoDataUri: vi.fn(), withinMs: (p: Promise<unknown>) => p }));
+vi.mock('../post-photo', () => ({ askPhotoSource: vi.fn() }));
+vi.mock('../../components/forum/ForumBits', async (orig) => ({
+    ...(await orig<object>()),
+    pickForumPhoto: vi.fn(async () => { picker.asked += 1; return picker.next; }),
+}));
+vi.mock('../forum-search', () => ({ searchForum: vi.fn(async () => node.search) }));
 vi.mock('../../components/ReportMessageSheet', () => ({ ReportMessageSheet: () => null }));
 
 const ME = 'm'.repeat(64);
 const ANA = 'a'.repeat(64);
 // No connection: what utils/forum.ts throws with no answer (forumRefusal), no words of its own, so the screen says its line. `refused`:
 // the node's sentence, as forumRefusal hands it on.
-const node = vi.hoisted(() => ({ offline: false, refused: null as string | null, front: null as any, list: null as any, topic: null as any, kept: { front: null as any, list: null as any, topic: null as any }, mine: null as any }));
+const node = vi.hoisted(() => ({ offline: false, refused: null as string | null, front: null as any, list: null as any, topic: null as any, kept: { front: null as any, list: null as any, topic: null as any }, mine: null as any, search: null as any, draft: null as any, replyFails: false }));
 const unanswered = () => {
     if (node.refused) throw Object.assign(new Error(node.refused), { status: 403, code: 'not_active' });
     if (node.offline) throw Object.assign(new Error(''), { unsaid: true });
@@ -98,12 +123,16 @@ vi.mock('../forum', () => ({
     readForumTopic: vi.fn(async () => 9),
     forumPhotoUri: vi.fn(async () => null),
     forgetForumTopic: vi.fn(async () => {}),
-    withdrawFirstLook: vi.fn(async () => {}), followForumTopic: vi.fn(), closeForumTopic: vi.fn(), removeForumPost: vi.fn(), replyInForum: vi.fn(),
-    reportForumPost: vi.fn(), markForumTold: vi.fn(),
+    withdrawFirstLook: vi.fn(async () => {}), followForumTopic: vi.fn(), closeForumTopic: vi.fn(), removeForumPost: vi.fn(),
+    replyInForum: vi.fn(async () => { if (node.replyFails) throw Object.assign(new Error(''), { unsaid: true }); return { number: 5 }; }),
+    reportForumPost: vi.fn(), markForumTold: vi.fn(), startForumTopic: vi.fn(async () => ({ topic: { id: 't9' }, post: {} })),
+    keptForumDraft: vi.fn(async () => node.draft),
+    keepForumDraft: vi.fn(async () => {}),
 }));
 
 import { ForumPane } from '../../components/forum/ForumPane';
 import ForumTopicScreen from '../../app/forum/[id]';
+import NewForumTopicScreen from '../../app/forum/new';
 import { COLOUR_SETS } from '../../constants/colors';
 
 const LOOKS = [['Classic', 'dark'], ['Light', 'light'], ['Dark', 'night']] as const;
@@ -136,12 +165,14 @@ const TOPIC = {
     next: null, lastRead: 1,
 };
 
+let lastRoot: Root | null = null;
 async function render(set: Set, what: () => unknown): Promise<HTMLElement> {
     look.colors = COLOUR_SETS[set];
     look.theme = set;
     const host = document.createElement('div');
     document.body.appendChild(host);
-    await act(async () => { createRoot(host).render(createElement(what as any) as unknown as Parameters<Root['render']>[0]); });
+    lastRoot = createRoot(host);
+    await act(async () => { lastRoot!.render(createElement(what as any) as unknown as Parameters<Root['render']>[0]); });
     await act(async () => {});
     await act(async () => {});
     return host;
@@ -192,7 +223,10 @@ beforeEach(() => {
     nav.pushed = [];
     nav.back = 0;
     nav.params = { id: 't1' };
-    Object.assign(node, { offline: false, refused: null, front: FRONT, list: LIST, topic: TOPIC, kept: { front: null, list: null, topic: null }, mine: null });
+    Object.assign(node, { offline: false, refused: null, front: FRONT, list: LIST, topic: TOPIC, kept: { front: null, list: null, topic: null }, mine: null, search: null, draft: null, replyFails: false });
+    picker.next = null;
+    picker.asked = 0;
+    vi.clearAllMocks();
 });
 
 describe.each(LOOKS)('the forum list in %s (%s)', (_name, set) => {
@@ -303,5 +337,111 @@ describe.each(LOOKS)('a topic in %s (%s)', (_name, set) => {
         const host = await render(set, ForumTopicScreen);
         expect(words(byId(host, 'forum-topic-title'))).toBe(TOPIC.topic.title);
         expect(allById(host, 'forum-post-3')).toHaveLength(1);
+    });
+});
+
+const PHOTO = 'data:image/jpeg;base64,/9j/4AAQ';
+const typeIn = async (box: Element, value: string) => {
+    await act(async () => {
+        const proto = box instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+        Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(box, value);
+        box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+};
+
+describe.each(LOOKS)('the forum list\'s search in %s (%s)', (_name, set) => {
+    it('draws the search box under ＋ New topic, as the web; hits take the topic list\'s place and open the topic at the post found', async () => {
+        node.search = { hits: [{ topicId: 't2', sectionId: 'skills', title: 'Seed swap ideas', postId: 'p7', number: 7, writer: writer(ANA, 'Asha'), createdAt: at(2), excerpt: '…swap seeds in spring…' }], next: null };
+        const host = await render(set, ForumPane);
+        const order = Array.from(host.querySelectorAll('[data-testid]')).map((n) => n.getAttribute('data-testid')).filter((id) => ['forum-new', 'forum-search', 'forum-topics'].includes(id!));
+        expect(order).toEqual(['forum-new', 'forum-search', 'forum-topics']);
+        expect(byId(host, 'forum-search-box').getAttribute('aria-label')).toBe('Search the forum');
+        await typeIn(byId(host, 'forum-search-box'), 'swap seeds');
+        await press(byId(host, 'forum-search-go'));
+        expect(allById(host, 'forum-topic-row')).toHaveLength(0);
+        const hit = byId(host, 'forum-search-hit');
+        expect(words(hit)).toContain('Seed swap ideas');
+        expect(words(hit)).toContain('Asha · Skills & how-to');
+        await press(hit);
+        expect(nav.pushed).toEqual([{ pathname: '/forum/[id]', params: { id: 't2', at: '7' } }]);
+        expectReadable(host, set);
+        expectHoldsSmall(host);
+        // ✕ gives the list back.
+        await press(byId(host, 'forum-search-clear'));
+        expect(allById(host, 'forum-topic-row')).toHaveLength(3);
+    });
+});
+
+describe.each(LOOKS)('a topic\'s photos and draft in %s (%s)', (_name, set) => {
+    it('the reply box has the photo button where the forum takes the member\'s photos; a picked photo waits with ✕ and goes with the reply', async () => {
+        const host = await render(set, ForumTopicScreen);
+        expect(byId(host, 'forum-composer-attach')).not.toBeNull();
+        picker.next = PHOTO;
+        await press(byId(host, 'forum-composer-attach'));
+        expect(picker.asked).toBe(1);
+        expect(byId(host, 'forum-attached').querySelector('img')!.getAttribute('data-src')).toBe(PHOTO);
+        expect(byId(host, 'forum-attached-remove').getAttribute('aria-label')).toBe('Remove photo 1');
+        expectHoldsSmall(host);
+        // Photos alone don't send (a reply has words, as on the web); with words they go together.
+        const { replyInForum, keepForumDraft } = await import('../forum');
+        await press(byId(host, 'forum-composer-send'));
+        expect(replyInForum).not.toHaveBeenCalled();
+        await typeIn(byId(host, 'forum-reply-box'), 'Here is our seed table.');
+        await press(byId(host, 'forum-composer-send'));
+        expect(vi.mocked(replyInForum).mock.calls[0][1]).toMatchObject({ words: 'Here is our seed table.', photos: [PHOTO] });
+        expect(byId(host, 'forum-attached')).toBeNull();
+        expect(keepForumDraft).toHaveBeenLastCalledWith('t1', null);
+    });
+
+    it('a new writer (links and photos off) gets no photo button, as on the web', async () => {
+        node.front = { ...FRONT, linksOn: false };
+        const host = await render(set, ForumTopicScreen);
+        expect(byId(host, 'forum-composer-attach')).toBeNull();
+    });
+
+    it('a kept draft is back in the box with its quote and photos; a send with no connection keeps it again', async () => {
+        node.draft = { words: 'Typed on the bus', quotes: 2, photos: [PHOTO] };
+        const host = await render(set, ForumTopicScreen);
+        expect((byId(host, 'forum-reply-box') as HTMLTextAreaElement).value).toBe('Typed on the bus');
+        expect(words(byId(host, 'forum-quote'))).toContain('Marty');
+        expect(byId(host, 'forum-attached').querySelector('img')!.getAttribute('data-src')).toBe(PHOTO);
+        node.replyFails = true;
+        const { keepForumDraft } = await import('../forum');
+        await press(byId(host, 'forum-composer-send'));
+        expect(keepForumDraft).toHaveBeenLastCalledWith('t1', { words: 'Typed on the bus', quotes: 2, photos: [PHOTO] });
+        // The words are back in the box, with the forum's own line (no answer has no words of its own).
+        expect((byId(host, 'forum-reply-box') as HTMLTextAreaElement).value).toBe('Typed on the bus');
+        expect(words(host)).toContain('Couldn’t save this in the forum.');
+        expectReadable(host, set);
+    });
+
+    it('leaving the topic with words in the box keeps them as its draft', async () => {
+        const host = await render(set, ForumTopicScreen);
+        await typeIn(byId(host, 'forum-reply-box'), 'Half a thought');
+        const { keepForumDraft } = await import('../forum');
+        await act(async () => { lastRoot!.unmount(); });
+        expect(keepForumDraft).toHaveBeenLastCalledWith('t1', { words: 'Half a thought', quotes: null, photos: [] });
+    });
+});
+
+describe.each(LOOKS)('New topic\'s photos in %s (%s)', (_name, set) => {
+    it('Add a photo where the member\'s photos are taken; the picked photo waits with ✕ and goes with the topic', async () => {
+        const host = await render(set, NewForumTopicScreen);
+        expect(words(byId(host, 'forum-attach'))).toBe('Add a photo');
+        picker.next = PHOTO;
+        await press(byId(host, 'forum-attach'));
+        expect(byId(host, 'forum-attached').querySelector('img')!.getAttribute('data-src')).toBe(PHOTO);
+        expectReadable(host, set);
+        expectHoldsSmall(host);
+    });
+
+    it('a new member\'s first topic takes photos (a moderator sees them first); a writer whose links are off and who isn\'t new gets none', async () => {
+        node.front = { ...FRONT, linksOn: false, firstTopicWaits: true };
+        let host = await render(set, NewForumTopicScreen);
+        expect(byId(host, 'forum-attach')).not.toBeNull();
+        document.body.innerHTML = '';
+        node.front = { ...FRONT, linksOn: false, firstTopicWaits: false };
+        host = await render(set, NewForumTopicScreen);
+        expect(byId(host, 'forum-attach')).toBeNull();
     });
 });

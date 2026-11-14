@@ -9,10 +9,15 @@
  *
  * ## Who may subscribe
  *
- * In W1, a key with a request to join here that members can still answer (engine/knocks.ts askerStanding), and nobody else:
- * 403 `no_open_request` (members get their browsers in W2). A key whose request was declined, within the decline's block, is
- * answered exactly as an open one, 201 with the same fields, and nothing is kept: a no is never a message, and nothing will
- * be sent to it. The signer is always the actor (the real signature middleware); no key is read from the body.
+ * A member (W2: "Turn on" on the web app; passesReadGate, the same members who may read their notices): a row of kind
+ * `member` per browser, told every kind their phone is (engine/web-push-subscriptions.ts putMemberSubscription), whatever
+ * the node's switches; past the key's day of new browsers, 429 `key_rate_limited`.
+ *
+ * A key with a request to join here that members can still answer (engine/knocks.ts askerStanding; W1): one `asker` row.
+ * Anyone else: 403 `no_open_request`; and with requests to join switched off here, 404 `feature_off`, as the profile gate
+ * answers them. A key whose request was declined, within the decline's block, is answered exactly as an open one, 201 with
+ * the same fields, and nothing is kept: a no is never a message, and nothing will be sent to it. The signer is always the
+ * actor (the real signature middleware); no key is read from the body.
  *
  * `pushKey` is the node key the browser pins for the notices (as the phone's registration answers it), so the app can tell a
  * notice its community signed from a forgery; `vapidKey` the key it subscribed with, so it can see the node's key changed.
@@ -24,15 +29,17 @@
  * ## The main server only
  *
  * A standby refuses a subscription (503 `standby`) and makes no key: it sends no push. Its key read answers the key it has,
- * or 503. Every route answers 404 `feature_off` with the `knocks` switch off (routes/profile-feature-gate.ts), since in W1
- * only an applicant subscribes.
+ * or 503.
  */
 import Router from '@koa/router';
 import { normaliseLang } from '@beanpool/core';
-import { getNodeRole } from '../state-engine.js';
+import { getNodeRole, passesReadGate } from '../state-engine.js';
 import { askerStanding } from '../engine/knocks.js';
 import { pushKeyHex } from '../engine/push-notices.js';
-import { parseBrowserSubscription, putAskerSubscription, removeWebPushSubscription, webPushSubId } from '../engine/web-push-subscriptions.js';
+import {
+    parseBrowserSubscription, putAskerSubscription, putMemberSubscription, removeWebPushSubscription, webPushSubId,
+} from '../engine/web-push-subscriptions.js';
+import { FEATURE_OFF, featureOffMessage, getProfileSwitches } from '../config/node-profile.js';
 import { ensureVapidKey, readVapidKey, type VapidKey } from '../services/web-push.js';
 import { RecoverySealKeyMissing } from '../services/recovery-seal-key.js';
 import type { RouteDeps } from './types.js';
@@ -79,9 +86,21 @@ export function createWebPushRoutes(_deps: RouteDeps): Router {
         const body = (ctx as any).requestBody ?? {};
         const sub = parseBrowserSubscription(body.subscription);
         if (!sub) return answer(ctx, 400, "'subscription' must be a browser's push subscription: its endpoint at a push service, and its keys.", 'bad_subscription');
-        const standing = askerStanding(actor);
+        const member = passesReadGate(actor);
+        let standing: ReturnType<typeof askerStanding> | 'member' = 'member';
+        if (!member) {
+            // An applicant's browser goes with the requests to join, as the profile gate would answer it.
+            const switches = getProfileSwitches();
+            const off = (['invites', 'knocks'] as const).find((k) => !switches[k]);
+            if (off) {
+                ctx.status = 404;
+                ctx.body = { error: featureOffMessage(off), code: FEATURE_OFF, feature: off };
+                return;
+            }
+            standing = askerStanding(actor);
+        }
         if (standing === 'none') {
-            return answer(ctx, 403, 'Only someone waiting for an answer to their request to join can be told here.', 'no_open_request');
+            return answer(ctx, 403, 'Only a member, or someone waiting for an answer to their request to join, can be told here.', 'no_open_request');
         }
         const contact = contactOf(ctx);
         if (!contact) return answer(ctx, 400, 'This request did not name this community by a host name.', 'bad_host');
@@ -90,7 +109,13 @@ export function createWebPushRoutes(_deps: RouteDeps): Router {
         let subId: string;
         try {
             const lang = typeof body.lang === 'string' ? normaliseLang(body.lang) : null;
-            subId = standing === 'open' ? putAskerSubscription(actor, sub, contact, lang) : webPushSubId(sub.endpoint);
+            if (standing === 'member') {
+                const kept = putMemberSubscription(actor, sub, contact, lang);
+                if (kept === 'key_rate_limited') return answer(ctx, 429, 'Too many new browsers for this account today. Try again tomorrow.', 'key_rate_limited');
+                subId = kept;
+            } else {
+                subId = standing === 'open' ? putAskerSubscription(actor, sub, contact, lang) : webPushSubId(sub.endpoint);
+            }
         } catch (e) {
             if (e instanceof RecoverySealKeyMissing) return answer(ctx, 503, "This community can't keep browser subscriptions right now.", 'no_seal_key');
             throw e;

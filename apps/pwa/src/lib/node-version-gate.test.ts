@@ -14,7 +14,7 @@ import {
     HEALTH_READ_TIMEOUT_MS, MIN_NODE_VERSION, NodeTooOldError, isNodeTooOldError, nodeNotReadText, nodeTooOldText, nodeVersionBelowMinimum,
     refuseIfNodeTooOld, resetNodeVersionGateForTests,
 } from './node-version-gate';
-import { fetchMembershipAt, getCommunityHealth, getRemotePosts, request, signedCopyFetch, signedFetchAt, testNodeConnection } from './api';
+import { fetchMembershipAt, getCommunityHealth, getRemotePosts, request, sendSignedAt, signedCopyFetch, signedFetchAt, testNodeConnection } from './api';
 import { membershipAt, purgeHere } from './delete-here';
 
 const OLD = 'https://old.example.org';
@@ -219,6 +219,27 @@ describe('every call to another community goes through it', () => {
         const reached = communities({ [OLD]: '1.3.0' });
         await expect(signedFetchAt('POST', OLD, '/api/join/knock', '{}', kim)).rejects.toBeInstanceOf(NodeTooOldError);
         expect(reached).toEqual([`${OLD}/api/community/health`]);
+    });
+
+    it('sendSignedAt: refused below 1.4.0, nothing but health sent', async () => {
+        const reached = communities({ [OLD]: '1.3.0' });
+        await expect(sendSignedAt('DELETE', OLD, '/api/web-push', '{"subId":"x"}', kim)).rejects.toBeInstanceOf(NodeTooOldError);
+        expect(reached).toEqual([`${OLD}/api/community/health`]);
+    });
+
+    it('sendSignedAt: to 1.4.0, signed for that host and sent with keepalive; its answer is never waited for', async () => {
+        const sent: { url: string; init: RequestInit | undefined }[] = [];
+        vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+            const url = String(input);
+            if (url.endsWith('/api/community/health')) return Promise.resolve(new Response(JSON.stringify({ version: '1.4.0' }), { status: 200 }));
+            sent.push({ url, init });
+            return new Promise<Response>(() => { /* an old community out of reach: never answers */ });
+        }));
+        await sendSignedAt('DELETE', NEW, '/api/web-push', '{"subId":"x"}', kim);
+        expect(sent).toHaveLength(1);
+        expect(sent[0].url).toBe(`${NEW}/api/web-push`);
+        expect(sent[0].init).toMatchObject({ method: 'DELETE', body: '{"subId":"x"}', keepalive: true });
+        expect(Object.keys(sent[0].init?.headers ?? {}).some((h) => /signature/i.test(h))).toBe(true);
     });
 
     it('signedCopyFetch: refused below 1.4.0, nothing but health sent', async () => {

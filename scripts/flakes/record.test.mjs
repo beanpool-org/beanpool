@@ -139,6 +139,10 @@ const LINE_TABLE = [
     ['fixture', ['not ok 2 - a member sees the bell once', '  ---', '  duration_ms: 0.4', "  location: '/home/runner/work/beanpool/beanpool/scripts/demo.test.mjs:4:1'", "  failureType: 'testCodeFailure'", '  ...'], 'test', 'a member sees the bell once'],
     ['fixture', ['not ok 3 - the forum', '  ---', "  location: '/home/runner/work/beanpool/beanpool/scripts/demo.test.mjs:5:1'", "  failureType: 'subtestsFailed'", '  ...'], 'check'],
     ['made', ['not ok 1 - scripts/demo.test.mjs', '  ---', '  duration_ms: 41.2', "  failureType: 'testCodeFailure'", '  exitCode: 1', '  ...'], 'check'],
+    // node 22's REAL per-file line (round 3's must-fix): it carries type and a <file>:1:1 location, as CI prints it.
+    ['real', ['not ok 1 - scripts/no-google-fonts.test.mjs', '  ---', '  duration_ms: 28.552209', "  type: 'test'", "  location: '/home/runner/work/beanpool/beanpool/scripts/no-google-fonts.test.mjs:1:1'", "  failureType: 'testCodeFailure'", '  exitCode: 1', '  signal: ~', "  error: 'test failed'", "  code: 'ERR_TEST_FAILURE'", '  ...'], 'check'],
+    // the same file-level line with no exitCode (a name equal to its location's file is still the file, not a test)
+    ['made', ['not ok 1 - scripts/no-google-fonts.test.mjs', '  ---', "  type: 'test'", "  location: '/home/runner/work/beanpool/beanpool/scripts/no-google-fonts.test.mjs:1:1'", "  failureType: 'testCodeFailure'", '  ...'], 'check'],
     ['made', ['not ok 1 - 1 problem'], 'check'],
     // eslint (round 2's must-fix is the first row)
     ['format', ['/home/runner/work/beanpool/beanpool/apps/pwa/src/a.tsx', "  12:5  error  'x' is assigned a value but never used  @typescript-eslint/no-unused-vars", '', '✖ 1 problem (1 error, 0 warnings)'], 'check'],

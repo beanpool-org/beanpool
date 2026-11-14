@@ -188,6 +188,14 @@ function readRawLines(section, add) {
             const at = yaml.map((y) => TAP_LOCATION.exec(y)?.[1]).find(Boolean);
             if (!at) continue;                                           // no location: not a test line
             const loc = /\/beanpool\/beanpool\/(.+)$/.exec(at)?.[1] ?? null;
+            const locFile = loc?.replace(/:\d+:\d+$/, '') ?? null;
+            // Node 22's per-FILE result (the file's process failed while none of its tests did: a missing export, a throw at
+            // load, a non-zero exit) also carries a location (<file>:1:1). Only that line holds `exitCode:`, and its name is
+            // its file. It names no test: a check record that keeps the file, as vitest's `FAIL  file [ file ]` (never pairs).
+            if (yaml.some((y) => /^exitCode:/.test(y)) || (locFile && m[1] === locFile)) {
+                add({ test: `${m[1]}: the file failed to run`, kind: 'check', check: section.check, file: locFile, pkg: null });
+                continue;
+            }
             add({ test: m[1], kind: 'node-test', check: section.check, file: loc, pkg: null });
         } else if ((!specList || /^test at /.test(L[i - 1] ?? '')) && (m = SPEC_TEST.exec(t)) && !describes.has(m[1])) {
             add({ test: m[1], kind: 'node-test', check: section.check, file: null, pkg: null });

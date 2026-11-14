@@ -441,3 +441,76 @@ describe('a tag the member types (DESIGN-tags-free-entry-fable.md §3, slice F2)
         });
     }
 });
+
+describe("this community's typed tags (DESIGN-tags-free-entry-fable.md §3, §5, slice F3)", () => {
+    const held = { tags: [] as string[], freeTags: [] as string[] };
+    type Used = { tag: string; listings: number; mergeInto?: string }[];
+    const USED: Used = [
+        { tag: '2nd hand', listings: 12 }, { tag: 'handmade', listings: 1 }, { tag: 'lemon curd', listings: 2 }, { tag: 'lemon', listings: 9 },
+        { tag: 'limones', listings: 0, mergeInto: 'food.fruit.lemon' },
+    ];
+    function Composer({ load }: { load: () => Promise<Used> }) {
+        const [nowTags, setTags] = useState<string[]>([]);
+        const [nowFree, setFree] = useState<string[]>([]);
+        held.tags = nowTags;
+        held.freeTags = nowFree;
+        return createElement(TagPicker, { value: nowTags, onChange: setTags, freeTags: nowFree, onFreeTagsChange: setFree, category: 'food', communityTags: load });
+    }
+    async function compose(load: () => Promise<Used> = () => Promise.resolve(USED)) {
+        await act(async () => { root.render(createElement(Composer, { load }) as any); });
+        await press(addButton(), '+ Add');
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    }
+    const key = (name: string) => act(async () => { search()!.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true })); });
+    const usedHere = () => host.querySelector('[data-testid="tag-picker-used-here"]');
+    const rows = () => [...(usedHere()?.querySelectorAll('button') ?? [])];
+
+    it('under the library matches, the tags used here that the typing reaches, with their counts', async () => {
+        await compose();
+        await typeInSearch('han');
+        expect(usedHere()?.textContent).toContain('Tags used here');
+        expect(rows().map((b) => b.textContent)).toEqual(['#2nd handUsed on 12 listings', '#handmadeUsed on 1 listing']);
+    });
+
+    it("a tap on one makes it the listing's tag, as typed", async () => {
+        await compose();
+        await typeInSearch('han');
+        await press(rows()[1], '#handmade');
+        expect(held.freeTags).toEqual(['handmade']);
+        expect(held.tags).toEqual([]);
+    });
+
+    it("never shadows the library: a tag with a library label's letters is left to the library rows", async () => {
+        await compose();
+        await typeInSearch('lem');
+        expect(rows().map((b) => b.textContent)).toEqual(['#lemon curdUsed on 2 listings']);
+    });
+
+    it('a merged tag shows as its library tag, and Enter on its word stores the library id', async () => {
+        await compose();
+        await typeInSearch('lim');
+        expect(rows().map((b) => b.textContent)).toEqual(['Lemon#limones']);
+        await typeInSearch('limones');
+        await key('Enter');
+        expect(held.tags).toEqual(['food.fruit.lemon']);
+        expect(held.freeTags).toEqual([]);
+    });
+
+    it("none when the community's tags cannot be had: the field works as before", async () => {
+        await compose(() => Promise.reject(new Error('offline')));
+        await typeInSearch('han');
+        expect(usedHere()).toBeNull();
+        await key('Enter');
+        expect(held.freeTags).toEqual(['han']);
+    });
+
+    for (const theme of ['light', 'dark'] as const) {
+        it(`every row is a 44 dp target, in ${theme}`, async () => {
+            device.theme = theme;
+            await compose();
+            await typeInSearch('han');
+            expect(rows().length).toBe(2);
+            for (const b of rows()) expect(Number(b.getAttribute('data-min-h')), `${b.textContent} height`).toBeGreaterThanOrEqual(44);
+        });
+    }
+});

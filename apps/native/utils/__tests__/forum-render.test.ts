@@ -98,6 +98,12 @@ vi.mock('../../components/forum/ForumBits', async (orig) => ({
     pickForumPhoto: vi.fn(async () => { picker.asked += 1; return picker.next; }),
 }));
 vi.mock('../forum-search', () => ({ searchForum: vi.fn(async () => node.search) }));
+const worldwide = vi.hoisted(() => ({ joined: false, opened: [] as string[], answer: 'switched' as string }));
+vi.mock('../worldwide-forum', () => ({
+    worldwideForumJoined: vi.fn(async () => worldwide.joined),
+    openWorldwideForum: vi.fn(async (me: string) => { worldwide.opened.push(me); return worldwide.answer; }),
+}));
+vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck: async () => 'member' }) }));
 vi.mock('../../components/ReportMessageSheet', () => ({ ReportMessageSheet: () => null }));
 
 const ME = 'm'.repeat(64);
@@ -226,6 +232,7 @@ beforeEach(() => {
     Object.assign(node, { offline: false, refused: null, front: FRONT, list: LIST, topic: TOPIC, kept: { front: null, list: null, topic: null }, mine: null, search: null, draft: null, replyFails: false });
     picker.next = null;
     picker.asked = 0;
+    Object.assign(worldwide, { joined: false, opened: [], answer: 'switched' });
     vi.clearAllMocks();
 });
 
@@ -443,5 +450,32 @@ describe.each(LOOKS)('New topic\'s photos in %s (%s)', (_name, set) => {
         node.front = { ...FRONT, linksOn: false, firstTopicWaits: false };
         host = await render(set, NewForumTopicScreen);
         expect(byId(host, 'forum-attach')).toBeNull();
+    });
+});
+
+describe.each(LOOKS)('the Worldwide forum row in %s (%s)', (_name, set) => {
+    it('where the member has joined the worldwide community: "Worldwide forum ›" after the first-look row, before the topics; a tap moves there', async () => {
+        worldwide.joined = true;
+        node.front = { ...FRONT, moderator: true, firstLooksWaiting: 2 };
+        const host = await render(set, ForumPane);
+        const row = byId(host, 'forum-worldwide-row');
+        expect(words(row)).toBe('Worldwide forum ›');
+        const order = Array.from(host.querySelectorAll('[data-testid]')).map((n) => n.getAttribute('data-testid')).filter((id) => ['forum-first-looks-row', 'forum-worldwide-row', 'forum-topics'].includes(id!));
+        expect(order).toEqual(['forum-first-looks-row', 'forum-worldwide-row', 'forum-topics']);
+        await press(row);
+        expect(worldwide.opened).toEqual([ME]);
+        expectReadable(host, set);
+        expectHoldsSmall(host);
+    });
+
+    it('no row where the member hasn\'t joined it (or is on it); a switch that didn\'t happen says so', async () => {
+        let host = await render(set, ForumPane);
+        expect(byId(host, 'forum-worldwide-row')).toBeNull();
+        document.body.innerHTML = '';
+        worldwide.joined = true;
+        worldwide.answer = 'failed';
+        host = await render(set, ForumPane);
+        await press(byId(host, 'forum-worldwide-row'));
+        expect(words(host)).toContain('Something went wrong. Try again in a moment.');
     });
 });

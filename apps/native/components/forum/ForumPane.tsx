@@ -9,6 +9,8 @@
  *   topic), ● where a followed topic has a reply they haven't opened.
  * - **Search** (slice F6, components/forum/ForumSearch.tsx), under ＋ New topic as on the web: its hits take the topic list's
  *   place while they show, each opening its topic at the post found.
+ * - **Worldwide forum ›** (joint design §2.2), after the first-look row: where the member has joined the worldwide community,
+ *   from any other community's Forum, it moves the phone there and opens its Forum (utils/worldwide-forum.ts).
  * - **A topic, a new topic, the first looks** are their own screens (app/forum/), each with ‹ back to this list.
  * - **Kept copies:** what was last read draws at once from this phone's copy (utils/forum-kept.ts), then the node is asked
  *   again; with no connection the copy is what shows, with the forum's own line (a refusal: the node's sentence) and Try again.
@@ -24,6 +26,9 @@ import {
 import { FORUM_WORDS, TOPIC_WORDS } from './forum-words';
 import { useForumStyles } from './forum-style';
 import { ForumSearch } from './ForumSearch';
+import { openWorldwideForum, worldwideForumJoined } from '../../utils/worldwide-forum';
+import { loadIdentity } from '../../utils/identity';
+import { useNodeStatus } from '../../app/NodeStatusContext';
 
 export function ForumPane() {
     const styles = useForumStyles();
@@ -35,6 +40,9 @@ export function ForumPane() {
     const [back, setBack] = useState<ReturnType<typeof takeForumBack>>(null);
     // A search's hits show in the topic list's place; the box keeps them while a hit's topic is open on top of this list.
     const [searching, setSearching] = useState(false);
+    const [worldwide, setWorldwide] = useState(false);
+    const [moving, setMoving] = useState(false);
+    const { recheck } = useNodeStatus();
     // The section picked now: a slower answer for one picked before it is dropped, never drawn under the newer pick.
     const picked = useRef(section);
     useEffect(() => { picked.current = section; }, [section]);
@@ -62,6 +70,7 @@ export function ForumPane() {
     // The kept copies first, then the node: each time the tab comes back (a reply, a first look's answer or another member's
     // topic may have come meanwhile), and each pick of a section.
     useFocusEffect(useCallback(() => {
+        void worldwideForumJoined().then(setWorldwide);
         setBack(takeForumBack());
         void keptForumFront().then((f) => { if (f) setFront((now) => now ?? f); });
         void loadFront();
@@ -79,6 +88,17 @@ export function ForumPane() {
         return s ? forumSectionName(s) : '';
     };
     const waiting = mine?.waiting ?? null;
+    const goWorldwide = async () => {
+        if (moving) return;
+        const me = (await loadIdentity())?.publicKey;
+        if (!me) return;
+        setMoving(true);
+        try {
+            if ((await openWorldwideForum(me, recheck)) !== 'switched') setFailed(t('Something went wrong. Try again in a moment.'));
+        } finally {
+            setMoving(false);
+        }
+    };
 
     return (
         <ScrollView testID="forum-pane" style={{ flex: 1 }} contentContainerStyle={[styles.pad, { paddingTop: 8, paddingBottom: 100 }]} keyboardShouldPersistTaps="handled">
@@ -120,6 +140,12 @@ export function ForumPane() {
             {front?.moderator && (front.firstLooksWaiting ?? 0) > 0 && (
                 <Pressable testID="forum-first-looks-row" accessibilityRole="button" onPress={() => router.push('/forum/first-looks')} style={styles.warnRow}>
                     <Text style={styles.warnText}>{t(FORUM_WORDS.firstLooks, { n: front.firstLooksWaiting! })}</Text>
+                </Pressable>
+            )}
+
+            {worldwide && (
+                <Pressable testID="forum-worldwide-row" accessibilityRole="button" disabled={moving} onPress={() => void goWorldwide()} style={[styles.row, { alignItems: 'center' }]}>
+                    <Text style={[styles.rowTitle, { flex: 1 }]}>{t(FORUM_WORDS.worldwide)}</Text>
                 </Pressable>
             )}
 

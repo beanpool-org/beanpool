@@ -3267,13 +3267,6 @@
   "Beans from a member you blocked": "Engellediğiniz bir üyeden gelen fasulyeler",
   "GUEST": "MİSAFİR",
   "BEANS": "FASULYE",
-  "No credit line yet": "Henüz kredi limiti yok",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Şu anda sahip olduğunuz fasulyelerle hemen takas yapabilirsiniz. İlk takasınızı tamamlayın, kredi limitiniz otomatik olarak açılsın — ne kadar çok değer takas ederseniz, o kadar derinleşir. (Bir topluluk kefili de size bir başlangıç limiti sağlayabilir.)",
-  "Credit position — tap to learn how it works": "Kredi durumu — nasıl çalıştığını öğrenmek için dokunun",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️ Harcama duraklatıldı — bakiyeniz, {n} aktif teklifinizin açtığı limitin (−{limit}) altında. Kaldırmak için bir Teklif yayınlayın veya takas yaparak bakiyenizi yükseltin. Yine de ödeme alabilir ve satış yapabilirsiniz.",
-    "other": "⚠️ Harcama duraklatıldı — bakiyeniz, {n} aktif teklifinizin açtığı limitin (−{limit}) altında. Kaldırmak için bir Teklif yayınlayın veya takas yaparak bakiyenizi yükseltin. Yine de ödeme alabilir ve satış yapabilirsiniz."
-  },
   "Levels": "Seviyeler",
   "Wallet": "Cüzdan",
   "Ledger": "Defter",
@@ -5317,32 +5310,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (doğrulanmış hesap)",
   "Opens external channel link": "Harici kanal bağlantısını açar",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈%{rate}/ay",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "Kredi bakiyesi {balance} Fasulye, kredi limiti {floor} Fasulye, kesintisiz tavan {max} Fasulye.",
-  "fee/mo": "kesinti/ay",
-  "your limit": "limitiniz",
-  "sweet spot": "ideal aralık",
-  "fee-free": "kesintisiz",
-  "← carry credit": "← borçlanma",
-  "hold credit →": "alacak tutma →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} −{depth} limitinin kilidini açar · {more} → −{next}",
-    "other": "🎣 {offers} −{depth} limitinin kilidini açar · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} −{depth} limitinin kilidini açar",
-    "other": "🎣 {offers} −{depth} limitinin kilidini açar"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} teklif",
-    "other": "{n} teklif"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 Kredi limitinizi açmak için {post} — {count} teklif tüm −{floor} limitinizin kilidini açar.",
-    "other": "🎣 Kredi limitinizi açmak için {post} — {count} teklif tüm −{floor} limitinizin kilidini açar."
-  },
-  "Post an offer": "Bir teklif paylaşın",
   "No maps app": "Harita uygulaması yok",
   "The event is at {lat}, {lng}.": "Etkinlik {lat}, {lng} konumunda.",
   "Cancel this event?": "Bu etkinlik iptal edilsin mi?",

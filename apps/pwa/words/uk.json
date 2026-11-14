@@ -17,24 +17,6 @@
   "(100% community owned)": "(100% належить спільноті)",
   "(You)": "(Ви)",
   "(You)\u0004roster: the viewer": "(Ви)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "one": "**Опублікуйте пропозицію**, щоб відкрити кредитну лінію — **{n}** пропозиція відкриває вам повні −{limit}.",
-    "few": "**Опублікуйте пропозицію**, щоб відкрити кредитну лінію — **{n}** пропозиції відкривають вам повні −{limit}.",
-    "many": "**Опублікуйте пропозицію**, щоб відкрити кредитну лінію — **{n}** пропозицій відкривають вам повні −{limit}.",
-    "other": "**Опублікуйте пропозицію**, щоб відкрити кредитну лінію — **{n}** пропозиції відкривають вам повні −{limit}."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "one": "**{n} пропозиція** відкриває −{limit}",
-    "few": "**{n} пропозиції** відкривають −{limit}",
-    "many": "**{n} пропозицій** відкривають −{limit}",
-    "other": "**{n} пропозиції** відкриває −{limit}"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "one": "**{n} пропозиція** → −{limit}",
-    "few": "**{n} пропозиції** → −{limit}",
-    "many": "**{n} пропозицій** → −{limit}",
-    "other": "**{n} пропозиції** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "Ще **{n}** довіра до {emoji} {tier}",
     "few": "Ще **{n}** довіри до {emoji} {tier}",
@@ -668,7 +650,6 @@
   "Creating...": "Створення...",
   "Creator account linking:": "Зв'язування облікового запису автора:",
   "Credit Line": "Кредитна лінія",
-  "Credit balance gauge": "Шкала кредитного балансу",
   "Credits (B)": "Бали (Боби)",
   "Credits (🫘 Beans)": "Кредити (🫘 боби)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "Кредити — це валюта взаємного кредиту. Коли ви торгуєте, кредити переходять між учасниками. Кожен починає з нуля. Система створена, щоб заохочувати взаємність і підтримувати обіг цінності на місцях.",
@@ -1381,7 +1362,6 @@
   "No bond required.": "Застава не потрібна.",
   "No comment provided.": "Без коментаря.",
   "No conversations yet.": "Розмов ще немає.",
-  "No credit line yet": "Кредитної лінії ще немає",
   "No deals in progress": "Немає активних угод",
   "No friends yet": "Друзів ще немає",
   "No groups found": "Груп не знайдено",
@@ -2126,12 +2106,6 @@
   "Spam or scam": "Спам або шахрайство",
   "Specific Action / Effect": "Конкретна дія / наслідок",
   "Specific Action or Effect": "Конкретна дія або наслідок",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "Витрати призупинено — ваш баланс нижчий за рівень, який відкриває {n} активна пропозиція (−{limit}). Опублікуйте Пропозицію або відновіть баланс торгівлею. Ви все ще можете отримувати та продавати.",
-    "few": "Витрати призупинено — ваш баланс нижчий за рівень, який відкривають {n} активні пропозиції (−{limit}). Опублікуйте Пропозицію або відновіть баланс торгівлею. Ви все ще можете отримувати та продавати.",
-    "many": "Витрати призупинено — ваш баланс нижчий за рівень, який відкривають {n} активних пропозицій (−{limit}). Опублікуйте Пропозицію або відновіть баланс торгівлею. Ви все ще можете отримувати та продавати.",
-    "other": "Витрати призупинено — ваш баланс нижчий за рівень, який відкриває {n} активної пропозиції (−{limit}). Опублікуйте Пропозицію або відновіть баланс торгівлею. Ви все ще можете отримувати та продавати."
-  },
   "Sprout": "Паросток",
   "Square — nothing owed either way": "Повний розрахунок — ніхто нікому не винен",
   "Start": "Почати",
@@ -2880,7 +2854,6 @@
   "You can propose a Decision once you have completed a trade.": "Ви зможете запропонувати Рішення після того, як завершите обмін.",
   "You can propose once you have completed a trade.": "Ви можете вносити пропозиції після завершення першого обміну.",
   "You can still read, edit your profile and leave.": "Ви все ще можете читати, редагувати профіль та вийти.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Ви можете торгувати просто зараз наявними бобами. Завершіть першу угоду, і ваша кредитна лінія відкриється автоматично — чим більшу цінність ви обмінюєте, тим глибшою вона стає. (Поручитель у спільноті також може надати вам початкову лінію.)",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "Ви змінили час або місце. Подія матиме позначку UPDATED, а всім, хто йде, про це повідомлять.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "Ви самі — на своєму комп'ютері або на орендованому. Сайт beanpool.org не є обов'язковим: власна вебадреса також працює.",
   "You have already rated this trade.": "Ви вже оцінили цей обмін.",
@@ -3088,8 +3061,6 @@
   "execution pending grace\u0004Decision status": "очікує завершення пільгового періоду",
   "execution void\u0004Decision status": "виконання анульовано",
   "failed\u0004Decision status": "відхилено",
-  "fee-free": "без комісії",
-  "fee/mo": "комісія/міс",
   "for {n} day|for {n} days": {
     "one": "на {n} день",
     "few": "на {n} дні",
@@ -3113,7 +3084,6 @@
   "from {who} · {when}": "від {who} · {when}",
   "general\u0004group category": "загальна",
   "guild\u0004group category": "гільдія",
-  "hold credit →": "зберігати кредит →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... або tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -3168,7 +3138,6 @@
   "request to join\u0004join policy": "за запитом",
   "requested\u0004deal status": "запитано",
   "social\u0004group category": "соціальна",
-  "sweet spot": "оптимум",
   "the account saved from the other tab": "обліковий запис, збережений в іншій вкладці",
   "the lever": "важіль",
   "them\u0004the other member of a trade, name unknown": "вони",
@@ -3185,7 +3154,6 @@
   "working group\u0004group category": "робоча група",
   "yesterday": "учора",
   "you": "ви",
-  "your limit": "ваш ліміт",
   "{actor} completed a trade with {target}": "{actor} завершив обмін із {target}",
   "{actor} joined": "{actor} приєднався",
   "{actor} joined the community": "{actor} приєднався(-лася) до спільноти",
@@ -3201,8 +3169,6 @@
   "{actor} traded with {target}": "{actor} здійснив(-ла) обмін із {target}",
   "{actor} traded with {target}: {title}": "{actor} здійснив обмін із {target}: {title}",
   "{amount} B": "{amount} Б",
-  "{amount} B · ≈{rate}%/mo": "{amount} Б · ≈{rate}%/міс",
-  "{amount} Beans": "{amount} бобів",
   "{amount} Beans from the pool: {what}.": "{amount} бобів зі спільного фонду: {what}.",
   "{amount} raised of {goal} 🫘": "Зібрано {amount} із {goal} 🫘",
   "{amount} · held in trust": "{amount} · у трасті",
@@ -3641,7 +3607,6 @@
   "← Choose another way": "← Обрати інший спосіб",
   "← Keep it": "← Залишити",
   "← Start again": "← Почати знову",
-  "← carry credit": "← використати кредит",
   "↑ Sent": "↑ Надіслано",
   "↓ Received": "↓ Отримано",
   "↻ RECURRING": "↻ РЕГУЛЯРНО",

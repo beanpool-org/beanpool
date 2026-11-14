@@ -17,18 +17,6 @@
   "(100% community owned)": "(100% inamilikiwa na jumuiya)",
   "(You)": "(Wewe)",
   "(You)\u0004roster: the viewer": "(Wewe)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "one": "**Weka Ofa** ili kufungua kikomo chako cha mkopo — ofa **{n}** inafungua kiwango chako kamili cha −{limit}.",
-    "other": "**Weka Ofa** ili kufungua kikomo chako cha mkopo — ofa **{n}** zinafungua kiwango chako kamili cha −{limit}."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "one": "**Ofa {n}** inafungua −{limit}",
-    "other": "**Ofa {n}** zinafungua −{limit}"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "one": "**Ofa {n}** → −{limit}",
-    "other": "**Ofa {n}** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "Uaminifu **{n}** zaidi kufikia {emoji} {tier}",
     "other": "Uaminifu **{n}** zaidi kufikia {emoji} {tier}"
@@ -642,7 +630,6 @@
   "Creating...": "Inatengeneza...",
   "Creator account linking:": "Kuunganisha akaunti ya mtayarishaji:",
   "Credit Line": "Kiwango cha Mkopo",
-  "Credit balance gauge": "Kipimo cha salio la mkopo",
   "Credits (B)": "Mikopo (Maharagwe)",
   "Credits (🫘 Beans)": "Salio (🫘 Maharagwe)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "Salio ni sarafu ya mkopo wa pamoja. Unapofanya biashara, salio huhamishwa kati ya wanachama. Kila mwanachama huanza na sifuri. Mfumo umeundwa kuhimiza kurudishiana na kuweka thamani ikizunguka katika eneo.",
@@ -1341,7 +1328,6 @@
   "No bond required.": "Hakuna dhamana inayohitajika.",
   "No comment provided.": "Hakuna maoni yaliyotolewa.",
   "No conversations yet.": "Bado hakuna mazungumzo.",
-  "No credit line yet": "Bado huna mstari wa mkopo",
   "No deals in progress": "Hakuna makubaliano yanayoendelea",
   "No friends yet": "Bado hakuna marafiki",
   "No groups found": "Hakuna vikundi vilivyopatikana",
@@ -2050,10 +2036,6 @@
   "Spam or scam": "Takataka au ulaghai",
   "Specific Action / Effect": "Hatua Mahususi / Matokeo",
   "Specific Action or Effect": "Hatua Mahususi au Matokeo",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "Matumizi yamesitishwa — salio lako liko chini ya kile kinachofunguliwa na ofa {n} yako amilifu (−{limit}). Weka Ofa au fanya biashara ili kuliondoa. Bado unaweza kupokea na kuuza.",
-    "other": "Matumizi yamesitishwa — salio lako liko chini ya kile kinachofunguliwa na ofa {n} zako amilifu (−{limit}). Weka Ofa au fanya biashara ili kuliondoa. Bado unaweza kupokea na kuuza."
-  },
   "Sprout": "Chipukizi",
   "Square — nothing owed either way": "Hakuna anayedaiwa upande wowote",
   "Start": "Anza",
@@ -2758,7 +2740,6 @@
   "You can propose a Decision once you have completed a trade.": "Unaweza kupendekeza Uamuzi mara tu utakapokamilisha biashara.",
   "You can propose once you have completed a trade.": "Unaweza kupendekeza mara tu utakapokamilisha biashara.",
   "You can still read, edit your profile and leave.": "Bado unaweza kusoma, kuhariri wasifu wako na kuondoka.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Unaweza kufanya biashara sasa hivi na maharagwe uliyonayo. Kamilisha biashara yako ya kwanza na mstari wako wa mkopo utafunguka kiotomatiki — kadiri unavyofanya biashara ya thamani zaidi, ndivyo unavyozidi kukua. (Mthibitishaji wa jumuiya anaweza pia kukupa mstari wa kuanzia.)",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "Umebadilisha saa au mahali. Tukio litaonyesha LIMESASISHWA na kila anayehudhuria ataambiwa.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "Wewe mwenyewe, kwenye mashine yako au unayokodi. Haihitaji kamwe beanpool.org: anwani yako mwenyewe ya wavuti inafanya kazi pia.",
   "You have already rated this trade.": "Tayari umekadiri biashara hii.",
@@ -2952,8 +2933,6 @@
   "execution pending grace\u0004Decision status": "utekelezaji unasubiri kipindi cha neema",
   "execution void\u0004Decision status": "utekelezaji umefutwa",
   "failed\u0004Decision status": "imeshindwa",
-  "fee-free": "bila ada",
-  "fee/mo": "ada/mwezi",
   "for {n} day|for {n} days": {
     "one": "kwa siku {n}",
     "other": "kwa siku {n}"
@@ -2971,7 +2950,6 @@
   "from {who} · {when}": "kutoka {who} · {when}",
   "general\u0004group category": "jumla",
   "guild\u0004group category": "chama",
-  "hold credit →": "weka salio →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... au tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -3020,7 +2998,6 @@
   "request to join\u0004join policy": "omba kujiunga",
   "requested\u0004deal status": "imeombwa",
   "social\u0004group category": "kijamii",
-  "sweet spot": "kiwango bora",
   "the account saved from the other tab": "akaunti iliyohifadhiwa kutoka kichupo kingine",
   "the lever": "kikomo cha kujiendesha",
   "them\u0004the other member of a trade, name unknown": "wao",
@@ -3037,7 +3014,6 @@
   "working group\u0004group category": "kikundi kazi",
   "yesterday": "jana",
   "you": "wewe",
-  "your limit": "kikomo chako",
   "{actor} completed a trade with {target}": "{actor} alikamilisha biashara na {target}",
   "{actor} joined": "{actor} amejiunga",
   "{actor} joined the community": "{actor} amejiunga na jumuiya",
@@ -3053,8 +3029,6 @@
   "{actor} traded with {target}": "{actor} alifanya biashara na {target}",
   "{actor} traded with {target}: {title}": "{actor} alifanya biashara na {target}: {title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈{rate}%/mwezi",
-  "{amount} Beans": "Maharagwe {amount}",
   "{amount} Beans from the pool: {what}.": "Maharagwe {amount} kutoka hazina: {what}.",
   "{amount} raised of {goal} 🫘": "{amount} zimekusanywa kati ya {goal} 🫘",
   "{amount} · held in trust": "{amount} · kwenye amana",
@@ -3395,7 +3369,6 @@
   "← Choose another way": "← Chagua njia nyingine",
   "← Keep it": "← Iweke",
   "← Start again": "← Anza tena",
-  "← carry credit": "← tumia mkopo",
   "↑ Sent": "↑ Zilizotumwa",
   "↓ Received": "↓ Zilizopokewa",
   "↻ RECURRING": "↻ INAYOJIRUDIA",

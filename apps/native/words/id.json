@@ -3130,12 +3130,6 @@
   "Beans from a member you blocked": "Kacang dari anggota yang Anda blokir",
   "GUEST": "TAMU",
   "BEANS": "KACANG",
-  "No credit line yet": "Belum ada jalur kredit",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Anda dapat bertransaksi sekarang dengan kacang yang Anda miliki. Selesaikan transaksi pertama Anda dan jalur kredit akan terbuka secara otomatis — makin banyak nilai yang Anda transaksikan, makin dalam batasnya. (Voucher komunitas juga dapat memberi Anda jalur awal.)",
-  "Credit position — tap to learn how it works": "Posisi kredit — ketuk untuk mempelajari cara kerjanya",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "other": "⚠️  Pengeluaran dijeda — saldo Anda di bawah yang dibuka oleh {n} penawaran aktif Anda (−{limit}). Pasang Penawaran atau bertransaksi lagi untuk memulihkannya. Anda masih dapat menerima dan menjual."
-  },
   "Levels": "Level",
   "Wallet": "Dompet",
   "Ledger": "Buku kas",
@@ -5118,28 +5112,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (akun terverifikasi)",
   "Opens external channel link": "Membuka tautan saluran eksternal",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate}%/bln",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "Saldo kredit {balance} kacang, batas kredit {floor} kacang, batas bebas biaya {max} kacang.",
-  "fee/mo": "biaya/bln",
-  "your limit": "batasmu",
-  "sweet spot": "titik ideal",
-  "fee-free": "bebas biaya",
-  "← carry credit": "← gunakan kredit",
-  "hold credit →": "simpan kredit →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "other": "🎣 {offers} membuka −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "other": "🎣 {offers} membuka −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "other": "{n} penawaran"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "other": "🎣 {post} untuk membuka batas kreditmu — {count} penawaran membuka penuh −{floor}."
-  },
-  "Post an offer": "Pasang penawaran",
   "Unknown\u0004a host with no name": "Tidak dikenal",
   "No maps app": "Tidak ada aplikasi peta",
   "The event is at {lat}, {lng}.": "Acara diadakan di {lat}, {lng}.",

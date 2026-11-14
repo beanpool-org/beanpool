@@ -3265,13 +3265,6 @@
   "Beans from a member you blocked": "آپ کے بلاک کردہ ممبر سے موصولہ پھلیاں",
   "GUEST": "مہمان",
   "BEANS": "پھلیاں",
-  "No credit line yet": "ابھی تک کوئی کریڈٹ لائن نہیں",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "آپ اپنے پاس موجود پھلیوں کے ساتھ ابھی لین دین کر سکتے ہیں۔ اپنی پہلی ٹریڈ مکمل کریں اور آپ کی کریڈٹ لائن خود بخود کھل جائے گی — آپ جتنی زیادہ قدر کا تبادلہ کریں گے، یہ اتنی ہی گہری ہوگی۔ (کمیونٹی کا کوئی ضامن بھی آپ کو ابتدائی لائن دے سکتا ہے۔)",
-  "Credit position — tap to learn how it works": "کریڈٹ کی پوزیشن — جاننے کے لیے ٹیپ کریں کہ یہ کیسے کام کرتا ہے",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️ خرچ معطل ہے — آپ کا بیلنس آپ کی {n} فعال پیشکش کے انلاک کردہ لمٹ (−{limit}) سے کم ہے۔ اسے بحال کرنے کے لیے پیشکش پوسٹ کریں یا لین دین کریں۔ آپ اب بھی رقم وصول اور فروخت کر سکتے ہیں۔",
-    "other": "⚠️ خرچ معطل ہے — آپ کا بیلنس آپ کی {n} فعال پیشکشوں کے انلاک کردہ لمٹ (−{limit}) سے کم ہے۔ اسے بحال کرنے کے لیے پیشکش پوسٹ کریں یا لین دین کریں۔ آپ اب بھی رقم وصول اور فروخت کر سکتے ہیں۔"
-  },
   "Levels": "لیولز",
   "Wallet": "والیٹ",
   "Ledger": "لیجر",
@@ -5309,32 +5302,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (تصدیق شدہ اکاؤنٹ)",
   "Opens external channel link": "بیرونی چینل کا لنک کھولتا ہے",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate}%/ماہ",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "کریڈٹ بیلنس {balance} پھلیاں، کریڈٹ کی حد {floor} پھلیاں، بغیر فیس کی حد {max} پھلیاں۔",
-  "fee/mo": "فیس/ماہ",
-  "your limit": "آپ کی حد",
-  "sweet spot": "بہترین توازن",
-  "fee-free": "بغیر فیس",
-  "← carry credit": "← ادھار پر چلیں",
-  "hold credit →": "بیلنس رکھیں →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} کھولتی ہے −{depth} · {more} → −{next}",
-    "other": "🎣 {offers} کھولتی ہیں −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} کھولتی ہے −{depth}",
-    "other": "🎣 {offers} کھولتی ہیں −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} پیشکش",
-    "other": "{n} پیشکشیں"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 اپنی کریڈٹ لائن کھولنے کے لیے {post} کریں — {count} پیشکش آپ کی مکمل −{floor} حد کھولتی ہے۔",
-    "other": "🎣 اپنی کریڈٹ لائن کھولنے کے لیے {post} کریں — {count} پیشکشیں آپ کی مکمل −{floor} حد کھولتی ہیں۔"
-  },
-  "Post an offer": "ایک پیشکش پوسٹ کریں",
   "Unknown\u0004a host with no name": "نامعلوم",
   "No maps app": "نقشے کی کوئی ایپ نہیں",
   "The event is at {lat}, {lng}.": "ایونٹ {lat}، {lng} پر ہے۔",

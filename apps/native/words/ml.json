@@ -3265,13 +3265,6 @@
   "Beans from a member you blocked": "നിങ്ങൾ ബ്ലോക്ക് ചെയ്ത അംഗത്തിൽ നിന്നുള്ള പയർ",
   "GUEST": "അതിഥി",
   "BEANS": "പയർ",
-  "No credit line yet": "ഇതുവരെ ക്രെഡിറ്റ് ലൈൻ ഇല്ല",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "നിങ്ങളുടെ കൈവശമുള്ള പയർ ഉപയോഗിച്ച് നിങ്ങൾക്ക് ഇപ്പോൾ തന്നെ വ്യാപാരം നടത്താം. നിങ്ങളുടെ ആദ്യ വ്യാപാരം പൂർത്തിയാക്കുക, നിങ്ങളുടെ ക്രെഡിറ്റ് ലൈൻ സ്വയമേവ തുറക്കും — നിങ്ങൾ കൂടുതൽ മൂല്യം വ്യാപാരം ചെയ്യുന്തോറും അത് കൂടുതൽ വികസിക്കും. (ഒരു കമ്മ്യൂണിറ്റി വൗച്ചറിനും നിങ്ങൾക്ക് ഒരു പ്രാരംഭ ലൈൻ നൽകാൻ കഴിയും.)",
-  "Credit position — tap to learn how it works": "ക്രെഡിറ്റ് നില — ഇത് എങ്ങനെ പ്രവർത്തിക്കുന്നുവെന്നറിയാൻ ടാപ്പ് ചെയ്യുക",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️ ചെലവഴിക്കൽ താൽക്കാലികമായി നിർത്തി — നിങ്ങളുടെ {n} സജീവ ഓഫർ അൺലോക്ക് ചെയ്യുന്നതിനേക്കാൾ (−{limit}) താഴെയാണ് ബാലൻസ്. ഇത് ഒഴിവാക്കാൻ ഒരു ഓഫർ പോസ്റ്റ് ചെയ്യുകയോ വീണ്ടും ഇടപാടുകൾ നടത്തുകയോ ചെയ്യുക. നിങ്ങൾക്ക് ഇപ്പോഴും സ്വീകരിക്കാനും വിൽക്കാനും കഴിയും.",
-    "other": "⚠️ ചെലവഴിക്കൽ താൽക്കാലികമായി നിർത്തി — നിങ്ങളുടെ {n} സജീവ ഓഫറുകൾ അൺലോക്ക് ചെയ്യുന്നതിനേക്കാൾ (−{limit}) താഴെയാണ് ബാലൻസ്. ഇത് ഒഴിവാക്കാൻ ഒരു ഓഫർ പോസ്റ്റ് ചെയ്യുകയോ വീണ്ടും ഇടപാടുകൾ നടത്തുകയോ ചെയ്യുക. നിങ്ങൾക്ക് ഇപ്പോഴും സ്വീകരിക്കാനും വിൽക്കാനും കഴിയും."
-  },
   "Levels": "ലെവലുകൾ",
   "Wallet": "വാലറ്റ്",
   "Ledger": "ലെഡ്ജർ",
@@ -5308,32 +5301,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (സ്ഥിരീകരിച്ച അക്കൗണ്ട്)",
   "Opens external channel link": "ബാഹ്യ ചാനൽ ലിങ്ക് തുറക്കുന്നു",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate}%/മാസം",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "ക്രെഡിറ്റ് ബാലൻസ് {balance} പയർ, ക്രെഡിറ്റ് പരിധി {floor} പയർ, ഫീസില്ലാത്ത പരിധി {max} പയർ.",
-  "fee/mo": "ഫീസ്/മാസം",
-  "your limit": "നിങ്ങളുടെ പരിധി",
-  "sweet spot": "അനുയോജ്യമായ പരിധി",
-  "fee-free": "ഫീസില്ലാത്തത്",
-  "← carry credit": "← ക്രെഡിറ്റ് കടം",
-  "hold credit →": "ക്രെഡിറ്റ് നീക്കിയിരിപ്പ് →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} അൺലോക്ക് ചെയ്യുന്നു −{depth} · {more} → −{next}",
-    "other": "🎣 {offers} അൺലോക്ക് ചെയ്യുന്നു −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} അൺലോക്ക് ചെയ്യുന്നു −{depth}",
-    "other": "🎣 {offers} അൺലോക്ക് ചെയ്യുന്നു −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} ഓഫർ",
-    "other": "{n} ഓഫറുകൾ"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "ക്രെഡിറ്റ് ലൈൻ തുറക്കാൻ 🎣 {post} ചെയ്യുക — {count} ഓഫർ നിങ്ങളുടെ പൂർണ്ണ −{floor} അൺലോക്ക് ചെയ്യുന്നു.",
-    "other": "ക്രെഡിറ്റ് ലൈൻ തുറക്കാൻ 🎣 {post} ചെയ്യുക — {count} ഓഫറുകൾ നിങ്ങളുടെ പൂർണ്ണ −{floor} അൺലോക്ക് ചെയ്യുന്നു."
-  },
-  "Post an offer": "ഓഫർ പോസ്റ്റ് ചെയ്യുക",
   "Unknown\u0004a host with no name": "അജ്ഞാതൻ",
   "No maps app": "മാപ്പ് ആപ്പ് ലഭ്യമല്ല",
   "The event is at {lat}, {lng}.": "ഇവന്റ് {lat}, {lng}-ൽ ആണ്.",

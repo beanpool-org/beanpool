@@ -17,18 +17,6 @@
   "(100% community owned)": "(100% de posse da comunidade)",
   "(You)": "(Você)",
   "(You)\u0004roster: the viewer": "(Você)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "one": "**Publique uma Oferta** para abrir sua linha de crédito — **{n}** oferta libera seu limite total de −{limit}.",
-    "other": "**Publique uma Oferta** para abrir sua linha de crédito — **{n}** ofertas liberam seu limite total de −{limit}."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "one": "**{n} oferta** libera −{limit}",
-    "other": "**{n} ofertas** liberam −{limit}"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "one": "**{n} oferta** → −{limit}",
-    "other": "**{n} ofertas** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "mais **{n}** de confiança para {emoji} {tier}",
     "other": "mais **{n}** de confiança para {emoji} {tier}"
@@ -642,7 +630,6 @@
   "Creating...": "Criando...",
   "Creator account linking:": "Vinculação de conta de criador:",
   "Credit Line": "Linha de crédito",
-  "Credit balance gauge": "Indicador de saldo de crédito",
   "Credits (B)": "Créditos (B)",
   "Credits (🫘 Beans)": "Créditos (🫘 Feijões)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "Créditos são uma moeda de crédito mútuo. Quando você faz uma troca, os créditos passam de um membro para outro. Todo membro começa no zero. O sistema foi pensado para incentivar a reciprocidade e manter o valor circulando no local.",
@@ -1341,7 +1328,6 @@
   "No bond required.": "Nenhuma caução necessária.",
   "No comment provided.": "Nenhum comentário adicionado.",
   "No conversations yet.": "Nenhuma conversa por enquanto.",
-  "No credit line yet": "Ainda sem linha de crédito",
   "No deals in progress": "Nenhum acordo em andamento",
   "No friends yet": "Nenhum amigo ainda",
   "No groups found": "Nenhum grupo encontrado",
@@ -2050,10 +2036,6 @@
   "Spam or scam": "Spam ou golpe",
   "Specific Action / Effect": "Ação / efeito específico",
   "Specific Action or Effect": "Ação ou efeito específico",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "Gastos pausados — seu saldo está abaixo do limite que sua {n} oferta ativa libera (−{limit}). Publique uma Oferta ou faça trocas para aumentá-lo. Você ainda pode receber e vender.",
-    "other": "Gastos pausados — seu saldo está abaixo do limite que suas {n} ofertas ativas liberam (−{limit}). Publique uma Oferta ou faça trocas para aumentá-lo. Você ainda pode receber e vender."
-  },
   "Sprout": "Broto",
   "Square — nothing owed either way": "Quitado — ninguém deve nada",
   "Start": "Começar",
@@ -2758,7 +2740,6 @@
   "You can propose a Decision once you have completed a trade.": "Você poderá propor uma Decisão após concluir uma troca.",
   "You can propose once you have completed a trade.": "Você pode propor assim que concluir uma troca.",
   "You can still read, edit your profile and leave.": "Você ainda pode ler, editar seu perfil e sair.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Você pode negociar agora com os feijões que possui. Conclua sua primeira troca e sua linha de crédito se abrirá automaticamente — quanto mais valor negociar, mais ela cresce. (Uma recomendação da comunidade também pode oferecer uma linha inicial).",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "Você mudou o horário ou o local. O evento mostrará UPDATED e todos que vão serão avisados.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "Você mesmo, na sua máquina ou na que alugar. Nunca precisa do beanpool.org: seu próprio endereço web também funciona.",
   "You have already rated this trade.": "Você já avaliou esta troca.",
@@ -2952,8 +2933,6 @@
   "execution pending grace\u0004Decision status": "execução pendente (carência)",
   "execution void\u0004Decision status": "execução anulada",
   "failed\u0004Decision status": "rejeitada",
-  "fee-free": "sem taxa",
-  "fee/mo": "taxa/mês",
   "for {n} day|for {n} days": {
     "one": "por {n} dia",
     "other": "por {n} dias"
@@ -2971,7 +2950,6 @@
   "from {who} · {when}": "de {who} · {when}",
   "general\u0004group category": "geral",
   "guild\u0004group category": "associação",
-  "hold credit →": "manter crédito →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... ou tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -3020,7 +2998,6 @@
   "request to join\u0004join policy": "pedir para entrar",
   "requested\u0004deal status": "solicitado",
   "social\u0004group category": "social",
-  "sweet spot": "ponto ideal",
   "the account saved from the other tab": "a conta salva da outra aba",
   "the lever": "a alavanca",
   "them\u0004the other member of a trade, name unknown": "a outra pessoa",
@@ -3037,7 +3014,6 @@
   "working group\u0004group category": "grupo de trabalho",
   "yesterday": "ontem",
   "you": "você",
-  "your limit": "seu limite",
   "{actor} completed a trade with {target}": "{actor} concluiu uma troca com {target}",
   "{actor} joined": "{actor} entrou",
   "{actor} joined the community": "{actor} entrou na comunidade",
@@ -3053,8 +3029,6 @@
   "{actor} traded with {target}": "{actor} trocou com {target}",
   "{actor} traded with {target}: {title}": "{actor} trocou com {target}: {title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈{rate}%/mês",
-  "{amount} Beans": "{amount} feijões",
   "{amount} Beans from the pool: {what}.": "{amount} feijões do fundo: {what}.",
   "{amount} raised of {goal} 🫘": "{amount} arrecadados de {goal} 🫘",
   "{amount} · held in trust": "{amount} · em custódia",
@@ -3396,7 +3370,6 @@
   "← Choose another way": "← Escolher outra forma",
   "← Keep it": "← Manter",
   "← Start again": "← Começar novamente",
-  "← carry credit": "← usar crédito",
   "↑ Sent": "↑ Enviado",
   "↓ Received": "↓ Recebido",
   "↻ RECURRING": "↻ RECORRENTE",

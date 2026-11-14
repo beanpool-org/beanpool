@@ -3539,15 +3539,6 @@
   "Beans from a member you blocked": "Боби від заблокованого учасника",
   "GUEST": "ГІСТЬ",
   "BEANS": "БОБИ",
-  "No credit line yet": "Кредитної лінії ще немає",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Ви можете торгувати просто зараз наявними бобами. Завершіть першу угоду, і ваша кредитна лінія відкриється автоматично — чим більшу цінність ви обмінюєте, тим глибшою вона стає. (Поручитель у спільноті також може надати вам початкову лінію.)",
-  "Credit position — tap to learn how it works": "Кредитна позиція — натисніть, щоб дізнатися, як це працює",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️ Витрати призупинено — ваш баланс нижчий за ліміт (−{limit}), відкритий вашою {n} активною пропозицією. Опублікуйте пропозицію або торгуйте для відновлення балансу. Ви все ще можете отримувати та продавати.",
-    "few": "⚠️ Витрати призупинено — ваш баланс нижчий за ліміт (−{limit}), відкритий вашими {n} активними пропозиціями. Опублікуйте пропозицію або торгуйте для відновлення балансу. Ви все ще можете отримувати та продавати.",
-    "many": "⚠️ Витрати призупинено — ваш баланс нижчий за ліміт (−{limit}), відкритий вашими {n} активними пропозиціями. Опублікуйте пропозицію або торгуйте для відновлення балансу. Ви все ще можете отримувати та продавати.",
-    "other": "⚠️ Витрати призупинено — ваш баланс нижчий за ліміт (−{limit}), відкритий вашими {n} активними пропозиціями. Опублікуйте пропозицію або торгуйте для відновлення балансу. Ви все ще можете отримувати та продавати."
-  },
   "Levels": "Рівні",
   "Wallet": "Гаманець",
   "Ledger": "Реєстр",
@@ -5712,40 +5703,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (підтверджений профіль)",
   "Opens external channel link": "Відкриває посилання на зовнішній канал",
-  "{balance} B · ≈{rate}%/mo": "{balance} Б · ≈{rate}%/міс",
-  "{balance} B": "{balance} Б",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "Кредитний баланс {balance} бобів, кредитний ліміт {floor} бобів, безкомісійний поріг {max} бобів.",
-  "fee/mo": "комісія/міс",
-  "your limit": "ваш ліміт",
-  "sweet spot": "оптимум",
-  "fee-free": "без комісії",
-  "← carry credit": "← використати кредит",
-  "hold credit →": "зберігати кредит →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} відкриває −{depth} · {more} → −{next}",
-    "few": "🎣 {offers} відкривають −{depth} · {more} → −{next}",
-    "many": "🎣 {offers} відкривають −{depth} · {more} → −{next}",
-    "other": "🎣 {offers} відкриває −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} відкриває −{depth}",
-    "few": "🎣 {offers} відкривають −{depth}",
-    "many": "🎣 {offers} відкривають −{depth}",
-    "other": "🎣 {offers} відкриває −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} пропозиція",
-    "few": "{n} пропозиції",
-    "many": "{n} пропозицій",
-    "other": "{n} пропозиції"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 {post}, щоб відкрити кредитну лінію — {count} пропозиція відкриває вам повні −{floor}.",
-    "few": "🎣 {post}, щоб відкрити кредитну лінію — {count} пропозиції відкривають вам повні −{floor}.",
-    "many": "🎣 {post}, щоб відкрити кредитну лінію — {count} пропозицій відкривають вам повні −{floor}.",
-    "other": "🎣 {post}, щоб відкрити кредитну лінію — {count} пропозиції відкривають вам повні −{floor}."
-  },
-  "Post an offer": "Опублікувати пропозицію",
   "Unknown\u0004a host with no name": "Невідомо",
   "No maps app": "Немає картографічного додатка",
   "The event is at {lat}, {lng}.": "Подія відбудеться за координатами {lat}, {lng}.",

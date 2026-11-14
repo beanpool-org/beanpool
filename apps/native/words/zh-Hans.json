@@ -3128,12 +3128,6 @@
   "Beans from a member you blocked": "来自被你屏蔽成员的豆子",
   "GUEST": "访客",
   "BEANS": "豆子",
-  "No credit line yet": "暂无信用额度",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "你现在就可以使用持有的豆子进行交易。完成首笔交易后，你的信用额度将自动开启 — 交易的价值越多，额度就越深。（社区担保人也可以为你提供初始额度。）",
-  "Credit position — tap to learn how it works": "信用状况 — 点按了解运作机制",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "other": "⚠️ 支出已暂停 — 你的余额低于 {n} 个有效供应所解锁的额度（−{limit}）。发布供应或通过交易回升即可解除。你仍然可以收款和出售。"
-  },
   "Levels": "等级",
   "Wallet": "钱包",
   "Ledger": "账本",
@@ -5107,28 +5101,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform}（已验证账户）",
   "Opens external channel link": "打开外部渠道链接",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate}%/月",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "信用余额 {balance} 颗豆子，授信额度 {floor} 颗豆子，免手续费上限 {max} 颗豆子。",
-  "fee/mo": "手续费/月",
-  "your limit": "你的额度",
-  "sweet spot": "最佳区间",
-  "fee-free": "免手续费",
-  "← carry credit": "← 使用额度",
-  "hold credit →": "持有额度 →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "other": "🎣 {offers} 解锁 −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "other": "🎣 {offers} 解锁 −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "other": "{n} 项提供"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "other": "🎣 {post} 以开启你的授信额度 — {count} 项提供可解锁完整的 −{floor}。"
-  },
-  "Post an offer": "发布一项提供",
   "BeanPool: your community and help, not connected": "BeanPool：你的社区与互助，未连接",
   "BeanPool: your community and help, offline": "BeanPool：你的社区与互助，离线",
   "BeanPool: your community and help, guest": "BeanPool：你的社区与互助，访客",

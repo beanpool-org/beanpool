@@ -3267,13 +3267,6 @@
   "Beans from a member you blocked": "आपके द्वारा ब्लॉक किए गए सदस्य से फलियाँ",
   "GUEST": "अतिथि",
   "BEANS": "फलियाँ",
-  "No credit line yet": "अभी कोई क्रेडिट लाइन नहीं",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "आपके पास मौजूद फलियों से आप अभी व्यापार कर सकते हैं। अपना पहला व्यापार पूरा करें और आपकी क्रेडिट लाइन अपने आप खुल जाती है — आप जितना अधिक व्यापार करते हैं, यह उतनी ही बढ़ती है। (एक सामुदायिक वाउचर भी आपको शुरुआती लाइन दे सकता है।)",
-  "Credit position — tap to learn how it works": "क्रेडिट स्थिति — यह कैसे काम करता है जानने के लिए टैप करें",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️  खर्च रोक दिया गया है — आपका शेष उस सीमा से नीचे है जो आपका {n} सक्रिय प्रस्ताव अनलॉक करता है (−{limit})। इसे हटाने के लिए कोई प्रस्ताव पोस्ट करें या वापस व्यापार करें। आप अभी भी प्राप्त कर सकते हैं और बेच सकते हैं।",
-    "other": "⚠️  खर्च रोक दिया गया है — आपका शेष उस सीमा से नीचे है जो आपके {n} सक्रिय प्रस्ताव अनलॉक करते हैं (−{limit})। इसे हटाने के लिए कोई प्रस्ताव पोस्ट करें या वापस व्यापार करें। आप अभी भी प्राप्त कर सकते हैं और बेच सकते हैं।"
-  },
   "Levels": "स्तर",
   "Wallet": "वॉलेट",
   "Ledger": "खाता",
@@ -5323,32 +5316,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (सत्यापित खाता)",
   "Opens external channel link": "बाहरी चैनल लिंक खोलता है",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate}%/माह",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "क्रेडिट बैलेंस {balance} फलियाँ, क्रेडिट सीमा {floor} फलियाँ, शुल्क-मुक्त सीमा {max} फलियाँ।",
-  "fee/mo": "शुल्क/माह",
-  "your limit": "आपकी सीमा",
-  "sweet spot": "उचित दायरा",
-  "fee-free": "शुल्क-मुक्त",
-  "← carry credit": "← क्रेडिट लेना",
-  "hold credit →": "क्रेडिट रखना →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} से −{depth} अनलॉक होता है · {more} → −{next}",
-    "other": "🎣 {offers} से −{depth} अनलॉक होते हैं · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} से −{depth} अनलॉक होता है",
-    "other": "🎣 {offers} से −{depth} अनलॉक होते हैं"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} ऑफ़र",
-    "other": "{n} ऑफ़र"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 अपनी क्रेडिट सीमा शुरू करने के लिए {post} — {count} ऑफ़र से आपकी पूरी सीमा −{floor} अनलॉक होती है।",
-    "other": "🎣 अपनी क्रेडिट सीमा शुरू करने के लिए {post} — {count} ऑफ़र से आपकी पूरी सीमा −{floor} अनलॉक होती है।"
-  },
-  "Post an offer": "एक ऑफ़र पोस्ट करें",
   "Unknown\u0004a host with no name": "अज्ञात आयोजक",
   "No maps app": "कोई नक्शा ऐप नहीं",
   "The event is at {lat}, {lng}.": "कार्यक्रम {lat}, {lng} पर है।",

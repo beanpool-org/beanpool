@@ -17,15 +17,6 @@
   "(100% community owned)": "(100% sở hữu bởi cộng đồng)",
   "(You)": "(Bạn)",
   "(You)\u0004roster: the viewer": "(Bạn)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "other": "**Đăng bài Chia sẻ** để mở hạn mức tín dụng — **{n}** chia sẻ mở khóa toàn bộ −{limit}."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "other": "**{n} chia sẻ** mở khóa −{limit}"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "other": "**{n} chia sẻ** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "other": "Còn **{n}** điểm tin cậy nữa để đạt {emoji} {tier}"
   },
@@ -629,7 +620,6 @@
   "Creating...": "Đang tạo...",
   "Creator account linking:": "Liên kết tài khoản người sáng tạo:",
   "Credit Line": "Hạn mức tín dụng",
-  "Credit balance gauge": "Thước đo số dư tín dụng",
   "Credits (B)": "Tín dụng (Đậu)",
   "Credits (🫘 Beans)": "Tín dụng (🫘 Đậu)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "Tín dụng là một loại tiền tệ tín dụng tương hỗ. Khi bạn giao dịch, tín dụng được chuyển giữa các thành viên. Ai cũng bắt đầu từ số không. Hệ thống được thiết kế để khuyến khích có đi có lại và giữ giá trị lưu thông tại địa phương.",
@@ -1321,7 +1311,6 @@
   "No bond required.": "Không yêu cầu tiền bảo đảm.",
   "No comment provided.": "Không có nhận xét.",
   "No conversations yet.": "Chưa có cuộc trò chuyện nào.",
-  "No credit line yet": "Chưa có hạn mức tín dụng",
   "No deals in progress": "Không có giao dịch đang tiến hành",
   "No friends yet": "Chưa có bạn bè",
   "No groups found": "Không tìm thấy nhóm",
@@ -2012,9 +2001,6 @@
   "Spam or scam": "Spam hoặc lừa đảo",
   "Specific Action / Effect": "Hành động / Tác động cụ thể",
   "Specific Action or Effect": "Hành động hoặc Tác động cụ thể",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "other": "Tạm dừng chi tiêu — số dư của bạn thấp hơn mức mở khóa của {n} chia sẻ đang hoạt động (−{limit}). Hãy đăng một Chia sẻ hoặc giao dịch trở lại để gỡ bỏ mức này. Bạn vẫn có thể nhận và bán hàng."
-  },
   "Sprout": "Mầm cây",
   "Square — nothing owed either way": "Cân bằng — hai bên không nợ nhau",
   "Start": "Bắt đầu",
@@ -2697,7 +2683,6 @@
   "You can propose a Decision once you have completed a trade.": "Bạn có thể đề xuất một Quyết định sau khi đã hoàn thành một giao dịch.",
   "You can propose once you have completed a trade.": "Bạn có thể đề xuất sau khi đã hoàn thành một giao dịch.",
   "You can still read, edit your profile and leave.": "Bạn vẫn có thể đọc, chỉnh sửa hồ sơ và rời đi.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Bạn có thể giao dịch ngay lúc này bằng số đậu đang có. Khi hoàn tất giao dịch đầu tiên, hạn mức tín dụng sẽ tự động mở — bạn giao dịch càng nhiều giá trị, hạn mức càng lớn. (Lời bảo lãnh từ cộng đồng cũng có thể mang lại cho bạn hạn mức khởi đầu.)",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "Bạn đã đổi thời gian hoặc địa điểm. Sự kiện sẽ hiện UPDATED và mọi người sẽ đến đều được thông báo.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "Chính bạn, trên máy của bạn hoặc máy bạn thuê. Không bao giờ cần đến beanpool.org: địa chỉ web riêng của bạn cũng hoạt động tốt.",
   "You have already rated this trade.": "Bạn đã đánh giá giao dịch này rồi.",
@@ -2884,8 +2869,6 @@
   "execution pending grace\u0004Decision status": "chờ thực thi sau ân hạn",
   "execution void\u0004Decision status": "thực thi vô hiệu",
   "failed\u0004Decision status": "không đạt",
-  "fee-free": "miễn phí",
-  "fee/mo": "phí/tháng",
   "for {n} day|for {n} days": {
     "other": "trong {n} ngày"
   },
@@ -2900,7 +2883,6 @@
   "from {who} · {when}": "từ {who} · {when}",
   "general\u0004group category": "chung",
   "guild\u0004group category": "hội nghề",
-  "hold credit →": "giữ tín dụng →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... hoặc tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -2946,7 +2928,6 @@
   "request to join\u0004join policy": "yêu cầu tham gia",
   "requested\u0004deal status": "đã yêu cầu",
   "social\u0004group category": "xã hội",
-  "sweet spot": "điểm tối ưu",
   "the account saved from the other tab": "tài khoản đã lưu từ tab kia",
   "the lever": "đòn bẩy",
   "them\u0004the other member of a trade, name unknown": "đối tác",
@@ -2963,7 +2944,6 @@
   "working group\u0004group category": "nhóm làm việc",
   "yesterday": "hôm qua",
   "you": "bạn",
-  "your limit": "hạn mức của bạn",
   "{actor} completed a trade with {target}": "{actor} đã hoàn tất giao dịch với {target}",
   "{actor} joined": "{actor} đã tham gia",
   "{actor} joined the community": "{actor} đã gia nhập cộng đồng",
@@ -2979,8 +2959,6 @@
   "{actor} traded with {target}": "{actor} đã giao dịch với {target}",
   "{actor} traded with {target}: {title}": "{actor} đã giao dịch với {target}: {title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈{rate}%/tháng",
-  "{amount} Beans": "{amount} đậu",
   "{amount} Beans from the pool: {what}.": "{amount} đậu từ quỹ chung: {what}.",
   "{amount} raised of {goal} 🫘": "Đã gây quỹ {amount} trên {goal} 🫘",
   "{amount} · held in trust": "{amount} · đang ký quỹ",
@@ -3272,7 +3250,6 @@
   "← Choose another way": "← Chọn cách khác",
   "← Keep it": "← Giữ lại",
   "← Start again": "← Bắt đầu lại",
-  "← carry credit": "← nợ tín dụng",
   "↑ Sent": "↑ Đã gửi",
   "↓ Received": "↓ Đã nhận",
   "↻ RECURRING": "↻ ĐỊNH KỲ",

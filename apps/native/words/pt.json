@@ -3430,13 +3430,6 @@
   "Beans from a member you blocked": "Feijões de um membro que você bloqueou",
   "GUEST": "CONVIDADO",
   "BEANS": "FEIJÕES",
-  "No credit line yet": "Ainda sem linha de crédito",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Você pode negociar agora com os feijões que possui. Conclua sua primeira troca e sua linha de crédito se abrirá automaticamente — quanto mais valor negociar, mais ela cresce. (Uma recomendação da comunidade também pode oferecer uma linha inicial).",
-  "Credit position — tap to learn how it works": "Situação do crédito — toque para ver como funciona",
-  "⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "⚠️  Gastos pausados — seu saldo está abaixo do que sua {n} oferta ativa desbloqueia (−{limit}). Publique uma oferta ou faça novas trocas para reativar. Você ainda pode receber e vender.",
-    "other": "⚠️  Gastos pausados — seu saldo está abaixo do que suas {n} ofertas ativas desbloqueiam (−{limit}). Publique uma oferta ou faça novas trocas para reativar. Você ainda pode receber e vender."
-  },
   "Levels": "Níveis",
   "Wallet": "Carteira",
   "Ledger": "Registro",
@@ -5304,32 +5297,6 @@
   "{platform} {handle}": "{platform} {handle}",
   "{platform} (verified account)": "{platform} (conta verificada)",
   "Opens external channel link": "Abre link do canal externo",
-  "{balance} B · ≈{rate}%/mo": "{balance} B · ≈{rate}%/mês",
-  "{balance} B": "{balance} B",
-  "Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.": "Saldo de crédito: {balance} feijões, limite de crédito: {floor} feijões, teto sem taxas: {max} feijões.",
-  "fee/mo": "taxa/mês",
-  "your limit": "seu limite",
-  "sweet spot": "ponto ideal",
-  "fee-free": "sem taxa",
-  "← carry credit": "← usar crédito",
-  "hold credit →": "manter crédito →",
-  "🎣 {offers} unlocks −{depth} · {more} → −{next}|🎣 {offers} unlock −{depth} · {more} → −{next}": {
-    "one": "🎣 {offers} libera −{depth} · {more} → −{next}",
-    "other": "🎣 {offers} liberam −{depth} · {more} → −{next}"
-  },
-  "🎣 {offers} unlocks −{depth}|🎣 {offers} unlock −{depth}": {
-    "one": "🎣 {offers} libera −{depth}",
-    "other": "🎣 {offers} liberam −{depth}"
-  },
-  "{n} offer|{n} offers": {
-    "one": "{n} oferta",
-    "other": "{n} ofertas"
-  },
-  "🎣 {post} to open your credit line — {count} offer unlocks your full −{floor}.|🎣 {post} to open your credit line — {count} offers unlock your full −{floor}.": {
-    "one": "🎣 {post} para abrir sua linha de crédito — {count} oferta libera seu limite total de −{floor}.",
-    "other": "🎣 {post} para abrir sua linha de crédito — {count} ofertas liberam seu limite total de −{floor}."
-  },
-  "Post an offer": "Publicar uma oferta",
   "No maps app": "Sem app de mapas",
   "The event is at {lat}, {lng}.": "O evento é em {lat}, {lng}.",
   "Cancel this event?": "Cancelar este evento?",

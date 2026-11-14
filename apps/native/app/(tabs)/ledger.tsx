@@ -19,7 +19,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useIdentity } from '../IdentityContext';
-import { getBalance, getTransactions, getAllCommunityMembers, sendTransfer, getPledgeHistory, getEscrowTotal, signedRequest } from '../../utils/db';
+import { getBalance, getTransactions, getAllCommunityMembers, sendTransfer, getPledgeHistory, getEscrowTotal, signedRequest, refreshBalanceFromServer } from '../../utils/db';
 import { useOwnProfile } from '../../utils/use-own-profile';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
@@ -32,6 +32,7 @@ import { TrustInfoModal } from '../../components/info-content/TrustInfoModal';
 import { SliderInfoModal } from '../../components/info-content/SliderInfoModal';
 import { TrustBadge, TrustLevel } from '../../components/TrustBadge';
 import { CreditBar } from '../../components/CreditBar';
+import { CreditBarUnread } from '../../components/CreditBarUnread';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 import {
@@ -175,6 +176,11 @@ export default function LedgerScreen() {
     const [heldSample, setHeldSample] = useState(false);
     const balanceState = heldSample === preview ? heldBalance : NO_BALANCE;
     const txns = heldSample === preview ? heldTxns : NO_TXNS;
+    // The credit card waits for the member's own line (round 2 of #3134): before it is read, or with none of the node's
+    // figures on this phone yet (getBalance's `lineKnown: false`, a first open), an answer reads as "no credit line yet",
+    // which is untrue for most. `balanceUnread`: that read failed, so the card says so, with Try again.
+    const [balanceUnread, setBalanceUnread] = useState(false);
+    const creditUnread = balanceState === NO_BALANCE || balanceState.lineKnown === false;
     // "What people who give credit see" (slice C6) is asked of the node only where credit lives: a community whose Beans are
     // live for this reader (never a preview, read-only or hidden: the worldwide community's are a preview, a node with Beans
     // off hides them), with no further profile read. The node still decides: it answers 404 anywhere else, and the card then
@@ -469,7 +475,16 @@ export default function LedgerScreen() {
         const latest = <T,>(set: (v: T) => void) => (v: T) => { if (gen === loadGen.current) set(v); };
         if (identity?.publicKey) {
             getCreditGiftOffer().then(latest(setGiftOffer)).catch(() => {});
-            getBalance(identity.publicKey).then(latest(setBalanceState)).catch(console.error);
+            const key = identity.publicKey;
+            // With none of the node's figures on this phone yet, the node is asked: its answer reloads the screen
+            // (sync_data_updated), and no answer at all means the line couldn't be read.
+            getBalance(key).then(latest((answer: any) => {
+                setBalanceState(answer);
+                if (answer?.lineKnown !== false) { setBalanceUnread(false); return; }
+                refreshBalanceFromServer(key)
+                    .then(latest((read: unknown) => setBalanceUnread(read === null)))
+                    .catch(() => latest(setBalanceUnread)(true));
+            })).catch((e) => { console.error(e); latest(setBalanceUnread)(true); });
             getTransactions(identity.publicKey).then(latest(setTxns)).catch(console.error);
             getBlockedUsers().then(list => setBlocked(new Set(list))).catch(() => {});
             getEscrowTotal(identity.publicKey).then(latest(setEscrowTotal)).catch(() => {});
@@ -1257,8 +1272,13 @@ export default function LedgerScreen() {
                 </Pressable>
             </View>
 
-            {/* ── Credit position: an admin's freeze keeps its own card; everyone else, a newcomer too, the credit card. ── */}
-            {creditLineCard(balanceState) === 'frozen' ? (
+            {/* ── Credit position: an admin's freeze keeps its own card; everyone else, a newcomer too, the credit card. Until
+                 the member's own line is in, the card's shape and no claim; if it couldn't be read, it says so. ── */}
+            {creditUnread ? (
+                <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
+                    <CreditBarUnread failed={balanceUnread} onRetry={() => { setBalanceUnread(false); loadData(); }} colors={colors} />
+                </View>
+            ) : creditLineCard(balanceState) === 'frozen' ? (
                 <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
                     <View testID="ledger-known-frozen" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: colors.feedback.info.bg, borderWidth: 1, borderColor: colors.feedback.info.border, borderRadius: 12, padding: 12 }}>
                         <Text style={{ fontSize: 20 }}>❄️</Text>

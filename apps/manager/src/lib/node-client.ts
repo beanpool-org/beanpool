@@ -1116,14 +1116,35 @@ export async function freezeNodeUser(
 
 /**
  * One member's standing as the node holds it now, from the owners' member rows (POST /api/local/admin/data/members, found
- * by key): whether their credit is frozen, and their status. Null when the node lists no such member. What a screen shows
- * after a change, read back, never guessed.
+ * by key): whether their credit is frozen, their status, and whether they are a retired empty duplicate. Null when the
+ * node lists no such member. What a screen shows after a change, read back, never guessed.
  */
-export async function fetchMemberStanding(nodeUrl: string, pubkey: string, credential?: string): Promise<{ creditFrozen: boolean; status: string } | null> {
+export async function fetchMemberStanding(nodeUrl: string, pubkey: string, credential?: string): Promise<{ creditFrozen: boolean; status: string; retiredAt: string | null } | null> {
     const page = await fetchMembersPage(nodeUrl, credential, { q: pubkey, limit: 5 });
-    const m = page.members.find((row) => row.publicKey === pubkey);
+    const m = page.members.find((row) => row.publicKey === pubkey) as (MemberItem & { retiredAt?: string | null }) | undefined;
     if (!m) return null;
-    return { creditFrozen: m.creditFrozen === true, status: String(m.status ?? 'active') };
+    return { creditFrozen: m.creditFrozen === true, status: String(m.status ?? 'active'), retiredAt: typeof m.retiredAt === 'string' ? m.retiredAt : null };
+}
+
+/**
+ * Whether this owner may retire this member as an empty duplicate now (GET /api/local/admin/users/:pubkey/retire), and if
+ * not, why in the node's words. Not an owner's own key session (an admin, a token), or a node from before it: not allowed.
+ */
+export async function fetchRetireCheck(nodeUrl: string, pubkey: string, credential?: string): Promise<{ allowed: boolean; error?: string }> {
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/retire`), { headers: buildAdminHeaders(credential) }).catch(() => null);
+    if (!res) return { allowed: false };
+    const data = await res.json().catch(() => null) as { allowed?: unknown; error?: unknown } | null;
+    return { allowed: res.ok && data?.allowed === true, ...(typeof data?.error === 'string' ? { error: data.error } : {}) };
+}
+
+/** Retire an empty duplicate (an owner, by their own key): no vote, nothing deleted. A refusal throws the node's words. */
+export async function retireEmptyDuplicate(nodeUrl: string, pubkey: string, credential?: string): Promise<{ success: boolean }> {
+    return postAdmin(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/retire`, {}, credential);
+}
+
+/** Bring back a retired empty duplicate: active again. */
+export async function bringBackRetiredMember(nodeUrl: string, pubkey: string, credential?: string): Promise<{ success: boolean }> {
+    return postAdmin(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/unretire`, {}, credential);
 }
 
 /**

@@ -241,7 +241,8 @@ export interface LabelElsewhere {
 
 /**
  * Every library tag's label in all 25 languages, keyed EXACTLY (core exactTagForms: the index's words and compound join,
- * lower case, NFC, every mark and letter kept), each to the tag it names and the language it is a label in. A device holds
+ * lower case in every language's rule, so i, ı and İ are one letter as Turkish's capitals make them, NFC, every mark and
+ * letter kept), each to the tag it names and the language it is a label in. A device holds
  * its own language and English, so a word that is a label in a third language ("limão-siciliano" on a Spanish phone) is
  * found here, and the field offers that tag above the member's own word, saying the language. Exact, never folded (Fable,
  * 15 Nov): across languages a fold makes one language's word another's ("Cát", sand in Vietnamese, as "cat"); folding stays

@@ -224,9 +224,9 @@ import SettingsScreen from '../../app/(tabs)/settings';
 const NODE = 'https://mullum.example';
 /** styles.toggle in settings.tsx: the switch every row ends in. */
 const TOGGLE = { width: 50, height: 28 };
-/** The Settings menu's switches (Background pattern, App Lock, Location, Holiday Mode, Show me as a connection) and the Notifications screen's (Direct Messages, Marketplace, asked, Held in Trust, Requests to join). */
+/** The Settings menu's switches (Background pattern, App Lock, Location, Holiday Mode, Show me as a connection) and the Notifications screen's (Direct Messages, Forum, Marketplace, asked, Held in Trust, Requests to join). */
 const MENU_SWITCHES = 5;
-const NOTIFICATION_SWITCHES = 5;
+const NOTIFICATION_SWITCHES = 6;
 
 let host: HTMLDivElement;
 let root: Root;
@@ -237,7 +237,7 @@ beforeEach(() => {
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
     store.map.set('beanpool_node_profiles', JSON.stringify({
-        [NODE]: { profile: 'local', features: { beans: true, escrow: true, askedPush: true, nearbyListings: { radiusKm: 10, max: 500 } }, checkedAt: new Date().toISOString() },
+        [NODE]: { profile: 'local', features: { beans: true, escrow: true, askedPush: true, forumNotices: true, nearbyListings: { radiusKm: 10, max: 500 } }, checkedAt: new Date().toISOString() },
     }));
     globalThis.fetch = vi.fn(async (url: RequestInfo | URL) => {
         const u = String(url);

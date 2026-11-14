@@ -472,7 +472,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 // Only to a community that takes it (core askedPushOn): one from before it refuses the whole save.
                 ...(askedPushOn(communityInfo?.features) ? { notify_asked: nextAsked } : {}),
                 // The same for the Forum switch (core forumNoticesOn).
-                ...(forumNoticesOn(communityInfo?.features as { forumNotices?: unknown } | undefined) ? { notify_forum: nextForum } : {}),
+                ...(forumNoticesOn(communityInfo?.features) ? { notify_forum: nextForum } : {}),
             });
         } catch (e) {
             console.warn('[NotifPrefs] Save failed:', e);
@@ -1806,7 +1806,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     />
                                 </div>
 
-                                {forumNoticesOn(communityInfo?.features as { forumNotices?: unknown } | undefined) && (
+                                {forumNoticesOn(communityInfo?.features) && (
                                     <div className="flex justify-between items-center gap-3 p-4 rounded-xl border border-nature-200 dark:border-nature-800" data-testid="settings-notify-forum">
                                         <div className="min-w-0">
                                             <div className="text-sm font-bold text-nature-900 dark:text-white">{t(FORUM_PUSH_WORDS.switchName)}</div>

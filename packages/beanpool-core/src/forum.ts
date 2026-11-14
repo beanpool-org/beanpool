@@ -34,8 +34,8 @@ export function forumOn(features: { forum?: unknown } | null | undefined): boole
  * that takes the member's Forum switch (`notify_forum`). Both apps show the switch in Settings → Notifications only here: a
  * server from before F5 refuses the key, and the web app saves every switch at once.
  */
-export function forumNoticesOn(features: { forumNotices?: unknown } | null | undefined): boolean {
-    return features?.forumNotices === true;
+export function forumNoticesOn(features: object | null | undefined): boolean {
+    return (features as { forumNotices?: unknown } | null | undefined)?.forumNotices === true;
 }
 
 /** The member's preference behind the Forum switch: on until they turn it off, as every push switch is. */

@@ -14,6 +14,10 @@
  * sent it to is never sent it (#1184 review 4110460184). The record goes with the account (identity.ts
  * `wipeIdentityScopedStorage`).
  *
+ * A phone waiting to be let in (utils/waiting-to-join.ts, S3: an account in no community yet) keeps no community, so its
+ * token goes to each community the key asked to join and still waits on instead ({@link askedWhileWaiting}; web push W4,
+ * Marty's Decision 4): the yes buzzes it. Each is on the record like any other, so a leave reaches it too.
+ *
  * One community going (Forget Community, alerts off) is not an account leaving: the key stays and goes on registering
  * everywhere else. {@link stopRegisteringAt} stops that one community alone (account-leaves-phone.ts
  * `unregisterPushTokenAt`); {@link stopRegistering} would stop them all.
@@ -47,8 +51,9 @@ import { isPlainNodeAddress } from './node-url';
 import { communitiesWithAlertsOff, readAlertsOff } from './push-alerts-off';
 import { communityAddress, pinPushKey, pushKeyOf } from './push-pins';
 import { languageForNode } from './language-choice';
+import { knockStillAnswerable } from '@beanpool/core';
 import {
-    PUSH_LEAVES_OWED_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY, PUSH_STAMP_STORE_KEY, SAVED_NODES_STORE_KEY,
+    KNOCKS_STORE_KEY, PUSH_LEAVES_OWED_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY, PUSH_STAMP_STORE_KEY, SAVED_NODES_STORE_KEY,
 } from './storage-keys';
 
 export { communityAddress };
@@ -57,6 +62,8 @@ const PUSH_TOKENS_PATH = '/api/push-tokens';
 const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
 /** The communities this key visited as a guest (nodes.ts `markGuestNode`). */
 const GUEST_NODES_STORE_KEY = 'beanpool_guest_nodes';
+/** The join wizard's record, part-way (onboarding-state.ts): a phone with one is not waiting to be let in. */
+const PENDING_ONBOARDING_STORE_KEY = 'beanpool_pending_onboarding';
 /** How long a registration may take, as other signed requests (db.ts `signedRequest`). */
 const REGISTER_TIMEOUT_MS = 12000;
 /**
@@ -540,7 +547,7 @@ export async function registerAccountForPush(
         console.warn('[Push] Could not get this phone\'s push token; its registrations are tried again later:', e instanceof Error ? e.message : e);
         try {
             if ((await onPhone())?.publicKey === publicKey) {
-                for (const community of await communitiesForAlerts(storage)) await stillDue(key, community, 'unsent', storage);
+                for (const community of await placesForToken(key, storage)) await stillDue(key, community, 'unsent', storage);
             }
         } catch (e2) {
             console.warn('[Push] Could not write down that this phone\'s registrations are still due', e2);
@@ -556,15 +563,17 @@ export async function registerAccountForPush(
     // Read once the token is here, which can take a while: a community forgotten meanwhile is not asked.
     let communities: string[] = [];
     let anchor: string | null = null;
+    let asked: string[] = [];
     try {
         anchor = communityAddress(await storage.getItem(ANCHOR_STORE_KEY));
         communities = await notLeftAlone(key, storage);
+        asked = await askedWhileWaiting(key, storage);
     } catch (e) {
         console.warn('[Push] Could not read which communities keep this phone\'s token; tried again later:', e instanceof Error ? e.message : e);
     }
     await Promise.all(communities.map(async (community) => {
         try {
-            if (community !== anchor && !await belongsThere(account, community, REGISTER_TIMEOUT_MS, storage)) return;
+            if (community !== anchor && !asked.includes(community) && !await belongsThere(account, community, REGISTER_TIMEOUT_MS, storage)) return;
             if (await registerPushTokenWithCommunity(account, token, platform, REGISTER_TIMEOUT_MS, storage, community)) {
                 console.log(`[Push] Token registered with ${community}`);
             }
@@ -610,7 +619,7 @@ async function belongsThere(account: RegisteringAccount, community: string, time
     return isMember && (await communitiesForAlerts(storage)).includes(community);
 }
 
-/** {@link communitiesForAlerts}, without those still waiting out a failed try, but for the one the phone is set to. */
+/** {@link placesForToken}, without those still waiting out a failed try, but for the one the phone is set to. */
 async function notLeftAlone(key: string, storage: Storage): Promise<string[]> {
     const anchor = communityAddress(await storage.getItem(ANCHOR_STORE_KEY));
     const now = Date.now();
@@ -618,7 +627,42 @@ async function notLeftAlone(key: string, storage: Storage): Promise<string[]> {
     const waiting = parseDue(await storage.getItem(PUSH_REGISTRATIONS_DUE_STORE_KEY))
         .filter((d) => d.publicKey === key && d.community !== anchor && !isDue(d, now))
         .map((d) => d.community);
-    return (await communitiesForAlerts(storage)).filter((c) => !waiting.includes(c));
+    return (await placesForToken(key, storage)).filter((c) => !waiting.includes(c));
+}
+
+/**
+ * Where this phone's token goes for `key`: {@link communitiesForAlerts}, and on a phone waiting to be let in, the
+ * communities it asked ({@link askedWhileWaiting}). Each once. Throws when the phone's storage can't be read.
+ */
+async function placesForToken(key: string, storage: Pick<Storage, 'getItem'>): Promise<string[]> {
+    return [...new Set([...await communitiesForAlerts(storage), ...await askedWhileWaiting(key, storage)])];
+}
+
+/**
+ * A phone waiting to be let in (utils/waiting-to-join.ts `phoneIsWaiting`: no community in use and no join wizard
+ * part-way; S3): the communities `key` asked to join and still waits on, as knock.ts remembers them (not cancelled, still
+ * answerable), so its token goes there and the yes buzzes it (`join.answered`; web push W4, Marty's Decision 4). Each
+ * already knows the key from its own request and keeps the token only while that request is open, dropping it once the
+ * request is cancelled, declined or lapses (server routes/community.ts POST /api/push-tokens), so no membership question
+ * is asked first ({@link belongsThere}): its answer would be no. None on a phone with a community in use or a wizard
+ * part-way, nor from another key's list (a wiped and restored phone). Reads only; throws when the phone's storage can't
+ * be read.
+ */
+export async function askedWhileWaiting(key: string, storage: Pick<Storage, 'getItem'> = AsyncStorage, now: number = Date.now()): Promise<string[]> {
+    if (communityAddress(await storage.getItem(ANCHOR_STORE_KEY))) return [];
+    if (await storage.getItem(PENDING_ONBOARDING_STORE_KEY)) return [];
+    let stored: { pubkey?: unknown; knocks?: unknown } | null = null;
+    try {
+        stored = JSON.parse((await storage.getItem(KNOCKS_STORE_KEY)) ?? 'null');
+    } catch {
+        return [];
+    }
+    if (!stored || typeof stored.pubkey !== 'string' || stored.pubkey.toLowerCase() !== key.toLowerCase() || !Array.isArray(stored.knocks)) return [];
+    const asked = (stored.knocks as { url?: unknown; sentAt?: unknown; cancelledAt?: unknown }[])
+        .filter((k) => k && !k.cancelledAt && knockStillAnswerable(k, now))
+        .map((k) => communityAddress(typeof k.url === 'string' ? k.url : null))
+        .filter((c): c is string => c !== null && isPlainNodeAddress(c));
+    return [...new Set(asked)];
 }
 
 /**
@@ -705,7 +749,7 @@ export function retryDueRegistrations(
             let due: DueRegistration[] = [];
             await changeDue(storage, async (all) => {
                 if (leaving.has(key)) return all;
-                const kept = await communitiesForAlerts(storage);
+                const kept = await placesForToken(key, storage);
                 const now = Date.now();
                 const forgotten = (d: DueRegistration) => d.publicKey === key && !kept.includes(d.community);
                 for (const d of all.filter(forgotten)) console.log(`[Push] This phone no longer keeps ${d.community}: its registration there is not tried again`);
@@ -724,10 +768,11 @@ export function retryDueRegistrations(
             // The account on the phone, or the communities it keeps, may have changed while the token was fetched: only
             // its own go, and only where the phone still keeps them.
             if (!token || (await onPhone())?.publicKey?.toLowerCase() !== key) return;
-            const kept = await communitiesForAlerts(storage);
+            const kept = await placesForToken(key, storage);
+            const asked = await askedWhileWaiting(key, storage);
             await Promise.all(due.filter((d) => kept.includes(d.community)).map(async (d) => {
                 try {
-                    if (!await belongsThere(account, d.community, timeoutMs, storage)) return;
+                    if (!asked.includes(d.community) && !await belongsThere(account, d.community, timeoutMs, storage)) return;
                     if (await registerPushTokenWithCommunity(account, token, platform, timeoutMs, storage, d.community)) {
                         console.log(`[Push] Token registered with ${d.community} at last`);
                     }
@@ -773,7 +818,7 @@ export async function registerWhereMissing(
             const key = account.publicKey.toLowerCase();
             const asked = await pushRegisteredCommunities(storage);
             const guests = await guestMarks(storage);
-            const missing = (await communitiesForAlerts(storage)).filter((c) => !asked.includes(c) && !guests.includes(c));
+            const missing = (await placesForToken(key, storage)).filter((c) => !asked.includes(c) && !guests.includes(c));
             const anchor = communityAddress(await storage.getItem(ANCHOR_STORE_KEY));
             await changeDue(storage, (due) => {
                 if (leaving.has(key)) return due;

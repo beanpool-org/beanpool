@@ -70,7 +70,7 @@ import { copiesRuleForScreen } from '../../utils/copies-rule';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, askedPushOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, NAME_BOX_WORDS, notANameIn, PEEK_WORDS, t, word, formatNumber, type QuizResult, showInviterSwitchWords } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, FORUM_PUSH_WORDS, askedPushOn, forumNoticesOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, NAME_BOX_WORDS, notANameIn, PEEK_WORDS, t, word, formatNumber, type QuizResult, showInviterSwitchWords } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -650,6 +650,9 @@ export default function SettingsScreen() {
     // "When a neighbour asks for something I'm into" (cold start N3): on until the member turns it off, and shown only where
     // the community sends that push (core askedPushOn): elsewhere there is nothing for it to switch.
     const [notifAsked, setNotifAsked] = useState(true);
+    // The Forum switch (slice F5; core forumNoticesOn): on until the member turns it off, shown only where the community
+    // sends the forum's notices.
+    const [notifForum, setNotifForum] = useState(true);
     // "Requests to join" only where it changes something (core knockSwitchShown): not for an owner or admin, who is always
     // told, nor on a Known community, whose members are never told. Asked as the screen opens; a node that gave no answer
     // (offline, a timeout, a 5xx) is a role not known yet, so the switch waits (askNodeRole, never fetchMyNodeRole's "no role").
@@ -2182,6 +2185,7 @@ export default function SettingsScreen() {
                                     setNotifEscrow(prefs.notify_escrow !== 'false');
                                     setNotifKnocks(prefs.notify_knocks === 'true');
                                     setNotifAsked(prefs.notify_asked !== 'false');
+                                    setNotifForum(prefs.notify_forum !== 'false');
                                 }
                                 if (identity.privateKey) setKnockSwitch(knockSwitchShown(nodeProfile?.features, (await askNodeRole(url, identity))?.role));
                             }
@@ -2722,6 +2726,21 @@ export default function SettingsScreen() {
                                     <View style={[styles.toggleThumb, notifChat && styles.toggleThumbOn]} />
                                 </Pressable>
                             </View>
+                            {forumNoticesOn(nodeProfile?.features) && (
+                                <View style={styles.menuBtn} testID="settings-notify-forum">
+                                    <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🗣️</Text></View>
+                                    <View style={styles.menuTextBesideSwitch}>
+                                        <Text style={styles.menuText}>{t(FORUM_PUSH_WORDS.switchName)}</Text>
+                                        <Text style={styles.menuSub}>{t(FORUM_PUSH_WORDS.switchLine)}</Text>
+                                    </View>
+                                    <Pressable style={[styles.toggle, notifForum && styles.toggleOn]} accessibilityRole="button" accessibilityLabel={t(FORUM_PUSH_WORDS.switchName)} accessibilityState={{ checked: notifForum }} testID="settings-notify-forum-toggle" onPress={async () => {
+                                        const next = !notifForum; setNotifForum(next);
+                                        try { if (identity?.publicKey) { await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { notify_forum: next } }); } } catch (e) { console.warn('[Prefs]', e); }
+                                    }}>
+                                        <View style={[styles.toggleThumb, notifForum && styles.toggleThumbOn]} />
+                                    </Pressable>
+                                </View>
+                            )}
                             <View style={styles.menuBtn}>
                                 <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📬</Text></View>
                                 <View style={styles.menuTextBesideSwitch}>

@@ -16,8 +16,14 @@
  *        429 `topics_per_day`
  *   POST /api/forum/topics/:id/replies      { words, quotes?, lang?, photos? } → 201 { post }   409 `closed`; 429 `replies_per_day`
  *   POST /api/forum/topics/:id/close        → { topic }   (its writer, an owner or an admin) 409 `already_closed`
- *   POST /api/forum/posts/:id/edit          { words, title? } → { topic, post }   (its writer, the topic open)
+ *   POST /api/forum/posts/:id/edit          { words, title? } → { topic, post }   (its writer, the topic open, one they may read)
  *   POST /api/forum/posts/:id/remove        → { ok: true }   (its writer)
+ * Notices (slice F5, engine/forum-notices.ts): an active member who may read the topic, on the main server:
+ *   POST /api/forum/topics/:id/follow       { follow: 'following' | 'muted' | null } → { follow }   (its bell: each reply tells
+ *        them, nothing does, or neither; who starts or replies in a topic follows it unless they muted it)
+ *   POST /api/forum/topics/:id/read         { upTo } → { lastRead }   (they opened it up to post number upTo: the unread dot
+ *        moves, and its bell rows come off the bell). A reply's followers and the people it mentions are told by the bell
+ *        and a push; apps that connect with `forum=1` hear `forum_reply` { topicId, number } and `forum_list`.
  * First looks (slice F2, engine/forum-first-look.ts): a new member's topic, where `forumFirstLook` is on, answers 202
  * { waiting } (409 `waiting_already` while one waits; a new member's photos only there, else 403 `new_no_photos`):
  *   GET  /api/forum/first-looks             → { waiting: [waiting] }   oldest first; owners, admins, moderators (else 403 `moderators_only`)
@@ -46,14 +52,15 @@
  */
 import crypto from 'node:crypto';
 import Router from '@koa/router';
-import { isNodeMember, readsAsMember, assertMemberActive, getNodeRole, moderationNoticesCb } from '../state-engine.js';
+import { isNodeMember, readsAsMember, assertMemberActive, getNodeRole, moderationNoticesCb, forumNoticeCb } from '../state-engine.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { memberErrorText } from './member-error-text.js';
 import { parseDataUrl } from '../storage/image-columns.js';
 import {
-    ForumRefusal, closeForumTopic, createForumSection, editForumPost, editForumSection, forumFront, forumListTag, forumPhoto, forumTopic,
-    forumTopics, markForumTold, moveForumTopic, pinForumTopic, removeForumPost, replyInForum, startForumTopic,
+    ForumRefusal, closeForumTopic, createForumSection, editForumPost, editForumSection, followTopic, forumFront, forumListTag, forumPhoto, forumTopic,
+    forumTopics, markForumTold, moveForumTopic, pinForumTopic, readTopic, removeForumPost, replyInForum, startForumTopic,
 } from '../engine/forum.js';
+import { noteForumReader, tellForumReply, tellForumTopic } from '../engine/forum-notices.js';
 import { FORUM_LIMITS, word } from '@beanpool/core';
 import {
     firstLookPhoto, listFirstLooks, myFirstLook, noFirstLook, okFirstLook, tellFirstLookWaiting, withdrawFirstLook,
@@ -173,7 +180,12 @@ export function createForumRoutes(_deps: RouteDeps): Router {
     router.get('/api/forum/topics/:id', (ctx) => {
         const after = whole(ctx.query.after, 0, 1_000_000);
         if (after === null) return answer(ctx, 400, 'after is a whole number.', 'bad_request');
-        read(ctx, (key) => forumTopic(key, ctx.params.id, after));
+        read(ctx, (key) => {
+            const out = forumTopic(key, ctx.params.id, after);
+            // Reading it now: its replies' doorbell reaches them for a while (engine/forum-notices.ts), following it or not.
+            noteForumReader(ctx.params.id, key);
+            return out;
+        });
     });
 
     router.get('/api/forum/posts/:id/photos/:n', (ctx) => {
@@ -202,9 +214,20 @@ export function createForumRoutes(_deps: RouteDeps): Router {
         if (ctx.status === 201 && out?.waiting) {
             ctx.status = 202;
             tellFirstLookWaiting(moderationNoticesCb(), out.waiting);
+        } else if (ctx.status === 201) {
+            tellForumTopic(forumNoticeCb());
         }
     });
-    router.post('/api/forum/topics/:id/replies', (ctx) => write(ctx, 201, (key, body) => ({ post: replyInForum(key, ctx.params.id, body) })));
+    router.post('/api/forum/topics/:id/replies', (ctx) => {
+        write(ctx, 201, (key, body) => ({ post: replyInForum(key, ctx.params.id, body) }));
+        // Its followers and the people it mentions are told, and open apps hear it (slice F5).
+        const post = (ctx.body as { post?: any } | undefined)?.post;
+        if (ctx.status === 201 && post) {
+            tellForumReply(forumNoticeCb(), { id: post.id, topicId: post.topicId, number: post.number, writer: post.writer.publicKey, words: post.words, quotes: post.quotes });
+        }
+    });
+    router.post('/api/forum/topics/:id/follow', (ctx) => write(ctx, 200, (key, body) => followTopic(key, ctx.params.id, body.follow)));
+    router.post('/api/forum/topics/:id/read', (ctx) => write(ctx, 200, (key, body) => readTopic(forumNoticeCb(), key, ctx.params.id, body.upTo)));
     router.post('/api/forum/topics/:id/close', (ctx) => write(ctx, 200, (key) => ({ topic: closeForumTopic(key, ctx.params.id) })));
     router.post('/api/forum/topics/:id/pin', (ctx) => write(ctx, 200, (key, body) => {
         if (typeof body.pinned !== 'boolean') throw new ForumRefusal(400, 'bad_request', 'pinned is true or false.');
@@ -231,7 +254,10 @@ export function createForumRoutes(_deps: RouteDeps): Router {
         ctx.type = parsed.mime;
         ctx.body = Buffer.from(parsed.base64, 'base64');
     });
-    router.post('/api/forum/first-looks/:id/ok', (ctx) => write(ctx, 200, (key) => okFirstLook(moderationNoticesCb(), key, ctx.params.id)));
+    router.post('/api/forum/first-looks/:id/ok', (ctx) => {
+        write(ctx, 200, (key) => okFirstLook(moderationNoticesCb(), key, ctx.params.id));
+        if (ctx.status === 200) tellForumTopic(forumNoticeCb());
+    });
     router.post('/api/forum/first-looks/:id/no', (ctx) => write(ctx, 200, (key, body) => { noFirstLook(moderationNoticesCb(), key, ctx.params.id, body.reason); return { ok: true }; }));
     router.post('/api/forum/first-looks/:id/withdraw', (ctx) => write(ctx, 200, (key) => { withdrawFirstLook(key, ctx.params.id); return { ok: true }; }));
 

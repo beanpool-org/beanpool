@@ -207,8 +207,9 @@ async function main() {
     db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'made_up_before', 'x')`).run(alice.pubKeyHex);
     const served = Object.keys(await readPrefs(alice)).sort();
     // notify_knocks: requests to join (front doors S1), served off by default. notify_asked: when a neighbour asks for
-    // something the member starred (cold start N3, engine/asked-push.ts), served on by default.
-    assert(served.join() === 'eventReminderOffsets,holiday_mode,notify_asked,notify_chat,notify_escrow,notify_knocks,notify_marketplace,notify_recovery,show_as_connection_in_common',
+    // something the member starred (cold start N3, engine/asked-push.ts), served on by default. notify_forum: the Forum
+    // switch (slice F5, engine/forum-notices.ts), served on by default.
+    assert(served.join() === 'eventReminderOffsets,holiday_mode,notify_asked,notify_chat,notify_escrow,notify_forum,notify_knocks,notify_marketplace,notify_recovery,show_as_connection_in_common',
         `a key stored before the rule is not served back (${served.join()})`);
     assert(rowsOf(alice.pubKeyHex).includes('made_up_before'), '...and its row is left in place');
 

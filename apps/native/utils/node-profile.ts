@@ -143,6 +143,12 @@ export interface NodeFeatures {
      * with a sound no one can play (a live community, 14 Nov): off, the composer exactly as before voice.
      */
     voiceLines?: boolean;
+    /**
+     * This node sends the forum's notices and takes the member's Forum switch (`notify_forum`; apps/server
+     * engine/forum-notices.ts, slice F5; core forumNoticesOn): Settings → Notifications shows that switch only then. A node
+     * that doesn't say (no forum, or from before F5) sends none and refuses the key.
+     */
+    forumNotices?: boolean;
 }
 
 export type NodeDoor = 'open' | 'members' | 'admins';
@@ -157,7 +163,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
-    'askedPush', 'knowledge', 'perItem', 'voiceLines',
+    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forumNotices',
 ];
 
 export interface NodeProfile {

@@ -18,14 +18,15 @@
  * Every write refuses on a standby. Pushes say only that something waits or has an answer; the words are in the bell.
  */
 import crypto from 'node:crypto';
-import { FORUM_TIMES, word, wordsFor } from '@beanpool/core';
+import { FORUM_TIMES, word, wordsFor, type PushNoticeKind } from '@beanpool/core';
 import { db, deletePlainRows } from '../db/db.js';
 import { getNodeRole } from './sync.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { getMember } from '@beanpool/engine';
 import { ForumRefusal, type ForumWaitingTopic } from './forum.js';
 import { forumModerators, isForumModerator } from './forum-moderation.js';
-import { normaliseRemovalReason, REMOVAL_REASON_LABELS, tell, type ModerationNoticeCallbacks } from './moderation-notices.js';
+import { normaliseRemovalReason, REMOVAL_REASON_LABELS, tell, type ModerationNoticeCallbacks, type TellPush } from './moderation-notices.js';
+import { followForumTopic } from './forum-notices.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -45,6 +46,19 @@ export const FIRST_LOOK_WORDS = {
     answeredTitle: word('Your first topic has an answer.'),
     expiredBody: word('No moderator looked at your first topic in 30 days, so it went back to you. You can start it again.'),
 };
+
+/**
+ * The pushes a first look sends (slice F5): the forum's own kinds, under the member's Forum switch (`notify_forum`), one
+ * table so each kind stands on a line of its own.
+ */
+const FIRST_LOOK_KINDS = {
+    waiting:
+        'forum.first-look',
+    answered:
+        'forum.first-look-answer',
+} as const satisfies Record<string, PushNoticeKind>;
+const WAITING_PUSH: TellPush = { category: 'forum', kind: FIRST_LOOK_KINDS.waiting };
+const ANSWERED_PUSH: TellPush = { category: 'forum', kind: FIRST_LOOK_KINDS.answered };
 
 interface WaitingRow {
     id: string; section_id: string; writer_pubkey: string; title: string; words: string; place: string | null; lang: string | null;
@@ -101,7 +115,7 @@ export function firstLookPhoto(reader: string, id: string, n: number): string | 
 /** A first topic is waiting: every moderator hears it, by the bell and a push, never its words (design §9). */
 export function tellFirstLookWaiting(cb: ModerationNoticeCallbacks, waiting: ForumWaitingTopic): void {
     const to = forumModerators().filter((pk) => pk !== waiting.writer.publicKey);
-    tell(cb, to, FIRST_LOOK_WORDS.waitingTitle, FIRST_LOOK_WORDS.waitingBody, { kind: 'forum_first_look_waiting', waitingId: waiting.id, screen: 'forum_first_looks' });
+    tell(cb, to, FIRST_LOOK_WORDS.waitingTitle, FIRST_LOOK_WORDS.waitingBody, { kind: 'forum_first_look_waiting', waitingId: waiting.id, screen: 'forum_first_looks' }, WAITING_PUSH);
 }
 
 const quoted = (title: string) => (title.length > 80 ? `${title.slice(0, 79)}…` : title);
@@ -140,10 +154,12 @@ export function okFirstLook(cb: ModerationNoticeCallbacks, moderator: string, id
         deletePlainRows('forum_waiting_photos', 'waiting_id = ?', id);
         db.prepare(`INSERT INTO forum_members (member_pubkey, known_at) VALUES (?, ?)
                      ON CONFLICT(member_pubkey) DO UPDATE SET known_at = COALESCE(forum_members.known_at, excluded.known_at)`).run(row.writer_pubkey, at);
+        // Its writer follows it, as anyone who starts a topic does (engine/forum-notices.ts).
+        followForumTopic(row.writer_pubkey, topicId, now);
     })();
     tell(cb, [row.writer_pubkey], FIRST_LOOK_WORDS.answeredTitle,
         tr('Your first topic “{title}” is up in the forum. From now on your topics go up at once.', { title: quoted(row.title) }),
-        { kind: 'forum_first_look_answered', outcome: 'ok', topicId, screen: 'forum_topic' });
+        { kind: 'forum_first_look_answered', outcome: 'ok', topicId, screen: 'forum_topic' }, ANSWERED_PUSH);
     return { topicId };
 }
 
@@ -162,7 +178,7 @@ export function noFirstLook(cb: ModerationNoticeCallbacks, moderator: string, id
     })();
     tell(cb, [row.writer_pubkey], FIRST_LOOK_WORDS.answeredTitle,
         tr('A moderator looked at your first topic “{title}” and it did not go up. Reason: {reason}.', { title: quoted(row.title), reason: REMOVAL_REASON_LABELS[reason] }),
-        { kind: 'forum_first_look_answered', outcome: 'no', waitingId: id });
+        { kind: 'forum_first_look_answered', outcome: 'no', waitingId: id }, ANSWERED_PUSH);
 }
 
 /** Its writer takes their waiting topic back: nobody is told, its photos are deleted. */
@@ -190,7 +206,7 @@ export function tidyFirstLooks(cb: ModerationNoticeCallbacks, now = Date.now()):
             deletePlainRows('forum_waiting_photos', 'waiting_id = ?', r.id);
         }
     })();
-    for (const r of old) tell(cb, [r.writer_pubkey], FIRST_LOOK_WORDS.answeredTitle, FIRST_LOOK_WORDS.expiredBody, { kind: 'forum_first_look_answered', outcome: 'expired', waitingId: r.id });
+    for (const r of old) tell(cb, [r.writer_pubkey], FIRST_LOOK_WORDS.answeredTitle, FIRST_LOOK_WORDS.expiredBody, { kind: 'forum_first_look_answered', outcome: 'expired', waitingId: r.id }, ANSWERED_PUSH);
     const deleted = db.transaction(() => {
         deletePlainRows('forum_waiting_photos', "waiting_id IN (SELECT id FROM forum_waiting WHERE state != 'waiting' AND answered_at < ?)", cutoff);
         return deletePlainRows('forum_waiting', "state != 'waiting' AND answered_at < ?", cutoff);

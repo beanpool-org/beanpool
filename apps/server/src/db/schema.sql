@@ -3317,6 +3317,21 @@ CREATE TABLE IF NOT EXISTS forum_waiting (
 );
 CREATE INDEX IF NOT EXISTS idx_forum_waiting_state ON forum_waiting (state, created_at);
 CREATE INDEX IF NOT EXISTS idx_forum_waiting_writer ON forum_waiting (writer_pubkey, created_at);
+-- Who follows or muted a topic (slice F5, engine/forum-notices.ts; design §3, §9). A member follows a topic they start or
+-- reply in, and anyone who reads one may follow it by its bell; `muted` tells them nothing, a reply of theirs included.
+-- `last_read`: the number of the last post they opened (the app's unread dot). No row: neither. What they were last told
+-- (the bell row a reply folds into) is the bell's own (push_notices, this server's), never copied. A plain table, so a
+-- take-over keeps every follow; the member's key, never a link to this server's members (joint design §2.2).
+CREATE TABLE IF NOT EXISTS forum_follows (
+    topic_id      TEXT NOT NULL,
+    member_pubkey TEXT NOT NULL,
+    state         TEXT NOT NULL CHECK (state IN ('following', 'muted')),
+    last_read     INTEGER NOT NULL DEFAULT 0 CHECK (last_read >= 0),
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT,
+    PRIMARY KEY (topic_id, member_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_forum_follows_member ON forum_follows (member_pubkey);
 -- A waiting first topic's photos, at most 3, as forum_post_photos keeps a post's: a moderator sees them first. They move to
 -- the topic's opening post on OK and are deleted on any other answer.
 CREATE TABLE IF NOT EXISTS forum_waiting_photos (

@@ -17,6 +17,9 @@ import {
     forumMentions,
     forumMentionsFit,
     forumOn,
+    forumNoticesOn,
+    FORUM_PUSH_PREF,
+    FORUM_PUSH_WORDS,
     forumPostProof,
     forumPostProofMatches,
     forumPublicShapeProblems,
@@ -48,6 +51,15 @@ describe('limits', () => {
         expect(forumOn({})).toBe(false);
         expect(forumOn(null)).toBe(false);
         expect(forumOn({ forum: 'yes' })).toBe(false);
+    });
+
+    it('says the forum\'s notices are sent only where the features say forumNotices (slice F5), with the switch\'s key and words', () => {
+        expect(forumNoticesOn({ forumNotices: true })).toBe(true);
+        expect(forumNoticesOn({ forum: true })).toBe(false);
+        expect(forumNoticesOn(undefined)).toBe(false);
+        expect(forumNoticesOn({ forumNotices: 'true' })).toBe(false);
+        expect(FORUM_PUSH_PREF).toBe('notify_forum');
+        expect(FORUM_PUSH_WORDS.switchName).toBe('Forum');
     });
 });
 

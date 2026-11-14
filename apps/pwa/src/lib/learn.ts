@@ -13,12 +13,14 @@
  *   `compareKnowledge`, so a list reads the same from a node and from the sample. A search is the plain match the node falls
  *   back to; it serves the preview and the Market's one line there, never a live community (the node answers those).
  */
+import { useEffect, useState } from 'react';
 import {
-    KNOWLEDGE_EMOJI, KNOWLEDGE_FRONT_ROWS, KNOWLEDGE_NAMES, KNOWLEDGE_SEARCH_MAX, KNOWLEDGE_TOPICS, KNOWLEDGE_TOPIC_PAGE, compareKnowledge,
-    knowledgeFeatureMode, knowledgeFirstLine, knowledgeTopic, pinLive, t, type FeatureMode, type KnowledgeFields, type KnowledgeFront, type KnowledgeRow,
-    type KnowledgeSearch, type KnowledgeTopicPage,
+    KNOWLEDGE_EMOJI, KNOWLEDGE_FRONT_ROWS, KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_SEARCH_MAX, KNOWLEDGE_TOPICS, KNOWLEDGE_TOPIC_PAGE, compareKnowledge,
+    isKnowledgeTopic, knowledgeFeatureMode, knowledgeFirstLine, knowledgeTopic, pinLive, t, type FeatureMode, type KnowledgeDraftMine,
+    type KnowledgeDraftToCheck, type KnowledgeDraftWhole, type KnowledgeFields, type KnowledgeFront, type KnowledgeRow, type KnowledgeSearch,
+    type KnowledgeSource, type KnowledgeTopicPage,
 } from '@beanpool/core';
-import { request } from './api';
+import { myNodeRoleOnce, request } from './api';
 import { useCommunityInfo, useReaderFeatures } from './features';
 import { LANGUAGE_NAMES, shownLanguage } from './language';
 
@@ -202,4 +204,117 @@ export function sourceHost(url: string): string {
 /** The name of a page's language in its own script ("Español"), or the code if the screens do not know it. */
 export function languageNameOf(code: string): string {
     return (LANGUAGE_NAMES as Record<string, string>)[code] ?? code;
+}
+
+// ── Writing (slice K4) ───────────────────────────────────────────────────────────────────
+// A member's suggestion waits for an owner or admin (POST /api/knowledge/drafts); an owner's or admin's own page goes into
+// Learn at once (POST /api/knowledge/posts). The node checks everything again: these rules only say it before the send.
+
+/** What the form sends: the node's KnowledgeInput. `photos` are data URLs (PostPhotoPicker), the member's own. */
+export interface LearnInput {
+    title: string;
+    body: string;
+    topic: string;
+    place?: string;
+    sources?: KnowledgeSource[];
+    lang?: string;
+    photos?: string[];
+}
+
+/** The first thing the form must say before it sends (§3.3's refusals), or null when it may go. */
+export function learnFormRefusal(input: LearnInput): string | null {
+    if (!input.title.trim()) return t('Give it a title.');
+    if (!input.body.trim()) return t('Write what people should know.');
+    if (!isKnowledgeTopic(input.topic)) return t('Pick a topic.');
+    if ((input.sources ?? []).some((s) => s.url.trim() !== '' && safeSourceUrl(s.url.trim()) === null)) return t('A link must start with https:// or http://');
+    return null;
+}
+
+/** The input as the node takes it: trimmed, empty sources left out, at most the limits. */
+export function learnInputToSend(input: LearnInput): LearnInput {
+    const sources = (input.sources ?? [])
+        .map((s) => ({ url: s.url.trim(), label: s.label.trim().slice(0, KNOWLEDGE_LIMITS.sourceLabel) }))
+        .filter((s) => s.url !== '')
+        .slice(0, KNOWLEDGE_LIMITS.sources);
+    return {
+        title: input.title.trim().slice(0, KNOWLEDGE_LIMITS.title),
+        body: input.body.trim().slice(0, KNOWLEDGE_LIMITS.body),
+        topic: input.topic,
+        place: (input.place ?? '').trim().slice(0, KNOWLEDGE_LIMITS.place),
+        sources,
+        lang: input.lang ?? shownLanguage(),
+        photos: (input.photos ?? []).slice(0, KNOWLEDGE_LIMITS.photos),
+    };
+}
+
+/** A member sends a suggestion: it waits for an owner or admin. */
+export function suggestLearn(input: LearnInput): Promise<{ draft: KnowledgeDraftMine }> {
+    return request('POST', '/api/knowledge/drafts', learnInputToSend(input));
+}
+
+/** An owner or admin publishes their own page: it goes into Learn at once. */
+export function publishLearn(input: LearnInput): Promise<{ post: LearnPost }> {
+    return request('POST', '/api/knowledge/posts', learnInputToSend(input));
+}
+
+/** The member's own suggestions: the waiting ones and those answered in the last 30 days. */
+export async function getMyLearnDrafts(): Promise<{ waiting: KnowledgeDraftMine[]; answered: KnowledgeDraftMine[] }> {
+    const r = await request<{ waiting?: KnowledgeDraftMine[]; answered?: KnowledgeDraftMine[] }>('GET', '/api/knowledge/drafts/mine');
+    return { waiting: Array.isArray(r?.waiting) ? r.waiting : [], answered: Array.isArray(r?.answered) ? r.answered : [] };
+}
+
+/** "Take it back": the member's own waiting suggestion. */
+export function withdrawLearnDraft(id: string): Promise<{ ok: true }> {
+    return request('POST', `/api/knowledge/drafts/${encodeURIComponent(id)}/withdraw`);
+}
+
+/** To check (owners and admins): the waiting suggestions, the longest waiting first, 50 at a time. */
+export async function getLearnToCheck(): Promise<{ drafts: KnowledgeDraftToCheck[]; total: number }> {
+    const r = await request<{ drafts?: KnowledgeDraftToCheck[]; total?: number }>('GET', '/api/knowledge/drafts?limit=50&offset=0');
+    const drafts = Array.isArray(r?.drafts) ? r.drafts : [];
+    return { drafts, total: typeof r?.total === 'number' ? r.total : drafts.length };
+}
+
+/** One waiting suggestion whole, for the checking screen; null when it is no longer waiting. */
+export async function getLearnDraft(id: string): Promise<KnowledgeDraftWhole | null> {
+    try {
+        return (await request<{ draft?: KnowledgeDraftWhole }>('GET', `/api/knowledge/drafts/${encodeURIComponent(id)}`))?.draft ?? null;
+    } catch (e) {
+        if ((e as { status?: number }).status === 404) return null;
+        throw e;
+    }
+}
+
+/** Approve, with the checker's edits ("Edit first", the whole form) and, for an assistant's draft, the tick. */
+export function approveLearnDraft(id: string, opts: { edits?: LearnInput; checkedSources?: boolean } = {}): Promise<{ post: LearnPost }> {
+    return request('POST', `/api/knowledge/drafts/${encodeURIComponent(id)}/approve`, {
+        ...(opts.edits ? learnInputToSend(opts.edits) : {}),
+        ...(opts.checkedSources ? { checkedSources: true } : {}),
+    });
+}
+
+/** "Not this one": a reason from core's list, and the checker's own few words, which the writer reads. */
+export function declineLearnDraft(id: string, reason: string, words: string): Promise<{ ok: true }> {
+    const said = words.trim().slice(0, KNOWLEDGE_LIMITS.reasonWords);
+    return request('POST', `/api/knowledge/drafts/${encodeURIComponent(id)}/no`, { reason, ...(said ? { words: said } : {}) });
+}
+
+/** Whether the member is an owner or admin here (their own page publishes at once; they check others'); false until known. */
+export function useChecksLearn(on: boolean): boolean {
+    const [checks, setChecks] = useState(false);
+    useEffect(() => {
+        if (!on) return;
+        let live = true;
+        myNodeRoleOnce().then((role) => { if (live) setChecks(role === 'owner' || role === 'admin'); }, () => {});
+        return () => { live = false; };
+    }, [on]);
+    return checks;
+}
+
+/** A refusal in the node's words (it answers in the member's language), or the form's own when the node said nothing. */
+export function learnRefusalText(e: unknown): string {
+    // Only an answer from the node (it has a status) carries its words; a dropped connection's own message is the browser's.
+    const err = (e ?? {}) as { message?: unknown; unsaid?: boolean; status?: unknown };
+    return typeof err.status === 'number' && !err.unsaid && typeof err.message === 'string' && err.message
+        ? err.message : t("Couldn't send it. Check your connection and try again.");
 }

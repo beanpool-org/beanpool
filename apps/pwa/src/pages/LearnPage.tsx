@@ -12,22 +12,29 @@
  * (one page whole): lib/learn.ts. Where the node has Learn off and shows previews (the global community) the same screens are
  * drawn from Example Valley's three pages under a strip that says so, and nothing is asked of the node.
  *
- * Read-only: no "Suggest knowledge", "This helped", "Suggest a fix", pin, edit or queue. Those are slices K4, K5 and K8; the
- * seams are marked where each plugs in. Report is the existing sheet, by post id.
+ * Writing (slice K4): "＋ Suggest knowledge" fixed at the foot of the front ("＋ Add local knowledge" for an owner or admin,
+ * whose page publishes at once) opens the form (components/LearnForm.tsx); line 4 under the search is "1 of yours is waiting for
+ * an admin ›" (My suggestions, components/LearnMine.tsx) and, amber, "3 to check ›" (To check, components/LearnCheck.tsx).
+ * Doors: `learn-suggest`, `learn-mine`, `learn-check`. Not in the preview: Example Valley takes no suggestions.
+ * Still to come: "This helped", "Suggest a fix", pin and edit (K5), "Thank" (K8). Report is the existing sheet, by post id.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    KNOWLEDGE_NAMES, LOCAL_COMMUNITY_SHEET, isKnowledgeTopic, pinLive, t, upperCase, type KnowledgeFront, type KnowledgeRow,
-    type KnowledgeTopicPage,
+    KNOWLEDGE_NAMES, LEARN_HOME_WORDS, LOCAL_COMMUNITY_SHEET, formatCount, isKnowledgeTopic, pinLive, t, tn, upperCase, type KnowledgeFront,
+    type KnowledgeRow, type KnowledgeTopicPage,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { resolveImageUrl } from '../lib/avatar';
 import { shownLanguage } from '../lib/language';
 import {
-    getLearnFront, getLearnPost, getLearnTopic, languageNameOf, learnFrontOf, learnSearchOf, learnTopicOf, monthYear, safeSourceUrl,
-    searchLearn, showsLearn, sourceHost, topicEmoji, topicLabel, useLearn, type LearnPost,
+    getLearnFront, getLearnPost, getLearnToCheck, getLearnTopic, getMyLearnDrafts, languageNameOf, learnFrontOf, learnSearchOf, learnTopicOf,
+    monthYear, publishLearn, safeSourceUrl, searchLearn, showsLearn, sourceHost, suggestLearn, topicEmoji, topicLabel, useChecksLearn, useLearn,
+    type LearnPost,
 } from '../lib/learn';
+import { LearnForm } from '../components/LearnForm';
+import { LearnMine } from '../components/LearnMine';
+import { LearnCheckList, LearnCheckOne } from '../components/LearnCheck';
 import { sampleLearnPosts } from '../components/ShowcasePreviews';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { LearnRow } from '../components/LearnRow';
@@ -38,12 +45,18 @@ import { ScrollHintRow } from '../components/ScrollHintRow';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import { BOX_LABEL, CHIP, PAGE_BOX, PAGE_INK, PAGE_TYPE, chip } from '../components/market-card-shell';
 
-/** Where a door sends Learn: App.tsx's `learn`, `learn-topic`, `learn-search` and `learn-page` doors. */
+/** Where a door sends Learn: App.tsx's `learn`, `learn-topic`, `learn-search`, `learn-page`, `learn-suggest`, `learn-mine`, `learn-check`. */
 export type LearnTarget =
     | { kind: 'front' }
     | { kind: 'topic'; topic: string }
     | { kind: 'search'; q: string }
-    | { kind: 'page'; id: string };
+    | { kind: 'page'; id: string }
+    | { kind: 'suggest' }
+    | { kind: 'mine' }
+    | { kind: 'check' };
+
+/** A screen of Learn beside its lists (slice K4): the form, what was sent, My suggestions, To check. */
+type Screen = 'list' | 'form' | 'sent' | 'mine' | 'check';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -58,19 +71,26 @@ interface Props {
     onNearYou?: () => void;
 }
 
-interface View { topic: string | null; words: string; pageId: string | null }
+interface View { topic: string | null; words: string; pageId: string | null; screen: Screen }
 
 /** What a door asks for, as the view's state. */
 function viewFor(target: LearnTarget | null): View {
-    if (!target || target.kind === 'front') return { topic: null, words: '', pageId: null };
-    if (target.kind === 'topic') return { topic: isKnowledgeTopic(target.topic) ? target.topic : null, words: '', pageId: null };
-    if (target.kind === 'search') return { topic: null, words: target.q, pageId: null };
-    return { topic: null, words: '', pageId: target.id };
+    const none: View = { topic: null, words: '', pageId: null, screen: 'list' };
+    if (!target || target.kind === 'front') return none;
+    if (target.kind === 'topic') return { ...none, topic: isKnowledgeTopic(target.topic) ? target.topic : null };
+    if (target.kind === 'search') return { ...none, words: target.q };
+    if (target.kind === 'page') return { ...none, pageId: target.id };
+    return { ...none, screen: target.kind === 'suggest' ? 'form' : target.kind };
 }
+
+/** A door that opens a page or a screen straight (a link, a bell line, the New Post panel): Back from it leaves Learn. */
+const opensStraight = (target: LearnTarget | null) => !!target && target.kind !== 'front' && target.kind !== 'topic' && target.kind !== 'search';
 
 const TOPIC_CHIP = `${CHIP} bg-bp-chip-learn-tint text-bp-chip-learn-ink`;
 const LINK_BUTTON = 'min-h-[44px] inline-flex items-center gap-1 px-1 text-start font-bold text-bp-ink-learn bg-transparent border-0 cursor-pointer hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-learn rounded';
 const MUTED = 'text-nature-600 dark:text-nature-300';
+/** "3 to check ›": amber, never by colour alone (a ▲ leads it). */
+const WARN_LINK = LINK_BUTTON.replace('text-bp-ink-learn', 'text-bp-ink-warning');
 
 function Shell({ children }: { children: React.ReactNode }) {
     return (
@@ -160,26 +180,38 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
     const open = ready && showsLearn(mode);
 
     const [view, setView] = useState<View>(() => viewFor(target));
-    // A page a door opened straight (a link, a bell line) leaves Learn on Back; one opened from a list returns to the list.
-    const [pageIsEntry, setPageIsEntry] = useState(() => target?.kind === 'page');
+    // A page or screen a door opened straight (a link, a bell line) leaves Learn on Back; one opened from a list returns to it.
+    const [pageIsEntry, setPageIsEntry] = useState(() => opensStraight(target));
     useEffect(() => {
         if (!target) return;
         setView(viewFor(target));
-        setPageIsEntry(target.kind === 'page');
+        setPageIsEntry(opensStraight(target));
         onTargetTaken();
     }, [target, onTargetTaken]);
 
-    const { topic, words, pageId } = view;
+    const { topic, words, pageId, screen } = view;
     const setTopic = (next: string | null) => setView((v) => ({ ...v, topic: next }));
     const setWords = (next: string) => setView((v) => ({ ...v, words: next }));
+    // A page opened from a screen (My suggestions' "Added") returns there; from a list, to the list.
     const openPage = (id: string) => { setPageIsEntry(false); setView((v) => ({ ...v, pageId: id })); };
     const closePage = () => { if (pageIsEntry) onBack(); else setView((v) => ({ ...v, pageId: null })); };
+    const openScreen = (next: Screen) => { setPageIsEntry(false); setView((v) => ({ ...v, screen: next, pageId: null })); };
+    const closeScreen = () => { if (pageIsEntry) onBack(); else setView((v) => ({ ...v, screen: 'list' })); };
 
     // The sample pages, made once per preview screen.
     const sample = useRef<LearnPost[] | null>(null);
     const samplePosts = (): LearnPost[] => (sample.current ??= sampleLearnPosts());
 
-    const front = useRead<KnowledgeFront>(open && !pageId ? () => (preview ? Promise.resolve(learnFrontOf(samplePosts())) : getLearnFront()) : null, [open, preview, pageId]);
+    const onList = open && !pageId && screen === 'list';
+    const front = useRead<KnowledgeFront>(onList ? () => (preview ? Promise.resolve(learnFrontOf(samplePosts())) : getLearnFront()) : null, [onList, preview]);
+    // Writing (K4): a member's own waiting suggestions and, for an owner or admin, what waits for them; never in the preview.
+    const writes = open && !preview && !!identity;
+    const checks = useChecksLearn(writes);
+    const mineWaiting = useRead<number>(writes && onList ? () => getMyLearnDrafts().then((m) => m.waiting.length) : null, [writes, onList]);
+    const toCheck = useRead<number>(writes && checks && onList ? () => getLearnToCheck().then((l) => l.total) : null, [writes, checks, onList]);
+    const [checkId, setCheckId] = useState<string | null>(null);
+    const [checkSaid, setCheckSaid] = useState<string | null>(null);
+    const [sentBy, setSentBy] = useState<'suggest' | 'publish'>('suggest');
 
     // One topic, a page at a time.
     const [more, setMore] = useState<{ topic: string; rows: KnowledgeRow[]; next: number | null; count: number } | null>(null);
@@ -262,6 +294,50 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
         );
     }
 
+    if (screen === 'form' && writes) {
+        return (
+            <Shell>
+                <Header title={checks ? t('Add local knowledge') : t('Suggest knowledge')} onBack={closeScreen} />
+                <LearnForm use={checks ? 'publish' : 'suggest'} onSend={async (input) => {
+                    if (checks) await publishLearn(input); else await suggestLearn(input);
+                    setSentBy(checks ? 'publish' : 'suggest');
+                    setView((v) => ({ ...v, screen: 'sent' }));
+                }} />
+            </Shell>
+        );
+    }
+    if (screen === 'sent' && writes) {
+        return (
+            <Shell>
+                <Header title={t(KNOWLEDGE_NAMES.place)} onBack={closeScreen} />
+                <section data-testid="learn-sent" role="status" className="py-6 flex flex-col gap-2">
+                    <h2 className="m-0 text-xl font-extrabold text-nature-900 dark:text-white">{sentBy === 'publish' ? t('Published') : t('Sent')}</h2>
+                    <p className={`m-0 ${MUTED}`}>{sentBy === 'publish' ? t("It's in Learn.") : t("An owner or admin will check it. You'll hear back here.")}</p>
+                    <button type="button" data-testid="learn-sent-open" onClick={() => openScreen('list')} className={LINK_BUTTON}>{t('Open Learn')}</button>
+                </section>
+            </Shell>
+        );
+    }
+    if (screen === 'mine' && writes) {
+        return (
+            <Shell>
+                <Header title={t('My suggestions')} onBack={closeScreen} />
+                <LearnMine onOpenPage={openPage} />
+            </Shell>
+        );
+    }
+    if (screen === 'check' && writes) {
+        return (
+            <Shell>
+                <Header title={t('To check')} onBack={checkId ? () => setCheckId(null) : closeScreen} />
+                {checkSaid && !checkId && <p role="status" data-testid="learn-check-said" className="m-0 mt-1 mb-2 text-sm font-bold text-bp-ink-learn">{checkSaid}</p>}
+                {checkId
+                    ? <LearnCheckOne key={checkId} id={checkId} onAnswered={(said) => { setCheckSaid(said); setCheckId(null); }} />
+                    : <LearnCheckList onOpen={(id) => { setCheckSaid(null); setCheckId(id); }} />}
+            </Shell>
+        );
+    }
+
     const searching = typed.length > 0;
     return (
         <Shell>
@@ -279,6 +355,18 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
                 aria-label={t('Search Learn')}
                 className="w-full min-h-[44px] mb-3 py-2 px-4 rounded-full border border-nature-200 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:outline-none focus:ring-2 focus:ring-bp-ink-learn shadow-sm"
             />
+            {/* Line 4 (amended §3.1): what waits for this member; for an owner or admin, what waits for them (amber, and a ▲). */}
+            {(mineWaiting.data ?? 0) > 0 && (
+                <button type="button" data-testid="learn-mine-line" onClick={() => openScreen('mine')} className={`${LINK_BUTTON} mb-1`}>
+                    {tn(mineWaiting.data!, '{n} of yours is waiting for an admin ›', '{n} of yours are waiting for an admin ›', { n: formatCount(mineWaiting.data!) })}
+                </button>
+            )}
+            {(toCheck.data ?? 0) > 0 && (
+                <button type="button" data-testid="learn-check-line" onClick={() => openScreen('check')} className={`${WARN_LINK} mb-1`}>
+                    <span aria-hidden="true" className="font-black">▲</span>
+                    <span>{tn(toCheck.data!, LEARN_HOME_WORDS.toCheck.one, LEARN_HOME_WORDS.toCheck.other, { n: formatCount(toCheck.data!) })}</span>
+                </button>
+            )}
 
             {searching ? (
                 searchFailed ? <Failed onAgain={() => setSearchTries((n) => n + 1)} />
@@ -286,7 +374,11 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
                 : found.rows.length === 0 ? (
                     <div data-testid="learn-search-empty" className="py-4">
                         <p className={`m-0 mb-2 ${MUTED}`}>{t('Nothing in Learn for "{words}".', { words: typed })}</p>
-                        {/* K4: the "Suggest knowledge" button joins this line. */}
+                        {writes && (
+                            <button type="button" data-testid="learn-search-suggest" onClick={() => openScreen('form')} className={`${LINK_BUTTON} me-3`}>
+                                {checks ? t('Add local knowledge') : t('Suggest knowledge')}
+                            </button>
+                        )}
                         {onNavigate && !preview && (
                             <button type="button" data-testid="learn-search-market" onClick={() => onNavigate('marketplace-search', typed)} className={LINK_BUTTON}>
                                 {t('Search the Market for "{words}" ›', { words: typed })}
@@ -307,8 +399,9 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
                         </ScrollHintRow>
                     )}
                     {front.data.total === 0 ? (
-                        // K4: "Know something locals should know?" and the button join this line.
-                        <p data-testid="learn-empty" className={`py-4 ${MUTED}`}>{t('Nothing here yet.')}</p>
+                        <p data-testid="learn-empty" className={`py-4 ${MUTED}`}>
+                            {t('Nothing here yet.')}{writes && <> {t('Know something locals should know?')}</>}
+                        </p>
                     ) : topic ? (
                         <TopicView
                             topic={topic} more={more} failed={topicFailed} onTopicAgain={() => setTopicTries((n) => n + 1)}
@@ -320,6 +413,15 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
                 </>
             )}
             <p data-testid="learn-standing" className={`mt-6 text-xs ${MUTED}`}>{t('Local knowledge is written by members. Check the source before you rely on it.')}</p>
+            {/* Fixed at the foot, above the bottom bar; at the end of the list it sits in its own place, under the last row. */}
+            {writes && (
+                <div className="sticky z-10 pt-2" style={{ bottom: 'calc(var(--bottom-nav-offset) + 0.5rem)' }}>
+                    <button type="button" data-testid="learn-suggest" onClick={() => openScreen('form')}
+                        className="w-full min-h-[48px] rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover px-4 py-2.5 font-bold text-bp-cta-on shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-learn">
+                        {checks ? t('＋ Add local knowledge') : t('＋ Suggest knowledge')}
+                    </button>
+                </div>
+            )}
         </Shell>
     );
 }

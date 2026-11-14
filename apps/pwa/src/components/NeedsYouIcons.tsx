@@ -24,7 +24,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
     BELL_EVENTS, BELL_PAGE_EVENT, bellBadge, bellClearWords, bellLabel, bellReadWords, capitalFirst, createRefreshGate, inviteAskNeedsLine, isOwnInviteChange,
-    isPushNoticeKind, NEEDS_YOU_PRIORITY, needsYouCounts, PUSH_NOTICE_KINDS, timeAgo, withoutBellNotices, type BellNotice, type NeedsYouKind,
+    isPushNoticeKind, knowledgeToCheckLine, NEEDS_YOU_PRIORITY, needsYouCounts, PUSH_NOTICE_KINDS, timeAgo, withoutBellNotices, type BellNotice, type NeedsYouKind,
 } from '@beanpool/core';
 import { t } from '@beanpool/core';
 import type { NeedsItem, NeedsTarget } from '../lib/home-cards';
@@ -61,6 +61,8 @@ export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: strin
         // The line "N people asked to join" (not "N asked for an invite", which lands here too) is a notice: 'asked' tells Invites
         // so, and it says so if they are answered by now instead of showing nothing (WantsToJoin).
         case 'people': return kind === 'knock' ? onNavigate('people-invites', 'asked') : onNavigate('people-invites');
+        // "Local knowledge to check: 3" (slice K4): To check in Learn, sent only because this app asks with lands=learn.
+        case 'learn-check': return onNavigate('learn-check');
         default: return undefined;
     }
 }
@@ -80,6 +82,9 @@ export function goToNoticeTarget(kind: string, data: Record<string, unknown>, on
         case 'group': case 'invite': if (id(data.groupId)) return onNavigate('group', id(data.groupId)); break;
         case 'decide': return onNavigate('projects');
         case 'settings': return onNavigate('settings');
+        // Local knowledge (slice K4): a member's suggestion to check lands on To check; the answer to one's own, on My suggestions.
+        case 'learn-check': return onNavigate('learn-check');
+        case 'learn-mine': return onNavigate('learn-mine');
         // A voucher's Ask for more (credit on the People list C3): People → Community, Show credit on, the Vouchers chip and that
         // voucher's row. A build without this screen lands on the kind's tab (People) through the default below.
         case 'credit': return onNavigate('people-credit', typeof data.by === 'string' && /^[0-9a-f]{64}$/.test(data.by) ? `vouchers:${data.by}` : 'vouchers');
@@ -158,6 +163,13 @@ function NeedSvg({ kind, shadow = false }: { kind: NeedsYouKind; shadow?: boolea
                     <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
                 </svg>
             );
+        case 'learn':
+            // An open book: Local knowledge waiting to be checked (slice K4).
+            return (
+                <svg className={cls} fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="learn">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                </svg>
+            );
         default:
             return null;
     }
@@ -218,8 +230,10 @@ export function NeedsYouIcons({
 
     // Filter out 'admin' (which requires phone unlock and has no web equivalent)
     const filterAndSort = useCallback((items: NeedsItem[]) => {
+        // The node writes a line in English; the two this app can say itself are said in the member's language.
         const supported = items.filter(i => (i.kind as string) !== 'admin')
-            .map(i => (i.kind === 'ask' ? { ...i, label: capitalFirst(inviteAskNeedsLine(i.count)) } : i));
+            .map(i => (i.kind === 'ask' ? { ...i, label: capitalFirst(inviteAskNeedsLine(i.count)) }
+                : i.kind === 'learn' ? { ...i, label: knowledgeToCheckLine(i.count) } : i));
         const rank = (k: NeedsYouKind) => NEEDS_YOU_PRIORITY.indexOf(k);
         return [...supported].sort((a, b) => rank(a.kind) - rank(b.kind));
     }, []);

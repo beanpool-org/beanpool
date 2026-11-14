@@ -3192,6 +3192,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                             community={c.community?.name ?? ''}
                             onOpen={postId => onNavigate('learn-page', postId)}
                             onSeeAll={() => onNavigate('learn')}
+                            onToCheck={() => onNavigate('learn-check')}
+                            onAddFirst={() => onNavigate('learn-suggest')}
                             onKeep={arriving ? () => { changeLayout((l) => keepCard(l, card.id, Date.now())); } : undefined}
                         />
                     </HomeCard>

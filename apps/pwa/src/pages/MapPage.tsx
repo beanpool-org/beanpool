@@ -15,6 +15,7 @@ import { POST_TYPE_LINES, upperCase, feeOf, formatHundredths, parseHundredths } 
 import { carryTotalToEach, perItemCreateFields, perItemFeeLine, perItemLines, priceUnitsOffered, type PerItemField } from '@beanpool/core';
 import { PerItemFields } from '../components/PerItemFields';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
+import { useLearn } from '../lib/learn';
 import { usePollNextStart } from '../lib/poll-week';
 import { usePollDayChoices } from '../lib/poll-length';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
@@ -280,6 +281,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [showPricingGuide, setShowPricingGuide] = useState(false);
     const [newPostType, setNewPostType] = useState<'offer' | 'need' | 'poll' | 'event'>('need');
+    // The New Post panel's fifth button, Local knowledge, shows only where Learn is on here (slice K4).
+    const learnLive = useLearn().mode === 'live';
     // Events (docs/events-on-the-map.md §3). Start and end hold <input type="datetime-local"> values.
     const [eventStart, setEventStart] = useState('');
     const [eventEnd, setEventEnd] = useState('');
@@ -2789,6 +2792,19 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         </p>
                         </div>
                     ))}
+                    {/* The fifth (slice K4): Local knowledge is written in Learn, never on the map, so this hands over to Learn's
+                        form (the `learn-suggest` door) and the panel holds no form of its own. Only where Learn is on. */}
+                    {learnLive && onNavigate && !visitor && (
+                        <div className="min-w-0 col-span-2">
+                            <button type="button" data-testid="new-post-type-knowledge" aria-describedby="new-post-type-line-knowledge" onClick={() => onNavigate('learn-suggest')}
+                                className="w-full py-3 rounded-xl border text-[15px] font-bold transition-all shadow-sm bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200">
+                                {t('📖 Local knowledge')}
+                            </button>
+                            <p id="new-post-type-line-knowledge" className="m-0 mt-1 px-1 text-center text-xs leading-snug text-nature-600 dark:text-nature-300 break-words">
+                                {t(POST_TYPE_LINES.knowledge)}
+                            </p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Audience Scope Selector — scope must be unmistakable before posting (Item 10) */}

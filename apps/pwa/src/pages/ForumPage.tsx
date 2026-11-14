@@ -107,13 +107,13 @@ export function ForumPage({ me, onOpenProfile }: { me: string; onOpenProfile?: (
         <div data-testid="forum-page" className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
                 <select value={section ?? ''} onChange={(e) => setSection(e.target.value || null)} aria-label={t(FORUM_WORDS.pickSection)} data-testid="forum-section-pick"
-                    className="flex-1 min-w-0 min-h-[44px] rounded-lg px-2 text-[0.95rem]" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-input)' }}>
+                    className="min-w-0 min-h-[44px] rounded-lg px-2 text-[0.95rem]" style={{ flex: '1 1 12rem', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-input)' }}>
                     <option value="">{t(FORUM_WORDS.allSections)}</option>
                     {sections.map((s) => <option key={s.id} value={s.id}>{s.archived ? t(FORUM_WORDS.archived, { name: forumSectionName(s) }) : forumSectionName(s)}</option>)}
                 </select>
                 {front && (
                     <button type="button" onClick={() => { setSent(false); setView({ kind: 'new' }); }} data-testid="forum-new" disabled={!!waiting && front.firstTopicWaits}
-                        className={`${button} font-bold disabled:opacity-50`} style={{ background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)' }}>{t(FORUM_WORDS.newTopic)}</button>
+                        className={`${button} font-bold disabled:opacity-50`} style={{ flex: '1 1 auto', background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)' }}>{t(FORUM_WORDS.newTopic)}</button>
                 )}
             </div>
 

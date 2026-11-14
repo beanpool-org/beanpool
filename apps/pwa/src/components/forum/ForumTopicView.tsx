@@ -143,7 +143,7 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
     function Byline({ post }: { post: ForumPost }) {
         return (
             <div className="flex items-center gap-2 min-w-0 text-xs" style={{ color: 'var(--text-muted)' }}>
-                <button type="button" onClick={() => onOpenProfile?.(post.writer.publicKey)} className="font-bold truncate min-h-[32px] text-left" style={{ color: 'var(--text-primary)' }}>{name(post)}</button>
+                <button type="button" onClick={() => onOpenProfile?.(post.writer.publicKey)} className="font-bold truncate min-h-[44px] text-left" style={{ color: 'var(--text-primary)' }}>{name(post)}</button>
                 <span className="shrink-0">· {timeAgo(Math.max(0, Date.now() - Date.parse(post.createdAt)))}</span>
                 {post.editedAt && <span className="shrink-0" aria-hidden="true">·</span>}
                 {post.editedAt && <span className="shrink-0">{t(TOPIC_WORDS.edited)}</span>}
@@ -210,7 +210,8 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
 
             {topic && !open && <p data-testid="forum-closed" className="m-0 text-sm italic" style={{ color: 'var(--text-muted)' }}>{t(TOPIC_WORDS.closed)}</p>}
             {topic && open && (
-                <div className="sticky bottom-0 flex flex-col gap-2 pt-2" style={{ background: 'var(--bg-primary)', borderTop: '1px solid var(--border-primary)', bottom: 'var(--bottom-nav-offset, 0px)' }}>
+                // In the flow at the topic's end, after the last post: a reply follows what it answers, and nothing sits over a post.
+                <div data-testid="forum-reply" className="flex flex-col gap-2 pt-3" style={{ borderTop: '1px solid var(--border-primary)' }}>
                     {quote && (
                         <div className="flex items-center gap-2 pl-2 text-xs" style={{ borderLeft: '3px solid var(--bp-accent-fill)', color: 'var(--text-secondary)' }} data-testid="forum-quote">
                             <span className="truncate flex-1 min-w-0">{t(TOPIC_WORDS.replyingTo, { name: name(quote), words: quote.words })}</span>
@@ -223,8 +224,8 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
                             aria-label={t(TOPIC_WORDS.writeReply)} data-testid="forum-reply-box"
                             className="flex-1 min-w-0 min-h-[44px] rounded-lg px-3 py-2 text-[0.95rem] resize-none"
                             style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-input)' }} />
-                        <button type="button" onClick={() => void send()} disabled={busy || !words.trim() || tooLong} data-testid="forum-send"
-                            className="min-w-[44px] min-h-[44px] px-3 rounded-lg font-bold disabled:opacity-50" style={{ background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)' }}>{t(TOPIC_WORDS.send)}</button>
+                        <button type="button" onClick={() => void send()} disabled={busy || !words.trim() || tooLong} data-testid="forum-send" aria-label={t(TOPIC_WORDS.send)} title={t(TOPIC_WORDS.send)}
+                            className="min-w-[44px] min-h-[44px] px-3 rounded-lg font-bold text-lg disabled:opacity-50" style={{ background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)' }}><span aria-hidden="true">➤</span></button>
                     </div>
                     {tooLong && <p className="m-0 text-xs" style={{ color: 'var(--bp-ink-danger)' }}>{t(TOPIC_WORDS.tooLong, { n: FORUM_LIMITS.reply })}</p>}
                 </div>

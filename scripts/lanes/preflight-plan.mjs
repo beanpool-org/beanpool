@@ -4,7 +4,8 @@
 // Why (Marty, 15 Nov 2026): most first-round NOT CLEAN results carried CI reds a lane could have caught in minutes, and each
 // cost a whole Opus round (30-40 min). Counted in the queue board's decided.md from 1 to 15 Nov, PRs red on: table hashes
 // (test-standby-health / test-replica-hashes) 11, native_dark_contrast 8, vitest source pins 6, no_node_names 5, typecheck 3,
-// EnterpriseNotAProfile 2, ListPhoto.slots 2, no_google_fonts 2, signing-source rule 2, pwa dark classes 2.
+// EnterpriseNotAProfile 2, ListPhoto.slots 2, no_google_fonts 2, signing-source rule 2. Not covered here: the web's browser
+// dark-class check (1, a Playwright run) and flakes.
 //
 // The plan is:
 //   1. `checks`: CI's "checks" shard, its list READ from .github/workflows/ci.yml (never a copy), through
@@ -20,7 +21,6 @@
 //                                                                   darkModeHover, ListPhoto.slots, static-colours-ceiling,
 //                                                                   signing-source-rule...), the tests that name a changed file
 //                                                                   (source pins, importers) and the changed tests themselves
-//      - a guide page                                            -> the guide package's tests
 //      - a script with a sibling .test.mjs test-all does not run -> that test
 //
 //   node scripts/lanes/preflight-plan.mjs [--base <ref>]     prints one step per line: <name> TAB <why> TAB <command>
@@ -167,10 +167,8 @@ export function planSteps(touched, repo) {
       cmd: `${pkg.env ? pkg.env + ' ' : ''}pnpm --filter ${pkg.name} exec vitest run --maxWorkers=2 --passWithNoTests ${rel.map(shq).join(' ')}` });
   }
 
-  // A guide page: the guide package's own tests (its pages build, versions and titles).
-  if (files.some(f => f.startsWith('packages/beanpool-guide/content/'))) {
-    steps.push({ name: 'guide', why: 'a guide page changed', cmd: 'pnpm --filter @beanpool/guide test' });
-  }
+  // Not a guide step: `pnpm --filter @beanpool/guide test` took 301 s on the Mac (15 Nov), over half a lane's 600 s Bash
+  // call, for 3 guide reds in two weeks. CI's vitest-rest shard runs it.
 
   // A script with a sibling test test-all.sh does not name (those it names run in a check), or a touched script test.
   const scriptTests = new Set();

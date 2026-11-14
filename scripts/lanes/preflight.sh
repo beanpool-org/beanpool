@@ -15,12 +15,13 @@
 #   1   a step was red (every step still ran, so one run names every red)
 #   2   no plan (ci.yml has no "checks" shard, git could not diff, bad arguments)
 #   75  the heavy-test lock stayed held past the wait budget: run it again when the lock is gone
-# Measured on the Mac (15 Nov 2026): checks 1m54s; with every targeted rule firing about 4m45s. A lane's Bash call is
-# capped at 600 s: give this call that whole timeout.
+# Measured on the Mac (15 Nov 2026): a scripts-only branch 1m15s (checks + words); every targeted rule firing (route,
+# table, web and phone tests) 3m57s, about 4m45s on a cold build cache (checks alone 1m08s warm, 1m54s cold). A lane's
+# Bash call is capped at 600 s: give this call that whole timeout.
 #
 # Environment (tests and odd cases): PREFLIGHT_PLAN_FILE (a plan to run instead of planning: name TAB why TAB command per
 # line), PREFLIGHT_LOCK (the lock dir, default ~/.cache/heavy-test.lock), PREFLIGHT_LOCK_WAIT_SECS (the whole run's wait
-# budget, default 240), PREFLIGHT_LOCK_POLL_SECS (default 3). macOS /bin/bash is 3.2: no associative arrays, no mapfile.
+# budget, default 180: with the slowest plan, under the 600 s cap), PREFLIGHT_LOCK_POLL_SECS (default 3). macOS /bin/bash is 3.2: no associative arrays, no mapfile.
 set -o pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)" || exit 2
@@ -39,18 +40,19 @@ while [ $# -gt 0 ]; do
 done
 
 LOCK="${PREFLIGHT_LOCK:-$HOME/.cache/heavy-test.lock}"
-LOCK_BUDGET="${PREFLIGHT_LOCK_WAIT_SECS:-240}"
+LOCK_BUDGET="${PREFLIGHT_LOCK_WAIT_SECS:-180}"
 LOCK_POLL="${PREFLIGHT_LOCK_POLL_SECS:-3}"
 
 LOGDIR=$(mktemp -d "${TMPDIR:-/tmp}/preflight.XXXXXX") || exit 2
 PLAN="$LOGDIR/plan.tsv"
 if [ -n "${PREFLIGHT_PLAN_FILE:-}" ]; then
-  cp "$PREFLIGHT_PLAN_FILE" "$PLAN" || { echo "preflight: cannot read $PREFLIGHT_PLAN_FILE"; exit 2; }
+  cp "$PREFLIGHT_PLAN_FILE" "$PLAN" || { echo "preflight: cannot read $PREFLIGHT_PLAN_FILE"; rm -rf "$LOGDIR"; exit 2; }
 elif ! node scripts/lanes/preflight-plan.mjs --base "$BASE" > "$PLAN"; then
   echo "preflight: no plan (above). Nothing was run."
+  rm -rf "$LOGDIR"
   exit 2
 fi
-if ! [ -s "$PLAN" ]; then echo "preflight: the plan is empty. Nothing was run."; exit 2; fi
+if ! [ -s "$PLAN" ]; then echo "preflight: the plan is empty. Nothing was run."; rm -rf "$LOGDIR"; exit 2; fi
 
 if [ $PLAN_ONLY -eq 1 ]; then
   while IFS=$'\t' read -r name why cmd; do
@@ -92,8 +94,14 @@ while IFS=$'\t' read -r name why cmd <&3; do
   N=$((N + 1))
   log="$LOGDIR/$N-$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '_').log"
   s=$(date +%s)
-  bash -c "$cmd" > "$log" 2>&1 < /dev/null
-  rc=$?
+  if [ -z "$cmd" ]; then
+    # A line with no command (or no why: read folds the empty field) would run nothing and read as a pass.
+    echo "plan line $N has no command: name TAB why TAB command" > "$log"
+    rc=2
+  else
+    bash -c "$cmd" > "$log" 2>&1 < /dev/null
+    rc=$?
+  fi
   d=$(( $(date +%s) - s ))
   if [ $rc -eq 0 ]; then
     printf 'PASS  %-28s %6s  %s\n' "$name" "$(fmt $d)" "$why"
@@ -107,7 +115,11 @@ done 3< "$PLAN"
 WALL=$(( $(date +%s) - START ))
 for log in $RED_LOGS; do
   echo ""
-  echo "━━━ $(basename "$log" .log) (last 40 lines; whole log: $log) ━━━"
+  echo "━━━ $(basename "$log" .log) (whole log: $log) ━━━"
+  # What failed first: test-all's report rows (❌), vitest's FAIL lines, node --test's ✖ lines. The tail alone often holds
+  # only the last failure's stack and not which check it was.
+  marks=$(grep -E '❌|✖|^ *FAIL ' "$log" | head -20)
+  if [ -n "$marks" ]; then echo "failed:"; printf '%s\n' "$marks"; echo "last 40 lines:"; fi
   tail -40 "$log"
 done
 echo ""

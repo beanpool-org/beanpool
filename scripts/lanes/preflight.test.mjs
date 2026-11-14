@@ -158,8 +158,8 @@ test('past the cap, importers are left to CI but scanners and pins still run', (
   assert.equal(s2.cmd.split(' ').filter(a => /^src\/p\d\.test\.ts$/.test(a)).length, 3);
 });
 
-test('a guide page runs the guide tests; a script runs its sibling test unless test-all already does', () => {
-  assert.ok(names(plan({ 'packages/beanpool-guide/content/en/joining.md': 'A new sentence.' })).includes('guide'));
+test('a guide page adds no step (its tests take 5 min: CI runs them); a script runs its sibling test unless test-all does', () => {
+  assert.deepEqual(names(plan({ 'packages/beanpool-guide/content/en/joining.md': 'A new sentence.' })), ['checks', 'words']);
   const repo = fakeRepo({ 'scripts/foo.mjs': '', 'scripts/foo.test.mjs': '', 'scripts/bar.mjs': '', 'scripts/bar.test.mjs': '' },
     'run_check "bar" node --test scripts/bar.test.mjs');
   const steps = plan({ 'scripts/foo.mjs': 'x', 'scripts/bar.mjs': 'y' }, repo);
@@ -208,6 +208,16 @@ test('a red step fails the script, names the step, shows its log, and the steps 
   assert.ok(fs.existsSync(`${d}/three-ran`));
 });
 
+test('a red test-all step names the failed check even when it is far above the last 40 lines', () => {
+  const d = tmpdir();
+  const r = run(planFile(d, [['checks', 'shard',
+    'echo "║  no_google_fonts  ❌ FAIL  1s"; for i in $(seq 1 80); do echo "filler $i"; done; exit 1']]));
+  assert.equal(r.rc, 1, r.out);
+  assert.match(r.out, /failed:\n║  no_google_fonts  ❌ FAIL/);
+  assert.match(r.out, /filler 80/);
+  assert.doesNotMatch(r.out, /filler 40\n/, 'only the tail of the filler');
+});
+
 test('MUTANT: a runner that does not count a red step passes the red plan, so the test above can fail', () => {
   const d = tmpdir();
   const src = fs.readFileSync(RUNNER, 'utf8');
@@ -234,6 +244,15 @@ test('--plan prints the steps and runs none', () => {
   assert.equal(r.rc, 0, r.out);
   assert.match(r.out, /one\s+first/);
   assert.ok(!fs.existsSync(`${d}/ran`));
+});
+
+test('a plan line with no command is red, never a pass that ran nothing', () => {
+  const d = tmpdir();
+  const f = path.join(d, 'plan.tsv');
+  fs.writeFileSync(f, 'lonely\t\t\n');
+  const r = run(f);
+  assert.equal(r.rc, 1, r.out);
+  assert.match(r.out, /^FAIL  lonely/m);
 });
 
 test('an empty plan is no pass', () => {

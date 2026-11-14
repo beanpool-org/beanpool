@@ -17,11 +17,11 @@
  * What is truly gone, said as it is: the links confirmed by hand and the notes, unless the old words turn up.
  */
 import {
-    CONTACTS_LIMITS, cleanContactName, mergeContactsLists, newContactId, openContactsCopy, readContactsCopy, readContactsList,
+    CONTACTS_LIMITS, cleanContactName, mergeContactsLists, newContactId, openContactsCopy, readContactsCopy, readContactsList, t, tn,
     type ContactsCopyWire, type ContactsList,
 } from '@beanpool/core';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { editContacts, type ContactsSyncDeps } from './contacts-sync';
+import { editContacts, phoneSyncDeps, type ContactsSyncDeps } from './contacts-sync';
 import type { ContactsAccount, ContactsKv } from './contacts-store';
 import { oldKeyFromWords } from './old-key-from-words';
 
@@ -94,6 +94,22 @@ export async function formerAlreadyMerged(account: ContactsAccount, f: FormerCop
     return (await mergedDigests(kv, account.publicKey)).includes(digestOf(f.copy));
 }
 
+/**
+ * The Contacts screen's notice (design §6.2): the old copy the community in use keeps, while this phone hasn't merged it in.
+ * One GET, as the screen opens. Never throws: no answer is no notice.
+ */
+export async function formerNoticeHere(account: ContactsAccount, deps: ContactsSyncDeps = phoneSyncDeps()): Promise<FormerCopyAt | null> {
+    try {
+        const { anchor } = await deps.communities();
+        if (!anchor) return null;
+        const f = await formerCopyAt(account, anchor, deps);
+        if (!f || await formerAlreadyMerged(account, f, deps.kv)) return null;
+        return f;
+    } catch {
+        return null;
+    }
+}
+
 /** What the old words did. */
 export type FormerOutcome =
     /** No community answered: try again when connected. */
@@ -146,7 +162,7 @@ export async function openFormerWithWords(typed: string | readonly string[], acc
  * "Delete it": every old copy the member's communities keep goes (a signed DELETE each, where one was found). Returns how
  * many went, and whether every community holding one answered.
  */
-export async function deleteFormerCopies(account: ContactsAccount, deps: ContactsSyncDeps): Promise<{ deleted: number; complete: boolean }> {
+export async function deleteFormerCopies(account: ContactsAccount, deps: ContactsSyncDeps = phoneSyncDeps()): Promise<{ deleted: number; complete: boolean }> {
     const { found, answered } = await findFormerCopies(account, deps);
     let deleted = 0;
     let complete = answered;
@@ -197,3 +213,49 @@ export function withPeopleAdded(list: ContactsList, people: readonly BeanPoolPer
     });
     return mergeContactsLists(list, { v: list.v, contacts, removed: [] });
 }
+
+// ── The words (design §6.2) ─────────────────────────────────────────────────────────────────────────────────────────
+
+/** The Contacts screen's notice, and the old-words screen opened for the old list. */
+export const formerContactsWords = {
+    notice: () => t('Your contacts are locked with your old key. If you ever find your old 12 words, you can open them here.'),
+    open: () => t('Open with my old 12 words'),
+    remove: () => t('Delete it', undefined, 'button: delete the old locked contacts list'),
+    removeTitle: () => t('Delete your old contacts list?'),
+    removeAsk: () => t("Only your old 12 words can open it. Once it's deleted, nobody can ever open it again."),
+    removeFailed: () => t("Some of your communities didn't answer. Your old contacts list is still kept there. Try again later."),
+    title: () => t('Your old contacts list'),
+    body: () => t('Type the 12 words of the key this account used before. They open your old contacts list on this phone and are never sent or kept.'),
+    button: () => t('Open my old contacts'),
+    busy: () => t('Opening your old contacts...'),
+};
+
+/** What the old-words screen says when it is done with the old list. */
+export function formerContactsEndWords(r: FormerOutcome): { text: string; ok: boolean } {
+    switch (r.kind) {
+        case 'merged':
+            if (r.added === 0) return { text: t('Done. Everyone in your old contacts list was already in your contacts.'), ok: true };
+            return {
+                text: tn(r.added, 'Done. {n} person from your old contacts list is back in your contacts.', 'Done. {n} people from your old contacts list are back in your contacts.'),
+                ok: true,
+            };
+        case 'not_the_key':
+            return { text: t("These words don't open your old contacts list. Check each word, and that they are the words of the key you had before."), ok: false };
+        case 'none':
+            return { text: t('None of your communities keeps an old contacts list for you.'), ok: true };
+        case 'no_answer':
+            return { text: t("Your communities didn't answer. Try again when you're connected."), ok: false };
+    }
+}
+
+/** "Add people I've chatted with and my friends" (design §3.6's ⋯, §6.2). */
+export const addPeopleWords = {
+    row: () => t("Add people I've chatted with and my friends"),
+    ask: (n: number, community: string) => tn(n,
+        "Add {n} person you've chatted with or added as a friend in {community}? Only you see your contacts, and nobody is told.",
+        "Add {n} people you've chatted with or added as friends in {community}? Only you see your contacts, and nobody is told.",
+        { community }),
+    yes: (n: number) => tn(n, 'Add {n} person', 'Add {n} people'),
+    none: () => t("Everyone you've chatted with or added as a friend here is already in your contacts."),
+    unread: () => t("Couldn't read your chats on this phone. Try again."),
+};

@@ -15,6 +15,12 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mem = vi.hoisted(() => ({
+    // After a re-key (slice C6): whether the community in use keeps an old list this phone hasn't merged, the old copies
+    // "Delete it" removed, and the people this phone has chats of two with, and friends, here.
+    former: false,
+    formerDeleted: 0,
+    chats: [] as Array<{ publicKey: string; callsign: string }>,
+    friends: [] as Array<{ publicKey: string; callsign: string }>,
     store: new Map<string, string>(),
     files: new Map<string, string>(),
     alerts: [] as Array<[string, string | undefined, Array<{ text: string; onPress?: () => void }> | undefined]>,
@@ -133,7 +139,17 @@ vi.mock('../../app/ThemeContext', async () => {
 });
 const ME = vi.hoisted(() => ({ publicKey: '', privateKey: '' }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME }) }));
-vi.mock('../db', () => ({ createConversationApi: vi.fn(async () => ({ id: 'conv-1' })) }));
+vi.mock('../db', () => ({
+    createConversationApi: vi.fn(async () => ({ id: 'conv-1' })),
+    getChattedWithMembers: async () => mem.chats,
+    getFriendsLocal: async () => mem.friends,
+}));
+// The old copy's requests (utils/contacts-former.ts, its own suite contacts-former.test.ts): no network here.
+vi.mock('../contacts-former', async (importOriginal) => ({
+    ...(await importOriginal<Record<string, unknown>>()),
+    formerNoticeHere: vi.fn(async () => (mem.former ? { community: 'https://riverside.example' } : null)),
+    deleteFormerCopies: vi.fn(async () => { mem.formerDeleted++; mem.former = false; return { deleted: 1, complete: true }; }),
+}));
 vi.mock('../blocklist', () => ({ BLOCKLIST_UPDATED_EVENT: 'blocklist', getBlockedUsers: async () => mem.blocked, unblockUser: vi.fn(async () => true) }));
 vi.mock('../use-communities', () => ({ switchCommunity: vi.fn(async () => {}) }));
 vi.mock('../../components/signed-request-lines', () => ({ signedRequestWords: (m: string) => m }));
@@ -204,6 +220,7 @@ const seedList = (list: (l: ContactsList) => ContactsList) => changeContacts(ME,
 const onPhone = async () => (await loadContacts(ME, phoneContactsDeps())).onPhone;
 
 beforeEach(() => {
+    mem.former = false; mem.formerDeleted = 0; mem.chats = []; mem.friends = [];
     mem.store.clear(); mem.files.clear(); mem.alerts.length = 0; mem.shared.length = 0; mem.blocked = []; mem.pushed.length = 0;
     mem.back.length = 0; mem.options.length = 0; mem.focused = true;
     mem.params = {}; mem.native = { ExpoContacts: true, ExpoDocumentPicker: true }; mem.asked = 0; mem.answer = { granted: true, canAskAgain: true };
@@ -544,5 +561,47 @@ describe('Import on the phone (slice C3): asked at the tap, the three answers, C
         expect(button('Import contacts')).toBeTruthy();
         await press('Import contacts');
         expect(text()).toContain('Type one in');
+    });
+});
+
+describe('after a re-key (slice C6): the old list, and the people chatted with', () => {
+    it('while the community in use keeps an old list: the notice, Open with my old 12 words, and Delete it after its question', async () => {
+        await seedList((l) => putContact(l, person('Ana Li')));
+        await render();
+        expect(host.querySelector('[data-testid="contacts-former"]')).toBeNull();
+        await act(async () => { root?.unmount(); });
+        mem.former = true;
+        await render();
+        expect(text()).toContain('Your contacts are locked with your old key. If you ever find your old 12 words, you can open them here.');
+        await press('Open with my old 12 words');
+        expect(mem.pushed).toContain('/old-words-unlock?for=contacts');
+        await press('Delete it');
+        expect(mem.alerts[mem.alerts.length - 1]?.[0]).toBe('Delete your old contacts list?');
+        expect(mem.formerDeleted).toBe(0);
+        await answer('Delete it');
+        expect(mem.formerDeleted).toBe(1);
+        expect(host.querySelector('[data-testid="contacts-former"]')).toBeNull();
+        // Mutation: drop the question → Delete it removes the copy on the first tap (formerDeleted 1 before the answer).
+    });
+
+    it('"Add people I\'ve chatted with and my friends": counted, asked once, added linked by hand here, nobody twice', async () => {
+        await seedList((l) => putContact(l, person('Sam Jones', { links: [link(SAM, RIVERSIDE, 'sam_j')] })));
+        mem.chats = [{ publicKey: SAM, callsign: 'sam_j' }, { publicKey: ANA, callsign: 'ana' }];
+        mem.friends = [{ publicKey: ANA, callsign: 'ana' }, { publicKey: BLOCKED, callsign: 'cy' }, { publicKey: ME.publicKey, callsign: 'me' }];
+        await render();
+        await press('More');
+        await press("Add people I've chatted with and my friends");
+        const asked = mem.alerts[mem.alerts.length - 1];
+        expect(asked?.[1]).toBe("Add 2 people you've chatted with or added as friends in Riverside? Only you see your contacts, and nobody is told.");
+        await answer('Add 2 people');
+        const now = await onPhone();
+        const contacts = now.kind === 'list' ? now.list.contacts : [];
+        expect(contacts.map((c) => c.name).sort()).toEqual(['Sam Jones', 'ana', 'cy']);
+        expect(contacts.find((c) => c.name === 'ana')?.links.map((l) => [l.key, l.community, l.how])).toEqual([[ANA, RIVERSIDE, 'hand']]);
+        // Again: everyone is in already, and nothing is added.
+        await press('More');
+        await press("Add people I've chatted with and my friends");
+        expect(mem.alerts[mem.alerts.length - 1]?.[1]).toBe("Everyone you've chatted with or added as a friend here is already in your contacts.");
+        // Mutation: skip peopleToAdd's linked check → Sam Jones twice, and the ask says 3.
     });
 });

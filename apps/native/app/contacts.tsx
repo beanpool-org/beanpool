@@ -7,6 +7,9 @@
  * Invite from a row (slice C5): Invite / Invite again opens components/ContactInviteSheet.tsx; the row then reads "invited
  * 12 Nov"; once the community says the code was used, the row asks "Is this Dee?" (Yes links, No forgets the invite); Remove
  * offers "Also cancel the invite I sent" while it is still out here. No name, number or email of a contact reaches any request.
+ * After a re-key (slice C6, utils/contacts-former.ts): while the community in use keeps the list the member's old key locked,
+ * a notice offers the old-words screen (`/old-words-unlock?for=contacts`) or Delete it; ⋯ holds "Add people I've chatted
+ * with and my friends".
  *
  * A list on this phone that can't be opened says so; a damaged one is set aside and brought back from the copies the
  * member's communities keep, when the member asks (contacts-store.ts `setAsideDamaged`).
@@ -33,7 +36,8 @@ import { checkContactsHere, contactsKeptAt, editContacts, syncContacts } from '.
 import { setAsideDamaged } from '../utils/contacts-store';
 import { sameCommunity } from '../utils/push-pins';
 import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser } from '../utils/blocklist';
-import { createConversationApi } from '../utils/db';
+import { createConversationApi, getChattedWithMembers, getFriendsLocal } from '../utils/db';
+import { addPeopleWords, deleteFormerCopies, formerContactsWords, formerNoticeHere, peopleToAdd, withPeopleAdded, type BeanPoolPerson } from '../utils/contacts-former';
 import { switchCommunity } from '../utils/use-communities';
 import { signedRequestWords } from '../components/signed-request-lines';
 import { cancelContactInvite, readMyInvites } from '../utils/contact-invites';
@@ -235,6 +239,25 @@ export default function ContactsScreen() {
             </View>
         ));
     }
+    // "Add people I've chatted with and my friends" (C6): everyone this phone has a chat of two with here, and the member's
+    // friends here, each once, linked by hand to this community; nobody already linked. One tap to count them, one to add.
+    const addPeople = async () => {
+        if (!anchor) return;
+        let people: BeanPoolPerson[];
+        try {
+            const [chats, friends] = await Promise.all([getChattedWithMembers(identity.publicKey), getFriendsLocal(identity.publicKey)]);
+            people = [...chats, ...friends].map((p: { publicKey?: unknown; callsign?: unknown }) => ({ key: String(p.publicKey ?? ''), callsign: String(p.callsign ?? '') }));
+        } catch {
+            Alert.alert(addPeopleWords.unread());
+            return;
+        }
+        const n = peopleToAdd(list ?? emptyContactsList(), people, identity.publicKey).length;
+        if (n === 0) { Alert.alert(addPeopleWords.row(), addPeopleWords.none()); return; }
+        Alert.alert(addPeopleWords.row(), addPeopleWords.ask(n, communityLabel(view, anchor)), [
+            { text: t('Cancel'), style: 'cancel' },
+            { text: addPeopleWords.yes(n), onPress: () => { void change((l) => withPeopleAdded(l, people, identity.publicKey, anchor)); } },
+        ]);
+    };
     // "Is this Dee?": Yes links the contact to who joined, No forgets the invite (and says so). Either way it isn't asked again.
     const answer = async (c: Contact, used: ContactInviteUsed, yes: boolean) => {
         const done = await change((l) => {
@@ -246,7 +269,7 @@ export default function ContactsScreen() {
     return shell(t('Contacts'), <>
         <ListScreen view={view} list={list} busy={busy} me={identity.publicKey}
             onOpen={(id) => { setCancelToo(false); setScreen({ kind: 'contact', id }); }} onAdd={() => setScreen({ kind: 'add' })} onImport={() => setScreen({ kind: 'import' })} onInfo={() => setInfo(true)}
-            onRemoveAll={() => change((l) => removeEveryContact(l))}
+            onRemoveAll={() => change((l) => removeEveryContact(l))} onAddPeople={anchor ? () => void addPeople() : null}
             onInvite={anchor ? setInviting : null} ask={(c) => (anchor ? contactInviteAsk(c, mine ?? [], isHere) : null)} onAnswer={(c, used, yes) => void answer(c, used, yes)} />
         {inviting && anchor && (
             <Suspense fallback={null}>
@@ -294,9 +317,11 @@ function saveFile(list: ContactsList | null) {
     ]);
 }
 
-function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onRemoveAll, onInvite, ask, onAnswer }: {
+function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onRemoveAll, onAddPeople, onInvite, ask, onAnswer }: {
     view: ContactsView; list: ContactsList | null; busy: boolean; me: string;
     onOpen: (id: string) => void; onAdd: () => void; onImport: () => void; onInfo: () => void; onRemoveAll: () => Promise<boolean>;
+    /** "Add people I've chatted with and my friends" (C6); null where the phone is on no community of the member's. */
+    onAddPeople: (() => void) | null;
     /** Invite from a row (C5); null where the phone is on no community of the member's. */
     onInvite: ((c: Contact) => void) | null;
     ask: (c: Contact) => ContactInviteUsed | null;
@@ -406,6 +431,7 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onR
     };
     const top = (
         <>
+            <FormerNotice me={me} seen={people.length} />
             <Text style={styles.muted}>{t("Private to you. Locked with your account's key.")}</Text>
             <View style={styles.btnRow}>
                 <Pressable accessibilityRole="button" style={styles.btn} onPress={onAdd}><Text style={styles.btnText}>{t('＋ Add')}</Text></Pressable>
@@ -417,6 +443,11 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onR
             {menu && (
                 <View style={styles.card} testID="contacts-menu">
                     <Pressable accessibilityRole="button" style={styles.menuRow} onPress={() => { setMenu(false); saveFile(list); }}><Text style={styles.btnText}>{t('Save a copy as a file (.vcf)')}</Text></Pressable>
+                    {onAddPeople && (
+                        <Pressable accessibilityRole="button" style={styles.menuRow} disabled={busy} onPress={() => { setMenu(false); onAddPeople(); }}>
+                            <Text style={styles.btnText}>{addPeopleWords.row()}</Text>
+                        </Pressable>
+                    )}
                     {people.length > 0 && (
                         <Pressable accessibilityRole="button" style={styles.menuRow} disabled={busy} onPress={() => {
                             setMenu(false);
@@ -466,6 +497,51 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onR
                 </View>
             )}
         />
+    );
+}
+
+/**
+ * After a re-key (C6, design §6.2): while the community in use keeps the list the member's old key locked, and this phone
+ * hasn't merged it in, it says so, with the way in (the old-words screen) and Delete it. Asked as the screen opens, and again
+ * when the list changes (a merge from the old-words screen hides it).
+ */
+function FormerNotice({ me, seen }: { me: string; seen: number }) {
+    const { identity } = useIdentity();
+    const styles = useStyles(makeStyles);
+    const [shown, setShown] = useState(false);
+    const [busy, setBusy] = useState(false);
+    useEffect(() => {
+        if (!identity || identity.publicKey !== me) return undefined;
+        let alive = true;
+        void formerNoticeHere(identity).then((f) => { if (alive) setShown(!!f); });
+        return () => { alive = false; };
+    }, [me, seen, identity?.publicKey]);
+    if (!shown || !identity) return null;
+    const remove = async () => {
+        setBusy(true);
+        try {
+            const r = await deleteFormerCopies(identity);
+            if (r.complete) setShown(false);
+            else Alert.alert(formerContactsWords.removeFailed());
+        } finally {
+            setBusy(false);
+        }
+    };
+    return (
+        <View style={styles.card} testID="contacts-former">
+            <Text style={styles.text}>{formerContactsWords.notice()}</Text>
+            <View style={styles.btnRow}>
+                <Pressable accessibilityRole="button" style={styles.go} disabled={busy} onPress={() => router.push('/old-words-unlock?for=contacts')}>
+                    <Text style={styles.goText}>{formerContactsWords.open()}</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" style={styles.btn} disabled={busy} onPress={() => Alert.alert(formerContactsWords.removeTitle(), formerContactsWords.removeAsk(), [
+                    { text: t('Cancel'), style: 'cancel' },
+                    { text: formerContactsWords.remove(), style: 'destructive', onPress: () => { void remove(); } },
+                ])}>
+                    <Text style={styles.btnText}>{formerContactsWords.remove()}</Text>
+                </Pressable>
+            </View>
+        </View>
     );
 }
 

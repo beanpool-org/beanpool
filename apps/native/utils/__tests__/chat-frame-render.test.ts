@@ -430,24 +430,57 @@ describe('the Chat tab where the forum is on: Chats · Forum in the title\'s pla
         }
     });
 
-    it('a chat notice whose details never came (every kind for the Chat tab), tapped or opened from the bell after a Forum tap, lands on Chats, at its chat\'s pane (review of #3146)', async () => {
+    it('a Chat tab notice whose details never came (every kind for the Chat tab), tapped or opened from the bell from the other side, lands at its chat\'s pane, or on the Forum for the forum\'s (review of #3146, slice F5)', async () => {
         rememberProfile(WITH_FORUM);
         await renderIn('en');
+        // A person's message is listed under Messages; group, enterprise and event chats under Groups; the forum's notices are
+        // the Forum side's.
+        const pane: Record<string, 'Messages' | 'Groups' | 'Forum'> = {
+            'chat.message': 'Messages', 'chat.group': 'Groups', 'chat.mention': 'Groups', 'group.lead': 'Groups',
+            'forum.reply': 'Forum', 'forum.mention': 'Forum', 'forum.first-look': 'Forum', 'forum.first-look-answer': 'Forum',
+        };
         const chatKinds = (Object.keys(PUSH_NOTICE_KINDS) as PushNoticeKind[]).filter((k) => PUSH_NOTICE_KINDS[k].tab === 'chats');
-        expect(chatKinds.sort()).toEqual(['chat.group', 'chat.mention', 'chat.message', 'group.lead']);
-        // A person's message is listed under Messages; group, enterprise and event chats under Groups.
-        const pane: Record<string, string> = { 'chat.message': 'Messages', 'chat.group': 'Groups', 'chat.mention': 'Groups', 'group.lead': 'Groups' };
-        // Each from the other pane first, so the landing is the route's doing.
+        expect(chatKinds.sort()).toEqual(Object.keys(pane).sort());
+        // Each from the other side (and, for Chats, the other pane) first, so the landing is the route's doing.
         for (const kind of [...chatKinds, ...chatKinds]) {
-            await click(radio(pane[kind] === 'Groups' ? 'Messages' : 'Groups'), 'the other pane');
-            await click(side('Forum'), 'Forum');
-            expect(forumPane(), `${kind}: on the Forum before it`).not.toBeNull();
+            if (pane[kind] === 'Forum') {
+                if (forumPane()) await click(side('Chats'), 'Chats');
+                await click(radio('Groups'), 'Groups');
+                expect(forumPane(), `${kind}: on Chats before it`).toBeNull();
+            } else {
+                await click(radio(pane[kind] === 'Groups' ? 'Messages' : 'Groups'), 'the other pane');
+                await click(side('Forum'), 'Forum');
+                expect(forumPane(), `${kind}: on the Forum before it`).not.toBeNull();
+            }
             // What followTap lands on when the community's answer timed out, and the bell's Open (components/NeedsYouIcons.tsx).
             await pushRoute(noticeRoute(kind, null));
-            expect(selected(tabs()), kind).toEqual(['true', 'false']);
-            expect(forumPane(), kind).toBeNull();
-            expect(radio(pane[kind])?.getAttribute('aria-selected'), kind).toBe('true');
+            if (pane[kind] === 'Forum') {
+                expect(selected(tabs()), kind).toEqual(['false', 'true']);
+                expect(forumPane(), kind).not.toBeNull();
+                // The Chats side kept its pane: back on Chats, Groups as the member left it.
+                await click(side('Chats'), 'Chats');
+                expect(radio('Groups')?.getAttribute('aria-selected'), kind).toBe('true');
+            } else {
+                expect(selected(tabs()), kind).toEqual(['true', 'false']);
+                expect(forumPane(), kind).toBeNull();
+                expect(radio(pane[kind])?.getAttribute('aria-selected'), kind).toBe('true');
+            }
         }
+    });
+
+    it('the same Forum pushed again after a Chats tap lands on the Forum again: the view is taken once read (slice F5)', async () => {
+        rememberProfile(WITH_FORUM);
+        await renderIn('en');
+        const left: string[] = [];
+        for (const i of [1, 2, 3]) {
+            if (forumPane()) await click(side('Chats'), 'Chats');
+            expect(forumPane(), `#${i}: on Chats before the push`).toBeNull();
+            await pushChat({ view: 'forum' });
+            expect(selected(tabs()), `#${i}`).toEqual(['false', 'true']);
+            expect(forumPane(), `#${i}`).not.toBeNull();
+            left.push(params.now.view);
+        }
+        expect(left).toEqual(['', '', '']);
     });
 
     it('the tab\'s own tap keeps the side the member chose: Forum stays Forum, before and after a way in took the view', async () => {
@@ -507,6 +540,18 @@ describe('the Chat tab where the forum is off: the title "Chat", as before', () 
             expect(forumPane()).toBeNull();
         });
     }
+
+    it('a forum notice pushed here (the forum switched off since it was sent) shows Chats, as before (slice F5)', async () => {
+        rememberProfile({ ...LOCAL, forum: false });
+        await renderIn('en');
+        await click(radio('Groups'), 'Groups');
+        await pushRoute(noticeRoute('forum.reply', null));
+        expect(tablist()).toBeNull();
+        expect(forumPane()).toBeNull();
+        expect(host.querySelector('[data-testid="page-title-talk"]')?.textContent).toBe('Chat');
+        expect(radio('Groups')?.getAttribute('aria-selected')).toBe('true');
+        expect(params.now.view).toBe('');
+    });
 });
 
 // ── 320 dp × 569 dp with text at 1.3×, as the design asks (§2.1: "T0's render test at 320 × 569 × 1.3 is the proof") ──────

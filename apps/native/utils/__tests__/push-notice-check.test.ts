@@ -620,17 +620,40 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         expect(noticeRoute('community.knock-shared', null)).toBe('/(tabs)/settings');
     });
 
-    it('a Chat tab notice whose details never came names the pane its chat is in, so the tab lands on Chats from the Forum side (review of #3146)', () => {
-        // Chats at Messages for a person's message; at Groups for the group kinds. Never the bare tab, which keeps the Forum.
+    it('a Chat tab notice whose details never came names the pane its chat is in, or the Forum for the forum\'s, so the tab lands there from the other side (review of #3146, slice F5)', () => {
+        // Chats at Messages for a person's message; at Groups for the group kinds; the Forum side for the forum's. Never the bare
+        // tab, which keeps whichever side the member left it on.
+        const pane: Record<string, NoticeRoute> = {
+            'chat.message': '/(tabs)/chats?view=messages',
+            'chat.group': '/(tabs)/chats?view=groups',
+            'chat.mention': '/(tabs)/chats?view=groups',
+            'group.lead': '/(tabs)/chats?view=groups',
+            'forum.reply': '/(tabs)/chats?view=forum',
+            'forum.mention': '/(tabs)/chats?view=forum',
+            'forum.first-look': '/(tabs)/chats?view=forum',
+            'forum.first-look-answer': '/(tabs)/chats?view=forum',
+        };
+        // Every kind the core sends to the Chat tab is one of those eight.
+        const chatKinds = (Object.keys(PUSH_NOTICE_KINDS) as PushNoticeKind[]).filter((k) => PUSH_NOTICE_KINDS[k].tab === 'chats');
+        expect(chatKinds.sort()).toEqual(Object.keys(pane).sort());
         for (const details of [null, undefined, {}, { screen: 'nowhere' }]) {
-            expect(noticeRoute('chat.message', details)).toBe('/(tabs)/chats?view=messages');
-            for (const kind of ['chat.group', 'chat.mention', 'group.lead'] as const) expect(noticeRoute(kind, details), kind).toBe('/(tabs)/chats?view=groups');
+            for (const kind of chatKinds) expect(noticeRoute(kind, details), kind).toBe(pane[kind]);
         }
-        // Every kind the core sends to the Chat tab is one of those four.
-        expect(Object.entries(PUSH_NOTICE_KINDS).filter(([, k]) => k.tab === 'chats').map(([kind]) => kind).sort())
-            .toEqual(['chat.group', 'chat.mention', 'chat.message', 'group.lead']);
         // Each still has somewhere of its own, so the bell offers Open.
-        for (const kind of ['chat.message', 'chat.group', 'chat.mention', 'group.lead'] as const) expect(noticeHasDestination(kind, null), kind).toBe(true);
+        for (const kind of chatKinds) expect(noticeHasDestination(kind, null), kind).toBe(true);
+    });
+
+    it('a forum notice with its details lands on the Forum side too: the topic, or the first topics waiting, as the node names them (slice F5)', () => {
+        // What the node answers (server engine/forum-notices.ts, forum-first-look.ts). Neither app has a topic page yet.
+        const topic = { screen: 'forum_topic', topicId: POST_ID, postId: CHAT_ID, number: 3 };
+        for (const kind of ['forum.reply', 'forum.mention'] as const) expect(noticeRoute(kind, topic), kind).toBe('/(tabs)/chats?view=forum');
+        expect(noticeRoute('forum.first-look', { kind: 'forum_first_look_waiting', waitingId: POST_ID, screen: 'forum_first_looks' })).toBe('/(tabs)/chats?view=forum');
+        expect(noticeRoute('forum.first-look-answer', { kind: 'forum_first_look_answered', outcome: 'ok', topicId: POST_ID, screen: 'forum_topic' })).toBe('/(tabs)/chats?view=forum');
+        // A kind this build doesn't know, naming a forum place: the Forum, with Open in the bell.
+        expect(noticeRoute(null, topic)).toBe('/(tabs)/chats?view=forum');
+        expect(noticeHasDestination(null, { screen: 'forum_first_looks' })).toBe(true);
+        // The ids are never read: nothing from the answer reaches the route.
+        expect(noticeRoute('forum.reply', { screen: 'forum_topic', topicId: '../settings' })).toBe('/(tabs)/chats?view=forum');
     });
 
     it('an answer to a suggestion of Local knowledge lands on My suggestions, added or not, with somewhere to Open (slice K4)', () => {

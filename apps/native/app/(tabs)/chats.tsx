@@ -72,13 +72,19 @@ export default function ChatsScreen() {
     }, [talkView, side]));
 
     React.useEffect(() => {
-        // A way in that names a pane (a notice, the header's icons, Home's "All N groups", a deep link) means Chats. Every
-        // notice for this tab names one (utils/push-notice-check.ts noticeRoute); the tab bar's own tap names none, so it
-        // keeps the side the member chose. The param is cleared once read, as the filter's is below: a tab stays mounted, so
-        // the same view pushed again after a Forum tap would change nothing and leave the member on the Forum. Only Talk's
-        // own three are taken: People's (friends, community, invites) are PeopleScreen's, which reads this route's params
-        // while mounted inside Talk.
+        // A way in that names a pane (a notice, the header's icons, Home's "All N groups", a deep link) means Chats; one that
+        // names the Forum (the forum's notices, slice F5) means the Forum, its Chats pane left as it was. Every notice for this
+        // tab names one or the other (utils/push-notice-check.ts noticeRoute); the tab bar's own tap names none, so it keeps
+        // the side the member chose. The param is cleared once read, as the filter's is below: a tab stays mounted, so the
+        // same view pushed again after the member changed side would change nothing. Only Talk's own three and the Forum are
+        // taken: People's (friends, community, invites) are PeopleScreen's, which reads this route's params while mounted
+        // inside Talk. Where the forum is off, "forum" shows Chats (core chatSideShown).
         const view = talkParams.view;
+        if (view === 'forum') {
+            setPickedSide('forum');
+            router.setParams({ view: '' });
+            return;
+        }
         if (view !== 'people' && view !== 'groups' && view !== 'messages') return;
         setTalkView(view);
         setPickedSide('chats');

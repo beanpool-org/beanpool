@@ -13,6 +13,7 @@
  *   Every way in from elsewhere shows Chats (`navNonce`, bumped by App's navigateToTab at each arrival): a conversation (a
  *   notice, a profile's Message), and the bell's and Home's rows that name no conversation (a message request, the unread
  *   messages, your groups). A tap on the tab itself is not a way in from elsewhere: it leaves the side the member picked.
+ *   The forum's notices are the one way in that shows the Forum (`openForum`, slice F5), as on the phone.
  */
 import { useEffect, useState, type ComponentProps } from 'react';
 import { chatSides, chatSideShown, t, type ChatSide, type ChatSideEntry } from '@beanpool/core';
@@ -56,9 +57,12 @@ export function ChatFrameSwitch({ sides, side, onChange }: {
     );
 }
 
-export function ChatTabPage({ navNonce, ...props }: ComponentProps<typeof MessagesPage> & {
+export function ChatTabPage({ navNonce, openForum, onForumOpened, ...props }: ComponentProps<typeof MessagesPage> & {
     /** Changes at every arrival at the tab from elsewhere (App's navigateToTab), with a conversation or without one. */
     navNonce?: number;
+    /** The arrival was for the Forum (a forum notice, slice F5): the Forum side, once; {@link onForumOpened} then clears it. */
+    openForum?: boolean;
+    onForumOpened?: () => void;
 }) {
     const features = useCommunityInfo()?.features;
     const sides = chatSides(features);
@@ -66,6 +70,13 @@ export function ChatTabPage({ navNonce, ...props }: ComponentProps<typeof Messag
     const side = chatSideShown(picked, features);
     useEffect(() => { setPicked('chats'); }, [navNonce]);
     useEffect(() => { if (props.openConversationId) setPicked('chats'); }, [props.openConversationId]);
+    // After the arrival's Chats above, in the same render: the Forum wins. Taken once, so the tab's own button later (which
+    // draws the tab afresh) is not a Forum arrival. Where the forum is off, the Forum shows Chats (core chatSideShown).
+    useEffect(() => {
+        if (!openForum) return;
+        setPicked('forum');
+        onForumOpened?.();
+    }, [openForum]);
     const frame = sides.length ? <ChatFrameSwitch sides={sides} side={side} onChange={setPicked} /> : undefined;
     return (
         <>

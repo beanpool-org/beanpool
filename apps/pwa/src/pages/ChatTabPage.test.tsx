@@ -103,6 +103,29 @@ describe('the Chat tab where the forum is on', () => {
         expect(seen.props.at(-1)).not.toHaveProperty('navNonce');
     });
 
+    it('a forum notice\'s arrival (openForum, with the arrival\'s count) shows the Forum, once; the next arrival with no forum shows Chats (slice F5)', () => {
+        const opened = vi.fn();
+        // Drawn by the arrival itself, as App does when the tab was elsewhere: the Forum, and the flag handed back at once.
+        const { rerender } = render(<ChatTabPage identity={ME} navNonce={1} openForum onForumOpened={opened} />);
+        expect(selected()).toEqual(['false', 'true']);
+        expect(screen.getByTestId('forum-page')).toBeInTheDocument();
+        expect(chatsBox()).toBe('none');
+        expect(opened).toHaveBeenCalledTimes(1);
+        // App clears it; the member goes to Chats, then another forum notice comes while the tab is open: the Forum again.
+        rerender(<ChatTabPage identity={ME} navNonce={1} openForum={false} onForumOpened={opened} />);
+        fireEvent.click(screen.getByRole('tab', { name: 'Chats' }));
+        expect(selected()).toEqual(['true', 'false']);
+        rerender(<ChatTabPage identity={ME} navNonce={2} openForum onForumOpened={opened} />);
+        expect(selected()).toEqual(['false', 'true']);
+        expect(opened).toHaveBeenCalledTimes(2);
+        // A chat arrival after it (the bell's request notice): Chats, as before.
+        rerender(<ChatTabPage identity={ME} navNonce={3} openForum={false} onForumOpened={opened} />);
+        expect(selected()).toEqual(['true', 'false']);
+        // MessagesPage is handed neither.
+        expect(seen.props.at(-1)).not.toHaveProperty('openForum');
+        expect(seen.props.at(-1)).not.toHaveProperty('onForumOpened');
+    });
+
     it('in the pseudo-locale: both names and the switch\'s spoken name came through t()', async () => {
         await act(async () => { await showIn('xx'); });
         render(<ChatTabPage identity={ME} />);
@@ -145,6 +168,14 @@ describe('the Chat tab where the forum is off: MessagesPage as before, no switch
         fireEvent.click(screen.getByRole('tab', { name: 'Forum' }));
         info.now = { features: LOCAL };
         rerender(<ChatTabPage identity={ME} />);
+        expect(tablist()).toBeNull();
+        expect(chatsBox()).toBe('contents');
+        expect(screen.queryByTestId('forum-page')).toBeNull();
+    });
+
+    it('a forum notice\'s arrival where the forum is off (switched off since it was sent) shows the list, as before (slice F5)', () => {
+        info.now = { features: LOCAL };
+        render(<ChatTabPage identity={ME} navNonce={1} openForum onForumOpened={() => {}} />);
         expect(tablist()).toBeNull();
         expect(chatsBox()).toBe('contents');
         expect(screen.queryByTestId('forum-page')).toBeNull();

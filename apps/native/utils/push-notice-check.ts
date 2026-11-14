@@ -513,7 +513,7 @@ export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Pro
 
 // ── Where a tap lands ──────────────────────────────────────────────────────────────────────────────────────────
 
-export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats?view=messages' | '/(tabs)/chats?view=groups' | '/(tabs)/settings' | '/(tabs)/people?view=invites&from=notice' | '/find-community' | '/shared-outside'
+export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats?view=messages' | '/(tabs)/chats?view=groups' | '/(tabs)/chats?view=forum' | '/(tabs)/settings' | '/(tabs)/people?view=invites&from=notice' | '/find-community' | '/shared-outside'
     | '/(tabs)/chats?filter=requests' | '/(tabs)/projects?section=decide'
     | '/(tabs)/people?view=community&credit=vouchers' | `/(tabs)/people?view=community&credit=vouchers&voucher=${string}`
     | `/post/${string}` | `/chat/${string}` | '/learn/mine'
@@ -531,6 +531,19 @@ export const CHAT_MESSAGES_ROUTE = '/(tabs)/chats?view=messages' satisfies Notic
 const CHAT_GROUPS_ROUTE = '/(tabs)/chats?view=groups' satisfies NoticeRoute;
 /** The Chat tab's kinds about a group (core push-notice.ts): a message in one, a mention in one, news of one the member leads. */
 const GROUP_CHAT_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['chat.group', 'chat.mention', 'group.lead']);
+/**
+ * The Chat tab on its Forum side: where the forum's notices land (core push-notice.ts, slice F5). The tab reads the view as
+ * "Forum", then clears it, as it does Chats' (app/(tabs)/chats.tsx). Where this community's forum is off, the tab shows Chats.
+ */
+const CHAT_FORUM_ROUTE = '/(tabs)/chats?view=forum' satisfies NoticeRoute;
+/** The forum's kinds (core push-notice.ts): a reply in a followed topic, a mention, a first topic waiting, its answer. */
+const FORUM_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['forum.reply', 'forum.mention', 'forum.first-look', 'forum.first-look-answer']);
+/**
+ * The places the forum's notices name (server engine/forum-notices.ts and forum-first-look.ts): a topic, and the first topics
+ * waiting for a moderator's look. Neither app has a page for either yet (slice F3 adds them on the phone, F4 on the web), so
+ * both land on the Forum side.
+ */
+const FORUM_SCREENS: ReadonlySet<unknown> = new Set<unknown>(['forum_topic', 'forum_first_looks']);
 
 /** An enterprise's key as the node writes it: 32 bytes, lower-case hex. */
 const ENTERPRISE_KEY = /^[0-9a-f]{64}$/;
@@ -541,7 +554,8 @@ const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
     // Home is the tabs' first screen (app/(tabs)/index.tsx); the Market has its own route since Home came (H2).
     home: '/(tabs)',
     market: '/(tabs)/market',
-    // A person's message (core push-notice.ts); the group kinds land at Groups (noticeRoute). Chats, whatever side the tab was left on.
+    // A person's message (core push-notice.ts); the group kinds land at Groups and the forum's on the Forum side (noticeRoute).
+    // Chats, whatever side the tab was left on.
     chats: CHAT_MESSAGES_ROUTE,
     settings: '/(tabs)/settings',
     // A request to join (community.knock, the People tab's only kind): Invites, where it is listed with Invite and Not now.
@@ -585,6 +599,9 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     // Someone asked to join after a listing this member shared (community.knock-shared, shared-listing door A3): their
     // Shared outside, where that link's row counts who asked.
     if (d.screen === 'shared-outside') return '/shared-outside';
+    // The forum's notices: the Forum side, with their details or without them (slice F5). Never the bare tab, which would keep
+    // Chats for a member who left the tab there.
+    if (FORUM_SCREENS.has(d.screen) || (kind && FORUM_KINDS.has(kind))) return CHAT_FORUM_ROUTE;
     if (kind && GROUP_CHAT_KINDS.has(kind)) return CHAT_GROUPS_ROUTE;
     // An owner or admin answered the member's suggestion of Local knowledge (community.knowledge-answer): My suggestions, where
     // it shows as added (a tap opens the page) or not, with the reason (slice K4).

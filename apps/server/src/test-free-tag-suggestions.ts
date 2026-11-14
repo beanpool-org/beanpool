@@ -180,6 +180,8 @@ async function main(): Promise<void> {
 
     const teapot = await offer(dee, 'A teapot', ['gone word']);
     assert(countOf('gone word')?.listings === 1, 'a word on one listing…');
+    // …first seen a month ago (so a stamp kept across the take-down would pass the week at once)…
+    db.prepare("UPDATE free_tag_seen SET first_seen = ? WHERE tag = 'gone word'").run(new Date(Date.now() - 30 * DAY).toISOString());
     db.prepare("UPDATE posts SET removed_by_moderator_at = '2026-01-01T00:00:00Z' WHERE id = ?").run(teapot);
     const another = await offer(dee, 'Another teapot', []);
     age(another, 30);

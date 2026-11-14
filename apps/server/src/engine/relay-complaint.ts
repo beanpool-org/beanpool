@@ -1,0 +1,328 @@
+/**
+ * Reports of lines from other communities, and the complaints one community's server sends another's (messages across
+ * communities X5: scratch/fable-design/DESIGN-cross-chat-voice-fable.md §3.5, §7 "Moderation", §11 row X5;
+ * DESIGN-cross-community-chat-fable.md §2.5; DESIGN-reaching-across-fable.md §3 "What a reporter hands over" and "the line
+ * crosses, the authority does not"; DESIGN-forums-messaging-joint-fable.md §2.4). The mailbox itself is engine/relay-mail.ts
+ * (receiving) and engine/relay-outbox.ts (sending).
+ *
+ * **A member here reports a line from another community** (`POST /api/mail/report`, member-signed): they hand over the
+ * item as it crossed (the sender's signed relay envelope and the sealed format-4 line inside it, which their device kept)
+ * and their word for what it says. This server checks that the envelope is its sender's and names the reporter, here, as
+ * its recipient, and that the line inside is signed by the same sender to the reporter under the item's id: else 400
+ * `line_not_verified`, nothing filed. Then it files one report (abuse_reports: the sender's key, `target_home` their home,
+ * the line's id, what was handed over), blocks the sender for the reporter at this server's door (engine/member-blocks.ts),
+ * and tells the sender's home. The line crosses; the authority does not: only the sender's home may act on its member.
+ *
+ * **The complaint** goes to `https://<sender home>/api/relay/complaint` in a request this server signs (engine/node-key.ts,
+ * checked at the other end by engine/node-signature.ts). It is {@link ComplaintBody}: the member there, the line's id and
+ * time, the report's kind and the reporter's word for the line. **It never names the reporter**: not their key, not their
+ * name, not the conversation (made from their key), nor the sealed line, whose signatures bind their key. What ties it to
+ * a real line is the home's own record: an item its member sent, by that id, to the community whose server signed the
+ * complaint (relay_outbox, kept 30 days after its last change). A complaint the other server does not take at once is
+ * tried again by the minute timer with the outbox's backoff for a day, its state kept beside the report (`told`).
+ *
+ * **At the sender's home** a complaint lands in Settings → Moderation beside the community's own reports, marked "from
+ * another community": abuse_reports with the complaining server's key as its reporter (a server, never a person), the
+ * member, the line's id, and `{"kind":"relay-complaint","from":<home>,...}` as its disclosure. It is answered 202 alike
+ * whether it was filed or dropped (no line by that id went to that community, a key that is no member here, one on file
+ * already, the owner's switch off), so no server learns from the answer who is a member here, nor whom they wrote. Refused:
+ * a request that is not one (400 bad_complaint), and past COMPLAINTS_PER_ORIGIN_DAY from one server (429).
+ *
+ * **Counts, never names.** No log line here names a member or a reporter; the owners' notice is the reports' own
+ * (services/alerts.ts noteNewReport: a kind and a count).
+ */
+import crypto from 'node:crypto';
+import {
+    dmLineSignedBy, readRelayEnvelope, relayConversationId, relayEnvelopeVerifies, relayPayloadHash, reportKind, word,
+    OUTSIDE_LINE_TEXT_MAX, type RelayEnvelope, type ReportKind,
+} from '@beanpool/core';
+import { db } from '../db/db.js';
+import { isNodeMember, readsAsMember } from '../state-engine.js';
+import { addBlocks, BlockRefusal } from './member-blocks.js';
+import { isOwnNodeHome } from './node-key.js';
+import { GroupLineReportError, type GroupLineReport } from './group-chat-report.js';
+import { outsideMessagesOn, RELAY_LINE_MAX_CHARS } from './relay-mail.js';
+import { RETRY_BACKOFF_MS, OUTBOX_QUEUE_MS, forwardSigned } from './relay-outbox.js';
+import { logger } from '../logger.js';
+
+/** The path a community's server brings complaints to (engine/node-signature.ts NODE_SIGNED_PATHS). */
+export const RELAY_COMPLAINT_PATH = '/api/relay/complaint';
+/** What a report of an outside line keeps as its disclosure, and a complaint from another community as its. */
+export const OUTSIDE_LINE_DISCLOSURE_KIND = 'outside-line';
+export const RELAY_COMPLAINT_DISCLOSURE_KIND = 'relay-complaint';
+/** Complaints one server may bring in any 24 hours; past it, 429. */
+export const COMPLAINTS_PER_ORIGIN_DAY = 100;
+const DAY_MS = 24 * 60 * 60_000;
+
+export const OUTSIDE_REPORT_FORM = 'A report of a message from another community hands over the item as it came and says why: { item: { envelope, payload }, reason, words }.';
+export const LINE_NOT_VERIFIED = word("This message couldn't be verified as its sender's, so it can't be reported.");
+
+/** The report kinds a complaint carries: core's, never the reporter's own words beside the choice. */
+const KINDS: readonly ReportKind[] = ['child safety', 'spam or scam', 'offensive content', 'misleading post', 'other'];
+const KEY_HEX = /^[0-9a-f]{64}$/;
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+/** What crosses: the whole of it. Nothing here is the reporter's, but their word for what the line said. */
+export interface ComplaintBody {
+    v: 1;
+    /** The complaint's own id, at the server that sends it: a repeat of it is the same complaint. */
+    id: string;
+    /** The member at the receiving home who sent the line. */
+    member: string;
+    /** The line's item id (its envelope's), and when its sender signed it, by their clock. */
+    itemId: string;
+    at: number;
+    /** The report's kind (core reportKind). */
+    reason: ReportKind;
+    /** The reporter's word for what the line said: nothing proves it (v1 hands over no message key). */
+    words: string;
+}
+
+// ── A member here reports a line from another community ─────────────────────────────────────
+
+export interface CheckedOutsideLineReport {
+    envelope: RelayEnvelope;
+    payload: string;
+    reason: string;
+    words: string;
+}
+
+/** Whether `payload` is a format-4 line its envelope's sender signed to `reporter` under the item's id. */
+function lineSignedBySender(env: RelayEnvelope, payload: string, reporter: string): boolean {
+    let p: { v?: unknown; c?: unknown; n?: unknown; r?: unknown };
+    try { p = JSON.parse(payload); } catch { return false; }
+    if (!p || p.v !== 1 || typeof p.c !== 'string' || typeof p.n !== 'string') return false;
+    if (p.r !== undefined && (typeof p.r !== 'string' || !p.r || p.r.length > 64)) return false;
+    return !!dmLineSignedBy({ ciphertext: p.c, nonce: p.n }, {
+        conversationId: relayConversationId(env.senderKey, reporter),
+        metadata: typeof p.r === 'string' ? { replyToId: p.r } : undefined,
+        recipients: [reporter], messageId: env.itemId,
+    }, [env.senderKey]);
+}
+
+/**
+ * Check a report of an outside line before anything is filed (the file header). Throws GroupLineReportError: 400
+ * `report_form` for a body that is not one, 400 `line_not_verified` for a line that is not its sender's to this reporter.
+ */
+export function checkOutsideLineReport(reporter: string, body: { item?: unknown; reason?: unknown; words?: unknown } | undefined): CheckedOutsideLineReport {
+    const { item, reason, words } = body ?? {};
+    const raw = item as { envelope?: unknown; payload?: unknown } | null | undefined;
+    if (typeof reason !== 'string' || !reason.trim() || typeof words !== 'string' || words.length > OUTSIDE_LINE_TEXT_MAX
+        || !raw || typeof raw !== 'object' || typeof raw.payload !== 'string' || raw.payload.length > RELAY_LINE_MAX_CHARS) {
+        throw new GroupLineReportError(400, 'report_form', OUTSIDE_REPORT_FORM);
+    }
+    const env = readRelayEnvelope(raw.envelope);
+    const notVerified = () => new GroupLineReportError(400, 'line_not_verified', LINE_NOT_VERIFIED);
+    if (!env || env.kind !== 'dm-line' || !UUID_V4.test(env.itemId)) throw notVerified();
+    if (env.recipient !== reporter || env.senderKey === reporter || !isOwnNodeHome(env.recipientHome) || isOwnNodeHome(env.senderHome)) throw notVerified();
+    if (relayPayloadHash(raw.payload) !== env.payloadHash || !relayEnvelopeVerifies(env)) throw notVerified();
+    if (!lineSignedBySender(env, raw.payload, reporter)) throw notVerified();
+    return { envelope: env, payload: raw.payload, reason, words };
+}
+
+/** A report's `told`: whether the sender's home has the complaint yet. */
+interface Told { state: 'queued' | 'sent' | 'failed'; tries: number; next: number | null; id: string }
+
+/**
+ * File a checked report: one row (the sender's key, their home, the line's id, what was handed over, and the complaint's
+ * state), the sender blocked for the reporter. Null for a reporter who is no member here.
+ */
+export function submitOutsideLineReport(reporter: string, checked: CheckedOutsideLineReport, now = Date.now()): GroupLineReport | null {
+    if (!isNodeMember(reporter) || !readsAsMember(reporter)) return null;
+    const env = checked.envelope;
+    const id = crypto.randomUUID();
+    const createdAt = new Date(now).toISOString();
+    const reason = checked.reason.slice(0, 500);
+    const told: Told = { state: 'queued', tries: 0, next: now, id: crypto.randomUUID() };
+    db.transaction(() => {
+        db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_home, target_message_id, disclosure, reason, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, reporter, env.senderKey, env.senderHome, env.itemId,
+            JSON.stringify({ kind: OUTSIDE_LINE_DISCLOSURE_KIND, v: 1, envelope: env, payload: checked.payload, words: checked.words, told }), reason, createdAt);
+        try {
+            addBlocks(reporter, [env.senderKey], now);
+        } catch (e) {
+            // A full list (409) keeps the report: the member can block from their list once there is room.
+            if (!(e instanceof BlockRefusal)) throw e;
+        }
+    })();
+    return { id, reporterPubkey: reporter, targetPubkey: env.senderKey, targetMessageId: env.itemId, reason, createdAt, status: 'pending' };
+}
+
+// ── Telling the sender's home ───────────────────────────────────────────────────────────────
+
+interface QueuedRow { id: string; target_pubkey: string; target_home: string; reason: string; disclosure: string }
+
+/** The complaint a report of an outside line sends: what {@link ComplaintBody} says, and nothing else. */
+function complaintOf(row: QueuedRow, told: Told): ComplaintBody | null {
+    let d: { envelope?: RelayEnvelope; words?: unknown };
+    try { d = JSON.parse(row.disclosure); } catch { return null; }
+    const env = readRelayEnvelope(d.envelope);
+    if (!env || typeof d.words !== 'string') return null;
+    return { v: 1, id: told.id, member: row.target_pubkey, itemId: env.itemId, at: env.at, reason: reportKind(row.reason), words: d.words };
+}
+
+function setTold(reportId: string, told: Told): void {
+    db.prepare(`UPDATE abuse_reports SET disclosure = json_set(disclosure, '$.told', json(?)), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+                WHERE id = ?`).run(JSON.stringify(told), reportId);
+}
+
+function toldOf(disclosure: string): Told | null {
+    try {
+        const t = (JSON.parse(disclosure) as { told?: Told }).told;
+        return t && typeof t.id === 'string' && (t.state === 'queued' || t.state === 'sent' || t.state === 'failed') ? t : null;
+    } catch {
+        return null;
+    }
+}
+
+/** One complaint to its home, and its state after: sent at a 2xx, failed at a 400 or past a day, else tried again later. */
+async function tell(row: QueuedRow, told: Told, createdAt: number): Promise<Told['state']> {
+    const complaint = complaintOf(row, told);
+    if (!complaint) {
+        setTold(row.id, { ...told, state: 'failed', next: null });
+        return 'failed';
+    }
+    const status = await forwardSigned(`https://${row.target_home}${RELAY_COMPLAINT_PATH}`, JSON.stringify({ complaint }));
+    const at = Date.now();
+    const tries = told.tries + 1;
+    let state: Told['state'];
+    if (status >= 200 && status < 300) state = 'sent';
+    else if (status === 400 || status === 413 || at - createdAt >= OUTBOX_QUEUE_MS) state = 'failed';
+    else state = 'queued';
+    const next = state === 'queued' ? at + RETRY_BACKOFF_MS[Math.min(told.tries, RETRY_BACKOFF_MS.length - 1)] : null;
+    setTold(row.id, { ...told, state, tries, next });
+    return state;
+}
+
+/** Tell the sender's home of one report now (the report route, after filing). */
+export async function tellHomeOf(reportId: string): Promise<void> {
+    const row = db.prepare('SELECT id, target_pubkey, target_home, reason, disclosure, created_at FROM abuse_reports WHERE id = ? AND target_home IS NOT NULL')
+        .get(reportId) as (QueuedRow & { created_at: string }) | undefined;
+    const told = row ? toldOf(row.disclosure) : null;
+    if (!row || told?.state !== 'queued' || !outsideMessagesOn()) return;
+    const state = await tell(row, told, Date.parse(row.created_at));
+    logger.info('SYS', `Complaints to other communities: 1 ${state === 'sent' ? 'taken by' : state === 'failed' ? 'refused by' : 'waits to be tried again at'} ${row.target_home}.`);
+}
+
+let telling = false;
+
+/** The minute timer's turn (https-server.ts): complaints that are due are tried again. Counts in the log, never names. */
+export async function retryComplaints(now = Date.now()): Promise<number> {
+    if (telling || !outsideMessagesOn()) return 0;
+    telling = true;
+    try {
+        const rows = db.prepare(`SELECT id, target_pubkey, target_home, reason, disclosure, created_at FROM abuse_reports
+                                 WHERE target_home IS NOT NULL AND json_extract(disclosure, '$.kind') = ? AND json_extract(disclosure, '$.told.state') = 'queued'
+                                   AND json_extract(disclosure, '$.told.next') <= ? ORDER BY created_at LIMIT 32`)
+            .all(OUTSIDE_LINE_DISCLOSURE_KIND, now) as Array<QueuedRow & { created_at: string }>;
+        const states = { sent: 0, queued: 0, failed: 0 };
+        for (const row of rows) {
+            const told = toldOf(row.disclosure);
+            if (told) states[await tell(row, told, Date.parse(row.created_at))]++;
+        }
+        if (rows.length) logger.info('SYS', `Complaints to other communities: ${states.sent} taken, ${states.queued} wait, ${states.failed} refused.`);
+        return rows.length;
+    } finally {
+        telling = false;
+    }
+}
+
+// ── A complaint from another community ──────────────────────────────────────────────────────
+
+export type ComplaintAnswer =
+    | { status: 202; body: { received: true } }
+    | { status: 400 | 429; body: { error: string; code: string }; retryAfterSec?: number };
+
+/** A complaint's body read back in exactly its fields, or null. */
+export function readComplaintBody(json: unknown): ComplaintBody | null {
+    const c = (json as { complaint?: unknown } | null | undefined)?.complaint as Record<string, unknown> | undefined;
+    if (!c || typeof c !== 'object' || Array.isArray(c) || c.v !== 1) return null;
+    if (typeof c.id !== 'string' || !UUID_V4.test(c.id) || typeof c.member !== 'string' || !KEY_HEX.test(c.member)) return null;
+    if (typeof c.itemId !== 'string' || !UUID_V4.test(c.itemId) || !Number.isSafeInteger(c.at) || (c.at as number) < 0) return null;
+    if (!KINDS.includes(c.reason as ReportKind) || typeof c.words !== 'string' || c.words.length > OUTSIDE_LINE_TEXT_MAX) return null;
+    return { v: 1, id: c.id, member: c.member, itemId: c.itemId, at: c.at as number, reason: c.reason as ReportKind, words: c.words };
+}
+
+/**
+ * What this server makes of a complaint `origin` signed with `originKey` (the file header): filed, or dropped and answered
+ * alike, or refused for its form or past the cap.
+ */
+export function receiveComplaint(origin: string, originKey: string, body: unknown, now = Date.now()): ComplaintAnswer {
+    const c = readComplaintBody(body);
+    if (!c) return { status: 400, body: { error: 'A complaint is { complaint: { v: 1, id, member, itemId, at, reason, words } }.', code: 'bad_complaint' } };
+    const received = { status: 202 as const, body: { received: true as const } };
+    if (!outsideMessagesOn()) return received;
+    const fromOrigin = (db.prepare(`SELECT COUNT(*) AS n FROM abuse_reports WHERE json_extract(disclosure, '$.kind') = ? AND json_extract(disclosure, '$.from') = ?
+                                    AND created_at > ?`).get(RELAY_COMPLAINT_DISCLOSURE_KIND, origin, new Date(now - DAY_MS).toISOString()) as { n: number }).n;
+    if (fromOrigin >= COMPLAINTS_PER_ORIGIN_DAY) {
+        return { status: 429, body: { error: word("This community isn't taking more complaints from there today."), code: 'rate_limited' }, retryAfterSec: 3_600 };
+    }
+    // A real line: this member sent an item by that id to the community whose server signed this. Else, nothing is filed.
+    const sent = db.prepare("SELECT 1 FROM relay_outbox WHERE sender_key = ? AND item_id = ? AND recipient_home = ? AND kind = 'dm-line'")
+        .get(c.member, c.itemId, origin);
+    if (!sent || !isNodeMember(c.member)) return received;
+    const onFile = db.prepare(`SELECT 1 FROM abuse_reports WHERE target_pubkey = ? AND target_message_id = ? AND json_extract(disclosure, '$.kind') = ?
+                               AND json_extract(disclosure, '$.from') = ?`).get(c.member, c.itemId, RELAY_COMPLAINT_DISCLOSURE_KIND, origin);
+    if (onFile) return received;
+    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_message_id, disclosure, reason, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)`).run(crypto.randomUUID(), originKey, c.member, c.itemId,
+        JSON.stringify({ kind: RELAY_COMPLAINT_DISCLOSURE_KIND, v: 1, from: origin, complaintId: c.id, at: c.at, words: c.words }),
+        c.reason === 'child safety' ? 'Child safety' : c.reason, new Date(now).toISOString());
+    logger.info('SYS', `Complaints from other communities: 1 filed from ${origin}.`);
+    return received;
+}
+
+// ── What the moderators read ────────────────────────────────────────────────────────────────
+
+/** A complaint from another community, as the moderators' list shows it: where from, and the reporter's word. */
+export interface ComplaintFromAnotherCommunity { from: string; words: string; signedAt: string | null }
+
+/** The complaint a report row holds, from its disclosure, or null for any other report. */
+export function complaintOfReport(disclosure: string | null): ComplaintFromAnotherCommunity | null {
+    if (!disclosure?.startsWith(`{"kind":"${RELAY_COMPLAINT_DISCLOSURE_KIND}"`)) return null;
+    try {
+        const d = JSON.parse(disclosure) as { from?: unknown; words?: unknown; at?: unknown };
+        if (typeof d.from !== 'string' || typeof d.words !== 'string') return null;
+        return { from: d.from, words: d.words, signedAt: Number.isSafeInteger(d.at) ? new Date(d.at as number).toISOString() : null };
+    } catch {
+        return null;
+    }
+}
+
+/** A reported outside line, as the moderators open it (GET /api/local/admin/reports/:id/message): signatures checked again. */
+export interface ReportedOutsideLine {
+    kind: 'dm';
+    id: string;
+    sentAt: null;
+    signedAt: string | null;
+    authorPubkey: string;
+    authorCallsign: null;
+    /** The sender's community. */
+    from: string;
+    signer: string | null;
+    signature: 'verified' | 'unverified';
+    words: { state: 'reported'; text: string };
+    photo: false;
+    voice: null;
+    /** No server keeps a line from outside: what the moderators read is what was handed over. */
+    line: 'gone';
+    /** Whether the sender's community has the complaint: still trying, taken, or it would not take it. */
+    told: Told['state'] | null;
+}
+
+export function openReportedOutsideLine(reportId: string): ReportedOutsideLine | null {
+    const row = db.prepare('SELECT reporter_pubkey, target_pubkey, target_home, disclosure FROM abuse_reports WHERE id = ? AND target_home IS NOT NULL').get(reportId) as
+        { reporter_pubkey: string; target_pubkey: string; target_home: string; disclosure: string | null } | undefined;
+    if (!row?.disclosure?.startsWith(`{"kind":"${OUTSIDE_LINE_DISCLOSURE_KIND}"`)) return null;
+    let d: { envelope?: unknown; payload?: unknown; words?: unknown };
+    try { d = JSON.parse(row.disclosure); } catch { return null; }
+    const env = readRelayEnvelope(d.envelope);
+    if (!env || typeof d.payload !== 'string' || typeof d.words !== 'string') return null;
+    const verified = env.senderKey === row.target_pubkey && env.recipient === row.reporter_pubkey && relayPayloadHash(d.payload) === env.payloadHash
+        && relayEnvelopeVerifies(env) && lineSignedBySender(env, d.payload, row.reporter_pubkey);
+    return {
+        kind: 'dm', id: env.itemId, sentAt: null, signedAt: verified ? new Date(env.at).toISOString() : null, authorPubkey: row.target_pubkey,
+        authorCallsign: null, from: row.target_home, signer: verified ? env.senderKey : null, signature: verified ? 'verified' : 'unverified',
+        words: { state: 'reported', text: d.words }, photo: false, voice: null, line: 'gone', told: toldOf(row.disclosure)?.state ?? null,
+    };
+}

@@ -57,8 +57,8 @@ describe('the doors to the listing form', () => {
             'app/(tabs)/index.tsx': ["'need'", "'offer'", 'type'],
             // A month with no events: "No events coming up yet. Start one ›"
             'app/calendar.tsx': ["'event'"],
-            // A pulse post's "Post Your Own Offer →", and "Contribution Required"'s "➕ Create an Offer".
-            'app/post/[id].tsx': ["'true'", "'true'"],
+            // "Contribution Required"'s "➕ Create an Offer" (the Daily Pulse post's "Post Your Own Offer →" went with the Daily Pulse, 15 Nov).
+            'app/post/[id].tsx': ["'true'"],
             // A tool's Offer (through the List sheet) and its Need, and the Offer a starter draft opens (Home's "What could you offer?").
             'tools/doors.ts': ["'offer'", "'need'", "'offer'"],
         });

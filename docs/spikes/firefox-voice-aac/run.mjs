@@ -70,6 +70,9 @@ if (mode === 'playwright') {
         'user_pref("toolkit.telemetry.reporting.policy.firstRun", false);',
         'user_pref("browser.startup.homepage_override.mstone", "ignore");',
         'user_pref("app.update.disabledForTesting", true);',
+        // A fake microphone for encode.html's 24 kHz capture check; no real device is opened and nothing is played.
+        'user_pref("media.navigator.streams.fake", true);',
+        'user_pref("media.navigator.permission.disabled", true);',
     ].join('\n'));
     const child = spawn('/Applications/Firefox.app/Contents/MacOS/firefox', ['--headless', '--no-remote', '--profile', profile, url], { stdio: 'ignore' });
     process.stderr.write(`[stock firefox pid ${child.pid}]\n`);

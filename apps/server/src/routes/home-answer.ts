@@ -74,6 +74,7 @@ import {
     readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor, HOME_DECIDE_ROWS, HOME_FRAME_LIMITS, dealsNeedingMe, standingNeedsLines,
     openDeals as coreOpenDeals, pinLive, PINS_MAX, type HomeCardInstance, type HomeChatCard, type HomeChatLine, type HomeLayoutV2, type HomeSearchSettings,
     type ShopCounts, type TourRecord, HUNDREDTHS_PER_BEAN, knowledgeToCheckLine, wordsFor, decidePollOrder, firstStepsOver, homeCardType, type HomeNodeFacts,
+    type HomeLearnCard,
 } from '@beanpool/core';
 import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, livePinIds, ON_HOLIDAY_SQL, UNNAMED_COPY_SQL, guestPost, haversineKm, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -98,6 +99,7 @@ import { getAdminQueue, type AdminQueueItem, type AdminSettingsSection } from '.
 import { actionableKnockCount, actionableKnocksWaitingDays } from '../engine/knocks.js';
 import { inviteAskCount } from '../engine/invite-asks.js';
 import { knowledgeDraftCount } from '../engine/knowledge-drafts.js';
+import { checksKnowledge, learnHomeRows, showingTo } from '../engine/knowledge.js';
 import { listKeptNotices } from '../engine/kept-notices.js';
 import { probationRuleSet, probationSummary, type ProbationSummary } from '../engine/probation.js';
 import { readMemberArea } from '../engine/member-area.js';
@@ -132,7 +134,7 @@ export const isHomeCardId = (id: unknown): id is HomeCardId => typeof id === 'st
  * has just added one asks for it before its layout reaches the node; a version-1 app never asks for it, and with no
  * `cards=` it is built only from a version-2 layout that holds it.
  */
-const BUILT_WHEN_ASKED: ReadonlySet<string> = new Set([...HOME_CARD_IDS, 'shop', 'asked']);
+const BUILT_WHEN_ASKED: ReadonlySet<string> = new Set([...HOME_CARD_IDS, 'shop', 'asked', 'learn']);
 
 /** Cards a member can't hide (§4.1): `needs` costs them something if missed, `community` holds "Arrange". `find` too, for its first 30 days on the global node. */
 const UNHIDEABLE: ReadonlySet<string> = new Set(['needs', 'community']);
@@ -389,6 +391,13 @@ export interface HomeCards {
      * reader's stars first. Absent while there is no Need to show, so the card is never drawn empty.
      */
     asked?: { items: NeedItem[] };
+    /**
+     * "Learn something local" (DESIGN-local-knowledge-amend-fable.md §3.6, slice K7; @beanpool/core HomeLearnCard): where
+     * Learn is on, to a member, up to three pages (the newest of the last 14 days marked new, then the day's pick, the same
+     * for every member that day), an owner's or admin's count to check and their first-page row. Absent for a member with
+     * nothing to show.
+     */
+    learn?: HomeLearnCard;
     /** The open Decisions, soonest closing first, and the first open poll (the soonest closing), its question as asked. */
     decide?: {
         open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean;
@@ -406,11 +415,12 @@ export interface HomeCards {
      * (running now or starting by then, as the Events card lists them)
      * and the Commons pot in whole Beans (where Beans are on), each null when it is zero (written by no app; §2.7).
      * `place`: the node's own place (local-config `location`) to two decimals, for a member; absent when the node has none
-     * and on the global profile.
+     * and on the global profile. `knowledge`: the pages showing in Learn ("{n} things worth knowing", slice K7), to a member
+     * where Learn is on, from 1; absent at 0, where Learn is off and to anyone else.
      */
     community?: {
         name: string | null; members: number; listings: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number };
-        joined7d?: number | null; eventsSoon?: number | null; commonsPot_c?: number | null;
+        joined7d?: number | null; eventsSoon?: number | null; commonsPot_c?: number | null; knowledge?: number;
     };
     /**
      * A card of a type that comes in many is keyed by its instance id (`search-k7mq`), not its type; so is any card the
@@ -505,6 +515,8 @@ interface Ctx {
     firstOffer?: boolean;
     /** Read once per answer, for `steps` and `me` (engine/way-back.ts). */
     wayBack?: WayBack;
+    /** Read once per answer, for the community card's figure and the Learn card: the pages showing in Learn to the reader. */
+    knowledge?: MarketplacePost[];
     /** Read once per answer, for the Market, Coming up and Decide cards: the live pins, newest pin first (pinnedPosts). */
     pinned?: MarketplacePost[];
 }
@@ -1518,6 +1530,39 @@ function noticesCard(c: Ctx): HomeCards['notices'] | undefined {
     return { unseen: unseen.length, first: { id: n.id, title: clip(n.title, TITLE_CHARS), line: clip((n.body || '').split('\n')[0], TITLE_CHARS) } };
 }
 
+/**
+ * The pages Learn shows this reader (engine/knowledge.ts showingTo: Learn's own rule, so the figure and the card count what
+ * Learn lists), read once per answer; null where Learn is off for the reader or they don't read as a member here. Learn is
+ * members only: a suspended member, a visitor and the global community get none.
+ */
+function learnPagesFor(c: Ctx): MarketplacePost[] | null {
+    if (!c.member || !c.me || c.features.knowledge !== true || c.switches.guestListingsOnly) return null;
+    c.knowledge ??= showingTo(c.me);
+    return c.knowledge;
+}
+
+/** Characters of a row's first line on the Learn card: a line, not the page (the answer stays a few kilobytes). */
+const LEARN_LINE_CHARS = 140;
+
+/**
+ * "Learn something local" (DESIGN-local-knowledge-amend-fable.md §3.6, slice K7): up to three pages, the newest of the last
+ * 14 days first and marked new, then the node's pick for the day (engine/knowledge.ts learnHomeRows), each opening its page.
+ * An owner or admin also gets the members' suggestions waiting (`toCheck`, for an app that opens To check: lands=learn, as
+ * the Needs-you line), and, while Learn holds nothing, `first` (their row "Add the first thing worth knowing about
+ * {community}"). A member with nothing to show gets no card.
+ */
+function learnCard(c: Ctx): HomeLearnCard | undefined {
+    built('learn');
+    const pages = learnPagesFor(c);
+    if (!pages) return undefined;
+    const rows = learnHomeRows(pages, c.now).map(r => ({ ...r, title: clip(r.title, TITLE_CHARS), line: clip(r.line, LEARN_LINE_CHARS) }));
+    const checker = checksKnowledge(c.me!);
+    const toCheck = checker && c.lands.has('learn') ? knowledgeDraftCount() : 0;
+    const first = checker && pages.length === 0;
+    if (rows.length === 0 && toCheck === 0 && !first) return undefined;
+    return { rows, ...(toCheck > 0 ? { toCheck } : {}), ...(first ? { first: true as const } : {}) };
+}
+
 function communityCard(c: Ctx): HomeCards['community'] {
     built('community');
     const config = getLocalConfig();
@@ -1539,6 +1584,15 @@ function communityCard(c: Ctx): HomeCards['community'] {
     // answered, after every field above, so a visitor's answer is what it was with this one added; then, to a member who
     // reads as one on a local community (the global profile's figures are members, communities and listings), the rest.
     const card: NonNullable<HomeCards['community']> = { ...out, listings: counts.postCount, ...(c.member && !c.switches.guestListingsOnly ? memberFigures(c, counts.commonsBalance_c) : {}) };
+    // "{n} things worth knowing" (slice K7): the pages Learn shows this member, from 1, only where Learn is on. A field an
+    // app from before it never reads, so its card is what it was. A read that fails leaves the figure out, never the card:
+    // buildHome drops a card whose builder throws, and this one holds Add a card and Arrange.
+    try {
+        const pages = learnPagesFor(c);
+        if (pages && pages.length > 0) card.knowledge = pages.length;
+    } catch (e) {
+        console.warn('[Home] the community card\'s Learn figure could not be read:', (e as Error)?.message || e);
+    }
     // A figure that is zero is not written (DESIGN-home-default-fable.md §2.7): "0 joined this week", "Commons pot 0 Beans"
     // and "0 trades this month" go. `members` and `listings` stay: every app reads them, and a community of one has its
     // own words. Trades and communities of 0 are left out, as on a node that has no such figure at all. A member's three
@@ -1588,7 +1642,7 @@ function memberFigures(c: Ctx, commonsBalance: number): Pick<NonNullable<HomeCar
 
 /** Which cards each part of a reader may have (the module's header). */
 const OWN_CARDS: ReadonlySet<string> = new Set(['needs', 'safety', 'steps', 'deals', 'enterprise', 'shop', 'groups', 'chat', 'beans', 'notices']);
-const COMMUNITY_CARDS: ReadonlySet<string> = new Set(['find', 'events', 'market', 'asked', 'search', 'decide', 'joined', 'pulse']);
+const COMMUNITY_CARDS: ReadonlySet<string> = new Set(['find', 'events', 'market', 'asked', 'learn', 'search', 'decide', 'joined', 'pulse']);
 
 /** A card type's builder: the reader, and the instance's settings through its type's reader (absent for a type with none). */
 type Builder = (c: Ctx, settings?: Record<string, unknown>) => unknown;
@@ -1596,7 +1650,7 @@ type Builder = (c: Ctx, settings?: Record<string, unknown>) => unknown;
 const BUILDERS: Partial<Record<string, Builder>> = {
     search: searchCard, chat: chatCard,
     needs: needsCard, safety: safetyCard, find: findCard, steps: stepsCard, deals: dealsCard, enterprise: enterpriseCard, shop: shopCard,
-    events: eventsCard, market: marketCard, asked: askedCard, decide: decideCard, groups: groupsCard, joined: joinedCard, pulse: pulseCard,
+    events: eventsCard, market: marketCard, asked: askedCard, learn: learnCard, decide: decideCard, groups: groupsCard, joined: joinedCard, pulse: pulseCard,
     beans: beansCard, notices: noticesCard, community: communityCard,
 };
 

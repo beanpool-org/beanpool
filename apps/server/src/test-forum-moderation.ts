@@ -308,6 +308,16 @@ async function main(): Promise<void> {
     const beaReportsDot = await report(bea, 'fp-dot-earlier');
     assert(beaReportsDot.status === 200 && beaReportsDot.body?.report?.targetPubkey === dot.pk, `and may report it (${show(beaReportsDot)})`);
     assert((await report(vic, 'fp-dot-earlier')).status === 404, 'another member, who reads nothing in the hidden topic, can\'t report a reply in it (404)');
+    // Editing that reply (F2's follow-up, fixed in F5): Dot reads nothing of the hidden topic, so the edit is refused before
+    // anything is saved. It used to save, then answer 404 from the topic's own read, so each retry spent an edit for nothing.
+    const dotEdits = () => db.prepare('SELECT COUNT(*) FROM forum_post_edits WHERE post_id = ?').pluck().get('fp-dot-earlier') as number;
+    const dotEdit = await call(dot, 'POST', '/api/forum/posts/fp-dot-earlier/edit', { words: 'Dot changed it' });
+    assert(dotEdit.status === 404 && dotEdit.body?.code === 'not_found', `a reply's writer who can't read the hidden topic can't edit in it: 404 (${show(dotEdit)})`);
+    assert(db.prepare('SELECT words FROM forum_posts WHERE id = ?').pluck().get('fp-dot-earlier') === 'Dot replied before' && dotEdits() === 0,
+        'and nothing was saved: the words stand, no earlier wording was kept, no edit was spent');
+    const beaEdit = await call(bea, 'POST', `/api/forum/posts/${beaOpening}/edit`, { words: 'Spam, edited' });
+    assert(beaEdit.status === 200 && beaEdit.body?.post?.words === 'Spam, edited' && beaEdit.body?.topic?.hidden === true,
+        `the topic's own writer still edits their hidden opening post, and reads the topic back (${show(beaEdit)})`);
 
     // ── 6. Settings: the list, restore, dismiss ────────────────────────────────────────────────
     console.log('── 6. Settings ──');

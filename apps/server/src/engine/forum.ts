@@ -514,7 +514,11 @@ function ownPost(member: string, postId: string): { post: PostRow; topic: TopicR
  */
 export function editForumPost(member: string, postId: string, raw: { words?: unknown; title?: unknown }, now = Date.now()): { topic: ForumTopic; post: ForumPost } {
     writable(member, now);
-    const { post, topic } = ownPost(member, postId);
+    const { post } = ownPost(member, postId);
+    // Editing is writing in the topic, so it takes a topic the writer may read: a reply's writer in a topic whose opening post
+    // is hidden reads nothing of it, and is refused here, before anything is saved or an edit spent (F2's follow-up: the
+    // answer's own read used to 404 after the save). Removing their reply (removeForumPost) is still theirs.
+    const topic = visibleTopic(member, post.topic_id);
     if (topic.closed_at) throw new ForumRefusal(409, 'closed', FORUM_WORDS.closed);
     // While an account is new, only in the hour after writing it, so an approved first topic can't be swapped (design §3).
     // By the new-account days, not by "known": OK makes its writer known, and the rule is there for exactly that topic.

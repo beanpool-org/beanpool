@@ -8,10 +8,10 @@
  *
  * The web app reads all three as "not a member" and shows a sentence (for private_preview, the 403 body's `error` text;
  * for account_closed, "Your account in this community was closed." through t(); for account_retired, core's
- * ACCOUNT_RETIRED_LINE through t(), the phone's words too), NEVER "Offline" or "Having trouble connecting".
+ * ACCOUNT_RETIRED_WORDS.line through t(), the phone's words too), NEVER "Offline" or "Having trouble connecting".
  * "Offline" is kept strictly for when there was no answer from the node at all.
  */
-import { ACCOUNT_RETIRED_CODE, ACCOUNT_RETIRED_LINE, isBusyStatus, t } from '@beanpool/core';
+import { ACCOUNT_RETIRED_CODE, ACCOUNT_RETIRED_WORDS, isBusyStatus, t } from '@beanpool/core';
 import type { SyncMode } from '../components/SyncChip';
 
 export const PRIVATE_PREVIEW = 'private_preview';
@@ -73,7 +73,7 @@ export function standingFromRefusal(e: unknown): StandingRefusal | null {
     // ACCOUNT_RETIRED: an owner retired this account as an empty duplicate. Core's line through t(), the phone's words
     // too, never the node's own error text (that is the server's catalog; this is what the member's app says).
     if (code === ACCOUNT_RETIRED) {
-        const sentence = t(ACCOUNT_RETIRED_LINE);
+        const sentence = t(ACCOUNT_RETIRED_WORDS.line);
         return {
             code: ACCOUNT_RETIRED,
             standing: 'not_member',

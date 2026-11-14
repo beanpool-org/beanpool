@@ -8,7 +8,7 @@
  * - Both codes reach guest from an online state, never offline (before W2 the web app read them as a connection failure)
  */
 import { describe, expect, it } from 'vitest';
-import { t, ACCOUNT_RETIRED_LINE } from '@beanpool/core';
+import { t, ACCOUNT_RETIRED_WORDS } from '@beanpool/core';
 import {
     standingFromRefusal,
     statusReducer,
@@ -92,7 +92,7 @@ describe('standingFromRefusal', () => {
     // returned null for it, so the web app said "Offline" or "couldn't reach". Core's line, the phone's words too.
     it("reads 403 account_retired as not a member, with core's one line through t() (never the node's own text)", () => {
         const line = "An owner retired this account as an empty duplicate. Sign in with your other account. If that's wrong, ask an owner to bring it back.";
-        expect(t(ACCOUNT_RETIRED_LINE)).toBe(line);
+        expect(t(ACCOUNT_RETIRED_WORDS.line)).toBe(line);
         for (const refusal of [
             Object.assign(new Error('This account was retired as an empty duplicate, so the community no longer accepts it.'), { status: 403, code: 'account_retired' }),
             { status: 403, body: { code: 'account_retired', error: 'node words' } },
@@ -164,7 +164,7 @@ describe('statusReducer', () => {
     it("each code → its state: account_retired probe error → guest standing with core's line, even from online", () => {
         const online: SyncStatusState = { isHttpOnline: true, isMember: true, mode: 'online', sentence: null };
         const next = statusReducer(online, { type: 'probe_error', error: { status: 403, code: 'account_retired' } });
-        expect(next).toEqual({ isHttpOnline: true, isMember: false, mode: 'guest', sentence: t(ACCOUNT_RETIRED_LINE) });
+        expect(next).toEqual({ isHttpOnline: true, isMember: false, mode: 'guest', sentence: t(ACCOUNT_RETIRED_WORDS.line) });
     });
 
     it('network error → offline', () => {

@@ -5,11 +5,13 @@
  *
  * One line, the same on the phone (the not-recognised screen's closed page: apps/native utils/membership-answer.ts reads
  * the code) and on the web (in place of "Offline" or "couldn't reach": apps/pwa lib/standing-refusal.ts), saying who did
- * it and what to do. Shown through t() where it is drawn.
+ * it and what to do. Shown through t() where it is drawn: `t(ACCOUNT_RETIRED_WORDS.line)`.
  */
 import { word } from './words.js';
 
 /** The node's refusal code for a retired empty duplicate's key (https-server.ts signature gate). */
 export const ACCOUNT_RETIRED_CODE = 'account_retired';
 
-export const ACCOUNT_RETIRED_LINE = word("An owner retired this account as an empty duplicate. Sign in with your other account. If that's wrong, ask an owner to bring it back.");
+export const ACCOUNT_RETIRED_WORDS = {
+    line: word("An owner retired this account as an empty duplicate. Sign in with your other account. If that's wrong, ask an owner to bring it back."),
+} as const;

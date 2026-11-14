@@ -18,7 +18,7 @@ import { membershipAnswerOf } from '../utils/membership-answer';
  *                 not-recognised screen's closed page (DESIGN-global-entry-fable.md §C.3),
  *                 never read as a connection problem. An owner's retiring of an empty duplicate
  *                 (403 `account_retired`) is 'closed' too, with `retired` set: the same page and
- *                 guards, its own words (core ACCOUNT_RETIRED_LINE).
+ *                 guards, its own words (core ACCOUNT_RETIRED_WORDS).
  * 'stranger' and 'closed' drive the not-recognised screen. The probe's answer is read by
  * utils/membership-answer.ts, the one reader every place that asks shares.
  */

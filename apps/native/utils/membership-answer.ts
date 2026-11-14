@@ -11,7 +11,7 @@
  * - 403 `account_retired` (the same gate's answer for a key an owner retired as an empty duplicate: server
  *   engine/retire-duplicate.ts) is closed too, marked `retired`: every place that acts on a closed account acts the same
  *   (the not-recognised screen, Settings kept for Delete account, the global door not offered), and only the words differ
- *   (core ACCOUNT_RETIRED_LINE: an owner did it, and Bring back undoes it). Before, it was no answer, and the phone sat on
+ *   (core ACCOUNT_RETIRED_WORDS: an owner did it, and Bring back undoes it). Before, it was no answer, and the phone sat on
  *   tabs that read every refusal as "trouble connecting".
  * - 403 `members_only` or `private_preview`: the node keeps its reads for members, and this key isn't one. A stranger.
  * - Anything else (401 unsigned, 403 `not_your_key`, a 5xx, a body that isn't the probe's) is no answer: null, and each

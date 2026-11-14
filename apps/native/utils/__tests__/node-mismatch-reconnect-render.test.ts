@@ -133,7 +133,7 @@ vi.mock('../../components/NoWordsNotice', () => ({ NoWordsNotice: () => null }))
 vi.mock('../../components/WordsOnScreen', () => ({ NoScreenCapture: ({ children }: { children?: unknown }) => children, NoScreenLockNote: () => null }));
 
 import NodeMismatchScreen from '../../app/node-mismatch';
-import { t, ACCOUNT_RETIRED_LINE } from '@beanpool/core';
+import { t, ACCOUNT_RETIRED_WORDS } from '@beanpool/core';
 import { getSavedNodes } from '../nodes';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
 import { takeDoorTap } from '../open-door';
@@ -411,7 +411,7 @@ describe("the closed page for an account an owner retired as an empty duplicate 
         await render();
         expect(text()).toContain('Your account in Riverside was retired');
         expect(text()).toContain(RETIRED_LINE);
-        expect(t(ACCOUNT_RETIRED_LINE)).toBe(RETIRED_LINE);
+        expect(t(ACCOUNT_RETIRED_WORDS.line)).toBe(RETIRED_LINE);
         expect(text()).not.toContain('was closed');
         expect(text()).not.toContain('You deleted it, or the community removed it.');
         // A removed account's hint (a vote could bring you back) is not this account's: an owner's Bring back is.

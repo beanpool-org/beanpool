@@ -5,7 +5,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, ErrorBoundary } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import { t, tn, ACCOUNT_RETIRED_LINE } from '@beanpool/core';
+import { t, tn, ACCOUNT_RETIRED_WORDS } from '@beanpool/core';
 
 export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
@@ -315,7 +315,7 @@ export default function NodeMismatchScreen() {
     }
 
     // The closed page is about an account an owner retired as an empty duplicate (403 `account_retired`), not one the
-    // community removed or its owner deleted: its own title and one line saying what to do (core ACCOUNT_RETIRED_LINE, the
+    // community removed or its owner deleted: its own title and one line saying what to do (core ACCOUNT_RETIRED_WORDS, the
     // web app's words too). Everything else on the page, Delete my account included, is the closed page's.
     const retiredPage = plan.page === 'closed' && (asked ? asked.retired === true : retiredHere === true);
     // The page's words (§E). A page about a community the phone isn't on says so: nothing was changed.
@@ -325,7 +325,7 @@ export default function NodeMismatchScreen() {
         : t("This community doesn't recognise you");
     const body = plan.page === 'open'
         ? t('{name} lets anyone join. Your account is fine: join with it, or go back to one of your communities.', { name: pageIsGlobal ? t('The global community') : nameOf(pageUrl) })
-        : retiredPage ? t(ACCOUNT_RETIRED_LINE)
+        : retiredPage ? t(ACCOUNT_RETIRED_WORDS.line)
         : plan.page === 'closed' ? t('You deleted it, or the community removed it. Your other communities are not affected.')
         : plan.page === 'preview' ? t('This community is in a private preview. Ask its owner for an invite.')
         : asked ? t("Your account is fine, but that community doesn't have you as a member. This usually means the address is wrong, or you haven't joined it yet.")

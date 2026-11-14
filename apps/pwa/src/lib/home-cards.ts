@@ -82,10 +82,12 @@ export type NeedsTarget =
     | { to: 'invite'; id: string }
     | { to: 'invites' }
     | { to: 'people' }
+    /** Learn's To check, for an owner or admin with members' suggestions waiting; sent only to an app that asks with `lands=learn`. */
+    | { to: 'learn-check' }
     | { to: 'shop'; id: string }
     | { to: 'shop-mine' };
 /** `knock`: requests to join (front doors S1), only to an app that asks with lands=people (lib/api.ts getHome); People → Invites lists them (S2). */
-export interface NeedsItem { kind: 'admin' | 'knock' | 'ask' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
+export interface NeedsItem { kind: 'admin' | 'knock' | 'ask' | 'learn' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
 export interface HomeProbation {
     onProbation: boolean;

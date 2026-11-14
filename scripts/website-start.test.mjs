@@ -85,6 +85,42 @@ test('the translations of /start are of today\'s English', () => {
     }
 });
 
+// The stamp above can say "current" while the words are not: #3147's review found all 24 copies stamped against the new
+// English but still giving the old route (de "Finde deine Community … Beanspruchen"), with no banner. So, besides the stamp:
+// every block of the page's text carries the same links and bold words, in the same order, as the English; the claim step
+// names the phone's labels as that language's catalog (apps/native/words/<lang>.json) says them, and Settings Home's
+// Action Required as the Settings app says it (English: it has no other language yet); and the description, which link
+// previews also show, is the English description's translation, not a copy of the lede.
+test('each translation of /start says what the English says: the same links and bold words, block by block; the phone\'s own labels for the claim; its own description', () => {
+    const blocks = (html) => {
+        const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
+        return [...main.matchAll(/<(h1|h2|h3|p|li)\b[^>]*>([\s\S]*?)<\/\1>/g)].map((m) => `<${m[1]}>${(m[2].match(/<[^>]+>/g) || []).join('')}`);
+    };
+    const between = (html, from, to) => html.slice(html.indexOf(from), html.indexOf(to, html.indexOf(from)));
+    const english = read('en', 'start.html');
+    const enBlocks = blocks(english);
+    assert.ok(enBlocks.length > 20, 'the English page has its blocks');
+    for (const lang of GUIDE_LANGS) {
+        const src = fs.readFileSync(path.join(CONTENT, lang, 'start.html'), 'utf8');
+        const trBlocks = blocks(src);
+        assert.equal(trBlocks.length, enBlocks.length, `${lang}: as many headings, paragraphs and list items as the English`);
+        enBlocks.forEach((b, i) => assert.equal(trBlocks[i], b, `${lang}: block ${i} has the English block's links and bold words, in order`));
+        const steps = between(src, '<ol class="run-node-steps">', '</ol>');
+        const words = JSON.parse(fs.readFileSync(path.join(ROOT, 'apps/native/words', `${lang}.json`), 'utf8'));
+        for (const label of ['Installed BeanPool on a server? Claim it', 'Set up a new community server', 'Claim and become owner']) {
+            assert.ok(steps.includes(`<strong>${words[label]}</strong>`), `${lang}: the claim step names "${words[label]}", the phone's "${label}"`);
+        }
+        assert.ok(steps.includes('<strong>Action Required</strong>'), `${lang}: Settings Home's list, as the Settings app names it`);
+        // In a right-to-left paragraph the slash takes the paragraph's direction and shows as "settings/" (measured in Chromium
+        // on ar, fa and ur, 15 Nov 2026); a left-to-right mark keeps it "/settings".
+        const settings = RTL_LANGS.includes(lang) ? '<strong>&lrm;/settings</strong>' : '<strong>/settings</strong>';
+        assert.ok(steps.includes(settings), `${lang}: the address to open reads ${settings}`);
+        const description = src.match(/<meta name="description" content="([^"]*)"/)?.[1] ?? '';
+        const lede = (src.match(/<p class="lede">([\s\S]*?)<\/p>/)?.[1] ?? '').trim();
+        assert.ok(description && lede && description !== lede, `${lang}: the description is the page's own, not a copy of the lede`);
+    }
+});
+
 test('the home page keeps id="run-a-node" as a teaser with a button to /start, and no install code, in every language', () => {
     for (const lang of LANGS) {
         const html = markup(lang, 'index.html');

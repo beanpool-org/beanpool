@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Khởi tạo một cộng đồng — BeanPool</title>
-    <meta name="description" content="Mỗi cộng đồng hoạt động trên một máy chủ riêng: một máy chủ nhỏ lưu trữ thành viên, bài đăng và sổ cái của cộng đồng đó. Một người dân địa phương sẽ vận hành máy chủ này. Nếu thị trấn hoặc thung lũng của bạn chưa có, người đó có thể chính là bạn.">
+    <meta name="description" content="Khởi tạo một cộng đồng BeanPool trên một máy tính dư ở nhà hoặc một máy chủ thuê nhỏ: cần những gì, cách chọn địa chỉ của bạn, và khối lệnh duy nhất cần dán để cài đặt.">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="../style.css?v=2.9">
@@ -49,7 +49,7 @@
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="BeanPool">
     <meta property="og:title" content="Khởi tạo một cộng đồng — BeanPool">
-    <meta property="og:description" content="Mỗi cộng đồng hoạt động trên một máy chủ riêng: một máy chủ nhỏ lưu trữ thành viên, bài đăng và sổ cái của cộng đồng đó. Một người dân địa phương sẽ vận hành máy chủ này. Nếu thị trấn hoặc thung lũng của bạn chưa có, người đó có thể chính là bạn.">
+    <meta property="og:description" content="Khởi tạo một cộng đồng BeanPool trên một máy tính dư ở nhà hoặc một máy chủ thuê nhỏ: cần những gì, cách chọn địa chỉ của bạn, và khối lệnh duy nhất cần dán để cài đặt.">
     <meta property="og:url" content="https://beanpool.org/vi/start">
     <meta property="og:image" content="https://beanpool.org/og-image.jpg">
     <meta property="og:image:width" content="1200">
@@ -234,8 +234,8 @@ docker compose exec beanpool-node beanpool claim</code>
 
         <h3 class="run-node-sub">Dòng lệnh cuối cùng: beanpool claim</h3>
         <ol class="run-node-steps">
-            <li><strong>Mã và mã QR.</strong> Lệnh sẽ hiển thị một mã nhận quyền dùng một lần và một mã QR. Quét mã QR bằng máy ảnh điện thoại, hoặc mở BeanPool, nhập địa chỉ máy chủ trong mục <strong>Tìm cộng đồng của bạn</strong> và nhấn <strong>Nhận quyền sở hữu</strong>. Điện thoại đó sẽ trở thành chủ sở hữu.</li>
-            <li><strong>Cài đặt.</strong> Mở địa chỉ của bạn (hoặc địa chỉ riêng của máy chủ) kèm theo <strong>/settings</strong>. Trình hướng dẫn thiết lập sẽ đặt tên cho cộng đồng của bạn, yêu cầu bạn thêm chủ sở hữu thứ hai và tạo ba lời mời sáng lập. Thiết lập vị trí của bạn trên bản đồ trong mục Nhận diện máy chủ (Node Identity) để mọi người ở gần có thể tìm thấy bạn.</li>
+            <li><strong>Mã và mã QR.</strong> Lệnh sẽ hiển thị một mã nhận quyền dùng một lần, một mã QR và các bước tiếp theo được đánh số. Trước tiên, trên điện thoại sẽ sở hữu cộng đồng, hãy cài BeanPool từ <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=vi" target="_blank" rel="noopener">Google Play</a> hoặc <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a>. Sau đó quét mã QR bằng máy ảnh điện thoại, hoặc mở BeanPool và nhấn <strong>Đã cài BeanPool trên một máy chủ? Nhận quyền sở hữu</strong> (nếu điện thoại đã có tài khoản: nhấn vào hạt đậu ở trên cùng, rồi nhấn <strong>Thiết lập máy chủ cộng đồng mới</strong>). Việc nhận quyền chỉ thực hiện được từ ứng dụng trên điện thoại. Việc này tạo tài khoản BeanPool của bạn trên điện thoại đó, không cần lời mời và không cần gì từ dự án BeanPool: nhập tên của bạn, nhấn <strong>Nhận quyền và trở thành chủ sở hữu</strong>, rồi ghi lại 12 từ hiện ra. Điện thoại đã có tài khoản sẽ nhận quyền bằng tài khoản đó. Điện thoại đó sẽ trở thành chủ sở hữu.</li>
+            <li><strong>Cài đặt.</strong> Mở địa chỉ của bạn (hoặc địa chỉ riêng của máy chủ) kèm theo <strong>/settings</strong>: xác nhận cài đặt cốt lõi (Core settings), tạo mã khôi phục, thêm chủ sở hữu thứ hai và mời những thành viên đầu tiên. Cho đến khi từng việc trong ba việc đầu hoàn tất, trang chủ của Cài đặt (Home) sẽ liệt kê việc đó dưới <strong>Action Required</strong> (Cần hành động). Trình hướng dẫn Cold-Start trên Home là tùy chọn: bước cuối của nó tạo ba lời mời sáng lập mà bạn có thể in. Thiết lập vị trí của bạn trên bản đồ trong mục Node Identity để mọi người ở gần có thể tìm thấy bạn.</li>
         </ol>
         <p class="run-node-note">Nếu khối lệnh thông báo <strong>No claim code after 5 minutes</strong>, hoặc <code>beanpool claim</code> thông báo <strong>This community has no claim code waiting</strong>, nghĩa là máy chủ chưa khởi động xong: lệnh <code>docker compose logs beanpool-node</code> sẽ hiển thị tiến trình. Khi nhật ký ghi nhận cộng đồng chưa có chủ sở hữu và đã có mã nhận quyền, hãy chạy lại dòng lệnh cuối cùng. Các bước đầy đủ được hướng dẫn trong phần <a href="../guide/operators/first-time-setup.html">thiết lập lần đầu</a> của cẩm nang người vận hành.</p>
 

@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>建立一个社区 — BeanPool</title>
-    <meta name="description" content="每个社区都运行在自己的节点上：一台保存该社区成员、帖子与账本的小型服务器。由本地居民负责运行。如果你的城镇或山谷还没有节点，那个人可以是你。">
+    <meta name="description" content="在家中闲置的电脑或租用的小型服务器上建立一个 BeanPool 社区：需要什么、如何选择你的地址，以及安装时只需粘贴的那一段命令。">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="style.css?v=2.9">
@@ -136,8 +136,8 @@ docker compose exec beanpool-node beanpool claim</code>
 
         <h3 class="run-node-sub">最后一行命令：beanpool claim</h3>
         <ol class="run-node-steps">
-            <li><strong>认领码与二维码。</strong>它会显示一个一次性认领码和一个二维码。使用手机相机扫描二维码，或者打开 BeanPool，在<strong>寻找你的社区</strong>下输入服务器地址并点击<strong>认领</strong>。该手机即成为所有者。</li>
-            <li><strong>设置。</strong>在浏览器中打开你的地址（或服务器自身地址）加上 <strong>/settings</strong>。设置向导会引导你为社区命名、添加第二位所有者，并生成三个创办邀请。在“节点身份”下设置你在地图上的位置，以便附近的人能找到你。</li>
+            <li><strong>认领码与二维码。</strong>它会显示一个一次性认领码、一个二维码，以及按编号列出的后续步骤。首先，在将要拥有该社区的手机上，从 <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a> 或 <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a> 安装 BeanPool。然后用手机相机扫描二维码，或者打开 BeanPool 并点按<strong>在服务器上安装了 BeanPool？认领它</strong>（如果手机上已有账户：点按顶部的豆子图标，然后点按<strong>配置新社区服务器</strong>）。认领只能在手机应用中完成。认领会在这部手机上创建你的 BeanPool 账户，无需邀请，也无需 BeanPool 项目提供任何东西：输入你的名字，点按<strong>认领并成为所有者</strong>，并抄写下显示的 12 个助记词。已有账户的手机会用该账户认领。该手机即成为所有者。</li>
+            <li><strong>设置。</strong>在浏览器中打开你的地址（或服务器自身地址）加上 <strong>/settings</strong>：确认你的核心设置（Core settings），创建恢复代码，添加第二位所有者，并邀请你的首批成员。前三项中的任何一项完成之前，设置首页（Home）会在<strong>Action Required</strong>（需要处理）下列出它。Home 上的 Cold-Start 向导是可选的：它的最后一步会生成三个可打印的创办邀请。在 Node Identity 下设置你在地图上的位置，以便附近的人能找到你。</li>
         </ol>
         <p class="run-node-note">如果命令块提示 <strong>No claim code after 5 minutes</strong>，或者 <code>beanpool claim</code> 提示 <strong>This community has no claim code waiting</strong>，说明服务器尚未完成启动：<code>docker compose logs beanpool-node</code> 会显示当前进度。一旦日志显示该社区尚无所有者并已生成认领码，请重新运行最后一行命令。完整步骤可参见运维手册中的<a href="guide/operators/first-time-setup.html">首次设置</a>。</p>
 

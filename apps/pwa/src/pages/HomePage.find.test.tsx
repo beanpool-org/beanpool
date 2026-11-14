@@ -1280,46 +1280,46 @@ describe('a yes shows itself on the Find card (Damo, 9 Nov 2026: it only showed 
 });
 
 describe('told from another origin on the waiting row (global yes Y2)', () => {
-    const BYRON = { key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12 };
-    const LISMORE = { key: 'lismore', name: 'Lismore BeanPool', url: 'https://lismore.example.org', memberCount: 30, distanceKm: 40 };
-    async function askedOf(...comms: Array<typeof BYRON>) {
+    const RIVERSIDE = { key: 'riverside', name: 'Riverside Exchange', url: 'https://riverside.example.org', memberCount: 40, distanceKm: 12 };
+    const HILLSIDE = { key: 'hillside', name: 'Hillside Commons', url: 'https://hillside.example.org', memberCount: 30, distanceKm: 40 };
+    async function askedOf(...comms: Array<typeof RIVERSIDE>) {
         for (const [i, c] of comms.entries()) await rememberKnock(ME.publicKey, c, new Date(Date.now() - (5 - i) * 3_600_000));
         vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: comms }, true)));
     }
     afterEach(() => { vi.restoreAllMocks(); });
 
     it('a waiting row has "Tell me when they answer", and its tap asks to be told by that community, with the key that asked (fails before: no card)', async () => {
-        await askedOf(BYRON);
+        await askedOf(RIVERSIDE);
         vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
         const tap = vi.spyOn(webPushModule, 'tellMeAtHome').mockResolvedValue({ ok: true, place: { kind: 'ok', device: 'computer', browser: 'Firefox' } });
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        const card = await screen.findByTestId(`home-tell-me-${BYRON.url}-card`);
-        expect(within(screen.getByTestId(`home-waiting-card-${BYRON.url}`)).getByTestId(`home-tell-me-${BYRON.url}-card`)).toBe(card);
+        const card = await screen.findByTestId(`home-tell-me-${RIVERSIDE.url}-card`);
+        expect(within(screen.getByTestId(`home-waiting-card-${RIVERSIDE.url}`)).getByTestId(`home-tell-me-${RIVERSIDE.url}-card`)).toBe(card);
         expect(card).toHaveTextContent('Tell me when they answer');
-        expect(card).toHaveTextContent("We'll tell you on this device when Byron Shire BeanPool answers, even with this page closed. Nothing else.");
-        fireEvent.click(within(card).getByTestId(`home-tell-me-${BYRON.url}`));
+        expect(card).toHaveTextContent("We'll tell you on this device when Riverside Exchange answers, even with this page closed. Nothing else.");
+        fireEvent.click(within(card).getByTestId(`home-tell-me-${RIVERSIDE.url}`));
         expect(tap).toHaveBeenCalledTimes(1);
-        expect(tap.mock.calls[0][0]).toBe(BYRON.url);
+        expect(tap.mock.calls[0][0]).toBe(RIVERSIDE.url);
         expect(tap.mock.calls[0][1]).toBe(ME);
-        expect(await within(card).findByTestId(`home-tell-me-${BYRON.url}-on`)).toHaveTextContent("✓ We'll tell you here when Byron Shire BeanPool answers.");
+        expect(await within(card).findByTestId(`home-tell-me-${RIVERSIDE.url}-on`)).toHaveTextContent("✓ We'll tell you here when Riverside Exchange answers.");
         expect(card).toHaveTextContent("We'll tell you here while Firefox is running.");
     });
 
     it('a yes, a cancelled request or one that is closed has no Tell me', async () => {
-        await askedOf(BYRON, LISMORE);
-        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === BYRON.url
+        await askedOf(RIVERSIDE, HILLSIDE);
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === RIVERSIDE.url
             ? { ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } }
             : { ok: true, value: { status: 'none' } }));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId(`home-find-invited-${BYRON.url}`);
-        await waitFor(() => expect(screen.getByTestId(`home-waiting-arrived-${LISMORE.url}`)).not.toHaveTextContent('Checking…'));
-        expect(screen.queryByTestId(`home-tell-me-${BYRON.url}-card`)).toBeNull();
-        expect(screen.queryByTestId(`home-tell-me-${LISMORE.url}-card`)).toBeNull();
+        await screen.findByTestId(`home-find-invited-${RIVERSIDE.url}`);
+        await waitFor(() => expect(screen.getByTestId(`home-waiting-arrived-${HILLSIDE.url}`)).not.toHaveTextContent('Checking…'));
+        expect(screen.queryByTestId(`home-tell-me-${RIVERSIDE.url}-card`)).toBeNull();
+        expect(screen.queryByTestId(`home-tell-me-${HILLSIDE.url}-card`)).toBeNull();
     });
 
     it('a click on its notice lands on that row: into view, its Join in focus, then the landing is done (fails before: nothing)', async () => {
-        await askedOf(LISMORE, BYRON);
-        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === BYRON.url
+        await askedOf(HILLSIDE, RIVERSIDE);
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === RIVERSIDE.url
             ? { ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } }
             : { ok: true, value: { status: 'pending' } }));
         const scrolled: string[] = [];
@@ -1327,46 +1327,46 @@ describe('told from another origin on the waiting row (global yes Y2)', () => {
         Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this.getAttribute('data-testid') ?? ''); };
         const seen = vi.fn();
         try {
-            render(<HomePage identity={ME} onNavigate={vi.fn()} knockRow={BYRON.url} onKnockRowSeen={seen} />);
+            render(<HomePage identity={ME} onNavigate={vi.fn()} knockRow={RIVERSIDE.url} onKnockRowSeen={seen} />);
             await waitFor(() => expect(seen).toHaveBeenCalledTimes(1));
-            expect(scrolled).toEqual([`home-find-invited-${BYRON.url}`]);
-            expect(document.activeElement).toBe(screen.getByTestId(`home-find-invited-join-${BYRON.url}`));
+            expect(scrolled).toEqual([`home-find-invited-${RIVERSIDE.url}`]);
+            expect(document.activeElement).toBe(screen.getByTestId(`home-find-invited-join-${RIVERSIDE.url}`));
         } finally {
             Element.prototype.scrollIntoView = was;
         }
     });
 
     it('a landing for a community this browser never asked brings nothing into view and focuses nothing', async () => {
-        await askedOf(BYRON);
+        await askedOf(RIVERSIDE);
         vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } });
         const seen = vi.fn();
         render(<HomePage identity={ME} onNavigate={vi.fn()} knockRow="https://elsewhere.example" onKnockRowSeen={seen} />);
-        await screen.findByTestId(`home-find-invited-${BYRON.url}`);
+        await screen.findByTestId(`home-find-invited-${RIVERSIDE.url}`);
         await act(async () => { await new Promise(r => setTimeout(r, 30)); });
         expect(seen).not.toHaveBeenCalled();
         expect(document.activeElement).toBe(document.body);
     });
 
     it("a yes Home reads is the bell's row (global yes Y3); a yes used there, or nothing open, is none", async () => {
-        await askedOf(BYRON, LISMORE);
-        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === BYRON.url
+        await askedOf(RIVERSIDE, HILLSIDE);
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === RIVERSIDE.url
             ? { ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } }
             : { ok: true, value: { status: 'approved', invite: 'USED-1234', expiresAt: null, member: true } }));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId(`home-find-invited-${BYRON.url}`);
-        await waitFor(() => expect(unseenYeses(ME.publicKey).map(r => [r.url, r.name, r.invite])).toEqual([[BYRON.url, BYRON.name, 'ABCD-EFGH']]));
+        await screen.findByTestId(`home-find-invited-${RIVERSIDE.url}`);
+        await waitFor(() => expect(unseenYeses(ME.publicKey).map(r => [r.url, r.name, r.invite])).toEqual([[RIVERSIDE.url, RIVERSIDE.name, 'ABCD-EFGH']]));
     });
 
     it('a request that is done lets go of the browser it asked to be told on: its yes used, or nothing open there any more; a waiting one does not', async () => {
-        const CASTLE = { key: 'castle', name: 'Castle BeanPool', url: 'https://castle.example.org', memberCount: 9, distanceKm: 70 };
-        await askedOf(BYRON, LISMORE, CASTLE);
-        localStorage.setItem('beanpool_web_push', JSON.stringify([BYRON.url, LISMORE.url, CASTLE.url].map(origin => ({ origin, publicKey: ME.publicKey, subId: 'e'.repeat(64), pushKey: 'd'.repeat(64), vapidKey: 'v', for: 'asker' }))));
-        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === BYRON.url
+        const LAKESIDE = { key: 'lakeside', name: 'Lakeside Commons', url: 'https://lakeside.example.org', memberCount: 9, distanceKm: 70 };
+        await askedOf(RIVERSIDE, HILLSIDE, LAKESIDE);
+        localStorage.setItem('beanpool_web_push', JSON.stringify([RIVERSIDE.url, HILLSIDE.url, LAKESIDE.url].map(origin => ({ origin, publicKey: ME.publicKey, subId: 'e'.repeat(64), pushKey: 'd'.repeat(64), vapidKey: 'v', for: 'asker' }))));
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === RIVERSIDE.url
             ? { ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null, member: true } }
-            : url === LISMORE.url ? { ok: true, value: { status: 'none' } } : { ok: true, value: { status: 'pending' } }));
+            : url === HILLSIDE.url ? { ok: true, value: { status: 'none' } } : { ok: true, value: { status: 'pending' } }));
         const letGo = vi.spyOn(webPushModule, 'stopTellingMeAtHome').mockResolvedValue(undefined);
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await waitFor(() => expect(new Set(letGo.mock.calls.map(c => c[0]))).toEqual(new Set([BYRON.url, LISMORE.url])));
+        await waitFor(() => expect(new Set(letGo.mock.calls.map(c => c[0]))).toEqual(new Set([RIVERSIDE.url, HILLSIDE.url])));
         expect(letGo.mock.calls.every(c => c[1] === ME)).toBe(true);
     });
 });

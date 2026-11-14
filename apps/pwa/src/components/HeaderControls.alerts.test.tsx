@@ -734,7 +734,7 @@ describe('goToNoticeTarget: where a row lands, as the phone\'s push tap', () => 
 });
 
 describe('The bell: a yes from a community asked from here, made by the app (global yes Y3)', () => {
-    const BYRON = 'https://byron.example.org';
+    const RIVERSIDE = 'https://riverside.example.org';
     beforeEach(() => {
         localStorage.clear();
         vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-0"', answer: makeHomeAnswer([]) as any });
@@ -742,18 +742,18 @@ describe('The bell: a yes from a community asked from here, made by the app (glo
     });
 
     it('is a row, counted with the notices, "🎉 {name} said yes." (fails before: the bell knew nothing of it)', async () => {
-        noteYesAnswers(ME.publicKey, [{ url: BYRON, name: 'Byron Shire BeanPool', invite: 'ABCD-EFGH' }], Date.now() - 120_000);
+        noteYesAnswers(ME.publicKey, [{ url: RIVERSIDE, name: 'Riverside Exchange', invite: 'ABCD-EFGH' }], Date.now() - 120_000);
         render(<HeaderRow />);
         await settle();
         expect(screen.getByTestId('bell-count')).toHaveTextContent('2');
         const sheet = openSheet();
         const row = within(sheet).getByTestId('bell-yes');
-        expect(row).toHaveTextContent('🎉 Byron Shire BeanPool said yes.');
+        expect(row).toHaveTextContent('🎉 Riverside Exchange said yes.');
         expect(row).toHaveTextContent('2 minutes ago');
     });
 
     it("a tap closes the sheet, lands on Home's row for that community and marks the yes seen: off the bell", async () => {
-        noteYesAnswers(ME.publicKey, [{ url: BYRON, name: 'Byron Shire BeanPool', invite: 'ABCD-EFGH' }]);
+        noteYesAnswers(ME.publicKey, [{ url: RIVERSIDE, name: 'Riverside Exchange', invite: 'ABCD-EFGH' }]);
         const landed: unknown[] = [];
         const listen = (e: Event) => landed.push((e as CustomEvent).detail);
         window.addEventListener(KNOCK_ROW_EVENT, listen);
@@ -762,7 +762,7 @@ describe('The bell: a yes from a community asked from here, made by the app (glo
             await settle();
             fireEvent.click(within(openSheet()).getByTestId('bell-yes'));
             await settle();
-            expect(landed).toEqual([BYRON]);
+            expect(landed).toEqual([RIVERSIDE]);
             expect(screen.queryByTestId('needs-sheet')).toBeNull();
             expect(screen.getByTestId('bell-count')).toHaveTextContent('1');
             expect(unseenYeses(ME.publicKey)).toEqual([]);
@@ -772,7 +772,7 @@ describe('The bell: a yes from a community asked from here, made by the app (glo
     });
 
     it("its ✕ marks it seen and opens nothing; Join tapped elsewhere (the banner's mark) takes it off the bell too", async () => {
-        noteYesAnswers(ME.publicKey, [{ url: BYRON, name: 'Byron Shire BeanPool', invite: 'ABCD-EFGH' }, { url: 'https://lismore.example.org', name: 'Lismore BeanPool', invite: 'WXYZ-1234' }]);
+        noteYesAnswers(ME.publicKey, [{ url: RIVERSIDE, name: 'Riverside Exchange', invite: 'ABCD-EFGH' }, { url: 'https://hillside.example.org', name: 'Hillside Commons', invite: 'WXYZ-1234' }]);
         const landed: unknown[] = [];
         const listen = (e: Event) => landed.push((e as CustomEvent).detail);
         window.addEventListener(KNOCK_ROW_EVENT, listen);
@@ -783,9 +783,9 @@ describe('The bell: a yes from a community asked from here, made by the app (glo
             const sheet = openSheet();
             fireEvent.click(within(sheet).getAllByTestId('bell-yes-clear')[0]);
             await settle();
-            expect(within(sheet).getAllByTestId('bell-yes').map(r => r.dataset.url)).toEqual(['https://lismore.example.org']);
+            expect(within(sheet).getAllByTestId('bell-yes').map(r => r.dataset.url)).toEqual(['https://hillside.example.org']);
             expect(landed).toEqual([]);
-            act(() => markYesSeen(ME.publicKey, yesMark('https://lismore.example.org', 'WXYZ-1234')));
+            act(() => markYesSeen(ME.publicKey, yesMark('https://hillside.example.org', 'WXYZ-1234')));
             await settle();
             expect(within(sheet).queryByTestId('bell-yes')).toBeNull();
             expect(screen.getByTestId('bell-count')).toHaveTextContent('1');
@@ -795,22 +795,22 @@ describe('The bell: a yes from a community asked from here, made by the app (glo
     });
 
     it('a yes used (the key joined there), or nothing open there any more, takes its row away; another account in this browser sees none', async () => {
-        noteYesAnswers(ME.publicKey, [{ url: BYRON, name: 'Byron Shire BeanPool', invite: 'ABCD-EFGH' }]);
-        expect(unseenYeses(ME.publicKey).map(r => r.url)).toEqual([BYRON]);
+        noteYesAnswers(ME.publicKey, [{ url: RIVERSIDE, name: 'Riverside Exchange', invite: 'ABCD-EFGH' }]);
+        expect(unseenYeses(ME.publicKey).map(r => r.url)).toEqual([RIVERSIDE]);
         expect(unseenYeses('c'.repeat(64))).toEqual([]);
         // A request not read this time changes nothing; one read as used takes the row.
         noteYesAnswers(ME.publicKey, []);
-        expect(unseenYeses(ME.publicKey).map(r => r.url)).toEqual([BYRON]);
-        noteYesAnswers(ME.publicKey, [{ url: BYRON, name: 'Byron Shire BeanPool', invite: null }]);
+        expect(unseenYeses(ME.publicKey).map(r => r.url)).toEqual([RIVERSIDE]);
+        noteYesAnswers(ME.publicKey, [{ url: RIVERSIDE, name: 'Riverside Exchange', invite: null }]);
         expect(unseenYeses(ME.publicKey)).toEqual([]);
         // A new yes (another invite) from the same community is a row again, once.
-        noteYesAnswers(ME.publicKey, [{ url: BYRON, name: 'Byron Shire BeanPool', invite: 'NEW-INVITE' }]);
-        noteYesAnswers(ME.publicKey, [{ url: BYRON, name: 'Byron Shire BeanPool', invite: 'NEW-INVITE' }]);
+        noteYesAnswers(ME.publicKey, [{ url: RIVERSIDE, name: 'Riverside Exchange', invite: 'NEW-INVITE' }]);
+        noteYesAnswers(ME.publicKey, [{ url: RIVERSIDE, name: 'Riverside Exchange', invite: 'NEW-INVITE' }]);
         expect(unseenYeses(ME.publicKey).map(r => r.invite)).toEqual(['NEW-INVITE']);
     });
 
     it('"Clear all" marks the yeses seen with the notices', async () => {
-        noteYesAnswers(ME.publicKey, [{ url: BYRON, name: 'Byron Shire BeanPool', invite: 'ABCD-EFGH' }]);
+        noteYesAnswers(ME.publicKey, [{ url: RIVERSIDE, name: 'Riverside Exchange', invite: 'ABCD-EFGH' }]);
         vi.spyOn(api, 'clearAllBellNotices').mockResolvedValue(1);
         render(<HeaderRow />);
         await settle();
@@ -818,5 +818,17 @@ describe('The bell: a yes from a community asked from here, made by the app (glo
         await settle();
         expect(unseenYeses(ME.publicKey)).toEqual([]);
         expect(screen.queryByTestId('bell-count')).toBeNull();
+    });
+
+    it('"Clear all" with only yes rows marks them seen and asks the node nothing', async () => {
+        vi.mocked(api.getBellNotices).mockResolvedValue([]);
+        noteYesAnswers(ME.publicKey, [{ url: RIVERSIDE, name: 'Riverside Exchange', invite: 'ABCD-EFGH' }]);
+        const clearAll = vi.spyOn(api, 'clearAllBellNotices').mockResolvedValue(0);
+        render(<HeaderRow />);
+        await settle();
+        fireEvent.click(within(openSheet()).getByRole('button', { name: 'Clear all' }));
+        await settle();
+        expect(unseenYeses(ME.publicKey)).toEqual([]);
+        expect(clearAll).not.toHaveBeenCalled();
     });
 });

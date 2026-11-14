@@ -528,6 +528,8 @@ export function NeedsYouIcons({
     // "Clear all": every notice (never "Needs you": those are the `entries`, which leave when they are done), in one request.
     const clearAll = () => {
         yeses.forEach(seeYes);
+        // Only the app's own yes rows: nothing for the node to clear.
+        if (notices.length === 0) return;
         setNotices([]);
         api.clearAllBellNotices().catch(() => { refreshBell(); });
     };

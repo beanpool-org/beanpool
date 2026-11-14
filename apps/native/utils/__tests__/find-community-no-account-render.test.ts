@@ -114,6 +114,8 @@ vi.mock('../typed-place', () => ({
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: vi.fn(async () => 'bundled://fox') }));
 vi.mock('../node-claim', () => ({ readClaimStatus: vi.fn(async () => ({ kind: 'claimed' })) }));
 vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => 'unanswered') }));
+// The registrations a remembered knock runs (web push W4), never the phone's push service itself here.
+vi.mock('../../services/push-notifications', () => ({ retryPushRegistrations: vi.fn(async () => {}) }));
 vi.mock('../../components/AddressSearch', () => ({ AddressSearch: () => null }));
 
 import FindCommunityScreen from '../../app/find-community';

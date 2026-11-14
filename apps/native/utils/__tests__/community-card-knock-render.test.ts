@@ -131,6 +131,9 @@ vi.mock('../crypto', () => ({
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: async () => 'bundled://phone-wide' }));
 vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: async () => {} }));
+// The registrations a remembered knock runs (web push W4: a waiting phone's token goes to the community it asked).
+const pushRuns = vi.hoisted(() => ({ count: 0 }));
+vi.mock('../../services/push-notifications', () => ({ retryPushRegistrations: async () => { pushRuns.count++; } }));
 // The join itself (utils/join-another-community.ts) is Find a community's; here, only that the card hands it the invite.
 const joins = vi.hoisted(() => [] as Array<{ targetUrl: string; code: string; knownName?: string | null }>);
 vi.mock('../join-another-community', () => ({
@@ -170,6 +173,7 @@ function remember(knock: { sentAt?: string; cancelledAt?: string } = {}): void {
 let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
+    pushRuns.count = 0;
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -607,6 +611,8 @@ describe('the card with no account on the phone (shared-listing door A2)', () =>
         expect(JSON.parse(store.map.get(KNOCKS_STORE_KEY)!)).toEqual({ pubkey: DRAFT.publicKey, knocks: [expect.objectContaining({ url: ORIGIN, name: 'Riverside' })] });
         expect(nav.replaced).toEqual(['/welcome']);
         expect(alerts).toEqual([]);
+        // Once remembered, the push registrations run, so a phone that allows notifications is told the yes (web push W4).
+        await vi.waitFor(() => expect(pushRuns.count).toBe(1), { timeout: 2000, interval: 10 });
     });
 
     it('…and what welcome reads then is waiting mode, with this request, a key whose words are new, and nothing handed over to join', async () => {

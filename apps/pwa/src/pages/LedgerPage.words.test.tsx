@@ -296,3 +296,59 @@ describe('a switch to Russian redraws the Ledger', () => {
         expect(screen.getAllByText(SEND).length).toBeGreaterThan(0);
     });
 });
+
+describe('the credit card before the balance is in (round 2 of #3134): never a credit fact from an answer that isn\'t there', () => {
+    /** Words the card would say from an empty answer: the starter card's, untrue for a member with a line. */
+    const EMPTY_ANSWER_WORDS = /no credit line yet|nothing to spend|You are at zero|Your credit line opens with/i;
+
+    it('while the balance is being read: the card\'s shape and "Loading…", no figure, no sentence, no note', async () => {
+        vi.mocked(getBalance).mockReturnValue(new Promise(() => {}) as any);
+        render(<LedgerPage identity={identity} isMember={true} onNavigate={vi.fn()} />);
+        const reading = await screen.findByTestId('credit-card-reading');
+        expect(getBalance).toHaveBeenCalled();
+        expect(reading.getAttribute('aria-busy')).toBe('true');
+        expect(reading.textContent).toBe('Loading…');
+        expect(screen.queryByTestId('credit-card')).toBeNull();
+        expect(screen.queryByTestId('credit-card-unread')).toBeNull();
+        expect(document.body.textContent).not.toMatch(EMPTY_ANSWER_WORDS);
+    });
+
+    it('a balance that could not be read: the card says so, and Try again reads it again and draws the card', async () => {
+        vi.mocked(getBalance).mockRejectedValueOnce(new Error('Member not found')).mockResolvedValue(RESIDENT as any);
+        render(<LedgerPage identity={identity} isMember={true} onNavigate={vi.fn()} />);
+        const unread = await screen.findByTestId('credit-card-unread');
+        expect(within(unread).getByRole('alert').textContent).toBe('Your credit line couldn’t be read just now.');
+        expect(screen.queryByTestId('credit-card')).toBeNull();
+        expect(document.body.textContent).not.toMatch(EMPTY_ANSWER_WORDS);
+
+        fireEvent.click(within(unread).getByRole('button', { name: 'Try again' }));
+        expect(await screen.findByTestId('credit-card')).toBeInTheDocument();
+        expect(getBalance).toHaveBeenCalledTimes(2);
+        expect(screen.getByTestId('credit-headline').textContent).toBe('You hold 450 Beans');
+        expect(screen.queryByTestId('credit-card-unread')).toBeNull();
+    });
+
+    it('in the pseudo-locale: the reading and the unread card through t()', async () => {
+        await showIn('xx');
+        vi.mocked(getBalance).mockRejectedValue(new Error('Member not found'));
+        render(<LedgerPage identity={identity} isMember={true} />);
+        const unread = await screen.findByTestId('credit-card-unread');
+        expect(within(unread).getByRole('alert').textContent).toBe(xx('Your credit line couldn’t be read just now.'));
+        expect(within(unread).getByRole('button', { name: xx('Try again') })).toBeInTheDocument();
+        expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
+        cleanup();
+
+        vi.mocked(getBalance).mockReturnValue(new Promise(() => {}) as any);
+        render(<LedgerPage identity={identity} isMember={true} />);
+        expect((await screen.findByTestId('credit-card-reading')).textContent).toBe(xx('Loading…'));
+    });
+
+    it('a guest has no balance here: no credit card at all, and none of its words', async () => {
+        render(<LedgerPage identity={identity} isMember={false} />);
+        await screen.findByTestId('ledger-balance');
+        expect(screen.queryByTestId('credit-card')).toBeNull();
+        expect(screen.queryByTestId('credit-card-reading')).toBeNull();
+        expect(screen.queryByTestId('credit-card-unread')).toBeNull();
+        expect(document.body.textContent).not.toMatch(EMPTY_ANSWER_WORDS);
+    });
+});

@@ -20,7 +20,8 @@ import {
 } from '@beanpool/core';
 
 const METER = creditMeterCss();
-const RAINBOW = `linear-gradient(90deg, ${CREDIT_RAINBOW.stops.map((c, i) => `${c} ${Math.round(CREDIT_RAINBOW.at[i]! * 100)}%`).join(', ')})`;
+/** The rainbow as a CSS background (CreditBarUnread draws the same track, faded, while the balance is read). */
+export const RAINBOW = `linear-gradient(90deg, ${CREDIT_RAINBOW.stops.map((c, i) => `${c} ${Math.round(CREDIT_RAINBOW.at[i]! * 100)}%`).join(', ')})`;
 /** The closed part: stripes in the card's own colour, with one edge. */
 const STRIPES = 'repeating-linear-gradient(45deg, var(--bg-card) 0 5px, transparent 5px 10px)';
 

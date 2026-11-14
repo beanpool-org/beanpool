@@ -28,9 +28,18 @@ describe('the web credit card is one button, its words core\'s', () => {
         const card = creditStandingCard(MARTY);
         const button = screen.getByRole('button', { name: card.spoken });
         expect(button).toHaveAttribute('type', 'button');
-        expect(card.spoken).toBe('You owe 50 Beans. You can spend 450 more of your 500 credit line. Your limit is minus 500. Your credit line: @Damo vouched 500. Opens how this works.');
+        // Every piece of the parts line, as the eye reads it, "Earned by trading 0 so far" too (round 2 of #3134).
+        expect(card.spoken).toBe('You owe 50 Beans. You can spend 450 more of your 500 credit line. Your limit is minus 500. Your credit line: Earned by trading 0 so far, @Damo vouched 500. Opens how this works.');
         expect(screen.queryByRole('meter')).toBeNull();
         expect(document.querySelector('[role="meter"]')).toBeNull();
+    });
+
+    it('a vouch of 500 with 100 passed on: the button\'s label says the 100 given away, as the parts line does (F16)', () => {
+        const passedOn: CreditStandingAnswer = { ...MARTY, balance_c: 0, floor_c: -40000, usableFloor_c: -40000, roomHeld_c: 40000 };
+        render(<CreditBar answer={passedOn} />);
+        expect(screen.getByTestId('credit-parts').textContent).toBe('Credit line 400: ■ Earned by trading 0 so far · □ @Damo vouched 500 · you gave 100 to another member');
+        expect(screen.getByRole('button').getAttribute('aria-label')).toContain(
+            'Your limit is minus 400. Your credit line: Earned by trading 0 so far, @Damo vouched 500, you gave 100 to another member.');
     });
 
     it('shows core\'s headline, sentence and parts line, and hides the drawing from screen readers', () => {

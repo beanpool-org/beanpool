@@ -24,6 +24,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { MyBudgetModal } from '../components/MyBudgetModal';
 import { CreditBar } from '../components/CreditBar';
+import { CreditBarUnread } from '../components/CreditBarUnread';
 import { RepaymentCard } from '../components/RepaymentCard';
 import { CreditSeenByGivers } from '../components/CreditSeenByGivers';
 import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerBudget, VOUCH_PRESET_WORDS, type TierName } from '@beanpool/core';
@@ -168,6 +169,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    // The member's balance couldn't be read: the credit card says so (with Try again) in place of drawing from nothing.
+    const [balanceReadFailed, setBalanceReadFailed] = useState(false);
     const [activeTab, setActiveTab] = useState<'trust' | 'financials'>('trust');
     const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
 
@@ -280,6 +283,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                 }
                 if (!isMountedRef.current) return;
                 setBalanceInfo(bal);
+                setBalanceReadFailed(false);
                 setGiftOffer(gift);
                 getMyVouching().then(v => { if (isMountedRef.current) setMyVouching(v); }).catch(() => {});
                 setTxns(txn);
@@ -291,6 +295,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                 lastRefreshTimeRef.current = Date.now();
             } catch (e: any) {
                 if (viewerIsMemberRef.current) setError(e.message || t('Failed to load'));
+                if (isMountedRef.current) setBalanceReadFailed(true);
                 throw e;
             } finally {
                 setLoading(false);
@@ -581,8 +586,16 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                 </div>
             </div>
 
-            {/* Credit position: an admin's freeze keeps its own card; everyone else, a newcomer too, the credit card. */}
-            {creditLineCard(balanceInfo ?? {}) === 'frozen' ? (
+            {/* Credit position: an admin's freeze keeps its own card; everyone else, a newcomer too, the credit card. Until the
+                member's own balance is in, the card's shape and no claim; if it couldn't be read, it says so (round 2 of #3134):
+                an empty answer would read as "no credit line yet". A guest has no balance here, so no card. */}
+            {!balanceInfo ? (
+                viewerIsMember && !preview && (
+                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 pt-3 pb-4 mb-4 shadow-sm">
+                        <CreditBarUnread failed={balanceReadFailed} onRetry={() => { setBalanceReadFailed(false); refresh().catch(() => {}); }} />
+                    </div>
+                )
+            ) : creditLineCard(balanceInfo) === 'frozen' ? (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 py-4 mb-4 shadow-sm" data-testid="ledger-known-frozen">
                     <div className="flex items-start gap-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-xl p-3">
                         <span className="text-xl leading-none" aria-hidden="true">❄️</span>
@@ -601,9 +614,9 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         the strip of what the line is made of, one note and the parts line, all from core. One button: until
                         the sheet (slice R2) it opens the guide's page on the credit line. A newcomer sees it too, the left
                         half striped. */}
-                    <CreditBar answer={balanceInfo ?? {}} onOpen={onNavigate ? () => onNavigate('guide', 'credit-line') : undefined} />
-                    {knownFrozenPartNote(balanceInfo ?? {}) && (
-                        <p className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-2">{knownFrozenPartNote(balanceInfo ?? {})}</p>
+                    <CreditBar answer={balanceInfo} onOpen={onNavigate ? () => onNavigate('guide', 'credit-line') : undefined} />
+                    {knownFrozenPartNote(balanceInfo) && (
+                        <p className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-2">{knownFrozenPartNote(balanceInfo)}</p>
                     )}
                 </div>
             )}

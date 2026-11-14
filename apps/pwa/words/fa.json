@@ -1435,7 +1435,6 @@
   "On the map": "روی نقشه",
   "On the map at {lat}, {lng}": "روی نقشه در {lat}، {lng}",
   "On your Home": "در صفحه خانه شما",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "هنگامی که سرور شما اجرا شد، جامعه خود را در برنامه تنظیمات آن نام‌گذاری می‌کنید، اولین اعضا را دعوت می‌کنید و آن‌ها بقیه را دعوت می‌کنند. گزینه «انتشار موقعیت مکانی» را در آنجا روشن کنید تا افراد نزدیک شما که خواسته بودند مطلع شوند، از آن باخبر گردند.",
   "One device at a time: the copy you changed last is the one kept.": "در هر زمان یک دستگاه: نسخه‌ای که آخرین بار تغییر داده‌اید نگهداری می‌شود.",
   "One moment…": "یک لحظه…",
   "One more comes back {when}.": "یک مورد دیگر {when} برمی‌گردد.",
@@ -4689,5 +4688,8 @@
     "one": "توقف فصلی خط اعتباری شما را تا ۹۰ روز در سطح {n} لوبیا حفظ کرده و آگهی‌های فعال را متوقف می‌کند تا اعضا نتوانند خرید کنند. هر مدیری در هر زمان می‌تواند آن را از سر بگیرد.",
     "other": "توقف فصلی خط اعتباری شما را تا ۹۰ روز در سطح {n} لوبیا حفظ کرده و آگهی‌های فعال را متوقف می‌کند تا اعضا نتوانند خرید کنند. هر مدیری در هر زمان می‌تواند آن را از سر بگیرد."
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "ازسرگیری، تمامی آگهی‌ها را دوباره فعال کرده و خط اعتباری را به محاسبه روزانه عادی بازمی‌گرداند."
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "ازسرگیری، تمامی آگهی‌ها را دوباره فعال کرده و خط اعتباری را به محاسبه روزانه عادی بازمی‌گرداند.",
+  "{name} has no owner yet": "{name} هنوز مالکی ندارد",
+  "If you installed it, claim it with the one-time code on the server.": "اگر شما آن را نصب کرده‌اید، با کد یک‌بارمصرف روی سرور مالکیت آن را تحویل بگیرید.",
+  "Claim {name}": "درخواست مالکیت {name}"
 }

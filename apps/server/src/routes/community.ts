@@ -37,6 +37,7 @@ import {
     inviterShownOf, setInviterShown, inviterVisibilityFor, INVITER_SHOWN_MEMBERS_ONLY_MESSAGE, isNodeMember, noteBillReported,
 } from '../state-engine.js';
 import { reportableBill, type BillRow } from '../engine/bills.js';
+import { reportableForumPostWriter } from '../engine/forum-moderation.js';
 import { CallsignNotANameError, NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { VoucherError, vouchFromProfile, myVouching, tellVoucherNotice } from '../engine/vouchers.js';
 import { CreditGiftError, creditGiftOffer, giveCreditLine } from '../engine/credit-gift.js';
@@ -2240,7 +2241,7 @@ function reportAsReporterSees<T extends { targetPubkey?: string }>(report: T, po
 }
 
 router.post('/api/reports', async (ctx) => {
-    const { reporterPubkey, reason, targetPostId, targetPulseItemId, targetBillId } = (ctx as any).requestBody || {};
+    const { reporterPubkey, reason, targetPostId, targetPulseItemId, targetBillId, targetForumPostId } = (ctx as any).requestBody || {};
     let { targetPubkey } = (ctx as any).requestBody || {};
     const activeReporter = ctx.state.actor as string | undefined;
     if (!activeReporter) {
@@ -2255,7 +2256,34 @@ router.post('/api/reports', async (ctx) => {
     // named. It declines the bill, three members' within 7 days hold the sender's bills, and the queue reads what the bill
     // was for and how much beside it (getReports): the report keeps its reporter's reason alone, below.
     let bill: BillRow | null = null;
-    if (targetBillId !== undefined && targetBillId !== null && targetBillId !== '') {
+    const forumPostId = targetForumPostId !== undefined && targetForumPostId !== null && targetForumPostId !== '' ? targetForumPostId : undefined;
+    if (forumPostId !== undefined) {
+        // A forum post's report (slice F2, engine/forum-moderation.ts): about its writer, whoever the client named, and nothing
+        // else: one that also named a post, a Pulse item or a bill would be read as a report on that too.
+        if ((targetPostId !== undefined && targetPostId !== null && targetPostId !== '') || (targetPulseItemId !== undefined && targetPulseItemId !== null)
+            || (targetBillId !== undefined && targetBillId !== null && targetBillId !== '')) {
+            ctx.status = 400;
+            ctx.body = { error: 'forum_report_names_more', message: 'A report on a forum post names nothing else.' };
+            return;
+        }
+        if (typeof forumPostId !== 'string') {
+            ctx.status = 400;
+            ctx.body = { error: 'targetForumPostId must be a string' };
+            return;
+        }
+        const writer = reportableForumPostWriter(activeReporter, forumPostId);
+        if (!writer) {
+            ctx.status = 404;
+            ctx.body = { error: 'not_found', message: word('That forum post is not here any more.') };
+            return;
+        }
+        if (writer === activeReporter) {
+            ctx.status = 400;
+            ctx.body = { error: 'own_post', message: word('You cannot report your own post.') };
+            return;
+        }
+        targetPubkey = writer;
+    } else if (targetBillId !== undefined && targetBillId !== null && targetBillId !== '') {
         if ((targetPostId !== undefined && targetPostId !== null && targetPostId !== '') || (targetPulseItemId !== undefined && targetPulseItemId !== null)) {
             ctx.status = 400;
             ctx.body = { error: 'bill_report_names_more', message: 'A report on a bill names no post or Pulse item.' };
@@ -2331,7 +2359,7 @@ router.post('/api/reports', async (ctx) => {
     // bill too it is the reporter's reason alone: what the bill was for is its sender's words, and they never make a report
     // child safety (the deciding review of #3066, finding 2).
     const kept = reason.slice(0, 500);
-    const pending = findPendingReport(activeReporter, targetPubkey, targetPostId, targetPulseItemId || undefined);
+    const pending = findPendingReport(activeReporter, targetPubkey, targetPostId, targetPulseItemId || undefined, forumPostId);
     if (pending) {
         // Reported again with "Child safety" after another reason (the review of #1895, finding 3): the report on file
         // becomes child safety and is told as a new one would be. Once: it is child safety from then on, and a member's
@@ -2355,7 +2383,7 @@ router.post('/api/reports', async (ctx) => {
         ctx.body = { error: 'rate_limited', message: 'You have sent a lot of reports recently. Please try again in an hour.' };
         return;
     }
-    const report = submitReport(activeReporter, targetPubkey, reason, targetPostId, targetPulseItemId || undefined);
+    const report = submitReport(activeReporter, targetPubkey, reason, targetPostId, targetPulseItemId || undefined, forumPostId);
     if (!report) {
         ctx.status = 400;
         ctx.body = { error: word('Failed — must be a registered member, cannot report yourself') };

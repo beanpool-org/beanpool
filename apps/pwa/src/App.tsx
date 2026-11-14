@@ -30,7 +30,7 @@ import { handoffAtLoad, takeHandoffParams } from './lib/handoff';
 import { isKnockKey } from './lib/knock-key';
 import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
 import { forgetRecentLookups } from './lib/members-on-demand';
-import { visitorsSeeListings, takeKeptLinkedPost, takeAskParam, takeKeptAskedCommunity } from './lib/visitor-lobby';
+import { visitorsSeeListings, keepLinkedPost, takeKeptLinkedPost, takeAskParam, takeKeptAskedCommunity } from './lib/visitor-lobby';
 import { setAccountHint } from './lib/community-card';
 import { MarketplacePage } from './pages/MarketplacePage';
 import type { PostType } from './lib/marketplace';
@@ -301,7 +301,8 @@ export function App() {
     const [openMarketTxId, setOpenMarketTxId] = useState<string | null>(null);
     // Whether the Market says so when that post can't be opened: yes for a member's own tap (navigateToTab), no for a link
     // the app arrived on (a shared /?post=, the lobby's kept listing), which lands quietly on the Market as before.
-    const [openMarketPostSaysWhy, setOpenMarketPostSaysWhy] = useState(false);
+    // 'came-for': the listing a member came for from a copy on the global community (slice G4), whose line says so.
+    const [openMarketPostSaysWhy, setOpenMarketPostSaysWhy] = useState<boolean | 'came-for'>(false);
     const [openMarketReviewTxId, setOpenMarketReviewTxId] = useState<string | null>(null);
     // A saved search's See more on Home: the words the Market's search opens with.
     const [openMarketSearch, setOpenMarketSearch] = useState<string | null>(null);
@@ -700,12 +701,15 @@ export function App() {
     }, [linkedShop, identity]);
     // On the global lobby a visitor reads the shared listing first; the lobby keeps it in this tab (a join by sign-in
     // leaves the page), and it opens here once, when they have joined. Before the address's own, so that one wins.
+    // Or the listing a member came for from a copy on the global community (slice G4): the handoff's Join kept it for this
+    // community, and it opens once, with a line if it has gone. The lobby's own kept listing is only read when there is none.
     useEffect(() => {
         if (!identity) return;
-        const kept = takeKeptLinkedPost();
+        const cameFor = takeKeptLinkedPost(Date.now(), window.location.host);
+        const kept = cameFor ?? takeKeptLinkedPost();
         if (!kept) return;
         setActiveTab('marketplace');
-        setOpenMarketPostSaysWhy(false);
+        setOpenMarketPostSaysWhy(cameFor ? 'came-for' : false);
         setOpenMarketPostId(kept);
     }, [identity]);
     useEffect(() => {
@@ -1021,6 +1025,9 @@ export function App() {
                     handoff={handoff}
                     onOpen={() => setHandoff(null)}
                     onJoin={({ account, invite, name }) => {
+                        // The listing the member came for from a copy (slice G4), kept from this Join, never before it: it
+                        // opens once they are in (the identity effect above).
+                        if (handoff.listing) keepLinkedPost(handoff.listing, Date.now(), window.location.host);
                         // Kept as the waiting key (established); the welcome page redeems the yes with it (WelcomePage handleCreate).
                         setHandoff(null);
                         setWaitingDoor(null);
@@ -1028,6 +1035,7 @@ export function App() {
                         setWaitingKey(account);
                     }}
                     onMember={(member) => {
+                        if (handoff.listing) keepLinkedPost(handoff.listing, Date.now(), window.location.host);
                         setHandoff(null);
                         beginAccountEpoch();
                         setWaitingKey(null);

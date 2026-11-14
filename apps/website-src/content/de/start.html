@@ -1,11 +1,11 @@
-<!-- source-hash: 35636ae8241b3e18 -->
+<!-- source-hash: 8d4284b32d457d76 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Eine Gemeinschaft gründen — BeanPool</title>
-    <meta name="description" content="Jede Gemeinschaft läuft auf ihrem eigenen Server: ein kleiner Rechner, der die Mitglieder, Beiträge und das Buch verwaltet. Jemand vor Ort betreibt ihn. Wenn deine Stadt oder dein Tal noch keinen hat, könntest du das sein.">
+    <meta name="description" content="Gründe eine BeanPool-Gemeinschaft auf einem ungenutzten Computer zu Hause oder einem kleinen gemieteten Server: was es braucht, wie du deine Adresse wählst, und der eine Block, den du zum Installieren einfügst.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="style.css?v=2.9">
@@ -136,8 +136,8 @@ docker compose exec beanpool-node beanpool claim</code>
 
         <h3 class="run-node-sub">Die letzte Zeile: beanpool claim</h3>
         <ol class="run-node-steps">
-            <li><strong>Code und QR-Code.</strong> Es wird ein einmaliger Beanspruchungscode und ein QR-Code angezeigt. Scanne den QR-Code mit der Kamera deines Smartphones oder öffne BeanPool, gib die Serveradresse unter <strong>Finde deine Community</strong> ein und tippe auf <strong>Beanspruchen</strong>. Dieses Telefon wird zum Eigentümer.</li>
-            <li><strong>Einstellungen.</strong> Öffne deine Adresse (oder die eigene Adresse des Servers) gefolgt von <strong>/settings</strong>. Der Einrichtungsassistent gibt deiner Gemeinschaft einen Namen, fordert dich auf, einen zweiten Eigentümer hinzuzufügen, und erstellt drei Gründungseinladungen. Lege deinen Standort auf der Karte unter Node-Identität fest, damit Menschen in der Nähe dich finden können.</li>
+            <li><strong>Code und QR-Code.</strong> Es zeigt einen QR-Code, einen einmaligen Beanspruchungscode und, nummeriert, die nächsten Schritte. Installiere zuerst auf dem Smartphone, dem die Gemeinschaft gehören soll, BeanPool aus <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a> oder dem <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a>. Scanne dann den QR-Code mit der Kamera deines Smartphones oder öffne BeanPool und tippe auf <strong>BeanPool auf einem Server installiert? Beanspruche ihn</strong> (wenn auf dem Smartphone schon ein Konto ist: tippe oben auf die Bohne, dann auf <strong>Neuen Community-Server einrichten</strong>). Beansprucht wird nur in der Smartphone-App. Die Beanspruchung legt dein BeanPool-Konto auf diesem Smartphone an, ohne Einladung und ohne etwas vom BeanPool-Projekt: Gib deinen Namen ein, tippe auf <strong>Beanspruchen und Eigentümer werden</strong> und schreibe die 12 Wörter auf, die angezeigt werden. Ein Smartphone, auf dem schon ein Konto ist, beansprucht mit diesem Konto. Dieses Smartphone wird zum Eigentümer.</li>
+            <li><strong>Einstellungen.</strong> Öffne deine Adresse (oder die eigene Adresse des Servers) gefolgt von <strong>/settings</strong>: Bestätige deine Kerneinstellungen (Core settings), erstelle einen Wiederherstellungscode, füge einen zweiten Eigentümer hinzu und lade deine ersten Mitglieder ein. Solange einer der ersten drei Punkte offen ist, steht er auf der Startseite der Einstellungen (Home) unter <strong>Action Required</strong> (Aktion erforderlich). Der Cold-Start-Assistent auf Home ist freiwillig: Sein letzter Schritt erstellt drei Gründungseinladungen zum Ausdrucken. Lege deinen Standort auf der Karte unter Node Identity fest, damit Menschen in der Nähe dich finden können.</li>
         </ol>
         <p class="run-node-note">Wenn der Block <strong>No claim code after 5 minutes</strong> anzeigt oder <code>beanpool claim</code> meldet <strong>This community has no claim code waiting</strong>, ist der Server noch nicht vollständig gestartet: <code>docker compose logs beanpool-node</code> zeigt den Status an. Sobald das Protokoll besagt, dass die Gemeinschaft noch keinen Eigentümer hat und ein Beanspruchungscode vorliegt, führe die letzte Zeile erneut aus. Alle Einzelschritte findest du in der <a href="guide/operators/first-time-setup.html">Ersteinrichtung</a> des Betreiber-Handbuchs.</p>
 

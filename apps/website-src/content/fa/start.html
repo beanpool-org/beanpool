@@ -1,11 +1,11 @@
-<!-- source-hash: 35636ae8241b3e18 -->
+<!-- source-hash: 8d4284b32d457d76 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>راه‌اندازی یک جامعه — BeanPool</title>
-    <meta name="description" content="هر جامعه روی نود اختصاصی خود اجرا می‌شود: یک سرور کوچک که اعضا، پست‌ها و دفتر کل آن جامعه را در خود نگه می‌دارد. فردی محلی آن را اداره می‌کند. اگر شهر یا منطقه شما هنوز نودی ندارد، آن فرد می‌تواند شما باشید.">
+    <meta name="description" content="یک جامعه BeanPool را روی یک رایانه بلااستفاده در خانه یا یک سرور اجاره‌ای کوچک راه‌اندازی کنید: چه چیزهایی لازم است، چگونه آدرس خود را انتخاب کنید، و تنها بلوکی که برای نصب باید بچسبانید.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="style.css?v=2.9">
@@ -136,8 +136,8 @@ docker compose exec beanpool-node beanpool claim</code>
 
         <h3 class="run-node-sub">خط آخر: beanpool claim</h3>
         <ol class="run-node-steps">
-            <li><strong>کد و QR.</strong> یک کد مالکیت یک‌بارمصرف و یک کد QR نشان می‌دهد. کد QR را با دوربین گوشی خود اسکن کنید، یا BeanPool را باز کنید، آدرس سرور را در بخش <strong>جامعه خود را پیدا کنید</strong> تایپ کنید و روی <strong>ثبت (Claim)</strong> ضربه بزنید. آن گوشی مالک جامعه می‌شود.</li>
-            <li><strong>تنظیمات.</strong> آدرس خود (یا آدرس سرور) را به همراه <strong>/settings</strong> در انتها باز کنید. راهنمای راه‌اندازی جامعه شما را نام‌گذاری می‌کند، از شما می‌خواهد مالک دومی اضافه کنید و سه دعوت‌نامه اولیه می‌سازد. مکان خود را روی نقشه زیر هویت نود تنظیم کنید تا افراد نزدیک بتوانند شما را پیدا کنند.</li>
+            <li><strong>کد و QR.</strong> یک کد مالکیت یک‌بارمصرف، یک کد QR و، به‌صورت شماره‌دار، قدم‌های بعدی را نشان می‌دهد. ابتدا روی گوشی‌ای که مالک جامعه خواهد بود، BeanPool را از <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a> یا <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a> نصب کنید. سپس کد QR را با دوربین گوشی خود اسکن کنید، یا BeanPool را باز کنید و روی <strong>BeanPool را روی سرور نصب کرده‌اید؟ مالکیت آن را بگیرید</strong> بزنید (اگر از قبل حسابی روی گوشی هست: روی نماد لوبیا در بالا بزنید، سپس روی <strong>راه‌اندازی سرور جدید جامعه</strong>). گرفتن مالکیت فقط از برنامه گوشی انجام می‌شود. این کار حساب BeanPool شما را روی آن گوشی می‌سازد، بدون دعوت‌نامه و بدون هیچ چیزی از پروژه BeanPool: نام خود را بنویسید، روی <strong>درخواست مالکیت و تبدیل شدن به مالک</strong> بزنید، و ۱۲ کلمه‌ای را که نشان می‌دهد یادداشت کنید. گوشی‌ای که از قبل حساب دارد، با همان حساب مالکیت را می‌گیرد. آن گوشی مالک جامعه می‌شود.</li>
+            <li><strong>تنظیمات.</strong> آدرس خود (یا آدرس سرور) را به همراه <strong dir="ltr">/settings</strong> در انتها باز کنید: تنظیمات اصلی خود (Core settings) را تأیید کنید، یک کد بازیابی بسازید، مالک دومی اضافه کنید و نخستین اعضای خود را دعوت کنید. تا وقتی هر یک از سه کار اول انجام نشده، صفحه خانه تنظیمات (Home) آن را زیر <strong>Action Required</strong> (اقدام لازم) فهرست می‌کند. دستیار Cold-Start در Home اختیاری است: آخرین مرحله آن سه دعوت‌نامه اولیه می‌سازد که می‌توانید چاپ کنید. مکان خود را روی نقشه زیر Node Identity تنظیم کنید تا افراد نزدیک بتوانند شما را پیدا کنند.</li>
         </ol>
         <p class="run-node-note">اگر در بلوک متن <strong>No claim code after 5 minutes</strong> نمایش داده شد، یا دستور <code>beanpool claim</code> اعلام کرد <strong>This community has no claim code waiting</strong>، سرور هنوز مراحل راه‌اندازی را به پایان نرسانده است: دستور <code>docker compose logs beanpool-node</code> نشان می‌دهد در چه مرحله‌ای قرار دارد. هنگامی که در گزارش ثبت شد جامعه هنوز مالکی ندارد و کد مالکیت آماده است، خط آخر را دوباره اجرا کنید. مراحل کامل در بخش <a href="guide/operators/first-time-setup.html">راه‌اندازی اولیه</a> از راهنمای گردانندگان آمده است.</p>
 

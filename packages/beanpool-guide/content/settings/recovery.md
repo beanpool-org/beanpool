@@ -23,19 +23,20 @@ Your account's key is not in your phone's backups. A new phone needs your 12 wor
 
 ## With a sign-in account
 
-This works only if you linked one before (see below). BeanPool's key vault keeps the locked copy, and your sign-in finds it: you don't type your name or your community's address.
+This works only if you linked one before (see below). Your community keeps a locked copy of your account, and your sign-in finds your account there. There is nothing to type but your community, if it isn't one of the choices.
 
-- Under **Which community?**, tap **Global community**, or one of the communities this phone has had, or **another address**. Your sign-in then opens your account there once it is back.
+- Under **Which community?**, tap **Global community**, or one of the communities this phone has had. For any other, tap **another address** and type your community's name or address.
 - Tap **Recover with** and the account you linked: Google or Facebook, or Apple on an iPhone.
 - With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead.
-- For your safety, getting back in with a sign-in waits a day. The app says when your account comes back. It checks by itself while it is open, and **Check now** asks straight away.
-- If you still have another phone with your account on it, open BeanPool there and tap **Yes, it's me** (see "If someone else tries"). Your account comes back within a minute.
-- When your account is back, check the community it opens in. The one you tapped first is filled in (if you tapped none, the first community in your copy, else the global community); to use another, type its name or address, or tap it under **Your communities on this phone**. Tap **Continue**. Your name and photo come back from that community.
-- **Use my 12 words instead** works any time, with no wait, and is there under the sign-in buttons from the start. **Start again** starts over with a sign-in.
+- The app says **Finding your account…** while your community finds the account that sign-in protects. If it protects more than one account there, the app asks **Which account is yours?**: tap yours. **← Start again** goes back to the sign-ins, and nothing is brought back.
+- The app opens your account's locked copy on this phone, and checks that it really is the account your community found. If it isn't, it says **The account that came back isn't** (the name) and saves nothing.
+- Your account comes back, with your name and photo from your community. If this phone already has another account, the app asks first (see "If the phone already has an account").
 
-If the app says **Getting back in with a sign-in is paused for a little while**, BeanPool's key vault has restarted and is waiting for the people who look after it to open it again. Nothing is lost: try again later. Your 12 words work any time.
+Your account's devices are told that it was brought back, in case it wasn't you.
 
-If the key vault keeps no copy for that sign-in account, the app says so: your community may still keep one, from before the key vault (see "Moving a copy your community keeps"). Type your name in the community and your community's name or address, then sign in once more. That copy works only while your community's server is running.
+If no account at that community uses the sign-in, the app says so. Try the community where you linked it, another sign-in account, or your 12 words.
+
+If the app says your community's **server is older than this app**, that server can't find your account from a sign-in yet. Ask its admin to update it, or use your 12 words.
 
 If the sign-in account was linked from a phone that had your 12 words, on an up-to-date app, your 12 words come back too. Otherwise the phone has no 12 words: they can't be rebuilt from a sign-in. If you have them written down, you can add them (see "Your 12 words"). Until then a linked sign-in account is that phone's way back, so keep one linked, and link a second one if you can (see below).
 

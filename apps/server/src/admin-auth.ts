@@ -275,6 +275,8 @@ export const MODERATOR_ROUTES: ReadonlyArray<{ method: 'GET' | 'POST'; path: str
     { method: 'POST', path: '/api/local/admin/posts/:id/delete' },
     // The global profile's auto-moderation (G3, D3 = a): restoring a post hidden by reports, and lifting a mute.
     { method: 'POST', path: '/api/local/admin/posts/:id/restore' },
+    // A forum post hidden while the moderators look (slice F2, engine/forum-moderation.ts): restoring it.
+    { method: 'POST', path: '/api/local/admin/forum/posts/:id/restore' },
     { method: 'GET', path: '/api/local/admin/members/muted' },
     { method: 'POST', path: '/api/local/admin/members/:pubkey/unmute' },
     // Reports clearing a sender's message requests (engine/request-limits.ts): who is limited, and the undo.

@@ -1,11 +1,11 @@
-<!-- source-hash: 35636ae8241b3e18 -->
+<!-- source-hash: 8d4284b32d457d76 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>एक समुदाय शुरू करें — BeanPool</title>
-    <meta name="description" content="प्रत्येक समुदाय अपने स्वयं के नोड पर चलता है: एक छोटा सर्वर जो उस समुदाय के सदस्यों, पोस्ट और खाते को रखता है। कोई स्थानीय व्यक्ति इसे चलाता है। यदि आपके कस्बे या इलाके में अभी तक कोई नहीं है, तो वह आप हो सकते हैं।">
+    <meta name="description" content="घर पर किसी खाली पड़े कंप्यूटर या किराए के छोटे सर्वर पर एक BeanPool समुदाय शुरू करें: इसमें क्या लगता है, अपना पता कैसे चुनें, और इंस्टॉल करने के लिए पेस्ट करने वाला एक ब्लॉक।">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="style.css?v=2.9">
@@ -136,8 +136,8 @@ docker compose exec beanpool-node beanpool claim</code>
 
         <h3 class="run-node-sub">अंतिम पंक्ति: beanpool claim</h3>
         <ol class="run-node-steps">
-            <li><strong>कोड और क्यूआर।</strong> यह एक बार का दावा कोड और एक क्यूआर कोड दिखाता है। अपने फ़ोन के कैमरे से क्यूआर कोड को स्कैन करें, या BeanPool खोलें, <strong>अपना समुदाय खोजें</strong> के तहत सर्वर का पता लिखें और <strong>दावा करें</strong> पर टैप करें। वह फ़ोन मालिक बन जाता है।</li>
-            <li><strong>सेटिंग्स।</strong> अपना पता (या सर्वर का अपना पता) उसके बाद <strong>/settings</strong> खोलें। सेटअप विज़ार्ड आपके समुदाय का नाम रखता है, आपसे दूसरा मालिक जोड़ने के लिए कहता है, और तीन संस्थापक आमंत्रण बनाता है। नोड पहचान के तहत नक्शे पर अपना स्थान निर्धारित करें ताकि आस-पास के लोग आपको ढूँढ सकें।</li>
+            <li><strong>कोड और क्यूआर।</strong> यह एक बार का दावा कोड, एक क्यूआर कोड और, क्रम से, आगे क्या करना है, दिखाता है। सबसे पहले, जो फ़ोन समुदाय का मालिक होगा, उस पर <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a> या <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a> से BeanPool इंस्टॉल करें। फिर अपने फ़ोन के कैमरे से क्यूआर कोड स्कैन करें, या BeanPool खोलें और <strong>सर्वर पर BeanPool इंस्टॉल किया है? इसे क्लेम करें</strong> पर टैप करें (अगर फ़ोन पर पहले से कोई खाता है: ऊपर बीन पर टैप करें, फिर <strong>नया समुदाय सर्वर सेट करें</strong> पर)। दावा केवल फ़ोन ऐप से ही किया जाता है। दावा उस फ़ोन पर आपका BeanPool खाता बनाता है, बिना किसी आमंत्रण के और BeanPool प्रोजेक्ट से कुछ लिए बिना: अपना नाम लिखें, <strong>दावा करें और मालिक बनें</strong> पर टैप करें, और जो 12 शब्द दिखें उन्हें लिख लें। जिस फ़ोन पर पहले से खाता है, वह उसी खाते से दावा करता है। वह फ़ोन मालिक बन जाता है।</li>
+            <li><strong>सेटिंग्स।</strong> अपना पता (या सर्वर का अपना पता) उसके बाद <strong>/settings</strong> खोलें: अपनी मुख्य सेटिंग्स (Core settings) की पुष्टि करें, एक रिकवरी कोड बनाएँ, दूसरा मालिक जोड़ें और अपने पहले सदस्यों को आमंत्रित करें। जब तक पहले तीन में से कोई काम बाकी है, सेटिंग्स का होम पेज (Home) उसे <strong>Action Required</strong> (कार्रवाई आवश्यक) के तहत दिखाता है। Home पर Cold-Start विज़ार्ड वैकल्पिक है: इसका आख़िरी चरण तीन संस्थापक आमंत्रण बनाता है जिन्हें आप प्रिंट कर सकते हैं। Node Identity के तहत नक्शे पर अपना स्थान निर्धारित करें ताकि आस-पास के लोग आपको ढूँढ सकें।</li>
         </ol>
         <p class="run-node-note">यदि ब्लॉक <strong>No claim code after 5 minutes</strong> कहता है, या <code>beanpool claim</code> <strong>This community has no claim code waiting</strong> कहता है, तो सर्वर पूरी तरह से शुरू नहीं हुआ है: <code>docker compose logs beanpool-node</code> दिखाता है कि यह कहाँ है। एक बार जब लॉग कहे कि समुदाय का अभी तक कोई मालिक नहीं है और उसके पास एक दावा कोड है, तो अंतिम पंक्ति फिर से चलाएं। पूरे चरण ऑपरेटर मैनुअल के <a href="guide/operators/first-time-setup.html">पहली बार सेटअप</a> में हैं।</p>
 

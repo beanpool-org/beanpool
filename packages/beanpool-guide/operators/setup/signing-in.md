@@ -9,7 +9,9 @@ There are two ways into Settings: the app's Manage button, and a computer you si
 
 ## Before the community has an owner
 
-On a new server nobody can sign in with a key yet, so the sign-in page says **This community has no owner yet.** and shows how to claim it instead: on the server, run docker compose exec beanpool-node beanpool claim, then scan the QR code on the page with your phone's camera, or in BeanPool open **Find a community**, tap **Set up a new community server**, then **Scan the code**. Or in **Find a community**, type the server's address and tap **Claim ‹name›**. The QR code carries the server's address and the waiting code's short name, never the code. The page turns into the normal sign-in by itself a few seconds after the community has an owner, and shows the normal sign-in only when the first check fails (a later failure keeps the card). See First-time setup.
+On a new server nobody can sign in with a key yet, so the sign-in page says **This community has no owner yet.** and shows how to claim it instead. Claiming is done from the phone app only. The page's QR code carries the server's address and the waiting code's short name, never the code: the code is read on the server. The page turns into the normal sign-in by itself a few seconds after the community has an owner, and shows the normal sign-in only when the first check fails (a later failure keeps the card). See First-time setup.
+
+On the server, run docker compose exec beanpool-node beanpool claim. Then scan the QR code with your phone's camera. Or, with no account on the phone yet, open BeanPool and tap **Installed BeanPool on a server? Claim it** at the bottom of its first screen; with an account already, tap the bean at the top, then **Set up a new community server**. Either way, **Scan the code**, or type the server's address under **Server address** and the code under **Claim code**.
 
 ![The sign-in screen in node Settings](images/sign-in.webp)
 

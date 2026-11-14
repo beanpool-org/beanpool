@@ -1,11 +1,11 @@
-<!-- source-hash: 35636ae8241b3e18 -->
+<!-- source-hash: 8d4284b32d457d76 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mulai sebuah komunitas — BeanPool</title>
-    <meta name="description" content="Setiap komunitas berjalan pada nodenya sendiri: server kecil yang menyimpan anggota, kiriman, dan buku kas komunitas tersebut. Dijalankan oleh warga lokal. Jika kota atau wilayah Anda belum memilikinya, Anda bisa menjadi orangnya.">
+    <meta name="description" content="Mulai komunitas BeanPool di komputer cadangan di rumah atau di server sewaan kecil: apa yang dibutuhkan, cara memilih alamat Anda, dan satu blok yang cukup ditempel untuk memasangnya.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="style.css?v=2.9">
@@ -136,8 +136,8 @@ docker compose exec beanpool-node beanpool claim</code>
 
         <h3 class="run-node-sub">Baris terakhir: beanpool claim</h3>
         <ol class="run-node-steps">
-            <li><strong>Kode dan QR.</strong> Perintah ini menampilkan kode klaim sekali pakai dan kode QR. Pindai kode QR dengan kamera ponsel Anda, atau buka BeanPool, ketik alamat server di bawah <strong>Temukan komunitas Anda</strong> dan ketuk <strong>Klaim</strong>. Ponsel tersebut menjadi pemilik.</li>
-            <li><strong>Pengaturan.</strong> Buka alamat Anda (atau alamat server itu sendiri) diikuti dengan <strong>/settings</strong>. Panduan penyiapan memberi nama komunitas Anda, meminta Anda menambahkan pemilik kedua, dan membuat tiga undangan awal. Tentukan tempat Anda di peta di bawah Identitas Node agar orang-orang di sekitar dapat menemukan Anda.</li>
+            <li><strong>Kode dan QR.</strong> Perintah ini menampilkan kode klaim sekali pakai, kode QR, dan langkah berikutnya secara bernomor. Pertama, di ponsel yang akan menjadi pemilik komunitas, pasang BeanPool dari <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a> atau <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a>. Lalu pindai kode QR dengan kamera ponsel Anda, atau buka BeanPool dan ketuk <strong>Sudah memasang BeanPool di server? Klaim servernya</strong> (jika ponsel sudah punya akun: ketuk ikon kacang di atas, lalu <strong>Siapkan server komunitas baru</strong>). Klaim hanya bisa dilakukan dari aplikasi ponsel. Klaim membuat akun BeanPool Anda di ponsel itu, tanpa undangan dan tanpa apa pun dari proyek BeanPool: ketik nama Anda, ketuk <strong>Klaim dan jadi pemilik</strong>, lalu catat 12 kata yang ditampilkan. Ponsel yang sudah punya akun mengklaim dengan akun tersebut. Ponsel tersebut menjadi pemilik.</li>
+            <li><strong>Pengaturan.</strong> Buka alamat Anda (atau alamat server itu sendiri) diikuti dengan <strong>/settings</strong>: konfirmasi pengaturan inti (Core settings), buat kode pemulihan, tambahkan pemilik kedua, dan undang anggota pertama Anda. Selama salah satu dari tiga langkah pertama belum selesai, halaman beranda Pengaturan (Home) mencantumkannya di bawah <strong>Action Required</strong> (Tindakan Diperlukan). Panduan Cold-Start di Home bersifat opsional: langkah terakhirnya membuat tiga undangan awal yang bisa Anda cetak. Tentukan tempat Anda di peta di bawah Node Identity agar orang-orang di sekitar dapat menemukan Anda.</li>
         </ol>
         <p class="run-node-note">Jika blok perintah menyatakan <strong>No claim code after 5 minutes</strong>, atau <code>beanpool claim</code> menyatakan <strong>This community has no claim code waiting</strong>, server belum selesai memulai: <code>docker compose logs beanpool-node</code> menunjukkan statusnya. Setelah log menyatakan komunitas belum memiliki pemilik dan memiliki kode klaim, jalankan baris terakhir lagi. Langkah-langkah selengkapnya ada di <a href="guide/operators/first-time-setup.html">penyiapan pertama kali</a> pada panduan operator.</p>
 

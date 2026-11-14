@@ -133,7 +133,8 @@ describe('the lower layers\' whole sentences', () => {
         for (const english of [
             "That sign-in did not say who you are, so it can't be used. Try again.",
             'This phone holds a different BeanPool account, so the join was not sent.',
-            'Connecting to node recovery session...', 'Account restored successfully!', 'Node returned an empty sign-in nonce.',
+            // utils/sso-recovery.ts: the find under way (the web's words, WebRestore.tsx), and its own two refusals.
+            'Finding your account…', 'Account restored successfully!', 'Node returned an empty sign-in nonce.',
             "Google's sign-in page could not open on this phone. Try again.", "The phone's lock was not passed, so no sign-in was linked.",
             'No node configured yet.', 'The sign-in could not be linked.',
             // utils/vault.ts subjectOf: Recover with a sign-in whose token names no account (PR #2206 review).
@@ -246,10 +247,10 @@ describe('the sentences with a name, a number or a time in them', () => {
     it("the restore's and the sign-ins' sentences with a status, a provider or the node's words after them", () => {
         const cases: Array<[template: string, english: string, names: string[]]> = [
             ['Signing in with {x}...', 'Signing in with Google...', ['Google']],
+            // The account picked coming back, by the name the community's find gives it: any name, as written.
+            ['Getting {x} back…', 'Getting Sally back…', ['Sally']],
+            ['Getting {x} back…', 'Getting Kim Lee (garden) back…', ['Kim Lee (garden)']],
             ['Failed to fetch fragments ({x})', 'Failed to fetch fragments (500)', []],
-            ['Could not open recovery session ({x})', 'Could not open recovery session (503)', []],
-            ['Could not obtain sign-in challenge ({x})', 'Could not obtain sign-in challenge (429)', []],
-            ['Sign-in verification failed ({x})', 'Sign-in verification failed (401)', []],
             ['Hub release failed ({x})', 'Hub release failed (404)', []],
             ['Could not reach your node: {x}', 'Could not reach your node: Network request failed', ['Network request failed']],
             ['Your node would not start a sign-in ({x}): {x}', 'Your node would not start a sign-in (500): oops', ['oops']],

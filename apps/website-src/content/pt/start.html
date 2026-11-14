@@ -1,11 +1,11 @@
-<!-- source-hash: 35636ae8241b3e18 -->
+<!-- source-hash: 8d4284b32d457d76 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inicie uma comunidade — BeanPool</title>
-    <meta name="description" content="Cada comunidade opera em seu próprio nó: um pequeno servidor que armazena os membros, publicações e o registro daquela comunidade. Alguém da região o administra. Se sua cidade ou bairro ainda não tem um, pode ser você.">
+    <meta name="description" content="Inicie uma comunidade BeanPool em um computador sobrando em casa ou em um pequeno servidor alugado: o que é preciso, como escolher seu endereço e o único bloco a colar para instalar.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="style.css?v=2.9">
@@ -136,8 +136,8 @@ docker compose exec beanpool-node beanpool claim</code>
 
         <h3 class="run-node-sub">A última linha: beanpool claim</h3>
         <ol class="run-node-steps">
-            <li><strong>O código e o QR.</strong> Ele exibe um código de reivindicação único e um código QR. Escaneie o código QR com a câmera do celular ou abra o BeanPool, digite o endereço do servidor em <strong>Encontre sua comunidade</strong> e toque em <strong>Reivindicar</strong>. Aquele aparelho se torna o proprietário.</li>
-            <li><strong>Configurações.</strong> Abra seu endereço (ou o próprio endereço do servidor) seguido de <strong>/settings</strong>. O assistente de configuração dá nome à sua comunidade, pede para você adicionar um segundo proprietário e gera três convites de fundador. Defina seu local no mapa em Identidade do Nó para que pessoas próximas possam encontrar você.</li>
+            <li><strong>O código e o QR.</strong> Ele exibe um código de reivindicação único, um código QR e, numerado, o que fazer em seguida. Primeiro, no celular que será o proprietário da comunidade, instale o BeanPool pelo <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a> ou pela <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a>. Depois, escaneie o código QR com a câmera do celular, ou abra o BeanPool e toque em <strong>Instalou o BeanPool em um servidor? Reivindique-o</strong> (se o celular já tiver uma conta: toque no feijão no topo e depois em <strong>Configurar um novo servidor de comunidade</strong>). A reivindicação é feita somente pelo aplicativo do celular. Ela cria sua conta BeanPool nesse celular, sem convite e sem nada do projeto BeanPool: digite seu nome, toque em <strong>Reivindicar e se tornar proprietário</strong> e anote as 12 palavras que aparecem. Um celular que já tem uma conta reivindica com ela. Esse celular se torna o proprietário.</li>
+            <li><strong>Configurações.</strong> Abra seu endereço (ou o próprio endereço do servidor) seguido de <strong>/settings</strong>: confirme suas configurações principais (Core settings), crie um código de recuperação, adicione um segundo proprietário e convide seus primeiros membros. Enquanto algum dos três primeiros não estiver feito, a página inicial das Configurações (Home) o lista em <strong>Action Required</strong> (Ação necessária). O assistente Cold-Start na Home é opcional: sua última etapa gera três convites de fundador para imprimir. Defina seu local no mapa em Node Identity para que pessoas próximas possam encontrar você.</li>
         </ol>
         <p class="run-node-note">Se o bloco indicar <strong>No claim code after 5 minutes</strong> ou <code>beanpool claim</code> disser <strong>This community has no claim code waiting</strong>, o servidor ainda não terminou de inicializar: <code>docker compose logs beanpool-node</code> mostra o status. Assim que o log indicar que a comunidade ainda não tem proprietário e tem um código de reivindicação, execute a última linha novamente. As etapas completas estão na <a href="guide/operators/first-time-setup.html">configuração inicial</a> do manual do operador.</p>
 

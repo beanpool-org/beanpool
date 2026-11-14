@@ -25,6 +25,7 @@ import { AddressFollowCard } from '../../components/AddressFollowCard';
 import { AddressFallbackCard } from '../../components/AddressFallbackCard';
 import { CopiesRuleCard } from '../../components/CopiesRuleCard';
 import { BringListingsSheet } from '../../components/BringListingsSheet';
+import { takeListingAfterJoin } from '../../utils/listing-after-join';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { NewPollModal } from '../../components/NewPollModal';
 import { NewEventModal } from '../../components/NewEventModal';
@@ -273,6 +274,14 @@ export default function HomeScreen() {
     }, [readNotify]));
     const roleRef = useRef<HomeRole>(undefined);
     roleRef.current = role;
+    // The listing a member came for from a copy on the global community (list on global G4): once its community's yes is
+    // joined and the profile step is done, Home opens it after the Bring my listings sheet, never under it.
+    const openListingAfterJoin = useCallback(() => {
+        void (async () => {
+            const route = await takeListingAfterJoin(await anchorUrl().catch(() => null));
+            if (route) router.push(route as any);
+        })().catch(() => {});
+    }, []);
 
     const currentPins = useCallback((ans: HomeAnswer | null | undefined, at: number = Date.now()) => {
         const hasOpenKnock = knocksRef.current.some(k => !k.cancelledAt && knockStillAnswerable(k, at));
@@ -1712,8 +1721,9 @@ export default function HomeScreen() {
                     visible={shapeSheetOpen}
                     onClose={() => setShapeSheetOpen(false)}
                 />
-                {/* A member's first local community: bring their global listings (utils/bring-listings.ts). */}
-                {!lookingAround && <BringListingsSheet />}
+                {/* A member's first local community: bring their global listings (utils/bring-listings.ts). Then, with
+                    nothing more on it, the listing they asked to join from (utils/listing-after-join.ts), once. */}
+                {!lookingAround && <BringListingsSheet onQuiet={openListingAfterJoin} />}
                 {manage.dialog}
             </View>
         </FabBandContext.Provider>

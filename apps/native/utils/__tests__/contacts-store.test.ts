@@ -26,7 +26,7 @@ function fakeDeps(at = 1_800_000_000_000): ContactsStoreDeps & { files: Map<stri
     const clock = { now: at };
     return {
         files, kvMap, clock,
-        disk: { read: async (pk) => files.get(pk) ?? null, write: async (pk, text) => { files.set(pk, text); } },
+        disk: { read: async (pk) => files.get(pk) ?? null, write: async (pk, text) => { files.set(pk, text); }, setAside: async (pk) => { files.delete(pk); } },
         kv: { getItem: async (k) => kvMap.get(k) ?? null, setItem: async (k, v) => { kvMap.set(k, v); } },
         now: () => clock.now,
     };

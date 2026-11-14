@@ -240,7 +240,16 @@ export interface TableHashes {
  * has. What an older importer drops is the forum: after a take-over from such a copy its sections are made again as at the
  * start and its topics are gone; no Bean is in it.
  */
-export const TABLE_HASHES_VERSION = 39;
+/**
+ * 40: the forum's moderation (engine/forum-moderation.ts, engine/forum-first-look.ts; slice F2): two new plain tables,
+ * forum_waiting and forum_waiting_photos, and new columns abuse_reports.target_forum_post_id and target_home,
+ * forum_posts.hidden_by_reports_at and forum_members.known_at. Raised for the same reason as 8: a standby updated before its
+ * main server hashes more columns and tables. REPLICA_FORMAT stays: each side's import writes only the columns and tables its
+ * own database has. What an older importer drops is the forum's moderation: after a take-over from such a copy a first topic
+ * waiting is gone (its writer starts it again), a hidden forum post shows until it is reported again, and a report of a forum
+ * post reads as a report of its writer; no Bean is in it.
+ */
+export const TABLE_HASHES_VERSION = 40;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

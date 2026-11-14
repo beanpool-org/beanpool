@@ -40,17 +40,14 @@ function withHeldCredentials(p: NodeProfile): NodeProfile {
 export function loadNodeProfiles(): NodeProfile[] {
     const localUrl = normalizeNodeUrl(window.location.port === '3001' ? 'https://localhost:8443' : window.location.origin);
     const defaultProfiles: NodeProfile[] = [
+        // The node this page is served by, and nothing of BeanPool's own: until 14 Nov 2026 our test server was listed here
+        // for every operator.
         {
             id: 'local-node',
             name: 'Local Sovereign Node',
             url: localUrl,
             isPrimary: true,
         },
-        {
-            id: 'test-node',
-            name: 'Test Staging Node (test.beanpool.org)',
-            url: 'https://test.beanpool.org',
-        }
     ];
 
     let profilesToUse = defaultProfiles.map(withHeldCredentials);

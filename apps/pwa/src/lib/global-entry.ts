@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { audienceOf, shouldBlockCleartextNodeUrl, t } from '@beanpool/core';
+import { DEFAULT_GLOBAL_COMMUNITY_HOST, audienceOf, shouldBlockCleartextNodeUrl, t } from '@beanpool/core';
 import type { AppStoreVersions, CommunityInfo } from './api';
 import { isVersionOlder, normaliseVersion } from './app-version';
 import { ANDROID_PACKAGE, APP_STORE_URL, PLAY_URL } from './peek';
@@ -24,7 +24,7 @@ import { ANDROID_PACKAGE, APP_STORE_URL, PLAY_URL } from './peek';
 /** The link the BeanPool app claims (slice P4): the app at the global community's door when installed, else the store. */
 export const APP_GLOBAL_LINK = 'https://beanpool.org/global';
 /** The community that link opens in the app (apps/native/utils/global-node-url.ts GLOBAL_NODE_URL), as a bare host. */
-export const APP_GLOBAL_HOST = 'global.beanpool.org';
+export const APP_GLOBAL_HOST = DEFAULT_GLOBAL_COMMUNITY_HOST;
 /**
  * The first iOS version with the global door (slice S14). S14's flip PR deletes this gate once the App Store build has it.
  */

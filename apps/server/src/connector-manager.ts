@@ -46,7 +46,7 @@ export interface ConnectorConfig {
     trustLevel: TrustLevel;
     enabled: boolean;
     callsign?: string;       // friendly name for the UI
-    publicUrl?: string;      // HTTPS URL for federation API (e.g. "https://mullum2.beanpool.org")
+    publicUrl?: string;      // HTTPS URL for federation API (e.g. "https://riverside.example.org")
     addedAt: number;
     /**
      * #104 — how many beans of credit this node will extend to this peer before it stops honouring

@@ -4656,7 +4656,7 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                 ...base.cards,
                 enterprise: {
                     id: 'ent1',
-                    name: 'Mullum Ceramics',
+                    name: 'Riverside Ceramics',
                     requests: 3,
                     others: 0,
                     lifecycle: 'ongoing',
@@ -4671,7 +4671,7 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
         await render();
         const card = document.querySelector('[data-testid="home-card-enterprise"]')!;
         expect(card).not.toBeNull();
-        expect(card.textContent).toContain('Mullum Ceramics · enterprise');
+        expect(card.textContent).toContain('Riverside Ceramics · enterprise');
         expect(card.textContent).toContain('Balance 340 Beans · 3 keepers');
         expect(card.textContent).toContain('This month: 5 trades · +120 in · −60 out');
         expect(card.textContent).toContain('Latest: +12 Beans from Ana');
@@ -4680,7 +4680,7 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
         // Requests row opens manage
         Object.values(nav.router).forEach(f => f.mockClear());
         await act(async () => { (document.querySelector('[data-testid="home-enterprise-requests"]') as HTMLElement).click(); });
-        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/treasury-manage', params: { publicKey: 'ent1', name: 'Mullum Ceramics' } });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/treasury-manage', params: { publicKey: 'ent1', name: 'Riverside Ceramics' } });
     });
 
     it('enterprise card: latest line shows "to {who}" when amount is negative', async () => {
@@ -4692,7 +4692,7 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                 ...base.cards,
                 enterprise: {
                     id: 'ent1',
-                    name: 'Mullum Ceramics',
+                    name: 'Riverside Ceramics',
                     requests: 0,
                     others: 0,
                     lifecycle: 'ongoing',
@@ -4717,7 +4717,7 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                 ...base.cards,
                 enterprise: {
                     id: 'ent1',
-                    name: 'Mullum Ceramics',
+                    name: 'Riverside Ceramics',
                     requests: 0,
                     others: 0,
                     keepers: 2,
@@ -4741,7 +4741,7 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                 ...base.cards,
                 enterprise: {
                     id: 'ent1',
-                    name: 'Mullum Ceramics',
+                    name: 'Riverside Ceramics',
                     requests: 0,
                     others: 0,
                     keepers: 2,
@@ -5033,7 +5033,7 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                 ...base.cards,
                 enterprise: {
                     id: 'ent1',
-                    name: 'Mullum Ceramics',
+                    name: 'Riverside Ceramics',
                     requests: 0,
                     others: 0,
                     lifecycle: 'ongoing',

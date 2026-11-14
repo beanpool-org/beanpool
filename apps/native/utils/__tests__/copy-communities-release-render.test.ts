@@ -135,7 +135,7 @@ describe('the lines under "Which community?" name what the field holds (#2660 fi
         expect(releaseFieldHolds(fieldTextFor(first.url), first)).toEqual({ kind: 'copy', name: 'Lismore Commons' });
         const { hint, a11y } = releaseFieldHints(fieldTextFor(first.url), first);
         expect(hint).toBe('Lismore Commons, from your copy, is filled in. To open your account in another community, pick it above or type its name or address. Your name and picture come back from it.');
-        expect(a11y).toBe("Lismore Commons, from your copy, is filled in. Enter your community's name, like mullum, or its full address");
+        expect(a11y).toBe("Lismore Commons, from your copy, is filled in. Enter your community's name, like riverside, or its full address");
         for (const line of [hint, a11y]) expect(line).not.toMatch(/global/i);
         // A copy's community with no name is named by its host.
         expect(releaseFieldHolds('lismore.example.org', { name: '', url: first.url })).toEqual({ kind: 'copy', name: 'lismore.example.org' });
@@ -144,7 +144,7 @@ describe('the lines under "Which community?" name what the field holds (#2660 fi
     it('the global community, as the field starts without a list: said as before', () => {
         expect(releaseFieldHolds(GLOBAL_FIELD, undefined)).toEqual({ kind: 'global' });
         expect(releaseFieldHints(GLOBAL_FIELD, undefined).hint).toBe('The global community is filled in. If you belong to a local community, type its name or address. Your name and picture come back from it.');
-        expect(releaseFieldHints(GLOBAL_FIELD, first).a11y).toBe("The global community is filled in. Enter your community's name, like mullum, or its full address");
+        expect(releaseFieldHints(GLOBAL_FIELD, first).a11y).toBe("The global community is filled in. Enter your community's name, like riverside, or its full address");
     });
 
     it('anything else (typed, picked, or emptied): no claim of what is filled in', () => {

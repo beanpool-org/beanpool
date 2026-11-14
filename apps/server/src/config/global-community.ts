@@ -10,9 +10,11 @@
  * Nothing on this node ever contacts it (memory no-domain-lock-in): it is a link a member may follow. Reported on GET
  * /api/community/info as `globalCommunityUrl`, absent when none.
  */
+import { DEFAULT_GLOBAL_COMMUNITY_URL } from '@beanpool/core';
 import { cleanStartCommunityUrl } from './start-community.js';
 
-export const GLOBAL_COMMUNITY_URL_DEFAULT = 'https://global.beanpool.org';
+/** Core's named default (packages/beanpool-core/src/beanpool-defaults.ts); env GLOBAL_COMMUNITY_URL overrides it. */
+export const GLOBAL_COMMUNITY_URL_DEFAULT = DEFAULT_GLOBAL_COMMUNITY_URL;
 
 const OFF = new Set(['off', 'none', '0', 'false', 'no']);
 

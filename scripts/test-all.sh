@@ -423,6 +423,12 @@ run_check "undeclared_imports" node scripts/check-undeclared-imports.mjs
 # that baseline and says why. Instant.
 run_check "balance_writes" node scripts/check-balance-writes.mjs
 
+# No community of ours named in the product's code (Marty, 14 Nov 2026: "I want the code clean for people using it out in
+# the world"): our communities' names and our servers' addresses fail in apps/, packages/ and workers/, beyond a per-file
+# baseline of what later slices still clear (scripts/no-node-names-baseline.json, lowered only). The global community's
+# address lives in core's beanpool-defaults.ts alone. The test shows the check can fail. Instant.
+run_check "no_node_names" bash -c 'node scripts/check-no-node-names.mjs && node --test scripts/check-no-node-names.test.mjs'
+
 # A migration file that is on origin/main has run on the live registrar and will never run there again, so an edit
 # to it reaches only new databases. New numbered files only. Instant; with no origin/main it reports as skipped, not as a
 # pass, and CI's shard fetches origin/main for it (.github/workflows/ci.yml, "Fetch origin/main").

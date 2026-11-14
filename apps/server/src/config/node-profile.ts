@@ -440,7 +440,7 @@ export interface NodeFeatures {
     /** True on every node of this build: it stores a voice line as one (engine/voice-lines.ts, DESIGN-cross-chat-voice-fable.md
      *  §5.4, slice V2), in a direct chat and in a locked group's. The apps offer the microphone only where it is
      *  (@beanpool/core voiceLinesOn). A node from before V2 says nothing, and stores a voice line as a text line carrying a
-     *  sound no one can play (Byron, 14 Nov): its version can't tell it from one that takes them, so this says it outright. */
+     *  sound no one can play (a live community, 14 Nov): its version can't tell it from one that takes them, so this says it outright. */
     voiceLines: true;
     /** Present, and true, only where `forum` is on (engine/forum.ts): the apps show the Forum, and its routes answer
      *  (/api/forum/*). Absent (a community whose owners switched it off, or a server from before it): no Forum, which

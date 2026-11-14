@@ -538,7 +538,7 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         await press('Next →', 'xx');
         check('Join BeanPool, no invite');
         await type('Paste your invite link or code', 'BP-ABCD-1234', 'xx');
-        await type('Community name or address (e.g. mullum)', 'mullum', 'xx');
+        await type('Community name or address (e.g. riverside)', 'mullum', 'xx');
         await type('Your name or nickname', 'Sally', 'xx');
         phone.invite = { valid: false, reason: 'used' };
         await press('Next →', 'xx');
@@ -555,7 +555,7 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         await mount('xx');
         await press('🎟️ Join with an invite', 'xx');
         await type('Paste your invite link or code', 'BP-ABCD-1234', 'xx');
-        await type('Community name or address (e.g. mullum)', 'mullum', 'xx');
+        await type('Community name or address (e.g. riverside)', 'mullum', 'xx');
         await type('Your name or nickname', 'Sally', 'xx');
         await press('Next →', 'xx');
         expect(host!.textContent).toContain(pseudoLocalise('Failed to register identity: {reason}').replace('{reason}', pseudoLocalise(noAnswer)));
@@ -566,7 +566,7 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         await mount('xx');
         await press('🎟️ Join with an invite', 'xx');
         await type('Paste your invite link or code', 'BP-ABCD-1234', 'xx');
-        await type('Community name or address (e.g. mullum)', 'mullum', 'xx');
+        await type('Community name or address (e.g. riverside)', 'mullum', 'xx');
         await type('Your name or nickname', 'Sally', 'xx');
         await press('Next →', 'xx');
         // The invite's line: one sentence, the inviter's and the community's names in it as written.
@@ -756,7 +756,7 @@ describe("a known community's rule on Join BeanPool (Marty, 2 Nov: a sentence, n
         await settle();
         await press('Next →', lang);
         await type('Paste your invite link or code', 'BP-ABCD-1234', lang);
-        await type('Community name or address (e.g. mullum)', 'https://mullum.example', lang);
+        await type('Community name or address (e.g. riverside)', 'https://mullum.example', lang);
         await vi.waitFor(() => expect(seen).toContain('https://mullum.example/api/community/known-rule'), { timeout: 3000 });
         await settle();
     }
@@ -924,7 +924,7 @@ describe('restoring an account in the pseudo-locale', () => {
         check('Restore your account');
         await press('🔑 Recover with 12 Words', 'xx');
         check('Recover with 12 Words, empty');
-        await type('Community name or address (e.g. mullum)', 'mullum', 'xx');
+        await type('Community name or address (e.g. riverside)', 'mullum', 'xx');
         expect(host!.textContent).toContain(pseudoLocalise('Will connect to {address} — if your community is hosted elsewhere, enter its full address instead.').replace('{address}', 'mullum.beanpool.org'));
         check('Recover with 12 Words, an address');
         await press('Recover Identity', 'xx');
@@ -941,7 +941,7 @@ describe('restoring an account in the pseudo-locale', () => {
         await mount('xx');
         await press('🔑 Already a Member? Restore Account →', 'xx');
         await press('🔑 Recover with 12 Words', 'xx');
-        await type('Community name or address (e.g. mullum)', 'mullum', 'xx');
+        await type('Community name or address (e.g. riverside)', 'mullum', 'xx');
         await press('Recover Identity', 'xx');
         expect(host!.textContent).toContain(pseudoLocalise('This phone was restored with a sign-in, so it has no 12 words for {name}. Without a connected sign-in, you cannot get {name} back.').replaceAll('{name}', 'Kim'));
         check('Replace, no words');
@@ -954,7 +954,7 @@ describe('restoring an account in the pseudo-locale', () => {
         await press('🌐 Recover with Social', 'xx');
         check('Recover with Social Sign-In, at the community');
         await type('Your Callsign (e.g. Monnunit)', 'Sally', 'xx');
-        await type('Community name or address (e.g. mullum)', 'mullum', 'xx');
+        await type('Community name or address (e.g. riverside)', 'mullum', 'xx');
         await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
         await settle();
         expect(host!.textContent).toContain(pseudoLocalise('Is this you?'));
@@ -1015,7 +1015,7 @@ describe('a language picked on an open step redraws it, live', () => {
  */
 describe("another community's door sent the member here to restore", () => {
     const SELF = 'https://open.riverbend.example';
-    const field = () => all('input').find((i) => i.getAttribute('placeholder') === 'Community name or address (e.g. mullum)') as HTMLInputElement | undefined;
+    const field = () => all('input').find((i) => i.getAttribute('placeholder') === 'Community name or address (e.g. riverside)') as HTMLInputElement | undefined;
 
     it("with 12 words: the address field is that community's, over the phone's anchor", async () => {
         store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
@@ -1077,7 +1077,7 @@ describe("another community's door sent the member here to restore", () => {
         expect(recover, 'a button "🔑 Recover with 12 Words"').toBeTruthy();
         await act(async () => { recover.click(); });
         await settle();
-        const address = Array.from(inView.querySelectorAll('input')).find((i) => i.getAttribute('placeholder') === 'Community name or address (e.g. mullum)');
+        const address = Array.from(inView.querySelectorAll('input')).find((i) => i.getAttribute('placeholder') === 'Community name or address (e.g. riverside)');
         expect(address?.value).toBe(SELF);
     });
 
@@ -1130,7 +1130,7 @@ describe("another community's door sent the member here to restore", () => {
         expect(recover, 'a button "🔑 Recover with 12 Words"').toBeTruthy();
         await act(async () => { recover.click(); });
         await settle();
-        const address = Array.from(inView.querySelectorAll('input')).find((i) => i.getAttribute('placeholder') === 'Community name or address (e.g. mullum)');
+        const address = Array.from(inView.querySelectorAll('input')).find((i) => i.getAttribute('placeholder') === 'Community name or address (e.g. riverside)');
         expect(address?.value).toBe(SELF);
     });
 
@@ -1156,7 +1156,7 @@ describe('which community the join screens name (N1)', () => {
     };
     const fill = async (lang: UiLang, address = 'mullum') => {
         await type('Paste your invite link or code', 'BP-ABCD-1234', lang);
-        await type('Community name or address (e.g. mullum)', address, lang);
+        await type('Community name or address (e.g. riverside)', address, lang);
         await type('Your name or nickname', 'Sally', lang);
     };
 
@@ -1181,11 +1181,11 @@ describe('which community the join screens name (N1)', () => {
         phone.invite = { valid: false, reason: 'used', communityName: 'Mullum Community' };
         await press('Next →', 'en');
         expect(titles()).toContain('Join Mullum Community');
-        await type('Community name or address (e.g. mullum)', 'castlemaine', 'en');
+        await type('Community name or address (e.g. riverside)', 'castlemaine', 'en');
         expect(titles()).toContain('🎟️ Join with an invite');
         expect(titles()).not.toContain('Join Mullum Community');
         // And back at the address it was read for, the name is true again.
-        await type('Community name or address (e.g. mullum)', 'mullum', 'en');
+        await type('Community name or address (e.g. riverside)', 'mullum', 'en');
         expect(titles()).toContain('Join Mullum Community');
     });
 

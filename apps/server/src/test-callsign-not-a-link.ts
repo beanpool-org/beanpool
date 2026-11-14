@@ -1,7 +1,7 @@
 /**
  * A name that is an invite or a web address is refused by the node, over REAL HTTP (Marty, 14 Nov 2026, card
- * callsign-link-guard: on 5 Sep a member pasted her invite link into the name box, and her account on Byron is named
- * "https://mullum.beanpool.org/?inv"). Through the real middleware, every route that writes a name:
+ * callsign-link-guard: on 5 Sep a member pasted her invite link into the name box, and her account was named after it,
+ * cut to 32 characters; here "https://riverside.example.org/?i"). Through the real middleware, every route that writes a name:
  *   1. POST /api/invite/redeem: her link, an invite code and a bare community address as the name are 400
  *      `callsign_link` with the one line, no member is written and the code stays unused; a name joins with that code;
  *   2. POST /api/community/register: a member re-registering under a link is 400 `callsign_link`, name unchanged;
@@ -70,8 +70,8 @@ const nameOf = (pk: string) => (db.prepare('SELECT callsign FROM members WHERE p
 const codeUsedBy = (code: string) => (db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(code) as { used_by: string | null } | undefined)?.used_by ?? null;
 const refusedAs = (r: Res, line: string) => r.status === 400 && r.body?.code === 'callsign_link' && (r.body?.error === line || r.body?.message === line);
 
-// What her name box held, whole, and what the 32-character profile box kept of it (her name on Byron).
-const HER_LINK = 'https://mullum.beanpool.org/?invite=INV-K7Q2-BSXA';
+// What her name box held, whole, and what the 32-character profile box kept of it (the name her account was left with).
+const HER_LINK = 'https://riverside.example.org/?invite=INV-K7Q2-BSXA';
 const HER_NAME = HER_LINK.slice(0, 32);
 
 async function main(): Promise<void> {
@@ -87,7 +87,7 @@ async function main(): Promise<void> {
         [HER_LINK, NAME_BOX_WORDS.inviteLink],
         [HER_LINK.slice(0, 20), NAME_BOX_WORDS.webLink],
         ['INV-K7Q2-BSXA', NAME_BOX_WORDS.inviteCode],
-        ['byron.beanpool.org', NAME_BOX_WORDS.webLink],
+        ['riverside.org', NAME_BOX_WORDS.webLink],
     ] as const) {
         const joiner = keypair();
         const r = await call('POST', joiner, '/api/invite/redeem', { code, publicKey: joiner.pk, callsign: name });
@@ -119,16 +119,16 @@ async function main(): Promise<void> {
     assert(refusedAs(renameInvite, NAME_BOX_WORDS.inviteLink), `a rename to her invite link, read whole before the 32-character cut, says invite link (got ${renameInvite.status} ${JSON.stringify(renameInvite.body)})`);
     // The profile keeps 32 characters, and this name is an address only once cut there ("… x.comet" kept as "… x.com"):
     // refused as the door refuses one, never kept.
-    const cutRename = await call('POST', dee, '/api/profile/update', { callsign: 'Rowan at Byron Bay NSW, AU x.comet' });
+    const cutRename = await call('POST', dee, '/api/profile/update', { callsign: 'Rowan at River Bay NSW, AU x.comet' });
     assert(refusedAs(cutRename, NAME_BOX_WORDS.webLink), `a rename that is an address only once cut to 32: 400 callsign_link (got ${cutRename.status} ${JSON.stringify(cutRename.body)})`);
     assert(nameOf(dee.pk) === 'Dee Dee', 'and the name is unchanged');
     const renamed = await call('POST', dee, '/api/profile/update', { callsign: 'Dee' });
     assert(renamed.status === 200 && nameOf(dee.pk) === 'Dee', `a rename to a name still saves (got ${renamed.status})`);
-    // Her account as it is on Byron: the name is kept, and a save of something else that sends it back still saves.
+    // Her account as it is on her community: the name is kept, and a save of something else that sends it back still saves.
     db.prepare('UPDATE members SET callsign = ? WHERE public_key = ?').run(HER_NAME, dee.pk);
     const bio = await call('POST', dee, '/api/profile/update', { callsign: HER_NAME, bio: 'Hello' });
     assert(bio.status === 200 && nameOf(dee.pk) === HER_NAME, `the name she already has is never refused: a bio save with it answers 200 and keeps it (got ${bio.status} ${JSON.stringify(bio.body)})`);
-    // Register cuts a name to 20, and a cut name used to rename her to it ("https://mullum.beanp"): now refused, name kept.
+    // Register cuts a name to 20, and a cut name used to rename her to it ("https://riverside.ex"): now refused, name kept.
     const reEnter = await call('POST', dee, '/api/community/register', { publicKey: dee.pk, callsign: HER_NAME });
     assert(refusedAs(reEnter, NAME_BOX_WORDS.webLink) && nameOf(dee.pk) === HER_NAME,
         `re-registering with her name, which register cuts to 20, is refused and her name kept (got ${reEnter.status} ${nameOf(dee.pk)})`);
@@ -151,7 +151,7 @@ async function main(): Promise<void> {
     const cutter = keypair();
     const handed = await call('POST', cutter, '/api/join/work', { door: 'words' });
     const challenge = String(handed.body?.work?.challenge ?? '');
-    const cut = await call('POST', cutter, '/api/join', { door: 'words', callsign: 'Rowan at Byron x.comet', work: { challenge, counters: solveDoorWorkSync(challenge) } });
+    const cut = await call('POST', cutter, '/api/join', { door: 'words', callsign: 'Rowan at River x.comet', work: { challenge, counters: solveDoorWorkSync(challenge) } });
     assert(refusedAs(cut, NAME_BOX_WORDS.webLink) && nameOf(cutter.pk) === undefined,
         `a name that is an address only once the door cuts it: 400 callsign_link, nobody joined (got ${cut.status} ${JSON.stringify(cut.body)})`);
     delete process.env.NODE_PROFILE;
@@ -171,8 +171,8 @@ async function main(): Promise<void> {
     const identity = await call('POST', null, '/api/local/update-identity', { callsign: 'http://192.168.1.20' }, ownerSessionHeaders(founder.pk));
     assert(refusedAs(identity, NAME_BOX_WORDS.webLink), `update-identity with a link as the callsign: 400 callsign_link (got ${identity.status} ${JSON.stringify(identity.body)})`);
     assert(getLocalConfig().callsign === before, 'and nothing is stored');
-    const nodeNamed = await call('POST', null, '/api/local/update-identity', { callsign: 'Mullum' }, ownerSessionHeaders(founder.pk));
-    assert(nodeNamed.status === 200 && getLocalConfig().callsign === 'Mullum', `a name is stored (got ${nodeNamed.status})`);
+    const nodeNamed = await call('POST', null, '/api/local/update-identity', { callsign: 'Riverside' }, ownerSessionHeaders(founder.pk));
+    assert(nodeNamed.status === 200 && getLocalConfig().callsign === 'Riverside', `a name is stored (got ${nodeNamed.status})`);
 
     await hugeNames(founder);
 
@@ -219,7 +219,7 @@ async function hugeNames(founder: Id): Promise<void> {
             // Its first 20 characters are an address ("x.com"), so the route reads the whole to say which; the whole,
             // "x.comeee…", is none, so every start after it is tried.
             label: `POST /api/community/register, a ${size} name whose first 20 characters are an address`,
-            send: () => call('POST', member, '/api/community/register', { publicKey: member.pk, callsign: `Rowan at Byron x.com${'e'.repeat(n)}` }),
+            send: () => call('POST', member, '/api/community/register', { publicKey: member.pk, callsign: `Rowan at River x.com${'e'.repeat(n)}` }),
             ok: (r) => refusedAs(r, NAME_BOX_WORDS.webLink) && nameOf(member.pk)?.startsWith(first) === true,
         }];
     };

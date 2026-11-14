@@ -478,7 +478,7 @@ export default function LedgerScreen() {
             const key = identity.publicKey;
             // With none of the node's figures on this phone yet, the node is asked: its answer reloads the screen
             // (sync_data_updated), and no answer at all means the line couldn't be read.
-            getBalance(key).then(latest((answer: any) => {
+            getBalance(identity.publicKey).then(latest((answer: any) => {
                 setBalanceState(answer);
                 if (answer?.lineKnown !== false) { setBalanceUnread(false); return; }
                 refreshBalanceFromServer(key)

@@ -99,9 +99,9 @@ function Screen() {
         case 'credit-bar':
             return (
                 <Column>
-                    <CreditBar balance_c={-10000} floor_c={-100000} usableFloor_c={-20000} liveOffers={1} />
-                    <CreditBar balance_c={0} floor_c={-100000} usableFloor_c={0} liveOffers={0} />
-                    <CreditBar balance_c={123456} floor_c={-50000} />
+                    <CreditBar answer={{ balance_c: -10000, floor_c: -100000, usableFloor_c: -20000, liveOffers: 1 }} />
+                    <CreditBar answer={{ balance_c: 0, floor_c: -100000, usableFloor_c: 0, liveOffers: 0 }} />
+                    <CreditBar answer={{ balance_c: 123456, floor_c: -50000 }} />
                 </Column>
             );
         case 'enterprise':

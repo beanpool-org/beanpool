@@ -5,10 +5,13 @@
  *
  *   1. the threshold both ways: one author's new listing is not offered; a second author's is; one author's tag a week
  *      old with no open report is; the same with an open report is not
- *  1b. the week runs from when the WORD first appeared on a live listing here, not from the listing: an author who edits a
- *      new word onto a month-old listing waits the week (a fake clock), so does one whose listing was paused long ago and
- *      came back, and a word whose listing was taken down starts again at its next edit; a second author's edit offers it
- *      at once; the Manager's first seen is that time
+ *  1b. the week is one listing's own with the word, not the listing's age: an author who edits a new word onto a
+ *      month-old listing waits the week (a fake clock), so does one whose listing was paused long ago and came back, and a
+ *      word whose listing was taken down starts again at its next edit; a second author's edit offers it at once; the
+ *      Manager's first seen is that time
+ *  1c. a report and a takedown follow the word (real routes): an author who moves a reported word to a new listing and
+ *      takes it off, or deletes, the reported one waits while the report is open and the new listing's own week; a
+ *      moderator's takedown holds the author's copy elsewhere for a week; a deleted account's listings keep no day
  *   2. what is counted: a listing hidden by reports, taken down, inactive, cancelled, a group's or one person's, a peer's,
  *      or by a paused or suspended author lends nothing
  *   3. the count is made at most once a minute, and a rule set is seen at once
@@ -36,6 +39,7 @@ import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { TABLES } from './engine/replication-manifest.js';
+import { scrubPostsOf } from './engine/post-scrub.js';
 import { FREE_TAG_COUNT_MS, FREE_TAG_OFFER_DAYS, forgetFreeTagCounts, freeTagCounts, offeredFreeTags, setFreeTagRule } from './engine/free-tags.js';
 
 delete process.env.CF_RECORD_NAME;
@@ -190,6 +194,69 @@ async function main(): Promise<void> {
     const goneSeen = Date.parse(countOf('gone word')?.firstSeen ?? '');
     assert(goneSeen >= goneAt - 1_000, `…taken down, then edited onto another: its week starts again at the edit, with no count between (${countOf('gone word')?.firstSeen})`);
     assert(!offeredAt(goneAt + (FREE_TAG_OFFER_DAYS - 1) * DAY).includes('gone word'), 'six days on: not yet');
+
+    // ── 1c. a report and a takedown follow the word ───────────────────────────────────────────
+    console.log('\n── 1c. a report or a takedown follows the word to another listing ──');
+    const eve = member('Eve');
+    const fay = member('Fay');
+    const kit = member('Kit');
+    grantNodeRole(kit.pk, 'moderator', owner.pk);
+    /** A member's report through the real route, POST /api/reports, and its id. */
+    const fileReport = async (reporter: Id, postId: string, author: Id): Promise<string | undefined> => {
+        const r = await call('POST', reporter, '/api/reports', { reporterPubkey: reporter.pk, targetPubkey: author.pk, targetPostId: postId, reason: 'offensive' });
+        if (r.status >= 300) console.error(`  (report on ${postId}: ${show(r)})`);
+        return (db.prepare('SELECT id FROM abuse_reports WHERE target_post_id = ? AND reporter_pubkey = ? ORDER BY created_at DESC').get(postId, reporter.pk) as { id: string } | undefined)?.id;
+    };
+    const reportStatus = (id: string | undefined) => (db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(id ?? '') as { status: string } | undefined)?.status;
+    /** The word's day moved back, as if the only listing carrying it had carried it `days` (the 'gone word' case's way). */
+    const stampBack = (tag: string, days: number) => db.prepare('UPDATE free_tag_seen SET first_seen = ? WHERE tag = ?').run(new Date(Date.now() - days * DAY).toISOString(), tag);
+
+    // The author moves a reported word to a new listing, then takes it off the reported one.
+    const poster = await offer(eve, 'A poster', ['dodgeword']);
+    stampBack('dodgeword', FREE_TAG_OFFER_DAYS + 1);
+    assert(offeredNow().includes('dodgeword'), 'one listing has carried a word eight days with no report: offered');
+    const dodgeReport = await fileReport(dee, poster, eve);
+    assert(!!dodgeReport && !offeredNow().includes('dodgeword'), `a member reports that listing (POST /api/reports): not offered (${JSON.stringify(countOf('dodgeword'))})`);
+    const fresh = await offer(eve, 'Another poster', []);
+    const movedAt = Date.now();
+    const moved = await editTags(eve, fresh, ['dodgeword']);
+    assert(moved.status === 200 && !offeredNow().includes('dodgeword'), `its author edits the word onto a new listing: not offered (${show(moved)})`);
+    const dropped = await editTags(eve, poster, []);
+    assert(dropped.status === 200 && reportStatus(dodgeReport) === 'pending', `…and takes it off the reported one; the report is still open (${show(dropped)}, ${reportStatus(dodgeReport)})`);
+    assert(!offeredNow().includes('dodgeword'), `the word is not offered: the report on the listing that carried it follows the word (${JSON.stringify(countOf('dodgeword'))})`);
+    assert(!offeredAt(movedAt + FREE_TAG_OFFER_DAYS * DAY + 60_000).includes('dodgeword'), 'nor a week after the move, while that report is open');
+    const dismissed = await call('POST', null, `/api/local/admin/reports/${dodgeReport}/dismiss`, {}, session(kit, 'moderator'));
+    assert(dismissed.status === 200 && !offeredNow().includes('dodgeword'), `a moderator dismisses the report: the new listing's own week still runs (${show(dismissed)})`);
+    assert(offeredAt(movedAt + FREE_TAG_OFFER_DAYS * DAY + 60_000).includes('dodgeword'), 'and a week after the move, with no report open: offered');
+
+    // The same, with the reported listing deleted by its author (no count runs at the delete).
+    const flyer = await offer(eve, 'A flyer', ['dropword']);
+    stampBack('dropword', FREE_TAG_OFFER_DAYS + 1);
+    await fileReport(dee, flyer, eve);
+    await offer(eve, 'Another flyer', ['dropword']);
+    const removed = await call('POST', eve, '/api/marketplace/posts/remove', { id: flyer, authorPublicKey: eve.pk });
+    assert(removed.status === 200 && !offeredNow().includes('dropword'), `the reported listing deleted by its author, the word on a new one: not offered (${show(removed)})`);
+
+    // A moderator takes the reported listing down; the author's other listing carries the word.
+    const banner = await offer(fay, 'A banner', ['takeword']);
+    stampBack('takeword', FREE_TAG_OFFER_DAYS + 1);
+    const banner2At = Date.now();
+    await offer(fay, 'Another banner', ['takeword']);
+    const takeReport = await fileReport(dee, banner, fay);
+    assert(!offeredNow().includes('takeword'), 'a word on a reported listing and a new one by the same author: not offered');
+    const takedown = await call('POST', null, `/api/local/admin/reports/${takeReport}/action`, { deletePost: true }, session(kit, 'moderator'));
+    const tookDownAt = Date.now();
+    const bannerRow = db.prepare('SELECT removed_by_moderator_at FROM posts WHERE id = ?').get(banner) as { removed_by_moderator_at: string | null } | undefined;
+    assert(takedown.status === 200 && !!bannerRow?.removed_by_moderator_at && reportStatus(takeReport) === 'actioned',
+        `a moderator upholds the report and takes the listing down (${show(takedown)})`);
+    assert(!offeredNow().includes('takeword'), `the word on the author's other listing is not offered at once (${JSON.stringify(countOf('takeword'))})`);
+    assert(!offeredAt(banner2At + (FREE_TAG_OFFER_DAYS - 1) * DAY).includes('takeword'), 'nor six days on');
+    assert(offeredAt(tookDownAt + FREE_TAG_OFFER_DAYS * DAY + 60_000).includes('takeword'),
+        'a week after the takedown, the other listing having carried it that week with no report: offered (an owner or admin hides a word for good)');
+    const faysDays = () => (db.prepare('SELECT COUNT(*) AS n FROM free_tag_seen s JOIN posts p ON p.id = s.post_id WHERE p.author_pubkey = ?').get(fay.pk) as { n: number }).n;
+    const faysBefore = faysDays();
+    db.transaction(() => { scrubPostsOf(fay.pk, new Date().toISOString()); })();
+    assert(faysBefore > 0 && faysDays() === 0, `a member's account deleted: their listings keep no typed tag's day (${faysBefore} → ${faysDays()})`);
 
     // ── 2. what is counted ────────────────────────────────────────────────────────────────────
     console.log('\n── 2. only live, public listings made here by an active author ──');

@@ -6,13 +6,17 @@
  * Counted over live listings made here and on the board for everyone: active, not hidden by reports, not taken down by a
  * moderator, made on this server (a peer's tags show on its listings and are never offered here), public (a group's or
  * one person's listing lends nobody its words), and by an author who is active (not paused or suspended). A tag is
- * offered only when it is on two distinct authors' listings, or has been on a live listing here for a week with no open
- * report on any listing carrying it, and no 'hide' rule holds it. The week runs from when the WORD first appeared on a
- * live listing (free_tag_seen), not from the listing: an author who edits a new word onto an old listing, or whose listing
- * comes back from a long pause, waits the week like anyone. So a slur typed once stays on that one listing until it is
- * reported or deleted, and never reaches the picker. A 'merge' rule offers the tag whatever its counts: an owner or admin
- * chose it, and the field stores the library id it names. Rebuilt at most once a minute (a json_each over the live
- * listings); a rule set here is seen at once.
+ * offered only when it is on two distinct authors' listings, or when one live listing here has carried it for a week and
+ * nothing holds it, and no 'hide' rule holds it. The week is one LISTING's own with that word (free_tag_seen, a stamp per
+ * word per listing), not the listing's age and not the word's: an author who edits a new word onto an old listing, whose
+ * listing comes back from a long pause, or who moves the word to another listing, waits the week like anyone. What holds
+ * a word: an open report on any listing that carries it, or carried it and still has that report open; or a listing that
+ * carried it in the last week and was taken down by a moderator or hidden by reports. So a report follows the word when
+ * its author moves it to a new listing and takes it off (or deletes) the reported one, and a takedown holds the author's
+ * copy elsewhere for a week after it (an owner or admin hides a word for good). A slur typed once stays on that one
+ * listing until it is reported or deleted, and never reaches the picker. A 'merge' rule offers the tag whatever its
+ * counts: an owner or admin chose it, and the field stores the library id it names. Rebuilt at most once a minute (a
+ * json_each over the live listings); a rule set here is seen at once.
  *
  * Not applied (noted in the design): a reader's own block list (a suggestion is a word, not a listing).
  */
@@ -22,7 +26,7 @@ import { assertPlainTablesWritable } from '../config/node-role.js';
 
 /** Distinct authors whose live listings carry a tag before it is offered. */
 export const FREE_TAG_OFFER_AUTHORS = 2;
-/** Or the days the word has been on a live listing here (free_tag_seen), with no open report on a listing carrying it. */
+/** Or the days one live listing here has carried the word itself (free_tag_seen), with nothing holding it (see above). */
 export const FREE_TAG_OFFER_DAYS = 7;
 /** How long one count is used before it is made again. */
 export const FREE_TAG_COUNT_MS = 60_000;
@@ -37,8 +41,9 @@ export interface FreeTagCount {
     listings: number;
     authors: number;
     /**
-     * When the word first appeared on a live listing here, in its present unbroken run (an edit that puts it on one starts
-     * the run then), or null when none carries it now (a rule outlives its listings).
+     * The earliest day a listing carrying the word now began to carry it, in that listing's present run (an edit that puts
+     * it on a listing, or the listing back from a pause, starts the run then), or null when none carries it now (a rule
+     * outlives its listings).
      */
     firstSeen: string | null;
     /** Whether members are offered it as they type. */
@@ -66,8 +71,11 @@ export class FreeTagRuleError extends Error {
     }
 }
 
-const OPEN_REPORT = `EXISTS (SELECT 1 FROM abuse_reports r WHERE r.target_post_id = p.id AND r.target_pulse_item_id IS NULL
-    AND (r.status = 'pending' OR r.status IS NULL))`;
+const DAY_MS = 86_400_000;
+
+/** An open report on the listing `postId` names (a column): pending, or from before reports kept a status. */
+const openReportOn = (postId: string) => `EXISTS (SELECT 1 FROM abuse_reports r WHERE r.target_post_id = ${postId}
+    AND r.target_pulse_item_id IS NULL AND (r.status = 'pending' OR r.status IS NULL))`;
 
 /** Each typed tag on each live listing here (posts p, its author m, the tag j): what is counted, and what free_tag_seen keeps. */
 const LIVE_TAGS_FROM = `
@@ -81,17 +89,23 @@ const LIVE_TAGS_WHERE = `
           AND m.status = 'active'`;
 
 /**
- * Keeps free_tag_seen to the words on a live listing here now: a word new to them is stamped `now`, and a word on none
- * any more loses its stamp, so when it comes back its week starts again. Run by every count, on each side of an author's
- * change to a listing's typed tags (engine/posts.ts: so a word taken off every live listing since the last count, then
- * edited onto another, starts again at that edit), and hourly on a main server (state-engine.ts: so a quiet community's
- * listing back from a long pause is not held to the day before it). Each server keeps its own (the manifest: local).
+ * Keeps free_tag_seen to the words on each listing here: a listing that carries a word live and had no stamp for it, or
+ * had stopped carrying it, is stamped `now` (its own week starts); a listing that stopped carrying one live is marked gone
+ * `now`; a stamp gone for over a week with no report open on its listing is dropped. Run by every count, on each side of
+ * an author's change to a listing's typed tags (engine/posts.ts: so a word taken off a listing since the last count, then
+ * edited back onto it, starts again at that edit), and hourly on every server (state-engine.ts: so a quiet community's
+ * listing back from a long pause is not held to the day before it, and a standby's stamps follow its copy). Each server
+ * keeps its own (the manifest: local).
  */
 export function noteFreeTagsSeen(now: number = Date.now()): void {
     const at = new Date(now).toISOString();
+    const weekAgo = new Date(now - FREE_TAG_OFFER_DAYS * DAY_MS).toISOString();
     db.transaction(() => {
-        db.prepare(`DELETE FROM free_tag_seen WHERE tag NOT IN (SELECT j.value ${LIVE_TAGS_FROM} ${LIVE_TAGS_WHERE})`).run();
-        db.prepare(`INSERT OR IGNORE INTO free_tag_seen (tag, first_seen) SELECT DISTINCT j.value, @at ${LIVE_TAGS_FROM} ${LIVE_TAGS_WHERE}`).run({ at });
+        db.prepare(`UPDATE free_tag_seen SET gone_at = @at WHERE gone_at IS NULL AND NOT EXISTS (
+            SELECT 1 ${LIVE_TAGS_FROM} ${LIVE_TAGS_WHERE} AND p.id = free_tag_seen.post_id AND j.value = free_tag_seen.tag)`).run({ at });
+        db.prepare(`INSERT INTO free_tag_seen (tag, post_id, first_seen) SELECT DISTINCT j.value, p.id, @at ${LIVE_TAGS_FROM} ${LIVE_TAGS_WHERE}
+            ON CONFLICT (tag, post_id) DO UPDATE SET first_seen = excluded.first_seen, gone_at = NULL WHERE free_tag_seen.gone_at IS NOT NULL`).run({ at });
+        db.prepare(`DELETE FROM free_tag_seen WHERE gone_at IS NOT NULL AND gone_at <= @weekAgo AND NOT ${openReportOn('free_tag_seen.post_id')}`).run({ weekAgo });
     })();
 }
 
@@ -101,22 +115,28 @@ let counted: { at: number; list: FreeTagCount[] } | null = null;
 export function freeTagCounts(now: number = Date.now()): FreeTagCount[] {
     if (counted && now - counted.at >= 0 && now - counted.at < FREE_TAG_COUNT_MS) return counted.list;
     noteFreeTagsSeen(now);
-    const weekAgo = new Date(now - FREE_TAG_OFFER_DAYS * 86_400_000).toISOString();
-    // A word with no stamp (none can be, just after noteFreeTagsSeen) is never old enough: first_seen NULL fails the week.
+    const weekAgo = new Date(now - FREE_TAG_OFFER_DAYS * DAY_MS).toISOString();
+    // A listing with no stamp (none can be, just after noteFreeTagsSeen) is never old enough: first_seen NULL fails the week.
     const rows = db.prepare(`
-        SELECT j.value AS tag, COUNT(DISTINCT p.id) AS listings, COUNT(DISTINCT p.author_pubkey) AS authors, MIN(s.first_seen) AS first_seen,
-               MAX(CASE WHEN ${OPEN_REPORT} THEN 1 ELSE 0 END) AS reported
+        SELECT j.value AS tag, COUNT(DISTINCT p.id) AS listings, COUNT(DISTINCT p.author_pubkey) AS authors, MIN(s.first_seen) AS first_seen
         ${LIVE_TAGS_FROM}
-        LEFT JOIN free_tag_seen s ON s.tag = j.value
+        LEFT JOIN free_tag_seen s ON s.tag = j.value AND s.post_id = p.id
         ${LIVE_TAGS_WHERE}
         GROUP BY j.value
-    `).all() as { tag: string; listings: number; authors: number; first_seen: string | null; reported: number }[];
+    `).all() as { tag: string; listings: number; authors: number; first_seen: string | null }[];
+    // The words held: a listing that carries or carried one (its stamp kept) has a report open, or one that carried it in the
+    // last week was taken down or hidden by reports. A live listing is neither, so its own stamp only counts by a report.
+    const held = new Set((db.prepare(`
+        SELECT DISTINCT s.tag FROM free_tag_seen s LEFT JOIN posts hp ON hp.id = s.post_id
+        WHERE ${openReportOn('s.post_id')}
+           OR ((s.gone_at IS NULL OR s.gone_at > @weekAgo) AND (hp.removed_by_moderator_at IS NOT NULL OR hp.hidden_by_reports_at IS NOT NULL))
+    `).all({ weekAgo }) as { tag: string }[]).map((r) => r.tag));
     const rules = new Map((db.prepare('SELECT tag, action, into_tag FROM free_tag_rules').all() as { tag: string; action: FreeTagRuleAction; into_tag: string | null }[])
         .map((r) => [r.tag, r]));
     const list: FreeTagCount[] = rows.map((r) => {
         const rule = rules.get(r.tag);
         rules.delete(r.tag);
-        const aged = r.first_seen !== null && r.first_seen <= weekAgo && r.reported === 0;
+        const aged = r.first_seen !== null && r.first_seen <= weekAgo && !held.has(r.tag);
         const passes = r.authors >= FREE_TAG_OFFER_AUTHORS || aged;
         return {
             tag: r.tag, listings: r.listings, authors: r.authors, firstSeen: r.first_seen,

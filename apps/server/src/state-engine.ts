@@ -1052,6 +1052,16 @@ export function initStateEngine(): void {
     // Every role: the sessions are each server's own.
     startSweepingRecoveryCollections();
 
+    // Each typed tag's day on each listing (engine/free-tags.ts), kept to the listings when nobody has read the count for a
+    // while: a listing back from a pause starts its week again. Every role, hourly: the stamps are each server's own, and a
+    // standby's follow its copy, so a take-over does not start from stamps last made at a read long ago.
+    if (!freeTagsTickArmed) {
+        freeTagsTickArmed = true;
+        setInterval(() => {
+            try { noteFreeTagsSeen(); } catch (e) { console.warn('[Tags] Could not keep the typed tags\' days:', e); }
+        }, 60 * 60 * 1000);
+    }
+
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
     const postCount = db.prepare("SELECT COUNT(*) as c FROM posts").get() as any;
     console.log(`📒 SQLite DB initialized: ${memberCount.c} members, ${postCount.c} posts`);
@@ -1091,6 +1101,8 @@ function runMainServerMigrations(): void {
 
 /** Whether this process armed the main server's timers (armMainServerTimers): once, whatever promotes it. */
 let mainServerTimersArmed = false;
+/** The hourly pass over the typed tags' days (initStateEngine), armed once on every role. */
+let freeTagsTickArmed = false;
 
 // Marketplace hygiene: expire stale requests, nudge lingering escrows (hourly + once at
 // boot). Primary only — it dispatches real push notifications to members, which a
@@ -1117,9 +1129,6 @@ function armMainServerTimers(): void {
         try { expireBills(); } catch (e) { console.warn('[Bills] Expiry failed:', e); }
         // Lines of the log of credit looks 12 months old go (engine/credit-looks.ts; the manifest's age rule, no tombstone).
         try { pruneOldLooks(); } catch (e) { console.warn('[Credit] Could not drop old credit looks:', e); }
-        // Each typed tag's first-seen day, kept to the live listings (engine/free-tags.ts) when nobody has read the count
-        // for a while: a word whose listings all went since then starts its week again when it comes back.
-        try { noteFreeTagsSeen(); } catch (e) { console.warn('[Tags] Could not keep the first-seen days:', e); }
     }), 60 * 60 * 1000);
 
     // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,

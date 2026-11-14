@@ -2301,13 +2301,18 @@ CREATE TABLE IF NOT EXISTS free_tag_rules (
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
--- When each tag members typed (by its stored form) first appeared on a live listing here, in its present unbroken run
--- (engine/free-tags.ts noteFreeTagsSeen): the week of the two-authors-or-a-week rule runs from it, not from the listing.
--- A row goes when no live listing carries the word, so it starts again when the word comes back. Each server keeps its
--- own (engine/replication-manifest.ts: local).
+-- Each tag members typed (by its stored form) on each listing here that carries or carried it live (engine/free-tags.ts
+-- noteFreeTagsSeen): the week of the two-authors-or-a-week rule is one listing's own, from `first_seen`, when that listing
+-- began to carry the word live in its present run (an edit that adds it, or the listing back from a pause, starts it
+-- again). `gone_at`: when the listing stopped carrying it live (taken off, paused, deleted, hidden, taken down), NULL while
+-- it does. A gone row is kept a week, and while a report on its listing is open, so a report or a takedown holds the word
+-- when it moves to another listing. Each server keeps its own (engine/replication-manifest.ts: local).
 CREATE TABLE IF NOT EXISTS free_tag_seen (
-    tag            TEXT PRIMARY KEY,
-    first_seen     DATETIME NOT NULL
+    tag            TEXT NOT NULL,
+    post_id        TEXT NOT NULL,
+    first_seen     DATETIME NOT NULL,
+    gone_at        DATETIME,
+    PRIMARY KEY (tag, post_id)
 );
 
 -- Every change to the known floor, the cap, the dial or a member's exception (design §4.2, §7.3), and to a member's badge

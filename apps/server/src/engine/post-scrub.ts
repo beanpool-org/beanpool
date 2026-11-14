@@ -55,6 +55,8 @@ export function scrubPostsOf(publicKey: string, at: string): string[] {
         .all(publicKey) as { id: string; title: string; description: string; category: string; tags: string }[];
     const clearTyped = db.prepare(`UPDATE posts SET free_tags = '', search_keywords = ?, updated_at = ? WHERE id = ?`);
     for (const p of polls) clearTyped.run(generateSearchKeywords(p.title, p.description, p.category, undefined, postTagsOf(p.tags)), at, p.id);
+    // Each typed tag's day on the member's posts, polls too (engine/free-tags.ts, each server's own): the words go with them.
+    db.prepare(`DELETE FROM free_tag_seen WHERE post_id IN (SELECT id FROM posts WHERE author_pubkey = ?)`).run(publicKey);
 
     const posts = db.prepare(`SELECT id, type, category FROM posts WHERE author_pubkey = ? AND type != 'poll'`)
         .all(publicKey) as { id: string; type: string; category: string | null }[];

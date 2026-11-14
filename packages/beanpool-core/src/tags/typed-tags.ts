@@ -60,11 +60,17 @@ export function exactLibraryTag(text: string, index: TagIndex = tagIndex()): str
     return index.search(text, 12).find((id) => ids.includes(id)) ?? ids[0];
 }
 
+/**
+ * The library tag an owner merged a typed tag into (community-tags.ts mergedInto), or null for none: the field commits it as
+ * that tag, so a merged word never makes a new free twin.
+ */
+export type MergedInto = (text: string) => string | null;
+
 /** What this text would become beside the tags held, or null for nothing to commit (an empty field, a lone `#`). */
-export function typedTag(text: string, held: TagsHeld, index: TagIndex = tagIndex()): TypedTag | null {
+export function typedTag(text: string, held: TagsHeld, index: TagIndex = tagIndex(), merged?: MergedInto): TypedTag | null {
     const tag = freeTagStored(text);
     if (!tag) return null;
-    const id = exactLibraryTag(text, index);
+    const id = exactLibraryTag(text, index) ?? (merged && freeTagRefusal(text) === null ? merged(text) : null);
     if (id) {
         if (!held.tags.includes(id) && held.tags.length >= POST_TAGS_MAX) return TOO_MANY_TAGS;
         return { kind: 'library', id };
@@ -90,13 +96,13 @@ export interface TagEntry {
  * the last piece; without it the piece after the last comma is still being typed and stays in the field. A refused piece
  * stops there: the ones before it are in, and it stays in the field with the words to say why.
  */
-export function enterTypedTags(text: string, held: TagsHeld, done: boolean, index: TagIndex = tagIndex()): TagEntry {
+export function enterTypedTags(text: string, held: TagsHeld, done: boolean, index: TagIndex = tagIndex(), merged?: MergedInto): TagEntry {
     const pieces = text.split(TAG_COMMA);
     const typing = done ? '' : pieces.pop() ?? '';
     const tags = [...held.tags];
     const freeTags = [...held.freeTags];
     for (let i = 0; i < pieces.length; i++) {
-        const typed = typedTag(pieces[i], { tags, freeTags }, index);
+        const typed = typedTag(pieces[i], { tags, freeTags }, index, merged);
         if (!typed) continue;
         if (typed.kind === 'refused') {
             const rest = [...pieces.slice(i).map((piece) => piece.trim()), typing.trimStart()].filter(Boolean).join(', ');

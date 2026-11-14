@@ -204,10 +204,13 @@ vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => who.value }));
 const theme = vi.hoisted(() => ({ dark: false }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors, darkColors } = await import('../../constants/colors');
+    const { useMemo } = await import('react');
     const colors = () => (theme.dark ? darkColors : lightColors);
     return {
         useTheme: () => ({ theme: theme.dark ? 'dark' : 'light', colors: colors(), isDark: theme.dark }),
-        useStyles: (make: (t: { theme: string; colors: unknown }) => unknown) => make({ theme: theme.dark ? 'dark' : 'light', colors: colors() }),
+        // Made once per theme, as the real hook keeps them (ThemeContext.tsx useStyles): a table made afresh each render would
+        // hide a memo that forgot a dependency (New message's contacts row, PR #3157).
+        useStyles: (make: (t: { theme: string; colors: unknown }) => unknown) => useMemo(() => make({ theme: theme.dark ? 'dark' : 'light', colors: colors() }), [theme.dark]),
     };
 });
 // Which community the phone is on: one that says `membersOnDemand` (the worldwide one) unless a test says otherwise.
@@ -325,6 +328,7 @@ import { InvitePeopleSheet } from '../../components/InvitePeopleSheet';
 import { splitRosterKeys } from '../../components/GroupChatView';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { forgetRecentLookups } from '../members-lookup';
+import { contactsRecordChanged, contactsSyncStoreKey, emptySyncState } from '../contacts-store';
 
 const realLoad = (Module as any)._load;
 beforeAll(() => {
@@ -691,6 +695,34 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(kept?.callsign).toBe('Rosa');
                 expect(kept?.card_fetched_at).toBeTruthy();
                 await fits([OWN, ROSA]);
+            });
+
+            // The contacts row (private contacts C3, PR #3157's deciding review): it follows the record beside the list
+            // (use-contacts.ts useContactsRecord), read after the first render. Turns red when `hasContacts` leaves the
+            // ListHeader memo's dependencies: the row keeps the words and the route of the first render.
+            const contactsRow = () => host.querySelector('[data-testid="new-message-contacts"]')!;
+            it('the contacts row says Import contacts until there is a list, and Your contacts once an import made one while New message stayed open', async () => {
+                await render(createElement(NewMessageScreen));
+                expect(contactsRow().textContent).toContain('Import contacts');
+                await press(contactsRow());
+                expect(nav.pushed).toEqual(['/contacts?start=import']);
+                // The import, from the Contacts screen on top: the record is written and the screens are told, nothing else changes here.
+                mem.store.set(contactsSyncStoreKey(OWN), JSON.stringify({ ...emptySyncState(), fileSeq: 1 }));
+                await act(async () => { contactsRecordChanged(OWN); });
+                await settle();
+                expect(contactsRow().textContent).toContain('Your contacts');
+                expect(contactsRow().textContent).not.toContain('Import contacts');
+                nav.pushed.length = 0;
+                await press(contactsRow());
+                expect(nav.pushed).toEqual(['/contacts']);
+            });
+
+            it('a member who has a list sees Your contacts on opening New message, however the first render fell', async () => {
+                mem.store.set(contactsSyncStoreKey(OWN), JSON.stringify({ ...emptySyncState(), fileSeq: 4 }));
+                await render(createElement(NewMessageScreen));
+                expect(contactsRow().textContent).toContain('Your contacts');
+                await press(contactsRow());
+                expect(nav.pushed).toEqual(['/contacts']);
             });
 
             it('offline: the held cards answer the search, and the empty line says to connect', async () => {

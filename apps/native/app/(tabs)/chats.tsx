@@ -97,7 +97,8 @@ export default function ChatsScreen() {
         setContactsHint(false);
         if (identity?.publicKey) AsyncStorage.setItem(contactsHintStoreKey(identity.publicKey), 'done').catch(() => {});
     };
-    const openContacts = () => { contactsHintDone(); router.push('/contacts'); };
+    // With no list yet the button reads Import contacts and opens Import (design §3.1, slice C3); with one, Contacts.
+    const openContacts = () => { contactsHintDone(); router.push(hasContacts ? '/contacts' : '/contacts?start=import'); };
     const [sortBy, setSortBy] = useState<'recent' | 'unread' | 'credits_desc' | 'credits_asc'>('recent');
     // Sorting by Beans is not offered on a community with Beans off (the worldwide one): every figure there is 0.
     const nodeProfile = useNodeProfile();
@@ -945,7 +946,7 @@ export default function ChatsScreen() {
                         </View>
                     )}
                 </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel={t('Contacts')} testID="contacts-button" hitSlop={2} style={styles.optionsToggleBtn} onPress={openContacts}>
+                <Pressable accessibilityRole="button" accessibilityLabel={hasContacts ? t('Contacts') : t('Import contacts')} testID="contacts-button" hitSlop={2} style={styles.optionsToggleBtn} onPress={openContacts}>
                     <MaterialCommunityIcons name={hasContacts ? 'account-multiple-outline' : 'account-multiple-plus-outline'} size={22} color={colors.text.secondary} />
                 </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel={t('New message')} style={[styles.optionsToggleBtn, { backgroundColor: colors.accent.tint }]} onPress={() => {
@@ -967,7 +968,7 @@ export default function ChatsScreen() {
                     </Text>
                     <View style={styles.contactsLineRow}>
                         <Pressable accessibilityRole="button" style={styles.contactsLineBtn} onPress={openContacts}>
-                            <Text style={styles.contactsLineBtnText}>{t('Contacts')}</Text>
+                            <Text style={styles.contactsLineBtnText}>{hasContacts ? t('Contacts') : t('Import contacts')}</Text>
                         </Pressable>
                         <Pressable accessibilityRole="button" accessibilityLabel={t('About your private contacts')} style={styles.contactsIconBtn} onPress={() => setContactsInfo(true)}>
                             <MaterialCommunityIcons name="information-outline" size={22} color={colors.text.body} />

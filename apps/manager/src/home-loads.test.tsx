@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { App } from './App';
-import { NODE_DATA_ANSWER_MS, NODE_DIAG_ANSWER_MS } from './lib/node-client';
+import { NODE_DATA_ANSWER_MS, NODE_DIAG_ANSWER_MS, NODE_TAKEOVER_ANSWER_MS } from './lib/node-client';
 
 /**
  * Settings' Home on a real community, as the owner reaches it from the phone's "Needs you" (Marty, 19 Oct, Mullumbimby on
@@ -11,6 +11,7 @@ import { NODE_DATA_ANSWER_MS, NODE_DIAG_ANSWER_MS } from './lib/node-client';
 
 const DATA = '/api/local/admin/data';
 const DIAGNOSTICS = '/api/local/admin/diagnostics';
+const TAKEOVER_STATUS = '/api/local/admin/takeover/status';
 
 /** A community of 34 members and one enterprise, as /api/local/admin/data answers it. */
 function communityData(): Record<string, unknown> {
@@ -32,6 +33,14 @@ function diagnostics(extra: Record<string, unknown> = {}): Record<string, unknow
     };
 }
 
+/** The take-over status a main server with a recovery code answers (Home reads it for an owner: #3155). */
+function takeoverStatus(): Record<string, unknown> {
+    return {
+        state: 'sealed', message: '', envelopeId: null, sealedAt: null, sealReason: null,
+        recipients: { owners: [], codes: [] }, skippedOwners: [], recoveryCode: { codeId: 1, createdAt: '2026-11-09T00:00:00.000Z' },
+    };
+}
+
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(body) });
 const refused = (status: number, body: unknown) => Promise.resolve({ ok: false, status, statusText: status === 401 ? 'Unauthorized' : 'Error', json: () => Promise.resolve(body) });
 const NOT_SIGNED_IN = { error: 'Not signed in: no admin session was sent', sessionExpired: true, notSignedIn: true };
@@ -41,6 +50,8 @@ interface NodeStub {
     /** What /admin/data answers once signed in. */
     data: () => Promise<unknown>;
     diag: () => Promise<unknown>;
+    /** What /admin/takeover/status answers once signed in; a main server with a recovery code when not given. */
+    takeover?: () => Promise<unknown>;
     /** Requests made before the sign-in finished, held until the test lets them answer. */
     held: Array<() => void>;
     hold: boolean;
@@ -64,6 +75,7 @@ function stubNode(node: NodeStub) {
         }
         if (u.includes(DATA)) return node.data();
         if (u.includes(DIAGNOSTICS)) return node.diag();
+        if (u.includes(TAKEOVER_STATUS)) return node.takeover ? node.takeover() : ok(takeoverStatus());
         return ok({ success: true, health: { flags: [] }, reports: [] });
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -218,6 +230,43 @@ describe('Settings Home after the phone link: real figures, or "couldn\'t load",
             await step(1_000);
             expect(screen.getByTestId('home-connections')).toHaveTextContent('3 active connections');
             expect(within(screen.getByTestId('home-action-required')).getByText(/All clear/)).toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('a take-over status still on its way says "Checking the recovery code…" beside the diagnostics\' "couldn\'t check" and its Retry, never over them; stalled, it ends in "couldn\'t check" too (#3155)', async () => {
+        vi.useFakeTimers();
+        try {
+            let broken = true;
+            const node: NodeStub = {
+                signedIn: false, hold: false, held: [],
+                data: () => ok(communityData()),
+                diag: () => (broken ? refused(500, { error: 'boom' }) : ok(diagnostics())),
+                takeover: () => (broken ? new Promise(() => { /* the phone link never brings it */ }) : ok(takeoverStatus())),
+            };
+            stubNode(node);
+            await openFromPhone();
+            await step(1_000);
+            expect(card(/Members/)).toHaveTextContent('34');
+            const panel = screen.getByTestId('home-action-required');
+            // The take-over read on its way keeps its own words, and the failed diagnostics keep theirs and their Retry.
+            expect(panel).toHaveTextContent('Checking the recovery code…');
+            expect(panel).toHaveTextContent("Couldn't check storage and the server's alerts (HTTP 500: Error).");
+            expect(within(panel).getByRole('button', { name: 'Retry the checks' })).toBeInTheDocument();
+            expect(panel).not.toHaveTextContent(/All clear/);
+            // A take-over read that never answers is no "Checking …" for as long as the socket stays open.
+            await step(NODE_TAKEOVER_ANSWER_MS);
+            expect(panel).not.toHaveTextContent(/Checking/);
+            expect(panel).toHaveTextContent("Couldn't check storage, the server's alerts and the recovery code (HTTP 500: Error; The node didn't answer within 30 seconds).");
+            expect(panel).not.toHaveTextContent(/All clear/);
+            broken = false;
+            await act(async () => {
+                fireEvent.click(within(panel).getByRole('button', { name: 'Retry the checks' }));
+            });
+            await step(1_000);
+            expect(panel).not.toHaveTextContent(/Checking|Couldn't check/);
+            expect(within(panel).getByText(/All clear/)).toBeInTheDocument();
         } finally {
             vi.useRealTimers();
         }

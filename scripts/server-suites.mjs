@@ -113,6 +113,7 @@ export const SUITES = [
     'test-distance-search',
     'test-tags-search',
     'test-free-tags',
+    'test-free-tag-suggestions',
     'test-distance-query-parsing',
     'test-guest-view',
     'test-private-preview',

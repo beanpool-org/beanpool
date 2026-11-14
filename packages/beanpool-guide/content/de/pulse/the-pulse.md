@@ -4,12 +4,14 @@ title: Der Puls
 summary: Was Nachbarn anderswo erstellen und teilen, gesammelt in einem Feed.
 related: home, learn, your-channels, reporting, the-bean
 help: Beiträge, die Nachbarn erstellt oder geteilt haben, in einem Feed. Tippe darauf zum Öffnen.
-source-hash: 5a5a0ba505806e0a
+source-hash: 48edba7a67cbc8e2
 ---
 
 ## Was es ist
 
-Öffne den Pulse über die Kachel **Der Puls** auf der **Startseite**: Tippe auf einen Beitrag oder auf **Alle ansehen**. Wenn die Kachel nicht auf deiner Startseite ist, hole sie mit **Karte hinzufügen** auf dem Smartphone oder **Startseite bearbeiten** in der Web-App zurück. Auf dem Smartphone kannst du ihn auch aus den **Einstellungen** unter **Der Puls** öffnen.
+Öffne den **Markt** und tippe oben auf **Puls**. Der Tab **Markt** bleibt hell, solange der Puls offen ist. In der Web-App findest du ihn auch im Menü an der Seite, unter **Markt**.
+
+Auch auf der **Startseite** ist er als Kachel **Der Puls** zu sehen, wenn ein Nachbar in der letzten Woche etwas geteilt hat: Tippe auf einen Beitrag oder auf **Alle ansehen**. Wenn die Kachel nicht auf deiner Startseite ist, hole sie mit **Karte hinzufügen** zurück. Auf dem Smartphone kannst du ihn auch aus den **Einstellungen** unter **Der Puls** öffnen.
 
 Der Pulse sammelt, was Mitglieder deiner Community auf anderen Websites veröffentlichen: Videos, Musik, Blogs, Fotos. Er bietet eine Möglichkeit zu entdecken, was deine Nachbarn schaffen und tun.
 
@@ -41,4 +43,6 @@ Du kannst den Beitrag einer anderen Person nicht nur für dich allein ausblenden
 
 ## Eigene Inhalte hinzufügen
 
-Tippe oben auf **+ Kanäle**. Siehe „Eigene Kanäle teilen“.
+Tippe unten rechts auf **Zu Pulse hinzufügen**. Wenn der Puls leer ist, sitzt der Button stattdessen in der Mitte der Seite. Um einen Beitrag zu teilen, füge zuerst den Kanal hinzu, auf dem er liegt: Tippe oben auf **Deine Kanäle**. Siehe „Eigene Kanäle teilen“.
+
+Auf der globalen Community verlangt der Puls noch nichts von dir: Es gibt dort kein **Zu Pulse hinzufügen**, und die Web-App schlägt keine Beiträge zum Teilen vor. Das wartet, bis das Hinzufügen dort Regeln für neue Mitglieder hat. **Deine Kanäle** funktioniert dort wie in jeder Community: Füge einen Kanal hinzu, seine Beiträge kommen trotzdem an, und du kannst von dort einen Beitrag teilen.

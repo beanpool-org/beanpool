@@ -4,12 +4,14 @@ title: O Pulso
 summary: O que seus vizinhos criam e compartilham em outros lugares, em um só feed.
 related: home, learn, your-channels, reporting, the-bean
 help: Links criados ou compartilhados por vizinhos em outros lugares, em um só feed. Toque em um para abrir.
-source-hash: 5a5a0ba505806e0a
+source-hash: 48edba7a67cbc8e2
 ---
 
 ## O que é
 
-Abra o Pulso a partir do cartão **O Pulso** no **Início**: toque em uma publicação ou em **Ver tudo**. Se ele não estiver no seu Início, traga-o de volta com **Adicionar um cartão** no celular ou **Editar início** no aplicativo web. No celular, você também pode abri-lo a partir de **Configurações**, sob **O Pulso**.
+Abra o **Mercado** e toque em **Pulso** perto do topo. A aba **Mercado** continua acesa enquanto o Pulso está aberto. No aplicativo web, ele também fica no menu lateral, sob **Mercado**.
+
+Ele também está no **Início**, como o cartão **O Pulso**, quando um vizinho compartilhou algo na última semana: toque em uma publicação ou em **Ver tudo**. Se ele não estiver no seu Início, traga-o de volta com **Adicionar um cartão**. No celular, você também pode abri-lo em **Configurações**, sob **O Pulso**.
 
 O Pulso reúne o que os membros da sua comunidade publicam em outros sites: vídeos, músicas, blogs, fotos. É uma forma de descobrir o que seus vizinhos criam e fazem.
 
@@ -41,4 +43,6 @@ Você não pode ocultar a publicação de outra pessoa apenas para você.
 
 ## Adicionar a sua
 
-Toque em **+ Canais** no topo. Consulte "Compartilhar seus canais".
+Toque em **Adicionar ao Pulso** no canto inferior direito. Quando o Pulso está vazio, o botão fica no meio da página. Para compartilhar uma publicação, adicione primeiro o canal em que ela está: toque em **Seus canais** no topo. Consulte "Compartilhar canais".
+
+Na comunidade global, o Pulso ainda não pede nada de você: não há **Adicionar ao Pulso**, e o aplicativo web não sugere publicações para compartilhar. Isso fica para quando adicionar ali tiver regras para novos membros. **Seus canais** funciona lá como em qualquer comunidade: adicione um canal e as publicações dele continuam chegando, e você pode compartilhar uma publicação de lá.

@@ -3,12 +3,12 @@ slug: your-channels
 title: Kanallarınızı paylaşma
 summary: YouTube, blog, Instagram ve diğer kanallarınızı Nabız'a ekleyin.
 related: the-pulse, learn, your-profile, privacy
-source-hash: bc8099cfeda70bea
+source-hash: 40a7c578cf3fdbbd
 ---
 
 ## Bir kanal ekleme
 
-- **Nabız**'da **+ Kanallar**'a dokunun. Telefonda ayrıca **Ayarlar**'ı açıp **Kanallar ve Vitrin** seçeneğine de dokunabilirsiniz.
+- **Nabız**'da üstteki **Kanallarınız** seçeneğine dokunun. Telefonda ayrıca **Ayarlar**'ı açıp **Kanallar ve Vitrin** seçeneğine de dokunabilirsiniz.
 - **+ Bir kanal ekle** seçeneğine dokunun.
 - **Nerede paylaşıyorsun?** altında siteyi seçin.
 - **Bağlantın veya kullanıcı adın** alanını yazın veya yapıştırın.

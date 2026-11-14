@@ -8,10 +8,10 @@
  * Rules:
  * - Facade cards, NOT embeds: taps open external post on platform.
  * - Prioritizes creator attribution: "my neighbour made this".
- * - Honest empty states. A quiet week asks nothing: two plain sentences, the one add button in the middle, and the Learn
- *   chip (DESIGN-pulse-home-fable.md §3.4).
- * - One add button, Add to Pulse, bottom right as the Market's ADD POST; none on the worldwide community until adding
- *   there has rules for new people (§3.2, §3.8; core pulseAddsHere).
+ * - Honest empty states. A quiet week asks nothing: two plain sentences, the one add button in the middle, and a line to
+ *   the How it works chip (the web has no Learn lane; DESIGN-pulse-home-fable.md §3.4).
+ * - One add button, Add to Pulse, bottom right as the Market's ADD POST; on the worldwide community no add button and no
+ *   nudges until adding there has rules for new people (§3.2, §3.8; core pulseAddsHere). Your channels stays.
  * - Responsive at 320dp and 1.3x font scale with pagination and filtering.
  */
 

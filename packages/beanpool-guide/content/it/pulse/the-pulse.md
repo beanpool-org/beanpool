@@ -4,12 +4,14 @@ title: The Pulse
 summary: Cosa creano e condividono altrove i tuoi vicini, raccolto in un unico feed.
 related: home, learn, your-channels, reporting, the-bean
 help: Link condivisi o creati dai tuoi vicini altrove, in un solo feed. Tocca per aprirli.
-source-hash: 5a5a0ba505806e0a
+source-hash: 48edba7a67cbc8e2
 ---
 
 ## Che cos'è
 
-Apri il Polso dalla scheda **Il Polso** su **Inizio**: tocca un post, oppure tocca **Vedi tutti**. Se non è presente sulla tua Home, ripristinalo con **Aggiungi una scheda** sul telefono, o **Modifica home** nell'app web. Sul telefono puoi aprirlo anche da **Impostazioni**, sotto **Il Polso**.
+Apri il **Mercato** e tocca **Polso** vicino all'alto. La scheda **Mercato** resta accesa finché il Polso è aperto. Nell'app web si trova anche nel menu laterale, sotto **Mercato**.
+
+È anche su **Inizio**, come scheda **Il Polso**, quando un vicino ha condiviso qualcosa nell'ultima settimana: tocca un post, oppure tocca **Vedi tutti**. Se non è presente sulla tua Home, ripristinalo con **Aggiungi una scheda**. Sul telefono puoi aprirlo anche da **Impostazioni**, sotto **Il Polso**.
 
 Il Polso raccoglie ciò che i membri della tua comunità pubblicano su altri siti: video, musica, blog, foto. È un modo per scoprire cosa creano e fanno i tuoi vicini.
 
@@ -41,4 +43,6 @@ Non puoi nascondere il post di qualcun altro solo per te stesso.
 
 ## Aggiungere i tuoi contenuti
 
-Tocca **+ Canali** in alto. Vedi "Condividere i tuoi canali".
+Tocca **Aggiungi a Pulse** in basso a destra. Quando il Polso è vuoto, il pulsante è invece al centro della pagina. Per condividere un post, aggiungi prima il canale su cui si trova: tocca **I tuoi canali** in alto. Vedi "Condividere i tuoi canali".
+
+Nella comunità globale il Polso non ti chiede ancora nulla: non c'è **Aggiungi a Pulse**, e l'app web non suggerisce post da condividere. Questo aspetta che l'aggiunta lì abbia regole per i nuovi membri. **I tuoi canali** funziona lì come in qualsiasi comunità: aggiungi un canale e i suoi post arrivano comunque, e puoi condividere un post da lì.

@@ -240,8 +240,10 @@ function findCreate(n: ts.Node, hops = 0, want?: string): ts.ObjectLiteralExpres
  *
  * Why a list and not every import (style box P2, 5 Nov 2026): following every relative import reads 14 more files and finds
  * two pairs under the bar in tools/ui.tsx that are not this change's to fix; that widening is its own change.
+ * The forum's (components/forum/forum-style.ts, slice F3) is one table every forum screen reads through `useForumStyles()`, the
+ * spec beside it, as the names list's.
  */
-const FOLLOWED_MODULES = new Set(['components/market-card-shell', 'utils/names-list-style']);
+const FOLLOWED_MODULES = new Set(['components/market-card-shell', 'utils/names-list-style', 'components/forum/forum-style']);
 
 /** The object literal a style-spec function returns: `(c) => ({ ... })`, or the first top-level `return { ... }` of its body. */
 function returnedObject(fn: ts.SignatureDeclaration): ts.ObjectLiteralExpression | undefined {

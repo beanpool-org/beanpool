@@ -4,7 +4,8 @@
  * code, so a second, plain one was made for the same person. Now:
  *
  *   Pending (n) ›  and  Joined (n) ›   folded, closed until opened (and kept open for the session once opened), count in the row
- *   each Pending row   who it is for (the note, else the code; "Name on the phone" for an invite bound to the names list, whose
+ *   each Pending row   who it is for (the name of the contact it was made for, from the private contacts list in this browser (C5),
+ *                      else the note, else the code; "Name on the phone" for an invite bound to the names list, whose
  *                      names are opened on a phone that holds the list's keys), what it carries ("200 vouch · voucher budget
  *                      1,000 · confirms them as known"), "23 days left" (red at 3 or fewer)
  *   the whole row      opens the invite: its QR, its code and Share
@@ -15,7 +16,7 @@
  * The words are core's (invite-rows.ts), the same as the phone's. Every control is at least 44 px tall and wraps at 320 px
  * with 1.3x text; colours are the central tokens, light and dark.
  */
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
     formatDate, inviteCarries, inviteFolds, inviteMadeTitle, inviteRevocable, inviteRevokeAsk, inviteRevokeWords, inviteTimeLeft, inviteWho, joinedHeading,
@@ -37,11 +38,11 @@ const dayWords = (iso: string | null | undefined): string => {
 };
 
 /** The three lines of an invite: who, what it carries, how long. A name needs the names list's key, which only a phone holds. */
-function InviteLines({ inv, now }: { inv: InviteRowSource; now: number }) {
+function InviteLines({ inv, now, contactName }: { inv: InviteRowSource; now: number; contactName?: string | null }) {
     const left = inviteTimeLeft(inv, now);
     return (
         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-            <span className="text-[15px] font-bold text-nature-950 dark:text-white break-words" data-testid="invite-who">{inviteWho(inv, { nameOnPhone: true })}</span>
+            <span className="text-[15px] font-bold text-nature-950 dark:text-white break-words" data-testid="invite-who">{inviteWho(inv, { nameOnPhone: true, contactName })}</span>
             <span className="text-[13px] leading-snug text-nature-600 dark:text-nature-300 break-words" data-testid="invite-carries">{inviteCarries(inv)}</span>
             {left && (
                 <span
@@ -113,8 +114,9 @@ export function RevokeInvite({ inv, onRevoke, testId = 'invite-revoke' }: { inv:
     );
 }
 
-function InviteDialog({ inv, now, link, share, onClose, onRevoke }: {
+function InviteDialog({ inv, now, link, share, onClose, onRevoke, contactName }: {
     inv: InviteRowSource; now: number; link: string; share: ReactNode; onClose: () => void; onRevoke?: (inv: InviteRowSource) => Promise<string | null>;
+    contactName?: string | null;
 }) {
     const dialog = useRef<HTMLDivElement | null>(null);
     useDialogFocus(dialog, onClose, { initialFocus: () => dialog.current?.querySelector<HTMLElement>('[data-testid="invite-sheet-close"]') });
@@ -124,7 +126,7 @@ function InviteDialog({ inv, now, link, share, onClose, onRevoke }: {
             className="fixed inset-0 z-[320] flex items-center justify-center p-4 bg-black/50"
             role="dialog"
             aria-modal="true"
-            aria-label={inviteWho(inv, { nameOnPhone: true })}
+            aria-label={inviteWho(inv, { nameOnPhone: true, contactName })}
             data-testid="invite-sheet"
             onClick={onClose}
         >
@@ -132,7 +134,7 @@ function InviteDialog({ inv, now, link, share, onClose, onRevoke }: {
                 className="w-full max-w-[420px] max-h-[90vh] overflow-y-auto p-5 rounded-2xl bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 shadow-xl flex flex-col gap-4"
                 onClick={(e) => e.stopPropagation()}
             >
-                <div className="flex"><InviteLines inv={inv} now={now} /></div>
+                <div className="flex"><InviteLines inv={inv} now={now} contactName={contactName} /></div>
                 {/* The QR code keeps its white quiet zone in dark mode too: a phone camera cannot read it on a dark ground. */}
                 <div className="self-center bg-white dark:bg-white rounded-xl p-4 shadow-sm">
                     <QRCodeSVGComponent value={link} size={180} />
@@ -163,15 +165,23 @@ export interface PendingInvitesProps {
     shareFor: (code: string) => ReactNode;
     /** Revoke an open invite on the community (I2): null once gone (the dialog closes), else the sentence to show. */
     onRevoke?: (inv: InviteRowSource) => Promise<string | null>;
+    /** Names from the member's private contacts in this browser, by code in lower case (core contactInviteNames; C5). */
+    contactNames?: ReadonlyMap<string, string>;
+    /** A fold is open with an invite in it that has no note and no names-list entry: the caller opens the contacts list. */
+    onNeedContacts?: (need: boolean) => void;
 }
 
-export function PendingInvites({ invites, now, linkFor, shareFor, onRevoke }: PendingInvitesProps) {
+export function PendingInvites({ invites, now, linkFor, shareFor, onRevoke, contactNames, onNeedContacts }: PendingInvitesProps) {
     const [pendingOpen, togglePending] = useFold('pending');
     const [joinedOpen, toggleJoined] = useFold('joined');
     const [openCode, setOpenCode] = useState<string | null>(null);
     const pending = pendingInvites(invites, now);
     const joined = joinedInvites(invites);
     const opened = openCode ? pending.find((i) => i.code === openCode) ?? null : null;
+    const plain = (i: InviteRowSource) => !i.namesEntryId && !i.forKnock && !i.intendedFor?.trim();
+    const needContacts = (pendingOpen && pending.some(plain)) || (joinedOpen && joined.some(plain));
+    useEffect(() => { onNeedContacts?.(needContacts); }, [needContacts, onNeedContacts]);
+    const contactFor = (inv: InviteRowSource) => contactNames?.get(inv.code.toLowerCase()) ?? null;
 
     const fold = (label: string, open: boolean, toggle: () => void, testId: string) => (
         <button
@@ -199,7 +209,7 @@ export function PendingInvites({ invites, now, linkFor, shareFor, onRevoke }: Pe
                             className="w-full min-h-[56px] mb-3 p-4 flex items-center gap-2 text-left rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 shadow-sm cursor-pointer"
                             data-testid="invite-pending-row"
                         >
-                            <InviteLines inv={inv} now={now} />
+                            <InviteLines inv={inv} now={now} contactName={contactFor(inv)} />
                             <span aria-hidden="true" className="text-nature-400 dark:text-nature-300 font-bold">›</span>
                         </button>
                     ))}
@@ -210,7 +220,7 @@ export function PendingInvites({ invites, now, linkFor, shareFor, onRevoke }: Pe
                 <div className="mb-4">
                     {fold(joinedHeading(joined.length), joinedOpen, toggleJoined, 'invites-joined-fold')}
                     {joinedOpen && joined.map((inv) => {
-                        const who = inviteWho(inv, { nameOnPhone: true });
+                        const who = inviteWho(inv, { nameOnPhone: true, contactName: contactFor(inv) });
                         return (
                             <div
                                 key={inv.code}
@@ -232,6 +242,7 @@ export function PendingInvites({ invites, now, linkFor, shareFor, onRevoke }: Pe
                     link={linkFor(opened.code)}
                     share={shareFor(opened.code)}
                     onClose={() => setOpenCode(null)}
+                    contactName={contactFor(opened)}
                     onRevoke={onRevoke && (async (i) => {
                         const said = await onRevoke(i);
                         if (!said) setOpenCode(null);

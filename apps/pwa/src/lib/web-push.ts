@@ -284,8 +284,9 @@ export async function turnOffWebPush(origin: string, identity: BeanPoolIdentity)
  * the address changed, so the DELETE is signed for that host and sent there. The pin goes at once. The DELETE leaves with
  * keepalive (lib/api.ts sendSignedAt), so the reload that follows doesn't cut it, and its answer is never awaited. The
  * browser's subscription ends too, so the old community can tell this browser nothing more even if the DELETE never gets
- * there. Resolves once both are on their way, or after LET_GO_WAIT_MS (a server version not heard yet, a slow browser);
- * with no pin there, at once and with nothing sent. Never throws.
+ * there (the old community forgets a browser its push service calls gone: apps/server web-push-subscriptions.ts
+ * sendWebPushes). Resolves once the DELETE is on its way and the subscription has ended, or after LET_GO_WAIT_MS (a server
+ * version not heard yet, a slow browser); with no pin there, at once and with nothing sent. Never throws.
  */
 export const LET_GO_WAIT_MS = 1_000;
 export async function letGoOfWebPushAt(origin: string, identity: BeanPoolIdentity): Promise<void> {

@@ -11,7 +11,7 @@
  * groups, places, poll answers. The 320 dp × 1.3 checks model widths as tab-bar-words-render.test.ts does (a generous
  * 0.62 em a letter), and for the category tiles at the emulator-measured ~5.6 dp a letter (utils/filter-chips.ts).
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Module from 'node:module';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -25,6 +25,17 @@ import { createRoot, type Root } from 'react-dom/client';
 /** The width every measured view reports (onLayout): the category panel's at 320 dp, 16 dp gutters, -8 dp margins. */
 const PANEL_WIDTH = 304;
 const alerts = vi.hoisted(() => ({ said: [] as string[] }));
+
+// One clock for the whole file: today's local noon, running on in real time. The fixtures below are dated from it and the
+// Market counts "posted today" by the local calendar day, so a run that crossed midnight saw the minute-old listing as
+// yesterday's and lost the fresh banner (merge queue run 43530979231: vitest started 23:59:31 UTC). Only Date is faked.
+vi.hoisted(() => {
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+    const noon = new Date();
+    noon.setHours(12, 0, 0, 0);
+    vi.setSystemTime(noon);
+});
+afterAll(() => { vi.useRealTimers(); });
 
 vi.mock('react-native', async () => {
     // Modal and Platform are the shared harness's: iOS's refusals and dismissals are `modalControl`'s (profile-events-words-harness.ts).

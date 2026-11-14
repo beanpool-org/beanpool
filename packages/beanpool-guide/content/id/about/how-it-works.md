@@ -36,14 +36,14 @@ Jika suatu transaksi mengalami kendala, admin komunitasmu dapat turun tangan. Me
 Kamu juga dapat mengirimkan kacang kepada seseorang sebagai hadiah, tanpa adanya transaksi.
 
 - Hadiah hanya dapat berasal dari kacang yang kamu miliki. Hadiah tidak pernah bisa membuat saldomu berada di bawah nol.
-- Kamu dapat mengirim hadiah setelah kamu menyelesaikan suatu transaksi di pasar. Transaksi yang hanya bernilai 1 atau 2 kacang terlalu kecil untuk dihitung.
+- Kamu dapat mengirim hadiah setelah kamu menyelesaikan suatu transaksi di pasar, sekecil apa pun.
 - Hadiah tidak dikenakan biaya.
 
 ## Berada di bawah nol: batas kreditmu
 
 Kamu dapat berbelanja sedikit lebih banyak dari yang kamu miliki, dan berada di bawah nol. Ini adalah **batas kreditmu**. Ini adalah janji untuk membantu orang lain nanti.
 
-Batas kreditmu dimulai dari nol. Batas ini terbuka saat kamu menyelesaikan transaksi pertamamu di pasar (transaksi yang hanya bernilai 1 atau 2 kacang terlalu kecil untuk dihitung). Seseorang yang dipilih komunitasmu untuk menyambut pendatang baru juga dapat memberimu permulaan kecil dengan menjaminmu: 25, 50, atau 100 kacang.
+Batas kreditmu dimulai dari nol. Batas ini terbuka saat kamu menyelesaikan transaksi pertamamu di pasar, sekecil apa pun. Seseorang yang dipilih komunitasmu untuk menyambut pendatang baru juga dapat memberimu permulaan kecil dengan menjaminmu: 25, 50, atau 100 kacang.
 
 Batas kreditmu bertumbuh seiring **kepercayaanmu**:
 

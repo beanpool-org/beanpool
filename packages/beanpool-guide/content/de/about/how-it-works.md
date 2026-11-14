@@ -36,14 +36,14 @@ Wenn ein Handel feststeckt, kann ein Admin deiner Community eingreifen. Er kann 
 Du kannst jemandem auch Bohnen als Geschenk senden, ganz ohne Handel.
 
 - Ein Geschenk kann nur aus Bohnen stammen, die du hast. Es kann dich niemals unter null bringen.
-- Du kannst Geschenke senden, sobald du einen Handel im Markt abgeschlossen hast. Ein Handel von nur 1 oder 2 Bohnen ist zu klein, um zu zählen.
+- Du kannst Geschenke senden, sobald du einen Handel im Markt abgeschlossen hast, wie klein auch immer.
 - Geschenke haben keine Gebühr.
 
 ## Unter null gehen: Dein Kreditrahmen
 
 Du kannst etwas mehr ausgeben, als du hast, und unter null gehen. Dies ist dein **Kreditrahmen**. Es ist ein Versprechen, anderen später zu helfen.
 
-Dein Kreditrahmen beginnt bei null. Er öffnet sich, wenn du deinen ersten Handel im Markt abschließt (ein Handel von nur 1 oder 2 Bohnen ist zu klein, um zu zählen). Jemand, den deine Community ausgewählt hat, um Neulinge zu begrüßen, kann dir auch einen kleinen Start ermöglichen, indem er für dich bürgt: 25, 50 oder 100 Bohnen.
+Dein Kreditrahmen beginnt bei null. Er öffnet sich, wenn du deinen ersten Handel im Markt abschließt, wie klein auch immer. Jemand, den deine Community ausgewählt hat, um Neulinge zu begrüßen, kann dir auch einen kleinen Start ermöglichen, indem er für dich bürgt: 25, 50 oder 100 Bohnen.
 
 Dein Kreditrahmen wächst mit deinem **Vertrauen**:
 

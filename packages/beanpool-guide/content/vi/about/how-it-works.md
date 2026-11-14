@@ -36,14 +36,14 @@ Nếu một giao dịch bị bế tắc, một quản trị viên của cộng �
 Bạn cũng có thể gửi Đậu cho ai đó như một món quà tặng, không cần thông qua giao dịch.
 
 - Quà tặng chỉ có thể lấy từ số Đậu bạn đang có. Quà tặng không bao giờ có thể khiến bạn xuống dưới mức 0.
-- Bạn có thể gửi quà tặng sau khi đã hoàn thành một giao dịch trên chợ. Một giao dịch chỉ 1 hoặc 2 Đậu là quá nhỏ để được tính.
+- Bạn có thể gửi quà tặng sau khi đã hoàn thành một giao dịch trên chợ, dù nhỏ đến đâu.
 - Quà tặng không mất phí.
 
 ## Vượt xuống dưới mức 0: hạn mức tín dụng của bạn
 
 Bạn có thể chi tiêu nhiều hơn một chút so với số Đậu bạn đang có, và số dư có thể xuống dưới mức 0. Đây là **hạn mức tín dụng** của bạn. Đó là một lời hứa sẽ giúp đỡ người khác sau này.
 
-Hạn mức tín dụng của bạn bắt đầu từ số 0. Nó sẽ mở ra khi bạn hoàn thành giao dịch đầu tiên trên chợ (giao dịch chỉ 1 hoặc 2 Đậu là quá nhỏ để được tính). Người được cộng đồng chọn để chào đón thành viên mới cũng có thể hỗ trợ bạn một khởi đầu nhỏ bằng cách bảo lãnh cho bạn: 25, 50 hoặc 100 Đậu.
+Hạn mức tín dụng của bạn bắt đầu từ số 0. Nó sẽ mở ra khi bạn hoàn thành giao dịch đầu tiên trên chợ, dù nhỏ đến đâu. Người được cộng đồng chọn để chào đón thành viên mới cũng có thể hỗ trợ bạn một khởi đầu nhỏ bằng cách bảo lãnh cho bạn: 25, 50 hoặc 100 Đậu.
 
 Hạn mức tín dụng của bạn sẽ tăng lên cùng với mức **uy tín** của bạn:
 

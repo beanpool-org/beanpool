@@ -19,7 +19,7 @@ The app has no way to buy or sell beans for money. Beans are earned by helping p
 
 ## Why can't I send a gift?
 
-A gift needs two things. You must have completed a trade in the market (1 or 2 beans is too small to count), and you can only give beans you have. A gift can never take you below zero.
+A gift needs two things. You must have completed a trade in the market, however small, and you can only give beans you have. A gift can never take you below zero.
 
 ## Why can't I spend below zero?
 

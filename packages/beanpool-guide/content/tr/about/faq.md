@@ -20,7 +20,7 @@ Uygulamanın parayla fasulye almak veya satmak için hiçbir yolu yoktur. Fasuly
 
 ## Neden hediye gönderemiyorum?
 
-Bir hediye için iki şey gerekir. Pazar'da tamamlanmış bir takasınız olmalıdır (1 veya 2 fasulye sayılmayacak kadar küçüktür) ve yalnızca sahip olduğunuz fasulyeleri verebilirsiniz. Bir hediye sizi asla sıfırın altına düşüremez.
+Bir hediye için iki şey gerekir. Pazar'da tamamlanmış bir takasınız olmalıdır, ne kadar küçük olursa olsun, ve yalnızca sahip olduğunuz fasulyeleri verebilirsiniz. Bir hediye sizi asla sıfırın altına düşüremez.
 
 ## Neden sıfırın altında harcama yapamıyorum?
 

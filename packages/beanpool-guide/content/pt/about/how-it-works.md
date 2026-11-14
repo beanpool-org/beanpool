@@ -36,14 +36,14 @@ Se uma troca ficar travada, um administrador da sua comunidade pode intervir. El
 Você também pode enviar feijões para alguém como presente, sem uma troca.
 
 - Um presente só pode vir de feijões que você tem. Ele nunca pode deixar seu saldo abaixo de zero.
-- Você pode enviar presentes após ter concluído uma troca no mercado. Uma troca de apenas 1 ou 2 feijões é pequena demais para contar.
+- Você pode enviar presentes após ter concluído uma troca no mercado, por menor que seja.
 - Presentes não têm taxa.
 
 ## Ficar abaixo de zero: sua linha de crédito
 
 Você pode gastar um pouco mais do que tem e ficar abaixo de zero. Esta é a sua **linha de crédito**. É uma promessa de ajudar os outros mais tarde.
 
-Sua linha de crédito começa no zero. Ela se abre quando você conclui sua primeira troca no mercado (uma troca de apenas 1 ou 2 feijões é pequena demais para contar). Alguém que sua comunidade escolheu para receber novatos também pode dar a você um começo garantindo por você: 25, 50 ou 100 feijões.
+Sua linha de crédito começa no zero. Ela se abre quando você conclui sua primeira troca no mercado, por menor que seja. Alguém que sua comunidade escolheu para receber novatos também pode dar a você um começo garantindo por você: 25, 50 ou 100 feijões.
 
 Sua linha de crédito cresce com a sua **confiança**:
 

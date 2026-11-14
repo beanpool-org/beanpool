@@ -36,14 +36,14 @@ Biashara ikikwama, msimamizi wa jumuiya yako anaweza kuingilia kati. Anaweza kum
 Unaweza pia kumtumia mtu maharagwe kama zawadi, bila biashara yoyote.
 
 - Zawadi inaweza kutoka tu kwa maharagwe uliyo nayo. Haiwezi kamwe kukupeleka chini ya sifuri.
-- Unaweza kutuma zawadi mara tu unapokamilisha biashara katika soko. Biashara ya maharagwe 1 au 2 tu ni ndogo sana kuhesabiwa.
+- Unaweza kutuma zawadi mara tu unapokamilisha biashara katika soko, hata iwe ndogo kiasi gani.
 - Zawadi hazina ada.
 
 ## Kwenda chini ya sifuri: kikomo chako cha mkopo
 
 Unaweza kutumia zaidi kidogo ya ulichonacho, na kwenda chini ya sifuri. Hiki ni **kikomo chako cha mkopo**. Ni ahadi ya kuwasaidia wengine baadaye.
 
-Kikomo chako cha mkopo huanzia sifuri. Hufunguka unapokamilisha biashara yako ya kwanza sokoni (biashara ya maharagwe 1 au 2 tu ni ndogo sana kuhesabiwa). Mtu ambaye jumuiya yako imemchagua kuwakaribisha wageni anaweza pia kukupa mwanzo mdogo kwa kukudhamini: maharagwe 25, 50 au 100.
+Kikomo chako cha mkopo huanzia sifuri. Hufunguka unapokamilisha biashara yako ya kwanza sokoni, hata iwe ndogo kiasi gani. Mtu ambaye jumuiya yako imemchagua kuwakaribisha wageni anaweza pia kukupa mwanzo mdogo kwa kukudhamini: maharagwe 25, 50 au 100.
 
 Kikomo chako cha mkopo hukua kulingana na **uaminifu** wako:
 

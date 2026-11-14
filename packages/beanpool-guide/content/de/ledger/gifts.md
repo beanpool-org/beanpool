@@ -8,7 +8,7 @@ source-hash: 51e9457f6d95368b
 
 ## Bevor du schenken kannst
 
-- Du musst mindestens einen Handel im Markt abgeschlossen haben. Ein Handel von nur 1 oder 2 Bohnen ist zu klein, um zu zählen.
+- Du musst mindestens einen Handel im Markt abgeschlossen haben, wie klein auch immer.
 - Du kannst nur Bohnen verschenken, die du besitzt. Ein Geschenk kann dich niemals unter null bringen.
 
 Bis dahin gibt die Schaltfläche an, was fehlt, wie etwa **erfordert 1 Handel** oder **erfordert positives Guthaben**.

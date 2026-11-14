@@ -20,7 +20,7 @@ L'app non prevede alcun modo per comprare o vendere fagioli in denaro. I fagioli
 
 ## Perché non posso inviare un dono?
 
-Un dono richiede due condizioni. Devi aver completato uno scambio nel mercato (1 o 2 fagioli è troppo poco per contare), e puoi donare solo fagioli che possiedi effettivamente. Un dono non può mai farti andare sotto zero.
+Un dono richiede due condizioni. Devi aver completato uno scambio nel mercato, per quanto piccolo, e puoi donare solo fagioli che possiedi effettivamente. Un dono non può mai farti andare sotto zero.
 
 ## Perché non posso spendere sotto zero?
 

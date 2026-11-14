@@ -8,7 +8,7 @@ source-hash: 51e9457f6d95368b
 
 ## Yapabilmeniz için gerekenler
 
-- Pazarda bir takas tamamlamış olmanız gerekir. Yalnızca 1 veya 2 fasulyelik bir takas sayılmak için çok küçüktür.
+- Pazarda, ne kadar küçük olursa olsun, bir takas tamamlamış olmanız gerekir.
 - Yalnızca sahip olduğunuz fasulyeleri verebilirsiniz. Bir hediye sizi asla sıfırın altına düşüremez.
 
 O zamana kadar düğme **1 tamamlanmış takas gerekir** veya **pozitif bakiye gerekir** gibi neyin eksik olduğunu söyler.

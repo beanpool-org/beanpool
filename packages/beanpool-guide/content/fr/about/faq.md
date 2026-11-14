@@ -20,7 +20,7 @@ L'application ne permet pas d'acheter ou de vendre des haricots contre de l'arge
 
 ## Pourquoi ne puis-je pas envoyer un don ?
 
-Un don nécessite deux conditions. Vous devez avoir conclu un échange sur le marché (1 ou 2 haricots est trop petit pour compter), et vous ne pouvez donner que les haricots que vous possédez. Un don ne peut jamais vous faire passer sous zéro.
+Un don nécessite deux conditions. Vous devez avoir conclu un échange sur le marché, aussi petit soit-il, et vous ne pouvez donner que les haricots que vous possédez. Un don ne peut jamais vous faire passer sous zéro.
 
 ## Pourquoi ne puis-je pas dépenser sous zéro ?
 

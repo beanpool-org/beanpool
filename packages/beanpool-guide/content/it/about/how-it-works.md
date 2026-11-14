@@ -36,14 +36,14 @@ Se uno scambio si blocca, un amministratore della tua comunità può intervenire
 Puoi anche inviare fagioli a qualcuno come dono, senza alcuno scambio.
 
 - Un dono può provenire solo dai fagioli che possiedi. Non può mai portarti sotto lo zero.
-- Puoi inviare doni dopo aver completato uno scambio nel mercato. Uno scambio di soli 1 o 2 fagioli è troppo piccolo per essere conteggiato.
+- Puoi inviare doni dopo aver completato uno scambio nel mercato, per quanto piccolo.
 - I doni non hanno commissioni.
 
 ## Andare sotto zero: la tua linea di credito
 
 Puoi spendere un po' più di quanto hai e andare sotto zero. Questa è la tua **linea di credito**. È una promessa di aiutare gli altri in seguito.
 
-La tua linea di credito inizia a zero. Si apre quando completi il tuo primo scambio nel mercato (uno scambio di soli 1 o 2 fagioli è troppo piccolo per essere conteggiato). Qualcuno scelto dalla tua comunità per dare il benvenuto ai nuovi arrivati può anche offrirti un piccolo inizio facendoti da garante: 25, 50 o 100 fagioli.
+La tua linea di credito inizia a zero. Si apre quando completi il tuo primo scambio nel mercato, per quanto piccolo. Qualcuno scelto dalla tua comunità per dare il benvenuto ai nuovi arrivati può anche offrirti un piccolo inizio facendoti da garante: 25, 50 o 100 fagioli.
 
 La tua linea di credito cresce con la tua **fiducia**:
 

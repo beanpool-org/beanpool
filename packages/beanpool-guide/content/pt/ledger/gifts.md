@@ -8,7 +8,7 @@ source-hash: 51e9457f6d95368b
 
 ## Antes de poder enviar
 
-- Você precisa ter concluído uma troca no mercado. Uma troca de apenas 1 ou 2 feijões é pequena demais para contar.
+- Você precisa ter concluído uma troca no mercado, por menor que seja.
 - Você só pode dar feijões que possui. Um presente nunca pode deixar seu saldo abaixo de zero.
 
 Até lá, o botão informa o que está faltando, como **exige 1 troca concluída** ou **exige saldo positivo**.

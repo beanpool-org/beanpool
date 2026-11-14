@@ -36,14 +36,14 @@ Si un trato se queda atascado, un administrador de tu comunidad puede intervenir
 También puedes enviar frijoles a alguien como un regalo, sin ningún trato.
 
 - Un regalo solo puede provenir de los frijoles que tienes. Nunca puede dejarte por debajo de cero.
-- Puedes enviar regalos una vez que hayas completado un trato en el mercado. Un trato de solo 1 o 2 frijoles es demasiado pequeño para contar.
+- Puedes enviar regalos una vez que hayas completado un trato en el mercado, por pequeño que sea.
 - Los regalos no tienen comisión.
 
 ## Saldo negativo: tu línea de crédito
 
 Puedes gastar un poco más de lo que tienes y tener un saldo negativo. Esta es tu **línea de crédito**. Es una promesa de ayudar a otros más adelante.
 
-Tu línea de crédito comienza en cero. Se habilita cuando completas tu primer trato en el mercado (un trato de solo 1 o 2 frijoles es demasiado pequeño para contar). Alguien a quien tu comunidad haya elegido para dar la bienvenida a los recién llegados también puede darte un pequeño comienzo al avalarte: 25, 50 o 100 frijoles.
+Tu línea de crédito comienza en cero. Se habilita cuando completas tu primer trato en el mercado, por pequeño que sea. Alguien a quien tu comunidad haya elegido para dar la bienvenida a los recién llegados también puede darte un pequeño comienzo al avalarte: 25, 50 o 100 frijoles.
 
 Tu línea de crédito crece con tu **confianza**:
 

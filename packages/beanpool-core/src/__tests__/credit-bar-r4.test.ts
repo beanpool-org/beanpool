@@ -8,7 +8,8 @@
  *   English pause warning are read.
  * - The guide's bar section (`credit-line`, "Where to see it") names the card's own marks and lines from core, and its
  *   examples are core's sentences for the same figures; `your-balance` names the tiles as the apps do; `circulation-fee`
- *   quotes the card's fee note. F23: no page still says a 1- or 2-Bean trade is too small to count.
+ *   quotes the card's fee note. F23: no English page of the guide (every page under content/, not only credit-line)
+ *   still says a 1- or 2-Bean trade is too small to count.
  * - The 24 copies of those pages name the sheet and the marks with their own catalog's words.
  *
  * The pages are read from content/ (what a test pins is what the page says, not the published copy).
@@ -18,6 +19,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { CREDIT_SHEET_WORDS } from '../credit-sheet.js';
+import { beans } from '../hundredths.js';
+import { earnedCreditFromValue } from '../protocol.js';
 import { CREDIT_STANDING_WORDS, creditBarPicture, creditLineParts, creditStandingCard, type CreditStandingAnswer } from '../credit-standing.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
@@ -146,6 +149,24 @@ describe("the guide's bar section matches the card's words", () => {
         expect(section(page, 'How it opens')).toContain(`**${CREDIT_STANDING_WORDS.noLineYet}**`);
     });
 
+    // F23 across the guide: the line opens, and Send unlocks, with any completed trade. The send gate is
+    // earnedCredit > 0 (state-engine's transfer), and a 1-Bean trade already earns some.
+    it('F23 on every English page: no page says a 1- or 2-Bean trade is too small to count', () => {
+        expect(earnedCreditFromValue(beans(1)), 'a 1-Bean trade earns credit').toBeGreaterThan(0);
+        const pages = walk(GUIDE).filter((p) => p.endsWith('.md') && !LANGS.some((lang) => p.startsWith(join(GUIDE, lang) + '/')));
+        expect(pages.length, 'English pages read').toBeGreaterThan(50);
+        const said = pages.flatMap((p) => readFileSync(p, 'utf8').split('\n')
+            .filter((line) => /\b(1|one) or (2|two) beans?\b|too small to count/i.test(line))
+            .map((line) => `${p.slice(GUIDE.length + 1)}: ${line}`));
+        expect(said).toEqual([]);
+        // The four places that said it now say the opposite, as credit-line does.
+        const howItWorks = readFileSync(join(GUIDE, 'about/how-it-works.md'), 'utf8');
+        expect(section(howItWorks, 'Gifts')).toContain('once you have completed a trade in the market, however small.');
+        expect(section(howItWorks, 'Going below zero: your credit line')).toContain('It opens when you complete your first trade in the market, however small.');
+        expect(section(english('gifts'), 'Before you can')).toContain('You need to have completed a trade in the market, however small.');
+        expect(section(readFileSync(join(GUIDE, 'about/faq.md'), 'utf8'), "Why can't I send a gift?")).toContain('You must have completed a trade in the market, however small,');
+    });
+
     it('your-balance names the Wallet tiles as the apps do, and circulation-fee quotes the card\'s fee note', () => {
         const balance = english('your-balance');
         expect(balance).not.toMatch(FLOOR);
@@ -174,5 +195,31 @@ describe('the 24 copies name the sheet and the marks in their own words', () => 
         const tile = value('apps/pwa/words', lang, 'Credit line');
         expect(tile, `${lang}: the web's "Credit line"`).toBeTruthy();
         expect(lower(copy(lang, 'your-balance')), `${lang}: the tile`).toContain(tile!.toLowerCase());
+    });
+});
+
+// Fix round 1, finding 2: the phone's Trust & Tiers ⓘ says how a line opens before any trade. It lists no preset
+// figures (an owner vouches 200 or 500 too) and names the other two ways: a member's credit-line gift and the known floor.
+describe("the phone's Trust & Tiers lines name every way a line opens before a trade", () => {
+    const file = join(ROOT, 'apps/native/components/info-content/TrustInfoModal.tsx');
+    const lines = wordsLiterals(file).filter((s) => /^Your credit line (stays|opens)/.test(s));
+
+    it('both lines name a vouch, a credit-line gift and the known floor, and no vouch figures', () => {
+        expect(lines).toHaveLength(2);
+        for (const s of lines) {
+            expect(s, s).toContain('someone vouches for you');
+            expect(s, s).toContain('a member gives you part of the credit line someone gave them');
+            expect(s, s).toContain('(the known floor)');
+            expect(s, s).not.toMatch(/\b(25|50|75|100|200|500)\b/);
+        }
+        expect(readFileSync(file, 'utf8')).not.toContain('25, 50, 75 or 100 Beans');
+    });
+
+    it.each(LANGS)('%s: the phone catalog has both lines, the first keeping {line}', (lang) => {
+        const words = catalog('apps/native/words', lang);
+        for (const s of lines) {
+            expect(typeof words[s], `${lang}: ${s}`).toBe('string');
+            if (s.includes('{line}')) expect(words[s] as string).toContain('{line}');
+        }
     });
 });

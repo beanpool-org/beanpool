@@ -36,14 +36,14 @@ Si un échange se retrouve bloqué, un administrateur de votre communauté peut 
 Vous pouvez aussi envoyer des haricots à quelqu'un sous forme de don, sans échange.
 
 - Un don ne peut provenir que des haricots que vous possédez. Il ne peut jamais vous faire passer sous zéro.
-- Vous pouvez faire des dons une fois que vous avez conclu un échange sur le marché. Un échange de seulement 1 ou 2 haricots est trop petit pour compter.
+- Vous pouvez faire des dons une fois que vous avez conclu un échange sur le marché, aussi petit soit-il.
 - Les dons sont sans frais.
 
 ## Passer sous zéro : votre ligne de crédit
 
 Vous pouvez dépenser un peu plus que ce que vous avez, et passer sous zéro. C'est votre **ligne de crédit**. C'est la promesse d'aider les autres plus tard.
 
-Votre ligne de crédit commence à zéro. Elle s'ouvre lorsque vous concluez votre premier échange sur le marché (un échange de seulement 1 ou 2 haricots est trop petit pour compter). Une personne choisie par votre communauté pour accueillir les nouveaux arrivants peut également vous donner un coup de pouce en vous parrainant : 25, 50 ou 100 haricots.
+Votre ligne de crédit commence à zéro. Elle s'ouvre lorsque vous concluez votre premier échange sur le marché, aussi petit soit-il. Une personne choisie par votre communauté pour accueillir les nouveaux arrivants peut également vous donner un coup de pouce en vous parrainant : 25, 50 ou 100 haricots.
 
 Votre ligne de crédit grandit avec votre **confiance** :
 

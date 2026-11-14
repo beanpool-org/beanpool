@@ -20,7 +20,7 @@ Aplikasi tidak memiliki cara untuk membeli atau menjual kacang dengan uang. Kaca
 
 ## Mengapa saya tidak bisa mengirim hadiah?
 
-Sebuah hadiah memerlukan dua hal. Kamu harus telah menyelesaikan suatu transaksi di pasar (transaksi 1 atau 2 kacang terlalu kecil untuk dihitung), dan kamu hanya bisa memberikan kacang yang kamu miliki. Hadiah tidak pernah bisa membuat saldomu berada di bawah nol.
+Sebuah hadiah memerlukan dua hal. Kamu harus telah menyelesaikan suatu transaksi di pasar, sekecil apa pun, dan kamu hanya bisa memberikan kacang yang kamu miliki. Hadiah tidak pernah bisa membuat saldomu berada di bawah nol.
 
 ## Mengapa saya tidak bisa berbelanja di bawah nol?
 

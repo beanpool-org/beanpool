@@ -36,14 +36,14 @@ Bir takas tıkanırsa topluluğunuzun bir yöneticisi müdahale edebilir. Satıc
 Bir takas olmadan da birine hediye olarak fasulye gönderebilirsiniz.
 
 - Bir hediye yalnızca sahip olduğunuz fasulyelerden verilebilir. Sizi asla sıfırın altına düşüremez.
-- Pazarda bir takası tamamladıktan sonra hediye gönderebilirsiniz. Yalnızca 1 veya 2 fasulyelik bir takas sayılmak için çok küçüktür.
+- Pazarda bir takası, ne kadar küçük olursa olsun, tamamladıktan sonra hediye gönderebilirsiniz.
 - Hediyelerin ücreti yoktur.
 
 ## Sıfırın altına inme: kredi limitiniz
 
 Sahip olduğunuzdan biraz daha fazlasını harcayabilir ve sıfırın altına inebilirsiniz. Bu sizin **kredi limitinizdir**. Daha sonra başkalarına yardım etme sözüdür.
 
-Kredi limitiniz sıfırdan başlar. Pazardaki ilk takasınızı tamamladığınızda açılır (yalnızca 1 veya 2 fasulyelik bir takas sayılmak için çok küçüktür). Topluluğunuzun yeni gelenleri karşılamak için seçtiği biri de size kefil olarak küçük bir başlangıç sağlayabilir: 25, 50 veya 100 fasulye.
+Kredi limitiniz sıfırdan başlar. Pazardaki ilk takasınızı tamamladığınızda, ne kadar küçük olursa olsun, açılır. Topluluğunuzun yeni gelenleri karşılamak için seçtiği biri de size kefil olarak küçük bir başlangıç sağlayabilir: 25, 50 veya 100 fasulye.
 
 Kredi limitiniz **güveninizle** büyür:
 

@@ -20,7 +20,7 @@ Programu haina njia ya kununua au kuuza maharagwe kwa pesa. Maharagwe hupatikana
 
 ## Kwa nini siwezi kutuma zawadi?
 
-Zawadi inahitaji mambo mawili. Lazima uwe umekamilisha biashara katika soko (maharagwe 1 au 2 ni madogo sana kuhesabiwa), na unaweza kutoa tu maharagwe uliyo nayo. Zawadi haiwezi kukupeleka chini ya sifuri kamwe.
+Zawadi inahitaji mambo mawili. Lazima uwe umekamilisha biashara katika soko, hata iwe ndogo kiasi gani, na unaweza kutoa tu maharagwe uliyo nayo. Zawadi haiwezi kukupeleka chini ya sifuri kamwe.
 
 ## Kwa nini siwezi kutumia chini ya sifuri?
 

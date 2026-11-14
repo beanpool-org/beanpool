@@ -36,14 +36,14 @@ Kung maipit ang isang kalakalan, maaaring mamagitan ang isang admin ng iyong kom
 Maaari ka ring magpadala ng munggo sa isang tao bilang regalo, nang walang kalakalan.
 
 - Ang isang regalo ay maaari lamang magmula sa munggo na mayroon ka. Hindi ka nito kailanman maaaring dalhin sa ilalim ng zero.
-- Maaari kang magpadala ng mga regalo kapag nakakumpleto ka na ng isang kalakalan sa merkado. Ang isang kalakalan na 1 o 2 munggo lamang ay masyadong maliit para mabilang.
+- Maaari kang magpadala ng mga regalo kapag nakakumpleto ka na ng isang kalakalan sa merkado, gaano man ito kaliit.
 - Walang bayad ang mga regalo.
 
 ## Pagbaba sa ilalim ng zero: ang iyong linya ng kredito
 
 Maaari kang gumastos nang kaunti pa kaysa sa mayroon ka, at bumaba sa ilalim ng zero. Ito ang iyong **linya ng kredito**. Isa itong pangako na tutulong sa iba sa ibang pagkakataon.
 
-Nagsisimula ang iyong linya ng kredito sa zero. Nagbubukas ito kapag nakumpleto mo ang iyong unang kalakalan sa merkado (ang kalakalan na 1 o 2 munggo lamang ay masyadong maliit para mabilang). Ang isang taong pinili ng iyong komunidad upang tanggapin ang mga baguhan ay maaari ding magbigay sa iyo ng kaunting panimula sa pamamagitan ng pag-vouch para sa iyo: 25, 50 o 100 munggo.
+Nagsisimula ang iyong linya ng kredito sa zero. Nagbubukas ito kapag nakumpleto mo ang iyong unang kalakalan sa merkado, gaano man ito kaliit. Ang isang taong pinili ng iyong komunidad upang tanggapin ang mga baguhan ay maaari ding magbigay sa iyo ng kaunting panimula sa pamamagitan ng pag-vouch para sa iyo: 25, 50 o 100 munggo.
 
 Lumalago ang iyong linya ng kredito kasama ng iyong **tiwala**:
 

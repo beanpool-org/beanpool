@@ -31,7 +31,8 @@
 import { ContactsCryptoError, type ContactsList } from '@beanpool/core';
 import { onAccountOnPhone } from './account-on-phone';
 import {
-    changeContacts, contactsRecordChanged, inTurn, loadContacts, phoneContactsDeps, readOnPhone, readStateFor, takeInCopy, writeState,
+    changeContacts, contactsRecordChanged, contactsSyncStoreKey, inTurn, loadContacts, phoneContactsDeps, readOnPhone, readStateFor, readSyncState, takeInCopy,
+    writeState,
     type ContactsAccount, type ContactsKv, type ContactsOnPhone, type ContactsRefusal, type ContactsStoreDeps, type ContactsSyncState,
 } from './contacts-store';
 
@@ -360,13 +361,15 @@ onAccountOnPhone((publicKey) => {
 
 /**
  * A pass when the member's latest change is due to leave the phone (its wait, design §4.5): set after each change, and as
- * the app opens with a change still waiting. One timer for the phone; a later call replaces it. Never throws.
+ * the app opens with a change still waiting. One timer for the phone; a later call replaces it. Never throws. Reads only the
+ * record beside the list, never the list: when a change is due doesn't depend on it, and opening 2,000 contacts takes most of
+ * a second on an old phone (PR #3142's measure), after every change and at every start.
  */
 export async function savePassWhenDue(account: ContactsAccount | null, deps: ContactsSyncDeps = phoneSyncDeps()): Promise<void> {
     stopTimer();
     if (!account?.publicKey) return;
     try {
-        const { state } = await loadContacts(account, deps);
+        const state = readSyncState(await deps.kv.getItem(contactsSyncStoreKey(account.publicKey)));
         if (state.dueAt === null) return;
         const wait = Math.max(0, state.dueAt - (deps.now ?? Date.now)());
         stopTimer();

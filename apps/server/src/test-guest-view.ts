@@ -1500,6 +1500,7 @@ async function main(): Promise<void> {
             'POST /api/node/check', 'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'GET /api/node/key',
             // The mailbox between communities (routes/relay.ts): another server's signed request, and a member's own mail.
             'POST /api/relay/mail', 'POST /api/mail/send', 'GET /api/mail', 'GET /api/mail/blob/:itemId', 'POST /api/mail/confirm',
+            'POST /api/mail/device/forget',
             'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',
             'POST /api/node/owner/lights-out', 'GET /api/local/admin/lights-out', 'POST /api/local/admin/lights-out',

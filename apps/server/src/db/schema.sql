@@ -3815,13 +3815,13 @@ CREATE INDEX IF NOT EXISTS idx_peek_tickets_sharer ON peek_tickets(sharer_pubkey
 CREATE INDEX IF NOT EXISTS idx_peek_tickets_expires ON peek_tickets(expires_at);
 
 -- 32. The mailbox between communities (messages across communities X2: scratch/fable-design/DESIGN-cross-chat-voice-fable.md
--- §3.2, §3.3, §7, §11 row X2; engine/relay-mail.ts, engine/relay-outbox.ts, routes/relay.ts). All three tables are this
--- server's own: never copied to a standby (engine/replication-manifest.ts, `local`), emptied in every snapshot and backup
+-- §3.2, §3.3, §7, §11 rows X2 and X2b; engine/relay-mail.ts, engine/relay-outbox.ts, routes/relay.ts). All five tables are
+-- this server's own: never copied to a standby (engine/replication-manifest.ts, `local`), emptied in every snapshot and backup
 -- file (services/address-retention.ts forgetAddressesInCopy), and a promoted standby starts with an empty mailbox: what was
 -- waiting is gone, and the sender sees "Not delivered" and can send again. Day zero: new tables, nothing converted.
 --
--- relay_mail: an item another community's server brought for a member here, held sealed until the member's device confirms
--- it has it, then deleted; 30 days at most. `envelope` is the sender's signed relay envelope as it came (@beanpool/core
+-- relay_mail: an item another community's server brought for a member here, held sealed until the member's devices confirm
+-- they have it (relay_mail_got), then deleted; 30 days at most. `envelope` is the sender's signed relay envelope as it came (@beanpool/core
 -- relay-envelope.ts); `payload` the sealed line or delete as it came. A blob's sealed bytes are a file of their own under
 -- <data>/relay-mail/in/ (never in the image store, so never in a backup's objects), `payload` NULL. `bytes` counts the
 -- payload either way, for the caps.
@@ -3839,6 +3839,26 @@ CREATE TABLE IF NOT EXISTS relay_mail (
 );
 CREATE INDEX IF NOT EXISTS idx_relay_mail_recipient ON relay_mail(recipient, received_at);
 CREATE INDEX IF NOT EXISTS idx_relay_mail_received ON relay_mail(received_at);
+
+-- relay_mail_devices: each device that fetches a member's mail (X2b, scratch/fable-design/decisions/DECISION-outside-door.md),
+-- by the random id its app made (@beanpool/core outside-devices.ts; gone from the app at Sign Out), and when it last asked.
+-- At most 5 a member, the one unseen longest going past that; one forgotten at Sign Out (POST /api/mail/device/forget) or
+-- unseen for 7 days is no longer listed, and comes back as new. relay_mail_got: which device has confirmed which item held
+-- for its member. An item goes once a device has confirmed it and every device listed has; a member's caps count only the
+-- items no device has confirmed. Both go with the member (the sweep) and with each item.
+CREATE TABLE IF NOT EXISTS relay_mail_devices (
+    member  TEXT NOT NULL CHECK (length(member) = 64),
+    device  TEXT NOT NULL CHECK (length(device) = 32),
+    seen_at INTEGER NOT NULL,
+    PRIMARY KEY (member, device)
+);
+CREATE INDEX IF NOT EXISTS idx_relay_mail_devices_seen ON relay_mail_devices(seen_at);
+CREATE TABLE IF NOT EXISTS relay_mail_got (
+    recipient TEXT NOT NULL CHECK (length(recipient) = 64),
+    item_id   TEXT NOT NULL CHECK (length(item_id) BETWEEN 8 AND 64),
+    device    TEXT NOT NULL CHECK (length(device) = 32),
+    PRIMARY KEY (recipient, item_id, device)
+);
 
 -- relay_mail_seen: every item another server brought here that passed its envelope's checks, held or dropped alike, by its
 -- sender and id, for 7 days: a replay is dropped, and the caps on a sending server and on this server count from it, so

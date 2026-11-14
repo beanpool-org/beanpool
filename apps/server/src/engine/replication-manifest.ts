@@ -663,11 +663,13 @@ export const TABLES: Record<string, TableEntry> = {
     // copied, stores none (engine/withheld-notes.ts).
     withheld_notes: { kind: 'local', reason: 'the note on Beans sent to someone who had blocked its sender, kept for the sender alone: never in a copy, so no standby can show it to them (engine/withheld-notes.ts)' },
     // The mailbox between communities (engine/relay-mail.ts, engine/relay-outbox.ts; DESIGN-cross-chat-voice-fable.md §7): mail
-    // waiting for a member here, the ids already seen, and what members here sent out. This server's own, never copied, and
+    // waiting for a member here, the ids already seen, each member's devices and what each has, and what members here sent out. This server's own, never copied, and
     // emptied in every snapshot and backup file (services/address-retention.ts): a promoted standby starts with none, and
     // the sender sees "Not delivered" and sends again.
     relay_mail: { kind: 'local', reason: "sealed items another community's server brought for a member here, held only until their device has them (engine/relay-mail.ts): never in a copy, so no standby or backup holds mail" },
     relay_mail_seen: { kind: 'local', reason: "the ids of the items other servers brought here, 7 days, against replays and for the caps (engine/relay-mail.ts): this server's own" },
+    relay_mail_devices: { kind: 'local', reason: "each device that fetches a member's mail and when it last asked, so an item waits until every one has it (engine/relay-mail.ts, X2b): this server's own, never in a copy" },
+    relay_mail_got: { kind: 'local', reason: "which of a member's devices has confirmed which item waiting here (engine/relay-mail.ts, X2b): goes with the item, never in a copy" },
     relay_outbox: { kind: 'local', reason: "what members here sent to other communities and what became of it, with the sealed item only while it waits to be taken (engine/relay-outbox.ts): never in a copy" },
 };
 

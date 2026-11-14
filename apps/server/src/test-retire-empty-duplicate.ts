@@ -139,6 +139,8 @@ const NOT_ACTIVITY: Record<string, string> = {
     'relay_mail.recipient': 'mail from another community waiting for it: done to it, not its act',
     'relay_mail.sender_key': "the sender, in another community, of mail waiting here: their key, no act of anyone's here",
     'relay_mail_seen.sender_key': "the sender, in another community, of an item that came here: their key, no act of anyone's here",
+    'relay_mail_devices.member': 'its own devices fetching mail from other communities: its own reading, no act (X2b)',
+    'relay_mail_got.recipient': 'which of its devices has which item waiting for it: its own reading, no act (X2b)',
     'relay_outbox.recipient': 'the person in another community its mail went to (or a receipt went back to): the sending is relay_outbox.sender_key',
     'invalidated_keys.public_key': "a key closed or replaced: the key's state, no act",
     // The forum (engine/forum.ts). A topic it started or a post or reply it wrote is forum_topics/forum_posts.writer_pubkey (`posts`).

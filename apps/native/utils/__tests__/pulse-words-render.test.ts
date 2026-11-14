@@ -434,7 +434,7 @@ describe('the Pulse tab in the pseudo-locale (words S3f)', () => {
         expect(host.textContent).toContain(xx('View post on {platform}').replace('{platform}', 'Instagram'));
         // A post with no link: its title as written, and no footer under it (the Daily Pulse's "Daily Reflection" line is gone).
         expect(host.textContent).toContain('On giving');
-        expect(host.textContent).not.toContain('Daily Reflection');
+        expect(host.textContent).not.toContain(xx('🌱 Daily Reflection'));
         expect(byLabel(xx('Neighbours feed, {n} items').replace('{n}', '3'))).not.toBeNull();
         expect(byLabel(xx('Category: {category}').replace('{category}', xx('Food & growing')))).not.toBeNull();
         expect(bracketed()).toBeGreaterThan(15);

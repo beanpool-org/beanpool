@@ -35,8 +35,10 @@ export async function cancelContactInvite(
     const failed = inviteRevokeWords.failed();
     try {
         const url = `${anchor}/api/invite/${encodeURIComponent(code)}`;
-        const sign = deps.signedHeaders ?? (await import('./crypto')).buildSignedHeaders;
-        const headers = await sign('DELETE', url, '', identity.privateKey, identity.publicKey);
+        // Signed by core's request builder (utils/crypto.ts buildSignedHeaders, as people.tsx's revoke): the phone's fetch signs
+        // only GETs on its own, and the community refuses an unsigned revoke. Loaded on the tap, like invite-and-share.ts.
+        const buildHeaders = deps.signedHeaders ?? (await import('./crypto')).buildSignedHeaders;
+        const headers = await buildHeaders('DELETE', url, '', identity.privateKey, identity.publicKey);
         const res = await (deps.fetchImpl ?? fetch)(url, { method: 'DELETE', headers });
         if (res.ok) return { ok: true };
         const body = await res.json().catch(() => null) as { code?: unknown; error?: unknown } | null;

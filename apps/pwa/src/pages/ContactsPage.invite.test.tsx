@@ -114,6 +114,8 @@ describe('Invite from a contact on the web', () => {
         fireEvent.click(within(rowOf('Dee Walker')).getByRole('button', { name: 'Invite' }));
         const sheet = await screen.findByTestId('contact-invite-sheet');
         expect(within(sheet).getByText(/^Invite Dee Walker to /)).toBeInTheDocument();
+        // The dialog is named by its heading.
+        expect(screen.getByRole('dialog', { name: /^Invite Dee Walker to / })).toBe(sheet);
         expect(within(sheet).getByText('One invite, for one person. It works once, for 30 days.')).toBeInTheDocument();
         expect(within(sheet).getByText("Dee Walker's name and number are not sent to the server.")).toBeInTheDocument();
         expect(within(sheet).getByRole('button', { name: 'Email' })).toBeInTheDocument();
@@ -185,6 +187,8 @@ describe('Invite from a contact on the web', () => {
         render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Invite' }));
         expect(await screen.findByText('In this community only its admins invite people. Ask an admin to bring them in.')).toBeInTheDocument();
+        // No heading is drawn here, and the dialog still has a name: the same words, on the dialog itself.
+        expect(screen.getByRole('dialog', { name: /^Invite Dee Walker to / })).toBe(screen.getByTestId('contact-invite-sheet'));
         fireEvent.click(screen.getByRole('button', { name: 'Ask an admin to invite Dee Walker' }));
         const ask = await screen.findByTestId('invite-ask-sheet');
         expect(within(ask).getByText('The admins will see the first name you type here.')).toBeInTheDocument();
@@ -199,6 +203,8 @@ describe('Invite from a contact on the web', () => {
         render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Invite' }));
         expect(await screen.findByText(/^This community doesn’t use invites/)).toBeInTheDocument();
+        // No heading is drawn here, and the dialog still has a name: the same words, on the dialog itself.
+        expect(screen.getByRole('dialog', { name: /^Invite Dee Walker to / })).toBe(screen.getByTestId('contact-invite-sheet'));
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: '📤 Share the link' })); });
         await waitFor(() => expect(shared).toEqual([{ text: `Join me on BeanPool: ${window.location.origin}` }]));
         expect(seen.filter((s) => s.includes('/api/invite/'))).toEqual([]);

@@ -115,6 +115,9 @@ export function ContactInviteSheet({ contact, identity, community, onClose }: {
     };
 
     let body;
+    // The dialog's name: the heading where there is one; where the member can't invite (no heading drawn) the same words,
+    // given to the dialog itself, so a screen reader still hears what the sheet is for.
+    let titled = false;
     if (!invitesOn(info)) {
         body = <>
             <p className="m-0 text-base leading-relaxed text-nature-800 dark:text-nature-200">{t(INVITE_WORDS.offFallback)}</p>
@@ -141,6 +144,7 @@ export function ContactInviteSheet({ contact, identity, community, onClose }: {
             </div>
         </>;
     } else {
+        titled = true;
         const [once, kept] = contactInviteLines(contact);
         body = <>
             <h2 id="contact-invite-title" className="m-0 text-lg font-extrabold text-nature-950 dark:text-white break-words">{contactInviteTitle(contact.name, community)}</h2>
@@ -154,7 +158,8 @@ export function ContactInviteSheet({ contact, identity, community, onClose }: {
         </>;
     }
     return (<>
-        <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="contact-invite-title" className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center" data-testid="contact-invite-sheet" onClick={onClose}>
+        <div ref={dialog} role="dialog" aria-modal="true"
+            {...(titled ? { 'aria-labelledby': 'contact-invite-title' } : { 'aria-label': contactInviteTitle(contact.name, community) })} className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center" data-testid="contact-invite-sheet" onClick={onClose}>
             <div className="absolute inset-0 bg-black/50" />
             <div className="relative w-full sm:max-w-[420px] max-h-[90vh] overflow-y-auto p-4 rounded-t-2xl sm:rounded-2xl bg-oat-50 dark:bg-nature-950 flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
                 {body}

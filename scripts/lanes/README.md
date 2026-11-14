@@ -21,6 +21,7 @@ not repeat them; the code comments name the incident behind each rule.
 | `sweep-orphans.sh` | Lists (or `--kill`s) test runners reparented to launchd that are more than an hour old. |
 | `remove-worktree.sh` | Removes finished worktrees: stops fsmonitor, unlocks, removes, and checks each step. |
 | `headless-brief-rules.md` | Appended to every headless Claude brief. |
+| `preflight.sh` | Run by a lane, last, before it opens or pushes a PR: CI's "checks" shard (read from `ci.yml`) through `TEST_ALL_ONLY`, words lint + check, and the suites the diff calls for (`preflight-plan.mjs` has the map). Waits for, never takes, the heavy-test lock; one PASS/FAIL line per step; non-zero on any red. `--plan` prints the steps. Tested by `preflight.test.mjs` in test-all's `workflows` check. |
 | `agy-brief-rules.md` | Appended to every AGY brief. |
 | `test/selftest.sh` | Proves all of the above against fake `agy`/`claude`/`gh`/`ssh`. No real model, PR or node is touched. |
 

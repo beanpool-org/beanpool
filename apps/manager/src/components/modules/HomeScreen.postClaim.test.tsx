@@ -17,6 +17,11 @@ vi.mock('../../lib/node-client', async (importOriginal) => ({
         return takeover.status;
     }),
 }));
+// A community shape Home reads itself (no `shape` prop) never answers here: the slow read of a standby's shape.
+vi.mock('../../lib/community-shape', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../lib/community-shape')>()),
+    fetchCommunityShape: vi.fn(() => new Promise(() => {})),
+}));
 
 import { HomeScreen } from './HomeScreen';
 
@@ -59,6 +64,8 @@ describe('Settings Home after the claim: the essentials on Action required', () 
     it('one owner: "add a second owner", opening Owners & admins; All clear stays hidden', async () => {
         const onNavigate = vi.fn();
         render(<HomeScreen {...props} activeNode={NODE} viewer={OWNER} nodeData={data(1) as any} onNavigate={onNavigate} />);
+        // Shown once the take-over status says this is no standby (#3147 review, note 2).
+        await screen.findByRole('button', { name: /One owner so far/ });
         const panel = screen.getByTestId('home-action-required');
         expect(panel).toHaveTextContent('One owner so far · add a second owner, so a lost phone never locks the community out ›');
         expect(panel).not.toHaveTextContent(/All clear/);
@@ -109,5 +116,37 @@ describe('Settings Home after the claim: the essentials on Action required', () 
         const { counts: _none, ...noCounts } = data(1);
         render(<HomeScreen {...props} viewer={OWNER} nodeData={noCounts as any} onNavigate={vi.fn()} />);
         expect(screen.queryByRole('button', { name: /One owner so far/ })).toBeNull();
+    });
+
+    // #3147's deciding review, note 2: the second-owner row trusted only the community shape's standby flag, so on a standby
+    // whose shape read was slow or failed it said "One owner so far". It now goes by the take-over status's own standby
+    // state, as the recovery-code row does.
+    it('a standby whose community shape is slow or failed: no second-owner row, from the take-over status', async () => {
+        takeover.status = status(null, 'standby');
+        const { unmount } = render(<HomeScreen {...props} shape={null} activeNode={NODE} viewer={OWNER} nodeData={data(1) as any} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(takeover.calls).toBe(1));
+        expect(screen.queryByRole('button', { name: /One owner so far/ })).toBeNull();
+        unmount();
+
+        // The shape is still on its way (undefined: Home reads it itself, and the read never answers).
+        const pending = render(<HomeScreen {...props} shape={undefined} activeNode={NODE} viewer={OWNER} nodeData={data(1) as any} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(takeover.calls).toBe(2));
+        expect(screen.queryByRole('button', { name: /One owner so far/ })).toBeNull();
+        pending.unmount();
+    });
+
+    it('the take-over status not read (failed): no second-owner row either, as Home lists nothing it cannot back', async () => {
+        takeover.status = new Error('offline');
+        render(<HomeScreen {...props} activeNode={NODE} viewer={OWNER} nodeData={data(1) as any} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(takeover.calls).toBe(1));
+        expect(screen.queryByRole('button', { name: /One owner so far/ })).toBeNull();
+    });
+
+    it('a main server whose take-over state is an error still gets the second-owner row (it is no standby)', async () => {
+        takeover.status = status(null, 'error');
+        render(<HomeScreen {...props} activeNode={NODE} viewer={OWNER} nodeData={data(1) as any} onNavigate={vi.fn()} />);
+        expect(await screen.findByRole('button', { name: /One owner so far/ })).toBeInTheDocument();
+        // An error state names no recovery code it can stand behind: no recovery-code row.
+        expect(screen.queryByRole('button', { name: /No recovery code yet/ })).toBeNull();
     });
 });

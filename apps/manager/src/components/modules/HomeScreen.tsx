@@ -96,19 +96,25 @@ export function HomeScreen({
     // Who is looking: an owner (or the owners' automation token) is offered what only an owner does.
     const isOwnerViewer = viewer?.kind === 'token' || viewer?.role === 'owner';
 
-    // Whether this community has a recovery code (sealed keys; TakeoverLockPanel makes it): read for an owner only, as the
-    // node answers only an owner. Null until read, and on a read that fails, an answer that names no recovery code at all
-    // (an error body, an older server), or a standby's (it has none of its own): Home then lists nothing it can't back.
-    const [recoveryCodeMissing, setRecoveryCodeMissing] = useState<boolean | null>(null);
+    // What the take-over status (TakeoverLockPanel's) says about this server, read for an owner only: the node answers any
+    // admin, but both rows that use it are an owner's to do. Null until read, and on a read that fails or an answer that
+    // names no recovery code at all (an error body, an older server): Home then lists nothing it can't back.
+    // `mainServer`: it answered as no standby. The owner rows below go by this, never by the community shape's standby
+    // flag alone, a second read that may be slow or fail (#3147 review, note 2).
+    // `recoveryCodeMissing`: null on a standby (it has none of its own) and in the error state, which can't vouch for it.
+    const [takeoverRead, setTakeoverRead] = useState<{ mainServer: boolean; recoveryCodeMissing: boolean | null } | null>(null);
     useEffect(() => {
-        setRecoveryCodeMissing(null);
+        setTakeoverRead(null);
         if (!activeNode || !isOwnerViewer) return;
         let mounted = true;
         fetchTakeoverStatus(activeNode.url, nodeCredential(activeNode))
             .then((s) => {
-                if (!mounted || !s || typeof s !== 'object' || !('recoveryCode' in s)) return;
-                if (s.state === 'standby' || s.state === 'error') return;
-                setRecoveryCodeMissing(s.recoveryCode === null);
+                if (!mounted || !s || typeof s !== 'object' || !('recoveryCode' in s) || typeof s.state !== 'string') return;
+                const mainServer = s.state !== 'standby';
+                setTakeoverRead({
+                    mainServer,
+                    recoveryCodeMissing: mainServer && s.state !== 'error' ? s.recoveryCode === null : null,
+                });
             })
             .catch(() => {});
         return () => {
@@ -272,10 +278,10 @@ export function HomeScreen({
 
     // The rest of the one "what next" after claiming (DESIGN-new-operator-path-fable.md S6, decision 3), after Core settings:
     // a recovery code, then a second owner. Owners only (both are an owner's to do), only while missing, and never on a
-    // standby, whose main server's owners do both. The owners are the node's count (counts.owners); a server that sends no
-    // counts gets no row.
-    const onStandby = Boolean(communityShape?.standby);
-    if (isOwnerViewer && !onStandby && recoveryCodeMissing === true) {
+    // standby, whose main server's owners do both: both wait for the take-over status to say this is a main server. The
+    // owners are the node's count (counts.owners); a server that sends no counts gets no row.
+    const onMainServer = takeoverRead?.mainServer === true && !communityShape?.standby;
+    if (isOwnerViewer && onMainServer && takeoverRead?.recoveryCodeMissing === true) {
         actionItems.push({
             key: 'recovery-code',
             icon: '🔑',
@@ -284,7 +290,7 @@ export function HomeScreen({
             sub: 'backups',
         });
     }
-    if (isOwnerViewer && !onStandby && counts && counts.owners === 1) {
+    if (isOwnerViewer && onMainServer && counts && counts.owners === 1) {
         actionItems.push({
             key: 'second-owner',
             icon: '👑',

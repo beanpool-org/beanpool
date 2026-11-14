@@ -26,6 +26,7 @@ import { nudgeOrphanSweep } from './storage-health.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import { assertFreeTags, assertLendFields, assertPostTags, type LendFieldsIn } from './post-fields.js';
+import { noteFreeTagsSeen } from './free-tags.js';
 import { itemColumnsOnCreate, itemColumnsOnEdit, writeItemCount } from './per-item.js';
 import { ownerAdminLimit } from './owner-admin-limit.js';
 import { isNodeAdmin } from './node-roles.js';
@@ -848,6 +849,9 @@ export function createPost(
     // A suggestion's photos, approved as a page's, were charged to their sender when sent (photosPaidFor): never twice.
     const photoColumns = storedPhotoColumns(finalId, (photos || []).slice(0, 5), options?.createdBy ?? authorPublicKey, options?.photosPaidFor ? 0 : undefined);
 
+    // A typed tag's week runs from when the word reached a live listing (engine/free-tags.ts): a word gone from every live
+    // listing since the last count starts again with this one, and a new word starts now.
+    if (freeTags.length > 0) noteFreeTagsSeen();
     db.transaction(() => {
         // An owner or admin acting (a keeper for an enterprise, by their own role) is held to the owners' "Owner and admin
         // limit" in place of a member's 1 active poll and 5 upcoming events (engine/owner-admin-limit.ts), read now.
@@ -933,6 +937,7 @@ export function createPost(
             ensureEventThread(finalId);
         }
     })();
+    if (freeTags.length > 0) noteFreeTagsSeen();
 
     // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
     // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
@@ -1693,6 +1698,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         : null;
 
     let openedLine: EventThreadMessage | null = null;
+    // An edit of the typed tags starts a new word's week now, however old the listing (engine/free-tags.ts), and a word gone
+    // from every live listing since the last count starts again with it.
+    const freeTagsEdited = updates.freeTags !== undefined;
+    if (freeTagsEdited) noteFreeTagsSeen();
     db.transaction(() => {
         db.prepare(`UPDATE posts SET ${fields.join(', ')} WHERE id = ? AND author_pubkey = ?`).run(...values);
         if (itemCells?.count) writeItemCount(id, itemCells.count);
@@ -1733,6 +1742,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             if (doomed.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, doomed));
         }
     })();
+    if (freeTagsEdited) noteFreeTagsSeen();
     if (openedLine) broadcastEventThreadMessage({ broadcast }, id, openedLine);
 
     // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and

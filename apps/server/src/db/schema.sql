@@ -2297,6 +2297,15 @@ CREATE TABLE IF NOT EXISTS free_tag_rules (
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- When each tag members typed (by its stored form) first appeared on a live listing here, in its present unbroken run
+-- (engine/free-tags.ts noteFreeTagsSeen): the week of the two-authors-or-a-week rule runs from it, not from the listing.
+-- A row goes when no live listing carries the word, so it starts again when the word comes back. Each server keeps its
+-- own (engine/replication-manifest.ts: local).
+CREATE TABLE IF NOT EXISTS free_tag_seen (
+    tag            TEXT PRIMARY KEY,
+    first_seen     DATETIME NOT NULL
+);
+
 -- Every change to the known floor, the cap, the dial or a member's exception (design §4.2, §7.3), and to a member's badge
 -- (action 'badge'): every owner and admin reads it. `member_pubkey` is null for a community-wide setting.
 CREATE TABLE IF NOT EXISTS known_floor_log (

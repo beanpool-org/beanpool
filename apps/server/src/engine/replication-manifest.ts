@@ -502,6 +502,12 @@ export const TABLES: Record<string, TableEntry> = {
     // An owner's or admin's hide or merge of a tag members typed (engine/free-tags.ts): a take-over offers members the same
     // tags, and a rule cleared reaches a standby as a tombstone.
     free_tag_rules: plain('tag action into_tag set_by set_at updated_at'),
+    // When each typed tag first appeared on a live listing (engine/free-tags.ts noteFreeTagsSeen): each server stamps the
+    // words it sees on the listings it holds. A promoted standby keeps what its own counts stamped, and a word it never
+    // stamped starts its week at the take-over: one author's word waits longer, never less.
+    free_tag_seen: {
+        kind: 'local', reason: "each server's own day for each typed tag it saw on a live listing (engine/free-tags.ts); a promoted standby's word it never stamped starts its week at the take-over, so one author's word waits longer, never less",
+    },
     // Vouchers and their budgets (engine/vouchers.ts): who vouches, every line of each budget, and the credit line each vouch
     // or member's gift gave. Plain rows, no name; a promoted standby carries on every budget and every member's line.
     vouchers: plain('member_pubkey source entry_id made_by made_at stopped_at stopped_by stop_reason updated_at'),

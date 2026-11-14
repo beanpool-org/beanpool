@@ -3,8 +3,12 @@
  * (DESIGN-tags-free-entry-fable.md §3 and §5, slice F3): engine/free-tags.ts, GET /api/free-tags, and
  * /api/local/admin/free-tags. Members and admins act over REAL HTTPS through the real signature and admin middleware.
  *
- *   1. the threshold both ways: one author's new listing is not offered; a second author's is; one author's listing a week
+ *   1. the threshold both ways: one author's new listing is not offered; a second author's is; one author's tag a week
  *      old with no open report is; the same with an open report is not
+ *  1b. the week runs from when the WORD first appeared on a live listing here, not from the listing: an author who edits a
+ *      new word onto a month-old listing waits the week (a fake clock), so does one whose listing was paused long ago and
+ *      came back, and a word whose listing was taken down starts again at its next edit; a second author's edit offers it
+ *      at once; the Manager's first seen is that time
  *   2. what is counted: a listing hidden by reports, taken down, inactive, cancelled, a group's or one person's, a peer's,
  *      or by a paused or suspended author lends nothing
  *   3. the count is made at most once a minute, and a rule set is seen at once
@@ -96,6 +100,12 @@ const age = (postId: string, days: number) => db.prepare('UPDATE posts SET creat
 const report = (postId: string, reporter: Id) => db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, status)
     SELECT ?, ?, author_pubkey, id, 'offensive', 'pending' FROM posts WHERE id = ?`).run(crypto.randomUUID(), reporter.pk, postId);
 const offeredNow = () => { forgetFreeTagCounts(); return offeredFreeTags().map((t) => t.tag); };
+const DAY = 86_400_000;
+/** The tags offered as if the clock read `at` (engine/free-tags.ts takes its clock as an argument). */
+const offeredAt = (at: number) => { forgetFreeTagCounts(); return offeredFreeTags(at).map((t) => t.tag); };
+/** An author's edit through the real route, with their signature: POST /api/marketplace/posts/update. */
+const editTags = (author: Id, postId: string, freeTags: string[]) =>
+    call('POST', author, '/api/marketplace/posts/update', { id: postId, authorPublicKey: author.pk, freeTags });
 const countOf = (tag: string) => { forgetFreeTagCounts(); return freeTagCounts().find((t) => t.tag === tag); };
 const adminLines = (since: number) => (db.prepare("SELECT message FROM system_logs WHERE category = 'ADMIN' AND id > ? ORDER BY id").all(since) as { message: string }[]).map((r) => r.message);
 const lastLogId = () => ((db.prepare('SELECT MAX(id) AS id FROM system_logs').get() as { id: number | null }).id ?? 0);
@@ -122,15 +132,62 @@ async function main(): Promise<void> {
     await offer(bea, 'A chair', ['Vintage']);
     assert(offeredNow().includes('vintage') && countOf('vintage')?.authors === 2, `a second author's listing offers it (${JSON.stringify(countOf('vintage'))})`);
 
+    const fixieAt = Date.now();
     const oldOne = await offer(cas, 'A bike', ['fixie']);
-    age(oldOne, FREE_TAG_OFFER_DAYS - 1);
-    assert(!offeredNow().includes('fixie'), 'one author for six days: not yet');
-    age(oldOne, FREE_TAG_OFFER_DAYS + 1);
-    assert(offeredNow().includes('fixie'), 'one author for over a week with no report: offered');
+    assert(!offeredAt(fixieAt + (FREE_TAG_OFFER_DAYS - 1) * DAY).includes('fixie'), 'one author for six days: not yet');
+    const weekOn = fixieAt + (FREE_TAG_OFFER_DAYS + 1) * DAY;
+    assert(offeredAt(weekOn).includes('fixie'), 'one author for over a week with no report: offered');
     report(oldOne, dee);
-    assert(!offeredNow().includes('fixie'), 'the same with an open report on it: not offered');
+    assert(!offeredAt(weekOn).includes('fixie'), 'the same with an open report on it: not offered');
     db.prepare("UPDATE abuse_reports SET status = 'reviewed' WHERE target_post_id = ?").run(oldOne);
-    assert(offeredNow().includes('fixie'), 'the report dismissed: offered again');
+    assert(offeredAt(weekOn).includes('fixie'), 'the report dismissed: offered again');
+
+    // ── 1b. the week runs from the word ───────────────────────────────────────────────────────
+    console.log('\n── 1b. the week runs from when the word first appeared on a live listing ──');
+    const monthOld = await offer(ann, 'An old lamp', []);
+    age(monthOld, 30);
+    const editedAt = Date.now();
+    const edit = await editTags(ann, monthOld, ['probeword']);
+    assert(edit.status === 200, `an author edits a new word onto a month-old listing (${show(edit)})`);
+    assert(!offeredNow().includes('probeword'), `one author's edited-in word is not offered at once (${JSON.stringify(countOf('probeword'))})`);
+    const probeSeen = Date.parse(countOf('probeword')?.firstSeen ?? '');
+    assert(probeSeen >= editedAt - 1_000 && probeSeen <= Date.now() + 1_000, `its first seen is the edit, not the listing's day (${countOf('probeword')?.firstSeen})`);
+    assert(!offeredAt(editedAt + (FREE_TAG_OFFER_DAYS - 1) * DAY).includes('probeword'), 'six days after the edit: not yet');
+    assert(offeredAt(editedAt + FREE_TAG_OFFER_DAYS * DAY + 60_000).includes('probeword'), 'a week after the edit, with no report: offered');
+
+    const deskOld = await offer(cas, 'An old desk', []);
+    age(deskOld, 30);
+    await editTags(cas, deskOld, ['second word']);
+    assert(!offeredNow().includes('second word'), "one author's edit: not offered…");
+    const beaDesk = await offer(bea, 'A desk lamp', []);
+    const beaEdit = await editTags(bea, beaDesk, ['Second Word']);
+    assert(beaEdit.status === 200 && offeredNow().includes('second word') && countOf('second word')?.authors === 2,
+        `…a second author's edit offers it at once (${JSON.stringify(countOf('second word'))})`);
+
+    const kettle = await offer(dee, 'A kettle put away', ['paused word']);
+    const pausedAt = Date.now();
+    // Paused as a shop closed for now pauses its listings (engine/shops.ts), and long ago: the listing is a month old.
+    db.prepare("UPDATE posts SET status = 'paused' WHERE id = ?").run(kettle);
+    age(kettle, 30);
+    assert(countOf('paused word') === undefined, 'a word on a paused listing is not counted');
+    db.prepare("UPDATE posts SET status = 'active' WHERE id = ?").run(kettle);
+    const backOn = pausedAt + (FREE_TAG_OFFER_DAYS + 1) * DAY;
+    forgetFreeTagCounts();
+    const backSeen = Date.parse(freeTagCounts(backOn).find((t) => t.tag === 'paused word')?.firstSeen ?? '');
+    assert(!offeredAt(backOn).includes('paused word') && backSeen >= backOn - 1_000,
+        `the listing back on eight days later: the week starts then (${Number.isFinite(backSeen) ? new Date(backSeen).toISOString() : 'none'})`);
+    assert(offeredAt(backOn + FREE_TAG_OFFER_DAYS * DAY + 60_000).includes('paused word'), 'and a week after that: offered');
+
+    const teapot = await offer(dee, 'A teapot', ['gone word']);
+    assert(countOf('gone word')?.listings === 1, 'a word on one listing…');
+    db.prepare("UPDATE posts SET removed_by_moderator_at = '2026-01-01T00:00:00Z' WHERE id = ?").run(teapot);
+    const another = await offer(dee, 'Another teapot', []);
+    age(another, 30);
+    const goneAt = Date.now();
+    await editTags(dee, another, ['gone word']);
+    const goneSeen = Date.parse(countOf('gone word')?.firstSeen ?? '');
+    assert(goneSeen >= goneAt - 1_000, `…taken down, then edited onto another: its week starts again at the edit, with no count between (${countOf('gone word')?.firstSeen})`);
+    assert(!offeredAt(goneAt + (FREE_TAG_OFFER_DAYS - 1) * DAY).includes('gone word'), 'six days on: not yet');
 
     // ── 2. what is counted ────────────────────────────────────────────────────────────────────
     console.log('\n── 2. only live, public listings made here by an active author ──');
@@ -205,6 +262,10 @@ async function main(): Promise<void> {
     assert(page.status === 200 && vintage?.listings === 3 && vintage?.authors === 2 && typeof vintage?.firstSeen === 'string' && vintage?.offered === true && vintage?.rule === null,
         `an admin reads each tag's listings, authors and first seen (${JSON.stringify(vintage)})`);
     assert(!page.text.includes(ann.pk) && !page.text.includes(bea.pk), "and no member's key");
+    const probe = (page.body?.tags ?? []).find((t: any) => t.tag === 'probeword');
+    const monthOldMade = Date.parse((db.prepare('SELECT created_at FROM posts WHERE id = ?').get(monthOld) as { created_at: string }).created_at);
+    assert(Date.parse(probe?.firstSeen ?? '') >= editedAt - 1_000 && Date.parse(probe?.firstSeen ?? '') > monthOldMade + 29 * DAY,
+        `the page's first seen of an edited-in word is the edit, not the listing's day (${JSON.stringify(probe)})`);
     const unoffered = (page.body?.tags ?? []).find((t: any) => t.tag === 'shed hidden by reports');
     assert(unoffered?.offered === false, `a tag not offered is listed too, said so (${JSON.stringify(unoffered)})`);
     const byMod = await call('GET', null, '/api/local/admin/free-tags', undefined, session(mo, 'moderator'));
@@ -271,6 +332,7 @@ async function main(): Promise<void> {
     const entry = TABLES.free_tag_rules as any;
     assert(entry?.plain === true && ['tag', 'action', 'into_tag', 'set_by', 'set_at', 'updated_at'].every((c) => entry.columns.includes(c)),
         'free_tag_rules is a plain table a standby copies, every column');
+    assert((TABLES.free_tag_seen as any)?.kind === 'local', 'free_tag_seen is each server\'s own: a standby stamps the words it sees');
     assert(!!db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'free_tag_rules' AND row_key = 'vintage'").get(), 'the cleared rule left a tombstone, so a standby drops it too');
     const stamped = db.prepare('SELECT updated_at FROM free_tag_rules WHERE tag = ?').get('limones') as { updated_at: string | null } | undefined;
     assert(typeof stamped?.updated_at === 'string' && stamped.updated_at.length > 10, `its watermark is stamped (${stamped?.updated_at})`);

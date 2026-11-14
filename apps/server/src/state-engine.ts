@@ -52,6 +52,7 @@ import { noteRemovedNewcomer } from './engine/door-signal.js';
 import { admitByAddress } from './db/writes-by-address.js';
 import { pruneAgedOut } from './engine/plain-tables.js';
 import { pruneOldLooks } from './engine/credit-looks.js';
+import { noteFreeTagsSeen } from './engine/free-tags.js';
 import { avatarValueRefusal, photoValueRefusal, photoRefusalError, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './engine/photo-upload-budget.js';
 import { stripImageValue } from './storage/image-metadata.js';
@@ -1110,6 +1111,9 @@ function armMainServerTimers(): void {
         try { expireBills(); } catch (e) { console.warn('[Bills] Expiry failed:', e); }
         // Lines of the log of credit looks 12 months old go (engine/credit-looks.ts; the manifest's age rule, no tombstone).
         try { pruneOldLooks(); } catch (e) { console.warn('[Credit] Could not drop old credit looks:', e); }
+        // Each typed tag's first-seen day, kept to the live listings (engine/free-tags.ts) when nobody has read the count
+        // for a while: a word whose listings all went since then starts its week again when it comes back.
+        try { noteFreeTagsSeen(); } catch (e) { console.warn('[Tags] Could not keep the first-seen days:', e); }
     }), 60 * 60 * 1000);
 
     // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,

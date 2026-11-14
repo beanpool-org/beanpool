@@ -3,7 +3,7 @@
  * the member works a debt off, a notice says what is left and why their incoming Beans go to the Commons (GET
  * /api/commons/repayment, their own only), with a real button, Pay back now, that opens Pay the Commons (app/pay-commons.tsx)
  * with their own pay-back code filled in (the repayment's debtId), so what they pay comes off it at once. Nothing at all
- * otherwise: everyone's way in is PayCommonsRow, the Wallet's row with its line. An admin's link
+ * otherwise: everyone's way in is PayCommonsRow.tsx, the Wallet's row with its line. An admin's link
  * (beanpool://pay-commons?code=…) opens the pay screen on its own. Reads on focus; says nothing when the node answers
  * nothing (an older node, no signal): no false state.
  */
@@ -15,7 +15,6 @@ import { useTheme } from '../app/ThemeContext';
 import { anchorUrl } from '../utils/node-post';
 import { fetchMyRepayment, type Repayment } from '../utils/names-debts';
 import { t } from '@beanpool/core';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { REPAYMENT_LINES, repaymentBannerWords } from './repayment-lines';
 
 export function RepaymentCard() {
@@ -50,29 +49,5 @@ export function RepaymentCard() {
                 </Pressable>
             </View>
         </View>
-    );
-}
-
-/**
- * The Wallet's row, for everyone: "Pay the Commons" with its line and an arrow, opening the pay screen. A member working a
- * debt off finds their own code filled in there (pay-commons.tsx reads their repayment), as from the notice above.
- */
-export function PayCommonsRow() {
-    const { colors } = useTheme();
-    return (
-        <Pressable
-            testID="ledger-pay-commons-row"
-            onPress={() => router.push('/pay-commons')}
-            accessibilityRole="button"
-            accessibilityLabel={t(REPAYMENT_LINES.payTitle)}
-            accessibilityHint={t(REPAYMENT_LINES.payRowLine)}
-            style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card }}
-        >
-            <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text.heading }}>{t(REPAYMENT_LINES.payTitle)}</Text>
-                <Text style={{ fontSize: 12, lineHeight: 16, marginTop: 2, color: colors.text.secondary }}>{t(REPAYMENT_LINES.payRowLine)}</Text>
-            </View>
-            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.muted} />
-        </Pressable>
     );
 }

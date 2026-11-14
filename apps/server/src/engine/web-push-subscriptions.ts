@@ -14,8 +14,8 @@
  * `member` (W2): a member's own browser, from "Turn on" (the web app's card or its Settings row). One row per browser, as
  * a phone's push token is: every kind the member's phone is pushed, under the same switches (state-engine.ts
  * dispatchPushNotification). Bound as phones are ({@link MEMBER_BROWSER_RULES}, KEY_PUSH_RULES' numbers): 10 live a key,
- * the stalest going past it, and 20 new a day. The same browser again (its endpoint) is the same row, never a new one, and
- * an asker's row for that browser becomes the member's. A member's rows go with the member: removed (engine/member-
+ * the stalest going past it, and 20 new a day. The same browser again (its endpoint) is the same row, never a new one, an
+ * asker's row for that browser becomes the member's, and another key's row for it goes (a browser is one account's). A member's rows go with the member: removed (engine/member-
  * wizards.ts), re-keyed (engine/key-move.ts), or found gone at the tidy-up ({@link dropLapsedMemberBrowsers}).
  *
  * ## Locked at rest
@@ -142,6 +142,9 @@ export function putMemberSubscription(publicKey: string, sub: BrowserSubscriptio
             newBrowsers.set(publicKey, day);
             if (newBrowsers.size > 10_000) newBrowsers.delete(newBrowsers.keys().next().value!);
         }
+        // A browser is one account's: the same browser kept for another key (an account signed out here without its row
+        // going) goes, so it is never told that account's notices, which it could only refuse as not for this one.
+        db.prepare('DELETE FROM web_push_subscriptions WHERE sub_id = ? AND public_key != ?').run(subId, publicKey);
         db.prepare(`INSERT INTO web_push_subscriptions (public_key, sub_id, sub_box, lang, kind) VALUES (?, ?, ?, ?, 'member')
             ON CONFLICT (public_key, sub_id) DO UPDATE SET sub_box = excluded.sub_box, lang = excluded.lang, kind = 'member',
                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`).run(publicKey, subId, box, lang);

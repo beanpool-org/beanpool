@@ -11,7 +11,8 @@
  *   4. the member's switch gates both: chat off, neither the phone nor the browser; marketplace still both
  *   5. by kind: a chat's topic is its kind (so a browser away wakes to one), TTL a day; a deal's 7 days, no topic; the
  *      account's a day, high
- *   6. an asker's row (kept after the key joined) gets only `join.answered`; "Turn on" with that browser makes it the member's
+ *   6. an asker's row (kept after the key joined) gets only `join.answered`; "Turn on" with that browser makes it the member's;
+ *      the same browser turned on by another account is that account's alone
  *   7. caps: 10 live a key (the stalest goes), 20 new a day (429 `key_rate_limited`)
  *   8. a member no longer a member (removed) loses their browsers at the tidy-up; a key with no request and no membership: 403
  *   9. the route is no longer behind the requests-to-join switch
@@ -227,6 +228,16 @@ async function main(): Promise<void> {
     dispatchPushNotification([ana.pk], owner.pk, 'Owner', 'welcome', {}, 'chat', 'chat.message');
     await settle();
     assert(web.length === 1 && web[0].url === anaTab.endpoint, `...and then a chat line reaches it (${web.length})`);
+
+    // A browser is one account's: the same browser turned on by another member here takes it from the first.
+    const ned = newId('Ned');
+    addMember(ned);
+    const handedOn = await call(ned, 'POST', '/api/web-push', subscription(anaTab));
+    clear();
+    dispatchPushNotification([ana.pk], owner.pk, 'Owner', 'for Ana', {}, 'chat', 'chat.message');
+    await settle();
+    assert(handedOn.status === 201 && rows(ana.pk).length === 0 && rows(ned.pk).length === 1 && web.length === 0,
+        `the same browser turned on by another account is that account's alone: the first's row goes, and its notices no longer reach it (${rows(ana.pk).length}, ${web.length})`);
 
     // ── 7. Caps ─────────────────────────────────────────────────────────────────────────────────────────────────────
     const cal = newId('Cal');

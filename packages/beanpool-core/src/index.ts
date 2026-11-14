@@ -58,6 +58,7 @@ export * from './listing-price.js';
 export * from './post-type-lines.js';
 export * from './knowledge.js';
 export * from './knowledge-write-words.js';
+export * from './pulse-knowledge-words.js';
 export * from './forum.js';
 export * from './name-line.js';
 export * from './chat-frame.js';

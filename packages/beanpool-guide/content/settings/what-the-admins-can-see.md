@@ -11,7 +11,7 @@ In a community with Beans, the join screen and "How this community works" say:
 
 "People who give credit here (the owners, admins and vouchers) can see your balance and your credit line, and each look is recorded."
 
-A **voucher** is a member an owner or the credit committee gave a budget to vouch from. Owners and admins give credit by their role. There is nothing to agree to and nothing to withdraw, and it needs no names list: it is the same whether or not an admin has confirmed you.
+A **voucher** is a member an owner or the credit committee gave a **Vouching budget**: what they can give other members as credit line when they vouch for them, not Beans and not their own spending. Owners and admins give credit by their role. There is nothing to agree to and nothing to withdraw, and it needs no names list: it is the same whether or not an admin has confirmed you.
 
 - **What every giver sees:** your credit line and how much of it you can use now, your live Offers, your balance with its sign and its figure (plus or minus), how much of your line you are using, and your credit risk with the reasons any giver may read. See "Credit risk: what it reads".
 - **What only owners and admins see:** what your line is made of (the known floor, vouches and what you earned), who confirmed you and who vouched for you, a freeze, and the reasons built from those: a ring, a dispute an admin decided, when you last made a sale, and how the people you stood behind are doing.

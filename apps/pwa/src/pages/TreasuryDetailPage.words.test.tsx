@@ -216,7 +216,7 @@ describe('the enterprise page in the pseudo-locale', () => {
         const until = formatDate(new Date('2026-12-14T12:00:00.000Z'), 'day-month', { width: 'long' });
         expect(until).not.toBe('14 December');
         expect(await screen.findByText(xx('Paused for the season. Credit held at {n} beans until {date}.').replace('{n}', '200').replace('{date}', until))).toBeInTheDocument();
-        expect(screen.getByText(xx('Pause credit floor snapshot expires in {n} days').replace('{n}', '3'))).toBeInTheDocument();
+        expect(screen.getByText(xx('The credit line held for the pause ends in {n} days').replace('{n}', '3'))).toBeInTheDocument();
         expect(screen.getAllByText(xx('⏸️ Paused')).length).toBe(2);
         expect(clean(INITIALS)).toEqual([]);
         await openManage(xx('Manage'));
@@ -393,7 +393,7 @@ describe('the enterprise page in English', () => {
         expect(screen.getByText(/days left$/).textContent).toBe('⏳ 5 days left');
         expect(screen.getByText("🔒 Pledges are held securely in the project's account, spendable only on transparent offers and needs that the whole community can see.")).toBeInTheDocument();
         expect(screen.getByText('Ask to join as a collaborator')).toBeInTheDocument();
-        expect(screen.getByText('Help run this project. You can back it with your earned trading standing to expand its credit floor.')).toBeInTheDocument();
+        expect(screen.getByText('Help run this project. You can back it with your earned trading standing to expand its credit line.')).toBeInTheDocument();
         expect(screen.getByText('Back this project with your standing: 0 … 30')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Request to join as a collaborator' })).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'Run by' })).toBeInTheDocument();

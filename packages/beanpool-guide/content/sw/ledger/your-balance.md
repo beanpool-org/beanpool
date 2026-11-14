@@ -17,15 +17,15 @@ Leja ina vichupo viwili: **Viwango** (uaminifu wako, tazama "Beji za uaminifu") 
 
 ## Kichupo cha Mkoba
 
-- **Salio lako**, na takriban saa ngapi za msaada inazolingana nazo, kwa maharagwe 40 kwa saa.
+- **Salio lako**, na takriban saa ngapi za msaada inazolingana nazo, kwa maharagwe 40 kwa saa, na kikomo chako cha mkopo.
 - **Mali za Pamoja:** hazina ya pamoja ya jumuiya yako.
-- **Kiwango cha Chini cha Mkopo:** jinsi unavyoweza kwenda chini ya sifuri.
+- **Kikomo cha mkopo:** jinsi unavyoweza kwenda chini ya sifuri, kama kiasi: 500 inamaanisha unaweza kushuka hadi −500. Tazama "Kikomo chako cha mkopo".
 - Maharagwe yako mangapi yanayoshikiliwa katika makubaliano yanayoendelea, yanapokuwepo.
 - **Mzunguko wa Jumuiya:** huonyeshwa unaposhikilia maharagwe. Tazama "Ada ya mzunguko".
 - **Ahadi za miradi:** maharagwe uliyoahidi kwa miradi, ikiwa yapo.
 - **Tuma Maharagwe:** tuma zawadi. Tazama "Kutuma zawadi".
 
-Kwenye programu ya wavuti kichupo cha Mkoba ni kifupi zaidi: **Kiwango cha Chini cha Mkopo**, **Hazina ya Pamoja**, **Tuma Maharagwe** na **Mzunguko wa Jumuiya**. Salio lako liko juu ya Leja.
+Kwenye programu ya wavuti kichupo cha Mkoba ni kifupi zaidi: **Kikomo cha mkopo**, **Hazina ya Pamoja**, **Tuma Maharagwe** na **Mzunguko wa Jumuiya**. Salio lako liko juu ya Leja.
 
 ## Miamala ya hivi karibuni
 
@@ -37,4 +37,4 @@ Orodha haina utafutaji au vichujio bado.
 
 ## Vitufe vya ⓘ
 
-Kwenye simu, gusa **ⓘ** kando ya Salio lako kwa maelezo mafupi ya salio lako na kiwango chako cha chini.
+Kwenye simu, gusa **ⓘ** kando ya Salio lako kwa maelezo mafupi ya salio lako na kikomo chako cha mkopo. Kadi iliyo juu ya Leja inajieleza yenyewe: iguse, kwenye simu au wavuti, kwa ajili ya **Maharagwe yako na kikomo chako cha mkopo**.

@@ -872,8 +872,8 @@ async function main(): Promise<void> {
         && JSON.stringify(told.map((n) => n.data.change)) === '["made","raised","lowered","stopped"]'
         && told.every((n) => n.title === VOUCHER_WORDS.noticeTitle)
         && told[0].body === 'You’re a voucher now: you have a budget of 800 Beans to vouch for people, up to 100 each.'
-        && told[1].body === 'Your budget to vouch from was raised to 1,500 Beans. You have 1,500 of it left to vouch with.'
-        && told[2].body === 'Your budget to vouch from was lowered to 600 Beans. You have 600 of it left to vouch with.'
+        && told[1].body === 'Your vouching budget was raised to 1,500 Beans. You have 1,500 of it left to vouch with.'
+        && told[2].body === 'Your vouching budget was lowered to 600 Beans. You have 600 of it left to vouch with.'
         && told[3].body === VOUCHER_WORDS.noticeStopped,
         `18. made, raised, lowered and stopped are each a notice kept for Jen; the same level and a refused one are none (${JSON.stringify(told.map((n) => [n.data.change, n.body]))})`);
     const heard: { live: unknown[][]; pushed: unknown[][] } = { live: [], pushed: [] };

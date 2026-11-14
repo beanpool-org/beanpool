@@ -11,18 +11,24 @@ Your credit line lets you spend more beans than you have, and go below zero. It 
 
 ## Where to see it
 
-On the **Ledger**, under your balance, a bar shows where you are:
+On the **Ledger**, at the top, a card shows where you are. Two sentences give the totals, for example "You owe 50 Beans" and "You can spend 450 more of your 500 credit line."
 
-- zero is in the middle;
-- the left end is **your limit**, the lowest you can go;
-- the marks on the left show how deep your Offers let you go;
-- past **+200** on the right is where the circulation fee starts.
+Under them is a bar, coloured like a rainbow:
+
+- the dot is where your balance is now;
+- **0**, in the middle, is **balanced**: you have given as much as you have received;
+- the left end is **your limit**: the lowest your balance can go;
+- **+200** is where the **monthly fee starts**: hold more than 200 Beans and a small monthly fee starts on the part above (see "The circulation fee");
+- the thin strip under the left half is what your credit line is made of: a solid block is credit you earned by trading, an outlined block is credit someone stands behind for you;
+- a striped part is closed for now: your live Offers open it.
+
+One line under the bar names the parts, and always the whole line, for example "Credit line 500: ■ Earned by trading 0 so far · □ @Jane vouched 500". Before you have a credit line, the left half is striped and says **no credit line yet**.
 
 Tap the card, on the phone or the web, for **Your Beans and your credit line**, which explains each part.
 
 ## How it opens
 
-It starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count), or when a voucher vouches for you on the invite that brought you in or on your profile. Until then the Ledger says **No credit line yet**. You can still trade with beans you hold.
+It starts at zero. It opens when you complete your first trade in the market, however small, or when a voucher vouches for you on the invite that brought you in or on your profile. Until then the card says **no credit line yet**. You can still trade with beans you hold.
 
 ## Who can see it
 
@@ -36,16 +42,12 @@ The people who give credit here (the owners, admins and vouchers) can see your c
 
 ## Your Offers set how much you can use
 
-You can only use as much of your credit line as your live Offers allow:
+You can only use as much of your credit line as your live Offers open. With no live Offer, none of it is open.
 
-- no Offers: none;
-- 1 Offer: down to −200;
-- 2: −500;
-- 3: −1,000;
-- 4: −1,500;
-- 5: −2,000.
+- One live Offer opens everything people stand behind for you (a vouch, a credit-line gift, the known floor) and the first 200 you earned.
+- What you earned by trading opens in steps: 2 Offers open 500 of it, 3 open 1,000, 4 open 1,500 and 5 open 2,000.
 
-The line under the bar tells you, for example "Post an offer to open your credit line".
+The card says what is open. For example: "You can spend 380 more: your live Offer opens 500 of your 900 credit line.", and under it "400 is closed for now. One more live Offer opens 800 of your 900, and 3 live Offers open all of it." With no live Offer it says, for example, "Your 500 credit line is asleep. Post one Offer and all of it opens."
 
 ## In a known community
 

@@ -300,7 +300,7 @@ async function main(): Promise<void> {
     assert(asked.rows.length === 3 && asked.rows.every((r) => r.kind === 'community.notice' && keptById.get(dataOf(r.data).noticeId)?.recipient === r.recipient),
         `20. one bell row each, naming its own kept copy (${asked.rows.length})`);
     const askText = asked.kept[0]?.body ?? '';
-    assert(askText.includes('@Jane asks for a bigger budget to vouch from.') && askText.includes('They have 600 of 1,000 Beans left.')
+    assert(askText.includes('@Jane asks for a bigger vouching budget.') && askText.includes('They have 600 of 1,000 Beans left.')
         && askText.includes('Vouched 400 to 4 people: 0 below zero, written off 0 (0%), 0 trading only inside their own circle.')
         && askText.includes('A voucher for 0 days.') && askText.includes('Confirmed for 41 days.') && !/balance/i.test(askText),
         `20. the body: left, level and the five facts, no balance (${askText})`);

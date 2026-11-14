@@ -17,15 +17,15 @@ Sổ cái có hai tab: **Cấp bậc** (mức độ tin cậy của bạn, xem "
 
 ## Tab Ví
 
-- **Số dư của bạn**, và tương đương khoảng bao nhiêu giờ giúp đỡ, với tỷ lệ 40 đậu một giờ.
+- **Số dư của bạn**, và tương đương khoảng bao nhiêu giờ giúp đỡ, với tỷ lệ 40 đậu một giờ, cùng hạn mức tín dụng của bạn.
 - **Commons:** quỹ chung của cộng đồng bạn.
-- **SÀN TÍN DỤNG:** bạn có thể xuống sâu đến mức nào dưới 0.
+- **Hạn mức tín dụng:** bạn có thể xuống dưới 0 đến mức nào, dưới dạng một con số: 500 nghĩa là bạn có thể xuống đến −500. Xem "Hạn mức tín dụng".
 - Số đậu của bạn đang bị giữ trong các giao dịch đang thực hiện, nếu có.
 - **Luân chuyển cộng đồng:** hiển thị khi bạn đang nắm giữ đậu. Xem "Phí lưu thông".
 - **CAM KẾT DỰ ÁN:** số đậu bạn đã cam kết cho các dự án, nếu có.
 - **Gửi đậu:** gửi một món quà tặng. Xem "Gửi quà tặng".
 
-Trong ứng dụng web, tab Ví ngắn gọn hơn: **Mức sàn thấu chi**, **Quỹ Commons**, **Gửi đậu** và **Luân chuyển cộng đồng**. Số dư của bạn hiển thị ở trên cùng của Sổ cái.
+Trong ứng dụng web, tab Ví ngắn gọn hơn: **Hạn mức tín dụng**, **Quỹ Commons**, **Gửi đậu** và **Luân chuyển cộng đồng**. Số dư của bạn hiển thị ở trên cùng của Sổ cái.
 
 ## Giao dịch gần đây
 
@@ -37,4 +37,4 @@ Danh sách này hiện chưa có chức năng tìm kiếm hoặc bộ lọc.
 
 ## Các nút ⓘ
 
-Trên điện thoại, nhấn vào biểu tượng **ⓘ** bên cạnh Số dư của bạn để xem giải thích ngắn gọn về số dư và mức sàn của bạn.
+Trên điện thoại, nhấn vào biểu tượng **ⓘ** bên cạnh Số dư của bạn để xem giải thích ngắn gọn về số dư và hạn mức tín dụng của bạn. Thẻ ở đầu Sổ cái tự giải thích: nhấn vào nó, trên điện thoại hoặc trên web, để xem **Đậu và hạn mức tín dụng của bạn**.

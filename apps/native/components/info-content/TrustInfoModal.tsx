@@ -143,7 +143,7 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
                     <View style={styles.cardContainer}>
                         <Text style={styles.cardLabel}>{t('3. MILESTONES')}</Text>
                         <Text style={[styles.cardText, { marginBottom: 8 }]}>
-                            {t("As your trust grows you pass milestone badges — they mark your progress, they don't set your credit floor:")}
+                            {t("As your trust grows you pass milestone badges — they mark your progress, they don't set your credit line:")}
                         </Text>
                         <ListItem>{richWords(t('🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**', {
                             newcomer: t(TIER_WORDS.Newcomer), resident: t(TIER_WORDS.Resident), steward: t(TIER_WORDS.Steward), elder: t(TIER_WORDS.Elder),
@@ -159,20 +159,20 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        {richWords(t('Tiers are **recognition milestones** — they mark how far your trust has grown, or a badge your community gave you. A tier gives no credit: your **credit floor** (how far below zero you can spend) slides with the value you trade and what your community gives you; the tiers are just the signposts along the way.'), bold)}
+                        {richWords(t('Tiers are **recognition milestones** — they mark how far your trust has grown, or a badge your community gave you. A tier gives no credit: your **credit line** (how far below zero you can spend) grows with the value you trade and what your community gives you; the tiers are just the signposts along the way.'), bold)}
                     </Text>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.brand.primary }]}>
                         <Text style={styles.tierTitle}>{t('🔑 Founding Status (before 1st trade)')}</Text>
                         <ListItem>{richWords(t('A starting state that lasts until you complete your **very first trade**'), bold)}</ListItem>
                         <ListItem>{richWords(t('Shows as **🔑 FOUNDING** so members know to help you get started'), bold)}</ListItem>
-                        <ListItem>{richWords(t('Your credit floor stays at **{floor}** until that first trade — no overdraft yet', { floor: 0 }), bold)}</ListItem>
+                        <ListItem>{richWords(t('Your credit line stays at **{line}** until that first trade, unless someone vouches for you, a member gives you part of the credit line someone gave them, or your community’s admins confirm you (the known floor)', { line: 0 }), bold)}</ListItem>
                         <ListItem>{richWords(t('Graduates to **{tier}** automatically once you trade', { tier: t(TIER_WORDS.Newcomer) }), bold)}</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.newcomer.fg }]}>
                         <Text style={styles.tierTitle}>{tierHeading(NEWCOMER)}</Text>
-                        <ListItem>{t('Credit floor opens after your 1st completed trade (or via a starter vouch of 25, 50, or 100B)')}</ListItem>
+                        <ListItem>{t('Your credit line opens with your first completed trade, or sooner when someone vouches for you, a member gives you part of the credit line someone gave them, or your community’s admins confirm you (the known floor)')}</ListItem>
                         <ListItem>{t('Browse & trade the marketplace, receive credits')}</ListItem>
                         <ListItem>{richWords(t('**Sending credits** unlocks the moment you complete that first trade'), bold)}</ListItem>
                     </View>
@@ -198,7 +198,7 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
                         <Text style={styles.cardLabel}>{t('OPEN TO EVERYONE — NO TIER REQUIRED')}</Text>
                         <ListItem>{richWords(t('**Inviting new members** — share BeanPool freely from day one.'), bold)}</ListItem>
                         <ListItem>{richWords(t('**A governance voice** — 1 member 1 vote on community polls and roles, plus quadratic voting on pool spending based on earned trade standing.'), bold)}</ListItem>
-                        <ListItem>{richWords(t('**No daily spending limits** — your credit floor is the only guardrail.'), bold)}</ListItem>
+                        <ListItem>{richWords(t('**No daily spending limits** — your credit line is the only guardrail.'), bold)}</ListItem>
                     </View>
                 </View>
             )

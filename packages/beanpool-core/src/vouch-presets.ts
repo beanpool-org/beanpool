@@ -134,7 +134,7 @@ export const VOUCH_PRESET_WORDS = {
     budgetTitle: word('Your vouching budget'),
     budgetHistory: word('Budget history'),
     askForMore: word('Ask for more'),
-    askForMoreHelp: word('To get a bigger budget to vouch from, ask an owner of this community.'),
+    askForMoreHelp: word('To get a bigger vouching budget, ask an owner of this community.'),
     setBudgetTo: word('Set budget to: {level}'),
     setBudgetToTitle: word('Set budget to'),
     vouchers: word('Vouchers'),

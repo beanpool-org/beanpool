@@ -38,7 +38,6 @@
         "ba9a0c61da",
         "bad12d46de",
         "c03f1e35de",
-        "d3c4b51575",
         "d73e009c54",
         "e306d88bb9",
         "e503a66db9",
@@ -195,11 +194,6 @@
         "cb8f6f31de"
       ]
     },
-    "apps/native/words/fil": {
-      "numbers": [
-        "d3c4b51575"
-      ]
-    },
     "apps/native/words/fr": {
       "glossary": [
         "0027bb79a7",
@@ -280,25 +274,13 @@
     "apps/native/words/hi": {
       "numbers": [
         "14dc55dd5d",
-        "85d15dbaf2",
-        "d3c4b51575"
-      ]
-    },
-    "apps/native/words/id": {
-      "numbers": [
-        "d3c4b51575"
-      ]
-    },
-    "apps/native/words/it": {
-      "numbers": [
-        "d3c4b51575"
+        "85d15dbaf2"
       ]
     },
     "apps/native/words/ja": {
       "numbers": [
         "14dc55dd5d",
-        "85d15dbaf2",
-        "d3c4b51575"
+        "85d15dbaf2"
       ]
     },
     "apps/native/words/ko": {
@@ -306,7 +288,6 @@
         "14dc55dd5d",
         "3076877414",
         "85d15dbaf2",
-        "d3c4b51575",
         "e1cb8576dc"
       ],
       "untranslatable": [
@@ -322,7 +303,6 @@
         "85d15dbaf2",
         "8d666c915f",
         "b905142f89",
-        "d3c4b51575",
         "d6c12adc08",
         "e392efcfb5"
       ],
@@ -432,7 +412,6 @@
         "0a9cae7f0d",
         "0b127d9208",
         "0bee18f1fe",
-        "0e264a7c4d",
         "0e84dde91e",
         "1250a72f75",
         "13f1ed9d92",
@@ -466,7 +445,6 @@
         "463490e972",
         "467c21cee7",
         "474c74d246",
-        "47e420919f",
         "488fcb2c27",
         "4a019ad7aa",
         "4c6cc0a4c0",
@@ -482,7 +460,6 @@
         "5f5934ac5c",
         "61b313878d",
         "620655321f",
-        "648989bf9a",
         "6593a66fe6",
         "682a0bf244",
         "687f74fccc",
@@ -511,9 +488,7 @@
         "a7bd8f5c02",
         "a8cfe80394",
         "a8d901fe69",
-        "b359f8aac1",
         "b48d80e825",
-        "b657055d3d",
         "b75afcf640",
         "b8d0981106",
         "ba1411a526",
@@ -614,7 +589,6 @@
         "85d15dbaf2",
         "9c0440f28c",
         "b4121cdfb8",
-        "d3c4b51575",
         "d6bceca8fa",
         "e392efcfb5"
       ]
@@ -622,8 +596,7 @@
     "apps/native/words/vi": {
       "numbers": [
         "14dc55dd5d",
-        "85d15dbaf2",
-        "d3c4b51575"
+        "85d15dbaf2"
       ]
     },
     "apps/native/words/zh-Hans": {
@@ -639,7 +612,6 @@
         "8b1b37f12f",
         "9898e22b69",
         "c4182fdcac",
-        "d3c4b51575",
         "d4fc8e7fad",
         "e392efcfb5",
         "e9aab2ba6c"
@@ -656,7 +628,6 @@
         "889f8d40c0",
         "8b1b37f12f",
         "9898e22b69",
-        "d3c4b51575",
         "e392efcfb5"
       ]
     },
@@ -897,7 +868,6 @@
         "06e547cb12",
         "0abb7a1f2b",
         "0b127d9208",
-        "0e264a7c4d",
         "0e84dde91e",
         "12ef83d202",
         "13f1ed9d92",
@@ -912,7 +882,6 @@
         "36650e6b8c",
         "3b57f78edd",
         "463490e972",
-        "47e420919f",
         "488fcb2c27",
         "4a019ad7aa",
         "53d109bf2e",
@@ -931,8 +900,6 @@
         "982b7f52fe",
         "9caee6173b",
         "a8cfe80394",
-        "b359f8aac1",
-        "b657055d3d",
         "b75afcf640",
         "bd48167d9d",
         "ca9774b373",

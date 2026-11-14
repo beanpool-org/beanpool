@@ -29,6 +29,8 @@ The fee builds up day by day and is taken a little at a time, whenever your acco
 
 ## Seeing it
 
-On the **Ledger**, **Wallet**, the **Community Circulation** box shows about how much you will pay this month. It only shows when you hold beans. Above 1,000 beans it turns amber. On the phone it also suggests spending some, and you can tap it for **System Circulation**, which explains the fee.
+On the **Ledger**, the card at the top marks **+200** on its bar: **monthly fee starts**. When you hold more than 200, the card says so, for example "400 of your Beans are above 200. A small monthly fee on them goes to the Commons: about 4.50 this month." Tap the card for **Your Beans and your credit line**: its part **The two fees** gives every rate.
+
+In **Wallet**, the **Community Circulation** box shows about how much you will pay this month. It only shows when you hold beans. Above 1,000 beans it turns amber. On the phone it also suggests spending some, and you can tap it for **System Circulation**, which explains the fee.
 
 Holiday Mode does not pause the fee.

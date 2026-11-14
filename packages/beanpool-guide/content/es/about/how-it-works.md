@@ -36,14 +36,14 @@ Si un trato se queda atascado, un administrador de tu comunidad puede intervenir
 También puedes enviar frijoles a alguien como un regalo, sin ningún trato.
 
 - Un regalo solo puede provenir de los frijoles que tienes. Nunca puede dejarte por debajo de cero.
-- Puedes enviar regalos una vez que hayas completado un trato en el mercado. Un trato de solo 1 o 2 frijoles es demasiado pequeño para contar.
+- Puedes enviar regalos una vez que hayas completado un trato en el mercado, por pequeño que sea.
 - Los regalos no tienen comisión.
 
 ## Saldo negativo: tu línea de crédito
 
 Puedes gastar un poco más de lo que tienes y tener un saldo negativo. Esta es tu **línea de crédito**. Es una promesa de ayudar a otros más adelante.
 
-Tu línea de crédito comienza en cero. Se habilita cuando completas tu primer trato en el mercado (un trato de solo 1 o 2 frijoles es demasiado pequeño para contar). Alguien a quien tu comunidad haya elegido para dar la bienvenida a los recién llegados también puede darte un pequeño comienzo al avalarte: 25, 50 o 100 frijoles.
+Tu línea de crédito comienza en cero. Se habilita cuando completas tu primer trato en el mercado, por pequeño que sea. Alguien a quien tu comunidad haya elegido para dar la bienvenida a los recién llegados también puede darte un pequeño comienzo al avalarte: 25, 50 o 100 frijoles.
 
 Tu línea de crédito crece con tu **confianza**:
 
@@ -55,14 +55,10 @@ Tu línea de crédito crece con tu **confianza**:
 
 ## Tus Ofertas habilitan tu crédito
 
-La confianza establece qué tan negativo **podrías** llegar a estar. Tus Ofertas activas establecen qué tan negativo **puedes** llegar a estar en este momento. Obtienes el menor de los dos.
+Solo puedes usar de tu línea de crédito lo que abren tus Ofertas activas. Sin ninguna Oferta activa, nada de ella está abierto.
 
-- Sin Ofertas activas: no puedes tener un saldo negativo.
-- 1 Oferta: hasta 200 por debajo de cero.
-- 2 Ofertas: hasta 500.
-- 3 Ofertas: hasta 1,000.
-- 4 Ofertas: hasta 1,500.
-- 5 Ofertas: hasta 2,000.
+- Una Oferta activa abre todo lo que otras personas avalan por ti (un aval, un regalo de línea de crédito, el límite mínimo conocido) y los primeros 200 que ganaste.
+- Lo que ganaste intercambiando se abre por pasos: 2 Ofertas abren 500 de ello, 3 abren 1,000, 4 abren 1,500 y 5 abren 2,000.
 
 Si retiras Ofertas mientras estás por debajo de cero, es posible que debas más de lo que tus Ofertas cubren ahora. En ese caso, no podrás gastar más hasta que vuelvas a estar dentro de tu límite. Aún puedes ganar frijoles y no se te quita nada.
 

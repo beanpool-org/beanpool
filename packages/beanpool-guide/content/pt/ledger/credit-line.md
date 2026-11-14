@@ -12,18 +12,24 @@ Sua linha de crédito permite que você gaste mais feijões do que possui e fiqu
 
 ## Onde encontrar
 
-No **Registro**, abaixo do seu saldo, uma barra mostra onde você está:
+No **Registro**, no topo, um cartão mostra onde você está. Duas frases dão os totais, por exemplo "Você deve 50 feijões" e "Você ainda pode gastar 450 da sua linha de crédito de 500."
 
-- zero fica no meio;
-- a extremidade esquerda é o **seu limite**, o valor mais baixo que você pode atingir;
-- as marcas à esquerda mostram até onde as suas Ofertas permitem que você vá;
-- após **+200** à direita é onde tem início a taxa de circulação.
+Abaixo delas há uma barra, colorida como um arco-íris:
 
-No celular, toque na barra para abrir **Informações do controle deslizante**, que explica cada parte.
+- o ponto é onde seu saldo está agora;
+- o **0**, no meio, é **em equilíbrio**: você deu tanto quanto recebeu;
+- a extremidade esquerda é o **seu limite**: o valor mais baixo que seu saldo pode atingir;
+- **+200** é onde a **taxa mensal começa**: com mais de 200 feijões, uma pequena taxa mensal começa sobre a parte acima (consulte "A taxa de circulação");
+- a faixa fina sob a metade esquerda mostra de que é feita sua linha de crédito: um bloco cheio é crédito que você conquistou negociando, um bloco só com contorno é crédito que alguém garante por você;
+- uma parte listrada está fechada por enquanto: suas Ofertas ativas a abrem.
+
+Uma linha sob a barra nomeia as partes, sempre a linha inteira, por exemplo "Linha de crédito 500: ■ Conquistado negociando até agora 0 · □ @Jane recomendou 500". Antes de ter uma linha de crédito, a metade esquerda fica listrada e diz **sem linha de crédito ainda**.
+
+Toque no cartão, no celular ou na web, para abrir **Seus feijões e sua linha de crédito**, que explica cada parte.
 
 ## Como é liberada
 
-Ela começa no zero. É liberada quando você conclui sua primeira troca no mercado (uma troca de apenas 1 ou 2 feijões é pequena demais para contar), ou quando alguém designado para receber novatos garante um aval para você. Até lá, o Registro exibe **Ainda sem linha de crédito**. Você ainda pode negociar usando os feijões que possui.
+Ela começa no zero. É liberada quando você conclui sua primeira troca no mercado, por menor que seja, ou quando alguém designado para receber novatos garante um aval para você. Até lá, o cartão exibe **sem linha de crédito ainda**. Você ainda pode negociar usando os feijões que possui.
 
 ## Como aumenta
 
@@ -33,16 +39,12 @@ Ela começa no zero. É liberada quando você conclui sua primeira troca no merc
 
 ## Suas Ofertas definem quanto você pode usar
 
-Você só pode usar da sua linha de crédito o equivalente ao que suas Ofertas ativas permitirem:
+Você só pode usar da sua linha de crédito o equivalente ao que suas Ofertas ativas abrem. Sem nenhuma Oferta ativa, nada dela está aberto.
 
-- nenhuma Oferta: nada;
-- 1 Oferta: até −200;
-- 2: −500;
-- 3: −1.000;
-- 4: −1.500;
-- 5: −2.000.
+- Uma Oferta ativa abre tudo o que as pessoas garantem por você (um aval, um presente de linha de crédito, o piso conhecido) e os primeiros 200 que você conquistou.
+- O que você conquistou negociando abre aos poucos: 2 Ofertas abrem 500 dele, 3 abrem 1.000, 4 abrem 1.500 e 5 abrem 2.000.
 
-A linha abaixo da barra informa você, por exemplo: "Publique uma Oferta para abrir sua linha de crédito".
+O cartão diz o que está aberto. Por exemplo: "Você pode gastar mais 380: sua Oferta ativa abre 500 da sua linha de crédito de 900.", e abaixo "Fechados por enquanto: 400. Mais uma Oferta ativa abre 800 da sua linha de 900, e 3 Ofertas ativas abrem tudo." Sem nenhuma Oferta ativa, ele diz, por exemplo, "Sua linha de crédito de 500 está adormecida. Publique uma Oferta e tudo se abre."
 
 ## Em uma comunidade de membros conhecidos
 

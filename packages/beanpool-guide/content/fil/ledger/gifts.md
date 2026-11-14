@@ -8,7 +8,7 @@ source-hash: 51e9457f6d95368b
 
 ## Bago mo magawa
 
-- Kailangan mong makakumpleto ng isang kalakalan sa merkado. Ang isang kalakalan na 1 o 2 munggo lamang ay napakaliit para mabilang.
+- Kailangan mong makakumpleto ng isang kalakalan sa merkado, gaano man ito kaliit.
 - Maaari ka lamang magbigay ng mga munggo na hawak mo. Ang isang regalo ay hindi ka kailanman maaaring dalhin sa ilalim ng zero.
 
 Hanggang sa panahong iyon, sinasabi ng button kung ano ang kulang, tulad ng **kailangan ng 1 nakumpletong kalakalan** o **kailangan ng positibong balanse**.

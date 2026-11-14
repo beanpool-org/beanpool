@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hant",
     "name": "Chinese (Traditional)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, balance rule S2, 2 Nov); claude-sonnet-5-5 (machine draft, market order S1: the Newest within line, 3 Nov); claude-sonnet-5-5 (machine draft, front doors S10, 4 Nov); claude-opus-5-5 (machine draft, DNS robustness S3 fallback card, 4 Nov); claude-sonnet-5-5 (machine draft, words-draft-e: app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-final: the last missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, open-door-web-2563: refusals naming another community, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, the host's box on the event page: one label, 4 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, names list S0b: a copy saved under the community's other address, 5 Nov 2026; meaning-check due); claude-opus-5-5 (machine draft, names-list S0 merge: two devices, 5 Nov); claude-sonnet-5-5 (machine draft, cold-start N2: Asked near you and the First steps line for a Need, 5 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, poll-change-confirm: ask before changing vote, 5 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, dns-robust-s4 words, 6 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, home-chat-c2: the chat card, 7 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, invite-adds-voucher A2: the names-list boxes on the phone, 8 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, knock-empty-landing: nobody is waiting to join, and another owner or admin may have answered, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, owner-vouch-unlimited 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109b: the last missing app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, invites I2: Revoke and one live invite per entry, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, invites I4: the Vouchers block, the profile button and the invite-out words, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, invites I4 fix round 1: a profile arrival that finds the person already confirmed or already a voucher, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, beans-words-addpost: Beans, not credits, in the deal release words, 11 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, colour themes T3: the Appearance list, 12 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, home D4: Welcome, First steps, the 12-words card and kit question, the notifications line, Reset’s Undo, the tour’s last step, 14 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, no-node-names: the examples name \"riverside\", not one of our communities, and the chat line says \"your community\", 14 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, cash-tick-needs: the Need's own cash words, 14 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, pulse-home r2 14 Nov: the Pulse door, Add to Pulse, Your channels, a quiet week; directed by claude-opus-5-5); claude-opus-5-5 (machine draft, account-retired-words: a retired empty duplicate told so, 14 Nov 2026, unreviewed)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, balance rule S2, 2 Nov); claude-sonnet-5-5 (machine draft, market order S1: the Newest within line, 3 Nov); claude-sonnet-5-5 (machine draft, front doors S10, 4 Nov); claude-opus-5-5 (machine draft, DNS robustness S3 fallback card, 4 Nov); claude-sonnet-5-5 (machine draft, words-draft-e: app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-final: the last missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, open-door-web-2563: refusals naming another community, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, the host's box on the event page: one label, 4 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, names list S0b: a copy saved under the community's other address, 5 Nov 2026; meaning-check due); claude-opus-5-5 (machine draft, names-list S0 merge: two devices, 5 Nov); claude-sonnet-5-5 (machine draft, cold-start N2: Asked near you and the First steps line for a Need, 5 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, poll-change-confirm: ask before changing vote, 5 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, dns-robust-s4 words, 6 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, home-chat-c2: the chat card, 7 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, invite-adds-voucher A2: the names-list boxes on the phone, 8 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, knock-empty-landing: nobody is waiting to join, and another owner or admin may have answered, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, owner-vouch-unlimited 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109b: the last missing app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, invites I2: Revoke and one live invite per entry, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, invites I4: the Vouchers block, the profile button and the invite-out words, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, invites I4 fix round 1: a profile arrival that finds the person already confirmed or already a voucher, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, beans-words-addpost: Beans, not credits, in the deal release words, 11 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, colour themes T3: the Appearance list, 12 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, home D4: Welcome, First steps, the 12-words card and kit question, the notifications line, Reset’s Undo, the tour’s last step, 14 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, no-node-names: the examples name \"riverside\", not one of our communities, and the chat line says \"your community\", 14 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, cash-tick-needs: the Need's own cash words, 14 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, pulse-home r2 14 Nov: the Pulse door, Add to Pulse, Your channels, a quiet week; directed by claude-opus-5-5); claude-opus-5-5 (machine draft, account-retired-words: a retired empty duplicate told so, 14 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, credit bar R4: the credit card, its sheet, the vouching budget, Pay back now and one name for the credit line, directed by claude-opus-5-5, 14 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, credit bar R4 fix round: the two Trust & Tiers lines name a vouch of any size, a credit-line gift and the known floor, 14 Nov 2026, unreviewed)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-14",
@@ -2775,8 +2775,6 @@
   "Temporary freeze of trading and messaging": "暫時凍結交易與私訊權限",
   "Restore member to active standing (simple majority)": "恢復成員的正常身分（簡單多數）",
   "Cancel pending removal and restore account (simple majority)": "取消待處理的移除並恢復帳號（簡單多數）",
-  "Lock credit floor to zero": "將信用額度下限鎖定為零",
-  "Restore credit floor (simple majority)": "恢復信用額度下限（簡單多數）",
   "Remove a lead keeper or project leader": "移除主要經營者或專案負責人",
   "Replace an enterprise's lead keeper or a project's leader": "更換事業的主要經營者或專案負責人",
   "Give Beans to a project or enterprise": "向專案或事業發放豆子",
@@ -3070,8 +3068,6 @@
   "Reached ✓": "已達成 ✓",
   "Next level": "下一等級",
   "Up ahead": "前方目標",
-  "Your current floor": "你目前的底線",
-  "Grows deeper as you trade more": "交易越多，底線越深",
   "Reach {min} trust ({left} to go) from the real value you trade.": "透過實質交易價值達到 {min} 信任分（還差 {left}）。",
   "🚀 Reach {emoji} {tier}": "🚀 達到 {emoji} {tier}",
   "Trust Manual": "信任手冊",
@@ -3097,9 +3093,7 @@
   "💡 Trust is a saturating curve over the real value you trade — diverse trades climb fastest, and it levels off near the top so no one runs away. Gifts don't build trust.": "💡 信任是基於你交易的實質價值的飽和曲線 — 多元化交易上升最快，且在頂部趨於平緩以防差距過大。贈禮不建立信任分。",
   "About your balance": "關於你的餘額",
   "YOUR BALANCE": "你的餘額",
-  "≈ {hours} hrs of value · Floor {floor}": "≈ {hours} 小時價值 · 底線 {floor}",
   "COMMONS ⓘ": "公共基金 ⓘ",
-  "CREDIT FLOOR": "信用底線",
   "Community Circulation ⓘ": "社群流通 ⓘ",
   "per month → commons pool": "每月 → 公共基金池",
   "{date} · {n}d|{date} · {n}d": {
@@ -3143,13 +3137,8 @@
   "Pay for community services": "支付社群服務費用",
   "Transfer to other members": "轉帳給其他成員",
   "Credits in BeanPool are backed by real community trust and exchange, not fiat currency.": "BeanPool 中的信用額度由真實的社群信任和交換支持，而非法定貨幣。",
-  "Floor Balance": "底線餘額",
-  "Every member has access to a **Floor Balance** (credit line) earned through completed trades and community vouches. This allows you to trade even if you temporarily have zero credits.": "每位成員都可以使用透過完成交易和社群擔保獲得的**底線餘額**（信用額度）。這讓你即使暫時沒有信用額度也能進行交易。",
   "Negative Balances": "負餘額",
-  "If you spend past zero, your balance becomes **negative** down to your **earned credit floor**. When you earn credits again, they will first pay off this negative balance.": "如果支出超過零，你的餘額將變為**負數**，最多達到你的**已獲信用底線**。當你再次賺取信用額度時，將首先償還此負餘額。",
-  "WHY A FLOOR?": "為什麼設立底線？",
   "Traditional systems stop you from trading when you're broke. A **mutual credit system** like BeanPool allows the community to **extend trust** so trade can continue flowing.": "傳統系統在你資金不足時阻止你交易。像 BeanPool 這樣的**互助信用系統**允許社群**延伸信任**，使交易能夠持續流動。",
-  "When you reach your credit floor, **further spending is paused** until you earn credits back by trading on the Marketplace.": "當達到信用底線時，**進一步支出將暫停**，直到你透過在市集交易賺回信用額度。",
   "Available Balance": "可用餘額",
   "What is the Circulation Fee?": "什麼是流通費？",
   "**Circulation Fee** is a small monthly reduction applied to positive credit balances. It acts as a circulation incentive to prevent hoarding and keep the economy active.": "**流通費**是對正信用餘額按月扣除的小額費用。它作為一種流通激勵機制，旨在防止囤積並保持經濟活躍。",
@@ -3159,7 +3148,6 @@
   "100% of collected fees go directly into the **Community Commons**. These funds are then distributed to community-approved enterprises and projects through community Decisions.": "收取的費用 100% 直接進入**社群公共基金**。然後透過社群決策將這些資金分配給社群批准的企業和專案。",
   "Unlike interest which rewards hoarding, circulation fees reward spending. It encourages you to spend your credits on community services!": "與獎勵囤積的利息不同，流通費獎勵消費。它激勵你將信用額度用於社群服務！",
   "Debt Recovery": "債務追償",
-  "If you have a **negative balance** (you've spent more than you've earned using your Floor Limit), your account goes into debt recovery mode.": "如果你有**負餘額**（使用底線限額支出的金額超過了賺取的金額），你的帳號將進入債務追償模式。",
   "Negative balances are **exempt from circulation fees**. You will not be charged monthly fees on a negative balance.": "負餘額**免除流通費**。你不會被收取負餘額的月度費用。",
   "CLEARING YOUR DEBT": "清償債務",
   "To return to a **positive balance**, you must offer goods or services to the community. When you earn credits, they will automatically pay down your **negative balance** until you reach **zero**.": "要恢復到**正餘額**，你必須向社群提供商品或服務。當你賺取信用額度時，它們將自動折抵你的**負餘額**，直到歸**零**。",
@@ -3229,16 +3217,13 @@
   },
   "**No reviews** = **{share}%** of score": "**無評價** = 得分的 **{share}%**",
   "3. MILESTONES": "3. 里程碑",
-  "As your trust grows you pass milestone badges — they mark your progress, they don't set your credit floor:": "隨著信任的增長，你將獲得里程碑徽章 — 它們記錄你的進步，並不限制你的信用底線：",
   "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**": "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**",
   "New members show a **🔑 Founding** badge until their first trade.": "新成員在進行首筆交易前會顯示 **🔑 創始成員** 徽章。",
   "Tiers & Perks": "等級與權益",
   "🔑 Founding Status (before 1st trade)": "🔑 創始成員狀態（首筆交易前）",
   "A starting state that lasts until you complete your **very first trade**": "一直持續到你完成**第一筆交易**的初始狀態",
   "Shows as **🔑 FOUNDING** so members know to help you get started": "顯示為 **🔑 創始成員**，以便其他成員知道協助你起步",
-  "Your credit floor stays at **{floor}** until that first trade — no overdraft yet": "在首筆交易前，你的信用底線保持在 **{floor}** — 尚無透支額度",
   "Graduates to **{tier}** automatically once you trade": "一旦交易便自動晉級為 **{tier}**",
-  "Credit floor opens after your 1st completed trade (or via a starter vouch of 25, 50, or 100B)": "完成首筆交易後開啟信用底線（或透過 25、50 或 100B 的初始擔保）",
   "Browse & trade the marketplace, receive credits": "瀏覽市集並進行交易，接收信用額度",
   "**Sending credits** unlocks the moment you complete that first trade": "完成首筆交易的瞬間即可解鎖**轉帳信用額度**",
   "Trusted-trader recognition across the community": "獲得全社群公認的受信任交易者認可",
@@ -3246,7 +3231,6 @@
   "OPEN TO EVERYONE — NO TIER REQUIRED": "對所有人開放 — 無需特定等級",
   "**Inviting new members** — share BeanPool freely from day one.": "**邀請新成員** — 從第一天起自由分享 BeanPool。",
   "**A governance voice** — 1 member 1 vote on community polls and roles, plus quadratic voting on pool spending based on earned trade standing.": "**治理發聲權** — 在社群投票和角色評選中一人一票，外加根據交易聲望對資金池支出的二次方投票。",
-  "**No daily spending limits** — your credit floor is the only guardrail.": "**無每日支出上限** — 信用底線是唯一的安全防護。",
   "Trust & Reputation": "信任與聲望",
   "yesterday": "昨天",
   "{n} day ago|{n} days ago": {
@@ -3456,8 +3440,6 @@
   "Propose Active Keeper as Lead": "提議活躍管理人擔任主要管理人",
   "🤝 ASK TO JOIN AS A COLLABORATOR": "🤝 申請加入成為協作者",
   "🤝 ASK TO JOIN AS A KEEPER": "🤝 申請加入成為管理人",
-  "Help run this project. You can back it with your earned trading standing to expand its credit floor.": "協助運作此專案。你可以用累積的交易信譽為其擔保，擴展其信用額度下限。",
-  "Help run this enterprise. You can back it with your earned trading standing to expand its credit floor.": "協助運作此事業。你可以用累積的交易信譽為其擔保，擴展其信用額度下限。",
   "Join as collaborator": "加入成為協作者",
   "Join as keeper": "加入成為管理人",
   "⏳ COLLABORATOR REQUEST PENDING": "⏳ 協作者申請待審核",
@@ -3780,10 +3762,6 @@
   "This project is winding down. Listings are inactive and cannot be bought. Any collaborator can stop this during the 7-day grace period.": "此專案正在清算結束。刊登項目已停用且無法購買。在 7 天寬限期內，任何協作者皆可終止清算。",
   "This enterprise is winding down. Listings are inactive and cannot be bought. Any keeper can stop this during the 7-day grace period.": "此事業正在清算結束。刊登項目已停用且無法購買。在 7 天寬限期內，任何管理人皆可終止清算。",
   "The 7-day grace period has elapsed. Ready to be finalised.": "7 天寬限期已過。已可完成清算。",
-  "Pause credit floor snapshot has expired": "暫停時的信用額度下限快照已過期",
-  "Pause credit floor snapshot expires in {n} day|Pause credit floor snapshot expires in {n} days": {
-    "other": "暫停時的信用額度下限快照將在 {n} 天後過期"
-  },
   "Paused for the season": "因應季節暫停",
   "Paused for the season. Credit held at {n} beans until {date}.|Paused for the season. Credit held at {n} beans until {date}.": {
     "other": "已因應季節暫停。信用額度凍結在 {n} 顆豆子，直至 {date}。"
@@ -3792,19 +3770,6 @@
     "other": "已因應季節暫停。信用額度凍結在 {n} 顆豆子。"
   },
   "Listings are paused and cannot be bought right now.": "刊登項目已暫停，目前無法購買。",
-  "Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.|Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.": {
-    "other": "因應季節暫停會將你的信用額度下限維持在 {n} 顆豆子直至 {date}，並暫停有效刊登項目以防成員購買。任何協作者皆可隨時恢復運作。"
-  },
-  "Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.|Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.": {
-    "other": "因應季節暫停會將你的信用額度下限維持在 {n} 顆豆子長達 90 天，並暫停有效刊登項目以防成員購買。任何協作者皆可隨時恢復運作。"
-  },
-  "Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.|Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.": {
-    "other": "因應季節暫停會將你的信用額度下限維持在 {n} 顆豆子直至 {date}，並暫停有效刊登項目以防成員購買。任何管理人皆可隨時恢復運作。"
-  },
-  "Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.|Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.": {
-    "other": "因應季節暫停會將你的信用額度下限維持在 {n} 顆豆子長達 90 天，並暫停有效刊登項目以防成員購買。任何管理人皆可隨時恢復運作。"
-  },
-  "Resuming reactivates all listings and restores the credit floor to normal daily calculation.": "恢復運作會重新啟用所有刊登項目，並將信用額度下限恢復為常態每日計算。",
   "Winding up returns {amount} beans to the Commons, releases {n} collaborator, and closes {name} for good. Any collaborator can stop this for the next 7 days.|Winding up returns {amount} beans to the Commons, releases {n} collaborators, and closes {name} for good. Any collaborator can stop this for the next 7 days.": {
     "other": "清算會將 {amount} 顆豆子歸還公共板塊，解除 {n} 位協作者的身分，並永久關閉 {name}。在接下來的 7 天內，任何協作者皆可終止此程序。"
   },
@@ -6767,5 +6732,43 @@
   "Yes, it's kept": "是的，已存放好",
   "Open the Pulse": "開啟動態",
   "📡 Pulse ›": "📡 動態 ›",
-  "Your account in {name} was retired": "你在 {name} 的帳號已停用"
+  "Your account in {name} was retired": "你在 {name} 的帳號已停用",
+  "Vouching budget: {left} of {level} left": "擔保預算：剩餘 {left}，共 {level}",
+  "Pay back now": "立即還款",
+  "Give Beans you hold to your community’s shared pot, or pay back a debt with a code from an admin.": "把你持有的豆子交給社群的共享資金，或用管理員給的代碼償還欠款。",
+  "You’re working off a debt to the Commons: {left} left of {amount}. Every Bean you receive above 0 goes to the Commons until it is cleared. You can also pay some or all of it yourself: it comes off at once.": "你正在償還欠公共資金池的款項：{amount} 中還剩 {left}。你收到的每一顆超過 0 的豆子都會撥入公共資金池，直到還清。你也可以自己償還一部分或全部：會立即扣減。",
+  "Tiers are **recognition milestones** — they mark how far your trust has grown, or a badge your community gave you. A tier gives no credit: your **credit line** (how far below zero you can spend) grows with the value you trade and what your community gives you; the tiers are just the signposts along the way.": "等級是**認可里程碑**：它們標示你的信任增長到哪裡，或社群授予你的徽章。等級不提供信用額度：你的**信用額度**（你能花到零以下多少）隨你交易的價值和社群給你的而增長；等級只是沿途的路標。",
+  "Lock the credit line at zero": "將信用額度鎖定為零",
+  "Restore the credit line (simple majority)": "恢復信用額度（簡單多數）",
+  "Every member can have a **credit line**, earned through completed trades or given by people who vouch for them. It lets you trade even when you hold no Beans.": "每位成員都可以擁有**信用額度**，透過完成交易賺取，或由為其擔保的人給予。它讓你即使沒有豆子也能交易。",
+  "If you spend past zero, your balance goes **below zero**, as far as your **credit line** allows. Beans you receive after that bring it back towards zero first.": "如果你花超過 0，你的餘額會降到**零以下**，最多到你的**信用額度**允許的程度。之後你收到的豆子會先讓它回到 0。",
+  "WHY A CREDIT LINE?": "為什麼要有信用額度？",
+  "When you have used all of your credit line, **spending pauses** until you sell or receive Beans.": "當你用完全部信用額度時，**支出會暫停**，直到你賣出或收到豆子。",
+  "If you have a **negative balance** (you've spent more than you've received, using your credit line), your account goes into debt recovery mode.": "如果你有**負餘額**（你用信用額度花的比收到的多），你的帳號將進入債務追償模式。",
+  "As your trust grows you pass milestone badges — they mark your progress, they don't set your credit line:": "隨著信任的增長，你將獲得里程碑徽章 — 它們記錄你的進步，並不決定你的信用額度：",
+  "Your credit line stays at **{line}** until that first trade, unless someone vouches for you, a member gives you part of the credit line someone gave them, or your community’s admins confirm you (the known floor)": "在首筆交易前，你的信用額度維持在 **{line}**，除非有人為你擔保、其他成員把別人給他們的信用額度分一部分給你，或你社群的管理員確認了你（已知下限）",
+  "Your credit line opens with your first completed trade, or sooner when someone vouches for you, a member gives you part of the credit line someone gave them, or your community’s admins confirm you (the known floor)": "完成首筆交易後，你的信用額度開啟；在此之前，若有人為你擔保、其他成員把別人給他們的信用額度分一部分給你，或你社群的管理員確認了你（已知下限），額度也會開啟",
+  "**No daily spending limits** — your credit line is the only guardrail.": "**無每日支出上限** — 信用額度是唯一的安全防護。",
+  "Grows as you trade more": "交易越多，增長越多",
+  "≈ {hours} hrs of value · Credit line {line}": "≈ {hours} 小時價值 · 信用額度 {line}",
+  "CREDIT LINE": "信用額度",
+  "Help run this project. You can back it with your earned trading standing to expand its credit line.": "協助運作此專案。你可以用累積的交易信譽為其擔保，擴展其信用額度。",
+  "Help run this enterprise. You can back it with your earned trading standing to expand its credit line.": "協助運作此事業。你可以用累積的交易信譽為其擔保，擴展其信用額度。",
+  "The credit line held for the pause has ended": "為暫停而保留的信用額度已到期",
+  "The credit line held for the pause ends in {n} day|The credit line held for the pause ends in {n} days": {
+    "other": "為暫停而保留的信用額度將在 {n} 天後到期"
+  },
+  "Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.|Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.": {
+    "other": "因應季節暫停會將你的信用額度維持在 {n} 顆豆子直至 {date}，並暫停有效刊登項目以防成員購買。任何協作者皆可隨時恢復運作。"
+  },
+  "Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.|Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.": {
+    "other": "因應季節暫停會將你的信用額度維持在 {n} 顆豆子長達 90 天，並暫停有效刊登項目以防成員購買。任何協作者皆可隨時恢復運作。"
+  },
+  "Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.|Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.": {
+    "other": "因應季節暫停會將你的信用額度維持在 {n} 顆豆子直至 {date}，並暫停有效刊登項目以防成員購買。任何管理人皆可隨時恢復運作。"
+  },
+  "Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.|Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.": {
+    "other": "因應季節暫停會將你的信用額度維持在 {n} 顆豆子長達 90 天，並暫停有效刊登項目以防成員購買。任何管理人皆可隨時恢復運作。"
+  },
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "恢復運作會重新啟用所有刊登項目，並將信用額度恢復為常態每日計算。"
 }

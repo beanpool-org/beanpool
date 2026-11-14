@@ -30,6 +30,8 @@ Les frais s'accumulent jour après jour et sont prélevés par petites fractions
 
 ## Les consulter
 
+Sur le **Registre**, la carte en haut marque **+200** sur sa barre : **début des frais mensuels**. Quand vous détenez plus de 200, la carte le dit, par exemple « 400 de vos haricots sont au-dessus de 200. De petits frais mensuels sur ceux-ci vont aux Communs : environ 4,50 ce mois-ci. » Touchez la carte pour **Vos haricots et votre ligne de crédit** : sa partie **Les deux frais** donne chaque taux.
+
 Sur le **Registre**, dans **Portefeuille**, l'encadré **Circulation communautaire** indique approximativement ce que vous paierez ce mois-ci. Il ne s'affiche que lorsque vous détenez des haricots. Au-delà de 1 000 haricots, il devient orange. Sur le téléphone, il vous suggère également d'en dépenser une partie, et vous pouvez le toucher pour ouvrir **Circulation du système**, qui explique ces frais.
 
 Le Mode vacances ne suspend pas ces frais.

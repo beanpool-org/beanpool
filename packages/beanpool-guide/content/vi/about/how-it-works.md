@@ -36,14 +36,14 @@ Nếu một giao dịch bị bế tắc, một quản trị viên của cộng �
 Bạn cũng có thể gửi Đậu cho ai đó như một món quà tặng, không cần thông qua giao dịch.
 
 - Quà tặng chỉ có thể lấy từ số Đậu bạn đang có. Quà tặng không bao giờ có thể khiến bạn xuống dưới mức 0.
-- Bạn có thể gửi quà tặng sau khi đã hoàn thành một giao dịch trên chợ. Một giao dịch chỉ 1 hoặc 2 Đậu là quá nhỏ để được tính.
+- Bạn có thể gửi quà tặng sau khi đã hoàn thành một giao dịch trên chợ, dù nhỏ đến đâu.
 - Quà tặng không mất phí.
 
 ## Vượt xuống dưới mức 0: hạn mức tín dụng của bạn
 
 Bạn có thể chi tiêu nhiều hơn một chút so với số Đậu bạn đang có, và số dư có thể xuống dưới mức 0. Đây là **hạn mức tín dụng** của bạn. Đó là một lời hứa sẽ giúp đỡ người khác sau này.
 
-Hạn mức tín dụng của bạn bắt đầu từ số 0. Nó sẽ mở ra khi bạn hoàn thành giao dịch đầu tiên trên chợ (giao dịch chỉ 1 hoặc 2 Đậu là quá nhỏ để được tính). Người được cộng đồng chọn để chào đón thành viên mới cũng có thể hỗ trợ bạn một khởi đầu nhỏ bằng cách bảo lãnh cho bạn: 25, 50 hoặc 100 Đậu.
+Hạn mức tín dụng của bạn bắt đầu từ số 0. Nó sẽ mở ra khi bạn hoàn thành giao dịch đầu tiên trên chợ, dù nhỏ đến đâu. Người được cộng đồng chọn để chào đón thành viên mới cũng có thể hỗ trợ bạn một khởi đầu nhỏ bằng cách bảo lãnh cho bạn: 25, 50 hoặc 100 Đậu.
 
 Hạn mức tín dụng của bạn sẽ tăng lên cùng với mức **uy tín** của bạn:
 
@@ -55,14 +55,10 @@ Hạn mức tín dụng của bạn sẽ tăng lên cùng với mức **uy tín*
 
 ## Lời đề nghị của bạn mở ra hạn mức tín dụng
 
-Uy tín quyết định mức sâu nhất bạn **có thể** chạm tới. Các Lời đề nghị đang hoạt động quyết định mức sâu nhất bạn **được phép** chạm tới lúc này. Bạn sẽ nhận mức nhỏ hơn trong hai mức đó.
+Bạn chỉ có thể sử dụng phần hạn mức tín dụng mà các Lời đề nghị đang đăng của bạn mở ra. Không có Lời đề nghị nào đang đăng thì không phần nào được mở.
 
-- Không có Lời đề nghị đang hoạt động: bạn không thể xuống dưới mức 0.
-- 1 Lời đề nghị: xuống đến −200.
-- 2 Lời đề nghị: xuống đến −500.
-- 3 Lời đề nghị: xuống đến −1.000.
-- 4 Lời đề nghị: xuống đến −1.500.
-- 5 Lời đề nghị: xuống đến −2.000.
+- Một Lời đề nghị đang đăng mở toàn bộ phần có người đứng ra bảo lãnh cho bạn (lời bảo lãnh, quà tặng hạn mức tín dụng, mức sàn quy định) và 200 đầu tiên bạn kiếm được.
+- Phần bạn kiếm được qua giao dịch mở theo từng bước: 2 Lời đề nghị mở 500 trong đó, 3 mở 1.000, 4 mở 1.500 và 5 mở 2.000.
 
 Nếu bạn gỡ bớt Lời đề nghị trong khi đang ở dưới mức 0, bạn có thể đang nợ nhiều hơn mức mà các Lời đề nghị hiện tại bao quát. Khi đó bạn không thể chi tiêu thêm cho đến khi quay lại trong giới hạn của mình. Bạn vẫn có thể nhận thêm Đậu, và không có gì bị thu hồi từ bạn.
 

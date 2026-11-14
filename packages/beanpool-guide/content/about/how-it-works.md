@@ -37,14 +37,14 @@ If a trade gets stuck, an admin of your community can step in. They can pay the 
 You can also send beans to someone as a gift, with no trade.
 
 - A gift can only come from beans you have. It can never take you below zero.
-- You can send gifts once you have completed a trade in the market. A trade of only 1 or 2 beans is too small to count.
+- You can send gifts once you have completed a trade in the market, however small.
 - Gifts have no fee.
 
 ## Going below zero: your credit line
 
 You can spend a little more than you have, and go below zero. This is your **credit line**. It is a promise to help others later.
 
-Your credit line starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count). A voucher can also give you a start by vouching for you on your invite or profile: 25, 50, 75 or 100 beans, from their voucher budget. An owner can also vouch 200 or 500 beans, and has no budget limit. Once an owner has vouched for you, your vouches can add up to 500 beans in all (300 otherwise).
+Your credit line starts at zero. It opens when you complete your first trade in the market, however small. A voucher can also give you a start by vouching for you on your invite or profile: 25, 50, 75 or 100 beans, from their voucher budget. An owner can also vouch 200 or 500 beans, and has no budget limit. Once an owner has vouched for you, your vouches can add up to 500 beans in all (300 otherwise).
 
 Your credit line grows with your **trust**:
 
@@ -56,14 +56,10 @@ Your credit line grows with your **trust**:
 
 ## Your Offers unlock your credit
 
-Trust sets how deep you **could** go. Your live Offers set how deep you **may** go right now. You get the smaller of the two.
+You can only use as much of your credit line as your live Offers open. With no live Offer, none of it is open.
 
-- No live Offers: you cannot go below zero.
-- 1 Offer: down to 200 below zero.
-- 2 Offers: down to 500.
-- 3 Offers: down to 1,000.
-- 4 Offers: down to 1,500.
-- 5 Offers: down to 2,000.
+- One live Offer opens everything people stand behind for you (a vouch, a credit-line gift, the known floor) and the first 200 you earned.
+- What you earned by trading opens in steps: 2 Offers open 500 of it, 3 open 1,000, 4 open 1,500 and 5 open 2,000.
 
 If you take Offers down while you are below zero, you may owe more than your Offers now cover. Then you cannot spend more until you are back within your limit. You can still earn beans, and nothing is taken from you.
 

@@ -422,9 +422,9 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         await click(byTestId('bean-sheet-open'), 'About your balance');
         expect(text()).toContain(xx('Available Balance'));
         expect(bypassing(), 'Your Balance').toEqual([]);
-        await click(row('Floor Balance'), 'Floor Balance');
-        expect(text()).toContain(xx('WHY A FLOOR?'));
-        expect(bypassing(), 'Floor Balance').toEqual([]);
+        await click(row('Credit line'), 'Credit line');
+        expect(text()).toContain(xx('WHY A CREDIT LINE?'));
+        expect(bypassing(), 'Credit line').toEqual([]);
         await click(byLabel(xx('Close')), 'Close');
         await click(row('Community Circulation ⓘ'), 'Community Circulation');
         expect(text()).toContain(xx('System Circulation'));
@@ -470,10 +470,10 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
             trustStats: { uniquePartners: 0 },
         };
         await renderIn('en');
-        // Own line shown once from their real floor (-1000), written as every figure is (core formatHundredths: a true minus,
-        // grouped in English; "-1000" before)
-        expect(text()).toContain('Your current floor');
-        expect(text()).toContain('−1,000');
+        // Own line shown once from their real floor (-1000), as the card names it (credit bar R4): "Your credit line" and a
+        // figure, never below zero, grouped in English ("Your current floor −1,000" before, "-1000" before that)
+        expect(text()).toContain('Your credit lineGrows as you trade more1,000');
+        expect(text()).not.toContain('Your current floor');
         expect(text()).not.toContain('Floor starts at');
         expect(text()).not.toContain('Floor from this tier');
         // Their line is open already: no 'your first completed trade … opens your credit line' above it
@@ -548,7 +548,7 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         await renderIn('en');
         expect(bracketed()).toBe(0);
         for (const english of ['YOUR TRUST LEVEL', 'Resident', 'Level 2 of 4 · credit line 200 Beans', '400 more trust to 🏛️ Steward', 'Send Beans', 'Invite Members', 'ALL LEVELS',
-            "You're here", '600 trust', 'Your current floor', 'Recognised as a community Resident', 'Invite others to join', '🚀 Reach 🏛️ Steward', 'Trust Manual', '400 trust to go',
+            "You're here", '600 trust', 'Your credit line', 'Recognised as a community Resident', 'Invite others to join', '🚀 Reach 🏛️ Steward', 'Trust Manual', '400 trust to go',
             'beans of value to trade', 'THE LEVER', 'new partners (roughly)', 'WHAT BUILDS YOUR TRUST', 'VALUE TRADED', '+150 trust', '3 reviews', 'diverse = faster', 'BEANS', 'Levels', 'Wallet',
             KNOWN_FROZEN.part]) {
             expect(text(), english).toContain(english);
@@ -556,7 +556,7 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         await click(byTestId('ledger-wallet-tab'), 'Wallet');
         // The floor and the balance as every figure is written (core formatHundredths): a true minus, no decimals when whole,
         // grouped in English ("Floor -200" and "+1200.0" before).
-        for (const english of ['YOUR BALANCE', '≈ 30.0 hrs of value · Floor −200', 'COMMONS ⓘ', 'CREDIT FLOOR', 'HELD IN TRUST', 'Community Circulation ⓘ', 'per month → commons pool',
+        for (const english of ['YOUR BALANCE', '≈ 30.0 hrs of value · Credit line 200', 'COMMONS ⓘ', 'CREDIT LINE', 'HELD IN TRUST', 'Community Circulation ⓘ', 'per month → commons pool',
             'PROJECT PLEDGES', '-25 B', '3 Oct 2026', 'RECENT TRANSACTIONS', 'Export CSV', 'Held in Trust: Fix the gate (to Mia)', 'Held in Trust: Bike repair (from Mia)',
             'Held in Trust', 'Project Wallet', BLOCKED_BEANS_NOTE, 'View Offer', '+1,200']) {
             expect(text(), english).toContain(english);
@@ -656,7 +656,7 @@ describe('the Ledger at 320 dp with 1.3× text, in the pseudo-locale', () => {
         await click(byTestId('ledger-wallet-tab'), 'Wallet');
         const wallet = Array.from(host.querySelectorAll('span')).filter((s) => styleOf(s).textTransform);
         expect([...levels, ...wallet].map((s) => s.textContent)).toEqual([]);
-        for (const label of ['YOUR BALANCE', 'COMMONS ⓘ', 'CREDIT FLOOR', 'HELD IN TRUST', 'RECENT TRANSACTIONS']) expect(text(), label).toContain(xx(label));
+        for (const label of ['YOUR BALANCE', 'COMMONS ⓘ', 'CREDIT LINE', 'HELD IN TRUST', 'RECENT TRANSACTIONS']) expect(text(), label).toContain(xx(label));
     });
 
     it('a confirmed member\'s levels card at 320 dp with 1.3× text in the pseudo-locale', async () => {
@@ -667,7 +667,7 @@ describe('the Ledger at 320 dp with 1.3× text, in the pseudo-locale', () => {
         };
         await renderIn('xx');
         expect(bypassing()).toEqual([]);
-        expect(text()).toContain(xx('Your current floor'));
+        expect(text()).toContain(xx('Your credit line'));
         expect(text()).not.toContain(xx('Floor starts at'));
 
         const residentBtn = Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes(xx('Resident')));

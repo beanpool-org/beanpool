@@ -96,6 +96,8 @@ async function pickDana() {
     fireEvent.click(screen.getByRole('button', { name: /Select recipient/ }));
     fireEvent.click(await screen.findByText('Dana'));
 }
+/** "Credit line" drawn anywhere but the Wallet's own tile, which names the member's credit line (credit bar R4): the Send tab is one. */
+const creditLineOutsideTile = () => screen.queryAllByText('Credit line').filter((el) => !el.closest('[data-testid="ledger-wallet-tiles"]'));
 const give = async () => { await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Give credit line' })); }); };
 
 describe('the Credit line tab beside Beans on Send (G1), on the web', () => {
@@ -107,7 +109,7 @@ describe('the Credit line tab beside Beans on Send (G1), on the web', () => {
             fireEvent.click(await screen.findByRole('button', { name: /Wallet/ }));
             fireEvent.click(await screen.findByRole('button', { name: /Send Beans/ }));
             expect(screen.queryByTestId('send-kind-tabs')).toBeNull();
-            expect(screen.queryByText('Credit line')).toBeNull();
+            expect(creditLineOutsideTile()).toEqual([]);
             expect(screen.getByPlaceholderText('Amount (B)')).toBeInTheDocument();
             unmount();
             vi.mocked(request).mockClear();
@@ -116,6 +118,7 @@ describe('the Credit line tab beside Beans on Send (G1), on the web', () => {
 
     it('the tab gives what is typed to whom is picked, and nothing else; the words carry the node\'s number', async () => {
         await openCreditTab();
+        expect(creditLineOutsideTile()).not.toEqual([]); // the check the test above makes sees the tab when it is there
         expect(screen.getByTestId('send-kind-beans')).toHaveTextContent('Beans');
         expect(screen.getByTestId('credit-gift-words')).toHaveTextContent('Give part of your credit line. You can give up to 100: the part someone gave you that you aren’t using. It’s theirs for good.');
         await pickDana();

@@ -8,7 +8,7 @@ source-hash: 51e9457f6d95368b
 
 ## Conditions préalables
 
-- Vous devez avoir conclu un échange sur le marché. Un échange de seulement 1 ou 2 haricots est trop petit pour compter.
+- Vous devez avoir conclu un échange sur le marché, aussi petit soit-il.
 - Vous ne pouvez donner que les haricots que vous possédez. Un don ne peut jamais vous faire passer sous zéro.
 
 Jusque-là, le bouton indique ce qui manque, comme **1 échange réalisé requis** ou **solde positif requis**.

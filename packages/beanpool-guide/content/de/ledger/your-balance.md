@@ -17,15 +17,15 @@ Das Buch hat zwei Tabs: **Stufen** (dein Vertrauen, siehe „Vertrauensstufen“
 
 ## Der Tab „Wallet“
 
-- **Dein Guthaben** und wie vielen Stunden Hilfe es ungefähr entspricht, bei 40 Bohnen pro Stunde.
+- **Dein Guthaben** und wie vielen Stunden Hilfe es ungefähr entspricht, bei 40 Bohnen pro Stunde, und dein Kreditrahmen.
 - **Gemeingut:** der gemeinsame Pool deiner Community.
-- **Kreditrahmen:** wie weit du unter null gehen könntest.
+- **Kreditrahmen:** wie weit du unter null gehen kannst, als Zahl: 500 heißt, du kannst bis −500 gehen. Siehe „Dein Kreditrahmen“.
 - Wie viele deiner Bohnen in laufenden Deals gebunden sind, sofern welche vorhanden sind.
 - **Community-Umlauf:** wird angezeigt, wenn du Bohnen besitzt. Siehe „Die Umlaufgebühr“.
 - **Projektbeiträge:** Bohnen, die du für Projekte zugesagt hast, falls vorhanden.
 - **Bohnen senden:** ein Geschenk senden. Siehe „Bohnen schenken“.
 
-In der Web-App ist der Tab „Wallet“ kompakter: **Kreditlimit**, **Gemeinschaftspool**, **Bohnen senden** und **Community-Umlauf**. Dein Kontostand befindet sich oben im Buch.
+In der Web-App ist der Tab „Wallet“ kompakter: **Kreditrahmen**, **Gemeinschaftspool**, **Bohnen senden** und **Community-Umlauf**. Dein Kontostand befindet sich oben im Buch.
 
 ## Kürzliche Transaktionen
 
@@ -37,4 +37,4 @@ Die Liste bietet derzeit noch keine Such- oder Filterfunktionen.
 
 ## ⓘ-Schaltflächen
 
-Tippe auf dem Smartphone auf das **ⓘ** neben „Dein Guthaben“ für eine kurze Erklärung deines Guthabens und deines Rahmens.
+Tippe auf dem Smartphone auf das **ⓘ** neben „Dein Guthaben“ für eine kurze Erklärung deines Guthabens und deines Kreditrahmens. Die Karte oben im Buch erklärt sich selbst: Tippe darauf, auf dem Smartphone oder im Web, für **Deine Bohnen und dein Kreditrahmen**.

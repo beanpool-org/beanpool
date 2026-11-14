@@ -8,7 +8,7 @@ source-hash: 51e9457f6d95368b
 
 ## Điều kiện cần trước khi gửi
 
-- Bạn cần hoàn tất một giao dịch trên chợ. Giao dịch chỉ có 1 hoặc 2 đậu là quá nhỏ để được tính.
+- Bạn cần hoàn tất một giao dịch trên chợ, dù nhỏ đến đâu.
 - Bạn chỉ có thể tặng số đậu bạn đang có. Một món quà tặng không bao giờ có thể đưa số dư của bạn xuống dưới mức 0.
 
 Cho đến lúc đó, nút sẽ cho biết điều kiện còn thiếu, chẳng hạn như **cần 1 giao dịch hoàn tất** hoặc **cần có số dư dương**.

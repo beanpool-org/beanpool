@@ -20,7 +20,7 @@ Walang paraan ang app upang bumili o magbenta ng munggo para sa pera. Ang munggo
 
 ## Bakit hindi ako makapagpadala ng regalo?
 
-Ang isang regalo ay nangangailangan ng dalawang bagay. Dapat ay nakakumpleto ka na ng isang kalakalan sa merkado (ang 1 o 2 munggo ay masyadong maliit para mabilang), at maaari ka lamang magbigay ng munggo na mayroon ka. Ang isang regalo ay hindi ka maaaring dalhin kailanman sa ilalim ng zero.
+Ang isang regalo ay nangangailangan ng dalawang bagay. Dapat ay nakakumpleto ka na ng isang kalakalan sa merkado, gaano man ito kaliit, at maaari ka lamang magbigay ng munggo na mayroon ka. Ang isang regalo ay hindi ka maaaring dalhin kailanman sa ilalim ng zero.
 
 ## Bakit hindi ako makagastos sa ilalim ng zero?
 

@@ -8,7 +8,7 @@ source-hash: 51e9457f6d95368b
 
 ## Prima di poterlo fare
 
-- Devi aver completato uno scambio nel mercato. Uno scambio di soli 1 o 2 fagioli è troppo piccolo per essere conteggiato.
+- Devi aver completato uno scambio nel mercato, per quanto piccolo.
 - Puoi donare solo fagioli in tuo possesso. Un dono non può mai portarti sotto lo zero.
 
 Fino ad allora il pulsante indica cosa manca, come **richiede 1 scambio completato** o **richiede saldo positivo**.

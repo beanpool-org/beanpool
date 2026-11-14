@@ -20,7 +20,7 @@ La app no tiene ninguna forma de comprar o vender frijoles por dinero. Los frijo
 
 ## ¿Por qué no puedo enviar un regalo?
 
-Un regalo necesita dos cosas. Debes haber completado un trato en el mercado (1 o 2 frijoles es demasiado poco para contar), y solo puedes dar frijoles que tienes. Un regalo nunca puede dejarte con saldo negativo.
+Un regalo necesita dos cosas. Debes haber completado un trato en el mercado, por pequeño que sea, y solo puedes dar frijoles que tienes. Un regalo nunca puede dejarte con saldo negativo.
 
 ## ¿Por qué no puedo tener saldo negativo?
 

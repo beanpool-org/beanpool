@@ -808,22 +808,22 @@ export default function LedgerScreen() {
                     ? t("Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.")
                     : t(sel.blurb)}</Text>
 
-                {/* Credit floor — show YOUR actual floor when this is your tier; what earns it in trust otherwise */}
+                {/* Your credit line (a figure, never below zero) when this is your tier; what earns it in trust otherwise */}
                 <View style={styles.detailFloorRow}>
                     <MaterialCommunityIcons name={selCurrent ? 'scale-balance' : 'shield-star-outline'} size={18} color={sel.color} />
                     <View style={{ flex: 1 }}>
                         <Text style={styles.detailFloorLabel}>
-                            {selCurrent ? t('Your current floor') : tn(sel.min / 100, 'from {n} trust', 'from {n} trust', { n: formatHundredths(sel.min) })}
+                            {selCurrent ? t('Your credit line') : tn(sel.min / 100, 'from {n} trust', 'from {n} trust', { n: formatHundredths(sel.min) })}
                         </Text>
                         {selCurrent && (
                             <Text style={{ fontSize: 10, color: colors.text.muted, marginTop: 1 }}>
-                                {t('Grows deeper as you trade more')}
+                                {t('Grows as you trade more')}
                             </Text>
                         )}
                     </View>
                     {selCurrent && (
                         <Text style={[styles.detailFloorVal, { color: sel.color }]}>
-                            {formatHundredths(balanceState.floor_c)}
+                            {formatHundredths(creditLine)}
                         </Text>
                     )}
                 </View>
@@ -961,7 +961,7 @@ export default function LedgerScreen() {
                     />
                     <Text style={styles.heroSub}>
                         {/* Hours at the reference rate (40 Beans an hour, in hundredths): a count of hours, not money. */}
-                        {t('≈ {hours} hrs of value · Floor {floor}', { hours: formatNumber(Math.abs(balanceState.balance_c) / REFERENCE_RATE, 1), floor: formatHundredths(balanceState.floor_c) })}
+                        {t('≈ {hours} hrs of value · Credit line {line}', { hours: formatNumber(Math.abs(balanceState.balance_c) / REFERENCE_RATE, 1), line: formatHundredths(creditLine) })}
                     </Text>
 
                     {/* Key metrics strip */}
@@ -974,8 +974,9 @@ export default function LedgerScreen() {
                         <View style={styles.walletMetricDivider} />
                         <View style={styles.walletMetric}>
                             <MaterialCommunityIcons name="scale-balance" size={14} color={colors.text.secondary} />
-                            <Text style={styles.walletMetricVal}>{formatHundredths(balanceState.floor_c)}</Text>
-                            <Text style={styles.walletMetricLabel}>{t('CREDIT FLOOR')}</Text>
+                            {/* One name everywhere (credit bar R4): the card's "credit line", as a figure: 500, not −500. */}
+                            <Text style={styles.walletMetricVal}>{formatHundredths(creditLine)}</Text>
+                            <Text style={styles.walletMetricLabel}>{t('CREDIT LINE')}</Text>
                         </View>
                         {escrowTotal > 0 && (
                             <>
@@ -1484,7 +1485,7 @@ export default function LedgerScreen() {
                                         <AskForMore anchorUrl={vouchAnchor} identity={identity} ask={myVouching.ask} onAsked={(ask) => setMyVouching((mv) => (mv ? { ...mv, ask } : mv))} testID="ledger-ask-for-more" />
                                     ) : (
                                         <Text style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 18 }}>
-                                            {t('To get a bigger budget to vouch from, ask an owner of this community.')}
+                                            {t('To get a bigger vouching budget, ask an owner of this community.')}
                                         </Text>
                                     )}
                                 </View>

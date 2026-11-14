@@ -16,15 +16,15 @@ The Ledger has two tabs: **Levels** (your trust, see "Trust badges") and **Walle
 
 ## The Wallet tab
 
-- **Your balance**, and roughly how many hours of help it is worth, at 40 beans an hour.
+- **Your balance**, roughly how many hours of help it is worth, at 40 beans an hour, and your credit line.
 - **Commons:** your community's shared pool.
-- **Credit Floor:** how far below zero you could go.
+- **Credit line:** how far below zero you can go, as a figure: 500 means you can go down to −500. See "Your credit line".
 - How many of your beans are held in deals that are under way, when there are some. Tap it to open **Your deals** on **In Progress**, where those deals are. On the web it is the **Held in Trust** box.
 - **Community Circulation:** shows when you hold beans. See "The circulation fee".
 - **Project pledges:** beans you have pledged to projects, if any.
 - **Send Beans:** send a gift. See "Sending a gift".
 
-In the web app the Wallet tab is shorter: **Overdraft Floor**, **Commons Pool**, **Held in Trust** (when beans are held), **Send Beans** and **Community Circulation**. Your balance is at the top of the Ledger.
+In the web app the Wallet tab is shorter: **Credit line**, **Commons Pool**, **Held in Trust** (when beans are held), **Send Beans** and **Community Circulation**. Your balance is at the top of the Ledger.
 
 ## Recent transactions
 
@@ -38,4 +38,4 @@ The list has no search or filters yet.
 
 ## ⓘ buttons
 
-On the phone, tap the **ⓘ** next to Your balance for a short explanation of your balance and your floor.
+On the phone, tap the **ⓘ** next to Your balance for a short explanation of your balance and your credit line. The card at the top of the Ledger explains itself: tap it, on the phone or the web, for **Your Beans and your credit line**.

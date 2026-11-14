@@ -20,7 +20,7 @@ Die App bietet keine Möglichkeit, Bohnen für Geld zu kaufen oder zu verkaufen.
 
 ## Warum kann ich kein Geschenk senden?
 
-Ein Geschenk erfordert zwei Dinge. Du musst einen Handel im Markt abgeschlossen haben (1 oder 2 Bohnen sind zu klein, um zu zählen), und du kannst nur Bohnen verschenken, die du hast. Ein Geschenk kann dich niemals unter null bringen.
+Ein Geschenk erfordert zwei Dinge. Du musst einen Handel im Markt abgeschlossen haben, wie klein auch immer, und du kannst nur Bohnen verschenken, die du hast. Ein Geschenk kann dich niemals unter null bringen.
 
 ## Warum kann ich nicht unter null ausgeben?
 

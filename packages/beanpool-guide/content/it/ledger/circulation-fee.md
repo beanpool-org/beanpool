@@ -30,6 +30,8 @@ La commissione si accumula giorno per giorno e viene prelevata poco alla volta, 
 
 ## Come vederla
 
+Nel **Mastro**, la scheda in alto segna **+200** sulla sua barra: **inizia la commissione mensile**. Quando possiedi più di 200 fagioli, la scheda lo dice, ad esempio "400 dei tuoi fagioli sono oltre 200. Una piccola commissione mensile su di essi va ai Beni comuni: circa 4,50 questo mese." Tocca la scheda per aprire **I tuoi fagioli e la tua linea di credito**: la sua parte **Le due commissioni** dà ogni aliquota.
+
 Nel **Mastro**, su **Portafoglio**, il riquadro **Circolazione nella comunità** mostra approssimativamente quanto pagherai questo mese. Compare solo quando possiedi fagioli. Oltre i 1.000 fagioli diventa ambra. Sul telefono suggerisce anche di spenderne un po', e puoi toccarlo per visualizzare **Circolazione del sistema**, che spiega la commissione.
 
 La Modalità vacanza non sospende la commissione.

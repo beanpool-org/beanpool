@@ -36,14 +36,14 @@ Biashara ikikwama, msimamizi wa jumuiya yako anaweza kuingilia kati. Anaweza kum
 Unaweza pia kumtumia mtu maharagwe kama zawadi, bila biashara yoyote.
 
 - Zawadi inaweza kutoka tu kwa maharagwe uliyo nayo. Haiwezi kamwe kukupeleka chini ya sifuri.
-- Unaweza kutuma zawadi mara tu unapokamilisha biashara katika soko. Biashara ya maharagwe 1 au 2 tu ni ndogo sana kuhesabiwa.
+- Unaweza kutuma zawadi mara tu unapokamilisha biashara katika soko, hata iwe ndogo kiasi gani.
 - Zawadi hazina ada.
 
 ## Kwenda chini ya sifuri: kikomo chako cha mkopo
 
 Unaweza kutumia zaidi kidogo ya ulichonacho, na kwenda chini ya sifuri. Hiki ni **kikomo chako cha mkopo**. Ni ahadi ya kuwasaidia wengine baadaye.
 
-Kikomo chako cha mkopo huanzia sifuri. Hufunguka unapokamilisha biashara yako ya kwanza sokoni (biashara ya maharagwe 1 au 2 tu ni ndogo sana kuhesabiwa). Mtu ambaye jumuiya yako imemchagua kuwakaribisha wageni anaweza pia kukupa mwanzo mdogo kwa kukudhamini: maharagwe 25, 50 au 100.
+Kikomo chako cha mkopo huanzia sifuri. Hufunguka unapokamilisha biashara yako ya kwanza sokoni, hata iwe ndogo kiasi gani. Mtu ambaye jumuiya yako imemchagua kuwakaribisha wageni anaweza pia kukupa mwanzo mdogo kwa kukudhamini: maharagwe 25, 50 au 100.
 
 Kikomo chako cha mkopo hukua kulingana na **uaminifu** wako:
 
@@ -55,14 +55,10 @@ Kikomo chako cha mkopo hukua kulingana na **uaminifu** wako:
 
 ## Ofa zako hufungua mkopo wako
 
-Uaminifu huweka kiwango cha kina ambacho **ungeweza** kwenda. Ofa zako zilizo mtandaoni huweka kiwango cha kina ambacho **unaruhusiwa** kwenda hivi sasa. Unapata kiwango kidogo kati ya viwili hivyo.
+Unaweza kutumia tu kiasi cha kikomo chako cha mkopo ambacho Ofa zako zinazotumika zinafungua. Bila Ofa inayotumika, hakuna kinachofunguka.
 
-- Bila Ofa zozote mtandaoni: huwezi kwenda chini ya sifuri.
-- Ofa 1: hadi 200 chini ya sifuri.
-- Ofa 2: hadi 500.
-- Ofa 3: hadi 1,000.
-- Ofa 4: hadi 1,500.
-- Ofa 5: hadi 2,000.
+- Ofa moja inayotumika hufungua kila kitu ambacho watu wanakudhamini (dhamana, zawadi ya kikomo cha mkopo, kima cha chini kinachojulikana) na 200 za kwanza ulizojipatia.
+- Ulichojipatia kwa biashara hufunguka kwa hatua: Ofa 2 hufungua 500 yake, 3 hufungua 1,000, 4 hufungua 1,500 na 5 hufungua 2,000.
 
 Ukiondoa Ofa wakati uko chini ya sifuri, unaweza kuwa unadaiwa zaidi ya kile ambacho Ofa zako sasa zinashughulikia. Basi huwezi kutumia zaidi hadi utakapokuwa tena ndani ya kikomo chako. Bado unaweza kupata maharagwe, na hakuna kinachochukuliwa kutoka kwako.
 

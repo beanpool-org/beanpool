@@ -20,7 +20,7 @@ Không. Số dư dưới mức 0 không tốn bất kỳ chi phí nào. Chỉ s�
 
 ## Tại sao tôi không thể gửi quà tặng?
 
-Một món quà tặng cần hai điều kiện. Bạn phải hoàn thành một giao dịch trên chợ (1 hoặc 2 Đậu là quá nhỏ để được tính), và bạn chỉ có thể tặng số Đậu bạn đang có sẵn. Một món quà tặng không bao giờ có thể khiến bạn xuống dưới mức 0.
+Một món quà tặng cần hai điều kiện. Bạn phải hoàn thành một giao dịch trên chợ, dù nhỏ đến đâu, và bạn chỉ có thể tặng số Đậu bạn đang có sẵn. Một món quà tặng không bao giờ có thể khiến bạn xuống dưới mức 0.
 
 ## Tại sao tôi không thể chi tiêu xuống dưới mức 0?
 

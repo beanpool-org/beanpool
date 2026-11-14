@@ -231,9 +231,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     pauseDaysRemaining = Math.max(0, Math.ceil((expiresTime - Date.now()) / (24 * 60 * 60 * 1000)));
                     pauseExpiringSoon = pauseDaysRemaining <= 14;
                     pauseWarning = pauseDaysRemaining === 0
-                        ? 'Pause credit floor snapshot has expired'
+                        ? 'The credit line held for the pause has ended'
                         : pauseDaysRemaining <= 14
-                            ? `Pause credit floor snapshot expires in ${pauseDaysRemaining} day${pauseDaysRemaining === 1 ? '' : 's'}`
+                            ? `The credit line held for the pause ends in ${pauseDaysRemaining} day${pauseDaysRemaining === 1 ? '' : 's'}`
                             : null;
                 }
 
@@ -370,9 +370,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             pauseDaysRemaining = Math.max(0, Math.ceil((expiresTime - Date.now()) / (24 * 60 * 60 * 1000)));
             pauseExpiringSoon = pauseDaysRemaining <= 14;
             pauseWarning = pauseDaysRemaining === 0
-                ? 'Pause credit floor snapshot has expired'
+                ? 'The credit line held for the pause has ended'
                 : pauseDaysRemaining <= 14
-                    ? `Pause credit floor snapshot expires in ${pauseDaysRemaining} day${pauseDaysRemaining === 1 ? '' : 's'}`
+                    ? `The credit line held for the pause ends in ${pauseDaysRemaining} day${pauseDaysRemaining === 1 ? '' : 's'}`
                     : null;
         }
 

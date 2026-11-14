@@ -20,7 +20,7 @@ O aplicativo não tem nenhuma forma de comprar ou vender feijões por dinheiro. 
 
 ## Por que não consigo enviar um presente?
 
-Um presente exige duas condições. Você deve ter concluído uma troca no mercado (1 ou 2 feijões é pouco demais para contar), e só pode doar feijões que possui de saldo positivo. Um presente nunca pode deixar seu saldo abaixo de zero.
+Um presente exige duas condições. Você deve ter concluído uma troca no mercado, por menor que seja, e só pode doar feijões que possui de saldo positivo. Um presente nunca pode deixar seu saldo abaixo de zero.
 
 ## Por que não posso gastar abaixo de zero?
 

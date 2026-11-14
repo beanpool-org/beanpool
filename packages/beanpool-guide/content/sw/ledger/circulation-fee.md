@@ -30,6 +30,8 @@ Ada hiyo hujikusanya siku baada ya siku na hukatwa kidogo kidogo kwa wakati, wak
 
 ## Kuiona
 
+Kwenye **Leja**, kadi iliyo juu inaweka alama ya **+200** kwenye upau wake: **ada ya mwezi inaanza**. Ukishikilia zaidi ya 200, kadi inasema hivyo, kwa mfano "Maharagwe 400 yako yako juu ya 200. Ada ndogo ya kila mwezi kwayo huenda kwa Mali za Pamoja: takriban 4.50 mwezi huu." Gusa kadi kwa ajili ya **Maharagwe yako na kikomo chako cha mkopo**: sehemu yake **Ada mbili** inatoa kila kiwango.
+
 Kwenye **Leja**, **Mkoba**, kisanduku cha **Mzunguko wa Jumuiya** huonyesha takriban kiasi gani utakacholipa mwezi huu. Huonekana pale tu unaposhikilia maharagwe. Zaidi ya maharagwe 1,000 hugeuka rangi ya kahawia/kaharabu. Kwenye simu inapendekeza pia kutumia baadhi, na unaweza kuigusa kwa ajili ya **Mzunguko wa Mfumo**, ambayo inaeleza ada hiyo.
 
 Hali ya Likizo haisimamishi ada hiyo.

@@ -8,7 +8,7 @@ source-hash: 51e9457f6d95368b
 
 ## Kabla hujaweza
 
-- Unahitaji kuwa umekamilisha biashara sokoni. Biashara ya maharagwe 1 au 2 tu ni ndogo mno kuhesabiwa.
+- Unahitaji kuwa umekamilisha biashara sokoni, hata iwe ndogo kiasi gani.
 - Unaweza tu kutoa maharagwe unayoshikilia. Zawadi haiwezi kamwe kukupeleka chini ya sifuri.
 
 Hadi wakati huo kitufe husema kile kinachokosekana, kama vile **inahitaji biashara 1 iliyokamilika** au **inahitaji salio chanya**.

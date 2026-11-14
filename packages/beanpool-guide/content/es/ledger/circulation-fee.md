@@ -30,6 +30,8 @@ La cuota se acumula día a día y se cobra poco a poco cada vez que vuelves a us
 
 ## Cómo verla
 
+En el **Registro**, la tarjeta de la parte superior marca **+200** en su barra: **empieza la cuota mensual**. Cuando tienes más de 200, la tarjeta lo dice, por ejemplo "400 de tus frijoles están por encima de 200. Una pequeña cuota mensual sobre ellos va a los Bienes comunes: unos 4.50 este mes." Toca la tarjeta para ver **Tus frijoles y tu línea de crédito**: su parte **Las dos cuotas** da cada tasa.
+
 En el **Registro**, **Billetera**, el cuadro **Circulación comunitaria** muestra aproximadamente cuánto pagarás este mes. Solo se muestra cuando tienes frijoles. Por encima de 1,000 frijoles se vuelve ámbar. En el teléfono también sugiere gastar parte de ellos, y puedes tocarlo para ver **Circulación del sistema**, que explica la cuota.
 
 El Modo vacaciones no pausa la cuota.

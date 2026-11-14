@@ -8,7 +8,7 @@ source-hash: 51e9457f6d95368b
 
 ## Syarat sebelum mengirim
 
-- Kamu harus telah menyelesaikan satu transaksi di pasar. Transaksi yang hanya bernilai 1 atau 2 kacang terlalu kecil untuk dihitung.
+- Kamu harus telah menyelesaikan satu transaksi di pasar, sekecil apa pun.
 - Kamu hanya dapat memberikan kacang yang kamu miliki. Hadiah tidak pernah bisa membuat saldomu berada di bawah nol.
 
 Sampai syarat tersebut terpenuhi, tombol akan menyebutkan apa yang kurang, seperti **perlu 1 transaksi selesai** atau **perlu saldo positif**.

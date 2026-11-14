@@ -8,7 +8,7 @@ source-hash: 51e9457f6d95368b
 
 ## Antes de que puedas
 
-- Debes haber completado un intercambio en el mercado. Un intercambio de solo 1 o 2 frijoles es demasiado pequeño para contar.
+- Debes haber completado un intercambio en el mercado, por pequeño que sea.
 - Solo puedes regalar frijoles que tienes. Un regalo nunca puede dejarte por debajo de cero.
 
 Hasta entonces el botón indica qué falta, como **requiere 1 intercambio completado** o **requiere saldo positivo**.

@@ -30,6 +30,8 @@ A taxa é calculada dia a dia e descontada aos poucos, sempre que a sua conta fo
 
 ## Como ver
 
+No **Registro**, o cartão no topo marca **+200** na barra: **taxa mensal começa**. Quando você tem mais de 200, o cartão diz isso, por exemplo "400 dos seus feijões estão acima de 200. Uma pequena taxa mensal sobre eles vai para os Bens comuns: cerca de 4,50 neste mês." Toque no cartão para abrir **Seus feijões e sua linha de crédito**: a parte **As duas taxas** mostra cada taxa.
+
 No **Registro**, em **Carteira**, o quadro **Circulação comunitária** mostra aproximadamente quanto você pagará neste mês. Ele só aparece quando você tem feijões. Acima de 1.000 feijões, fica em tom âmbar. No celular, ele também sugere gastar um pouco, e você pode tocar nele para abrir **Circulação do sistema**, que explica a taxa.
 
 O Modo férias não pausa a taxa.

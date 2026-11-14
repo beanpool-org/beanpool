@@ -788,20 +788,20 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             ? t("Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.")
                             : t(sel.blurb)}</p>
 
-                        {/* Credit floor — show YOUR actual floor when viewing your own tier; what earns it in trust otherwise */}
+                        {/* Your credit line (a figure, never below zero) when viewing your own tier; what earns it in trust otherwise */}
                         <div className="flex items-start gap-3 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl p-3 mb-4">
                             <span className="mt-0.5">{selCurrent ? '⚖️' : '🛡️'}</span>
                             <div className="flex-1">
                                 <div className="text-[13px] text-nature-600 dark:text-nature-300 font-semibold">
-                                    {selCurrent ? t('Your current floor') : tn(sel.min / 100, 'from {n} trust', 'from {n} trust', { n: formatHundredths(sel.min) })}
+                                    {selCurrent ? t('Your credit line') : tn(sel.min / 100, 'from {n} trust', 'from {n} trust', { n: formatHundredths(sel.min) })}
                                 </div>
                                 {selCurrent && (
-                                    <div className="text-[10px] text-nature-400 dark:text-nature-300 mt-0.5">{t('Grows deeper as you trade more')}</div>
+                                    <div className="text-[10px] text-nature-400 dark:text-nature-300 mt-0.5">{t('Grows as you trade more')}</div>
                                 )}
                             </div>
                             {selCurrent && (
                                 <span className="text-xl font-black font-mono" style={{ color: sel.color }}>
-                                    {formatHundredths(floor)}
+                                    {formatHundredths(creditLine)}
                                 </span>
                             )}
                         </div>
@@ -885,9 +885,10 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         other: at 320 px with 1.3x text the pair pushed Commons Pool past the right edge. */}
                     <div className="flex flex-wrap gap-3" data-testid="ledger-wallet-tiles">
                         <div className="flex-1 basis-[9rem] min-w-0 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 text-center shadow-sm">
-                            <p className="text-nature-500 dark:text-nature-400 text-sm font-semibold mb-2">{t('Overdraft Floor')}</p>
+                            <p className="text-nature-500 dark:text-nature-400 text-sm font-semibold mb-2">{t('Credit line')}</p>
+                            {/* One name everywhere (credit bar R4): the card's "credit line", as a figure: 500, not −500. */}
                             <p className="text-2xl font-black font-mono text-nature-950 dark:text-white flex flex-wrap items-center justify-center gap-1 [overflow-wrap:anywhere]">
-                                {formatHundredths(floor)}
+                                {formatHundredths(creditLine)}
                                 <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt={t('B', undefined, 'the Beans sign')} />
                             </p>
                             <p className="text-nature-400 text-[10px] mt-1 font-semibold">

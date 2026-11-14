@@ -30,6 +30,8 @@ Sıfırın altındaki bir bakiye hiçbir şey ödemez. Hiç kimse borç için fa
 
 ## Görüntüleme
 
+**Defter** sekmesinde, en üstteki kart çubuğunda **+200** işaretler: **aylık ücret başlıyor**. 200'den fazlasını tuttuğunuzda kart bunu söyler, örneğin "Fasulyelerinizin 400 kısmı 200 üzerinde. Bunlara uygulanan küçük bir aylık ücret Ortak'a gider: bu ay yaklaşık 4,50." **Fasulyeleriniz ve kredi limitiniz** için karta dokunun: **İki ücret** bölümü her oranı verir.
+
 **Defter** sekmesinde, **Cüzdan** altında **Topluluk Dolaşımı** kutusu bu ay yaklaşık ne kadar ödeyeceğinizi gösterir. Yalnızca elinizde fasulye tuttuğunuzda görünür. 1.000 fasulyenin üzerinde kehribar rengine döner. Telefonda ayrıca bir kısmını harcamanızı önerir ve ücreti açıklayan **Sistem Dolaşımı** bölümünü görmek için kutuya dokunabilirsiniz.
 
 Tatil Modu ücreti duraklatmaz.

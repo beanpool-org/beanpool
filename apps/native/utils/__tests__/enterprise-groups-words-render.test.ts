@@ -461,7 +461,7 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
         await renderIn('xx');
         // The banner's label in capitals, the language's way (inCapitalsOf; the pseudo-locale takes English's rule).
         expect(host.textContent).toContain(xx('Paused for the season').toUpperCase());
-        expect(host.textContent).toContain(xx('Pause credit floor snapshot expires in {n} days').replace('{n}', '5'));
+        expect(host.textContent).toContain(xx('The credit line held for the pause ends in {n} days').replace('{n}', '5'));
         expect(bypassing(), 'paused').toEqual([]);
 
         net.answer = community({ getTreasuryDetail: leadsView({ status: 'winding_up', windUpInitiatedBy: KOFI, windUpGraceEndsAt: iso(now - 3600_000) }) });

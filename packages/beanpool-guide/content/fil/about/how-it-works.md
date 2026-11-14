@@ -36,14 +36,14 @@ Kung maipit ang isang kalakalan, maaaring mamagitan ang isang admin ng iyong kom
 Maaari ka ring magpadala ng munggo sa isang tao bilang regalo, nang walang kalakalan.
 
 - Ang isang regalo ay maaari lamang magmula sa munggo na mayroon ka. Hindi ka nito kailanman maaaring dalhin sa ilalim ng zero.
-- Maaari kang magpadala ng mga regalo kapag nakakumpleto ka na ng isang kalakalan sa merkado. Ang isang kalakalan na 1 o 2 munggo lamang ay masyadong maliit para mabilang.
+- Maaari kang magpadala ng mga regalo kapag nakakumpleto ka na ng isang kalakalan sa merkado, gaano man ito kaliit.
 - Walang bayad ang mga regalo.
 
 ## Pagbaba sa ilalim ng zero: ang iyong linya ng kredito
 
 Maaari kang gumastos nang kaunti pa kaysa sa mayroon ka, at bumaba sa ilalim ng zero. Ito ang iyong **linya ng kredito**. Isa itong pangako na tutulong sa iba sa ibang pagkakataon.
 
-Nagsisimula ang iyong linya ng kredito sa zero. Nagbubukas ito kapag nakumpleto mo ang iyong unang kalakalan sa merkado (ang kalakalan na 1 o 2 munggo lamang ay masyadong maliit para mabilang). Ang isang taong pinili ng iyong komunidad upang tanggapin ang mga baguhan ay maaari ding magbigay sa iyo ng kaunting panimula sa pamamagitan ng pag-vouch para sa iyo: 25, 50 o 100 munggo.
+Nagsisimula ang iyong linya ng kredito sa zero. Nagbubukas ito kapag nakumpleto mo ang iyong unang kalakalan sa merkado, gaano man ito kaliit. Ang isang taong pinili ng iyong komunidad upang tanggapin ang mga baguhan ay maaari ding magbigay sa iyo ng kaunting panimula sa pamamagitan ng pag-vouch para sa iyo: 25, 50 o 100 munggo.
 
 Lumalago ang iyong linya ng kredito kasama ng iyong **tiwala**:
 
@@ -55,14 +55,10 @@ Lumalago ang iyong linya ng kredito kasama ng iyong **tiwala**:
 
 ## Binubuksan ng iyong Mga Alok ang iyong kredito
 
-Itinatakda ng tiwala kung gaano kalalim ang **maaari** mong marating. Itinatakda ng iyong mga aktibong Alok kung gaano kalalim ang **puwede** mong marating sa ngayon. Nakukuha mo ang mas maliit sa dalawa.
+Magagamit mo lamang ang bahagi ng iyong credit line na binubuksan ng iyong mga live na Alok. Kapag walang live na Alok, walang bukas.
 
-- Walang aktibong Alok: hindi ka maaaring bumaba sa ilalim ng zero.
-- 1 Alok: hanggang 200 sa ilalim ng zero.
-- 2 Alok: hanggang 500.
-- 3 Alok: hanggang 1,000.
-- 4 na Alok: hanggang 1,500.
-- 5 Alok: hanggang 2,000.
+- Ang isang live na Alok ay nagbubukas ng lahat ng sinasagot ng mga tao para sa iyo (isang patunay, regalong credit line, ang kilalang floor) at ng unang 200 na kinita mo.
+- Ang kinita mo sa pakikipagkalakalan ay nagbubukas nang paunti-unti: 2 Alok ang nagbubukas ng 500 nito, 3 ang 1,000, 4 ang 1,500 at 5 ang 2,000.
 
 Kung aalisin mo ang Mga Alok habang ikaw ay nasa ilalim ng zero, maaari kang magkaroon ng utang na higit pa sa sinasakop ng iyong Mga Alok ngayon. Pagkatapos ay hindi ka na maaaring gumastos ng higit pa hanggang sa makabalik ka sa loob ng iyong limitasyon. Maaari ka pa ring kumita ng munggo, at walang kukunin mula sa iyo.
 

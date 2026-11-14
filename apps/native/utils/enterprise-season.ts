@@ -124,8 +124,8 @@ export function seasonBanner(detail: any, now: number = Date.now()): SeasonBanne
         const warning = detail.pauseWarning
             || (typeof daysRemaining === 'number' && daysRemaining <= 14
                 ? (daysRemaining === 0
-                    ? t('Pause credit floor snapshot has expired')
-                    : tn(daysRemaining, 'Pause credit floor snapshot expires in {n} day', 'Pause credit floor snapshot expires in {n} days'))
+                    ? t('The credit line held for the pause has ended')
+                    : tn(daysRemaining, 'The credit line held for the pause ends in {n} day', 'The credit line held for the pause ends in {n} days'))
                 : null);
         return {
             kind: 'paused',
@@ -192,16 +192,16 @@ export function pauseConfirmText(detail: any): string {
     const [held, heldN] = heldValues(heldCredit(detail));
     if (isProject(detail)) {
         return until
-            ? tn(held, 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', { ...heldN, date: until })
-            : tn(held, 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.', heldN);
+            ? tn(held, 'Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', { ...heldN, date: until })
+            : tn(held, 'Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.', heldN);
     }
     return until
-        ? tn(held, 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', { ...heldN, date: until })
-        : tn(held, 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.', heldN);
+        ? tn(held, 'Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', { ...heldN, date: until })
+        : tn(held, 'Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.', heldN);
 }
 
 /** Marked here, translated where it is shown: t(RESUME_CONFIRM_TEXT). */
-export const RESUME_CONFIRM_TEXT = word('Resuming reactivates all listings and restores the credit floor to normal daily calculation.');
+export const RESUME_CONFIRM_TEXT = word('Resuming reactivates all listings and restores the credit line to normal daily calculation.');
 
 function keeperCount(detail: any): number {
     return Array.isArray(detail?.keepers) && detail.keepers.length > 0 ? detail.keepers.length : 1;

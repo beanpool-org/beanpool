@@ -226,6 +226,9 @@ const byTestId = (id: string) => host.querySelector(`[data-testid="${id}"]`);
 const byLabel = (label: string) => host.querySelector(`[aria-label="${label.replace(/"/g, '\\"')}"]`);
 const buttonSaying = (words: string) => Array.from(host.querySelectorAll('button')).find((b) => b.textContent === words) ?? null;
 const text = () => host.textContent ?? '';
+/** Each piece of text drawn on its own (a leaf): the Send tab is the words "Credit line" alone, while the Ledger's own line under
+ *  the balance names the credit line inside a longer sentence ("≈ 3.0 hrs of value · Credit line 150", credit bar R4). */
+const pieces = () => Array.from(host.querySelectorAll('*')).filter((el) => el.children.length === 0).map((el) => (el.textContent ?? '').trim());
 const styleOf = (el: Element | null | undefined) => JSON.parse(el?.getAttribute('data-style') || '{}');
 
 async function openSend(label = 'Send Beans') {
@@ -244,7 +247,7 @@ describe('the Credit line tab beside Beans on Send (G1)', () => {
             node.offer = offer;
             await openSend();
             expect(byTestId('send-kind-tabs'), JSON.stringify(offer)).toBeNull();
-            expect(text()).not.toContain('Credit line');
+            expect(pieces()).not.toContain('Credit line');
             expect(byLabel('Amount to send')).not.toBeNull();
             act(() => root.unmount());
             root = createRoot(host);
@@ -255,6 +258,7 @@ describe('the Credit line tab beside Beans on Send (G1)', () => {
     it('the tab gives what is typed to whom is picked, and nothing else; the words carry the node\'s number', async () => {
         await openSend();
         expect(byTestId('send-kind-tabs')).not.toBeNull();
+        expect(pieces()).toContain('Credit line'); // the check the test above makes sees the tab when it is there
         expect(byTestId('send-kind-beans')?.textContent).toBe('Beans');
         await click(byTestId('send-kind-credit'), 'Credit line');
         expect(byTestId('credit-gift-words')?.textContent).toBe('Give part of your credit line. You can give up to 100: the part someone gave you that you aren’t using. It’s theirs for good.');

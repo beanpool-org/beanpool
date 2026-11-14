@@ -12,18 +12,24 @@ Kredi limitiniz, sahip olduğunuzdan daha fazla fasulye harcamanıza ve sıfır�
 
 ## Nerede görünür
 
-**Defter** sekmesinde, bakiyenizin altında bir çubuk nerede olduğunuzu gösterir:
+**Defter** sekmesinin en üstünde bir kart nerede olduğunuzu gösterir. İki cümle toplamları verir, örneğin "50 fasulye borçlusunuz" ve "500 kredi limitinizden 450 daha harcayabilirsiniz."
 
-- sıfır ortadadır;
-- sol uç **limitiniz**dir, inebileceğiniz en düşük seviyedir;
-- soldaki işaretler, Tekliflerinizin ne kadar derine inmenize izin verdiğini gösterir;
-- sağdaki **+200**'ün ötesi dolaşım ücretinin başladığı yerdir.
+Altlarında gökkuşağı gibi renklendirilmiş bir çubuk vardır:
 
-Telefonda her bir bölümü açıklayan **Kredi Kaydırıcısı Bilgisi** için çubuğa dokunun.
+- nokta, bakiyenizin şu an olduğu yerdir;
+- ortadaki **0**, **dengede** demektir: aldığınız kadar verdiniz;
+- sol uç **limitiniz**dir: bakiyenizin inebileceği en düşük nokta;
+- **+200**, **aylık ücret başlıyor** noktasıdır: 200 fasulyeden fazlasını tutarsanız üzerindeki kısma küçük bir aylık ücret başlar ("Dolaşım ücreti" bölümüne bakın);
+- sol yarının altındaki ince şerit kredi limitinizin neyden oluştuğunu gösterir: dolu blok takasla kazandığınız kredidir, çerçeveli blok birinin sizin için arkanızda durduğu kredidir;
+- çizgili bir kısım şimdilik kapalıdır: yayındaki Teklifleriniz onu açar.
+
+Çubuğun altındaki bir satır parçaları adlandırır ve her zaman limitin tamamını verir, örneğin "Kredi limiti 500: ■ Takasla şimdiye kadar kazanılan 0 · □ @Jane 500 kefil oldu". Kredi limitiniz olmadan önce sol yarı çizgilidir ve **henüz kredi limiti yok** yazar.
+
+Her bölümü açıklayan **Fasulyeleriniz ve kredi limitiniz** için karta dokunun, telefonda da webde de.
 
 ## Nasıl açılır
 
-Sıfırdan başlar. Pazarda ilk takasınızı tamamladığınızda (yalnızca 1 veya 2 fasulyelik bir takas sayılmak için çok küçüktür) ya da yeni gelenleri karşılamak için seçilen biri size kefil olduğunda açılır. O zamana kadar Defter **Henüz kredi limiti yok** der. Elinizde tuttuğunuz fasulyelerle yine de takas yapabilirsiniz.
+Sıfırdan başlar. Pazarda ilk takasınızı tamamladığınızda, ne kadar küçük olursa olsun, ya da sizi içeri alan davette veya profilinizde bir kefil size kefil olduğunda açılır. O zamana kadar kart **henüz kredi limiti yok** der. Elinizde tuttuğunuz fasulyelerle yine de takas yapabilirsiniz.
 
 ## Nasıl büyür
 
@@ -33,16 +39,12 @@ Sıfırdan başlar. Pazarda ilk takasınızı tamamladığınızda (yalnızca 1 
 
 ## Ne kadar kullanabileceğinizi Teklifleriniz belirler
 
-Kredi limitinizin yalnızca yayındaki Tekliflerinizin izin verdiği kadarını kullanabilirsiniz:
+Kredi limitinizin yalnızca yayındaki Tekliflerinizin açtığı kadarını kullanabilirsiniz. Yayında Teklifiniz yoksa hiçbiri açık değildir.
 
-- Teklif yoksa: hiçbiri;
-- 1 Teklif: −200'e kadar;
-- 2: −500;
-- 3: −1.000;
-- 4: −1.500;
-- 5: −2.000.
+- Yayındaki bir Teklif, insanların sizin için arkanızda durduğu her şeyi (bir kefalet, bir kredi limiti hediyesi, bilinen taban) ve kazandığınızın ilk 200 kısmını açar.
+- Takasla kazandığınız kısım adım adım açılır: 2 Teklif bunun 500 kısmını açar, 3 Teklif 1.000, 4 Teklif 1.500 ve 5 Teklif 2.000 kısmını.
 
-Çubuğun altındaki satır size bildirir; örneğin "Kredi limitinizi açmak için bir teklif paylaşın".
+Kart neyin açık olduğunu söyler. Örneğin: "380 daha harcayabilirsiniz: yayındaki 1 Teklifiniz 900 kredi limitinizin 500 kısmını açıyor." ve altında "400 şimdilik kapalı. Yayında bir Teklif daha eklerseniz 900 tutarının 800 kısmı açılır, 3 yayındaki Teklif tamamını açar." Yayında Teklifiniz yoksa örneğin şöyle der: "500 kredi limitiniz uykuda. Bir Teklif paylaşın, tamamı açılır."
 
 ## Bilinen bir toplulukta
 

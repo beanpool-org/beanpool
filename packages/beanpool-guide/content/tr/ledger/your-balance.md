@@ -17,15 +17,15 @@ Defter'in iki sekmesi vardır: **Seviyeler** (güveniniz, "Güven rozetleri" bö
 
 ## Cüzdan sekmesi
 
-- **Bakiyeniz** ve saat başına 40 fasulyeden yaklaşık kaç saatlik yardıma karşılık geldiği.
+- **Bakiyeniz**, saat başına 40 fasulyeden yaklaşık kaç saatlik yardıma karşılık geldiği ve kredi limitiniz.
 - **Ortak:** topluluğunuzun paylaşılan havuzu.
-- **Kredi Tabanı:** sıfırın ne kadar altına inebileceğiniz.
+- **Kredi limiti:** sıfırın ne kadar altına inebileceğiniz.
 - Varsa, devam eden anlaşmalarda tutulan fasulyelerinizin kaç tane olduğu.
 - **Topluluk Dolaşımı:** fasulye tuttuğunuzda görünür. "Dolaşım ücreti" bölümüne bakın.
 - **Proje taahhütleri:** varsa projelere taahhüt ettiğiniz fasulyeler.
 - **Fasulye Gönder:** hediye gönderin. "Hediye gönderme" bölümüne bakın.
 
-Web uygulamasında Cüzdan sekmesi daha kısadır: **Kredi Tabanı**, **Ortak Havuz**, **Fasulye Gönder** ve **Topluluk Dolaşımı**. Bakiyeniz Defter'in üst kısmındadır.
+Web uygulamasında Cüzdan sekmesi daha kısadır: **Kredi limiti**, **Ortak Havuz**, **Fasulye Gönder** ve **Topluluk Dolaşımı**. Bakiyeniz Defter'in üst kısmındadır.
 
 ## Son işlemler
 
@@ -37,4 +37,4 @@ Listede henüz arama veya filtreler bulunmamaktadır.
 
 ## ⓘ düğmeleri
 
-Telefonda bakiyeniz ve tabanınız hakkında kısa bir açıklama için Bakiyeniz yanındaki **ⓘ** işaretine dokunun.
+Telefonda bakiyeniz ve kredi limitiniz hakkında kısa bir açıklama için Bakiyeniz yanındaki **ⓘ** işaretine dokunun. Defter'in en üstündeki kart kendini açıklar: telefonda da webde de ona dokunun, **Fasulyeleriniz ve kredi limitiniz** açılır.

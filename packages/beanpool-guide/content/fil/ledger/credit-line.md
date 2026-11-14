@@ -12,18 +12,24 @@ Hinahayaan ka ng iyong credit line na gumastos ng higit pang munggo kaysa sa may
 
 ## Saan ito makikita
 
-Sa **Talaan**, sa ilalim ng iyong balanse, may bar na nagpapakita kung nasaan ka:
+Sa **Talaan**, sa itaas, may card na nagpapakita kung nasaan ka. Dalawang pangungusap ang nagbibigay ng kabuuan, halimbawa "May utang kang 50 munggo" at "Makakagastos ka pa ng 450 sa iyong 500 na credit line."
 
-- ang zero ay nasa gitna;
-- ang kaliwang dulo ay **iyong limitasyon**, ang pinakamababang maaari mong puntahan;
-- ipinapakita ng mga marka sa kaliwa kung gaano kalalim ang hinahayaan ng iyong Mga Alok na maabot mo;
-- lampas sa **+200** sa kanan ang kung saan nagsisimula ang circulation fee.
+Sa ilalim ng mga ito ay may bar na may kulay ng bahaghari:
 
-Sa telepono, i-tap ang bar para sa **Impormasyon sa Credit Slider**, na nagpapaliwanag sa bawat bahagi.
+- ang tuldok ay kung nasaan ang iyong balanse ngayon;
+- ang **0**, sa gitna, ay **patas**: nagbigay ka ng kasing dami ng natanggap mo;
+- ang kaliwang dulo ay **iyong limitasyon**: ang pinakamababang maaabot ng balanse mo;
+- ang **+200** ay kung saan **simula ng buwanang bayad**: kapag humawak ka ng higit sa 200 munggo, may maliit na buwanang bayad na magsisimula sa bahaging lampas dito (tingnan ang "Ang circulation fee");
+- ang manipis na strip sa ilalim ng kaliwang kalahati ay kung saan binubuo ang iyong credit line: ang solid na bloke ay credit na kinita mo sa pakikipagkalakalan, ang bloke na may balangkas lang ay credit na may sumasagot para sa iyo;
+- ang may guhit na bahagi ay sarado muna: binubuksan ito ng mga live mong Alok.
+
+Isang linya sa ilalim ng bar ang nagpapangalan ng mga bahagi, at laging ang buong line, halimbawa "Credit line 500: ■ Kinita sa kalakalan 0 sa ngayon · □ Nagpatunay si @Jane ng 500". Bago ka magkaroon ng credit line, may guhit ang kaliwang kalahati at sinasabi nitong **wala pang credit line**.
+
+I-tap ang card, sa telepono o sa web, para sa **Iyong munggo at iyong credit line**, na nagpapaliwanag sa bawat bahagi.
 
 ## Paano ito nagbubukas
 
-Nagsisimula ito sa zero. Nagbubukas ito kapag nakumpleto mo ang iyong unang kalakalan sa merkado (ang isang kalakalan na 1 o 2 munggo lamang ay masyadong maliit para mabilang), o kapag ang isang taong pinili upang sumalubong sa mga baguhan ay nag-vouch para sa iyo. Hanggang sa panahong iyon sinasabi ng Talaan na **Wala pang credit line**. Maaari ka pa ring makipagkalakalan gamit ang mga munggo na hawak mo.
+Nagsisimula ito sa zero. Nagbubukas ito kapag nakumpleto mo ang iyong unang kalakalan sa merkado, gaano man ito kaliit, o kapag nagpatunay para sa iyo ang isang tagapagpatunay sa imbitasyong nagdala sa iyo o sa iyong profile. Hanggang sa panahong iyon sinasabi ng card na **wala pang credit line**. Maaari ka pa ring makipagkalakalan gamit ang mga munggo na hawak mo.
 
 ## Paano ito lumalago
 
@@ -33,16 +39,12 @@ Nagsisimula ito sa zero. Nagbubukas ito kapag nakumpleto mo ang iyong unang kala
 
 ## Itinatakda ng iyong Mga Alok kung gaano karami ang magagamit mo
 
-Magagamit mo lamang ang bahagi ng iyong credit line na pinapayagan ng iyong mga live na Alok:
+Magagamit mo lamang ang bahagi ng iyong credit line na binubuksan ng iyong mga live na Alok. Kapag walang live na Alok, walang bukas.
 
-- walang Mga Alok: wala;
-- 1 Alok: hanggang −200;
-- 2: −500;
-- 3: −1,000;
-- 4: −1,500;
-- 5: −2,000.
+- Ang isang live na Alok ay nagbubukas ng lahat ng sinasagot ng mga tao para sa iyo (isang patunay, regalong credit line, ang kilalang floor) at ng unang 200 na kinita mo.
+- Ang kinita mo sa pakikipagkalakalan ay nagbubukas nang paunti-unti: 2 Alok ang nagbubukas ng 500 nito, 3 ang 1,000, 4 ang 1,500 at 5 ang 2,000.
 
-Sinasabi sa iyo ng linya sa ilalim ng bar, halimbawa "Mag-post ng alok para buksan ang iyong credit line".
+Sinasabi ng card kung ano ang bukas. Halimbawa: "Makakagastos ka pa ng 380: ang live mong Alok ay nagbubukas ng 500 ng iyong 900 na credit line.", at sa ilalim nito "Sarado muna ang 400. Ang isa pang live na Alok ay nagbubukas ng 800 ng iyong 900, at ang 3 live na Alok ay nagbubukas nito nang buo." Kapag walang live na Alok, sinasabi nito, halimbawa, "Tulog ang iyong 500 na credit line. Mag-post ng isang Alok at magbubukas ito nang buo."
 
 ## Sa isang kilalang komunidad
 

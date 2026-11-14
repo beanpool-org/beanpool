@@ -36,14 +36,14 @@ Se uno scambio si blocca, un amministratore della tua comunità può intervenire
 Puoi anche inviare fagioli a qualcuno come dono, senza alcuno scambio.
 
 - Un dono può provenire solo dai fagioli che possiedi. Non può mai portarti sotto lo zero.
-- Puoi inviare doni dopo aver completato uno scambio nel mercato. Uno scambio di soli 1 o 2 fagioli è troppo piccolo per essere conteggiato.
+- Puoi inviare doni dopo aver completato uno scambio nel mercato, per quanto piccolo.
 - I doni non hanno commissioni.
 
 ## Andare sotto zero: la tua linea di credito
 
 Puoi spendere un po' più di quanto hai e andare sotto zero. Questa è la tua **linea di credito**. È una promessa di aiutare gli altri in seguito.
 
-La tua linea di credito inizia a zero. Si apre quando completi il tuo primo scambio nel mercato (uno scambio di soli 1 o 2 fagioli è troppo piccolo per essere conteggiato). Qualcuno scelto dalla tua comunità per dare il benvenuto ai nuovi arrivati può anche offrirti un piccolo inizio facendoti da garante: 25, 50 o 100 fagioli.
+La tua linea di credito inizia a zero. Si apre quando completi il tuo primo scambio nel mercato, per quanto piccolo. Qualcuno scelto dalla tua comunità per dare il benvenuto ai nuovi arrivati può anche offrirti un piccolo inizio facendoti da garante: 25, 50 o 100 fagioli.
 
 La tua linea di credito cresce con la tua **fiducia**:
 
@@ -55,14 +55,10 @@ La tua linea di credito cresce con la tua **fiducia**:
 
 ## Le tue Offerte aprono il tuo credito
 
-La fiducia stabilisce quanto potresti scendere al massimo. Le tue Offerte attive stabiliscono quanto puoi scendere in questo momento. Ottieni il valore minore tra i due.
+Puoi usare della tua linea di credito solo quanto aprono le tue Offerte attive. Senza Offerte attive, non se ne apre nulla.
 
-- Nessuna Offerta attiva: non puoi andare sotto zero.
-- 1 Offerta: fino a 200 sotto zero.
-- 2 Offerte: fino a 500.
-- 3 Offerte: fino a 1.000.
-- 4 Offerte: fino a 1.500.
-- 5 Offerte: fino a 2.000.
+- Un'Offerta attiva apre tutto ciò per cui gli altri garantiscono per te (una garanzia, un dono di linea di credito, la soglia nota) e i primi 200 che hai guadagnato.
+- Ciò che hai guadagnato scambiando si apre a gradini: 2 Offerte ne aprono 500, 3 ne aprono 1.000, 4 ne aprono 1.500 e 5 ne aprono 2.000.
 
 Se rimuovi delle Offerte mentre sei sotto zero, potresti trovarti a dovere più di quanto le tue Offerte attuali coprano. In tal caso non puoi spendere di più finché non rientri nel tuo limite. Puoi comunque guadagnare fagioli, e nulla ti viene tolto.
 

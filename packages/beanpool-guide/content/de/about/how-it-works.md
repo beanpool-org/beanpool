@@ -36,14 +36,14 @@ Wenn ein Handel feststeckt, kann ein Admin deiner Community eingreifen. Er kann 
 Du kannst jemandem auch Bohnen als Geschenk senden, ganz ohne Handel.
 
 - Ein Geschenk kann nur aus Bohnen stammen, die du hast. Es kann dich niemals unter null bringen.
-- Du kannst Geschenke senden, sobald du einen Handel im Markt abgeschlossen hast. Ein Handel von nur 1 oder 2 Bohnen ist zu klein, um zu zählen.
+- Du kannst Geschenke senden, sobald du einen Handel im Markt abgeschlossen hast, wie klein auch immer.
 - Geschenke haben keine Gebühr.
 
 ## Unter null gehen: Dein Kreditrahmen
 
 Du kannst etwas mehr ausgeben, als du hast, und unter null gehen. Dies ist dein **Kreditrahmen**. Es ist ein Versprechen, anderen später zu helfen.
 
-Dein Kreditrahmen beginnt bei null. Er öffnet sich, wenn du deinen ersten Handel im Markt abschließt (ein Handel von nur 1 oder 2 Bohnen ist zu klein, um zu zählen). Jemand, den deine Community ausgewählt hat, um Neulinge zu begrüßen, kann dir auch einen kleinen Start ermöglichen, indem er für dich bürgt: 25, 50 oder 100 Bohnen.
+Dein Kreditrahmen beginnt bei null. Er öffnet sich, wenn du deinen ersten Handel im Markt abschließt, wie klein auch immer. Jemand, den deine Community ausgewählt hat, um Neulinge zu begrüßen, kann dir auch einen kleinen Start ermöglichen, indem er für dich bürgt: 25, 50 oder 100 Bohnen.
 
 Dein Kreditrahmen wächst mit deinem **Vertrauen**:
 
@@ -55,14 +55,10 @@ Dein Kreditrahmen wächst mit deinem **Vertrauen**:
 
 ## Deine Angebote eröffnen deinen Kredit
 
-Das Vertrauen legt fest, wie weit du ins Minus gehen **könntest**. Deine aktiven Angebote legen fest, wie weit du im Moment ins Minus gehen **darfst**. Du erhältst den kleineren der beiden Werte.
+Du kannst nur so viel von deinem Kreditrahmen nutzen, wie deine aktiven Angebote öffnen. Ohne aktives Angebot ist nichts davon offen.
 
-- Keine aktiven Angebote: Du kannst nicht unter null gehen.
-- 1 Angebot: Bis zu 200 unter null.
-- 2 Angebote: Bis zu 500.
-- 3 Angebote: Bis zu 1.000.
-- 4 Angebote: Bis zu 1.500.
-- 5 Angebote: Bis zu 2.000.
+- Ein aktives Angebot öffnet alles, wofür Leute für dich bürgen (eine Bürgschaft, ein Geschenk an Kreditrahmen, den bekannten Kreditrahmen) und die ersten 200, die du erarbeitet hast.
+- Was du durch Handeln erarbeitet hast, öffnet sich in Stufen: 2 Angebote öffnen 500 davon, 3 öffnen 1.000, 4 öffnen 1.500 und 5 öffnen 2.000.
 
 Wenn du Angebote herausnimmst, während du unter null bist, schuldest du möglicherweise mehr, als deine Angebote jetzt abdecken. Dann kannst du nicht mehr ausgeben, bis du wieder innerhalb deines Limits bist. Du kannst weiterhin Bohnen verdienen, und dir wird nichts weggenommen.
 

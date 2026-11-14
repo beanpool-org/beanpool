@@ -1643,11 +1643,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed font-medium">
                                                                     {project
                                                                         ? (pauseDateFormatted
-                                                                            ? tn(heldCredit / 100, 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', { n: formatHundredths(heldCredit), date: pauseDateFormatted })
-                                                                            : tn(heldCredit / 100, 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.', { n: formatHundredths(heldCredit) }))
+                                                                            ? tn(heldCredit / 100, 'Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', { n: formatHundredths(heldCredit), date: pauseDateFormatted })
+                                                                            : tn(heldCredit / 100, 'Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.', { n: formatHundredths(heldCredit) }))
                                                                         : (pauseDateFormatted
-                                                                            ? tn(heldCredit / 100, 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', { n: formatHundredths(heldCredit), date: pauseDateFormatted })
-                                                                            : tn(heldCredit / 100, 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.', { n: formatHundredths(heldCredit) }))}
+                                                                            ? tn(heldCredit / 100, 'Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', { n: formatHundredths(heldCredit), date: pauseDateFormatted })
+                                                                            : tn(heldCredit / 100, 'Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.', { n: formatHundredths(heldCredit) }))}
                                                                 </p>
                                                                 <div className="flex gap-2 pt-1">
                                                                     <button
@@ -1677,7 +1677,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                     <span>{project ? t('Confirm Resume Project') : t('Confirm Resume Enterprise')}</span>
                                                                 </div>
                                                                 <p className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed font-medium">
-                                                                    {t('Resuming reactivates all listings and restores the credit floor to normal daily calculation.')}
+                                                                    {t('Resuming reactivates all listings and restores the credit line to normal daily calculation.')}
                                                                 </p>
                                                                 <div className="flex gap-2 pt-1">
                                                                     <button
@@ -2140,8 +2140,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 <span aria-hidden="true">⚠️</span>
                                                 {/* The node's own warning is shown as it sent it (slice S4). */}
                                                 <span>{detail.pauseWarning || (detail.pauseDaysRemaining === 0
-                                                    ? t('Pause credit floor snapshot has expired')
-                                                    : tn(detail.pauseDaysRemaining, 'Pause credit floor snapshot expires in {n} day', 'Pause credit floor snapshot expires in {n} days'))}</span>
+                                                    ? t('The credit line held for the pause has ended')
+                                                    : tn(detail.pauseDaysRemaining, 'The credit line held for the pause ends in {n} day', 'The credit line held for the pause ends in {n} days'))}</span>
                                             </div>
                                         )}
                                     </div>
@@ -2368,8 +2368,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             </div>
                                             <p className="text-xs text-nature-600 dark:text-nature-400 mt-1 leading-relaxed">
                                                 {project
-                                                    ? t('Help run this project. You can back it with your earned trading standing to expand its credit floor.')
-                                                    : t('Help run this enterprise. You can back it with your earned trading standing to expand its credit floor.')}
+                                                    ? t('Help run this project. You can back it with your earned trading standing to expand its credit line.')
+                                                    : t('Help run this enterprise. You can back it with your earned trading standing to expand its credit line.')}
                                             </p>
                                         </div>
                                         <LocalCommunityAction feature="enterprises" label={project ? t('Join as collaborator') : t('Join as keeper')} className="w-full" {...ways} />
@@ -2401,8 +2401,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 </div>
                                                 <p className="text-xs text-nature-600 dark:text-nature-400 mt-1 leading-relaxed">
                                                     {project
-                                                        ? t('Help run this project. You can back it with your earned trading standing to expand its credit floor.')
-                                                        : t('Help run this enterprise. You can back it with your earned trading standing to expand its credit floor.')}
+                                                        ? t('Help run this project. You can back it with your earned trading standing to expand its credit line.')
+                                                        : t('Help run this enterprise. You can back it with your earned trading standing to expand its credit line.')}
                                                 </p>
                                             </div>
 

@@ -386,7 +386,7 @@ describe('the Chat tab where the forum is off: the title "Chat", as before', () 
 
 // ── 320 dp × 569 dp with text at 1.3×, as the design asks (§2.1: "T0's render test at 320 × 569 × 1.3 is the proof") ──────
 const FLOOR = 320;
-const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[️​‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : 0.62);
+const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[\uFE0F\u200B\u200C\u200D]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : 0.62);
 const widthOf = (text: string, px: number) => Array.from(text).reduce((w, c) => w + glyphEm(c) * px, 0);
 const boxOf = (el: Element): Record<string, number | string> => JSON.parse(el.getAttribute('data-box') ?? '{}');
 const layoutOf = (el: Element): Record<string, number | string> => JSON.parse(el.getAttribute('data-layout') ?? '{}');

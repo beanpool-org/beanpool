@@ -60,9 +60,10 @@ export default function ChatsScreen() {
     const [pickedSide, setPickedSide] = useState<ChatSide>('chats');
     const side = chatSideShown(pickedSide, nodeProfile?.features);
     // The "?" names Groups' and People's own guide pages while Talk shows them (DESIGN-getting-started-fable.md §4); the
-    // Forum side has none yet.
+    // Forum side has none of its own yet, so it opens the tab's.
     useFocusEffect(React.useCallback(() => {
-        setHelpContext(side === 'forum' || talkView === 'messages' ? null : talkView);
+        if (side === 'forum') setHelpContext(null);
+        else setHelpContext(talkView === 'messages' ? null : talkView);
         return () => setHelpContext(null);
     }, [talkView, side]));
 

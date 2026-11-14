@@ -52,6 +52,16 @@ Kadi inasema **Mwanachama alikualika**. Gusa **Jiunge** ikiwa na jina la jumuiya
 
 Unabaki kuwa mwanachama wa jumuiya ya kimataifa, na unaweza kubadili kati yao: tazama "Zaidi ya jumuiya moja".
 
+## Kwenye programu ya wavuti
+
+Unaweza kuomba pia kutoka kwenye kadi ya **Tafuta jumuiya yako** kwenye **Nyumbani** ya programu ya wavuti, na kusubiri hapo.
+
+- Unaposubiri, kadi ya kusubiri ina **Niambie wakijibu**. Gusa **Nieleze**, na kivinjari chako kinakuuliza kwanza; kisha **Tutakuarifu hapa {name} atakapojibu.** Jumuiya uliyoiomba inakijulisha kivinjari hiki yenyewe, hata ukurasa ukiwa umefungwa, na hakuna kingine. Jumuiya uliyomo haihifadhi chochote cha ombi lako.
+- Kwenye iPhone inafanya kazi tu kutoka kwenye skrini ya kwanza, na kadi inasema jinsi. Mahali ambapo kivinjari hakiwezi kujulishwa, kadi inasema hivyo, ikiwa na **Pata programu** kwanza kwenye simu; Nyumbani bado huangalia jibu kila baada ya dakika chache ikiwa wazi.
+- Kugusa arifa hufungua **Nyumbani** kwenye jumuiya hiyo kwenye kadi, ikiwa na **Jiunge** na jina lake. Arifa isiyotoka kwenye jumuiya hiyo haifungui chochote na inasema hivyo.
+- Kengele iliyo juu pia inaonyesha **🎉 {name} amekubali.** hadi uiguse au uguse **Jiunge**. Kuigusa hufungua mahali pale pale.
+- **Jiunge** hufungua ukurasa wa jumuiya kwenye kivinjari hiki na kuleta akaunti yako nawe: maneno yale yale 12. Ombi lako likijibiwa na kutumika, kughairiwa au kutokuwa wazi tena, kivinjari hiki huacha kujulishwa.
+
 ## Hakuna kitu karibu nawe
 
 - **Niambie pindi moja inapoanza hapa:** unapata arifa wakati jumuiya inapoanza karibu na mahali ulipo. Eneo pekee ndilo linalowekwa, la takriban km 10 upana wake, kamwe si mahali pako kamili. Unaweza kutazama hadi maeneo 3, na kuacha kutazama moja kwa **Acha**.

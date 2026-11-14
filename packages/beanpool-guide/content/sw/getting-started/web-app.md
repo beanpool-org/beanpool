@@ -127,6 +127,12 @@ Skrini ya 1 ya kujiunga kwenye kivinjari inasema yaleyale kinyume chake: ikiwa t
 - Simu kisha huonyesha **tarakimu nne**. Ziandike kwenye kompyuta na ubonyeze **Thibitisha**. Akaunti yako huenda kwenye kompyuta baada ya hapo tu. Majaribio matatu yasiyo sahihi na hakuna kinachotumwa: tengeneza msimbo mpya. Kamwe usisome tarakimu hizo kwa sauti au kuzituma kwa mtu yeyote.
 - Ikiwa simu inasema programu yake ni ya zamani sana, sasisha programu ya BeanPool juu yake, kisha uchanganue msimbo mpya.
 
+## Arifa
+
+Programu ya wavuti inaweza kukuambia kilichotokea, kama simu: arifa zilezile, chini ya swichi zilezile. Ziwashe katika **Mipangilio**, kisha **Arifa**, kwenye safu ya kwanza, **Kwenye kifaa hiki**. Kivinjari chako kinakuuliza kwanza, kwa mguso huo. Kivinjari cha kompyuta hujulishwa kikiwa kinafanya kazi, Safari kwenye Mac na kivinjari cha simu hata kikiwa kimefungwa, na iPhone tu kutoka kwenye skrini ya kwanza. Mahali ambapo kivinjari hakiwezi kujulishwa, kengele iliyo juu bado inaorodhesha kilichotokea, na kwenye kivinjari cha simu **Pata programu** inakuja kwanza. Tazama "Arifa".
+
+Uliomba jumuiya nyingine ikuruhusu kuingia, kutoka kwenye kadi ya **Tafuta jumuiya yako** kwenye **Nyumbani**? Kadi yake ya kusubiri ina **Niambie wakijibu**, na jumuiya hiyo inakijulisha kivinjari hiki jibu lake yenyewe. Kugusa arifa, au **🎉 {name} amekubali.** kwenye kengele, hufungua **Nyumbani** kwenye jumuiya hiyo, ikiwa na **Jiunge**. Tazama "Kupata jumuiya iliyo karibu nawe".
+
 ## Kuisakinisha
 
 Programu ya wavuti inaweza kutoa **Sakinisha BeanPool** ili ifunguke kutoka kwenye skrini yako ya kwanza kama programu. Ikiwa kivinjari chako hakiwezi kufanya hivyo, gusa **Vipi?** kwa hatua hizo.

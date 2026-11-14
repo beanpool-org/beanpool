@@ -12,7 +12,7 @@ source-hash: 5a1feb7390e4c3fb
 - **Con una invitación**, te unes a una comunidad: las personas cerca de ti, con sus propios Frijoles, intercambios y Bienes comunes. Te invita un miembro de esa comunidad.
 - **Sin una invitación**, puedes unirte a la **comunidad global** cuando esté abierta: personas de todas partes, donde puedes publicar, enviar mensajes a las personas y encontrar una comunidad cerca de ti. Allí no hay Frijoles ni votaciones comunitarias. Los Frijoles, el crédito, los Bienes comunes y sus Decisiones residen en las comunidades locales. La comunidad global te muestra cómo funcionan, en una comunidad de ejemplo. Consulta "Frijoles y la comunidad global".
 
-¿Sin invitación, pero con una comunidad cerca de ti? Únete a la comunidad global, y luego pide a esa comunidad que te deje entrar: cualquiera de sus miembros puede hacerlo o, en una comunidad donde solo los administradores invitan, sus administradores. Consulta "Buscar una comunidad cerca".
+¿Sin invitación, pero con una comunidad cerca de ti? Únete a la comunidad global, y luego pide a esa comunidad que te deje entrar: cualquiera de sus miembros puede hacerlo o, en una comunidad donde solo los administradores invitan, sus administradores. ¿Ya eres miembro de otra y pediste desde **Inicio** de la app web? Su tarjeta de espera también tiene **Avísame cuando respondan**, y un sí aparece en la campana. Consulta "Buscar una comunidad cerca".
 
 De cualquier manera, tu cuenta es una clave que se guarda en tu teléfono, con 12 palabras que la recuperan. No hay contraseña.
 

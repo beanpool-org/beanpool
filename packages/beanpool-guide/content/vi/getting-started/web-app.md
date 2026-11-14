@@ -127,6 +127,12 @@ Màn hình 1 của việc tham gia trên trình duyệt cũng nêu điều tươ
 - Sau đó điện thoại sẽ hiển thị **bốn chữ số**. Nhập bốn chữ số đó trên máy tính và nhấn **Xác nhận**. Tài khoản của bạn chỉ chuyển sang máy tính sau bước đó. Ba lần thử sai và không có gì được gửi đi: hãy tạo mã mới. Không bao giờ đọc to các chữ số hoặc gửi chúng cho bất kỳ ai.
 - Nếu điện thoại báo ứng dụng của nó quá cũ, hãy cập nhật ứng dụng BeanPool trên điện thoại, sau đó quét mã mới.
 
+## Thông báo
+
+Ứng dụng web có thể báo cho bạn điều đã xảy ra, như điện thoại: cùng các cảnh báo, dưới cùng các nút bật tắt. Hãy bật chúng trong **Cài đặt**, rồi **Thông báo**, ở hàng đầu tiên, **Trên thiết bị này**. Trình duyệt sẽ hỏi bạn trước, ngay lúc bạn nhấn. Trình duyệt trên máy tính được báo khi đang chạy, Safari trên Mac và trình duyệt trên điện thoại kể cả khi đã đóng, còn iPhone chỉ từ Màn hình chính. Nếu một trình duyệt không thể được báo, chuông ở trên cùng vẫn liệt kê điều đã xảy ra, và trên trình duyệt điện thoại thì **Tải ứng dụng** đứng đầu. Xem "Thông báo".
+
+Đã xin một cộng đồng khác cho bạn vào, từ thẻ **Tìm cộng đồng của bạn** trên **Trang chủ**? Thẻ chờ của nó có **Cho tôi biết khi họ trả lời**, và cộng đồng đó tự báo câu trả lời cho trình duyệt này. Nhấn vào thông báo, hoặc **🎉 {name} đã đồng ý.** trong chuông, sẽ mở **Trang chủ** tại cộng đồng đó, với **Tham gia**. Xem "Tìm một cộng đồng gần bạn".
+
 ## Cài đặt ứng dụng
 
 Ứng dụng web có thể đưa ra tùy chọn **Cài đặt BeanPool** để mở từ màn hình chính như một ứng dụng. Nếu trình duyệt của bạn không thể làm được điều đó, hãy nhấn **Như thế nào?** để xem các bước.

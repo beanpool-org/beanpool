@@ -52,6 +52,16 @@ Die Karte meldet: **Ein Mitglied hat dich eingeladen**. Tippe auf **Teilnehmen**
 
 Du bleibst weiterhin Mitglied der globalen Community und kannst zwischen ihnen wechseln: Siehe „Mehr als eine Community“.
 
+## In der Web-App
+
+Du kannst auch über die Karte **Finde deine Community** auf der **Startseite** der Web-App fragen und dort warten.
+
+- Während du wartest, hat die Wartekarte **Benachrichtige mich, wenn sie antworten**. Tippe auf **Benachrichtigen**, und dein Browser fragt dich zuerst; dann **Wir benachrichtigen dich hier, wenn {name} antwortet.** Die Community, die du gefragt hast, benachrichtigt diesen Browser selbst, auch bei geschlossener Seite, und sonst nichts. Die Community, in der du bist, behält nichts von deiner Anfrage.
+- Auf einem iPhone geht das nur vom Home-Bildschirm aus, und die Karte sagt, wie. Wo ein Browser nicht benachrichtigt werden kann, sagt die Karte das, auf einem Smartphone mit **App herunterladen** zuerst; die Startseite prüft weiter alle paar Minuten auf die Antwort, solange sie offen ist.
+- Tippst du auf die Benachrichtigung, öffnet sich die **Startseite** bei dieser Community auf der Karte, mit **Teilnehmen** und ihrem Namen. Eine Benachrichtigung, die nicht von dieser Community kam, öffnet nichts und sagt das.
+- Die Glocke oben zeigt auch **🎉 {name} hat zugestimmt.**, bis du sie oder **Teilnehmen** antippst. Antippen öffnet dieselbe Stelle.
+- **Teilnehmen** öffnet die Seite der Community in diesem Browser und bringt dein Konto mit: dieselben 12 Wörter. Wenn deine Anfrage beantwortet und verwendet, abgebrochen oder nicht mehr offen ist, wird dieser Browser nicht mehr benachrichtigt.
+
 ## Noch nichts in deiner Nähe
 
 - **Benachrichtigen, wenn hier eine startet:** Du erhältst eine Benachrichtigung, wenn eine Community in deiner Nähe entsteht. Es wird nur das Gebiet gespeichert, etwa 10 km im Durchmesser, niemals dein genauer Aufenthaltsort. Du kannst bis zu 3 Orte beobachten und das Beobachten eines Ortes mit **Stopp** beenden.

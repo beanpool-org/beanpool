@@ -52,6 +52,16 @@ La tarjeta dice **Un miembro te invitó**. Toca **Unirse** con el nombre de la c
 
 Sigues siendo miembro de la comunidad global y puedes cambiar entre ellas: consulta "Más de una comunidad".
 
+## En la app web
+
+También puedes pedirlo desde la tarjeta **Encuentra tu comunidad** en **Inicio** de la app web, y esperar allí.
+
+- Mientras esperas, la tarjeta de espera tiene **Avísame cuando respondan**. Toca **Avisarme** y tu navegador te pregunta primero; después, **Te avisaremos aquí cuando {name} responda.** La comunidad a la que pediste avisa a este navegador por sí misma, incluso con la página cerrada, y nada más. La comunidad en la que estás no guarda nada de tu solicitud.
+- En un iPhone solo funciona desde la pantalla de inicio, y la tarjeta explica cómo. Cuando no se puede avisar a un navegador, la tarjeta lo dice, con **Obtén la app** primero en un teléfono; Inicio sigue comprobando la respuesta cada pocos minutos mientras está abierto.
+- Al tocar la notificación se abre **Inicio** en esa comunidad en la tarjeta, con **Unirse** y su nombre. Una notificación que no vino de esa comunidad no abre nada y lo dice.
+- La campana de arriba también muestra **🎉 {name} dijo que sí.**, hasta que la toques o toques **Unirse**. Al tocarla se abre el mismo lugar.
+- **Unirse** abre la página de la comunidad en este navegador y trae tu cuenta contigo: las mismas 12 palabras. Cuando tu solicitud es respondida y usada, cancelada o ya no está abierta, este navegador deja de recibir avisos.
+
 ## Nada cerca de ti
 
 - **Avisarme cuando empiece una aquí:** recibes una notificación cuando comience una comunidad cerca de donde estás. Solo se conserva la zona, de unos 10 km de ancho, nunca dónde estás exactamente. Puedes seguir hasta 3 lugares y dejar de seguir uno con **Detener**.

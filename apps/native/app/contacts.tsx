@@ -514,7 +514,7 @@ function FormerNotice({ me, seen }: { me: string; seen: number }) {
     const [shown, setShown] = useState<null | 'open' | 'merged'>(null);
     const [busy, setBusy] = useState(false);
     // Also asked when the old-words screen has tried the old list: a merge that added nobody new changes no list, and the
-    // notice still goes. Only the latest answer is kept.
+    // notice still turns to its merged form. Only the latest answer is kept.
     useEffect(() => {
         if (!identity || identity.publicKey !== me) return undefined;
         let latest = 0;

@@ -29,7 +29,7 @@ export const CONTACTS_FORMER_PATH = '/api/contacts/former';
 
 /**
  * Said (DeviceEventEmitter) once the old-words screen has tried the old list: the Contacts screen's notice asks again, so a
- * merge goes from it even when it added nobody new (no list changed to tell it).
+ * merge turns it to its merged form even when it added nobody new (no list changed to tell it).
  */
 export const CONTACTS_FORMER_CHANGED_EVENT = 'beanpool_contacts_former_changed';
 
@@ -86,7 +86,7 @@ export async function findFormerCopies(account: ContactsAccount, deps: ContactsS
     return { found, answered, silent, anchor: anchor ?? null };
 }
 
-/** Where the phone notes the old copies it has merged in, so the Contacts screen stops offering them. Per account. */
+/** Where the phone notes the old copies it has merged in, so the Contacts notice offers only their Delete. Per account. */
 export function formerMergedStoreKey(publicKey: string): string {
     return `beanpool_contacts:former-merged:${publicKey.toLowerCase()}`;
 }

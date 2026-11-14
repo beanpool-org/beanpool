@@ -9,7 +9,7 @@
  *     their own cards, newest first; a page gathered with the assistant names nobody.
  *  3. 30 days and the newest 20 only: a 31-day-old page and the 21st newest are not counted.
  *  4. Where it never goes: under `category=`, where the switch is off, on a node with the visitors' view (the global
- *     community), to a suspended member, a stranger or an unsigned read.
+ *     community), to a suspended member, a visitor, a stranger or an unsigned read.
  *  5. The feed's own order: the cards merge into the keyset order; a page boundary through a day's card neither repeats nor
  *     skips an item at any page size, with a creator's item tied on the card's time on either side of its id; a page holds
  *     `limit` items.
@@ -36,7 +36,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { NODE_PROFILE_KEY } from './config/node-profile.js';
 import { setNodeRole } from './config/node-role.js';
-import { registerMemberInternal } from './engine/members.js';
+import { registerMemberInternal, registerVisitor } from './engine/members.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { claimGrantor } from './claim-code.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
@@ -256,7 +256,7 @@ async function main(): Promise<void> {
     dropOverride('knowledge');
     setOverride('guestListingsOnly', 'true');
     const globalLike = await feed(mel);
-    assert(globalLike.status === 200 && cardsOf(globalLike).length === 0, `4. a node with the visitors' view (the global community), knowledge on or not: no card (${show(cardsOf(globalLike))})`);
+    assert(globalLike.status === 200 && cardsOf(globalLike).length === 0, `4. a node with the visitors' view (the global community), even with Learn's switch on: no card (${show(cardsOf(globalLike))})`);
     dropOverride('guestListingsOnly');
     db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(sam.pk);
     const suspended = await feed(sam);
@@ -265,6 +265,12 @@ async function main(): Promise<void> {
     assert(!!cardOn(await feed(sam), today), '4. active again: the card');
     const strangers = await feed(stranger);
     assert(strangers.status === 403 && !strangers.text.includes('know_') && !strangers.text.includes(fresh), `4. a stranger: 403, nothing of it (${strangers.status})`);
+    // A visitor: a key from another community with a row here (as a message across communities makes one).
+    const visitor = newId('Visitor');
+    registerVisitor(visitor.pk, 'Visitor', 'https://elsewhere.example');
+    require_(!!db.prepare('SELECT 1 FROM members WHERE public_key = ? AND is_visitor = 1').get(visitor.pk), 'a visitor has a row here');
+    const visitors = await feed(visitor);
+    assert(visitors.status !== 200 && !visitors.text.includes('know_') && !visitors.text.includes(fresh), `4. a visitor: refused, nothing of it (${visitors.status})`);
     const unsigned = await feed(null);
     assert(unsigned.status === 401 && !unsigned.text.includes('know_'), `4. unsigned: 401 (${unsigned.status})`);
     ageAllOut();

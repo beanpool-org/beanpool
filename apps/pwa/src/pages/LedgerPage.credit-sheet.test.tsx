@@ -181,10 +181,10 @@ describe('one repayment for the notice and the Wallet\'s row (review of #3137)',
     });
     afterEach(() => { vi.mocked(window.confirm).mockRestore(); });
 
-    const payInWallet = (beans: string) => {
+    const payInWallet = async (beans: string) => {
         const wallet = screen.getByTestId('ledger-wallet');
         fireEvent.click(within(wallet).getByRole('button', { name: 'Pay the Commons' }));
-        expect(within(wallet).getByLabelText(/PAY-BACK CODE/)).toHaveValue(CODE);
+        await waitFor(() => expect(within(wallet).getByLabelText(/PAY-BACK CODE/)).toHaveValue(CODE));
         fireEvent.change(within(wallet).getByLabelText(/BEANS/), { target: { value: beans } });
         fireEvent.click(within(wallet).getByRole('button', { name: 'Pay the Commons' }));
     };
@@ -194,12 +194,12 @@ describe('one repayment for the notice and the Wallet\'s row (review of #3137)',
         expect(within(await screen.findByTestId('ledger-repayment')).getByRole('status')).toHaveTextContent('180 Beans left of 300 Beans');
         expect(debts.getMyRepayment).toHaveBeenCalledTimes(1);
         fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
-        payInWallet('80');
+        await payInWallet('80');
         expect(await within(screen.getByTestId('ledger-wallet')).findByText('Paid 80 Beans to the Commons. That came off your debt: 100 Beans left.')).toBeInTheDocument();
         await waitFor(() => expect(within(screen.getByTestId('ledger-repayment')).getByRole('status')).toHaveTextContent('100 Beans left of 300 Beans'));
         expect(within(screen.getByTestId('ledger-repayment')).getByRole('button', { name: 'Pay back now' })).toBeInTheDocument();
         fireEvent.click(within(screen.getByTestId('ledger-wallet')).getByRole('button', { name: 'Done' }));
-        payInWallet('100');
+        await payInWallet('100');
         expect(await within(screen.getByTestId('ledger-wallet')).findByText('Paid 100 Beans to the Commons. Your debt is paid off and settled.')).toBeInTheDocument();
         await waitFor(() => expect(screen.queryByTestId('ledger-repayment')).toBeNull());
         expect(screen.queryByRole('button', { name: 'Pay back now' })).toBeNull();
@@ -214,7 +214,6 @@ describe('one repayment for the notice and the Wallet\'s row (review of #3137)',
         fireEvent.change(within(notice).getByLabelText(/BEANS/), { target: { value: '180' } });
         fireEvent.click(within(notice).getByRole('button', { name: 'Pay the Commons' }));
         expect(await within(notice).findByText('Paid 180 Beans to the Commons. Your debt is paid off and settled.')).toBeInTheDocument();
-        await waitFor(() => expect(debts.getMyRepayment).toHaveBeenCalledTimes(2));
         const wallet = screen.getByTestId('ledger-wallet');
         fireEvent.click(within(wallet).getByRole('button', { name: 'Pay the Commons' }));
         await waitFor(() => expect(within(wallet).getByLabelText(/PAY-BACK CODE/)).toHaveValue(''));

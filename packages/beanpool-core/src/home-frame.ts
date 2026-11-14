@@ -24,6 +24,7 @@ import { readSkySettings } from './sky.js';
 import { isTagId } from './tags/index.js';
 import { POST_TAGS_MAX } from './tags/post-tags.js';
 import { toolHomeCardTypes } from './tools/index.js';
+import { KNOWLEDGE_PLACE_LINE, LEARN_HOME_WORDS, knowledgeFeatureMode } from './knowledge.js';
 import { t, word, type WordKey } from './words.js';
 import type { CardHue } from './brand-colours.js';
 
@@ -162,7 +163,8 @@ export interface HomeCardType {
      * A card that arrives on a Home its member already arranged (DESIGN-local-knowledge-amend-fable.md §3.6, Marty's pick 2,
      * 11 Nov 2026): drawn once, after the member's own cards, while their saved list neither holds it nor carries the stamp
      * `new:<id>` in `dismissed`; Remove, a move or "Keep on Home" writes the stamp in the member's own next save, and nothing
-     * is written by itself. The mark only: the rule that reads it is slice K7's, with the `learn` card. No card has it yet.
+     * is written by itself. The rule: {@link arrivingCards}, {@link keepArrivedCard}, and the stamp {@link removeCard},
+     * {@link moveCard} and {@link addCard} write (slice K7, with the `learn` card, the one type that has it).
      */
     arrives?: true;
 }
@@ -388,6 +390,11 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
     // N1): real open Needs only, the member's stars first, and no body while there are none. On every node, since the worldwide
     // community has Needs too (it gets the card, not the push).
     { id: 'asked', hue: 'orange', name: word('Asked near you'), line: word('Things neighbours are asking for, what you star first.'), group: 'around', asks: 'node', onNode: everywhere },
+    // Learn something local (DESIGN-local-knowledge-amend-fable.md §3.6, slice K7): up to three pages of Local knowledge, the
+    // newest of the last 14 days and the day's pick, built by the node where Learn is on (`features.knowledge`); where it is
+    // off and the node shows previews (`showcase`, the global community) the apps draw Example Valley's samples (§2.9). It
+    // arrives once on a Home its member already arranged (`arrives`), since a saved list never gains a type by itself.
+    { id: 'learn', hue: 'sage', name: LEARN_HOME_WORDS.name, line: KNOWLEDGE_PLACE_LINE, group: 'around', asks: 'node', onNode: (a) => knowledgeFeatureMode(a.features) !== 'hidden', arrives: true },
     {
         id: 'search', hue: 'orange', name: word('A saved search'), line: word('Listings that match words you choose, near you.'), group: 'around',
         multiple: { max: 5 }, asks: 'node', onNode: everywhere, readSettings: readSearchSettings,
@@ -477,9 +484,10 @@ export const HOME_V1_CARD_IDS: readonly string[] = [
 /**
  * The default list (scratch/fable-design/DESIGN-home-default-fable.md §2.2, Marty's picks of 13 Nov 2026): a newcomer's
  * Home from the first second, the community first and the chores second, in the phone's order (the web packs the same
- * order into its columns). Sixteen of the 24, which leaves eight for the member's own: the Pulse came back after Coming
+ * order into its columns). Seventeen of the 24, which leaves seven for the member's own: the Pulse came back after Coming
  * up on Marty's pick of 14 Nov 2026 (scratch/fable-design/DESIGN-pulse-home-fable.md §3.5, slice P0), so a new member
- * finds it on the screen the app opens on. Each is drawn only while it has
+ * finds it on the screen the app opens on, and Learn something local follows Asked near you (DESIGN-local-knowledge-amend-
+ * fable.md §3.6 "Starter set", Marty and Damo's picks of 11 Nov 2026, slice K7). Each is drawn only while it has
  * something to say, by the rule it already follows (§2.1 rule 3), so a newcomer sees about six to ten on day one and the
  * rest arrive in their places as they have something:
  *
@@ -494,6 +502,7 @@ export const HOME_V1_CARD_IDS: readonly string[] = [
  * | `pulse` (The Pulse) | A neighbour shared something in the last seven days (routes/home-answer.ts `PULSE_DAYS`) |
  * | `beans` (Your Beans) | Beans are on here |
  * | `asked` (Asked near you) | A neighbour has an open Need |
+ * | `learn` (Learn something local) | Learn holds a page, or the reader is an owner or admin there (their first page, or members' suggestions to check) |
  * | `deals` (Your deals) | An open deal |
  * | `groups` (Your groups) | In a group |
  * | `decide` (Decide) | A Decision or poll is open |
@@ -506,8 +515,8 @@ export const HOME_V1_CARD_IDS: readonly string[] = [
  * pinned under Needs you, and the cards it has no feature for (Your Beans, Your deals, Decide) are never asked for.
  */
 export const HOME_DEFAULT_LIST: readonly string[] = [
-    'start', 'safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined',
-    'tips', 'sky',
+    'start', 'safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'learn', 'deals', 'groups', 'decide', 'notices',
+    'joined', 'tips', 'sky',
 ];
 
 /**
@@ -757,7 +766,8 @@ export function newInstanceId(type: string, taken: ReadonlySet<string>, random: 
 /**
  * A card added to Home (§1.3): first, after any leading cards in `pinned` (a pinned Find your community stays on top).
  * A one-of-a-kind type already there, an instance type at its limit, a Home at 24, a fixed or unknown type: refused,
- * the layout unchanged. `settings` go through the type's reader. `now` stamps `updatedAt`.
+ * the layout unchanged. `settings` go through the type's reader. `now` stamps `updatedAt`, and an arriving type's stamp
+ * (`new:<type>`): the member chose it, so taking it off later never brings it back as arriving.
  */
 export function addCard(
     layout: HomeLayoutV2 | null,
@@ -778,20 +788,33 @@ export function addCard(
     let at = 0;
     while (at < base.cards.length && pinned.has(base.cards[at].id)) at++;
     const cards = [...base.cards.slice(0, at), card, ...base.cards.slice(at)];
-    return { ok: true, id, layout: { ...base, cards, updatedAt: new Date(opts.now ?? Date.now()).toISOString() } };
+    const stamp = new Date(opts.now ?? Date.now()).toISOString();
+    return { ok: true, id, layout: { ...base, cards, dismissed: stampedIfArrives(base.dismissed, type, stamp), updatedAt: stamp } };
 }
 
-/** A card taken off Home: the instance goes, its settings and any dismissal with it. Unchanged when it isn't there. */
+/**
+ * A card taken off Home: the instance goes, its settings and any dismissal with it. A card of an arriving type leaves its
+ * stamp (`new:<type>`), so it never arrives again; one drawn as arriving and not in the list leaves the stamp alone, the
+ * list as it was. Unchanged when it is neither.
+ */
 export function removeCard(layout: HomeLayoutV2 | null, id: string, now: number = Date.now()): HomeLayoutV2 {
     const base = layout ?? defaultHomeLayout();
-    if (!base.cards.some((c) => c.id === id)) return base;
+    const at = new Date(now).toISOString();
+    const card = base.cards.find((c) => c.id === id);
+    if (!card) {
+        return isArriving(layout, id) ? { ...base, dismissed: { ...base.dismissed, [arrivedStamp(id)]: at }, updatedAt: at } : base;
+    }
     const { [id]: _gone, ...dismissed } = base.dismissed;
-    return { ...base, cards: base.cards.filter((c) => c.id !== id), dismissed, updatedAt: new Date(now).toISOString() };
+    return { ...base, cards: base.cards.filter((c) => c.id !== id), dismissed: stampedIfArrives(dismissed, card.type, at), updatedAt: at };
 }
 
-/** A card moved one place up (-1) or down (+1) in the list. Unchanged at an end or when it isn't there. */
+/**
+ * A card moved one place up (-1) or down (+1) in the list. A card drawn as arriving is kept first ({@link keepArrivedCard}:
+ * last in the list, stamped), then moved, so a move always writes its stamp. Unchanged at an end or when it isn't there.
+ */
 export function moveCard(layout: HomeLayoutV2 | null, id: string, delta: -1 | 1, now: number = Date.now()): HomeLayoutV2 {
-    const base = layout ?? defaultHomeLayout();
+    const kept = isArriving(layout, id) ? keepArrivedCard(layout, id, now) : null;
+    const base = kept ?? layout ?? defaultHomeLayout();
     const from = base.cards.findIndex((c) => c.id === id);
     const to = from + delta;
     if (from < 0 || to < 0 || to >= base.cards.length) return base;
@@ -827,6 +850,49 @@ export function cardSettings(card: HomeCardInstance): Record<string, unknown> | 
     return reader ? reader(card.settings) : undefined;
 }
 
+// ── A card that arrives (DESIGN-local-knowledge-amend-fable.md §3.6, Marty and Damo's pick 2 of 11 Nov 2026; slice K7) ──
+
+/**
+ * The stamp an arriving type leaves in `dismissed` once its member has acted on it (Keep on Home, Remove, a move, or Add a
+ * card): `new:<type>`. `dismissed` keeps any id of up to 32 characters with a date ({@link checkHomeLayout}), the apps read
+ * only `safety` from it, and Remove, Reset and the tour's end each keep every other key, so the stamp outlives the card.
+ */
+export const arrivedStamp = (type: string): string => `new:${type}`;
+
+const stampedIfArrives = (dismissed: Record<string, string>, type: string, at: string): Record<string, string> =>
+    TYPES.get(type)?.arrives ? { ...dismissed, [arrivedStamp(type)]: at } : dismissed;
+
+/**
+ * The cards that arrive on this saved Home, in the catalogue's order: each one-of-a-kind type marked `arrives` that the
+ * member's list neither holds nor carries the stamp of, while the list has room for it (Keep on Home must be able to keep
+ * it). The apps draw them after the member's own cards, by the type's own rules (on this node, something to show), until
+ * the member acts on one; nothing is written by itself. None for a Home never saved: the default list already holds them.
+ */
+export function arrivingCards(layout: HomeLayoutV2 | null): HomeCardInstance[] {
+    if (!layout || layout.cards.length >= HOME_FRAME_LIMITS.cards) return [];
+    return HOME_CARD_TYPES
+        .filter((t) => t.arrives && !t.fixed && !t.multiple && !layout.cards.some((c) => c.type === t.id) && !(arrivedStamp(t.id) in layout.dismissed))
+        .map((t) => ({ id: t.id, type: t.id }));
+}
+
+const isArriving = (layout: HomeLayoutV2 | null, id: string): boolean => arrivingCards(layout).some((c) => c.id === id);
+
+/** The list the apps draw from: the member's cards, then the cards that arrive ({@link arrivingCards}). */
+export const homeCardsWithArrivals = (layout: HomeLayoutV2 | null): HomeCardInstance[] =>
+    layout ? [...layout.cards, ...arrivingCards(layout)] : defaultCards();
+
+/**
+ * "Keep on Home" on a card drawn as arriving: it joins the member's list where it was drawn (last) and its stamp is written,
+ * in this one save. Unchanged when the card isn't arriving.
+ */
+export function keepArrivedCard(layout: HomeLayoutV2 | null, id: string, now: number = Date.now()): HomeLayoutV2 {
+    const base = layout ?? defaultHomeLayout();
+    const card = arrivingCards(layout).find((c) => c.id === id);
+    if (!card) return base;
+    const at = new Date(now).toISOString();
+    return { ...base, cards: [...base.cards, card], dismissed: { ...base.dismissed, [arrivedStamp(card.type)]: at }, updatedAt: at };
+}
+
 // ── Asking ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** Catalogue order, then id: a move in the list never changes it. Unknown types last (never asked anyway). */
@@ -842,10 +908,10 @@ export function compareForAsk(a: Pick<HomeCardInstance, 'id' | 'type'>, b: Pick<
  * whatever the member's order and a repeat read can be a 304: the fixed two, every instance in the list whose type this
  * build knows and the node builds (`asks: 'node'`) and whose settings give it something to build (`asksWith`: a chat
  * card with no chat picked is not), and any `pinned` type (asked for whatever the list says). An unknown type is never
- * asked: this build couldn't draw its body.
+ * asked: this build couldn't draw its body. A card that arrives ({@link arrivingCards}) is asked as one in the list is.
  */
 export function cardsToAsk(layout: HomeLayoutV2 | null, pinned: readonly string[] = []): string[] {
-    const cards = layout?.cards ?? defaultCards();
+    const cards = homeCardsWithArrivals(layout);
     const want = new Map<string, Pick<HomeCardInstance, 'id' | 'type'>>();
     const add = (c: Pick<HomeCardInstance, 'id' | 'type' | 'settings'>) => {
         const t = TYPES.get(c.type);

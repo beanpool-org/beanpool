@@ -247,16 +247,19 @@ describe('home frame §5.2 (3): cardsToAsk', () => {
     it('is the same for the same set whatever the order: catalogue order, then id', () => {
         const a = layout([{ id: 'search-zz11', type: 'search' }, one('market'), one('steps'), { id: 'search-aa22', type: 'search' }]);
         const b = layout([one('steps'), { id: 'search-aa22', type: 'search' }, one('market'), { id: 'search-zz11', type: 'search' }]);
-        expect(cardsToAsk(a)).toEqual(['needs', 'steps', 'market', 'search-aa22', 'search-zz11', 'community']);
+        // Learn something local arrives on a saved Home that never had it (slice K7), and is asked in its catalogue place.
+        expect(cardsToAsk(a)).toEqual(['needs', 'steps', 'market', 'learn', 'search-aa22', 'search-zz11', 'community']);
         expect(cardsToAsk(b).join(',')).toBe(cardsToAsk(a).join(','));
     });
 
     it("omits asks: 'none' types and never asks an unknown type; a pinned type is asked whatever the list says", () => {
         const l = layout([one('tips'), one('interests'), one('invite'), FUTURE, one('beans')]);
-        expect(cardsToAsk(l)).toEqual(['needs', 'beans', 'community']);
-        expect(cardsToAsk(l, ['find'])).toEqual(['needs', 'find', 'beans', 'community']);
+        expect(cardsToAsk(l)).toEqual(['needs', 'learn', 'beans', 'community']);
+        expect(cardsToAsk(l, ['find'])).toEqual(['needs', 'find', 'learn', 'beans', 'community']);
+        // Once the member acted on the arriving card (its stamp), it is asked no more.
+        expect(cardsToAsk({ ...l, dismissed: { 'new:learn': AT } })).toEqual(['needs', 'beans', 'community']);
         // A newcomer's Home is the default list (DESIGN-home-default-fable.md §2.2): the fixed two and every default card the node builds.
-        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'events', 'market', 'asked', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
+        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'events', 'market', 'asked', 'learn', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
     });
 });
 
@@ -265,7 +268,7 @@ const wordDp = (word: string) => word.length * 15 * 1.3 * 0.6;
 
 describe('home frame §5.2 (4): the default and the words', () => {
     it("defaultCards is the default list on both profiles, Welcome first; the starter set is the same list less Welcome", () => {
-        expect(HOME_STARTER_SET).toEqual(['safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky']);
+        expect(HOME_STARTER_SET).toEqual(['safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'learn', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky']);
         expect(HOME_DEFAULT_LIST).toEqual(['start', ...HOME_STARTER_SET]);
         for (const p of ['local', 'global'] as const) expect(defaultCards(p)).toEqual(HOME_DEFAULT_LIST.map(id => ({ id, type: id })));
     });
@@ -274,13 +277,17 @@ describe('home frame §5.2 (4): the default and the words', () => {
         for (const t of HOME_CARD_TYPES) {
             for (const text of [t.name, t.globalName ?? '', t.line]) {
                 for (const word of text.split(/\s+/).filter(Boolean)) expect(wordDp(word), `${t.id}: ${word}`).toBeLessThanOrEqual(140);
-                expect(text).not.toMatch(/lock|earn|tier|level|Ʀ/i);
+                // "earn" as a word of its own (earn, earned, earning): "Learn", the place Local knowledge lives in
+                // (DESIGN-local-knowledge-amend-fable.md §2.1, Marty's pick 3 of 11 Nov 2026), holds the letters and says none of it.
+                expect(text).not.toMatch(/lock|\bearn|tier|level|Ʀ/i);
             }
         }
+        expect('You earn Beans').toMatch(/lock|\bearn|tier|level|Ʀ/i);
+        expect('Earned it').toMatch(/lock|\bearn|tier|level|Ʀ/i);
     });
 
     it('which node shows which type: no money, Decide or invites on the worldwide community', () => {
-        const local: HomeNodeFacts = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, wordsDoor: false } };
+        const local: HomeNodeFacts = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, wordsDoor: false, knowledge: true } };
         const global: HomeNodeFacts = { profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, wordsDoor: true } };
         const on = (a: HomeNodeFacts, role?: 'admin' | null) => HOME_CARD_TYPES.filter(t => t.onNode(a, role)).map(t => t.id);
         // A tool's card (tools/index.ts) is wherever its tool is, by its own manifest: the built-in types are pinned here.
@@ -298,7 +305,7 @@ describe('home frame §5.2 (4): the default and the words', () => {
         const safety = HOME_CARD_TYPES.find(t => t.id === 'safety')!;
         // As every invite-only local node answers: its 12-words door is shut (`wordsDoor: false`), and an invited member
         // gets no `cards.safety` (that body is the 12-words door's own).
-        const local: HomeNodeFacts = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, wordsDoor: false } };
+        const local: HomeNodeFacts = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, wordsDoor: false, knowledge: true } };
         expect(safety.onNode({ ...local, me: { wayBack: 'words' } })).toBe(true);
         // A sign-in's copy linked here is a second way back: the door's rule alone, so not on this node.
         expect(safety.onNode({ ...local, me: { wayBack: 'covered' } })).toBe(false);
@@ -331,7 +338,7 @@ describe('home frame §5.2 (4): the default and the words', () => {
         // Its place in the catalogue is just after the Market; a layout that names both asks for them in that order.
         const ids = HOME_CARD_TYPES.map(t => t.id);
         expect(ids.indexOf('asked')).toBe(ids.indexOf('market') + 1);
-        expect(cardsToAsk(layout([one('asked'), one('market')]))).toEqual(['needs', 'market', 'asked', 'community']);
+        expect(cardsToAsk(layout([one('asked'), one('market')], { 'new:learn': AT }))).toEqual(['needs', 'market', 'asked', 'community']);
         // In the default list it comes after the Market (DESIGN-home-default-fable.md §2.2: #8, after Your Beans).
         expect(HOME_STARTER_SET.indexOf('asked')).toBeGreaterThan(HOME_STARTER_SET.indexOf('market'));
         // The catalogue of version 1 never grows (its ids are what a version-1 app and the node's old layout read know).
@@ -487,12 +494,12 @@ describe('a chosen chat (C0, scratch/fable-design/DESIGN-home-chosen-chat-fable.
         const none = chatCard('chat-cccc', {});
         const junk = chatCard('chat-dddd', { conversationId: 'x'.repeat(65), kind: 'dm' });
         const withChats = layout([one('beans'), a, none, one('groups'), junk, b, one('market')]);
-        expect(cardsToAsk(withChats)).toEqual(['needs', 'market', 'groups', 'chat-aaaa', 'chat-bbbb', 'beans', 'community']);
+        expect(cardsToAsk(withChats)).toEqual(['needs', 'market', 'learn', 'groups', 'chat-aaaa', 'chat-bbbb', 'beans', 'community']);
         // The same set in another order is the same ask.
         expect(cardsToAsk(layout([b, one('market'), junk, a, one('groups'), none, one('beans')]))).toEqual(cardsToAsk(withChats));
         // A Home without a chat card asks no chat, and asks what it asked before the type existed.
         const without = layout([one('beans'), one('groups'), one('market')]);
-        expect(cardsToAsk(without)).toEqual(['needs', 'market', 'groups', 'beans', 'community']);
+        expect(cardsToAsk(without)).toEqual(['needs', 'market', 'learn', 'groups', 'beans', 'community']);
         expect(cardsToAsk(without).some(id => id.startsWith('chat'))).toBe(false);
         // Another instance type is untouched by the rule: a saved search with no words is asked as before.
         expect(cardsToAsk(layout([{ id: 'search-k7mq', type: 'search', settings: {} }]))).toContain('search-k7mq');

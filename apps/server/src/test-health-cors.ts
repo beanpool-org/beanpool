@@ -13,7 +13,8 @@
  *   2. Its preflight, if one is ever sent, allows GET and HEAD alone, `*`, no credentials and no request header.
  *   3. A write to it from another origin gets no allowance.
  *   4. Nothing else is opened: every route the node serves, preflighted from an unlisted origin with its own method, gets an
- *      allowance only where it had one before (the three signed knock routes) or is the health read; and real unsigned GETs of
+ *      allowance only where it is listed by route and method below: the three signed knock routes, the web push key and
+ *      subscription an applicant's web app reads and gives (global yes Y2), and the health read; and real unsigned GETs of
  *      the health read's neighbours (info, card, version, config, known rule, Home, the node's status) carry none.
  *   5. An origin the operator lists keeps its own rule on the health read: its origin back, with credentials.
  *
@@ -116,7 +117,16 @@ async function main(): Promise<void> {
     const materialise = (routePath: string): string => routePath
         .replace(/\(\.\*\)/g, 'sentinel')
         .replace(/:([A-Za-z_]+)(\([^)]*\))?\??/g, 'sentinel');
-    const KNOCK = new Set(['/api/join/knock', '/api/join/knock/status', '/api/join/knock/cancel']);
+    // Every opening, by route and method, and nothing more: a route opened by mistake (or a method added to an open one)
+    // is named here, not hidden in a count.
+    const OPEN: readonly string[] = [
+        `GET ${HEALTH}`,
+        // The three signed knock routes (front doors S2, Lounge L1).
+        'POST /api/join/knock', 'GET /api/join/knock/status', 'POST /api/join/knock/cancel',
+        // An applicant's web app is told of the answer (DESIGN-global-yes-join-fable.md §2.4, slice Y2): the community's web
+        // push key, read, and the browser's subscription, given and taken back, signed by the asking key.
+        'GET /api/web-push/key', 'POST /api/web-push', 'DELETE /api/web-push',
+    ];
     const opened: string[] = [];
     const unexpected: string[] = [];
     for (const route of served) {
@@ -127,12 +137,13 @@ async function main(): Promise<void> {
         const r = await preflight(path, method, WEB);
         if (header(r, 'access-control-allow-origin') === null) continue;
         opened.push(route);
-        if (!(KNOCK.has(path) || (path === HEALTH && method === 'GET'))) unexpected.push(`${route} (ACAO ${header(r, 'access-control-allow-origin')})`);
+        if (!OPEN.includes(`${method} ${path}`)) unexpected.push(`${route} (ACAO ${header(r, 'access-control-allow-origin')})`);
     }
     assert(served.length > 400, `the sweep reaches every route the node serves (${served.length})`);
     assert(opened.includes(`GET ${HEALTH}`), `the health read is the one new opening (${opened.join(', ')})`);
     assert(unexpected.length === 0, `no other route answers an unlisted origin's preflight with an allowance${unexpected.length ? `: ${unexpected.join(', ')}` : ''}`);
-    assert(opened.length === 4, `four openings in all: the three signed knock routes and the health read (${opened.length})`);
+    assert(JSON.stringify([...opened].sort()) === JSON.stringify([...OPEN].sort()),
+        `exactly the seven openings, by route and method: the health read, the three signed knock routes, the web push key and subscription (${opened.join(', ')})`);
 
     const neighbours = ['/api/community/info', '/api/community/card', '/api/community/known-rule', '/api/version', '/api/node/config', '/api/home', '/api/local/status', '/api/community/health/extra', '/api/community/healthz'];
     for (const p of neighbours) {

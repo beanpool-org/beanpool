@@ -176,7 +176,7 @@ async function main(): Promise<void> {
     const mergedUnlisted = copiedOnto(db);
     assert(mergedUnlisted.written === 3 && mergedUnlisted.invalid === 0, `the standby takes the three rows (${JSON.stringify(mergedUnlisted)})`);
     assert(switchOf(db, 'dir-leaving') === 1 && switchOf(db, 'dir-off') === 0,
-        `the copy stores each switch as the main server does (${switchOf(db, 'dir-leaving')}, ${switchOf(db, 'dir-off')})`);
+        `the copy stores the unlisted row's switch as 1 and the listed false as 0 (${switchOf(db, 'dir-leaving')}, ${switchOf(db, 'dir-off')})`);
     assert(directoryHash(db).rows === 3 && directoryHash(db).hash === mainDirectory.hash,
         `an unlisted row: the standby's hash is the main server's (${directoryHash(db).hash.slice(0, 12)} vs ${mainDirectory.hash.slice(0, 12)})`);
 

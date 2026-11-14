@@ -58,9 +58,20 @@ beforeEach(() => {
         if (path.startsWith('/api/knowledge/front?topic=')) return learnTopicOf(POSTS, q.get('topic')!, Number(q.get('offset') ?? 0));
         if (path.startsWith('/api/knowledge/front?q=')) return learnSearchOf(POSTS, q.get('q')!);
         if (path.startsWith('/api/marketplace/posts?')) return POSTS.filter((p) => p.id === q.get('id'));
+        // Writing (slice K4): a member's own suggestions, and what waits for an owner or admin.
+        if (path === '/api/knowledge/drafts/mine') return { waiting: [DRAFT_MINE], answered: [{ ...DRAFT_MINE, id: 'm2', state: 'declined', reason: 'copied', reasonWords: 'Write it again' }] };
+        if (path.startsWith('/api/knowledge/drafts?')) return { drafts: [DRAFT_ROW], total: 1, limit: 50, offset: 0 };
+        if (path === '/api/knowledge/drafts/d1') return { draft: DRAFT_WHOLE };
         throw new Error(`unexpected ${path}`);
     }) as never);
+    vi.spyOn(api, 'myNodeRoleOnce').mockImplementation(async () => role.current);
 });
+const role = { current: null as string | null };
+const DRAFT_MINE = { id: 'm1', kind: 'new', title: 'Bins day', topic: 'local-services', state: 'waiting', createdAt: '2026-11-03T00:00:00.000Z', answeredAt: null, postId: null, reason: null, reasonWords: null };
+const DRAFT_ROW = { id: 'd1', kind: 'new', title: 'Creek crossing', topic: 'emergencies', from: { pubkey: 'ada-pk', name: 'Ada' }, assistant: 'Helper', createdAt: '2026-11-14T00:00:00.000Z' };
+const DRAFT_WHOLE = { ...DRAFT_ROW, body: 'Use the high road', place: 'Low bridge', sources: [{ url: 'https://www.council.example/roads', label: 'Council roads' }], lang: 'en', about: 'place', note: null, photos: [], needsSourcesTicked: true };
+// Plus the link box's hint, how an address starts: the same in every language (LearnForm URL_HINT).
+const WRITTEN = ['Bins day', 'Write it again', 'Creek crossing', 'Ada', 'Helper', 'Use the high road', 'https://'];
 afterEach(() => { cleanup(); backToEnglish(); });
 
 describe('Learn in the pseudo-locale', () => {
@@ -110,6 +121,45 @@ describe('Learn in the pseudo-locale', () => {
         expect(bracketed()).toBeGreaterThan(0);
         expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
         expect(screen.getByTestId('market-learn-line').textContent).toContain(String(learnSearchOf(POSTS, 'tip').total));
+    });
+});
+
+describe('Learn\'s writing screens in the pseudo-locale (slice K4)', () => {
+    const others = [...OTHERS, ...WRITTEN];
+    beforeEach(() => { role.current = null; });
+
+    it('the front\'s button and line, the form and what was sent: every word came through t()', async () => {
+        await showIn('xx');
+        await open();
+        expect(screen.getByTestId('learn-suggest').textContent).toBe(xx('＋ Suggest knowledge'));
+        expect(bypassing(document.body, { others })).toEqual([]);
+        fireEvent.click(screen.getByTestId('learn-suggest'));
+        fireEvent.click(screen.getByTestId('learn-form-add-link'));
+        fireEvent.click(screen.getByTestId('learn-form-send'));
+        expect(screen.getByTestId('learn-form-refusal').textContent).toBe(xx('Give it a title.'));
+        expect(bypassing(document.body, { others })).toEqual([]);
+    });
+
+    it('My suggestions, waiting and answered', async () => {
+        await showIn('xx');
+        await open({ kind: 'mine' });
+        await wait(40);
+        expect(screen.getByTestId('learn-mine')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('learn-mine-take-back'));
+        expect(bypassing(document.body, { others })).toEqual([]);
+    });
+
+    it('To check, one opened with the assistant\'s tick, and "Not this one"', async () => {
+        role.current = 'owner';
+        await showIn('xx');
+        await open({ kind: 'check' });
+        await wait(40);
+        expect(bypassing(document.body, { others })).toEqual([]);
+        fireEvent.click(screen.getByTestId('learn-check-row'));
+        await wait(40);
+        expect(bypassing(document.body, { others })).toEqual([]);
+        fireEvent.click(screen.getByTestId('learn-check-not'));
+        expect(bypassing(document.body, { others })).toEqual([]);
     });
 });
 

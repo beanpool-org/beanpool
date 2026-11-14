@@ -84,7 +84,7 @@ const ranOut = () => Object.assign(new Error('This round ran out of time.'), { n
  * `p`'s answer, or the round's AbortError the moment `signal` aborts (at once when it has): a wait the deadline ends, whatever
  * `p` itself waits on. What `p` was doing carries on unheard; nothing here waits for it any more.
  */
-export function untilDeadline<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+function untilDeadline<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
     if (!signal) return p;
     if (signal.aborted) {
         p.catch(() => {});

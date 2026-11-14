@@ -20,8 +20,16 @@
  *      DELETE too.
  *   7. A standby: writes 409 `standby`, its GET answers the copy it keeps; the whole copy a standby pulls carries every
  *      row byte for byte, and a standby that imports it ends identical (a row it had of its own is gone).
- *   8. The schema step: a database without the table (a 1.4.0 one from before) boots with it, and nothing else changed:
+ *   8. The schema step: a database without the tables (a 1.4.0 one from before) boots with them, and nothing else changed:
  *      every other table, row and schema object byte for byte.
+ *   9. After a re-key (design §6.2, slice C6): the old key's copy is kept a year beside the new key in
+ *      contact_copies_former, still locked: it opens with the OLD key's words only, and no column or answer holds a
+ *      contact's name or number. GET /api/contacts/former answers it to the new key alone (everyone else the same 404, a
+ *      visitor 403, unsigned 401) and DELETE removes it with a tombstone. At most one: a second re-key keeps the newest
+ *      copy (the current one, or the former one moved with its year). Past its year it is no longer served and the sweep
+ *      deletes it with a tombstone; it goes with the member (removed, account deleted) and with the owners' switch. A
+ *      standby's DELETE 409, its GET answers; a standby following the re-key drops the old key's rows and writes none of
+ *      its own (the main server's come in the copy, byte for byte).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-contact-copies.ts
  */
@@ -47,7 +55,11 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setNodeRole } from './config/node-role.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { importPlainTables } from './engine/plain-tables.js';
-import { CONTACT_COPIES_PER_HOUR, contactCopiesBytes, resetContactCopySavesForTests, setContactCopiesBudgetForTests } from './engine/contact-copies.js';
+import {
+    CONTACT_COPIES_PER_HOUR, CONTACT_FORMER_KEEP_MS, contactCopiesBytes, forgetExpiredFormerCopies, resetContactCopySavesForTests, setContactCopiesBudgetForTests,
+} from './engine/contact-copies.js';
+import { moveMemberKeyRows } from './engine/key-move.js';
+import { openContactsCopy, readContactsList } from '@beanpool/core';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
@@ -103,6 +115,8 @@ const wire = (c: ContactsCopy) => ({ header: c.header, signature: c.signature, n
 const getCopy = (id: Id | null, q = '') => call(id, 'GET', `/api/contacts/copy${q}`);
 const putCopy = (id: Id | null, c: ContactsCopy | Record<string, unknown>) => call(id, 'PUT', '/api/contacts/copy', 'owner' in c ? wire(c as ContactsCopy) : c);
 const delCopy = (id: Id | null) => call(id, 'DELETE', '/api/contacts/copy');
+const getFormer = (id: Id | null, q = '') => call(id, 'GET', `/api/contacts/former${q}`);
+const delFormer = (id: Id | null) => call(id, 'DELETE', '/api/contacts/former');
 const unread = (id: Id) => call(id, 'GET', '/api/me/unread');
 
 /** A device's list, `n` contacts long, locked as copy `seq`. */
@@ -132,6 +146,13 @@ const tombSince = (pk: string, since: string) => {
     return !!t && t.deleted_at >= since;
 };
 const allRows = () => JSON.stringify(db.prepare('SELECT * FROM contact_copies ORDER BY owner_pubkey').all());
+const formerOf = (pk: string) => db.prepare('SELECT * FROM contact_copies_former WHERE owner_pubkey = ?').get(pk) as Record<string, any> | undefined;
+const formerTombSince = (pk: string, since: string) => {
+    const t = db.prepare("SELECT deleted_at FROM tombstones WHERE table_name = 'contact_copies_former' AND row_key = ?").get(pk) as { deleted_at: string } | undefined;
+    return !!t && t.deleted_at >= since;
+};
+const allFormerRows = () => JSON.stringify(db.prepare('SELECT * FROM contact_copies_former ORDER BY owner_pubkey').all());
+const rekey = (from: Id, to: Id, owner: Id) => completeRekey(from.pk, to.pk, issueRekeyCode(from.pk, owner.pk).code, owner.pk);
 
 async function main(): Promise<void> {
     await ensureGenesis();
@@ -278,22 +299,186 @@ async function main(): Promise<void> {
     const eveNew = newId('Eve2');
     completeRekey(eve.pk, eveNew.pk, issueRekeyCode(eve.pk, owen.pk).code, owen.pk);
     assert(!rowOf(eve.pk) && !rowOf(eveNew.pk) && tombSince(eve.pk, since), '6. re-keyed: Eve\'s old copy is gone (her new key can\'t open it), nothing moved, a tombstone');
+    assert(formerOf(eveNew.pk)?.former_pubkey === eve.pk, '6. re-keyed: it is kept as her former copy instead (section 9)');
     const own = await delCopy(ana);
     assert(own.status === 200 && own.body?.deleted === true && !rowOf(ana.pk) && tombSince(ana.pk, since), `6. Ana's own DELETE: gone, with a tombstone (${show(own)})`);
     const delta = await exportSyncState('test-contact-copies', since) as any;
     const shippedTombs = ((delta.tombstones ?? []) as { tableName: string; rowKey: string }[]).filter((t) => t.tableName === 'contact_copies').map((t) => t.rowKey);
     assert([ben.pk, cy.pk, eve.pk, ana.pk].every((k) => shippedTombs.includes(k)), `6. the delta a standby pulls carries each deleted row's tombstone (${shippedTombs.length})`);
 
+    // ── 9. After a re-key: the former copy, a year ─────────────────────────────────────────────────────────────
+    {
+        const [ivy, jo, kim] = ['Ivy', 'Jo', 'Kim'].map(newId);
+        for (const who of [ivy, jo, kim]) {
+            const made = await generate(owen);
+            require_(made.status === 200 && (await redeem(who, made.body?.invite?.code)).status === 200, `9. ${who.name} joins with Owen's invite`);
+        }
+        resetContactCopySavesForTests();
+        const i3 = copyOf(ivy, 3, 5);
+        require_((await putCopy(ivy, i3)).status === 200, '9. Ivy saves her list, copy 3');
+        const none9 = await getFormer(ivy);
+        assert(none9.status === 404 && none9.body?.code === 'no_former', `9. before any re-key: 404 no_former (${show(none9)})`);
+        const since9 = new Date(Date.now() - 1).toISOString();
+        const ivy2 = newId('Ivy2');
+        const before9 = Date.now();
+        rekey(ivy, ivy2, owen);
+        const f = formerOf(ivy2.pk);
+        assert(!rowOf(ivy.pk) && !rowOf(ivy2.pk) && tombSince(ivy.pk, since9), '9. re-keyed: no current copy under either key, the old one\'s with a tombstone');
+        assert(!!f && f.former_pubkey === ivy.pk && f.header === i3.header && f.signature === i3.signature && f.nonce === i3.nonce && f.sealed === i3.sealed && f.seq === 3,
+            `9. the old copy is kept beside the new key, byte for byte (${JSON.stringify(f && { former: String(f.former_pubkey).slice(0, 8), seq: f.seq })})`);
+        const keptFor = f ? Date.parse(f.kept_until) - before9 : NaN;
+        assert(keptFor >= CONTACT_FORMER_KEEP_MS - 5_000 && keptFor <= CONTACT_FORMER_KEEP_MS + 60_000, `9. kept a year from the re-key (${f?.kept_until})`);
+        assert(!formerOf(ivy.pk), '9. nothing kept under the old key');
+        // Still locked: no column holds a contact's name or number, and it opens with the old key's words alone.
+        const rowText = JSON.stringify(f);
+        assert(!rowText.includes("Ivy's contact") && !rowText.includes('0400 000'), '9. no column of the kept row holds a contact\'s name or number');
+        const got9 = await getFormer(ivy2);
+        assert(got9.status === 200 && got9.body?.header === i3.header && got9.body?.signature === i3.signature && got9.body?.nonce === i3.nonce && got9.body?.sealed === i3.sealed
+            && got9.body?.formerKey === ivy.pk && got9.body?.keptUntil === f?.kept_until, `9. GET /api/contacts/former as the new key: the old copy, the key it is locked with, and its last day (${show(got9)})`);
+        assert(!got9.text.includes("Ivy's contact") && !got9.text.includes('0400 000'), '9. the answer holds no contact\'s name or number');
+        const oldOpens = openContactsCopy(got9.body, { publicKey: ivy.pk, privateKey: ivy.seedHex });
+        const oldList = oldOpens.ok ? readContactsList(oldOpens.json) : null;
+        assert(!!oldList?.ok && oldList.list.contacts.length === 5 && oldList.list.contacts[0].name === "Ivy's contact 0", '9. the old key opens it: her 5 contacts');
+        const newOpens = openContactsCopy(got9.body, { publicKey: ivy2.pk, privateKey: ivy2.seedHex });
+        const newOpensAsOld = openContactsCopy(got9.body, { publicKey: ivy.pk, privateKey: ivy2.seedHex });
+        assert(!newOpens.ok && !newOpensAsOld.ok, `9. the new key opens nothing (${!newOpens.ok && newOpens.reason}, ${!newOpensAsOld.ok && newOpensAsOld.reason})`);
+        // Nobody else reads it: the same 404 for every other member, an admin, the owner, with or without a key named.
+        const others9 = [await getFormer(dot), await getFormer(ada), await getFormer(owen), await getFormer(owen, `?owner=${ivy2.pk}`), await getFormer(dot, `?owner=${ivy.pk}`)];
+        assert(others9.every((r) => r.status === 404 && r.text === none9.text), `9. another member, an admin and the owner get the same 404 (${others9.map(show).join(' | ')})`);
+        const oldKey9 = await getFormer(ivy);
+        assert(oldKey9.status === 401 || oldKey9.status === 403, `9. the old key itself is refused: it is no member now (${show(oldKey9)})`);
+        const vis9 = [await getFormer(vic), await delFormer(vic)];
+        assert(vis9.every((r) => r.status === 403 && r.body?.code === 'not_a_member'), `9. a visitor: 403 not_a_member (${vis9.map(show).join(' | ')})`);
+        const uns9 = [await getFormer(null), await delFormer(null)];
+        assert(uns9.every((r) => r.status === 401), `9. unsigned: 401 (${uns9.map((r) => r.status).join(' ')})`);
+        const dotDeletes = await delFormer(dot);
+        assert(dotDeletes.status === 200 && dotDeletes.body?.deleted === false && !!formerOf(ivy2.pk), `9. another member's DELETE removes only their own (none) (${show(dotDeletes)})`);
+        // The former copy is not the current one: the new key starts a list of its own beside it.
+        const cur9 = await getCopy(ivy2);
+        assert(cur9.status === 404 && cur9.body?.code === 'no_copy', `9. GET /api/contacts/copy as the new key: 404 no_copy, the former isn't served as current (${show(cur9)})`);
+        const u9 = await unread(ivy2);
+        assert(u9.status === 200 && u9.body?.contacts === null, '9. unread says contacts null for the new key');
+        const n1 = copyOf(ivy2, 1, 1);
+        assert((await putCopy(ivy2, n1)).status === 200 && formerOf(ivy2.pk)?.header === i3.header, '9. the new key saves its own copy 1, and the former stays');
+
+        // At most one: re-keyed again with a current copy, that copy is the former one now, with a new year.
+        const ivy3 = newId('Ivy3');
+        rekey(ivy2, ivy3, owen);
+        const f3 = formerOf(ivy3.pk);
+        const all3 = db.prepare('SELECT owner_pubkey FROM contact_copies_former WHERE owner_pubkey IN (?, ?, ?)').all(ivy.pk, ivy2.pk, ivy3.pk) as unknown[];
+        assert(!!f3 && f3.former_pubkey === ivy2.pk && f3.header === n1.header && all3.length === 1 && formerTombSince(ivy2.pk, since9) && !rowOf(ivy2.pk),
+            `9. a second re-key: the newest copy (Ivy2's own) is the former one, one row, the last one's with a tombstone (${all3.length} rows)`);
+        // Re-keyed again with no current copy: the former one moves, its year as it was.
+        resetContactCopySavesForTests();
+        require_((await putCopy(jo, copyOf(jo, 2))).status === 200, '9. Jo saves a list');
+        const jo2 = newId('Jo2');
+        const jo3 = newId('Jo3');
+        rekey(jo, jo2, owen);
+        const fj2 = formerOf(jo2.pk);
+        rekey(jo2, jo3, owen);
+        const fj3 = formerOf(jo3.pk);
+        assert(!!fj2 && !!fj3 && fj3.former_pubkey === jo.pk && fj3.header === fj2.header && fj3.kept_until === fj2.kept_until && !formerOf(jo2.pk) && formerTombSince(jo2.pk, since9),
+            '9. re-keyed again with no copy of its own: the former copy moves to the newest key, locked with the first key, its year unchanged');
+
+        // DELETE: the member's own choice, with a tombstone.
+        const sinceDel = new Date(Date.now() - 1).toISOString();
+        const del9 = await delFormer(ivy3);
+        assert(del9.status === 200 && del9.body?.deleted === true && !formerOf(ivy3.pk) && formerTombSince(ivy3.pk, sinceDel), `9. DELETE: gone, with a tombstone (${show(del9)})`);
+        const delAgain = await delFormer(ivy3);
+        assert(delAgain.status === 200 && delAgain.body?.deleted === false, `9. DELETE again: nothing to remove (${show(delAgain)})`);
+        assert((await getFormer(ivy3)).body?.code === 'no_former', '9. after DELETE: 404 no_former');
+
+        // Past its year: no longer served, and the sweep deletes it with a tombstone; one within its year stays.
+        const kim2 = newId('Kim2');
+        require_((await putCopy(kim, copyOf(kim, 1))).status === 200, '9. Kim saves a list');
+        rekey(kim, kim2, owen);
+        require_(!!formerOf(kim2.pk), '9. Kim is re-keyed: her former copy is kept');
+        db.prepare('UPDATE contact_copies_former SET kept_until = ? WHERE owner_pubkey = ?').run(new Date(Date.now() - 1000).toISOString(), jo3.pk);
+        const expired = await getFormer(jo3);
+        assert(expired.status === 404 && expired.body?.code === 'no_former', `9. past its year: 404 no_former before any sweep (${show(expired)})`);
+        const sinceSweep = new Date(Date.now() - 1).toISOString();
+        const swept = forgetExpiredFormerCopies();
+        assert(swept === 1 && !formerOf(jo3.pk) && formerTombSince(jo3.pk, sinceSweep) && !!formerOf(kim2.pk), `9. the sweep deletes the one past its year with a tombstone, and keeps the other (${swept})`);
+        assert(contactCopiesBytes() === (db.prepare('SELECT COALESCE(SUM(padded_size), 0) AS n FROM contact_copies').get() as { n: number }).n
+            + (db.prepare('SELECT COALESCE(SUM(padded_size), 0) AS n FROM contact_copies_former').get() as { n: number }).n, '9. the node\'s budget counts the former copies too');
+
+        // A standby: its DELETE is refused, its GET answers; the whole copy carries the rows byte for byte.
+        const formerBefore = allFormerRows();
+        const sync9 = await exportSyncState('test-contact-copies');
+        const shipped9 = (sync9 as any).plainTables?.contact_copies_former as Record<string, unknown>[] | undefined;
+        assert(Array.isArray(shipped9) && JSON.stringify([...shipped9].sort((x, y) => String(x.owner_pubkey).localeCompare(String(y.owner_pubkey)))) === formerBefore,
+            `9. the whole copy a standby pulls carries every former row, byte for byte (${shipped9?.length} rows)`);
+        setNodeRole('backup');
+        const sbDel = await delFormer(kim2);
+        const sbGet = await getFormer(kim2);
+        const sbSwept = forgetExpiredFormerCopies(Date.now() + 2 * CONTACT_FORMER_KEEP_MS);
+        setNodeRole('primary');
+        assert(sbDel.status === 409 && sbDel.body?.code === 'standby' && !!formerOf(kim2.pk), `9. a standby's DELETE: 409 standby (${show(sbDel)})`);
+        assert(sbGet.status === 200 && sbGet.body?.header === formerOf(kim2.pk)?.header, `9. a standby answers a GET from the copy it keeps (${show(sbGet)})`);
+        assert(sbSwept === 0 && !!formerOf(kim2.pk), '9. a standby sweeps nothing: the main server\'s tombstones come in its copy');
+        // A standby following its main server's re-key drops the old key's rows, writes no tombstone and no row of its own.
+        const [lo, lo2] = [newId('Lo'), newId('Lo2')];
+        const tombsBefore = (db.prepare("SELECT COUNT(*) AS c FROM tombstones WHERE table_name IN ('contact_copies', 'contact_copies_former')").get() as { c: number }).c;
+        db.prepare(`INSERT INTO contact_copies (owner_pubkey, seq, padded_size, saved_at, nonce, sealed, digest, header, signature) VALUES (?, 1, 16384, 'x', 'x', 'x', 'x', 'x', 'x')`).run(lo.pk);
+        db.prepare(`INSERT INTO contact_copies_former (owner_pubkey, former_pubkey, seq, padded_size, saved_at, nonce, sealed, digest, header, signature, kept_until)
+                    VALUES (?, ?, 1, 16384, 'x', 'x', 'x', 'x', 'x', 'x', ?)`).run(lo.pk, 'e'.repeat(64), new Date(Date.now() + 1e9).toISOString());
+        moveMemberKeyRows(lo.pk, lo2.pk, new Date().toISOString(), { keepStamps: true });
+        const tombsAfter = (db.prepare("SELECT COUNT(*) AS c FROM tombstones WHERE table_name IN ('contact_copies', 'contact_copies_former')").get() as { c: number }).c;
+        assert(!rowOf(lo.pk) && !formerOf(lo.pk) && !formerOf(lo2.pk) && !rowOf(lo2.pk) && tombsAfter === tombsBefore,
+            '9. a standby following a re-key drops the old key\'s current and former rows, with no tombstone and no row of its own');
+
+        // It goes with the member: an account deleted, a member removed.
+        const sinceGo = new Date(Date.now() - 1).toISOString();
+        const purged9 = await call(kim2, 'POST', '/api/member/purge', { action: 'purge_account' });
+        require_(purged9.status === 200, `9. Kim deletes her account (${show(purged9)})`);
+        assert(!formerOf(kim2.pk) && formerTombSince(kim2.pk, sinceGo), '9. account deleted: her former copy is gone, with a tombstone');
+        const [mo, mo2] = [newId('Mo'), newId('Mo2')];
+        {
+            const made = await generate(owen);
+            require_(made.status === 200 && (await redeem(mo, made.body?.invite?.code)).status === 200, '9. Mo joins');
+        }
+        require_((await putCopy(mo, copyOf(mo, 1))).status === 200, '9. Mo saves a list');
+        rekey(mo, mo2, owen);
+        setSwitchOverride('decisions', false);
+        const pruned9 = await call(null, 'POST', `/api/local/admin/users/${mo2.pk}/prune`, {}, OWNER());
+        setSwitchOverride('decisions', true);
+        require_(pruned9.status === 200, `9. Mo is removed (${show(pruned9)})`);
+        assert(!formerOf(mo2.pk) && formerTombSince(mo2.pk, sinceGo), '9. removed: his former copy is gone, with a tombstone');
+
+        // The owners' switch: off deletes the former copies too, and the route says so.
+        const [ned, ned2] = [newId('Ned'), newId('Ned2')];
+        {
+            const made = await generate(owen);
+            require_(made.status === 200 && (await redeem(ned, made.body?.invite?.code)).status === 200, '9. Ned joins');
+        }
+        resetContactCopySavesForTests();
+        require_((await putCopy(ned, copyOf(ned, 1))).status === 200, '9. Ned saves a list');
+        rekey(ned, ned2, owen);
+        require_(!!formerOf(ned2.pk), '9. Ned is re-keyed: his former copy is kept');
+        require_((await call(null, 'POST', '/api/local/admin/community-shape', { changes: { contacts: false } }, OWNER())).status === 200, '9. an owner switches copies off');
+        const offFormer = await getFormer(ned2);
+        const offDel = await delFormer(ned2);
+        assert(offFormer.status === 404 && offFormer.body?.code === 'contacts_off' && offDel.status === 200 && !formerOf(ned2.pk) && formerTombSince(ned2.pk, sinceGo),
+            `9. off: every former copy is deleted with a tombstone, GET 404 contacts_off, DELETE still answers (${show(offFormer)} | ${show(offDel)})`);
+        require_((await call(null, 'POST', '/api/local/admin/community-shape', { changes: { contacts: true } }, OWNER())).status === 200, '9. and back on');
+    }
+
     // ── 8. The schema step ──────────────────────────────────────────────────────────────────────────────────────
-    const objects = () => JSON.stringify(db.prepare(`SELECT type, name, tbl_name, sql FROM sqlite_master WHERE tbl_name <> 'contact_copies' AND name NOT LIKE 'sqlite_%' ORDER BY type, name`).all());
-    const tables = () => (db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name <> 'contact_copies' AND name NOT LIKE 'sqlite_%' ORDER BY name`).all() as { name: string }[]).map((t) => t.name);
+    const OURS = `('contact_copies', 'contact_copies_former')`;
+    const objects = () => JSON.stringify(db.prepare(`SELECT type, name, tbl_name, sql FROM sqlite_master WHERE tbl_name NOT IN ${OURS} AND name NOT LIKE 'sqlite_%' ORDER BY type, name`).all());
+    const tables = () => (db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT IN ${OURS} AND name NOT LIKE 'sqlite_%' ORDER BY name`).all() as { name: string }[]).map((t) => t.name);
     const contents = () => JSON.stringify(tables().map((t) => [t, db.prepare(`SELECT * FROM "${t}"`).raw().all()]), (_k, v) => (typeof v === 'bigint' ? String(v) : Buffer.isBuffer(v) ? v.toString('hex') : v));
     db.exec('DROP TABLE contact_copies');
+    db.exec('DROP TABLE contact_copies_former');
     const [objectsBefore, contentsBefore] = [objects(), contents()];
     initSchema();
     const made = db.prepare(`SELECT name FROM sqlite_master WHERE tbl_name = 'contact_copies' ORDER BY name`).all() as { name: string }[];
     assert(made.some((m) => m.name === 'contact_copies') && made.some((m) => m.name === 'idx_contact_copies_updated_at'), `8. a database without it boots with the table and its watermark (${made.map((m) => m.name).join(', ')})`);
-    assert((db.prepare('SELECT COUNT(*) AS c FROM contact_copies').get() as { c: number }).c === 0, '8. born empty');
+    const madeFormer = db.prepare(`SELECT name FROM sqlite_master WHERE tbl_name = 'contact_copies_former' ORDER BY name`).all() as { name: string }[];
+    assert(madeFormer.some((m) => m.name === 'contact_copies_former') && madeFormer.some((m) => m.name === 'idx_contact_copies_former_updated_at'),
+        `8. and with the former copies' table and its watermark (${madeFormer.map((m) => m.name).join(', ')})`);
+    assert((db.prepare('SELECT COUNT(*) AS c FROM contact_copies').get() as { c: number }).c === 0
+        && (db.prepare('SELECT COUNT(*) AS c FROM contact_copies_former').get() as { c: number }).c === 0, '8. born empty');
     assert(objects() === objectsBefore, '8. every other schema object is as it was');
     assert(contents() === contentsBefore, '8. every other table\'s rows are as they were, byte for byte');
 

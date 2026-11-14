@@ -269,7 +269,15 @@ export interface TableHashes {
  * the tables its own database has. What an older importer drops is who follows a topic: after a take-over from such a copy
  * nobody is told of replies until they reply or follow again, and every topic reads as read; no Bean is in it.
  */
-export const TABLE_HASHES_VERSION = 43;
+/**
+ * 44: a re-keyed member's old locked contacts list (engine/contact-copies.ts, DESIGN-private-contacts-fable.md §6.2, slice
+ * C6): a new plain table, contact_copies_former. Raised for the same reason as 8: a standby updated before its main server
+ * hashes one more table. REPLICA_FORMAT stays: each side's import writes only the tables its own database has. What an older
+ * importer drops is a locked copy no server can open: after a take-over from such a copy a re-keyed member's old list,
+ * locked with a key they lost, isn't offered for their old words there; their other communities and any file they saved
+ * still have it, and no Bean is in it.
+ */
+export const TABLE_HASHES_VERSION = 44;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

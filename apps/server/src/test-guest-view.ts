@@ -1484,6 +1484,8 @@ async function main(): Promise<void> {
             'POST /api/messages/send',
             // A member's locked contacts list (routes/contacts.ts): the signer's own copy only.
             'GET /api/contacts/copy', 'PUT /api/contacts/copy', 'DELETE /api/contacts/copy',
+            // A re-keyed member's old contacts list (routes/contacts.ts, contacts C6): the signer's own only.
+            'GET /api/contacts/former', 'DELETE /api/contacts/former',
             'GET /api/names/copy', 'PUT /api/names/copy', 'POST /api/names/confirmations', 'POST /api/names/confirmations/:id/revoke', 'POST /api/names/confirmations/:id/second',
             'GET /api/names/entries', 'POST /api/names/entries', 'DELETE /api/names/entries/:id', 'PUT /api/names/entries/:id',
             'POST /api/names/entries/:id/invite', 'DELETE /api/names/entries/:id/invite', 'GET /api/names/invites',

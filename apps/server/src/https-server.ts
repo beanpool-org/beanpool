@@ -176,6 +176,7 @@ import { startTidyingInviteAsks } from './engine/invite-asks.js';
 import { startTidyingKnowledgeDrafts } from './engine/knowledge-drafts.js';
 import { startTidyingForumEdits } from './engine/forum.js';
 import { startTidyingFirstLooks } from './engine/forum-first-look.js';
+import { startForgettingFormerCopies } from './engine/contact-copies.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { startForgettingOldAddresses } from './services/address-retention.js';
 import { createChannelRoutes } from './routes/channels.js';
@@ -1626,6 +1627,8 @@ export async function startHttpsServer(port: number): Promise<number> {
     startTidyingForumEdits();
     // First topics nobody looked at in 30 days go back to their writers; answered ones go 30 days after (engine/forum-first-look.ts).
     startTidyingFirstLooks(moderationNoticesCb());
+    // A re-keyed member's old locked contacts list, a year after the re-key, on the main server (engine/contact-copies.ts).
+    startForgettingFormerCopies();
 
     // The split-brain guard (services/identity-epoch.ts): once this server has seen that another took over its
     // identity, members' writes are refused here, before a body is read. The admin control plane stays open.

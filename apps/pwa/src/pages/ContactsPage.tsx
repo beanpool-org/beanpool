@@ -6,8 +6,10 @@
  * Remove everyone, How this is kept.
  *
  * Nothing is read into the list, and nothing leaves this browser, before Import (§3.4); a file is read here, never
- * uploaded. The list is kept and saved by lib/contacts-store.ts. "Add people I've chatted with and my friends" is C6; the
- * guide page behind "More in the guide" is C7.
+ * uploaded. The list is kept and saved by lib/contacts-store.ts. The guide page behind "More in the guide" is C7.
+ *
+ * After a re-key (slice C6): while this community keeps the list the member's old key locked, the list says so and points to
+ * the phone app, where the old 12 words open it (design §10's parity table: the web says so, points to the phone).
  *
  * Invite from a row (slice C5): Invite / Invite again opens components/ContactInviteSheet.tsx; the row then reads "invited
  * 12 Nov"; once this community says the code was used, the row asks "Is this Dee?" (Yes links, No forgets the invite); Remove
@@ -24,7 +26,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { getMyInvites, nodeAddress, revokeInvite } from '../lib/api';
 import { isUserBlocked, unblockUser } from '../lib/blocklist';
 import { isPhoneBrowser } from '../lib/global-entry';
-import { changeContacts, contactsHost as hostOf, ContactsNewerError, openContacts, saveContactsFile as saveFile, useContacts, type ContactsWhere } from '../lib/contacts-store';
+import { changeContacts, contactsHost as hostOf, ContactsNewerError, hasFormerContacts, openContacts, saveContactsFile as saveFile, useContacts, type ContactsWhere } from '../lib/contacts-store';
 import { ContactsInfo } from '../components/ContactsInfo';
 import { BoldWords } from '../components/BoldWords';
 import { UsePhoneAppCard, isUsePhoneAppDismissed } from '../components/UsePhoneAppCard';
@@ -83,6 +85,13 @@ export function ContactsPage({ identity, start = 'list', onBack, onMessage }: {
     const [inviting, setInviting] = useState<Contact | null>(null);
     const [mine, setMine] = useState<MyInviteSeen[]>([]);
     useEffect(() => { void openContacts(identity, true); }, [identity]);
+    // After a re-key (C6): this community keeps the list the old key locked. Asked once as the page opens.
+    const [former, setFormer] = useState(false);
+    useEffect(() => {
+        let alive = true;
+        void hasFormerContacts(identity).then((yes) => { if (alive) setFormer(yes); });
+        return () => { alive = false; };
+    }, [identity]);
 
     const list = snap.key === identity.publicKey.toLowerCase() ? snap.list : null;
     const here = nodeAddress();
@@ -174,7 +183,7 @@ export function ContactsPage({ identity, start = 'list', onBack, onMessage }: {
                 if (await change((l) => removeContact(l, c.id))) back();
             }} />);
     }
-    return shell(<ListView list={list} where={snap.where} keptAt={snap.keptAt} header={header} onBack={onBack} busy={busy} alert={alert}
+    return shell(<ListView list={list} where={snap.where} keptAt={snap.keptAt} header={header} onBack={onBack} busy={busy} alert={alert} former={former}
         onOpen={(id) => back({ kind: 'contact', id })} onAdd={() => back({ kind: 'add' })} onImport={() => back({ kind: 'import' })} onInfo={() => setInfo(true)}
         onMessage={onMessage} onRemoveAll={() => change((l) => removeEveryContact(l))}
         onInvite={setInviting} ask={(c) => contactInviteAsk(c, mine, isHere)} onAnswer={(c, used, yes) => void answer(c, used, yes)} />);
@@ -182,8 +191,10 @@ export function ContactsPage({ identity, start = 'list', onBack, onMessage }: {
 
 type Header = (title: string, onTap: () => void) => ReactNode;
 
-function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport, onInfo, onMessage, onRemoveAll, busy, alert, onInvite, ask, onAnswer }: {
+function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport, onInfo, onMessage, onRemoveAll, busy, alert, former, onInvite, ask, onAnswer }: {
     list: ContactsList; where: ContactsWhere; keptAt: string | null; header: Header; onBack: () => void; busy: boolean; alert: ReactNode;
+    /** This community keeps the list the member's old key locked (C6): said, with the way to it, the phone app. */
+    former: boolean;
     onOpen: (id: string) => void; onAdd: () => void; onImport: () => void; onInfo: () => void; onMessage: (pubkey: string) => void; onRemoveAll: () => Promise<boolean>;
     onInvite: (c: Contact) => void; ask: (c: Contact) => ContactInviteUsed | null; onAnswer: (c: Contact, used: ContactInviteUsed, yes: boolean) => void;
 }) {
@@ -242,6 +253,11 @@ function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport
     return (
         <>
             {header(t('Contacts'), onBack)}
+            {former && (
+                <p data-testid="contacts-former" style={{ ...card, lineHeight: 1.45 }}>
+                    {t('Your contacts are locked with your old key. If you ever find your old 12 words, you can open them in the BeanPool phone app.')}
+                </p>
+            )}
             <p style={muted}>{t("Private to you. Locked with your account's key.")}</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
                 <button type="button" style={btn} onClick={onAdd}>{t('＋ Add')}</button>

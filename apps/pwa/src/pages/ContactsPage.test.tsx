@@ -24,9 +24,12 @@ const sam = 'ab'.repeat(32);
 
 let seen: string[] = [];
 let kept: ContactsCopyWire | null = null;
+// After a re-key (C6): the old copy this community keeps for the member's key now, or none.
+let former: Record<string, unknown> | null = null;
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 function community(url: string, init: RequestInit = {}): Response {
     seen.push(`${init.method ?? 'GET'} ${url} ${JSON.stringify(init.headers ?? {})} ${typeof init.body === 'string' ? init.body : ''}`);
+    if (url.endsWith('/api/contacts/former')) return former ? json(200, former) : json(404, { code: 'no_former' });
     if (!url.endsWith('/api/contacts/copy')) return json(404, { error: 'no route' });
     if ((init.method ?? 'GET') === 'GET') return kept ? json(200, kept) : json(404, { code: 'no_copy' });
     const body = JSON.parse(String(init.body)) as ContactsCopyWire;
@@ -51,6 +54,7 @@ async function pick(file: File) {
 beforeEach(async () => {
     seen = [];
     kept = null;
+    former = null;
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => community(url, init)));
     resetContactsStoreForTest();
@@ -226,6 +230,20 @@ describe('Contacts on the web', () => {
         fireEvent.click(within(note).getByRole('button', { name: 'Save now' }));
         await waitFor(() => expect(screen.queryByTestId('contacts-sign-out')).toBeNull());
         expect(kept).not.toBeNull();
+    });
+
+    it('after a re-key (C6): while this community keeps the old locked list, the list says so and points to the phone app; not otherwise', async () => {
+        const first = render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
+        await waitFor(() => expect(seen.some((s) => s.startsWith('GET ') && s.includes('/api/contacts/former'))).toBe(true));
+        expect(screen.queryByTestId('contacts-former')).toBeNull();
+        first.unmount();
+        former = { header: 'h', signature: 's', nonce: 'n', sealed: 'x', formerKey: 'cd'.repeat(32), keptUntil: '2027-11-15T00:00:00.000Z' };
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
+        expect(await screen.findByTestId('contacts-former')).toHaveTextContent(
+            'Your contacts are locked with your old key. If you ever find your old 12 words, you can open them in the BeanPool phone app.');
+        // One signed GET, with no body: nothing about the list is sent.
+        expect(seen.filter((s) => s.includes('/api/contacts/former')).every((s) => s.startsWith('GET ') && s.endsWith(' '))).toBe(true);
+        // Mutation: drop the `former &&` guard → the sentence shows to every member.
     });
 
     it('the ⓘ says the true sentence about encryption and never "all messages" or "by default"', () => {

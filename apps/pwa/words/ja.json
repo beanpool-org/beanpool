@@ -1411,7 +1411,6 @@
   "On the map": "地図上で確認",
   "On the map at {lat}, {lng}": "地図上の位置：{lat}, {lng}",
   "On your Home": "ホームに配置",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "ノードが動き出したら、設定画面でコミュニティの名前を決め、最初のメンバーを招待します。あとはその人たちが輪を広げていきます。「場所を公開」をオンにしておくと、通知を希望している近くの人たちに届きます。",
   "One device at a time: the copy you changed last is the one kept.": "端末は一度に1台のみ：最後に変更したコピーが保持されます。",
   "One moment…": "少々お待ちください…",
   "One more comes back {when}.": "{when}にさらに1件可能になります。",
@@ -4512,5 +4511,8 @@
   "When someone asks to join your community": "だれかがコミュニティへの参加を申請したとき",
   "Control which push notifications wake up your device. Changes are saved automatically.": "どのプッシュ通知で端末を起動するかを管理します。変更は自動的に保存されます。",
   "Turn on notifications?": "通知をオンにしますか？",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "誰かが返信したとき、メッセージを送ったとき、または参加をリクエストしたときに通知が届きます。それ以外には届きません。"
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "誰かが返信したとき、メッセージを送ったとき、または参加をリクエストしたときに通知が届きます。それ以外には届きません。",
+  "{name} has no owner yet": "{name}にはまだオーナーがいません",
+  "If you installed it, claim it with the one-time code on the server.": "インストールされたご本人の場合は、サーバー上のワンタイムコードを使って所有権を申請してください。",
+  "Claim {name}": "{name}の所有権を取得"
 }

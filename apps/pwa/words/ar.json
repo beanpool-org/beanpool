@@ -1506,7 +1506,6 @@
   "On the map": "على الخريطة",
   "On the map at {lat}, {lng}": "على الخريطة عند {lat}، {lng}",
   "On your Home": "في الرئيسية",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "بمجرد تشغيل خادمك، يمكنك تسمية مجتمعك في تطبيق إعداداته، ودعوة الأعضاء الأوائل، وهم يدعون الباقين. فعّل 'نشر الموقع' هناك، وسيعرف الأشخاص القريبون منك الذين طلبوا إشعارهم بذلك.",
   "One device at a time: the copy you changed last is the one kept.": "جهاز واحد في كل مرة: النسخة التي قمت بتغييرها أخيرًا هي التي يتم الاحتفاظ بها.",
   "One moment…": "لحظة…",
   "One more comes back {when}.": "يعود خيار إضافي {when}.",
@@ -5370,5 +5369,8 @@
   "When someone asks to join your community": "عندما يطلب أحدهم الانضمام إلى مجتمعك",
   "Control which push notifications wake up your device. Changes are saved automatically.": "تحكّم في الإشعارات الفورية التي تنبه جهازك. يتم حفظ التغييرات تلقائيًا.",
   "Turn on notifications?": "هل تريد تشغيل الإشعارات؟",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "لتصلك إشعارات عندما يرد عليك شخص ما، أو يراسلك، أو يطلب الانضمام. لا شيء آخر."
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "لتصلك إشعارات عندما يرد عليك شخص ما، أو يراسلك، أو يطلب الانضمام. لا شيء آخر.",
+  "{name} has no owner yet": "{name} ليس له مالك بعد",
+  "If you installed it, claim it with the one-time code on the server.": "إذا قمت بتثبيته، فقم بالمطالبة به باستخدام الرمز الذي يُستخدم لمرة واحدة على الخادم.",
+  "Claim {name}": "المطالبة بـ {name}"
 }

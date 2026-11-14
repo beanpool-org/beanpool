@@ -1430,7 +1430,6 @@
   "On the map": "Sur la carte",
   "On the map at {lat}, {lng}": "Sur la carte à {lat}, {lng}",
   "On your Home": "Sur votre Accueil",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Une fois votre serveur en route, nommez votre communauté dans son application de paramètres, invitez les premiers membres, et ils inviteront le reste. Activez-y « publier la position », et les personnes proches ayant demandé à être averties en seront informées.",
   "One device at a time: the copy you changed last is the one kept.": "Un appareil à la fois : la copie que vous avez modifiée en dernier est celle qui est conservée.",
   "One moment…": "Un instant…",
   "One more comes back {when}.": "Une de plus sera disponible {when}.",
@@ -4683,5 +4682,8 @@
   "When someone asks to join your community": "Quand quelqu'un demande à rejoindre votre communauté",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Contrôlez quelles notifications push réveillent votre appareil. Les modifications sont enregistrées automatiquement.",
   "Turn on notifications?": "Activer les notifications ?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Pour savoir quand quelqu'un vous répond, vous envoie un message ou demande à rejoindre. Rien d'autre."
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Pour savoir quand quelqu'un vous répond, vous envoie un message ou demande à rejoindre. Rien d'autre.",
+  "{name} has no owner yet": "{name} n'a pas encore de propriétaire",
+  "If you installed it, claim it with the one-time code on the server.": "Si vous l'avez installée, revendiquez-la avec le code à usage unique sur le serveur.",
+  "Claim {name}": "Revendiquer {name}"
 }

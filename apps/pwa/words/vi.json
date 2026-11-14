@@ -1411,7 +1411,6 @@
   "On the map": "Trên bản đồ",
   "On the map at {lat}, {lng}": "Trên bản đồ tại {lat}, {lng}",
   "On your Home": "Trên Trang chủ của bạn",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Khi máy chủ của bạn hoạt động, bạn đặt tên cộng đồng trong ứng dụng cài đặt, mời những thành viên đầu tiên, và họ sẽ mời những người khác. Bật \"công khai vị trí\" tại đó, và những người gần bạn đã đăng ký nhận tin sẽ biết đến.",
   "One device at a time: the copy you changed last is the one kept.": "Mỗi lần một thiết bị: bản sao bạn chỉnh sửa lần cuối là bản được giữ lại.",
   "One moment…": "Chờ một chút…",
   "One more comes back {when}.": "Sẽ có thêm một lượt {when}.",
@@ -4512,5 +4511,8 @@
   "When someone asks to join your community": "Khi có người xin tham gia cộng đồng của bạn",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Kiểm soát những thông báo đẩy nào đánh thức thiết bị của bạn. Các thay đổi được lưu tự động.",
   "Turn on notifications?": "Bật thông báo?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Để bạn biết khi ai đó trả lời bạn, nhắn tin cho bạn hoặc yêu cầu tham gia. Không có gì khác."
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Để bạn biết khi ai đó trả lời bạn, nhắn tin cho bạn hoặc yêu cầu tham gia. Không có gì khác.",
+  "{name} has no owner yet": "{name} chưa có chủ sở hữu",
+  "If you installed it, claim it with the one-time code on the server.": "Nếu bạn đã cài đặt, hãy xác nhận quyền sở hữu bằng mã dùng một lần trên máy chủ.",
+  "Claim {name}": "Nhận quyền sở hữu {name}"
 }

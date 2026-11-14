@@ -1430,7 +1430,6 @@
   "On the map": "Haritada",
   "On the map at {lat}, {lng}": "Haritada {lat}, {lng} konumunda",
   "On your Home": "Ana Sayfanda",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Sunucunuz çalışmaya başladığında, ayarlar uygulamasında topluluğunuza bir isim verirsiniz, ilk üyeleri davet edersiniz ve onlar da geri kalanları davet eder. Orada \"konumu yayınla\" seçeneğini açtığınızda, haber verilmesini isteyen yakınınızdaki insanlar bunu duyar.",
   "One device at a time: the copy you changed last is the one kept.": "Aynı anda tek bir cihaz: en son değiştirdiğin kopya tutulur.",
   "One moment…": "Bir saniye…",
   "One more comes back {when}.": "Bir tanesi daha {when} geri gelir.",
@@ -4682,5 +4681,8 @@
   "When someone asks to join your community": "Biri topluluğuna katılmak istediğinde",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Hangi anlık bildirimlerin cihazınızı uyandıracağını kontrol edin. Değişiklikler otomatik olarak kaydedilir.",
   "Turn on notifications?": "Bildirimleri aç?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Biri size yanıt verdiğinde, mesaj attığında veya katılmak istediğinde haberdar olun. Başka hiçbir şey için değil."
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Biri size yanıt verdiğinde, mesaj attığında veya katılmak istediğinde haberdar olun. Başka hiçbir şey için değil.",
+  "{name} has no owner yet": "{name} topluluğunun henüz bir sahibi yok",
+  "If you installed it, claim it with the one-time code on the server.": "Eğer siz kurduysanız, sunucudaki tek kullanımlık kodla sahiplenin.",
+  "Claim {name}": "{name} topluluğunu sahiplen"
 }

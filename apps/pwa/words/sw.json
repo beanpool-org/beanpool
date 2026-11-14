@@ -1430,7 +1430,6 @@
   "On the map": "Kwenye ramani",
   "On the map at {lat}, {lng}": "Kwenye ramani katika {lat}, {lng}",
   "On your Home": "Kwenye Nyumbani yako",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Pindi seva yako inapofanya kazi, unaipa jumuiya yako jina katika programu yake ya mipangilio, unawaalika wanachama wa kwanza, na wao wanawaalika wengine. Washa \"chapisha eneo\" hapo, na watu walio karibu nawe walioomba kujulishwa watasikia kulihusu.",
   "One device at a time: the copy you changed last is the one kept.": "Kifaa kimoja kwa wakati mmoja: nakala uliyobadilisha mwisho ndiyo inayowekwa.",
   "One moment…": "Subiri kidogo…",
   "One more comes back {when}.": "Nyingine moja itarudi {when}.",
@@ -4690,5 +4689,8 @@
   "When someone asks to join your community": "Mtu anapoomba kujiunga na jumuiya yako",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Dhibiti arifa zipi zinazoamsha kifaa chako. Mabadiliko yanahifadhiwa kiotomatiki.",
   "Turn on notifications?": "Washa arifa?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Ili ujue mtu anapokujibu, anapokutumia ujumbe, au anapoomba kujiunga. Hakuna kingine."
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Ili ujue mtu anapokujibu, anapokutumia ujumbe, au anapoomba kujiunga. Hakuna kingine.",
+  "{name} has no owner yet": "{name} bado haina mmiliki",
+  "If you installed it, claim it with the one-time code on the server.": "Ikiwa uliisakinisha, idai kwa msimbo wa mara moja uliopo kwenye seva.",
+  "Claim {name}": "Dai {name}"
 }

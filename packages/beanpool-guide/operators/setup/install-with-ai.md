@@ -40,7 +40,7 @@ Docker can restart, or take a patch update (the last number of its version, for 
 
 ## What stays yours
 
-- **The claim.** Your phone claims the community and becomes its owner. Install BeanPool on it, then scan the QR code, or open BeanPool and tap **Installed BeanPool on a server? Claim it**. The claim makes your BeanPool account on the phone: no invite, and nothing from the BeanPool project. A phone that already has an account claims with it. The code works once, for the first phone that uses it, so claim straight away. Then check under People & Safety → Owners & admins that you are the only owner.
+- **The claim.** Your phone claims the community and becomes its owner. Install BeanPool on it, then scan the QR code, or open BeanPool and tap **Installed BeanPool on a server? Claim it** (with an account already on the phone: the bean at the top, then **Set up a new community server**). The claim makes your BeanPool account on the phone: no invite, and nothing from the BeanPool project. A phone that already has an account claims with it. The code works once, for the first phone that uses it, so claim straight away. Then check under People & Safety → Owners & admins that you are the only owner.
 - **Your 12 words.** Your phone shows them when it makes your key. Write them on paper and keep them. Never type them into an assistant, a chat or a server: whoever has them is you.
 - **Your keys and secrets.** Give the assistant nothing more than a token you can revoke: an SSH key made for this job, which you remove from the server when it is done, or a cloud provider's token you can revoke. Never your cloud account's password, and never your phone. Afterwards, change anything you keep secret that it saw.
 

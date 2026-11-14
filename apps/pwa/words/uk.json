@@ -1468,7 +1468,6 @@
   "On the map": "На карті",
   "On the map at {lat}, {lng}": "На карті за координатами {lat}, {lng}",
   "On your Home": "На вашій Головній",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Коли сервер запрацює, ви вказуєте назву спільноти в додатку налаштувань, запрошуєте перших учасників, а вони запрошують інших. Увімкніть там «публікувати місцезнаходження», і люди поблизу, які хотіли отримати сповіщення, дізнаються про це.",
   "One device at a time: the copy you changed last is the one kept.": "Один пристрій за раз: зберігається та копія, яку ви змінили останньою.",
   "One moment…": "Хвилинку…",
   "One more comes back {when}.": "Ще одна можливість відновиться {when}.",
@@ -5022,5 +5021,8 @@
   "When someone asks to join your community": "Коли хтось запитує вступ до вашої спільноти",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Виберіть, які push-сповіщення ви хочете отримувати. Зміни зберігаються автоматично.",
   "Turn on notifications?": "Увімкнути сповіщення?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Щоб дізнаватися, коли хтось відповідає вам, пише повідомлення або просить приєднатися. Більше нічого."
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Щоб дізнаватися, коли хтось відповідає вам, пише повідомлення або просить приєднатися. Більше нічого.",
+  "{name} has no owner yet": "{name} ще не має власника",
+  "If you installed it, claim it with the one-time code on the server.": "Якщо ви його встановили, підтвердьте право власності одноразовим кодом на сервері.",
+  "Claim {name}": "Заявити права на {name}"
 }

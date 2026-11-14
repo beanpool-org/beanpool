@@ -1411,7 +1411,6 @@
   "On the map": "在活動地圖上",
   "On the map at {lat}, {lng}": "在地圖上標記於 {lat}, {lng}",
   "On your Home": "在你的首頁上",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "伺服器運作後，在伺服器設定應用程式中為社群命名，邀請首批成員，再由他們邀請其他人。開啟「發布地點」後，周邊已要求接收通知的人便會收到相關訊息。",
   "One device at a time: the copy you changed last is the one kept.": "一次僅限一台裝置：保留的是你最後修改的複本。",
   "One moment…": "請稍候…",
   "One more comes back {when}.": "名額將於 {when} 恢復一項。",
@@ -4512,5 +4511,8 @@
   "When someone asks to join your community": "有人申請加入你的社群時",
   "Control which push notifications wake up your device. Changes are saved automatically.": "控制哪些推播通知可喚醒你的裝置。變更將自動儲存。",
   "Turn on notifications?": "開啟通知？",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "以便在有人回覆、發訊息或申請加入時收到提醒。不會用於其他任何用途。"
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "以便在有人回覆、發訊息或申請加入時收到提醒。不會用於其他任何用途。",
+  "{name} has no owner yet": "{name} 尚無所有者",
+  "If you installed it, claim it with the one-time code on the server.": "若是由你安裝，請使用伺服器上的一次性代碼認領。",
+  "Claim {name}": "認領 {name}"
 }

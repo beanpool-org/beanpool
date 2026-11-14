@@ -1430,7 +1430,6 @@
   "On the map": "نقشے پر",
   "On the map at {lat}, {lng}": "نقشے پر {lat}، {lng} پر",
   "On your Home": "آپ کے ہوم پر",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "ایک بار جب آپ کا سرور چل پڑے، تو آپ اس کی سیٹنگز ایپ میں اپنی کمیونٹی کا نام رکھتے ہیں، پہلے اراکین کو مدعو کرتے ہیں، اور وہ باقی لوگوں کو مدعو کرتے ہیں۔ وہاں \"لوکیشن شائع کریں\" کو فعال کریں، اور آپ کے قریب وہ لوگ جنہوں نے مطلع کرنے کی درخواست کی تھی، اس کے بارے میں جان جائیں گے۔",
   "One device at a time: the copy you changed last is the one kept.": "ایک وقت میں ایک ڈیوائس: آپ نے آخری بار جس کاپی میں تبدیلی کی تھی، وہی محفوظ رکھی جاتی ہے۔",
   "One moment…": "ایک لمحہ…",
   "One more comes back {when}.": "ایک اور گنجائش {when} بحال ہو جائے گی۔",
@@ -4690,5 +4689,8 @@
   "When someone asks to join your community": "جب کوئی آپ کی کمیونٹی میں شامل ہونے کی درخواست کرے",
   "Control which push notifications wake up your device. Changes are saved automatically.": "کنٹرول کریں کہ کون سی پش اطلاعات آپ کے آلے کو فعال کریں۔ تبدیلیاں خودکار طور پر محفوظ ہو جاتی ہیں۔",
   "Turn on notifications?": "اطلاعات آن کریں؟",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "تاکہ جب کوئی آپ کو جواب دے، پیغام بھیجے یا شامل ہونے کی درخواست کرے تو آپ کو معلوم ہو سکے۔ اس کے علاوہ کچھ نہیں۔"
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "تاکہ جب کوئی آپ کو جواب دے، پیغام بھیجے یا شامل ہونے کی درخواست کرے تو آپ کو معلوم ہو سکے۔ اس کے علاوہ کچھ نہیں۔",
+  "{name} has no owner yet": "{name} کا ابھی کوئی مالک نہیں ہے",
+  "If you installed it, claim it with the one-time code on the server.": "اگر آپ نے اسے انسٹال کیا ہے، تو سرور پر موجود یک وقتی کوڈ کے ذریعے اس پر دعویٰ کریں۔",
+  "Claim {name}": "{name} کا دعویٰ کریں"
 }

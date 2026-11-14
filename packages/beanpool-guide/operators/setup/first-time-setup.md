@@ -49,7 +49,7 @@ Setting your server up with an AI assistant? See Setting up your server with an 
 
 ## Claim your community: the address, then your phone
 
-First, on the phone that will own the community: install BeanPool from Google Play or the App Store. You don't need an account first, an invite, or anything from the BeanPool project: the claim makes your BeanPool account on that phone. Scan the QR code below, type your name under **Your name here** and tap **Claim and become owner**. Then BeanPool shows you your 12 words: write them on paper. A phone that already has a BeanPool account claims with it.
+Claiming is done from the phone app only: Settings in a browser shows how to claim, and can't claim for you. First, on the phone that will own the community: install BeanPool from Google Play or the App Store. You don't need an account first, an invite, or anything from the BeanPool project: the claim makes your BeanPool account on that phone. Scan the QR code below, type your name under **Your name here** and tap **Claim and become owner**. Then BeanPool shows you your 12 words: write them on paper. A phone that already has a BeanPool account claims with it.
 
 The last step of an install, on the server:
 
@@ -58,9 +58,9 @@ docker compose exec beanpool-node beanpool claim
 - With your server's IP address, beanpool claim --ip 203.0.113.7, or your own domain, beanpool claim --address https://your.domain: your server keeps the address and gets its own certificate for it, and beanpool claim waits up to three minutes until the address answers with that certificate. Then the QR code carries it. If it does not answer in time, beanpool claim says why, for example that port 80 is not reachable from the internet and needs opening in the firewall; for a domain, it also says which DNS record to make. With --ip the QR code then carries no address, and with --address it carries your domain anyway. Your server keeps trying by itself: run beanpool claim again once it has its certificate, and the QR code carries the address.
 - Without either, it asks for a name for your community's address, ending in **.beanpool.org** (or give it with --name cairns). It waits up to three minutes for the name to go live and reach your server. A name that waits for approval by the BeanPool project moves over by itself once approved. A name that is taken: it says why and asks for another. Press Enter to skip, or use --no-name to set one later in Settings. Nothing here needs the BeanPool project: if its address service is down, the claim still works.
 - Without an address that works, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it. On a home network that works; on a server on the internet the phone refuses it, and beanpool claim says so before the QR code (see Your community needs an address phones can reach, above).
-- It shows the one-time claim code, a QR code and, numbered, what to do next on your phone. Scan the QR code with your phone. Or open BeanPool and tap **Installed BeanPool on a server? Claim it** at the bottom of its first screen, and type your server's address. On a phone that already has an account, go to **Find a community**, type your server's address in the search box, and tap **Claim ‹name›**. That phone becomes the owner, and the code is used up.
+- It shows the one-time claim code, a QR code and, numbered, what to do next on your phone. Scan the QR code with your phone. Without the camera, and with no account on the phone yet, open BeanPool and tap **Installed BeanPool on a server? Claim it** at the bottom of its first screen. With an account already, open BeanPool, tap the bean at the top, then **Set up a new community server**. Then type your server's address under **Server address**, tap **Check this server**, type the code under **Claim code**, your name under **Your name here**, and tap **Claim and become owner**. That phone becomes the owner, and the code is used up.
 
-To scan the QR code, point your phone's camera at it: the camera opens it in BeanPool, on **Claim ‹name›** with the code filled in. Or open BeanPool yourself and tap **Installed BeanPool on a server? Claim it** (with an account already: **Find a community** or **Start a community**, then **Set up a new community server**), then **Scan the code**. If the QR code carries no address, BeanPool fills in the code and asks for your server's address. To type the code instead, it is the part after claim- that beanpool claim shows: the empty box shows xxxx-xxxx-xxxx-xxxx, an example, not a code.
+To scan the QR code, point your phone's camera at it: the camera opens it in BeanPool, on **Claim ‹name›** with the code filled in. Or open BeanPool yourself and tap **Installed BeanPool on a server? Claim it** (with an account already: the bean at the top, then **Set up a new community server**), then **Scan the code**. If the QR code carries no address, BeanPool fills in the code and asks for your server's address. To type the code instead, it is the part after claim- that beanpool claim shows: the empty box shows xxxx-xxxx-xxxx-xxxx, an example, not a code.
 
 An owner's phone needs a screen lock (a PIN, a pattern, a fingerprint or a face): it is how you manage the community. Without one, the claim screen says **Set a screen lock first** and nothing is made. With no account on the phone, the claim then goes on as joining does: **Your Photo**, **Safety Backup** with your 12 words (and, if you like, **Add a sign-in as a second way back**, kept by your own community, never by the BeanPool project), **How it Works**, and last **You own ‹name›**, with **Set the address** or **Open Settings**. It also says: **Next: confirm your community's core settings in Settings. About five minutes; your community runs meanwhile.** If the server's answer doesn't come back, the account stays on the phone and the screen says **We couldn't confirm the claim yet. It may have worked.**: tap **Check again**, and BeanPool comes back to it the next time it opens. If another phone claimed the community first, it says **Someone already owns ‹name›.**, and nothing is left on your phone.
 
@@ -84,7 +84,7 @@ The page checks every few seconds, and the moment the community has an owner it 
 
 ## The setup wizard
 
-Settings never opens the setup wizard by itself: every server already has members it made itself, such as the built-in BeanPool account. Open it from Home with **Launch Cold-Start Wizard →**. You can leave it at any step and open it again later. It records that you finished it in this browser only.
+The setup wizard is optional: after the claim, the next step is the core settings (see Then, below). Its last step makes three founding invites with QR codes you can print. Settings never opens the setup wizard by itself: every server already has members it made itself, such as the built-in BeanPool account. Open it from Home with **Launch Cold-Start Wizard →**. You can leave it at any step and open it again later. It records that you finished it in this browser only.
 
 ![The first-time setup wizard in Settings](images/cold-start.webp)
 
@@ -114,6 +114,11 @@ A server set up before the claim code may already have a member called **Admin**
 
 ## Then
 
-- Make a second owner (The first owner, above).
-- Set up backups (Backups and restore).
-- Invite your first members.
+The same four steps follow every claim, in this order:
+
+- Confirm the core settings (Confirm the core settings, above).
+- Make a recovery code (Make a recovery code, in Backups and replicas). Without one, a backup from Settings can't bring your community back on a new server.
+- Make a second owner (The first owner, above), so a lost phone never locks the community out.
+- Invite your first members (Members and invites): **Invite a Member** on Home.
+
+Until each of the first three is done, Settings Home lists it under **Action Required**, and the row opens the place it is done. There is no two-factor sign-in to switch on: an owner signs in with their phone's key, and the phone's own lock is the proof it is you.

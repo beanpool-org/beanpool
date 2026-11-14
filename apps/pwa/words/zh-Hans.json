@@ -1411,7 +1411,6 @@
   "On the map": "在地图上",
   "On the map at {lat}, {lng}": "在地图上的位置：{lat}, {lng}",
   "On your Home": "在首页上",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "节点运行后，你在其设置应用中为社区命名，邀请首批成员，再由他们邀请更多人。在设置中开启“发布位置”，附近订阅了通知的人们就会收到消息。",
   "One device at a time: the copy you changed last is the one kept.": "一次仅限一台设备：将保留你最后修改的副本。",
   "One moment…": "请稍候…",
   "One more comes back {when}.": "还有一次额度将于 {when} 恢复。",
@@ -4512,5 +4511,8 @@
   "When someone asks to join your community": "有人申请加入你的社区时",
   "Control which push notifications wake up your device. Changes are saved automatically.": "控制哪些推送通知可以唤醒你的设备。更改将自动保存。",
   "Turn on notifications?": "开启通知？",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "以便在有人回复、发消息或申请加入时收到提醒。不会用于其他任何用途。"
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "以便在有人回复、发消息或申请加入时收到提醒。不会用于其他任何用途。",
+  "{name} has no owner yet": "{name} 尚无所有者",
+  "If you installed it, claim it with the one-time code on the server.": "如果是你安装的，请使用服务器上的一次性验证码认领它。",
+  "Claim {name}": "认领 {name}"
 }

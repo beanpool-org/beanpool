@@ -1411,7 +1411,6 @@
   "On the map": "Di peta",
   "On the map at {lat}, {lng}": "Di peta pada {lat}, {lng}",
   "On your Home": "Di Beranda Anda",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Setelah nodemu berjalan, beri nama komunitasmu di aplikasi pengaturannya, undang anggota pertama, dan mereka akan mengundang yang lain. Aktifkan \"publikasikan lokasi\" di sana, dan orang-orang di dekatmu yang meminta diberi tahu akan mengetahuinya.",
   "One device at a time: the copy you changed last is the one kept.": "Satu perangkat dalam satu waktu: salinan yang terakhir kamu ubah adalah yang disimpan.",
   "One moment…": "Sebentar…",
   "One more comes back {when}.": "Satu lagi tersedia kembali {when}.",
@@ -4512,5 +4511,8 @@
   "When someone asks to join your community": "Saat seseorang meminta bergabung dengan komunitasmu",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Atur notifikasi push mana yang membangunkan perangkatmu. Perubahan disimpan secara otomatis.",
   "Turn on notifications?": "Nyalakan notifikasi?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Agar Anda tahu saat seseorang membalas, mengirim pesan, atau meminta bergabung. Tidak ada yang lain."
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Agar Anda tahu saat seseorang membalas, mengirim pesan, atau meminta bergabung. Tidak ada yang lain.",
+  "{name} has no owner yet": "{name} belum memiliki pemilik",
+  "If you installed it, claim it with the one-time code on the server.": "Jika kamu menginstalnya, klaim dengan kode satu kali pakai di server.",
+  "Claim {name}": "Klaim {name}"
 }

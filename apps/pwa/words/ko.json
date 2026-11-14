@@ -1411,7 +1411,6 @@
   "On the map": "지도에서 보기",
   "On the map at {lat}, {lng}": "지도 위치: {lat}, {lng}",
   "On your Home": "홈 화면에 표시",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "노드가 실행되면 설정 앱에서 커뮤니티 이름을 짓고 첫 멤버들을 초대하세요. 그 멤버들이 다른 사람들을 초대하게 돼요. 거기서 '위치 공개'를 켜면 소식을 받기로 한 근처 사람들에게 알림이 가요.",
   "One device at a time: the copy you changed last is the one kept.": "한 번에 기기 하나만: 마지막으로 변경한 사본이 유지돼요.",
   "One moment…": "잠시만요…",
   "One more comes back {when}.": "{when} 1건이 다시 가능해져요.",
@@ -4512,5 +4511,8 @@
   "When someone asks to join your community": "누군가 내 커뮤니티에 가입을 신청할 때",
   "Control which push notifications wake up your device. Changes are saved automatically.": "어떤 푸시 알림을 받을지 설정하세요. 변경 사항은 자동으로 저장됩니다.",
   "Turn on notifications?": "알림을 켤까요?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "누군가 답변하거나, 메시지를 보내거나, 가입을 요청할 때 알림을 받습니다. 그 외에는 알림이 오지 않습니다."
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "누군가 답변하거나, 메시지를 보내거나, 가입을 요청할 때 알림을 받습니다. 그 외에는 알림이 오지 않습니다.",
+  "{name} has no owner yet": "{name}에 아직 소유자가 없어요",
+  "If you installed it, claim it with the one-time code on the server.": "직접 설치했다면 서버의 일회용 코드로 소유권을 등록하세요.",
+  "Claim {name}": "{name} 소유권 등록"
 }

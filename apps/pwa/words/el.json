@@ -1429,7 +1429,6 @@
   "On the map": "Στον χάρτη",
   "On the map at {lat}, {lng}": "Στον χάρτη στις {lat}, {lng}",
   "On your Home": "Στην Αρχική σας",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Μόλις ο διακομιστής σου τεθεί σε λειτουργία, ονομάζεις την κοινότητά σου στην εφαρμογή ρυθμίσεών του, προσκαλείς τα πρώτα μέλη και αυτά προσκαλούν τα υπόλοιπα. Ενεργοποίησε τη «δημοσίευση τοποθεσίας» εκεί και οι άνθρωποι κοντά σου που ζήτησαν να ενημερώνονται θα το μάθουν.",
   "One device at a time: the copy you changed last is the one kept.": "Μία συσκευή κάθε φορά: το αντίγραφο που άλλαξες τελευταίο είναι αυτό που διατηρείται.",
   "One moment…": "Μια στιγμή…",
   "One more comes back {when}.": "Ένα ακόμα επιστρέφει {when}.",
@@ -4682,5 +4681,8 @@
   "When someone asks to join your community": "Όταν κάποιος ζητά να συμμετάσχει στην κοινότητά σου",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Έλεγξε ποιες ειδοποιήσεις push ενεργοποιούν τη συσκευή σου. Οι αλλαγές αποθηκεύονται αυτόματα.",
   "Turn on notifications?": "Ενεργοποίηση ειδοποιήσεων;",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Για να μαθαίνετε όταν κάποιος σας απαντάει, σας στέλνει μήνυμα ή ζητά να εγγραφεί. Τίποτα άλλο."
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Για να μαθαίνετε όταν κάποιος σας απαντάει, σας στέλνει μήνυμα ή ζητά να εγγραφεί. Τίποτα άλλο.",
+  "{name} has no owner yet": "Το {name} δεν έχει ακόμα κάτοχο",
+  "If you installed it, claim it with the one-time code on the server.": "Αν το εγκατέστησες εσύ, διεκδίκησέ το με τον κωδικό μίας χρήσης στον διακομιστή.",
+  "Claim {name}": "Διεκδίκηση της κοινότητας {name}"
 }

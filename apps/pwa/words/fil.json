@@ -1430,7 +1430,6 @@
   "On the map": "Sa mapa",
   "On the map at {lat}, {lng}": "Nasa mapa sa {lat}, {lng}",
   "On your Home": "Sa iyong Home",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Kapag tumatakbo na ang iyong server, papangalanan mo ang iyong komunidad sa settings app nito, iimbitahan ang mga unang miyembro, at sila ang mag-iimbita sa iba pa. I-on ang \"ilathala ang lokasyon\" doon, at malalaman ito ng mga taong malapit sa iyo na humiling na masabihan.",
   "One device at a time: the copy you changed last is the one kept.": "Isang device sa bawat pagkakataon: ang kopyang huli mong binago ang siyang itinatago.",
   "One moment…": "Sandali lang…",
   "One more comes back {when}.": "Babalik ang isa pa {when}.",
@@ -4682,5 +4681,8 @@
   "When someone asks to join your community": "Kapag may humiling na sumali sa iyong komunidad",
   "Control which push notifications wake up your device. Changes are saved automatically.": "Kontrolin kung aling mga push notification ang gigising sa iyong device. Awtomatikong nase-save ang mga pagbabago.",
   "Turn on notifications?": "I-on ang mga notification?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para marinig mo kapag may sumagot sa iyo, nagpadala ng mensahe, o humiling na sumali. Wala nang iba."
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para marinig mo kapag may sumagot sa iyo, nagpadala ng mensahe, o humiling na sumali. Wala nang iba.",
+  "{name} has no owner yet": "Wala pang may-ari ang {name}",
+  "If you installed it, claim it with the one-time code on the server.": "Kung ikaw ang nag-install nito, i-claim ito gamit ang one-time code sa server.",
+  "Claim {name}": "I-claim ang {name}"
 }

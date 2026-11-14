@@ -1429,7 +1429,6 @@
   "On the map": "வரைபடத்தில்",
   "On the map at {lat}, {lng}": "வரைபடத்தில் {lat}, {lng}-இல்",
   "On your Home": "உங்கள் முகப்பில்",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "உங்கள் முனை இயங்கியதும், அதன் அமைப்புகள் செயலியில் உங்கள் சமூகத்திற்குப் பெயரிட்டு, முதல் உறுப்பினர்களை அழைக்கிறீர்கள், அவர்கள் மற்றவர்களை அழைக்கிறார்கள். அங்கே \"இருப்பிடத்தை வெளியிடு\" என்பதை இயக்கினால், தகவல் கோரிய அருகிலுள்ள மக்களுக்கு அது தெரிவிக்கப்படும்.",
   "One device at a time: the copy you changed last is the one kept.": "ஒரு நேரத்தில் ஒரு சாதனம்: கடைசியாக நீங்கள் மாற்றிய நகலே வைக்கப்படும்.",
   "One moment…": "ஒரு நொடி…",
   "One more comes back {when}.": "மற்றொன்று மீண்டும் {when} வரும்.",
@@ -4682,5 +4681,8 @@
   "When someone asks to join your community": "யாராவது உங்கள் சமூகத்தில் சேரக் கேட்கும்போது",
   "Control which push notifications wake up your device. Changes are saved automatically.": "எந்த அறிவிப்புகள் உங்கள் சாதனத்தை எழுப்ப வேண்டும் என்பதைக் கட்டுப்படுத்தவும். மாற்றங்கள் தானாகவே சேமிக்கப்படும்.",
   "Turn on notifications?": "அறிவிப்புகளை இயக்கவா?",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "யாராவது உங்களுக்குப் பதிலளிக்கும் போது, செய்தி அனுப்பும் போது அல்லது இணையக் கோரும் போது நீங்கள் அறிந்துகொள்ள. வேறு எதுவுமில்லை."
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "யாராவது உங்களுக்குப் பதிலளிக்கும் போது, செய்தி அனுப்பும் போது அல்லது இணையக் கோரும் போது நீங்கள் அறிந்துகொள்ள. வேறு எதுவுமில்லை.",
+  "{name} has no owner yet": "{name}-க்கு இன்னும் உரிமையாளர் இல்லை",
+  "If you installed it, claim it with the one-time code on the server.": "நீங்கள் அதை நிறுவியிருந்தால், சர்வரில் உள்ள ஒருமுறை குறியீட்டைக் கொண்டு உரிமை கோருங்கள்.",
+  "Claim {name}": "{name}-க்கு உரிமை கோருங்கள்"
 }

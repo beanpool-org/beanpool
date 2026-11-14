@@ -1430,7 +1430,6 @@
   "On the map": "روی نقشه",
   "On the map at {lat}, {lng}": "روی نقشه در {lat}، {lng}",
   "On your Home": "در صفحه خانه شما",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "هنگامی که سرور شما اجرا شد، جامعه خود را در برنامه تنظیمات آن نام‌گذاری می‌کنید، اولین اعضا را دعوت می‌کنید و آن‌ها بقیه را دعوت می‌کنند. گزینه «انتشار موقعیت مکانی» را در آنجا روشن کنید تا افراد نزدیک شما که خواسته بودند مطلع شوند، از آن باخبر گردند.",
   "One device at a time: the copy you changed last is the one kept.": "در هر زمان یک دستگاه: نسخه‌ای که آخرین بار تغییر داده‌اید نگهداری می‌شود.",
   "One moment…": "یک لحظه…",
   "One more comes back {when}.": "یک مورد دیگر {when} برمی‌گردد.",
@@ -4690,5 +4689,8 @@
   "When someone asks to join your community": "وقتی کسی درخواست پیوستن به جامعه شما را می‌دهد",
   "Control which push notifications wake up your device. Changes are saved automatically.": "کنترل کنید کدام اعلان‌ها دستگاه شما را بیدار کنند. تغییرات خودکار ذخیره می‌شوند.",
   "Turn on notifications?": "روشن کردن اعلان‌ها؟",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "تا وقتی کسی به شما پاسخ می‌دهد، پیام می‌دهد، یا درخواست پیوستن دارد باخبر شوید. نه هیچ چیز دیگر."
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "تا وقتی کسی به شما پاسخ می‌دهد، پیام می‌دهد، یا درخواست پیوستن دارد باخبر شوید. نه هیچ چیز دیگر.",
+  "{name} has no owner yet": "{name} هنوز مالکی ندارد",
+  "If you installed it, claim it with the one-time code on the server.": "اگر شما آن را نصب کرده‌اید، با کد یک‌بارمصرف روی سرور مالکیت آن را تحویل بگیرید.",
+  "Claim {name}": "درخواست مالکیت {name}"
 }

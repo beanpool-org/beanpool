@@ -26,8 +26,9 @@
 //                                                                      the test's folder or the package root), never by
 //                                                                      file name alone (app/(tabs)/_layout.tsx is not
 //                                                                      app/_layout.tsx)
-//                                                                   4. the package's other tree-scanning tests
-//                                                                   5. tests that import a changed file
+//                                                                   4. tests that import a changed file
+//                                                                   5. the package's other tree-scanning tests (the scanners
+//                                                                      with a record of reds are guards already)
 //                                                                   3-5 hold at most MAX_EXTRA (60) files a package, closest
 //                                                                   first. What does not fit is counted in the step's why
 //                                                                   and left to CI, which runs every vitest file on every PR.
@@ -151,7 +152,7 @@ export const EST = { checks: 115, words: 8, 'test-guest-view': 45, 'test-health-
 const SOURCE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
 const TEST_FILE = /\.test\.(ts|tsx|js|jsx|mjs)$/;
 const SCANNER = /\breaddirSync\b|\bglobSync\b|\breaddir\s*\(|\bfs\.glob\b/;
-const CLASSES = ['changed', 'pins', 'scanners', 'importers'];
+const CLASSES = ['changed', 'pins', 'importers', 'scanners'];
 
 const shq = s => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
 const stripExt = f => f.replace(SOURCE_EXT, '');
@@ -235,7 +236,7 @@ function classify(pkg, mine, repo) {
  * `files(dir)` all its tracked files, `read(file)` returns a file's text ('' when missing), `exists(file)`, and
  * `testAllText` / `ciYml` are those files' text. Each step is { name, est (seconds), why, cmd }.
  */
-export function planSteps(touched, repo) {
+export function planSteps(touched, repo, { planSecs = PLAN_SECS, maxExtra = MAX_EXTRA } = {}) {
   const steps = [];
   const files = [...touched.keys()];
   const checks = readChecksShard(repo.ciYml);
@@ -271,8 +272,9 @@ export function planSteps(touched, repo) {
     cmd: `node --test ${[...scriptTests].sort().map(shq).join(' ')}` } : null;
 
   // Each vitest package with a touched source file: guards first (whatever the budget), then the other classes in order,
-  // across packages, while the plan's estimate stays under PLAN_SECS. What is left over is counted and left to CI.
-  let est = steps.reduce((n, s) => n + s.est, 0) + (scriptStep ? scriptStep.est : 0);
+  // across packages, while the plan's estimate stays under planSecs. What is left over is counted and left to CI.
+  const fixed = steps.reduce((n, s) => n + s.est, 0) + (scriptStep ? scriptStep.est : 0);
+  const stepEst = (pkg, n) => (n ? Math.ceil(pkg.start + pkg.perFile * n) : 0);
   const plans = [];
   for (const pkg of VITEST_PACKAGES) {
     const mine = files.filter(f => f.startsWith(pkg.dir + '/') && SOURCE_EXT.test(f) && !/\/(node_modules|dist)\//.test(f));
@@ -281,17 +283,18 @@ export function planSteps(touched, repo) {
     p.chosen = [...p.guards];
     p.left = { changed: 0, pins: 0, scanners: 0, importers: 0 };
     p.extra = 0;
-    if (p.chosen.length) est += pkg.start + pkg.perFile * p.chosen.length;
     plans.push(p);
   }
+  let est = fixed + plans.reduce((n, p) => n + stepEst(p.pkg, p.chosen.length), 0);
   for (const c of CLASSES) {
     for (const p of plans) {
       for (const t of p.cls[c]) {
-        const cost = p.pkg.perFile + (p.chosen.length ? 0 : p.pkg.start);
-        const capped = c !== 'changed' && p.extra >= MAX_EXTRA;
-        if (!capped && est + cost <= PLAN_SECS) {
+        // The plan's estimate is the sum of the steps' whole seconds, so the check adds this step's rounded growth.
+        const grow = stepEst(p.pkg, p.chosen.length + 1) - stepEst(p.pkg, p.chosen.length);
+        const capped = c !== 'changed' && p.extra >= maxExtra;
+        if (!capped && est + grow <= planSecs) {
           p.chosen.push(t);
-          est += cost;
+          est += grow;
           if (c !== 'changed') p.extra++;
         } else p.left[c]++;
       }
@@ -303,10 +306,10 @@ export function planSteps(touched, repo) {
     const ran = c => cls[c].length - left[c];
     const leftText = CLASSES.filter(c => left[c]).map(c => `${left[c]} ${c}`).join(', ');
     const why = `${p.sources.length} source + ${p.changedTests.length} test file(s) touched in ${pkg.dir}: ${p.guards.length} guards, `
-      + `${ran('changed')} changed tests, ${ran('pins')} pins/co-located, ${ran('scanners')} tree scanners, ${ran('importers')} importers`
-      + (leftText ? `; left to CI (past ${MAX_EXTRA} a package or the ${PLAN_SECS} s plan budget): ${leftText}` : '');
+      + `${ran('changed')} changed tests, ${ran('pins')} pins/co-located, ${ran('importers')} importers, ${ran('scanners')} tree scanners`
+      + (leftText ? `; left to CI (past ${maxExtra} a package or the ${planSecs} s plan budget): ${leftText}` : '');
     const rel = p.chosen.map(t => path.posix.relative(pkg.dir, t)).sort();
-    steps.push({ name: `vitest:${pkg.name}`, est: Math.ceil(pkg.start + pkg.perFile * rel.length), why,
+    steps.push({ name: `vitest:${pkg.name}`, est: stepEst(pkg, rel.length), why,
       files: rel.length, left: CLASSES.reduce((k, c) => k + left[c], 0),
       cmd: `TEST_ALL_TIMEOUT_MS=${timeout} pnpm --filter ${pkg.name} exec vitest run --maxWorkers=2 --passWithNoTests ${rel.map(shq).join(' ')}` });
   }

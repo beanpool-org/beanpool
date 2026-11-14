@@ -31,6 +31,8 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const alerts = vi.hoisted(() => ({ said: [] as string[] }));
+/** The platform the screen is drawn for: Android unless a test says iOS. */
+const platform = vi.hoisted(() => ({ os: 'android' as 'android' | 'ios' }));
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert', progressbar: 'progressbar', tab: 'tab', tablist: 'tablist' };
@@ -77,7 +79,7 @@ vi.mock('react-native', () => {
     class Value { constructor(public v = 0) {} setValue() {} setOffset() {} stopAnimation() {} interpolate() { return this; } addListener() { return ''; } removeListener() {} removeAllListeners() {} }
     const animation = () => ({ start(cb?: () => void) { cb?.(); }, stop() {} });
     return {
-        Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
+        Platform: { get OS() { return platform.os; }, select: (o: Record<string, unknown>) => o[platform.os] ?? o.default },
         Image: el('img'),
         Dimensions: { get: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }) },
         FlatList,
@@ -677,25 +679,39 @@ describe('a chat with someone in another community, in the Chats list at 320 dp 
             const width = FLOOR - 2 * num(r.marginHorizontal) - 2 * num(r.paddingHorizontal) - 2 * num(r.borderWidth) - AVATAR - GLOBE;
             expect(width).toBe(178);
             expect(row()!.querySelector('[data-icon="earth"]')).not.toBeNull();
-            const lines = Number(line!.getAttribute('data-lines'));
+            // No line limit for a platform to cut at (Android cuts a limited line at its tail): it fits its 3 lines whole.
+            expect(line!.getAttribute('data-lines'), 'no line limit').toBeNull();
             const px = Number(line!.getAttribute('data-font')) * 1.3;
-            expect(Math.ceil(widthOf(home, px) / width), `${home} at ${px}px needs`).toBeLessThanOrEqual(lines);
+            expect(Math.ceil(widthOf(home, px) / width), `${home} at ${px}px needs`).toBeLessThanOrEqual(3);
         }
     });
 
-    it('a home too long for its 3 lines is cut at its head, so the tail that names the real domain stays (PR #3168 review note)', async () => {
-        // ~55 characters fit 3 lines here; a host this long is the community operator's choice, never the sender's.
-        const home = 'hilltop-market-and-tool-library-cooperative-of-the-north-coast.riverside.example';
-        outside.chats = [outsideChat('Ana Ríos', home)];
-        rememberProfile(LOCAL);
-        await renderIn('en');
-        const line = communityLine()!;
-        expect(line.textContent).toBe(home);
-        const lines = Number(line.getAttribute('data-lines'));
-        const px = Number(line.getAttribute('data-font')) * 1.3;
-        expect(Math.ceil(widthOf(home, px) / 178), 'this home needs more lines than it has').toBeGreaterThan(lines);
-        expect(line.getAttribute('data-ellipsize')).toBe('head');
-    });
+    for (const os of ['android', 'ios'] as const) {
+        it(`${os}: a home too long for 3 lines is cut at its head in whole labels before it is drawn, so the real domain shows (PR #3168 round-3 note)`, async () => {
+            // A host this long is the community operator's choice, never the sender's. Android draws no head ellipsis past a
+            // line limit (TextLayoutManager.kt: START is ignored with maxLines > 1), so the cut is made before the text is drawn,
+            // the same on both platforms, and the line has no limit and no ellipsis mode for a platform to apply.
+            const home = 'hilltop-market-and-tool-library-cooperative.of-the-north-coast.riverside.example.org';
+            platform.os = os;
+            try {
+                outside.chats = [outsideChat('Ana Ríos', home)];
+                rememberProfile(LOCAL);
+                await reopenIn('en');
+                const line = communityLine()!;
+                const px = Number(line.getAttribute('data-font')) * 1.3;
+                expect(Math.ceil(widthOf(home, px) / 178), 'the whole home needs more than 3 lines').toBeGreaterThan(3);
+                expect(line.textContent).toBe('…of-the-north-coast.riverside.example.org');
+                expect(home.endsWith(`.${line.textContent!.slice(1)}`), 'whole labels, the end intact').toBe(true);
+                expect(Math.ceil(widthOf(line.textContent!, px) / 178), 'what shows fits 3 lines').toBeLessThanOrEqual(3);
+                expect(line.getAttribute('data-lines')).toBeNull();
+                expect(line.getAttribute('data-ellipsize')).toBeNull();
+                // A screen reader hears the whole home.
+                expect(line.getAttribute('aria-label')).toBe(home);
+            } finally {
+                platform.os = 'android';
+            }
+        });
+    }
 
     it('no name given: "Someone in another community", the community still under it', async () => {
         outside.chats = [outsideChat(null, 'coast.example')];

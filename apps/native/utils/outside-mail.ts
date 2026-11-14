@@ -98,24 +98,45 @@ async function answerOf(res: Response): Promise<any> {
     return body;
 }
 
+/** Why my home can't be read now and none was read before: no answer at all (no signal, the server down, the deadline). */
+export const HOME_UNREACHED = 'unreached';
+/** Why my home can't be read now and none was read before: my server answered, but not with its info (an error, a proxy's page). */
+export const HOME_UNANSWERED = 'home_unanswered';
+
 /**
  * This community's home as other servers name it: its primary address (GET /api/community/info), on the port this phone
- * reaches it at when the two hosts agree. Kept once read. Null while the community knows none of its names.
+ * reaches it at when the two hosts agree. Kept once read. Null only when my server answered and knows none of its names.
+ * With none kept and no answer now, it throws an OutsideMailError saying the true reason: no answer at all
+ * ({@link HOME_UNREACHED}: offline, the server down, the caller's deadline), or an answer that was not the info
+ * ({@link HOME_UNANSWERED}). Never "knows none of its names" for a phone that couldn't ask.
  */
 export async function myHome(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'store' | 'signal'>, now = Date.now()): Promise<string | null> {
     // Kept as `<home> <when read>`, and read again after HOME_FRESH_MS: a community that moves to a new address signs its
     // requests as the new home, and an envelope naming the old one would be refused (relay-outbox.ts itemProblem).
     const kept = (await ctx.store.getMeta(HOME_META))?.split(' ');
     if (kept?.[0] && now - Number(kept[1]) < HOME_FRESH_MS) return kept[0];
-    let primary: string | null = null;
+    let info: any = null;
+    let unread: typeof HOME_UNREACHED | typeof HOME_UNANSWERED | null = null;
     try {
         const res = await fetch(`${ctx.nodeUrl.replace(/\/+$/, '')}/api/community/info`, ctx.signal ? { signal: ctx.signal } : undefined);
-        const info: any = res.ok ? await res.json().catch(() => null) : null;
-        primary = typeof info?.primaryAddress === 'string' ? info.primaryAddress : null;
+        info = res.ok ? await res.json().catch(() => null) : null;
+        if (!info || typeof info !== 'object') unread = HOME_UNANSWERED;
     } catch {
-        primary = null;
+        unread = HOME_UNREACHED;
     }
-    if (!primary) return kept?.[0] || null;   // unreachable now: the home read before, if any
+    // A body cut off by the deadline is no answer either.
+    if (unread && ctx.signal?.aborted) unread = HOME_UNREACHED;
+    const primary = typeof info?.primaryAddress === 'string' ? info.primaryAddress : null;
+    if (!primary) {
+        if (kept?.[0]) return kept[0];   // can't be read now, or says none: the home read before
+        if (unread === HOME_UNREACHED) {
+            throw new OutsideMailError(0, t("This phone can't reach your community's server just now: no signal, or the server is down. Try again in a while."), HOME_UNREACHED);
+        }
+        if (unread === HOME_UNANSWERED) {
+            throw new OutsideMailError(503, t("Your community's server had a problem just now. Try again in a while."), HOME_UNANSWERED);
+        }
+        return null;   // my server answered: it knows none of its names
+    }
     const reached = nodeHomeOf(ctx.nodeUrl);
     const home = reached && audienceOf(reached) === audienceOf(primary) ? reached : nodeHomeOf(primary);
     if (home) await ctx.store.setMeta(HOME_META, `${home} ${now}`);
@@ -182,8 +203,9 @@ export async function sendOutsideLine(ctx: OutsideMailContext, chatId: string, t
 /**
  * A line sent from a box on screen (the chat's box, the card's first line), with the typed words never lost: `onKept`
  * empties the box once the line is kept on this phone (shown at once as Sending…, or Not delivered with my server's words
- * why), and never before. A send that fails before that (my community knows none of its names here and can't be read now,
- * the deadline cut that read, the request not accepted yet) leaves the words in the box, to send again. The send has its
+ * why), and never before. A send that fails before that (my home never read here and my server not reached now, or the
+ * deadline cut that read: "can't reach"; my server answered and knows none of its names; the request not accepted yet)
+ * leaves the words in the box, to send again, with the true reason (myHome). The send has its
  * own deadline, `budgetMs`: a kept line my server hasn't answered by then stays `sending`, and goes at the next round.
  */
 export async function sendFromBox(ctx: OutsideMailContext, chatId: string, words: string, budgetMs: number, onKept: () => void): Promise<{ kept: boolean; error: unknown }> {

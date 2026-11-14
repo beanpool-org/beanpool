@@ -24,7 +24,25 @@ export function normTest(name) {
     return String(name ?? '').replace(ANSI, '').replace(/\s+\d+(?:\.\d+)?m?s$/, '').replace(/\s+/g, ' ').trim();
 }
 
-const SUITE_ENTRY = /^(test-[a-z0-9-]+)(?:\s*\([^)]*\))?: (?:✗|❌)/;
+// A record names a TEST only when its line has the full shape of that runner's test line; any other line a reader
+// meets is not a test, however much it looks like one (eslint's `✖ 1 problem (1 error, 0 warnings)` was read as a node
+// test and paired two PRs' own lint reds, round 2 of #3178). record.test.mjs holds a row for every kind of `✖`, `×`,
+// `✗`, `not ok`, `FAIL` and `❌` line in 94 real failed CI job logs, plus eslint, tsc, prettier, pnpm, turbo and
+// test-all's own summary lines. The shapes:
+//   server suite  `✗ <assertion>` under its `━━━ test-x ━━━` header (test-all's block writes `test-x: ✗ <assertion>`).
+//                 A suite's `❌` line is its catch-all (`❌ Test failed: …`), as test-all-lib.sh failing_tests_summary
+//                 says: a check record that keeps the suite's file. The few suites that print their own checks with `❌`
+//                 are recorded the same way, so they never pair: a missed pair, never a false one.
+//   vitest        `FAIL  <file>.<ts|tsx|js|mjs…> > <name>`. `FAIL  file [ file ]` (the file failed to load) is a check.
+//   node, TAP     `not ok N - <name>` with a YAML block holding its `location:` (CI's node 22).
+//   node, spec    `✖ <name> (<n>ms)`, the duration required (node 26 on this Mac), never a describe's own `✖`.
+// A roll-up (`❌ Server suites failed: test-a test-b`) names suites, not tests: one check record per suite.
+const SUITE_TEST = /^(test-[a-z0-9-]+)(?:\s*\([^)]*\))?: ✗/;
+const SUITE_OTHER = /^(test-[a-z0-9-]+)(?:\s*\([^)]*\))?: /;
+const VITEST_TEST = /^(\S+\.[cm]?[jt]sx?) > \S/;
+const SPEC_TEST = /^✖ (.+?) \(\d+(?:\.\d+)?ms\)$/;
+const TAP_TEST = /^not ok \d+ - (.+?)(?:\s+#.*)?$/;
+const TAP_LOCATION = /^location: '([^']+):\d+:\d+'$/;
 const ROLLUP = /^❌ .*suites failed:\s*(.*)$/;
 const serverFile = (id) => `apps/server/src/${id}.ts`;
 
@@ -37,8 +55,9 @@ const serverFile = (id) => `apps/server/src/${id}.ts`;
  *   1. test-all's `── Failing tests (N) ──` block (scripts/test-all-lib.sh failing_tests_summary), which already names
  *      each vitest `file > suite > test` and each server suite `test-x: ✗ <assertion>`.
  *   2. With no block for a failed check: vitest ` FAIL  file > test` lines, node --test `not ok N - name` lines (TAP,
- *      as on CI, with the file from its `location:`) and `✖ name` lines (spec, as node v26 logs it on this Mac), and
- *      `✗` lines under a `━━━ test-x ━━━` header.
+ *      as on CI, with the file from its `location:`) and `✖ name (1.2ms)` lines (spec, as node v26 logs it on this
+ *      Mac), and `✗` lines under a `━━━ test-x ━━━` header. Only a line of its runner's full test shape (SUITE_TEST,
+ *      VITEST_TEST, TAP_TEST, SPEC_TEST) names a test; any other names none, or is a check record.
  *   3. A failed check (`║  name  ❌ FAIL`) that names no test at all: one entry for the check (kind 'check', NO_TEST),
  *      with the first repo file its stack points at, so a red check is still on the ledger. It never pairs.
  */
@@ -102,16 +121,17 @@ export const NO_TEST = 'check red, no test named: ';
 export const namesATest = (e) => e.kind !== 'check';
 
 function classify(entry, check, pkg) {
-    const suite = SUITE_ENTRY.exec(entry);
+    const suite = SUITE_TEST.exec(entry);
     if (suite) return { test: entry, kind: 'server-suite', check, file: serverFile(suite[1]), pkg: null };
     const roll = ROLLUP.exec(entry);
     if (roll) return roll[1].split(/\s+/).filter(Boolean).map((n) => {
         const id = n.replace(/\(.*\)$/, '');
-        return { test: `${n}: the whole suite failed`, kind: 'server-suite', check, file: /^test-[a-z0-9-]+$/.test(id) ? serverFile(id) : null, pkg: null };
+        return { test: `${n}: the whole suite failed`, kind: 'check', check, file: /^test-[a-z0-9-]+$/.test(id) ? serverFile(id) : null, pkg: null };
     });
-    const gt = entry.indexOf(' > ');
-    if (gt > 0) return { test: entry, kind: 'vitest', check, file: entry.slice(0, gt).trim(), pkg };
-    return { test: entry, kind: 'check', check, file: null, pkg: null };
+    const vitest = VITEST_TEST.exec(entry);
+    if (vitest) return { test: entry, kind: 'vitest', check, file: vitest[1], pkg };
+    const other = SUITE_OTHER.exec(entry);
+    return { test: entry, kind: 'check', check, file: other ? serverFile(other[1]) : null, pkg: null };
 }
 
 // The block is `── Failing tests (N) ──`, then N entries at two spaces (each maybe followed by its error at six), and
@@ -140,7 +160,8 @@ function readSummaryBlocks(section, add) {
 // node --test's spec reporter (what node v26 prints to a file as well as a terminal) ends with this list of the failed
 // tests themselves: `test at <file>:L:C`, then `✖ name (1.2ms)`. A describe that failed only through a child prints its
 // own `✖` above the list, not in it. So with a list in the log, only a `✖` right under its `test at` line counts (a log
-// can hold several runs, each with its own list); with none (the tail was cut), every `✖` does.
+// can hold several runs, each with its own list); with none (the tail was cut), every `✖` of the test shape does,
+// except a describe's (it opened with `▶ name`).
 const SPEC_LIST = '✖ failing tests:';
 
 /** The YAML block under a TAP `not ok` line at i (`---` … `...`), trimmed. */
@@ -154,18 +175,21 @@ function readRawLines(section, add) {
     let suite = null;
     const L = section.lines.map((l) => l.trim());
     const specList = L.includes(SPEC_LIST);
+    const describes = new Set(L.filter((l) => l.startsWith('▶ ')).map((l) => l.slice(2)));
     for (let i = 0; i < L.length; i++) {
         const t = L[i];
         const h = /^━━━\s*(.+?)\s*━━━$/.exec(t);
         if (h) { suite = h[1]; continue; }
         let m;
-        if ((m = /^FAIL\s+(.+ > .+)$/.exec(t))) add(classify(m[1].trim(), section.check, null));
-        else if ((m = /^not ok \d+ - (.+?)(?:\s+#.*)?$/.exec(t))) {
+        if ((m = /^FAIL\s+(.+)$/.exec(t))) add(classify(m[1].trim(), section.check, null));
+        else if ((m = TAP_TEST.exec(t))) {
             const yaml = tapBlock(L, i);
             if (yaml.includes("failureType: 'subtestsFailed'")) continue;
-            const loc = yaml.map((y) => /^location: '\S*?\/beanpool\/beanpool\/([^':]+):\d+:\d+'$/.exec(y)?.[1]).find(Boolean) ?? null;
+            const at = yaml.map((y) => TAP_LOCATION.exec(y)?.[1]).find(Boolean);
+            if (!at) continue;                                           // no location: not a test line
+            const loc = /\/beanpool\/beanpool\/(.+)$/.exec(at)?.[1] ?? null;
             add({ test: m[1], kind: 'node-test', check: section.check, file: loc, pkg: null });
-        } else if (t !== SPEC_LIST && (!specList || /^test at /.test(L[i - 1] ?? '')) && (m = /^✖ (.+?)(?: \(\d+(?:\.\d+)?m?s\))?$/.exec(t))) {
+        } else if ((!specList || /^test at /.test(L[i - 1] ?? '')) && (m = SPEC_TEST.exec(t)) && !describes.has(m[1])) {
             add({ test: m[1], kind: 'node-test', check: section.check, file: null, pkg: null });
         } else if (/^✗/.test(t)) {
             const name = suite && !t.includes(suite) ? `${suite}: ${t}` : t;

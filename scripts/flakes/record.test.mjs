@@ -82,7 +82,7 @@ function scenario({ pr, run, job, completedAt, log = 'ci-server-suite.txt', comp
             { databaseId: job + 1, name: 'Run BeanPool Test-All Pipeline', conclusion: 'failure', completedAt },
             { databaseId: job + 2, name: 'Test-All shard vitest-rest', conclusion: 'success', completedAt },
         ] },
-        logs: { [job]: path.join(FIX, log), [job + 1]: AGG },
+        logs: { [job]: path.resolve(FIX, log), [job + 1]: AGG },
         compare, prDiff: compare,
     };
 }
@@ -96,6 +96,81 @@ function runRecord(dir, args, cfg, env) {
     });
     return { out: r.stdout + r.stderr, code: r.status };
 }
+
+// ── Every line that looks like a failure: a test, or a check ────────────────────────────────────────────────────────
+// Round 1 and round 2 of #3178 each let a line that is not a test become a test name and pair two PRs' own reds. So
+// each row is a line (with the lines it needs around it) as a failed check's Failure Details print it, and says what
+// it is. 'real' rows are verbatim from 94 failed CI job logs of 40 PR runs (14-15 Nov, `gh run view --job <id>
+// --log-failed`); 'fixture' rows are this suite's captured logs; 'format' rows are the tool's usual output; 'made' rows
+// are built to hit a hole a looser rule lets through (round 2's code gets 5 of the 6 wrong). A `── Failing tests (1) ──`
+// row is test-all's own block (scripts/test-all-lib.sh failing_tests_summary).
+const LINE_TABLE = [
+    // server suites
+    ['real', ['── Failing tests (1) ──', '  test-alerts: ✗ 11. once it stays down 15 minutes: resolved, told once', '      Error: Assertion failed: 11. once it stays down 15 minutes: resolved, told once'], 'test', 'test-alerts: ✗ 11. once it stays down 15 minutes: resolved, told once'],
+    ['real', ['━━━ test-alerts ━━━', '  ✅ 10. a node that answers again is not alerted', '  ✗ 11. once it stays down 15 minutes: resolved, told once'], 'test', 'test-alerts: ✗ 11. once it stays down 15 minutes: resolved, told once'],
+    ['real', ['── Failing tests (1) ──', '  test-tls-first-boot: ❌ the four are made together (2 certificates, a new CA) — calls=4'], 'check'],
+    ['real', ['━━━ test-node-profile ━━━', '66/67 checks passed.', '❌ Test failed: Error: 1 check(s) failed'], 'check'],
+    ['real', ['── Failing tests (1) ──', '  ❌ Server suites failed: test-standby-health'], 'check'],
+    ['real', ['Logs of the failing runs copied to /home/runner/work/_temp/test-all-logs/server-suites', '', '❌ Server suites failed: test-visitors-cant-act test-non-members-cant-act'], 'check'],
+    ['format', ['── Failing tests (1) ──', '  ❌ Server suites failed: test-keeper-http(TIMEOUT)'], 'check'],
+    ['made', ['── Failing tests (1) ──', '  test-members-on-demand: ❌ Test failed: Error: p95 10.84 ms > 10 ms'], 'check'],
+    ['made', ['── Failing tests (1) ──', '  ❌ Test failed: Error: 2 > 1, the second write was kept'], 'check'],
+    ['made', ['2 files are not formatted', '✗ apps/pwa/src/a.tsx > the line is too long'], 'check'],
+    // other checks' ❌ lines
+    ['real', ['── Failing tests (1) ──', '  ❌ One of our communities is named in the code (or the address of one of our servers):'], 'check'],
+    ['real', ['✘ [ERROR] No matching export in "stub:expo-router" for import "useLocalSearchParams"', '', 'Error: Build failed with 1 error:'], 'check'],
+    // vitest
+    ['real', ['── Failing tests (1) ──', "  e2e/button-contrast.check.ts > the phone's buttons and labels reach 4.5:1 in every colour set > is not losing screens into shapes it cannot read"], 'test',
+        "e2e/button-contrast.check.ts > the phone's buttons and labels reach 4.5:1 in every colour set > is not losing screens into shapes it cannot read"],
+    ['real', ['⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯', '', ' FAIL  src/lib/home-lands.test.ts > GET /api/home names the landings this app opens > lands=enterprise,group,invite'], 'test',
+        'src/lib/home-lands.test.ts > GET /api/home names the landings this app opens > lands=enterprise,group,invite'],
+    ['real', ["   × the phone's buttons and labels reach 4.5:1 in every colour set > is not losing screens into shapes it cannot read 12ms"], 'check'],
+    ['real', [' ❯ src/lib/home-lands.test.ts (1 test | 1 failed) 472ms', '   × GET /api/home names the landings this app opens > lands=enterprise,group,invite 469ms'], 'check'],
+    ['real', [' Test Files  1 failed (1)', '      Tests  1 failed | 4 passed (5)'], 'check'],
+    ['real', ['          >', '            ✕', '          </button>'], 'check'],
+    ['format', [' FAIL  src/pages/MessagesPage.test.tsx [ src/pages/MessagesPage.test.tsx ]', 'Error: Failed to resolve import "./gone"'], 'check'],
+    ['format', ['── Failing tests (1) ──', '  src/pages/MessagesPage.test.tsx [ src/pages/MessagesPage.test.tsx ]'], 'check'],
+    // node --test, spec (node 26) and TAP (CI's node 22)
+    ['fixture', ['✖ a member sees the bell once (0.386791ms)'], 'test', 'a member sees the bell once'],
+    ['fixture', ['✖ failing tests:', '', 'test at scripts/demo.test.mjs:4:1', '✖ a member sees the bell once (0.386791ms)'], 'test', 'a member sees the bell once'],
+    ['fixture', ['▶ the forum', '  ✔ a reply lands under its topic (0.07975ms)', '✖ the forum (1.029625ms)'], 'check'],
+    ['made', ['✖ the forum (1.029625ms)', '✖ failing tests:', '', 'test at scripts/demo.test.mjs:4:1', '✖ a member sees the bell once (0.386791ms)'], 'test', 'a member sees the bell once'],
+    ['fixture', ['ℹ fail 2', '', '✖ failing tests:'], 'check'],
+    ['fixture', ['not ok 2 - a member sees the bell once', '  ---', '  duration_ms: 0.4', "  location: '/home/runner/work/beanpool/beanpool/scripts/demo.test.mjs:4:1'", "  failureType: 'testCodeFailure'", '  ...'], 'test', 'a member sees the bell once'],
+    ['fixture', ['not ok 3 - the forum', '  ---', "  location: '/home/runner/work/beanpool/beanpool/scripts/demo.test.mjs:5:1'", "  failureType: 'subtestsFailed'", '  ...'], 'check'],
+    ['made', ['not ok 1 - scripts/demo.test.mjs', '  ---', '  duration_ms: 41.2', "  failureType: 'testCodeFailure'", '  exitCode: 1', '  ...'], 'check'],
+    ['made', ['not ok 1 - 1 problem'], 'check'],
+    // eslint (round 2's must-fix is the first row)
+    ['format', ['/home/runner/work/beanpool/beanpool/apps/pwa/src/a.tsx', "  12:5  error  'x' is assigned a value but never used  @typescript-eslint/no-unused-vars", '', '✖ 1 problem (1 error, 0 warnings)'], 'check'],
+    ['format', ['✖ 12 problems (3 errors, 9 warnings)', '  1 error and 0 warnings potentially fixable with the `--fix` option.'], 'check'],
+    ['format', ['✖ 1 problem (0 errors, 1 warning)', '', 'ESLint found too many warnings (maximum: 0).'], 'check'],
+    // tsc
+    ['real', ["##[error]src/pages/HomePage.learn.test.tsx(20,77): error TS2304: Cannot find name 'HomeLayout'."], 'check'],
+    ['format', ["src/a.ts(1,2): error TS2322: Type 'A' is not assignable to type 'B'.", '', 'Found 3 errors in 2 files.'], 'check'],
+    ['format', ["src/a.ts:1:2 - error TS2322: Type 'A > B' is not assignable to type 'C'."], 'check'],
+    // prettier
+    ['format', ['[warn] src/a.ts', '[warn] Code style issues found in the above file. Run Prettier with --write to fix.'], 'check'],
+    ['format', ['[error] src/a.ts: SyntaxError: Unexpected token (1:7)'], 'check'],
+    // pnpm
+    ['real', [' ELIFECYCLE  Test failed. See above for more details.'], 'check'],
+    ['real', [' ELIFECYCLE  Command failed with exit code 2.'], 'check'],
+    ['real', ['/home/runner/work/beanpool/beanpool/apps/pwa:', ' ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @beanpool/pwa@1.4.1 dark-class-check: `node e2e/dark-class-check.mjs`', 'Exit status 1'], 'check'],
+    // turbo
+    ['format', ['@beanpool/pwa#lint: command (/home/runner/work/beanpool/beanpool/apps/pwa) /usr/bin/pnpm run lint exited (1)', '', ' Tasks:    12 successful, 13 total', 'Failed:    @beanpool/pwa#lint', '', ' ERROR  run failed: command  exited (1)'], 'check'],
+    ['format', ['  × Found `pipeline` field instead of `tasks`.'], 'check'],
+    // test-all's own summary
+    ['real', ['║  Total: 2 passed, 1 failed, 0 skipped', 'Full logs of every check copied to /home/runner/work/_temp/test-all-logs', '##[error]Process completed with exit code 1.'], 'check'],
+    ['real', ['❌ Test failed: Error: 10 check(s) failed'], 'check'],
+];
+
+/** The table row as one failed check's part of a CI job log (`gh run view --log-failed`, with its prefix). */
+function rowLog(lines, check = 'demo_check') {
+    return ['╔══════════════════════════════════════════╗', `║  ${check} ❌ FAIL  12s  (started +0s)`, '╚══════════════════════════════════════════╝', '',
+        '──── Failure Details ────', '', `━━━ ${check} ━━━`, ...lines, '']
+        .map((l) => `Test-All shard checks\tRun test-all checks (checks)\t2026-11-14T13:09:54.0870554Z ${l}`).join('\n') + '\n';
+}
+
+const LINE_RULE = "a line names a test only in its runner's full test shape; every other line is a check that never pairs";
 
 // ── The rules: each a check over a loaded copy of the scripts ──────────────────────────────────────────────────────
 
@@ -112,6 +187,7 @@ const RULES = {
         const e = lib.parseFailures(fixture('ci-server-suite.txt'));
         assert.equal(e.length, 1, JSON.stringify(e));
         assert.equal(e[0].test, 'test-alerts: ✗ 11. once it stays down 15 minutes: resolved, told once');
+        assert.equal(e[0].kind, 'server-suite');
         assert.equal(e[0].file, 'apps/server/src/test-alerts.ts');
         assert.equal(e[0].check, 'server_suites');
     },
@@ -298,12 +374,56 @@ const RULES = {
         assert.doesNotMatch(said.join('\n'), /SEEN-ON-CI/, said.join('\n'));
         assert.match(said.join('\n'), /^same file on CI PR #8 2026-11-14 run 3: check red, no test named: unit/m);
     },
+    // LINE_TABLE: each row parses to exactly the test it names, or to check records only; check rows never pair, the
+    // same row on two PRs included; and the round-2 eslint case end to end through the CLI.
+    [LINE_RULE]: async ({ lib }, dir) => {
+        const t0 = Date.parse('2026-11-14T10:00:00Z');
+        const parsed = LINE_TABLE.map(([from, lines, want, name]) => ({ from, lines, want, name, recs: lib.parseFailures(rowLog(lines)) }));
+        for (const r of parsed) {
+            const label = `${r.from} row ${JSON.stringify(r.lines.at(-1))}: ${JSON.stringify(r.recs.map((e) => [e.kind, e.test]))}`;
+            if (r.want === 'test') {
+                assert.equal(r.recs.length, 1, `want one record: ${label}`);
+                assert.ok(lib.namesATest(r.recs[0]), `want a test: ${label}`);
+                assert.equal(r.recs[0].test, r.name, label);
+            } else {
+                assert.ok(r.recs.length >= 1, `a failed check is always recorded: ${label}`);
+                for (const e of r.recs) assert.ok(e.kind === 'check' && !lib.namesATest(e), `want a check: ${label}`);
+            }
+        }
+        const stamp = (recs, pr, ms) => recs.map((e) => ({ ...e, pr, run: pr, job: pr, time: new Date(t0 + ms).toISOString() }));
+        const checks = parsed.filter((r) => r.want === 'check');
+        for (const a of checks) {
+            for (const b of checks) {
+                for (const now of stamp(b.recs, 2, 3600e3)) {
+                    const h = lib.earlierHits(stamp(a.recs, 1, 0), now);
+                    assert.equal(h.same.length + h.sameFile.length, 0, `two PRs' check rows paired: ${JSON.stringify(a.lines.at(-1))} then ${now.test}`);
+                }
+            }
+        }
+        for (const r of parsed.filter((x) => x.want === 'test')) {
+            assert.equal(lib.earlierHits(stamp(r.recs, 1, 0), stamp(r.recs, 2, 3600e3)[0]).same.length, 1, `a test row pairs with itself on another PR: ${r.name}`);
+        }
+        // Round 2: two PRs' own lint reds (different files, different packages) through record.mjs and the fake gh.
+        const WORK = tmp('lint');
+        const env = { WORK, CALLS: path.join(WORK, 'calls'), LEDGER: path.join(WORK, 'flakes.jsonl'), ROOT: makeTree() };
+        const lint = (file) => rowLog([`/home/runner/work/beanpool/beanpool/${file}`, "  12:5  error  'x' is assigned a value but never used  no-unused-vars", '', '✖ 1 problem (1 error, 0 warnings)'], 'lint');
+        fs.writeFileSync(path.join(WORK, 'lint-1.txt'), lint('apps/pwa/src/a.tsx'));
+        fs.writeFileSync(path.join(WORK, 'lint-2.txt'), lint('packages/core/src/b.ts'));
+        let out = '';
+        for (const [pr, n] of [[3148, 1], [3153, 2]]) {
+            const r = runRecord(dir, [String(pr)], scenario({ pr, run: 9500 + n, job: 7500 + n * 10, completedAt: `2026-11-14T1${n}:00:00Z`, log: path.join(WORK, `lint-${n}.txt`) }), env);
+            assert.equal(r.code, 0, r.out);
+            out += r.out;
+        }
+        assert.equal(out.match(/^ {2}recorded {2}check red, no test named: lint {2}.*never counted toward a second hit$/gm)?.length, 2, out);
+        assert.doesNotMatch(out, /SECOND-HIT/, out);
+    },
 };
 
 // Each mutant breaks exactly the rule it is named for.
 const MUTANTS = [
     ['summary block bounded by its count', 'lib.mjs', 'if (head) { left = Number(head[1]); continue; }', 'if (head) { left = Infinity; continue; }'],
-    ['a server suite check is tagged with its suite file', 'lib.mjs', 'const SUITE_ENTRY = /^(test-', 'const SUITE_ENTRY = /^(never-'],
+    ['a server suite check is tagged with its suite file', 'lib.mjs', 'const SUITE_TEST = /^(test-', 'const SUITE_TEST = /^(never-'],
     ['a failed check that names no test is still recorded, with its stack file', 'lib.mjs', 'if (named.has(check)) continue;', 'continue;'],
     ['imports are followed transitively, .js naming the .ts', 'lib.mjs', "const swapped = abs.replace(/\\.(m|c)?js$/, '');", 'const swapped = abs;'],
     ['imports are followed transitively, .js naming the .ts', 'lib.mjs', 'if (!seen.has(r)) { seen.add(r); queue.push(r); }', 'if (!seen.has(r)) { seen.add(r); }'],
@@ -326,10 +446,18 @@ const MUTANTS = [
     ['two PRs\' own check reds are recorded as "check red, no test named", never SECOND-HIT', 'record.mjs', "(namesATest(entry) ? '' : '; never counted toward a second hit')", "''"],
     ['node --test on CI: each failed test with its file, never the describe around it', 'lib.mjs', `if (yaml.includes("failureType: 'subtestsFailed'")) continue;`, ''],
     ['node --test on CI: each failed test with its file, never the describe around it', 'lib.mjs', "add({ test: m[1], kind: 'node-test', check: section.check, file: loc, pkg: null });", "add({ test: m[1], kind: 'node-test', check: section.check, file: null, pkg: null });"],
-    ['node v26 spec output is read, so SEEN-ON-CI fires for a node --test file', 'lib.mjs', "(m = /^✖ (.+?)(?: \\(\\d+(?:\\.\\d+)?m?s\\))?$/.exec(t))", 'false'],
-    ['node v26 spec output is read, so SEEN-ON-CI fires for a node --test file', 'lib.mjs', '/^✖ (.+?)(?: \\(\\d+(?:\\.\\d+)?m?s\\))?$/', '/^✖ (.+?)$/'],
-    ['node v26 spec output is read, so SEEN-ON-CI fires for a node --test file', 'lib.mjs', "(!specList || /^test at /.test(L[i - 1] ?? '')) && ", ''],
-    ['node v26 spec output is read, so SEEN-ON-CI fires for a node --test file', 'lib.mjs', "/^test at /.test(L[i - 1] ?? '')", 'true'],
+    ['node v26 spec output is read, so SEEN-ON-CI fires for a node --test file', 'lib.mjs', '(m = SPEC_TEST.exec(t))', 'false'],
+    ['node v26 spec output is read, so SEEN-ON-CI fires for a node --test file', 'lib.mjs', 'const SPEC_TEST = /^✖ (.+?) \\(\\d+(?:\\.\\d+)?ms\\)$/;', 'const SPEC_TEST = /^✖ (.+)$/;'],
+    // The line table: each shape rule loosened back to what let a non-test line in.
+    [LINE_RULE, 'lib.mjs', 'const SPEC_TEST = /^✖ (.+?) \\(\\d+(?:\\.\\d+)?ms\\)$/;', 'const SPEC_TEST = /^✖ (.+?)(?: \\(\\d+(?:\\.\\d+)?m?s\\))?$/;'],
+    [LINE_RULE, 'lib.mjs', 'if (!at) continue;', ''],
+    [LINE_RULE, 'lib.mjs', 'const VITEST_TEST = /^(\\S+\\.[cm]?[jt]sx?) > \\S/;', 'const VITEST_TEST = /^(.+?) > \\S/;'],
+    [LINE_RULE, 'lib.mjs', 'const SUITE_TEST = /^(test-[a-z0-9-]+)(?:\\s*\\([^)]*\\))?: ✗/;', 'const SUITE_TEST = /^(test-[a-z0-9-]+)(?:\\s*\\([^)]*\\))?: (?:✗|❌)/;'],
+    [LINE_RULE, 'lib.mjs', "the whole suite failed`, kind: 'check'", "the whole suite failed`, kind: 'server-suite'"],
+    [LINE_RULE, 'lib.mjs', ' && !describes.has(m[1])', ''],
+    [LINE_RULE, 'lib.mjs', "(!specList || /^test at /.test(L[i - 1] ?? '')) && ", ''],
+    [LINE_RULE, 'lib.mjs', "/^test at /.test(L[i - 1] ?? '')", 'true'],
+    [LINE_RULE, 'lib.mjs', "return { test: entry, kind: 'check', check, file: other ? serverFile(other[1]) : null, pkg: null };", "return { test: entry, kind: 'node-test', check, file: other ? serverFile(other[1]) : null, pkg: null };"],
 ];
 
 for (const [name, check] of Object.entries(RULES)) {

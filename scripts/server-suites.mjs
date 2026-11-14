@@ -859,8 +859,8 @@ export const SERIAL = {
     // 36747148280): the same pair, built the same way.
     'test-standby-swap-at-boot': 'many node processes and stagers; was a scaled 3 s copy idle time',
     // Gates each form's p95 at 30,570 members on its ratio to a plain signed read timed in the same round (its section
-    // 10; the bounds come from the CI runner's own ratios). A ratio cancels a slower machine, not a neighbour: a burst of
-    // CPU during one form's reads and not the floor's still moves it, so it runs alone. (Its absolute 5/20 ms budgets
+    // 10; the bounds come from the CI runner's own ratios). A ratio cancels what slows a whole round, not a neighbour: a
+    // burst of CPU during one form's reads and not the floor's still moves it, so it runs alone. (Its absolute 5/20 ms budgets
     // before that missed even x3 in the CI pool on 21 Oct 2026: near 61.8-68.3 ms against 60.)
     'test-members-on-demand': 'p95 ratios to a plain signed read; a neighbour moves one side',
     // Asserts a group chat id and an id nobody has answer an outsider's send within a flat 3 ms (median of 21 paired

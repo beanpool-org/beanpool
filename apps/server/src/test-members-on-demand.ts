@@ -28,8 +28,9 @@
  *   9. Faces heal: once the face URLs change shape (engine/avatar-keys.ts), a `keys=` delta from before is answered with
  *      every key asked, and a by-area delta from before is the whole set; one from after is as before.
  *  10. At 30,000 more members, over HTTP: each form's p95 against a plain signed read timed in the same round (the
- *      floor: GET /api/profile/privacy), `q` at most 3.8x it, `keys` 4.5x, `near` 8x (the milliseconds and the
- *      load are printed); and the whole directory and the old delta still answer (their bytes are
+ *      floor: GET /api/profile/privacy), `q` at most 4.7x it, `keys` 4.0x, `near` 15.4x, bounds set from a GitHub
+ *      runner's ratios (the milliseconds and the load are printed, and one 📏 line of every round's ratios reaches
+ *      test-all's summary, pass or fail); and the whole directory and the old delta still answer (their bytes are
  *      test-members-snapshot's and test-members-directory-cost's to prove).
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-members-on-demand)
@@ -574,20 +575,29 @@ async function main() {
     })();
     bumpMembersVersion();
     // Over HTTP, signed, through the middleware: what a phone's read costs. The design's figures (q and keys 5 ms, near
-    // 20 ms) are the droplet's, and no machine these run on is the droplet: a GitHub runner answers every request about
-    // twice as slowly as the Mac, and a gate held on milliseconds failed there on PRs that never touched these forms
+    // 20 ms) are the droplet's, no machine these run on is the droplet, and they differ (a GitHub runner answers near
+    // about twice as slowly as the Mac): a gate held on milliseconds failed there on PRs that never touched these forms
     // (14 Nov 2026: q 10.09-11.76 ms against 10; main measured the same as 626e4cf9, from earlier that evening). So
     // each round also times the floor: a signed read of the reader's own privacy switch (GET /api/profile/privacy),
     // through the same TLS, middleware, signature check and nonce store, one member looked up, a few bytes out, nothing
-    // of the directory. Each form is gated on its p95 over that round's floor p95: a slower or busier machine raises
-    // both alike, and what the form adds to a plain signed read, the part 30,000 members could make costly, stays in it.
-    // Every round's milliseconds and load are printed, and kept in MEMBERS_ON_DEMAND_REPORT when it is set.
-    // The bounds sit halfway (geometrically) between healthy and broken, measured on the Mac at load 3-19 on 12 cores:
-    // healthy rounds q 1.65-3.10x the floor, keys 1.53-2.91x, near 3.79-6.83x (25-28 rounds each); with the search, or
-    // the keys read that near uses too, reading the whole directory first (the cost these forms exist to avoid), the
-    // best round of a run was q 4.80x and 7.19x, keys 7.13x, near 9.56x. A lost index is the plan check's (section 3):
-    // at 30,000 members a scan costs about what the 3,000 names that start "ka" do, inside the healthy spread.
-    const BOUND = { q: 3.8, keys: 4.5, near: 8 };
+    // of the directory. Each form is gated on its p95 over that round's floor p95: what the form adds to a plain signed
+    // read, the part 30,000 members could make costly, stays in it, and a busier round raises both sides.
+    // A ratio is not the same on every machine, though: near's is two to three times as high on a GitHub runner
+    // (10.02-11.95x) as on the Mac (3.25-6.83x), the runner's floor being no dearer (p95 1.64-1.97 ms, the Mac's
+    // 1.97-4.80) and its near dearer (18.0-22.7 ms, the Mac's 9.5-14.9 at a floor under 3.3 ms). So the bounds are the
+    // runner's, where the gate counts: every round's ratios go into one 📏 line, which test-all's summary keeps from a
+    // passing run too. Measured there (14 Nov 2026, CI run 43620412990 and its rerun, shard server-2, load 8.6-9.3 on
+    // 4 cores, 6 rounds): q 3.23-3.52x, keys 2.53-3.25x, near 10.02-11.95x.
+    // Each bound is the geometric middle of the worst round and twice the best, rounded down, so it sits as far above
+    // the worst healthy round as a form whose cost doubled (every round twice its ratio) would sit above it: q 4.7
+    // (1.34x above 3.52, 6.46 is 1.37x above it), keys 4.0 (1.23x, 1.27x), near 15.4 (1.29x, 1.30x). A doubled form
+    // fails while the runner's best healthy round stays above half its bound (q 2.35x, keys 2.0x, near 7.7x).
+    // On the Mac (load 3-19 on 12 cores) healthy rounds are q 1.52-3.10x, keys 1.25-2.91x, near 3.25-6.83x, all well
+    // inside; with the search, or the keys read that near uses too, reading the whole directory first (the cost these
+    // forms exist to avoid), its best round of a run was q 4.80x and 7.19x, keys 7.13x, near 9.56x: all but that near
+    // fail there too. A lost index is the plan check's (section 3): at 30,000 members a scan costs about what the 3,000
+    // names that start "ka" do, inside the healthy spread.
+    const BOUND = { q: 4.7, keys: 4.0, near: 15.4 };
     const round = async () => {
         const times = { q: [] as number[], keys: [] as number[], near: [] as number[], floor: [] as number[] };
         for (let i = 0; i < 60; i++) {
@@ -626,7 +636,7 @@ async function main() {
     }
     const load = os.loadavg().map(x => x.toFixed(1)).join(' ');
     // One line for the record, pass or fail: run-server-suites.mjs keeps a line starting 📏 and test-all prints it in its
-    // summary, so a passing CI run leaves the runner's ratios in its log (where the bounds below come from).
+    // summary, so a passing CI run leaves the runner's ratios in its log (where BOUND above comes from).
     const each = (pick: (t: typeof rounds[number]) => number) => rounds.map(t => pick(t).toFixed(2)).join(' ');
     note(`📏 test-members-on-demand: p95 over a plain signed read, each round: q ${each(t => t.x.q)} (bound ${BOUND.q}), keys ${each(t => t.x.keys)} (${BOUND.keys}), near ${each(t => t.x.near)} (${BOUND.near}); floor ${each(t => t.floor)} ms; load ${load} on ${os.cpus().length} cores${process.env.CI ? '; CI' : ''}`);
     if (!best.all) note('   a form or the floor did not answer as asked in every read of a round: no ratio is taken from it');

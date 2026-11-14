@@ -13,7 +13,7 @@
  */
 import { formatDate, t } from './words.js';
 import { INVITE_LIFE_MS } from './invite-rows.js';
-import type { Contact } from './contacts-list.js';
+import { CONTACTS_LIMITS, type Contact } from './contacts-list.js';
 
 /** An invite as `GET /api/invite/mine/:publicKey` tells its maker: what these rules read of it. */
 export interface MyInviteSeen {
@@ -84,6 +84,14 @@ export function contactInviteNames(contacts: readonly Contact[], here: IsHere): 
     return names;
 }
 
+/**
+ * The codes made from the list for this community, lower-cased, sorted and joined: '' with none. Each app re-reads the member's
+ * own invites whenever this changes (a second invite in the same visit, or Invite again, gives a code the last read didn't hold).
+ */
+export function contactInviteCodes(contacts: readonly Contact[], here: IsHere): string {
+    return [...contactInviteNames(contacts, here).keys()].sort().join(',');
+}
+
 /** Who used a contact's invite, as the community told its maker. */
 export interface ContactInviteUsed {
     code: string;
@@ -95,11 +103,12 @@ const sameCode = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /**
  * "Someone joined with the invite you sent Dee: @dee_w. Is this Dee?": asked when this community says the contact's code was
- * used, and that member isn't linked to the contact yet. Null otherwise.
+ * used, and that member isn't linked to the contact yet. Null otherwise, and null for a contact that already holds its 5 links:
+ * a Yes could add none (the list keeps 5), so the question would only come back.
  */
 export function contactInviteAsk(contact: Contact, mine: readonly MyInviteSeen[], here: IsHere): ContactInviteUsed | null {
     const inv = contact.invite;
-    if (!inv || !here(inv.community)) return null;
+    if (!inv || !here(inv.community) || contact.links.length >= CONTACTS_LIMITS.links) return null;
     const seen = mine.find((m) => sameCode(m.code, inv.code));
     const key = typeof seen?.usedBy === 'string' ? seen.usedBy.toLowerCase() : '';
     if (!/^[0-9a-f]{64}$/.test(key) || contact.links.some((l) => l.key === key)) return null;

@@ -26,6 +26,9 @@ const mem = vi.hoisted(() => ({
     role: null as null | string,
     mine: [] as Array<Record<string, unknown>>,
     generateAnswer: null as null | { status: number; body: unknown },
+    // When set, the community lists every invite made so far, unused (the reviewer's probe of #3165), and counts its reads.
+    mineIsMade: false,
+    mineReads: 0,
 }));
 const fakes = vi.hoisted(() => {
     const fsFake = {
@@ -144,7 +147,11 @@ function community(url: string, init: RequestInit = {}): Response {
     mem.sent.push(`${method} ${url} ${JSON.stringify(init.headers ?? {})} ${typeof init.body === 'string' ? init.body : ''}`);
     const path = url.replace(RIVERSIDE, '');
     if (path === '/api/invite/generate') return mem.generateAnswer ? json(mem.generateAnswer.status, mem.generateAnswer.body) : json(200, { success: true, invite: { code: `INV-TEST-000${mem.sent.filter((s) => s.includes('/api/invite/generate')).length}` } });
-    if (path.startsWith('/api/invite/mine/')) return json(200, { invites: mem.mine });
+    if (path.startsWith('/api/invite/mine/')) {
+        mem.mineReads += 1;
+        const made = mem.sent.filter((s) => s.includes('/api/invite/generate')).map((_, i) => ({ code: `INV-TEST-000${i + 1}`, createdAt: new Date().toISOString(), usedBy: null }));
+        return json(200, { invites: mem.mineIsMade ? made : mem.mine });
+    }
     if (method === 'DELETE' && path.startsWith('/api/invite/')) return json(200, { success: true, revoked: 1, returned: 0, promiseEnded: false });
     if (path === '/api/me/unread') return json(200, { contacts: seq ? { seq } : null });
     if (path === '/api/contacts/copy') {
@@ -195,7 +202,7 @@ const assertNothingNamed = () => { for (const n of NEEDLES) expect(sentText(), `
 beforeEach(() => {
     mem.store.clear(); mem.files.clear(); mem.alerts.length = 0; mem.shares.length = 0; mem.opened.length = 0; mem.copied.length = 0; mem.sent.length = 0;
     mem.profile = { profile: 'local', features: { invites: true, door: 'members' } };
-    mem.role = null; mem.mine = []; mem.generateAnswer = null; seq = 0;
+    mem.role = null; mem.mine = []; mem.generateAnswer = null; mem.mineIsMade = false; mem.mineReads = 0; seq = 0;
     mem.store.set('beanpool_anchor_url', RIVERSIDE);
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => community(String(url), init)));
 });
@@ -355,6 +362,46 @@ describe('Invite from a contact on the phone', () => {
         await open('Tom Riley');
         expect(host.querySelector('[data-testid="contact-cancel-invite"] i')?.getAttribute('data-icon')).toBe('checkbox-blank-outline');
         // Mutation: drop the reset on opening a contact → Tom's tick is already on, red.
+    });
+
+    it('two invites on this screen, then Invite again, with no re-render: each one\'s Remove offers to cancel its own invite', async () => {
+        mem.mineIsMade = true;
+        await seedList((l) => putContact(putContact(l, DEE), TOM));
+        await render();
+        const inviteBy = async (button: 'Invite' | 'Invite again') => {
+            await press(button, 0);
+            await sheetOpen();
+            await press('Copy');
+            expect(text()).toContain('Copied. Paste it in your own message.');
+            await press('Close');
+        };
+        const open = async (name: string) => {
+            const row = Array.from(host.querySelectorAll('[data-testid="contact-row"]')).find((r) => r.textContent?.includes(name))!;
+            await act(async () => { (row.querySelector('button') as HTMLButtonElement).click(); });
+            await settle();
+        };
+        await inviteBy('Invite'); // Dee
+        await inviteBy('Invite'); // Tom: Dee's row now reads Invite again
+        expect(mem.mineReads).toBe(2);
+        // Tom's invite, the second made on this screen, is in the read: his Remove offers the tick.
+        await open('Tom Riley');
+        expect(host.querySelector('[data-testid="contact-cancel-invite"]')).not.toBeNull();
+        await press('Go back');
+        await open('Dee Walker');
+        expect(host.querySelector('[data-testid="contact-cancel-invite"]')).not.toBeNull();
+        await press('Go back');
+        // Invite again on Dee: a new code, read again; ticked, Remove cancels that new code (not the first one).
+        await inviteBy('Invite again');
+        expect(mem.mineReads).toBe(3);
+        await open('Dee Walker');
+        await act(async () => { (host.querySelector('[data-testid="contact-cancel-invite"]') as HTMLButtonElement).click(); });
+        await settle();
+        await press('Remove from contacts');
+        await answer('Remove');
+        expect(mem.sent.filter((s) => s.startsWith('DELETE')).map((s) => s.split(' ')[1].replace(`${RIVERSIDE}/api/invite/`, ''))).toEqual(['INV-TEST-0003']);
+        expect((await listNow())?.contacts.map((c) => c.name)).toEqual(['Tom Riley']);
+        assertNothingNamed();
+        // Mutation: key the read on "someone holds an invite here" (a boolean) → mineReads stays 1 and Tom has no tick, red.
     });
 
     it('No: the contact stays unlinked, the invite is forgotten (not asked again), and the member is told what it means', async () => {

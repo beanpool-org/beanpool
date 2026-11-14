@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    contactInviteAsk, contactInviteLines, contactInviteNames, contactInviteOut, contactInviteTitle, contactInvitedLine, contactMailtoLink,
+    CONTACTS_LIMITS, contactInviteAsk, contactInviteCodes, contactInviteLines, contactInviteNames, contactInviteOut, contactInviteTitle, contactInvitedLine, contactMailtoLink,
     contactSmsLink, forgetContactInvite, linkContactToInvite, withContactInvite, inviteWho, type Contact,
 } from '../index';
 
@@ -71,6 +71,22 @@ describe('the code kept in the locked list', () => {
         expect(inviteWho({ code: 'X', createdAt: '2026-11-12T01:00:00.000Z', namesEntryId: 'e1' }, { name: 'Sam', contactName: 'Dee' })).toBe('Sam');
         // Mutation: drop contactName from inviteWho → the row reads the bare code.
     });
+
+    it('the codes made here, as one key: a second invite, or Invite again, changes it (so each app reads its invites again)', () => {
+        const tom = (code: string) => ({ ...invited(code), id: 'b'.repeat(32), name: 'Tom' });
+        const there = { ...invited('INV-THERE-001', THERE), id: 'c'.repeat(32), name: 'Sam' };
+        expect(contactInviteCodes([dee(), there], same)).toBe('');
+        const one = contactInviteCodes([invited('INV-DEE-0001'), there], same);
+        expect(one).toBe('inv-dee-0001');
+        // Tom invited in the same visit: the key changes although "someone holds an invite here" was already true.
+        const two = contactInviteCodes([invited('INV-DEE-0001'), tom('INV-TOM-0001'), there], same);
+        expect(two).toBe('inv-dee-0001,inv-tom-0001');
+        // Invite again on Dee: a new code in place of the old one.
+        expect(contactInviteCodes([invited('INV-DEE-0002'), tom('INV-TOM-0001')], same)).not.toBe(two);
+        // The order of the list doesn't change it.
+        expect(contactInviteCodes([tom('INV-TOM-0001'), invited('INV-DEE-0001')], same)).toBe(two);
+        // Mutation: return whether any code is held (a boolean) → the second and third keys equal the first, red.
+    });
 });
 
 describe('"Is this Dee?": asked once the invite is used, never assumed', () => {
@@ -84,6 +100,16 @@ describe('"Is this Dee?": asked once the invite is used, never assumed', () => {
         expect(contactInviteAsk(dee(), [used], same)).toBeNull();
         const linked = linkContactToInvite(invited(), { code: used.code, key: DEE_KEY, callsign: 'dee_w' }, new Date(NOW));
         expect(contactInviteAsk(linked, [used], same)).toBeNull();
+    });
+    it('does not ask for a contact already holding its 5 links: a Yes could add none, so the question would come back', () => {
+        const link = (i: number) => ({ key: String(i).repeat(64), community: HERE, callsign: `m${i}`, how: 'hand' as const, at: '2026-11-13T01:00:00.000Z' });
+        const four = invited();
+        four.links = [1, 2, 3, 4].map(link);
+        expect(contactInviteAsk(four, [used], same)).toEqual({ code: 'INV-ABCD-1234', key: DEE_KEY, callsign: 'dee_w' });
+        const full = { ...four, links: [...four.links, link(5)] };
+        expect(full.links).toHaveLength(CONTACTS_LIMITS.links);
+        expect(contactInviteAsk(full, [used], same)).toBeNull();
+        // Mutation: drop the links check → the full contact is asked, red.
     });
     it('Yes links the contact to that member (how: invite), here; No forgets the invite so it is not asked again', () => {
         const linked = linkContactToInvite(invited(), { code: used.code, key: DEE_KEY, callsign: 'dee_w' }, new Date(NOW));

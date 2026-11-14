@@ -33,6 +33,10 @@ let seen: string[] = [];
 let mine: Array<Record<string, unknown>> = [];
 let generateAnswer: null | { status: number; body: unknown } = null;
 let made = 0;
+// When set, the community lists every invite made so far, unused (the reviewer's probe of #3165), and counts its reads.
+let mineIsMade = false;
+let madeCodes: string[] = [];
+let mineReads = 0;
 const shared: Array<{ text?: string }> = [];
 const copied: string[] = [];
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -43,9 +47,13 @@ function community(url: string, init: RequestInit = {}): Response {
     if (path === '/api/invite/generate') {
         if (generateAnswer) return json(generateAnswer.status, generateAnswer.body);
         made += 1;
+        madeCodes.push(`INV-TEST-000${made}`);
         return json(200, { success: true, invite: { code: `INV-TEST-000${made}` } });
     }
-    if (path.startsWith('/api/invite/mine/')) return json(200, { invites: mine });
+    if (path.startsWith('/api/invite/mine/')) {
+        mineReads += 1;
+        return json(200, { invites: mineIsMade ? madeCodes.map((code) => ({ code, createdAt: new Date().toISOString(), usedBy: null })) : mine });
+    }
     if (method === 'DELETE' && path.startsWith('/api/invite/')) return json(200, { success: true, revoked: 1, returned: 0, promiseEnded: false });
     if (path === '/api/contacts/copy') return method === 'PUT' ? json(200, { seq: JSON.parse(String(init.body)).header?.seq ?? 1 }) : json(404, { code: 'no_copy' });
     return json(404, { error: 'no route' });
@@ -56,7 +64,7 @@ const seedList = async (fn: (l: ContactsList) => ContactsList) => { await openCo
 const rowOf = (name: string) => screen.getAllByTestId('contact-row').find((r) => r.textContent?.includes(name))!;
 
 beforeEach(async () => {
-    seen = []; mine = []; generateAnswer = null; made = 0; shared.length = 0; copied.length = 0;
+    seen = []; mine = []; generateAnswer = null; made = 0; shared.length = 0; copied.length = 0; mineIsMade = false; madeCodes = []; mineReads = 0;
     state.info = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { invites: true, door: 'members' } };
     state.role = null;
     vi.stubGlobal('indexedDB', memoryIndexedDB());
@@ -73,7 +81,23 @@ afterEach(() => {
     vi.unstubAllGlobals();
     delete (navigator as unknown as Record<string, unknown>).share;
     delete (navigator as unknown as Record<string, unknown>).clipboard;
+    delete (document as unknown as Record<string, unknown>).execCommand;
 });
+
+// A browser at a plain http:// address: no share sheet and no navigator.clipboard, only the older copy command (`works` says
+// whether it copies). What it copied is the hidden box's words at the moment of the command.
+const plainHttpBrowser = (works: boolean) => {
+    delete (navigator as unknown as Record<string, unknown>).share;
+    delete (navigator as unknown as Record<string, unknown>).clipboard;
+    const execCommand = vi.fn((cmd: string) => {
+        const box = document.querySelector<HTMLTextAreaElement>('textarea[aria-hidden="true"]');
+        if (works && cmd === 'copy' && box) copied.push(box.value);
+        return works;
+    });
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: execCommand });
+    return execCommand;
+};
+const NO_EMAIL = { id: newContactId(), name: 'Dee Walker', phones: ['0412 345 678'], emails: [], note: '', links: [], invite: null };
 
 describe('Invite from a contact on the web', () => {
     it('the key used to sign holds none of the needles (so a hit below is the flow, not chance)', () => {
@@ -179,6 +203,102 @@ describe('Invite from a contact on the web', () => {
         await waitFor(() => expect(shared).toEqual([{ text: `Join me on BeanPool: ${window.location.origin}` }]));
         expect(seen.filter((s) => s.includes('/api/invite/'))).toEqual([]);
         expect(contactsSnapshot().list?.contacts[0].invite).toBeNull();
+    });
+
+    it('two invites in one visit, then Invite again, with no re-render: each one\'s Remove offers to cancel its own invite', async () => {
+        mineIsMade = true;
+        await seedList((l) => putContact(putContact(l, DEE), TOM));
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
+        await screen.findByText('Not on BeanPool yet');
+        const inviteBy = async (name: string, button: 'Invite' | 'Invite again') => {
+            fireEvent.click(within(rowOf(name)).getByRole('button', { name: button }));
+            const sheet = await screen.findByTestId('contact-invite-sheet');
+            await act(async () => { fireEvent.click(within(sheet).getByRole('button', { name: 'Copy' })); });
+            await within(sheet).findByText('Copied. Paste it in your own message.');
+            fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+            await waitFor(() => expect(screen.queryByTestId('contact-invite-sheet')).toBeNull());
+        };
+        const tickOn = async (name: string) => {
+            fireEvent.click(within(rowOf(name)).getByRole('button', { name: new RegExp(name) }));
+            fireEvent.click(await screen.findByRole('button', { name: 'Remove from contacts' }));
+            return screen.queryByRole('checkbox', { name: 'Also cancel the invite I sent' });
+        };
+        await inviteBy('Dee Walker', 'Invite');
+        await inviteBy('Tom Riley', 'Invite');
+        await waitFor(() => expect(mineReads).toBe(2));
+        // Tom's invite, the second made in this visit, is in the read: his Remove offers the tick.
+        expect(await tickOn('Tom Riley')).not.toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+        expect(await tickOn('Dee Walker')).not.toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+        // Invite again on Dee: a new code, read again; ticked, Remove cancels that new code (not the first one).
+        await screen.findByText('Not on BeanPool yet');
+        await inviteBy('Dee Walker', 'Invite again');
+        await waitFor(() => expect(mineReads).toBe(3));
+        const tick = await tickOn('Dee Walker');
+        expect(tick).not.toBeNull();
+        fireEvent.click(tick!);
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Remove' })); });
+        await waitFor(() => expect(contactsSnapshot().list?.contacts.map((c) => c.name)).toEqual(['Tom Riley']));
+        expect(seen.filter((s) => s.startsWith('DELETE')).map((s) => s.split(' ')[1].replace(/^.*\/api\/invite\//, ''))).toEqual(['INV-TEST-0003']);
+        assertNothingNamed();
+        // Mutation: key the read on "someone holds an invite here" (a boolean) → mineReads stays 1 and Tom has no tick, red.
+    });
+
+    it('no clipboard (a plain http:// address): Copy falls back to the older copy command and copies the whole message', async () => {
+        const execCommand = plainHttpBrowser(true);
+        await seedList((l) => putContact(l, NO_EMAIL));
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Invite' }));
+        const sheet = await screen.findByTestId('contact-invite-sheet');
+        expect(within(sheet).getAllByRole('button').map((b) => b.textContent)).toEqual(['Copy', 'Close']);
+        await act(async () => { fireEvent.click(within(sheet).getByRole('button', { name: 'Copy' })); });
+        expect(await within(sheet).findByText('Copied. Paste it in your own message.')).toBeInTheDocument();
+        expect(execCommand).toHaveBeenCalledTimes(1);
+        expect(copied).toHaveLength(1);
+        expect(copied[0]).toContain('/?invite=INV-TEST-0001');
+        expect(made).toBe(1);
+        assertNothingNamed();
+        // Mutation: navigator.clipboard.writeText in the sheet again → a TypeError, "Tap the same button again", 0 copies, red.
+    });
+
+    it('no clipboard and the older command refused too: the next tap shows the message to copy by hand; still one invite', async () => {
+        plainHttpBrowser(false);
+        await seedList((l) => putContact(l, NO_EMAIL));
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Invite' }));
+        const sheet = await screen.findByTestId('contact-invite-sheet');
+        // Refused after the wait for the invite: the next tap (inside the tap, nothing to wait for) may work.
+        await act(async () => { fireEvent.click(within(sheet).getByRole('button', { name: 'Copy' })); });
+        expect(await within(sheet).findByText('Your invite is ready. Tap the same button again to send it.')).toBeInTheDocument();
+        expect(screen.queryByTestId('contact-invite-by-hand')).toBeNull();
+        // Refused with nothing to wait for: it won't work by tapping, so the message is there to copy by hand.
+        await act(async () => { fireEvent.click(within(sheet).getByRole('button', { name: 'Copy' })); });
+        expect(await within(sheet).findByText('Could not copy the link.')).toBeInTheDocument();
+        const box = screen.getByTestId('contact-invite-by-hand') as HTMLTextAreaElement;
+        expect(box.value).toContain('/?invite=INV-TEST-0001');
+        expect(box).toHaveAccessibleName('Could not copy the link.');
+        expect(made).toBe(1);
+        expect(within(sheet).queryByText('Your invite is ready. Tap the same button again to send it.')).toBeNull();
+    });
+
+    it('no invites here and no share sheet: "Share the link" copies it with the older command and says so; refused, it is shown', async () => {
+        state.info = { ...state.info, profile: 'global', features: { invites: false } };
+        const execCommand = plainHttpBrowser(true);
+        await seedList((l) => putContact(l, DEE));
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Invite' }));
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: '📤 Share the link' })); });
+        const sheet = screen.getByTestId('contact-invite-sheet');
+        expect(within(sheet).getByText('Copied. Paste it in your own message.')).toBeInTheDocument();
+        expect(copied).toEqual([`Join me on BeanPool: ${window.location.origin}`]);
+        execCommand.mockReturnValue(false);
+        copied.length = 0;
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: '📤 Share the link' })); });
+        expect(within(sheet).getByText('Could not copy the link.')).toBeInTheDocument();
+        expect((screen.getByTestId('contact-invite-by-hand') as HTMLTextAreaElement).value).toBe(`Join me on BeanPool: ${window.location.origin}`);
+        expect(seen.filter((s) => s.includes('/api/invite/'))).toEqual([]);
+        // Mutation: navigator.clipboard.writeText then onClose() again → the sheet closes with nothing copied and nothing said, red.
     });
 
     it('No: the contact stays unlinked, the invite is forgotten (not asked again), and the member is told what it means', async () => {

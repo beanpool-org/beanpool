@@ -15,7 +15,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
 import {
-    CONTACTS_FILE_MAX_BYTES, CONTACTS_FILE_WORDS, CONTACTS_LIMITS, cleanContactName, contactAlreadyInList, contactInviteAsk, contactInviteAskWords,
+    CONTACTS_FILE_MAX_BYTES, CONTACTS_FILE_WORDS, CONTACTS_LIMITS, cleanContactName, contactAlreadyInList, contactInviteAsk, contactInviteAskWords, contactInviteCodes,
     contactInviteCancelWords, contactInviteNoWords, contactInviteOut, contactInviteWords, contactInvitedLine, contactsFromCandidates, emptyContactsList,
     forgetContactInvite, formatCount, inviteRevokeWords, linkContactToInvite, mergeContactsLists, newContactId, putContact, readContactsFile, removeContact, removeEveryContact,
     t, timeAgo, tn, type Contact, type ContactCandidate, type ContactInviteUsed, type ContactsList, type MyInviteSeen,
@@ -87,14 +87,15 @@ export function ContactsPage({ identity, start = 'list', onBack, onMessage }: {
     const list = snap.key === identity.publicKey.toLowerCase() ? snap.list : null;
     const here = nodeAddress();
     const isHere = (c: string) => sameOrigin(c, here);
-    // Read only while some contact holds an invite made here (a first invite made sets it, and so reads).
-    const invitedHere = !!list?.contacts.some((c) => !!c.invite && isHere(c.invite.community));
+    // Read while some contact holds an invite made here, and again whenever those codes change: a second invite in this visit,
+    // or Invite again (a new code), is then in `mine`, so its Remove offers to cancel it.
+    const codesHere = list ? contactInviteCodes(list.contacts, isHere) : '';
     useEffect(() => {
-        if (!invitedHere) return;
+        if (!codesHere) return;
         let alive = true;
         getMyInvites(identity.publicKey).then((r) => { if (alive && Array.isArray(r?.invites)) setMine(r.invites); }).catch(() => {});
         return () => { alive = false; };
-    }, [invitedHere, identity.publicKey]);
+    }, [codesHere, identity.publicKey]);
     const change = async (fn: (l: ContactsList) => ContactsList): Promise<boolean> => {
         setBusy(true);
         setError(null);

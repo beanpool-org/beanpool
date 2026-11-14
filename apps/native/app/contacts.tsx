@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, ErrorBoundary, useLocalSearchParams, useNavigation } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
-    CONTACTS_LIMITS, cleanContactName, contactInviteAsk, contactInviteAskWords, contactInviteCancelWords, contactInviteNoWords, contactInviteOut,
+    CONTACTS_LIMITS, cleanContactName, contactInviteAsk, contactInviteAskWords, contactInviteCancelWords, contactInviteCodes, contactInviteNoWords, contactInviteOut,
     contactInviteWords, contactInvitedLine, emptyContactsList, forgetContactInvite, formatCount, linkContactToInvite, newContactId, putContact,
     removeContact, removeEveryContact, t, tn, type Contact, type ContactInviteUsed, type ContactsList, type MyInviteSeen,
 } from '@beanpool/core';
@@ -66,10 +66,15 @@ export default function ContactsScreen() {
     useEffect(() => { if (identity) void checkContactsHere(identity); }, [identity?.publicKey]);
     const anchor = view?.anchor ?? null;
     const isHere = (c: string) => !!anchor && sameCommunity(c, anchor);
-    const invitedHere = contactsOf(view).some((c) => !!c.invite && isHere(c.invite.community));
-    // Read only while some contact holds an invite made here (a first invite made sets it, and so reads).
-    const readMine = () => { if (identity && anchor) void readMyInvites(anchor, identity).then((m) => { if (m) setMine(m); }); };
-    useEffect(() => { if (invitedHere) readMine(); }, [invitedHere, anchor, identity?.publicKey]);
+    // Read while some contact holds an invite made here, and again whenever those codes change: a second invite on this screen,
+    // or Invite again (a new code), is then in `mine`, so its Remove offers to cancel it. Only the latest read's answer is kept.
+    const codesHere = contactInviteCodes(contactsOf(view), isHere);
+    useEffect(() => {
+        if (!codesHere || !identity || !anchor) return undefined;
+        let alive = true;
+        void readMyInvites(anchor, identity).then((m) => { if (alive && m) setMine(m); });
+        return () => { alive = false; };
+    }, [codesHere, anchor, identity?.publicKey]);
     // "Add a contact" and a contact's page are this one route's own pages: Android's Back returns to the list from them, as
     // the arrow does, and iOS's swipe from the edge is off while one is open (it would close Contacts, and what was typed).
     const navigation = useNavigation();

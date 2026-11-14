@@ -1,0 +1,64 @@
+✔ the ledger keeps one line per job (0.320542ms)
+✖ a member sees the bell once (0.386791ms)
+▶ the forum
+  ✔ a reply lands under its topic (0.07975ms)
+  ✖ a quote keeps its author (0.555375ms)
+✖ the forum (1.029625ms)
+ℹ tests 4
+ℹ suites 1
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45.682333
+
+✖ failing tests:
+
+test at scripts/demo.test.mjs:4:1
+✖ a member sees the bell once (0.386791ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  2 !== 3
+  
+      at TestContext.<anonymous> (file:///Users/dev/beanpool/scripts/demo.test.mjs:4:52)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 3,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/demo.test.mjs:7:5
+✖ a quote keeps its author (0.555375ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+  +   a: 1
+  -   a: 2
+    }
+  
+      at TestContext.<anonymous> (file:///Users/dev/beanpool/scripts/demo.test.mjs:7:53)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1869:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { a: 1 },
+    expected: { a: 2 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

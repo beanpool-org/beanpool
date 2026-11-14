@@ -51,7 +51,7 @@ export const PRICING_CATEGORIES: PricingCategoryMeta[] = [
     { id: 'animals', label: word('Animals & Pets'), emoji: '🐾', description: 'Poultry, hay, pet sitting, dog walking, and animal care' },
     { id: 'tech', label: word('Tech & Digital'), emoji: '💻', description: 'Phone repair, computing, home WiFi, 3D printing, and digital support' },
     { id: 'energy', label: word('Energy & Firewood'), emoji: '☀️', description: 'Firewood, kindling, solar consults, and off-grid power solutions' },
-    { id: 'mindset', label: word('Mindset & Wisdom'), emoji: '📜', description: 'Philosophy, mutual aid, daily pulse essays, community mindset' },
+    { id: 'mindset', label: word('Mindset & Wisdom'), emoji: '📜', description: 'Philosophy, mutual aid, community mindset' },
     { id: 'general', label: word('General & Community'), emoji: '🌱', description: 'Event gear, venue space, marquee, sound hire, and community items' },
 ];
 

@@ -31,7 +31,7 @@ import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, standingRoomOf, type DealMoves,
-    FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill, marketOrder, daySections,
+    FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, wantsFill, marketOrder, daySections,
     editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
     tagIndex, freshBanner, recordFreshBannerDismissal, PINS_MAX, pinLive, upperCase,
     MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel,
@@ -1523,7 +1523,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // across all listings is "Show everywhere"), and not when the member picked a distance: that is the circle they
     // asked for, and the filter above would cut the fill to it anyway.
     const fillOn = !!near && !isVisitor && !membersOnly && typeFilter !== 'event' && !radiusSettings && !searchQuery.trim();
-    const fillWanted = fillOn && !loading && wantsFill(clientFilter(posts).filter(p => !isNodePulsePost(p)).length);
+    const fillWanted = fillOn && !loading && wantsFill(clientFilter(posts).length);
     const fillFilter = feedListFilter(typeFilter, categoryFilter, beansOnly, groupFilter);
     const fillKey = JSON.stringify(fillFilter);
     const [elsewhere, setElsewhere] = useState<{ key: string; posts: MarketplacePost[] | null } | null>(null);
@@ -1762,7 +1762,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // stayed enabled and called the ordinary accept on it — which the server now refuses, but a member
         // meeting that as a raw error alert is a worse version of the same bug.
         const isRemotePost = !!((selectedPost as any)._remoteNode ?? (selectedPost as any).originNode);
-        const isPulsePost = (selectedPost.authorCallsign || (selectedPost as any).author_callsign) === 'Daily Pulse';
         // A keeper of the enterprise that listed it may edit or pause/resume it, as on the phone (app/post/[id].tsx isOperatorOfAuthor):
         // the node takes the mutation signed with the keeper's own key (apps/server engine/posts.ts updatePost, pausePost, resumePost),
         // for a listing here for everyone. Deleting it stays the author's alone on this page.
@@ -2130,13 +2129,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     <div data-testid="listing-head" className={`flex flex-col gap-2 min-w-0 ${hasPhoto ? 'md:col-start-2 md:row-start-1' : ''}`}>
                         {/* The list card's chips, in its order (type · PINNED · category · RECURRING · CASH TOO · PAUSED), and "3d ago" at the row's end. */}
                         <div data-testid="listing-chips" className="flex flex-wrap items-center gap-1 min-w-0">
-                            {isPulsePost ? (
-                                <span data-testid="listing-type-chip" className={chip('warn')}>{upperCase(t('🗞️ Daily Pulse'))}</span>
-                            ) : (
-                                <span data-testid="listing-type-chip" className={chip(selectedPost.type === 'offer' ? 'offer' : 'need')}>{upperCase(typeWords(selectedPost.type))}</span>
-                            )}
+                            <span data-testid="listing-type-chip" className={chip(selectedPost.type === 'offer' ? 'offer' : 'need')}>{upperCase(typeWords(selectedPost.type))}</span>
                             {isPinned && <span data-testid="listing-pinned-chip" className={chip('pinned')}>{t('📌 PINNED')}</span>}
-                            {!isPulsePost && cat && (
+                            {cat && (
                                 <span data-testid="listing-category-chip" className={chip('quiet')}>{cat.emoji} <span>{t(cat.label)}</span></span>
                             )}
                             {selectedPost.repeatable && <span data-testid="listing-recurring-chip" className={chip('quiet')}>{t('↻ RECURRING')}</span>}
@@ -2213,7 +2208,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                         {/* 6. The terms box, on the shell: the label in small capitals, then the value, left-aligned, in the page's own
                             font. Where Beans live in a local community: what it asks in return, and the line that says where. */}
-                        {!isPulsePost && priceMarked && (
+                        {priceMarked && (
                             <div className={`mt-1 ${PAGE_BOX}`} data-testid="listing-in-return">
                                 <p className={BOX_LABEL.muted}>{t('In return')}</p>
                                 {/* lib/visitor-lobby.ts NO_BEANS_TERMS_TEXT's words, and the phone's key (utils/market-global.ts). */}
@@ -2221,7 +2216,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <LocalCommunityLine feature="beans" text={t(LOCAL_COMMUNITY_LINES.price)} {...markWays} />
                             </div>
                         )}
-                        {!isPulsePost && !priceMarked && (
+                        {!priceMarked && (
                             <div className={`mt-1 ${PAGE_BOX}`} data-testid="listing-price">
                                 {/* A listing priced at 0 reads Free (core listing-price.ts, as on every card): a Need says "Free help wanted", and
                                     its label is "Price", not "Willing to pay" over a figure that pays nothing. The words are the figure: no Beans
@@ -2607,27 +2602,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 )}
 
                 {/* 2. Unaccepted Posts Displayed to Browsers */}
-                {isPulsePost ? (
-                    <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-2xl p-5 text-center my-4 shadow-sm">
-                        <span className="text-3xl mb-2 block" aria-hidden="true">🗞️</span>
-                        <h4 className="font-bold text-amber-950 dark:text-amber-100 text-base mb-1">{t('Feeling Inspired?')}</h4>
-                        <p className="text-sm text-amber-900/90 dark:text-amber-200/90 mb-4 leading-relaxed max-w-md mx-auto">
-                            {t('The best way to participate in BeanPool is by offering your skills, surplus produce, or lending tools to your neighbors.')}
-                        </p>
-                        <button
-                            onClick={() => {
-                                setSelectedPost(null);
-                                onNavigate?.('map-post');
-                            }}
-                            className="px-6 py-2.5 bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold rounded-xl text-sm transition-colors shadow-md inline-flex items-center gap-2"
-                        >
-                            <span aria-hidden="true">💡</span> {t('Post Your Own Offer →')}
-                        </button>
-                        <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mt-3 font-medium">
-                            <span aria-hidden="true">🗞️ </span>{t('Daily Pulse — a daily thought for the post-extraction economy')}
-                        </p>
-                    </div>
-                ) : (myRequest || deals.canTakeUp) && selectedPost.status === 'active' && !isAcceptedByMe && (
+                {(myRequest || deals.canTakeUp) && selectedPost.status === 'active' && !isAcceptedByMe && (
                     <div className="flex flex-col gap-2 mt-3">
                         {(() => {
                             // A lendable Offer is asked for, never taken in one step: the lender says yes first (the node refuses a
@@ -3067,7 +3042,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 )}
                 
                 {/* 3. The rating, once a deal here is finished, for its two people (Message is in the quiet row, Report at the foot). */}
-                {!isOwnPost && !isPulsePost && (
+                {!isOwnPost && (
                     <>
                         {/* Transaction-gated rating — only show on completed posts where user was a participant */}
                         {identity && selectedPost.status === 'completed' && selectedPost.pendingTransactionId && (
@@ -3658,7 +3633,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         <div data-testid="listing-tile-banner" className="w-full aspect-[3/1] mb-1 rounded-[14px] overflow-hidden">
                             <CategoryTile
                                 category={selectedPost.category}
-                                kind={isPulsePost ? 'pulse' : ((selectedPost.type as string) === 'event' ? 'event' : 'listing')}
+                                kind={(selectedPost.type as string) === 'event' ? 'event' : 'listing'}
                                 size="banner"
                             />
                         </div>
@@ -3666,14 +3641,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                     <div data-testid="listing-body" className={`flex flex-col gap-4 min-w-0 ${hasPhoto ? 'md:col-start-2 md:row-start-3' : ''}`}>
                         {/*
-                          * 9. The quiet row: Message (for anyone but its author; not on the Pulse) and Share with its menu of the
+                          * 9. The quiet row: Message (for anyone but its author) and Share with its menu of the
                           * ways (front doors S6, DW2), in the neutral outline, as the event page's chat, Share and Add to calendar.
                           */}
                         <div className="flex flex-col gap-1.5 min-w-0">
                             <SharePostButtons
                                 post={selectedPost}
                                 isMember={isMember}
-                                lead={!isOwnPost && !isPulsePost ? (
+                                lead={!isOwnPost ? (
                                     <button
                                         type="button"
                                         data-testid="listing-message"
@@ -3685,7 +3660,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </button>
                                 ) : undefined}
                             />
-                            {!isOwnPost && !isPulsePost && isRemotePost && (
+                            {!isOwnPost && isRemotePost && (
                                 <p className={`m-0 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>
                                     {t("This post is from another community — messaging across communities isn't available yet.")}
                                 </p>
@@ -3796,8 +3771,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             </div>
                         )}
 
-                        {/* 13. Report, last and small, as the event page has it: for anyone but its author, never on the Pulse. */}
-                        {!isOwnPost && !isPulsePost && (
+                        {/* 13. Report, last and small, as the event page has it: for anyone but its author. */}
+                        {!isOwnPost && (
                             <div className="flex flex-col gap-2 min-w-0">
                                 <button
                                     type="button"
@@ -4263,14 +4238,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             ) : membersOnly ? null : (() => {
                 let filtered = clientFilter(searchResults !== null ? searchRows(searchResults, posts, searchQuery) : posts);
 
-                // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
-                const realMemberListingsCount = posts.filter(p => {
-                    return !isNodePulsePost(p) && p.type !== 'poll' && p.type !== 'event' && p.status === 'active';
-                }).length;
-                if (realMemberListingsCount >= 2) {
-                    filtered = filtered.filter(p => !isNodePulsePost(p));
-                }
-
                 // Pinned block (scratch/fable-design/DESIGN-pinning-fable.md §0.2, §2.4, §2.9):
                 // A pin rises within what the member asked to see (clientFilter already applied).
                 // Under search, tags, or member-picked distance (near.from === 'setting' or radiusSettings),
@@ -4289,22 +4256,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 // The Market's order, one rule on both apps (core market-order, DESIGN-market-order-fable.md): the newest listed
                 // first, an event or an open poll listed again the day before its moment, no author past two places in a day
-                // until the others have had theirs. Pinned posts are out of the stream, so they never count towards that. The
-                // node's own Daily Pulse first (local only). Where the node's order stands, it is kept: under Events (soonest
-                // first, the date chips) and under a search or a tag (its ranking). The pinned posts follow in `filtered`, for
-                // what counts or fills, and are left out of what the list draws (`unpinnedFiltered`).
+                // until the others have had theirs. Pinned posts are out of the stream, so they never count towards that.
+                // Where the node's order stands, it is kept: under Events (soonest first, the date chips) and under a search or a
+                // tag (its ranking). The pinned posts follow in `filtered`, for what counts or fills, and are left out of what the
+                // list draws (`unpinnedFiltered`).
                 // A visitor's list draws no pinned block (it is the one list below), so for them pins stay in the stream.
                 const orderNow = Date.now();
                 const outOfStream = visitor ? new Set<string>() : pinnedIds;
-                const pulses = filtered.filter(p => isNodePulsePost(p) && !outOfStream.has(p.id));
-                const rest = filtered.filter(p => !isNodePulsePost(p) && !outOfStream.has(p.id));
-                const unpinnedFiltered = [...pulses, ...(typeFilter === 'event' || searchResults !== null ? rest : marketOrder(rest, orderNow))];
+                const rest = filtered.filter(p => !outOfStream.has(p.id));
+                const unpinnedFiltered = typeFilter === 'event' || searchResults !== null ? rest : marketOrder(rest, orderNow);
                 filtered = [...unpinnedFiltered, ...(visitor ? [] : pinnedPosts)];
 
-                // The fill beneath a short nearby list (see clientFilter): none of them already shown, and not the node's own
-                // Daily Pulse, which is not from elsewhere. Pending while the read is out; nothing if it failed or came back empty.
+                // The fill beneath a short nearby list (see clientFilter): none of them already shown. Pending while the read is
+                // out; nothing if it failed or came back empty.
                 const fillRead = fillWanted && elsewhere?.key === fillKey ? elsewhere.posts : undefined;
-                const fillRows = fillRead ? elsewhereFill(filtered, clientFilter(fillRead).filter(p => !isNodePulsePost(p))) : [];
+                const fillRows = fillRead ? elsewhereFill(filtered, clientFilter(fillRead)) : [];
                 const fillPending = fillWanted && elsewhere?.key !== fillKey;
 
                 // Distance on a card: the node's, where it read from a point, else from the centre the viewer picked for
@@ -4506,23 +4472,22 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             />
                                         );
                                     }
-                                    const isPulse = (post as any).author_callsign === 'Daily Pulse' || post.authorCallsign === 'Daily Pulse';
                                     return (
                                     <div
                                         key={post.id}
                                         data-testid={pinned ? 'market-pinned-tile' : undefined}
-                                        onClick={isPulse ? undefined : () => setSelectedPost(post)}
-                                        onKeyDown={isPulse ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
-                                        role={isPulse ? undefined : "button"}
-                                        tabIndex={isPulse ? undefined : 0}
-                                        aria-label={isPulse ? t('Daily Pulse: {title}', { title: post.title }) : openListingLabel(post)}
+                                        onClick={() => setSelectedPost(post)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
+                                        role="button"
+                                        tabIndex={0}
+                                        aria-label={openListingLabel(post)}
                                         // The cell IS the card (G2, DESIGN-market-grid-sizes-fable.md §0.3): the grid
                                         // stretches this item to its row, and the tile inside is `h-full`, so every
                                         // tile in a row is one height and there is no blank cell space around a card
                                         // for the click and the focus ring to cover (#1092's objection to stretching
                                         // was a cell taller than its card; here the card fills the cell). No
                                         // `self-start`: that kept each tile at its own height, the gaps Marty saw.
-                                        className={`h-full rounded-[14px] ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
+                                        className="h-full rounded-[14px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                     >
                                         <MarketplaceCard
                                             post={post as any}
@@ -4611,16 +4576,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 </div>
                                             );
                                         }
-                                        const isPulse = (post as any).author_callsign === 'Daily Pulse' || post.authorCallsign === 'Daily Pulse';
                                         return (
                                         <div
                                             key={post.id}
-                                            onClick={isPulse ? undefined : () => setSelectedPost(post)}
-                                            onKeyDown={isPulse ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
-                                            role={isPulse ? undefined : "button"}
-                                            tabIndex={isPulse ? undefined : 0}
-                                            aria-label={isPulse ? t('Daily Pulse: {title}', { title: post.title }) : openListingLabel(post)}
-                                            className={`rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
+                                            onClick={() => setSelectedPost(post)}
+                                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
+                                            role="button"
+                                            tabIndex={0}
+                                            aria-label={openListingLabel(post)}
+                                            className="rounded-xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                         >
                                             <MarketplaceCard
                                                 post={post as any}

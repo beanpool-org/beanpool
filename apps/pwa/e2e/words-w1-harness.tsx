@@ -48,7 +48,6 @@ const CARDS = [
     listing({ id: 'c2', photos: ['/assets/header-bg.png'], repeatable: true, authorFoundingNeeded: true, status: 'pending', priceType: 'weekly' }),
     listing({ id: 'c3', type: 'need', category: 'tools', title: 'Borrow a ladder', description: '', status: 'pending', priceType: 'daily', photos: ['/assets/header-bg.png'] }),
     listing({ id: 'c4', status: 'paused', priceType: 'monthly', price_c: 250, category: 'mindset' }),
-    listing({ id: 'c5', authorCallsign: 'Daily Pulse', title: 'On sharing', description: 'A thought for today' }),
 ];
 
 const deal = (over: Record<string, unknown>) => ({

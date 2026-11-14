@@ -27,9 +27,6 @@ import {
     Linking,
     Alert,
     Platform,
-    Modal,
-    ActivityIndicator,
-    ScrollView,
     useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -42,7 +39,7 @@ import {
     formatDate,
     t,
 } from '@beanpool/core';
-import { type PulseFeedItem, type DailyPulseReflection, fetchDailyPulse, pulseAge, isOfficialSource, canReportPulseItem, resolvePulseThumbnailUrl, PULSE_REPORT_REASONS } from '../utils/pulse';
+import { type PulseFeedItem, pulseAge, isOfficialSource, canReportPulseItem, resolvePulseThumbnailUrl, PULSE_REPORT_REASONS } from '../utils/pulse';
 import { CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../utils/reportReasons';
 import { pulseLineWords } from './pulse-lines';
 import { Sentence } from './Sentence';
@@ -56,7 +53,7 @@ import { YOUTUBE_MIN_VIEWPORT_PX } from '../utils/youtube-embed';
 import { MemberAvatar } from './MemberAvatar';
 import { PulseYouTubePlayer } from './PulseYouTubePlayer';
 import { CategoryTile } from './CategoryTile';
-import { useTheme, useStyles } from '../app/ThemeContext';
+import { useStyles } from '../app/ThemeContext';
 
 interface PulseFeedCardProps {
     item: PulseFeedItem;
@@ -85,7 +82,6 @@ function publishedWords(dateString: string | null | undefined): string {
 }
 
 export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }: PulseFeedCardProps) {
-    const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
     const { width: windowWidth, fontScale } = useWindowDimensions();
     // At 320dp with 1.3x text the header cannot fit the author, a labelled category pill and the
@@ -112,40 +108,6 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
 
     // A card that starts playing again has left its last failure behind.
     useEffect(() => { if (isPlaying) setPlayerError(null); }, [isPlaying]);
-
-    const isDailyPulse = Boolean(
-        item.id?.startsWith('item_pulse_') ||
-        item.external_id?.startsWith('daily_pulse_') ||
-        item.channel_id === 'chan_daily_pulse'
-    );
-
-    const [showReflection, setShowReflection] = useState(false);
-    const [reflection, setReflection] = useState<DailyPulseReflection | null>(null);
-    const [reflectionLoading, setReflectionLoading] = useState(false);
-    const [reflectionError, setReflectionError] = useState(false);
-
-    const loadReflection = async () => {
-        setReflectionLoading(true);
-        setReflectionError(false);
-        try {
-            const itemDate = item.id?.startsWith('item_pulse_')
-                ? item.id.replace('item_pulse_', '')
-                : item.external_id?.startsWith('daily_pulse_')
-                ? item.external_id.replace('daily_pulse_', '')
-                : undefined;
-            const data = await fetchDailyPulse(itemDate);
-            setReflection(data);
-        } catch {
-            setReflectionError(true);
-        } finally {
-            setReflectionLoading(false);
-        }
-    };
-
-    const handleOpenDailyPulse = () => {
-        setShowReflection(true);
-        void loadReflection();
-    };
 
     const isOwner = Boolean(currentPubkey && item.ownerPubkey === currentPubkey);
     const canReport = Boolean(onReport) && canReportPulseItem(item, currentPubkey);
@@ -424,14 +386,14 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                 </View>
             ) : (
                 <Pressable
-                    disabled={!item.url && !isDailyPulse}
-                    onPress={canPlayInApp ? handlePlayInApp : (isDailyPulse ? handleOpenDailyPulse : (item.url ? handleOpenPost : undefined))}
+                    disabled={!item.url}
+                    onPress={canPlayInApp ? handlePlayInApp : (item.url ? handleOpenPost : undefined)}
                     style={({ pressed }) => [
                         styles.contentPressable,
-                        (item.url || isDailyPulse) && pressed && styles.contentPressed,
+                        !!item.url && pressed && styles.contentPressed,
                     ]}
-                    accessibilityRole={canPlayInApp || isDailyPulse ? 'button' : (item.url ? 'link' : undefined)}
-                    accessibilityLabel={canPlayInApp ? t('Play {post}', { post: cardAccessibilityLabel }) : (isDailyPulse ? t('🌱 Daily Reflection') : cardAccessibilityLabel)}
+                    accessibilityRole={canPlayInApp ? 'button' : (item.url ? 'link' : undefined)}
+                    accessibilityLabel={canPlayInApp ? t('Play {post}', { post: cardAccessibilityLabel }) : cardAccessibilityLabel}
                     accessibilityHint={
                         canPlayInApp
                             ? t('Plays the video here, in this card')
@@ -486,14 +448,14 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                     </View>
                 ) : (
                     <Pressable
-                        disabled={!item.url && !isDailyPulse}
-                        onPress={isDailyPulse ? handleOpenDailyPulse : (item.url ? handleOpenPost : undefined)}
+                        disabled={!item.url}
+                        onPress={item.url ? handleOpenPost : undefined}
                         style={({ pressed }) => [
                             styles.contentPressable,
-                            (item.url || isDailyPulse) && pressed && styles.contentPressed,
+                            !!item.url && pressed && styles.contentPressed,
                         ]}
-                        accessibilityRole={isDailyPulse ? 'button' : (item.url ? 'link' : undefined)}
-                        accessibilityLabel={isDailyPulse ? t('🌱 Daily Reflection') : (item.url ? t('Open {post} on {platform}', { post: cardAccessibilityLabel, platform: platName }) : undefined)}
+                        accessibilityRole={item.url ? 'link' : undefined}
+                        accessibilityLabel={item.url ? t('Open {post} on {platform}', { post: cardAccessibilityLabel, platform: platName }) : undefined}
                         accessibilityHint={item.url ? t('Opens external post in browser or app') : undefined}
                     >
                         <View style={styles.bodyWrap}>
@@ -506,87 +468,10 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                                         <Sentence text={t('Open on {platform} {arrow}', { platform: platName })} parts={{ arrow: <Text style={styles.arrowIcon}>↗</Text> }} />
                                     </Text>
                                 </View>
-                            ) : (
-                                <View style={styles.footerLinkRow}>
-                                    <Text style={styles.footerLinkText}>
-                                        {t('🌱 Daily Reflection')}
-                                    </Text>
-                                </View>
-                            )}
+                            ) : null}
                         </View>
                     </Pressable>
                 )
-            )}
-
-            {/* Daily Pulse reflection sheet */}
-            {isDailyPulse && (
-                <Modal
-                    visible={showReflection}
-                    animationType="slide"
-                    transparent
-                    onRequestClose={() => setShowReflection(false)}
-                    statusBarTranslucent
-                >
-                    <View style={styles.modalBackdrop}>
-                        <Pressable
-                            style={styles.modalBackdropPressable}
-                            onPress={() => setShowReflection(false)}
-                            accessibilityLabel={t('Close')}
-                            accessibilityRole="button"
-                        />
-                        <View style={styles.modalSheet} testID="pulse-reflection-modal">
-                            <View style={styles.modalHandleBar} />
-                            <View style={styles.modalHeader}>
-                                <View style={styles.modalTitleWrap}>
-                                    <Text style={styles.modalTitle} accessibilityRole="header">
-                                        {t('🌱 Daily Reflection')}
-                                    </Text>
-                                    {reflection?.date ? (
-                                        <Text style={styles.modalDate}>{reflection.date}</Text>
-                                    ) : null}
-                                </View>
-                                <Pressable
-                                    onPress={() => setShowReflection(false)}
-                                    style={styles.modalCloseButton}
-                                    accessibilityRole="button"
-                                    accessibilityLabel={t('Close')}
-                                >
-                                    <Text style={styles.modalCloseText}>{t('Close')}</Text>
-                                </Pressable>
-                            </View>
-
-                            <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalContentInner}>
-                                {reflectionLoading ? (
-                                    <View style={styles.modalLoadingWrap}>
-                                        <ActivityIndicator size="small" color={colors.brand.primary} />
-                                        <Text style={styles.modalLoadingText}>{t('Loading')}</Text>
-                                    </View>
-                                ) : reflectionError ? (
-                                    <View style={styles.modalErrorWrap}>
-                                        <Text style={styles.modalErrorText}>{t('Failed to load')}</Text>
-                                        <Pressable
-                                            onPress={loadReflection}
-                                            style={styles.modalRetryButton}
-                                            accessibilityRole="button"
-                                            accessibilityLabel={t('Retry')}
-                                        >
-                                            <Text style={styles.modalRetryText}>{t('Retry')}</Text>
-                                        </Pressable>
-                                    </View>
-                                ) : reflection ? (
-                                    <View style={styles.modalBodyWrap}>
-                                        <Text style={styles.reflectionHeadline}>
-                                            {reflection.headline}
-                                        </Text>
-                                        <Text style={styles.reflectionBody}>
-                                            {reflection.body}
-                                        </Text>
-                                    </View>
-                                ) : null}
-                            </ScrollView>
-                        </View>
-                    </View>
-                </Modal>
             )}
         </View>
     );
@@ -981,117 +866,5 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             fontSize: 14,
             fontWeight: '700',
             color: colors.text.heading,
-        },
-        modalBackdrop: {
-            flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            justifyContent: 'flex-end',
-        },
-        modalBackdropPressable: {
-            ...StyleSheet.absoluteFillObject,
-        },
-        modalSheet: {
-            backgroundColor: colors.surface.card,
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
-            maxHeight: '85%',
-            paddingBottom: 24,
-        },
-        modalHandleBar: {
-            width: 36,
-            height: 4,
-            borderRadius: 2,
-            backgroundColor: colors.border.default,
-            alignSelf: 'center',
-            marginTop: 8,
-            marginBottom: 8,
-        },
-        modalHeader: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingHorizontal: 16,
-            paddingBottom: 12,
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            borderBottomColor: colors.border.default,
-        },
-        modalTitleWrap: {
-            flex: 1,
-        },
-        modalTitle: {
-            fontSize: 16,
-            fontWeight: '700',
-            color: colors.text.heading,
-        },
-        modalDate: {
-            fontSize: 12,
-            color: colors.text.muted,
-            marginTop: 2,
-        },
-        modalCloseButton: {
-            minHeight: 44,
-            minWidth: 44,
-            justifyContent: 'center',
-            alignItems: 'flex-end',
-            paddingHorizontal: 8,
-        },
-        modalCloseText: {
-            fontSize: 15,
-            fontWeight: '600',
-            color: colors.text.link,
-        },
-        modalContent: {
-            paddingHorizontal: 16,
-        },
-        modalContentInner: {
-            paddingVertical: 16,
-        },
-        modalLoadingWrap: {
-            paddingVertical: 32,
-            alignItems: 'center',
-            gap: 8,
-        },
-        modalLoadingText: {
-            fontSize: 14,
-            color: colors.text.muted,
-        },
-        modalErrorWrap: {
-            paddingVertical: 32,
-            alignItems: 'center',
-            gap: 12,
-        },
-        modalErrorText: {
-            fontSize: 14,
-            color: colors.text.danger || '#ef4444',
-        },
-        modalRetryButton: {
-            minHeight: 44,
-            minWidth: 88,
-            paddingHorizontal: 16,
-            paddingVertical: 10,
-            borderRadius: 8,
-            backgroundColor: colors.surface.sunken || '#e5e7eb',
-            alignItems: 'center',
-            justifyContent: 'center',
-        },
-        modalRetryText: {
-            fontSize: 14,
-            fontWeight: '600',
-            color: colors.text.heading,
-        },
-        modalBodyWrap: {
-            gap: 12,
-        },
-        reflectionHeadline: {
-            fontSize: 18,
-            fontWeight: '700',
-            color: colors.text.heading,
-            marginBottom: 12,
-            lineHeight: 24,
-        },
-        reflectionBody: {
-            fontSize: 15,
-            lineHeight: 22,
-            color: colors.text.body,
         },
     });

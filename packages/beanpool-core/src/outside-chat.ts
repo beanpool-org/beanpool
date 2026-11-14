@@ -210,8 +210,8 @@ export type OutsideChatState = 'request' | 'open' | 'declined';
 export type OutsideGateVerdict = 'line' | 'request' | 'drop';
 
 /**
- * The request gate, as one pure rule (design §3.5; the phone's utils/outside-chat-store.ts and the web's
- * lib/outside-chat-store.ts both take it from here): what becomes of an item of `kind` from a sender, given the chat this
+ * The request gate, as one pure rule (design §3.5; the phone's utils/outside-mail.ts, through outside-chat-store.ts
+ * gateIncoming, and the web's lib/outside-mail.ts both take it from here): what becomes of an item of `kind` from a sender, given the chat this
  * device has with them (null: none), whether that chat already holds a line of theirs, the member's door, and their blocks.
  * A block always wins; an open chat takes lines only; a stranger gets one line of words, only through an open door, and
  * nothing at all once declined.

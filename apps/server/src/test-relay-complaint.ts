@@ -16,9 +16,14 @@
  *      another sender, a line from here, no reason, a key that is no member: refused, nothing filed, nothing sent
  *   4  a.example cannot be reached: the complaint waits and is tried again; a 400 is final
  *   5  a complaint from a.example about Ben's line to Ana: filed, from another community, its reporter a server
- *   6  dropped and answered alike: again, from a community the line never went to, an id never sent, a key that is no member,
- *      the owner's switch off; a field naming a reporter is never kept
+ *   6  on file already (again, another complaint id): 202, nothing filed again; dropped and answered alike, 422 not_taken,
+ *      never as one taken: from a community the line never went to, an id never sent, a key that is no member, a member
+ *      gone since, the owner's switch off; a field naming a reporter is never kept
  *   7  refusals: not a complaint (400), unsigned or a member's signature (401), past 100 a day from one server (429)
+ *   9  closing the class (round 2 of #3185): a line addressed to the home now, a former name or an alias x a complaint signed
+ *      as the home now: matched and filed; to another community's name: dropped alike; to a name whose key document can't
+ *      be had: 503, tried again. The reporting side signs as its home now for a line to any of its names; and every answer
+ *      the home gave, handed back to it: told `sent` only for one taken (202), never for a drop
  *   8  closing the class: every outward path (complaint body and headers, the answer, the moderators' list, the stored
  *      complaint, every log line, the owners' notice) x every spelling of the reporter: absent; the logs carry counts
  *
@@ -26,7 +31,7 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 process.env.BEANPOOL_SSRF_TEST_HOOK = '1';
-process.env.BEANPOOL_ADDRESSES = 'b.example';
+process.env.BEANPOOL_ADDRESSES = 'b.example,b-alias.example';
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 
@@ -85,7 +90,9 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { __useNodeKeyFetchForTests } = await import('./engine/node-signature.js');
     const { applyShapeChanges } = await import('./config/community-shape-write.js');
-    const { hasBlocked } = await import('./engine/member-blocks.js');
+    const { updateNodeConfig } = await import('./state-engine.js');
+    const { forgetOwnAddresses } = await import('./engine/own-addresses.js');
+    const { hasBlocked, addBlocks, MEMBER_BLOCKS_MAX } = await import('./engine/member-blocks.js');
     const outbox = await import('./engine/relay-outbox.js');
     const complaints = await import('./engine/relay-complaint.js');
 
@@ -198,6 +205,14 @@ async function main(): Promise<void> {
     db.prepare("UPDATE abuse_reports SET disclosure = json_set(disclosure, '$.payload', ?) WHERE id = ?").run(JSON.stringify({ v: 1, c: 'AAAA', n: 'AAAA' }), reportId);
     assert(complaints.openReportedOutsideLine(reportId)?.signature === 'unverified', '2c. a stored line changed since reads as unverified: no stored flag stands in for the check');
     db.prepare("UPDATE abuse_reports SET disclosure = json_set(disclosure, '$.payload', ?) WHERE id = ?").run(spam.payload, reportId);
+    assert(complaints.openReportedOutsideLine(reportId)?.blocked === true, '2d. Ana is blocked for Ben, and the moderators read that she is');
+    const fay = keys();
+    addLocal(fay, 'Fay');
+    addBlocks(fay.key, Array.from({ length: MEMBER_BLOCKS_MAX }, () => crypto.randomBytes(32).toString('hex')));
+    const toFay = await line(ana, 'a.example', fay, 'b.example', 'To Fay');
+    const rFay = await asMember(fay, '/api/mail/report', { item: toFay, reason: 'Other', words: 'To Fay' });
+    assert(rFay.status === 200 && !hasBlocked(fay.key, ana.key) && complaints.openReportedOutsideLine(rFay.body?.report?.id)?.blocked === false,
+        `2e. a member whose block list is full: the report is filed, the block is not, and the moderators never read that it is (got ${rFay.status})`);
 
     // ── 3. A report that is not one ───────────────────────────────────────────────────────
     console.log('\n3. Reports that are not one are refused, and nothing is filed or sent');
@@ -259,27 +274,45 @@ async function main(): Promise<void> {
         && open5.id === benToAna.envelope.itemId, `5f. the moderators open it: from a.example, its reporter's word, about Ben's line (got ${JSON.stringify(open5)?.slice(0, 120)})`);
     assert(r5.text === '{"received":true}', '5e. the answer says received, nothing of what was filed');
 
-    // ── 6. Dropped, answered alike ────────────────────────────────────────────────────────
-    console.log('\n6. Complaints dropped and answered alike');
+    // ── 6. On file, or dropped and answered alike ─────────────────────────────────────────
+    console.log('\n6. A complaint on file already is taken; every drop is answered alike, and never as one taken');
     const answersAlike: string[] = [];
+    /** The home's real answers, by what they were (section 9 hands each to the reporting side). */
+    const realAnswers: Array<{ what: string; status: number; text: string }> = [{ what: 'filed', status: r5.status, text: r5.text }];
+    const onFile = async (what: string, body: unknown) => {
+        const n0 = reportsCount();
+        const r = await complain(body);
+        realAnswers.push({ what, status: r.status, text: r.text });
+        assert(r.status === 202 && r.text === '{"received":true}' && reportsCount() === n0, `6. ${what}: on file already, 202 received, nothing filed again (got ${r.status} ${r.text})`);
+    };
+    await onFile('the same complaint again', complaint5);
+    await onFile('the same line, another complaint id', { ...complaint5, id: crypto.randomUUID() });
     const drop = async (what: string, body: unknown, as?: { name: string; k: Keys }) => {
         const n0 = reportsCount();
         const r = await complain(body, as);
         answersAlike.push(`${r.status} ${r.text}`);
-        assert(r.status === 202 && r.text === '{"received":true}' && reportsCount() === n0, `6. ${what}: 202 received, nothing filed (got ${r.status} ${r.text})`);
+        realAnswers.push({ what, status: r.status, text: r.text });
+        assert(r.status === 422 && r.body?.code === 'not_taken' && reportsCount() === n0, `6. ${what}: 422 not_taken, nothing filed (got ${r.status} ${r.text})`);
     };
-    await drop('the same complaint again', complaint5);
-    await drop('the same line, another complaint id', { ...complaint5, id: crypto.randomUUID() });
     await drop('from c.example, where the line never went', { ...complaint5, id: crypto.randomUUID() }, { name: 'c.example', k: C });
     await drop('an id Ben never sent', { ...complaint5, id: crypto.randomUUID(), itemId: crypto.randomUUID() });
     await drop('a key that is no member here', { ...complaint5, id: crypto.randomUUID(), member: stranger.key });
+    // A member who sent the line and is gone since: nothing here can act on them.
+    const bo = keys();
+    addLocal(bo, 'Bo');
+    const boToAna = await line(bo, 'b.example', ana, 'a.example', 'Bye');
+    const boSent = await asMember(bo, '/api/mail/send', { items: [boToAna] });
+    db.prepare('DELETE FROM members WHERE public_key = ?').run(bo.key);
+    await drop('a member who sent the line and is gone since', { ...complaint5, id: crypto.randomUUID(), member: bo.key, itemId: boToAna.envelope.itemId });
+    assert(boSent.body?.items?.[0]?.state === 'sent', `6. (Bo's line did go to a.example before: ${boSent.status} ${boSent.body?.items?.[0]?.state})`);
     applyShapeChanges({ actor: olive.key, actorRole: 'owner' }, { changes: { outsideMessages: false } });
     const benToAna2 = await line(ben, 'b.example', ana, 'a.example', 'Second line');
     db.prepare(`INSERT INTO relay_outbox (sender_key, item_id, kind, recipient, recipient_home, state, item, attempts, next_try_at, created_at, updated_at)
                 VALUES (?, ?, 'dm-line', ?, 'a.example', 'sent', NULL, 1, NULL, ?, ?)`).run(ben.key, benToAna2.envelope.itemId, ana.key, Date.now(), Date.now());
     await drop('the owner\'s switch off', { ...complaint5, id: crypto.randomUUID(), itemId: benToAna2.envelope.itemId });
     applyShapeChanges({ actor: olive.key, actorRole: 'owner' }, { changes: { outsideMessages: true } });
-    assert(new Set(answersAlike).size === 1 && answersAlike[0] === `202 ${r5.text}`, '6z. every drop answered exactly as the one filed');
+    assert(new Set(answersAlike).size === 1 && !answersAlike[0].startsWith('202') && !answersAlike[0].includes('received'),
+        `6z. every drop answered exactly alike, whatever the reason, and never as one taken (got ${[...new Set(answersAlike)].join(' | ')})`);
     const withReporter = await complain({ ...complaint5, id: crypto.randomUUID(), itemId: benToAna2.envelope.itemId, reporter: ana.key, reporterName: ANA_NAME });
     const row6 = db.prepare('SELECT * FROM abuse_reports WHERE target_message_id = ?').get(benToAna2.envelope.itemId) as any;
     assert(withReporter.status === 202 && !!row6 && !JSON.stringify(row6).includes(ana.key) && !JSON.stringify(row6).includes(ANA_NAME),
@@ -299,6 +332,7 @@ async function main(): Promise<void> {
             })()
             : await complain(body);
         assert(r.status === 400 && r.body?.code === 'bad_complaint', `7a. ${what}: 400 bad_complaint (got ${r.status} ${r.body?.code})`);
+        if (what === 'an unknown kind') realAnswers.push({ what: 'not a complaint', status: r.status, text: r.text });
     }
     const unsigned = await send('POST', '/api/relay/complaint', {}, JSON.stringify({ complaint: complaint5 }));
     assert(unsigned.status === 401 && unsigned.body?.code === 'node_signature_missing', `7b. unsigned: refused (got ${unsigned.status} ${unsigned.body?.code})`);
@@ -310,9 +344,74 @@ async function main(): Promise<void> {
         fill.run(crypto.randomUUID(), 'community:a.example', bea.key, crypto.randomUUID(), JSON.stringify({ kind: 'relay-complaint', v: 1, from: 'a.example', complaintId: crypto.randomUUID(), at: 1, words: '' }), new Date().toISOString());
     }
     const over = await complain({ ...complaint5, id: crypto.randomUUID() });
+    realAnswers.push({ what: 'past the day\'s cap', status: over.status, text: over.text });
     assert(over.status === 429 && over.body?.code === 'rate_limited', `7d. past ${complaints.COMPLAINTS_PER_ORIGIN_DAY} a day from one server: 429 (got ${over.status})`);
-    const fromC = await complain({ ...complaint5, id: crypto.randomUUID() }, { name: 'c.example', k: C });
-    assert(fromC.status === 202, '7e. another server\'s complaints still count on their own');
+    const benToCara = await line(ben, 'b.example', cara, 'c.example', 'A line to Cara');
+    await asMember(ben, '/api/mail/send', { items: [benToCara] });
+    const fromC = await complain({ v: 1, id: crypto.randomUUID(), member: ben.key, itemId: benToCara.envelope.itemId, at: benToCara.envelope.at, reason: 'other', words: 'A line to Cara' },
+        { name: 'c.example', k: C });
+    assert(fromC.status === 202 && !!db.prepare("SELECT 1 FROM abuse_reports WHERE reporter_pubkey = 'community:c.example' AND target_message_id = ?").get(benToCara.envelope.itemId),
+        `7e. another server's complaints still count on their own: c.example's about Ben's line to Cara is filed (got ${fromC.status} ${fromC.text})`);
+
+    // ── 9. Closing the class: every name a line went to; every answer the home gives ──────
+    console.log('\n9. A line to any of a server\'s names is matched; a complaint the home did not take is never told as taken');
+    // a.example's day is full from 7d: those made-up rows go, so its complaints are read again.
+    db.prepare("DELETE FROM abuse_reports WHERE reporter_pubkey = 'community:a.example' AND target_pubkey = ?").run(bea.key);
+    // a.example's names: its home now, the name it had before a rename, and an alias, each serving its one key document.
+    const aDoc = docs.get('https://a.example/api/node/key');
+    for (const n of ['a-old.example', 'a-alias.example']) docs.set(`https://${n}/api/node/key`, aDoc);
+    // 9a. At the home (here): Ben's line to Ana, addressed to each name; a.example complains, signed as its home now.
+    const nameRows: Array<[string, string, number, boolean]> = [
+        ['a.example\'s home now', 'a.example', 202, true],
+        ['the name a.example had before its rename (a-old.example)', 'a-old.example', 202, true],
+        ['an alias of a.example (a-alias.example)', 'a-alias.example', 202, true],
+        ['another community\'s name (c.example, whose key document names another key)', 'c.example', 422, false],
+        ['a name whose key document can\'t be had now (a-gone.example)', 'a-gone.example', 503, false],
+    ];
+    for (const [what, home, status, filed] of nameRows) {
+        const l = await line(ben, 'b.example', ana, home, `To Ana at ${home}`);
+        const s = await asMember(ben, '/api/mail/send', { items: [l] });
+        const r = await complain({ v: 1, id: crypto.randomUUID(), member: ben.key, itemId: l.envelope.itemId, at: l.envelope.at, reason: 'spam or scam', words: `To Ana at ${home}` });
+        const row = db.prepare('SELECT reporter_pubkey FROM abuse_reports WHERE target_message_id = ?').get(l.envelope.itemId) as { reporter_pubkey: string } | undefined;
+        if (status === 422) answersAlike.push(`${r.status} ${r.text}`);
+        if (!filed) realAnswers.push({ what: `a line to ${what}`, status: r.status, text: r.text });
+        assert(s.body?.items?.[0]?.state === 'sent' && r.status === status && !!row === filed && (!filed || row?.reporter_pubkey === 'community:a.example'),
+            `9a. a line to ${what}, the complaint signed as a.example: ${status}, ${filed ? 'filed, from a.example' : 'nothing filed'} (got ${r.status} ${r.text.slice(0, 100)})`);
+    }
+    assert(new Set(answersAlike).size === 1, '9a. a line that went to another server\'s name is dropped as every other drop is: the same answer');
+    // 9b. At the reporting side (here): Ben reports a line Ana addressed to each of this server's names. One complaint goes
+    // to a.example, signed as this server's home now (b.example), about that line: 9a shows a.example matches it by name.
+    updateNodeConfig({ ownerAddresses: ['b-old.example'] } as any);   // as keepReplacedAddress keeps a name a rename replaced
+    forgetOwnAddresses();
+    for (const [what, home] of [['b.example, its home now', 'b.example'], ['b-old.example, the name it had before', 'b-old.example'], ['b-alias.example, an alias', 'b-alias.example']]) {
+        const sentBefore = complaintsSent().length;
+        const l = await line(ana, 'a.example', ben, home, `Spam to Ben at ${home}`);
+        const r = await asMember(ben, '/api/mail/report', { item: l, reason: 'Spam or scam', words: `Spam to Ben at ${home}` });
+        const went = complaintsSent().slice(sentBefore);
+        const c = JSON.parse(went[0]?.body ?? '{}').complaint ?? {};
+        assert(r.status === 200 && went.length === 1 && went[0].signed && went[0].url === 'https://a.example/api/relay/complaint' && c.itemId === l.envelope.itemId,
+            `9b. Ben reports a line Ana addressed to ${what}: one complaint to a.example, signed as b.example, about that line (got ${r.status} ${went.length} ${r.text.slice(0, 80)})`);
+    }
+    // 9c. Every answer the home gave above, handed to the reporting side as its answer: told `sent` only for one taken.
+    const replay = [...realAnswers, { what: 'a 200 from something that is no BeanPool home', status: 200, text: '{"received":true}' }, { what: 'cannot be reached', status: 0, text: '' }];
+    const drops = realAnswers.filter((a) => a.status === 422).length;
+    assert(drops >= 6 && replay.some((a) => a.status === 503) && replay.some((a) => a.status === 429) && replay.some((a) => a.status === 400),
+        `9c. there is every kind of answer to hand over (${drops} drops, a 503, a 429, a 400)`);
+    const toldWant = (status: number) => (status === 202 ? 'sent' : status === 400 || status === 413 || status === 422 ? 'failed' : 'queued');
+    for (const [i, a] of replay.entries()) {
+        const reporter = keys();
+        addLocal(reporter, `Reporter ${i}`);
+        otherAnswers = a.status;
+        otherUnreachable = a.status === 0;
+        const l = await line(ana, 'a.example', reporter, 'b.example', `Answered ${a.status}: ${a.what}`);
+        const r = await asMember(reporter, '/api/mail/report', { item: l, reason: 'Other', words: 'x' });
+        otherUnreachable = false;
+        const told = toldOf(r.body?.report?.id);
+        const taken = a.what === 'filed' || a.what.startsWith('the same');
+        assert(r.status === 200 && told === toldWant(a.status) && (told === 'sent') === taken,
+            `9c. the home answers ${a.status} (${a.what}): told ${toldWant(a.status)}${taken ? '' : ', never sent'} (got ${told})`);
+    }
+    otherAnswers = 202;
 
     // ── 8. Closing the class: the reporter is never named outward ─────────────────────────
     console.log('\n8. Every outward path x every spelling of the reporter');

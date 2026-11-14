@@ -18,16 +18,26 @@
  * time, the report's kind and the reporter's word for the line. **It never names the reporter**: not their key, not their
  * name, not the conversation (made from their key), nor the sealed line, whose signatures bind their key. What ties it to
  * a real line is the home's own record: an item its member sent, by that id, to the community whose server signed the
- * complaint (relay_outbox, kept 30 days after its last change). A complaint the other server does not take at once is
- * tried again by the minute timer with the outbox's backoff for a day, its state kept beside the report (`told`).
+ * complaint (relay_outbox, kept 30 days after its last change). The complaint is signed as this server's home now; the line
+ * may have been addressed to another of its names (a former name after a rename, an alias), which it takes lines for all the
+ * same (engine/node-key.ts isOwnNodeHome), and the home matches it by that name's key document (below). Told is `sent` only
+ * at the home's 202, which it answers only for a complaint it has on file; a complaint the other server does not take at
+ * once is tried again by the minute timer with the outbox's backoff for a day, and one it answers it will not take (422)
+ * or refuses as not one (400, 413) is `failed`, its state kept beside the report (`told`).
  *
  * **At the sender's home** a complaint lands in Settings → Moderation beside the community's own reports, marked "from
  * another community": abuse_reports with `community:<home>` as its reporter (a community, never a person), the member,
  * the line's id, and `{"kind":"relay-complaint","from":<home>,...}` as its disclosure, which the reports queue never reads:
- * the moderators open its words with the message (GET /api/local/admin/reports/:id/message, {@link openReportedComplaint}). It is answered 202 alike
- * whether it was filed or dropped (no line by that id went to that community, a key that is no member here, one on file
- * already, the owner's switch off), so no server learns from the answer who is a member here, nor whom they wrote. Refused:
- * a request that is not one (400 bad_complaint), and past COMPLAINTS_PER_ORIGIN_DAY from one server (429).
+ * the moderators open its words with the message (GET /api/local/admin/reports/:id/message, {@link openReportedComplaint}).
+ * The line is found by its sender and id (relay_outbox's own key), and it must have gone to the signing server: to its home
+ * as signed, or to a name whose key document (engine/node-signature.ts, fetched as for the door) names the key that signed
+ * the complaint, so a former name or an alias of the reporting server is one of its names here too, and no other server's.
+ * Answered 202 `{received:true}` when filed or on file already from that community. Every drop is answered alike, 422
+ * `not_taken`, whatever the reason (no line by that id from that member, a key that is no member here now, a line that went
+ * to another server's name, the owner's switch off), so the reporting server learns only whether its complaint is on file,
+ * never which of these it was; and it can ask only of lines it was sent (it needs the line's random id). Refused: a request
+ * that is not one (400 bad_complaint), past COMPLAINTS_PER_ORIGIN_DAY from one server (429), and 503 while the name the
+ * line went to can't be confirmed yet (its key document not had: try again later).
  *
  * **Counts, never names.** No log line here names a member or a reporter; the owners' notice is the reports' own
  * (services/alerts.ts noteNewReport: a kind and a count).
@@ -39,8 +49,9 @@ import {
 } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getNodeRole, isNodeMember, readsAsMember } from '../state-engine.js';
-import { addBlocks, BlockRefusal } from './member-blocks.js';
+import { addBlocks, BlockRefusal, hasBlocked } from './member-blocks.js';
 import { isOwnNodeHome } from './node-key.js';
+import { NODE_BUSY_RETRY_AFTER_SEC, keptNodeKeyDocument, originKeyStanding, type NodeOrigin } from './node-signature.js';
 import { GroupLineReportError, type GroupLineReport } from './group-chat-report.js';
 import { outsideMessagesOn, RELAY_LINE_MAX_CHARS } from './relay-mail.js';
 import { RETRY_BACKOFF_MS, OUTBOX_QUEUE_MS, forwardSigned } from './relay-outbox.js';
@@ -123,8 +134,10 @@ export function checkOutsideLineReport(reporter: string, body: { item?: unknown;
     return { envelope: env, payload: raw.payload, reason, words };
 }
 
+/** Whether the sender's home has the complaint: still trying, on file there, or it will not be. */
+export type ToldState = 'queued' | 'sent' | 'failed';
 /** A report's `told`: whether the sender's home has the complaint yet. */
-interface Told { state: 'queued' | 'sent' | 'failed'; tries: number; next: number | null; id: string }
+interface Told { state: ToldState; tries: number; next: number | null; id: string }
 
 /**
  * File a checked report: one row (the sender's key, their home, the line's id, what was handed over, and the complaint's
@@ -178,7 +191,20 @@ function toldOf(disclosure: string): Told | null {
     }
 }
 
-/** One complaint to its home, and its state after: sent at a 2xx, failed at a 400 or past a day, else tried again later. */
+/** What the home answers for a complaint it will not take, whatever the reason (the file header): final, never `sent`. */
+export const COMPLAINT_NOT_TAKEN_STATUS = 422;
+
+/**
+ * A complaint's state after the home's answer `status`: `sent` only at 202 (the home has it on file: no other answer, 2xx or
+ * not, says so), `failed` at a refusal that is final (400, 413, 422) or past a day, else `queued` (tried again later).
+ */
+export function toldAfter(status: number, sinceCreated: number): ToldState {
+    if (status === 202) return 'sent';
+    if (status === 400 || status === 413 || status === COMPLAINT_NOT_TAKEN_STATUS || sinceCreated >= OUTBOX_QUEUE_MS) return 'failed';
+    return 'queued';
+}
+
+/** One complaint to its home, and its state after ({@link toldAfter}). */
 async function tell(row: QueuedRow, told: Told, createdAt: number): Promise<Told['state']> {
     const complaint = complaintOf(row, told);
     if (!complaint) {
@@ -188,10 +214,7 @@ async function tell(row: QueuedRow, told: Told, createdAt: number): Promise<Told
     const status = await forwardSigned(`https://${row.target_home}${RELAY_COMPLAINT_PATH}`, JSON.stringify({ complaint }));
     const at = Date.now();
     const tries = told.tries + 1;
-    let state: Told['state'];
-    if (status >= 200 && status < 300) state = 'sent';
-    else if (status === 400 || status === 413 || at - createdAt >= OUTBOX_QUEUE_MS) state = 'failed';
-    else state = 'queued';
+    const state = toldAfter(status, at - createdAt);
     const next = state === 'queued' ? at + RETRY_BACKOFF_MS[Math.min(told.tries, RETRY_BACKOFF_MS.length - 1)] : null;
     setTold(row.id, { ...told, state, tries, next });
     return state;
@@ -237,11 +260,17 @@ export async function retryComplaints(now = Date.now()): Promise<number> {
 
 /**
  * What the route answers (`status`, `body`, `retryAfterSec`), and whether a report was filed (`filed`: the owners' notice,
- * told by the route). `filed` is never in the answer: the body is the same whether it was filed or dropped.
+ * told by the route). `filed` is never in the answer: 202 is the same body whether it was filed now or was on file already.
  */
 export type ComplaintAnswer =
     | { status: 202; body: { received: true }; filed: boolean }
-    | { status: 400 | 429; body: { error: string; code: string }; retryAfterSec?: number; filed?: false };
+    | { status: 400 | 422 | 429 | 503; body: { error: string; code: string }; retryAfterSec?: number; filed?: false };
+
+/** The one answer every drop gets (the file header): the same words and code whatever the reason. */
+export const COMPLAINT_NOT_TAKEN = {
+    error: 'This community has no message by that id from that member to your server, so it has not taken this complaint.',
+    code: 'not_taken',
+} as const;
 
 /** A complaint's body read back in exactly its fields, or null. */
 export function readComplaintBody(json: unknown): ComplaintBody | null {
@@ -254,14 +283,27 @@ export function readComplaintBody(json: unknown): ComplaintBody | null {
 }
 
 /**
- * What this server makes of a complaint the server of `origin` signed (the file header): filed, or dropped and answered
- * alike, or refused for its form or past the cap.
+ * Whether the name a line went to is one of the signing server's (the file header): its home as signed, or a name whose key
+ * document names the key it signed with. 'busy' while this server can't ask yet, or that name's document can't be had.
  */
-export function receiveComplaint(origin: string, body: unknown, now = Date.now()): ComplaintAnswer {
+async function wentToSigner(recipientHome: string, from: NodeOrigin, now: number): Promise<boolean | 'busy'> {
+    if (recipientHome === from.origin) return true;
+    const standing = await originKeyStanding(recipientHome, from.key, now);
+    if (standing === 'current' || standing === 'previous') return true;
+    if (standing === 'busy' || (standing === 'unknown' && !keptNodeKeyDocument(recipientHome, now))) return 'busy';
+    return false;
+}
+
+/**
+ * What this server makes of a complaint the server `from` signed (the file header): filed (or on file already), dropped and
+ * answered alike, or refused for its form, past the cap, or while the name its line went to can't be confirmed yet.
+ */
+export async function receiveComplaint(from: NodeOrigin, body: unknown, now = Date.now()): Promise<ComplaintAnswer> {
     const c = readComplaintBody(body);
     if (!c) return { status: 400, body: { error: 'A complaint is { complaint: { v: 1, id, member, itemId, at, reason, words } }.', code: 'bad_complaint' } };
-    const received = { status: 202 as const, body: { received: true as const }, filed: false };
-    if (!outsideMessagesOn()) return received;
+    const notTaken = { status: COMPLAINT_NOT_TAKEN_STATUS, body: { ...COMPLAINT_NOT_TAKEN } } as const;
+    if (!outsideMessagesOn()) return notTaken;
+    const origin = from.origin;
     // Counted by the community (its complaints' reporter, read on idx_abuse_reports_reporter), never from a disclosure.
     const reporter = `${COMPLAINT_REPORTER_PREFIX}${origin}`;
     const fromOrigin = (db.prepare(`SELECT COUNT(*) AS n FROM abuse_reports WHERE reporter_pubkey = ? AND created_at > ?`)
@@ -269,12 +311,21 @@ export function receiveComplaint(origin: string, body: unknown, now = Date.now()
     if (fromOrigin >= COMPLAINTS_PER_ORIGIN_DAY) {
         return { status: 429, body: { error: word("This community isn't taking more complaints from there today."), code: 'rate_limited' }, retryAfterSec: 3_600 };
     }
-    // A real line: this member sent an item by that id to the community whose server signed this. Else, nothing is filed.
-    const sent = db.prepare("SELECT 1 FROM relay_outbox WHERE sender_key = ? AND item_id = ? AND recipient_home = ? AND kind = 'dm-line'")
-        .get(c.member, c.itemId, origin);
-    if (!sent || !isNodeMember(c.member)) return received;
-    // One complaint a line from one community.
-    if (db.prepare('SELECT 1 FROM abuse_reports WHERE reporter_pubkey = ? AND target_message_id = ?').get(reporter, c.itemId)) return received;
+    // A real line: this member sent an item by that id (one row: the outbox's own key), and it went to the signing server.
+    const sent = db.prepare("SELECT recipient_home FROM relay_outbox WHERE sender_key = ? AND item_id = ? AND kind = 'dm-line'")
+        .get(c.member, c.itemId) as { recipient_home: string } | undefined;
+    if (!sent || !isNodeMember(c.member)) return notTaken;
+    const received = { status: 202 as const, body: { received: true as const }, filed: false };
+    const onFile = () => !!db.prepare('SELECT 1 FROM abuse_reports WHERE reporter_pubkey = ? AND target_message_id = ?').get(reporter, c.itemId);
+    // One complaint a line from one community: one on file already is taken (the first went to the signer, checked then).
+    if (onFile()) return received;
+    const toSigner = await wentToSigner(sent.recipient_home, from, now);
+    if (toSigner === 'busy') {
+        return { status: 503, body: { error: 'This server can\'t yet confirm that your server is the one this message went to. Please try again later.', code: 'busy' }, retryAfterSec: NODE_BUSY_RETRY_AFTER_SEC };
+    }
+    if (!toSigner) return notTaken;
+    // Asked again after the wait: the same community's complaint that came meanwhile may be on file now.
+    if (onFile()) return received;
     db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_message_id, disclosure, reason, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)`).run(crypto.randomUUID(), reporter, c.member, c.itemId,
         JSON.stringify({ kind: RELAY_COMPLAINT_DISCLOSURE_KIND, v: 1, from: origin, complaintId: c.id, at: c.at, words: c.words }),
@@ -330,7 +381,9 @@ export interface ReportedOutsideLine {
     /** No server keeps a line from outside: what the moderators read is what was handed over. */
     line: 'gone';
     /** Whether the sender's community has the complaint: still trying, taken, or it would not take it. */
-    told: Told['state'] | null;
+    told: ToldState | null;
+    /** Whether the reporter has its sender blocked now: not when their list was full at the report, or they unblocked since. */
+    blocked: boolean;
 }
 
 export function openReportedOutsideLine(reportId: string): ReportedOutsideLine | null {
@@ -347,5 +400,6 @@ export function openReportedOutsideLine(reportId: string): ReportedOutsideLine |
         kind: 'dm', id: env.itemId, sentAt: null, signedAt: verified ? new Date(env.at).toISOString() : null, authorPubkey: row.target_pubkey,
         authorCallsign: null, from: row.target_home, signer: verified ? env.senderKey : null, signature: verified ? 'verified' : 'unverified',
         words: { state: 'reported', text: d.words }, photo: false, voice: null, line: 'gone', told: toldOf(row.disclosure)?.state ?? null,
+        blocked: hasBlocked(row.reporter_pubkey, row.target_pubkey),
     };
 }

@@ -15,7 +15,9 @@
  *                                                          a line from another community reported, its sender blocked for
  *                                                          them, and their home told (engine/relay-complaint.ts)
  *   POST /api/relay/complaint       another community's server's signed request only
- *                                   { complaint } → 202 { received: true } (filed or dropped alike)
+ *                                   { complaint } → 202 { received: true } (filed, or on file already); every drop
+ *                                                          422 not_taken alike; 503 while the name its line went to
+ *                                                          can't be confirmed as the signer's yet
  *
  * The member routes are for a member who reads as one (engine/members.ts readsAsMember): a visitor's row, a key that is no
  * member here, a suspended member is refused (403 not_a_member). Every answer is `no-store`: a member's mail is theirs.
@@ -151,7 +153,7 @@ export function createRelayRoutes(): Router {
             ctx.body = { error: 'This path takes only requests signed by a community\'s server.', code: 'node_signature_missing' };
             return;
         }
-        const answer = receiveComplaint(from.origin, (ctx.request as any).body);
+        const answer = await receiveComplaint(from, (ctx.request as any).body);
         ctx.status = answer.status;
         if ('retryAfterSec' in answer && answer.retryAfterSec) ctx.set('Retry-After', String(answer.retryAfterSec));
         ctx.body = answer.body;

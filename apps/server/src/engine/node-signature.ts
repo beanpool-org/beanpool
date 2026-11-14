@@ -185,6 +185,16 @@ function askFor(origin: string, now: number): Promise<NodeKeyDocument | null> | 
     return ask;
 }
 
+/**
+ * Whether a document of `origin`'s came and is still trusted at `now`. After {@link originKeyStanding} answered 'unknown',
+ * this tells a document that names another key (the origin answered: not that key) from one that could not be had (ask again
+ * later). Reads only: it asks nobody.
+ */
+export function keptNodeKeyDocument(origin: string, now = Date.now()): boolean {
+    const have = kept.get(origin);
+    return !!have && now < have.trustUntil;
+}
+
 export type OriginKeyStanding = 'current' | 'previous' | 'expired' | 'unknown' | 'busy';
 
 /**

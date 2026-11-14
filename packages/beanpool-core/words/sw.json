@@ -2551,8 +2551,6 @@
   "Your channels": "Njia zako",
   "Nothing new this week.": "Hakuna jipya wiki hii.",
   "Have a video, a song, a blog or photos of your own? Add a link and your neighbours see it here.": "Una video, wimbo, blogu au picha zako mwenyewe? Weka kiungo na majirani zako wataviona hapa.",
-  "Nothing to add? The Learn lane has short videos on how BeanPool works.": "Hakuna cha kuongeza? Njia ya Jifunze ina video fupi kuhusu jinsi BeanPool inavyofanya kazi.",
-  "The Learn lane has short videos on how BeanPool works.": "Njia ya Jifunze ina video fupi kuhusu jinsi BeanPool inavyofanya kazi.",
   "Nothing to add? Tap {chip} for short videos about BeanPool.": "Hakuna cha kuongeza? Gusa {chip} kuona video fupi kuhusu BeanPool.",
   "Tap {chip} for short videos about BeanPool.": "Gusa {chip} kuona video fupi kuhusu BeanPool.",
   "your limit": "kikomo chako",
@@ -2699,5 +2697,6 @@
   "What you write on another phone or browser shows only there.": "Unachoandika kwenye simu au kivinjari kingine kinaonekana huko tu.",
   "Delete the old copy": "Futa nakala ya zamani",
   "Your old contacts list is in your contacts now. Its old locked copy is still kept here.": "Orodha yako ya zamani ya anwani sasa iko kwenye anwani zako. Nakala yake ya zamani iliyofungwa bado imehifadhiwa hapa.",
-  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "Jumuiya hii haikujibu. Orodha yako ya zamani ya anwani bado imehifadhiwa hapa. Jaribu tena baadaye."
+  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "Jumuiya hii haikujibu. Orodha yako ya zamani ya anwani bado imehifadhiwa hapa. Jaribu tena baadaye.",
+  "Learn": "Jifunze"
 }

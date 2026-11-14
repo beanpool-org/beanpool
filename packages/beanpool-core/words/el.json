@@ -2551,8 +2551,6 @@
   "Your channels": "Τα κανάλια σας",
   "Nothing new this week.": "Τίποτα νέο αυτή την εβδομάδα.",
   "Have a video, a song, a blog or photos of your own? Add a link and your neighbours see it here.": "Έχετε δικό σας βίντεο, τραγούδι, ιστολόγιο ή φωτογραφίες; Προσθέστε έναν σύνδεσμο και οι γείτονές σας θα τον δουν εδώ.",
-  "Nothing to add? The Learn lane has short videos on how BeanPool works.": "Δεν έχετε κάτι να προσθέσετε; Η λωρίδα Μάθηση έχει σύντομα βίντεο για το πώς λειτουργεί το BeanPool.",
-  "The Learn lane has short videos on how BeanPool works.": "Η λωρίδα Μάθηση έχει σύντομα βίντεο για το πώς λειτουργεί το BeanPool.",
   "Nothing to add? Tap {chip} for short videos about BeanPool.": "Δεν έχετε κάτι να προσθέσετε; Πατήστε {chip} για σύντομα βίντεο για το BeanPool.",
   "Tap {chip} for short videos about BeanPool.": "Πατήστε {chip} για σύντομα βίντεο για το BeanPool.",
   "your limit": "το όριό σου",
@@ -2699,5 +2697,6 @@
   "What you write on another phone or browser shows only there.": "Ό,τι γράφεις σε άλλο τηλέφωνο ή πρόγραμμα περιήγησης εμφανίζεται μόνο εκεί.",
   "Delete the old copy": "Διαγραφή του παλιού αντιγράφου",
   "Your old contacts list is in your contacts now. Its old locked copy is still kept here.": "Η παλιά σου λίστα επαφών βρίσκεται πλέον στις επαφές σου. Το παλιό κλειδωμένο αντίγραφό της φυλάσσεται ακόμα εδώ.",
-  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "Αυτή η κοινότητα δεν απάντησε. Η παλιά σου λίστα επαφών φυλάσσεται ακόμα εδώ. Δοκίμασε ξανά αργότερα."
+  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "Αυτή η κοινότητα δεν απάντησε. Η παλιά σου λίστα επαφών φυλάσσεται ακόμα εδώ. Δοκίμασε ξανά αργότερα.",
+  "Learn": "Μάθηση"
 }

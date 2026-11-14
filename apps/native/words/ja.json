@@ -2291,7 +2291,6 @@
   "Connect to a community before proposing a decision.": "決定を提案する前に、コミュニティに接続してください。",
   "Neighbours": "ご近所",
   "Local": "ローカル",
-  "Learn": "学び",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "other": "ご近所フィード、{n}件"
   },
@@ -2300,14 +2299,8 @@
     "other": "ローカルフィード、{n}件"
   },
   "Local feed": "ローカルフィード",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "other": "学びフィード、{n}件"
-  },
-  "Learn feed": "学びフィード",
   "Could not load community feed.": "コミュニティフィードを読み込めませんでした。",
   "Could not hide that item.": "その項目を非表示にできませんでした。",
-  "No learning guides yet": "学習ガイドはまだありません",
-  "Curated guides and reflections will appear here.": "厳選されたガイドや日々のヒントがここに表示されます。",
   "No posts in this category yet": "このカテゴリーにはまだ投稿がありません",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "「すべて」を選択するか、別のカテゴリーを確認して、近隣の投稿を見てみましょう。",
   "Show all categories": "すべてのカテゴリーを表示",
@@ -2316,7 +2309,6 @@
   "Pulse": "パルス",
   "Manage your channels": "チャンネルを管理",
   "‹ Back": "‹ 戻る",
-  "How BeanPool works and daily reflections": "BeanPoolの仕組みと日々のヒント",
   "News and notices from around the shire": "地域からのニュースとお知らせ",
   "What your neighbours are creating and sharing": "近隣の仲間が作成・共有しているもの",
   "All categories": "すべてのカテゴリー",

@@ -2551,8 +2551,6 @@
   "Your channels": "Deine Kanäle",
   "Nothing new this week.": "Diese Woche gibt es nichts Neues.",
   "Have a video, a song, a blog or photos of your own? Add a link and your neighbours see it here.": "Du hast ein eigenes Video, einen Song, einen Blog oder Fotos? Füge einen Link hinzu, und deine Nachbarn sehen ihn hier.",
-  "Nothing to add? The Learn lane has short videos on how BeanPool works.": "Nichts hinzuzufügen? In der Lernen-Spur findest du kurze Videos dazu, wie BeanPool funktioniert.",
-  "The Learn lane has short videos on how BeanPool works.": "In der Lernen-Spur findest du kurze Videos dazu, wie BeanPool funktioniert.",
   "Nothing to add? Tap {chip} for short videos about BeanPool.": "Nichts hinzuzufügen? Tippe auf {chip} für kurze Videos über BeanPool.",
   "Tap {chip} for short videos about BeanPool.": "Tippe auf {chip} für kurze Videos über BeanPool.",
   "your limit": "Dein Limit",
@@ -2699,5 +2697,6 @@
   "What you write on another phone or browser shows only there.": "Was du auf einem anderen Telefon oder in einem anderen Browser schreibst, erscheint nur dort.",
   "Delete the old copy": "Alte Kopie löschen",
   "Your old contacts list is in your contacts now. Its old locked copy is still kept here.": "Deine alte Kontaktliste ist jetzt in deinen Kontakten. Ihre alte gesperrte Kopie wird hier noch aufbewahrt.",
-  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "Diese Community hat nicht geantwortet. Deine alte Kontaktliste wird hier noch aufbewahrt. Versuche es später noch einmal."
+  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "Diese Community hat nicht geantwortet. Deine alte Kontaktliste wird hier noch aufbewahrt. Versuche es später noch einmal.",
+  "Learn": "Lernen"
 }

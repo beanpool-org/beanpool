@@ -2392,7 +2392,6 @@
   "Connect to a community before proposing a decision.": "Bir karar önermeden önce bir topluluğa bağlan.",
   "Neighbours": "Komşular",
   "Local": "Yerel",
-  "Learn": "Öğren",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "one": "Komşular akışı, {n} öge",
     "other": "Komşular akışı, {n} öge"
@@ -2403,15 +2402,8 @@
     "other": "Yerel akış, {n} öge"
   },
   "Local feed": "Yerel akış",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "one": "Öğrenme akışı, {n} öge",
-    "other": "Öğrenme akışı, {n} öge"
-  },
-  "Learn feed": "Öğrenme akışı",
   "Could not load community feed.": "Topluluk akışı yüklenemedi.",
   "Could not hide that item.": "Bu öge gizlenemedi.",
-  "No learning guides yet": "Henüz öğrenme rehberi yok",
-  "Curated guides and reflections will appear here.": "Seçilmiş rehberler ve düşünceler burada görünecektir.",
   "No posts in this category yet": "Bu kategoride henüz gönderi yok",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "Komşuların neler paylaştığını görmek için \"Tümü\"nü seçmeyi dene ya da başka bir kategoriye bak.",
   "Show all categories": "Tüm kategorileri göster",
@@ -2420,7 +2412,6 @@
   "Pulse": "Nabız",
   "Manage your channels": "Kanallarını yönet",
   "‹ Back": "‹ Geri",
-  "How BeanPool works and daily reflections": "BeanPool nasıl çalışır ve günlük düşünceler",
   "News and notices from around the shire": "Çevreden haberler ve duyurular",
   "What your neighbours are creating and sharing": "Komşularının ürettikleri ve paylaştıkları",
   "All categories": "Tüm kategoriler",

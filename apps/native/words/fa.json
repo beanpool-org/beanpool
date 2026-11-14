@@ -2392,7 +2392,6 @@
   "Connect to a community before proposing a decision.": "قبل از پیشنهاد یک تصمیم، به یک جامعه متصل شوید.",
   "Neighbours": "همسایه‌ها",
   "Local": "محلی",
-  "Learn": "یادگیری",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "one": "فید همسایه‌ها، {n} مورد",
     "other": "فید همسایه‌ها، {n} مورد"
@@ -2403,15 +2402,8 @@
     "other": "فید محلی، {n} مورد"
   },
   "Local feed": "فید محلی",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "one": "فید یادگیری، {n} مورد",
-    "other": "فید یادگیری، {n} مورد"
-  },
-  "Learn feed": "فید یادگیری",
   "Could not load community feed.": "بارگذاری فید جامعه ممکن نشد.",
   "Could not hide that item.": "پنهان کردن آن مورد ممکن نشد.",
-  "No learning guides yet": "هنوز راهنمای آموزشی وجود ندارد",
-  "Curated guides and reflections will appear here.": "راهنماها و یادداشت‌های برگزیده اینجا نمایش داده می‌شوند.",
   "No posts in this category yet": "هنوز پستی در این دسته‌بندی وجود ندارد",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "گزینه «همه» را انتخاب کنید یا دسته‌بندی دیگری را بررسی کنید تا ببینید همسایه‌ها چه چیزهایی پست کرده‌اند.",
   "Show all categories": "نمایش همه دسته‌بندی‌ها",
@@ -2420,7 +2412,6 @@
   "Pulse": "نبض",
   "Manage your channels": "مدیریت کانال‌های شما",
   "‹ Back": "‹ بازگشت",
-  "How BeanPool works and daily reflections": "نحوه کارکرد BeanPool و یادداشت‌های روزانه",
   "News and notices from around the shire": "اخبار و اطلاعیه‌ها از سراسر منطقه",
   "What your neighbours are creating and sharing": "آنچه همسایگان شما می‌سازند و به اشتراک می‌گذارند",
   "All categories": "همه دسته‌بندی‌ها",

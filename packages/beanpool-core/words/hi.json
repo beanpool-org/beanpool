@@ -2551,8 +2551,6 @@
   "Your channels": "आपके चैनल",
   "Nothing new this week.": "इस सप्ताह कुछ नया नहीं है।",
   "Have a video, a song, a blog or photos of your own? Add a link and your neighbours see it here.": "क्या आपके पास अपना कोई वीडियो, गाना, ब्लॉग या फ़ोटो हैं? एक लिंक जोड़ें और आपके पड़ोसी उसे यहाँ देखेंगे।",
-  "Nothing to add? The Learn lane has short videos on how BeanPool works.": "जोड़ने के लिए कुछ नहीं है? सीखें लेन में BeanPool कैसे काम करता है, इसके छोटे वीडियो हैं।",
-  "The Learn lane has short videos on how BeanPool works.": "सीखें लेन में BeanPool कैसे काम करता है, इसके छोटे वीडियो हैं।",
   "Nothing to add? Tap {chip} for short videos about BeanPool.": "जोड़ने के लिए कुछ नहीं है? BeanPool के छोटे वीडियो के लिए {chip} पर टैप करें।",
   "Tap {chip} for short videos about BeanPool.": "BeanPool के छोटे वीडियो के लिए {chip} पर टैप करें।",
   "your limit": "आपकी सीमा",
@@ -2699,5 +2697,6 @@
   "What you write on another phone or browser shows only there.": "आप किसी दूसरे फ़ोन या ब्राउज़र पर जो लिखते हैं, वह सिर्फ़ वहीं दिखता है।",
   "Delete the old copy": "पुरानी कॉपी हटाएं",
   "Your old contacts list is in your contacts now. Its old locked copy is still kept here.": "आपकी पुरानी संपर्क सूची अब आपके संपर्कों में है। इसकी पुरानी लॉक की गई कॉपी अभी भी यहाँ रखी है।",
-  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "इस समुदाय ने जवाब नहीं दिया। आपकी पुरानी संपर्क सूची अभी भी यहाँ रखी है। बाद में फिर से कोशिश करें।"
+  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "इस समुदाय ने जवाब नहीं दिया। आपकी पुरानी संपर्क सूची अभी भी यहाँ रखी है। बाद में फिर से कोशिश करें।",
+  "Learn": "सीखें"
 }

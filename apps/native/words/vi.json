@@ -2291,7 +2291,6 @@
   "Connect to a community before proposing a decision.": "Hãy kết nối với một cộng đồng trước khi đề xuất quyết định.",
   "Neighbours": "Hàng xóm",
   "Local": "Địa phương",
-  "Learn": "Tìm hiểu",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "other": "Bảng tin Hàng xóm, {n} mục"
   },
@@ -2300,14 +2299,8 @@
     "other": "Bảng tin Địa phương, {n} mục"
   },
   "Local feed": "Bảng tin Địa phương",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "other": "Bảng tin Tìm hiểu, {n} mục"
-  },
-  "Learn feed": "Bảng tin Tìm hiểu",
   "Could not load community feed.": "Không thể tải bảng tin cộng đồng.",
   "Could not hide that item.": "Không thể ẩn mục đó.",
-  "No learning guides yet": "Chưa có bài hướng dẫn nào",
-  "Curated guides and reflections will appear here.": "Các bài hướng dẫn chọn lọc và chiêm nghiệm sẽ xuất hiện ở đây.",
   "No posts in this category yet": "Chưa có bài đăng nào trong danh mục này",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "Hãy thử chọn \"Tất cả\" hoặc xem danh mục khác để thấy những gì hàng xóm đã đăng.",
   "Show all categories": "Hiển thị tất cả danh mục",
@@ -2316,7 +2309,6 @@
   "Pulse": "Nhịp đập",
   "Manage your channels": "Quản lý các kênh của bạn",
   "‹ Back": "‹ Quay lại",
-  "How BeanPool works and daily reflections": "Cách BeanPool hoạt động và những chiêm nghiệm hằng ngày",
   "News and notices from around the shire": "Tin tức và thông báo quanh vùng",
   "What your neighbours are creating and sharing": "Những gì hàng xóm của bạn đang sáng tạo và chia sẻ",
   "All categories": "Tất cả danh mục",

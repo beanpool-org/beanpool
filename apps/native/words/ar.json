@@ -2786,7 +2786,6 @@
   "Connect to a community before proposing a decision.": "اتصل بمجتمع قبل اقتراح قرار.",
   "Neighbours": "الجيران",
   "Local": "محلي",
-  "Learn": "تعلم",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "zero": "خلاصة الجيران، {n} عنصر",
     "one": "خلاصة الجيران، عنصر واحد",
@@ -2805,19 +2804,8 @@
     "other": "الخلاصة المحلية، {n} عنصر"
   },
   "Local feed": "الخلاصة المحلية",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "zero": "خلاصة التعلم، {n} عنصر",
-    "one": "خلاصة التعلم، عنصر واحد",
-    "two": "خلاصة التعلم، عنصران",
-    "few": "خلاصة التعلم، {n} عناصر",
-    "many": "خلاصة التعلم، {n} عنصرًا",
-    "other": "خلاصة التعلم، {n} عنصر"
-  },
-  "Learn feed": "خلاصة التعلم",
   "Could not load community feed.": "تعذر تحميل خلاصة المجتمع.",
   "Could not hide that item.": "تعذر إخفاء هذا العنصر.",
-  "No learning guides yet": "لا توجد أدلة تعليمية بعد",
-  "Curated guides and reflections will appear here.": "ستظهر الأدلة والخواطر المختارة هنا.",
   "No posts in this category yet": "لا توجد منشورات في هذه الفئة بعد",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "جرب اختيار \"الكل\" أو تفقّد فئة أخرى لمعرفة ما نشره الجيران.",
   "Show all categories": "عرض كل الفئات",
@@ -2826,7 +2814,6 @@
   "Pulse": "النبض",
   "Manage your channels": "إدارة قنواتك",
   "‹ Back": "‹ رجوع",
-  "How BeanPool works and daily reflections": "كيف يعمل BeanPool والخواطر اليومية",
   "News and notices from around the shire": "أخبار وتنبيهات من جميع أنحاء المنطقة",
   "What your neighbours are creating and sharing": "ما يبدعه جيرانك ويشاركونه",
   "All categories": "جميع الفئات",

@@ -2441,8 +2441,6 @@
   "Your channels": "Kanalmu",
   "Nothing new this week.": "Belum ada yang baru minggu ini.",
   "Have a video, a song, a blog or photos of your own? Add a link and your neighbours see it here.": "Punya video, lagu, blog, atau foto sendiri? Tambahkan tautan dan tetanggamu akan melihatnya di sini.",
-  "Nothing to add? The Learn lane has short videos on how BeanPool works.": "Tidak ada yang ditambahkan? Jalur Belajar punya video singkat tentang cara kerja BeanPool.",
-  "The Learn lane has short videos on how BeanPool works.": "Jalur Belajar punya video singkat tentang cara kerja BeanPool.",
   "Nothing to add? Tap {chip} for short videos about BeanPool.": "Tidak ada yang ditambahkan? Ketuk {chip} untuk video singkat tentang BeanPool.",
   "Tap {chip} for short videos about BeanPool.": "Ketuk {chip} untuk video singkat tentang BeanPool.",
   "your limit": "batasmu",
@@ -2581,5 +2579,6 @@
   "What you write on another phone or browser shows only there.": "Yang kamu tulis di ponsel atau peramban lain hanya muncul di sana.",
   "Delete the old copy": "Hapus salinan lama",
   "Your old contacts list is in your contacts now. Its old locked copy is still kept here.": "Daftar kontak lamamu sekarang sudah ada di kontakmu. Salinan lamanya yang terkunci masih disimpan di sini.",
-  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "Komunitas ini tidak menjawab. Daftar kontak lamamu masih disimpan di sini. Coba lagi nanti."
+  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "Komunitas ini tidak menjawab. Daftar kontak lamamu masih disimpan di sini. Coba lagi nanti.",
+  "Learn": "Belajar"
 }

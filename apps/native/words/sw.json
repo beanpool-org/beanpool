@@ -2390,7 +2390,6 @@
   "Connect to a community before proposing a decision.": "Unganisha na jumuiya kabla ya kupendekeza uamuzi.",
   "Neighbours": "Majirani",
   "Local": "Eneo",
-  "Learn": "Jifunze",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "one": "Mlisho wa majirani, kipengele {n}",
     "other": "Mlisho wa majirani, vipengele {n}"
@@ -2401,15 +2400,8 @@
     "other": "Mlisho wa eneo, vipengele {n}"
   },
   "Local feed": "Mlisho wa eneo",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "one": "Mlisho wa kujifunza, kipengele {n}",
-    "other": "Mlisho wa kujifunza, vipengele {n}"
-  },
-  "Learn feed": "Mlisho wa kujifunza",
   "Could not load community feed.": "Haikuweza kupakia mlisho wa jumuiya.",
   "Could not hide that item.": "Haikuweza kuficha kipengele hicho.",
-  "No learning guides yet": "Bado hakuna miongozo ya mafunzo",
-  "Curated guides and reflections will appear here.": "Miongozo na tafakari zilizochaguliwa zitaonekana hapa.",
   "No posts in this category yet": "Bado hakuna machapisho katika kitengo hiki",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "Jaribu kuchagua \"Yote\" au angalia kitengo kingine ili kuona kile majirani wamechapisha.",
   "Show all categories": "Onyesha vitengo vyote",
@@ -2418,7 +2410,6 @@
   "Pulse": "Mwenendo",
   "Manage your channels": "Dhibiti njia zako",
   "‹ Back": "‹ Nyuma",
-  "How BeanPool works and daily reflections": "Jinsi BeanPool inavyofanya kazi na tafakari za kila siku",
   "News and notices from around the shire": "Habari na taarifa kutoka maeneo ya karibu",
   "What your neighbours are creating and sharing": "Kile ambacho majirani zako wanaunda na kushiriki",
   "All categories": "Vitengo vyote",

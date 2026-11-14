@@ -2551,8 +2551,6 @@
   "Your channels": "Kanallarınız",
   "Nothing new this week.": "Bu hafta yeni bir şey yok.",
   "Have a video, a song, a blog or photos of your own? Add a link and your neighbours see it here.": "Kendi videonuz, şarkınız, blogunuz veya fotoğraflarınız mı var? Bir bağlantı ekleyin, komşularınız burada görsün.",
-  "Nothing to add? The Learn lane has short videos on how BeanPool works.": "Eklenecek bir şey yok mu? Öğren bölümünde BeanPool'un nasıl çalıştığını anlatan kısa videolar var.",
-  "The Learn lane has short videos on how BeanPool works.": "Öğren bölümünde BeanPool'un nasıl çalıştığını anlatan kısa videolar var.",
   "Nothing to add? Tap {chip} for short videos about BeanPool.": "Eklenecek bir şey yok mu? BeanPool hakkında kısa videolar için {chip} düğmesine dokunun.",
   "Tap {chip} for short videos about BeanPool.": "BeanPool hakkında kısa videolar için {chip} düğmesine dokunun.",
   "your limit": "limitiniz",
@@ -2699,5 +2697,6 @@
   "What you write on another phone or browser shows only there.": "Başka bir telefonda veya tarayıcıda yazdıkların yalnızca orada görünür.",
   "Delete the old copy": "Eski kopyayı sil",
   "Your old contacts list is in your contacts now. Its old locked copy is still kept here.": "Eski kişi listen artık kişilerinde. Kilitli eski kopyası hâlâ burada saklanıyor.",
-  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "Bu topluluk yanıt vermedi. Eski kişi listen hâlâ burada saklanıyor. Daha sonra yeniden dene."
+  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "Bu topluluk yanıt vermedi. Eski kişi listen hâlâ burada saklanıyor. Daha sonra yeniden dene.",
+  "Learn": "Öğren"
 }

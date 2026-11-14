@@ -2991,8 +2991,6 @@
   "Your channels": "قنواتك",
   "Nothing new this week.": "لا جديد هذا الأسبوع.",
   "Have a video, a song, a blog or photos of your own? Add a link and your neighbours see it here.": "هل لديك فيديو أو أغنية أو مدونة أو صور من إنتاجك؟ أضف رابطًا وسيراه جيرانك هنا.",
-  "Nothing to add? The Learn lane has short videos on how BeanPool works.": "لا شيء لإضافته؟ في مسار تعلم مقاطع فيديو قصيرة عن كيفية عمل BeanPool.",
-  "The Learn lane has short videos on how BeanPool works.": "في مسار تعلم مقاطع فيديو قصيرة عن كيفية عمل BeanPool.",
   "Nothing to add? Tap {chip} for short videos about BeanPool.": "لا شيء لإضافته؟ اضغط على {chip} لمشاهدة مقاطع فيديو قصيرة عن BeanPool.",
   "Tap {chip} for short videos about BeanPool.": "اضغط على {chip} لمشاهدة مقاطع فيديو قصيرة عن BeanPool.",
   "your limit": "حدك",
@@ -3171,5 +3169,6 @@
   "What you write on another phone or browser shows only there.": "ما تكتبه على هاتف أو متصفح آخر يظهر هناك فقط.",
   "Delete the old copy": "حذف النسخة القديمة",
   "Your old contacts list is in your contacts now. Its old locked copy is still kept here.": "قائمة جهات اتصالك القديمة موجودة الآن في جهات اتصالك. ولا تزال نسختها القديمة المقفلة محفوظة هنا.",
-  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "لم يردّ هذا المجتمع. ولا تزال قائمة جهات اتصالك القديمة محفوظة هنا. حاول مرة أخرى لاحقًا."
+  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "لم يردّ هذا المجتمع. ولا تزال قائمة جهات اتصالك القديمة محفوظة هنا. حاول مرة أخرى لاحقًا.",
+  "Learn": "تعلم"
 }

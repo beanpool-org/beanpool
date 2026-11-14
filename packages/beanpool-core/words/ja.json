@@ -2441,8 +2441,6 @@
   "Your channels": "あなたのチャンネル",
   "Nothing new this week.": "今週の新着はありません。",
   "Have a video, a song, a blog or photos of your own? Add a link and your neighbours see it here.": "ご自身の動画、曲、ブログ、写真はありますか？リンクを追加すると、近隣の方々がここで見られます。",
-  "Nothing to add? The Learn lane has short videos on how BeanPool works.": "追加するものがありませんか？学びレーンには、BeanPoolのしくみを紹介する短い動画があります。",
-  "The Learn lane has short videos on how BeanPool works.": "学びレーンには、BeanPoolのしくみを紹介する短い動画があります。",
   "Nothing to add? Tap {chip} for short videos about BeanPool.": "追加するものがありませんか？{chip}をタップすると、BeanPoolの短い動画が見られます。",
   "Tap {chip} for short videos about BeanPool.": "{chip}をタップすると、BeanPoolの短い動画が見られます。",
   "your limit": "利用限度額",
@@ -2581,5 +2579,6 @@
   "What you write on another phone or browser shows only there.": "別のスマートフォンやブラウザで書いた内容は、そこにだけ表示されます。",
   "Delete the old copy": "古いコピーを削除",
   "Your old contacts list is in your contacts now. Its old locked copy is still kept here.": "古い連絡先リストは連絡先に入りました。ロックされた古いコピーはまだここに保管されています。",
-  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "このコミュニティから応答がありませんでした。古い連絡先リストはまだここに保管されています。あとでもう一度お試しください。"
+  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "このコミュニティから応答がありませんでした。古い連絡先リストはまだここに保管されています。あとでもう一度お試しください。",
+  "Learn": "学び"
 }

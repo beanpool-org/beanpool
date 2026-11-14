@@ -2441,8 +2441,6 @@
   "Your channels": "Kênh của bạn",
   "Nothing new this week.": "Tuần này chưa có gì mới.",
   "Have a video, a song, a blog or photos of your own? Add a link and your neighbours see it here.": "Bạn có video, bài hát, blog hay ảnh của riêng mình? Hãy thêm một liên kết và hàng xóm sẽ thấy ở đây.",
-  "Nothing to add? The Learn lane has short videos on how BeanPool works.": "Chưa có gì để thêm? Mục Tìm hiểu có những video ngắn về cách BeanPool hoạt động.",
-  "The Learn lane has short videos on how BeanPool works.": "Mục Tìm hiểu có những video ngắn về cách BeanPool hoạt động.",
   "Nothing to add? Tap {chip} for short videos about BeanPool.": "Chưa có gì để thêm? Nhấn {chip} để xem các video ngắn về BeanPool.",
   "Tap {chip} for short videos about BeanPool.": "Nhấn {chip} để xem các video ngắn về BeanPool.",
   "your limit": "hạn mức của bạn",
@@ -2581,5 +2579,6 @@
   "What you write on another phone or browser shows only there.": "Những gì bạn viết trên điện thoại hoặc trình duyệt khác chỉ hiện ở đó.",
   "Delete the old copy": "Xóa bản sao cũ",
   "Your old contacts list is in your contacts now. Its old locked copy is still kept here.": "Danh bạ cũ của bạn giờ đã nằm trong danh bạ của bạn. Bản sao cũ đã khóa của nó vẫn được giữ ở đây.",
-  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "Cộng đồng này không trả lời. Danh bạ cũ của bạn vẫn được giữ ở đây. Hãy thử lại sau."
+  "This community didn't answer. Your old contacts list is still kept here. Try again later.": "Cộng đồng này không trả lời. Danh bạ cũ của bạn vẫn được giữ ở đây. Hãy thử lại sau.",
+  "Learn": "Tìm hiểu"
 }

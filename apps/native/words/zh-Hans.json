@@ -2291,7 +2291,6 @@
   "Connect to a community before proposing a decision.": "发起决策前请先连接到一个社区。",
   "Neighbours": "邻里",
   "Local": "本地",
-  "Learn": "学习",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "other": "邻里动态，{n} 条内容"
   },
@@ -2300,14 +2299,8 @@
     "other": "本地动态，{n} 条内容"
   },
   "Local feed": "本地动态",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "other": "学习动态，{n} 条内容"
-  },
-  "Learn feed": "学习动态",
   "Could not load community feed.": "无法加载社区动态。",
   "Could not hide that item.": "无法隐藏该内容。",
-  "No learning guides yet": "暂无学习指南",
-  "Curated guides and reflections will appear here.": "精选指南与心得将显示在这里。",
   "No posts in this category yet": "此分类下暂无内容",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "尝试选择“全部”或查看其他分类，看看邻居们发布了什么。",
   "Show all categories": "显示所有分类",
@@ -2316,7 +2309,6 @@
   "Pulse": "脉搏",
   "Manage your channels": "管理你的频道",
   "‹ Back": "‹ 返回",
-  "How BeanPool works and daily reflections": "BeanPool 运作方式与每日心得",
   "News and notices from around the shire": "来自全郡的新闻与通知",
   "What your neighbours are creating and sharing": "你的邻居正在创作和分享的内容",
   "All categories": "所有分类",

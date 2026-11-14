@@ -2392,7 +2392,6 @@
   "Connect to a community before proposing a decision.": "Verbinde dich mit einer Community, bevor du einen Beschluss vorschlägst.",
   "Neighbours": "Nachbarn",
   "Local": "Lokal",
-  "Learn": "Lernen",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "one": "Nachbarn-Feed, {n} Eintrag",
     "other": "Nachbarn-Feed, {n} Einträge"
@@ -2403,15 +2402,8 @@
     "other": "Lokaler Feed, {n} Einträge"
   },
   "Local feed": "Lokaler Feed",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "one": "Lern-Feed, {n} Eintrag",
-    "other": "Lern-Feed, {n} Einträge"
-  },
-  "Learn feed": "Lern-Feed",
   "Could not load community feed.": "Community-Feed konnte nicht geladen werden.",
   "Could not hide that item.": "Eintrag konnte nicht ausgeblendet werden.",
-  "No learning guides yet": "Noch keine Lernleitfäden",
-  "Curated guides and reflections will appear here.": "Ausgewählte Leitfäden und Denkanstöße erscheinen hier.",
   "No posts in this category yet": "Noch keine Beiträge in dieser Kategorie",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "Wähle „Alle“ oder sieh in einer anderen Kategorie nach, was Nachbarn geteilt haben.",
   "Show all categories": "Alle Kategorien anzeigen",
@@ -2420,7 +2412,6 @@
   "Pulse": "Pulse",
   "Manage your channels": "Deine Kanäle verwalten",
   "‹ Back": "‹ Zurück",
-  "How BeanPool works and daily reflections": "Wie BeanPool funktioniert und tägliche Denkanstöße",
   "News and notices from around the shire": "Neuigkeiten und Mitteilungen aus der Region",
   "What your neighbours are creating and sharing": "Was deine Nachbarn erstellen und teilen",
   "All categories": "Alle Kategorien",

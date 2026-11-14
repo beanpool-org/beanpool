@@ -5,7 +5,7 @@
  * browser writes AAC in .m4a, never in a request, and Firefox gets one line instead; and a recording is sent sealed, under one
  * line id on every try, and kept when a send is refused. A recorder that won't start lets the microphone go; the 60 s give-up
  * stops when the node takes the line, not after the chat's reload; the waveform's sound is started where Safari leaves it
- * suspended.
+ * suspended. A click on the microphone, or words typed, the moment the chat shows are not undone by the chat's opening.
  */
 import { render, screen, waitFor, fireEvent, cleanup, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -14,7 +14,7 @@ import { openDmVoice, sealDmVoice, VOICE_BARS, VOICE_MIME } from '@beanpool/core
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { Conversation, ApiMessage } from '../lib/api';
-import { sendMessageApi } from '../lib/api';
+import { getConversationMessages, sendMessageApi } from '../lib/api';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 import { forgetGroupKeys, groupKeyring, memoryGroupLockStore } from '../lib/group-chat-keys';
@@ -185,6 +185,31 @@ const track = { stop: vi.fn(), onended: null as null | (() => void) };
 const getUserMedia = vi.fn(async () => ({ getTracks: () => [track] }));
 let clock = 1000;
 
+/** The open chat's effects have run: its first read of the chat (only they and a send read it, and nothing is sent yet). */
+const chatEffectsRan = () => vi.mocked(getConversationMessages).mock.calls.some(([id]) => id === DM_CONV);
+
+/**
+ * Acts on an element the moment React draws it: in the MutationObserver's microtask right after the commit that drew it,
+ * the earliest a member could. React 19 yields to the browser after a commit that asks for a paint and runs its plain
+ * effects in a later task, so a chat's "just opened" effects used to come after that moment and undo what was done in it.
+ * On a loaded machine a findBy* resolved in that gap too (CI, 14 Nov: "Unable to find role="button" and name "Stop
+ * recording"" twice, and a typed "hi" emptied once). Here the gap is certain, not up to the machine's load.
+ */
+function actTheMomentItShows(container: HTMLElement, find: () => HTMLElement | null, then: (el: HTMLElement) => void) {
+    return new Promise<void>((resolve) => {
+        const look = () => {
+            const el = find();
+            if (!el) return;
+            observer.disconnect();
+            then(el);
+            resolve();
+        };
+        const observer = new MutationObserver(look);
+        observer.observe(container, { childList: true, subtree: true, attributes: true });
+        look();
+    });
+}
+
 describe('voice messages on the web (V4)', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
@@ -282,6 +307,26 @@ describe('voice messages on the web (V4)', () => {
         const mic = await screen.findByRole('button', { name: 'Record a voice message' });
         expect(mic).toBeTruthy();
         fireEvent.change(screen.getByPlaceholderText('Message...'), { target: { value: 'hi' } });
+        expect(screen.queryByRole('button', { name: 'Record a voice message' })).toBeNull();
+    });
+
+    it('a click on the microphone the moment the chat shows records: opening the chat doesn\'t throw that recording away', async () => {
+        const { container } = render(<MessagesPage identity={identity} openConversationId={DM_CONV} />);
+        await actTheMomentItShows(container, () => container.querySelector<HTMLElement>('[data-testid="voice-mic"]'), (mic) => fireEvent.click(mic));
+        await screen.findByRole('button', { name: 'Stop recording' });
+        await waitFor(() => expect(chatEffectsRan()).toBe(true));
+        // The chat's effects have run since, and the recording is still going.
+        expect(screen.getByRole('button', { name: 'Stop recording' })).toBeTruthy();
+        expect(getUserMedia).toHaveBeenCalledTimes(1);
+        expect(track.stop).not.toHaveBeenCalled();
+    });
+
+    it('words typed the moment the chat shows stay in the box: opening the chat doesn\'t empty it after', async () => {
+        const { container } = render(<MessagesPage identity={identity} openConversationId={DM_CONV} />);
+        await actTheMomentItShows(container, () => container.querySelector<HTMLElement>('textarea'),
+            (box) => fireEvent.change(box, { target: { value: 'hi' } }));
+        await waitFor(() => expect(chatEffectsRan()).toBe(true));
+        expect((screen.getByPlaceholderText('Message...') as HTMLTextAreaElement).value).toBe('hi');
         expect(screen.queryByRole('button', { name: 'Record a voice message' })).toBeNull();
     });
 

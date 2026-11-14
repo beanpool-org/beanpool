@@ -636,7 +636,7 @@ async function main(): Promise<void> {
             `the table holds every Turkish label with i, ı, İ or I (${rows.length}, ${inTurkish} answered in Turkish)`);
         assert(wrong.length === 0, `each of them typed as written, lower and upper case by both rules: its own tag, one answer (${wrong.length} wrong${wrong.length ? `: ${wrong.slice(0, 12).join('; ')}` : ''})`);
     }
-    const twice =await call('GET', bea, '/api/free-tags?q=laranja&q=limão', undefined, es);
+    const twice = await call('GET', bea, '/api/free-tags?q=laranja&q=limão', undefined, es);
     assert(twice.status === 200 && twice.body?.library === null && twice.body?.lang === null, `two q's are no word (${show(twice)})`);
     const noLanguage = await asked('laranja', bea, {});
     assert(noLanguage.body?.library === 'food.fruit.orange' && noLanguage.body?.lang === 'pt', `no X-Language: the same answer (${show(noLanguage)})`);

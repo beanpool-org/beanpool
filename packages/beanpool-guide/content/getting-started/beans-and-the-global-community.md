@@ -94,7 +94,7 @@ If other people near you would help, Home's **Find your community** card says ho
 
 To begin, tap **Start a community** in any **Why this lives in a local community** sheet, or, on the phone, on Home's **Find your community** card. It shows three ways to run one: a spare computer at home, a small rented server, or asking for help on the global community. **Copy my community's details** copies your community's name, place and how people can reach you, to paste into your new server's settings.
 
-The steps are in "First-time setup", in the guide for people who run a community, on beanpool.org. When your server is up, you claim it with your phone: point the phone's camera at the QR code your server shows, or in BeanPool tap **Set up a new community server** (in **Find a community** or **Start a community**), then **Scan the code**. Settings then helps you name your community, add a second owner and make your first invites. Set your community's place in Settings too, so that people near you can find it.
+The steps are in "First-time setup", in the guide for people who run a community, on beanpool.org. When your server is up, you claim it with your phone: point the phone's camera at the QR code your server shows, or in BeanPool tap the bean at the top, then **Set up a new community server**, then **Scan the code**. On a phone with no account yet, it is **Installed BeanPool on a server? Claim it** at the bottom of the first screen. Then open Settings: confirm your community's core settings, make a recovery code, add a second owner and invite your first members. Set your community's place in Settings too, so that people near you can find it.
 
 ## Join one near you
 

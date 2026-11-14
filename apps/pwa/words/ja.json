@@ -1416,7 +1416,6 @@
   "On the map": "地図上で確認",
   "On the map at {lat}, {lng}": "地図上の位置：{lat}, {lng}",
   "On your Home": "ホームに配置",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "ノードが動き出したら、設定画面でコミュニティの名前を決め、最初のメンバーを招待します。あとはその人たちが輪を広げていきます。「場所を公開」をオンにしておくと、通知を希望している近くの人たちに届きます。",
   "One device at a time: the copy you changed last is the one kept.": "端末は一度に1台のみ：最後に変更したコピーが保持されます。",
   "One moment…": "少々お待ちください…",
   "One more comes back {when}.": "{when}にさらに1件可能になります。",
@@ -4511,5 +4510,8 @@
   "Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.|Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.": {
     "other": "シーズン休止にすると、最大90日間クレジット枠が{n}豆に保持され、メンバーが購入できないよう有効な出品が一時停止されます。運営者はいつでも再開できます。"
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "再開するとすべての出品が再び有効になり、クレジット枠が通常の毎日計算に戻ります。"
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "再開するとすべての出品が再び有効になり、クレジット枠が通常の毎日計算に戻ります。",
+  "{name} has no owner yet": "{name}にはまだオーナーがいません",
+  "If you installed it, claim it with the one-time code on the server.": "インストールされたご本人の場合は、サーバー上のワンタイムコードを使って所有権を申請してください。",
+  "Claim {name}": "{name}の所有権を取得"
 }

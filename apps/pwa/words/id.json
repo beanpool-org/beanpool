@@ -1416,7 +1416,6 @@
   "On the map": "Di peta",
   "On the map at {lat}, {lng}": "Di peta pada {lat}, {lng}",
   "On your Home": "Di Beranda Anda",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Setelah nodemu berjalan, beri nama komunitasmu di aplikasi pengaturannya, undang anggota pertama, dan mereka akan mengundang yang lain. Aktifkan \"publikasikan lokasi\" di sana, dan orang-orang di dekatmu yang meminta diberi tahu akan mengetahuinya.",
   "One device at a time: the copy you changed last is the one kept.": "Satu perangkat dalam satu waktu: salinan yang terakhir kamu ubah adalah yang disimpan.",
   "One moment…": "Sebentar…",
   "One more comes back {when}.": "Satu lagi tersedia kembali {when}.",
@@ -4511,5 +4510,8 @@
   "Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.|Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.": {
     "other": "Menjeda untuk musim menahan batas kreditmu pada {n} kacang hingga 90 hari dan menjeda listing aktif sehingga anggota tidak dapat membeli. Pengurus mana pun dapat melanjutkannya kapan saja."
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Melanjutkan akan mengaktifkan kembali semua listing dan memulihkan batas kredit ke perhitungan harian normal."
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Melanjutkan akan mengaktifkan kembali semua listing dan memulihkan batas kredit ke perhitungan harian normal.",
+  "{name} has no owner yet": "{name} belum memiliki pemilik",
+  "If you installed it, claim it with the one-time code on the server.": "Jika kamu menginstalnya, klaim dengan kode satu kali pakai di server.",
+  "Claim {name}": "Klaim {name}"
 }

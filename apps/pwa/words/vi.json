@@ -1416,7 +1416,6 @@
   "On the map": "Trên bản đồ",
   "On the map at {lat}, {lng}": "Trên bản đồ tại {lat}, {lng}",
   "On your Home": "Trên Trang chủ của bạn",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Khi máy chủ của bạn hoạt động, bạn đặt tên cộng đồng trong ứng dụng cài đặt, mời những thành viên đầu tiên, và họ sẽ mời những người khác. Bật \"công khai vị trí\" tại đó, và những người gần bạn đã đăng ký nhận tin sẽ biết đến.",
   "One device at a time: the copy you changed last is the one kept.": "Mỗi lần một thiết bị: bản sao bạn chỉnh sửa lần cuối là bản được giữ lại.",
   "One moment…": "Chờ một chút…",
   "One more comes back {when}.": "Sẽ có thêm một lượt {when}.",
@@ -4511,5 +4510,8 @@
   "Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.|Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.": {
     "other": "Việc tạm dừng theo mùa sẽ giữ hạn mức tín dụng của bạn ở mức {n} đậu trong tối đa 90 ngày và tạm dừng các tin đăng đang hoạt động để thành viên không thể mua. Bất kỳ người quản lý nào cũng có thể tiếp tục bất cứ lúc nào."
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Tiếp tục hoạt động sẽ kích hoạt lại tất cả tin đăng và khôi phục hạn mức tín dụng về cách tính hàng ngày bình thường."
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Tiếp tục hoạt động sẽ kích hoạt lại tất cả tin đăng và khôi phục hạn mức tín dụng về cách tính hàng ngày bình thường.",
+  "{name} has no owner yet": "{name} chưa có chủ sở hữu",
+  "If you installed it, claim it with the one-time code on the server.": "Nếu bạn đã cài đặt, hãy xác nhận quyền sở hữu bằng mã dùng một lần trên máy chủ.",
+  "Claim {name}": "Nhận quyền sở hữu {name}"
 }

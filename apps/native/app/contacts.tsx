@@ -2,28 +2,31 @@
  * Contacts on the phone (scratch/fable-design/DESIGN-private-contacts-fable.md §3.6, §3.9, slice C2): the member's private
  * list, opened from Chat. The same words, order and behaviour as the web's ContactsPage (apps/pwa, slice C4): On BeanPool
  * and Not on BeanPool yet, a contact with Remove, Add by hand, the footer that says where it is kept, and ⋯: Save a copy as
- * a file, Remove everyone, How this is kept. Import is slice C3 (it needs the phone's contacts and a file picker, a new
- * build), so the phone has no Import button yet; invites from a row are C5.
+ * a file, Remove everyone, How this is kept. Import (slice C3: the phone's contacts, asked at the tap, or a contacts file;
+ * "Choose who to bring"; Done) is components/ContactsImport.tsx; opened as `/contacts?start=import` it starts there. Invites
+ * from a row are C5.
  *
  * A list on this phone that can't be opened says so; a damaged one is set aside and brought back from the copies the
  * member's communities keep, when the member asks (contacts-store.ts `setAsideDamaged`).
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, DeviceEventEmitter, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, ErrorBoundary, useNavigation } from 'expo-router';
+import { router, ErrorBoundary, useLocalSearchParams, useNavigation } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
-    CONTACTS_LIMITS, cleanContactName, formatCount, newContactId, putContact, removeContact, removeEveryContact, t, tn,
+    CONTACTS_LIMITS, cleanContactName, emptyContactsList, formatCount, newContactId, putContact, removeContact, removeEveryContact, t, tn,
     type Contact, type ContactsList,
 } from '@beanpool/core';
 import { Alert } from '../utils/keyboard-alert';
 import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles, type ThemeContextType } from './ThemeContext';
 import { ContactsInfoSheet } from '../components/ContactsInfoSheet';
+import { DoneScreen, ImportScreen, ReviewScreen, type ImportRead } from '../components/ContactsImport';
+import { importChosen } from '../utils/contacts-import';
 import { communityLabel, contactsOf, contactsWhereWords, shareContactsFile, useContacts, type ContactsView } from '../utils/use-contacts';
-import { checkContactsHere, editContacts, syncContacts } from '../utils/contacts-sync';
+import { checkContactsHere, contactsKeptAt, editContacts, syncContacts } from '../utils/contacts-sync';
 import { setAsideDamaged } from '../utils/contacts-store';
 import { sameCommunity } from '../utils/push-pins';
 import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser } from '../utils/blocklist';
@@ -33,14 +36,19 @@ import { signedRequestWords } from '../components/signed-request-lines';
 
 export { ErrorBoundary };
 
-type Screen = { kind: 'list' } | { kind: 'add' } | { kind: 'contact'; id: string };
+type Screen =
+    | { kind: 'list' } | { kind: 'add' } | { kind: 'contact'; id: string } | { kind: 'import' }
+    | { kind: 'review'; read: ImportRead } | { kind: 'done'; added: number; fromPhone: boolean };
 type Row = { kind: 'head'; title: string } | { kind: 'contact'; c: Contact };
 
 export default function ContactsScreen() {
     const { identity } = useIdentity();
     const { colors } = useTheme();
     const view = useContacts(identity);
-    const [screen, setScreen] = useState<Screen>({ kind: 'list' });
+    // Opened from Chat's "Import contacts" (no list yet), it starts on Import, and Back from there goes back to Chat.
+    const { start } = useLocalSearchParams<{ start?: string }>();
+    const startedOnImport = start === 'import';
+    const [screen, setScreen] = useState<Screen>(startedOnImport ? { kind: 'import' } : { kind: 'list' });
     const [info, setInfo] = useState(false);
     const [busy, setBusy] = useState(false);
     // The community in use is asked for its copy as the screen opens (design §4.5), at most once a minute.
@@ -49,20 +57,27 @@ export default function ContactsScreen() {
     // the arrow does, and iOS's swipe from the edge is off while one is open (it would close Contacts, and what was typed).
     const navigation = useNavigation();
     const onPage = screen.kind !== 'list';
+    // Android's Back does what the arrow does on each page (Choose who to bring returns to Import).
+    const backRef = useRef<() => void>(() => setScreen({ kind: 'list' }));
     useEffect(() => {
         navigation.setOptions({ gestureEnabled: !onPage });
         if (!onPage) return undefined;
         // Only while Contacts is the screen on top: a screen pushed over it (a notification tap, a link) gets its own Back.
         const sub = BackHandler.addEventListener('hardwareBackPress', () => {
             if (!navigation.isFocused()) return false;
-            setScreen({ kind: 'list' });
+            backRef.current();
             return true;
         });
         return () => sub.remove();
     }, [navigation, onPage]);
     const styles = useStyles(makeStyles);
 
-    const back = () => (screen.kind === 'list' ? router.back() : setScreen({ kind: 'list' }));
+    const back = () => {
+        if (screen.kind === 'review') setScreen({ kind: 'import' });
+        else if (screen.kind === 'list' || (screen.kind === 'import' && startedOnImport && contactsOf(view).length === 0)) router.back();
+        else setScreen({ kind: 'list' });
+    };
+    backRef.current = back;
     const header = (title: string) => (
         <View style={styles.header}>
             <Pressable style={styles.iconBtn} onPress={back} accessibilityRole="button" accessibilityLabel={t('Go back')}>
@@ -124,6 +139,33 @@ export default function ContactsScreen() {
     const list = view.onPhone.kind === 'list' ? view.onPhone.list : null;
     const people = contactsOf(view);
 
+    if (screen.kind === 'import') {
+        return shell(t('Import contacts'), <ImportScreen full={people.length >= CONTACTS_LIMITS.contacts} onBack={back}
+            onRead={(read) => setScreen({ kind: 'review', read })} onTypeOne={() => setScreen({ kind: 'add' })} />);
+    }
+    if (screen.kind === 'review') {
+        return shell(t('Choose who to bring'), <ReviewScreen list={list ?? emptyContactsList()} read={screen.read} busy={busy}
+            onImport={async (chosen) => {
+                if (!identity) return;
+                setBusy(true);
+                try {
+                    // One change for everyone chosen: the list opened once and written once (utils/contacts-import.ts).
+                    const added = await importChosen(identity, chosen);
+                    setScreen({ kind: 'done', added, fromPhone: screen.read.fromPhone });
+                } catch {
+                    Alert.alert(t("Couldn't save your contacts on this phone. Try again."));
+                } finally {
+                    setBusy(false);
+                }
+            }} />);
+    }
+    if (screen.kind === 'done') {
+        const { off } = contactsKeptAt(view.state, view.onPhone, view.communities);
+        const open = view.communities.filter((c) => !off.includes(c));
+        return shell(t('Contacts'), <DoneScreen added={screen.added} fromPhone={screen.fromPhone} onDone={() => setScreen({ kind: 'list' })}
+            places={open.length ? open.map((c) => communityLabel(view, c)).join(', ') : null} />);
+    }
+
     if (screen.kind === 'add') {
         return shell(t('Add a contact'), <AddByHand busy={busy} full={people.length >= CONTACTS_LIMITS.contacts}
             onAdd={async (c) => { if (await change((l) => putContact(l, { id: newContactId(), links: [], invite: null, ...c }))) setScreen({ kind: 'list' }); }} />);
@@ -156,7 +198,7 @@ export default function ContactsScreen() {
         ));
     }
     return shell(t('Contacts'), <ListScreen view={view} list={list} busy={busy} me={identity.publicKey}
-        onOpen={(id) => setScreen({ kind: 'contact', id })} onAdd={() => setScreen({ kind: 'add' })} onInfo={() => setInfo(true)}
+        onOpen={(id) => setScreen({ kind: 'contact', id })} onAdd={() => setScreen({ kind: 'add' })} onImport={() => setScreen({ kind: 'import' })} onInfo={() => setInfo(true)}
         onRemoveAll={() => change((l) => removeEveryContact(l))} />);
 }
 
@@ -197,9 +239,9 @@ function saveFile(list: ContactsList | null) {
     ]);
 }
 
-function ListScreen({ view, list, busy, me, onOpen, onAdd, onInfo, onRemoveAll }: {
+function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onRemoveAll }: {
     view: ContactsView; list: ContactsList | null; busy: boolean; me: string;
-    onOpen: (id: string) => void; onAdd: () => void; onInfo: () => void; onRemoveAll: () => Promise<boolean>;
+    onOpen: (id: string) => void; onAdd: () => void; onImport: () => void; onInfo: () => void; onRemoveAll: () => Promise<boolean>;
 }) {
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
@@ -286,6 +328,7 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onInfo, onRemoveAll }
             <Text style={styles.muted}>{t("Private to you. Locked with your account's key.")}</Text>
             <View style={styles.btnRow}>
                 <Pressable accessibilityRole="button" style={styles.btn} onPress={onAdd}><Text style={styles.btnText}>{t('＋ Add')}</Text></Pressable>
+                <Pressable accessibilityRole="button" style={styles.btn} onPress={onImport}><Text style={styles.btnText}>{t('Import')}</Text></Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel={t('More')} accessibilityState={{ expanded: menu }} style={styles.btn} onPress={() => setMenu(!menu)}>
                     <MaterialCommunityIcons name="dots-horizontal" size={22} color={colors.text.body} />
                 </Pressable>
@@ -308,8 +351,11 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onInfo, onRemoveAll }
             )}
             {people.length === 0 ? (
                 <View style={styles.card}>
-                    <Text style={styles.text}>{t('No contacts yet. Add someone by hand.')}</Text>
-                    <Pressable accessibilityRole="button" style={styles.go} onPress={onAdd}><Text style={styles.goText}>{t('＋ Add')}</Text></Pressable>
+                    <Text style={styles.text}>{t('No contacts yet. Import them from this phone or a contacts file, or add someone by hand.')}</Text>
+                    <View style={styles.btnRow}>
+                        <Pressable accessibilityRole="button" style={styles.go} onPress={onImport}><Text style={styles.goText}>{t('Import contacts')}</Text></Pressable>
+                        <Pressable accessibilityRole="button" style={styles.btn} onPress={onAdd}><Text style={styles.btnText}>{t('＋ Add')}</Text></Pressable>
+                    </View>
                 </View>
             ) : (
                 <TextInput value={q} onChangeText={setQ} placeholder={t('Search')} placeholderTextColor={colors.text.muted} accessibilityLabel={t('Search your contacts')} style={styles.field} />

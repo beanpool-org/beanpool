@@ -26,6 +26,16 @@ const mem = vi.hoisted(() => ({
     back: [] as Array<() => boolean>,
     focused: true,
     options: [] as Array<Record<string, unknown>>,
+    // Import (slice C3): the route's params, the native parts this build carries, the phone's contacts question and its
+    // answer, the address book, the file the picker hands back, and Settings opened.
+    params: {} as Record<string, string>,
+    native: { ExpoContacts: true, ExpoDocumentPicker: true } as Record<string, boolean>,
+    asked: 0,
+    answer: { granted: true, canAskAgain: true } as { granted: boolean; canAskAgain: boolean },
+    book: [] as Array<{ name?: string; phoneNumbers?: { number: string }[]; emails?: { email: string }[] }>,
+    queries: [] as Array<{ fields: readonly string[] }>,
+    picked: null as null | { uri: string; size: number; text: string },
+    settings: 0,
 }));
 // The store loads Expo's file system, AsyncStorage and the share sheet with require() (utils/contacts-store.ts
 // phoneContactsDeps, use-contacts.ts shareContactsFile), which vi.mock doesn't reach: Node's loader hands these out instead.
@@ -48,6 +58,25 @@ const fakes = vi.hoisted(() => {
         if (request === 'expo-file-system/legacy') return fsFake;
         if (request === '@react-native-async-storage/async-storage') return { default: storage, __esModule: true };
         if (request === 'expo-sharing') return sharing;
+        if (request === 'expo-modules-core') return { requireOptionalNativeModule: (name: string) => (mem.native[name] ? {} : null) };
+        if (request === 'expo-contacts') {
+            return {
+                requestPermissionsAsync: async () => { mem.asked++; return { ...mem.answer, status: mem.answer.granted ? 'granted' : 'denied' }; },
+                getContactsAsync: async (q: { fields: readonly string[]; pageSize: number; pageOffset: number }) => {
+                    mem.queries.push(q);
+                    return { data: mem.book.slice(q.pageOffset, q.pageOffset + q.pageSize), hasNextPage: q.pageOffset + q.pageSize < mem.book.length };
+                },
+            };
+        }
+        if (request === 'expo-document-picker') {
+            return {
+                getDocumentAsync: async () => {
+                    if (!mem.picked) return { canceled: true, assets: null };
+                    mem.files.set(mem.picked.uri, mem.picked.text);
+                    return { canceled: false, assets: [{ uri: mem.picked.uri, size: mem.picked.size }] };
+                },
+            };
+        }
         return load.call(this, request, ...rest);
     };
     return { fsFake, storage, sharing };
@@ -71,6 +100,7 @@ vi.mock('react-native', () => {
     return {
         Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
         View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), FlatList,
+        ActivityIndicator: el('span'), Linking: { openSettings: async () => { mem.settings++; } },
         Modal: ({ visible, children }: { visible: boolean; children?: ReactNode }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
         StyleSheet: { create: (s: unknown) => s },
         DeviceEventEmitter: { addListener: () => ({ remove() {} }), emit: () => {} },
@@ -86,6 +116,7 @@ const NAV = vi.hoisted(() => ({ setOptions: (o: Record<string, unknown>) => { me
 vi.mock('expo-router', () => ({
     router: { push: (to: unknown) => mem.pushed.push(to), back: () => mem.pushed.push('back') },
     useNavigation: () => NAV,
+    useLocalSearchParams: () => mem.params,
     ErrorBoundary: () => null,
 }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: { children?: ReactNode }) => createElement('div', null, children) }));
@@ -175,6 +206,8 @@ const onPhone = async () => (await loadContacts(ME, phoneContactsDeps())).onPhon
 beforeEach(() => {
     mem.store.clear(); mem.files.clear(); mem.alerts.length = 0; mem.shared.length = 0; mem.blocked = []; mem.pushed.length = 0;
     mem.back.length = 0; mem.options.length = 0; mem.focused = true;
+    mem.params = {}; mem.native = { ExpoContacts: true, ExpoDocumentPicker: true }; mem.asked = 0; mem.answer = { granted: true, canAskAgain: true };
+    mem.book = []; mem.queries.length = 0; mem.picked = null; mem.settings = 0;
     mem.store.set('beanpool_anchor_url', RIVERSIDE);
     vi.mocked(syncContacts).mockClear();
 });
@@ -207,8 +240,8 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         expect(button('Unblock')).toBeDefined();
         // The phone keeps only Riverside here (its anchor; nothing in its saved list): the change in its wait goes there.
         expect(host.querySelector('[data-testid="contacts-where"]')?.textContent).toBe('Kept on this phone. Your latest changes go to Riverside within 15 minutes.');
-        // No Import yet: the phone can't import until slice C3.
-        expect(button('Import')).toBeUndefined();
+        // Import beside Add, as the web's (slice C3; C2 pinned it absent until then).
+        expect(button('Import')).toBeDefined();
         // Mutation: one list sorted by name, no sections → Dee Walker before Sam Jones, and the order check fails.
     });
 
@@ -234,7 +267,7 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
 
     it('Add by hand: nothing typed says what is needed; a name and a number are kept, locked, on the phone', async () => {
         await render();
-        expect(text()).toContain('No contacts yet. Add someone by hand.');
+        expect(text()).toContain('No contacts yet. Import them from this phone or a contacts file, or add someone by hand.');
         await press('＋ Add');
         await press('Add');
         expect(text()).toContain('Type a name, a number or an email.');
@@ -339,6 +372,11 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         // Nothing there: nothing to remove, and it never throws.
         await expect(sweepContactsFile()).resolves.toBeUndefined();
         await expect(sweepContactsFile({ cacheDirectory: null, deleteAsync: async () => { throw new Error('no'); } })).resolves.toBeUndefined();
+        // And the file picker's copy from an import the app was ended in (slice C3): its whole folder (only Import picks files).
+        const gone: string[] = [];
+        await sweepContactsFile({ cacheDirectory: 'file:///c', deleteAsync: async (u: string) => { gone.push(u); } });
+        // Mutation: drop the folder's removal → an unlocked contacts file a killed import left stays in the cache.
+        expect(gone).toEqual(['file:///c/contacts.vcf', 'file:///c/DocumentPicker/']);
         // The app's start runs it, beside the recovery kit's sweep.
         expect(readFileSync(join(__dirname, '../../app/_layout.tsx'), 'utf8')).toMatch(/useEffect\(\(\) => \{ void import\('\.\.\/utils\/use-contacts'\)\.then\(\(m\) => m\.sweepContactsFile\(\)\)/);
         // Mutation: drop the call in _layout.tsx → the file a killed share left stays in the cache, unlocked, until the next Save.
@@ -353,7 +391,7 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         expect(mem.files.get(`${FILE}.damaged`)).toBe('{"broken":');
         expect(mem.files.has(FILE)).toBe(false);
         expect(syncContacts).toHaveBeenCalledTimes(1);
-        expect(text()).toContain('No contacts yet. Add someone by hand.');
+        expect(text()).toContain('No contacts yet. Import them from this phone or a contacts file, or add someone by hand.');
         // Mutation: no Set it aside → the screen is a dead end, as PR #3073's review found.
     });
 
@@ -409,5 +447,100 @@ describe('the footer: where the list is kept (design §3.6)', () => {
         expect(contactsWhereWords(view({ refused: { [RIVERSIDE]: off, [RIVERBEND]: off } }), now))
             .toBe("Kept on this phone only. Save a copy as a file to keep it safe. Riverside doesn't keep contact lists. Riverbend doesn't keep contact lists.");
         // Mutation: count a refused community as one that may take it → "will try again", a promise nothing keeps.
+    });
+});
+
+describe('Import on the phone (slice C3): asked at the tap, the three answers, Choose who to bring, Done', () => {
+    const book = (n: number) => Array.from({ length: n }, (_, i) => ({ name: `Person ${i}`, phoneNumbers: [{ number: `0412 ${String(i).padStart(6, '0')}` }] }));
+    const byTest = (id: string) => Array.from(host.querySelectorAll('button')).find((b) => b.getAttribute('data-testid') === id);
+    const pressTest = async (id: string) => {
+        const b = byTest(id);
+        if (!b) throw new Error(`no button ${id} in: ${text().slice(0, 400)}`);
+        await act(async () => { b.click(); });
+        await settle();
+    };
+
+    it('opened from Chat it starts on Import and asks nothing; the tap asks once; everyone found is ticked; one Import adds them all', async () => {
+        mem.params = { start: 'import' };
+        mem.book = [...book(3), { name: 'No Number' }];
+        await render();
+        const t = text();
+        expect(t).toContain("Choose where your contacts are. WhatsApp uses your phone's contacts, so this brings those too.");
+        expect(t).toContain("From this phone's contacts");
+        expect(t).toContain("Contacts you saved only inside WhatsApp aren't in your phone's contacts. Save them to your phone in WhatsApp first.");
+        expect(t).toContain('From a contacts file (.vcf)');
+        expect(t).toContain('Type one in');
+        // Mutation: ask in an effect on open (or at Chat) -> asked is 1 before any tap.
+        expect(mem.asked).toBe(0);
+        await pressTest('import-from-phone');
+        expect(mem.asked).toBe(1);
+        expect(mem.queries.every((q) => q.fields.join() === 'name,firstName,lastName,phoneNumbers,emails')).toBe(true);
+        expect(text()).toContain('Found 4 contacts. Nothing has left your phone yet.');
+        expect(text()).toContain('(no number or email)');
+        // Nothing is in the list before the button (design §3.4).
+        expect((await onPhone()).kind).toBe('none');
+        await press('Import 3 contacts');
+        expect(text()).toContain("3 contacts added. They're locked with your key and will be kept at: Riverside.");
+        expect(text()).toContain("BeanPool read your phone's contacts once, just now. It doesn't watch them. To bring new ones later, tap Import again.");
+        const kept = await onPhone();
+        expect(kept.kind === 'list' && kept.list.contacts.map((c) => c.name).sort()).toEqual(['Person 0', 'Person 1', 'Person 2']);
+        await press('Done');
+        expect(text()).toContain('Not on BeanPool yet');
+    });
+
+    it('no: the design\'s sentence with Pick a file and Back; no for good: Open Settings and Pick a file instead; nothing is read', async () => {
+        mem.params = { start: 'import' };
+        mem.book = book(2);
+        mem.answer = { granted: false, canAskAgain: true };
+        await render();
+        await pressTest('import-from-phone');
+        expect(text()).toContain("No problem. BeanPool can't see your phone's contacts. You can pick a contacts file instead, or add people by hand.");
+        expect(button('Pick a file')).toBeTruthy();
+        expect(button('Back')).toBeTruthy();
+        mem.answer = { granted: false, canAskAgain: false };
+        await pressTest('import-from-phone');
+        expect(text()).toContain("Your phone is set not to let BeanPool see contacts. To change it, open your phone's Settings, then BeanPool, then Contacts.");
+        expect(text()).not.toContain('No problem.');
+        await press('Open Settings');
+        expect(mem.settings).toBe(1);
+        expect(button('Pick a file instead')).toBeTruthy();
+        // Mutation: read the address book whatever the answer -> queries made.
+        expect(mem.queries).toHaveLength(0);
+        mem.answer = { granted: false, canAskAgain: true };
+        await pressTest('import-from-phone');
+        // Back from Import, with no list yet, goes back to Chat.
+        await press('Back');
+        expect(mem.pushed.at(-1)).toBe('back');
+    });
+
+    it('a contacts file: the people in it to choose from, the picker\'s copy removed; a file that isn\'t one says so', async () => {
+        mem.params = { start: 'import' };
+        mem.picked = { uri: 'file:///cache/DocumentPicker/x.vcf', size: 120, text: 'BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Dee Walker\r\nTEL:0412 345 678\r\nEND:VCARD\r\n' };
+        await render();
+        await pressTest('import-from-file');
+        expect(text()).toContain('Found 1 contact. Nothing has left your phone yet.');
+        expect(mem.files.has('file:///cache/DocumentPicker/x.vcf')).toBe(false);
+        expect(mem.asked).toBe(0);
+        // Android's Back from Choose who to bring returns to Import.
+        await pressBack();
+        expect(text()).toContain('From a contacts file (.vcf)');
+        mem.picked = { uri: 'file:///cache/DocumentPicker/y.jpg', size: 10, text: 'not a card' };
+        await pressTest('import-from-file');
+        expect(text()).toContain('That file isn’t a contacts file BeanPool can read. Export it again as vCard (.vcf).');
+        expect(mem.files.has('file:///cache/DocumentPicker/y.jpg')).toBe(false);
+    });
+
+    it('an app built without the two native parts offers neither row, and Type one in still works; the empty list has Import contacts', async () => {
+        mem.native = {};
+        mem.params = { start: 'import' };
+        await render();
+        expect(byTest('import-from-phone')).toBeUndefined();
+        expect(byTest('import-from-file')).toBeUndefined();
+        await press('Type one inAdd a person by hand.');
+        expect(text()).toContain('Phone number');
+        await pressBack();
+        expect(button('Import contacts')).toBeTruthy();
+        await press('Import contacts');
+        expect(text()).toContain('Type one in');
     });
 });

@@ -19,6 +19,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
+import { useContactsRecord } from '../utils/use-contacts';
 import { getDb, createConversationApi, getRecentChatMembers, getFriendsLocal } from '../utils/db';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { membersByKey } from '../utils/node-profile';
@@ -60,6 +61,8 @@ function ShimmerRow({ index, styles }: { index: number; styles: any }) {
 
 export default function NewMessageScreen() {
     const { identity } = useIdentity();
+    // The record beside the list, never the list (use-contacts.ts): with none yet the row reads Import contacts (design §3.1).
+    const hasContacts = (useContactsRecord(identity)?.fileSeq ?? 0) > 0;
     const { theme, colors } = useTheme();
     const styles = useStyles(({ theme, colors, patternEnabled }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: patternEnabled ? colors.surface.page : colors.surface.card },
@@ -363,8 +366,8 @@ export default function NewMessageScreen() {
     const ListHeader = useMemo(() => (
         <>
             {/* The member's private contacts (DESIGN-private-contacts-fable.md §3.1): the first row, as the web's New Message. */}
-            <Pressable accessibilityRole="button" testID="new-message-contacts" style={styles.contactsRow} onPress={() => router.push('/contacts')}>
-                <Text style={styles.contactsRowText}>{t('👥 Your contacts')}</Text>
+            <Pressable accessibilityRole="button" testID="new-message-contacts" style={styles.contactsRow} onPress={() => router.push(hasContacts ? '/contacts' : '/contacts?start=import')}>
+                <Text style={styles.contactsRowText}>{hasContacts ? t('👥 Your contacts') : t('👥 Import contacts')}</Text>
                 <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
             </Pressable>
             <Text style={styles.contactsRowNote}>{t('Chats between two people are end-to-end encrypted.')}</Text>

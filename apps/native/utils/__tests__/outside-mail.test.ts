@@ -47,7 +47,9 @@ const server = vi.hoisted(() => ({
     /** The batches /api/mail/send was posted, by their items' ids. */
     batches: [] as string[][],
     /** An item the server refuses, as relay-outbox.ts sendRelayItems does: the whole request answered with the first problem. */
-    refuse: null as null | ((item: RelayItem) => { status: number; error: string; code: string } | null),
+    refuse: null as null | ((item: RelayItem) => { status: number; error: string; code: string } | { status: number; body: unknown } | null),
+    /** What my server answers a report instead of taking it (X5): its status and body as sent. */
+    reportAnswer: null as null | { status: number; body: unknown },
     /** Every request's signal, by its path. */
     signals: [] as Array<{ path: string; signal: AbortSignal | undefined }>,
     /** A GET that never answers until its signal aborts (React Native's fetch never gives up by itself). */
@@ -114,11 +116,12 @@ vi.mock('../node-post', () => ({
             server.batches.push(body.items.map((i: RelayItem) => i.envelope.itemId));
             for (const i of body.items) {
                 const problem = server.refuse?.(i);
-                if (problem) return new Response(JSON.stringify({ error: problem.error, code: problem.code }), { status: problem.status });
+                if (problem) return new Response(JSON.stringify('body' in problem ? problem.body : { error: problem.error, code: problem.code }), { status: problem.status });
             }
             server.sent.push(...body.items);
             answer = new Response(JSON.stringify({ items: body.items.map((i: RelayItem) => ({ itemId: i.envelope.itemId, state: server.sendState })) }), { status: 200 });
         } else if (path === '/api/mail/report') {
+            if (server.reportAnswer) return new Response(JSON.stringify(server.reportAnswer.body), { status: server.reportAnswer.status });
             server.reports.push(body);
             answer = new Response(JSON.stringify({ success: true, report: { id: 'r-1' } }), { status: 200 });
         } else {
@@ -165,7 +168,7 @@ let sql: DatabaseSync;
 let blocked: Set<string>;
 
 beforeEach(async () => {
-    server.reports = []; server.held = []; server.outbox = []; server.calls = []; server.sent = []; server.confirmed = []; server.sendFails = false; server.sendState = 'sent';
+    server.reports = []; server.reportAnswer = null; server.held = []; server.outbox = []; server.calls = []; server.sent = []; server.confirmed = []; server.sendFails = false; server.sendState = 'sent';
     server.batches = []; server.refuse = null; server.signals = []; server.stallGet = false; server.stallSend = false;
     server.stop = null; server.seen = { confirm: 0, receipt: 0 }; server.stopped = false; server.deadline = null; server.receiptTries = [];
     const s = sqlStore();
@@ -725,4 +728,35 @@ describe('X5  report a line from another community', () => {
         await expect(reportOutsideLine(ctx, uuid(), 'Other')).rejects.toBeInstanceOf(OutsideMailError);
         expect(server.reports).toHaveLength(0);
     });
+
+    // Every shape a refusal comes in, on every path that reads my server's answer (one reader, answerOf): the words a
+    // screen shows are the server's sentence or `HTTP <n>` (which each screen turns into its own sentence), never a code.
+    const RATE = 'You have sent a lot of reports recently. Please try again in an hour.';
+    const MEMBERS = 'Only members of this community can do this.';
+    const shapes: Array<[string, number, unknown, string, string | undefined]> = [
+        ['a report\'s 429: a code in error, its words in message', 429, { error: 'rate_limited', message: RATE }, RATE, 'rate_limited'],
+        ['words in error beside a code', 403, { error: MEMBERS, code: 'not_a_member' }, MEMBERS, 'not_a_member'],
+        ['words in message beside a code in code', 429, { error: 'rate_limited', code: 'rate_limited', message: RATE }, RATE, 'rate_limited'],
+        ['a code alone', 429, { error: 'rate_limited' }, 'HTTP 429', 'rate_limited'],
+        ['no body', 503, null, 'HTTP 503', undefined],
+    ];
+    for (const [what, status, body, says, code] of shapes) {
+        it(`a refusal, ${what}: reads "${says}" on the report path and the send path`, async () => {
+            const chatId = relayConversationId(BEN.key, ANA.key);
+            await ctx.store.openChat(BEN.key, chatId, { key: ANA.key, home: ANA_HOME, name: 'Ana' });
+            const item = await heldLine(ANA, 'Buy my miracle seeds');
+            await syncOutsideMail(ctx);
+            server.reportAnswer = { status, body };
+            const reported = await reportOutsideLine(ctx, item.envelope.itemId, 'Spam or scam').catch((e) => e);
+            server.refuse = () => ({ status, body });
+            const sent = await sendOutsideLine(ctx, chatId, 'Hello').catch((e) => e);
+            for (const e of [reported, sent]) {
+                expect(e).toBeInstanceOf(OutsideMailError);
+                expect(e.message).toBe(says);
+                expect(e.code).toBe(code);
+                expect(e.message).not.toMatch(/^[a-z0-9_]+$/);
+            }
+            expect(server.reports).toHaveLength(0);
+        });
+    }
 });

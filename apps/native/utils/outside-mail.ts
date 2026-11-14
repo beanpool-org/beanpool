@@ -92,9 +92,21 @@ function refusalWords(e: OutsideMailError): string {
     return e.message && !/^HTTP \d+$/.test(e.message) ? e.message : t('Your community refused this message.');
 }
 
+/** A server's code, not words: one lower-case token (`rate_limited`, `not_a_member`). */
+const CODE_ONLY = /^[a-z0-9_]+$/;
+
 async function answerOf(res: Response): Promise<any> {
     const body = await res.json().catch(() => null);
-    if (!res.ok) throw new OutsideMailError(res.status, typeof body?.error === 'string' ? body.error : `HTTP ${res.status}`, body?.code);
+    if (!res.ok) {
+        // The server's sentence: `message` when it sent one beside a code in `error` (a report's 429: { error: 'rate_limited',
+        // message }), as utils/db.ts reportRefusal reads it; else `error`, its words beside `code`. Never a bare code
+        // (`rate_limited`): that reads as `HTTP <n>`, which every screen shows as its own sentence.
+        const said = typeof body?.message === 'string' && body.message ? body.message : null;
+        const error = typeof body?.error === 'string' && body.error ? body.error : null;
+        const errorIsCode = !!error && CODE_ONLY.test(error);
+        const code = typeof body?.code === 'string' ? body.code : error && (errorIsCode || said) ? error : undefined;
+        throw new OutsideMailError(res.status, said ?? (error && !errorIsCode ? error : `HTTP ${res.status}`), code);
+    }
     return body;
 }
 

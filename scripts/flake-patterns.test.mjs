@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { RULE_IDS, blank, judge, lowerCeiling, readCeiling, scanRepo, scanSource, total } from './flake-patterns.mjs';
+import { RULE_IDS, blank, judge, lowerCeiling, mainCeiling, raisedOver, readCeiling, scanRepo, scanSource, total } from './flake-patterns.mjs';
 
 const SORT_KEYS = new Set(['sentAt', 'createdAt']);
 const hitsOf = (src, rule) => scanSource(src, { sortKeys: SORT_KEYS }).hits.filter((h) => h.rule === rule);
@@ -179,6 +179,9 @@ node.notices = [notice('n1'), notice('n2')];`;
         assert.deepEqual(hitsOf(GOOD, R), []);
         assert.deepEqual(hitsOf(STOPPED, R), []);
     });
+    it('a stopped clock named only in a comment stops nothing', () => {
+        assert.equal(hitsOf(`// no vi.useFakeTimers() here\n${BAD}`, R).length, 3);
+    });
 });
 
 describe('allow comments', () => {
@@ -227,6 +230,12 @@ describe('the ceiling only falls', () => {
         assert.deepEqual(lowerCeiling({ 'focus-after-await': { 'a.test.tsx': 5, 'new.test.ts': 1 } }, ceiling)['focus-after-await'], { 'a.test.tsx': 2 });
         assert.deepEqual(lowerCeiling({}, ceiling)['focus-after-await'], {});
     });
+    it('a ceiling raised over main\'s, or a file added to it, is named', () => {
+        assert.deepEqual(raisedOver(ceiling, ceiling), []);
+        assert.deepEqual(raisedOver({ 'focus-after-await': { 'a.test.tsx': 1 } }, ceiling), []);
+        assert.deepEqual(raisedOver({ 'focus-after-await': { 'a.test.tsx': 3 } }, ceiling).map((r) => r.was), [2]);
+        assert.deepEqual(raisedOver({ 'fixed-ms-bound': { 'b.test.ts': 1 } }, ceiling).map((r) => r.file), ['b.test.ts']);
+    });
 });
 
 describe('the repository', () => {
@@ -241,6 +250,11 @@ describe('the repository', () => {
         const { over } = judge(scan.counts, ceiling);
         const named = over.map((o) => `${o.rule} ${o.file}: ${o.n} (ceiling ${o.cap}); lines ${scan.list.filter((h) => h.file === o.file && h.rule === o.rule).map((h) => h.line).join(', ')}`);
         assert.deepEqual(named, [], `run node scripts/flake-patterns.mjs for the fix each rule asks for (${RULE_IDS.map((r) => `${r} ${total(scan.counts[r])}`).join(', ')})`);
+    });
+    it('never raises the ceiling over main\'s (a new hit takes a flake-ok reason instead)', (t) => {
+        const base = mainCeiling();
+        if (!base) { t.skip('no ceiling on origin/main to compare with (no origin/main, or before this file landed)'); return; }
+        assert.deepEqual(raisedOver(ceiling, base).map((r) => `${r.rule} ${r.file}: ${r.n}, main ${r.was}`), []);
     });
     it('has no flake-ok comment without a reason, or that excuses nothing', () => {
         assert.deepEqual(scan.badAllows.map((b) => `${b.file}:${b.line}: ${b.why}`), []);

@@ -8,10 +8,12 @@
  *                       later one; RTL's findBy/waitFor resolve after a setTimeout(0) that a loaded runner can run first
  *                       (#3161 RecoveryKitButton, the 4 tests lane 1134 fixes). Fix: `await waitFor(() => expect(...))`.
  *   fixed-ms-bound      a time the test measured (performance.now(), Date.now() - t0, process.hrtime/cpuUsage) held under a fixed
- *                       number of milliseconds. A shared runner's neighbour moves it (#3166 members-on-demand p95, #3115 the id
- *                       guard, place-circles' CPU 50 ms). Fix: a ratio to a baseline measured in the same run, in the same loop.
+ *                       number of milliseconds. A shared runner's neighbour moves it (#3166 members-on-demand p95 under 5 ms;
+ *                       place-circles' CPU 50 ms is still on main). Fix: a ratio to a baseline measured in the same run, in the
+ *                       same loop. (#3115's id guard was already a ratio, 4x the parse + 1 ms, too tight: not this shape.)
  *   clock-per-row       the rows of one list each read the live clock (a fixture helper with `Date.now()`/`new Date()` called for
- *                       every row) where the clock is not stopped. The rows' times are equal, except when the clock ticks between
+ *                       every row) for a field the product sorts or orders by (read from the app code: a .sort() comparator or an
+ *                       ORDER BY), where the clock is not stopped. The rows' times are equal, except when the clock ticks between
  *                       two of them, so an order sorted by that time is fixed by nothing but luck (notice-bell-header, 15 Nov:
  *                       three credit notices, `sentAt` from Date.now() each, sorted newest first). Fix: read the clock once and
  *                       give each row its own time (`now - i`), or stop the clock (vi.useFakeTimers / vi.setSystemTime).
@@ -84,8 +86,7 @@ export function blank(src, onComment = null) {
         if (c === '`') { i++; template(); continue; }
         if (c === '}' && stack.length && depth - 1 === stack[stack.length - 1]) { stack.pop(); depth--; i++; template(); continue; }
         if (c === '/') {
-            const before = src.slice(Math.max(0, lastWordEnd - 12), i).trimEnd();
-            const isRegex = lastSig === '' || REGEX_BEFORE.has(lastSig) || (lastWordEnd >= 0 && REGEX_AFTER_WORD.test(src.slice(0, i).trimEnd()) && before.length);
+            const isRegex = lastSig === '' || REGEX_BEFORE.has(lastSig) || (lastWordEnd >= 0 && REGEX_AFTER_WORD.test(src.slice(Math.max(0, i - 16), i).trimEnd()));
             if (isRegex) {
                 const s = i; i++;
                 let cls = false;
@@ -148,7 +149,7 @@ function calleeBefore(code, p) {
 const RETRIES = /(^|\.)(waitFor|waitForExpect|until|poll|eventually|retry|toPass)$/;
 const TEST_CALL = /^(it|test)(\.(only|skip|concurrent|each|todo|fails))*$/;
 /** An awaited call that settles React's effects before it resolves: act(), userEvent (its eventWrapper is act). */
-const ACT_AWAIT = /(^|\.)act$|^(user|userEvent|u|ue)\.[\w$]+$|^userEvent$/;
+const ACT_AWAIT = /(^|\.)act$|^(user|userEvent)\.[\w$]+$/;
 /** A synchronous step that runs in act() or moves the focus itself. */
 const ACT_STEP = /(?:^|[^\w$.])(?:fireEvent\s*\.\s*[\w$]+|fireEvent|act|render|rerender)\s*\(|[\w$)\]]\s*\??\.\s*(?:focus|blur|click)\s*\(\s*\)/;
 
@@ -399,7 +400,8 @@ function fixedMsBound(code) {
     return hits;
 }
 
-const STOPPED_CLOCK = /\b(?:vi|jest)\s*\.\s*(?:useFakeTimers|setSystemTime)\s*\(|\bspyOn\s*\(\s*Date\s*,\s*['"`]?\s*now|\bDate\s*\.\s*now\s*=|\bmockdate\b|\bFakeTimers\b|\binstall\s*\(\s*\{[^}]*now/;
+/** The clock stopped in this file (read from code, so a comment naming one does not count; the spied name is a blanked string). */
+const STOPPED_CLOCK = /\b(?:vi|jest)\s*\.\s*(?:useFakeTimers|setSystemTime)\s*\(|\bspyOn\s*\(\s*Date\s*,|\bDate\s*\.\s*now\s*=(?!=)|\bFakeTimers\s*\.\s*install\s*\(|\bMockDate\s*\.\s*set\s*\(/;
 const LIVE_CLOCK = /\bDate\s*\.\s*now\s*\(\s*\)|\bnew\s+Date\s*\(\s*\)/;
 /** `field: <a live clock read>` in an object literal; the value with no per-row offset (`now - i * 1000` is the fix). */
 const CLOCK_FIELD = /([\w$]+)\s*:\s*([^,}]*?(?:\bDate\s*\.\s*now\s*\(\s*\)|\bnew\s+Date\s*\(\s*\))[^,}]*)/g;
@@ -420,7 +422,7 @@ export function productSortKeys(root = ROOT) {
         let src;
         try { src = readFileSync(join(root, file), 'utf8'); } catch { continue; }
         for (const m of src.matchAll(/\bsort\s*\(\s*\(\s*([\w$]+)\s*(?::[^,)]*)?,\s*([\w$]+)\s*(?::[^)]*)?\)\s*=>([^\n]{0,240})/g)) {
-            for (const f of m[3].matchAll(new RegExp(`\\b(?:${m[1]}|${m[2]})\\s*\\.\\s*([\\w$]+)`, 'g'))) if (!/^(localeCompare|getTime|valueOf|length)$/.test(f[1])) keys.add(f[1]);
+            for (const f of m[3].matchAll(new RegExp(`(?:^|[^\\w$.])(?:${esc(m[1])}|${esc(m[2])})\\s*\\.\\s*([\\w$]+)`, 'g'))) if (!/^(localeCompare|getTime|valueOf|length)$/.test(f[1])) keys.add(f[1]);
         }
         for (const m of src.matchAll(/\bORDER\s+BY\s+([^;`'")]{1,200})/gi)) {
             for (const col of m[1].split(',')) {
@@ -436,7 +438,7 @@ let sortKeysCache = null;
 
 function clockPerRow(code, raw, opts = {}) {
     const hits = [];
-    if (!LIVE_CLOCK.test(code) || STOPPED_CLOCK.test(raw)) return hits;
+    if (!LIVE_CLOCK.test(code) || STOPPED_CLOCK.test(code)) return hits;
     const sortKeys = opts.sortKeys ?? (sortKeysCache ??= productSortKeys());
     /** The clock-read fields of an object-literal body that the product sorts by, with no per-row offset. */
     const sortedClockFields = (text) => [...text.matchAll(CLOCK_FIELD)]
@@ -567,6 +569,27 @@ export function judge(counts, ceiling) {
         for (const [file, n] of Object.entries(cap)) if ((now[file] ?? 0) < n) lowered.push({ rule, file, n: now[file] ?? 0, cap: n });
     }
     return { over, lowered };
+}
+
+/** Where `ceiling` is higher than `base` (main's): a rule or file raised, or added. The ceiling only falls. */
+export function raisedOver(ceiling, base) {
+    const raised = [];
+    for (const rule of Object.keys(ceiling)) {
+        for (const [file, n] of Object.entries(ceiling[rule])) {
+            const was = base[rule]?.[file] ?? 0;
+            if (n > was) raised.push({ rule, file, n, was });
+        }
+    }
+    return raised;
+}
+
+/** main's ceiling (origin/main), or null where there is none to compare with (no origin/main, or before this file landed). */
+export function mainCeiling(root = ROOT) {
+    try {
+        return JSON.parse(execFileSync('git', ['show', `origin/main:${CEILING_FILE}`], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
+    } catch {
+        return null;
+    }
 }
 
 /** The ceiling lowered to what is found: never raised, never a new file or rule; files at 0 drop out. */

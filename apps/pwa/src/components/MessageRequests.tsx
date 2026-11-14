@@ -206,6 +206,8 @@ interface ListProps {
     onGoToGlobal?: () => void;
     entries: DmRequestEntry[];
     count: number;
+    /** Requests from people in other communities (X4, components/OutsideChats.tsx), kept in this browser: their cards, above. */
+    outside?: ReactNode;
     identity: BeanPoolIdentity;
     /** The cards' lines, kept by the page (useRequestPreviews). */
     store: RequestPreviews;
@@ -228,7 +230,7 @@ interface ListProps {
  * Decline all when more than five wait. Each card's lines are read once per request (by its id and time) while the page is
  * open, three at a time.
  */
-export function MessageRequestsList({ entries, count, onGlobal, onGoToGlobal, identity, store, avatar, joinedWordsOf, onOpen, onOpenProfile, onAccepted, onChanged, onReport, onBack }: ListProps) {
+export function MessageRequestsList({ entries, count, outside, onGlobal, onGoToGlobal, identity, store, avatar, joinedWordsOf, onOpen, onOpenProfile, onAccepted, onChanged, onReport, onBack }: ListProps) {
     const shown = entries.slice(0, REQUEST_CARDS_SHOWN);
     const { previews, setPreviews, asked } = store;
     const keyOf = (e: DmRequestEntry) => `${e.id}@${e.request.at}`;
@@ -295,7 +297,8 @@ export function MessageRequestsList({ entries, count, onGlobal, onGoToGlobal, id
                     <span style={{ display: 'block', fontSize: '0.9rem', textDecoration: 'underline' }}>{t('Open their requests there')}</span>
                 </a>
             )}
-            {count === 0 && onGlobal ? null : count === 0 ? (
+            {outside}
+            {count === 0 && (onGlobal || outside) ? null : count === 0 ? (
                 <p style={{
                     textAlign: 'center', padding: '2rem 1.25rem', margin: 0, background: 'var(--bg-card)', border: '1px solid var(--border-primary)',
                     borderRadius: '1rem', color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.45,

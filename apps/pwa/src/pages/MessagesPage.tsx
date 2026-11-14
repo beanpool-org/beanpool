@@ -18,6 +18,10 @@ import {
 import { requestsWaitingOnGlobal } from '../lib/show-on-global';
 import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, requestReportNotSentWords, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
 import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPreviews } from '../components/MessageRequests';
+import { OutsideChatRow, OutsideChatThread, OutsideRequestCard } from '../components/OutsideChats';
+import { AddressCardPanel } from '../components/AddressCardPanel';
+import { OUTSIDE_CHATS_EVENT, outsideContext, syncOutsideMailNow } from '../lib/outside-mail';
+import type { OutsideChat } from '../lib/outside-chat-store';
 import { ChatPhotoViewer } from '../components/ChatPhotoViewer';
 import { ChatImageBubble, ChatPhotoShown } from '../components/ChatImageBubble';
 import { AboutCard, AboutChipBar } from '../components/ChatAbout';
@@ -311,9 +315,30 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     useLayoutEffect(() => { conversationsRef.current = conversations; }, [conversations]);
     useEffect(() => registerLivePostTie(conversationTie(() => conversationsRef.current)), []);
     const [userTransactions, setUserTransactions] = useState<MarketplaceTransaction[]>([]);
+    // Chats with people in other communities (X4), kept in this browser only (lib/outside-chat-store.ts): read from it, and a
+    // round of the mailbox now and every half minute while this page is open and seen (the round asks nothing where the
+    // community doesn't take them). A request among them waits behind the one "Message requests" row.
+    const [outsideChats, setOutsideChats] = useState<OutsideChat[]>([]);
+    const [openOutside, setOpenOutside] = useState<string | null>(null);
+    const [showCard, setShowCard] = useState(false);
+    useEffect(() => {
+        let alive = true;
+        const read = () => {
+            void outsideContext().then((ctx) => (ctx ? ctx.store.chats(ctx.identity.publicKey) : []))
+                .then((list) => { if (alive) setOutsideChats(list); }, () => {});
+        };
+        read();
+        void syncOutsideMailNow().then(read);
+        const timer = setInterval(() => { if (document.visibilityState !== 'hidden') void syncOutsideMailNow().then(read); }, 30_000);
+        window.addEventListener(OUTSIDE_CHATS_EVENT, read);
+        return () => { alive = false; clearInterval(timer); window.removeEventListener(OUTSIDE_CHATS_EVENT, read); };
+    }, [identity.publicKey]);
+    const outsideRequests = outsideChats.filter((c) => c.state === 'request');
+    // A way in that names a conversation (a notice, a profile's Message) is never held behind an outside chat or the cards.
+    useEffect(() => { if (openConversationId) { setOpenOutside(null); setShowCard(false); } }, [openConversationId]);
     const [activeTab, setActiveTab] = useState<ConversationTab>('all');
     // Requests turned off while the member is on them: the pill goes, so the list goes back to All, never to no chip.
-    useEffect(() => { if (!requests && !onGlobal && activeTab === 'requests') setActiveTab('all'); }, [requests, onGlobal, activeTab]);
+    useEffect(() => { if (!requests && !onGlobal && !outsideRequests.length && activeTab === 'requests') setActiveTab('all'); }, [requests, onGlobal, outsideRequests.length, activeTab]);
     // Groups' "New group": the form Commons uses, opened here (the phone's Talk → Groups).
     const [showCreateGroup, setShowCreateGroup] = useState(false);
     // An enterprise holds Beans and its form asks for a goal in Beans: no bridge to Start something on a community with
@@ -399,6 +424,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             textAlign: 'left', fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 600, color: 'var(--text-primary)',
         }}>
             <span>{hasContacts ? t('👥 Your contacts') : t('👥 Import contacts')}</span><span aria-hidden="true">›</span>
+        </button>
+    );
+    // New Message's way to someone in another community (X4): their card, or mine. Only where this community takes them.
+    const outsideRow = (style: CSSProperties) => (communityInfo?.features as { outsideMessages?: unknown } | undefined)?.outsideMessages !== true ? null : (
+        <button type="button" data-testid="new-message-outside" onClick={() => { setShowNewDm(false); setShowCard(true); }} style={{
+            ...style, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', width: '100%', minHeight: '44px',
+            textAlign: 'left', fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 600, color: 'var(--text-primary)', overflowWrap: 'anywhere',
+        }}>
+            <span><span aria-hidden="true">🌐 </span>{t('Someone in another community')}</span><span aria-hidden="true">›</span>
         </button>
     );
     // Who this page can name: the member directory, or on a community where people are asked for, not read whole
@@ -2114,6 +2148,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     // New DM overlay with members on demand (lib/members-on-demand): the people this member already talks to, named
     // from their chats' rows, then a search the node answers, never a list of everyone. Every control at least 44 px.
+    // Someone in another community (X4): their chat, or the address cards, each a page of its own as on the phone.
+    if (openOutside) {
+        return <OutsideChatThread chatId={openOutside} onBack={() => setOpenOutside(null)} />;
+    }
+    if (showCard) {
+        return <AddressCardPanel onBack={() => setShowCard(false)} onOpenChat={(id) => { setShowCard(false); setOpenOutside(id); }} />;
+    }
+
     if (showNewDm && membersOnDemand === true) {
         const blocked = new Set(getBlockedUsers());
         const seen = new Set<string>();
@@ -2162,6 +2204,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 </div>
                 {chatRefusalNotice && <div style={{ marginBottom: '0.75rem' }}>{chatRefusalNotice}</div>}
                 {contactsRow({ ...cardStyle, marginBottom: '1rem' })}
+                {outsideRow({ ...cardStyle, marginBottom: '1rem' })}
 
                 <label htmlFor="new-message-search" style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
                     {t('Find someone by name')}
@@ -2218,6 +2261,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 </div>
 
                 {contactsRow({ ...cardStyle, marginBottom: '1rem' })}
+                {outsideRow({ ...cardStyle, marginBottom: '1rem' })}
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
                     {t('Choose someone to message:')}
                 </p>
@@ -3906,7 +3950,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // Requests (lib/dm-requests.ts): one plain row at the top of Chat, where the community has them on and one is waiting. No
     // count and no badge until one is accepted (Marty, 1 Nov 2026): every kind of outside request waits behind it.
     const requestCount = requests?.count ?? 0;
-    const showingRequests = activeTab === 'requests' && (!!requests || !!onGlobal);
+    const showingRequests = activeTab === 'requests' && (!!requests || !!onGlobal || outsideRequests.length > 0);
+    // Open chats with people in other communities, in All and Direct, above the community's own (kept in this browser only).
+    const outsideShown = activeTab === 'all' || activeTab === 'direct' ? outsideChats.filter((c) => c.state === 'open') : [];
     // When a person joined, on a request card, where this page holds their card.
     const joinedWordsOf = (pubkey: string): string | null => {
         const joinedAt = membersByPublicKey.get(pubkey)?.joinedAt;
@@ -3993,7 +4039,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 })}
             </div>
 
-            {(requestCount > 0 || !!onGlobal) && !showingRequests && (
+            {(requestCount > 0 || !!onGlobal || outsideRequests.length > 0) && !showingRequests && (
                 <button type="button" data-testid="message-requests-row" onClick={() => setActiveTab('requests')} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: '48px', padding: '0.5rem 1rem',
                     marginBottom: '1rem', background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: '12px',
@@ -4027,10 +4073,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 />
             )}
 
+            {!showingRequests && outsideShown.length > 0 && (
+                <div data-testid="outside-chats" style={{ marginBottom: '1rem', background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: '1rem', overflow: 'hidden' }}>
+                    {outsideShown.map((c) => <OutsideChatRow key={c.id} chat={c} onOpen={() => setOpenOutside(c.id)} />)}
+                </div>
+            )}
+
             {showingRequests ? (
                 <MessageRequestsList
                     entries={requests?.conversations ?? []}
                     count={requestCount}
+                    outside={outsideRequests.length === 0 ? null : (
+                        <ul style={{ margin: 0, padding: 0 }}>
+                            {outsideRequests.map((c) => <OutsideRequestCard key={c.id} chat={c} onOpen={() => setOpenOutside(c.id)} />)}
+                        </ul>
+                    )}
                     onGlobal={onGlobal}
                     onGoToGlobal={() => { askedGlobalAt.current = 0; }}
                     identity={identity}
@@ -4080,7 +4137,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         </button>
                     </div>
                 </div>
-            ) : conversations.length === 0 ? (
+            ) : conversations.length === 0 && outsideShown.length > 0 ? null : conversations.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-faint)' }}>
                     <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>💬</p>
                     <p>{t('No conversations yet.')}</p>

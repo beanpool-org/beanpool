@@ -20,7 +20,7 @@ import {
     type ForumFront, type ForumList, type ForumTopic, type ForumWaiting,
 } from '../../utils/forum';
 import { FORUM_WORDS, TOPIC_WORDS } from './forum-words';
-import { useForumStyles, type ForumStyles } from './ForumBits';
+import { useForumStyles } from './forum-style';
 
 export function ForumPane() {
     const styles = useForumStyles();
@@ -127,7 +127,7 @@ export function ForumPane() {
 
             {list && list.topics.length === 0 && !failed && <Text style={styles.small}>{t(FORUM_WORDS.none)}</Text>}
             <View testID="forum-topics">
-                {list?.topics.map((topic) => <TopicRow key={topic.id} topic={topic} sectionName={section ? '' : nameOf(topic.sectionId)} styles={styles} />)}
+                {list?.topics.map((topic) => <TopicRow key={topic.id} topic={topic} sectionName={section ? '' : nameOf(topic.sectionId)} />)}
             </View>
             {list?.next != null && (
                 <Pressable accessibilityRole="button" onPress={() => void loadList(section, list.next!)} style={styles.quiet}>
@@ -139,7 +139,8 @@ export function ForumPane() {
 }
 
 /** One topic in the list: a tap anywhere opens it (the small-cards rule). */
-function TopicRow({ topic, sectionName, styles }: { topic: ForumTopic; sectionName: string; styles: ForumStyles }) {
+function TopicRow({ topic, sectionName }: { topic: ForumTopic; sectionName: string }) {
+    const styles = useForumStyles();
     const when = timeAgo(Math.max(0, Date.now() - Date.parse(topic.lastActivityAt)));
     const replies = tn(topic.replyCount, FORUM_WORDS.replies.one, FORUM_WORDS.replies.other, { n: topic.replyCount });
     // Its opening post removed, with others' replies kept: the node sends no title (the topic page's words).

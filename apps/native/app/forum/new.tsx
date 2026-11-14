@@ -16,7 +16,8 @@ import { useTheme } from '../ThemeContext';
 import { loadIdentity } from '../../utils/identity';
 import { usePinRole } from '../../utils/use-pin-role';
 import { getForumFront, keptForumFront, markForumTold, noteForumBack, startForumTopic, type ForumFront } from '../../utils/forum';
-import { askForumTold, useForumStyles } from '../../components/forum/ForumBits';
+import { askForumTold } from '../../components/forum/ForumBits';
+import { useForumStyles } from '../../components/forum/forum-style';
 import { NEW_TOPIC_WORDS, TOPIC_WORDS } from '../../components/forum/forum-words';
 
 export default function NewForumTopicScreen() {

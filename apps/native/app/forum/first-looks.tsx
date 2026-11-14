@@ -13,7 +13,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { forumSectionName, t, timeAgo } from '@beanpool/core';
 import { useTheme } from '../ThemeContext';
 import { FIRST_LOOK_NO_REASONS, keptForumFront, listFirstLooks, noFirstLook, okFirstLook, type FirstLookNoReason, type ForumFront, type ForumWaiting } from '../../utils/forum';
-import { ForumPhotos, ForumWords, useForumStyles } from '../../components/forum/ForumBits';
+import { ForumPhotos, ForumWords } from '../../components/forum/ForumBits';
+import { useForumStyles } from '../../components/forum/forum-style';
 import { FIRST_LOOK_WORDS, TOPIC_WORDS } from '../../components/forum/forum-words';
 
 export default function ForumFirstLooksScreen() {
@@ -66,8 +67,8 @@ export default function ForumFirstLooksScreen() {
                             <Text style={styles.rowTitle}>{w.title}</Text>
                             {w.place ? <Text style={styles.muted}>📍 {w.place}</Text> : null}
                             {/* A new writer's words: their links stay plain text here too, until a moderator says OK. */}
-                            <ForumWords words={w.words} linksOn={false} styles={styles} />
-                            <ForumPhotos id={w.id} count={w.photos} waiting styles={styles} />
+                            <ForumWords words={w.words} linksOn={false} />
+                            <ForumPhotos id={w.id} count={w.photos} waiting />
                             {saying === w.id ? (
                                 <View style={{ gap: 4 }}>
                                     <Text style={styles.label}>{t(FIRST_LOOK_WORDS.why)}</Text>

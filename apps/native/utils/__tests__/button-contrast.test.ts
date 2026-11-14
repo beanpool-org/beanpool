@@ -654,6 +654,49 @@ describe('a table made by StyleSheet.create(spec(colors)) from the names list\'s
     });
 });
 
+// The forum (slice F3): every forum screen and part reads one table through `const styles = useForumStyles()`, a hook in
+// components/forum/forum-style.ts that makes `StyleSheet.create(forumStyleSpec(colors))` from the spec beside it. The scanner
+// follows the hook into the module, then the spec into the object it returns.
+describe("the forum's table, made by its hook from the spec in components/forum/forum-style.ts, is read there", () => {
+    const FILE_F = 'app/forum/[id].tsx';
+    const SCREEN = `
+        import { useForumStyles } from '../../components/forum/forum-style';
+        export default function ForumTopicScreen() {
+            const styles = useForumStyles();
+            return <Pressable style={styles.commit}><Text style={styles.commitText}>Reply</Text></Pressable>;
+        }`;
+    const styleModule = (ink: string) => `
+        import { StyleSheet } from 'react-native';
+        import { useStyles } from '../../app/ThemeContext';
+        export function forumStyleSpec(colors) {
+            return {
+                commit: { minHeight: 48, backgroundColor: colors.brand.fill },
+                commitText: { fontSize: 15, fontWeight: '800', color: ${ink} },
+            };
+        }
+        export function useForumStyles() {
+            return useStyles(({ colors }) => StyleSheet.create(forumStyleSpec(colors)));
+        }`;
+
+    it('reads the button and its words from the spec, in both themes', () => {
+        const r = scanSource(FILE_F, SCREEN, [], { 'components/forum/forum-style.ts': styleModule('colors.text.onBrand') });
+        expect(r.stats.unreadTables.size).toBe(0);
+        expect(r.stats.opaqueStyles).toBe(0);
+        expect(r.stats.checked).toEqual({ light: 1, dark: 1 });
+        expect(r.findings).toEqual([]);
+    });
+
+    it('sees a pair under the bar in the spec (the following can fail)', () => {
+        const r = scanSource(FILE_F, SCREEN, [], { 'components/forum/forum-style.ts': styleModule('colors.brand.fill') });
+        expect(r.findings.length).toBeGreaterThan(0);
+        expect(r.findings[0].words).toMatchObject({ expr: 'colors.brand.fill', in: 'components/forum/forum-style.ts' });
+    });
+
+    it('without the module, the table is still a missing one', () => {
+        expect(scanSource(FILE_F, SCREEN).stats.unreadTables.get(FILE_F)).toEqual(['styles']);
+    });
+});
+
 // The style box's chips and tones (5 Nov 2026): a `<CardChip role=...>` is a ground and its words inside a component the scanner
 // cannot see into, and `shell.tones.<role>.bg` / `.fg` is a plain object the module builds, not a StyleSheet table. Both are
 // read from the module's `chipTones(colors)`, in the theme being measured, so a chip or a card that reads them is measured.

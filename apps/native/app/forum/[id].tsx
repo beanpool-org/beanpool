@@ -32,7 +32,8 @@ import {
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { makeChatStyles } from '../../components/chat/styles';
 import { ReportMessageSheet } from '../../components/ReportMessageSheet';
-import { ForumMenu, ForumPhotos, ForumWords, askForumTold, useForumStyles, type ForumMenuItem } from '../../components/forum/ForumBits';
+import { ForumMenu, ForumPhotos, ForumWords, askForumTold, type ForumMenuItem } from '../../components/forum/ForumBits';
+import { useForumStyles } from '../../components/forum/forum-style';
 import { TOPIC_WORDS } from '../../components/forum/forum-words';
 
 type Menu = { kind: 'post'; post: ForumPost; confirm?: 'block' | 'remove' } | { kind: 'topic' } | null;
@@ -162,8 +163,8 @@ export default function ForumTopicScreen() {
         return (
             <>
                 {post.hidden && <Text style={[styles.small, { color: colors.feedback.warning.fg, fontWeight: '700' }]}>{t(TOPIC_WORDS.hidden)}</Text>}
-                <ForumWords words={post.words} linksOn={post.linksOn} styles={styles} testID={`forum-words-${post.number}`} />
-                <ForumPhotos id={post.id} count={post.photos} styles={styles} />
+                <ForumWords words={post.words} linksOn={post.linksOn} testID={`forum-words-${post.number}`} />
+                <ForumPhotos id={post.id} count={post.photos} />
             </>
         );
     }
@@ -296,7 +297,7 @@ export default function ForumTopicScreen() {
                     </View>
                 )}
             </KeyboardAvoidingView>
-            <ForumMenu label={menu?.kind === 'post' ? t(TOPIC_WORDS.postMenu) : t(TOPIC_WORDS.topicMenu)} items={menu ? menuItems(menu) : null} onClose={() => setMenu(null)} styles={styles} />
+            <ForumMenu label={menu?.kind === 'post' ? t(TOPIC_WORDS.postMenu) : t(TOPIC_WORDS.topicMenu)} items={menu ? menuItems(menu) : null} onClose={() => setMenu(null)} />
             <ReportMessageSheet isOpen={!!reporting} photo={false} title={t(TOPIC_WORDS.reportTitle)} note={t(TOPIC_WORDS.reportNote)} onClose={() => setReporting(null)}
                 onSubmit={async (reason) => {
                     if (!reporting) return;

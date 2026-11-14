@@ -1397,7 +1397,8 @@ CREATE INDEX IF NOT EXISTS idx_agent_takedown_posts_held ON agent_takedown_posts
 -- `closing_on` are the listing promise (mothership A2, engine/directory-promise.ts): the promise as JSON text, checked
 -- to its five fields; whether a stranger can ask to join; the day the community says it closes. `listings_from_here` is
 -- whether the community's name and door are drawn beside its members' listings shown here (list-on-global G5,
--- engine/event-copy.ts): 0 only where its push said false; 1, or NULL on a row no run has written since, is on.
+-- engine/event-copy.ts): 0 only where its push said false, else 1, an unlisted row and a row from before the column
+-- included; never NULL, so a standby's copy stores what the main server stores and the two hash it the same.
 CREATE TABLE IF NOT EXISTS directory_cache (
     community_key TEXT PRIMARY KEY,
     listed INTEGER NOT NULL DEFAULT 1 CHECK (listed IN (0, 1)),
@@ -1416,7 +1417,7 @@ CREATE TABLE IF NOT EXISTS directory_cache (
     accepting_knocks INTEGER CHECK (accepting_knocks IS NULL OR accepting_knocks IN (0, 1)),
     closing_on TEXT,
     answers TEXT CHECK (answers IS NULL OR answers IN ('week', 'slow', 'none')),
-    listings_from_here INTEGER CHECK (listings_from_here IS NULL OR listings_from_here IN (0, 1))
+    listings_from_here INTEGER NOT NULL DEFAULT 1 CHECK (listings_from_here IN (0, 1))
 );
 CREATE INDEX IF NOT EXISTS idx_directory_cache_updated_at ON directory_cache(updated_at);
 

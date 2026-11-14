@@ -1534,6 +1534,8 @@ function directoryCommunityOfRow(r: any): SyncDirectoryCommunity {
         acceptingKnocks: r.accepting_knocks === 1 ? true : r.accepting_knocks === 0 ? false : null,
         closingOn: r.closing_on ?? null,
         answers: r.answers ?? null,
+        // Never NULL here (the server's schema.sql: an unlisted row, and one from before the column, hold 1), so the
+        // standby stores what this server stores and the two hash the table the same.
         listingsFromHere: r.listings_from_here !== 0,
     };
 }

@@ -38,7 +38,8 @@
  *
  * A community seen for the first time is inserted with `first_seen_at`; one seen before is updated where anything
  * shown changed; one that has left the registry is kept as its key and `first_seen_at` only (`listed` 0, everything
- * it published cleared, so an unlisted community's contacts don't linger here). A row is never deleted, so a
+ * it published cleared, so an unlisted community's contacts don't linger here; `listings_from_here` goes back to its
+ * default, 1, as the column is never NULL). A row is never deleted, so a
  * community is new to this node once in the life of its database: that is what makes a watcher's notice once only.
  *
  * ## A standby holds the same rows (mergeReplicatedDirectory)
@@ -326,8 +327,8 @@ interface CacheRecord {
     accepting_knocks: number | null;
     closing_on: string | null;
     answers?: string | null;
-    /** 0 off, 1 on; NULL on a row no run has written since the column came, which reads as on. */
-    listings_from_here?: number | null;
+    /** 0 off, 1 on; never NULL (db/schema.sql): a row from before the column, and an unlisted one, are 1. */
+    listings_from_here: number;
     first_seen_at: string;
     updated_at: string;
 }
@@ -340,9 +341,7 @@ function columns(r: DirectoryRow): unknown[] {
 
 function stored(c: CacheRecord): unknown[] {
     return [c.name, c.node_url, c.lat, c.lng, c.radius_km, c.member_count, c.contact_email, c.contact_phone, c.registry_updated_at,
-        c.promise ?? null, c.accepting_knocks ?? null, c.closing_on ?? null, c.answers ?? null,
-        // Read as it reads: a NULL from before the column is on, so a run doesn't stamp every row once for it.
-        c.listings_from_here === 0 ? 0 : 1];
+        c.promise ?? null, c.accepting_knocks ?? null, c.closing_on ?? null, c.answers ?? null, c.listings_from_here === 0 ? 0 : 1];
 }
 
 export interface DirectoryWrite {
@@ -373,7 +372,7 @@ export function writeDirectoryRows(rows: readonly DirectoryRow[], now: string): 
         closing_on = ?, answers = ?, listings_from_here = ?, updated_at = ? WHERE community_key = ?`);
     const scrub = db.prepare(`UPDATE directory_cache SET listed = 0, name = NULL, node_url = NULL, lat = NULL, lng = NULL,
         radius_km = NULL, member_count = NULL, contact_email = NULL, contact_phone = NULL, registry_updated_at = NULL,
-        promise = NULL, accepting_knocks = NULL, closing_on = NULL, answers = NULL, listings_from_here = NULL, updated_at = ?
+        promise = NULL, accepting_knocks = NULL, closing_on = NULL, answers = NULL, listings_from_here = 1, updated_at = ?
         WHERE community_key = ?`);
     const out: DirectoryWrite = { added: [], updated: 0, removed: 0 };
     const seen = new Set<string>();

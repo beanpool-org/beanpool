@@ -265,7 +265,7 @@ async function main() {
         await D.page.getByTestId('forum-new').click();
         await fits(D.page, 'the new topic form (dark)');
         await shot(D.page, '09-new-topic-dark');
-        check(otherHosts.size === 0 || [...otherHosts].every((h) => h === 'fonts.googleapis.com' || h === 'fonts.gstatic.com'), `no request left this machine (${[...otherHosts].join(', ')})`);
+        check(otherHosts.size === 0, `no request left this machine (${[...otherHosts].join(', ')})`);
     } catch (e) {
         failures.push(String(e?.stack || e));
         console.error(e);

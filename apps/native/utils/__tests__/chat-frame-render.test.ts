@@ -36,7 +36,7 @@ vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert', progressbar: 'progressbar', tab: 'tab', tablist: 'tablist' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
     const el = (tag: string) => function Host(props: Record<string, any>) {
-        const { children, onPress, accessibilityLabel, accessibilityHint, accessibilityRole, accessibilityState, testID, placeholder, numberOfLines, adjustsFontSizeToFit, minimumFontScale, maxFontSizeMultiplier, horizontal, onLayout, value, onChangeText, disabled } = props;
+        const { children, onPress, accessibilityLabel, accessibilityHint, accessibilityRole, accessibilityState, testID, placeholder, numberOfLines, ellipsizeMode, adjustsFontSizeToFit, minimumFontScale, maxFontSizeMultiplier, horizontal, onLayout, value, onChangeText, disabled } = props;
         useEffect(() => { onLayout?.({ nativeEvent: { layout: { x: 0, y: 0, width: 288, height: 40 } } }); }, []);
         const attrs: Record<string, unknown> = {};
         if (testID) attrs['data-testid'] = testID;
@@ -48,6 +48,7 @@ vi.mock('react-native', () => {
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (placeholder) attrs.placeholder = placeholder;
         if (numberOfLines) attrs['data-lines'] = String(numberOfLines);
+        if (ellipsizeMode) attrs['data-ellipsize'] = ellipsizeMode;
         if (adjustsFontSizeToFit) attrs['data-shrinks'] = 'true';
         if (minimumFontScale !== undefined) attrs['data-min-scale'] = String(minimumFontScale);
         if (maxFontSizeMultiplier !== undefined) attrs['data-max-scale'] = String(maxFontSizeMultiplier);
@@ -680,6 +681,20 @@ describe('a chat with someone in another community, in the Chats list at 320 dp 
             const px = Number(line!.getAttribute('data-font')) * 1.3;
             expect(Math.ceil(widthOf(home, px) / width), `${home} at ${px}px needs`).toBeLessThanOrEqual(lines);
         }
+    });
+
+    it('a home too long for its 3 lines is cut at its head, so the tail that names the real domain stays (PR #3168 review note)', async () => {
+        // ~55 characters fit 3 lines here; a host this long is the community operator's choice, never the sender's.
+        const home = 'hilltop-market-and-tool-library-cooperative-of-the-north-coast.riverside.example';
+        outside.chats = [outsideChat('Ana Ríos', home)];
+        rememberProfile(LOCAL);
+        await renderIn('en');
+        const line = communityLine()!;
+        expect(line.textContent).toBe(home);
+        const lines = Number(line.getAttribute('data-lines'));
+        const px = Number(line.getAttribute('data-font')) * 1.3;
+        expect(Math.ceil(widthOf(home, px) / 178), 'this home needs more lines than it has').toBeGreaterThan(lines);
+        expect(line.getAttribute('data-ellipsize')).toBe('head');
     });
 
     it('no name given: "Someone in another community", the community still under it', async () => {

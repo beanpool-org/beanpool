@@ -614,7 +614,8 @@ export default function ChatsScreen() {
                         </View>
                         <View style={styles.outsideHomeRow}>
                             <MaterialCommunityIcons name="earth" size={14} color={colors.text.secondary} />
-                            <Text style={styles.outsideHome} numberOfLines={3} testID="outside-chat-community">{item.outsideHome}</Text>
+                            {/* Cut at its head when it must be: the tail names the real domain. */}
+                            <Text style={styles.outsideHome} numberOfLines={3} ellipsizeMode="head" testID="outside-chat-community">{item.outsideHome}</Text>
                         </View>
                         <View style={styles.messageRow}>
                             <Text style={styles.lastMessage} numberOfLines={1}>{item.lastMessage || t('Kept on this phone only. Your community keeps no copy.')}</Text>

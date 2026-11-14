@@ -727,12 +727,14 @@ const NTFY_TAGS: Record<AlertPriority, string> = { 1: 'bar_chart', 2: 'white_che
  * is a failure in a few words that never repeat the address or the token.
  *
  * Each POST goes on a connection of its own (`Connection: close`), never on one fetch kept open from the last send. The
- * channel closes an idle connection on its own clock (Node's own server after 5 s), and fetch only notices when it next
- * reads that socket: a send written onto it first is reset, and fetch never tries a POST again, so the alert failed as
- * "unreachable" and waited 5 minutes for its retry while Settings showed the channel as failing. A node busy for a few
- * seconds (sync database work) is all it takes, because fetch's own idle timer runs on the same busy thread. Measured on
- * Node 22, the node image's version: test-alerts step 11 was told its end 5 minutes late (merge-queue run 43647481293).
- * Messages are a few an hour at most (ALERT_HOURLY_CAP), so a new connection each costs nothing.
+ * channel closes an idle connection on its own clock, and fetch only notices when it next reads that socket: a send
+ * written onto it first is reset ("other side closed"), and fetch never tries a POST again, so the alert failed as
+ * "unreachable" and waited 5 minutes for its retry while Settings showed the channel as failing. It takes the channel's
+ * close to land after fetch last read its sockets and before the send is written: a tick's sync work stretches that gap,
+ * and fetch's own idle timer, which would otherwise close the connection first, waits on the same busy thread. Measured on
+ * Node 22's fetch (HTTP/1.1), the node image's: test-alerts step 11 told its end 5 minutes late (merge-queue run
+ * 43647481293). A fetch that speaks HTTP/2 to the channel drops the header, harmlessly. Messages are a few an hour at
+ * most (ALERT_HOURLY_CAP), so a new connection each costs nothing.
  */
 export async function sendToChannel(c: AlertChannel, m: AlertMessage): Promise<{ ok: true; status: number } | { ok: false; error: string }> {
     const controller = new AbortController();

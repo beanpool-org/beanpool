@@ -643,8 +643,9 @@ async function main(): Promise<void> {
         `11. once it stays down 15 minutes: resolved, told once (${end11.length} told: ${JSON.stringify(end11.map((h) => h.body.replace(/\s+/g, ' ').slice(0, 90)))}; `
         + `channel ${st11.error ?? 'ok'}, ${st11.waiting} waiting, active ${st11.active.map((a) => a.key)})`);
     // Every message so far came on a connection of its own. One kept open from an earlier send is closed by the channel on
-    // its own clock (this stand-in's after 5 s, in its own thread, while the day above kept this one busy); a send written
-    // onto it is reset, fetch never retries a POST, and the end above was told 5 minutes late (merge-queue run 43647481293).
+    // its own clock (this stand-in, in its own thread: 5 s after the day's first message, about as long as the day above
+    // takes on CI); landing just before the end's send was written, it reset that send, fetch never retries a POST, and
+    // the end was told 5 minutes late (merge-queue run 43647481293, and #3167's run 43626495655).
     const channelHits = await ntfy.hits();
     const onOld = channelHits.filter((h) => h.nth !== 1).length;
     const keepOpen = channelHits.filter((h) => h.headers.connection !== 'close').length;

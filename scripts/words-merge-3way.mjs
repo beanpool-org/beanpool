@@ -23,7 +23,7 @@
  * checks files git merged by itself.
  *
  * AS GIT'S MERGE DRIVER (15 Nov: most sync rounds were catalog-only). .gitattributes sends every catalog to the driver
- * "beanpool-words"; each checkout needs it named once (scripts/lanes/lib.sh and scripts/sync-pr.sh do this):
+ * "beanpool-words"; a checkout needs it named once (scripts/lanes/lib.sh sets it; scripts/sync-pr.sh passes it on its own git command):
  *
  *   git config merge.beanpool-words.name 'BeanPool word catalogs, per key'
  *   git config merge.beanpool-words.driver 'node scripts/words-merge-3way.mjs --driver %O %A %B %P'

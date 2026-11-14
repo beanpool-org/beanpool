@@ -20,7 +20,8 @@
  *  7. Doorbells: only apps that said `forum=1`, members only: a reply's to its followers and its recent readers, the list's
  *     to every member's socket, at most once in 15 seconds.
  *  8. First looks: the waiting topic and its answer go out as forum.first-look and forum.first-look-answer, under the Forum
- *     switch; the OK'd topic's writer follows it.
+ *     switch; the OK'd topic's writer follows it. Opening the topic takes the answer off the bell with its kept copy, and
+ *     leaves a moderation notice that names the same topic where it is.
  *  9. Every new kind is in the kinds table and the push suite's prefix list; a browser's delivery folds them as a chat's.
  * 10. The standby and the account: forum_follows travels; delete-account and a new key take a member's follows.
  *
@@ -37,7 +38,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isPushNoticeKind, PUSH_NOTICE_KINDS } from '@beanpool/core';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, grantNodeRole, registerPushToken, addWsClient, exportSyncState, purgeMemberSelf } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, grantNodeRole, registerPushToken, addWsClient, exportSyncState, purgeMemberSelf, moderationNoticesCb } from './state-engine.js';
+import { tell } from './engine/moderation-notices.js';
 import { getNodeFeatures } from './config/node-profile.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
@@ -446,8 +448,19 @@ async function main(): Promise<void> {
     assert(pushesTo(nia, 'forum.first-look-answer', mark).length === 1, 'Nia is pushed forum.first-look-answer');
     assert((await topic(nia, ok.body.topicId)).body?.topic?.follow === 'following', 'and follows the topic it became');
     const noRow = rows(nia, 'forum.first-look-answer')[0];
+    // A moderation notice that names the same topic (a report's outcome: F2's forumData), kept and pushed by the real path.
+    tell(moderationNoticesCb(), [nia.pk], 'Report outcome', 'The post you reported was reviewed and kept.',
+        { kind: 'report_outcome', outcome: 'kept', forumPostId: 'fp-elsewhere', topicId: ok.body.topicId, screen: 'forum_topic' });
+    const keptUnseen = () => db.prepare(`SELECT json_extract(data, '$.kind') AS k FROM moderation_notices WHERE recipient = ? AND seen_at IS NULL`)
+        .all(nia.pk).map((r: any) => r.k).sort().join(',');
+    require_(keptUnseen() === 'forum_first_look_answered,report_outcome' && rows(nia, 'community.notice').length === 1,
+        `Nia has the answer's kept copy and a moderation notice naming the topic, both unseen (${keptUnseen()})`);
     assert(noRow?.data?.topicId === ok.body.topicId && (await readTo(nia, ok.body.topicId, 1)).status === 200 && rows(nia, 'forum.first-look-answer').length === 0,
         'opening the topic takes the answer off her bell');
+    assert(!keptUnseen().includes('forum_first_look_answered'),
+        `and marks the answer's kept copy with it, so the web app never shows that alert again (${keptUnseen()})`);
+    assert(rows(nia, 'community.notice').length === 1 && keptUnseen() === 'report_outcome',
+        `a moderation notice naming the same topic stays on her bell, its kept copy unseen: opening a topic marks the forum's own kinds only (${keptUnseen()})`);
     delete process.env.NODE_PROFILE;
 
     // ── 9. The kinds ────────────────────────────────────────────────────────────────────────────

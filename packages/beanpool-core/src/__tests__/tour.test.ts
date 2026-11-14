@@ -27,6 +27,17 @@ describe('the tour: steps derived from the tabs this node shows (§2)', () => {
         expect(ids('web', { global: false, beans: false })).toEqual(['home', 'market', 'map', 'chat', 'people', 'top', 'cards']);
     });
 
+    it('where the forum is on, the Chat step names Chats and the Forum on both apps, true on either side of the switch (T0)', () => {
+        const words = (app: 'phone' | 'web', forum?: boolean) => tourSteps(app, { global: false, beans: true, forum }).find((s) => s.tab === (app === 'phone' ? 'chats' : 'messages'))!.words;
+        expect(words('phone', true)).toBe(TOUR_WORDS.chatForum);
+        expect(words('web', true)).toBe(TOUR_WORDS.chatForum);
+        expect(TOUR_WORDS.chatForum).toMatch(/Chats and the Forum/);
+        // No forum (switched off, or a node that doesn't say): the words of the one side there is, as before.
+        expect(words('phone', false)).toBe(TOUR_WORDS.talk);
+        expect(words('web', undefined)).toBe(TOUR_WORDS.chat);
+        expect(ids('web', { global: false, beans: true, forum: true })).toEqual(ids('web', { global: false, beans: true }));
+    });
+
     it('a local node with Beans off has no money step (a hidden tab is never a step)', () => {
         expect(ids('phone', { global: false, beans: false })).not.toContain('commons');
         expect(ids('phone', { global: false, beans: false })).not.toContain('ledger');

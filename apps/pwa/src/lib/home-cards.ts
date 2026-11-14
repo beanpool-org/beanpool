@@ -303,6 +303,8 @@ export interface HomeFeatures {
     exampleListings?: boolean; decisions?: boolean; invites?: boolean; wordsDoor?: boolean; probation?: boolean;
     /** Present, and true, only where the node previews what it switched off (the global showcase). */
     showcase?: boolean;
+    /** The forum is on (@beanpool/core forumOn): the tour's Chat step names both sides of the Chats · Forum switch. */
+    forum?: boolean;
     [k: string]: unknown;
 }
 

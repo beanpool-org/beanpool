@@ -43,6 +43,11 @@ export interface TourNodeFacts {
     beans: boolean;
     /** The global showcase shows Commons and Ledger as previews (DESIGN-global-showcase W3). */
     showcase?: boolean;
+    /**
+     * The forum is on here (@beanpool/core forumOn), so the Chat tab opens on a Chats · Forum switch: its step names both
+     * sides, true whichever one the member left it on. A node that doesn't say has no forum.
+     */
+    forum?: boolean;
 }
 
 /**
@@ -56,6 +61,9 @@ export const TOUR_WORDS = {
     map: word('What\'s near you: green pins are Offers, orange are Needs, purple are events.'),
     talk: word('Messages, Groups and People live here. A chat with one person is locked end to end.'),
     chat: word('Your messages. A chat with one person is locked end to end.'),
+    // Where the forum is on, the Chat tab's top is a switch (slice T0), on both apps: the step says both sides, so it is true
+    // whichever side the member left the tab on.
+    chatForum: word('Chats and the Forum, switched at the top. A chat with one person is locked end to end.'),
     people: word('Members, friends and invites.'),
     commons: word('Where your community decides things together: Decisions, events and shared enterprises.'),
     commonsGlobal: word('Where a local community decides things together. This one is an example.'),
@@ -81,14 +89,14 @@ export function tourSteps(app: TourApp, node: TourNodeFacts): TourStep[] {
     const ledger: TourStep = { id: 'ledger', tab: 'ledger', words: g ? TOUR_WORDS.ledgerGlobal : TOUR_WORDS.ledger };
     if (app === 'phone') {
         // The phone's tabs: Home · Market · Map · Talk · Commons · Ledger.
-        steps.push({ id: 'talk', tab: 'chats', words: TOUR_WORDS.talk });
+        steps.push({ id: 'talk', tab: 'chats', words: node.forum ? TOUR_WORDS.chatForum : TOUR_WORDS.talk });
         if (moneyTabs) steps.push(commons, ledger);
         steps.push({ id: 'top', tab: 'index', words: TOUR_WORDS.topPhone });
         steps.push({ id: 'cards', tab: 'index', words: TOUR_WORDS.cards });
     } else {
         // The web app's: Home · Market · Map · Commons · Chat · People · Ledger.
         if (moneyTabs) steps.push(commons);
-        steps.push({ id: 'chat', tab: 'messages', words: TOUR_WORDS.chat });
+        steps.push({ id: 'chat', tab: 'messages', words: node.forum ? TOUR_WORDS.chatForum : TOUR_WORDS.chat });
         steps.push({ id: 'people', tab: 'people', words: TOUR_WORDS.people });
         if (moneyTabs) steps.push(ledger);
         steps.push({ id: 'top', tab: 'home', words: TOUR_WORDS.topWeb });

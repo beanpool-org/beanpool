@@ -88,10 +88,11 @@ vi.mock('../../app/IdentityContext', () => ({
     useIdentity: () => ({ identity: { publicKey: KEY, privateKey: 'not-used', callsign: 'Damo' }, setIdentity() {} }),
 }));
 // The phone's recognition: the real one asks the community in use; here it reads where the phone is anchored now.
-const recognition = vi.hoisted(() => ({ asked: 0, now: 'stranger' as 'stranger' | 'closed', nodeUrl: 'https://riverside.example' }));
+const recognition = vi.hoisted(() => ({ asked: 0, now: 'stranger' as 'stranger' | 'closed', retired: false, nodeUrl: 'https://riverside.example' }));
 vi.mock('../../app/NodeStatusContext', () => ({
     useNodeStatus: () => ({
         recognition: recognition.now,
+        retired: recognition.retired,
         nodeUrl: recognition.nodeUrl,
         recheck: async () => {
             recognition.asked++;
@@ -132,6 +133,7 @@ vi.mock('../../components/NoWordsNotice', () => ({ NoWordsNotice: () => null }))
 vi.mock('../../components/WordsOnScreen', () => ({ NoScreenCapture: ({ children }: { children?: unknown }) => children, NoScreenLockNote: () => null }));
 
 import NodeMismatchScreen from '../../app/node-mismatch';
+import { t, ACCOUNT_RETIRED_WORDS } from '@beanpool/core';
 import { getSavedNodes } from '../nodes';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
 import { takeDoorTap } from '../open-door';
@@ -175,6 +177,7 @@ beforeEach(() => {
     nav.pushed.length = 0;
     recognition.asked = 0;
     recognition.now = 'stranger';
+    recognition.retired = false;
     recognition.nodeUrl = LOCAL;
     dbCalls.closed = 0;
     dbCalls.opened = 0;
@@ -392,6 +395,73 @@ describe("the not-recognised screen's pages (§C.1, §C.3)", () => {
         expect(text()).toContain('Your phone is still on Riverside. Nothing was changed.');
         expect(buttons().some(b => /Delete my account at/.test(b.textContent ?? ''))).toBe(false);
         expect(store.map.get('beanpool_anchor_url')).toBe(LOCAL);
+    });
+});
+
+// #3124's deciding review: the node refuses a retired empty duplicate's key with 403 `account_retired`, and the phone read
+// it as no answer, so its tabs said "trouble connecting". It is a closed account (utils/membership-answer.ts), marked
+// retired: the closed page, with its own title and core's one line (the web app's words too), saying who and what to do.
+const RETIRED_LINE = "An owner retired this account as an empty duplicate. Sign in with your other account. If that's wrong, ask an owner to bring it back.";
+
+describe("the closed page for an account an owner retired as an empty duplicate (account_retired)", () => {
+    it('the community in use: told it was retired, by name, with what to do; never "trouble connecting"; Delete my account stays', async () => {
+        recognition.now = 'closed';
+        recognition.retired = true;
+        globalThis.fetch = network({ global: 'stranger', riverside: { profile: 'local', features: { invites: true } } });
+        await render();
+        expect(text()).toContain('Your account in Riverside was retired');
+        expect(text()).toContain(RETIRED_LINE);
+        expect(t(ACCOUNT_RETIRED_WORDS.line)).toBe(RETIRED_LINE);
+        // At 320 dp and 1.3x (this file's window) the line takes several lines: neither it nor the title is clipped.
+        const drawn = Array.from(host.querySelectorAll('span')).filter(el => el.textContent === RETIRED_LINE || el.textContent === 'Your account in Riverside was retired');
+        expect(drawn).toHaveLength(2);
+        for (const el of drawn) expect(el.getAttribute('data-lines')).toBeNull();
+        expect(text()).not.toContain('was closed');
+        expect(text()).not.toContain('You deleted it, or the community removed it.');
+        // A removed account's hint (a vote could bring you back) is not this account's: an owner's Bring back is.
+        expect(text()).not.toContain('a vote could bring you back');
+        expect(text()).not.toMatch(/trouble connecting|check your connection|couldn.t reach/i);
+        expect(host.querySelector('input')).toBeNull();
+        // The closed page's way out stays: the community still takes its own Delete account from this key.
+        await act(async () => { button('Delete my account at Riverside')!.click(); });
+        expect(nav.pushed).toEqual([{ pathname: '/(tabs)/settings', params: { section: 'delete' } }]);
+        expect(store.map.get('beanpool_anchor_url')).toBe(LOCAL);
+    });
+
+    it('a closed account the community removed keeps its own words (retired is only for account_retired)', async () => {
+        recognition.now = 'closed';
+        recognition.retired = false;
+        globalThis.fetch = network({ global: 'stranger', riverside: { profile: 'local', features: { invites: true } } });
+        await render();
+        expect(text()).toContain('Your account in Riverside was closed');
+        expect(text()).not.toContain(RETIRED_LINE);
+    });
+
+    it('Reconnect asks a community that answers account_retired: its retired page, the phone still where it was, nothing moved', async () => {
+        const ELSEWHERE = 'https://hilltop.example';
+        globalThis.fetch = vi.fn(async (input: unknown) => {
+            const u = String(input);
+            asked.push(u);
+            if (u === `${ELSEWHERE}/api/community/membership/${KEY}`) {
+                return new Response(JSON.stringify({ error: 'retired', code: 'account_retired' }), { status: 403 });
+            }
+            if (u === `${ELSEWHERE}/api/community/info`) {
+                return new Response(JSON.stringify({ name: 'Hilltop', profile: 'local', features: { invites: true } }), { status: 200 });
+            }
+            return (network({ global: 'stranger', riverside: { profile: 'local', features: { invites: true } } }) as any)(input);
+        }) as typeof fetch;
+        await render();
+        await act(async () => { type(await addressField(), 'hilltop.example'); });
+        await settle();
+        await act(async () => { button('Reconnect')!.click(); });
+        await settle();
+        expect(text()).toContain('Your account in hilltop.example was retired');
+        expect(text()).toContain(RETIRED_LINE);
+        expect(text()).not.toMatch(/Couldn.t reach that community/);
+        expect(text()).toContain('Your phone is still on Riverside. Nothing was changed.');
+        expect(buttons().some(b => /Delete my account at/.test(b.textContent ?? ''))).toBe(false);
+        expect(store.map.get('beanpool_anchor_url')).toBe(LOCAL);
+        expect(dbCalls.closed).toBe(0);
     });
 });
 

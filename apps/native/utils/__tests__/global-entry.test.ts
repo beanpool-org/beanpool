@@ -98,6 +98,10 @@ describe('readMembershipAnswer', () => {
         expect(readMembershipAnswer(200, { isMember: false })).toEqual({ kind: 'stranger', recovering: false });
         expect(readMembershipAnswer(200, { isMember: false, isRecovering: true })).toEqual({ kind: 'stranger', recovering: true });
         expect(readMembershipAnswer(403, { code: 'account_closed' })).toEqual({ kind: 'closed' });
+        // An owner retired the account as an empty duplicate (#3124's account_retired): a closed account, marked retired.
+        // Before, it was no answer (null), and the phone read the refusals that followed as "trouble connecting".
+        expect(readMembershipAnswer(403, { code: 'account_retired' })).toStrictEqual({ kind: 'closed', retired: true });
+        expect(readMembershipAnswer(403, { code: 'account_closed' })).toStrictEqual({ kind: 'closed' });
         expect(readMembershipAnswer(403, { code: 'members_only' })).toEqual({ kind: 'stranger', recovering: false });
         expect(readMembershipAnswer(403, { code: 'private_preview' })).toEqual({ kind: 'stranger', recovering: false });
         expect(readMembershipAnswer(403, { code: 'not_your_key' })).toBeNull();

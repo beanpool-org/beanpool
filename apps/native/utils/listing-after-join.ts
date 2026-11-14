@@ -5,7 +5,8 @@
  * nothing more to show (components/BringListingsSheet.tsx onQuiet).
  *
  *   1. kept at Send, on the community's card (app/community-card.tsx): the community and the listing's id, nothing else;
- *   2. marked at the join the yes made (joinAnotherCommunity from that card or from Find a community): it may open now;
+ *   2. marked at the join the yes made (joinAnotherCommunity from that card or from Find a community; on a phone that had no
+ *      account, welcome's invite step joining that yes, app/welcome.tsx markYesJoined): it may open now;
  *   3. taken once, on Home in that community: its screen (app/post/[id].tsx), which says so in one line if it has gone.
  * A join by someone else's invite, or a request never answered, never marks it, and it lapses a month after the tap (core
  * LISTING_AFTER_JOIN_MS). Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage). Nothing of it leaves the phone.

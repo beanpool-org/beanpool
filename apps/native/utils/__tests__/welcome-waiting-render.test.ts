@@ -22,6 +22,10 @@
  *   8. A request sent again from Find a community (the same address, a newer `sentAt`) is read when the screen is back in front,
  *      and the old answer ("no longer open", with its Got it) is not taken for it. The focus switch above stands in for
  *      expo-router's: another screen covers this one, then it is back.
+ *   9. A visitor on global with no account, from a copy of a listing (list on global G4, DESIGN-list-on-global-fable.md §6
+ *      steps 1 to 3): the community's card asks with a key it makes at Send and keeps the listing; the phone waits here; the
+ *      yes is joined through the invite step; and Home's take (utils/listing-after-join.ts) opens the listing. Someone
+ *      else's invite to that community, or a redeem the community refuses, never marks it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -191,6 +195,8 @@ const ids = vi.hoisted(() => {
         WORDS, OUT_WORDS,
         SALLY: { publicKey: 'a1'.repeat(32), privateKey: 'b2'.repeat(32), callsign: 'Sally', createdAt: '2026-01-01', mnemonic: WORDS },
         KIM: { publicKey: 'c3'.repeat(32), privateKey: 'd4'.repeat(32), callsign: 'Kim', createdAt: '2026-01-01', mnemonic: OUT_WORDS },
+        /** The key a phone with no account drafts on a community's card (section 9). */
+        VISITOR: { publicKey: '9a'.repeat(32), privateKey: '8b'.repeat(32), callsign: '', createdAt: '2026-11-14', mnemonic: WORDS },
     };
 });
 const phone = vi.hoisted(() => ({
@@ -217,7 +223,22 @@ vi.mock('../knock', async (importOriginal) => {
 vi.mock('../knock-key', () => ({
     knockKeyIsNew: async (pk: string) => knocking.mark === pk,
     forgetKnockKey: async () => { knocking.mark = null; },
+    // A community's card on a phone with no account (section 9): the key drafted when its form opens, and written at Send as
+    // utils/knock-key.ts writes it (knock-without-account.test.ts runs the real one): the look ends, there is no community in
+    // use, the key is marked as the knock's, and the phone holds it.
+    knockKeyForThisPhone: async (held: unknown) => held ?? { identity: { ...ids.VISITOR }, createdHere: true },
+    commitKnockKey: async (key: { identity: Record<string, unknown> }, callsign: string) => {
+        const identity = { ...key.identity, callsign };
+        store.map.delete('beanpool_anchor_url');
+        knocking.mark = identity.publicKey as string;
+        phone.stored = identity;
+        return identity;
+    },
 }));
+vi.mock('../notification-permission', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../notification-permission')>();
+    return { ...real, askNotificationPermissionOnAction: async () => {} };
+});
 const door = vi.hoisted(() => ({
     check: { ok: true, profile: { features: {} } } as any,
     answer: null as any,
@@ -253,6 +274,7 @@ vi.mock('../db', () => ({
     recordOnboardingEvent: async () => {},
     signedRequestWithMethod: async () => ({}),
     signedRequest: async () => ({}),
+    getMemberProfile: async () => null,
 }));
 vi.mock('../invite-next', async (importOriginal) => {
     const real = await importOriginal<typeof import('../invite-next')>();
@@ -401,6 +423,9 @@ vi.mock('../../components/SsoButton', () => {
 import { setLanguage } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import WelcomeScreen from '../../app/welcome';
+import CommunityCardScreen from '../../app/community-card';
+import { keepListingAfterJoin, takeListingAfterJoin } from '../listing-after-join';
+import { KNOCKS_STORE_KEY, LISTING_AFTER_JOIN_STORE_KEY } from '../storage-keys';
 import { noVault } from './fake-vault';
 
 const RIVERSIDE = 'https://riverside.example.org';
@@ -771,5 +796,123 @@ describe('8. a request sent again from Find a community is a new request (round 
         knocking.reads = [];
         await covered(false);
         expect(knocking.reads).toEqual([RIVERSIDE]);
+    });
+});
+
+describe('9. a visitor with no account, from a copy of a listing on global: the card, Send, the yes here, and the listing on Home (list on global G4 round 2)', () => {
+    const POST = '3f2b8c1e-5d4a-4e7b-9a10-0c6d2e8f1a34';
+    const LOOKED_AT = 'https://commons.example.org';
+    const YES = { ok: true, value: { status: 'approved', invite: 'INV-ABCD-EFGH', expiresAt: null } };
+    const realFetch = globalThis.fetch;
+    const knocksSent: Array<Record<string, unknown>> = [];
+    const kept = () => JSON.parse(store.map.get(LISTING_AFTER_JOIN_STORE_KEY) ?? 'null');
+
+    beforeEach(() => {
+        // Looking around another community, with no account: the copy's Ask to join opened the card for its own community.
+        phone.stored = null;
+        knocking.asked = [];
+        knocking.mark = null;
+        store.map.set('beanpool_anchor_url', LOOKED_AT);
+        knocksSent.length = 0;
+        globalThis.fetch = vi.fn(async (input: unknown, init?: RequestInit) => {
+            const u = String(input);
+            if (u === `${RIVERSIDE}/api/community/card`) {
+                return new Response(JSON.stringify({ name: 'Riverside', host: 'riverside.example.org', members: null, area: null, joining: 'requests', askUrl: null, globalUrl: null }), { status: 200 });
+            }
+            if (u === `${RIVERSIDE}/api/community/known-rule`) return new Response(JSON.stringify({ known: false }), { status: 200 });
+            if (u === `${RIVERSIDE}/api/join/knock` && init?.method === 'POST') {
+                knocksSent.push(JSON.parse(String(init.body)));
+                return new Response(JSON.stringify({ knock: { status: 'pending' } }), { status: 201 });
+            }
+            throw new TypeError(`Network request failed: ${u}`);
+        }) as typeof fetch;
+    });
+    afterEach(() => { globalThis.fetch = realFetch; });
+
+    /** The community's card, opened from the copy (`listing`), with no account: Ask to join, a name, a few words, Send. */
+    async function askFromTheCopy(): Promise<void> {
+        params.now = { node: RIVERSIDE, listing: POST };
+        host = document.createElement('div');
+        document.body.appendChild(host);
+        root = createRoot(host);
+        await act(async () => { root!.render(createElement(CommunityCardScreen) as any); });
+        await settle();
+        const ask = byId('community-card-ask');
+        expect(ask, 'Ask to join on the card').not.toBeNull();
+        await act(async () => { ask!.click(); });
+        await settle();
+        await type('Your name', 'River Kid');
+        await type('A few words about yourself', 'I live by the river and grow tomatoes.');
+        await press('Send');
+        act(() => root?.unmount());
+        host?.remove();
+        root = null; host = null;
+        params.now = {};
+    }
+
+    it('the listing opens on Home once the yes is joined here, once (fails before: welcome never marked it, and Home took nothing)', async () => {
+        await askFromTheCopy();
+        // Send: the request went, signed by the key made at Send; the look ended; the listing is kept, not yet to open; and
+        // the phone waits on welcome.
+        expect(knocksSent).toHaveLength(1);
+        expect(phone.stored).toMatchObject({ publicKey: ids.VISITOR.publicKey, callsign: 'River Kid' });
+        expect(store.map.has('beanpool_anchor_url')).toBe(false);
+        expect(kept()).toEqual({ 'riverside.example.org': { id: POST, at: expect.any(Number) } });
+        expect(nav.replaced).toEqual(['/welcome']);
+
+        // Welcome's waiting mode, with the request the card remembered, and its yes.
+        knocking.asked = JSON.parse(store.map.get(KNOCKS_STORE_KEY)!).knocks;
+        expect(knocking.asked).toEqual([expect.objectContaining({ url: RIVERSIDE, name: 'Riverside' })]);
+        knocking.statuses = { [RIVERSIDE]: YES };
+        await mount();
+        expect(host!.textContent).toContain('Riverside said yes. Join now.');
+        expect(await takeListingAfterJoin(RIVERSIDE)).toBeNull();
+        await press('Join Riverside');
+        expect(host!.textContent).toContain('Your Photo');
+        expect(store.map.get('beanpool_anchor_url')).toBe(RIVERSIDE);
+        expect(kept()).toEqual({ 'riverside.example.org': { id: POST, at: expect.any(Number), joined: true } });
+
+        // Home in Riverside, once its Bring my listings sheet has nothing to show: the listing, said once.
+        expect(await takeListingAfterJoin(store.map.get('beanpool_anchor_url')!)).toBe(`/post/${POST}?cameFor=1`);
+        expect(await takeListingAfterJoin(RIVERSIDE)).toBeNull();
+        expect(store.map.has(LISTING_AFTER_JOIN_STORE_KEY)).toBe(false);
+    });
+
+    it('a yes the card hands here (its Join, with no community in use) lands on the listing too', async () => {
+        await askFromTheCopy();
+        knocking.asked = JSON.parse(store.map.get(KNOCKS_STORE_KEY)!).knocks;
+        const { handKnockYesToWelcome } = await import('../waiting-to-join');
+        handKnockYesToWelcome({ url: RIVERSIDE, invite: 'INV-ABCD-EFGH', name: 'Riverside' }, ids.VISITOR.publicKey);
+        await mount();
+        expect(host!.textContent).toContain('Your Photo');
+        expect(await takeListingAfterJoin(RIVERSIDE)).toBe(`/post/${POST}?cameFor=1`);
+    });
+
+    it("someone else's invite to that community never marks it: the request's own yes is what lets it open", async () => {
+        phone.stored = { ...KNOCKER };
+        knocking.mark = KNOCKER.publicKey;
+        knocking.asked = [knockAt(RIVERSIDE, 'Riverside')];
+        store.map.delete('beanpool_anchor_url');
+        await keepListingAfterJoin(RIVERSIDE, POST);
+        // A friend's invite link, which the root layout hands to welcome's invite step.
+        params.now = { invite: 'INV-WXYZ-0001', server: RIVERSIDE, t: '1' };
+        await mount();
+        await press('Next');
+        expect(host!.textContent).toContain('Your Photo');
+        expect(store.map.get('beanpool_anchor_url')).toBe(RIVERSIDE);
+        expect(kept()).toEqual({ 'riverside.example.org': { id: POST, at: expect.any(Number) } });
+        expect(await takeListingAfterJoin(RIVERSIDE)).toBeNull();
+    });
+
+    it('a yes whose redeem the community refuses marks nothing: no community, and the listing still waits', async () => {
+        await askFromTheCopy();
+        knocking.asked = JSON.parse(store.map.get(KNOCKS_STORE_KEY)!).knocks;
+        knocking.statuses = { [RIVERSIDE]: YES };
+        phone.redeemFails = 'This invite has expired.';
+        await mount();
+        await press('Join Riverside');
+        expect(host!.textContent).toContain('This invite has expired.');
+        expect(store.map.has('beanpool_anchor_url')).toBe(false);
+        expect(kept()).toEqual({ 'riverside.example.org': { id: POST, at: expect.any(Number) } });
     });
 });

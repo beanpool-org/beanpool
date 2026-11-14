@@ -47,7 +47,7 @@ describe('the shell (§1.1)', () => {
     });
 
     it('has two variants and no band: an Elder border of 3 and a Pulse border of 2', () => {
-        expect(MARKET_CARD_SHELL.variant).toEqual({ elderBorderLeft: 3, pulseBorder: 2 });
+        expect(MARKET_CARD_SHELL.variant).toEqual({ elderBorderLeft: 3 });
         expect(Object.keys(MARKET_CARD_SHELL.variant)).toHaveLength(2);
     });
 });

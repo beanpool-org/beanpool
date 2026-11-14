@@ -124,12 +124,14 @@ describe('MarketplacePage: a short nearby list is filled with the newest from el
         expect(within(fill).getByText('Far 0')).toBeInTheDocument();
     });
 
-    it('7 real near listings + a pulse: the fill still shows', async () => {
-        const pulse = listing('pulse-post', 'Daily thought', { authorCallsign: 'Daily Pulse' });
-        vi.mocked(api.getMarketplacePosts).mockImplementation(node([...nearOf(7), pulse], farOf(2)));
+    it('7 near + one by an author named "Daily Pulse": that one counts like any listing, so 8 and no fill', async () => {
+        // The Daily Pulse is gone (Marty, 15 Nov 2026): a post by that name is a member's own and is counted.
+        const named = listing('pulse-post', 'Daily thought', { authorCallsign: 'Daily Pulse' });
+        vi.mocked(api.getMarketplacePosts).mockImplementation(node([...nearOf(7), named], farOf(2)));
         render(<MarketplacePage identity={identity} />);
-        const fill = await screen.findByTestId('market-fill');
-        expect(within(fill).getByText('Far 0')).toBeInTheDocument();
+        await screen.findByText('Daily thought');
+        expect(screen.queryByTestId('market-fill')).toBeNull();
+        expect(fillReads()).toEqual([]);
     });
 
     it('never takes the list past a page', async () => {

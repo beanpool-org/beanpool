@@ -48,6 +48,12 @@
  * go after `BURST.keepActionsDays` days, and a member who deletes their own account, and so their label, leaves them
  * (`forgetBurstActionsOf`).
  *
+ * Forum posts too (the forum's slice F2; DESIGN-forums-fable.md §5, "forum posts included"): a hide sets
+ * `forum_posts.hidden_by_reports_at` with the same stamp on every forum post of theirs still up and not hidden, recorded in
+ * `burst_action_forum_posts`, counted in the action's posts and the author's notice. Its undo shows each again that still
+ * carries the stamp, unless reports would hide it now (forumHideTally), in one pass: a forum post adds nothing to standing,
+ * so showing one moves no other's bar.
+ *
  * ## The digest
  *
  * `burstDigest`: one line per recent burst of `BURST.digestMinAccounts` or more (how many, how many are still here, how
@@ -59,7 +65,7 @@ import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { provenKeySpelling } from './member-key.js';
 import { bumpActivityVersion, bumpPostsVersion } from './versions.js';
-import { hideTally, standingParts } from './auto-moderation.js';
+import { forumHideTally, hideTally, standingParts } from './auto-moderation.js';
 import { notifyPostsBack, notifyPostsHiddenForReview, type ModerationNoticeCallbacks } from './moderation-notices.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -293,6 +299,7 @@ function pruneOldActions(now: number): void {
     const cutoff = iso(now - BURST.keepActionsDays * DAY_MS);
     db.transaction(() => {
         db.prepare('DELETE FROM burst_action_posts WHERE action_id IN (SELECT id FROM burst_actions WHERE at < ?)').run(cutoff);
+        db.prepare('DELETE FROM burst_action_forum_posts WHERE action_id IN (SELECT id FROM burst_actions WHERE at < ?)').run(cutoff);
         db.prepare('DELETE FROM burst_actions WHERE at < ?').run(cutoff);
     })();
 }
@@ -329,6 +336,19 @@ export function hideBurstPosts(cb: ModerationNoticeCallbacks, anchor: string, ke
             for (const p of select.all(author) as { id: string }[]) {
                 if (hide.run(at, at, p.id).changes === 0) continue;
                 record.run(id, p.id);
+                hidden.push({ id: p.id, author });
+            }
+        }
+        // Their forum posts still up, with the same stamp; an opening post's topic is touched so every list's tag moves.
+        const selectForum = db.prepare('SELECT id, topic_id, number FROM forum_posts WHERE writer_pubkey = ? AND removed_by IS NULL AND hidden_by_reports_at IS NULL');
+        const hideForum = db.prepare('UPDATE forum_posts SET hidden_by_reports_at = ? WHERE id = ? AND hidden_by_reports_at IS NULL');
+        const recordForum = db.prepare('INSERT INTO burst_action_forum_posts (action_id, post_id) VALUES (?, ?)');
+        const touchTopic = db.prepare('UPDATE forum_topics SET updated_at = ? WHERE id = ?');
+        for (const author of keys) {
+            for (const p of selectForum.all(author) as { id: string; topic_id: string; number: number }[]) {
+                if (hideForum.run(at, p.id).changes === 0) continue;
+                recordForum.run(id, p.id);
+                if (p.number === 1) touchTopic.run(at, p.topic_id);
                 hidden.push({ id: p.id, author });
             }
         }
@@ -426,6 +446,24 @@ export function undoBurstHide(cb: ModerationNoticeCallbacks, actionId: string, n
             if (stays.has(p.id)) continue;
             touched.run(at, p.id);
             back.push({ id: p.id, author: p.author_status === 'pruned' ? null : p.author_pubkey, live: p.active === 1 && p.status !== 'cancelled' });
+        }
+        // Its forum posts that still carry its stamp: shown again, unless reports would hide one now (the header).
+        const forumPosts = db.prepare(`SELECT fp.id, fp.topic_id, fp.number, fp.writer_pubkey, fp.removed_by, m.status AS author_status
+                                         FROM burst_action_forum_posts bp JOIN forum_posts fp ON fp.id = bp.post_id
+                                         LEFT JOIN members m ON m.public_key = fp.writer_pubkey
+                                        WHERE bp.action_id = ? AND fp.hidden_by_reports_at = ?`)
+            .all(actionId, action.at) as { id: string; topic_id: string; number: number; writer_pubkey: string; removed_by: string | null; author_status: string | null }[];
+        const reportedForum = db.prepare(`SELECT 1 FROM abuse_reports WHERE target_forum_post_id = ? AND (status = 'pending' OR status IS NULL) LIMIT 1`);
+        const showForum = db.prepare('UPDATE forum_posts SET hidden_by_reports_at = NULL WHERE id = ? AND hidden_by_reports_at = ?');
+        const touchTopic = db.prepare('UPDATE forum_topics SET updated_at = ? WHERE id = ?');
+        for (const p of forumPosts) {
+            if (reportsHide && reportedForum.get(p.id)) {
+                const t = forumHideTally(p.id, now);
+                if (t.circles.length >= t.circlesNeeded) { keptHidden++; continue; }
+            }
+            if (showForum.run(p.id, action.at).changes === 0) continue;
+            if (p.number === 1) touchTopic.run(at, p.topic_id);
+            back.push({ id: p.id, author: p.author_status === 'pruned' ? null : p.writer_pubkey, live: !p.removed_by });
         }
         return true;
     })();

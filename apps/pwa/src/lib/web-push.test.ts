@@ -11,12 +11,14 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { pushCommunityTag, pushNoticeBytes, PUSH_NOTICE_KINDS } from '@beanpool/core';
 import {
     pushPlace, grantedLine, cannotLines, noticeInLocation, tellMeWhenTheyAnswer, readWebPushPin, FORGED_NOTICE_LINE, type PushEnv,
+    knockScope, tellMeAtHome, stopTellingMeAtHome,
 } from './web-push';
+import { knockLandingFor, takeKnockLanding } from './knock-landing';
 import { APP_STORE_URL, PLAY_URL } from './peek';
-import { signedFetchAt } from './api';
+import { sendSignedAt, signedFetchAt } from './api';
 import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
 
-vi.mock('./api', () => ({ signedFetchAt: vi.fn() }));
+vi.mock('./api', () => ({ signedFetchAt: vi.fn(), sendSignedAt: vi.fn(async () => {}) }));
 
 const SW_SOURCE = fs.readFileSync(path.resolve(__dirname, '../../public/sw.js'), 'utf8');
 
@@ -165,6 +167,93 @@ describe('the service worker (public/sw.js)', () => {
         const w = loadWorker();
         expect(Object.keys(w.listeners).sort()).toEqual(['activate', 'install', 'notificationclick', 'push']);
         expect(SW_SOURCE).not.toMatch(/indexedDB|localStorage|caches\.|importScripts|crypto\.subtle/);
+    });
+});
+
+describe('told from another origin: the worker in a community\'s own registration (global yes Y2)', () => {
+    const SCOPE = 'https://global.example/app/knock/riverside.example/';
+
+    it('stays, and shows exactly the fixed words it shows at /app/', async () => {
+        const w = loadWorker(SCOPE);
+        await w.fire('activate', {});
+        expect(w.unregistered()).toBe(0);
+        await w.fire('push', pushEvent({ title: 'Pay now', body: PUSH_NOTICE_KINDS['join.answered'].body, data: notice(), image: 'https://evil.example/x.png' }));
+        expect(w.shown.map(x => [x.title, x.options.body, x.options.tag, Object.keys(x.options).sort().join(',')])).toEqual([
+            ['BeanPool', 'A community answered your request to join.', 'join.answered', 'body,data,icon,tag'],
+        ]);
+    });
+
+    it("a click opens Home's row for that community, /app?knock=<host>, with the notice in the fragment, in a new tab", async () => {
+        const w = loadWorker(SCOPE);
+        const n = notice();
+        // The member's app is open in a tab, and the waiting page of an A1 request too: neither is taken or focused (the
+        // open app checks a notice by its own community's key), and no tab is navigated.
+        w.setTabs([{ url: 'https://global.example/app', controlled: false }, { url: 'https://global.example/app/', controlled: true }]);
+        await w.fire('notificationclick', { notification: { close() {}, data: { notice: n } } });
+        expect(w.opened).toEqual([`/app?knock=riverside.example#notice=${encodeURIComponent(JSON.stringify(n))}`]);
+        expect(w.focused).toEqual([]);
+        expect(w.navigated).toEqual([]);
+        const port = loadWorker('https://global.example/app/knock/riverside.example:8443/');
+        await port.fire('notificationclick', { notification: { close() {}, data: { notice: n } } });
+        expect(port.opened[0].startsWith('/app?knock=riverside.example%3A8443#notice=')).toBe(true);
+    });
+
+    it('registered at anything that is not one community\'s host under /app/knock/, it removes itself and shows nothing', async () => {
+        for (const scope of ['https://global.example/app/knock/', 'https://global.example/app/knock/a/b/', 'https://global.example/app/knock/-bad.example/', 'https://global.example/app/knocks/riverside.example/']) {
+            const w = loadWorker(scope);
+            await w.fire('activate', {});
+            await w.fire('push', pushEvent({ body: 'hello', data: notice() }));
+            expect([scope, w.unregistered(), w.shown.length]).toEqual([scope, 1, 0]);
+        }
+    });
+});
+
+describe('the landing of such a click (lib/knock-landing.ts)', () => {
+    const RIVERSIDE = 'https://riverside.example';
+    const winAt = (search: string, hash = '') => {
+        const replaced: string[] = [];
+        return {
+            win: { location: { search, hash, pathname: '/app' }, history: { state: null, replaceState: (_: unknown, __: string, url: string) => { replaced.push(url); } } } as any,
+            replaced,
+        };
+    };
+    const pinFor = (pushKey: string | null) => localStorage.setItem('beanpool_web_push', JSON.stringify([{ origin: RIVERSIDE, publicKey: ASKER, subId: 'c'.repeat(64), pushKey, vapidKey: 'v', for: 'asker' }]));
+    beforeEach(() => localStorage.clear());
+
+    it('takes ?knock=<host> and the notice out of the address; a host that is no community\'s lands nowhere', () => {
+        const n = notice();
+        const at = winAt('?knock=riverside.example', `#notice=${encodeURIComponent(JSON.stringify(n))}`);
+        expect(takeKnockLanding(at.win)).toEqual({ origin: RIVERSIDE, notice: n });
+        expect(at.replaced).toEqual(['/app']);
+        expect(takeKnockLanding(winAt('?door=ask').win)).toBeNull();
+        for (const bad of ['riverside.example/evil', 'user@riverside.example', 'localhost', 'riverside.example%2Fx', '']) {
+            expect([bad, takeKnockLanding(winAt(`?knock=${encodeURIComponent(bad)}`).win)]).toEqual([bad, null]);
+        }
+    });
+
+    it('the community\'s own yes, for this key, signed by the key pinned at Tell me: the row', () => {
+        pinFor(PUSH_KEY);
+        expect(knockLandingFor({ origin: RIVERSIDE, notice: notice() }, ASKER)).toBe('row');
+    });
+
+    it('a forged notice opens nothing: another signer, another key, another kind, garbled, or nothing pinned for that community', () => {
+        pinFor(PUSH_KEY);
+        const other = ed25519.utils.randomSecretKey();
+        expect(knockLandingFor({ origin: RIVERSIDE, notice: notice('join.answered', ASKER, other) }, ASKER)).toBe('forged');
+        expect(knockLandingFor({ origin: RIVERSIDE, notice: notice('join.answered', bytesToHex(ed25519.getPublicKey(other))) }, ASKER)).toBe('forged');
+        expect(knockLandingFor({ origin: RIVERSIDE, notice: notice('chat.message') }, ASKER)).toBe('forged');
+        expect(knockLandingFor({ origin: RIVERSIDE, notice: null }, ASKER)).toBe('forged');
+        // Signed by this community's key, but landing for another community this browser asked: that one's pin decides.
+        expect(knockLandingFor({ origin: 'https://elsewhere.example', notice: notice() }, ASKER)).toBe('forged');
+        localStorage.clear();
+        expect(knockLandingFor({ origin: RIVERSIDE, notice: notice() }, ASKER)).toBe('forged');
+    });
+
+    it('no notice in the address, or one only late: the row, without a word', () => {
+        expect(knockLandingFor({ origin: RIVERSIDE, notice: undefined }, ASKER)).toBe('row');
+        pinFor(PUSH_KEY);
+        const now = Math.floor(Date.now() / 1000);
+        expect(knockLandingFor({ origin: RIVERSIDE, notice: notice('join.answered', ASKER, KEY, now - 8 * 86_400) }, ASKER, now)).toBe('row');
     });
 });
 
@@ -324,5 +413,75 @@ describe('the tap (tellMeWhenTheyAnswer)', () => {
         await import('./web-push');
         expect(register).not.toHaveBeenCalled();
         expect(requestPermission).not.toHaveBeenCalled();
+    });
+});
+
+describe('the tap on Home\'s row (tellMeAtHome, global yes Y2)', () => {
+    const identity = { publicKey: ASKER, privateKey: '00'.repeat(48) } as any;
+    const RIVERSIDE = 'https://riverside.example';
+
+    it('a registration of its own at /app/knock/<host>/, that community\'s key, the subscription given to that community signed by the key that asked, its pin kept under that community', async () => {
+        localStorage.clear();
+        const requestPermission = vi.fn(async () => 'granted');
+        (globalThis as any).Notification = { permission: 'default', requestPermission };
+        const vapidKey = Buffer.from(new Uint8Array(65).fill(7)).toString('base64url');
+        const subscribe = vi.fn(async () => ({ toJSON: () => ({ endpoint: 'https://fcm.googleapis.com/fcm/send/y', keys: { p256dh: 'P', auth: 'A' } }) }));
+        const registration: any = { installing: null, waiting: null, active: {}, pushManager: { getSubscription: async () => null, subscribe } };
+        const register = vi.fn(async () => registration);
+        Object.defineProperty(navigator, 'serviceWorker', { value: { register }, configurable: true });
+        resetNodeVersionGateForTests();
+        hearNodeVersionForTests(RIVERSIDE);
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ vapidKey }), { status: 200 }));
+        vi.mocked(signedFetchAt).mockClear();
+        vi.mocked(signedFetchAt).mockImplementation(async () => new Response(JSON.stringify({ success: true, subId: 'e'.repeat(64), pushKey: PUSH_KEY, vapidKey }), { status: 201 }));
+        try {
+            const r = await tellMeAtHome(RIVERSIDE, identity, 'en', env({}));
+            expect(r.ok).toBe(true);
+            expect(register).toHaveBeenCalledWith('/sw.js', { scope: '/app/knock/riverside.example/' });
+            expect(fetchSpy).toHaveBeenCalledWith('https://riverside.example/api/web-push/key', expect.anything());
+            const [method, origin, p] = vi.mocked(signedFetchAt).mock.calls[0];
+            expect([method, origin, p]).toEqual(['POST', RIVERSIDE, '/api/web-push']);
+            expect(readWebPushPin(RIVERSIDE, ASKER)).toEqual({ origin: RIVERSIDE, publicKey: ASKER, subId: 'e'.repeat(64), pushKey: PUSH_KEY, vapidKey, for: 'asker' });
+            // The click's notice from that community now lands on its row; the member's own pin (none here) is never read.
+            expect(knockLandingFor({ origin: RIVERSIDE, notice: notice() }, ASKER)).toBe('row');
+        } finally {
+            fetchSpy.mockRestore();
+        }
+    });
+
+    it('no community\'s https address: nothing asked, nothing registered', async () => {
+        const register = vi.fn();
+        const requestPermission = vi.fn();
+        Object.defineProperty(navigator, 'serviceWorker', { value: { register }, configurable: true });
+        (globalThis as any).Notification = { permission: 'default', requestPermission };
+        expect(knockScope('http://riverside.example')).toBeNull();
+        expect(knockScope('https://riverside.example/path')).toBeNull();
+        expect(knockScope('https://riverside.example:8443')).toBe('/app/knock/riverside.example:8443/');
+        const r = await tellMeAtHome('http://riverside.example', identity, 'en', env({}));
+        expect(r.ok).toBe(false);
+        expect(register).not.toHaveBeenCalled();
+        expect(requestPermission).not.toHaveBeenCalled();
+    });
+
+    it('letting go: that community is told (signed DELETE), the pin goes, and only that community\'s registration ends, never the member\'s own at /app/', async () => {
+        localStorage.setItem('beanpool_web_push', JSON.stringify([{ origin: RIVERSIDE, publicKey: ASKER, subId: 'e'.repeat(64), pushKey: PUSH_KEY, vapidKey: 'v', for: 'asker' }]));
+        const unsubscribe = vi.fn(async () => true);
+        const own = { scope: 'https://global.example/app/', unregister: vi.fn(async () => true), pushManager: { getSubscription: async () => ({ unsubscribe }) } };
+        const theirs = { scope: 'https://global.example/app/knock/riverside.example/', unregister: vi.fn(async () => true), pushManager: { getSubscription: async () => ({ unsubscribe }) } };
+        let held: any[] = [own, theirs];
+        // The browser answers the registration whose scope covers the address best.
+        const getRegistration = vi.fn(async (scope: string) => held.filter(r => scope.startsWith(new URL(r.scope).pathname)).sort((a, b) => b.scope.length - a.scope.length)[0]);
+        Object.defineProperty(navigator, 'serviceWorker', { value: { getRegistration }, configurable: true });
+        vi.mocked(sendSignedAt).mockClear();
+        await stopTellingMeAtHome(RIVERSIDE, identity);
+        expect(vi.mocked(sendSignedAt).mock.calls.map(c => [c[0], c[1], c[2], c[3]])).toEqual([['DELETE', RIVERSIDE, '/api/web-push', JSON.stringify({ subId: 'e'.repeat(64) })]]);
+        expect(readWebPushPin(RIVERSIDE, ASKER)).toBeNull();
+        expect(theirs.unregister).toHaveBeenCalledTimes(1);
+        expect(own.unregister).not.toHaveBeenCalled();
+        // With that community's registration already gone, the browser would answer the member's own: it is left alone.
+        held = [own];
+        await stopTellingMeAtHome(RIVERSIDE, identity);
+        expect(own.unregister).not.toHaveBeenCalled();
+        expect(unsubscribe).toHaveBeenCalledTimes(1);
     });
 });

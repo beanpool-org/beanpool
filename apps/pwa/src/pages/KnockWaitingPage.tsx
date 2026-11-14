@@ -30,11 +30,8 @@ import { useKnockStatusWatch } from '../lib/use-knock-status-watch';
 import { lookAroundUrl } from '../lib/community-card';
 import { AskHere, thisCommunityOrigin } from '../components/AskHere';
 import { LanguageSwitch } from '../components/LanguageSwitch';
-import {
-    TELL_ME_WORDS as TW, cannotLines, forgetWebPushPin, grantedLine, noticeInLocation, pushPlace, readWebPushPin, stopTellingMe,
-    tellMeWhenTheyAnswer, type PushPlace,
-} from '../lib/web-push';
-import { PEEK_WORDS, currentLanguage } from '@beanpool/core';
+import { TELL_ME_WORDS as TW, forgetWebPushPin, noticeInLocation, readWebPushPin, stopTellingMe } from '../lib/web-push';
+import { TellMeCard } from '../components/TellMeCard';
 
 const DOOR = 'block w-full min-h-[48px] px-4 py-3 rounded-xl text-center text-base font-bold break-words no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info';
 const PRIMARY = `${DOOR} border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on cursor-pointer disabled:cursor-default disabled:opacity-60`;
@@ -242,54 +239,5 @@ export function KnockWaitingPage({ identity, onJoin, onInvite, onSignIn, onForgo
                 </section>
             </div>
         </main>
-    );
-}
-
-/**
- * "Tell me when they answer" (DESIGN-web-notifications-fable.md §2.3, §2.4): the reason first, the browser asked only at the
- * tap. Subscribed already (this browser keeps the pin and still has permission): the ✓ line. Where push can't work: the
- * plain words, and on a phone the app's store link above them (Marty, 9 Nov, Decision 3).
- */
-function TellMeCard({ origin, identity, name }: { origin: string; identity: BeanPoolIdentity; name: string }) {
-    const [state, setState] = useState<{ kind: 'idle' | 'asking' } | { kind: 'on' | 'off'; place: PushPlace; dismissed?: boolean }>(() => {
-        const granted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
-        return readWebPushPin(origin, identity.publicKey) && granted ? { kind: 'on', place: pushPlace() } : { kind: 'idle' };
-    });
-    // Called straight from the tap, with nothing awaited first: a browser asks for permission only inside the gesture.
-    const tap = () => {
-        setState({ kind: 'asking' });
-        void tellMeWhenTheyAnswer(origin, identity, currentLanguage()).then(r => {
-            if (r.ok) setState({ kind: 'on', place: r.place });
-            else if (r.reason === 'dismissed') setState({ kind: 'idle' });
-            else setState({ kind: 'off', place: r.place, dismissed: r.reason === 'failed' });
-        });
-    };
-    const off = state.kind === 'off' ? (state.dismissed ? { lines: [t(TW.failed)], getApp: null } : cannotLines(state.place)) : null;
-    return (
-        <div data-testid="tell-me-card" className="mb-4 p-4 max-[359px]:p-3 rounded-xl border border-nature-200 dark:border-nature-800">
-            {state.kind === 'on' ? (
-                <div role="status">
-                    <p dir="auto" data-testid="tell-me-on" className="m-0 text-base font-bold break-words">{t(TW.granted, { name })}</p>
-                    {grantedLine(state.place) && <p dir="auto" className="m-0 mt-1 text-sm text-text-secondary break-words">{grantedLine(state.place)}</p>}
-                </div>
-            ) : (
-                <>
-                    <p dir="auto" className="m-0 mb-1 text-base font-bold break-words">{t(TW.title)}</p>
-                    <p dir="auto" className="m-0 mb-3 text-sm text-text-secondary break-words">{t(TW.line, { name })}</p>
-                    {off ? (
-                        <div role="status" data-testid="tell-me-off" className="grid gap-2">
-                            {off.getApp && (
-                                <a href={off.getApp} rel="noopener noreferrer" data-testid="tell-me-get-app" className={`${PRIMARY} no-underline`}>{t(PEEK_WORDS.getApp)}</a>
-                            )}
-                            {off.lines.map(line => <p key={line} dir="auto" className="m-0 text-sm break-words">{line}</p>)}
-                        </div>
-                    ) : (
-                        <button type="button" data-testid="tell-me" className={PRIMARY} disabled={state.kind === 'asking'} aria-busy={state.kind === 'asking'} onClick={tap}>
-                            {state.kind === 'asking' ? t(TW.asking) : t(TW.button)}
-                        </button>
-                    )}
-                </>
-            )}
-        </div>
     );
 }

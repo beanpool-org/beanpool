@@ -39,6 +39,8 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { KNOCK_MESSAGES, cancelKnock, communityOrigin, forgetKnock, markYesSeen, readKnockStatus, rememberedKnocks, yesMark, yesSeenMarks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
 import { useKnockStatuses } from '../lib/use-knock-statuses';
 import { YesJoin } from '../components/YesJoin';
+import { TellMeCard } from '../components/TellMeCard';
+import { readWebPushPin, stopTellingMeAtHome, tellMeAtHome } from '../lib/web-push';
 import { forgetHandedOver, handedOverHere } from '../lib/handoff';
 import { isPhoneBrowser } from '../lib/global-entry';
 import { getConversations, getHome, getNodeApiUrl, getYourGroups, groupKeysNet, markNoticesSeen, myNodeRoleOnce, saveHomePreferences, watchPlace } from '../lib/api';
@@ -329,6 +331,12 @@ interface Props {
     askedCommunity?: string | null;
     /** Its ✕: the Find card as usual. */
     onAskedCommunitySeen?: () => void;
+    /**
+     * A click on the notice of a community this member asked from here (global yes Y2, lib/knock-landing.ts): its address.
+     * Home brings that community's row on the Find card into view, its Join in focus when it said yes; then `onKnockRowSeen`.
+     */
+    knockRow?: string | null;
+    onKnockRowSeen?: () => void;
     /**
      * The Market's "Save this search to Home" (Marty, 7 Oct): once Home knows the member's list, the saved search's dialog
      * opens with it filled in (Add to Home its last button), or Home says why not; then `onSaveSearchTaken`.
@@ -1223,7 +1231,7 @@ function CommunityBody({
     );
 }
 
-export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords, saveSearch, onSaveSearchTaken, addCardType, onAddCardTaken, askedCommunity = null, onAskedCommunitySeen }: Props) {
+export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords, saveSearch, onSaveSearchTaken, addCardType, onAddCardTaken, askedCommunity = null, onAskedCommunitySeen, knockRow = null, onKnockRowSeen }: Props) {
     const publicKey = visitor ? null : identity?.publicKey ?? null;
     // The node's info, read once per page load and shared (the app's own read): its rule for members' copies, for the
     // "one way back" card's sign-in words. A visitor's Home asks nothing new.
@@ -1389,6 +1397,29 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
             }
         }
     }, [knockStatuses, knocks, publicKey]);
+
+    // Told from here (global yes Y2): a request that is done (its yes used, cancelled, or nothing open there any more) lets go
+    // of the browser it asked to be told on: the community, the pin, and this browser's registration for that community.
+    useEffect(() => {
+        if (!identity) return;
+        for (const k of knocks) {
+            const st = knockStatuses[k.url];
+            const done = cancelledKnocks.has(k.url) || joinedKnocks.has(k.url)
+                || (!!st?.ok && (st.value.status === 'none' || (st.value.status === 'approved' && !!st.value.member)));
+            if (done && readWebPushPin(k.url, identity.publicKey)) void stopTellingMeAtHome(k.url, identity);
+        }
+    }, [knocks, knockStatuses, cancelledKnocks, joinedKnocks, identity]);
+
+    // The row a click on a notice came for (global yes Y2): once the community's answer is read and the row is drawn, into
+    // view, and its Join in focus when it is a yes. A row this browser doesn't hold never comes, and nothing happens.
+    useEffect(() => {
+        if (!knockRow || knockStatuses[knockRow] === undefined) return;
+        const row = Array.from(document.querySelectorAll<HTMLElement>('[data-knock-row]')).find(el => el.dataset.knockRow === knockRow);
+        if (!row) return;
+        try { row.scrollIntoView({ block: 'center' }); } catch { /* an old browser: the row is still on the card */ }
+        row.querySelector<HTMLElement>('[data-knock-join] button')?.focus();
+        onKnockRowSeen?.();
+    }, [knockRow, knockStatuses, knocks, onKnockRowSeen]);
 
     const handleCancelKnock = async (k: RememberedKnock) => {
         if (!identity) return;
@@ -2747,7 +2778,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                                 // region it sits in speaks for it.
                                 if (yes.value.member || joinedKnocks.has(k.url)) {
                                     return (
-                                        <div key={k.url} data-testid={`home-find-joined-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
+                                        <div key={k.url} data-testid={`home-find-joined-${k.url}`} data-knock-row={k.url} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
                                             <p dir="auto" className="m-0 font-semibold text-sm text-text-primary break-words">{t('You joined {name}.', { name: yesName })}</p>
                                             <div className="mt-2">
                                                 <a href={`${k.url}/app`} target="_blank" rel="noopener noreferrer" className="flex w-full min-h-[48px] px-4 py-2 items-center justify-center rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white no-underline text-center break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
@@ -2759,11 +2790,13 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                                 }
                                 const invite = yes.value.invite;
                                 return (
-                                    <div key={k.url} data-testid={`home-find-invited-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
+                                    <div key={k.url} data-testid={`home-find-invited-${k.url}`} data-knock-row={k.url} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
                                         <p dir="auto" className="m-0 mb-2 font-semibold text-sm text-text-primary break-words">{t('🎉 {name} said yes.', { name: yesName })}</p>
                                         {identity && (
-                                            <YesJoin knock={k} name={yesName} identity={identity} testId="home-find-invited"
-                                                onTapped={() => seeYes(k, invite)} onJoined={() => joinedHere(k)} />
+                                            <div data-knock-join="">
+                                                <YesJoin knock={k} name={yesName} identity={identity} testId="home-find-invited"
+                                                    onTapped={() => seeYes(k, invite)} onJoined={() => joinedHere(k)} />
+                                            </div>
                                         )}
                                     </div>
                                 );
@@ -2794,7 +2827,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                             else arrivedLine = t(KNOCK_MESSAGES.none);
 
                             return (
-                                <div key={k.url} data-testid={`home-waiting-card-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
+                                <div key={k.url} data-testid={`home-waiting-card-${k.url}`} data-knock-row={k.url} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
                                     <p dir="auto" className="m-0 text-sm font-semibold text-text-primary break-words" data-testid={`home-waiting-sent-${k.url}`}>
                                         {t(FIND_COMMUNITY_WORDS.askedOnDate, { name, date: sentDate })}
                                     </p>
@@ -2816,6 +2849,11 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                                         <p className="m-0 mt-1 text-xs italic text-nature-600 dark:text-nature-300 break-words" data-testid={`home-waiting-answers-${k.url}`}>
                                             {answersLine}
                                         </p>
+                                    )}
+                                    {/* "Tell me when they answer" on this row (global yes Y2): this browser subscribes with that
+                                        community's key and gives it that community, signed by the key that asked. */}
+                                    {pending && !cancelled && identity && (
+                                        <TellMeCard origin={k.url} identity={identity} name={name} subscribe={tellMeAtHome} testId={`home-tell-me-${k.url}`} compact />
                                     )}
                                     {pending && !cancelled && !circle && circleWaitingLine(f.demand) && (
                                         <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words" data-testid={`home-waiting-near-${k.url}`}>

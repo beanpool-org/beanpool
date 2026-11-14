@@ -781,7 +781,8 @@ export function approveKnock(id: string, member: string, now = Date.now(), names
 /**
  * After a yes is committed: `join.answered` to the browser the applicant asked to be told on (W1) and to the phone that
  * registered under the key while waiting (W4), if any, with the fixed sentence and a signed notice, for as long as the
- * invite works (joinAnsweredTtl). A decline sends nothing: it reads as waiting, by design. Never throws: the yes stands, and the waiting page reads it anyway.
+ * invite works (joinAnsweredTtl). A decline sends nothing: it reads as waiting, by design. Never throws: the yes stands,
+ * and the waiting page reads it anyway.
  */
 function tellAskerAnswered(asker: string, member: string, inviteExpiresAt: number): void {
     try {

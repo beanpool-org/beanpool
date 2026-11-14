@@ -11016,8 +11016,12 @@ export function deliverPushNotices(
 
         // The bell (DESIGN-web-notifications-fable.md §2.1): the notice is kept for every member here it is for, a phone
         // or not, so the web app, and a phone with no push, list what the phone is buzzed with. Not for a key that can't
-        // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before.
-        const tokens = getPushTokens(pk, open);
+        // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before;
+        // a key with no row at all is a phone waiting for the answer to its request to join (web push W4), and is told
+        // that answer and nothing else, as its browser is (engine/web-push-subscriptions.ts webPushTargetOpener). The row
+        // is looked up only for a key with a phone here.
+        const held = getPushTokens(pk, open);
+        const tokens = held.length === 0 || kind === 'join.answered' || hasMembersRow(pk) ? held : [];
         const browsers = browsersOf(pk, kind);
         if (tokens.length === 0 && browsers.length === 0 && !passesReadGate(pk)) continue;
 

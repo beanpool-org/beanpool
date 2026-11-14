@@ -10,7 +10,8 @@
  *      a cancelled key's new phone is refused
  *   5. a lapsed request's phone goes at the tidy-up, an open one's stays
  *   6. approve sends `join.answered` to the waiting phone through Expo: the fixed words and a notice signed for that key,
- *      nothing else; the row stays while the invite works, and goes once it has lapsed
+ *      nothing else; any other kind sent to that key reaches none of its phones; the row stays while the invite works,
+ *      and goes once it has lapsed
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-push-waiting-asker)
  */
@@ -20,7 +21,7 @@ delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember } from './state-engine.js';
+import { dispatchPushNotification, initStateEngine, seedGenesisMember } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { startP2P } from './p2p.js';
@@ -179,6 +180,11 @@ async function main(): Promise<void> {
     const text = JSON.stringify(msg);
     assert(!text.includes(ana.name) && !text.includes(yes.body?.invite?.code ?? '§') && !text.includes(ana.pk) && !text.includes('Owner'),
         'no name, key or invite code in it');
+    // Anything else sent to a key with no row reaches none of its phones: only the answer it waits for does.
+    expo.length = 0;
+    dispatchPushNotification([ana.pk], owner.pk, 'Hello', 'Hello', { screen: 'chat' }, 'chat', 'chat.message');
+    await settle();
+    assert(expo.length === 0, `a message to the waiting key reaches no phone of its (${expo.length} sent)`);
     tidyKnocks();
     assert(phones(ana.pk).length === 1, 'the waiting phone\'s row stays while the yes\'s invite works');
     const yesAgain = await register(ana, tokenOf(ana));

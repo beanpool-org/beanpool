@@ -39,6 +39,7 @@ export * from './tags/suggest.js';
 export * from './tags/post-tags.js';
 export * from './tags/free-tags.js';
 export * from './tags/typed-tags.js';
+export * from './tags/community-tags.js';
 export * from './channels.js';
 export * from './groups.js';
 // "Invited, not joined yet" on a group's page: the node's answer and the words both apps say it in.

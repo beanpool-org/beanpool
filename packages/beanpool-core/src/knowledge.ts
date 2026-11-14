@@ -267,6 +267,37 @@ export interface HomeLearnCard {
     first?: true;
 }
 
+/** The doors an app can open from the Home card beyond a page and Learn itself: To check, and the form (slice K4's screens). */
+export interface LearnHomeOpens {
+    toCheck?: boolean;
+    addFirst?: boolean;
+}
+
+/** What the Home card draws: the amber To check row's count (0: none), the first-page row, and the day's rows. */
+export interface LearnHomeLines {
+    toCheck: number;
+    first: boolean;
+    rows: HomeLearnRow[];
+}
+
+/**
+ * What the Home card draws on both apps (amended §3.6), from the node's card and the doors this app opens: "N to check ›" only
+ * where To check opens, "Add the first thing worth knowing about {community}" only where the form opens (and Learn shows
+ * nothing), so neither row ever lands nowhere; then up to {@link LEARN_HOME_ROWS} rows. Null when that leaves nothing to
+ * draw: the card is not drawn (a member with nothing to show gets no card).
+ */
+export function learnHomeLines(card: HomeLearnCard | null | undefined, opens: LearnHomeOpens = {}): LearnHomeLines | null {
+    if (!card || typeof card !== 'object') return null;
+    const rows = (Array.isArray(card.rows) ? card.rows : []).slice(0, LEARN_HOME_ROWS);
+    const toCheck = opens.toCheck && typeof card.toCheck === 'number' && card.toCheck > 0 ? Math.floor(card.toCheck) : 0;
+    const first = !!opens.addFirst && card.first === true && rows.length === 0;
+    return rows.length > 0 || toCheck > 0 || first ? { toCheck, first, rows } : null;
+}
+
+/** The "Your community" card's figure (amended §3.6): the count of pages Learn shows, from 1; null at 0 or when not sent. */
+export const learnFigureCount = (n: unknown): number | null =>
+    typeof n === 'number' && Number.isFinite(n) && n >= 1 ? Math.floor(n) : null;
+
 // ── The waiting list (slice K3) ──────────────────────────────────────────────────────────
 
 /**

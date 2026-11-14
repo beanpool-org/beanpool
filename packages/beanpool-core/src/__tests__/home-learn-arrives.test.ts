@@ -9,7 +9,8 @@ import { describe, expect, it } from 'vitest';
 import {
     HOME_CARD_TYPES, HOME_DEFAULT_LIST, HOME_FRAME_LIMITS, HOME_V1_CARD_IDS, KNOWLEDGE_PLACE_LINE, LEARN_HOME_WORDS, addCard, arrivedStamp,
     arrivingCards, cardsToAsk, checkHomeLayout, endTourLayout, homeCardHue, homeCardType, homeCardsWithArrivals, keepArrivedCard, moveCard,
-    readHomeLayout, removeCard, resetHomeLayout, type HomeLayoutV2, type HomeNodeFacts,
+    defaultHomeLayout, readHomeLayout, removeCard, resetHomeLayout, type HomeLayoutV2, type HomeNodeFacts,
+    LEARN_HOME_ROWS, learnFigureCount, learnHomeLines, type HomeLearnRow,
 } from '../index.js';
 
 const AT = '2026-11-14T09:00:00.000Z';
@@ -48,14 +49,16 @@ describe('K7: the learn type', () => {
         expect(learn.onNode({ profile: 'global', features: { showcase: true } })).toBe(true);
     });
 
-    it('is not in the default list yet (it joins after Asked near you with the slice that draws it on both apps); a Reset Home still has it arriving', () => {
-        // Each app holds that it draws every card of the default list, so the card joins it when both apps draw it.
-        expect(HOME_DEFAULT_LIST).not.toContain('learn');
+    it('is in the default list after Asked near you (both apps draw it), so it never arrives on a Home never saved or Reset', () => {
+        expect(HOME_DEFAULT_LIST.indexOf('learn')).toBe(HOME_DEFAULT_LIST.indexOf('asked') + 1);
         const reset = resetHomeLayout(arranged(), NOW);
-        expect(ids(reset.cards)).not.toContain('learn');
-        expect(arrivingCards(reset)).toEqual([one('learn')]);
-        // Reset after the member put it away: the stamp is kept, so it stays away.
-        expect(arrivingCards(resetHomeLayout(arranged(undefined, { [STAMP]: AT }), NOW))).toEqual([]);
+        expect(ids(reset.cards)).toContain('learn');
+        expect(arrivingCards(reset)).toEqual([]);
+        // Reset puts the defaults back, Learn something local among them, and keeps the stamp.
+        const resetStamped = resetHomeLayout(arranged(undefined, { [STAMP]: AT }), NOW);
+        expect(ids(resetStamped.cards)).toContain('learn');
+        expect(resetStamped.dismissed).toEqual({ [STAMP]: AT });
+        expect(arrivingCards(resetStamped)).toEqual([]);
     });
 });
 
@@ -72,12 +75,10 @@ describe('K7: a card that arrives on an arranged Home', () => {
         expect(ids(homeCardsWithArrivals(holds))).toEqual(['learn', 'market']);
         // Never once its stamp is there, whatever the list says.
         expect(arrivingCards(arranged(undefined, { [STAMP]: AT }))).toEqual([]);
-        // A Home never saved is the default list: the card arrives after it too, until the list holds it (then never).
-        expect(arrivingCards(null)).toEqual([one('learn')]);
-        expect(ids(homeCardsWithArrivals(null))).toEqual([...HOME_DEFAULT_LIST, 'learn']);
-        const keptOnDefault = keepArrivedCard(null, 'learn', LATER);
-        expect(ids(keptOnDefault.cards)).toEqual([...HOME_DEFAULT_LIST, 'learn']);
-        expect(keptOnDefault.dismissed).toEqual({ [STAMP]: new Date(LATER).toISOString() });
+        // A Home never saved is the default list, which holds it: it never arrives there, and Keep on Home changes nothing.
+        expect(arrivingCards(null)).toEqual([]);
+        expect(ids(homeCardsWithArrivals(null))).toEqual([...HOME_DEFAULT_LIST]);
+        expect(keepArrivedCard(null, 'learn', LATER).cards).toEqual(defaultHomeLayout().cards);
         // A full Home has no room to keep it, so it does not arrive (Keep on Home must be able to keep it).
         const full = arranged(Array.from({ length: HOME_FRAME_LIMITS.cards }, (_, i) => ({ id: `search-a${String(i).padStart(3, '0')}`, type: 'search' })));
         expect(arrivingCards(full)).toEqual([]);
@@ -166,5 +167,44 @@ describe('K7: a card that arrives on an arranged Home', () => {
         expect(readHomeLayout(stamped)!.dismissed).toEqual({ [STAMP]: AT, safety: AT });
         expect(arrivedStamp('learn')).toBe(STAMP);
         expect(STAMP.length).toBeLessThanOrEqual(HOME_FRAME_LIMITS.idChars);
+    });
+});
+
+describe('K7: what the Home card draws (learnHomeLines), the same on both apps', () => {
+    const row = (id: string, isNew?: true): HomeLearnRow => ({ id, title: `Page ${id}`, line: 'A line', topic: 'services', photo: null, helped: 0, checkedAt: AT, pinned: false, outdated: false, ...(isNew ? { isNew } : {}) });
+
+    it('draws the day\'s rows, at most three, with the new mark as sent', () => {
+        const lines = learnHomeLines({ rows: [row('a', true), row('b'), row('c'), row('d')] });
+        expect(lines?.rows.map((r) => r.id)).toEqual(['a', 'b', 'c']);
+        expect(lines?.rows.length).toBe(LEARN_HOME_ROWS);
+        expect(lines?.rows[0].isNew).toBe(true);
+        expect(lines).toMatchObject({ toCheck: 0, first: false });
+    });
+
+    it('"N to check" only where the app opens To check; "Add the first" only where it opens the form and Learn shows nothing', () => {
+        const owner = { rows: [], toCheck: 3, first: true as const };
+        // An app that opens neither draws neither, and with no rows there is no card.
+        expect(learnHomeLines(owner)).toBeNull();
+        expect(learnHomeLines(owner, { toCheck: true })).toEqual({ toCheck: 3, first: false, rows: [] });
+        expect(learnHomeLines(owner, { addFirst: true })).toEqual({ toCheck: 0, first: true, rows: [] });
+        expect(learnHomeLines(owner, { toCheck: true, addFirst: true })).toEqual({ toCheck: 3, first: true, rows: [] });
+        // With rows, "first" never shows (the node sends it only while Learn shows nothing; the app holds to it too).
+        expect(learnHomeLines({ rows: [row('a')], first: true }, { addFirst: true })?.first).toBe(false);
+        // Nothing waiting: no To check row.
+        expect(learnHomeLines({ rows: [row('a')], toCheck: 0 }, { toCheck: true })?.toCheck).toBe(0);
+    });
+
+    it('a member with nothing to show gets no card; a card the node did not send is none', () => {
+        expect(learnHomeLines({ rows: [] }, { toCheck: true, addFirst: true })).toBeNull();
+        expect(learnHomeLines(undefined)).toBeNull();
+        expect(learnHomeLines(null)).toBeNull();
+    });
+
+    it('the community figure counts from 1, and is none at 0 or when the node left it out', () => {
+        expect(learnFigureCount(6)).toBe(6);
+        expect(learnFigureCount(1)).toBe(1);
+        expect(learnFigureCount(0)).toBeNull();
+        expect(learnFigureCount(undefined)).toBeNull();
+        expect(learnFigureCount('6')).toBeNull();
     });
 });

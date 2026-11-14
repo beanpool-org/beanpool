@@ -159,6 +159,8 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // signed for the old key (engine/push-notices.ts: this server's own, never copied)
     db.prepare('DELETE FROM push_tokens WHERE public_key = ?').run(oldKey);
     db.prepare('DELETE FROM push_notices WHERE recipient = ?').run(oldKey);
+    // Its browsers too (engine/web-push-subscriptions.ts, this server's own): the new key's web app subscribes again.
+    db.prepare('DELETE FROM web_push_subscriptions WHERE public_key = ?').run(oldKey);
 
     // (o) member_preferences
     move('member_preferences', 'public_key');
@@ -372,6 +374,8 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // A member's badge (engine/badges.ts) and the badges an owner or admin gave: recognition follows the person.
     move('member_badges', 'member_pubkey');
     move('member_badges', 'set_by');
+    // A hide or merge of a typed tag an owner or admin set (engine/free-tags.ts): the rule stays theirs.
+    move('free_tag_rules', 'set_by');
     // A retired empty duplicate stays retired under its new key, and the owner who retired one is named by theirs.
     move('retired_accounts', 'member_pubkey');
     move('retired_accounts', 'retired_by');

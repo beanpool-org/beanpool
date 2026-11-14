@@ -19,7 +19,8 @@ import { arrangeCards, cardLine, reorderAmong, reorderIds } from './home-layout'
 const NOW = Date.UTC(2026, 9, 2, 4, 0, 0);
 const H = 3_600_000;
 const iso = (at: number) => new Date(at).toISOString();
-const LOCAL = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true } };
+// Every switch on, Learn's too (slice K7).
+const LOCAL = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, knowledge: true } };
 const GLOBAL = { profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false } };
 const ids = (l: { cards: { id: string }[] } | null) => l?.cards.map(c => c.id);
 const NEWER = { id: 'sky-aaaa', type: 'skyline', settings: { place: { lat: -28.5, lng: 153.5 }, odd: [1, 'two'] } };
@@ -41,7 +42,13 @@ describe('the picker (§1.2)', () => {
         expect(rows.map(r => r.type)).not.toContain('needs');
         expect(rows.map(r => r.type)).not.toContain('community');
         expect(rows.map(r => r.type)).not.toContain('find');
-        for (const r of rows) expect(`${r.name} ${r.line}`).not.toMatch(/lock|earn|tier|Ʀ/i);
+        // No "earn" language on Home: `\bearn`, since "Learn something local" (slice K7, the design's name) holds those letters
+        // without saying earn (core home-frame.test.ts made the same narrowing in #3143). Earn, earned and earning still match.
+        const refused = /lock|\bearn|tier|Ʀ/i;
+        expect('You earn Beans').toMatch(refused);
+        expect('Earned it').toMatch(refused);
+        expect(rows.map(r => r.type)).toContain('learn');
+        for (const r of rows) expect(`${r.name} ${r.line}`).not.toMatch(refused);
     });
 
     it('the worldwide community lists no Beans, deals, enterprise, Decide or Grow your community; "Near you" for the Market; a plain member where only admins invite gets no invite row', () => {
@@ -117,8 +124,10 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
 
     it('move up and down past the card next to it on screen, keeping every other card\'s place', () => {
         const l: HomeLayoutV2 = { ...starterLayout(), cards: ['steps', 'tips', 'market', 'events', 'notices'].map(id => ({ id, type: id })) };
-        // On screen: tips isn't drawn (no tip to show), so market moves up past steps.
-        const shown = cardOrder(l).filter(c => c.id !== 'tips');
+        // On screen: tips isn't drawn (no tip to show), so market moves up past steps. Learn something local arrives on this
+        // list (slice K7) and has nothing to show here either, so notices is the last card on screen; a move past an arriving
+        // card that is drawn: 'Arrange with a card that arrives among the moving ones' below.
+        const shown = cardOrder(l).filter(c => c.id !== 'tips' && c.id !== 'learn');
         expect(ids(moveCard(l, 'market', 'up', shown, NOW))).toEqual(['market', 'tips', 'steps', 'events', 'notices']);
         expect(ids(moveCard(l, 'events', 'down', shown, NOW))).toEqual(['steps', 'tips', 'market', 'notices', 'events']);
         expect(moveCard(l, 'steps', 'up', shown, NOW)).toBeNull();
@@ -272,7 +281,8 @@ describe('what is drawn and asked', () => {
         const searches = Array.from({ length: 7 }, (_, i) => ({ id: `search-${i}aaa`, type: 'search', settings: { q: `w${i}` } }));
         expect(cardOrder({ ...starterLayout(), cards: searches }).filter(c => c.type === 'search')).toHaveLength(5);
         const fixed = [{ id: 'community', type: 'community' }, { id: 'needs', type: 'needs' }, { id: 'market', type: 'market' }];
-        expect(cardOrder({ ...starterLayout(), cards: fixed }).map(c => c.id)).toEqual(['needs', 'market', 'community']);
+        // The fixed two never from the list; Learn something local arrives after the list's own cards (slice K7).
+        expect(cardOrder({ ...starterLayout(), cards: fixed }).map(c => c.id)).toEqual(['needs', 'market', 'learn', 'community']);
     });
 
     it('a pinned Find your community stands under Needs you, and under "Your way back in" while that one leads', () => {
@@ -322,7 +332,8 @@ describe('what is drawn and asked', () => {
     it('cards= is catalogue order then id, the same after a move; with an answer in hand the global node is asked no Beans, deals, enterprise or Decide (review of #1699, finding 5)', () => {
         const l: HomeLayoutV2 = { ...starterLayout(), cards: ['beans', 'deals', 'decide', 'enterprise', 'market', 'tips'].map(id => ({ id, type: id })) };
         const asked = cardsToAsk(l);
-        expect(asked).toEqual(['needs', 'deals', 'enterprise', 'market', 'decide', 'beans', 'community']);
+        // Learn something local arrives on this list saved before it (slice K7), so it is asked in its catalogue place.
+        expect(asked).toEqual(['needs', 'deals', 'enterprise', 'market', 'learn', 'decide', 'beans', 'community']);
         expect(cardsToAsk(moveCard(l, 'market', 'up', cardOrder(l), NOW))).toEqual(asked);
         expect(cardsToAsk(l, ['find'], GLOBAL)).toEqual(['needs', 'find', 'market', 'community']);
         expect(cardsToAsk(l, [], LOCAL)).toEqual(asked);
@@ -788,5 +799,65 @@ describe('the cards Arrange folds (DESIGN-home-layout-fable.md §3.2)', () => {
     it("a folded card's line is the catalogue's; a type nobody knows has none", () => {
         expect(cardLine('events')).toBe('Events coming up soon.');
         expect(cardLine('future-card')).toBe('');
+    });
+});
+
+describe('Arrange with a card that arrives among the moving ones (slice K7, review of #3154)', () => {
+    // A Home arranged before Learn something local: Learn arrives after the member's own cards, and Arrange moves it with them.
+    const arranged = (): HomeLayoutV2 => ({ v: 2, cards: ['market', 'beans', 'groups'].map(id => ({ id, type: id })), dismissed: {}, updatedAt: iso(NOW - H) });
+    const among = (l: HomeLayoutV2) => cardOrder(l).filter(c => c.type !== 'needs' && c.type !== 'community');
+    const STAMP = 'new:learn';
+
+    it('↓ on the card above it goes under it: Learn is kept first (on the list, stamped), then the two swap, as drawn', () => {
+        const home = arranged();
+        expect(among(home).map(c => c.id)).toEqual(['market', 'beans', 'groups', 'learn']);
+        const down = moveCard(home, 'groups', 'down', among(home), NOW)!;
+        expect(down).not.toBeNull();
+        expect(ids(down)).toEqual(['market', 'beans', 'learn', 'groups']);
+        expect(Object.keys(down.dismissed)).toEqual([STAMP]);
+        expect(cardOrder(down).map(c => c.id)).toEqual(['needs', 'market', 'beans', 'learn', 'groups', 'community']);
+        // ↑ on Learn from there moves it as any card on the list.
+        expect(ids(moveCard(down, 'learn', 'up', among(down), NOW + 1))).toEqual(['market', 'learn', 'beans', 'groups']);
+    });
+
+    it('a drop into its place lands there, where the preview showed it: Learn kept first and moved up one', () => {
+        const home = arranged();
+        const preview = reorderAmong(among(home), 'market', 3).map(c => c.id);
+        expect(preview).toEqual(['beans', 'groups', 'learn', 'market']);
+        const dropped = moveCardTo(home, 'market', 3, among(home), NOW)!;
+        expect(dropped).not.toBeNull();
+        expect(ids(dropped)).toEqual(preview);
+        expect(Object.keys(dropped.dismissed)).toEqual([STAMP]);
+        expect(cardOrder(dropped).map(c => c.id)).toEqual(['needs', ...preview, 'community']);
+    });
+
+    it("a move that doesn't reach it leaves it arriving, unstamped, after the member's cards", () => {
+        const home = arranged();
+        const up = moveCard(home, 'groups', 'up', among(home), NOW)!;
+        expect(ids(up)).toEqual(['market', 'groups', 'beans']);
+        expect(up.dismissed).toEqual({});
+        expect(cardOrder(up).map(c => c.id)).toEqual(['needs', 'market', 'groups', 'beans', 'learn', 'community']);
+        const dropped = moveCardTo(home, 'market', 2, among(home), NOW)!;
+        expect(ids(dropped)).toEqual(['beans', 'groups', 'market']);
+        expect(dropped.dismissed).toEqual({});
+    });
+
+    it('moves of Learn itself keep it first, as before: ↑, a drag to the top, and ↓ or a drop from where it stands', () => {
+        const home = arranged();
+        const up = moveCard(home, 'learn', 'up', among(home), NOW)!;
+        expect(ids(up)).toEqual(['market', 'beans', 'learn', 'groups']);
+        expect(Object.keys(up.dismissed)).toEqual([STAMP]);
+        expect(ids(moveCardTo(home, 'learn', 0, among(home), NOW))).toEqual(['learn', 'market', 'beans', 'groups']);
+        expect(ids(moveCard(home, 'learn', 'down', among(home), NOW))).toEqual(['market', 'beans', 'groups', 'learn']);
+        expect(ids(moveCardTo(home, 'learn', 3, among(home), NOW))).toEqual(['market', 'beans', 'groups', 'learn']);
+    });
+
+    it('an arriving card Home does not draw (nothing to show) is never kept by a move past its place', () => {
+        const home = arranged();
+        const drawn = among(home).filter(c => c.id !== 'learn');
+        expect(moveCard(home, 'groups', 'down', drawn, NOW)).toBeNull();
+        const dropped = moveCardTo(home, 'market', 2, drawn, NOW)!;
+        expect(ids(dropped)).toEqual(['beans', 'groups', 'market']);
+        expect(dropped.dismissed).toEqual({});
     });
 });

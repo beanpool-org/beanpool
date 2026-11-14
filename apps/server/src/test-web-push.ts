@@ -8,8 +8,8 @@
  *   2. the VAPID header: ES256 by data/vapid.key, aud = the endpoint's origin, exp within 24 hours, k = the public key
  *   3. data/vapid.key: made once by the node, PEM, 0600, the same key after; in the take-over bundle's files
  *   4. only browser push services: http, another host, a port, credentials are refused
- *   5. the routes: the key is public; a subscription needs a signature (401), a key with an open request (403 for none,
- *      for a member, for an approved one), a push service's endpoint and browser keys (400)
+ *   5. the routes: the key is public; a subscription needs a signature (401), a key with an open request (403 for none;
+ *      a member's is a member row since W2, test-web-push-members.ts), a push service's endpoint and browser keys (400)
  *   6. one asker row per key, sealed (no endpoint or key in the clear in the database); DELETE removes it
  *   7. cancel and decline delete it; a declined key in its block is answered as if open and nothing is kept; a lapse
  *      deletes it at the tidy-up
@@ -211,8 +211,10 @@ async function main(): Promise<void> {
     assert(unsigned.status === 401, `an unsigned subscription: 401 (${unsigned.status})`);
     const noKnock = await call(ana, 'POST', '/api/web-push', subscription(anaPhone));
     assert(noKnock.status === 403 && rows(ana.pk).length === 0, `a key with no open request: 403, nothing kept (${noKnock.status} ${show(noKnock.body)})`);
+    // A member's browser is a `member` row since W2 (test-web-push-members.ts), never an asker's.
     const asMember = await call(owner, 'POST', '/api/web-push', subscription(newBrowser()));
-    assert(asMember.status === 403 && rows(owner.pk).length === 0, `a member: 403 in W1, nothing kept (${asMember.status})`);
+    assert(asMember.status === 201 && rows(owner.pk).length === 1 && rows(owner.pk)[0].kind === 'member', `a member: a member row, not an asker's (${asMember.status})`);
+    await call(owner, 'DELETE', '/api/web-push', { subId: asMember.body?.subId });
 
     const anaKnock = await knockOf(ana);
     for (const [what, body] of [

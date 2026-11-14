@@ -1,7 +1,7 @@
 ---
 slug: notifications
 title: Notifications
-summary: Choose which alerts reach your phone, and when events remind you.
+summary: Choose which alerts reach your phone or your browser, and when events remind you.
 help: Choose which alerts reach you, and when events remind you.
 related: mute, messages, my-deals, events, holiday-mode, the-top-bar, communities
 ---
@@ -16,15 +16,28 @@ related: mute, messages, my-deals, events, holiday-mode, the-top-bar, communitie
 - **Held in Trust & System:** beans held, released or in question.
 - **Requests to join:** when someone asks to join your community from the global community, so you can help welcome them. Only members who can let people in see it: owners and admins are always told, so they have no switch, and in a community where only admins let people in it isn't shown.
 
-In the web app the first is called **Chat Messages**, and the third is the one named after **Deals**. They set what reaches your phone.
+The web app has the same switches, with the same names. They set what reaches your phone and, if you turn notifications on in a browser, that browser too: in the web app, the first row, **On this device**, says whether this browser gets them, with **Turn on** or **Turn off**. Your browser asks you first, at that tap.
 
 Changes save by themselves. They are kept by your community's server, so they follow your account.
+
+## In a web browser
+
+The web app's alerts are the phone's: the same kinds, the same words and the same switches. A browser gets them only once you turn them on there: open **Settings**, then **Notifications**, and tap **Turn on** on the first row, **On this device**. Your browser asks you first, at that tap, and never before. Once on, the row says how long the browser can be told:
+
+- **On a computer, in Chrome, Edge, Firefox or Brave:** while that browser is running. Brave needs its own setting for Google services on.
+- **In Safari on a Mac:** even with Safari closed.
+- **In a phone's browser:** even with the browser closed. Firefox on Android works on a phone with no Google services too.
+- **On an iPhone or iPad:** only when BeanPool is opened from the Home Screen. In Safari, tap **Share**, then **Add to Home Screen**, open BeanPool from there and tap **Turn on** again.
+
+Some browsers can't be told at all: an older iPhone, a private window, and a community's page opened over plain http, as on a home network. There the row says **Notifications can't reach this browser. The bell still lists what happened.** If your browser blocked notifications for your community's site, the row says how to allow them again, from the icon by the address. On a phone's browser, either way, **Get the app** comes first: the phone app gets alerts with nothing more to set up.
+
+**Turn off** stops them in that browser. Signing out does too, and so does blocking them in the browser.
 
 Four alerts about your account always come through, and the app has no switch for them: that your account was just restored on another device, that an admin started moving your account to a new phone, that your community opened a vote about your account, and that an admin took down your reply on that vote. If you run your community's server, its alerts about the server always come through too.
 
 ## What an alert says
 
-An alert on your phone says only what kind of news it is, for example:
+An alert on your phone or in your browser says only what kind of news it is, for example:
 
 - "You have a new message."
 - "There is news on one of your trades."
@@ -37,9 +50,9 @@ An alert on your phone says only what kind of news it is, for example:
 - "A jury you're on closes in about a day." A reminder, when about a day of the vote is left, if you haven't voted.
 - "The member your jury is deciding about has answered the case."
 - "Someone asked to join your community."
-- "A community answered your request."
+- "A community answered your request to join." It reaches the phone or the browser you asked from, before you have joined.
 
-It never says who it is from, which listing, how many beans, or what your community's announcement says. Alerts pass through Apple's, Google's and Expo's servers on their way to your phone, and anyone can read a lock screen, so the rest stays with your community. Open BeanPool to see it.
+It never says who it is from, which listing, how many beans, or what your community's announcement says. Alerts pass through Apple's, Google's and Expo's servers on their way to your phone, and anyone can read a lock screen, so the rest stays with your community. Open BeanPool to see it. A browser's alert goes from your community's server through that browser's own service (Google's, Mozilla's, Apple's or Microsoft's), locked so that service can't read it, and carries the same few words.
 
 On a phone that can't get alerts from a community, BeanPool tells you itself: "You have new messages in Castlemaine." That line comes from BeanPool on your phone, not through those servers. It names the community, so anyone who can read your lock screen can read that name, and it says nothing else. It stays quiet where an alert would: for a chat you've muted, with **Direct Messages** off, and for an event's chat. While BeanPool is closed, your phone checks for new messages about every 15 minutes at best. If you leave messages unread in the community you are currently using, your phone will tell you about them again after each time you open the app.
 

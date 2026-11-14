@@ -1395,7 +1395,10 @@ CREATE INDEX IF NOT EXISTS idx_agent_takedown_posts_held ON agent_takedown_posts
 -- about it once. Replicated to a standby (`updated_at`, stamped only when a row changes), so a server that takes over
 -- knows what the old one had already seen and tells nobody about it again. `promise`, `accepting_knocks` and
 -- `closing_on` are the listing promise (mothership A2, engine/directory-promise.ts): the promise as JSON text, checked
--- to its five fields; whether a stranger can ask to join; the day the community says it closes.
+-- to its five fields; whether a stranger can ask to join; the day the community says it closes. `listings_from_here` is
+-- whether the community's name and door are drawn beside its members' listings shown here (list-on-global G5,
+-- engine/event-copy.ts): 0 only where its push said false, else 1, an unlisted row and a row from before the column
+-- included; never NULL, so a standby's copy stores what the main server stores and the two hash it the same.
 CREATE TABLE IF NOT EXISTS directory_cache (
     community_key TEXT PRIMARY KEY,
     listed INTEGER NOT NULL DEFAULT 1 CHECK (listed IN (0, 1)),
@@ -1413,7 +1416,8 @@ CREATE TABLE IF NOT EXISTS directory_cache (
     promise TEXT,
     accepting_knocks INTEGER CHECK (accepting_knocks IS NULL OR accepting_knocks IN (0, 1)),
     closing_on TEXT,
-    answers TEXT CHECK (answers IS NULL OR answers IN ('week', 'slow', 'none'))
+    answers TEXT CHECK (answers IS NULL OR answers IN ('week', 'slow', 'none')),
+    listings_from_here INTEGER NOT NULL DEFAULT 1 CHECK (listings_from_here IN (0, 1))
 );
 CREATE INDEX IF NOT EXISTS idx_directory_cache_updated_at ON directory_cache(updated_at);
 
@@ -2282,6 +2286,33 @@ CREATE TABLE IF NOT EXISTS member_badges (
     set_at         DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- An owner's or admin's rule on a tag members typed (engine/free-tags.ts, DESIGN-tags-free-entry-fable.md §5, slice F3), by
+-- the tag's stored form: 'hide' = never offered to members as they type; 'merge' = offered as the library tag `into_tag`,
+-- and the Tags field stores that id when the word is committed. Listings keep their text either way. No row: no rule.
+CREATE TABLE IF NOT EXISTS free_tag_rules (
+    tag            TEXT PRIMARY KEY CHECK (length(tag) BETWEEN 2 AND 200),
+    action         TEXT NOT NULL CHECK (action IN ('hide', 'merge')),
+    into_tag       TEXT CHECK ((action = 'merge') = (into_tag IS NOT NULL)),
+    set_by         TEXT NOT NULL,
+    set_at         DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- Each tag members typed (by its stored form) on each listing here that carries or carried it live (engine/free-tags.ts
+-- noteFreeTagsSeen): the week of the two-authors-or-a-week rule is one listing's own, from `first_seen`, when that listing
+-- began to carry the word live in its present run (an edit that adds it, or the listing back from a pause, starts it
+-- again). `gone_at`: when the listing stopped carrying it live (taken off, paused, deleted, hidden, taken down), NULL while
+-- it does. A gone row is kept a week, and while a report on its listing is open, so a report or a takedown holds the word
+-- when it moves to another listing. Each server keeps its own (engine/replication-manifest.ts: local).
+CREATE TABLE IF NOT EXISTS free_tag_seen (
+    tag            TEXT NOT NULL,
+    post_id        TEXT NOT NULL,
+    first_seen     DATETIME NOT NULL,
+    gone_at        DATETIME,
+    PRIMARY KEY (tag, post_id)
 );
 
 -- Every change to the known floor, the cap, the dial or a member's exception (design §4.2, §7.3), and to a member's badge

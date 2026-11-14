@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RecoveryKitButton } from './RecoveryKitButton';
 import { BRAND_SETS, KIT_WEB_RESTORE_STEPS, brandColours, brandGrounds, contrastRatio, type BrandSet } from '@beanpool/core';
 import { KIT_FRAME_FALLBACK_MS, printKitInFrame, removeKitFrame } from '../lib/recovery-kit';
@@ -107,11 +107,15 @@ describe('after the kit: "Did you keep it somewhere safe?"', () => {
         const onKept = vi.fn();
         printed(onKept);
         const group = await screen.findByRole('group', { name: ASK });
+        // The question is drawn first and takes the focus a task later, in its useEffect: the update comes after the print's
+        // await, not in a click, so React runs that effect after the commit rather than in it. Wait for the focus itself,
+        // not only the question: on a loaded runner the test got here between the two, with the focus still on <body>
+        // (CI 14 and 15 Nov). A question that never takes the focus still fails, at the wait's deadline.
+        await waitFor(() => expect(document.activeElement).toBe(group));
         expect(onKept).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: "Yes, it's kept" })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Not yet' })).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Print or save your recovery kit' })).toBeNull();
-        expect(document.activeElement).toBe(group);
         // Still no success line: the question asks, it says nothing was saved.
         expect(screen.queryByText(/printed|saved|success/i)).toBeNull();
     });

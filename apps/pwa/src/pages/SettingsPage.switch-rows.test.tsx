@@ -87,11 +87,11 @@ describe('Settings: the words beside a switch leave a gap before it', () => {
         expectGapBeforeEverySwitch(['Modern Map Pins', 'Holiday Mode', 'Show me as a connection in common']);
     });
 
-    it('Notification Preferences: Chat Messages, Marketplace Activity and Held in Trust & Deals (and every other switch drawn there)', async () => {
+    it("Notification Preferences: Direct Messages, Marketplace Activity and Held in Trust & System, the phone's names (and every other switch drawn there)", async () => {
         renderSettings();
         fireEvent.click(await screen.findByText('Notification Preferences'));
         await waitFor(() => expect(api.getNotificationPreferences).toHaveBeenCalled());
-        await screen.findByText('Chat Messages');
-        expectGapBeforeEverySwitch(['Chat Messages Notifications', 'Marketplace Activity Notifications', 'Held in Trust & Deals Notifications']);
+        await screen.findByText('Direct Messages');
+        expectGapBeforeEverySwitch(['Direct messages notifications', 'Marketplace activity notifications', 'Held in trust and system notifications']);
     });
 });

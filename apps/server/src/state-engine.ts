@@ -52,6 +52,7 @@ import { noteRemovedNewcomer } from './engine/door-signal.js';
 import { admitByAddress } from './db/writes-by-address.js';
 import { pruneAgedOut } from './engine/plain-tables.js';
 import { pruneOldLooks } from './engine/credit-looks.js';
+import { noteFreeTagsSeen } from './engine/free-tags.js';
 import { avatarValueRefusal, photoValueRefusal, photoRefusalError, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './engine/photo-upload-budget.js';
 import { stripImageValue } from './storage/image-metadata.js';
@@ -72,7 +73,7 @@ import {
     newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, markPushNoticesSeen, markPushNoticesSeenWhere, markAllPushNoticesSeen,
     keptNoticeIdsOf, type PushNoticeRow,
 } from './engine/push-notices.js';
-import { sendWebPushes, webPushDelivery, webPushTargetsFor, type WebPushSend } from './engine/web-push-subscriptions.js';
+import { sendWebPushes, webPushDelivery, webPushTargetOpener, type WebPushSend } from './engine/web-push-subscriptions.js';
 import type { PushDetailsFor } from './engine/kept-notices.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
 import { linesPushedAbout } from './engine/chat-mutes.js';
@@ -728,6 +729,12 @@ export interface NodeConfig {
     publishContactEmail?: boolean;
     publishContactPhone?: boolean;
     publishHealth?: boolean;
+    /**
+     * Whether the community's name, and Ask to join, appear beside a member's listing shown on the global community
+     * (DESIGN-list-on-global-fable.md §2, G5): the push's `listingsFromHere`. On unless an owner turned it off: only a stored
+     * `false` is off. A member can show a listing there either way.
+     */
+    publishListingsFromHere?: boolean;
     directoryPushIntervalHours?: number;
     lastDirectoryPush?: string;
     /**
@@ -1045,6 +1052,16 @@ export function initStateEngine(): void {
     // Every role: the sessions are each server's own.
     startSweepingRecoveryCollections();
 
+    // Each typed tag's day on each listing (engine/free-tags.ts), kept to the listings when nobody has read the count for a
+    // while: a listing back from a pause starts its week again. Every role, hourly: the stamps are each server's own, and a
+    // standby's follow its copy, so a take-over does not start from stamps last made at a read long ago.
+    if (!freeTagsTickArmed) {
+        freeTagsTickArmed = true;
+        setInterval(() => {
+            try { noteFreeTagsSeen(); } catch (e) { console.warn('[Tags] Could not keep the typed tags\' days:', e); }
+        }, 60 * 60 * 1000);
+    }
+
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
     const postCount = db.prepare("SELECT COUNT(*) as c FROM posts").get() as any;
     console.log(`📒 SQLite DB initialized: ${memberCount.c} members, ${postCount.c} posts`);
@@ -1084,6 +1101,8 @@ function runMainServerMigrations(): void {
 
 /** Whether this process armed the main server's timers (armMainServerTimers): once, whatever promotes it. */
 let mainServerTimersArmed = false;
+/** The hourly pass over the typed tags' days (initStateEngine), armed once on every role. */
+let freeTagsTickArmed = false;
 
 // Marketplace hygiene: expire stale requests, nudge lingering escrows (hourly + once at
 // boot). Primary only — it dispatches real push notifications to members, which a
@@ -9801,6 +9820,7 @@ export function getNodeConfig(): NodeConfig {
         publishContactEmail: config.publishContactEmail === true,
         publishContactPhone: config.publishContactPhone === true,
         publishHealth: config.publishHealth !== false,
+        publishListingsFromHere: config.publishListingsFromHere !== false,
         directoryPushIntervalHours: typeof config.directoryPushIntervalHours === 'number' ? config.directoryPushIntervalHours : 12,
         lastDirectoryPush: config.lastDirectoryPush,
         publicAddress: config.publicAddress ?? null,
@@ -9982,6 +10002,10 @@ export function getDirectoryInfo(): any {
     // Each only when the owner turned it on; otherwise null, so the directory drops one it was sent before.
     info.contactEmail = config.publishContactEmail && localConfig.contactEmail ? localConfig.contactEmail : null;
     info.contactPhone = config.publishContactPhone && localConfig.contactPhone ? localConfig.contactPhone : null;
+
+    // Always said, true or false: absent at the registry reads as on (a node from before the switch), so a community that
+    // turned it off says so at every push. A global node draws no from-line and no door on its members' copies while false.
+    info.listingsFromHere = config.publishListingsFromHere !== false;
 
     if (config.publishHealth) {
         const realVersion = getVersion();
@@ -10461,8 +10485,17 @@ export function registerPushToken(
 
 export type PushRegistration = 'registered' | 'left' | 'key_rate_limited' | 'rate_limited' | 'busy' | 'failed';
 
-function hasMembersRow(publicKey: string): boolean {
+/** Whether this key has a row here, a member's or a visitor's (a key with none is a stranger: STRANGER_PUSH_RULES). */
+export function hasMembersRow(publicKey: string): boolean {
     return !!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(publicKey);
+}
+
+/**
+ * Whether this key already holds a row for this phone's token (a registration again adds none, and is never refused:
+ * routes/community.ts POST /api/push-tokens). Throws without this server's key ({@link registerPushToken} then fails too).
+ */
+export function holdsPushToken(publicKey: string, token: string): boolean {
+    return !!db.prepare('SELECT 1 FROM push_tokens WHERE public_key = ? AND token_id = ?').get(publicKey, pushTokenId(token));
 }
 
 /**
@@ -10516,9 +10549,12 @@ function dropStalestTokens(publicKey: string, kept: string): void {
 
 /**
  * What a key with no row here (neither a member's nor a visitor's) may store of push tokens (registerPushToken). Such a
- * key registers before its account here exists (a knock waiting for its answer, a join under way). Nothing is sent to
- * it until it has a row, and then none of this applies. Refused, the app tries again within a minute, then less often,
- * and lands once its row is made (apps/native utils/push-registrations.ts).
+ * key registers while it waits for the answer to its request to join here: the route takes a new token of one only with a
+ * request members can still answer (routes/community.ts POST /api/push-tokens; web push W4), and what it sends such a key
+ * is that answer, `join.answered`, and nothing else (engine/knocks.ts tellAskerAnswered). Its rows go when the request is
+ * cancelled, declined or lapses (engine/knocks.ts dropAskerPhonesOf, tidyKnocks); once the key joins, none of this
+ * applies. A key joining by an invite has its row by then. Refused, the app tries again within a minute, then less often
+ * (apps/native utils/push-registrations.ts).
  */
 export const STRANGER_PUSH_RULES = {
     /**
@@ -10902,8 +10938,10 @@ const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoti
  * recipient reads (engine/push-notices.ts, GET /api/notices/push/:id), and none of them reaches Expo, Apple or Google.
  *
  * Browsers too (services/web-push.ts, DESIGN-web-notifications-fable.md §2.2), after Expo's part, with the same words and
- * notice, encrypted to the browser: in W1 only `join.answered`, to the browser an applicant asked to be told on
- * (engine/web-push-subscriptions.ts webPushTargetsFor), for `options.ttlSeconds`.
+ * notice, encrypted to the browser (engine/web-push-subscriptions.ts webPushTargetOpener): every kind to a member's own
+ * browsers (W2), under the same switch as their phones, and `join.answered` to the browser an applicant asked to be told
+ * on (W1), for `options.ttlSeconds`. Each kind's TTL, urgency and topic are webPushDelivery's (a chat's topic is its kind,
+ * so a browser away for a while gets one message of it, not every one).
  *
  * Answers how many messages went to the push services (a phone's to Expo, a browser's by web push). {@link deliverPushNotices}
  * also says how many members were told: a notice kept for them is on their bell (web notifications W0), a phone or not.
@@ -10983,8 +11021,9 @@ export function deliverPushNotices(
     const phones: { publicKey: string; tokenId: string; token: string }[] = [];
     const notices: PushNoticeRow[] = [];
     const webSends: WebPushSend[] = [];
-    // The key read once for the whole send (an announcement reaches every member's phones).
+    // The key read once for the whole send (an announcement reaches every member's phones and browsers).
     const open = pushTokenOpener();
+    const browsersOf = webPushTargetOpener();
 
     for (const pk of recipients) {
         // Check user's notification preference for this category
@@ -11001,9 +11040,13 @@ export function deliverPushNotices(
 
         // The bell (DESIGN-web-notifications-fable.md §2.1): the notice is kept for every member here it is for, a phone
         // or not, so the web app, and a phone with no push, list what the phone is buzzed with. Not for a key that can't
-        // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before.
-        const tokens = getPushTokens(pk, open);
-        const browsers = webPushTargetsFor(pk, kind);
+        // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before;
+        // a key with no row at all is a phone waiting for the answer to its request to join (web push W4), and is told
+        // that answer and nothing else, as its browser is (engine/web-push-subscriptions.ts webPushTargetOpener). The row
+        // is looked up only for a key with a phone here.
+        const held = getPushTokens(pk, open);
+        const tokens = held.length === 0 || kind === 'join.answered' || hasMembersRow(pk) ? held : [];
+        const browsers = browsersOf(pk, kind);
         if (tokens.length === 0 && browsers.length === 0 && !passesReadGate(pk)) continue;
 
         // One notice per recipient, the same on each of their phones and browsers.
@@ -11044,7 +11087,7 @@ export function deliverPushNotices(
         for (const { subId, lang, target } of browsers) {
             const words = phoneWords(lang);
             webSends.push({
-                publicKey: pk, subId, target, ...webPushDelivery('join.answered', options.ttlSeconds),
+                publicKey: pk, subId, target, ...webPushDelivery(kind, options.ttlSeconds),
                 payload: { title: words.title, body: words.body, data: notice.data, tab: PUSH_NOTICE_KINDS[kind].tab },
             });
         }

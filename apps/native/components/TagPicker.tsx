@@ -5,9 +5,11 @@ import {
 import { KeyboardAvoidingView, KeyboardController } from 'react-native-keyboard-controller';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
-    FREE_TAGS_MAX, FREE_TAG_TOO_SHORT, POST_TAGS_MAX, TAG_COMMA, TOO_MANY_TAGS, TYPED_TAG_WORDS,
-    enterTypedTags, exactLibraryTag, lastTagOff, suggestTags, tagChildren, tagIndex, t, typedTag, type RefusedTag,
+    FREE_TAGS_MAX, FREE_TAG_TOO_SHORT, POST_TAGS_MAX, TAG_COMMA, TOO_MANY_TAGS, TYPED_TAG_WORDS, communityTagsFor,
+    enterTypedTags, exactLibraryTag, lastTagOff, mergedInto, suggestTags, tagChildren, tagIndex, t, tn, typedTag, type CommunityTag,
+    type RefusedTag,
 } from '@beanpool/core';
+import { loadCommunityTags } from '../utils/community-tags';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { hapticTick, hapticWarning } from '../utils/haptics';
 import { dismissKeyboardWithin } from '../utils/keyboard-dismiss';
@@ -31,6 +33,8 @@ export interface TagPickerProps {
     title?: string;
     description?: string;
     testID?: string;
+    /** Where this community's typed tags come from (GET /api/free-tags); read once each time the sheet opens. */
+    communityTags?: () => Promise<CommunityTag[]>;
 }
 
 export function TagPicker({
@@ -43,6 +47,7 @@ export function TagPicker({
     title = '',
     description = '',
     testID = 'tag-picker',
+    communityTags = loadCommunityTags,
 }: TagPickerProps) {
     const selectedTags = value ?? tags ?? [];
     const { colors } = useTheme();
@@ -258,6 +263,21 @@ export function TagPicker({
             marginTop: 10,
             marginBottom: 8,
         },
+        // This community's typed tags, under the library's matches (slice F3): a two-line chip, the tag and its count.
+        usedHere: {
+            marginTop: 8,
+        },
+        usedChip: {
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            borderRadius: 16,
+            gap: 0,
+        },
+        usedCount: {
+            fontSize: 12,
+            color: colors.text.secondary,
+            flexShrink: 1,
+        },
         sectionWrap: {
             marginBottom: 16,
         },
@@ -290,6 +310,18 @@ export function TagPicker({
 
     const index = useMemo(() => tagIndex(), [sheetVisible]);
 
+    // This community's typed tags (slice F3): read when the sheet opens, none until they come or when they can't.
+    const canType = !!onFreeTagsChange;
+    const [community, setCommunity] = useState<CommunityTag[]>([]);
+    useEffect(() => {
+        if (!sheetVisible || !canType) return;
+        let live = true;
+        communityTags().then((list) => { if (live) setCommunity(list); }, () => {});
+        return () => { live = false; };
+    }, [sheetVisible, canType, communityTags]);
+    // A word an owner merged into a library tag commits as that tag (core community-tags.ts).
+    const merged = useMemo(() => mergedInto(community, index), [community, index]);
+
     const toggleTag = (id: string) => {
         if (selectedTags.includes(id)) {
             hapticTick();
@@ -314,7 +346,6 @@ export function TagPicker({
         onFreeTagsChange?.(freeTags.filter((other) => other !== tag));
     };
 
-    const canType = !!onFreeTagsChange;
     const held = { tags: selectedTags, freeTags };
 
     // The typed word has found its tag. Left in the field, Done would put back one just taken off.
@@ -325,7 +356,7 @@ export function TagPicker({
 
     /** Commits what is typed (core typed-tags.ts); false when a piece was refused and stays in the field with its words. */
     const enter = (text: string, done: boolean): boolean => {
-        const entry = enterTypedTags(text, held, done, index);
+        const entry = enterTypedTags(text, held, done, index, merged);
         const added = entry.tags.length !== selectedTags.length || entry.freeTags.length !== freeTags.length;
         if (entry.tags.length !== selectedTags.length) onChange(entry.tags);
         if (entry.freeTags.length !== freeTags.length) onFreeTagsChange?.(entry.freeTags);
@@ -396,7 +427,9 @@ export function TagPicker({
     }, [searchQuery, index, canType]);
 
     // What Enter would do with the field now. A word still being typed is not yet too short.
-    const typed = canType ? typedTag(searchQuery, held, index) : null;
+    const typed = canType ? typedTag(searchQuery, held, index, merged) : null;
+    // Under the library's matches: this community's tags the typing reaches, never one with a library label's letters.
+    const usedHere = canType ? communityTagsFor(searchQuery, community, held, { shadowed: (tag) => exactLibraryTag(tag, index) !== null }) : [];
     const addable = typed?.kind === 'free' && !freeTags.includes(typed.tag) ? typed.tag : null;
     const shownRefusal = refused ?? (typed?.kind === 'refused' && typed.why !== FREE_TAG_TOO_SHORT ? typed : null);
 
@@ -547,6 +580,27 @@ export function TagPicker({
                                                     </Pressable>
                                                 );
                                             })}
+                                        </View>
+                                    )}
+                                    {usedHere.length > 0 && (
+                                        <View style={styles.usedHere} testID="tag-picker-used-here">
+                                            <Text style={styles.sectionTitle}>{t('Tags used here')}</Text>
+                                            <View style={styles.chipsRow}>
+                                                {usedHere.map((c) => (
+                                                    <Pressable
+                                                        key={`#${c.tag}`}
+                                                        style={[styles.chip, styles.usedChip]}
+                                                        onPress={() => (c.mergeInto ? pickFound(c.mergeInto) : enter(c.tag, true))}
+                                                        accessibilityRole="button"
+                                                    >
+                                                        <Text style={styles.chipText}>{c.mergeInto ? index.label(c.mergeInto) : `#${c.tag}`}</Text>
+                                                        <Text style={styles.usedCount}>
+                                                            {[c.mergeInto ? `#${c.tag}` : '', c.listings > 0 ? tn(c.listings, 'Used on {n} listing', 'Used on {n} listings') : '']
+                                                                .filter(Boolean).join(' · ')}
+                                                        </Text>
+                                                    </Pressable>
+                                                ))}
+                                            </View>
                                         </View>
                                     )}
                                 </View>

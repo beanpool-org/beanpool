@@ -30,7 +30,8 @@ module.exports = ({ config }) => {
 const withSecrets = (config) => ({
   ...config,
   // The iOS permission pop-ups in each declared language (plugins/ios-permission-locales.js); English until translated.
-  locales: { ...(config.locales || {}), ...iosPermissionLocales(config.ios && config.ios.infoPlist) },
+  // app.json's own files per language (infoplist-words) are read and kept beside them, never replaced.
+  locales: { ...(config.locales || {}), ...iosPermissionLocales(config.ios && config.ios.infoPlist, undefined, config.locales || {}) },
   android: {
     ...config.android,
     config: {

@@ -422,7 +422,7 @@ async function main(): Promise<void> {
     for (const p of [bobOffer, hiddenPost]) inShop.run(bobShop, p.id);
     db.prepare("UPDATE posts SET shop_id = ? WHERE author_pubkey = ? AND category = 'grid' AND rowid % 2 = 0").run(gridShop, grid.pk);
     writeDirectoryRows(COMMUNITIES.map(c => ({ key: c.key, name: c.name, url: `https://${c.key}.example`, lat: c.lat, lng: c.lng, radiusKm: c.radiusKm,
-        memberCount: 5, contactEmail: null, contactPhone: null, registryUpdatedAt: now, promise: null, acceptingKnocks: null, closingOn: null })), now);
+        memberCount: 5, contactEmail: null, contactPhone: null, registryUpdatedAt: now, promise: null, acceptingKnocks: null, closingOn: null, listingsFromHere: true })), now);
 
     /** Every post's place, from the database itself. */
     const truth = new Map((db.prepare('SELECT id, lat, lng FROM posts').all() as Array<{ id: string; lat: number | null; lng: number | null }>)
@@ -1363,6 +1363,7 @@ async function main(): Promise<void> {
             'POST /api/knowledge/drafts', 'GET /api/knowledge/drafts/mine', 'POST /api/knowledge/drafts/:id/withdraw', 'GET /api/knowledge/drafts',
             'GET /api/knowledge/drafts/:id', 'POST /api/knowledge/drafts/:id/approve', 'POST /api/knowledge/drafts/:id/no',
             // The forum (routes/forum.ts, slice F1): members' reads and writes, all signed; the public pages are slice F7's.
+            'GET /api/free-tags',
             'GET /api/forum', 'GET /api/forum/topics', 'GET /api/forum/topics/:id', 'GET /api/forum/posts/:id/photos/:n', 'POST /api/forum/told',
             'POST /api/forum/topics', 'POST /api/forum/topics/:id/replies', 'POST /api/forum/topics/:id/close', 'POST /api/forum/topics/:id/pin',
             'POST /api/forum/topics/:id/move', 'POST /api/forum/posts/:id/edit', 'POST /api/forum/posts/:id/remove', 'POST /api/forum/sections',
@@ -1445,6 +1446,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/users/:pubkey/freeze', 'POST /api/local/admin/users/:pubkey/operator',
             'POST /api/local/admin/users/:pubkey/prune', 'GET /api/local/admin/users/:pubkey/retire', 'POST /api/local/admin/users/:pubkey/retire',
             'POST /api/local/admin/users/:pubkey/status', 'POST /api/local/admin/users/:pubkey/suspend',
+            'GET /api/local/admin/free-tags', 'POST /api/local/admin/free-tags/:key/:action',
             'POST /api/local/admin/users/:pubkey/tier', 'POST /api/local/admin/users/:pubkey/unretire', 'GET /api/local/admin/web-visits',
             'POST /api/local/admin/ws-connections', 'POST /api/local/admin/ws-ticket',
             'GET /api/local/community-info', 'GET /api/local/connectors', 'POST /api/local/connectors',

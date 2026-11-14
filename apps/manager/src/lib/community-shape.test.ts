@@ -352,6 +352,8 @@ describe('community-shape lib', () => {
             expect(getConsequenceSentence('shareEmail', true, shape)).toContain('Your contact email will be listed');
             expect(getConsequenceSentence('sharePhone', true, shape)).toContain('Your contact phone will be listed');
             expect(getConsequenceSentence('shareHealth', false, shape)).toContain('Node health and version diagnostics will no longer be shared');
+            expect(getConsequenceSentence('shareListingsFromHere', false, shape)).toBe("Within the hour, members' listings shown on the global community appear with no name and no Ask to join. A member can still show one there.");
+            expect(getConsequenceSentence('shareListingsFromHere', true, shape)).toBe("Within the hour, members' listings shown on the global community say they are from this community, with Ask to join beside them.");
             expect(getConsequenceSentence('probation', false, shape)).toContain('New members will have no daily limits');
             expect(getConsequenceSentence('autoHide', true, shape)).toContain('Reports from three independent groups');
             expect(getConsequenceSentence('autoMute', true, shape)).toContain('Three posts removed in 30 days');

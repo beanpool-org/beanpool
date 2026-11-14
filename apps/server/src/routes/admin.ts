@@ -76,6 +76,7 @@ import { SIGNED_FOR_HEADER, avatarUrlOf, hundredthsAsDecimalText, wordsFor } fro
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
 import { describeRefundShortfall } from '../engine/posts.js';
 import { setMemberBadge, BadgeError } from '../engine/badges.js';
+import { FREE_TAG_OFFER_AUTHORS, FREE_TAG_OFFER_DAYS, FreeTagRuleError, freeTagCounts, setFreeTagRule } from '../engine/free-tags.js';
 import { emptyAccountRefusal, retireEmptyDuplicate, bringBackRetired, isRetiredKey, RETIRE_WORDS } from '../engine/retire-duplicate.js';
 import { StandbyLedgerError } from '../config/node-role.js';
 import { tellVoucherNotice } from '../engine/vouchers.js';
@@ -1987,6 +1988,40 @@ router.post('/api/local/admin/users/:pubkey/tier', async (ctx) => {
         ctx.body = { success: true, tier: result.badge, changed: result.changed };
     } catch (e) {
         if (!(e instanceof BadgeError) && !(e instanceof StandbyLedgerError)) throw e;
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code };
+    }
+});
+
+// The tags members typed on listings here, for the owners' and admins' Tags page (engine/free-tags.ts, slice F3): each
+// with its live listings, its authors and when it was first seen (counts, never who), whether members are offered it, and
+// the rule on it. Not a moderator's (MODERATOR_ROUTES).
+router.get('/api/local/admin/free-tags', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can see its tags.')) return;
+    ctx.body = { tags: freeTagCounts(), offerAuthors: FREE_TAG_OFFER_AUTHORS, offerDays: FREE_TAG_OFFER_DAYS };
+});
+
+// Hide a typed tag from what members are offered, merge it into a library tag ({ into }), or clear its rule; any other
+// action is 400 `bad_action` (after the sign-in check, as every admin route). Admin level, as hiding a post is; a key session
+// only, so each rule is in someone's name. Listings keep their text either way.
+router.post('/api/local/admin/free-tags/:key/:action', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can change how a tag is offered.')) return;
+    const actor = (ctx.state as any)?.actor;
+    if ((ctx.state as any)?.automationTokenId || typeof actor !== 'string' || !/^[0-9a-f]{64}$/.test(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Sign in with your own key to change how a tag is offered, so it is logged in your name.', code: 'key_session_only' };
+        return;
+    }
+    try {
+        const result = setFreeTagRule(actor, ctx.params.key, ctx.params.action, ((ctx as any).requestBody || {}).into);
+        if (result.changed) {
+            logger.info('ADMIN', `Typed tag ${JSON.stringify(result.tag)} ${result.rule === 'hide' ? 'hidden from suggestions' : result.rule === 'merge' ? `merged into ${result.mergeInto}` : 'rule cleared'} by ${actor.substring(0, 12)}`);
+        }
+        ctx.body = { success: true, tag: result.tag, rule: result.rule, mergeInto: result.mergeInto, changed: result.changed };
+    } catch (e) {
+        if (!(e instanceof FreeTagRuleError) && !(e instanceof StandbyLedgerError)) throw e;
         ctx.status = e.status;
         ctx.body = { error: e.message, code: e.code };
     }

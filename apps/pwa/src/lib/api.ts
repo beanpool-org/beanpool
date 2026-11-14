@@ -10,6 +10,7 @@ import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, Tour
 import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type KnockVia } from '@beanpool/core';
 import { readGroupInvitations, type GroupInvitations } from '@beanpool/core';
 import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
+import { communityTagsOf, type CommunityTag } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -580,6 +581,18 @@ export interface KeptNotice {
     seenAt: string | null;
 }
 
+/**
+ * The tags members of this community typed that the Tags field offers (GET /api/free-tags, slice F3), held to the rule by
+ * core's communityTagsOf. None when it can't be had (offline, a visitor, a node older than the route): never an error.
+ */
+export async function getCommunityTags(): Promise<CommunityTag[]> {
+    try {
+        return communityTagsOf(await request<unknown>('GET', '/api/free-tags'));
+    } catch {
+        return [];
+    }
+}
+
 /** The signer's own notices they have not marked seen, oldest first. A node older than the route answers 404. */
 export async function getUnseenNotices(): Promise<KeptNotice[]> {
     const res = await request<{ notices?: KeptNotice[] }>('GET', '/api/notices?unseen=1');
@@ -589,6 +602,15 @@ export async function getUnseenNotices(): Promise<KeptNotice[]> {
 /** The bell: the signer's own push notices not yet opened, newest first (GET /api/notices/push?unseen=1). */
 export async function getBellNotices(): Promise<BellNotice[]> {
     return unseenBellNotices(await request<{ notices?: unknown[] }>('GET', '/api/notices/push?unseen=1'));
+}
+
+/**
+ * One push's details, read after a click on its notification (web push W2): what the sender wrote and where it lands; reading
+ * it takes it off the bell, as the phone's tap does. Null for an id not in the node's shape, or one it no longer has (7 days).
+ */
+export async function getPushNoticeDetails(id: string): Promise<{ id: string; kind: string; title: string; body: string; data: unknown } | null> {
+    if (!/^[0-9a-f]{32}$/.test(id)) return null;
+    return request<{ id: string; kind: string; title: string; body: string; data: unknown }>('GET', `/api/notices/push/${id}`).catch(() => null);
 }
 
 /** Takes these of the signer's own notices off the bell (a tap on the row, or its ✕); the node ignores an id that is not theirs. */
@@ -749,6 +771,18 @@ export async function signedFetchAt(
     return fetch(`${community}${path}`, method === 'GET'
         ? { method, headers: signed, cache: 'no-cache' }
         : { method, headers: { 'Content-Type': 'application/json', ...signed }, body: bodyString });
+}
+
+/**
+ * signedFetchAt's POST or DELETE, sent and never waited for: resolves once it is on its way (the version known, the signature
+ * made, both here), with keepalive, so a reload or a closed tab right after doesn't cut it. Its answer is read by nobody: for
+ * a request whose outcome changes nothing in this browser (web push W2: the community the web app moves away from lets go
+ * of this browser). Throws only before sending (a server not known to be new enough, a key that can't sign).
+ */
+export async function sendSignedAt(method: 'POST' | 'DELETE', community: string, path: string, bodyString: string, identity: BeanPoolIdentity): Promise<void> {
+    await refuseIfNodeTooOld(community);
+    const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
+    void fetch(`${community}${path}`, { method, headers: { 'Content-Type': 'application/json', ...signed }, body: bodyString, keepalive: true }).catch(() => null);
 }
 
 /**

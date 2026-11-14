@@ -281,8 +281,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [showPricingGuide, setShowPricingGuide] = useState(false);
     const [newPostType, setNewPostType] = useState<'offer' | 'need' | 'poll' | 'event'>('need');
-    // The New Post panel's fifth button, Local knowledge, shows only where Learn is on here (slice K4).
-    const learnLive = useLearn().mode === 'live';
+    // The New Post panel's fifth button, Local knowledge, shows only where Learn is on here (slice K4): asked once a member opens it.
+    const learnLive = useLearn(!!identity && !visitor && showNewPost).mode === 'live';
     // Events (docs/events-on-the-map.md §3). Start and end hold <input type="datetime-local"> values.
     const [eventStart, setEventStart] = useState('');
     const [eventEnd, setEventEnd] = useState('');

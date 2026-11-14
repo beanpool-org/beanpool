@@ -378,7 +378,7 @@ describe('where nothing is written', () => {
     });
 
     it('a visitor with no key has no Suggest button', async () => {
-        await openLearn({ identity: null });
+        await openLearn({ identity: null as unknown as BeanPoolIdentity });
         expect(screen.queryByTestId('learn-suggest')).toBeNull();
     });
 });

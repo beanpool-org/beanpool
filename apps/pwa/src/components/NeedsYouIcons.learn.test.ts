@@ -4,8 +4,8 @@
  * writer). The phone's landings are the same (apps/native utils/push-notice-check.ts).
  */
 import { describe, expect, it, vi } from 'vitest';
-import { NEEDS_YOU_PRIORITY, knowledgeToCheckLine } from '@beanpool/core';
-import { goToNoticeTarget, goToWebNeedsTarget, noticeHasDestination } from './NeedsYouIcons';
+import { knowledgeToCheckLine } from '@beanpool/core';
+import { WEB_NEEDS_PRIORITY, goToNoticeTarget, goToWebNeedsTarget, noticeHasDestination } from './NeedsYouIcons';
 
 describe('the bell and Local knowledge', () => {
     it('the needs line "Local knowledge to check" opens To check', () => {
@@ -15,8 +15,8 @@ describe('the bell and Local knowledge', () => {
     });
 
     it('ranks after a member\'s ask and before a deal, as the node orders it', () => {
-        expect(NEEDS_YOU_PRIORITY.indexOf('learn')).toBe(NEEDS_YOU_PRIORITY.indexOf('ask') + 1);
-        expect(NEEDS_YOU_PRIORITY.indexOf('learn')).toBeLessThan(NEEDS_YOU_PRIORITY.indexOf('deal'));
+        expect(WEB_NEEDS_PRIORITY.indexOf('learn')).toBe(WEB_NEEDS_PRIORITY.indexOf('ask') + 1);
+        expect(WEB_NEEDS_PRIORITY.indexOf('learn')).toBeLessThan(WEB_NEEDS_PRIORITY.indexOf('deal'));
     });
 
     it('says the line in the member\'s words, a count and never a name', () => {

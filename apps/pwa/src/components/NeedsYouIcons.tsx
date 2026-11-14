@@ -124,7 +124,14 @@ function BellSvg({ shadow = false, small = false }: { shadow?: boolean; small?: 
 }
 
 /** `shadow`: on the header's photo, the phone's icon shadow (black at 75%, 1 px down, 4 px soft), so the icon reads on the vines. */
-function NeedSvg({ kind, shadow = false }: { kind: NeedsYouKind; shadow?: boolean }) {
+/**
+ * The kinds of line this app draws: core's, and Learn's To check (slice K4), which the node sends only to an app that asks with
+ * `lands=learn` (routes/home-answer.ts NeedsKind) and orders after a member's ask. Kept here so the phone's own kinds don't change.
+ */
+export type WebNeedsKind = NeedsYouKind | 'learn';
+export const WEB_NEEDS_PRIORITY: readonly WebNeedsKind[] = NEEDS_YOU_PRIORITY.flatMap((k): WebNeedsKind[] => (k === 'ask' ? [k, 'learn'] : [k]));
+
+function NeedSvg({ kind, shadow = false }: { kind: WebNeedsKind; shadow?: boolean }) {
     const cls = `w-[20px] h-[20px] shrink-0${shadow ? ' drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)]' : ''}`;
     switch (kind) {
         case 'invite':
@@ -234,7 +241,7 @@ export function NeedsYouIcons({
         const supported = items.filter(i => (i.kind as string) !== 'admin')
             .map(i => (i.kind === 'ask' ? { ...i, label: capitalFirst(inviteAskNeedsLine(i.count)) }
                 : i.kind === 'learn' ? { ...i, label: knowledgeToCheckLine(i.count) } : i));
-        const rank = (k: NeedsYouKind) => NEEDS_YOU_PRIORITY.indexOf(k);
+        const rank = (k: WebNeedsKind) => WEB_NEEDS_PRIORITY.indexOf(k);
         return [...supported].sort((a, b) => rank(a.kind) - rank(b.kind));
     }, []);
 
@@ -514,7 +521,7 @@ export function NeedsYouIcons({
     };
     const unseen = notices.length;
     // The payee's line of a short standing deal is listed, not counted (core needsYouCounts).
-    const counted = entries.filter(needsYouCounts).length;
+    const counted = entries.filter((e) => e.kind === 'learn' || needsYouCounts(e as { kind: NeedsYouKind; accent: boolean })).length;
     const label = bellLabel(unseen, counted);
     const bell = (small: boolean) => (
         <button

@@ -77,11 +77,12 @@ type FeatureSet = Record<string, unknown> | null | undefined;
 /**
  * Learn's mode for this reader: `live` where the node has it on, `preview` where it is off and the node shows previews (the
  * global community), `hidden` otherwise. `ready` is false until the node's info has answered; until then the mode is
- * `hidden`, so no screen flashes a preview a live node then takes away (lib/features.ts).
+ * `hidden`, so no screen flashes a preview a live node then takes away (lib/features.ts). `enabled` false: nothing is read
+ * and the mode stays `hidden` (a visitor's map, a New Post panel not open).
  */
-export function useLearn(): { ready: boolean; mode: FeatureMode } {
-    const info = useCommunityInfo();
-    const reader = useReaderFeatures(info);
+export function useLearn(enabled = true): { ready: boolean; mode: FeatureMode } {
+    const info = useCommunityInfo(enabled);
+    const reader = useReaderFeatures(info, enabled);
     return { ready: info !== null, mode: info ? knowledgeFeatureMode(info.features as FeatureSet, reader) : 'hidden' };
 }
 

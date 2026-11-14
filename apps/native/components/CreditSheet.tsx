@@ -82,7 +82,7 @@ export function CreditSheet({ visible, answer, earning, colors, set, onClose, on
                             colors={[...CREDIT_RAINBOW.stops]}
                             locations={[...CREDIT_RAINBOW.at]}
                             start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-                            style={half ? { position: 'absolute', top: 0, bottom: 0, width: '200%', left: row.mark === 'left' ? 0 : '-100%' } : StyleSheet.absoluteFill}
+                            style={half ? { position: 'absolute', top: 0, bottom: 0, width: '200%', left: row.mark === 'left' ? 0 : '-100%' } : { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
                         />
                     </View>
                 );

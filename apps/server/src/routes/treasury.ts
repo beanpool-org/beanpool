@@ -983,9 +983,6 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // The event itself is built by the shared builder, so an enterprise's event and a member's are validated
     // and stored by exactly the same code (routes/event-post.ts). The author is the enterprise; the keeper
     // who did it is recorded as created_by, as the Offer and Need above do.
-    //
-    // No syncPulseMarketplaceGate() call, matching /offer and /need: the gate counts active listings with
-    // `type NOT IN ('poll', 'event')` (daily-pulse.ts), so an event can never move it.
     router.post('/api/treasury/:treasury/event', async (ctx) => {
         const { treasury } = ctx.params;
         const actor = requireOperator(ctx, treasury);

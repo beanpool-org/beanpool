@@ -18,9 +18,8 @@
  * The one limit is human: a member who confirms an impostor met in person hands that person exactly the old key's
  * epochs the confirming member holds. The confirm screen says so.
  */
-import { isWellFormedRecoveryPhrase, normaliseRecoveryWords, dmPublicKeyOf } from '@beanpool/core';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { oldKeyFromWords } from './old-key-from-words';
 import type { BeanPoolIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
 import { groupKeyring, type GroupKeyStore } from './group-chat-keys';
@@ -208,16 +207,8 @@ export async function noteLockedHistoryCount(nodeUrl: string, me: string, groupI
 
 // ─── Path A: the old 12 words (§3) ──────────────────────────────────────────────────────────────────────────────────
 
-/** The old key's seed and public key from typed words, or null when they are not 12 listed words. Kept in memory only. */
-export function oldKeyFromWords(typed: string | readonly string[]): { seed: Uint8Array; publicKey: string } | null {
-    if (!isWellFormedRecoveryPhrase(typed)) return null;
-    const phrase = utf8ToBytes(normaliseRecoveryWords(typed).join(' '));
-    const inner = sha256(phrase);
-    const seed = sha256(inner);
-    phrase.fill(0);
-    inner.fill(0);
-    return { seed, publicKey: dmPublicKeyOf(bytesToHex(seed)) };
-}
+/** The old key's seed and public key from typed words (old-key-from-words.ts, shared with the old contacts list). */
+export { oldKeyFromWords };
 
 export interface HistoryGroup {
     id: string;

@@ -39,6 +39,12 @@ const eve = person();
 const mal = person(true);
 /** The node's answer to "start a DM" (createConversationApi); null: it refuses. */
 let createAnswer: any = null;
+/**
+ * The node lists the conversation it answers "start a DM" with from that answer on, as a node that made it does. Set
+ * before the start, never after the test sees it: the page reads the new chat on its own clock, and a read that came
+ * first used to get the group's row for that id (merge-queue run 43637227231: C5 drew "Garden crew" and its keys refusal).
+ */
+let startedIsListed = false;
 let node: FakeGroupNode;
 let chatLocked = true;
 let chatError: unknown = null;
@@ -67,11 +73,20 @@ vi.mock('../lib/api', () => ({
     getConversations: vi.fn(async () => ({
         conversations: [...(listMode === 'omit' ? [] : [conv(listMode === 'caps' ? GCAPS : G)]), ...extraConvs], totalUnread: 0,
     })),
-    getConversationMessages: vi.fn(async (id: string) => ({ conversation: extraConvs.find((c) => c.id === id) ?? conv(id), messages: [] })),
+    // Only the group's own id (in any case) is the group's row; an id the node doesn't hold is its 404, never the group.
+    getConversationMessages: vi.fn(async (id: string) => {
+        const held = extraConvs.find((c) => c.id === id) ?? (id.toLowerCase() === G ? conv(id) : null);
+        if (!held) throw new Error('Not found');
+        return { conversation: held, messages: [] };
+    }),
     getMembers: vi.fn(async () => [{ publicKey: ben.publicKey, callsign: 'Ben' }, { publicKey: eve.publicKey, callsign: 'Eve' }, { publicKey: mal.publicKey, callsign: 'Mal' }]),
     getMyMarketplaceTransactions: vi.fn(async () => []),
     markConversationReadApi: vi.fn(async () => ({ success: true })),
-    createConversationApi: vi.fn(async () => { if (!createAnswer) throw new Error('no'); return createAnswer; }),
+    createConversationApi: vi.fn(async () => {
+        if (!createAnswer) throw new Error('no');
+        if (startedIsListed && createAnswer.conversation) extraConvs = [...extraConvs, createAnswer.conversation];
+        return createAnswer;
+    }),
     getEventChat: vi.fn(async () => { if (!eventChatView) throw new Error('Not found'); return eventChatView; }),
     postEventChatMessage: vi.fn(async () => ({ success: true, message: {} })),
     removeEventChatMessage: vi.fn(),
@@ -141,7 +156,7 @@ beforeEach(async () => {
     forgetGroupKeys();
     node = fakeGroupNode(G, [ana.publicKey, ben.publicKey]);
     chatLocked = true; chatError = null; nodeType = 'group_thread'; listMode = 'normal'; participants = []; eventChatView = null; servedOrder = 'stored';
-    createAnswer = null; extraConvs = [];
+    createAnswer = null; startedIsListed = false; extraConvs = [];
     const { epoch, key } = await groupKeyring(node.as(ben.publicKey), ben, G, memoryGroupLockStore()).prepareToSeal();
     const id = crypto.randomUUID();
     const sealed = sealLine('Working bee Saturday 9am', { myEdPrivHex: ben.privateKey, groupKey: key, groupId: G, epoch, messageId: id });
@@ -589,11 +604,12 @@ describe('the node\'s answer to "start a DM" never makes a held group a DM (conf
         vi.stubGlobal('indexedDB', lockStoreUnreadable(mem));
         listMode = 'omit';
         createAnswer = { conversation: dmWithEve };
+        startedIsListed = true;
         render(<MessagesPage identity={me} />);
         fireEvent.click(await screen.findByText('✉️ New DM', {}, { timeout: 5000 }));
         fireEvent.click(await screen.findByText('Eve', {}, { timeout: 5000 }));
         await waitFor(() => expect(createConversationApi).toHaveBeenCalled(), { timeout: 5000 });
-        extraConvs = [dmWithEve];
+        expect(extraConvs).toEqual([dmWithEve]);
         const composer = await screen.findByPlaceholderText('Message...', {}, { timeout: 5000 });
         await waitFor(() => expect(getConversationMessages).toHaveBeenCalledWith(D), { timeout: 5000 });
         expect(isKnownDmConversation(D)).toBe(false);

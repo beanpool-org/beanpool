@@ -8,7 +8,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import {
-    addressCardDigest, addressCardFromText, addressCardLink, addressCardVerifies, openOutsideLine, outsideReceiptPayload,
+    addressCardDigest, addressCardFromText, addressCardLink, addressCardVerifies, homeTail, openOutsideLine, outsideReceiptPayload, HOME_LINE_MAX,
     sealOutsideLine, signAddressCard, OutsideLineNotVerifiedError, type AddressCard,
 } from '../outside-chat.js';
 import { relayConversationId, relayPayloadHash, signRelayEnvelope, type RelayEnvelope } from '../relay-envelope.js';
@@ -134,5 +134,49 @@ describe('a line across communities', () => {
 
     it('a receipt is the mailbox\'s {"v":1,"items":[ids]}, each id once', () => {
         expect(outsideReceiptPayload(['a1b2c3d4e5', 'a1b2c3d4e5', 'f6e5d4c3b2'])).toBe('{"v":1,"items":["a1b2c3d4e5","f6e5d4c3b2"]}');
+    });
+});
+
+describe('a home, short enough for a list\'s line (homeTail; PR #3168 round-3 note)', () => {
+    // One table: the home, what the line shows. A cut drops whole labels from the front only, so the end (the real domain)
+    // shows in full and nothing after the "…" is half a label.
+    const CASES: Array<[string, string]> = [
+        ['riverside.example', 'riverside.example'],
+        ['coop.example.org:8443', 'coop.example.org:8443'],
+        ['203.0.113.200:65535', '203.0.113.200:65535'],
+        // 48 characters: whole.
+        [`${'a'.repeat(36)}.example.org`, `${'a'.repeat(36)}.example.org`],
+        // Too long: the front label goes, the last three stay.
+        ['hilltop-market-and-tool-library-cooperative-of-the-north-coast.riverside.example', 'hilltop-market-and-tool-library-cooperative-of-the-north-coast.riverside.example'],
+        ['hilltop-market-and-tool-library-cooperative.north-coast.riverside.example.org', '…north-coast.riverside.example.org'],
+        // A front label that only half fits is dropped whole, never cut: never `…mybank.example` for `evil-mybank.example`.
+        ['a-very-long-prefix-made-to-look-like-evil-mybank.example', 'a-very-long-prefix-made-to-look-like-evil-mybank.example'],
+        ['x.y.a-very-long-prefix-made-to-look-like-evil-mybank.example.org', '…a-very-long-prefix-made-to-look-like-evil-mybank.example.org'],
+        // The last three labels stay however long (a two-label suffix): longer than the line's 48, never cut.
+        [`${'r'.repeat(60)}.co.uk`, `${'r'.repeat(60)}.co.uk`],
+        [`shop.${'r'.repeat(60)}.co.uk`, `…${'r'.repeat(60)}.co.uk`],
+        // With a port: the port rides on the last label.
+        ['the-long-name-of-a-community-garden-and-its-shed.hills.example:8443', 'the-long-name-of-a-community-garden-and-its-shed.hills.example:8443'],
+        ['the-long-name-of-a-community-garden-and-its-shed.green.hills.example:8443', '…green.hills.example:8443'],
+        // IPv6 has no dots: never cut.
+        ['[2001:db8:1234:5678:9abc:def0:1234:5678]:8443', '[2001:db8:1234:5678:9abc:def0:1234:5678]:8443'],
+    ];
+    it.each(CASES)('%s shows as %s', (home, shown) => {
+        const out = homeTail(home);
+        expect(out).toBe(shown);
+        // Whatever shows ends with the home's own end and is a run of its whole labels after the "…".
+        expect(home.endsWith(out.replace(/^…/, ''))).toBe(true);
+        if (out.startsWith('…')) {
+            expect(home.endsWith(`.${out.slice(1)}`), 'cut at a dot, between whole labels').toBe(true);
+            expect(out.slice(1).split('.').length, 'the last three labels at least').toBeGreaterThanOrEqual(3);
+            if (out.slice(1).split('.').length > 3) expect(out.length, 'a cut past three labels fits the line').toBeLessThanOrEqual(HOME_LINE_MAX);
+        } else {
+            expect(out).toBe(home);
+        }
+    });
+
+    it('takes as many whole labels as fit, from the end', () => {
+        expect(homeTail('aaaa.bbbb.cccc.dddd.eeee.example.org', 22)).toBe('…dddd.eeee.example.org');
+        expect(homeTail('aaaa.bbbb.cccc.dddd.eeee.example.org', 21)).toBe('…eeee.example.org');
     });
 });

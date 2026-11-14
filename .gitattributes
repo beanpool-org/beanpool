@@ -1,0 +1,6 @@
+# Word catalogs merge per key through scripts/words-merge-3way.mjs (its header, "AS GIT'S MERGE DRIVER"). A checkout needs
+# the driver named once: git config merge.beanpool-words.driver 'node scripts/words-merge-3way.mjs --driver %O %A %B %P'
+# (scripts/lanes/lib.sh sets it; scripts/sync-pr.sh passes it itself). Without that line git merges them as text, as before.
+# GitHub's own merges (the merge queue, "Update branch") never run a custom driver.
+apps/*/words/*.json merge=beanpool-words
+packages/*/words/*.json merge=beanpool-words

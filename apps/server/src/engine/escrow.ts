@@ -419,9 +419,6 @@ export function requestPost(
     }
 
     const author = getMember(db, post.author_pubkey);
-    if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
-        throw new Error(word('Daily Pulse inspirational posts cannot be requested or transacted'));
-    }
     if (post.type === 'poll' || post.type === 'event' || post.type === 'knowledge') {
         // Local knowledge is a page, never a listing (DESIGN-local-knowledge-fable.md §2.3): refused by name, never read as a Need.
         throw new Error(post.type === 'event' ? 'Events cannot be requested or transacted' : post.type === 'knowledge' ? 'Local knowledge cannot be requested or transacted' : 'Polls cannot be requested or transacted');
@@ -1061,10 +1058,6 @@ export function offerHoldChecks(
     // A standing deal's payee may go on holiday while it runs (DESIGN-standing-deals-fable §2.5).
     if (!opts.scheduled && isOnHoliday(post.authorPublicKey)) throw new Error(word('This member is away (holiday mode) and not trading right now.'));
 
-    const author = getMember(db, post.authorPublicKey);
-    if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
-        throw new Error(word('Daily Pulse inspirational posts cannot be requested or transacted'));
-    }
     if (post.type === 'poll' || post.type === 'event' || post.type === 'knowledge') {
         // Local knowledge is a page, never a listing (DESIGN-local-knowledge-fable.md §2.3): refused by name, never read as a Need.
         throw new Error(post.type === 'event' ? 'Events cannot be requested or transacted' : post.type === 'knowledge' ? 'Local knowledge cannot be requested or transacted' : 'Polls cannot be requested or transacted');

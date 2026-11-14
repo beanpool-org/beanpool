@@ -2111,6 +2111,32 @@ CREATE TABLE IF NOT EXISTS contact_copies (
     updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- A re-keyed member's old locked contacts list (scratch/fable-design/DESIGN-private-contacts-fable.md §6.2, slice C6):
+-- locked under the key the member had before an admin re-keyed them, so neither the new key nor this server can open it;
+-- only that key's old 12 words can, on the member's phone. Kept a year beside the new key in case those words turn up
+-- (engine/contact-copies.ts), at most one per member, read and deleted only by the member's key now (routes/contacts.ts
+-- GET/DELETE /api/contacts/former). Written only by a re-key (engine/key-move.ts), as the old key's row was sent; deleted
+-- with a tombstone after `kept_until`, on the member's DELETE, when they stop being a member here, or when the owners
+-- switch the community's copies off. Born empty: no existing row is read or moved.
+CREATE TABLE IF NOT EXISTS contact_copies_former (
+    owner_pubkey   TEXT PRIMARY KEY,
+    -- The key the copy is locked under and signed by: the one its header names.
+    former_pubkey  TEXT NOT NULL,
+    seq            INTEGER NOT NULL CHECK (seq >= 1),
+    padded_size    INTEGER NOT NULL CHECK (padded_size >= 16384 AND padded_size <= 524288 AND padded_size % 16384 = 0),
+    saved_at       TEXT NOT NULL,
+    nonce          TEXT NOT NULL,
+    sealed         TEXT NOT NULL,
+    digest         TEXT NOT NULL,
+    header         TEXT NOT NULL,
+    signature      TEXT NOT NULL,
+    -- A year after the re-key that kept it (ISO 8601): no longer served after it, then deleted.
+    kept_until     TEXT NOT NULL,
+    created_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- A holder of a key who stopped being an owner or admin (engine/names-list.ts reconcileHolders): marked once, logged
 -- once, and no longer counted as holding it. While a holder of the current key is marked, nothing is written until an
 -- admin who holds it makes a new generation (the write freeze, 409 `new_key_first`).

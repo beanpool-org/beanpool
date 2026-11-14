@@ -7,7 +7,7 @@
 // same edit stored any JSON type in title, description, category, priceType, lat and lng.
 //
 // Every post is made through state-engine `createPost` and edited through state-engine `updatePost` (the marketplace
-// routes, the enterprise's own routes, events, the Daily Pulse), and both ask this before anything else. A refusal is
+// routes, the enterprise's own routes, events), and both ask this before anything else. A refusal is
 // a plain Error, which each route answers as 400, and nothing is written.
 
 // LENGTH LIMITS ON THE TEXT (#1493, global launch). Until then the request body (2 MB) was the only bound, and every list

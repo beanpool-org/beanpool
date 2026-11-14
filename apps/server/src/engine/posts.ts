@@ -565,7 +565,7 @@ export function createPost(
         tags?: unknown;
         /** The tags its author typed, at most 5 (post-fields.ts assertFreeTags). */
         freeTags?: unknown;
-        /** Allowed only for system-created internal posts like Daily Pulse. */
+        /** No photo needed: for the server's own callers only (tests); no route passes it. */
         allowNoPhoto?: boolean;
         /** A member's copy from their own community (engine/event-copy.ts copyOfRequest): no chat, no activity line. */
         shownCopy?: CopyColumns | null;

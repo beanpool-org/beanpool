@@ -218,7 +218,7 @@ test('each reason to leave a PR out names it, and the others still go', () => wo
     w.pr(7, { diffUnreadable: true });
     w.pr(8, { files: [] });
     const r = plan(w, 1, 2, 3, 4, 5, 6, 7, 8, 80);
-    for (const line of ['#2 already merged', '#3 left out: a draft', '#4 left out: based on other, not main', '#5 left out: conflicts with main', '#6 left out: labels unreadable', '#7 left out: changes unreadable', '#8 left out: changes unreadable', '#80 left out: PR unreadable', 'queue 1']) assert.ok(r.out.includes(line), `${line}\n${r.out}`);
+    for (const line of ['#2 already merged', '#3 left out: a draft', '#4 left out: based on other, not main', '#5 left out: conflicts with main: sync the branch (scripts/sync-pr.sh 5 merges', '#6 left out: labels unreadable', '#7 left out: changes unreadable', '#8 left out: changes unreadable', '#80 left out: PR unreadable', 'queue 1']) assert.ok(r.out.includes(line), `${line}\n${r.out}`);
 }));
 
 test('a head that is not the cleared one is left out; the cleared head, whole or short, goes', () => world((w) => {

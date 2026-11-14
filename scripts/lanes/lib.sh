@@ -218,7 +218,18 @@ lane_sweep_orphans(){ # [--kill] — test runners reparented to launchd (PPID 1)
   (( n )) || print "no orphaned test runners older than $((LANE_ORPHAN_MIN_SECS/60)) min"; }
 
 # ── Worktrees ────────────────────────────────────────────────────────────────────────────────────────────────
+# Word catalogs merge per key in every merge a lane makes (15 Nov: most sync rounds were catalog-only). .gitattributes
+# names the driver; this names its command (scripts/words-merge-3way.mjs, "AS GIT'S MERGE DRIVER"). The config is the
+# repository's, shared by every worktree, so it is written only when it differs. The path is relative: git runs a driver
+# from the top of the worktree doing the merge, so each worktree uses its own copy of the script.
+LANE_WORDS_DRIVER='node scripts/words-merge-3way.mjs --driver %O %A %B %P'
+lane_words_driver(){
+  [ "$(git -C "$LANE_REPO" config --get merge.beanpool-words.driver)" = "$LANE_WORDS_DRIVER" ] && return 0
+  git -C "$LANE_REPO" config merge.beanpool-words.name 'BeanPool word catalogs, per key' \
+    && git -C "$LANE_REPO" config merge.beanpool-words.driver "$LANE_WORDS_DRIVER" \
+    || { log "⚠ could not name the word-catalog merge driver: catalogs merge as text"; return 1; }; }
 lane_fresh(){ # put the lane worktree on current origin/<base> (creating it if needed)
+  lane_words_driver
   if [ ! -d "$LANE_WT" ]; then
     git -C "$LANE_REPO" fetch -q origin && git -C "$LANE_REPO" worktree add -q --detach "$LANE_WT" "origin/$LANE_BASE" \
       || { log "⚠ could not create the lane worktree $LANE_WT"; return 1; }

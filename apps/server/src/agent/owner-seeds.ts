@@ -39,7 +39,6 @@ import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes } from '../engine/photo-upload-budget.js';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getProfileSwitches } from '../config/node-profile.js';
-import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { cleanMemberText, fence, MEMBER_TEXT_NOTICE } from './fence.js';
 import { admitAgentCreate, agentPostsPerDay, AGENT_LIST_MAX, returnAgentCreate } from './limits.js';
 import {
@@ -185,7 +184,6 @@ async function createGroupPost(grant: AgentGrant, args: Record<string, unknown>)
                 returnAgentCreate(grant.id);
                 return { ok: false, error: 'The post could not be made.' };
             }
-            syncPulseMarketplaceGate();
             return {
                 ok: true, rows: 1,
                 result: {

@@ -217,3 +217,5 @@ export * from './contacts-crypto.js';
 export * from './contacts-list.js';
 export * from './contacts-vcard.js';
 export * from './contacts-invite.js';
+// After a re-key (slice C6): the old contacts list's words, both apps.
+export * from './contacts-former-words.js';

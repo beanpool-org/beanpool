@@ -114,15 +114,37 @@ function nfc(text: string): string {
     try { return text.normalize('NFC'); } catch { return text; }
 }
 
+/** A letter of the Greek block (U+0370–U+03FF). No other of the 25 languages is written in it. */
+const GREEK_LETTER = /[\u0370-\u03ff]/;
+/** A Greek letter with its tonos (U+0301) or dialytika (U+0308) after it, as NFD writes them: Greek's own capitals drop them. */
+const GREEK_LETTER_MARKED = /([\u0370-\u03ff])(?:\u0301|\u0308)+/g;
+
 /**
- * Lower case that holds in every language at once. Turkish writes I as the capital of ı and İ as the capital of i; every
- * other language writes I as the capital of i. The default lower case (plainWords, and freeTagStored, the form the apps send)
- * makes "BALIK" (Turkish balık) "balik" and "İncir" an i with a combining dot above, which nobody types. So i, ı and that
- * dotted i are one letter here, and case never matters in either rule: "incir", "İNCİR", "ıspanak", "ISPANAK", "BALIK".
- * This is case only: no other mark or letter is folded (ç, ş, ğ, ö, ü stay).
+ * Lower case that holds in every language at once: a label typed in its own language's capitals, read by the default lower
+ * case (plainWords, and freeTagStored, the form the apps send), comes to the same letters here as the label as written.
+ * - Turkish writes I as the capital of ı and İ as the capital of i; every other language writes I as the capital of i. The
+ *   default lower case makes "BALIK" (Turkish balık) "balik" and "İncir" an i with a combining dot above, which nobody
+ *   types. So i, ı and that dotted i are one letter here: "incir", "İNCİR", "ıspanak", "ISPANAK", "BALIK".
+ * - German capitals write ß as SS, so ß is ss here: "Süßkartoffel" and "SÜSSKARTOFFEL" are one word.
+ * - Greek capitals drop the tonos and the dialytika ("Λεμόνι" is "ΛΕΜΟΝΙ", "Λάιμ" is "ΛΑΪΜ"), so on a Greek letter both go
+ *   here. On Greek letters only: no other of the 25 languages is written in Greek letters, so a Greek key meets nobody
+ *   else's word, and "maïs" or "café" keep their marks.
+ * This is case only: no other mark or letter is folded (ç, ş, ğ, ö, ü, ã stay).
+ *
+ * The test for anything else that asks to join caseless (Fable, 15 Nov, DECISION-tags-turkish-dotless.md): a label typed in
+ * its own language's capitals must come back from the default lower case as different letters. ø, ł, đ, œ, æ and every
+ * accent a member leaves off fail that test and stay out: across languages, a fold makes one language's word another's.
  */
 function caseless(text: string): string {
-    return text.replace(/ı/g, 'i').replace(/i\u0307/g, 'i');
+    const out = text.replace(/ı/g, 'i').replace(/i\u0307/g, 'i').replace(/ß/g, 'ss');
+    if (!GREEK_LETTER.test(out)) return out;
+    // Guarded as tagText's normalize: an engine without it keeps the Greek marks.
+    try { return out.normalize('NFD').replace(GREEK_LETTER_MARKED, '$1').normalize('NFC'); } catch { return out; }
+}
+
+/** A text's words in lower case, NFC, every mark and letter kept, as written and with each compound joined. */
+function writtenForms(text: string): string[] {
+    return formsBy(nfc(text), (t) => nfc(plainWords(t).join(' ')));
 }
 
 /**
@@ -134,6 +156,16 @@ function caseless(text: string): string {
  */
 export function exactTagForms(text: string): string[] {
     return formsBy(nfc(text), (t) => caseless(nfc(plainWords(t).join(' '))));
+}
+
+/**
+ * Of a text's exactTagForms, the ones only caseless made: forms its own lower case does not write ("internet" of Turkish
+ * "İnternet", "süsskartoffel" of "Süßkartoffel", "λεμονι" of "Λεμόνι"). The node's map lets a label that writes such a form
+ * as it is (English "Internet") hold it before a form born from case (apps/server engine/free-tags.ts labelMapOf).
+ */
+export function caseBornTagForms(text: string): string[] {
+    const written = writtenForms(text);
+    return exactTagForms(text).filter((form) => !written.includes(form));
 }
 
 /** The words of one language turned into tag ids. */

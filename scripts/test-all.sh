@@ -408,7 +408,8 @@ run_check "fail_summary" bash scripts/test-failing-tests-summary.sh
 # A Mac's run rests on this script's green record, scripts/test-all-merge-check.sh and scripts/test-all-pr.sh, and
 # on check-deps-installed.mjs telling a stale install from broken code. This runs all four against a throwaway
 # repository with a stub `gh` (no GitHub, no network). A few seconds.
-run_check "merge_gate" bash scripts/test-merge-gate.sh
+# scripts/sync-pr.test.mjs: scripts/sync-pr.sh and the word-catalog merge driver against a throwaway origin and a stub gh.
+run_check "merge_gate" bash -c 'bash scripts/test-merge-gate.sh && node --test scripts/sync-pr.test.mjs'
 
 # Undeclared imports & dependency boundary guard. Ensures every bare module import in each package the
 # Dockerfile builds — core, engine, PWA, manager and the server (its src/test-*.ts included, because the

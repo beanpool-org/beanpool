@@ -1373,6 +1373,8 @@ async function main(): Promise<void> {
             'POST /api/forum/first-looks/:id/ok', 'POST /api/forum/first-looks/:id/no', 'POST /api/forum/first-looks/:id/withdraw',
             // Notices (slice F5): a topic's bell (follow, mute, neither) and how far its reader read; both signed.
             'POST /api/forum/topics/:id/follow', 'POST /api/forum/topics/:id/read',
+            // Search (slice F6): a member's, signed, counted against their day's searches.
+            'GET /api/forum/search',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',
@@ -1484,6 +1486,8 @@ async function main(): Promise<void> {
             'POST /api/messages/send',
             // A member's locked contacts list (routes/contacts.ts): the signer's own copy only.
             'GET /api/contacts/copy', 'PUT /api/contacts/copy', 'DELETE /api/contacts/copy',
+            // A re-keyed member's old contacts list (routes/contacts.ts, contacts C6): the signer's own only.
+            'GET /api/contacts/former', 'DELETE /api/contacts/former',
             'GET /api/names/copy', 'PUT /api/names/copy', 'POST /api/names/confirmations', 'POST /api/names/confirmations/:id/revoke', 'POST /api/names/confirmations/:id/second',
             'GET /api/names/entries', 'POST /api/names/entries', 'DELETE /api/names/entries/:id', 'PUT /api/names/entries/:id',
             'POST /api/names/entries/:id/invite', 'DELETE /api/names/entries/:id/invite', 'GET /api/names/invites',

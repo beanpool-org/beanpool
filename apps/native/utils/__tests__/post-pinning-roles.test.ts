@@ -128,7 +128,7 @@ describe('marketPins: the pinned block, one rule for the screen and this test', 
         expect(r.pinned.map(p => p.id)).toEqual(['p1']);
         expect(r.realMatchingCount).toBe(1);
     });
-    it('a post the screen says is not visible (the Daily Pulse) is never pinned', () => {
+    it('a post the screen says is not visible is never pinned', () => {
         const r = run({}, { visible: p => p.id !== 'p2' });
         expect(r.pinned.map(p => p.id)).toEqual(['p3', 'p1', 'p4']);
     });

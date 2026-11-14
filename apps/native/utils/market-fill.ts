@@ -8,7 +8,7 @@
  * a read of the whole node already), not under Events, a group, or a picked distance, which narrow the list on purpose.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { isNodePulsePost, READ_TIMEOUT_MS, wantsFill, word } from '@beanpool/core';
+import { READ_TIMEOUT_MS, wantsFill, word } from '@beanpool/core';
 import type { NodeProfile } from './node-profile';
 import { EVENT_TYPES_QUERY } from './events';
 import { marketSecondRow, type MarketTypeFilter } from './market-filters';
@@ -17,7 +17,7 @@ import { marketSecondRow, type MarketTypeFilter } from './market-filters';
 export const ELSEWHERE_HEADING = word('Newest from elsewhere');
 
 /** Re-exported so callers can import from here or core. */
-export { READ_TIMEOUT_MS, isNodePulsePost };
+export { READ_TIMEOUT_MS };
 
 /** The node's page, which is the most the fill holds (core FILL_MAX). */
 const READ_LIMIT = 50;
@@ -85,12 +85,12 @@ export interface FillInputs {
     shownNear: number | readonly any[];
 }
 
-/** Whether the list is to be filled from elsewhere. The node's own Daily Pulse post is never counted as a nearby listing. */
+/** Whether the list is to be filled from elsewhere. */
 export function fillWanted(i: FillInputs): boolean {
     const nearCount = typeof i.shownNear === 'number'
         ? i.shownNear
         : Array.isArray(i.shownNear)
-        ? i.shownNear.filter(p => !isNodePulsePost(p)).length
+        ? i.shownNear.length
         : 0;
     return !!i.profile?.features?.nearbyListings && i.member && i.ready && !i.noArea && !i.searching
         && i.filter !== 'events' && !i.groupFiltered && !i.distancePicked && wantsFill(nearCount);

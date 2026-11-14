@@ -79,8 +79,6 @@ interface Props {
 
 export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', isOwnPost, distanceKm, beansMarked = false, dealChip = null, popUp = false }: Props) {
     const categoryConfig = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
-    const isPulse = post.authorCallsign === 'Daily Pulse' || (post as any).author_callsign === 'Daily Pulse';
-    const emoji = isPulse ? '🗞️' : (categoryConfig?.emoji ?? '📦');
 
     const nodeBadge = formatNodeName(
         remoteNode || (post as any)?._remoteNode || (post as any)?.originNode,
@@ -123,13 +121,13 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const copy = eventCopyOf(post);
     // The price and the founding-trade chip are Beans: neither shows where Beans are marked (`beansMarked`). A copy's `credits`
     // is 0 and no price: its line says what it is at home.
-    const showPrice = !isPulse && !beansMarked && !copy;
+    const showPrice = !beansMarked && !copy;
     // A listing priced at 0 reads "Free" (core listing-price.ts, the one rule both apps read), in the price's own place: no Beans
     // sign and no unit, and a screen reader reads "Free", not "0 B".
     const freePrice = showPrice ? freePriceWords(post.price_c, post.type) : null;
     // An Offer priced for each one (core per-item.ts, DESIGN-per-item-price-fable.md §2.1): "300 🫘 each" in the price's place and
     // how many are left (and the price for all of them while it is on offer) as its own phrases. Where the price is not shown (a
-    // copy, Beans off, the Pulse) there is no count either. Any other listing reads as it always did.
+    // copy, Beans off) there is no count either. Any other listing reads as it always did.
     const each = showPrice ? perItemCard(post) : null;
     const foundingChip = !!post.authorFoundingNeeded && !beansMarked;
 
@@ -188,9 +186,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const groupScopeBadge = isGroupScope ? t('🔒 Only {group} can see this', { group: targetGroupName }) : null;
     const authorName = post.authorCallsign || t('Anonymous');
     const copyLine = copy && <p data-testid="listing-copy-line" className="m-0 mt-0.5 text-xs font-semibold text-nature-700 dark:text-nature-300 break-words">{copyPriceLine(copy)}</p>;
-    const elderStyleList = isPulse
-        ? 'border-2 border-amber-400/80 dark:border-amber-500/70 shadow-[0_4px_20px_rgba(245,158,11,0.15)] bg-amber-50/20 dark:bg-amber-950/20'
-        : elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.1)]' : '';
+    const elderStyleList = elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.1)]' : '';
 
     if (viewMode === 'compact') {
         // The compact row, on the Market's style box (components/market-card-shell.ts COMPACT_*, slice C1): the same row an
@@ -204,9 +200,9 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {/* Compact Category Picture / Tile */}
                     <div className={COMPACT_PICTURE}>
                         {displayImage ? (
-                            cardPicture(<CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />)
+                            cardPicture(<CategoryTile category={post.category} kind={post.type === 'event' ? 'event' : 'listing'} size="thumb" />)
                         ) : (
-                            <CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />
+                            <CategoryTile category={post.category} kind={post.type === 'event' ? 'event' : 'listing'} size="thumb" />
                         )}
                     </div>
 
@@ -266,16 +262,10 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         </span>
                     )}
 
-                    {/* Daily Pulse or Needs/Offers: the box's one chip (10/800), its capitals from the words */}
-                    {isPulse ? (
-                        <span data-testid="compact-type-chip" className={chip('warn')}>
-                            {upperCase(t('PULSE'))}
-                        </span>
-                    ) : (
-                        <span data-testid="compact-type-chip" className={chip(post.type === 'offer' ? 'offer' : 'need')}>
-                            {upperCase(typeWords(post.type))}
-                        </span>
-                    )}
+                    {/* Needs/Offers: the box's one chip (10/800), its capitals from the words */}
+                    <span data-testid="compact-type-chip" className={chip(post.type === 'offer' ? 'offer' : 'need')}>
+                        {upperCase(typeWords(post.type))}
+                    </span>
                 </div>
             </div>
         );
@@ -286,11 +276,11 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
         // the photo flush under the card's left corners and the card's full height, the text beside it with 12 of padding,
         // the chips the one chip in the box's order (type · PINNED · YOU · category · RECURRING · CASH TOO · PAUSED · group ·
         // deal) with the price at the row's end, the title, who, and how far. The card takes the height its lines need.
-        const tileKind = isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing');
+        const tileKind = post.type === 'event' ? 'event' : 'listing';
         return (
             <div
                 data-testid="listing-list-card"
-                className={`${listCard({ pulse: isPulse, elder: elderCard })} cursor-pointer transition-shadow duration-300 hover:shadow-md`}
+                className={`${listCard({ elder: elderCard })} cursor-pointer transition-shadow duration-300 hover:shadow-md`}
             >
                 {/* The picture: the first thing in the card, so the card's own corners round it. */}
                 <div data-testid="listing-list-photo" className={LIST_PHOTO}>
@@ -320,11 +310,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             </span>
                         )}
                         <span data-testid="listing-list-chips" className="[&>span]:me-1 [&>span]:mb-1 [&>span]:align-top">
-                            {isPulse ? (
-                                <span className={chip('warn')}>{upperCase(t('🗞️ Daily Pulse'))}</span>
-                            ) : (
-                                <span className={chip(post.type === 'offer' ? 'offer' : 'need')}>{upperCase(typeWords(post.type))}</span>
-                            )}
+                            <span className={chip(post.type === 'offer' ? 'offer' : 'need')}>{upperCase(typeWords(post.type))}</span>
                             {isPinned && (
                                 <span data-testid="card-pinned-chip" className={chip('pinned')}>{t('📌 PINNED')}</span>
                             )}
@@ -400,9 +386,9 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     // A lattice: the photo 4:3 flush at the top, then a text block of exactly four rows, and the tile fills its cell, so every
     // tile in a row is the same height whatever it holds. On the photo: the type chip top-left, and at its foot the status
     // chip, 📌 PINNED and the price (the phone's foot row). Under it: the title (rows 1 and 2, two reserved), who (row 3), and
-    // row 4, one line: how far, then at most one chip by deal › paused › group lock › RECURRING. The Pulse tile: its title, its
-    // pill, one line of its news. Nothing is cut from what a member reads: the page a tap opens says it all.
-    const tileKind = isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing');
+    // row 4, one line: how far, then at most one chip by deal › paused › group lock › RECURRING. Nothing is cut from what a
+    // member reads: the page a tap opens says it all.
+    const tileKind = post.type === 'event' ? 'event' : 'listing';
     const rowChip = (() => {
         if (dealChip) {
             return <span data-testid="card-deal-chip" className={gridChip(dealChip === 'in-trust' ? 'ok' : 'warn')}>{upperCase(listingChipWords(dealChip))}</span>;
@@ -417,7 +403,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
         return null;
     })();
     return (
-        <div data-testid="listing-grid-tile" className={`${gridTile({ pulse: isPulse, elder: elderCard })} cursor-pointer transition-shadow duration-300 hover:shadow-md`}>
+        <div data-testid="listing-grid-tile" className={`${gridTile({ elder: elderCard })} cursor-pointer transition-shadow duration-300 hover:shadow-md`}>
             {/* 4:3 Media Box at Card Top (edge to edge, radius 14) */}
             <div className={GRID_PHOTO}>
                 {displayImage ? (
@@ -426,14 +412,12 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     <CategoryTile category={post.category} kind={tileKind} size="grid" />
                 )}
 
-                {/* Top-leading: the type chip (unless pulse) */}
-                {!isPulse && (
-                    <div className="absolute top-2 left-2">
-                        <span className={chip(post.type === 'offer' ? 'offer' : 'need')}>
-                            {upperCase(typeWords(post.type))}
-                        </span>
-                    </div>
-                )}
+                {/* Top-leading: the type chip */}
+                <div className="absolute top-2 left-2">
+                    <span className={chip(post.type === 'offer' ? 'offer' : 'need')}>
+                        {upperCase(typeWords(post.type))}
+                    </span>
+                </div>
 
                 {/* Top-trailing: Remote node badge if any */}
                 {nodeBadge && (
@@ -488,48 +472,30 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {post.title}
                 </h3>
 
-                {isPulse ? (
-                    <>
-                        {/* Row 3: the Pulse's pill; row 4: one line of its news */}
-                        <div className={GRID_ROW}>
-                            <span className={gridChip('warn')}>{upperCase(t('🗞️ Daily Pulse'))}</span>
-                        </div>
-                        <div className={GRID_ROW}>
-                            {post.description && (
-                                <p dir="auto" className={`m-0 min-w-0 truncate text-xs ${CARD_INK.secondary}`}>
-                                    {post.description}
-                                </p>
-                            )}
-                        </div>
-                    </>
-                ) : (
-                    <>
-                        {/* Row 3: who (or, for a member's copy on the global community, its price at home) */}
-                        <div className={GRID_ROW}>
-                            {copy ? (
-                                <p data-testid="listing-copy-line" className="m-0 min-w-0 truncate text-xs font-semibold text-nature-700 dark:text-nature-300">{copyPriceLine(copy)}</p>
-                            ) : (
-                                <PostAuthorTrust
-                                    callsign={authorName}
-                                    energyCycled={authorEnergy}
-                                    rating={authorRating}
-                                    avatarUrl={authorAvatarUrl}
-                                    publicKey={post.authorPublicKey}
-                                    mode="compact"
-                                    showTier={!beansMarked}
-                                    isFounding={!beansMarked && !!post.authorFoundingNeeded}
-                                    className="min-w-0 flex-1"
-                                />
-                            )}
-                        </div>
+                {/* Row 3: who (or, for a member's copy on the global community, its price at home) */}
+                <div className={GRID_ROW}>
+                    {copy ? (
+                        <p data-testid="listing-copy-line" className="m-0 min-w-0 truncate text-xs font-semibold text-nature-700 dark:text-nature-300">{copyPriceLine(copy)}</p>
+                    ) : (
+                        <PostAuthorTrust
+                            callsign={authorName}
+                            energyCycled={authorEnergy}
+                            rating={authorRating}
+                            avatarUrl={authorAvatarUrl}
+                            publicKey={post.authorPublicKey}
+                            mode="compact"
+                            showTier={!beansMarked}
+                            isFounding={!beansMarked && !!post.authorFoundingNeeded}
+                            className="min-w-0 flex-1"
+                        />
+                    )}
+                </div>
 
-                        {/* Row 4: how far, then at most one chip; blank when there is nothing to say */}
-                        <div data-testid="grid-row-4" className={GRID_ROW}>
-                            {distanceTag}
-                            {rowChip}
-                        </div>
-                    </>
-                )}
+                {/* Row 4: how far, then at most one chip; blank when there is nothing to say */}
+                <div data-testid="grid-row-4" className={GRID_ROW}>
+                    {distanceTag}
+                    {rowChip}
+                </div>
             </div>
         </div>
     );

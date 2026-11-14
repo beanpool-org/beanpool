@@ -24,9 +24,22 @@ const sam = 'ab'.repeat(32);
 
 let seen: string[] = [];
 let kept: ContactsCopyWire | null = null;
+// After a re-key (C6): the old copy this community keeps for the member's key now, or none.
+let former: Record<string, unknown> | null = null;
+// What the old copy's DELETE answers: 200 removes it; anything else keeps it.
+let formerDeleteStatus = 200;
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 function community(url: string, init: RequestInit = {}): Response {
     seen.push(`${init.method ?? 'GET'} ${url} ${JSON.stringify(init.headers ?? {})} ${typeof init.body === 'string' ? init.body : ''}`);
+    if (url.endsWith('/api/contacts/former')) {
+        if (init.method === 'DELETE') {
+            if (formerDeleteStatus !== 200) return json(formerDeleteStatus, { error: 'Service unavailable' });
+            const had = !!former;
+            former = null;
+            return json(200, { deleted: had });
+        }
+        return former ? json(200, former) : json(404, { code: 'no_former' });
+    }
     if (!url.endsWith('/api/contacts/copy')) return json(404, { error: 'no route' });
     if ((init.method ?? 'GET') === 'GET') return kept ? json(200, kept) : json(404, { code: 'no_copy' });
     const body = JSON.parse(String(init.body)) as ContactsCopyWire;
@@ -51,6 +64,8 @@ async function pick(file: File) {
 beforeEach(async () => {
     seen = [];
     kept = null;
+    former = null;
+    formerDeleteStatus = 200;
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => community(url, init)));
     resetContactsStoreForTest();
@@ -226,6 +241,57 @@ describe('Contacts on the web', () => {
         fireEvent.click(within(note).getByRole('button', { name: 'Save now' }));
         await waitFor(() => expect(screen.queryByTestId('contacts-sign-out')).toBeNull());
         expect(kept).not.toBeNull();
+    });
+
+    it('after a re-key (C6): while this community keeps the old locked list, the list says so and points to the phone app; not otherwise', async () => {
+        const first = render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
+        await waitFor(() => expect(seen.some((s) => s.startsWith('GET ') && s.includes('/api/contacts/former'))).toBe(true));
+        expect(screen.queryByTestId('contacts-former')).toBeNull();
+        first.unmount();
+        former = { header: 'h', signature: 's', nonce: 'n', sealed: 'x', formerKey: 'cd'.repeat(32), keptUntil: '2027-11-15T00:00:00.000Z' };
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
+        expect(await screen.findByTestId('contacts-former')).toHaveTextContent(
+            'Your contacts are locked with your old key. If you ever find your old 12 words, you can open them in the BeanPool phone app.');
+        // One signed GET, with no body: nothing about the list is sent.
+        expect(seen.filter((s) => s.includes('/api/contacts/former')).every((s) => s.startsWith('GET ') && s.endsWith(' '))).toBe(true);
+        // Mutation: drop the `former &&` guard → the sentence shows to every member.
+    });
+
+    it('after a re-key (C6): Delete the old copy asks first, then one signed DELETE with no body, and the sentence goes', async () => {
+        former = { header: 'h', signature: 's', nonce: 'n', sealed: 'x', formerKey: 'cd'.repeat(32), keptUntil: '2027-11-15T00:00:00.000Z' };
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
+        const card = await screen.findByTestId('contacts-former');
+        fireEvent.click(within(card).getByRole('button', { name: 'Delete the old copy' }));
+        // The phone's question, before anything is sent.
+        expect(card).toHaveTextContent('Delete your old contacts list?');
+        expect(card).toHaveTextContent("Only your old 12 words can open it. Once it's deleted, nobody can ever open it again.");
+        expect(seen.some((s) => s.startsWith('DELETE '))).toBe(false);
+        fireEvent.click(within(card).getByRole('button', { name: 'Cancel' }));
+        expect(seen.some((s) => s.startsWith('DELETE '))).toBe(false);
+        fireEvent.click(within(card).getByRole('button', { name: 'Delete the old copy' }));
+        fireEvent.click(within(card).getByRole('button', { name: 'Delete it' }));
+        await waitFor(() => expect(screen.queryByTestId('contacts-former')).toBeNull());
+        const deletes = seen.filter((s) => s.startsWith('DELETE '));
+        expect(deletes).toHaveLength(1);
+        expect(deletes[0]).toContain('/api/contacts/former');
+        // Signed as every member request is (the signature headers), and nothing about the list sent.
+        expect(deletes[0]).toMatch(/signature/i);
+        expect(deletes[0].endsWith(' ')).toBe(true);
+        expect(former).toBeNull();
+        // Mutation: drop the Delete button (the reviewed head) → no way to clear the sentence on the web.
+    });
+
+    it('after a re-key (C6): a Delete this community did not confirm keeps the sentence and says the copy is still kept', async () => {
+        former = { header: 'h', signature: 's', nonce: 'n', sealed: 'x', formerKey: 'cd'.repeat(32), keptUntil: '2027-11-15T00:00:00.000Z' };
+        formerDeleteStatus = 503;
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
+        const card = await screen.findByTestId('contacts-former');
+        fireEvent.click(within(card).getByRole('button', { name: 'Delete the old copy' }));
+        fireEvent.click(within(card).getByRole('button', { name: 'Delete it' }));
+        expect(await within(card).findByRole('alert')).toHaveTextContent("This community didn't answer. Your old contacts list is still kept here. Try again later.");
+        expect(screen.getByTestId('contacts-former')).toHaveTextContent('Your contacts are locked with your old key.');
+        expect(former).not.toBeNull();
+        // Mutation: hide the sentence whatever the DELETE answers → it goes while the copy is still kept.
     });
 
     it('the ⓘ says the true sentence about encryption and never "all messages" or "by default"', () => {

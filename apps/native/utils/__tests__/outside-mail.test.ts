@@ -16,6 +16,8 @@
  *      written once, confirmed, and receipted to its sender's home, and nothing is left owed
  *  12  owed receipts: one per line, a refused one tried again behind the rest, none kept past 30 days, 200 ids a round at most
  *  13  typed words are never lost on a failed send: in the box, or kept as the line with its state
+ *  14  a first send with no home read here says the true reason: can't reach (offline, the deadline), had a problem (an
+ *      answer that is not the info), or knows none of its names (only when my server answered so)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
@@ -136,7 +138,7 @@ vi.mock('../member-statements', async () => {
 });
 
 import { outsideChatStore, gateIncoming, OUTSIDE_CHAT_TABLES_SQL, type OutsideChatState } from '../outside-chat-store';
-import { failUnsent, myHome, syncOutsideMail, sendFromBox, sendOutsideLine, setDoor, type OutsideMailContext } from '../outside-mail';
+import { failUnsent, myAddressCard, myHome, syncOutsideMail, sendFromBox, sendOutsideLine, setDoor, type OutsideMailContext } from '../outside-mail';
 
 const seedKey = () => { const seed = randomBytes(32); return { seed: bytesToHex(seed), key: bytesToHex(ed25519.getPublicKey(seed)) }; };
 const BEN = seedKey(), ANA = seedKey(), SOL = seedKey(), CY = seedKey();
@@ -696,5 +698,65 @@ describe('13  typed words are never lost on a failed send (PR #3168 review note)
         expect(card).toMatch(/sendFromBox\(/);
         expect(card).not.toMatch(/\bsetFirst\(\s*(''|""|\()/);
         expect(card).toMatch(/if \(kept\) router\.replace\(/);
+    });
+});
+
+describe('14  a first send on a phone that never read its home says the true reason (PR #3168 round-3 note)', () => {
+    const WORDS = 'Are the bikes still there?';
+    const KNOWS_NONE = "This community's server knows none of its own names yet, so it can't send to another community.";
+    const CANT_REACH = "This phone can't reach your community's server just now: no signal, or the server is down. Try again in a while.";
+    const HAD_A_PROBLEM = "Your community's server had a problem just now. Try again in a while.";
+    const realFetch = globalThis.fetch;
+    const aborted = (init?: RequestInit) => new Promise<Response>((_, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
+    // How my server's info answers (GET /api/community/info), on a phone with no home kept (a restore from 12 words).
+    const CASES: Array<{ what: string; info: (init?: RequestInit) => Promise<Response>; code: string; words: string; budgetMs?: number }> = [
+        { what: 'offline: no signal', info: async () => { throw new TypeError('Network request failed'); }, code: 'unreached', words: CANT_REACH },
+        { what: 'the send\'s deadline cuts the read', info: aborted, code: 'unreached', words: CANT_REACH, budgetMs: 40 },
+        { what: 'my server answered, and knows none of its names', code: 'no_home', words: KNOWS_NONE,
+            info: async () => new Response(JSON.stringify({ name: 'Riverside', primaryAddress: null }), { status: 200 }) },
+        { what: 'a proxy answered for my server (502, its own page)', code: 'home_unanswered', words: HAD_A_PROBLEM,
+            info: async () => new Response('<html>Bad gateway</html>', { status: 502 }) },
+        { what: 'my server answered 200, but not its info', code: 'home_unanswered', words: HAD_A_PROBLEM,
+            info: async () => new Response('<html>A captive page</html>', { status: 200 }) },
+    ];
+    for (const c of CASES) {
+        it(`${c.what}: "${c.words.slice(0, 40)}…", the words stay in the box`, async () => {
+            const chatId = relayConversationId(BEN.key, ANA.key);
+            await ctx.store.openChat(BEN.key, chatId, { key: ANA.key, home: ANA_HOME, name: 'Ana' });
+            sql.exec("DELETE FROM outside_meta WHERE k = 'home'");
+            globalThis.fetch = ((_url: string, init?: RequestInit) => c.info(init)) as any;
+            try {
+                let box = WORDS;
+                const r = await sendFromBox(ctx, chatId, WORDS, c.budgetMs ?? 5_000, () => { box = ''; });
+                expect(r.kept).toBe(false);
+                expect(box).toBe(WORDS);
+                expect(lineRows()).toEqual([]);
+                expect((r.error as any)?.code).toBe(c.code);
+                expect((r.error as Error).message).toBe(c.words);
+                // Nothing reached my server's mailbox: no line was made to send.
+                expect(server.batches).toEqual([]);
+                // Showing my card says the same.
+                if (c.code === 'no_home') expect(await myAddressCard(ctx)).toBeNull();
+                else await expect(myAddressCard({ ...ctx, signal: c.budgetMs ? AbortSignal.timeout(c.budgetMs) : undefined })).rejects.toMatchObject({ code: c.code, message: c.words });
+            } finally {
+                globalThis.fetch = realFetch;
+            }
+        });
+    }
+
+    it('a home read before is used while my server can\'t be reached or answers badly: the send goes', async () => {
+        const chatId = relayConversationId(BEN.key, ANA.key);
+        await ctx.store.openChat(BEN.key, chatId, { key: ANA.key, home: ANA_HOME, name: 'Ana' });
+        await ctx.store.setMeta('home', `${HOME} ${Date.now() - 2 * 60 * 60_000}`);   // stale: read again first
+        for (const info of [CASES[0].info, CASES[3].info, CASES[4].info]) {
+            globalThis.fetch = ((_url: string, init?: RequestInit) => info(init)) as any;
+            try {
+                const r = await sendFromBox(ctx, chatId, WORDS, 5_000, () => {});
+                expect(r).toEqual({ kept: true, error: null });
+            } finally {
+                globalThis.fetch = realFetch;
+            }
+        }
+        expect(server.sent.map((i: RelayItem) => i.envelope.senderHome)).toEqual([HOME, HOME, HOME]);
     });
 });

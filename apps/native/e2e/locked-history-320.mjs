@@ -61,7 +61,7 @@ const STUBS = {
         export const MaterialCommunityIcons = ({ size = 22, color }) => React.createElement(View, { style: { width: size, height: size, borderRadius: 4, backgroundColor: color, opacity: 0.6 } });
     `,
     'ThemeContext': `export const useTheme = () => globalThis.__theme;`,
-    'expo-router': `export const router = { back() {}, push() {}, replace() {} }; export const ErrorBoundary = () => null; export const useIsFocused = () => true;`,
+    'expo-router': `export const router = { back() {}, push() {}, replace() {} }; export const ErrorBoundary = () => null; export const useIsFocused = () => true; export const useLocalSearchParams = () => ({});`,
     'react-native-safe-area-context': `export const useSafeAreaInsets = () => ({ top: 24, bottom: 16, left: 0, right: 0 });`,
     // The keyboard library's scroll view is built on Reanimated worklets, which need the Babel worklets transform Metro runs and
     // this esbuild bundle does not (unstubbed it throws "global is not defined", then "not a worklet", and the screen draws

@@ -155,7 +155,9 @@ export default function OutsideChatScreen() {
                     <View style={styles.headerText}>
                         <Text style={styles.name} numberOfLines={1}>{name}</Text>
                         {chat && (
-                            <Text style={styles.from} numberOfLines={2}>
+                            // The whole home, and "name not confirmed here" after it, never cut: no line limit (a limit cuts
+                            // at the tail on Android, where the real domain and that warning are). A long home wraps.
+                            <Text style={styles.from} testID="outside-chat-from">
                                 {chat.peerName ? t('{community} · name not confirmed here', { community: chat.peerHome }) : chat.peerHome}
                             </Text>
                         )}

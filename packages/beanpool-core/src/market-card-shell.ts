@@ -65,12 +65,10 @@ export const MARKET_CARD_SHELL = {
     compactEndMaxPercent: 45,
     /** A compact row's shadow: lighter than a card's, a list of rows (what the phone's compact row has today). */
     compactShadow: { offsetY: 1, opacity: 0.02, blur: 1, elevation: 1 },
-    /** The two variants; no other band (the event's purple band is gone). */
+    /** The one variant; no other band (the event's purple band is gone). */
     variant: {
         /** An Elder's card: a left border in `trust.star`. */
         elderBorderLeft: 3,
-        /** Daily Pulse: a border in `feedback.warning.border` on the `tile.pulse.tint` ground. */
-        pulseBorder: 2,
     },
 } as const;
 

@@ -25,9 +25,10 @@
  *      takedown, a report-hide) × the uphold before the move, 3 or 8 days after it, with or without taking it down, or the
  *      report left open: the author's copy elsewhere is not offered until a week after the latest of the move and the
  *      uphold, nor ever while the report is open; the unreported control is offered after its own week
- *   9. "Did you mean …?" (slice F5): GET /api/free-tags?q= names the library tag a word is the label of in any of the 25
- *      languages: a Portuguese, Russian or Japanese label on a Spanish device, with or without its accents, a plural; none
- *      for a top's label, an unknown word, a word no listing could carry, two q's; members only; the map's size and heap
+ *   9. "Did you mean …?" (slice F5): GET /api/free-tags?q= names the library tag a word is exactly the label of in one of
+ *      the 25 languages, and that language: a Portuguese, German, Spanish, Russian or Japanese label, marks kept, any case,
+ *      typed decomposed, a plural; none for a word only a fold makes a label (cat, man, maca), a top's label, an unknown
+ *      word, a word no listing could carry, two q's; members only; the map's size and heap
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-free-tag-suggestions.ts
  */
@@ -566,35 +567,44 @@ async function main(): Promise<void> {
     const labels = libraryLabelCount();
     const buildMs = performance.now() - builtAt;
     const heapAfter = (globalThis as { gc?: () => void }).gc ? ((globalThis as { gc: () => void }).gc(), process.memoryUsage().heapUsed) : process.memoryUsage().heapUsed;
-    console.log(`  label map: ${labels} folded labels, built in ${buildMs.toFixed(0)} ms, heap ${((heapAfter - heapBefore) / 1024).toFixed(0)} KiB after${(globalThis as { gc?: unknown }).gc ? ' (gc before and after)' : ' (no --expose-gc: rough)'}`);
-    assert(labels > 5000, `the map holds every language's labels, folded (${labels})`);
-    for (const [q, want, why] of [
-        ['laranja', 'food.fruit.orange', 'a Portuguese label on a Spanish device'],
-        ['Laranjas', 'food.fruit.orange', 'its plural, any case'],
-        ['maçã', 'food.fruit.apple', 'a Portuguese label with its accents'],
-        ['maca', 'food.fruit.apple', 'the same without them'],
-        ['limão-siciliano', 'food.fruit.lemon', 'a Portuguese compound label'],
-        ['limão', 'food.fruit.lime', "Portuguese's own lime, not Spanish lemon"],
-        ['апельсин', 'food.fruit.orange', 'a Russian label'],
-        ['オレンジ', 'food.fruit.orange', 'a Japanese label'],
-        ['lemons', 'food.fruit.lemon', 'an English plural'],
+    console.log(`  label map: ${labels} exact labels, built in ${buildMs.toFixed(0)} ms, heap ${((heapAfter - heapBefore) / 1024).toFixed(0)} KiB after${(globalThis as { gc?: unknown }).gc ? ' (gc before and after)' : ' (no --expose-gc: rough)'}`);
+    assert(labels > 5000, `the map holds every language's labels, exact (${labels})`);
+    // Exact keys, marks kept (Fable, 15 Nov): the design's pinned maca → apple is now maçã → apple, and maca is no label.
+    for (const [q, want, lang, why] of [
+        ['laranja', 'food.fruit.orange', 'pt', 'a Portuguese label on a Spanish device'],
+        ['Laranjas', 'food.fruit.orange', 'pt', 'its plural, any case'],
+        ['maçã', 'food.fruit.apple', 'pt', 'a Portuguese label with its marks'],
+        ['maçã'.normalize('NFD'), 'food.fruit.apple', 'pt', 'the same typed decomposed'],
+        ['limão-siciliano', 'food.fruit.lemon', 'pt', 'a Portuguese compound label'],
+        ['limão', 'food.fruit.lime', 'pt', "Portuguese's own lime, not Spanish lemon"],
+        ['Limão', 'food.fruit.lime', 'pt', 'the same capitalised'],
+        ['mist', 'garden.soil.manure', 'de', 'a German label no English label is written as'],
+        ['pan', 'food.bakery.bread', 'es', 'a Spanish label (the apps hide it on a device whose own search lists rows)'],
+        ['апельсин', 'food.fruit.orange', 'ru', 'a Russian label'],
+        ['オレンジ', 'food.fruit.orange', 'ja', 'a Japanese label'],
+        ['lemons', 'food.fruit.lemon', 'en', 'an English plural'],
     ] as const) {
         const r = await asked(q);
-        assert(r.status === 200 && r.body?.library === want && !('tags' in (r.body ?? {})), `${why}: "${q}" → ${want} (${show(r)})`);
+        assert(r.status === 200 && r.body?.library === want && r.body?.lang === lang && !('tags' in (r.body ?? {})),
+            `${why}: "${q}" → ${want} (${lang}) (${show(r)})`);
     }
     for (const [q, why] of [
+        ['cat', 'English cat: Vietnamese Cát (sand) only folded away its mark'],
+        ['man', 'English man: Vietnamese Mận (plum) only folded away its mark'],
+        ['maca', 'maçã without its marks is no label'],
+        ['limao', 'limão without its mark is no label'],
         ['zzqx unheard', 'a word no language labels'],
         ['food & produce', "a top's label: the category is its own field"],
         ['call 0412 345 678', 'a word no listing could carry'],
         ['x', 'one letter'],
     ] as const) {
         const r = await asked(q);
-        assert(r.status === 200 && r.body?.library === null, `${why}: "${q}" → null (${show(r)})`);
+        assert(r.status === 200 && r.body?.library === null && r.body?.lang === null, `${why}: "${q}" → null (${show(r)})`);
     }
     const twice = await call('GET', bea, '/api/free-tags?q=laranja&q=limão', undefined, es);
-    assert(twice.status === 200 && twice.body?.library === null, `two q's are no word (${show(twice)})`);
+    assert(twice.status === 200 && twice.body?.library === null && twice.body?.lang === null, `two q's are no word (${show(twice)})`);
     const noLanguage = await asked('laranja', bea, {});
-    assert(noLanguage.body?.library === 'food.fruit.orange', `no X-Language: the same answer (${show(noLanguage)})`);
+    assert(noLanguage.body?.library === 'food.fruit.orange' && noLanguage.body?.lang === 'pt', `no X-Language: the same answer (${show(noLanguage)})`);
     const listAgain = await call('GET', bea, '/api/free-tags');
     assert(listAgain.status === 200 && Array.isArray(listAgain.body?.tags) && !('library' in listAgain.body),
         `without q the answer is the offered tags, as before (${show(listAgain)})`);

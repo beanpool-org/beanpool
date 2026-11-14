@@ -70,6 +70,8 @@ export * from './invite-text.js';
 // A name box that holds an invite or a web address instead of a name: refused the same on both apps and the node.
 export * from './name-box.js';
 export * from './event-copy.js';
+// Back to the listing after the join (list on global G4): the slot both apps keep a copy's listing in, and its one line.
+export * from './listing-after-join.js';
 export * from './show-on-global.js';
 export * from './beanpool-defaults.js';
 export * from './peek-ticket.js';

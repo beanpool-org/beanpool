@@ -1,7 +1,7 @@
 /**
  * The release gate (PR #1336 fix round, deciding review findings 6 and 3). BeanPool's key vault isn't hosted yet, so
  * every build cut from main has no vault values. Such a build must keep sign-in recovery exactly as it was before the
- * vault: the copy is deposited at the member's community, disconnected there, and restored from there with the callsign.
+ * vault: the copy is deposited at the member's community, disconnected there, and restored from there with the sign-in.
  * Only a build with a whole, well-formed vault (utils/vault-config.ts) switches to the vault, and no build is left with
  * neither.
  *
@@ -150,17 +150,22 @@ describe('a build without a vault: sign-in recovery exactly as before the vault'
         expect(to(VAULT)).toEqual([]);
     });
 
-    it('a new phone restores from the community copy with the callsign and the sign-in, onto that community', async () => {
+    it('a new phone restores from the community copy with the sign-in alone, which finds the account there (recovery S2)', async () => {
         await connect();
         mem.async.clear();
         mem.secure.clear();
         expect(await loadIdentity()).toBeNull();
+        net.sent.length = 0;
 
-        const result = await recoverAccountWithSso({ callsign: 'Sam', anchorUrl: COMMUNITY, provider: 'google' });
+        const result = await recoverAccountWithSso({ anchorUrl: COMMUNITY, provider: 'google' });
         expect(result.identity.publicKey).toBe(member.publicKey);
+        expect(result.identity.callsign).toBe('Sam');
         expect(result.identity.mnemonic).toEqual(member.mnemonic);
         expect((await loadIdentity())?.publicKey).toBe(member.publicKey);
         expect(mem.async.get(ANCHOR)).toBe(COMMUNITY);
+        expect(paths(COMMUNITY)).toEqual([
+            'POST /api/recovery/find-nonce', 'POST /api/recovery/find', 'POST /api/recovery/collect', 'POST /api/recovery/collect/fragments',
+        ]);
         expect(to(VAULT)).toEqual([]);
     });
 
@@ -169,7 +174,7 @@ describe('a build without a vault: sign-in recovery exactly as before the vault'
         community.copies.set('google', await sealSeedToSso(seed, 'google', SUB));
         mem.async.clear();
         mem.secure.clear();
-        const result = await recoverAccountWithSso({ callsign: 'Sam', anchorUrl: COMMUNITY, provider: 'google' });
+        const result = await recoverAccountWithSso({ anchorUrl: COMMUNITY, provider: 'google' });
         expect(result.identity.publicKey).toBe(member.publicKey);
         expect(to(VAULT)).toEqual([]);
     });

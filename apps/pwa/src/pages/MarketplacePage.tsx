@@ -68,6 +68,7 @@ import {
 import { dealAmountFor, eventCopyOf, aboutOfPost, chatAboutDrafts, feeOf, formatHundredths, isHundredths, parseHundredths } from '@beanpool/core';
 // A price for each one: the price box's lines (slice P2; its own lines so a parallel slice's edits to the import above do not meet these).
 import { perItemCard } from '@beanpool/core';
+import { LISTING_AFTER_JOIN_WORDS } from '@beanpool/core';
 import { BeansText } from '../components/BeansText';
 import {
     carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
@@ -147,9 +148,10 @@ interface Props {
     /**
      * A member's own tap named `openPostId` (a chat's View Post, a Home card, a map pin): if it can't be opened, say so in
      * one sentence. Off (the default) for a link the app arrived on — a shared `/?post=`, the lobby's kept listing — where
-     * a listing that has gone lands quietly on the Market (GuestLobby.test "a listing that has gone").
+     * a listing that has gone lands quietly on the Market (GuestLobby.test "a listing that has gone"). 'came-for': the listing
+     * a member came for from a copy on the global community (slice G4), which says so in its own words when it has gone.
      */
-    sayWhenPostUnopened?: boolean;
+    sayWhenPostUnopened?: boolean | 'came-for';
     /** A finished trade to rate (a chat's "Rate your partner"): its rating form opens here; taken once, then `onReviewOpened`. */
     openReviewTxId?: string | null;
     /** The deal `openPostId` was opened for (Home, the header's needs-you icons): the listing opens at that deal (deals S4). */
@@ -804,7 +806,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 deepLinkFetched.current = id;
                 // The node's own read rules decide: a listing taken down, or one this member may not read, comes back empty.
                 const notReadable = () => {
-                    if (sayWhenPostUnopened) setPostLinkNotice(t('That listing can no longer be opened. It may have been taken down.'));
+                    if (sayWhenPostUnopened) setPostLinkNotice(sayWhenPostUnopened === 'came-for' ? t(LISTING_AFTER_JOIN_WORDS.gone) : t('That listing can no longer be opened. It may have been taken down.'));
                     onPostOpened?.();
                 };
                 // Not a listing at all: a link to a page of Local knowledge (the Market never reads one) lands in Learn.

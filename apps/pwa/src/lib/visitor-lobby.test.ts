@@ -3,18 +3,20 @@
  * (G9b follow-up, 4112421730): one key, one use, only the post's id, and nothing once it is stale.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LISTING_AFTER_JOIN_MS } from '@beanpool/core';
 import {
-    keepLinkedPost, takeKeptLinkedPost, LINKED_POST_KEPT_MS, LINKED_POST_STORAGE_KEY,
+    keepLinkedPost, takeKeptLinkedPost, keptLinkedPostAt, LINKED_POST_KEPT_MS, LINKED_POST_STORAGE_KEY, LISTING_AFTER_JOIN_STORAGE_KEY,
     keepAskedCommunity, takeKeptAskedCommunity, takeAskParam, ASKED_COMMUNITY_STORAGE_KEY,
 } from './visitor-lobby';
 
 const T0 = Date.UTC(2026, 8, 27, 10, 0, 0);
 
-beforeEach(() => { sessionStorage.clear(); });
+beforeEach(() => { sessionStorage.clear(); localStorage.clear(); });
 afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     sessionStorage.clear();
+    localStorage.clear();
 });
 
 describe('the listing kept across a join', () => {
@@ -118,5 +120,51 @@ describe('the community a stranger came to ask to join (?ask=, front doors S15)'
         vi.stubGlobal('sessionStorage', { getItem: vi.fn(refuse), setItem: vi.fn(refuse), removeItem: vi.fn(refuse), clear: vi.fn(), key: vi.fn(), length: 0 });
         expect(() => keepAskedCommunity('test.beanpool.org', T0)).not.toThrow();
         expect(takeKeptAskedCommunity(T0 + 1)).toBeNull();
+    });
+});
+
+describe('the listing a copy stood for, kept for its community (list on global G4)', () => {
+    const POST = '3f2b8c1e-5d4a-4e7b-9a10-0c6d2e8f1a34';
+
+    it('is kept in this browser (a yes can take days), for that community, as the id and the time only', () => {
+        keepLinkedPost(POST, T0, 'riverside.example.org');
+        expect(sessionStorage.getItem(LINKED_POST_STORAGE_KEY)).toBeNull();
+        expect(JSON.parse(localStorage.getItem(LISTING_AFTER_JOIN_STORAGE_KEY)!)).toEqual({ 'riverside.example.org': { id: POST, at: T0 } });
+    });
+
+    it('the yes\'s Join reads it without taking it; the join done takes it, once', () => {
+        keepLinkedPost(POST, T0, 'riverside.example.org');
+        expect(keptLinkedPostAt('https://riverside.example.org', T0 + 1)).toBe(POST);
+        expect(keptLinkedPostAt('https://riverside.example.org', T0 + 2)).toBe(POST);
+        expect(takeKeptLinkedPost(T0 + 3, 'https://riverside.example.org')).toBe(POST);
+        expect(takeKeptLinkedPost(T0 + 4, 'https://riverside.example.org')).toBeNull();
+        expect(localStorage.getItem(LISTING_AFTER_JOIN_STORAGE_KEY)).toBeNull();
+    });
+
+    it('is only ever read for its own community, and the lobby\'s own kept listing never reads it', () => {
+        keepLinkedPost(POST, T0, 'riverside.example.org');
+        expect(takeKeptLinkedPost(T0 + 1)).toBeNull();
+        expect(takeKeptLinkedPost(T0 + 1, 'hillside.example.org')).toBeNull();
+        expect(keptLinkedPostAt('riverside.example.org', T0 + 1)).toBe(POST);
+        keepLinkedPost('p-lobby', T0);
+        expect(takeKeptLinkedPost(T0 + 1, 'riverside.example.org')).toBe(POST);
+        expect(takeKeptLinkedPost(T0 + 1)).toBe('p-lobby');
+    });
+
+    it('lapses a month after the tap', () => {
+        keepLinkedPost(POST, T0, 'riverside.example.org');
+        expect(keptLinkedPostAt('riverside.example.org', T0 + LISTING_AFTER_JOIN_MS)).toBe(POST);
+        expect(takeKeptLinkedPost(T0 + LISTING_AFTER_JOIN_MS + 1, 'riverside.example.org')).toBeNull();
+    });
+
+    it('keeps nothing that is no id or no host, and a storage that refuses throws nothing', () => {
+        keepLinkedPost('https://elsewhere.example/?x=1', T0, 'riverside.example.org');
+        keepLinkedPost(POST, T0, 'javascript:alert(1)');
+        expect(localStorage.getItem(LISTING_AFTER_JOIN_STORAGE_KEY)).toBeNull();
+        const refuse = () => { throw new DOMException('denied', 'SecurityError'); };
+        vi.stubGlobal('localStorage', { getItem: vi.fn(refuse), setItem: vi.fn(refuse), removeItem: vi.fn(refuse), clear: vi.fn(), key: vi.fn(), length: 0 });
+        expect(() => keepLinkedPost(POST, T0, 'riverside.example.org')).not.toThrow();
+        expect(keptLinkedPostAt('riverside.example.org', T0)).toBeNull();
+        expect(takeKeptLinkedPost(T0, 'riverside.example.org')).toBeNull();
     });
 });

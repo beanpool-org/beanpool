@@ -27,7 +27,9 @@
  *      uphold, nor ever while the report is open; the unreported control is offered after its own week
  *   9. "Did you mean …?" (slice F5): GET /api/free-tags?q= names the library tag a word is exactly the label of in one of
  *      the 25 languages, and that language: a Portuguese, German, Spanish, Russian or Japanese label, marks kept, any case,
- *      typed decomposed, a plural; none for a word only a fold makes a label (cat, man, maca), a top's label, an unknown
+ *      typed decomposed, a plural; Turkish in any case too (incir, İNCİR, ıspanak, BALIK), and the table: every Turkish
+ *      label with i, ı, İ or I typed as written, lower and upper case by Turkish's rule and the default rule, one answer,
+ *      its own tag; none for a word only a fold makes a label (cat, man, maca), a top's label, an unknown
  *      word, a word no listing could carry, two q's; members only; the map's size and heap
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-free-tag-suggestions.ts
@@ -50,8 +52,10 @@ import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { TABLES } from './engine/replication-manifest.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import {
-    FREE_TAG_COUNT_MS, FREE_TAG_OFFER_DAYS, forgetFreeTagCounts, freeTagCounts, libraryLabelCount, offeredFreeTags, setFreeTagRule,
+    FREE_TAG_COUNT_MS, FREE_TAG_OFFER_DAYS, forgetFreeTagCounts, freeTagCounts, libraryLabelCount, libraryTagNamed, offeredFreeTags, setFreeTagRule,
 } from './engine/free-tags.js';
+import { TAG_LIBRARY, wordsFor } from '@beanpool/core';
+import { coreCatalogOnce } from './member-words.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -583,6 +587,16 @@ async function main(): Promise<void> {
         ['апельсин', 'food.fruit.orange', 'ru', 'a Russian label'],
         ['オレンジ', 'food.fruit.orange', 'ja', 'a Japanese label'],
         ['lemons', 'food.fruit.lemon', 'en', 'an English plural'],
+        // Case never matters in Turkish either: I is the capital of ı and İ of i there, and the apps send the stored form.
+        ['incir', 'food.fruit.fig', 'tr', 'Turkish İncir typed lower case'],
+        ['İncir', 'food.fruit.fig', 'tr', 'the same as written'],
+        ['İNCİR', 'food.fruit.fig', 'tr', 'the same in Turkish capitals'],
+        ['ıspanak', 'food.vegetables.spinach', 'tr', 'Turkish Ispanak typed lower case, a dotless ı'],
+        ['ISPANAK', 'food.vegetables.spinach', 'tr', 'the same in capitals'],
+        ['inekler', 'animals.livestock.cows', 'tr', 'Turkish İnekler typed lower case'],
+        ['BALIK', 'food.seafood.fish', 'tr', 'Turkish Balık in capitals (stored as "balik")'],
+        ['ACI BİBER', 'food.vegetables.chilli', 'tr', 'Turkish Acı biber in capitals, ı and i in one label'],
+        ['halı temizliği', 'labour.cleaning.carpet-cleaning', 'tr', 'a Turkish label with ı inside, as written'],
     ] as const) {
         const r = await asked(q);
         assert(r.status === 200 && r.body?.library === want && r.body?.lang === lang && !('tags' in (r.body ?? {})),
@@ -600,6 +614,27 @@ async function main(): Promise<void> {
     ] as const) {
         const r = await asked(q);
         assert(r.status === 200 && r.body?.library === null && r.body?.lang === null, `${why}: "${q}" → null (${show(r)})`);
+    }
+    // The class, closed: every Turkish label with i, ı, İ or I anywhere, typed every way a member may, gets one answer, the
+    // label's own tag (in Turkish, or in an earlier language whose label for the same tag is written alike: "Pizza").
+    {
+        const tr = wordsFor('tr', [coreCatalogOnce('tr')!]);
+        const rows = TAG_LIBRARY.filter((tag) => tag.id.includes('.')).map((tag) => [tag.id, tr.t(tag.en)] as const)
+            .filter(([, written]) => /[İIıi]/.test(written));
+        const wrong: string[] = [];
+        let inTurkish = 0;
+        for (const [id, written] of rows) {
+            const typings = [written, written.toLocaleLowerCase('tr'), written.toLocaleUpperCase('tr'), written.toLowerCase(), written.toUpperCase()];
+            const answers = typings.map((typed) => libraryTagNamed(typed));
+            for (let i = 0; i < typings.length; i++) {
+                const a = answers[i];
+                if (a?.id !== id || a.lang !== answers[0]?.lang) wrong.push(`${typings[i]} → ${a ? `${a.id} (${a.lang})` : 'null'}`);
+            }
+            if (answers[0]?.lang === 'tr') inTurkish++;
+        }
+        assert(rows.length > 300 && rows.filter(([, w]) => /[İI]/.test(w)).length >= 13 && rows.filter(([, w]) => w.includes('ı')).length > 100,
+            `the table holds every Turkish label with i, ı, İ or I (${rows.length}, ${inTurkish} answered in Turkish)`);
+        assert(wrong.length === 0, `each of them typed as written, lower and upper case by both rules: its own tag, one answer (${wrong.length} wrong${wrong.length ? `: ${wrong.slice(0, 12).join('; ')}` : ''})`);
     }
     const twice = await call('GET', bea, '/api/free-tags?q=laranja&q=limão', undefined, es);
     assert(twice.status === 200 && twice.body?.library === null && twice.body?.lang === null, `two q's are no word (${show(twice)})`);

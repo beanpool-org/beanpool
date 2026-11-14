@@ -115,13 +115,25 @@ function nfc(text: string): string {
 }
 
 /**
+ * Lower case that holds in every language at once. Turkish writes I as the capital of ı and İ as the capital of i; every
+ * other language writes I as the capital of i. The default lower case (plainWords, and freeTagStored, the form the apps send)
+ * makes "BALIK" (Turkish balık) "balik" and "İncir" an i with a combining dot above, which nobody types. So i, ı and that
+ * dotted i are one letter here, and case never matters in either rule: "incir", "İNCİR", "ıspanak", "ISPANAK", "BALIK".
+ * This is case only: no other mark or letter is folded (ç, ş, ğ, ö, ü stay).
+ */
+function caseless(text: string): string {
+    return text.replace(/ı/g, 'i').replace(/i\u0307/g, 'i');
+}
+
+/**
  * The forms the node's map of every language's labels keys a label by, and looks a typed word up by (slice F5, apps/server
- * engine/free-tags.ts): the words and compound join of tagForms, lower case, NFC, with every mark and letter KEPT ("maçã",
- * never "maca"; "cát", never "cat"). Folding belongs inside one language's index only, where a member types their own words
- * without marks: across languages it would make one language's word another's ("Cát", sand in Vietnamese, is no "cat").
+ * engine/free-tags.ts): the words and compound join of tagForms, lower case in every language's rule (caseless), NFC, with
+ * every mark and letter KEPT ("maçã", never "maca"; "cát", never "cat"). Folding belongs inside one language's index only,
+ * where a member types their own words without marks: across languages it would make one language's word another's ("Cát",
+ * sand in Vietnamese, is no "cat").
  */
 export function exactTagForms(text: string): string[] {
-    return formsBy(nfc(text), (t) => nfc(plainWords(t).join(' ')));
+    return formsBy(nfc(text), (t) => caseless(nfc(plainWords(t).join(' '))));
 }
 
 /** The words of one language turned into tag ids. */

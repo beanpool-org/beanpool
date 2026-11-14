@@ -18,7 +18,7 @@
  * more. The rest (a yes here for that key, no account here, the person's own Join) is the receiver's.
  */
 
-import { toEd25519Seed } from '@beanpool/core';
+import { landingPostId, toEd25519Seed } from '@beanpool/core';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { getMemberProfile, getNodeApiUrl } from './api';
@@ -80,26 +80,30 @@ export function handoffOrigin(raw: unknown): string | null {
     return url.origin;
 }
 
-/** The address the holder opens: the community's page, its handoff door, this handoff's nonce and who is asking. */
-export function handoffUrl(communityOrigin: string, nonce: string, holderOrigin: string): string {
-    return `${communityOrigin}/app?door=${HANDOFF_DOOR}&n=${nonce}&from=${encodeURIComponent(holderOrigin)}`;
+/**
+ * The address the holder opens: the community's page, its handoff door, this handoff's nonce and who is asking. `listing`:
+ * the listing there the member came for from a copy (slice G4), an id and nothing else; the page opens it once they are in.
+ */
+export function handoffUrl(communityOrigin: string, nonce: string, holderOrigin: string, listing?: string | null): string {
+    const id = landingPostId(listing);
+    return `${communityOrigin}/app?door=${HANDOFF_DOOR}&n=${nonce}&from=${encodeURIComponent(holderOrigin)}${id ? `&listing=${encodeURIComponent(id)}` : ''}`;
 }
 
 /** What the receiver reads from its own address at load: a well-formed handoff from another origin, or nothing. */
-export function handoffAtLoad(search: string, ownOrigin: string): { nonce: string; from: string } | null {
+export function handoffAtLoad(search: string, ownOrigin: string): { nonce: string; from: string; listing: string | null } | null {
     const q = new URLSearchParams(search);
     if (q.get('door') !== HANDOFF_DOOR) return null;
     const nonce = q.get('n');
     const from = handoffOrigin(q.get('from'));
     if (!isHandoffNonce(nonce) || !from || from === ownOrigin) return null;
-    return { nonce, from };
+    return { nonce, from, listing: landingPostId(q.get('listing')) };
 }
 
 /** Takes the handoff out of the address once read, so a reload or a later door never reads it again. */
 export function takeHandoffParams(): void {
     try {
         const url = new URL(window.location.href);
-        for (const p of ['door', 'n', 'from']) url.searchParams.delete(p);
+        for (const p of ['door', 'n', 'from', 'listing']) url.searchParams.delete(p);
         window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
     } catch { /* the address keeps it; nothing reads it but the load */ }
 }

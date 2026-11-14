@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     HANDOFF_DOOR, accountFrom, accountMessage, answerFrom, answerMessage, awaitHandoffJoin, forgetHandedOver, handedOverHere, handoffAtLoad,
-    handoffJoined, handoffOrigin, handoffUrl, isHandoffNonce, isReadyFrom, markHandedOver, newHandoffNonce, readyMessage, runHandoff,
+    handoffJoined, handoffOrigin, handoffUrl, isHandoffNonce, isReadyFrom, markHandedOver, newHandoffNonce, readyMessage, runHandoff, takeHandoffParams,
 } from './handoff';
 import { generateIdentity, type BeanPoolIdentity } from './identity';
 
@@ -44,7 +44,7 @@ describe('the address the holder opens', () => {
 
     it('the receiver reads only a well-formed handoff from another https origin', () => {
         const n = 'a'.repeat(32);
-        expect(handoffAtLoad(`?door=handoff&n=${n}&from=${encodeURIComponent(GLOBAL)}`, BYRON)).toEqual({ nonce: n, from: GLOBAL });
+        expect(handoffAtLoad(`?door=handoff&n=${n}&from=${encodeURIComponent(GLOBAL)}`, BYRON)).toEqual({ nonce: n, from: GLOBAL, listing: null });
         expect(handoffAtLoad(`?door=ask&n=${n}&from=${encodeURIComponent(GLOBAL)}`, BYRON)).toBeNull();
         expect(handoffAtLoad(`?door=handoff&n=${'a'.repeat(31)}&from=${encodeURIComponent(GLOBAL)}`, BYRON)).toBeNull();
         expect(handoffAtLoad(`?door=handoff&n=${'A'.repeat(32)}&from=${encodeURIComponent(GLOBAL)}`, BYRON)).toBeNull();
@@ -52,6 +52,25 @@ describe('the address the holder opens', () => {
         expect(handoffAtLoad(`?door=handoff&n=${n}&from=${encodeURIComponent(`${GLOBAL}/app`)}`, BYRON)).toBeNull();
         expect(handoffAtLoad(`?door=handoff&n=${n}&from=${encodeURIComponent(BYRON)}`, BYRON)).toBeNull();
         expect(handoffAtLoad(`?door=handoff&n=${n}`, BYRON)).toBeNull();
+    });
+
+    it('carries the listing the member came for from a copy (G4): an id and nothing else, read back by the receiver', () => {
+        const nonce = newHandoffNonce();
+        const post = '3f2b8c1e-5d4a-4e7b-9a10-0c6d2e8f1a34';
+        const url = handoffUrl(BYRON, nonce, GLOBAL, post);
+        expect(url).toBe(`${BYRON}/app?door=${HANDOFF_DOOR}&n=${nonce}&from=${encodeURIComponent(GLOBAL)}&listing=${post}`);
+        expect(handoffAtLoad(new URL(url).search, BYRON)).toEqual({ nonce, from: GLOBAL, listing: post });
+        // Anything that is no id goes nowhere: not into the address, not out of it.
+        expect(handoffUrl(BYRON, nonce, GLOBAL, 'https://spy.example.org/?x=1')).toBe(handoffUrl(BYRON, nonce, GLOBAL));
+        expect(handoffUrl(BYRON, nonce, GLOBAL, null)).toBe(handoffUrl(BYRON, nonce, GLOBAL));
+        expect(handoffAtLoad(`?door=handoff&n=${nonce}&from=${encodeURIComponent(GLOBAL)}&listing=${encodeURIComponent('a b/c')}`, BYRON)).toEqual({ nonce, from: GLOBAL, listing: null });
+    });
+
+    it('the receiver takes the listing out of its address with the rest of the handoff', () => {
+        window.history.replaceState(null, '', `/app?door=handoff&n=${'a'.repeat(32)}&from=${encodeURIComponent(GLOBAL)}&listing=p1&lang=es`);
+        takeHandoffParams();
+        expect(window.location.search).toBe('?lang=es');
+        window.history.replaceState(null, '', '/');
     });
 
     it('a holder origin is https, a host with a dot (or an IPv4), a port at most', () => {

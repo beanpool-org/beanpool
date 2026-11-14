@@ -20,6 +20,7 @@ import {
     KNOCK_MESSAGES, KNOCK_MESSAGE_CHARS, KNOCK_CALLSIGN_CHARS, type KnockStatusResult, type RememberedKnock, type KnockCardState,
 } from '../utils/knock';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
+import { joinedForListing } from '../utils/listing-after-join';
 import { knockAddressFrom, knockFromNode, knockScanTarget } from '../utils/knock-address';
 import { handScannedInvite, scannedInviteGoesToRoot } from '../utils/scanned-invite';
 import type { JoinKey } from '../utils/door-key';
@@ -442,6 +443,8 @@ export default function FindCommunityScreen() {
         try {
             const joined = await joinAnotherCommunity({ targetUrl: url, code: invite, identity, returnUrl, knownName: name });
             await forgetKnock(identity.publicKey, url);
+            // A request sent from a copy's door (list on global G4): its listing opens once Home has nothing else to show.
+            await joinedForListing(url).catch(() => {});
             // Where a copy made there goes, by the new community's rule (vault rethink VR2, utils/copies-rule.ts).
             const nudge = joinedNudgeWords(joinedNudge(joined.name, await copiesAtFor(joined.url)), joined.name);
             Alert.alert(nudge.title, nudge.body, [

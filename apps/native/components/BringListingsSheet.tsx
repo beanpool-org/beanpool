@@ -5,6 +5,10 @@
  * member's first Offer. Once the member has said yes, what is left is tried again here with no sheet at all until there
  * is something to say. The run can be closed: it goes on, and says what came of it when it ends.
  *
+ * `onQuiet`: said each time Home comes to the front and the sheet has nothing to show, and each time a sheet shown is put
+ * away for good (Not now, Done), so what waits for it (the listing a member came for, utils/listing-after-join.ts) opens
+ * after it, never under it. Not while the offer, a run that was shown, or its answer is up.
+ *
  * Drawn by components/BringListingsSheetView.tsx.
  */
 import React, { useCallback, useRef, useState } from 'react';
@@ -27,8 +31,11 @@ const LOOK_GAP_MS = 5 * 60 * 1000;
  */
 let busy = false;
 
-export function BringListingsSheet() {
+export function BringListingsSheet({ onQuiet }: { onQuiet?: () => void } = {}) {
     const { identity } = useIdentity();
+    const quietRef = useRef(onQuiet);
+    quietRef.current = onQuiet;
+    const quiet = useCallback(() => { quietRef.current?.(); }, []);
     const [view, setView] = useState<BringStep | null>(null);
     const asked = useRef<{ offer: BringOffer; plan: BringPlan } | null>(null);
     const closed = useRef(false);
@@ -43,23 +50,27 @@ export function BringListingsSheet() {
             const result = await runBring(offer, plan, identity, shown ? onStep : undefined);
             await settleBringOffer(offer, result);
             if (result.brought > 0) (await import('../services/pillar-sync')).requestSync().catch(() => {});
-            const quiet = !shown && (result.kept || (result.brought === 0 && result.lines.length === 0));
-            setView(quiet ? null : { step: 'done', name: offer.name, brought: result.brought, lines: result.lines, kept: result.kept });
+            const nothingToSay = !shown && (result.kept || (result.brought === 0 && result.lines.length === 0));
+            setView(nothingToSay ? null : { step: 'done', name: offer.name, brought: result.brought, lines: result.lines, kept: result.kept });
+            if (nothingToSay) quiet();
         } catch {
             // Never left on a sheet with no way out: the offer is as it was, for the next visit.
             setView(null);
+            quiet();
         } finally {
             busy = false;
         }
-    }, [identity]);
+    }, [identity, quiet]);
 
     useFocusEffect(useCallback(() => {
         let live = true;
         void (async () => {
             const publicKey = identity?.publicKey;
-            if (!identity || !publicKey || busy || asked.current) return;
+            // A sheet up, or a run going: it says when it is done.
+            if (busy || asked.current) return;
+            if (!identity || !publicKey) { quiet(); return; }
             const offer = await pendingBringOffer(publicKey, await anchorUrl().catch(() => null)).catch(() => null);
-            if (!offer || Date.now() - lastLook.current < LOOK_GAP_MS) return;
+            if (!offer || Date.now() - lastLook.current < LOOK_GAP_MS) { if (live) quiet(); return; }
             lastLook.current = Date.now();
             busy = true;
             let plan: Awaited<ReturnType<typeof planBring>>;
@@ -68,9 +79,10 @@ export function BringListingsSheet() {
             } finally {
                 busy = false;
             }
-            if (plan === 'unreachable' || plan === 'waiting') return;
+            if (plan === 'unreachable' || plan === 'waiting') { if (live) quiet(); return; }
             if (plan === 'nothing' || (plan.bring.length === 0 && (offer.accepted || plan.gone.length === 0))) {
                 await closeBringOffer(publicKey);
+                if (live) quiet();
                 return;
             }
             // After a yes the question isn't asked again, and the lines about what stayed behind have been said.
@@ -89,7 +101,7 @@ export function BringListingsSheet() {
             setView({ step: 'offer', name: offer.name, count: plan.bring.length, noPrice });
         })().catch(() => {});
         return () => { live = false; };
-    }, [identity, run]));
+    }, [identity, run, quiet]));
 
     if (!view) return null;
     return (
@@ -107,8 +119,15 @@ export function BringListingsSheet() {
                 asked.current = null;
                 setView(null);
                 if (now) void putOffBringOffer(now.offer).catch(() => {});
+                quiet();
             }}
-            onClose={() => { closed.current = true; setView(null); }}
+            onClose={() => {
+                closed.current = true;
+                // Its answer put away is the end; a run put away still says what came of it when it ends.
+                const over = view.step === 'done';
+                setView(null);
+                if (over) quiet();
+            }}
         />
     );
 }

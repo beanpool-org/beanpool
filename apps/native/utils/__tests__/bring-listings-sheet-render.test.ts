@@ -369,3 +369,70 @@ describe('Home\'s sheet', () => {
         expect(calls.plan).toHaveBeenCalledTimes(1);
     });
 });
+
+describe("Home's sheet says when it has nothing more to show (list on global G4: the listing a member came for opens after it)", () => {
+    const quietCount = (q: ReturnType<typeof vi.fn>) => q.mock.calls.length;
+
+    it.each([
+        ['no offer waiting', () => calls.pending.mockResolvedValue(null)],
+        ['offline', () => calls.plan.mockResolvedValue('unreachable')],
+        ['nothing to bring', () => calls.plan.mockResolvedValue({ bring: [], gone: [] })],
+    ])('%s: quiet at once, with no sheet', async (_what, setUp) => {
+        setUp();
+        const onQuiet = vi.fn();
+        await draw(createElement(BringListingsSheet, { onQuiet }));
+        await focus();
+        expect(byId('bring-listings-sheet')).toBeNull();
+        expect(quietCount(onQuiet)).toBe(1);
+    });
+
+    it('never while the offer is up; quiet once it is put off', async () => {
+        const onQuiet = vi.fn();
+        await draw(createElement(BringListingsSheet, { onQuiet }));
+        await focus();
+        expect(byId('bring-listings-sheet')).not.toBeNull();
+        expect(quietCount(onQuiet)).toBe(0);
+        await press('bring-listings-not-now');
+        expect(quietCount(onQuiet)).toBe(1);
+    });
+
+    it('never during a run, nor while its answer is up; quiet at Done', async () => {
+        const onQuiet = vi.fn();
+        await draw(createElement(BringListingsSheet, { onQuiet }));
+        await focus();
+        await press('bring-listings-yes');
+        expect(host.textContent).toContain('2 listings are now in Mullumbimby.');
+        expect(quietCount(onQuiet)).toBe(0);
+        await press('bring-listings-done');
+        expect(quietCount(onQuiet)).toBe(1);
+    });
+
+    it('a run put away is not the end: quiet only once its answer, shown when it ends, is put away', async () => {
+        let finish: (r: BringResult) => void = () => {};
+        calls.run.mockImplementation(async (_o: unknown, _p: unknown, _i: unknown, onStep: (d: number, t: number) => void) => {
+            onStep(1, 2);
+            return new Promise<BringResult>((resolve) => { finish = resolve; });
+        });
+        const onQuiet = vi.fn();
+        await draw(createElement(BringListingsSheet, { onQuiet }));
+        await focus();
+        await press('bring-listings-yes');
+        await press('bring-listings-hide');
+        expect(quietCount(onQuiet)).toBe(0);
+        await act(async () => { finish({ brought: 2, lines: [], kept: false, held: false }); });
+        await flush();
+        expect(quietCount(onQuiet)).toBe(0);
+        await press('bring-listings-done');
+        expect(quietCount(onQuiet)).toBe(1);
+    });
+
+    it('a look that comes again within the gap shows nothing, and says so', async () => {
+        const onQuiet = vi.fn();
+        await draw(createElement(BringListingsSheet, { onQuiet }));
+        await focus();
+        await press('bring-listings-not-now');
+        await focus();
+        expect(byId('bring-listings-sheet')).toBeNull();
+        expect(quietCount(onQuiet)).toBe(2);
+    });
+});

@@ -1,7 +1,8 @@
 /**
  * What stands where Going and Interested stand on a member's copy of an event, and where Accept stands on one of an Offer or a
  * Need with its `line` (DESIGN-list-on-global-fable.md §6): the words of the door and the way through it, the community's own card, whose Ask to join sends nothing before its tap.
- * Every word from the directory row global holds (@beanpool/core eventCopyOf).
+ * Every word from the directory row global holds (@beanpool/core eventCopyOf). The card is told which listing at home the copy
+ * stands for, so a request sent from it lands the member on that listing once they have joined (slice G4).
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -17,7 +18,7 @@ export function EventCopyDoor({ copy, line }: { copy: EventCopy; line?: string }
         <View style={styles.door} testID="event-copy-door">
             <Text style={styles.line}>{line ?? copyDoorLine(copy)}</Text>
             {!!button && !!copy.from && (
-                <Pressable onPress={() => router.push(communityCardRoute(copy.from!.url) as any)} style={styles.button} accessibilityRole="button" testID="event-copy-ask">
+                <Pressable onPress={() => router.push(communityCardRoute(copy.from!.url, undefined, copy.from!.postId) as any)} style={styles.button} accessibilityRole="button" testID="event-copy-ask">
                     <Text style={styles.buttonText}>{button}</Text>
                 </Pressable>
             )}

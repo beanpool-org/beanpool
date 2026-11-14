@@ -164,6 +164,7 @@ import { retryRelayOutbox, sweepRelayOutbox } from './engine/relay-outbox.js';
 import { isNodeSignedPath, pruneNodeRequestNonces, requireNodeSignature } from './engine/node-signature.js';
 import { createInviteAskRoutes } from './routes/invite-asks.js';
 import { createKnowledgeRoutes } from './routes/knowledge.js';
+import { createForumRoutes } from './routes/forum.js';
 import { createNoticeRoutes } from './routes/notices.js';
 import { createBlockRoutes } from './routes/blocks.js';
 import { createToolRoutes } from './routes/tools.js';
@@ -172,6 +173,7 @@ import { createBillRoutes } from './routes/bills.js';
 import { startTidyingKnocks } from './engine/knocks.js';
 import { startTidyingInviteAsks } from './engine/invite-asks.js';
 import { startTidyingKnowledgeDrafts } from './engine/knowledge-drafts.js';
+import { startTidyingForumEdits } from './engine/forum.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { startForgettingOldAddresses } from './services/address-retention.js';
 import { createChannelRoutes } from './routes/channels.js';
@@ -1611,6 +1613,8 @@ export async function startHttpsServer(port: number): Promise<number> {
     startTidyingInviteAsks();
     // Local knowledge's answered and taken-back suggestions, 30 days after (engine/knowledge-drafts.ts).
     startTidyingKnowledgeDrafts();
+    // The forum's wording before an edit, 30 days after (engine/forum.ts).
+    startTidyingForumEdits();
 
     // The split-brain guard (services/identity-epoch.ts): once this server has seen that another took over its
     // identity, members' writes are refused here, before a body is read. The admin control plane stays open.
@@ -2081,6 +2085,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createWebPushRoutes(deps),
         createInviteAskRoutes(deps),
         createKnowledgeRoutes(deps),
+        createForumRoutes(deps),
         createNoticeRoutes(deps),
         createBlockRoutes(deps),
         createToolRoutes(deps),

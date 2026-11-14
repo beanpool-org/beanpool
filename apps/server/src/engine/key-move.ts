@@ -170,6 +170,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('knowledge_drafts', 'member_pubkey');
     move('knowledge_drafts', 'answered_by');
     move('knowledge_helped', 'member_pubkey');
+    // Their forum topics and posts, and their told stamp (engine/forum.ts): still theirs to edit and remove.
+    move('forum_topics', 'writer_pubkey');
+    move('forum_posts', 'writer_pubkey');
+    move('forum_members', 'member_pubkey');
     // Their tools' private copies (engine/tool-state.ts): the new phone gets them back from here.
     move('member_tool_state', 'public_key');
     // Their shop (engine/shops.ts): the same front window, under the new key. Keyed by its own id, so its listings and its

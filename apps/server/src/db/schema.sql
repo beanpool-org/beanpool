@@ -3151,6 +3151,97 @@ CREATE TABLE IF NOT EXISTS knowledge_helped (
 );
 CREATE INDEX IF NOT EXISTS idx_knowledge_helped_member ON knowledge_helped (member_pubkey);
 
+-- The forum (DESIGN-forums-fable.md §3, slice F1; engine/forum.ts): sections, topics with a title, replies under them. New
+-- tables, empty on every node until its server first reads its forum (the starter sections, made once) and a member writes:
+-- nothing here is read from or written to an older row. All plain tables (engine/replication-manifest.ts), so the forum
+-- survives a take-over; every delete goes with a tombstone. Writers are named by key, never by a link to this server's
+-- members (joint design §2.2: a topic keeps its id and its writers if a forum is ever shared across communities).
+-- A section. `starter`: the starter's id (@beanpool/core FORUM_STARTER_SECTIONS) while its name is the starter's own, so each
+-- language reads its word; cleared when an owner or admin renames it, and `name` then holds what they typed. `starts`: who
+-- may start a topic, any member or only owners and admins. `listed`: whether search engines may list its topics (slice F7,
+-- the global community only). Archived: out of every list, its topics still readable by their address.
+CREATE TABLE IF NOT EXISTS forum_sections (
+    id          TEXT PRIMARY KEY,
+    starter     TEXT,
+    name        TEXT,
+    about       TEXT,
+    position    INTEGER NOT NULL,
+    starts      TEXT NOT NULL CHECK (starts IN ('members', 'staff')),
+    listed      INTEGER NOT NULL DEFAULT 0 CHECK (listed IN (0, 1)),
+    archived_at TEXT,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT
+);
+-- A topic: its title and the facts its list row shows. The opening words are its post number 1 in forum_posts. `closed_by`:
+-- 'writer' or 'moderator' (closed by hand), 'quiet' (180 days with no reply on the global community, slice F2), 'removed'
+-- (its writer removed it: blanked, and listed nowhere). `reply_count` counts the replies not removed.
+CREATE TABLE IF NOT EXISTS forum_topics (
+    id               TEXT PRIMARY KEY,
+    section_id       TEXT NOT NULL,
+    title            TEXT NOT NULL,
+    writer_pubkey    TEXT NOT NULL,
+    place            TEXT,
+    lang             TEXT,
+    reply_count      INTEGER NOT NULL DEFAULT 0,
+    last_activity_at TEXT NOT NULL,
+    pinned_at        TEXT,
+    closed_at        TEXT,
+    closed_by        TEXT CHECK (closed_by IS NULL OR closed_by IN ('writer', 'moderator', 'quiet', 'removed')),
+    created_at       TEXT NOT NULL,
+    updated_at       TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_forum_topics_section ON forum_topics (section_id, last_activity_at);
+CREATE INDEX IF NOT EXISTS idx_forum_topics_activity ON forum_topics (last_activity_at);
+CREATE INDEX IF NOT EXISTS idx_forum_topics_writer ON forum_topics (writer_pubkey, created_at);
+-- A topic's opening words (number 1) and each reply (2 on), one table so reporting, hiding, removing, editing and photos are
+-- written once. `quotes`: the number of the one earlier post it quotes. `lang`: the writer's app language. `public_from`: when
+-- it may show on the public pages (slices F2 and F7 stamp and read it); empty in this slice, so nothing is public. A removed
+-- post keeps its row as a marker ("Removed by its writer"), its words blanked and its photos gone.
+CREATE TABLE IF NOT EXISTS forum_posts (
+    id            TEXT PRIMARY KEY,
+    topic_id      TEXT NOT NULL,
+    number        INTEGER NOT NULL CHECK (number >= 1),
+    writer_pubkey TEXT NOT NULL,
+    words         TEXT NOT NULL,
+    quotes        INTEGER,
+    lang          TEXT,
+    public_from   TEXT,
+    created_at    TEXT NOT NULL,
+    edited_at     TEXT,
+    removed_at    TEXT,
+    removed_by    TEXT CHECK (removed_by IS NULL OR removed_by IN ('writer', 'moderator', 'account')),
+    updated_at    TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_forum_posts_number ON forum_posts (topic_id, number);
+CREATE INDEX IF NOT EXISTS idx_forum_posts_writer ON forum_posts (writer_pubkey, created_at);
+-- A post's photos, at most 3, the writer's own: kept in the row as a data URL with its metadata stripped (as Local
+-- knowledge's suggestions keep theirs), so a standby's copy carries them whole. Deleted with the post's removal.
+CREATE TABLE IF NOT EXISTS forum_post_photos (
+    post_id    TEXT NOT NULL,
+    order_num  INTEGER NOT NULL,
+    photo_data TEXT NOT NULL,
+    bytes      INTEGER NOT NULL,
+    updated_at TEXT,
+    PRIMARY KEY (post_id, order_num)
+);
+-- The wording before an edit, for moderators only (slice F2 reads it), kept 30 days (the manifest's age rule), so an
+-- approved topic swapped for something else can be seen. `title`: the topic's title before, on an opening post's edit.
+CREATE TABLE IF NOT EXISTS forum_post_edits (
+    post_id    TEXT NOT NULL,
+    edited_at  TEXT NOT NULL,
+    words      TEXT NOT NULL,
+    title      TEXT,
+    updated_at TEXT,
+    PRIMARY KEY (post_id, edited_at)
+);
+-- Per member: when they were told, once, that anyone on the web can read this forum with their name (design §5). The server
+-- refuses a first post on a public forum without it, so no app can skip the telling.
+CREATE TABLE IF NOT EXISTS forum_members (
+    member_pubkey  TEXT PRIMARY KEY,
+    told_public_at TEXT,
+    updated_at     TEXT
+);
+
 -- 25b. A group's chat, mutes and convenor succession (groups redesign slice 1, 2026-09-19).
 -- Every group owns one node-readable conversation: conversations.id = groups.id, type 'group_thread'. Its
 -- conversation_participants rows mirror the ACTIVE group_members (convenor, member, observer) and feed the Talk

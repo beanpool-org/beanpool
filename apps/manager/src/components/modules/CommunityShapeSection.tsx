@@ -666,6 +666,24 @@ export function CommunityShapeSection({
                         </div>
                     </ShapeRow>
 
+                    {/* forum (server engine/forum.ts), on a server that has it */}
+                    {settings.forum !== undefined && (
+                        <ShapeRow
+                            id="forum"
+                            icon="💬"
+                            name={t('Forum')}
+                            summary={t('Sections, topics and replies for members, in both apps.')}
+                            displayValue={settings.forum.value ? t('On') : t('Off')}
+                            lock={settings.forum.lock}
+                            {...rowProps('forum', settings.forum.value)}
+                        >
+                            <div className="space-y-3 pt-2">
+                                {checkbox(t('Forum on'))}
+                                {controls('forum', draftValue === settings.forum.value)}
+                            </div>
+                        </ShapeRow>
+                    )}
+
                     {/* shareOutside (front doors S6), on a server that has it */}
                     {settings.shareOutside !== undefined && (
                         <ShapeRow

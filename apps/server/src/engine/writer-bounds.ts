@@ -1,6 +1,6 @@
 /**
  * The per-route writer limits (W-main, design scratch/global-node/DESIGN-replica-flood-bounds-opus.md §6.2): how many
- * posts, groups, enterprises, invites, Pulse links and new people by DM one member makes in a day, how many enterprises
+ * posts, groups, enterprises, invites, Pulse links, forum edits and new people by DM one member makes in a day, how many enterprises
  * and unused invites they hold at once, and how long a DM line may be. The numbers are in config/writer-limits.ts
  * (WRITER_LIMITS), with the day budget and the chat minute that are enforced elsewhere.
  *
@@ -31,8 +31,8 @@
  * keeper's.
  *
  * An owner or admin (their role now) is held to that same setting in place of a member's posts a day, groups a day,
- * enterprises a day and running, invites a day and unused, and Pulse links by hand a day (engine/owner-admin-limit.ts;
- * Marty, 31 Oct), and its refusals name it.
+ * enterprises a day and running, invites a day and unused, Pulse links by hand a day (engine/owner-admin-limit.ts;
+ * Marty, 31 Oct) and forum edits a day, and its refusals name it.
  */
 import { INVITE_LIFE_DAYS } from '@beanpool/core';
 import { db } from '../db/db.js';
@@ -55,7 +55,8 @@ export type WriterLimitCode =
     | 'friend_adds_per_day'
     | 'invites_per_day'
     | 'invites_unused'
-    | 'pulse_per_day';
+    | 'pulse_per_day'
+    | 'forum_edits_per_day';
 
 export class WriterLimitError extends Error {
     constructor(
@@ -411,4 +412,32 @@ export function pulseSyncAllowance(member: string, now = Date.now()): number {
  */
 export function pulseHarvestAllowance(member: string, now = Date.now()): number {
     return Math.max(0, WRITER_LIMITS.pulseHarvestedItemsPerDay - pulseItemsToday(member, 'autolist', now).length);
+}
+
+// ── The forum ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The edits `member` made in the day to their own forum posts: each edit's earlier wording (forum_post_edits, keyed on the
+ * post and when it was edited), and those deleted since, read from their tombstones. So the oldest wording an edit drops
+ * past the 10 kept (engine/forum.ts), and a removal's, never free a place. A tombstone's key is `<post id>|<edited at>`, so
+ * one post's edits in the day are the keys between `<post id>|<the day's start>` and `<post id>}` ('}' sorts just after
+ * '|'), a range of the tombstones' primary key for each of the member's posts, as the friends' count reads its own.
+ */
+function forumEditTimes(member: string, now: number): string[] {
+    return column(db.prepare(`
+        SELECT e.edited_at AS t FROM forum_posts p JOIN forum_post_edits e ON e.post_id = p.id AND e.edited_at > @since
+         WHERE p.writer_pubkey = @member
+        UNION ALL
+        SELECT substr(s.row_key, length(p.id) + 2) AS t FROM forum_posts p
+          JOIN tombstones s ON s.table_name = 'forum_post_edits' AND s.row_key > p.id || '|' || @since AND s.row_key < p.id || '}'
+         WHERE p.writer_pubkey = @member`).all({ member, since: since(now) }));
+}
+
+/** Before `member` edits one of their forum posts: 100 edits in any 24 hours; an owner's or admin's, the owners' setting. */
+export function assertMayEditForumToday(member: string, now = Date.now()): void {
+    const owners = ownerAdminLimit(member);
+    const limit = owners ?? WRITER_LIMITS.forumEditsPerDay;
+    assertUnderDaily(forumEditTimes(member, now), limit, now, 'forum_edits_per_day', owners !== null
+        ? (when) => `${ownersAllow(`${limit.toLocaleString('en')} edits to forum posts in any 24 hours`)} You can edit again ${when}.`
+        : (when) => `You can make ${limit} edits to your forum posts in any 24 hours. You can edit again ${when}.`);
 }

@@ -219,6 +219,15 @@ export interface ProfileSwitches {
      *  global node), where every /api/bills route refuses. A bill holds no Beans, so an operator may turn it off on a live
      *  community: the bills out then wait unpaid and expire. */
     bills: boolean;
+    /** The forum (engine/forum.ts; DESIGN-forums-fable.md §4, Marty Q3, 14 Nov 2026): sections, topics and replies for this
+     *  community's members. On for every kind from the start, with starter sections; the owners may switch it off under How
+     *  this community works, which makes every /api/forum route 404 `feature_off` (routes/profile-feature-gate.ts) and keeps
+     *  every topic for when it is on again. Reported in `features` only while on. */
+    forum: boolean;
+    /** Anyone on the web will be able to read this forum (the global community; slice F7 builds the pages). Set by the
+     *  server's kind: a local community's forum is for its members. While on, a member's first post is refused until they
+     *  were told so (engine/forum.ts assertTold). Reported in `features` only while on, beside `forum`. */
+    forumPublic: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -260,6 +269,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         shareOutside: true,
         knowledge: true,
         bills: true,
+        forum: true,
+        forumPublic: false,
     },
     global: {
         openJoin: true,
@@ -315,6 +326,9 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         knowledge: false,
         // No Beans here, so no bills (DESIGN-getting-paid-fable §4.1).
         bills: false,
+        // The worldwide forum, readable on the web once its public pages are built (slice F7).
+        forum: true,
+        forumPublic: true,
     },
 };
 
@@ -428,6 +442,13 @@ export interface NodeFeatures {
      *  (@beanpool/core voiceLinesOn). A node from before V2 says nothing, and stores a voice line as a text line carrying a
      *  sound no one can play (a live community, 14 Nov): its version can't tell it from one that takes them, so this says it outright. */
     voiceLines: true;
+    /** Present, and true, only where `forum` is on (engine/forum.ts): the apps show the Forum, and its routes answer
+     *  (/api/forum/*). Absent (a community whose owners switched it off, or a server from before it): no Forum, which
+     *  @beanpool/core forumOn reads as off. */
+    forum?: true;
+    /** Present, and true, only where the forum is on and public (`forumPublic`, the global community): the apps tell a member
+     *  once, before their first post, that anyone on the web can read it with their name (POST /api/forum/told). */
+    forumPublic?: true;
 }
 
 /**
@@ -706,6 +727,8 @@ export function getNodeFeatures(): NodeFeatures {
         ...(PER_ITEM_BUILT ? { perItem: true as const } : {}),
         // And voice lines (engine/voice-lines.ts): every profile stores one. The apps offer the microphone only where it is said.
         voiceLines: true,
+        ...(s.forum ? { forum: true as const } : {}),
+        ...(s.forum && s.forumPublic ? { forumPublic: true as const } : {}),
     };
     // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite. Nor does a
     // post go outside: the preview shows visitors nothing.
@@ -833,6 +856,7 @@ const FEATURE_OFF_MESSAGES: Partial<Record<ProfileSwitch, string>> = {
     knocks: 'This community isn’t taking requests to join. Ask one of its members for an invite.',
     decisions: 'Community votes are switched off on this node, so nothing here can be proposed or voted on. Its moderators look after it instead.',
     bills: 'Bills are switched off on this node.',
+    forum: 'This community’s forum is switched off by its owners.',
 };
 
 /** Invites off, to a member who would make one and to someone holding a code: what to do instead. */

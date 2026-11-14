@@ -174,6 +174,7 @@ GET /api/pulse/feed          (public read, unsigned)
   query: cursor?   = ISO published_at of the last item seen
          category? = community|food|craft|business|repair|art|other
          limit?    = 1..50, default 20
+         with?     = knowledge                  // slice KP: also Local knowledge's cards (below)
   200 -> {
     items: [{
       id, ownerPubkey, callsign, avatarUrl,     // presenter fields, joined from members
@@ -183,6 +184,16 @@ GET /api/pulse/feed          (public read, unsigned)
     nextCursor: string | null
   }
 ```
+
+**`with=knowledge` (Local knowledge's card, slice KP; `scratch/fable-design/DESIGN-local-knowledge-amend-fable.md` §2.12,
+§3.8).** Only a read that asks gets it, so an app from before it never does. Under "All" only (none with `category`), to a
+reader who reads as a member, where the `knowledge` switch is on, never on a node with the visitors' view (the global
+community). One card per node local day for the pages Learn shows that first showed in the last 30 days, the newest 20:
+`{ id: 'know_<YYYY-MM-DD>', source: 'knowledge', platform: 'beanpool', category: 'knowledge', url: null, thumbnailUrl: null,
+ownerPubkey: '', callsign: '', avatarUrl: null, isVerified: false, title, publishedAt, knowledge: { count, posts: [{ id,
+title, topic, line, photo, by, gathered }] } }` (@beanpool/core `PulseKnowledgeCard`; at most 3 posts, newest first). It
+sorts among the items by its `publishedAt` and id like any item, so `nextCursor` keeps its shape and a page holds `limit`
+items. Nothing is stored: mute and report of a `know_` id answer 404 as for any unknown item.
 
 **Visibility — copy `listPublicChannels`' gating exactly.** An item is visible only when its channel
 is not deleted and has `syndicate_to_node = 1`, the item is not deleted and `muted = 0`, **and**

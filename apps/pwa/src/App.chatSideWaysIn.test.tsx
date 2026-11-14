@@ -66,6 +66,12 @@ vi.mock('./lib/api', () => ({
     markBellNoticesSeen: vi.fn(async () => 1),
     getMemberProfile: vi.fn(async () => ({ publicKey: 'my-user-pubkey', avatar: null, bio: '', contact: null })),
     getHome: vi.fn(async () => ({ notModified: false, etag: null, answer: answer(node.needs) })),
+    // The real ForumPage's reads (slice F4, lib/forum.ts): an empty forum.
+    request: vi.fn(async (_method: string, path: string) => (path === '/api/forum'
+        ? { sections: [], public: false, told: true, moderator: false, firstLooksWaiting: null, firstTopicWaits: false, linksOn: true }
+        : path.startsWith('/api/forum/topics') ? { topics: [], next: null } : {})),
+    signedFetch: vi.fn(async () => new Response(null, { status: 404 })),
+    myNodeRoleOnce: vi.fn(async () => null),
 }));
 
 vi.mock('./pages/HomePage', () => ({ HomePage: () => <div data-testid="home-page" /> }));

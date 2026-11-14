@@ -209,6 +209,11 @@ describe('every door on the web lands on the enterprise page', () => {
         // Learn's page (slice K2): the writer's name on a page of Local knowledge opens their profile by key. LearnPage only
         // takes onOpenProfile as a prop and calls it from that one button; App.tsx hands it `(pubkey) => setOpenProfilePubkey(pubkey)`
         // (checked above), so it is the same one overlay, and LearnPage draws no Trust Profile and no PublicProfilePage (checked in the loop).
+        // The forum (slice F4): a writer's name in a topic opens their profile by key. ChatTabPage hands the onOpenProfile App.tsx
+        // gives it (`(pubkey) => setOpenProfilePubkey(pubkey)`, checked above) to ForumPage, which hands it to ForumTopicView, whose
+        // one call is that name's button (ForumPage.test.tsx "a writer's name opens their profile by key"). None of the three
+        // draws a Trust Profile or a PublicProfilePage (checked in the loop), and a topic's row in the list opens the topic, never
+        // its writer (the small-cards rule).
         expect(doors.sort()).toEqual([
             path.join('components', 'ActivityWaterfall.tsx'),
             path.join('components', 'AppHeader.tsx'),
@@ -220,6 +225,9 @@ describe('every door on the web lands on the enterprise page', () => {
             path.join('components', 'PollCard.tsx'),
             path.join('components', 'PostAuthorTrust.tsx'),
             path.join('components', 'PulseFeedCard.tsx'),
+            path.join('components', 'forum', 'ForumTopicView.tsx'),
+            path.join('pages', 'ChatTabPage.tsx'),
+            path.join('pages', 'ForumPage.tsx'),
             path.join('pages', 'LearnPage.tsx'),
             path.join('pages', 'MarketplacePage.tsx'),
             path.join('pages', 'MessagesPage.tsx'),
@@ -229,6 +237,14 @@ describe('every door on the web lands on the enterprise page', () => {
             path.join('pages', 'ShopDetailPage.tsx'),
             path.join('pages', 'TreasuryDetailPage.tsx'),
         ].sort());
+        // The forum's three follow the rule as said above: ChatTabPage and ForumPage only hand App's onOpenProfile on, unchanged,
+        // and ForumTopicView calls it once, with a post's writer's key.
+        const calls = (rel: string) => [...fs.readFileSync(path.join(root, rel), 'utf8').matchAll(/onOpenProfile(?:\?\.)?\(([^)]*)\)/g)].map((m) => m[1]);
+        expect(calls(path.join('pages', 'ChatTabPage.tsx'))).toEqual([]);
+        expect(calls(path.join('pages', 'ForumPage.tsx'))).toEqual([]);
+        expect(calls(path.join('components', 'forum', 'ForumTopicView.tsx'))).toEqual(['post.writer.publicKey']);
+        expect(src(path.join('pages', 'ChatTabPage.tsx'))).toMatch(/<ForumPage\b[^>]*\bonOpenProfile=\{props\.onOpenProfile\}/);
+        expect(src(path.join('pages', 'ForumPage.tsx'))).toMatch(/<ForumTopicView\b[^>]*\bonOpenProfile=\{onOpenProfile\}/);
         // The profile opens no one by key itself: past its props, its one onOpenProfile is the one it hands InvitedByCard.
         const profile = fs.readFileSync(path.join(root, 'pages', 'PublicProfilePage.tsx'), 'utf8');
         const uses = [...profile.matchAll(/[^\n]*\bonOpenProfile\b[^\n]*/g)].map((m) => m[0].trim());

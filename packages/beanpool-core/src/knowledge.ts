@@ -420,6 +420,24 @@ export function knowledgeFeatureMode(node: FeatureSet, reader?: FeatureSet): Fea
 /** A feed item's `source` for the knowledge card: both apps branch on it before anything else (amended §3.8). */
 export const PULSE_KNOWLEDGE_SOURCE = 'knowledge' as const;
 
+/**
+ * The word an app sends in GET /api/pulse/feed's `with=` to be given knowledge cards (amended §2.3): a read without it never
+ * holds one, so an app from before KP never draws a card it doesn't know.
+ */
+export const PULSE_KNOWLEDGE_WITH = 'knowledge' as const;
+
+/** The card's id is this and the node's local date: `know_2026-11-15`. No Pulse item's id starts so. */
+export const PULSE_KNOWLEDGE_ID_PREFIX = 'know_' as const;
+
+/** How far back the Pulse announces (amended §2.12): pages first shown in the last 30 days. */
+export const PULSE_KNOWLEDGE_DAYS = 30;
+
+/** And of those, the newest 20 only: the Pulse is no second Learn (amended §A6). */
+export const PULSE_KNOWLEDGE_MAX_PAGES = 20;
+
+/** The rows one card carries (amended §3.8): the first three titles; "and {n} more ›" counts the rest from `count`. */
+export const PULSE_KNOWLEDGE_ROWS = 3;
+
 /** One page on the Pulse's knowledge card: a row, never the body. `by`: the writer's name on a single page they wrote. */
 export interface PulseKnowledgePost {
     id: string;
@@ -433,7 +451,8 @@ export interface PulseKnowledgePost {
 
 /**
  * The knowledge card on the Pulse feed (amended §3.8): worked out from the posts when the feed is read with
- * `with=knowledge`, one a day at most, never stored. It keeps a feed item's fields so one list holds both kinds.
+ * `with=knowledge`, one a day at most, never stored. It keeps a feed item's fields so one list holds both kinds: the owner's
+ * fields are there and empty (no face, no name, no profile to open).
  */
 export interface PulseKnowledgeCard {
     /** `know_<local date>`. */
@@ -443,8 +462,15 @@ export interface PulseKnowledgeCard {
     category: 'knowledge';
     url: null;
     thumbnailUrl: null;
+    ownerPubkey: '';
+    callsign: '';
+    avatarUrl: null;
+    isVerified: false;
+    /** The day's newest page's title. */
     title: string;
+    /** When that day's newest page first showed, as an ISO time: the card's place in the feed's order. */
     publishedAt: string;
+    /** `count`: the day's pages; `posts`: the newest PULSE_KNOWLEDGE_ROWS of them, newest first. */
     knowledge: { count: number; posts: PulseKnowledgePost[] };
 }
 

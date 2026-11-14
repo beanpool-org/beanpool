@@ -6,7 +6,7 @@
  * turns it red.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
@@ -23,13 +23,15 @@ import { oldKeyFromWords } from '../old-key-from-words';
 const RIVERSIDE = 'https://riverside.example';
 const RIVERBEND = 'https://riverbend.example';
 
-/** An account whose key its 12 words make, as a restore makes it. */
-function wordsAccount(): ContactsAccount & { words: string[] } {
+/** An account whose key its 12 words make, as a restore makes it; `holding` among the 12, side by side, when given. */
+function wordsAccount(holding: readonly string[] = []): ContactsAccount & { words: string[] } {
     let words: string[] = [];
     do {
         const packed = new Uint8Array(randomBytes(17));
         packed[16] &= 0xf0;
         words = unpackRecoveryWords(packed);
+        const at = randomInt(words.length - holding.length + 1);
+        words.splice(at, holding.length, ...holding);
     } while (!oldKeyFromWords(words));
     const k = oldKeyFromWords(words)!;
     return { publicKey: k.publicKey, privateKey: bytesToHex(k.seed), words };
@@ -69,7 +71,8 @@ class FakeCommunity {
     }
 }
 
-interface Request { community: string; method: string; path: string; body: string }
+/** A request as the phone's net sends it (contacts-sync.ts phoneContactsNet): where, how, the key its headers sign it as, the body. */
+interface Request { community: string; method: string; path: string; signer: string; body: string }
 function phone(communities: Record<string, FakeCommunity>, anchor: string | null) {
     const files = new Map<string, string>();
     const kv = new Map<string, string>();
@@ -77,7 +80,7 @@ function phone(communities: Record<string, FakeCommunity>, anchor: string | null
     const requests: Request[] = [];
     const net: ContactsNet = {
         async call(community, account, method, path, body) {
-            requests.push({ community, method, path, body: body === undefined ? '' : JSON.stringify(body) });
+            requests.push({ community, method, path, signer: account.publicKey, body: body === undefined ? '' : JSON.stringify(body) });
             const c = communities[community];
             return c && link.up ? c.answer(account.publicKey, method, path) : null;
         },
@@ -127,16 +130,27 @@ describe('the old 12 words open the old list and merge it into the new one', () 
     });
 
     it('never sends the words, the old key, or anyone in the list: only a GET of the old copy, per community', async () => {
-        const oldMe = wordsAccount();
+        // Two of the old 12 are words the record of requests holds itself: "body" (a field name) and "river" (in the test's
+        // addresses). Checked against that record as text, such a word was "found" with nothing sent: 10 of the 2048 list
+        // words are in it, so about one run in 18 drew one and went red (merge queue run 43652594837, "not to contain
+        // 'body'"; 5 of 50 runs on main). Every run holds them now, so the check below can never lean on the draw.
+        const oldMe = wordsAccount(['body', 'river']);
         const me = person();
         const riverside = new FakeCommunity();
         riverside.former.set(me.publicKey, { copy: copyOf(oldMe, listOf(contact('Dee Walker', ['0412 345 678']))), formerKey: oldMe.publicKey, keptUntil: '2027-11-15T00:00:00.000Z' });
         const p = phone({ [RIVERSIDE]: riverside, [RIVERBEND]: new FakeCommunity() }, RIVERSIDE);
         await openFormerWithWords(oldMe.words, me, p.deps);
-        expect(p.requests.map((q) => `${q.method} ${q.community}${q.path}`)).toEqual([`GET ${RIVERSIDE}${CONTACTS_FORMER_PATH}`, `GET ${RIVERBEND}${CONTACTS_FORMER_PATH}`]);
-        const sent = JSON.stringify(p.requests);
-        for (const secret of [...oldMe.words, oldMe.privateKey, 'Dee', '0412', '345 678']) expect(sent).not.toContain(secret);
-        // Mutation: send the words to the server to check → the request body holds them.
+        // Every request whole, each field the phone's net sends: a GET of the old copy at each community, signed as the key now,
+        // carrying nothing. No other request, no query on the path, no body, never signed as the old key.
+        expect(p.requests).toEqual([
+            { community: RIVERSIDE, method: 'GET', path: CONTACTS_FORMER_PATH, signer: me.publicKey, body: '' },
+            { community: RIVERBEND, method: 'GET', path: CONTACTS_FORMER_PATH, signer: me.publicKey, body: '' },
+        ]);
+        // And each secret by name in what the requests carry past their address (pinned above, and the test's own).
+        const carried = p.requests.map((q) => q.body).join('\n');
+        for (const secret of [oldMe.words.join(' '), ...oldMe.words, oldMe.privateKey, 'Dee', '0412', '345 678']) expect(carried).not.toContain(secret);
+        // Mutation: send the words to the server to check (in the body, or a query on the path) → the requests differ and the
+        // body names them; sign the GET as the old key → its signer is the old key (main's check let that through).
     });
 
     it("words that aren't the old key's open nothing and change nothing", async () => {

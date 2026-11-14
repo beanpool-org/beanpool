@@ -52,7 +52,12 @@ export default function ContactsScreen() {
     useEffect(() => {
         navigation.setOptions({ gestureEnabled: !onPage });
         if (!onPage) return undefined;
-        const sub = BackHandler.addEventListener('hardwareBackPress', () => { setScreen({ kind: 'list' }); return true; });
+        // Only while Contacts is the screen on top: a screen pushed over it (a notification tap, a link) gets its own Back.
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+            if (!navigation.isFocused()) return false;
+            setScreen({ kind: 'list' });
+            return true;
+        });
         return () => sub.remove();
     }, [navigation, onPage]);
     const styles = useStyles(makeStyles);

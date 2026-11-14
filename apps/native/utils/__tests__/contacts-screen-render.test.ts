@@ -24,6 +24,7 @@ const mem = vi.hoisted(() => ({
     reads: 0,
     // Android's hardware Back (BackHandler's listeners, newest first, as React Native asks them) and the route's options (iOS swipe-back).
     back: [] as Array<() => boolean>,
+    focused: true,
     options: [] as Array<Record<string, unknown>>,
 }));
 // The store loads Expo's file system, AsyncStorage and the share sheet with require() (utils/contacts-store.ts
@@ -81,7 +82,7 @@ vi.mock('react-native', () => {
         },
     };
 });
-const NAV = vi.hoisted(() => ({ setOptions: (o: Record<string, unknown>) => { mem.options.push(o); } }));
+const NAV = vi.hoisted(() => ({ setOptions: (o: Record<string, unknown>) => { mem.options.push(o); }, isFocused: () => mem.focused }));
 vi.mock('expo-router', () => ({
     router: { push: (to: unknown) => mem.pushed.push(to), back: () => mem.pushed.push('back') },
     useNavigation: () => NAV,
@@ -173,7 +174,7 @@ const onPhone = async () => (await loadContacts(ME, phoneContactsDeps())).onPhon
 
 beforeEach(() => {
     mem.store.clear(); mem.files.clear(); mem.alerts.length = 0; mem.shared.length = 0; mem.blocked = []; mem.pushed.length = 0;
-    mem.back.length = 0; mem.options.length = 0;
+    mem.back.length = 0; mem.options.length = 0; mem.focused = true;
     mem.store.set('beanpool_anchor_url', RIVERSIDE);
     vi.mocked(syncContacts).mockClear();
 });
@@ -275,6 +276,18 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         // Mutation: drop setOptions({ gestureEnabled }) → swipeCloses() stays true on Add, and an edge swipe closes Contacts.
     });
 
+    it('Back belongs to Contacts only while it is on top: a screen pushed over "Add a contact" keeps its own Back (review 2)', async () => {
+        await render();
+        await press('＋ Add');
+        expect(text()).toContain('Phone number');
+        // A notification tap pushes another screen over Contacts: this one is no longer focused.
+        mem.focused = false;
+        await pressBack();
+        expect(mem.pushed).toEqual(['back']);
+        expect(text()).toContain('Phone number');
+        // Mutation: drop the isFocused() guard → Back is swallowed here (pushed stays []) and the Add form is discarded.
+    });
+
     it('a contact: Remove asks first, in the design\'s words, then the contact is gone from the phone', async () => {
         await seedList((l) => putContact(l, person('Dee Walker', { phones: ['0412 345 678'], note: 'Seedlings' })));
         await render();
@@ -327,7 +340,7 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         await expect(sweepContactsFile()).resolves.toBeUndefined();
         await expect(sweepContactsFile({ cacheDirectory: null, deleteAsync: async () => { throw new Error('no'); } })).resolves.toBeUndefined();
         // The app's start runs it, beside the recovery kit's sweep.
-        expect(readFileSync(join(__dirname, '../../app/_layout.tsx'), 'utf8')).toMatch(/sweepPrintedPdfs\(\);\s*void import\('\.\.\/utils\/use-contacts'\)\.then\(\(m\) => m\.sweepContactsFile\(\)\)/);
+        expect(readFileSync(join(__dirname, '../../app/_layout.tsx'), 'utf8')).toMatch(/useEffect\(\(\) => \{ void import\('\.\.\/utils\/use-contacts'\)\.then\(\(m\) => m\.sweepContactsFile\(\)\)/);
         // Mutation: drop the call in _layout.tsx → the file a killed share left stays in the cache, unlocked, until the next Save.
     });
 

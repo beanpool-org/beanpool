@@ -530,6 +530,15 @@ export function initSchema() {
     // CONVERSION CODE (schema step), log row PERITEM-S4, remove in the release after the one that ships per-item.
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN item_option TEXT CHECK (item_option IS NULL OR item_option IN ('each', 'lot'))`).run(); } catch { }
 
+    // Born with the forum's moderation (slice F2; DESIGN-forums-fable.md §3 and §20, the joint design §2.4): four empty columns,
+    // NULL on every row that is there. Additions, not conversion code, as K1's above and as the design's §20 says: nothing is
+    // read, filled in or rewritten. A file from before the forum has no forum_posts or forum_members yet: those two find no
+    // table and do nothing, and schema.sql below makes the tables whole. On a fresh install each finds its column.
+    for (const [table, column] of [['abuse_reports', 'target_forum_post_id TEXT'], ['abuse_reports', 'target_home TEXT'],
+        ['forum_posts', 'hidden_by_reports_at TEXT'], ['forum_members', 'known_at TEXT']]) {
+        try { db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column}`).run(); } catch { }
+    }
+
     // An older conversion pass not yet removed: it finds nothing to do on a file the gate opens (every kept node ran it;
     // MEASURE-conversion-code.md M2), and goes in its own removal with the seal's half (the split-off N1b lists it). Push
     // tokens stored in the clear go aside for the boot to lock or drop (services/push-token-seal.ts, A25).

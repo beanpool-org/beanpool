@@ -790,7 +790,7 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
     // and photo in another community") waits as a rename here, and the node refuses it (400 `callsign_link`). Every Save
     // here sent it again and failed "Could Not Save" until the member typed a new name.
     it('a Save told the waiting name is a link drops it: said in the community\'s words, and the next Save goes without it', async () => {
-        const LINK = 'https://mullum.beanpool.org/?inv';
+        const LINK = 'https://riverside.example.org/?i';
         const { keepPendingProfileChange } = await import('../pending-profile-sync');
         await keepPendingProfileChange(NODE, KEY, { callsign: LINK });
         mockDb.localProfile = { public_key: KEY, callsign: 'Marty party' };

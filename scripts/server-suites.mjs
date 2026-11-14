@@ -605,10 +605,13 @@ export const SUITES = [
     'test-credit-gift-memory',
     // Tiers are badges only: a badge gives no credit, never your own, logged, the member told; a genesis invite's too.
     'test-tiers-badge-only-http',
+    // Retire an empty duplicate: owners only, by key; every "empty" rule; no vote, nothing deleted; Bring back; Freeze reads back.
+    'test-retire-empty-duplicate',
     'test-invite-asks',
     'test-knowledge-publish',
     'test-knowledge-reads',
     'test-knowledge-drafts',
+    'test-forum',
     'test-mcp-knowledge',
     'test-names-copy',
     'test-contact-copies',

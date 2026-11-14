@@ -336,7 +336,7 @@ export function StandbyReplicationPanel({
                             type="url"
                             value={primaryUrl}
                             onChange={(e) => setPrimaryUrl(e.target.value)}
-                            placeholder="https://test.beanpool.org"
+                            placeholder="https://riverside.example.org"
                             className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-terra-500 min-h-[44px]"
                         />
                     </div>

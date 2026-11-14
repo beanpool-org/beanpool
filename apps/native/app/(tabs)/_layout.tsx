@@ -25,6 +25,7 @@ import { fetchNodeProfile, getCachedNodeProfile, hiddenTabsFor, type HideableTab
 import { UNKNOWN_NODE_PROFILE, anchorRead, profileArrived, type AnchoredNodeProfile } from '../../utils/node-profile-anchor';
 import { keepCommunityIdentity } from '../../utils/address-follow';
 import { HallBanner } from '../../components/HallBanner';
+import { marketTabLit } from '../../utils/pulse-door';
 
 /** Each tour step's tab as a route, written out so every link into the app is checked (deep-links-resolve.test.ts). */
 const TOUR_ROUTES: Record<string, '/(tabs)' | '/(tabs)/market' | '/(tabs)/map' | '/(tabs)/chats' | '/(tabs)/projects' | '/(tabs)/ledger'> = {
@@ -412,7 +413,11 @@ export default function TabLayout() {
                         title: t(TAB.market),
                         tabBarAccessibilityLabel: t(TAB.market),
                         tabBarButtonTestID: 'tab-market',
-                        tabBarIcon: ({ focused, color }) => <TabItem label={t(TAB.market)} icon="🤝" focused={focused} color={color} count={dealsCount} />
+                        // Lit while the Pulse is open too: its door is at the top of the Market (utils/pulse-door.ts).
+                        tabBarIcon: ({ focused, color }) => {
+                            const lit = marketTabLit(focused, pathname);
+                            return <TabItem label={t(TAB.market)} icon="🤝" focused={lit} color={lit ? colors.accent.primary : color} count={dealsCount} />;
+                        }
                     }}
                 />
                 <Tabs.Screen

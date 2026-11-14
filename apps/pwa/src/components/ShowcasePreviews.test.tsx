@@ -296,9 +296,10 @@ describe('the Ledger in preview is the member\'s real screen, drawn from Example
         expect(screen.getByRole('heading', { name: S.member })).toBeInTheDocument();
         expect(screen.getAllByText(tier.name).length).toBeGreaterThanOrEqual(2);
         expect(screen.getByTestId('ledger-balance')).toHaveTextContent(`+${formatHundredths(S.balance * 100)}B`);
-        // The credit bar, as a member's: zero the sweet spot, the fee-free ceiling above it.
-        expect(screen.getByText('sweet spot')).toBeInTheDocument();
-        expect(screen.getByText('fee-free')).toBeInTheDocument();
+        // The credit card, as a member's (slice R1): 0 balanced, the monthly fee's start at +200, one button.
+        expect(screen.getByText('balanced')).toBeInTheDocument();
+        expect(screen.getByText('monthly fee starts')).toBeInTheDocument();
+        expect(screen.getByTestId('credit-card')).toBeInTheDocument();
         // The sample's figures are whole Beans; the screen writes them from hundredths (formatHundredths), as a node's.
         expect(screen.getByText(`Level ${S.level} of ${S.levels} · credit line ${formatHundredths(-S.floor * 100)} Beans`)).toBeInTheDocument();
         expect(document.body.textContent).toContain(`${formatHundredths(next.minCredit - S.trust * 100)} more trust to ${next.emoji} ${next.name}`);

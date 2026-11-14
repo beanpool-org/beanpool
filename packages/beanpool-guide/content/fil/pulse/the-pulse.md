@@ -4,12 +4,14 @@ title: The Pulse
 summary: Kung ano ang ginagawa at ibinabahagi ng mga kapitbahay sa ibang lugar, sa iisang feed.
 related: home, learn, your-channels, reporting, the-bean
 help: Mga link na ginawa o ibinahagi ng mga kapitbahay sa ibang lugar, sa iisang feed. I-tap ang isa para buksan ito.
-source-hash: 5a5a0ba505806e0a
+source-hash: 48edba7a67cbc8e2
 ---
 
 ## Ano ito
 
-Buksan ang Pulse mula sa card ng **Ang Balita** sa **Home**: i-tap ang isang post, o i-tap ang **Tingnan lahat**. Kung wala ito sa iyong Home, ibalik ito gamit ang **Magdagdag ng card** sa telepono, o **I-edit ang Home** sa web app. Sa telepono maaari mo rin itong buksan mula sa **Mga Setting**, sa ilalim ng **Ang Balita**.
+Buksan ang **Merkado** at i-tap ang **Balita** malapit sa itaas. Nananatiling naka-highlight ang tab na **Merkado** habang bukas ang Pulse. Sa web app, nasa menu rin ito sa gilid, sa ilalim ng **Merkado**.
+
+Nasa **Home** din ito, bilang card na **Ang Balita**, kapag may ibinahagi ang isang kapitbahay sa nakaraang linggo: mag-tap ng post, o i-tap ang **Tingnan lahat**. Kung wala ito sa iyong Home, ibalik ito gamit ang **Magdagdag ng card**. Sa telepono maaari mo rin itong buksan mula sa **Mga Setting**, sa ilalim ng **Ang Balita**.
 
 Tinitipon ng Pulse kung ano ang ipinopost ng mga miyembro ng iyong komunidad sa iba pang mga site: mga video, musika, blog, larawan. Isa itong paraan upang malaman kung ano ang ginagawa at nililikha ng iyong mga kapitbahay.
 
@@ -41,4 +43,6 @@ Hindi mo maaaring itago ang post ng ibang tao para lamang sa iyong sarili.
 
 ## Pagdaragdag ng sarili mo
 
-I-tap ang **+ Mga Channel** sa itaas. Tingnan ang "Pagbahagi ng iyong mga channel".
+I-tap ang **Idagdag sa Pulse** sa kanang ibaba. Kapag walang laman ang Pulse, nasa gitna ng pahina ang button. Para magbahagi ng post, idagdag muna ang channel na kinaroroonan nito: i-tap ang **Mga channel mo** sa itaas. Tingnan ang "Pagbahagi ng mga channel".
+
+Sa pandaigdigang komunidad, wala pang hinihingi sa iyo ang Pulse: walang **Idagdag sa Pulse**, at hindi nagmumungkahi ng mga post na ibabahagi ang web app. Hihintayin muna na magkaroon ng mga patakaran ang pagdaragdag doon para sa mga bagong miyembro. Gumagana roon ang **Mga channel mo** tulad sa anumang komunidad: magdagdag ng channel at papasok pa rin ang mga post nito, at makakapagbahagi ka ng post mula roon.

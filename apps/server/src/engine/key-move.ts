@@ -170,6 +170,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('knowledge_drafts', 'member_pubkey');
     move('knowledge_drafts', 'answered_by');
     move('knowledge_helped', 'member_pubkey');
+    // Their forum topics and posts, and their told stamp (engine/forum.ts): still theirs to edit and remove.
+    move('forum_topics', 'writer_pubkey');
+    move('forum_posts', 'writer_pubkey');
+    move('forum_members', 'member_pubkey');
     // Their tools' private copies (engine/tool-state.ts): the new phone gets them back from here.
     move('member_tool_state', 'public_key');
     // Their shop (engine/shops.ts): the same front window, under the new key. Keyed by its own id, so its listings and its
@@ -365,6 +369,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // A member's badge (engine/badges.ts) and the badges an owner or admin gave: recognition follows the person.
     move('member_badges', 'member_pubkey');
     move('member_badges', 'set_by');
+    // A retired empty duplicate stays retired under its new key, and the owner who retired one is named by theirs.
+    move('retired_accounts', 'member_pubkey');
+    move('retired_accounts', 'retired_by');
     // A voucher's budget, the lines that wrote it, and the credit line each vouch or gift gave, beside invited_by (engine/vouchers.ts):
     // the budget and the room follow the person.
     move('vouchers', 'member_pubkey');

@@ -53,8 +53,8 @@
  *               shared outside stops at once (engine/peek-tickets.ts stopAllPeekTickets), in the same transaction: set on
  *               again, none of them opens anything.
  *   doorCheck   only where the open door is set (400 otherwise); no lock.
- *   dmRequests, decisions, outsideMessages, probation, autoHide, autoMute, shareLocation, shareMemberCount, shareEmail, sharePhone,
- *   shareHealth: no lock.
+ *   dmRequests, decisions, forum, outsideMessages, probation, autoHide, autoMute, shareLocation, shareMemberCount, shareEmail,
+ *   sharePhone, shareHealth: no lock.
  *   recoveryCopies  'vault' | 'server' | 'none' (config/recovery-copies.ts, vault rethink VR2): no lock. Only where new
  *               copies go; every copy a member already has stays theirs, and the members' sentence says so.
  *   contacts    true | false: whether members' locked contact lists are kept here (config/contact-copies.ts, contacts
@@ -119,7 +119,7 @@ const bad = (setting: string | undefined, message: string, code = 'bad_setting')
 
 /** Each a profile switch's override, in the shape's name. The 12-words door is `ssoRequiredForJoin` the other way up. */
 const SWITCH_OF = {
-    doorCheck: 'doorCheck', knocks: 'knocks', beans: 'beans', dmRequests: 'dmRequests', decisions: 'decisions', outsideMessages: 'outsideMessages', shareOutside: 'shareOutside', listed: 'publishToDirectory',
+    doorCheck: 'doorCheck', knocks: 'knocks', beans: 'beans', dmRequests: 'dmRequests', decisions: 'decisions', forum: 'forum', outsideMessages: 'outsideMessages', shareOutside: 'shareOutside', listed: 'publishToDirectory',
     probation: 'probation', autoHide: 'autoHideReports', autoMute: 'autoMute',
 } as const satisfies Record<string, ProfileSwitch>;
 type SwitchSetting = keyof typeof SWITCH_OF;
@@ -133,7 +133,7 @@ type ShareSetting = keyof typeof SHARE_FIELD_OF;
 
 /** Checked and written in this order, so a request with two refusals is always refused for the same one. */
 const SETTINGS_IN_ORDER = [
-    'join', 'wordsDoor', 'doorCheck', 'knocks', 'beans', 'knownFloor', 'voucherBudget', 'memberGift', 'dmRequests', 'decisions', 'outsideMessages', 'shareOutside', 'listed',
+    'join', 'wordsDoor', 'doorCheck', 'knocks', 'beans', 'knownFloor', 'voucherBudget', 'memberGift', 'dmRequests', 'decisions', 'forum', 'outsideMessages', 'shareOutside', 'listed',
     'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth', 'probation', 'autoHide', 'autoMute',
     'recoveryCopies', 'contacts', 'removalDecider',
 ] as const;
@@ -153,7 +153,7 @@ export const SETTING_NAMES: Record<ShapeSettingName, string> = {
     doorCheck: 'A person check on busy days', knocks: 'Requests to join', beans: 'Beans',
     knownFloor: 'Known floor for confirmed members', voucherBudget: 'Budget per voucher', memberGift: 'Members giving part of their credit line',
     dmRequests: 'First message from someone new',
-    decisions: 'Community votes (Decisions)', outsideMessages: 'Messages from other communities',
+    decisions: 'Community votes (Decisions)', forum: 'Forum', outsideMessages: 'Messages from other communities',
     shareOutside: 'Members may share listings outside the community',
     listed: 'Listed in the BeanPool directory',
     shareLocation: 'Share location & radius', shareMemberCount: 'Share member count', shareEmail: 'Share email',
@@ -187,6 +187,8 @@ const NOTICE = {
     dmOff: word("Your community's owners changed how it works: every message now arrives straight away."),
     decisionsOn: word("Your community's owners changed how it works: community votes are on."),
     decisionsOff: word("Your community's owners changed how it works: community votes are off; the moderators look after things."),
+    forumOn: word("Your community's owners changed how it works: the forum is on."),
+    forumOff: word("Your community's owners changed how it works: the forum is off. Its topics are kept for when it is on again."),
     shareOutsideOn: word("Your community's owners changed how it works: you can share a listing or an event outside the community for 7 days."),
     shareOutsideOff: word("Your community's owners changed how it works: posts are no longer shared outside the community, and every link shared outside has stopped."),
     probationOn: word("Your community's owners changed how it works: new accounts have limits for their first days."),
@@ -224,6 +226,7 @@ function memberSentence(change: PlannedChange): string | null {
         case 'memberGift': return change.to === '0' ? tr(NOTICE.giftOff) : tr(NOTICE.giftOn, { max: beansAmount(Number(change.to)) });
         case 'dmRequests': return on ? tr(NOTICE.dmOn) : tr(NOTICE.dmOff);
         case 'decisions': return on ? tr(NOTICE.decisionsOn) : tr(NOTICE.decisionsOff);
+        case 'forum': return on ? tr(NOTICE.forumOn) : tr(NOTICE.forumOff);
         case 'shareOutside': return on ? tr(NOTICE.shareOutsideOn) : tr(NOTICE.shareOutsideOff);
         case 'probation': return on ? tr(NOTICE.probationOn) : tr(NOTICE.probationOff);
         case 'autoHide': return on ? tr(NOTICE.autoHideOn) : tr(NOTICE.autoHideOff);
@@ -643,9 +646,10 @@ function planShapeChanges(body: unknown): ShapePlan {
         }
     }
 
-    // Votes, messages from other communities and the three safety switches: no lock. Members are not told of the outside
-    // switch (memberSentence: none): no app shows an outside chat until X3, so a sentence would name something they can't see.
-    for (const setting of ['decisions', 'outsideMessages', 'probation', 'autoHide', 'autoMute'] as const satisfies readonly SwitchSetting[]) {
+    // Votes, the forum, messages from other communities and the three safety switches: no lock. Members are not told of the
+    // outside switch (memberSentence: none): no app shows an outside chat until X3, so a sentence would name something they
+    // can't see.
+    for (const setting of ['decisions', 'forum', 'outsideMessages', 'probation', 'autoHide', 'autoMute'] as const satisfies readonly SwitchSetting[]) {
         if (asked[setting] === undefined) continue;
         const v = boolOf(setting, asked[setting]);
         if (v === S[setting].configured) continue;

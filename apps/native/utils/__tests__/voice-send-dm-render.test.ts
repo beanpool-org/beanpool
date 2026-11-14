@@ -11,7 +11,7 @@
  *   - db.ts:7448: each try made a new line id, so a Send after the 60 s timeout was the voice message twice. The recording's
  *     own line id goes to sendVoiceMessage as its messageId on every try, with a signal that gives the send up for real.
  *
- * Byron, 14 Nov: a voice message sent to a node from before voice V2 was stored as a text line carrying a sound, an empty
+ * A live community, 14 Nov: a voice message sent to a node from before voice V2 was stored as a text line carrying a sound, an empty
  * bubble on the other phone. The microphone shows only where the community says `features.voiceLines: true` (core
  * voiceLinesOn), read from this phone's copy of the community as every other switch is (utils/use-node-profile.ts); a
  * recording that would still go where it isn't said is kept, not sent, and the chat says so.
@@ -304,7 +304,7 @@ describe('a direct chat\'s voice message sent twice is one line (PR #3112 review
     });
 });
 
-describe('the microphone only where the chat\'s community takes voice messages (features.voiceLines; Byron, 14 Nov)', () => {
+describe('the microphone only where the chat\'s community takes voice messages (features.voiceLines; a live community, 14 Nov)', () => {
     const NOT_TAKEN = "This community doesn't take voice messages yet. Nothing was sent.";
     const kept = (features: Record<string, unknown>, checkedAt = new Date().toISOString()) =>
         store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features, checkedAt } }));
@@ -315,7 +315,7 @@ describe('the microphone only where the chat\'s community takes voice messages (
     }
 
     for (const [what, features] of [
-        ['says nothing of it (a node from before voice V2, as Byron was)', {}],
+        ['says nothing of it (a node from before voice V2, as one live community was)', {}],
         ['says voiceLines: false', { voiceLines: false }],
     ] as const) {
         it(`a community that ${what}: no microphone, the composer as before voice`, async () => {

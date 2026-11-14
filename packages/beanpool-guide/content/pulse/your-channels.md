@@ -7,7 +7,7 @@ related: the-pulse, learn, your-profile, privacy
 
 ## Add a channel
 
-- In the **Pulse**, tap **+ Channels**. On the phone you can also open **Settings** and tap **Channels & Showcase**.
+- In the **Pulse**, tap **Your channels** at the top. On the phone you can also open **Settings** and tap **Channels & Showcase**.
 - Tap **+ Add a channel**.
 - Under **Where do you post?**, choose the site.
 - Type or paste **Your link or handle**.

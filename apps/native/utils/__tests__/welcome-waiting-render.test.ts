@@ -576,7 +576,7 @@ describe('5. Restore over the waiting key', () => {
         await mount();
         await press('Already a Member? Restore Account');
         await press('🔑 Recover with 12 Words');
-        await type('Community name or address (e.g. mullum)', 'riverside.example.org');
+        await type('Community name or address (e.g. riverside)', 'riverside.example.org');
         await press('Recover Identity');
         expect(host!.textContent).toContain("⚠️ Replace this phone's account?");
     });

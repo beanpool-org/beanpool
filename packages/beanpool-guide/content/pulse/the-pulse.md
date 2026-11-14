@@ -8,7 +8,9 @@ related: home, learn, your-channels, reporting, the-bean
 
 ## What it is
 
-Open the Pulse from the **The Pulse** card on **Home**: tap a post, or tap **See all**. If it is not on your Home, bring it back with **Add a card**. On the phone you can also open it from **Settings**, under **The Pulse**.
+Open the **Market** and tap **Pulse** near the top. The **Market** tab stays lit while the Pulse is open. In the web app it is also in the menu at the side, under **Market**.
+
+It is on **Home** too, as the **The Pulse** card, when a neighbour has shared something in the last week: tap a post, or tap **See all**. If it is not on your Home, bring it back with **Add a card**. On the phone you can also open it from **Settings**, under **The Pulse**.
 
 The Pulse gathers what members of your community post on other sites: videos, music, blogs, photos. It is a way to find out what your neighbours make and do.
 
@@ -40,4 +42,6 @@ You cannot hide someone else's post just for yourself.
 
 ## Adding your own
 
-Tap **+ Channels** at the top. See "Sharing your channels".
+Tap **Add to Pulse** at the bottom right. When the Pulse is empty, the button is in the middle of the page instead. To share a post, add the channel it is on first: tap **Your channels** at the top. See "Sharing your channels".
+
+On the global community the Pulse asks nothing of you yet: there is no **Add to Pulse**, and the web app does not suggest posts to share. That waits until adding there has rules for new members. **Your channels** works there as on any community: add a channel and its posts still come in, and you can share a post from there.

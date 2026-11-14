@@ -3,12 +3,12 @@ slug: your-channels
 title: Chia sẻ các kênh của bạn
 summary: Đưa các kênh YouTube, blog, Instagram và các kênh khác của bạn lên Nhịp đập.
 related: the-pulse, learn, your-profile, privacy
-source-hash: bc8099cfeda70bea
+source-hash: 40a7c578cf3fdbbd
 ---
 
 ## Thêm một kênh
 
-- Trong **Nhịp đập**, nhấn **+ Kênh**. Trên điện thoại, bạn cũng có thể mở **Cài đặt** và nhấn **Kênh & Giới thiệu**.
+- Trong **Nhịp đập**, nhấn **Kênh của bạn** ở trên cùng. Trên điện thoại, bạn cũng có thể mở **Cài đặt** và nhấn **Kênh & Giới thiệu**.
 - Nhấn **+ Thêm một kênh**.
 - Dưới mục **Bạn đăng ở đâu?**, hãy chọn trang web.
 - Nhập hoặc dán **Liên kết hoặc tên tài khoản của bạn**.

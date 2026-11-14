@@ -30,8 +30,10 @@ describe('AddCardDialog', () => {
         expect(screen.getByText('New in the Market is already on Home')).toHaveClass('sr-only');
         expect(within(screen.getByTestId('home-add-on-market')).getByText('On Home')).toHaveAttribute('aria-hidden', 'true');
         expect(screen.getByTestId('home-add-count-search')).toHaveTextContent('2 of 5 on Home');
-        // Your Beans is in the default list (DESIGN-home-default-fable.md §2.2); The Pulse is the one it leaves out.
-        expect(screen.getByRole('button', { name: 'Add The Pulse to Home' })).toBeInTheDocument();
+        // Your Beans and The Pulse are in the default list (DESIGN-home-default-fable.md §2.2; DESIGN-pulse-home-fable.md §3.5);
+        // Your enterprise is one it leaves out.
+        expect(screen.getByRole('button', { name: 'Add Your enterprise to Home' })).toBeInTheDocument();
+        expect(screen.getByTestId('home-add-on-pulse')).toHaveTextContent('On Home');
         expect(screen.getByTestId('home-add-on-beans')).toHaveTextContent('On Home');
         expect(screen.queryByTestId('home-add-row-community')).toBeNull();
         expect(screen.queryByTestId('home-add-row-needs')).toBeNull();

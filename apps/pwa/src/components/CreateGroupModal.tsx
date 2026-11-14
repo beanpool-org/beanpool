@@ -191,7 +191,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            placeholder={t('e.g. Bindarrabi Garden Crew, Solar Guild')}
+                            placeholder={t('e.g. Riverside Garden Crew, Solar Guild')}
                             maxLength={60}
                             required
                             className="w-full px-3 py-2 bg-white dark:bg-nature-950 border border-nature-300 dark:border-nature-600 rounded-xl text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"

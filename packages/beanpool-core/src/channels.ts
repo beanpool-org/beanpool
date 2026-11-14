@@ -150,3 +150,34 @@ export function isWebUrl(url: string | null | undefined): boolean {
     if (!trimmed) return false;
     return /^https?:\/\//i.test(trimmed);
 }
+
+// ── The Pulse page: its one add button and a quiet week (DESIGN-pulse-home-fable.md §3.2, §3.4, §3.8, P2/P3) ─────────
+
+/** The Pulse page's own words, the same on the phone and the web. Shown through t() where drawn. */
+export const PULSE_PAGE_WORDS = {
+    /** The one add button, bottom right (in the middle of the page on a quiet week, where it is still the only one). */
+    add: word('Add to Pulse'),
+    /** The title row's way to the member's own channels (was "+ Channels"). */
+    yourChannels: word('Your channels'),
+    quietTitle: word('Nothing new this week.'),
+    quietBody: word('Have a video, a song, a blog or photos of your own? Add a link and your neighbours see it here.'),
+    learnLine: word('Nothing to add? The Learn lane has short videos on how BeanPool works.'),
+    /** On the worldwide community, where nothing is asked to be added yet: the Learn lane leads. */
+    learnGlobal: word('The Learn lane has short videos on how BeanPool works.'),
+    /**
+     * The web app's two lines: it has no Learn lane, and "Learn" there is the Local knowledge page. Its how-to videos are
+     * under the **How it works** chip (pulse/learn.md), named by {chip} as the chip itself reads.
+     */
+    learnLineWeb: word('Nothing to add? Tap {chip} for short videos about BeanPool.'),
+    learnGlobalWeb: word('Tap {chip} for short videos about BeanPool.'),
+} as const;
+
+/**
+ * Whether the Pulse page offers Add to Pulse on this community (Marty's pick 3 of 14 Nov 2026). On the worldwide community
+ * it waits until adding there has rules for new people (the design's P5: a first look, and reports that can hide an item);
+ * a local community adds at once. A profile not heard yet is no reason to take a local member's button away. The Settings
+ * path to Channels that exists today is neither widened nor narrowed.
+ */
+export function pulseAddsHere(profile: string | null | undefined): boolean {
+    return profile !== 'global';
+}

@@ -1362,6 +1362,11 @@ async function main(): Promise<void> {
             // Its waiting list (slice K3): a member's suggestion, their own, taking one back; an owner's or admin's To check.
             'POST /api/knowledge/drafts', 'GET /api/knowledge/drafts/mine', 'POST /api/knowledge/drafts/:id/withdraw', 'GET /api/knowledge/drafts',
             'GET /api/knowledge/drafts/:id', 'POST /api/knowledge/drafts/:id/approve', 'POST /api/knowledge/drafts/:id/no',
+            // The forum (routes/forum.ts, slice F1): members' reads and writes, all signed; the public pages are slice F7's.
+            'GET /api/forum', 'GET /api/forum/topics', 'GET /api/forum/topics/:id', 'GET /api/forum/posts/:id/photos/:n', 'POST /api/forum/told',
+            'POST /api/forum/topics', 'POST /api/forum/topics/:id/replies', 'POST /api/forum/topics/:id/close', 'POST /api/forum/topics/:id/pin',
+            'POST /api/forum/topics/:id/move', 'POST /api/forum/posts/:id/edit', 'POST /api/forum/posts/:id/remove', 'POST /api/forum/sections',
+            'POST /api/forum/sections/:id/edit',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',
@@ -1434,8 +1439,9 @@ async function main(): Promise<void> {
             'POST /api/local/admin/treasury/:treasury/operators', 'DELETE /api/local/admin/treasury/:treasury/operators/:pubkey',
             'GET /api/local/admin/unlock/:sessionId', 'POST /api/local/admin/unlock/:sessionId', 'POST /api/local/admin/unlock/cancel',
             'POST /api/local/admin/users/:pubkey/freeze', 'POST /api/local/admin/users/:pubkey/operator',
-            'POST /api/local/admin/users/:pubkey/prune', 'POST /api/local/admin/users/:pubkey/status', 'POST /api/local/admin/users/:pubkey/suspend',
-            'POST /api/local/admin/users/:pubkey/tier', 'GET /api/local/admin/web-visits',
+            'POST /api/local/admin/users/:pubkey/prune', 'GET /api/local/admin/users/:pubkey/retire', 'POST /api/local/admin/users/:pubkey/retire',
+            'POST /api/local/admin/users/:pubkey/status', 'POST /api/local/admin/users/:pubkey/suspend',
+            'POST /api/local/admin/users/:pubkey/tier', 'POST /api/local/admin/users/:pubkey/unretire', 'GET /api/local/admin/web-visits',
             'POST /api/local/admin/ws-connections', 'POST /api/local/admin/ws-ticket',
             'GET /api/local/community-info', 'GET /api/local/connectors', 'POST /api/local/connectors',
             'POST /api/local/connectors/connect', 'POST /api/local/connectors/credit-cap', 'POST /api/local/connectors/disconnect',

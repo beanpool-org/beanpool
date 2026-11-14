@@ -145,13 +145,13 @@ describe('Create a Group in the pseudo-locale', () => {
         const others = ['ℹ️'];
         expect(bypassing(document.body, { others })).toEqual([]);
 
-        fireEvent.change(screen.getByPlaceholderText(xx('e.g. Bindarrabi Garden Crew, Solar Guild')), { target: { value: 'A' } });
+        fireEvent.change(screen.getByPlaceholderText(xx('e.g. Riverside Garden Crew, Solar Guild')), { target: { value: 'A' } });
         fireEvent.click(screen.getByRole('button', { name: xx('Create Group (You become Convenor)') }));
         expect(await screen.findByText(xx('Group name must be at least 2 characters long.'))).toBeInTheDocument();
         expect(bypassing(document.body, { others })).toEqual([]);
 
         vi.mocked(createGroup).mockReturnValue(new Promise(() => {}));
-        fireEvent.change(screen.getByPlaceholderText(xx('e.g. Bindarrabi Garden Crew, Solar Guild')), { target: { value: 'Bees' } });
+        fireEvent.change(screen.getByPlaceholderText(xx('e.g. Riverside Garden Crew, Solar Guild')), { target: { value: 'Bees' } });
         fireEvent.click(screen.getByRole('button', { name: xx('Create Group (You become Convenor)') }));
         expect(await screen.findByRole('button', { name: xx('Creating...') })).toBeInTheDocument();
         expect(bypassing(document.body, { others })).toEqual([]);

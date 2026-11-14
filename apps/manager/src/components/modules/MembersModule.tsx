@@ -802,6 +802,14 @@ export function MembersModule({
                                                     <div className="min-w-0">
                                                         <div className="font-bold text-white truncate flex items-center gap-1.5 group-hover:text-bp-ink-terra transition-colors">
                                                             <span>{displayName}</span>
+                                                            {m.status === 'disabled' && (
+                                                                <span
+                                                                    data-testid="member-paused-mark"
+                                                                    className="px-1.5 py-0.5 rounded text-[9px] font-bold border shrink-0 bg-nature-900 text-nature-300 border-nature-700"
+                                                                >
+                                                                    {typeof m.retiredAt === 'string' ? 'Retired (empty duplicate)' : 'Suspended'}
+                                                                </span>
+                                                            )}
                                                             {knownFloorMarks[pubkey] && (
                                                                 <span
                                                                     data-testid="known-floor-mark"

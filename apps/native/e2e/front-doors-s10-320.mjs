@@ -154,7 +154,7 @@ const Page = () => {
                     onChoose={() => {}} onAnother={() => {}}
                 />
                 <TextInput style={S.input} placeholder="Your Callsign (e.g. Monnunit)" placeholderTextColor={colors.text.muted} accessibilityLabel="Callsign" />
-                {q.get('another') === '1' && <TextInput style={S.input} placeholder="Community name or address (e.g. mullum)" placeholderTextColor={colors.text.muted} accessibilityLabel="Community name or node address" />}
+                {q.get('another') === '1' && <TextInput style={S.input} placeholder="Community name or address (e.g. riverside)" placeholderTextColor={colors.text.muted} accessibilityLabel="Community name or node address" />}
             </View>
         </ScrollView>
     );

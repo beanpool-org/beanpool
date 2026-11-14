@@ -121,7 +121,7 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
 
 /**
  * A new or changed name that is an invite or a web address (core name-box.ts; Marty, 14 Nov 2026, card
- * callsign-link-guard: a member's invite link pasted into the name box became her name on Byron). 400 `callsign_link`,
+ * callsign-link-guard: a member's invite link pasted into the name box became her name on her community). 400 `callsign_link`,
  * with the one line both apps show (routes/profile-feature-gate.ts respondProfileRefusal, claim-code.ts claimNode), so
  * an old app or a script can't store one either. A name already held is never refused for being one: only a new name,
  * or a change of one, is read (no conversion code).

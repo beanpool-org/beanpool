@@ -524,7 +524,7 @@ export function NodeIdentityPanel({
                         maxLength={60}
                         value={communityName}
                         onChange={(e) => setCommunityName(e.target.value)}
-                        placeholder="e.g. Mullumbimby Community Exchange"
+                        placeholder="e.g. Riverside Exchange"
                         className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
                     />
                     <p className="text-xs text-nature-400 mt-1 m-0">
@@ -543,7 +543,7 @@ export function NodeIdentityPanel({
                         maxLength={20}
                         value={callsign}
                         onChange={(e) => setCallsign(e.target.value)}
-                        placeholder="e.g. mullum"
+                        placeholder="e.g. riverside"
                         className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:outline-none focus:border-terra-500"
                     />
                     <p className="text-xs text-nature-400 mt-1 m-0">
@@ -705,7 +705,7 @@ export function NodeIdentityPanel({
                         value={areaName}
                         maxLength={AREA_NAME_MAX}
                         onChange={(e) => setAreaName(e.target.value)}
-                        placeholder="e.g. Castlemaine and around"
+                        placeholder="e.g. Riverside and around"
                         disabled={area !== 'loaded'}
                         aria-describedby="area-name-help"
                         className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-terra-500 disabled:opacity-50"

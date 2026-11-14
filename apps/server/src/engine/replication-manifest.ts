@@ -496,6 +496,9 @@ export const TABLES: Record<string, TableEntry> = {
     credit_look_log: plain('actor_pubkey subject_pubkey surface day sight at updated_at', { agedOut: { column: 'at', days: CREDIT_LOOK_KEPT_DAYS } }),
     // A member's tier badge (engine/badges.ts): recognition only, no credit. A take-over shows every member the same badge.
     member_badges: plain('member_pubkey tier set_by set_at updated_at'),
+    // An empty duplicate an owner retired (engine/retire-duplicate.ts): a take-over keeps it retired, and Bring back's
+    // delete reaches a standby as a tombstone. The account's 'disabled' travels in its members row, as every status does.
+    retired_accounts: plain('member_pubkey retired_by retired_at updated_at'),
     // Vouchers and their budgets (engine/vouchers.ts): who vouches, every line of each budget, and the credit line each vouch
     // or member's gift gave. Plain rows, no name; a promoted standby carries on every budget and every member's line.
     vouchers: plain('member_pubkey source entry_id made_by made_at stopped_at stopped_by stop_reason updated_at'),
@@ -543,6 +546,16 @@ export const TABLES: Record<string, TableEntry> = {
     knowledge_drafts: plain('id kind post_id member_pubkey via assistant_name title body topic place sources lang about note state answered_at answered_by reason reason_words result_post_id created_at updated_at'),
     knowledge_draft_photos: plain('draft_id order_num photo_data bytes updated_at'),
     knowledge_helped: plain('post_id member_pubkey counted at updated_at'),
+    // The forum (engine/forum.ts, DESIGN-forums-fable.md §3, §16, slice F1): sections, topics, posts and their photos (in the
+    // row, so the copy carries them), and who was told the forum is public. A promoted standby has the whole forum, and every
+    // delete goes with a tombstone, so it leaves the standby too. The wording before an edit is aged out after 30 days on
+    // each server, with no tombstone.
+    forum_sections: plain('id starter name about position starts listed archived_at created_at updated_at'),
+    forum_topics: plain('id section_id title writer_pubkey place lang reply_count last_activity_at pinned_at closed_at closed_by created_at updated_at'),
+    forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at'),
+    forum_post_photos: plain('post_id order_num photo_data bytes updated_at'),
+    forum_post_edits: plain('post_id edited_at words title updated_at', { agedOut: { column: 'edited_at', days: 30 } }),
+    forum_members: plain('member_pubkey told_public_at updated_at'),
     // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
     thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),
     // A group chat's keys (engine/group-keys.ts): each epoch's signed record and one wrap per member, none of which the
@@ -774,6 +787,10 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     node_config: { kind: 'per-server', reason: 'a JSON object; each field is classified in NODE_CONFIG_BLOB_FIELDS' },
     nodeProfile: { kind: 'payload', reason: 'the node profile record (payload.nodeProfile)' },
     'nodeProfile.*': { kind: 'payload', reason: "the operator's switch overrides (payload.nodeProfile)" },
+    'forum.startersMade': {
+        kind: 'per-server',
+        reason: "when this server made the forum's starter sections (engine/forum.ts): a promoted standby finds its main server's sections in its copy, makes none, and writes its own",
+    },
     // The key itself is a file (data/open-join.key, services/open-join-key.ts), in the take-over bundle only.
     openJoinKeyId: { kind: 'payload', reason: "which key the open door's hashes are made with, a hash of it, never the key (payload.openJoinKeyId)" },
     openJoinSalt: {

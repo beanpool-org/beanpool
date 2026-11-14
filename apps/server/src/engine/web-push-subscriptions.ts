@@ -4,14 +4,19 @@
  *
  * ## Who has a row
  *
- * W1 keeps one kind, `asker`: a key with an open request to join here that tapped "Tell me when they answer" on the waiting
+ * Two kinds. `asker` (W1): a key with an open request to join here that tapped "Tell me when they answer" on the waiting
  * page. One row per key (a second browser replaces the first). No reference to `members`: the key is no member yet. The row
  * goes when the request is cancelled or declined (engine/knocks.ts cancelKnock, declineKnock) and when it lapses (tidyKnocks,
  * every minute); it stays once the request is approved (the yes is what it waits for) and when the key joins (the same key,
- * now a member). What it is sent: `join.answered`, and nothing else (`webPushTargetsFor`).
+ * now a member). What it is sent: `join.answered`, and nothing else (`webPushTargetsFor`). Bound: a row needs an open
+ * request, and requests have the knock rules' ceilings (30 a day on the node, 50 open made in three days, one per key).
  *
- * The bound: a row needs an open request, and requests have the knock rules' ceilings (30 a day on the node, 50 open made in
- * three days, one per key), so the table holds at most a few hundred rows of about 400 bytes.
+ * `member` (W2): a member's own browser, from "Turn on" (the web app's card or its Settings row). One row per browser, as
+ * a phone's push token is: every kind the member's phone is pushed, under the same switches (state-engine.ts
+ * dispatchPushNotification). Bound as phones are ({@link MEMBER_BROWSER_RULES}, KEY_PUSH_RULES' numbers): 10 live a key,
+ * the stalest going past it, and 20 new a day. The same browser again (its endpoint) is the same row, never a new one, and
+ * an asker's row for that browser becomes the member's. A member's rows go with the member: removed (engine/member-
+ * wizards.ts), re-keyed (engine/key-move.ts), or found gone at the tidy-up ({@link dropLapsedMemberBrowsers}).
  *
  * ## Locked at rest
  *
@@ -21,11 +26,12 @@
  * sealed with XChaCha20-Poly1305 (a random nonce, bound to the key and the id), both keys from data/recovery-seal.key with
  * info `beanpool-web-push/v1`. A copy of the database alone opens none. This server's own (replication-manifest.ts,
  * `local`): after a take-over the asker loses only the buzz, never the yes, which the waiting page reads every 5 minutes and
- * the 30-day invite keeps.
+ * the 30-day invite keeps; a member's browser is subscribed again at the web app's next open (lib/web-push.ts
+ * keepWebPushAtOpen posts the subscription each time it is open and allowed), and the bell has what came between.
  */
 import crypto from 'node:crypto';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
-import { isLang, type Lang, type PushNoticeKind } from '@beanpool/core';
+import { isLang, PUSH_NOTICE_LIFETIME_SECONDS, type Lang, type PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { recoverySealSubkey, RecoverySealKeyMissing, RECOVERY_SEAL_KEY_FILE } from '../services/recovery-seal-key.js';
 import {
@@ -35,6 +41,7 @@ import {
 const INFO = 'beanpool-web-push/v1';
 const NONCE_BYTES = 24;
 const TAG_BYTES = 16;
+const DAY_SECONDS = 24 * 60 * 60;
 
 interface Keys { box: Uint8Array; id: Uint8Array }
 
@@ -78,6 +85,12 @@ export function webPushSubId(endpoint: string): string {
     return idUnder(requireKeys(), endpoint);
 }
 
+function sealRow(keys: Keys, publicKey: string, subId: string, sealed: Sealed): string {
+    const nonce = crypto.randomBytes(NONCE_BYTES);
+    return Buffer.concat([nonce, xchacha20poly1305(keys.box, nonce, aad(publicKey, subId)).encrypt(Buffer.from(JSON.stringify(sealed), 'utf8'))])
+        .toString('base64');
+}
+
 /**
  * Keep this browser for a key whose request to join is open here (the caller has checked: routes/web-push.ts), in place of
  * any browser it kept before. Returns the row's id. Throws {@link RecoverySealKeyMissing}; never stores a subscription
@@ -86,16 +99,74 @@ export function webPushSubId(endpoint: string): string {
 export function putAskerSubscription(publicKey: string, sub: BrowserSubscription, contact: string, lang: Lang | null): string {
     const keys = requireKeys();
     const subId = idUnder(keys, sub.endpoint);
-    const sealed: Sealed = { ...sub, contact };
-    const nonce = crypto.randomBytes(NONCE_BYTES);
-    const box = Buffer.concat([nonce, xchacha20poly1305(keys.box, nonce, aad(publicKey, subId)).encrypt(Buffer.from(JSON.stringify(sealed), 'utf8'))])
-        .toString('base64');
+    const box = sealRow(keys, publicKey, subId, { ...sub, contact });
     db.transaction(() => {
         db.prepare(`DELETE FROM web_push_subscriptions WHERE public_key = ? AND kind = 'asker'`).run(publicKey);
         db.prepare(`INSERT INTO web_push_subscriptions (public_key, sub_id, sub_box, lang, kind) VALUES (?, ?, ?, ?, 'asker')`)
             .run(publicKey, subId, box, lang);
     })();
     return subId;
+}
+
+/**
+ * What one key may keep and add of its browsers: a phone's numbers (state-engine.ts KEY_PUSH_RULES), so an account on
+ * several computers and phones is far inside them and no key can fill the table.
+ */
+export const MEMBER_BROWSER_RULES = {
+    /** Browsers a key holds at once; a new one past this drops the key's stalest (subscribed again longest ago). */
+    liveBrowsers: 10,
+    /** New browsers a key may add in any 24 hours, then `key_rate_limited`. The same browser again is never new. */
+    newBrowsersPerDay: 20,
+} as const;
+
+/** Each key's new browsers in the last day, by time (ms): {@link MEMBER_BROWSER_RULES}.newBrowsersPerDay. */
+const newBrowsers = new Map<string, number[]>();
+
+/**
+ * Keep this browser for a member (the caller has checked the key is one: routes/web-push.ts). The same browser again keeps
+ * its row, sealed afresh with this answer's language and address, and an asker's row for it becomes the member's.
+ * Returns the row's id, or `key_rate_limited` past {@link MEMBER_BROWSER_RULES}.newBrowsersPerDay. Throws
+ * {@link RecoverySealKeyMissing}; never stores a subscription unlocked.
+ */
+export function putMemberSubscription(publicKey: string, sub: BrowserSubscription, contact: string, lang: Lang | null, now = Date.now()): string | 'key_rate_limited' {
+    const keys = requireKeys();
+    const subId = idUnder(keys, sub.endpoint);
+    const box = sealRow(keys, publicKey, subId, { ...sub, contact });
+    return db.transaction((): string | 'key_rate_limited' => {
+        const held = !!db.prepare(`SELECT 1 FROM web_push_subscriptions WHERE public_key = ? AND sub_id = ? AND kind = 'member'`).get(publicKey, subId);
+        if (!held) {
+            // Counted in memory, rows since dropped included (a restart forgets it: the live cap still holds the rows).
+            const day = (newBrowsers.get(publicKey) ?? []).filter((t) => t > now - DAY_SECONDS * 1000);
+            if (day.length >= MEMBER_BROWSER_RULES.newBrowsersPerDay) return 'key_rate_limited';
+            day.push(now);
+            newBrowsers.set(publicKey, day);
+            if (newBrowsers.size > 10_000) newBrowsers.delete(newBrowsers.keys().next().value!);
+        }
+        db.prepare(`INSERT INTO web_push_subscriptions (public_key, sub_id, sub_box, lang, kind) VALUES (?, ?, ?, ?, 'member')
+            ON CONFLICT (public_key, sub_id) DO UPDATE SET sub_box = excluded.sub_box, lang = excluded.lang, kind = 'member',
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`).run(publicKey, subId, box, lang);
+        // Past its live browsers, the key's stalest go (never this one).
+        db.prepare(`DELETE FROM web_push_subscriptions WHERE public_key = ? AND kind = 'member' AND sub_id IN (
+            SELECT sub_id FROM web_push_subscriptions WHERE public_key = ? AND kind = 'member' AND sub_id != ?
+            ORDER BY updated_at DESC, created_at DESC, sub_id DESC LIMIT -1 OFFSET ?)`)
+            .run(publicKey, publicKey, subId, MEMBER_BROWSER_RULES.liveBrowsers - 1);
+        return subId;
+    })();
+}
+
+/** Every browser of this key, of both kinds, gone: the member was removed, or its key replaced. How many went. */
+export function dropWebPushSubscriptionsOf(publicKey: string): number {
+    return db.prepare('DELETE FROM web_push_subscriptions WHERE public_key = ?').run(publicKey).changes;
+}
+
+/**
+ * The tidy-up's part for members' browsers (engine/knocks.ts tidyKnocks, every minute): a row whose key is replaced, or is
+ * no member here any more (removed, a visitor's, never one), goes. An asker's rows are the knock rules' (tidyKnocks).
+ */
+export function dropLapsedMemberBrowsers(): number {
+    return db.prepare(`DELETE FROM web_push_subscriptions WHERE kind = 'member' AND (
+            EXISTS (SELECT 1 FROM invalidated_keys i WHERE i.public_key = web_push_subscriptions.public_key)
+            OR NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = web_push_subscriptions.public_key AND m.is_visitor = 0 AND m.status != 'pruned'))`).run().changes;
 }
 
 /** The signer's own row with this id, gone. How many went (0 or 1). */
@@ -124,18 +195,19 @@ function openBox(keys: Keys, publicKey: string, subId: string, box: string): Sea
 export interface WebPushRecipient { subId: string; lang: Lang | null; target: WebPushTarget }
 
 /**
- * The browsers a push of this kind reaches for this key: in W1, `join.answered` to the browser the key asked with, and
- * nothing for any other kind (W2 adds members' browsers). A row this server's key does not open is skipped. Never throws.
+ * The browsers a push of this kind reaches for this key: a member's own browsers for every kind (W2), and the browser an
+ * asker tapped "Tell me when they answer" on for `join.answered` only (W1), which asked for nothing else. A row this
+ * server's key does not open is skipped. Never throws.
  */
 export function webPushTargetsFor(publicKey: string, kind: PushNoticeKind): WebPushRecipient[] {
-    if (kind !== 'join.answered') return [];
     let keys: Keys;
     try {
         keys = requireKeys();
     } catch {
         return [];
     }
-    const rows = db.prepare(`SELECT sub_id, sub_box, lang FROM web_push_subscriptions WHERE public_key = ? AND kind = 'asker'`).all(publicKey) as
+    const kinds = kind === 'join.answered' ? `kind IN ('member', 'asker')` : `kind = 'member'`;
+    const rows = db.prepare(`SELECT sub_id, sub_box, lang FROM web_push_subscriptions WHERE public_key = ? AND ${kinds}`).all(publicKey) as
         { sub_id: string; sub_box: string; lang: string | null }[];
     const out: WebPushRecipient[] = [];
     for (const r of rows) {
@@ -149,9 +221,19 @@ export function webPushTargetsFor(publicKey: string, kind: PushNoticeKind): WebP
     return out;
 }
 
-/** How a kind is delivered (design §2.2): W1's one kind, `join.answered`, lives as long as its invite, normal, topic `join`. */
-export function webPushDelivery(_kind: 'join.answered', ttlSeconds: number | undefined): { ttlSeconds: number; urgency: PushUrgency; topic: string } {
-    return { ttlSeconds: pushTtl(ttlSeconds ?? 0), urgency: 'normal', topic: 'join' };
+/**
+ * How a kind is delivered (design §2.2, "TTL, urgency, topic by kind"):
+ * - `join.answered`: as long as its invite (`ttlSeconds`, the sender's), normal, topic `join`;
+ * - a chat's (`chat.*`): a day, normal, topic = the kind, so a browser away for a week wakes to one "You have a new
+ *   message.", not forty (a push service keeps only the newest undelivered message of a topic);
+ * - the account's and the owners' (`account.*`, `owner.*`): a day, high;
+ * - every other kind (deals, requests to join, events, the market): the notice's own lifetime, 7 days, normal.
+ */
+export function webPushDelivery(kind: PushNoticeKind, ttlSeconds: number | undefined): { ttlSeconds: number; urgency: PushUrgency; topic?: string } {
+    if (kind === 'join.answered') return { ttlSeconds: pushTtl(ttlSeconds ?? 0), urgency: 'normal', topic: 'join' };
+    if (kind.startsWith('chat.')) return { ttlSeconds: DAY_SECONDS, urgency: 'normal', topic: kind.replace(/\./g, '-') };
+    if (kind.startsWith('account.') || kind.startsWith('owner.')) return { ttlSeconds: DAY_SECONDS, urgency: 'high' };
+    return { ttlSeconds: pushTtl(PUSH_NOTICE_LIFETIME_SECONDS), urgency: 'normal' };
 }
 
 export interface WebPushSend {

@@ -10843,8 +10843,10 @@ const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoti
  * recipient reads (engine/push-notices.ts, GET /api/notices/push/:id), and none of them reaches Expo, Apple or Google.
  *
  * Browsers too (services/web-push.ts, DESIGN-web-notifications-fable.md §2.2), after Expo's part, with the same words and
- * notice, encrypted to the browser: in W1 only `join.answered`, to the browser an applicant asked to be told on
- * (engine/web-push-subscriptions.ts webPushTargetsFor), for `options.ttlSeconds`.
+ * notice, encrypted to the browser (engine/web-push-subscriptions.ts webPushTargetsFor): every kind to a member's own
+ * browsers (W2), under the same switch as their phones, and `join.answered` to the browser an applicant asked to be told
+ * on (W1), for `options.ttlSeconds`. Each kind's TTL, urgency and topic are webPushDelivery's (a chat's topic is its kind,
+ * so a browser away for a while gets one message of it, not every one).
  *
  * Answers how many messages went to the push services (a phone's to Expo, a browser's by web push). {@link deliverPushNotices}
  * also says how many members were told: a notice kept for them is on their bell (web notifications W0), a phone or not.
@@ -10985,7 +10987,7 @@ export function deliverPushNotices(
         for (const { subId, lang, target } of browsers) {
             const words = phoneWords(lang);
             webSends.push({
-                publicKey: pk, subId, target, ...webPushDelivery('join.answered', options.ttlSeconds),
+                publicKey: pk, subId, target, ...webPushDelivery(kind, options.ttlSeconds),
                 payload: { title: words.title, body: words.body, data: notice.data, tab: PUSH_NOTICE_KINDS[kind].tab },
             });
         }

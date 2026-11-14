@@ -96,9 +96,9 @@ export default function AddressCardScreen() {
             if (!ctx) return;
             const chatId = relayConversationId(ctx.identity.publicKey, theirs.key);
             await ctx.store.openChat(ctx.identity.publicKey, chatId, { key: theirs.key, home: theirs.home, name: theirs.name });
-            // The words leave this box only once the line is kept (the chat then shows it, Sending… or Not delivered). A send
-            // that fails before that stays here with its words, to send again.
-            const { kept, error } = await sendFromBox(ctx, chatId, words, OUTSIDE_SEND_MS, () => setFirst((now) => (now.trim() === words ? '' : now)));
+            // The words stay in this box while the line goes. Kept on this phone: on to the chat, which shows it (Sending… or
+            // Not delivered). Not kept: this screen stays, with the words, to send again.
+            const { kept, error } = await sendFromBox(ctx, chatId, words, OUTSIDE_SEND_MS, () => {});
             if (error) Alert.alert(outsideErrorWords(error, kept));
             if (kept) router.replace(`/outside-chat/${chatId}`);
         } finally {

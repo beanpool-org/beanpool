@@ -684,15 +684,17 @@ describe('13  typed words are never lost on a failed send (PR #3168 review note)
         });
     }
 
-    it('the chat\'s box and the card\'s first line send only through sendFromBox, and empty only once the line is kept', () => {
+    it('the chat\'s box and the card\'s first line send only through sendFromBox; neither gives up its words before the line is kept', () => {
         const src = (f: string) => readFileSync(join(__dirname, '../../app', f), 'utf8');
-        for (const [file, setter] of [['outside-chat/[id].tsx', 'setText'], ['address-card.tsx', 'setFirst']] as const) {
-            const s = src(file);
-            expect(s, file).not.toMatch(/\bsendOutsideLine\(/);
-            expect(s, file).toMatch(new RegExp(`sendFromBox\\([^;]*\\(\\)\\s*=>\\s*${setter}\\(`));
-            expect(s.match(new RegExp(`\\b${setter}\\(\\s*(''|"")\\s*\\)`, 'g')) ?? [], `${file}: no other way to empty the box`).toEqual([]);
-        }
-        // The card moves on to the chat only when its line was kept: otherwise the words wait on the card, to send again.
-        expect(src('address-card.tsx')).toMatch(/if \(kept\) router\.replace\(/);
+        const chat = src('outside-chat/[id].tsx');
+        const card = src('address-card.tsx');
+        for (const s of [chat, card]) expect(s).not.toMatch(/\bsendOutsideLine\(/);
+        // The chat's box empties in sendFromBox's onKept, and nowhere else; the kept line is shown at once.
+        expect(chat).toMatch(/sendFromBox\([^;]*\(\)\s*=>\s*\{?\s*setText\(/);
+        expect(chat.match(/\bsetText\(\s*(''|"")\s*\)/g) ?? [], 'no other way to empty the box').toEqual([]);
+        // The card never empties its box: it moves on to the chat only when the line was kept, and otherwise stays with the words.
+        expect(card).toMatch(/sendFromBox\(/);
+        expect(card).not.toMatch(/\bsetFirst\(\s*(''|""|\()/);
+        expect(card).toMatch(/if \(kept\) router\.replace\(/);
     });
 });

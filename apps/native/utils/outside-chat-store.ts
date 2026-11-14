@@ -230,7 +230,7 @@ export function outsideChatStore(getDb: () => Promise<SqliteLike>) {
         },
         /** The receipts still owed, `limit` at most: never tried first, then those tried longest ago, so one refused never holds the rest. */
         async owedReceipts(me: string, limit: number): Promise<Array<{ id: string; key: string; home: string }>> {
-            return (await (await db()).getAllAsync<any>(
+            return (await (await db()).getAllAsync<{ id: string; peer_key: string; peer_home: string }>(
                 'SELECT id, peer_key, peer_home FROM outside_receipts WHERE me = ? ORDER BY tried_at ASC, owed_at ASC, id ASC LIMIT ?', [me, limit],
             )).map((r) => ({ id: r.id, key: r.peer_key, home: r.peer_home }));
         },

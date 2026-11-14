@@ -73,10 +73,13 @@ export default function OutsideChatScreen() {
         try {
             const ctx = await outsideContext();
             if (!ctx) return;
-            // The box empties once the line is kept here (shown as Sending… or Not delivered), never before: a send that fails
+            // The box empties once the line is kept here, and the line shows at once (Sending…), never before: a send that fails
             // before that leaves the words in the box. Its own deadline: a send my server never answers leaves the line
             // `sending` (it goes at the next round) and the composer free. Words typed while it ran are left as they are.
-            const { kept, error } = await sendFromBox(ctx, chat.id, words, OUTSIDE_SEND_MS, () => setText((now) => (now.trim() === words ? '' : now)));
+            const { kept, error } = await sendFromBox(ctx, chat.id, words, OUTSIDE_SEND_MS, () => {
+                setText((now) => (now.trim() === words ? '' : now));
+                void load();
+            });
             if (error) Alert.alert(outsideErrorWords(error, kept));
             await load();
         } finally {

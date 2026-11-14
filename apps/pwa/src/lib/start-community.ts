@@ -29,7 +29,7 @@ export const START_COMMUNITY_COPY = {
         { icon: '☁️', title: word('A small rented server'), body: word('A small virtual server from a hosting company, for a few dollars a month. Nobody needs to keep a machine at home.') },
         { icon: '🤝', title: word('Ask for help'), body: word('Post a Need here on BeanPool worldwide, such as "Someone to help run a community in my town". Someone near you may already know how.') },
     ],
-    after: word('Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on "publish location" there, and people near you who asked to be told will hear about it.'),
+    after: word('Once your node is running, claim it with the BeanPool app on your phone: claiming is done from the phone app only. Then, in its settings app, confirm your Core settings, make a recovery code, add a second owner and invite your first members, and they invite the rest. Turn on "publish location" there, and people near you who asked to be told will hear about it.'),
     website: word('How to run a node, on beanpool.org'),
     copyButton: word("Copy my community's details"),
     copied: word("Copied. Paste them into your node's settings app."),

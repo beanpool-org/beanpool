@@ -1435,7 +1435,6 @@
   "On the map": "Sulla mappa",
   "On the map at {lat}, {lng}": "Sulla mappa a {lat}, {lng}",
   "On your Home": "Nella tua Home",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Una volta avviato il nodo, dai un nome alla comunità nella sua app delle impostazioni, inviti i primi membri e loro inviteranno gli altri. Attiva «pubblica posizione» e le persone vicine che hanno chiesto di essere informate ne riceveranno notizia.",
   "One device at a time: the copy you changed last is the one kept.": "Un dispositivo alla volta: la copia modificata per ultima è quella conservata.",
   "One moment…": "Un momento…",
   "One more comes back {when}.": "Ne recuperi uno in più {when}.",
@@ -4682,5 +4681,8 @@
     "one": "La pausa stagionale mantiene la tua linea di credito a {n} fagiolo per un massimo di 90 giorni e sospende gli annunci attivi in modo che i membri non possano acquistare. Qualsiasi custode può riprendere in qualsiasi momento.",
     "other": "La pausa stagionale mantiene la tua linea di credito a {n} fagioli per un massimo di 90 giorni e sospende gli annunci attivi in modo che i membri non possano acquistare. Qualsiasi custode può riprendere in qualsiasi momento."
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "La ripresa riattiva tutti gli annunci e riporta la linea di credito al normale calcolo giornaliero."
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "La ripresa riattiva tutti gli annunci e riporta la linea di credito al normale calcolo giornaliero.",
+  "{name} has no owner yet": "{name} non ha ancora un proprietario",
+  "If you installed it, claim it with the one-time code on the server.": "Se l'hai installato tu, riscattalo con il codice monouso sul server.",
+  "Claim {name}": "Rivendica {name}"
 }

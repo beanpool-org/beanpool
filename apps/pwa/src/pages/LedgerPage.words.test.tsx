@@ -74,11 +74,23 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); backToEnglish(); });
 
+/**
+ * The balance answer is drawn. Not the moment the read is asked, and not the first `ledger-balance`: both come before the
+ * answer, and the page draws "+0B" and a locked "🔒 Send Beans (needs 1 completed trade)" until it is in, so a loaded
+ * runner could read the words before the answer. First the page itself (until the node says Beans are live it shows
+ * "Loading your ledger…", with no Loading card to wait out), then the credit card's Loading shape gone: the answer is in
+ * (or the read failed, and the card says so).
+ */
+async function answerDrawn() {
+    await screen.findByTestId('ledger-balance');
+    await waitFor(() => expect(screen.queryByTestId('credit-card-reading')).toBeNull());
+}
+
 async function open(balance: Record<string, unknown>) {
     vi.mocked(getBalance).mockResolvedValue(balance as any);
     render(<LedgerPage identity={identity} isMember={true} onNavigate={vi.fn()} />);
     await waitFor(() => expect(getTransactions).toHaveBeenCalled());
-    await screen.findByTestId('ledger-balance');
+    await answerDrawn();
 }
 
 describe('the Ledger in the pseudo-locale', () => {
@@ -203,6 +215,9 @@ describe('the Ledger in the pseudo-locale', () => {
         vi.mocked(getMemberCards).mockRejectedValue(new TypeError('Failed to fetch'));
         vi.mocked(getBalance).mockResolvedValue({ ...RESIDENT, frozen: false } as any);
         render(<LedgerPage identity={identity} isMember={true} />);
+        // The answer first: before it, Send is the locked "🔒 Send Beans (needs 1 completed trade)", which the pattern below
+        // matches too, and a click on it opens nothing.
+        await answerDrawn();
         fireEvent.click(await screen.findByRole('button', { name: xx('💸 Wallet') }));
         fireEvent.click(await screen.findByRole('button', { name: new RegExp(xx('Send Beans').replace(/[[\]~]/g, '.')) }));
         fireEvent.click(screen.getByRole('button', { name: new RegExp(xx('Select recipient...').replace(/[[\]~.]/g, '.')) }));
@@ -306,8 +321,15 @@ describe('the credit card before the balance is in (round 2 of #3134): never a c
     it('while the balance is being read: the card\'s shape and "Loading…", no figure, no sentence, no note', async () => {
         vi.mocked(getBalance).mockReturnValue(new Promise(() => {}) as any);
         render(<LedgerPage identity={identity} isMember={true} onNavigate={vi.fn()} />);
-        const reading = await screen.findByTestId('credit-card-reading');
-        expect(getBalance).toHaveBeenCalled();
+        // The card's shape comes first, in the render where the node says Beans are live; the read is asked in the effect
+        // after that render. Nothing may be claimed in between either.
+        await screen.findByTestId('credit-card-reading');
+        expect(screen.queryByTestId('credit-card')).toBeNull();
+        expect(document.body.textContent).not.toMatch(EMPTY_ANSWER_WORDS);
+        // Then wait for the read itself (never a sleep): a loaded runner can find the card before that effect has run (the
+        // red on #3136 and #3135, 14 Nov). The answer never comes, so from here on the card is waiting on a read in flight.
+        await waitFor(() => expect(getBalance).toHaveBeenCalled());
+        const reading = screen.getByTestId('credit-card-reading');
         expect(reading.getAttribute('aria-busy')).toBe('true');
         expect(reading.textContent).toBe('Loading…');
         expect(screen.queryByTestId('credit-card')).toBeNull();

@@ -214,7 +214,7 @@ async function main(): Promise<void> {
 
     // ── 6. hide, merge, clear ─────────────────────────────────────────────────────────────────
     console.log('\n── 6. hide, merge, clear ──');
-    const rule = (tag: string, action: string, body: unknown = {}, headers = session(ada, 'admin')) =>
+    const rule = (tag: string, action: string, body: unknown = {}, headers: Record<string, string> = session(ada, 'admin')) =>
         call('POST', null, `/api/local/admin/free-tags/${encodeURIComponent(tag)}/${action}`, body, headers);
     let mark = lastLogId();
     const hide = await rule('Vintage', 'hide');

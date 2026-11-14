@@ -263,7 +263,13 @@ export interface TableHashes {
  * rules: after a take-over from such a copy a hidden tag may be offered again and a merged one offered as typed, until an
  * owner or admin sets the rule again; no listing and no Bean is in it.
  */
-export const TABLE_HASHES_VERSION = 42;
+/**
+ * 43: the forum's notices (engine/forum-notices.ts, slice F5): a new plain table, forum_follows. Raised for the same reason
+ * as 8: a standby updated before its main server hashes one more table. REPLICA_FORMAT stays: each side's import writes only
+ * the tables its own database has. What an older importer drops is who follows a topic: after a take-over from such a copy
+ * nobody is told of replies until they reply or follow again, and every topic reads as read; no Bean is in it.
+ */
+export const TABLE_HASHES_VERSION = 43;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

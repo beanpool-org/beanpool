@@ -149,6 +149,12 @@ export interface NodeFeatures {
      * none, or is from before it: the title "Chat", as before.
      */
     forum?: boolean;
+    /**
+     * This node sends the forum's notices and takes the member's Forum switch (`notify_forum`; apps/server
+     * engine/forum-notices.ts, slice F5; core forumNoticesOn): Settings → Notifications shows that switch only then. A node
+     * that doesn't say (no forum, or from before F5) sends none and refuses the key.
+     */
+    forumNotices?: boolean;
 }
 
 export type NodeDoor = 'open' | 'members' | 'admins';
@@ -163,7 +169,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
-    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forum',
+    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forum', 'forumNotices',
 ];
 
 export interface NodeProfile {

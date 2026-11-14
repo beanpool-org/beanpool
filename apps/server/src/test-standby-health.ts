@@ -527,11 +527,13 @@ async function main(): Promise<void> {
         // Version 41: directory_cache with listings_from_here (a community's name on its members' listings on the global
         // community, list-on-global G5); no new table.
         // Version 42: a new table, free_tag_rules (an owner's or admin's hide or merge of a typed tag, engine/free-tags.ts).
-        assert(snap?.tableHashes?.v === 42 &&['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'marketplace_transactions', 'messages', 'poll_answers',
+        // Version 43: a new table, forum_follows (who follows or muted a topic and how far they read; engine/forum-notices.ts,
+        // slice F5).
+        assert(snap?.tableHashes?.v === 43 &&['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'marketplace_transactions', 'messages', 'poll_answers',
             'vouchers', 'voucher_allocations', 'room_gifts', 'standing_deals', 'standing_period_changes', 'recovery_shares', 'join_requests', 'contact_copies', 'bills',
             'knowledge_drafts', 'knowledge_draft_photos', 'knowledge_helped', 'credit_look_log', 'member_badges', 'retired_accounts',
             'forum_sections', 'forum_topics', 'forum_posts', 'forum_post_photos', 'forum_post_edits', 'forum_members',
-            'forum_waiting', 'forum_waiting_photos', 'directory_cache', 'free_tag_rules'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
+            'forum_waiting', 'forum_waiting_photos', 'directory_cache', 'free_tag_rules', 'forum_follows'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
             && !('tombstones' in hashed) && !('burst_action_forum_posts' in hashed) && typeof snap.signature === 'string',
             `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
         let rec = await standby.send('record');

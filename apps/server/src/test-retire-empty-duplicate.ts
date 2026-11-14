@@ -145,6 +145,8 @@ const NOT_ACTIVITY: Record<string, string> = {
     'forum_members.member_pubkey': 'told once that the forum is public: its own reading, no act (what it wrote is `posts`)',
     'forum_topics.closed_by': "how a topic closed, a word ('writer', 'moderator', 'quiet', 'removed'), never a key",
     'forum_posts.removed_by': "who removed a post, a word ('writer', 'moderator', 'account'), never a key",
+    // The forum's notices (engine/forum-notices.ts, F5): following a topic is reading, not writing (what it wrote is `posts`).
+    'forum_follows.member_pubkey': 'a topic it follows or muted, and how far it read: its own setting',
 };
 
 /**

@@ -458,6 +458,10 @@ export interface NodeFeatures {
     /** Present, and true, only where the forum is on and public (`forumPublic`, the global community): the apps tell a member
      *  once, before their first post, that anyone on the web can read it with their name (POST /api/forum/told). */
     forumPublic?: true;
+    /** Present, and true, only where the forum is on, on a build that sends its notices (engine/forum-notices.ts, slice F5):
+     *  the apps show the Forum switch (`notify_forum`) in Settings → Notifications only here (@beanpool/core forumNoticesOn),
+     *  since a server from before it refuses the key and the web app saves every switch at once. */
+    forumNotices?: true;
 }
 
 /**
@@ -738,6 +742,8 @@ export function getNodeFeatures(): NodeFeatures {
         voiceLines: true,
         ...(s.forum ? { forum: true as const } : {}),
         ...(s.forum && s.forumPublic ? { forumPublic: true as const } : {}),
+        // And the forum's notices (engine/forum-notices.ts): a capability of this build, wherever the forum is on.
+        ...(s.forum ? { forumNotices: true as const } : {}),
     };
     // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite. Nor does a
     // post go outside: the preview shows visitors nothing.

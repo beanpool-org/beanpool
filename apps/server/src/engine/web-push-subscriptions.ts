@@ -237,14 +237,15 @@ export function webPushTargetOpener(): WebPushTargetOpener {
 /**
  * How a kind is delivered (design §2.2, "TTL, urgency, topic by kind"):
  * - `join.answered`: as long as its invite (`ttlSeconds`, the sender's), normal, topic `join`;
- * - a chat's (`chat.*`): a day, normal, topic = the kind, so a browser away for a week wakes to one "You have a new
- *   message.", not forty (a push service keeps only the newest undelivered message of a topic);
+ * - a chat's (`chat.*`), and a forum reply's or mention's (`forum.reply`, `forum.mention`): a day, normal, topic = the kind,
+ *   so a browser away for a week wakes to one "You have a new message.", not forty (a push service keeps only the newest
+ *   undelivered message of a topic);
  * - the account's and the owners' (`account.*`, `owner.*`): a day, high;
  * - every other kind (deals, requests to join, events, the market): the notice's own lifetime, 7 days, normal.
  */
 export function webPushDelivery(kind: PushNoticeKind, ttlSeconds: number | undefined): { ttlSeconds: number; urgency: PushUrgency; topic?: string } {
     if (kind === 'join.answered') return { ttlSeconds: pushTtl(ttlSeconds ?? 0), urgency: 'normal', topic: 'join' };
-    if (kind.startsWith('chat.')) return { ttlSeconds: DAY_SECONDS, urgency: 'normal', topic: kind.replace(/\./g, '-') };
+    if (kind.startsWith('chat.') || kind === 'forum.reply' || kind === 'forum.mention') return { ttlSeconds: DAY_SECONDS, urgency: 'normal', topic: kind.replace(/\./g, '-') };
     if (kind.startsWith('account.') || kind.startsWith('owner.')) return { ttlSeconds: DAY_SECONDS, urgency: 'high' };
     return { ttlSeconds: pushTtl(PUSH_NOTICE_LIFETIME_SECONDS), urgency: 'normal' };
 }

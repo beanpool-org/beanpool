@@ -1130,6 +1130,8 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                 // The app reads the bell's events (`bell=1`, state-engine.ts tellBell): an older one took them for
                 // a doorbell, and an old phone ran a full sync for each.
                 ws._bell = parsedUrl.searchParams.get('bell') === '1';
+                // And the forum's doorbells (`forum=1`, state-engine.ts tellForumSockets), for the same reason.
+                ws._forum = parsedUrl.searchParams.get('forum') === '1';
 
                 addWsClient(ws);
                 trackConnection(ws, 'sync', req);

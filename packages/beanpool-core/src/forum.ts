@@ -30,6 +30,27 @@ export function forumOn(features: { forum?: unknown } | null | undefined): boole
 }
 
 /**
+ * Whether a node's `features` says it sends the forum's notices (slice F5): present only where the forum is on, on a server
+ * that takes the member's Forum switch (`notify_forum`). Both apps show the switch in Settings → Notifications only here: a
+ * server from before F5 refuses the key, and the web app saves every switch at once.
+ */
+export function forumNoticesOn(features: object | null | undefined): boolean {
+    return (features as { forumNotices?: unknown } | null | undefined)?.forumNotices === true;
+}
+
+/** The member's preference behind the Forum switch: on until they turn it off, as every push switch is. */
+export const FORUM_PUSH_PREF = 'notify_forum' as const;
+
+/** Settings → Notifications: the Forum switch's name (and its label for a screen reader), and its line. Both apps. */
+export const FORUM_PUSH_WORDS = {
+    switchName: word('Forum'),
+    switchLine: word('Replies in topics you follow, mentions, and first topics'),
+} as const;
+
+/** What a member does with one topic's notices: follow it (each reply tells them), mute it (nothing does), or neither. */
+export type ForumFollow = 'following' | 'muted';
+
+/**
  * The limits, in characters as the apps' fields count them (design §2). The section name and about line are not in the
  * design; 40 and 200 fit a 320 px row and a line under it.
  */

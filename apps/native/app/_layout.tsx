@@ -292,8 +292,10 @@ function RootLayoutNav() {
         return () => sub.remove();
     }, [lockScreen]);
 
-    // Once at start: a recovery kit PDF left in expo-print's folder by an app killed mid-share (utils/recovery-kit.ts).
+    // Once at start: a recovery kit PDF left in expo-print's folder by an app killed mid-share (utils/recovery-kit.ts), and
+    // the unlocked contacts file a Save a copy left in the cache the same way (utils/use-contacts.ts; loaded when used).
     useEffect(() => { void sweepPrintedPdfs(); }, []);
+    useEffect(() => { void import('../utils/use-contacts').then((m) => m.sweepContactsFile()).catch(() => {}); }, []);
 
     // At start (and for a new identity): the copy of a break-glass code an older app offered to keep on this phone, which
     // nothing reads back and this app no longer makes (utils/break-glass.ts, #1531). Conversion code, log row CUT3.

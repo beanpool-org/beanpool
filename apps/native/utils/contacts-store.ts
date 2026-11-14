@@ -9,7 +9,8 @@
  * Beside it, in AsyncStorage under the account ({@link contactsSyncStoreKey}), what the phone knows of each community's copy.
  *
  * **Never saved over.** A file that can't be opened (damaged, or written by a newer app: core refuses that list whole) is
- * `unreadable`, and nothing here writes over it: the member's communities still keep their copies.
+ * `unreadable`, and nothing here writes over it: the member's communities still keep their copies. A damaged one comes back
+ * from them only when the member asks ({@link setAsideDamaged}: the file is moved aside, as it is).
  *
  * **A number never used twice.** Each copy carries a number its communities only take when it is newer. A change re-locks
  * the list under the number the file has while that number has never left the phone; once one has (a save was sent with
@@ -49,6 +50,8 @@ export interface ContactsDisk {
     /** The file's text, or null when there is none. Throws when it is there and can't be read. */
     read(publicKey: string): Promise<string | null>;
     write(publicKey: string, text: string): Promise<void>;
+    /** The file `read` would read moved beside the list, as it is (one kept; a later one replaces it): see {@link setAsideDamaged}. */
+    setAside(publicKey: string): Promise<void>;
 }
 
 export interface ContactsKv {
@@ -168,6 +171,15 @@ export function phoneContactsDisk(): ContactsDisk {
             await fs.writeAsStringAsync(`${file}.new`, text);
             await fs.deleteAsync(file, { idempotent: true });
             await fs.moveAsync({ from: `${file}.new`, to: file });
+        },
+        async setAside(pk) {
+            const file = fileOf(pk);
+            for (const f of [file, `${file}.new`]) {
+                if (!(await fs.getInfoAsync(f)).exists) continue;
+                await fs.deleteAsync(`${file}.damaged`, { idempotent: true });
+                await fs.moveAsync({ from: f, to: `${file}.damaged` });
+                return;
+            }
         },
     };
 }
@@ -391,6 +403,29 @@ export async function loadContacts(account: ContactsAccount, deps: ContactsStore
     return inTurn(account.publicKey, async () => {
         const onPhone = await readOnPhone(account, deps.disk);
         return { onPhone, state: await readStateFor(account, deps.kv, onPhone) };
+    });
+}
+
+/**
+ * The way back from a list on this phone that can't be opened (damaged; PR #3073's review: every community was skipped and
+ * nothing could be merged into it, for good). Asked by the member on the Contacts screen. The file is moved aside as it is,
+ * never written over or deleted, and the record forgets what it had merged, so the next pass fetches every community's copy
+ * and merges it into a list that starts empty: "Your contacts are back" then counts who came back. The numbers that left the
+ * phone stay, so none is used twice. A list a newer app wrote is not damaged: updating the app opens it, so it is left
+ * alone. Returns whether the file was set aside.
+ */
+export function setAsideDamaged(account: ContactsAccount, deps: ContactsStoreDeps = phoneContactsDeps()): Promise<boolean> {
+    return inTurn(account.publicKey, async () => {
+        const onPhone = await readOnPhone(account, deps.disk);
+        if (onPhone.kind !== 'unreadable' || onPhone.reason !== 'damaged') return false;
+        const s = await readStateFor(account, deps.kv, onPhone);
+        await deps.disk.setAside(account.publicKey);
+        s.fileSeq = 0;
+        s.merged = {};
+        s.back = null;
+        await writeState(account, deps.kv, s);
+        told(account.publicKey);
+        return true;
     });
 }
 

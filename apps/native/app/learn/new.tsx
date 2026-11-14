@@ -69,7 +69,10 @@ export default function NewKnowledgeScreen() {
         linkTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
         remove: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
         removeText: { fontSize: 16, fontWeight: '700', color: c.text.secondary },
-        secondary: { minHeight: 48, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: c.chip.learn.fg },
+        secondary: {
+            minHeight: 48, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, borderRadius: 12, borderWidth: 1,
+            borderColor: c.chip.learn.fg, backgroundColor: c.surface.card,
+        },
         secondaryText: { fontSize: 15, fontWeight: '800', color: c.chip.learn.fg, textAlign: 'center' },
         photos: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' },
         photo: { width: 64, height: 64, borderRadius: 10, backgroundColor: c.surface.subtle },
@@ -146,7 +149,10 @@ export default function NewKnowledgeScreen() {
                 <View style={s.box}><Text style={s.boxText}>{t(LEARN_WRITE.formBox)}</Text></View>
 
                 <Text style={s.label}>{t(LEARN_WRITE.titleLabel)}</Text>
+                {/* Grows to a second line rather than cutting one (its hint and an 80-letter title at 320 dp with 1.3x text); Enter
+                    leaves the box, a title holds no line break. */}
                 <TextInput testID="learn-new-title" style={s.input} value={form.title} onChangeText={(title) => set({ title })} maxLength={KNOWLEDGE_LIMITS.title}
+                    multiline scrollEnabled={false} submitBehavior="blurAndSubmit" returnKeyType="next"
                     placeholder={t(LEARN_WRITE.titleHint)} placeholderTextColor={colors.text.muted} accessibilityLabel={t(LEARN_WRITE.titleLabel)} />
 
                 <Text style={s.label}>{t(LEARN_WRITE.bodyLabel)}</Text>

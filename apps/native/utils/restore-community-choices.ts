@@ -86,6 +86,18 @@ export function chosenRestoreChoice(typed: string, choices: readonly RestoreChoi
 }
 
 /**
+ * The community a restore's field holds, by the name its chip shows (Global community, a saved community's name), or
+ * else the typed address's host: what the sign-in restore's sentences call it ("No account at Riverside uses this Google
+ * account…", recovery S2). The web names its page's community the same way (WelcomePage's `community` for WebRestore).
+ */
+export function restoreCommunityName(typed: string, choices: readonly RestoreChoice[]): string {
+    const chosen = chosenRestoreChoice(typed, choices);
+    if (chosen && chosen !== 'another') return chosen.kind === 'global' ? t('Global community') : chosen.name;
+    const address = normalizeNodeUrl(typed.trim());
+    try { return new URL(address).host || typed.trim(); } catch { return typed.trim(); }
+}
+
+/**
  * Whether the address field is drawn on a screen where it comes and goes (Recover with Social): from what the member did,
  * never from what the text spells. `another` (they tapped "another address", or typed in the field) keeps it, so a bare
  * `global` or `mullum`, which reads back as a chip's address, does not unmount the field mid-word and close the keyboard;

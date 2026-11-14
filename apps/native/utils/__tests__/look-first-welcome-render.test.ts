@@ -315,7 +315,6 @@ vi.mock('../sso-recovery', async (importOriginal) => {
     const real = await importOriginal<typeof import('../sso-recovery')>();
     return {
         ...real,
-        lookupRestorable: async () => vaultState.candidates,
         waitingSsoRestore: async () => vaultState.waiting,
         checkSsoRestore: async () => vaultState.check,
         startSsoRestore: async () => vaultState.waiting,

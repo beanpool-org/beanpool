@@ -428,8 +428,9 @@ export class FakeCommunity {
 
 /**
  * A community as every live one is today: it keeps each member's sign-in copy, hands out its own nonce, and gives the
- * copy back to a restore that names the callsign and proves the sign-in. Put in place of {@link FakeCommunity}'s
- * `handle` (release-gate.test.ts, vault-phone-gates.test.ts).
+ * copy back to a restore that proves the sign-in: its find names the member for that sign-in (recovery S0), and the
+ * collect by the find's hold releases the copy (S2). Put in place of {@link FakeCommunity}'s `handle`
+ * (release-gate.test.ts, vault-phone-gates.test.ts).
  */
 export class CommunityKeepingCopies {
     /** provider → the copy (the phone's single-blob share), for the one member here. */
@@ -438,7 +439,9 @@ export class CommunityKeepingCopies {
     private seq = 0;
     /** The sign-in the restore under way proved, whose copy it collects. */
     private collecting: string | null = null;
-    /** The member's key, which the public lookup lists for their name while a copy is kept here. Set once the member is made. */
+    /** The sign-in a find verified, held for the collect (routes/recovery-collect.ts holdFind). */
+    private held: string | null = null;
+    /** The member's key, which the find names for a sign-in with a copy kept here. Set once the member is made. */
     publicKey: string | null = null;
     constructor(readonly callsign: string) {}
 
@@ -473,26 +476,29 @@ export class CommunityKeepingCopies {
             if (!this.copies.delete(del[1])) return { status: 404, body: { error: 'not connected' } };
             return ok({ removed: del[1], enrolledSso: [...this.copies.keys()] });
         }
-        const lookup = /^\/api\/recovery\/lookup\/([^/]+)$/.exec(req.path);
-        if (req.method === 'GET' && lookup) {
-            // The public lookup (routes/community.ts): the whole name, case forgiven, listed only with a sign-in copy here.
-            const asked = decodeURIComponent(lookup[1]).trim().toLowerCase();
-            return ok(asked === this.callsign.toLowerCase() && this.publicKey && this.copies.size
-                ? [{ publicKey: this.publicKey, callsign: this.callsign, canRecoverBySso: true, joinedAt: null, avatarUrl: null }]
-                : []);
-        }
-        if (req.method === 'POST' && req.path === '/api/recovery/collect') {
-            return b.callsign === this.callsign ? ok({ collectionId: 'c-1' }) : { status: 404, body: { error: 'No such account.' } };
-        }
-        if (req.method === 'POST' && req.path === '/api/recovery/collect/sso-nonce') {
-            const nonce = `collect-nonce-${++this.seq}`;
+        // The find (routes/recovery-collect.ts, recovery S0): a nonce, then the accounts the verified sign-in protects here,
+        // which is the member for a provider whose copy is kept here. The verified sign-in is held for the collect.
+        if (req.method === 'POST' && req.path === '/api/recovery/find-nonce') {
+            const nonce = `find-nonce-${++this.seq}`;
             this.nonces.add(nonce);
-            return ok({ nonce });
+            return ok({ nonce, expiresInSeconds: 600, clientIds: {} });
         }
-        if (req.method === 'POST' && req.path === '/api/recovery/collect/sso') {
-            if (!this.nonces.delete(b.nonce)) return { status: 401, body: { error: 'nonce' } };
-            this.collecting = b.provider;
-            return ok({ released: true });
+        if (req.method === 'POST' && req.path === '/api/recovery/find') {
+            if (!this.nonces.delete(b.nonce)) return { status: 400, body: { error: 'nonce' } };
+            this.held = b.provider;
+            return ok({
+                accounts: this.publicKey && this.copies.has(b.provider) ? [{ publicKey: this.publicKey, callsign: this.callsign }] : [],
+            });
+        }
+        // The collect by the find's hold (S2): the key must be the one the find named, and the hold's copy is released.
+        if (req.method === 'POST' && req.path === '/api/recovery/collect') {
+            const hold = this.held;
+            this.held = null;
+            if (!hold || b.callsign !== undefined || b.candidatePublicKey !== this.publicKey) {
+                return { status: 400, body: { error: "Sign in with your account's sign-in first." } };
+            }
+            this.collecting = hold;
+            return ok({ collectionId: 'c-1' });
         }
         if (req.method === 'POST' && req.path === '/api/recovery/collect/fragments') {
             const copy = this.copies.get(this.collecting ?? 'google');

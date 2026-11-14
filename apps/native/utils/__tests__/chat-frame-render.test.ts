@@ -220,6 +220,13 @@ import { LanguageProvider } from '../../components/LanguageProvider';
 import { yourGroupsStore } from '../../components/useYourGroups';
 // People asks where the member is to end a Show credit visit (utils/people-visit.ts; its own test and people-show-credit-visit-render.test.ts): nothing here leaves the tab.
 vi.mock('../people-visit', () => ({ usePeopleVisitEnds: () => 0 }));
+/** Chats with people in other communities, kept on this phone (utils/outside-chat-store.ts): none unless a test puts some. */
+const outside = vi.hoisted(() => ({ chats: [] as any[] }));
+vi.mock('../outside-chat-live', () => ({
+    OUTSIDE_CHATS_UPDATED: 'outside_chats_updated',
+    syncOutsideMailNow: async () => null,
+    outsideContext: async () => ({ identity: { publicKey: 'me-key' }, store: { chats: async () => outside.chats } }),
+}));
 import ChatsScreen from '../../app/(tabs)/chats';
 
 const NODE = 'https://riverside.example';
@@ -269,6 +276,7 @@ beforeEach(() => {
     knockReads.answers.clear();
     store.map.set('beanpool_anchor_url', NODE);
     yourGroupsStore.reset();
+    outside.chats = [];
     globalThis.fetch = vi.fn(async () => new Response('{}', { status: 404 })) as typeof fetch;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
@@ -632,5 +640,53 @@ describe('the Chat tab at 320 dp × 569 dp with text at 1.3×', () => {
         }
         // English draws whole, at full size.
         expect(worst.filter(([lang]) => lang === 'en').map(([, , s]) => s)).toEqual([1, 1]);
+    });
+});
+
+describe('a chat with someone in another community, in the Chats list at 320 dp with text at 1.3× (PR #3168 review)', () => {
+    /** The sender chooses their name (up to 60 characters, new with every line); the community is the envelope's, checked. */
+    const outsideChat = (peerName: string | null, peerHome: string) => ({
+        id: 'oc-1', peerKey: 'f'.repeat(64), peerHome, peerName, state: 'open', restored: false,
+        updatedAt: now - 30_000, lastText: 'Are the bikes still there?', lastAt: now - 30_000,
+    });
+    const row = () => host.querySelector('[data-testid="outside-chat-row"]');
+    const communityLine = () => row()?.querySelector('[data-testid="outside-chat-community"]') ?? null;
+    /** The row's avatar (50 dp) and the gap after it (16 dp), and the line's globe (14 dp) and its gap (4 dp): fixed sizes
+     *  the stand-in doesn't carry. */
+    const AVATAR = 50 + 16;
+    const GLOBE = 14 + 4;
+
+    it('the community has a line of its own, under the name, never cut: whatever name the sender gives, and however long the address', async () => {
+        const home = 'riverside-commons-cooperative.example.org';
+        for (const name of ['Ana Ríos', 'Hilltop Market · hilltop.example', 'Someone with a very long name they chose themselves, 60 chars']) {
+            outside.chats = [outsideChat(name, home)];
+            rememberProfile(LOCAL);
+            await reopenIn('en');
+            expect(row(), name).not.toBeNull();
+            const line = communityLine();
+            expect(line, name).not.toBeNull();
+            // Exactly the community, on its own: not sharing the name's one line, where an ellipsis would take it.
+            expect(line!.textContent, name).toBe(home);
+            const nameLine = Array.from(row()!.querySelectorAll('span[data-lines="1"]')).find((s) => s.textContent === name);
+            expect(nameLine, `${name}: the name on its own line`).toBeTruthy();
+            expect(nameLine!.contains(line!)).toBe(false);
+            expect(line!.contains(nameLine!)).toBe(false);
+            // It fits the lines it may take: the row's width at 320 dp, less its margins, padding, border, avatar and globe.
+            const r = layoutOf(row()!);
+            const width = FLOOR - 2 * num(r.marginHorizontal) - 2 * num(r.paddingHorizontal) - 2 * num(r.borderWidth) - AVATAR - GLOBE;
+            expect(width).toBe(178);
+            expect(row()!.querySelector('[data-icon="earth"]')).not.toBeNull();
+            const lines = Number(line!.getAttribute('data-lines'));
+            const px = Number(line!.getAttribute('data-font')) * 1.3;
+            expect(Math.ceil(widthOf(home, px) / width), `${home} at ${px}px needs`).toBeLessThanOrEqual(lines);
+        }
+    });
+
+    it('no name given: "Someone in another community", the community still under it', async () => {
+        outside.chats = [outsideChat(null, 'coast.example')];
+        rememberProfile(LOCAL);
+        await renderIn('en');
+        expect(row()!.textContent).toContain('Someone in another community');
+        expect(communityLine()!.textContent).toBe('coast.example');
     });
 });

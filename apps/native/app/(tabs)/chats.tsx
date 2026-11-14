@@ -269,6 +269,9 @@ export default function ChatsScreen() {
         timestampUnread: { color: colors.accent.primary, fontWeight: '700' },
         messageRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 },
         lastMessage: { fontSize: 14, color: colors.text.secondary, flex: 1, paddingRight: 16 },
+        // A chat with someone in another community: their community on its own line, under the sender's chosen name.
+        outsideHomeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+        outsideHome: { fontSize: 13, color: colors.text.secondary, flexShrink: 1 },
         lastMessageUnread: { color: colors.text.heading, fontWeight: '700' },
         // A DM whose key changed and waits for the member (utils/dm-peer-pins.ts): the warning colours, as the banner's.
         keyChangedTag: { backgroundColor: colors.feedback.warning.bg, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 6, flexShrink: 0 },
@@ -595,16 +598,24 @@ export default function ChatsScreen() {
 
     const renderItem = ({ item }: { item: any }) => {
         if (item.outside) {
-            // Someone in another community: their community always shows (joint design §2.6), the chat is this phone's own.
+            // Someone in another community: their community always shows (joint design §2.6), the chat is this phone's own. The
+            // name is the sender's own choice (up to 60 characters, new with each line), so the community never shares its line:
+            // it has its own, under the name, with room to wrap (3 lines hold ~55 characters at 320 dp and 1.3x text).
+            const outsideName = item.peer || t('Someone in another community');
             return (
-                <Pressable accessibilityRole="button" style={styles.chatRow} testID="outside-chat-row" onPress={() => router.push(`/outside-chat/${item.id}`)}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`${outsideName}, ${item.outsideHome}`} style={styles.chatRow} testID="outside-chat-row"
+                    onPress={() => router.push(`/outside-chat/${item.id}`)}>
                     <View style={styles.avatarWrapper}>
                         <MemberAvatar avatarUrl={null} pubkey={item.peerPubkey || ''} callsign={item.peer} size={44} />
                     </View>
                     <View style={styles.chatDetails}>
                         <View style={styles.chatHeader}>
-                            <Text style={[styles.peerName, { flexShrink: 1 }]} numberOfLines={1}>{t('{name} · {community}', { name: item.peer || t('Someone in another community'), community: item.outsideHome })}</Text>
+                            <Text style={[styles.peerName, { flexShrink: 1 }]} numberOfLines={1}>{outsideName}</Text>
                             <Text style={styles.timestamp}>{rowTime(item.rawTimestamp)}</Text>
+                        </View>
+                        <View style={styles.outsideHomeRow}>
+                            <MaterialCommunityIcons name="earth" size={14} color={colors.text.secondary} />
+                            <Text style={styles.outsideHome} numberOfLines={3} testID="outside-chat-community">{item.outsideHome}</Text>
                         </View>
                         <View style={styles.messageRow}>
                             <Text style={styles.lastMessage} numberOfLines={1}>{item.lastMessage || t('Kept on this phone only. Your community keeps no copy.')}</Text>

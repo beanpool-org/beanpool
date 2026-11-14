@@ -41,9 +41,12 @@ export interface RecoveryHttps {
     /** Add a member with this seed (its public key) and callsign, then deposit their sign-in copy over HTTPS. */
     deposit(args: { seedHex: string; words: string[]; callsign: string; addMember: boolean }):
         Promise<{ status: number; body: any; pk: string; sealed: { encryptedShare: string; shareIv: string; shareTag: string; kdfParams: string } }>;
-    /** A new device with only the sign-in: open a collection for the callsign, release the Google copy, fetch it, open it. */
+    /**
+     * A new device with only the sign-in: find with it, collect the account called `callsign` by the find's hold (which
+     * opens the session and releases the Google copy), fetch the copy, open it. `found` is the find's status.
+     */
     recover(args: { callsign: string; sub?: string }): Promise<{
-        opened: number; released: { status: number; body: any }; fragments: { status: number; body: any };
+        found: number; opened: number; released: { status: number; body: any }; fragments: { status: number; body: any };
         seedHex: string | null; words: string[] | null; error: string | null;
     }>;
 }
@@ -132,11 +135,21 @@ export async function startRecoveryHttps(): Promise<RecoveryHttps> {
             return { ...res, pk: id.pk, sealed };
         },
         async recover({ callsign, sub = GOOGLE_SUB }) {
+            // As both apps restore since S2, with no name sent: a find with the sign-in, then the collect of the account's key
+            // by the find's hold, which opens the session and releases the copy in one request. The device sends the key of
+            // the member called `callsign` (a live one first) whether or not the find named it, and any key when nobody is
+            // called that, so every refusal is the server's own: a key no find named opens nothing.
             const eph = idFromSeed(crypto.randomBytes(32));
-            const opened = await call(eph, '/api/recovery/collect', { callsign });
-            const collectionId = opened.body?.collectionId;
-            const n = (await call(eph, '/api/recovery/collect/sso-nonce', { collectionId })).body?.nonce;
-            const released = await call(eph, '/api/recovery/collect/sso', { collectionId, provider: 'google', idToken: googleToken(sub, n), nonce: n });
+            const n = (await call(eph, '/api/recovery/find-nonce', {})).body?.nonce;
+            const found = await call(eph, '/api/recovery/find', { provider: 'google', idToken: googleToken(sub, n), nonce: n });
+            const row = db.prepare(`SELECT public_key FROM members WHERE callsign = ?
+                                    ORDER BY status IN ('migrated', 'pruned'), rowid LIMIT 1`).get(callsign) as { public_key: string } | undefined;
+            const collected = await call(eph, '/api/recovery/collect', { candidatePublicKey: row?.public_key ?? crypto.randomBytes(32).toString('hex') });
+            const collectionId = collected.body?.collectionId;
+            // `opened` is whether a session opened, which since S3 only a release opens; `released` the collect's answer as the
+            // release's was before: the session's progress, or the refusal.
+            const opened = collected.status;
+            const released = { status: collected.status, body: collected.status === 200 ? collected.body?.progress : collected.body };
             const fragments = await call(eph, '/api/recovery/collect/fragments', { collectionId });
             const f = fragments.body?.fragments?.[0];
             let seedHex: string | null = null, words: string[] | null = null, error: string | null = null;
@@ -149,7 +162,7 @@ export async function startRecoveryHttps(): Promise<RecoveryHttps> {
             } else {
                 error = 'no fragment came back';
             }
-            return { opened: opened.status, released, fragments, seedHex, words, error };
+            return { found: found.status, opened, released, fragments, seedHex, words, error };
         },
     };
     return started;

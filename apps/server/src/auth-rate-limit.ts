@@ -27,12 +27,13 @@ export const AUTH_RATE_LIMIT = { perAddress: 15, windowMs: 60_000 } as const;
 export type AuthLimitBucket =
     | 'admin'
     | 'pairing'           // QR pairing: /api/pair/init and /api/pair/transfer, one pairing's two calls
-    | 'names'             // /api/recovery/lookup/:callsign and /api/members/callsign-available/:callsign (unless a key
-                          // joining at the open door signs it): one bucket, as both say whether a name is taken
+    | 'names'             // /api/members/callsign-available/:callsign (unless a key joining at the open door signs it),
+                          // which says whether a name is taken
     | 'funnel-event'      // the wizard's three counted steps, every newcomer's
     | 'knock'             // /api/join/knock (and its own daily caps, engine/knocks.ts)
     | 'pricing-guide'     // the pricing guide's read and its anonymous report
-    | 'sign-in-recovery'; // a restore by sign-in: /api/recovery/collect*, /api/recovery/sso-nonce, /api/recovery/shares/sso
+    | 'sign-in-recovery'; // a restore by sign-in: /api/recovery/find-nonce, /find and /collect; and a member's own sign-in:
+                          // /api/recovery/sso-nonce, /api/recovery/shares/sso, /api/recovery/community-copy(/half)
 const authAttempts = new Map<string, { count: number; resetAt: number }>();
 export function authRateLimit(ctx: Koa.Context, bucket: AuthLimitBucket = 'admin'): boolean {
     const ip = `${bucket} ${clientLimiterKey(ctx)}`;

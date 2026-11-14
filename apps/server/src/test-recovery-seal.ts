@@ -173,9 +173,10 @@ async function main(): Promise<void> {
             check(stored === 0, `...and nothing is stored, wrapped or not (${stored} rows)`);
 
             const c = await collectGoogle(callsign1, GOOGLE_SUB);
-            check(c.opened.status === 200, `a recovering device can still open a collection (got ${c.opened.status})`);
-            check(c.released.status === 503 && c.released.body?.error === SENTENCE,
-                `...and the sign-in release answers 503 with the sentence (got ${c.released.status} ${JSON.stringify(c.released.body)})`);
+            check(c.found.status === 503 && c.found.body?.error === SENTENCE,
+                `a recovering device's find answers 503 with the sentence, before its sign-in is checked (got ${c.found.status} ${JSON.stringify(c.found.body)})`);
+            check(c.released.status === 503 && c.released.body?.error === SENTENCE && !c.collectionId,
+                `...and so does its collect, opening nothing (got ${c.released.status} ${JSON.stringify(c.released.body)})`);
             if (eph6) {
                 const frags = await call(eph6, '/api/recovery/collect/fragments', { collectionId: collection6 });
                 check(frags.status === 503 && frags.body?.error === SENTENCE,
@@ -189,11 +190,10 @@ async function main(): Promise<void> {
             const again = await deposit(m4, sealed4, d.nonce, d.token);
             check(again.res.status === 200,
                 `with the key back, the same sign-in deposits: the refusal did not spend its nonce (got ${again.res.status} ${JSON.stringify(again.res.body)})`);
-            const releasedNow = await call(c.eph, '/api/recovery/collect/sso', {
-                collectionId: c.collectionId, provider: 'google', idToken: c.token, nonce: c.nonce,
-            });
-            check(releasedNow.status === 200 && releasedNow.body?.enough === true,
-                `...and the recovering device's same sign-in releases: its nonce was not spent either (got ${releasedNow.status} ${JSON.stringify(releasedNow.body)})`);
+            const foundNow = await call(c.eph, '/api/recovery/find', { provider: 'google', idToken: c.token, nonce: c.nonce });
+            const releasedNow = await call(c.eph, '/api/recovery/collect', { candidatePublicKey: c.pk });
+            check(foundNow.status === 200 && releasedNow.status === 200 && releasedNow.body?.progress?.enough === true,
+                `...and the recovering device's same sign-in finds and releases: its nonce was not spent either (got ${foundNow.status} ${releasedNow.status} ${JSON.stringify(releasedNow.body?.progress ?? releasedNow.body)})`);
         } finally {
             if (saved && !fs.existsSync(keyPath)) fs.writeFileSync(keyPath, saved, { mode: 0o600 });
         }

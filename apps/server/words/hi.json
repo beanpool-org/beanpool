@@ -562,7 +562,6 @@
   "That account has no recovery fragments to collect.": "उस खाते में इकट्ठा करने के लिए कोई रिकवरी अंश नहीं हैं।",
   "That account name is too long.": "खाते का वह नाम बहुत लंबा है।",
   "That address is not reachable from the internet.": "वह पता इंटरनेट से पहुँच योग्य नहीं है।",
-  "That callsign is ambiguous on this node.": "इस नोड पर वह कॉलसाइन अस्पष्ट है।",
   "That check didn't pass. Try again, or sign in to join now.": "वह जाँच सफल नहीं हुई। फिर कोशिश करें, या अभी जुड़ने के लिए साइन इन करें।",
   "That code isn’t valid. Ask the admin for a new one.": "वह कोड मान्य नहीं है। एडमिन से नया कोड माँगें।",
   "That confirmation doesn’t need a second admin.": "उस पुष्टि के लिए दूसरे एडमिन की ज़रूरत नहीं है।",

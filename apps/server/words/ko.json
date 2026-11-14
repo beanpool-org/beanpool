@@ -557,7 +557,6 @@
   "That account has no recovery fragments to collect.": "그 계정에는 모을 복구 조각이 없어요.",
   "That account name is too long.": "그 계정 이름이 너무 길어요.",
   "That address is not reachable from the internet.": "그 주소는 인터넷에서 닿을 수 없어요.",
-  "That callsign is ambiguous on this node.": "그 호출 부호는 이 노드에서 모호해요.",
   "That check didn't pass. Try again, or sign in to join now.": "확인을 통과하지 못했어요. 다시 시도하거나 로그인해서 바로 가입하세요.",
   "That code isn’t valid. Ask the admin for a new one.": "그 코드는 유효하지 않아요. 관리자에게 새 코드를 부탁하세요.",
   "That confirmation doesn’t need a second admin.": "그 확인에는 두 번째 관리자가 필요하지 않아요.",

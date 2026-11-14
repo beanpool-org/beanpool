@@ -808,17 +808,21 @@ export async function bootParent() {
         };
     }
 
-    /** Open a collection for `callsign` and release its Google copy with `sub`. */
+    /**
+     * Restore the account called `callsign` with its Google copy and `sub`, as both apps do since S2: a find with the
+     * sign-in, then the collect of that account's key by the find's hold, which opens the session and releases the copy in
+     * one request. The device sends that member's key whether or not the find named it, so a refusal is the server's own.
+     * `released` is that collect's answer as the release's was before S3: the session's progress, or the refusal.
+     */
     async function collectGoogle(callsign: string, sub: string) {
         const eph = newId();
-        const opened = await call(eph, '/api/recovery/collect', { callsign });
-        const collectionId = opened.body?.collectionId;
-        const n = (await call(eph, '/api/recovery/collect/sso-nonce', { collectionId })).body?.nonce;
+        const n = (await call(eph, '/api/recovery/find-nonce', {})).body?.nonce;
         const token = googleToken(sub, n);
-        const released = await call(eph, '/api/recovery/collect/sso', {
-            collectionId, provider: 'google', idToken: token, nonce: n,
-        });
-        return { eph, opened, collectionId, released, nonce: n, token };
+        const found = await call(eph, '/api/recovery/find', { provider: 'google', idToken: token, nonce: n });
+        const pk = (db.prepare('SELECT public_key FROM members WHERE callsign = ?').get(callsign) as { public_key: string } | undefined)?.public_key ?? '';
+        const collected = await call(eph, '/api/recovery/collect', { candidatePublicKey: pk });
+        const released = { status: collected.status, body: collected.status === 200 ? collected.body?.progress : collected.body };
+        return { eph, pk, found, collectionId: collected.body?.collectionId as string | undefined, released, nonce: n, token };
     }
 
     /** The database as files on disk: state.db and whatever WAL sits beside it. */

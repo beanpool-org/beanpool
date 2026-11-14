@@ -190,6 +190,15 @@ async function main() {
     assert(members.status === 200 && Array.isArray(members.body), `a member reads the members (${show(members)})`);
     const ssoNonce = await call('POST', newId(), '/api/recovery/sso-nonce', {});
     assert(!isPreviewRefusal(ssoNonce), `recovery by a sign-in still reaches its route (${show(ssoNonce)})`);
+    // A restore by a sign-in finds the account first (routes/recovery-collect.ts): the new phone signs with a throwaway key,
+    // never a member's, so find-nonce and find must be open to it, as the collect they lead to is.
+    const restoring = newId();
+    const findNonce = await call('POST', restoring, '/api/recovery/find-nonce', {});
+    const find = await call('POST', restoring, '/api/recovery/find', { provider: 'google', idToken: 'not-a-token', nonce: findNonce.body?.nonce ?? 'none' });
+    const collectByHold = await call('POST', restoring, '/api/recovery/collect', { candidatePublicKey: damo.pk });
+    assert(findNonce.status === 200 && typeof findNonce.body?.nonce === 'string' && find.status === 400 && !isPreviewRefusal(find)
+        && collectByHold.status === 400 && !isPreviewRefusal(collectByHold),
+        `a restore by a sign-in reaches find-nonce, find and the collect by its hold (${show(findNonce)} | ${show(find)} | ${show(collectByHold)})`);
     const reEnroll = await call('POST', newId(), '/api/member/re-enroll', {});
     assert(!isPreviewRefusal(reEnroll), `re-enrol (a member's new key) still reaches its route (${show(reEnroll)})`);
 

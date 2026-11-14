@@ -183,6 +183,19 @@ function derivePubHex(seed: Uint8Array): string {
     return (edPub.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
 }
 
+/**
+ * A restore as both apps run it since S2 (design DESIGN-recovery-no-callsign-fable.md §3): a find with the sign-in names
+ * the accounts it protects here, and the collect of `publicKey` by the find's hold opens the session and releases that
+ * account's copy in the same request. `progress` is the session's progress after that release.
+ */
+async function restoreWith(eph: string, provider: 'google' | 'apple', sub: string, publicKey: string) {
+    const nonce = (await signedCall('/api/recovery/find-nonce', eph, {})).body?.nonce;
+    const idToken = provider === 'google' ? mintGoogleToken(sub, nonce) : mintAppleToken(sub, nonce);
+    const found = await signedCall('/api/recovery/find', eph, { provider, idToken, nonce });
+    const collected = await signedCall('/api/recovery/collect', eph, { candidatePublicKey: publicKey });
+    return { found, collected, collectionId: collected.body?.collectionId as string, progress: collected.body?.progress };
+}
+
 async function main() {
     console.log('\n── SSO Recovery Round-Trip Comprehensive Suite ──\n');
     primeJwks();
@@ -232,32 +245,24 @@ async function main() {
         assert.strictEqual(statusRes1.body.canRemoveKeeper, false);
     });
 
-    // Recovery collection
+    // Recovery collection: the find with the sign-in names the account, and the collect by its hold opens the session and
+    // releases the copy in the same request.
     const ephPubHex1 = crypto.randomBytes(32).toString('hex');
-    const openRes1 = await signedCall('/api/recovery/collect', ephPubHex1, { callsign: m1.callsign });
-    await test('1.4 collection opens with threshold 1', () => {
-        assert.strictEqual(openRes1.status, 200);
-        assert.strictEqual(openRes1.body.threshold, 1);
-        assert.strictEqual(openRes1.body.generation, 1);
+    const restore1 = await restoreWith(ephPubHex1, 'google', GOOGLE_SUB, m1.pubHex);
+    await test('1.4 the find names the account, and the collect by its hold opens the collection with threshold 1', () => {
+        assert.strictEqual(restore1.found.status, 200);
+        assert(restore1.found.body.accounts.some((a: any) => a.publicKey === m1.pubHex && a.callsign === m1.callsign));
+        assert.strictEqual(restore1.collected.status, 200);
+        assert.strictEqual(restore1.collected.body.threshold, 1);
+        assert.strictEqual(restore1.collected.body.generation, 1);
     });
-    const collId1 = openRes1.body.collectionId;
+    const collId1 = restore1.collectionId;
 
-    const collectNonceRes1 = await signedCall('/api/recovery/collect/sso-nonce', ephPubHex1, { collectionId: collId1 });
-    assert.strictEqual(collectNonceRes1.status, 200);
-    const collectToken1 = mintGoogleToken(GOOGLE_SUB, collectNonceRes1.body.nonce);
-
-    const collectSsoRes1 = await signedCall('/api/recovery/collect/sso', ephPubHex1, {
-        collectionId: collId1,
-        provider: 'google',
-        idToken: collectToken1,
-        nonce: collectNonceRes1.body.nonce,
-    });
-    await test('1.5 collect sso marks session enough=true with 1 collected fragment', () => {
-        assert.strictEqual(collectSsoRes1.status, 200);
-        assert.strictEqual(collectSsoRes1.body.collected, 1);
-        assert.strictEqual(collectSsoRes1.body.threshold, 1);
-        assert.strictEqual(collectSsoRes1.body.enough, true);
-        assert.deepStrictEqual(collectSsoRes1.body.releasedTypes, ['sso']);
+    await test('1.5 the same collect released the sign-in copy: enough=true with 1 collected fragment', () => {
+        assert.strictEqual(restore1.progress.collected, 1);
+        assert.strictEqual(restore1.progress.threshold, 1);
+        assert.strictEqual(restore1.progress.enough, true);
+        assert.deepStrictEqual(restore1.progress.releasedTypes, ['sso']);
     });
 
     const fragsRes1 = await signedCall('/api/recovery/collect/fragments', ephPubHex1, { collectionId: collId1 });
@@ -322,15 +327,8 @@ async function main() {
     });
 
     const eph1c = crypto.randomBytes(32).toString('hex');
-    const open1c = await signedCall('/api/recovery/collect', eph1c, { callsign: m1c.callsign });
-    const collectNonce1c = await signedCall('/api/recovery/collect/sso-nonce', eph1c, { collectionId: open1c.body.collectionId });
-    await signedCall('/api/recovery/collect/sso', eph1c, {
-        collectionId: open1c.body.collectionId,
-        provider: 'google',
-        idToken: mintGoogleToken(GOOGLE_SUB, collectNonce1c.body.nonce),
-        nonce: collectNonce1c.body.nonce,
-    });
-    const frags1c = await signedCall('/api/recovery/collect/fragments', eph1c, { collectionId: open1c.body.collectionId });
+    const restore1c = await restoreWith(eph1c, 'google', GOOGLE_SUB, m1c.pubHex);
+    const frags1c = await signedCall('/api/recovery/collect/fragments', eph1c, { collectionId: restore1c.collectionId });
     const frag1c = frags1c.body.fragments?.[0];
     const released1c = {
         encryptedShare: frag1c?.payload, shareIv: frag1c?.payloadIv, shareTag: frag1c?.payloadTag, kdfParams: frag1c?.kdfParams,
@@ -448,26 +446,15 @@ async function main() {
 
     // Recovery collection
     const ephPubHex2 = crypto.randomBytes(32).toString('hex');
-    const openRes2 = await signedCall('/api/recovery/collect', ephPubHex2, { callsign: m2.callsign });
-    assert.strictEqual(openRes2.status, 200);
-    assert.strictEqual(openRes2.body.threshold, TWO_LAYER_THRESHOLD);
-    const collId2 = openRes2.body.collectionId;
+    const restore2 = await restoreWith(ephPubHex2, 'google', GOOGLE_SUB, m2.pubHex);
+    assert.strictEqual(restore2.collected.status, 200);
+    assert.strictEqual(restore2.collected.body.threshold, TWO_LAYER_THRESHOLD);
+    const collId2 = restore2.collectionId;
 
-    const collectNonceRes2 = await signedCall('/api/recovery/collect/sso-nonce', ephPubHex2, { collectionId: collId2 });
-    assert.strictEqual(collectNonceRes2.status, 200);
-    const collectToken2 = mintGoogleToken(GOOGLE_SUB, collectNonceRes2.body.nonce);
-
-    const collectSsoRes2 = await signedCall('/api/recovery/collect/sso', ephPubHex2, {
-        collectionId: collId2,
-        provider: 'google',
-        idToken: collectToken2,
-        nonce: collectNonceRes2.body.nonce,
-    });
-    await test('2.4 collect sso releases sso fragment with enough=false (waiting for hub)', () => {
-        assert.strictEqual(collectSsoRes2.status, 200);
-        assert.strictEqual(collectSsoRes2.body.collected, 1);
-        assert.strictEqual(collectSsoRes2.body.threshold, TWO_LAYER_THRESHOLD);
-        assert.strictEqual(collectSsoRes2.body.enough, false);
+    await test('2.4 the collect by the hold releases the sso fragment with enough=false (waiting for hub)', () => {
+        assert.strictEqual(restore2.progress.collected, 1);
+        assert.strictEqual(restore2.progress.threshold, TWO_LAYER_THRESHOLD);
+        assert.strictEqual(restore2.progress.enough, false);
     });
 
     const collectHubRes2 = await signedCall('/api/recovery/collect/hub', ephPubHex2, { collectionId: collId2 });
@@ -631,12 +618,7 @@ function toSealedShare(frag: any) {
 
     // 4.4 Verify Google independently recovers seed
     const ephGoogle = crypto.randomBytes(32).toString('hex');
-    const openGoogle = await signedCall('/api/recovery/collect', ephGoogle, { callsign: m4.callsign });
-    const collIdGoogle = openGoogle.body.collectionId;
-    const nonceCollGoogle = (await signedCall('/api/recovery/collect/sso-nonce', ephGoogle, { collectionId: collIdGoogle })).body.nonce;
-    await signedCall('/api/recovery/collect/sso', ephGoogle, {
-        collectionId: collIdGoogle, provider: 'google', idToken: mintGoogleToken(GOOGLE_SUB, nonceCollGoogle), nonce: nonceCollGoogle,
-    });
+    const collIdGoogle = (await restoreWith(ephGoogle, 'google', GOOGLE_SUB, m4.pubHex)).collectionId;
     const fragsGoogle = (await signedCall('/api/recovery/collect/fragments', ephGoogle, { collectionId: collIdGoogle })).body.fragments;
     const recSeedGoogle = await openShareFromSso(toSealedShare(fragsGoogle[0]), 'google', GOOGLE_SUB);
     await test('4.4 Google recovers full seed independently without hub', () => {
@@ -645,12 +627,7 @@ function toSealedShare(frag: any) {
 
     // 4.5 Verify Apple independently recovers seed
     const ephApple = crypto.randomBytes(32).toString('hex');
-    const openApple = await signedCall('/api/recovery/collect', ephApple, { callsign: m4.callsign });
-    const collIdApple = openApple.body.collectionId;
-    const nonceCollApple = (await signedCall('/api/recovery/collect/sso-nonce', ephApple, { collectionId: collIdApple })).body.nonce;
-    await signedCall('/api/recovery/collect/sso', ephApple, {
-        collectionId: collIdApple, provider: 'apple', idToken: mintAppleToken(APPLE_SUB, nonceCollApple), nonce: nonceCollApple,
-    });
+    const collIdApple = (await restoreWith(ephApple, 'apple', APPLE_SUB, m4.pubHex)).collectionId;
     const fragsApple = (await signedCall('/api/recovery/collect/fragments', ephApple, { collectionId: collIdApple })).body.fragments;
     const recSeedApple = await openShareFromSso(toSealedShare(fragsApple[0]), 'apple', APPLE_SUB);
     await test('4.5 Apple recovers full seed independently without hub', () => {
@@ -678,12 +655,7 @@ function toSealedShare(frag: any) {
 
     // 4.7 Verify Apple still recovers after Google disconnect
     const ephApplePost = crypto.randomBytes(32).toString('hex');
-    const openApplePost = await signedCall('/api/recovery/collect', ephApplePost, { callsign: m4.callsign });
-    const collIdApplePost = openApplePost.body.collectionId;
-    const nonceCollApplePost = (await signedCall('/api/recovery/collect/sso-nonce', ephApplePost, { collectionId: collIdApplePost })).body.nonce;
-    await signedCall('/api/recovery/collect/sso', ephApplePost, {
-        collectionId: collIdApplePost, provider: 'apple', idToken: mintAppleToken(APPLE_SUB, nonceCollApplePost), nonce: nonceCollApplePost,
-    });
+    const collIdApplePost = (await restoreWith(ephApplePost, 'apple', APPLE_SUB, m4.pubHex)).collectionId;
     const fragsApplePost = (await signedCall('/api/recovery/collect/fragments', ephApplePost, { collectionId: collIdApplePost })).body.fragments;
     const recSeedApplePost = await openShareFromSso(toSealedShare(fragsApplePost[0]), 'apple', APPLE_SUB);
     await test('4.7 Apple still recovers seed after Google was disconnected', () => {
@@ -733,12 +705,7 @@ function toSealedShare(frag: any) {
 
     // Verify old format recoverability
     const eph5Old = crypto.randomBytes(32).toString('hex');
-    const open5Old = await signedCall('/api/recovery/collect', eph5Old, { callsign: m5.callsign });
-    const collId5Old = open5Old.body.collectionId;
-    const n5Old = (await signedCall('/api/recovery/collect/sso-nonce', eph5Old, { collectionId: collId5Old })).body.nonce;
-    await signedCall('/api/recovery/collect/sso', eph5Old, {
-        collectionId: collId5Old, provider: 'google', idToken: mintGoogleToken(GOOGLE_SUB, n5Old), nonce: n5Old,
-    });
+    const collId5Old = (await restoreWith(eph5Old, 'google', GOOGLE_SUB, m5.pubHex)).collectionId;
     await signedCall('/api/recovery/collect/hub', eph5Old, { collectionId: collId5Old });
     const frags5Old = (await signedCall('/api/recovery/collect/fragments', eph5Old, { collectionId: collId5Old })).body.fragments;
     const ssoF5 = frags5Old.find((f: any) => f.holderType === 'sso');
@@ -780,15 +747,11 @@ function toSealedShare(frag: any) {
 
     // 5.4 Verify member is now seamlessly recoverable under new format without hub
     const eph5New = crypto.randomBytes(32).toString('hex');
-    const open5New = await signedCall('/api/recovery/collect', eph5New, { callsign: m5.callsign });
-    assert.strictEqual(open5New.body.threshold, 1);
-    const collId5New = open5New.body.collectionId;
-    const n5New = (await signedCall('/api/recovery/collect/sso-nonce', eph5New, { collectionId: collId5New })).body.nonce;
-    const colSso5New = await signedCall('/api/recovery/collect/sso', eph5New, {
-        collectionId: collId5New, provider: 'google', idToken: mintGoogleToken(GOOGLE_SUB, n5New), nonce: n5New,
-    });
-    assert.strictEqual(colSso5New.body.enough, true);
-    assert.strictEqual(colSso5New.body.collected, 1);
+    const restore5New = await restoreWith(eph5New, 'google', GOOGLE_SUB, m5.pubHex);
+    assert.strictEqual(restore5New.collected.body.threshold, 1);
+    const collId5New = restore5New.collectionId;
+    assert.strictEqual(restore5New.progress.enough, true);
+    assert.strictEqual(restore5New.progress.collected, 1);
 
     const frags5New = (await signedCall('/api/recovery/collect/fragments', eph5New, { collectionId: collId5New })).body.fragments;
     assert.strictEqual(frags5New.length, 1);
@@ -850,20 +813,13 @@ function toSealedShare(frag: any) {
 
     // 6.3 Mixed account recovery via Google (single-blob)
     const eph6Google = crypto.randomBytes(32).toString("hex");
-    const open6Google = await signedCall("/api/recovery/collect", eph6Google, { callsign: m6.callsign });
-    const collId6Google = open6Google.body.collectionId;
-    const n6Google = (await signedCall("/api/recovery/collect/sso-nonce", eph6Google, { collectionId: collId6Google })).body.nonce;
-    const colSso6Google = await signedCall("/api/recovery/collect/sso", eph6Google, {
-        collectionId: collId6Google,
-        provider: "google",
-        idToken: mintGoogleToken(GOOGLE_SUB, n6Google),
-        nonce: n6Google,
-    });
+    const restore6Google = await restoreWith(eph6Google, "google", GOOGLE_SUB, m6.pubHex);
+    const collId6Google = restore6Google.collectionId;
 
     await test("6.2 recovering via single-blob provider on mixed account reaches enough=true with threshold 1", () => {
-        assert.strictEqual(colSso6Google.body.collected, 1);
-        assert.strictEqual(colSso6Google.body.threshold, 1);
-        assert.strictEqual(colSso6Google.body.enough, true);
+        assert.strictEqual(restore6Google.progress.collected, 1);
+        assert.strictEqual(restore6Google.progress.threshold, 1);
+        assert.strictEqual(restore6Google.progress.enough, true);
     });
 
     const frags6Google = (await signedCall("/api/recovery/collect/fragments", eph6Google, { collectionId: collId6Google })).body.fragments;
@@ -876,20 +832,14 @@ function toSealedShare(frag: any) {
 
     // 6.4 Mixed account recovery via Apple (legacy) - Finding 1 verification
     const eph6Apple = crypto.randomBytes(32).toString("hex");
-    const open6Apple = await signedCall("/api/recovery/collect", eph6Apple, { callsign: m6.callsign });
-    const collId6Apple = open6Apple.body.collectionId;
-    const n6Apple = (await signedCall("/api/recovery/collect/sso-nonce", eph6Apple, { collectionId: collId6Apple })).body.nonce;
-    const colSso6Apple = await signedCall("/api/recovery/collect/sso", eph6Apple, {
-        collectionId: collId6Apple,
-        provider: "apple",
-        idToken: mintAppleToken(APPLE_SUB, n6Apple),
-        nonce: n6Apple,
-    });
+    const restore6Apple = await restoreWith(eph6Apple, "apple", APPLE_SUB, m6.pubHex);
+    const collId6Apple = restore6Apple.collectionId;
 
     await test("6.4 recovering via legacy provider on mixed account reports enough=false and threshold 2 (Finding 1 fix)", () => {
-        assert.strictEqual(colSso6Apple.body.collected, 1);
-        assert.strictEqual(colSso6Apple.body.threshold, 2);
-        assert.strictEqual(colSso6Apple.body.enough, false);
+        assert.strictEqual(restore6Apple.progress.collected, 1);
+        assert.strictEqual(restore6Apple.progress.threshold, 2);
+        assert.strictEqual(restore6Apple.collected.body.threshold, 2);
+        assert.strictEqual(restore6Apple.progress.enough, false);
     });
 
     const colHub6Apple = await signedCall("/api/recovery/collect/hub", eph6Apple, { collectionId: collId6Apple });
@@ -1052,12 +1002,7 @@ function toSealedShare(frag: any) {
 
     // Verify member still recovers generation 1 seed
     const eph8 = crypto.randomBytes(32).toString("hex");
-    const open8 = await signedCall("/api/recovery/collect", eph8, { callsign: m8.callsign });
-    const collId8 = open8.body.collectionId;
-    const n8 = (await signedCall("/api/recovery/collect/sso-nonce", eph8, { collectionId: collId8 })).body.nonce;
-    await signedCall("/api/recovery/collect/sso", eph8, {
-        collectionId: collId8, provider: "google", idToken: mintGoogleToken(GOOGLE_SUB, n8), nonce: n8,
-    });
+    const collId8 = (await restoreWith(eph8, "google", GOOGLE_SUB, m8.pubHex)).collectionId;
     const frags8 = (await signedCall("/api/recovery/collect/fragments", eph8, { collectionId: collId8 })).body.fragments;
     const recSeed8 = await openShareFromSso(toSealedShare(frags8[0]), "google", GOOGLE_SUB);
     await test("8.6 member recovers seed from intact generation 1 after all rejected deposits", () => {
@@ -1081,12 +1026,8 @@ function toSealedShare(frag: any) {
     });
 
     const eph9 = crypto.randomBytes(32).toString("hex");
-    const open9 = await signedCall("/api/recovery/collect", eph9, { callsign: m9.callsign });
-    const collId9 = open9.body.collectionId;
-    const n9 = (await signedCall("/api/recovery/collect/sso-nonce", eph9, { collectionId: collId9 })).body.nonce;
-    await signedCall("/api/recovery/collect/sso", eph9, {
-        collectionId: collId9, provider: "google", idToken: mintGoogleToken(GOOGLE_SUB, n9), nonce: n9,
-    });
+    const restore9 = await restoreWith(eph9, "google", GOOGLE_SUB, m9.pubHex);
+    const collId9 = restore9.collectionId;
 
     // Call fragments route: verify threshold 1 and enough=true with 1 collected fragment
     const fragsRes9 = await signedCall("/api/recovery/collect/fragments", eph9, { collectionId: collId9 });
@@ -1098,7 +1039,7 @@ function toSealedShare(frag: any) {
 
     // Verify initial collection threshold for single-blob member is 1
     await test("9.2 collection opening reports threshold 1 for single-blob member", () => {
-        assert.strictEqual(open9.body.threshold, 1);
+        assert.strictEqual(restore9.collected.body.threshold, 1);
     });
 
     // Verify fallback calculation logic directly produces threshold 1 and enough=true

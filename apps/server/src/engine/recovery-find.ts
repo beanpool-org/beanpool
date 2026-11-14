@@ -69,8 +69,8 @@ export function ssoFindHash(provider: SsoProvider, sub: string): string {
 }
 
 /**
- * The accounts a restore here may bring back, as the restore by name has them (routes/recovery-collect.ts resolveCallsign):
- * not migrated or pruned, not a visitor's row, not an enterprise's or a project's.
+ * The accounts a restore here may bring back: not migrated or pruned, not a visitor's row (a member of another community,
+ * or a key someone sent to, which no restore here brings back), not an enterprise's or a project's, which no one restores.
  */
 const RESTORABLE = "m.status NOT IN ('migrated', 'pruned') AND m.is_visitor = 0 AND COALESCE(m.is_treasury, 0) = 0";
 /** The owner's current generation: a copy from a superseded one is not a copy. */

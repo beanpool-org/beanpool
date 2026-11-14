@@ -90,12 +90,22 @@ const HOUR_MS = 3_600_000;
 /** The card as buildHome answers this reader at this moment, asked as an app asks it. */
 const learnAt = (who: Id, now: number, lands: string[] = ['learn']) =>
     buildHome({ actor: who.pk, point: null, asked: ['needs', 'learn', 'community'], lands: new Set(lands as any), now }).body.cards as any;
-/** Midnight at the start of the node's local day holding `ms`. */
+/** Midnight at the start of the node's local day holding `ms`, to the minute (a zone's offset can be a half hour). */
 function localMidnight(ms: number): number {
     const day = nodeLocalDay(ms);
-    let t = ms - (ms % HOUR_MS);
+    let t = ms - (ms % 60_000);
     while (nodeLocalDay(t - HOUR_MS) === day) t -= HOUR_MS;
+    while (nodeLocalDay(t - 60_000) === day) t -= 60_000;
     return t;
+}
+/**
+ * Moments spread over the node's local day that starts at `start`, every one inside it: its first and last half hour and
+ * four hours between. A day is 23 or 25 hours long where the clocks change, so its end is measured, not taken as 24 hours
+ * (midnight + 23 h is already the next day on a spring-forward day, such as 4 Oct 2026 in Australia/Sydney).
+ */
+function momentsOfDay(start: number): number[] {
+    const end = localMidnight(start + 30 * HOUR_MS);
+    return [start + 30 * 60_000, ...[1, 6, 12, 18].map((h) => start + h * HOUR_MS), end - 30 * 60_000];
 }
 
 async function main(): Promise<void> {
@@ -183,8 +193,13 @@ async function main(): Promise<void> {
     // From 20 days on, the newest is no longer new, so every row is the day's pick.
     const base = localMidnight(Date.now() + 20 * DAY_MS);
     const pickOf = (who: Id, at: number) => rowIds(learnAt(who, at).learn).join(',');
-    const morning = pickOf(mel, base + 30 * 60_000);
-    const sameDay = [1, 6, 12, 18, 23].map((h) => pickOf(mel, base + h * HOUR_MS));
+    // The moments stay inside one local day on every day of a year, in whatever zone the suite runs (a clock change included).
+    const yearStart = Date.UTC(new Date().getUTCFullYear(), 0, 1, 12);
+    const strays = Array.from({ length: 366 }, (_, d) => localMidnight(yearStart + d * DAY_MS))
+        .filter((start) => momentsOfDay(start).some((ms) => nodeLocalDay(ms) !== nodeLocalDay(start)))
+        .map((start) => nodeLocalDay(start));
+    assert(strays.length === 0, `3. every moment sampled is inside its own local day (${strays.join(', ') || 'all inside'})`);
+    const [morning, ...sameDay] = momentsOfDay(base).map((ms) => pickOf(mel, ms));
     assert(morning.split(',').length === LEARN_HOME_ROWS && sameDay.every((p) => p === morning), `3. the same rows at every hour of one local day (${morning} | ${sameDay.join(' | ')})`);
     assert(pickOf(pat, base + 9 * HOUR_MS) === morning && pickOf(owen, base + 15 * HOUR_MS) === morning, '3. and for every member that day');
     assert(learnAt(mel, base + 3 * HOUR_MS).learn.rows.every((r: any) => r.isNew === undefined), `3. after ${LEARN_HOME_NEW_DAYS} days the newest is no longer new`);

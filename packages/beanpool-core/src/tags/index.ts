@@ -96,12 +96,32 @@ export function tagText(text: string): string {
     return out.replace(FOLD_LETTERS, (c) => LETTER_FOLDS[c] ?? c);
 }
 
+/** A text read by `key` as it is written and with each compound joined: one form, or two when they differ. */
+function formsBy(text: string, key: (text: string) => string): string[] {
+    const words = key(text);
+    const joined = key(joinCompounds(text));
+    return joined === words ? [words] : [words, joined];
+}
+
 /** The forms a text is keyed and found by: tagText, and tagText with each compound joined as a search looks it up ("wi-fi" →
  *  wifi, search-terms.ts queryWords), so "Wi-Fi" finds the label "Wifi" and "tshirt" a label "T-shirt". */
 function tagForms(text: string): string[] {
-    const words = tagText(text);
-    const joined = tagText(joinCompounds(text));
-    return joined === words ? [words] : [words, joined];
+    return formsBy(text, tagText);
+}
+
+function nfc(text: string): string {
+    // Guarded as tagText's normalize: an engine without it keeps the text as typed.
+    try { return text.normalize('NFC'); } catch { return text; }
+}
+
+/**
+ * The forms the node's map of every language's labels keys a label by, and looks a typed word up by (slice F5, apps/server
+ * engine/free-tags.ts): the words and compound join of tagForms, lower case, NFC, with every mark and letter KEPT ("maçã",
+ * never "maca"; "cát", never "cat"). Folding belongs inside one language's index only, where a member types their own words
+ * without marks: across languages it would make one language's word another's ("Cát", sand in Vietnamese, is no "cat").
+ */
+export function exactTagForms(text: string): string[] {
+    return formsBy(nfc(text), (t) => nfc(plainWords(t).join(' ')));
 }
 
 /** The words of one language turned into tag ids. */

@@ -263,6 +263,14 @@ export function wordsIn(lang: Lang | null | undefined): Words {
 }
 
 
+/**
+ * Core's catalog for `lang` read from its file again, kept nowhere: for a pass that reads every language once and keeps only
+ * what it takes from them (engine/free-tags.ts, the library's labels). Null when the file is missing or unreadable.
+ */
+export function coreCatalogOnce(lang: Lang): Catalog | null {
+    return readCatalog(() => requireFromHere.resolve(`@beanpool/core/words/${lang}.json`));
+}
+
 /** The language a request names in `X-Language`, when it is one BeanPool writes; null when it names none. */
 export function requestLanguage(ctx: Pick<Koa.Context, 'get'>): Lang | null {
     const tag = ctx.get(LANGUAGE_HEADER);

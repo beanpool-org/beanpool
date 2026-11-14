@@ -1,11 +1,17 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    FREE_TAGS_MAX, FREE_TAG_TOO_SHORT, POST_TAGS_MAX, TAG_COMMA, TOO_MANY_TAGS, TYPED_TAG_WORDS, communityTagsFor,
-    enterTypedTags, exactLibraryTag, lastTagOff, mergedInto, suggestTags, tagChildren, tagIndex, t, tn, typedTag, type CommunityTag,
-    type RefusedTag,
+    FREE_TAGS_MAX, FREE_TAG_TOO_SHORT, LIBRARY_ASK_MS, POST_TAGS_MAX, TAG_COMMA, TOO_MANY_TAGS, TYPED_TAG_WORDS, communityTagsFor,
+    didYouMeanTag, enterTypedTags, exactLibraryTag, lastTagOff, mergedInto, suggestTags, tagChildren, tagIndex, t, tn, typedTag,
+    isLang, type CommunityTag, type LibraryElsewhere, type LibraryLabel, type RefusedTag,
 } from '@beanpool/core';
-import { getCommunityTags } from '../lib/api';
+import { getCommunityTags, getLibraryTagFor } from '../lib/api';
+import { LANGUAGE_NAMES } from '../lib/language';
+
+/** A language as the language list names it, in itself ("Deutsch"); a code this app has no name for, as the code. */
+function languageName(lang: string): string {
+    return isLang(lang) ? LANGUAGE_NAMES[lang] : lang;
+}
 
 export interface TagPickerProps {
     value?: string[];
@@ -20,6 +26,9 @@ export interface TagPickerProps {
     testID?: string;
     /** Where this community's typed tags come from (GET /api/free-tags); read once each time the sheet opens. */
     communityTags?: () => Promise<CommunityTag[]>;
+    /** The library tag a word is the label of in another language, and that language (GET /api/free-tags?q=, slice F5), or
+     *  null; rejects when it can't be had, and the picker then asks again later. */
+    libraryTagFor?: (text: string) => Promise<LibraryLabel | null>;
 }
 
 export function TagPicker({
@@ -33,6 +42,7 @@ export function TagPicker({
     description = '',
     testID = 'tag-picker',
     communityTags = getCommunityTags,
+    libraryTagFor = getLibraryTagFor,
 }: TagPickerProps) {
     const selectedTags = value ?? tags ?? [];
     const [isOpen, setIsOpen] = useState(false);
@@ -155,6 +165,27 @@ export function TagPicker({
     // Under the library's matches: this community's tags the typing reaches, never one with a library label's letters.
     const usedHere = canType ? communityTagsFor(searchQuery, community, held, { shadowed: (tag) => exactLibraryTag(tag, index) !== null }) : [];
     const addable = typed?.kind === 'free' && !freeTags.includes(typed.tag) ? typed.tag : null;
+    // A word "Add" would make that is a library tag's label in another language (slice F5): the node is asked once the field
+    // is still, once per word, and the field offers that tag above the "Add" row, naming the language. Never while the
+    // library rows list anything for the word (core didYouMeanTag), and then not asked at all. Only an answer is kept: a
+    // failed ask is asked again. Enter still adds the member's own word.
+    const [elsewhere, setElsewhere] = useState<LibraryElsewhere | null>(null);
+    const askedNode = useRef(new Map<string, LibraryLabel | null>());
+    const listed = searchResults.length > 0;
+    useEffect(() => {
+        if (!isOpen || !addable || listed) return;
+        const known = askedNode.current.get(addable);
+        if (known !== undefined) { setElsewhere({ tag: addable, found: known }); return; }
+        let live = true;
+        const timer = setTimeout(() => {
+            libraryTagFor(addable).then((found) => {
+                askedNode.current.set(addable, found);
+                if (live) setElsewhere({ tag: addable, found });
+            }, () => {});
+        }, LIBRARY_ASK_MS);
+        return () => { live = false; clearTimeout(timer); };
+    }, [isOpen, addable, listed, libraryTagFor]);
+    const meant = didYouMeanTag(addable, elsewhere, held, searchResults, index);
     const shownRefusal = refused ?? (typed?.kind === 'refused' && typed.why !== FREE_TAG_TOO_SHORT ? typed : null);
 
     const groups = useMemo(() => {
@@ -476,6 +507,17 @@ export function TagPicker({
                             )}
                         </div>
 
+                        {/* The library tag the typed word names in another language, just above the row that adds the word itself. */}
+                        {meant && (
+                            <button
+                                type="button"
+                                onClick={() => pickFound(meant.id)}
+                                data-testid="tag-picker-did-you-mean"
+                                className="w-full min-h-[44px] mt-2 flex items-center text-left break-words text-sm font-bold text-nature-900 dark:text-white hover:underline border-t border-nature-100 dark:border-nature-800"
+                            >
+                                {t(TYPED_TAG_WORDS.didYouMean, { tag: index.label(meant.id), language: languageName(meant.lang) })}
+                            </button>
+                        )}
                         {/* The last row, and held below the list: twelve results would push it off a short screen. */}
                         {addable && (
                             <button

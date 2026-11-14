@@ -19,9 +19,9 @@
  * Every write here answers 503 on a standby at the route (routes/knowledge.ts); none is a ledger write.
  */
 import {
-    KNOWLEDGE_FRONT_ROWS, KNOWLEDGE_LIMITS, KNOWLEDGE_SEARCH_MAX, KNOWLEDGE_TOPIC_PAGE, KNOWLEDGE_TOPICS, LANGS,
+    KNOWLEDGE_FRONT_ROWS, KNOWLEDGE_LIMITS, KNOWLEDGE_SEARCH_MAX, KNOWLEDGE_TOPIC_PAGE, KNOWLEDGE_TOPICS, LANGS, LEARN_HOME_NEW_DAYS, LEARN_HOME_ROWS,
     compareKnowledge, isKnowledgeTopic, knowledgeFirstLine, knowledgeTopic, pinLive, word, wordsFor,
-    type KnowledgeFront, type KnowledgeRow, type KnowledgeSearch, type KnowledgeSource, type KnowledgeTopicPage,
+    type HomeLearnRow, type KnowledgeFront, type KnowledgeRow, type KnowledgeSearch, type KnowledgeSource, type KnowledgeTopicPage,
 } from '@beanpool/core';
 import { getPosts, type MarketplacePost } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -351,4 +351,46 @@ export function knowledgeSearch(reader: string, q: string, now = Date.now()): Kn
     const scored = found.map((p) => ({ score: score(p), row: knowledgeRowOf(p, now) }));
     scored.sort((a, b) => b.score - a.score || byLearnOrder(a.row, b.row));
     return { total: scored.length, rows: scored.slice(0, KNOWLEDGE_SEARCH_MAX).map((s) => s.row) };
+}
+
+// ── Home's card (slice K7) ───────────────────────────────────────────────────────────────
+
+const DAY_MS = 86_400_000;
+
+/**
+ * The node's own day, YYYY-MM-DD in its local time, as the Daily Pulse dates its item (daily-pulse.ts rotateDailyPulse):
+ * the day the Home card's pick belongs to.
+ */
+export function nodeLocalDay(now: number): string {
+    return new Date(now - new Date(now).getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+}
+
+/** A page's place in one day's pick: FNV-1a over the day and the page's id, so every member draws the same order that day. */
+function dayRank(day: string, id: string): number {
+    let h = 0x811c9dc5;
+    const text = `${day}\n${id}`;
+    for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h;
+}
+
+/**
+ * The Home card's rows (amended §3.6) from the pages showing: first the newest page, marked new, if it first showed (was
+ * published) in the last LEARN_HOME_NEW_DAYS days; then pages picked by the node's day, the same for every member that day,
+ * so the card doesn't reshuffle at each open and changes the next day. A page marked "may be out of date" comes after every
+ * page that isn't, as Learn lists it. A new page joins the day's order where its rank falls and moves no other page.
+ */
+export function learnHomeRows(pages: readonly MarketplacePost[], now = Date.now()): HomeLearnRow[] {
+    const day = nodeLocalDay(now);
+    const at = (p: MarketplacePost) => { const ms = Date.parse(p.createdAt); return Number.isFinite(ms) ? ms : -Infinity; };
+    const newest = pages.reduce<MarketplacePost | null>((best, p) => (!best || at(p) > at(best) || (at(p) === at(best) && p.id > best.id) ? p : best), null);
+    const out: HomeLearnRow[] = [];
+    const fresh = newest && now - at(newest) < LEARN_HOME_NEW_DAYS * DAY_MS ? newest : null;
+    if (fresh) out.push({ ...knowledgeRowOf(fresh, now), isNew: true });
+    const rest = pages.filter((p) => p !== fresh).map((p) => ({ row: knowledgeRowOf(p, now), rank: dayRank(day, p.id) }));
+    rest.sort((a, b) => Number(a.row.outdated) - Number(b.row.outdated) || a.rank - b.rank || (a.row.id < b.row.id ? -1 : a.row.id > b.row.id ? 1 : 0));
+    for (const { row } of rest.slice(0, LEARN_HOME_ROWS - out.length)) out.push(row);
+    return out;
 }

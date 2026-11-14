@@ -68,17 +68,15 @@ export default function ChatsScreen() {
     }, [talkView, side]));
 
     React.useEffect(() => {
-        // A way in that names a pane (a notice, the header's icons, a deep link) means Chats.
-        if (talkParams.view === 'people') {
-            setTalkView('people');
-            setPickedSide('chats');
-        } else if (talkParams.view === 'groups') {
-            setTalkView('groups');
-            setPickedSide('chats');
-        } else if (talkParams.view === 'messages') {
-            setTalkView('messages');
-            setPickedSide('chats');
-        }
+        // A way in that names a pane (a notice, the header's icons, Home's "All N groups", a deep link) means Chats. The
+        // param is cleared once read, as the filter's is below: a tab stays mounted, so the same view pushed again after a
+        // Forum tap would change nothing and leave the member on the Forum. Only Talk's own three are taken: People's
+        // (friends, community, invites) are PeopleScreen's, which reads this route's params while mounted inside Talk.
+        const view = talkParams.view;
+        if (view !== 'people' && view !== 'groups' && view !== 'messages') return;
+        setTalkView(view);
+        setPickedSide('chats');
+        router.setParams({ view: '' });
     }, [talkParams.view]);
 
     const [conversations, setConversations] = useState<any[]>([]);

@@ -103,14 +103,21 @@ vi.mock('react-native', () => {
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
-const params = vi.hoisted(() => ({ now: {} as Record<string, string> }));
+/** The Chat route's params, as expo-router keeps them for a mounted tab: a push or setParams changes them in place, and every
+ *  screen reading them (Talk, and People inside it) draws again. */
+const params = vi.hoisted(() => ({ now: {} as Record<string, string>, heard: new Set<() => void>() }));
+const setRouteParams = vi.hoisted(() => (next: Record<string, string>) => { params.now = next; for (const draw of [...params.heard]) draw(); });
 vi.mock('expo-router', async () => {
-    const { useEffect: effect } = await import('react');
+    const { useEffect: effect, useSyncExternalStore } = await import('react');
+    const listen = (draw: () => void) => { params.heard.add(draw); return () => { params.heard.delete(draw); }; };
     return {
-        router: { push() {}, navigate() {}, replace() {}, back() {}, setParams() {}, canGoBack: () => true },
+        router: {
+            push() {}, navigate() {}, replace() {}, back() {}, canGoBack: () => true,
+            setParams: (p: Record<string, string>) => setRouteParams({ ...params.now, ...p }),
+        },
         useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
         useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
-        useLocalSearchParams: () => params.now,
+        useLocalSearchParams: () => useSyncExternalStore(listen, () => params.now),
         ErrorBoundary: () => null,
     };
 });
@@ -204,7 +211,7 @@ import { yourGroupsStore } from '../../components/useYourGroups';
 vi.mock('../people-visit', () => ({ usePeopleVisitEnds: () => 0 }));
 import ChatsScreen from '../../app/(tabs)/chats';
 
-const NODE = 'https://mullum.example';
+const NODE = 'https://riverside.example';
 const now = Date.now();
 const iso = (ms: number) => new Date(ms).toISOString();
 const CONVERSATIONS = [
@@ -266,6 +273,12 @@ async function reopenIn(lang: UiLang) {
     root = createRoot(host);
     await renderIn(lang);
 }
+/** A way in from elsewhere pushing the Chat tab with these params while the tab stays mounted (a notice, Home's "All N
+ *  groups", the needs-you rows). */
+const pushChat = async (next: Record<string, string>) => {
+    await act(async () => { setRouteParams({ ...next }); });
+    await settle(4);
+};
 const click = async (el: Element | null, what: string) => {
     expect(el, what).not.toBeNull();
     await act(async () => { (el as HTMLElement).click(); });
@@ -349,6 +362,34 @@ describe('the Chat tab where the forum is on: Chats · Forum in the title\'s pla
         await renderIn('en');
         expect(selected(tabs())).toEqual(['true', 'false']);
         expect(forumPane()).toBeNull();
+    });
+
+    it('the same pane pushed again after a Forum tap lands on Chats again: the view is taken once read (Home\'s "All N groups" twice)', async () => {
+        rememberProfile(WITH_FORUM);
+        await renderIn('en');
+        const names: Record<string, string> = { groups: 'Groups', people: 'People', messages: 'Messages' };
+        const left: string[] = [];
+        // Each pushed twice, a Forum tap before each push: the second push carries exactly what the first did.
+        for (const [i, view] of ['groups', 'groups', 'people', 'people', 'messages', 'messages'].entries()) {
+            await click(side('Forum'), 'Forum');
+            expect(forumPane(), `${view} #${i}: on the Forum before the push`).not.toBeNull();
+            await pushChat({ view });
+            expect(selected(tabs()), `${view} #${i}`).toEqual(['true', 'false']);
+            expect(forumPane(), `${view} #${i}`).toBeNull();
+            expect(radio(names[view])?.getAttribute('aria-selected'), `${view} #${i}`).toBe('true');
+            left.push(params.now.view);
+        }
+        // Taken each time: the next push of the same view is a change again.
+        expect(left).toEqual(['', '', '', '', '', '']);
+    });
+
+    it('People\'s own views in the param (friends, community, invites) are left for People to read', async () => {
+        rememberProfile(WITH_FORUM);
+        await renderIn('en');
+        await click(radio('People'), 'People');
+        await pushChat({ view: 'invites' });
+        expect(params.now.view).toBe('invites');
+        expect(radio('People')?.getAttribute('aria-selected')).toBe('true');
     });
 
     it('in the pseudo-locale: the two names and the switch\'s spoken name came through t()', async () => {

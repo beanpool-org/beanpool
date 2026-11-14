@@ -990,7 +990,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "@{name} 님에 대해 이미 총 {total} 콩을 보증했어요. 올릴 더 큰 합계를 골라 주세요.",
   "Send either an amount to vouch or a total to raise to, not both.": "보증할 금액이나 올릴 합계 중 하나만 보내 주세요. 둘 다는 안 돼요.",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "다른 사람에게 받은 신용 한도가 {room} 콩뿐이므로 {amount}을(를) 선물할 수 없어요.",
-  "Your budget to vouch from": "보증에 사용할 내 예산",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "보증용 예산이 {level} 콩으로 줄었어요. 보증에 사용할 수 있는 금액이 {left} 남았어요.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "보증용 예산이 {level} 콩으로 늘었어요. 보증에 사용할 수 있는 금액이 {left} 남았어요.",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "보증용 예산이 중단되었어요. 선물한 신용 한도는 선물을 받은 사람들에게 그대로 유지돼요.",

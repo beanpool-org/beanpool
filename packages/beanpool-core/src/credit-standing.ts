@@ -344,6 +344,8 @@ export interface CreditPart {
     inLine_c: Hundredths;
     /** "Earned by trading 200", "@Jane vouched 200", … */
     text: string;
+    /** A vouch's voucher, as `vouchedBy` names them. */
+    name?: string;
 }
 
 export interface CreditLineParts {
@@ -388,7 +390,7 @@ export function creditLineParts(a: CreditStandingAnswer): CreditLineParts {
         ...(before > 0 ? [{ kind: 'before' as const, solid: false, amount_c: before, text: t('From before {amount}', { amount: B(before) }) }] : []),
         ...(known > 0 ? [{ kind: 'confirmed' as const, solid: false, amount_c: known, text: t('Confirmed member {amount}', { amount: B(known) }) }] : []),
         ...(given > 0 ? [{ kind: 'given' as const, solid: false, amount_c: given, text: t('Given by members {amount}', { amount: B(given) }) }] : []),
-        ...vouches.slice().reverse().map((v) => ({ kind: 'vouch' as const, solid: false, amount_c: whole(v.amount_c), text: t('@{name} vouched {amount}', { name: v.callsign, amount: B(whole(v.amount_c)) }) })),
+        ...vouches.slice().reverse().map((v) => ({ kind: 'vouch' as const, solid: false, amount_c: whole(v.amount_c), name: v.callsign, text: t('@{name} vouched {amount}', { name: v.callsign, amount: B(whole(v.amount_c)) }) })),
     ];
     // What counts now: the vouches less what was passed on (from the latest, farthest from zero), then the community's most
     // cuts from the left (the earned part, the one the offer bands meter).

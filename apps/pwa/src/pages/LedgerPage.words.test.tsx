@@ -22,9 +22,10 @@ import ruWords from '../../words/ru.json';
 
 vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}) }));
 vi.mock('../lib/blocklist', () => ({ getBlockedUsers: vi.fn(() => [BLOCKED]), onBlocklistUpdated: vi.fn(() => () => {}) }));
-// Other screens' cards, with words of their own sweeps: the Commons modal (closed here) and the pay-back card.
+// Other screens' cards, with words of their own sweeps: the Commons modal (closed here) and the pay-back card (with the
+// page's read of the debt it shows: none here).
 vi.mock('../components/CommonsInfoModal', () => ({ CommonsInfoModal: () => null }));
-vi.mock('../components/RepaymentCard', () => ({ RepaymentCard: () => null }));
+vi.mock('../components/RepaymentCard', () => ({ RepaymentCard: () => null, useMyRepayment: () => [null, () => {}] }));
 vi.mock('../lib/api', () => ({
     getBalance: vi.fn(),
     // V3: the Ledger asks whether this member is a voucher (null = not one), beside the gift offer.

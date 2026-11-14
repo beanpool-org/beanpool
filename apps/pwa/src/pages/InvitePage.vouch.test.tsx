@@ -74,7 +74,7 @@ describe('InvitePage Vouching & Presets (V3, §4 & §11)', () => {
         render(<InvitePage identity={IDENTITY} onNavigate={() => {}} />);
         await waitFor(() => expect(screen.getByTestId('invite-vouch')).toBeInTheDocument());
 
-        expect(screen.getByText(/From your budget: 550 of .* left/)).toBeInTheDocument();
+        expect(screen.getByText(/From your vouching budget: 550 of .* left/)).toBeInTheDocument();
         expect(screen.getByText('None')).toBeInTheDocument();
         expect(screen.getByText('25')).toBeInTheDocument();
         expect(screen.getByText('50')).toBeInTheDocument();

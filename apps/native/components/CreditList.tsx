@@ -140,7 +140,7 @@ export function CreditList({ anchorUrl, identity, query, initialFilter, focusVou
     };
 
     const budget = mine?.voucher && !mine.noLimit && mine.budget
-        ? t('Your budget: {left} of {level} left', { left: formatHundredths(mine.budget.left), level: formatHundredths(mine.budget.level) })
+        ? t('Vouching budget: {left} of {level} left', { left: formatHundredths(mine.budget.left), level: formatHundredths(mine.budget.level) })
         : null;
     const chips: CreditFilter[] = committee ? ['all', 'no_credit', 'has_offers', 'mine', 'vouchers'] : ['all', 'no_credit', 'has_offers', 'mine'];
 

@@ -999,7 +999,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "Ya has avalado a @{name} por {total} frijoles. Elige un total más alto al que subirlo.",
   "Send either an amount to vouch or a total to raise to, not both.": "Envía una cantidad para avalar o un total al que subir, pero no ambos.",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "Tienes {room} frijoles de la línea de crédito que alguien te dio, por lo que no puedes dar {amount}.",
-  "Your budget to vouch from": "Tu presupuesto para avalar",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "Tu presupuesto para avalar se redujo a {level} frijoles. Te quedan {left} para avalar.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "Tu presupuesto para avalar se aumentó a {level} frijoles. Te quedan {left} para avalar.",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "Tu presupuesto para avalar se detuvo. Cada línea de crédito que diste permanece con las personas a las que se la diste.",

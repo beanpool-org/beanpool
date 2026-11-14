@@ -47,7 +47,7 @@ With it on, each row says in plain words what the person has:
 - Their **credit risk**, one word with its shape: ○ not known yet, ✓ low, ! medium, ✕ high. The reasons are under it on the **Give credit** sheet and on the profile. See "Credit risk: what it reads".
 - One button, **Give credit**.
 
-Tap anywhere else on the row to open the profile. The chips **All**, **No credit yet**, **Has Offers** and **My people** narrow the list. **Has Offers** is people with no credit yet who have a live Offer, because credit you give them can be used at once. **My people** is the people you invited or vouched for. People with no credit yet come first, and of them those with a live Offer first. A voucher also sees their own budget line above the chips, such as "Your budget: 150 of 1,000 left", with **Ask for more** beside it. Owners and the credit committee have one more chip, **Vouchers**, with each voucher's budget left, a flag when it is running low and a one-tap top-up.
+Tap anywhere else on the row to open the profile. The chips **All**, **No credit yet**, **Has Offers** and **My people** narrow the list. **Has Offers** is people with no credit yet who have a live Offer, because credit you give them can be used at once. **My people** is the people you invited or vouched for. People with no credit yet come first, and of them those with a live Offer first. A voucher also sees their own budget line above the chips, such as "Vouching budget: 150 of 1,000 left", with **Ask for more** beside it. Owners and the credit committee have one more chip, **Vouchers**, with each voucher's budget left, a flag when it is running low and a one-tap top-up.
 
 The list comes from your community's server each time and is not kept on your phone, so offline it says "Connect to your community to see credit lines." Enterprises, visitors and removed accounts are never listed. A paused member is listed greyed, with no button, and your own row has none. Every look is recorded: who looked, at whom, on which day.
 
@@ -65,7 +65,7 @@ If the person is below zero, the presets are greyed under the sentence "@sam is 
 
 A voucher can vouch for a member who has already joined, giving them a credit line to start trading with. Vouchers are owners by role, admins an owner has made vouchers, and members set as vouchers on the names list by an owner or credit-committee admin.
 
-On the member's profile, a voucher taps **Vouch for @name** and chooses **25**, **50**, **75** or **100** Beans, from their voucher budget. An owner can also choose **200** or **500**, and has no budget limit ("From your budget: No limit"). No Beans leave the voucher's own wallet.
+On the member's profile, a voucher taps **Vouch for @name** and chooses **25**, **50**, **75** or **100** Beans, from their voucher budget. An owner can also choose **200** or **500**, and has no budget limit ("From your vouching budget: no limit"). No Beans leave the voucher's own wallet.
 
 - **One vouch per person:** each voucher can vouch for a person once. You can later raise your vouch for them, up to 100 Beans in total (500 for an owner).
 - **At most 3 vouchers:** at most 3 vouchers can vouch for the same person (up to 300 Beans total).

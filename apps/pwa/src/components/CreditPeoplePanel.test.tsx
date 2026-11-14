@@ -380,7 +380,7 @@ describe('the give flow (tests 11 and 12)', () => {
         expect(within(sam).queryByTestId('give-done')).toBeNull();
         expect(sam.textContent).not.toContain('@Rob');
         // The budget the node reported after the give, on the panel and on Sam's sheet: 75 and 100 are more than the 50 left.
-        await waitFor(() => expect(screen.getByTestId('credit-my-budget')).toHaveTextContent('Your budget: 50 of 1,000 left'));
+        await waitFor(() => expect(screen.getByTestId('credit-my-budget')).toHaveTextContent('Vouching budget: 50 of 1,000 left'));
         expect(within(sam).getByTestId('invite-vouch-100')).toBeDisabled();
         expect(within(sam).getByTestId('invite-vouch-50')).not.toBeDisabled();
         // Red when Rob's result stays under Sam's title, or the next sheet starts from the budget read before the give.
@@ -600,7 +600,7 @@ describe("vouchers' budgets (amendment §3.5; tests 18 and 19)", () => {
         await draw();
         fireEvent.click(await screen.findByTestId('credit-switch'));
         const box = await screen.findByTestId('credit-my-budget');
-        expect(box).toHaveTextContent('Your budget: 150 of 1,000 left');
+        expect(box).toHaveTextContent('Vouching budget: 150 of 1,000 left');
         expect(within(box).getByTestId('ask-for-more')).toBeInTheDocument();
     });
 });

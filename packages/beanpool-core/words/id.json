@@ -2111,7 +2111,6 @@
   "Budget history": "Riwayat anggaran",
   "Budget history ({count})": "Riwayat anggaran ({count})",
   "Decrease budget": "Kurangi anggaran",
-  "From your budget: {left} of {total} left": "Dari anggaran Anda: tersisa {left} dari {total}",
   "Has not vouched for anyone yet.": "Belum menjamin siapa pun.",
   "Increase budget": "Tambah anggaran",
   "Invited by @{name}": "Diundang oleh @{name}",
@@ -2133,7 +2132,6 @@
   "Vouchers": "Penjamin",
   "You aren’t a voucher here, so you can’t vouch for anyone. An owner or the credit committee makes vouchers.": "Anda bukan penjamin di sini, jadi tidak dapat menjamin siapa pun. Pemilik atau komite kredit yang mengangkat penjamin.",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "Anda tidak dapat menjamin pada tiket offline. Pilih Tidak ada untuk membuatnya, atau coba lagi saat terhubung.",
-  "Your budget: {left} of {total} left": "Anggaran Anda: tersisa {left} dari {total}",
   "You’ve already vouched for @{name}.": "Anda sudah menjamin @{name}.",
   "no trades yet": "belum ada transaksi",
   "trading inside only": "transaksi internal saja",
@@ -2246,9 +2244,7 @@
   "{n} asked to join from this link|{n} asked to join from this link": {
     "other": "{n} orang meminta bergabung lewat tautan ini"
   },
-  "From your budget: No limit": "Dari anggaran Anda: Tanpa batas",
   "No limit": "Tanpa batas",
-  "Your budget: No limit": "Anggaran Anda: Tanpa batas",
   "Clear all": "Hapus semua",
   "Clear this notice": "Hapus pemberitahuan ini",
   "Founding member": "Anggota pendiri",

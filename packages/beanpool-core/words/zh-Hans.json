@@ -2111,7 +2111,6 @@
   "Budget history": "预算记录",
   "Budget history ({count})": "预算记录 ({count})",
   "Decrease budget": "减少预算",
-  "From your budget: {left} of {total} left": "来自你的预算：剩余 {left} / 总共 {total}",
   "Has not vouched for anyone yet.": "尚未为任何人担保。",
   "Increase budget": "增加预算",
   "Invited by @{name}": "由 @{name} 邀请",
@@ -2133,7 +2132,6 @@
   "Vouchers": "担保人",
   "You aren’t a voucher here, so you can’t vouch for anyone. An owner or the credit committee makes vouchers.": "你在这里不是担保人，因此不能为任何人担保。所有者或信用委员会可以指定担保人。",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "你无法在离线凭证上进行担保。选择“无”以生成离线凭证，或在联网后重试。",
-  "Your budget: {left} of {total} left": "你的预算：剩余 {left} / 总共 {total}",
   "You’ve already vouched for @{name}.": "你已经为 @{name} 担保过了。",
   "no trades yet": "暂无交易",
   "trading inside only": "仅限内部交易",
@@ -2246,9 +2244,7 @@
   "{n} asked to join from this link|{n} asked to join from this link": {
     "other": "{n} 人通过此链接申请加入"
   },
-  "From your budget: No limit": "来自你的预算：无上限",
   "No limit": "无上限",
-  "Your budget: No limit": "你的预算：无上限",
   "Clear all": "全部清除",
   "Clear this notice": "清除此通知",
   "Founding member": "创始成员",

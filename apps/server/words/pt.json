@@ -999,7 +999,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "Você já recomendou @{name} em {total} feijões. Escolha um total mais alto para aumentar.",
   "Send either an amount to vouch or a total to raise to, not both.": "Envie um valor para recomendar ou um total para aumentar, não os dois.",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "Você tem {room} feijões da linha de crédito que alguém lhe deu, portanto não pode doar {amount}.",
-  "Your budget to vouch from": "Seu orçamento para recomendar",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "Seu orçamento para recomendar foi diminuído para {level} feijões. Restam {left} para você recomendar.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "Seu orçamento para recomendar foi aumentado para {level} feijões. Restam {left} para você recomendar.",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "Seu orçamento para recomendar foi interrompido. Cada linha de crédito que você doou permanece com quem a recebeu.",

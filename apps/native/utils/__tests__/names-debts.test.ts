@@ -335,7 +335,12 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         expect(read('app', '(tabs)', 'ledger.tsx')).toContain('<RepaymentCard />');
         const card = read('components', 'RepaymentCard.tsx');
         expect(card).toContain('fetchMyRepayment(node, identity)');
-        expect(card).toContain("router.push(repayment?.debtId ? { pathname: '/pay-commons', params: { code: repayment.debtId } } : '/pay-commons')");
+        // Credit bar R3: the card is drawn only while a debt is worked off; its Pay back now opens the screen with their code.
+        expect(card).toContain('if (!repayment) return null;');
+        expect(card).toContain("router.push(repayment.debtId ? { pathname: '/pay-commons', params: { code: repayment.debtId } } : '/pay-commons')");
+        // Everyone else's way in: the Wallet's row.
+        expect(read('app', '(tabs)', 'ledger.tsx')).toContain('<PayCommonsRow />');
+        expect(read('components', 'PayCommonsRow.tsx')).toContain("router.push('/pay-commons')");
     });
     it('Pay the Commons checks the amount and code, asks first, then pays with the code as the debt id', () => {
         const pay = read('app', 'pay-commons.tsx');
@@ -377,8 +382,9 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         expect(pay).toContain('const r = await fetchMyRepayment(node, identity);');
         expect(pay).toContain('if (mine.debtId && !codeTyped.current) setCode((c) => (c.trim() ? c : mine.debtId!));');
         expect(pay).toContain('onChangeText={edit((v) => { codeTyped.current = true; setCode(v); })}');
-        expect(read('components', 'RepaymentCard.tsx')).toContain("router.push(repayment?.debtId ? { pathname: '/pay-commons', params: { code: repayment.debtId } } : '/pay-commons')");
-        expect(REPAYMENT_COPY.banner({ amount_c: 20000, repaid_c: 0, left_c: 20000, debtId: DEBT.id })).toContain('pay some or all of it yourself under Pay the Commons, where your pay-back code is filled in: it comes off at once.');
+        expect(read('components', 'RepaymentCard.tsx')).toContain("router.push(repayment.debtId ? { pathname: '/pay-commons', params: { code: repayment.debtId } } : '/pay-commons')");
+        expect(REPAYMENT_COPY.banner({ amount_c: 20000, repaid_c: 0, left_c: 20000, debtId: DEBT.id })).toBe('You’re working off a debt to the Commons: 200 Beans left of 200 Beans. Every Bean you receive above 0 goes to the Commons until it is cleared. You can also pay some or all of it yourself: it comes off at once.');
+        expect(REPAYMENT_COPY.payBackNow).toBe('Pay back now');
         expect(REPAYMENT_COPY.payIntro).toContain('enter the pay-back code an admin gave you (working one off, yours is filled in)');
         expect(REPAYMENT_COPY.payConfirm(20000, false, null, true)).toBe('Pay 200 Beans to the Commons? This won’t come off your debt: it has no pay-back code. To pay your debt, pay with '
             + 'your code (Pay the Commons fills it in), or ask an admin to count this payment toward it afterwards. Until an admin counts it, your debt is still being worked off: the next time you receive Beans, what is left on it is taken from what you hold above 0. This can’t be undone.');
@@ -393,6 +399,8 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         // reads back with parseBeans to the same 17950.
         expect(DEBT_COPY.shareCode(DEBT)).toContain(`beanpool://pay-commons?code=${DEBT.id}&amount=179.50 `);
         expect(DEBT_COPY.shareCode(DEBT)).toContain('(179.50 Beans), pay it with this code: each payment comes off the debt as you pay it, and when nothing is left it is settled.');
+        // Credit bar R3: Pay the Commons is a row in the Wallet now, so the admin's message names it (amendment §7b).
+        expect(DEBT_COPY.shareCode(DEBT)).toContain(`or open BeanPool, go to Ledger, then Wallet, tap Pay the Commons, enter this pay-back code: ${DEBT.id} and pay 179.50 Beans.`);
         expect(parseBeans('179.50')).toBe(leftOf(DEBT));
         expect(REPAYMENT_COPY.paid(8000, 'tx-7', false)).toBe('Paid 80 Beans to the Commons.');
     });

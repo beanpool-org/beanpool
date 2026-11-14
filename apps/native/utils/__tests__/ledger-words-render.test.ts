@@ -3,7 +3,7 @@
  * The Ledger tab and its info sheets in the member's language (words slice S3, sweep B8): app/(tabs)/ledger.tsx rendered
  * for real inside the real LanguageProvider, with what only the Ledger draws drawn for real too: the frozen card's and
  * the bar's lines (utils/credit-line-card.ts), the rows' holds and dates, Example Valley's rows in preview, and every
- * sheet it opens (Trust & Reputation, Credit Slider Info, Available Balance, System Circulation) with their frame
+ * sheet it opens (Trust & Reputation, Your Beans and your credit line, Available Balance, System Circulation) with their frame
  * (components/InfoModal.tsx). The sheets nothing on the Ledger opens (Pricing & Fees, Your deals & Trust Hold, Invites &
  * Vouching) are rendered on their own. React Native's host components are plain tags carrying their accessibility props,
  * placeholders and the layout props the 320 dp checks read; the node client answers a member's ledger.
@@ -138,7 +138,7 @@ vi.mock('../../components/showcase/LocalCommunityMark', () => ({
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/TrustBadge', () => ({ TrustBadge: ({ level }: { level: string }) => createElement('span', { 'data-badge': level }) }));
 
-import { BLOCKED_BEANS_NOTE, CIRCULATION_FREE_BEANS, SAMPLE_COMMUNITY, TIER_LEVELS, formatHundredths, formatNumber, pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
+import { BLOCKED_BEANS_NOTE, CIRCULATION_FREE_BEANS, CREDIT_SHEET_PARTS, SAMPLE_COMMUNITY, TIER_LEVELS, creditSheet, formatHundredths, formatNumber, pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { DrawnInLanguage, LanguageProvider } from '../../components/LanguageProvider';
 import { LanguageRow } from '../../components/LanguagePicker';
 import { PricingInfoModal } from '../../components/info-content/PricingInfoModal';
@@ -304,7 +304,7 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         expect(text()).toContain(xx('Reach {min} trust ({left} to go) from the real value you trade.').replace('{min}', '600').replace('{left}', '400'));
     });
 
-    it('the credit card: one button labelled with core\'s spoken sentence, the known part frozen; Credit Slider Info with its three tabs', async () => {
+    it('the credit card: one button labelled with core\'s spoken sentence, the known part frozen; it opens the sheet, six parts, every word through t()', async () => {
         await renderIn('xx');
         expect(host.querySelector('[data-later-sweep="CreditBar"]')).not.toBeNull();
         expect(text()).toContain(xx(KNOWN_FROZEN.part));
@@ -312,18 +312,37 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         // rest-words-render); the button's label is core's spoken sentence, through the words layer.
         expect(byTestId('credit-card')!.getAttribute('aria-label')).toMatch(/^\[.*\]$/s);
         expect(bypassing(), 'the card').toEqual([]);
+        // Slice R2: the sheet "Your Beans and your credit line" (core's creditSheet) replaces Credit Slider Info.
+        expect(byTestId('credit-sheet')).toBeNull();
         await click(byTestId('credit-card'), 'the credit card');
-        expect(text()).toContain(xx('Credit Slider Info'));
-        expect(text()).toContain(xx('Zero is the Sweet Spot'));
-        expect(bypassing(), 'Credit Slider').toEqual([]);
-        await click(row('Overdraft Floors'), 'Overdraft Floors');
-        expect(text()).toContain(xx('~{amount}B traded').replace('{amount}', '10000'));
-        expect(bypassing(), 'Overdraft Floors').toEqual([]);
-        await click(row('Idle Balance Tiers'), 'Idle Balance Tiers');
-        expect(text()).toContain(xx('{rate}% (Fee-Free Zone)').replace('{rate}', '0.0'));
-        expect(text()).toContain(xx('{low} – {high}B').replace('{low}', '1000').replace('{high}', '2000'));
-        expect(bypassing(), 'Idle Balance Tiers').toEqual([]);
+        expect(byTestId('credit-sheet')).not.toBeNull();
+        expect(text()).toContain(xx('Your Beans and your credit line'));
+        expect(CREDIT_SHEET_PARTS.map((id) => byTestId(`credit-sheet-part-${id}`) !== null)).toEqual(CREDIT_SHEET_PARTS.map(() => true));
+        expect(text()).not.toMatch(/Credit Slider|Sweet Spot|Overdraft Floor|Fee-Free/);
+        expect(bypassing(), 'the sheet').toEqual([]);
         expect(byLabel(xx('Close'))).not.toBeNull();
+    });
+
+    it('the credit sheet in English: the same six parts as core\'s, every row\'s words and figures core\'s own for the member', async () => {
+        await renderIn('en');
+        await click(byTestId('credit-card'), 'the credit card');
+        const b = ledger.balance;
+        const sheet = creditSheet(b, { qualifiedValue: b.qualifiedValue_c, avgRating: b.avgRating, reviewCount: b.reviewCount });
+        expect(byTestId('credit-sheet')!.textContent).toContain('Your Beans and your credit line');
+        for (const part of sheet.parts) {
+            const el = byTestId(`credit-sheet-part-${part.id}`)!;
+            expect(el, part.id).not.toBeNull();
+            expect(el.textContent, part.id).toContain(part.title);
+            for (const r of part.rows) {
+                expect(el.textContent, `${part.id}: ${r.text}`).toContain(r.text);
+                if (r.line) expect(el.textContent, `${part.id}: ${r.line}`).toContain(r.line);
+            }
+        }
+        expect(Array.from(host.querySelectorAll('[data-testid^="credit-sheet-part-"]')).map((e) => e.getAttribute('data-testid')))
+            .toEqual(CREDIT_SHEET_PARTS.map((id) => `credit-sheet-part-${id}`));
+        // Its ✕ closes it.
+        await click(byLabel('Close'), 'Close');
+        expect(byTestId('credit-sheet')).toBeNull();
     });
 
     it('Trust & Reputation: the trust formula and the tiers, every number in place', async () => {
@@ -623,13 +642,12 @@ describe('the Ledger at 320 dp with 1.3× text, in the pseudo-locale', () => {
         expect(styleOf(title.parentElement).flexShrink).toBe(1);
     });
 
-    it('the Credit Slider\'s bracket rows wrap each side, the rate kept to the right', async () => {
+    it('the credit sheet\'s rows wrap beside their marks, and its links\' words shrink before the ›', async () => {
         await renderIn('xx');
         await click(byTestId('credit-card'), 'the credit card');
-        await click(row('Idle Balance Tiers'), 'Idle Balance Tiers');
-        const rate = spanSaying(xx('{rate}% (Fee-Free Zone)').replace('{rate}', '0.0'))!;
-        expect(styleOf(rate)).toMatchObject({ flexShrink: 1, textAlign: 'right' });
-        expect(styleOf(rate.previousElementSibling)).toMatchObject({ flexShrink: 1 });
+        const words = spanSaying(xx('Where your balance is now.'))!;
+        expect(styleOf(words.parentElement)).toMatchObject({ flex: 1 });
+        expect(styleOf(spanSaying(xx('More in the guide')))).toMatchObject({ flexShrink: 1 });
     });
 
     it('labels in capitals carry their own capitals: none is upper-cased by the phone', async () => {

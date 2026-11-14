@@ -125,7 +125,7 @@ export const VOUCHER_WORDS = {
     giftInCoreSettings: word('Members giving part of their credit line is a core setting: an owner changes it in Settings, Core settings, which asks for their proof once the core settings are locked. Nothing in this request was saved.'),
     voucherEnded: word('The vouch on this invite ended before you joined; you start with no credit line'),
     frozen: word('Your credit line is frozen, so you can’t vouch from your budget until an admin unfreezes it.'),
-    noticeTitle: word('Your budget to vouch from'),
+    noticeTitle: word('Your vouching budget'),
     noticeStopped: word('Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.'),
     askTitle: word('A voucher asks for more'),
     askOwner: word('You vouch as an owner, with no limit, so there is no budget to ask for.'),

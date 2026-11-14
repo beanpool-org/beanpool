@@ -123,6 +123,7 @@ import { LanguagePickerSheet } from '../../components/LanguagePicker';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { CreditBar } from '../../components/CreditBar';
 import { RepaymentCard } from '../../components/RepaymentCard';
+import { PayCommonsRow } from '../../components/PayCommonsRow';
 import PayCommonsScreen from '../../app/pay-commons';
 import GroupInviteLanding from '../../app/group/[id]';
 import { HelpSheet } from '../../components/HelpSheet';
@@ -303,7 +304,21 @@ describe('Pay the Commons and the repayment card in the pseudo-locale', () => {
         expect(host.textContent).toContain(repaymentBannerWords({ amount_c: 20000, left_c: 15000 }));
         expect(host.textContent).toContain(xx('{amount} Beans').replace('{amount}', '150'));
         expect(host.textContent).toMatch(/^\[/);
-        expect(host.querySelector(`[data-hint="${xx('Pay Beans you hold to the Commons, or pay back a debt')}"]`)).not.toBeNull();
+        // Credit bar R3: the notice holds one real button, Pay back now.
+        expect(buttonReading(xx(REPAYMENT_LINES.payBackNow))).not.toBeNull();
+        expect(buttonReading(xx(REPAYMENT_LINES.payTitle))).toBeNull();
+        expect(bypassing(host)).toEqual([]);
+    });
+
+    it('no debt: the card above the tabs draws nothing; the Wallet\'s row is Pay the Commons with its line', async () => {
+        debt.repayment = null;
+        await renderIn('xx', createElement(RepaymentCard));
+        expect(host.textContent).toBe('');
+        expect(host.querySelector('button')).toBeNull();
+        await renderIn('xx', createElement(PayCommonsRow));
+        expect(buttonReading(xx(REPAYMENT_LINES.payTitle))).not.toBeNull();
+        expect(host.textContent).toContain(xx(REPAYMENT_LINES.payRowLine));
+        expect(host.querySelector(`[data-hint="${xx(REPAYMENT_LINES.payRowLine)}"]`)).not.toBeNull();
         expect(bypassing(host)).toEqual([]);
     });
 

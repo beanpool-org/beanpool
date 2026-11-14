@@ -342,7 +342,7 @@ describe('InvitesModule', () => {
             });
 
             expect(screen.getByTestId('vouch-budget-left')).toHaveTextContent(
-                'From your budget: 550 of 1,000 left'
+                'From your vouching budget: 550 of 1,000 left'
             );
             expect(screen.getByTestId('vouch-preset-None')).toBeInTheDocument();
             expect(screen.getByTestId('vouch-preset-25')).toBeInTheDocument();
@@ -512,7 +512,7 @@ describe('InvitesModule', () => {
             vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue(voucher(4925) as any);
             render(<InvitesModule activeNode={mockNode} viewer={OWNER_KEY} />);
             await waitFor(() => expect(screen.getByTestId('vouch-preset-section')).toBeInTheDocument());
-            expect(screen.getByTestId('vouch-budget-left')).toHaveTextContent('From your budget: 49.25 of 1,000 left');
+            expect(screen.getByTestId('vouch-budget-left')).toHaveTextContent('From your vouching budget: 49.25 of 1,000 left');
             // 49.25 left: the 25 preset fits, 50 and up do not.
             expect(screen.getByTestId('vouch-preset-25')).not.toBeDisabled();
             expect(screen.getByTestId('vouch-preset-50')).toBeDisabled();

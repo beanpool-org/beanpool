@@ -999,7 +999,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "Hai già garantito per @{name} per {total} fagioli. Scegli un totale più alto a cui portarla.",
   "Send either an amount to vouch or a total to raise to, not both.": "Invia o un importo da garantire o un totale a cui salire, non entrambi.",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "Disponi di {room} fagioli della linea di credito che qualcuno ti ha donato, quindi non puoi donare {amount}.",
-  "Your budget to vouch from": "Il tuo budget per garantire",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "Il tuo budget per garantire è stato ridotto a {level} fagioli. Te ne rimangono {left} con cui garantire.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "Il tuo budget per garantire è stato aumentato a {level} fagioli. Te ne rimangono {left} con cui garantire.",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "Il tuo budget per garantire è stato interrotto. Ogni linea di credito che hai donato rimane alle persone a cui l'hai donata.",

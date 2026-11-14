@@ -999,7 +999,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "Έχετε ήδη εγγυηθεί συνολικά {total} φασόλια για το μέλος @{name}. Επιλέξτε ένα υψηλότερο σύνολο για να την αυξήσετε.",
   "Send either an amount to vouch or a total to raise to, not both.": "Στείλτε είτε ένα ποσό εγγύησης είτε ένα σύνολο στο οποίο θα αυξηθεί, όχι και τα δύο.",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "Κατέχετε {room} φασόλια πιστωτικού ορίου που σας έδωσε κάποιος, επομένως δεν μπορείτε να δώσετε {amount}.",
-  "Your budget to vouch from": "Ο προϋπολογισμός σας για παροχή εγγυήσεων",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "Ο προϋπολογισμός σας για παροχή εγγυήσεων μειώθηκε σε {level} φασόλια. Σας απομένουν {left} για παροχή εγγυήσεων.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "Ο προϋπολογισμός σας για παροχή εγγυήσεων αυξήθηκε σε {level} φασόλια. Σας απομένουν {left} για παροχή εγγυήσεων.",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "Ο προϋπολογισμός σας για παροχή εγγυήσεων διακόπηκε. Τα πιστωτικά όρια που δώσατε παραμένουν στα άτομα που τα δώσατε.",

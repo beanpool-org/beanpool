@@ -250,7 +250,7 @@ const browser = await chromium.launch();
 const cases = [
     { view: 'presets', scheme: 'light', name: 'native-presets-320dp-light.png' },
     { view: 'presets', scheme: 'dark', name: 'native-presets-320dp-dark.png' },
-    // An owner (Marty, 9 Nov): 200 and 500 too, "From your budget: No limit".
+    // An owner (Marty, 9 Nov): 200 and 500 too, "From your vouching budget: no limit".
     { view: 'presets', scheme: 'light', owner: true, name: 'native-owner-presets-320dp-light.png' },
     { view: 'presets', scheme: 'dark', owner: true, name: 'native-owner-presets-320dp-dark.png' },
     // A raise (invites-vouching I6): "Raise to" the totals above what was vouched, no None; a voucher at 25 with 30 left (50 open, 75 and 100 greyed

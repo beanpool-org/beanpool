@@ -398,7 +398,7 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
                                 </label>
                                 <span className="text-[11px] text-nature-400" data-testid="vouch-budget-left">
                                     {vouchData.budget
-                                        ? `From your budget: ${beansFigure(vouchData.budget.left)} of ${beansFigure(vouchData.budget.level)} left`
+                                        ? `From your vouching budget: ${beansFigure(vouchData.budget.left)} of ${beansFigure(vouchData.budget.level)} left`
                                         : null}
                                 </span>
                             </div>

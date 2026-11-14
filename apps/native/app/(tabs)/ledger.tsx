@@ -29,7 +29,7 @@ import { BalanceInfoModal } from '../../components/info-content/BalanceInfoModal
 import { CirculationInfoModal } from '../../components/info-content/CirculationInfoModal';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { TrustInfoModal } from '../../components/info-content/TrustInfoModal';
-import { SliderInfoModal } from '../../components/info-content/SliderInfoModal';
+import { CreditSheet } from '../../components/CreditSheet';
 import { TrustBadge, TrustLevel } from '../../components/TrustBadge';
 import { CreditBar } from '../../components/CreditBar';
 import { CreditBarUnread } from '../../components/CreditBarUnread';
@@ -49,6 +49,7 @@ import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../compo
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { ledgerItemNote } from '../../utils/ledger-note';
 import { RepaymentCard } from '../../components/RepaymentCard';
+import { PayCommonsRow } from '../../components/PayCommonsRow';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, LocalCommunitySheet, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleBalance, sampleEscrowTotal, sampleTransactions, SAMPLE_MEMBER } from '../../components/showcase/sample-screens';
@@ -216,7 +217,8 @@ export default function LedgerScreen() {
     const [showCirculationInfo, setShowCirculationInfo] = useState(false);
     const [showTrustInfo, setShowTrustInfo] = useState(false);
     const [trustInfoTab, setTrustInfoTab] = useState<'levels' | 'perks'>('levels');
-    const [showSliderInfo, setShowSliderInfo] = useState(false);
+    // The sheet a tap on the credit card opens, "Your Beans and your credit line" (slice R2).
+    const [showCreditSheet, setShowCreditSheet] = useState(false);
     const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
     // The node this budget was read from: the panel's Ask for more asks the same one.
     const [vouchAnchor, setVouchAnchor] = useState<string | null>(null);
@@ -999,6 +1001,10 @@ export default function LedgerScreen() {
                     </View>
                 </View>
 
+                {/* Pay the Commons, for everyone, under the Commons: a row with its line, opening the pay screen (credit bar
+                    amendment §7b, slice R3). A member working a debt off finds their own code filled in there. */}
+                {beansMode !== undefined && !preview && <PayCommonsRow />}
+
                 {/* ── Community Circulation ── */}
                 {balanceState.balance_c > 0 && (
                     <Pressable style={[styles.circBox, amber && styles.circBoxAmber]} accessibilityRole="button" onPress={() => setShowCirculationInfo(true)}>
@@ -1296,13 +1302,13 @@ export default function LedgerScreen() {
                     accessibilityRole="button"
                     // The card's words read once, in order, then what a tap opens: core's spoken sentence (slice R1).
                     accessibilityLabel={creditStandingCard(balanceState).spoken}
-                    onPress={() => setShowSliderInfo(true)}
+                    onPress={() => setShowCreditSheet(true)}
                     testID="credit-card"
                     style={{ minHeight: 44, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}
                 >
                     {/* The member's own card (DESIGN-credit-bar-amend-fable.md, slice R1): the two sentences, the rainbow with
                         the strip of what the line is made of, one note and the parts line, all from core. A newcomer sees it
-                        too, the left half striped. The tap opens today's info until the sheet (slice R2). */}
+                        too, the left half striped. The tap opens the sheet "Your Beans and your credit line" (slice R2). */}
                     <CreditBar answer={balanceState} colors={colors} set={set} />
                     {knownFrozenPartNote(balanceState) && (
                         <Text style={{ fontSize: 12.5, color: colors.text.body, lineHeight: 17, marginTop: 8 }}>{knownFrozenPartNote(balanceState)}</Text>
@@ -1319,15 +1325,23 @@ export default function LedgerScreen() {
                         onPress={() => setShowBudgetModal(true)}
                         style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 12, backgroundColor: colors.surface.subtle, borderRadius: 12 }}
                     >
-                        <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text.heading }}>
-                            {myVouching.noLimit ? t(VOUCH_PRESET_WORDS.ledgerBudgetNoLimit) : ledgerBudget(myVouching.budget.left, myVouching.budget.level)}
-                        </Text>
-                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text.muted }}>›</Text>
+                        {/* The budget to vouch from, never their own spending (credit bar amendment §7a, slice R3): its line says so. */}
+                        <MaterialCommunityIcons name="handshake-outline" size={18} color={colors.text.secondary} style={{ marginRight: 8 }} />
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text.heading }}>
+                                {myVouching.noLimit ? t(VOUCH_PRESET_WORDS.ledgerBudgetNoLimit) : ledgerBudget(myVouching.budget.left, myVouching.budget.level)}
+                            </Text>
+                            <Text testID="ledger-budget-line" style={{ fontSize: 12, lineHeight: 16, marginTop: 2, color: colors.text.secondary }}>
+                                {myVouching.noLimit ? t(VOUCH_PRESET_WORDS.ledgerBudgetLineNoLimit) : t(VOUCH_PRESET_WORDS.ledgerBudgetLine)}
+                            </Text>
+                        </View>
+                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text.muted, marginLeft: 8 }}>›</Text>
                     </Pressable>
                 </View>
             )}
 
-            {/* Working off a debt (#1597): what is left, and Pay the Commons (a pay-back code from an admin). */}
+            {/* Working off a debt (#1597): what is left, and Pay back now with their own code. Nothing about the Commons
+                otherwise: Pay the Commons is a row in the Wallet (slice R3). */}
             {beansMode !== undefined && !preview && <RepaymentCard />}
 
             {/* ── Tab bar ── */}
@@ -1378,7 +1392,16 @@ export default function LedgerScreen() {
             <CommonsInfoModal isOpen={showCommonsInfo} onClose={() => setShowCommonsInfo(false)} commonsBalance={balanceState.commons_c} />
             <CirculationInfoModal isOpen={showCirculationInfo} onClose={() => setShowCirculationInfo(false)} />
             <TrustInfoModal isOpen={showTrustInfo} onClose={() => setShowTrustInfo(false)} initialTab={trustInfoTab} />
-            <SliderInfoModal isOpen={showSliderInfo} onClose={() => setShowSliderInfo(false)} />
+            <CreditSheet
+                visible={showCreditSheet}
+                answer={balanceState}
+                earning={{ qualifiedValue: balanceState.qualifiedValue_c, avgRating: balanceState.avgRating, reviewCount: balanceState.reviewCount }}
+                colors={colors}
+                set={set}
+                onClose={() => setShowCreditSheet(false)}
+                onGivers={creditSeen && identity && vouchAnchor ? () => { setShowCreditSheet(false); setActiveTab('trust'); } : undefined}
+                onGuide={(slug) => { setShowCreditSheet(false); router.push({ pathname: '/guide/[slug]', params: { slug } }); }}
+            />
             {preview && <LocalCommunitySheet feature="beans" visible={sheetOpen} onClose={() => setSheetOpen(false)} />}
 
             {/* Voucher Budget Modal (V3) */}
@@ -1399,7 +1422,7 @@ export default function LedgerScreen() {
                         >
                             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                                 <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.heading }}>
-                                    {t('Your budget to vouch from')}
+                                    {t(VOUCH_PRESET_WORDS.budgetTitle)}
                                 </Text>
                                 <Pressable
                                     accessibilityRole="button"

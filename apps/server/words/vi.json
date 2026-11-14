@@ -990,7 +990,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "Bạn đã bảo lãnh cho @{name} tổng cộng {total} đậu rồi. Hãy chọn tổng cao hơn để nâng lên.",
   "Send either an amount to vouch or a total to raise to, not both.": "Hãy gửi hoặc một số tiền để bảo lãnh hoặc một tổng để nâng lên, không gửi cả hai.",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "Bạn đang giữ {room} đậu từ hạn mức tín dụng người khác tặng, nên không thể tặng {amount}.",
-  "Your budget to vouch from": "Ngân sách bảo lãnh của bạn",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "Ngân sách bảo lãnh của bạn đã bị giảm xuống {level} đậu. Bạn còn lại {left} để bảo lãnh.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "Ngân sách bảo lãnh của bạn đã được tăng lên {level} đậu. Bạn còn lại {left} để bảo lãnh.",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "Ngân sách bảo lãnh của bạn đã bị dừng. Các hạn mức tín dụng bạn đã tặng vẫn thuộc về người nhận.",

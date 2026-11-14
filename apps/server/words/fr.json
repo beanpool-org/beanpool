@@ -999,7 +999,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "Vous avez déjà parrainé @{name} à hauteur de {total} haricots. Choisissez un total plus élevé pour l'augmenter.",
   "Send either an amount to vouch or a total to raise to, not both.": "Envoyez soit un montant à parrainer, soit un total à atteindre, pas les deux.",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "Vous disposez de {room} haricots sur la ligne de crédit qui vous a été donnée, vous ne pouvez donc pas donner {amount}.",
-  "Your budget to vouch from": "Votre budget de parrainage",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "Votre budget de parrainage a été ramené à {level} haricots. Il vous en reste {left} pour parrainer.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "Votre budget de parrainage a été augmenté à {level} haricots. Il vous en reste {left} pour parrainer.",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "Votre budget de parrainage a été arrêté. Chaque ligne de crédit que vous avez transmise reste acquise aux personnes qui l'ont reçue.",

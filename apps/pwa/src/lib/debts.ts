@@ -115,9 +115,13 @@ function beansWords(c: number): string {
  * sentences per case. The strings are word() keys, t()'d where shown; the functions write their sentence through t().
  */
 export const REPAYMENT_WORDS = {
-    banner: (r: Repayment) => t('You’re working off a debt to the Commons: {left} left of {amount}. Every Bean you receive above 0 goes to the Commons until it is cleared. You can also pay some or all of it yourself under Pay the Commons, where your pay-back code is filled in: it comes off at once. Then you keep what you receive, as everyone does.',
+    banner: (r: Repayment) => t('You’re working off a debt to the Commons: {left} left of {amount}. Every Bean you receive above 0 goes to the Commons until it is cleared. You can also pay some or all of it yourself: it comes off at once.',
         { left: beansWords(r.left_c), amount: beansWords(r.amount_c) }),
     payTitle: word('Pay the Commons'),
+    /** The banner's button (credit bar amendment §7b): the pay form with the member's own pay-back code filled in. */
+    payBackNow: word('Pay back now'),
+    /** The Wallet's row for everyone else: its line under "Pay the Commons". */
+    payRowLine: word('Give Beans you hold to your community’s shared pot, or pay back a debt with a code from an admin.'),
     payIntro: word('Pay the Commons from the Beans you hold: never more than you hold. If you’re paying back a debt, enter the pay-back code an admin gave you (working one off, yours is filled in): what you pay comes off the debt at once, and when nothing is left it is settled. Your server refuses a payment above what is left.'),
     /** The admin's link's amount: what was left when they shared it (a work-off may have lowered it since). */
     linkLeft: (left: number) => t('What was left when the admin shared this: {left}.', { left: beansWords(left) }),

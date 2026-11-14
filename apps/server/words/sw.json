@@ -994,7 +994,6 @@
   "Members giving part of their credit line is a core setting: an owner changes it in Settings, Core settings, which asks for their proof once the core settings are locked. Nothing in this request was saved.": "Wanachama kutoa sehemu ya kikomo chao cha mkopo ni mpangilio mkuu: mmiliki huubadilisha katika Mipangilio, Mipangilio mikuu, ambayo huomba uthibitisho wao mara mipangilio mikuu inapofungwa. Hakuna chochote kilichohifadhiwa katika ombi hili.",
   "The vouch on this invite ended before you joined; you start with no credit line": "Dhamana kwenye mwaliko huu iliisha kabla hujajiunga; unaanza bila kikomo cha mkopo",
   "Your credit line is frozen, so you can’t vouch from your budget until an admin unfreezes it.": "Kikomo chako cha mkopo kimegandishwa, kwa hivyo huwezi kudhamini kutoka kwenye bajeti yako hadi msimamizi aondoe kizuizi.",
-  "Your budget to vouch from": "Bajeti yako ya kudhamini",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "Bajeti yako ya kudhamini imesitishwa. Vikomo vya mkopo ulivyotoa vinabaki kwa watu uliowapa.",
   "You have {left} Beans of budget left, so you can’t vouch {amount}. Pick a smaller vouch, or ask an owner for more.": "Umebakiwa na maharagwe {left} ya bajeti, kwa hivyo huwezi kudhamini {amount}. Chagua dhamana ndogo zaidi, au mwombe mmiliki zaidi.",
   "You’ve already vouched for @{name}.": "Tayari umeshamdhamini @{name}.",

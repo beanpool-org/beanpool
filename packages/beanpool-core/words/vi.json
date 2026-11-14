@@ -2111,7 +2111,6 @@
   "Budget history": "Lịch sử ngân sách",
   "Budget history ({count})": "Lịch sử ngân sách ({count})",
   "Decrease budget": "Giảm ngân sách",
-  "From your budget: {left} of {total} left": "Từ ngân sách của bạn: còn {left} trên {total}",
   "Has not vouched for anyone yet.": "Chưa bảo lãnh cho ai.",
   "Increase budget": "Tăng ngân sách",
   "Invited by @{name}": "Được mời bởi @{name}",
@@ -2133,7 +2132,6 @@
   "Vouchers": "Người bảo lãnh",
   "You aren’t a voucher here, so you can’t vouch for anyone. An owner or the credit committee makes vouchers.": "Bạn không phải là người bảo lãnh ở đây, nên không thể bảo lãnh cho ai. Chủ sở hữu hoặc hội đồng tín dụng chỉ định người bảo lãnh.",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "Bạn không thể bảo lãnh trên vé ngoại tuyến. Chọn Không có để tạo vé, hoặc thử lại khi đã kết nối mạng.",
-  "Your budget: {left} of {total} left": "Ngân sách của bạn: còn {left} trên {total}",
   "You’ve already vouched for @{name}.": "Bạn đã bảo lãnh cho @{name} rồi.",
   "no trades yet": "chưa có giao dịch",
   "trading inside only": "chỉ giao dịch nội bộ",
@@ -2246,9 +2244,7 @@
   "{n} asked to join from this link|{n} asked to join from this link": {
     "other": "{n} người đã xin tham gia từ liên kết này"
   },
-  "From your budget: No limit": "Từ ngân sách của bạn: Không giới hạn",
   "No limit": "Không giới hạn",
-  "Your budget: No limit": "Ngân sách của bạn: Không giới hạn",
   "Clear all": "Xóa tất cả",
   "Clear this notice": "Xóa thông báo này",
   "Founding member": "Thành viên sáng lập",

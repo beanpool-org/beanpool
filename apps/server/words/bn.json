@@ -994,7 +994,6 @@
   "Members giving part of their credit line is a core setting: an owner changes it in Settings, Core settings, which asks for their proof once the core settings are locked. Nothing in this request was saved.": "সদস্যদের ক্রেডিট লাইনের অংশ দেওয়া একটি মূল সেটিং: একজন মালিক এটি সেটিংস, মূল সেটিংস-এ পরিবর্তন করেন, যা মূল সেটিংস লক হয়ে গেলে তাঁদের প্রমাণের অনুরোধ করে। এই অনুরোধের কিছুই সংরক্ষিত হয়নি।",
   "The vouch on this invite ended before you joined; you start with no credit line": "আপনি যোগ দেওয়ার আগেই এই আমন্ত্রণের নিশ্চয়তার মেয়াদ শেষ হয়ে গেছে; আপনি কোনো ক্রেডিট লাইন ছাড়াই শুরু করছেন",
   "Your credit line is frozen, so you can’t vouch from your budget until an admin unfreezes it.": "আপনার ক্রেডিট লাইন ফ্রিজ করা আছে, তাই কোনো অ্যাডমিন এটি আনফ্রিজ না করা পর্যন্ত আপনি আপনার বাজেট থেকে নিশ্চয়তা দিতে পারবেন না।",
-  "Your budget to vouch from": "নিশ্চয়তা দেওয়ার জন্য আপনার বাজেট",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "নিশ্চয়তা দেওয়ার জন্য আপনার বাজেট বন্ধ করা হয়েছে। আপনি যে ক্রেডিট লাইনগুলো দিয়েছিলেন তা যাঁদের দিয়েছিলেন তাঁদের কাছেই থাকবে।",
   "You have {left} Beans of budget left, so you can’t vouch {amount}. Pick a smaller vouch, or ask an owner for more.": "আপনার বাজেটে {left} শিম বাকি আছে, তাই আপনি {amount} নিশ্চয়তা দিতে পারবেন না। একটি ছোট নিশ্চয়তা বেছে নিন, বা কোনো মালিকের কাছে আরও চান।",
   "You’ve already vouched for @{name}.": "আপনি ইতিমধ্যে @{name}-এর জন্য নিশ্চয়তা দিয়েছেন।",

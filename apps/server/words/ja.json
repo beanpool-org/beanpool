@@ -990,7 +990,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "@{name} への保証はすでに合計 {total} 豆です。引き上げ先として、より大きな合計を選んでください。",
   "Send either an amount to vouch or a total to raise to, not both.": "保証する額か引き上げ先の合計のどちらか一方を送ってください。両方は送れません。",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "人から譲り受けたクレジット枠は {room} 豆しかないため、{amount} を譲渡することはできません。",
-  "Your budget to vouch from": "あなたの保証用予算",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "保証用の予算が {level} 豆に減額されました。保証に使える残りは {left} です。",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "保証用の予算が {level} 豆に増額されました。保証に使える残りは {left} です。",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "保証用の予算が停止されました。これまでに譲渡したクレジット枠はそのまま相手の手元に残ります。",

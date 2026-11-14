@@ -4066,6 +4066,42 @@ describe("the New Post form's choices each say what they are (core post-type-lin
     });
 });
 
+// Marty, 14 Nov 2026: one flag (cash_also_needed) draws the cash box on Offers and Needs, and on a Need the poster is the one who
+// would PAY. So on a Need only, the box and its note read the other way round, in the phone's words; an Offer's are as they were.
+describe("the New Post form's cash box reads the post's type (Marty, 14 Nov: on a Need the poster pays)", () => {
+    const draft = { type: 'need' as const, title: 'Lift to Lismore', description: 'Tuesday morning.', category: 'transport', credits: 0, priceType: 'fixed' as const, repeatable: false, cashAlsoNeeded: true };
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        mockCreatedMarkers.length = 0;
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([]);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+        window.alert = vi.fn();
+    });
+
+    it("a Need: \"I'll pay cash too\" and the helper's note; switched to an Offer, the Offer's words as they were", async () => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} onDraftOpened={() => {}} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        const box = within(panel).getByRole('checkbox', { name: "💸 I'll pay cash too — for fuel or materials" });
+        expect(box).toBeChecked();
+        expect(panel.textContent).toContain('Cash covers fuel or materials the helper buys — at cost, not their time or tools.');
+        expect(panel.textContent).not.toContain('Cash also needed');
+        expect(panel.textContent).not.toContain('you paid for');
+
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🟢 Offer' })); });
+        expect(within(panel).getByRole('checkbox', { name: '💸 Cash also needed — for fuel or materials' })).toBeChecked();
+        expect(panel.textContent).toContain('Cash is for fuel and consumables you paid for — not your time, not your tools. At cost, no markup.');
+        expect(panel.textContent).not.toContain("I'll pay cash too");
+        expect(panel.textContent).not.toContain('the helper buys');
+    });
+});
+
 // A price for each one (DESIGN-per-item-price-fable.md §2.4, slice P4): the web's create form offers the unit Each on an Offer once
 // the node says it takes them up, with the count, the optional price for all of them and their live line, and sends the unit, the
 // count and { price_c } as the node takes them. Each names the change that turns it red.

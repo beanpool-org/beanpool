@@ -71,8 +71,8 @@ export const COMMUNITY_NODE_CONFIG_KEYS = [
 
 /** Fields of the `node_config` row's object that are the community's. */
 export const COMMUNITY_DIRECTORY_FIELDS = [
-    'serviceRadius', 'publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours',
-    'areaName',
+    'serviceRadius', 'publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'publishListingsFromHere',
+    'directoryPushIntervalHours', 'areaName',
 ] as const;
 
 /** Where a standby keeps its main server's record. */
@@ -125,6 +125,7 @@ export function readCommunitySettings(): SyncCommunitySettings {
             publishContactEmail: n.publishContactEmail === true,
             publishContactPhone: n.publishContactPhone === true,
             publishHealth: n.publishHealth !== false,
+            publishListingsFromHere: n.publishListingsFromHere !== false,
             directoryPushIntervalHours: n.directoryPushIntervalHours ?? DEFAULT_DIRECTORY_PUSH_INTERVAL_HOURS,
             areaName: n.areaName ?? null,
         },
@@ -292,6 +293,7 @@ const DIRECTORY_CHECKS: Record<(typeof COMMUNITY_DIRECTORY_FIELDS)[number], Chec
     publishContactEmail: bool,
     publishContactPhone: bool,
     publishHealth: bool,
+    publishListingsFromHere: bool,
     directoryPushIntervalHours: (v) => (isDirectoryPushInterval(v) || v === LEGACY_NEVER_INTERVAL ? v : BAD),
     // The town or area a stranger's card names (routes/community-card.ts), as the node config route keeps it.
     areaName: orNull(label(AREA_NAME_MAX)),

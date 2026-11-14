@@ -182,6 +182,11 @@ export interface MarketplacePost {
     shownCopy?: boolean;
     /** Where it is from, drawn from the directory row global holds for it at each read, never from the phone's words. */
     shownFrom?: ShownFrom;
+    /**
+     * Its author's read only: the community it is from is listed, and keeps its name off its members' listings here (its
+     * directory push said `listingsFromHere: false`), so there is no `shownFrom`. The phone says why, once.
+     */
+    shownNameOff?: boolean;
     /** #143 step 4: how far this listing travels. Absent on a row written before the column existed → 'local'. */
     reach?: PostReach;
     /** Peer ids named when `reach === 'peers'`. Empty for every other reach. */
@@ -2803,6 +2808,8 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // A copy says it is one, where from when the directory says so, and its price at home in words. The stored host is never a
     // reader's.
     shownCopy: 'keep', shownFrom: 'keep', shownPrice: 'keep', shownFromHost: 'drop', shownFromPostId: 'drop', takesQuestions: 'drop',
+    // Why its author's copy has no from-line: theirs, never a reader's (apps/server engine/event-copy.ts readOfCopy).
+    shownNameOff: 'drop',
     // A lendable Offer's own words, as its price and description are. When it is due back is dropped below, with when it
     // was taken.
     lendable: 'keep', lendMaxDays: 'keep', lendTerms: 'keep', replacementValue: 'keep',

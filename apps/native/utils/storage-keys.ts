@@ -39,6 +39,12 @@ export const BRING_LISTINGS_STORE_KEY = 'beanpool_bring_listings';
  */
 export const SHOWN_ON_GLOBAL_STORE_KEY = 'beanpool_shown_on_global';
 
+/**
+ * The listings a member asked to join a community from, by a copy on the global community, each kept until that yes is
+ * joined (utils/listing-after-join.ts). Sign Out wipes them (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export const LISTING_AFTER_JOIN_STORE_KEY = 'beanpool_listing_after_join';
+
 /** The key that has ticked "Take questions" on this phone (utils/global-requests.ts). Sign Out wipes it. */
 export const QUESTIONS_OPENED_STORE_KEY = 'beanpool_questions_opened';
 

@@ -10,7 +10,10 @@
  * The words and the small rules here; what decides whether the lobby is shown is lib/visitor-lobby-gate.ts.
  */
 
-import { askHost, FREE_PRICE_WORDS, perItemLine, perItemOf, t, tn, word, formatHundredths } from '@beanpool/core';
+import {
+    askHost, FREE_PRICE_WORDS, listingAfterJoinHost, listingsAfterJoinOf, perItemLine, perItemOf, t, tn, withListingAfterJoin, word, formatHundredths,
+    type ListingsAfterJoin,
+} from '@beanpool/core';
 import type { CommunityInfo, MarketplacePost } from './api';
 
 /** Under the first card of the lobby's list, once (not per card). The lobby's fixed lines are word() keys (VISITOR_WORDS). */
@@ -96,19 +99,67 @@ export const LINKED_POST_KEPT_MS = 60 * 60_000;
 /** A post id as the node makes them (a UUID) or a client names one: no spaces, no address, nothing long. */
 const POST_ID = /^[\w.:-]{1,200}$/;
 
-/** The lobby opened `postId` from a shared link: keep it for after the join. A storage that refuses keeps nothing. */
-export function keepLinkedPost(postId: string, now: number = Date.now()): void {
+/**
+ * Listings kept for another community (list on global G4, DESIGN-list-on-global-fable.md §6): the one a copy on this
+ * community stood for, at the community it is from, kept at its door. A request to join can wait days for its yes, so this
+ * browser keeps it (not this tab) for a month (core LISTING_AFTER_JOIN_MS): per community, the id and the time only.
+ */
+export const LISTING_AFTER_JOIN_STORAGE_KEY = 'beanpool_listing_after_join';
+
+function readListingsAfterJoin(now: number): ListingsAfterJoin {
+    try {
+        return listingsAfterJoinOf(localStorage.getItem(LISTING_AFTER_JOIN_STORAGE_KEY), now);
+    } catch {
+        return {};
+    }
+}
+
+function writeListingsAfterJoin(held: ListingsAfterJoin): void {
+    try {
+        if (Object.keys(held).length) localStorage.setItem(LISTING_AFTER_JOIN_STORAGE_KEY, JSON.stringify(held));
+        else localStorage.removeItem(LISTING_AFTER_JOIN_STORAGE_KEY);
+    } catch { /* storage off: the member lands on Home there */ }
+}
+
+/**
+ * The lobby opened `postId` from a shared link: keep it for after the join. A storage that refuses keeps nothing.
+ * With `host`: the listing is at that community (a copy's door, or the handoff that carried it there), kept for a month
+ * until the member is in it (takeKeptLinkedPost with that host).
+ */
+export function keepLinkedPost(postId: string, now: number = Date.now(), host?: string): void {
+    if (host !== undefined) {
+        const held = withListingAfterJoin(readListingsAfterJoin(now), host, postId, now);
+        if (held) writeListingsAfterJoin(held);
+        return;
+    }
     if (!POST_ID.test(postId)) return;
     try {
         sessionStorage.setItem(LINKED_POST_STORAGE_KEY, JSON.stringify({ id: postId, at: now }));
     } catch { /* a private window: the member lands on the Market */ }
 }
 
+/** The listing kept for `host`, left where it is (the yes's Join reads it before the join is done); null for none. */
+export function keptLinkedPostAt(host: string, now: number = Date.now()): string | null {
+    const h = listingAfterJoinHost(host);
+    return h ? readListingsAfterJoin(now)[h]?.id ?? null : null;
+}
+
 /**
  * The listing kept by the lobby, taken out: its id once, then never again. Nothing when there is none, when it was
  * kept longer ago than a join takes (or "later" than now), or when the slot holds anything but an id and a time.
+ * With `host`: the one kept for that community, taken out the same way; a host-less take never reads one of those.
  */
-export function takeKeptLinkedPost(now: number = Date.now()): string | null {
+export function takeKeptLinkedPost(now: number = Date.now(), host?: string): string | null {
+    if (host !== undefined) {
+        const h = listingAfterJoinHost(host);
+        const held = readListingsAfterJoin(now);
+        const kept = h ? held[h]?.id ?? null : null;
+        if (h && h in held) {
+            delete held[h];
+            writeListingsAfterJoin(held);
+        }
+        return kept;
+    }
     let raw: string | null;
     try {
         raw = sessionStorage.getItem(LINKED_POST_STORAGE_KEY);

@@ -13,7 +13,7 @@ import * as loaded from '../supabase/functions/directory-register/rules.ts';
 const rules = loaded.default?.checkBeforeSignature ? loaded.default : loaded;
 const {
     DENIED_HOST_MESSAGE, DEFAULT_DENY_HOSTS, TIMESTAMP_WINDOW_MS, checkBeforeSignature, decideAfterSignature, hostDenied,
-    hostOfPublicUrl, isUnlistPayload, parseDenyHosts, requiredFields,
+    hostOfPublicUrl, isUnlistPayload, listingsFromHereOf, parseDenyHosts, requiredFields,
 } = rules;
 
 const NOW = Date.UTC(2026, 9, 27, 8, 0, 0);
@@ -91,4 +91,18 @@ test('a push keeps today\'s required fields and the 5-minute window, either way'
     assert.deepEqual(checkBeforeSignature(push(null, { timestamp: 'soon' }), NOW), { status: 401, error: 'Timestamp Expired' });
     // A body that is not an object is a 400, not a crash.
     for (const body of [null, [], 'x', 7]) assert.deepEqual(checkBeforeSignature(body, NOW), { status: 400, error: 'Missing required fields' });
+});
+
+test('listings_from_here (list-on-global G5): the push\'s boolean, else null, never a refusal', () => {
+    assert.equal(listingsFromHereOf(push('https://x.example.org', { listingsFromHere: false })), false);
+    assert.equal(listingsFromHereOf(push('https://x.example.org', { listingsFromHere: true })), true);
+    // A node from before the switch says nothing: null, which every reader takes as on.
+    assert.equal(listingsFromHereOf(push('https://x.example.org')), null);
+    // Something that is no boolean is stored as null, not refused: refusing would cost the community its listing.
+    for (const v of ['false', 0, 1, null, {}, [false]]) {
+        assert.equal(listingsFromHereOf(push('https://x.example.org', { listingsFromHere: v })), null, JSON.stringify(v));
+        assert.equal(checkBeforeSignature(push('https://x.example.org', { listingsFromHere: v }), NOW), null, `the push goes on (${JSON.stringify(v)})`);
+        assert.deepEqual(decideAfterSignature(push('https://x.example.org', { listingsFromHere: v }), DENY), { action: 'upsert' });
+    }
+    for (const body of [null, [], 'x', 7]) assert.equal(listingsFromHereOf(body), null);
 });

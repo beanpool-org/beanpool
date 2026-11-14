@@ -15,6 +15,7 @@ import { t } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { forgetKnock, type RememberedKnock } from '../lib/knock';
 import { handoffUrl, holderPhoto, newHandoffNonce, runHandoff, type HandoffRun } from '../lib/handoff';
+import { keptLinkedPostAt, takeKeptLinkedPost } from '../lib/visitor-lobby';
 
 const PRIMARY = 'flex w-full min-h-[48px] px-4 py-2 items-center justify-center rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-base font-bold text-center break-words cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info disabled:cursor-default disabled:opacity-60';
 const SECONDARY = 'flex w-full min-h-[48px] px-4 py-2 items-center justify-center rounded-xl border border-nature-300 dark:border-nature-700 bg-transparent text-sm font-bold text-nature-900 dark:text-white no-underline text-center break-words cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
@@ -44,8 +45,11 @@ export function YesJoin({ knock, name, identity, testId, onTapped, onJoined, rea
     const join = () => {
         run.current?.cancel();
         const nonce = newHandoffNonce();
+        // The listing a copy's door kept at that community (slice G4): it goes with the account, and is forgotten here once
+        // the community's page says the account joined (a refused or blocked open keeps it for another tap).
+        const listing = keptLinkedPostAt(knock.url);
         // Inside the tap, synchronously: a pop-up blocker refuses an open made after an await.
-        const win = window.open(handoffUrl(knock.url, nonce, window.location.origin), '_blank');
+        const win = window.open(handoffUrl(knock.url, nonce, window.location.origin, listing), '_blank');
         onTapped?.();
         if (!win) {
             setState('fallback');
@@ -75,6 +79,7 @@ export function YesJoin({ knock, name, identity, testId, onTapped, onJoined, rea
                 run.current = null;
                 if (end === 'joined') {
                     void forgetKnock(identity.publicKey, knock.url);
+                    takeKeptLinkedPost(Date.now(), knock.url);
                     setState('joined');
                     onJoined?.();
                 } else if (end === 'closed') {

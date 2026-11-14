@@ -26,6 +26,7 @@ import {
 } from '@beanpool/core';
 import { StandingPanel, StandingTakeUp, type StandingChoice } from '../../components/StandingDeal';
 import { standingOfRow } from '../../utils/standing-row';
+import { missingListingLine, openedForListing } from '../../utils/listing-after-join';
 import { isPostPinned, pinnedDetailLine, showPinMenu, pinFailureText } from '../../utils/pins';
 import { usePinRole } from '../../utils/use-pin-role';
 import { PinSheet } from '../../components/PinSheet';
@@ -535,7 +536,10 @@ function PostDetailModal() {
         },
     }));
 
-    const { id, txId } = useLocalSearchParams<{ id?: string | string[]; txId?: string | string[] }>();
+    const { id, txId, cameFor: cameForParam } = useLocalSearchParams<{ id?: string | string[]; txId?: string | string[]; cameFor?: string | string[] }>();
+    // Opened for the listing a member came for from a copy on the global community (utils/listing-after-join.ts): if it has
+    // gone, the missing view says so in those words, and its button goes to the Market.
+    const cameFor = openedForListing(cameForParam);
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     useEffect(() => {
@@ -1042,8 +1046,8 @@ function PostDetailModal() {
         }
         return (
             <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
-                <Text style={styles.errorText}>{t('Post not found. It may have been expired by the Network.')}</Text>
-                <Pressable accessibilityRole="button" onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); }} style={styles.closeBtn}>
+                <Text style={styles.errorText} testID="post-missing-line">{missingListingLine(cameFor)}</Text>
+                <Pressable accessibilityRole="button" onPress={() => { if (cameFor) router.replace('/(tabs)/market'); else if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); }} style={styles.closeBtn}>
                     <Text style={styles.closeBtnText}>{t('Return to Market')}</Text>
                 </Pressable>
             </View>

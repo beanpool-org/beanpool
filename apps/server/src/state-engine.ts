@@ -72,7 +72,7 @@ import {
     newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, markPushNoticesSeen, markPushNoticesSeenWhere, markAllPushNoticesSeen,
     keptNoticeIdsOf, type PushNoticeRow,
 } from './engine/push-notices.js';
-import { sendWebPushes, webPushDelivery, webPushTargetsFor, type WebPushSend } from './engine/web-push-subscriptions.js';
+import { sendWebPushes, webPushDelivery, webPushTargetOpener, type WebPushSend } from './engine/web-push-subscriptions.js';
 import type { PushDetailsFor } from './engine/kept-notices.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
 import { linesPushedAbout } from './engine/chat-mutes.js';
@@ -727,6 +727,12 @@ export interface NodeConfig {
     publishContactEmail?: boolean;
     publishContactPhone?: boolean;
     publishHealth?: boolean;
+    /**
+     * Whether the community's name, and Ask to join, appear beside a member's listing shown on the global community
+     * (DESIGN-list-on-global-fable.md §2, G5): the push's `listingsFromHere`. On unless an owner turned it off: only a stored
+     * `false` is off. A member can show a listing there either way.
+     */
+    publishListingsFromHere?: boolean;
     directoryPushIntervalHours?: number;
     lastDirectoryPush?: string;
     /**
@@ -9799,6 +9805,7 @@ export function getNodeConfig(): NodeConfig {
         publishContactEmail: config.publishContactEmail === true,
         publishContactPhone: config.publishContactPhone === true,
         publishHealth: config.publishHealth !== false,
+        publishListingsFromHere: config.publishListingsFromHere !== false,
         directoryPushIntervalHours: typeof config.directoryPushIntervalHours === 'number' ? config.directoryPushIntervalHours : 12,
         lastDirectoryPush: config.lastDirectoryPush,
         publicAddress: config.publicAddress ?? null,
@@ -9980,6 +9987,10 @@ export function getDirectoryInfo(): any {
     // Each only when the owner turned it on; otherwise null, so the directory drops one it was sent before.
     info.contactEmail = config.publishContactEmail && localConfig.contactEmail ? localConfig.contactEmail : null;
     info.contactPhone = config.publishContactPhone && localConfig.contactPhone ? localConfig.contactPhone : null;
+
+    // Always said, true or false: absent at the registry reads as on (a node from before the switch), so a community that
+    // turned it off says so at every push. A global node draws no from-line and no door on its members' copies while false.
+    info.listingsFromHere = config.publishListingsFromHere !== false;
 
     if (config.publishHealth) {
         const realVersion = getVersion();
@@ -10900,8 +10911,10 @@ const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoti
  * recipient reads (engine/push-notices.ts, GET /api/notices/push/:id), and none of them reaches Expo, Apple or Google.
  *
  * Browsers too (services/web-push.ts, DESIGN-web-notifications-fable.md §2.2), after Expo's part, with the same words and
- * notice, encrypted to the browser: in W1 only `join.answered`, to the browser an applicant asked to be told on
- * (engine/web-push-subscriptions.ts webPushTargetsFor), for `options.ttlSeconds`.
+ * notice, encrypted to the browser (engine/web-push-subscriptions.ts webPushTargetOpener): every kind to a member's own
+ * browsers (W2), under the same switch as their phones, and `join.answered` to the browser an applicant asked to be told
+ * on (W1), for `options.ttlSeconds`. Each kind's TTL, urgency and topic are webPushDelivery's (a chat's topic is its kind,
+ * so a browser away for a while gets one message of it, not every one).
  *
  * Answers how many messages went to the push services (a phone's to Expo, a browser's by web push). {@link deliverPushNotices}
  * also says how many members were told: a notice kept for them is on their bell (web notifications W0), a phone or not.
@@ -10981,8 +10994,9 @@ export function deliverPushNotices(
     const phones: { publicKey: string; tokenId: string; token: string }[] = [];
     const notices: PushNoticeRow[] = [];
     const webSends: WebPushSend[] = [];
-    // The key read once for the whole send (an announcement reaches every member's phones).
+    // The key read once for the whole send (an announcement reaches every member's phones and browsers).
     const open = pushTokenOpener();
+    const browsersOf = webPushTargetOpener();
 
     for (const pk of recipients) {
         // Check user's notification preference for this category
@@ -11001,7 +11015,7 @@ export function deliverPushNotices(
         // or not, so the web app, and a phone with no push, list what the phone is buzzed with. Not for a key that can't
         // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before.
         const tokens = getPushTokens(pk, open);
-        const browsers = webPushTargetsFor(pk, kind);
+        const browsers = browsersOf(pk, kind);
         if (tokens.length === 0 && browsers.length === 0 && !passesReadGate(pk)) continue;
 
         // One notice per recipient, the same on each of their phones and browsers.
@@ -11042,7 +11056,7 @@ export function deliverPushNotices(
         for (const { subId, lang, target } of browsers) {
             const words = phoneWords(lang);
             webSends.push({
-                publicKey: pk, subId, target, ...webPushDelivery('join.answered', options.ttlSeconds),
+                publicKey: pk, subId, target, ...webPushDelivery(kind, options.ttlSeconds),
                 payload: { title: words.title, body: words.body, data: notice.data, tab: PUSH_NOTICE_KINDS[kind].tab },
             });
         }

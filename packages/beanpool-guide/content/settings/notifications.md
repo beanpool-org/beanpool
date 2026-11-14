@@ -16,7 +16,7 @@ related: mute, messages, my-deals, events, holiday-mode, the-top-bar, communitie
 - **Held in Trust & System:** beans held, released or in question.
 - **Requests to join:** when someone asks to join your community from the global community, so you can help welcome them. Only members who can let people in see it: owners and admins are always told, so they have no switch, and in a community where only admins let people in it isn't shown.
 
-In the web app the first is called **Chat Messages**, and the third is the one named after **Deals**. They set what reaches your phone.
+The web app has the same switches, with the same names. They set what reaches your phone and, if you turn notifications on in a browser, that browser too: in the web app, the first row, **On this device**, says whether this browser gets them, with **Turn on** or **Turn off**. Your browser asks you first, at that tap.
 
 Changes save by themselves. They are kept by your community's server, so they follow your account.
 

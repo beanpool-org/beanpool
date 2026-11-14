@@ -21,7 +21,7 @@ import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
 import {
-    bundledAvatarForPubkey, combineKnockTicks, inviteForInviteBox, joinRuleLines, knockTickOf, landingPostId, lowercaseRecoveryWords, NAME_BOX_WORDS, notANameIn,
+    bundledAvatarForPubkey, combineKnockTicks, inviteForInviteBox, joinRuleLines, knockTickOf, landingPostId, listingAfterJoinHost, lowercaseRecoveryWords, NAME_BOX_WORDS, notANameIn,
     photoStepNote, postIdFromInviteLink, splitBold,
     type KnockWatchTick, type KnownRule,
     shareAddress,
@@ -103,6 +103,7 @@ import { returnToApp } from '../utils/sso-signin';
 import { extractNodeOrigin, holdsInvite, normaliseInviteCode, readInviteText } from '../utils/invite-parser';
 import { fetchKnownRule } from '../utils/known-rule';
 import { holdPostAfterJoin } from '../utils/post-after-join';
+import { joinedForListing } from '../utils/listing-after-join';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { StepFooter } from '../components/welcome/StepFooter';
 import { forgetHeldInvite, heldInviteKey, onHeldInvite, readHeldInvite, type HeldInvite } from '../utils/held-invite';
@@ -538,6 +539,12 @@ export default function WelcomeScreen() {
     const [waitJoining, setWaitJoining] = useState<string | null>(null);
     /** A community's yes being joined: the invite step's Next, run once its fields hold this invite (the effect below). */
     const [knockJoin, setKnockJoin] = useState<KnockYes | null>(null);
+    /**
+     * The yes the invite step is joining (startKnockJoin), kept past its Next so a retry after a refusal is still it: once its
+     * own invite lands at its own community, a listing kept at Send opens on Home (list on global G4: a visitor's phone,
+     * with no account, asked from a copy on global). Someone else's invite never matches, so it marks nothing.
+     */
+    const knockYesRef = useRef<KnockYes | null>(null);
     const waitTurn = useRef(0);
     /** This screen is the one shown (not covered by another): the waiting mode asks its communities nothing while it is not. */
     const [waitShown, setWaitShown] = useState(true);
@@ -640,8 +647,16 @@ export default function WelcomeScreen() {
         setInviteCode(yes.invite);
         setCreateAnchorUrl(yes.url);
         setCallsign(accountOnPhone.callsign || '');
+        knockYesRef.current = yes;
         setKnockJoin(yes);
         setMode('create');
+    }
+    /** Next joined `nodeUrl` with `code`: when that was the yes being joined, its listing may open on Home (utils/listing-after-join.ts). */
+    async function markYesJoined(nodeUrl: string, code: string): Promise<void> {
+        const yes = knockYesRef.current;
+        if (!yes || normaliseInviteCode(yes.invite.trim()) !== code || listingAfterJoinHost(yes.url) !== listingAfterJoinHost(nodeUrl)) return;
+        knockYesRef.current = null;
+        await joinedForListing(nodeUrl).catch(() => {});
     }
     useEffect(() => {
         if (!knockJoin || mode !== 'create' || inviteCode !== knockJoin.invite || createAnchorUrl !== knockJoin.url) return;
@@ -1375,6 +1390,8 @@ export default function WelcomeScreen() {
                         // The update screen asks the community now in use (utils/community-switch.ts).
                         communitySwitched();
                         await clearPendingOnboarding();
+                        // A yes whose redeem landed with its answer lost is joined all the same.
+                        await markYesJoined(nodeUrl, parsedCode);
                         await recheckNodeStatus().catch(() => {});
                         setIdentity(storedIdentity);
                         return;
@@ -1482,6 +1499,9 @@ export default function WelcomeScreen() {
                 // does the request this invite answered (utils/knock-key.ts, utils/knock.ts).
                 if (knockMade) await forgetKnockKey();
                 if (storedIdentity) await forgetKnock(storedIdentity.publicKey, nodeUrl);
+                // The yes this phone asked for is joined (its own invite): a listing it asked from opens once Home has
+                // nothing else to show, as from the card's and Find a community's Join.
+                await markYesJoined(nodeUrl, parsedCode);
 
                 // Go to avatar selection (Step 2)
                 setMode('profileSetup');

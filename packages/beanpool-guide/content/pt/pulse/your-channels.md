@@ -3,12 +3,12 @@ slug: your-channels
 title: Compartilhar canais
 summary: Coloque seus canais do YouTube, blog, Instagram e outros no Pulso.
 related: the-pulse, learn, your-profile, privacy
-source-hash: bc8099cfeda70bea
+source-hash: 40a7c578cf3fdbbd
 ---
 
 ## Adicionar um canal
 
-- No **Pulso**, toque em **+ Canais**. No celular, você também pode abrir **Configurações** e tocar em **Canais e vitrine**.
+- No **Pulso**, toque em **Seus canais** no topo. No celular, você também pode abrir **Configurações** e tocar em **Canais e vitrine**.
 - Toque em **+ Adicionar um canal**.
 - Em **Onde você publica?**, escolha o site.
 - Digite ou cole **Seu link ou usuário**.

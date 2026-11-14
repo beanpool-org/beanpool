@@ -3,12 +3,12 @@ slug: your-channels
 title: 내 채널 공유하기
 summary: YouTube, 블로그, Instagram 등 내 채널을 동향 피드에 공유해 보세요.
 related: the-pulse, learn, your-profile, privacy
-source-hash: bc8099cfeda70bea
+source-hash: 40a7c578cf3fdbbd
 ---
 
 ## 채널 추가하기
 
-- **동향**에서 **+ 채널**을 탭하세요. 휴대폰에서는 **설정**을 열고 **채널 및 쇼케이스**를 탭할 수도 있어요.
+- **동향**에서 위쪽의 **내 채널**을 탭하세요. 휴대폰에서는 **설정**을 열고 **채널 및 쇼케이스**를 탭할 수도 있어요.
 - **+ 채널 추가**를 탭하세요.
 - **주로 어디에 글을 올리시나요?** 아래에서 사이트를 선택하세요.
 - **내 링크 또는 핸들**을 입력하거나 붙여넣으세요.

@@ -256,7 +256,7 @@ describe('home frame §5.2 (3): cardsToAsk', () => {
         expect(cardsToAsk(l)).toEqual(['needs', 'beans', 'community']);
         expect(cardsToAsk(l, ['find'])).toEqual(['needs', 'find', 'beans', 'community']);
         // A newcomer's Home is the default list (DESIGN-home-default-fable.md §2.2): the fixed two and every default card the node builds.
-        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'events', 'market', 'asked', 'decide', 'groups', 'joined', 'beans', 'notices', 'community']);
+        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'events', 'market', 'asked', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
     });
 });
 
@@ -265,7 +265,7 @@ const wordDp = (word: string) => word.length * 15 * 1.3 * 0.6;
 
 describe('home frame §5.2 (4): the default and the words', () => {
     it("defaultCards is the default list on both profiles, Welcome first; the starter set is the same list less Welcome", () => {
-        expect(HOME_STARTER_SET).toEqual(['safety', 'market', 'steps', 'interests', 'events', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky']);
+        expect(HOME_STARTER_SET).toEqual(['safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky']);
         expect(HOME_DEFAULT_LIST).toEqual(['start', ...HOME_STARTER_SET]);
         for (const p of ['local', 'global'] as const) expect(defaultCards(p)).toEqual(HOME_DEFAULT_LIST.map(id => ({ id, type: id })));
     });

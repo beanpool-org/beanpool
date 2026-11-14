@@ -4,12 +4,14 @@ title: Mwenendo
 summary: Kile ambacho majirani wako hutengeneza na kushiriki kwingine, katika mlisho mmoja.
 related: home, learn, your-channels, reporting, the-bean
 help: Viungo ambavyo majirani wametengeneza au kushiriki, katika mlisho mmoja. Gusa kimoja kufungua.
-source-hash: 5a5a0ba505806e0a
+source-hash: 48edba7a67cbc8e2
 ---
 
 ## Ni nini
 
-Fungua Mwenendo kutoka kwenye kadi ya **Mwenendo** kwenye **Nyumbani**: gusa chapisho, au uguse **Ona yote**. Ikiwa haipo kwenye Nyumbani kwako, irudishe kwa **Ongeza kadi** kwenye simu, au **Hariri nyumbani** kwenye programu ya wavuti. Kwenye simu unaweza pia kuifungua kutoka **Mipangilio**, chini ya **Mwenendo**.
+Fungua **Soko** na uguse **Mwenendo** karibu na juu. Kichupo cha **Soko** kinabaki kimewaka wakati Mwenendo umefunguliwa. Kwenye programu ya wavuti pia upo kwenye menyu ya pembeni, chini ya **Soko**.
+
+Pia upo kwenye **Nyumbani**, kama kadi ya **Mwenendo**, jirani akishiriki kitu ndani ya wiki iliyopita: gusa chapisho, au uguse **Ona yote**. Ikiwa haupo kwenye Nyumbani kwako, uurudishe kwa **Ongeza kadi**. Kwenye simu unaweza pia kuufungua kutoka **Mipangilio**, chini ya **Mwenendo**.
 
 Mwenendo hukusanya kile ambacho wanachama wa jumuiya yako huchapisha kwenye tovuti nyingine: video, muziki, blogu, picha. Ni njia ya kugundua kile ambacho majirani wako wanatengeneza na kufanya.
 
@@ -41,4 +43,6 @@ Huwezi kuficha chapisho la mtu mwingine kwa ajili yako mwenyewe tu.
 
 ## Kuongeza yako mwenyewe
 
-Gusa **+ Njia** juu kabisa. Tazama "Kushiriki chaneli zako".
+Gusa **Ongeza kwenye Mwenendo** chini kulia. Mwenendo ukiwa tupu, kitufe kiko katikati ya ukurasa badala yake. Ili kushiriki chapisho, ongeza kwanza njia ambayo chapisho hilo liko: gusa **Njia zako** juu. Tazama "Kushiriki chaneli zako".
+
+Kwenye jumuiya ya kimataifa, Mwenendo bado haukuombi chochote: hakuna **Ongeza kwenye Mwenendo**, na programu ya wavuti haipendekezi machapisho ya kushiriki. Hilo litasubiri hadi kuongeza huko kuwe na kanuni kwa wanachama wapya. **Njia zako** hufanya kazi huko kama kwenye jumuiya yoyote: ongeza njia na machapisho yake bado yanaingia, na unaweza kushiriki chapisho kutoka huko.

@@ -3,12 +3,12 @@ slug: your-channels
 title: Compartir tus canales
 summary: Muestra tus canales de YouTube, blog, Instagram y otros en el Pulso.
 related: the-pulse, learn, your-profile, privacy
-source-hash: bc8099cfeda70bea
+source-hash: 40a7c578cf3fdbbd
 ---
 
 ## Añadir un canal
 
-- En el **Pulso**, toca **+ Canales**. En el teléfono también puedes abrir **Ajustes** y tocar **Canales y vitrina**.
+- En el **Pulso**, toca **Tus canales** en la parte superior. En el teléfono también puedes abrir **Ajustes** y tocar **Canales y vitrina**.
 - Toca **+ Añadir un canal**.
 - Bajo **¿Dónde publicas?**, elige el sitio.
 - Escribe o pega **Tu enlace o usuario**.

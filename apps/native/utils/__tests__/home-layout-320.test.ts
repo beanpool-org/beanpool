@@ -519,7 +519,9 @@ describe('the tab strip: Home · Market · Map · Chat · Commons · Ledger', ()
 
     it('the Market\'s tab still carries the deals count, and still answers to tab-market', () => {
         const market = screens.find(x => x.name === 'market')!.body;
-        expect(market).toMatch(/<TabItem label=\{t\(TAB\.market\)\} icon="🤝" focused=\{focused\} color=\{color\} count=\{dealsCount\} \/>/);
+        // Lit on the Market and while the Pulse its door opens is open (utils/pulse-door.ts, DESIGN-pulse-home-fable.md §3.1).
+        expect(market).toMatch(/const lit = marketTabLit\(focused, pathname\);/);
+        expect(market).toMatch(/<TabItem label=\{t\(TAB\.market\)\} icon="🤝" focused=\{lit\} color=\{lit \? colors\.accent\.primary : color\} count=\{dealsCount\} \/>/);
         expect(labelOf(market)).toBe('Market');
         expect(market).toMatch(/tabBarButtonTestID: 'tab-market'/);
         // The count is the same rule as the Market's own pill (MyDealsSheet usePendingDealsCount), set from the database.

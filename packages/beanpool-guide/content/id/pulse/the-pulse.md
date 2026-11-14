@@ -4,12 +4,14 @@ title: The Pulse
 summary: Apa yang dibuat dan dibagikan tetangga di platform lain, dalam satu umpan kabar.
 related: home, learn, your-channels, reporting, the-bean
 help: Tautan yang dibuat atau dibagikan tetangga di platform lain. Ketuk tautan untuk membukanya.
-source-hash: 5a5a0ba505806e0a
+source-hash: 48edba7a67cbc8e2
 ---
 
 ## Apa itu The Pulse
 
-Buka Pulse dari kartu **Kabar** di **Beranda**: ketuk postingan, atau ketuk **Lihat semua**. Jika tidak ada di Berandamu, kembalikan dengan **Tambah kartu** di ponsel, atau **Edit beranda** di web app. Di ponsel kamu juga dapat membukanya dari **Pengaturan**, di bawah **Kabar**.
+Buka **Pasar** dan ketuk **Kabar** di dekat bagian atas. Tab **Pasar** tetap menyala selama Kabar terbuka. Di web app, Kabar juga ada di menu samping, di bawah **Pasar**.
+
+Kabar juga ada di **Beranda**, sebagai kartu **Kabar**, saat ada tetangga yang membagikan sesuatu dalam seminggu terakhir: ketuk sebuah postingan, atau ketuk **Lihat semua**. Jika tidak ada di Berandamu, kembalikan dengan **Tambah kartu**. Di ponsel kamu juga dapat membukanya dari **Pengaturan**, di bawah **Kabar**.
 
 The Pulse mengumpulkan apa yang diposting anggota komunitasmu di situs lain: video, musik, blog, foto. Ini adalah cara untuk mengetahui apa yang dibuat dan dilakukan tetanggamu.
 
@@ -41,4 +43,6 @@ Kamu tidak dapat menyembunyikan postingan orang lain hanya untuk dirimu sendiri.
 
 ## Menambahkan postinganmu sendiri
 
-Ketuk **+ Kanal** di bagian atas. Lihat "Membagikan saluranmu".
+Ketuk **Tambahkan ke Pulse** di kanan bawah. Saat Kabar kosong, tombolnya ada di tengah halaman. Untuk membagikan postingan, tambahkan dulu kanal tempat postingan itu berada: ketuk **Kanalmu** di bagian atas. Lihat "Membagikan saluranmu".
+
+Di komunitas global, Kabar belum meminta apa pun darimu: tidak ada **Tambahkan ke Pulse**, dan web app tidak menyarankan postingan untuk dibagikan. Itu menunggu sampai penambahan di sana punya aturan untuk anggota baru. **Kanalmu** bekerja di sana seperti di komunitas mana pun: tambahkan kanal dan postingannya tetap masuk, dan kamu dapat membagikan postingan dari sana.

@@ -4,12 +4,14 @@ title: Nabız Akışı
 summary: Komşularınızın başka yerlerde ürettikleri ve paylaştıkları tek bir akışta.
 related: home, learn, your-channels, reporting, the-bean
 help: Komşularınızın paylaştığı bağlantılar tek bir akışta. Açmak için birine dokunun.
-source-hash: 5a5a0ba505806e0a
+source-hash: 48edba7a67cbc8e2
 ---
 
 ## Nedir
 
-**Ana Sayfa**'daki **Nabız** kartından Nabız'ı açın: bir gönderiye veya **Tümünü gör** seçeneğine dokunun. Ana Sayfa'nızda yoksa telefonda **Kart ekle** ile, web uygulamasında **Ana Sayfayı düzenle** ile geri getirin. Telefonda ayrıca **Ayarlar** altındaki **Nabız** bölümünden de açabilirsiniz.
+**Pazar**'ı açın ve üstteki **Nabız** seçeneğine dokunun. Nabız açıkken **Pazar** sekmesi yanık kalır. Web uygulamasında yan menüde **Pazar**'ın altında da bulunur.
+
+Bir komşunuz son bir hafta içinde bir şey paylaştıysa **Ana Sayfa**'da da **Nabız** kartı olarak görünür: bir gönderiye veya **Tümünü gör** seçeneğine dokunun. Ana Sayfa'nızda yoksa **Kart ekle** ile geri getirin. Telefonda ayrıca **Ayarlar** altındaki **Nabız** bölümünden de açabilirsiniz.
 
 Nabız, topluluğunuzun üyelerinin diğer sitelerde paylaştıklarını bir araya getirir: videolar, müzik, bloglar, fotoğraflar. Komşularınızın neler ürettiğini ve yaptığını öğrenmenin bir yoludur.
 
@@ -41,4 +43,6 @@ Başkasının gönderisini yalnızca kendiniz için gizleyemezsiniz.
 
 ## Kendinizinkini ekleme
 
-Üstteki **+ Kanallar** seçeneğine dokunun. "Kanallarınızı paylaşma" bölümüne bakın.
+Sağ alttaki **Nabız'a Ekle** düğmesine dokunun. Nabız boşken düğme bunun yerine sayfanın ortasında durur. Bir gönderi paylaşmak için önce gönderinin bulunduğu kanalı ekleyin: üstteki **Kanallarınız** seçeneğine dokunun. "Kanallarınızı paylaşma" bölümüne bakın.
+
+Global toplulukta Nabız henüz sizden bir şey beklemez: **Nabız'a Ekle** yoktur ve web uygulaması paylaşmanız için gönderi önermez. Orada ekleme yapmanın yeni üyeler için kuralları belirlenene kadar bu bekleyecek. **Kanallarınız** orada da her topluluktaki gibi çalışır: bir kanal ekleyin, gönderileri yine gelir ve oradan bir gönderi paylaşabilirsiniz.

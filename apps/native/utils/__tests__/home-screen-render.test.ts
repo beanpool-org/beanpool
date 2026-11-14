@@ -386,9 +386,10 @@ const byLabel = (label: string) => document.querySelector(`[aria-label="${label.
 const homeReads = () => node.requests.filter(r => new URL(r.url).pathname === '/api/home');
 /**
  * A newcomer's Home past the tour as this file's local member draws it: the default list less Welcome, in its order
- * (DESIGN-home-default-fable.md §2.2), each card drawn only where the fixture gives it something to say.
+ * (DESIGN-home-default-fable.md §2.2), each card drawn only where the fixture gives it something to say. The Pulse after
+ * Coming up since DESIGN-pulse-home-fable.md §3.5 (P0): the fixture has a neighbour's link this week.
  */
-const NEWCOMER_DRAWN = ['market', 'steps', 'interests', 'events', 'beans', 'joined', 'tips', 'community'];
+const NEWCOMER_DRAWN = ['market', 'steps', 'interests', 'events', 'pulse', 'beans', 'joined', 'tips', 'community'];
 /** The default list less Welcome, less Coming up; and less the Market too (the edits the standby tests make). */
 const STARTER_LESS_EVENTS = HOME_STARTER_SET.filter(id => id !== 'events');
 const STARTER_LESS_BOTH = HOME_STARTER_SET.filter(id => id !== 'events' && id !== 'market');
@@ -1389,16 +1390,18 @@ describe('a layout save the node refuses is not sent again at every read', () =>
     });
 
     it('a member who never edited adds a card on a node from before the frame: one save, then one read', async () => {
-        node.answer = { ...localMember(), me: { ...localMember().me!, joinedAt: iso(Date.now() - 30 * 24 * H) }, layout: null };
+        // firstOffer: Grow your community, the card added below, is drawn once the member has offered something.
+        node.answer = { ...localMember(), me: { ...localMember().me!, joinedAt: iso(Date.now() - 30 * 24 * H), firstOffer: true }, layout: null };
         node.refuse = 400;
         mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
         await render();
         const before = node.requests.length;
         await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
-        await act(async () => { byLabel('Add The Pulse to Home')!.click(); });
+        // Grow your community: a card the default list leaves out (the Pulse is in it since DESIGN-pulse-home-fable.md §3.5).
+        await act(async () => { byLabel('Add Grow your community to Home')!.click(); });
         await settle(20);
         expect(node.requests.slice(before).map(r => `${r.method} ${r.status}`)).toEqual(['POST 400', 'GET 200']);
-        expect(cards()[0]).toBe('pulse');
+        expect(cards()[0]).toBe('invite');
     });
 });
 
@@ -4364,7 +4367,7 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
             mem.store.set(`beanpool_tour_progress_${who.identity.publicKey}`, JSON.stringify({ v: 1, step: 7, startedAt: iso(Date.now() - H) }));
             await render();
             // The default list under the pinned Find your community (DESIGN-home-default-fable.md §2.9): nothing folds behind Welcome.
-            expect(cards()).toEqual(['needs', 'find', 'start', 'market', 'steps', 'events', 'groups', 'notices', 'joined', 'tips', 'community']);
+            expect(cards()).toEqual(['needs', 'find', 'start', 'market', 'steps', 'events', 'pulse', 'groups', 'notices', 'joined', 'tips', 'community']);
             const step = showcase ? 7 : 5;
             expect(document.querySelector('[data-testid="home-start-look"]')!.textContent).toBe(`Pick up the tour at step ${step + 1} ›`);
             await act(async () => { (document.querySelector('[data-testid="home-start-look"]') as HTMLElement).click(); });

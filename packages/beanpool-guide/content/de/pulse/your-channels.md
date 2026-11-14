@@ -3,12 +3,12 @@ slug: your-channels
 title: Eigene Kanäle teilen
 summary: Bringe YouTube, Blogs, Instagram und andere Kanäle in den Puls.
 related: the-pulse, learn, your-profile, privacy
-source-hash: bc8099cfeda70bea
+source-hash: 40a7c578cf3fdbbd
 ---
 
 ## Einen Kanal hinzufügen
 
-- Tippe im **Puls** auf **+ Kanäle**. Auf dem Smartphone kannst du auch die **Einstellungen** öffnen und auf **Kanäle & Schaufenster** tippen.
+- Tippe im **Puls** oben auf **Deine Kanäle**. Auf dem Smartphone kannst du auch die **Einstellungen** öffnen und auf **Kanäle & Schaufenster** tippen.
 - Tippe auf **+ Einen Kanal hinzufügen**.
 - Wähle unter **Wo veröffentlichst du?** die Plattform aus.
 - Gib **Dein Link oder Benutzername** ein oder füge ihn ein.

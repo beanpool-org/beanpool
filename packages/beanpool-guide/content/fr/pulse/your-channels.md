@@ -3,12 +3,12 @@ slug: your-channels
 title: Partager vos canaux
 summary: Diffusez vos canaux YouTube, blog, Instagram et autres sur le Pouls.
 related: the-pulse, learn, your-profile, privacy
-source-hash: bc8099cfeda70bea
+source-hash: 40a7c578cf3fdbbd
 ---
 
 ## Ajouter un canal
 
-- Dans le **Pouls**, touchez **+ Canaux**. Sur le téléphone, vous pouvez aussi ouvrir les **Paramètres** et toucher **Canaux et vitrine**.
+- Dans le **Pouls**, touchez **Vos canaux** en haut. Sur le téléphone, vous pouvez aussi ouvrir les **Paramètres** et toucher **Canaux et vitrine**.
 - Touchez **+ Ajouter un canal**.
 - Sous **Où publiez-vous ?**, choisissez le site.
 - Saisissez ou collez **Votre lien ou identifiant**.

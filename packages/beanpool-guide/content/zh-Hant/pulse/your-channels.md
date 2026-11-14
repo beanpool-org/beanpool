@@ -3,12 +3,12 @@ slug: your-channels
 title: 分享你的頻道
 summary: 將你的 YouTube、部落格、Instagram 等頻道展示在動態中。
 related: the-pulse, learn, your-profile, privacy
-source-hash: bc8099cfeda70bea
+source-hash: 40a7c578cf3fdbbd
 ---
 
 ## 新增頻道
 
-- 在 **Pulse 動態** 中，點擊 **+ 頻道**。在手機上，你也可以開啟**設定**並點擊**頻道與櫥窗**。
+- 在**動態**中，點擊頂部的**你的頻道**。在手機上，你也可以開啟**設定**並點擊**頻道與櫥窗**。
 - 點擊 **+ 新增頻道**。
 - 在**你在哪裡發布？**下方，選擇平台。
 - 輸入或貼上**你的連結或帳號**。

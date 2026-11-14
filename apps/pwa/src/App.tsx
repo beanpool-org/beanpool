@@ -1003,6 +1003,11 @@ export function App() {
         { id: 'ledger', label: word('Ledger', 'tab'), emoji: '📊' },
     ];
     const activeTabEntry = TABS.find(tb => tb.id === activeTab);
+    // The side menu has its own Pulse, right after the Market (Marty's pick 2 of 14 Nov 2026, DESIGN-pulse-home-fable.md
+    // question 2). The bottom bar keeps its seven: there the Pulse's door is the Market's, and the Market stays lit on it.
+    const SIDE_TABS: { id: Tab; label: WordKey; emoji: string }[] = TABS.flatMap(tb => (tb.id === 'marketplace'
+        ? [tb, { id: 'pulse' as Tab, label: word('Pulse', 'tab'), emoji: '📡' }]
+        : [tb]));
 
     // The mobile header's title (none on the map, which shows the community's name); MobileHeader sends the sync chip to its
     // dot alone where the title wouldn't fit beside the chip's words.
@@ -1196,11 +1201,12 @@ export function App() {
 
                 {/* Navigation Tab Links */}
                 <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
-                    {TABS.map((tab) => {
+                    {SIDE_TABS.map((tab) => {
                         const isActive = activeTab === tab.id && !showSettings;
                         return (
                             <button
                                 key={tab.id}
+                                aria-current={isActive ? 'page' : undefined}
                                 onClick={() => {
                                     if (tab.id === 'marketplace') setMarketClickCount(c => c + 1);
                                     if (tab.id === 'people' && activeTab !== 'people') { setPeopleSubView('friends'); setPeopleFromNotice(false); }
@@ -1451,6 +1457,7 @@ export function App() {
                                 <PulsePage
                                     identity={identity}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
+                                    profile={nodeInfo?.profile}
                                 />
                             )}
                             {activeTab === 'learn' && (
@@ -1693,7 +1700,8 @@ export function App() {
                     <div className="absolute inset-0 bg-black/30 pointer-events-none" />
                     <div className="relative z-10 w-full flex gap-px sm:gap-1">
                     {TABS.map((tab) => {
-                        const isActive = activeTab === tab.id && !showSettings;
+                        // The Pulse opens from the Market's door: the Market stays lit while it is open.
+                        const isActive = (activeTab === tab.id || (tab.id === 'marketplace' && activeTab === 'pulse')) && !showSettings;
                         return (
                         <button
                             key={tab.id}

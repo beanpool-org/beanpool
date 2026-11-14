@@ -3,12 +3,12 @@ slug: your-channels
 title: 分享你的频道
 summary: 将你的 YouTube、博客、Instagram 等频道展示在动态中。
 related: the-pulse, learn, your-profile, privacy
-source-hash: bc8099cfeda70bea
+source-hash: 40a7c578cf3fdbbd
 ---
 
 ## 添加频道
 
-- 在**脉搏**中，点按 **+ 频道**。在手机上，你也可以打开**设置**并点按**频道与橱窗**。
+- 在**动态**中，点按顶部的**你的频道**。在手机上，你也可以打开**设置**并点按**频道与橱窗**。
 - 点按 **+ 添加频道**。
 - 在**你在哪里发布内容？**下方，选择对应网站。
 - 输入或粘贴**你的链接或账号**。

@@ -253,13 +253,32 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
                     </span>
                 )}
                 <span className="text-nature-400">
-                    Reported by {report.reporterCallsign || 'a member'}{report.createdAt ? ` · ${when(report.createdAt)}` : ''}
+                    {/* A complaint from another community names that community, never who reported (server: engine/relay-complaint.ts). */}
+                    {report.fromAnotherCommunity ? `From another community, ${report.fromAnotherCommunity.from}` : `Reported by ${report.reporterCallsign || 'a member'}`}
+                    {report.createdAt ? ` · ${when(report.createdAt)}` : ''}
                 </span>
             </div>
 
-            {report.directMessage ? (
-                // One direct message line: its sender's signature checked, its words the reporter's.
-                <ReportedDirectMessage nodeUrl={nodeUrl} reportId={report.id} />
+            {report.fromAnotherCommunity ? (
+                <div className="space-y-1" data-testid="report-from-another-community">
+                    <p className="text-xs font-bold uppercase tracking-wider text-nature-500 m-0">
+                        A message {report.targetCallsign || 'this member'} sent to {report.fromAnotherCommunity.from}
+                    </p>
+                    <p className="text-xs text-nature-400 m-0">Who reported it isn't shown. The words are what their reporter says it said.</p>
+                    {report.fromAnotherCommunity.words && <p className="text-sm text-nature-200 m-0 whitespace-pre-line">{report.fromAnotherCommunity.words}</p>}
+                </div>
+            ) : report.directMessage ? (
+                // One direct message line: its sender's signature checked, its words the reporter's. A line from another community
+                // opens the same way, from what its reporter handed over; only its own community can act on its sender.
+                <>
+                    {report.targetHome && (
+                        <p className="text-xs text-nature-400 m-0" data-testid="report-outside-line">
+                            From another community, {report.targetHome}: they are blocked for the member who reported them, and
+                            {report.complaintTold === 'sent' ? ' their community has been told.' : report.complaintTold === 'failed' ? " their community's server didn't take the complaint." : ' their community is being told.'}
+                        </p>
+                    )}
+                    <ReportedDirectMessage nodeUrl={nodeUrl} reportId={report.id} />
+                </>
             ) : report.targetMessageId ? (
                 // A locked group chat's message, reported with its key: opened here, verified, and nothing else of the chat.
                 <ReportedGroupMessage nodeUrl={nodeUrl} reportId={report.id} groupName={report.groupMessage?.groupName} />

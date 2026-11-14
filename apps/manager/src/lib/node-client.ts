@@ -247,6 +247,12 @@ export interface NodeReport {
     targetForumPostId?: string;
     /** That forum post: its topic's title, its words (the first 500), its writer, hidden while moderators look, or already down. */
     forumPost?: ReportedForumPost | null;
+    /** A report of a line from another community (the server's engine/relay-complaint.ts): that community, `host[:port]`. */
+    targetHome?: string | null;
+    /** Whether that community has the complaint about it: 'queued' (still trying), 'sent', 'failed'. */
+    complaintTold?: 'queued' | 'sent' | 'failed' | null;
+    /** A complaint from another community about a member here: which community, and its reporter's word. Never its reporter. */
+    fromAnotherCommunity?: { from: string; words: string; signedAt: string | null } | null;
     [key: string]: unknown;
 }
 

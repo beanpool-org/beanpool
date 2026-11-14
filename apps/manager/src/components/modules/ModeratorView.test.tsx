@@ -311,6 +311,32 @@ describe('ModeratorView report actions', () => {
         }
     });
 
+    it('shows a complaint from another community by its community, never its reporter, and asks the node for no message (X5)', async () => {
+        const complaint = {
+            id: 'r-complaint', reason: 'offensive content', createdAt: '2026-11-15T09:00:00Z', outcome: 'open', reporterCallsign: 'riverside.example',
+            targetCallsign: 'Oscar', postId: null, pulseItem: null, targetMessageId: '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b',
+            groupMessage: null, directMessage: null,
+            fromAnotherCommunity: { from: 'riverside.example', words: 'You lot are useless', signedAt: '2026-11-15T08:00:00Z' },
+        };
+        REPORTS.push(complaint as typeof REPORTS[number]);
+        try {
+            mockNode();
+            await act(async () => {
+                render(<ModeratorView nodeUrl="https://mullum.example" communityName="Mullum" onLogout={() => {}} />);
+            });
+            await waitFor(() => expect(screen.getAllByTestId('moderator-report')).toHaveLength(4));
+            const card = screen.getAllByTestId('moderator-report')[3];
+            expect(within(card).getByText(/From another community, riverside\.example/)).toBeInTheDocument();
+            expect(within(card).getByText('A message Oscar sent to riverside.example')).toBeInTheDocument();
+            expect(within(card).getByText('You lot are useless')).toBeInTheDocument();
+            expect(within(card).getByText(/Who reported it isn't shown/)).toBeInTheDocument();
+            expect(within(card).queryByText(/Reported by/)).toBeNull();
+            expect(calls.filter(c => c.url.includes('/message'))).toHaveLength(0);
+        } finally {
+            REPORTS.pop();
+        }
+    });
+
     it('filters by outcome and shows the open count', async () => {
         await renderView();
         expect(screen.getByRole('button', { name: 'Open (3)' })).toHaveAttribute('aria-pressed', 'true');

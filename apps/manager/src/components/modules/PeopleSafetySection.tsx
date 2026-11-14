@@ -653,7 +653,28 @@ export function PeopleSafetySection({
                                                         credential={nodeCredential(activeNode)}
                                                     />
                                                 )}
-                                                {report.targetMessageId && !report.directMessage && report.id && (
+                                                {report.targetHome && (
+                                                    // A line from another community: only its own community can act on its sender (server: engine/relay-complaint.ts).
+                                                    <p className="m-0 text-xs text-nature-300" data-testid="report-outside-line">
+                                                        From another community: <span className="font-semibold text-white">{report.targetHome}</span>.{' '}
+                                                        {report.complaintTold === 'sent' ? 'Their community has been told.'
+                                                            : report.complaintTold === 'failed' ? "Their community's server didn't take the complaint."
+                                                            : 'Telling their community.'}
+                                                        {' '}They are blocked for the member who reported them.
+                                                    </p>
+                                                )}
+                                                {report.fromAnotherCommunity && (
+                                                    // A complaint another community's server sent about a member here. It never names who reported.
+                                                    <div className="text-xs space-y-1 text-nature-300 bg-nature-900/60 px-2.5 py-1 rounded-lg border border-nature-800/80" data-testid="report-from-another-community">
+                                                        <p className="m-0">
+                                                            A complaint from another community, <span className="font-semibold text-white">{report.fromAnotherCommunity.from}</span>,
+                                                            about a message this member sent there{report.fromAnotherCommunity.signedAt ? ` on ${new Date(report.fromAnotherCommunity.signedAt).toLocaleDateString()}` : ''}.
+                                                            Who reported it isn't shown. The words are what their reporter says it said.
+                                                        </p>
+                                                        {report.fromAnotherCommunity.words && <p className="m-0 text-nature-200 whitespace-pre-line">{report.fromAnotherCommunity.words}</p>}
+                                                    </div>
+                                                )}
+                                                {report.targetMessageId && !report.directMessage && !report.fromAnotherCommunity && report.id && (
                                                     // A locked group chat's message, reported with its key (server: engine/group-chat-report.ts).
                                                     <ReportedGroupMessage
                                                         nodeUrl={activeNode.url}

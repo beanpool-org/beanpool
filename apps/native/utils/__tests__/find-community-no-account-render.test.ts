@@ -115,7 +115,8 @@ vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: vi.fn(async () => '
 vi.mock('../node-claim', () => ({ readClaimStatus: vi.fn(async () => ({ kind: 'claimed' })) }));
 vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: vi.fn(async () => 'unanswered') }));
 // The registrations a remembered knock runs (web push W4), never the phone's push service itself here.
-vi.mock('../../services/push-notifications', () => ({ registerAfterKnock: vi.fn(async () => {}) }));
+const push = vi.hoisted(() => ({ registerAfterKnock: vi.fn(async (_community: string) => {}) }));
+vi.mock('../../services/push-notifications', () => push);
 vi.mock('../../components/AddressSearch', () => ({ AddressSearch: () => null }));
 
 import FindCommunityScreen from '../../app/find-community';
@@ -130,6 +131,7 @@ beforeEach(() => {
     store.clear();
     who.identity = null;
     who.setIdentity.mockClear();
+    push.registerAfterKnock.mockClear();
     for (const f of [directory.fetchCommunities, directory.fetchGlobalHome, knocks.sendKnock, knocks.readKnockStatus, keys.knockKeyForThisPhone, keys.commitKnockKey,
         location.getForegroundPermissionsAsync, location.getLastKnownPositionAsync, nav.router.push, nav.router.replace]) vi.mocked(f).mockClear();
     directory.fetchCommunities.mockResolvedValue({ ok: true, value: { communities: [], total: 0, fetchedAt: '2026-10-29T00:00:00.000Z' } });
@@ -223,6 +225,9 @@ describe('Find a community with no account on the phone', () => {
         expect(fromNode).toBeNull();
         // Remembered, and its answer read from that community only, signed by the knock's key.
         expect(knocks.readKnockStatus).toHaveBeenCalledWith(RIVERSIDE, expect.objectContaining({ publicKey: DRAFT.publicKey }));
+        // And the push registrations run for the community just asked, so a waiting phone's token goes there even where an
+        // earlier request there ended (web push W4).
+        await vi.waitFor(() => expect(push.registerAfterKnock.mock.calls).toEqual([[RIVERSIDE]]), { timeout: 2000, interval: 10 });
     });
 
     /** The real utils/knock-key.ts behind the screen, over the key store above: nothing of the key's rule is stubbed. */

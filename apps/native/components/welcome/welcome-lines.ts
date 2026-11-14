@@ -66,13 +66,9 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Relay Node Offline: The selected community node is currently unreachable.': word('Relay Node Offline: The selected community node is currently unreachable.'),
     'The community node did not confirm the invite. Please try again.': word('The community node did not confirm the invite. Please try again.'),
     'No identity to register': word('No identity to register'),
-    // utils/sso-recovery.ts recoverAccountWithSso: its progress, and why it stopped.
-    'Connecting to node recovery session...': word('Connecting to node recovery session...'),
-    'Requesting secure sign-in challenge...': word('Requesting secure sign-in challenge...'),
-    'Verifying sign-in with node...': word('Verifying sign-in with node...'),
-    'Downloading recovery fragments...': word('Downloading recovery fragments...'),
-    'Reconstructing account identity...': word('Reconstructing account identity...'),
-    'Collecting node fragment...': word('Collecting node fragment...'),
+    // utils/sso-recovery.ts recoverAccountWithSso: its progress (the web's words for the find, WebRestore.tsx), and why it
+    // stopped.
+    'Finding your account…': word('Finding your account…'),
     'Account restored successfully!': word('Account restored successfully!'),
     'Could not determine user identifier for this sign-in.': word('Could not determine user identifier for this sign-in.'),
     // utils/vault.ts subjectOf: the key vault's restore, from a sign-in whose token names no account.
@@ -80,7 +76,6 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Sign-in token does not contain a valid subject claim (sub).': word('Sign-in token does not contain a valid subject claim (sub).'),
     "Your community's copy didn't open on this phone, so nothing was changed. Start again, or use your 12 words.": word("Your community's copy didn't open on this phone, so nothing was changed. Start again, or use your 12 words."),
     "Getting back in with a sign-in goes through BeanPool's key vault in this version of the app. Your 12 words work any time.": word("Getting back in with a sign-in goes through BeanPool's key vault in this version of the app. Your 12 words work any time."),
-    'Enter your callsign to recover your account.': word('Enter your callsign to recover your account.'),
     'Enter your community node address.': word('Enter your community node address.'),
     "That node address doesn't look right. Use something like node.yourcommunity.org": word("That node address doesn't look right. Use something like node.yourcommunity.org"),
     'That node address is insecure (http on a public host). Use https:// instead.': word('That node address is insecure (http on a public host). Use https:// instead.'),
@@ -196,15 +191,15 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
         pattern: /^Lots of people are joining right now\. Setting up a 12-words account will take (.+) on this phone\. Or sign in to join now\.$/,
         words: (m) => t('Lots of people are joining right now. Setting up a 12-words account will take {time} on this phone. Or sign in to join now.', { time: aboutWords(m[1]) }),
     },
-    // utils/sso-recovery.ts: the sign-in under way, and a community's refusal with no words of its own, by its status.
+    // utils/sso-recovery.ts: the sign-in under way, the account picked coming back (the web's words, WebRestore.tsx), and a
+    // community's refusal of the copy with no words of its own, by its status.
     {
         pattern: /^Signing in with (Apple|Google|Facebook)\.\.\.$/,
         words: (m) => t('Signing in with {provider}...', { provider: m[1] }),
     },
+    // The account's name as the community gives it, whatever it holds.
+    { pattern: /^Getting ([\s\S]+) back…$/, words: (m) => t('Getting {name} back…', { name: m[1] }) },
     { pattern: /^Failed to fetch fragments \((\d+)\)$/, words: (m) => t('Failed to fetch fragments ({status})', { status: m[1] }) },
-    { pattern: /^Could not open recovery session \((\d+)\)$/, words: (m) => t('Could not open recovery session ({status})', { status: m[1] }) },
-    { pattern: /^Could not obtain sign-in challenge \((\d+)\)$/, words: (m) => t('Could not obtain sign-in challenge ({status})', { status: m[1] }) },
-    { pattern: /^Sign-in verification failed \((\d+)\)$/, words: (m) => t('Sign-in verification failed ({status})', { status: m[1] }) },
     { pattern: /^Hub release failed \((\d+)\)$/, words: (m) => t('Hub release failed ({status})', { status: m[1] }) },
     // utils/sso-signin.ts: a sign-in that didn't finish, with the node's or the provider's own words after it.
     { pattern: /^Could not reach your node: ([\s\S]*)$/, words: (m) => t('Could not reach your node: {reason}', { reason: m[1] }) },

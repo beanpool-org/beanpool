@@ -312,7 +312,8 @@ describe('the tap (tellMeWhenTheyAnswer)', () => {
             const [method, origin, p, body] = vi.mocked(signedFetchAt).mock.calls[0];
             expect([method, origin, p]).toEqual(['POST', 'https://node.example', '/api/web-push']);
             expect(JSON.parse(body)).toEqual({ subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/x', keys: { p256dh: 'P', auth: 'A' } }, lang: 'fr' });
-            expect(readWebPushPin('https://node.example', ASKER)).toEqual({ origin: 'https://node.example', publicKey: ASKER, subId: 'c'.repeat(64), pushKey: 'd'.repeat(64), vapidKey });
+            // Kept as Tell me's (`asker`): never given again at an open, and never On in Settings (web-push.members.test.ts).
+            expect(readWebPushPin('https://node.example', ASKER)).toEqual({ origin: 'https://node.example', publicKey: ASKER, subId: 'c'.repeat(64), pushKey: 'd'.repeat(64), vapidKey, for: 'asker' });
         } finally {
             fetchSpy.mockRestore();
         }

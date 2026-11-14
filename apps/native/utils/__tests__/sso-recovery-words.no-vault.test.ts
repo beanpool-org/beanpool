@@ -42,7 +42,7 @@ import {
 import { signedPost } from '../node-post';
 import { signInWithGoogle } from '../sso-signin';
 import { recoverAccountWithSso } from '../sso-recovery';
-import { stubCommunityLookup } from './community-lookup';
+import { findAnswer, noNodeContacted } from './community-find';
 
 // Test phrases only (BIP-39 vectors), never a real account's.
 const WORDS = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
@@ -58,9 +58,10 @@ function mockSignInAndNode(sealed: SealedShare) {
     (signInWithGoogle as any).mockResolvedValue({ idToken: token, nonce: 'n' });
     (signedPost as any).mockImplementation(async (_url: string, path: string) => {
         const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
+        // The community's find names Marty with this key for the sign-in (community-find.ts).
+        const found = findAnswer(path, [{ publicKey: PUB, callsign: 'Marty' }], 'n');
+        if (found) return found;
         if (path === '/api/recovery/collect') return ok({ collectionId: 'c1', threshold: 1 });
-        if (path === '/api/recovery/collect/sso-nonce') return ok({ nonce: 'n' });
-        if (path === '/api/recovery/collect/sso') return ok({ collected: 1, threshold: 1, enough: true });
         if (path === '/api/recovery/collect/fragments') {
             return ok({
                 collected: 1, threshold: 1, enough: true,
@@ -77,7 +78,7 @@ function mockSignInAndNode(sealed: SealedShare) {
 
 async function restore() {
     return recoverAccountWithSso({
-        callsign: 'Marty', anchorUrl: 'https://test.beanpool.org', provider: 'google',
+        anchorUrl: 'https://test.beanpool.org', provider: 'google',
     });
 }
 
@@ -106,8 +107,8 @@ async function withWordsBox(sealed: SealedShare, words: string[]): Promise<Seale
 describe('a sign-in restore and the 12 words', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        // The community lists Marty with this key (community-lookup.ts); nothing else is contacted.
-        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: PUB, callsign: 'Marty' }]);
+        // Nothing but the stubbed recovery routes is contacted (community-find.ts).
+        noNodeContacted();
     });
 
     afterEach(() => {

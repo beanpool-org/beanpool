@@ -8,12 +8,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     HANDOFF_DOOR, accountFrom, accountMessage, answerFrom, answerMessage, awaitHandoffJoin, forgetHandedOver, handedOverHere, handoffAtLoad,
-    handoffJoined, handoffOrigin, handoffUrl, isHandoffNonce, isReadyFrom, markHandedOver, newHandoffNonce, readyMessage, runHandoff,
+    handoffJoined, handoffOrigin, handoffUrl, isHandoffNonce, isReadyFrom, markHandedOver, newHandoffNonce, readyMessage, runHandoff, takeHandoffParams,
 } from './handoff';
 import { generateIdentity, type BeanPoolIdentity } from './identity';
 
 const GLOBAL = 'https://global.example.org';
-const BYRON = 'https://byron.example.org';
+const RIVERSIDE = 'https://riverside.example.org';
 const SPY = 'https://spy.example.org';
 
 /** A stand-in window: what was posted to it, and with which target origin. */
@@ -33,8 +33,8 @@ describe('the address the holder opens', () => {
         const nonce = newHandoffNonce();
         expect(isHandoffNonce(nonce)).toBe(true);
         expect(newHandoffNonce()).not.toBe(nonce);
-        const url = handoffUrl(BYRON, nonce, GLOBAL);
-        expect(url).toBe(`${BYRON}/app?door=${HANDOFF_DOOR}&n=${nonce}&from=${encodeURIComponent(GLOBAL)}`);
+        const url = handoffUrl(RIVERSIDE, nonce, GLOBAL);
+        expect(url).toBe(`${RIVERSIDE}/app?door=${HANDOFF_DOOR}&n=${nonce}&from=${encodeURIComponent(GLOBAL)}`);
         expect(url).not.toContain(me.privateKey);
         expect(url).not.toContain(me.publicKey);
         // The address is exactly the line above: the constants and the nonce. "door", "hand", "off" and "example" are in
@@ -44,14 +44,33 @@ describe('the address the holder opens', () => {
 
     it('the receiver reads only a well-formed handoff from another https origin', () => {
         const n = 'a'.repeat(32);
-        expect(handoffAtLoad(`?door=handoff&n=${n}&from=${encodeURIComponent(GLOBAL)}`, BYRON)).toEqual({ nonce: n, from: GLOBAL });
-        expect(handoffAtLoad(`?door=ask&n=${n}&from=${encodeURIComponent(GLOBAL)}`, BYRON)).toBeNull();
-        expect(handoffAtLoad(`?door=handoff&n=${'a'.repeat(31)}&from=${encodeURIComponent(GLOBAL)}`, BYRON)).toBeNull();
-        expect(handoffAtLoad(`?door=handoff&n=${'A'.repeat(32)}&from=${encodeURIComponent(GLOBAL)}`, BYRON)).toBeNull();
-        expect(handoffAtLoad(`?door=handoff&n=${n}&from=${encodeURIComponent('http://global.example.org')}`, BYRON)).toBeNull();
-        expect(handoffAtLoad(`?door=handoff&n=${n}&from=${encodeURIComponent(`${GLOBAL}/app`)}`, BYRON)).toBeNull();
-        expect(handoffAtLoad(`?door=handoff&n=${n}&from=${encodeURIComponent(BYRON)}`, BYRON)).toBeNull();
-        expect(handoffAtLoad(`?door=handoff&n=${n}`, BYRON)).toBeNull();
+        expect(handoffAtLoad(`?door=handoff&n=${n}&from=${encodeURIComponent(GLOBAL)}`, RIVERSIDE)).toEqual({ nonce: n, from: GLOBAL, listing: null });
+        expect(handoffAtLoad(`?door=ask&n=${n}&from=${encodeURIComponent(GLOBAL)}`, RIVERSIDE)).toBeNull();
+        expect(handoffAtLoad(`?door=handoff&n=${'a'.repeat(31)}&from=${encodeURIComponent(GLOBAL)}`, RIVERSIDE)).toBeNull();
+        expect(handoffAtLoad(`?door=handoff&n=${'A'.repeat(32)}&from=${encodeURIComponent(GLOBAL)}`, RIVERSIDE)).toBeNull();
+        expect(handoffAtLoad(`?door=handoff&n=${n}&from=${encodeURIComponent('http://global.example.org')}`, RIVERSIDE)).toBeNull();
+        expect(handoffAtLoad(`?door=handoff&n=${n}&from=${encodeURIComponent(`${GLOBAL}/app`)}`, RIVERSIDE)).toBeNull();
+        expect(handoffAtLoad(`?door=handoff&n=${n}&from=${encodeURIComponent(RIVERSIDE)}`, RIVERSIDE)).toBeNull();
+        expect(handoffAtLoad(`?door=handoff&n=${n}`, RIVERSIDE)).toBeNull();
+    });
+
+    it('carries the listing the member came for from a copy (G4): an id and nothing else, read back by the receiver', () => {
+        const nonce = newHandoffNonce();
+        const post = '3f2b8c1e-5d4a-4e7b-9a10-0c6d2e8f1a34';
+        const url = handoffUrl(RIVERSIDE, nonce, GLOBAL, post);
+        expect(url).toBe(`${RIVERSIDE}/app?door=${HANDOFF_DOOR}&n=${nonce}&from=${encodeURIComponent(GLOBAL)}&listing=${post}`);
+        expect(handoffAtLoad(new URL(url).search, RIVERSIDE)).toEqual({ nonce, from: GLOBAL, listing: post });
+        // Anything that is no id goes nowhere: not into the address, not out of it.
+        expect(handoffUrl(RIVERSIDE, nonce, GLOBAL, 'https://spy.example.org/?x=1')).toBe(handoffUrl(RIVERSIDE, nonce, GLOBAL));
+        expect(handoffUrl(RIVERSIDE, nonce, GLOBAL, null)).toBe(handoffUrl(RIVERSIDE, nonce, GLOBAL));
+        expect(handoffAtLoad(`?door=handoff&n=${nonce}&from=${encodeURIComponent(GLOBAL)}&listing=${encodeURIComponent('a b/c')}`, RIVERSIDE)).toEqual({ nonce, from: GLOBAL, listing: null });
+    });
+
+    it('the receiver takes the listing out of its address with the rest of the handoff', () => {
+        window.history.replaceState(null, '', `/app?door=handoff&n=${'a'.repeat(32)}&from=${encodeURIComponent(GLOBAL)}&listing=p1&lang=es`);
+        takeHandoffParams();
+        expect(window.location.search).toBe('?lang=es');
+        window.history.replaceState(null, '', '/');
     });
 
     it('a holder origin is https, a host with a dot (or an IPv4), a port at most', () => {
@@ -131,19 +150,19 @@ describe('the holder posts the account only to the knock\'s origin, after its pa
         const { win, posted } = fakeWindow();
         const { win: spy } = fakeWindow();
         const ends: string[] = [];
-        runHandoff({ win, origin: BYRON, nonce, account, listenOn: host, onEnd: (e) => ends.push(e) });
-        host.dispatchEvent(event(readyMessage(nonce), BYRON, spy));
+        runHandoff({ win, origin: RIVERSIDE, nonce, account, listenOn: host, onEnd: (e) => ends.push(e) });
+        host.dispatchEvent(event(readyMessage(nonce), RIVERSIDE, spy));
         host.dispatchEvent(event(readyMessage(nonce), SPY, win));
-        host.dispatchEvent(event(readyMessage('e'.repeat(32)), BYRON, win));
+        host.dispatchEvent(event(readyMessage('e'.repeat(32)), RIVERSIDE, win));
         await vi.advanceTimersByTimeAsync(10);
         expect(posted).toEqual([]);
-        host.dispatchEvent(event(readyMessage(nonce), BYRON, win));
+        host.dispatchEvent(event(readyMessage(nonce), RIVERSIDE, win));
         await vi.advanceTimersByTimeAsync(10);
         expect(posted).toHaveLength(1);
-        expect(posted[0].targetOrigin).toBe(BYRON);
+        expect(posted[0].targetOrigin).toBe(RIVERSIDE);
         expect((posted[0].data as { type: string }).type).toBe('account');
         // A second ready posts nothing more.
-        host.dispatchEvent(event(readyMessage(nonce), BYRON, win));
+        host.dispatchEvent(event(readyMessage(nonce), RIVERSIDE, win));
         await vi.advanceTimersByTimeAsync(10);
         expect(posted).toHaveLength(1);
         expect(ends).toEqual([]);
@@ -153,27 +172,27 @@ describe('the holder posts the account only to the knock\'s origin, after its pa
         const { win } = fakeWindow();
         const { win: spy } = fakeWindow();
         const ends: string[] = [];
-        runHandoff({ win, origin: BYRON, nonce, account, listenOn: host, onEnd: (e) => ends.push(e) });
-        host.dispatchEvent(event(answerMessage(nonce, 'joined'), BYRON, win));
+        runHandoff({ win, origin: RIVERSIDE, nonce, account, listenOn: host, onEnd: (e) => ends.push(e) });
+        host.dispatchEvent(event(answerMessage(nonce, 'joined'), RIVERSIDE, win));
         expect(ends).toEqual([]);
-        host.dispatchEvent(event(readyMessage(nonce), BYRON, win));
+        host.dispatchEvent(event(readyMessage(nonce), RIVERSIDE, win));
         await vi.advanceTimersByTimeAsync(10);
         host.dispatchEvent(event(answerMessage(nonce, 'joined'), SPY, win));
-        host.dispatchEvent(event(answerMessage(nonce, 'joined'), BYRON, spy));
-        host.dispatchEvent(event(answerMessage('e'.repeat(32), 'joined'), BYRON, win));
+        host.dispatchEvent(event(answerMessage(nonce, 'joined'), RIVERSIDE, spy));
+        host.dispatchEvent(event(answerMessage('e'.repeat(32), 'joined'), RIVERSIDE, win));
         expect(ends).toEqual([]);
-        host.dispatchEvent(event(answerMessage(nonce, 'joined'), BYRON, win));
-        host.dispatchEvent(event(answerMessage(nonce, 'refused'), BYRON, win));
+        host.dispatchEvent(event(answerMessage(nonce, 'joined'), RIVERSIDE, win));
+        host.dispatchEvent(event(answerMessage(nonce, 'refused'), RIVERSIDE, win));
         expect(ends).toEqual(['joined']);
-        expect(answerFrom(event(answerMessage(nonce, 'held'), BYRON, win), win, BYRON, nonce)).toBe('held');
-        expect(answerFrom(event({ ...answerMessage(nonce, 'held'), type: 'steal' }, BYRON, win), win, BYRON, nonce)).toBeNull();
+        expect(answerFrom(event(answerMessage(nonce, 'held'), RIVERSIDE, win), win, RIVERSIDE, nonce)).toBe('held');
+        expect(answerFrom(event({ ...answerMessage(nonce, 'held'), type: 'steal' }, RIVERSIDE, win), win, RIVERSIDE, nonce)).toBeNull();
     });
 
     it('no ready in 20 s: late (the fallback shows), nothing posted; a late ready, by the same checks, still gets it, at that origin only', async () => {
         const { win, posted } = fakeWindow();
         const ends: string[] = [];
         const late = vi.fn();
-        runHandoff({ win, origin: BYRON, nonce, account, listenOn: host, onLate: late, onEnd: (e) => ends.push(e) });
+        runHandoff({ win, origin: RIVERSIDE, nonce, account, listenOn: host, onLate: late, onEnd: (e) => ends.push(e) });
         await vi.advanceTimersByTimeAsync(19_000);
         expect(late).not.toHaveBeenCalled();
         await vi.advanceTimersByTimeAsync(1_001);
@@ -184,10 +203,10 @@ describe('the holder posts the account only to the knock\'s origin, after its pa
         host.dispatchEvent(event(readyMessage(nonce), SPY, win));
         await vi.advanceTimersByTimeAsync(10);
         expect(posted).toEqual([]);
-        host.dispatchEvent(event(readyMessage(nonce), BYRON, win));
+        host.dispatchEvent(event(readyMessage(nonce), RIVERSIDE, win));
         await vi.advanceTimersByTimeAsync(10);
         expect(posted).toHaveLength(1);
-        expect(posted[0].targetOrigin).toBe(BYRON);
+        expect(posted[0].targetOrigin).toBe(RIVERSIDE);
         expect(ends).toEqual([]);
         expect(late).toHaveBeenCalledTimes(1);
     });
@@ -195,22 +214,22 @@ describe('the holder posts the account only to the knock\'s origin, after its pa
     it('nothing at all for 15 minutes: timeout, nothing posted; a window closed before its ready: timeout; after the account: closed', async () => {
         const ends: string[] = [];
         const silent = fakeWindow();
-        runHandoff({ win: silent.win, origin: BYRON, nonce, account, listenOn: host, onEnd: (e) => ends.push(e) });
+        runHandoff({ win: silent.win, origin: RIVERSIDE, nonce, account, listenOn: host, onEnd: (e) => ends.push(e) });
         await vi.advanceTimersByTimeAsync(15 * 60_000 + 1);
-        host.dispatchEvent(event(readyMessage(nonce), BYRON, silent.win));
+        host.dispatchEvent(event(readyMessage(nonce), RIVERSIDE, silent.win));
         await vi.advanceTimersByTimeAsync(10);
         expect(ends).toEqual(['timeout']);
         expect(silent.posted).toEqual([]);
 
         const shut = fakeWindow();
-        runHandoff({ win: shut.win, origin: BYRON, nonce, account, listenOn: host, onEnd: (e) => ends.push(e) });
+        runHandoff({ win: shut.win, origin: RIVERSIDE, nonce, account, listenOn: host, onEnd: (e) => ends.push(e) });
         shut.win.closed = true;
         await vi.advanceTimersByTimeAsync(1_001);
         expect(ends).toEqual(['timeout', 'timeout']);
 
         const second = fakeWindow();
-        runHandoff({ win: second.win, origin: BYRON, nonce, account, listenOn: host, onEnd: (e) => ends.push(e) });
-        host.dispatchEvent(event(readyMessage(nonce), BYRON, second.win));
+        runHandoff({ win: second.win, origin: RIVERSIDE, nonce, account, listenOn: host, onEnd: (e) => ends.push(e) });
+        host.dispatchEvent(event(readyMessage(nonce), RIVERSIDE, second.win));
         await vi.advanceTimersByTimeAsync(10);
         second.win.closed = true;
         await vi.advanceTimersByTimeAsync(1_001);
@@ -219,8 +238,8 @@ describe('the holder posts the account only to the knock\'s origin, after its pa
 
     it('isReadyFrom is the one test for the ready', () => {
         const { win } = fakeWindow();
-        expect(isReadyFrom(event(readyMessage(nonce), BYRON, win), win, BYRON, nonce)).toBe(true);
-        expect(isReadyFrom(event(readyMessage(nonce), BYRON, win), win, SPY, nonce)).toBe(false);
+        expect(isReadyFrom(event(readyMessage(nonce), RIVERSIDE, win), win, RIVERSIDE, nonce)).toBe(true);
+        expect(isReadyFrom(event(readyMessage(nonce), RIVERSIDE, win), win, SPY, nonce)).toBe(false);
     });
 });
 

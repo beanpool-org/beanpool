@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>بدء مجتمع — BeanPool</title>
-    <meta name="description" content="يعمل كل مجتمع على خادمه الخاص: خادم صغير يحتوي على أعضاء ذلك المجتمع ومنشوراته وسجله. يديره شخص محلي. وإذا لم تكن بلدتك أو منطقتك تمتلك خادماً بعد، فيمكنك أن تكون أنت هذا الشخص.">
+    <meta name="description" content="ابدأ مجتمع BeanPool على حاسوب غير مستخدم في المنزل أو على خادم صغير مستأجر: ما يتطلبه ذلك، وكيف تختار عنوانك، والكتلة الوحيدة التي تلصقها لتثبيته.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="style.css?v=2.9">
@@ -136,8 +136,8 @@ docker compose exec beanpool-node beanpool claim</code>
 
         <h3 class="run-node-sub">السطر الأخير: beanpool claim</h3>
         <ol class="run-node-steps">
-            <li><strong>الرمز ورمز QR.</strong> يعرض رمز مطالبة لمرة واحدة ورمز QR. امسح رمز QR بكاميرا هاتفك، أو افتح BeanPool، واكتب عنوان الخادم ضمن <strong>اعثر على مجتمعك</strong> وانقر على <strong>مطالبة</strong>. يصبح ذلك الهاتف هو المالك.</li>
-            <li><strong>الإعدادات.</strong> افتح عنوانك (أو عنوان الخادم نفسه) متبوعاً بـ <strong>/settings</strong>. يساعدك معالج الإعداد في تسمية مجتمعك، ويطلب منك إضافة مالك ثانٍ، وينشئ ثلاث دعوات تأسيسية. حدد موقعك على الخريطة ضمن هوية الخادم حتى يتمكن الأشخاص القريبون منك من العثور عليك.</li>
+            <li><strong>الرمز ورمز QR.</strong> يعرض رمز مطالبة لمرة واحدة، ورمز QR، وخطوات مرقّمة لما عليك فعله بعد ذلك. أولاً، على الهاتف الذي سيملك المجتمع، ثبّت BeanPool من <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a> أو <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a>. ثم امسح رمز QR بكاميرا هاتفك، أو افتح BeanPool واضغط على <strong>هل قمت بتثبيت BeanPool على خادم؟ طالب به</strong> (إذا كان على الهاتف حساب بالفعل: اضغط على حبة الفاصوليا في الأعلى، ثم <strong>إعداد خادم مجتمع جديد</strong>). لا تتم المطالبة إلا من تطبيق الهاتف. تُنشئ المطالبة حسابك في BeanPool على ذلك الهاتف، دون دعوة ودون أي شيء من مشروع BeanPool: اكتب اسمك، واضغط على <strong>المطالبة وتولي الملكية</strong>، ودوّن الكلمات الـ 12 التي تظهر لك. الهاتف الذي عليه حساب بالفعل يطالب بهذا الحساب. يصبح ذلك الهاتف هو المالك.</li>
+            <li><strong>الإعدادات.</strong> افتح عنوانك (أو عنوان الخادم نفسه) متبوعاً بـ <strong dir="ltr">/settings</strong>: أكّد إعداداتك الأساسية (Core settings)، وأنشئ رمز استعادة، وأضف مالكاً ثانياً، وادعُ أعضاءك الأوائل. وإلى أن تُنجز كل خطوة من الخطوات الثلاث الأولى، تعرضها الصفحة الرئيسية للإعدادات (Home) ضمن <strong>Action Required</strong> (إجراء مطلوب). معالج Cold-Start في صفحة Home اختياري: خطوته الأخيرة تنشئ ثلاث دعوات تأسيسية يمكنك طباعتها. حدد موقعك على الخريطة ضمن Node Identity حتى يتمكن الأشخاص القريبون منك من العثور عليك.</li>
         </ol>
         <p class="run-node-note">إذا ظهرت عبارة <strong>No claim code after 5 minutes</strong>، أو أظهر <code>beanpool claim</code> عبارة <strong>This community has no claim code waiting</strong>، فهذا يعني أن الخادم لم يكتمل تشغيله بعد: يوضح <code>docker compose logs beanpool-node</code> المرحلة التي وصل إليها. بمجرد أن يذكر السجل أن المجتمع ليس له مالك بعد ولديه رمز مطالبة، شغّل السطر الأخير مرة أخرى. الخطوات الكاملة موجودة في <a href="guide/operators/first-time-setup.html">الإعداد للمرة الأولى</a> في دليل المشغل.</p>
 

@@ -57,7 +57,7 @@ vi.mock('../../app/ThemeContext', () => ({
 const world = vi.hoisted(() => ({
     identity: { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32) } as any,
     focus: null as null | (() => void | (() => void)),
-    anchor: 'https://mullum.example.org' as string | null,
+    anchor: 'https://riverside.example.org' as string | null,
     beans: true as boolean | undefined,
     sync: 0,
 }));
@@ -81,10 +81,10 @@ import { BringListingsSheetView, type BringStep } from '../../components/BringLi
 import { darkColors, lightColors } from '../../constants/colors';
 import { BRING_WORDS, type BringLine, type BringOffer, type BringPlan, type BringResult, type OwnListing } from '../bring-listings';
 
-const OFFER: BringOffer = { publicKey: world.identity.publicKey, from: 'https://global.beanpool.org', to: 'https://mullum.example.org', name: 'Mullumbimby', at: 1 };
+const OFFER: BringOffer = { publicKey: world.identity.publicKey, from: 'https://global.beanpool.org', to: 'https://riverside.example.org', name: 'Riverside', at: 1 };
 const LISTING = { id: 'a', title: 'Seedlings' } as OwnListing;
 const PLAN: BringPlan = { bring: [LISTING, { ...LISTING, id: 'b' }], gone: [] };
-const LONG_NAME = 'Mullumbimby and the Brunswick Valley Community Exchange';
+const LONG_NAME = 'Riverside Gardens and the Long Valley Community Exchange';
 
 let host: HTMLElement;
 let root: Root | null = null;
@@ -237,14 +237,14 @@ describe('Home\'s sheet', () => {
     it('a yes runs the plan and says what came of it', async () => {
         await draw(createElement(BringListingsSheet));
         await focus();
-        expect(host.textContent).toContain('Bring my listings to Mullumbimby?');
+        expect(host.textContent).toContain('Bring my listings to Riverside?');
         expect(calls.run).not.toHaveBeenCalled();
         await press('bring-listings-yes');
         expect(calls.accept).toHaveBeenCalledWith(OFFER);
         expect(calls.run.mock.calls[0][1]).toBe(PLAN);
         expect(calls.settle).toHaveBeenCalled();
         expect(world.sync).toBe(1);
-        expect(host.textContent).toContain('2 listings are now in Mullumbimby.');
+        expect(host.textContent).toContain('2 listings are now in Riverside.');
         await press('bring-listings-done');
         expect(shown()).toBe(false);
     });
@@ -291,7 +291,7 @@ describe('Home\'s sheet', () => {
         await act(async () => { finish({ brought: 2, lines: [], kept: false, held: false }); });
         await flush();
         expect(calls.settle).toHaveBeenCalled();
-        expect(host.textContent).toContain('2 listings are now in Mullumbimby.');
+        expect(host.textContent).toContain('2 listings are now in Riverside.');
     });
 
     it('a Home drawn anew during a run starts no second one: each listing would be sent twice, and the node refuses the copy', async () => {
@@ -317,7 +317,7 @@ describe('Home\'s sheet', () => {
         await focus();
         await press('bring-listings-yes');
         expect(host.textContent).toContain('None of your listings came across.');
-        expect(host.textContent).toContain('Mullumbimby takes a Need once you have listed an Offer there. List one, and you will be asked again.');
+        expect(host.textContent).toContain('Riverside takes a Need once you have listed an Offer there. List one, and you will be asked again.');
         expect(calls.settle).toHaveBeenCalled();
         expect(calls.close).not.toHaveBeenCalled();
         await press('bring-listings-done');
@@ -348,7 +348,7 @@ describe('Home\'s sheet', () => {
             calls.run.mockResolvedValue({ brought: 1, lines: [], kept: false, held: false });
             await draw(createElement(BringListingsSheet));
             await focus();
-            expect(host.textContent).toContain('1 listing is now in Mullumbimby.');
+            expect(host.textContent).toContain('1 listing is now in Riverside.');
         });
 
         it('does not repeat what stayed behind, and with nothing left closes quietly', async () => {
@@ -367,5 +367,72 @@ describe('Home\'s sheet', () => {
         await focus();
         await focus();
         expect(calls.plan).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("Home's sheet says when it has nothing more to show (list on global G4: the listing a member came for opens after it)", () => {
+    const quietCount = (q: ReturnType<typeof vi.fn>) => q.mock.calls.length;
+
+    it.each([
+        ['no offer waiting', () => calls.pending.mockResolvedValue(null)],
+        ['offline', () => calls.plan.mockResolvedValue('unreachable')],
+        ['nothing to bring', () => calls.plan.mockResolvedValue({ bring: [], gone: [] })],
+    ])('%s: quiet at once, with no sheet', async (_what, setUp) => {
+        setUp();
+        const onQuiet = vi.fn();
+        await draw(createElement(BringListingsSheet, { onQuiet }));
+        await focus();
+        expect(byId('bring-listings-sheet')).toBeNull();
+        expect(quietCount(onQuiet)).toBe(1);
+    });
+
+    it('never while the offer is up; quiet once it is put off', async () => {
+        const onQuiet = vi.fn();
+        await draw(createElement(BringListingsSheet, { onQuiet }));
+        await focus();
+        expect(byId('bring-listings-sheet')).not.toBeNull();
+        expect(quietCount(onQuiet)).toBe(0);
+        await press('bring-listings-not-now');
+        expect(quietCount(onQuiet)).toBe(1);
+    });
+
+    it('never during a run, nor while its answer is up; quiet at Done', async () => {
+        const onQuiet = vi.fn();
+        await draw(createElement(BringListingsSheet, { onQuiet }));
+        await focus();
+        await press('bring-listings-yes');
+        expect(host.textContent).toContain('2 listings are now in Riverside.');
+        expect(quietCount(onQuiet)).toBe(0);
+        await press('bring-listings-done');
+        expect(quietCount(onQuiet)).toBe(1);
+    });
+
+    it('a run put away is not the end: quiet only once its answer, shown when it ends, is put away', async () => {
+        let finish: (r: BringResult) => void = () => {};
+        calls.run.mockImplementation(async (_o: unknown, _p: unknown, _i: unknown, onStep: (d: number, t: number) => void) => {
+            onStep(1, 2);
+            return new Promise<BringResult>((resolve) => { finish = resolve; });
+        });
+        const onQuiet = vi.fn();
+        await draw(createElement(BringListingsSheet, { onQuiet }));
+        await focus();
+        await press('bring-listings-yes');
+        await press('bring-listings-hide');
+        expect(quietCount(onQuiet)).toBe(0);
+        await act(async () => { finish({ brought: 2, lines: [], kept: false, held: false }); });
+        await flush();
+        expect(quietCount(onQuiet)).toBe(0);
+        await press('bring-listings-done');
+        expect(quietCount(onQuiet)).toBe(1);
+    });
+
+    it('a look that comes again within the gap shows nothing, and says so', async () => {
+        const onQuiet = vi.fn();
+        await draw(createElement(BringListingsSheet, { onQuiet }));
+        await focus();
+        await press('bring-listings-not-now');
+        await focus();
+        expect(byId('bring-listings-sheet')).toBeNull();
+        expect(quietCount(onQuiet)).toBe(2);
     });
 });

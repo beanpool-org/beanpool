@@ -1,16 +1,16 @@
 /**
- * A sign-in restore at the member's community saves only the account the community lists for the name being restored
- * (launch-readiness review 3, 2026-10-15). The web's restore already refused anything else (apps/pwa/src/lib/
- * web-restore.ts `openRestoredAccount`); the phone checked only the copy's 12 words against the key it rebuilt, then
- * saved that key under the name typed. So a wrong or stale copy, or a community answering for another member, put a key
- * on the phone under a name that isn't that key's account there, and the member signed in as nobody or as someone else.
+ * A sign-in restore at the member's community finds the account from the sign-in itself, with nothing typed (recovery
+ * S2, scratch design DESIGN-recovery-no-callsign-fable.md §3-§6; Marty, 9 Nov), and saves only the account the find
+ * named for it (launch-readiness review 3, 2026-10-15; #1951).
  *
- * Now the phone asks the community's public lookup (`GET /api/recovery/lookup/:callsign`, utils/sso-recovery.ts
- * `lookupRestorable`) before anything is released, and the rebuilt key must be one it lists for that name. If it
- * isn't, or the lookup can't be had, nothing on the phone changes.
+ * The phone asks the community's find (`POST /api/recovery/find-nonce`, the provider's sheet with that nonce, then
+ * `POST /api/recovery/find`), which names the accounts this sign-in protects there, by name and key; the member picks
+ * when there are several; `POST /api/recovery/collect { candidatePublicKey }` opens the session for that key by the
+ * find's hold and releases its copy; the copy opens; and the key it makes must be the key the find named for the account
+ * picked. Anything else (another account's copy, a community answering for someone else) saves nothing. The web's
+ * restore makes the same check (apps/pwa/src/lib/web-restore.ts `openRestoredAccount`).
  *
- * Nothing here contacts a node or a provider: the lookup is a stubbed fetch, the recovery routes a stubbed signedPost,
- * Google's sheet a stub.
+ * Nothing here contacts a node or a provider: the recovery routes are a stubbed signedPost, Google's sheet a stub.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -39,6 +39,9 @@ vi.mock('../sso-signin', () => ({
     signInWithGoogle: vi.fn(),
     signInWithApple: vi.fn(),
     signInWithFacebook: vi.fn(),
+    SsoSignInError: class SsoSignInError extends Error {
+        constructor(readonly reason: string, message: string) { super(message); }
+    },
 }));
 vi.mock('../node-post', () => ({ signedPost: vi.fn() }));
 vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => {}) }));
@@ -48,12 +51,13 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { signedPost } from '../node-post';
 import { signInWithGoogle } from '../sso-signin';
-import { recoverAccountWithSso } from '../sso-recovery';
+import { recoverAccountWithSso, type FoundAccount } from '../sso-recovery';
 import { restoreRefusalText } from '../community-restore-copy';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { mnemonicToKeypair, seedToKeypair } from '../crypto';
 import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
 import { PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { answer, noNodeContacted, type Found } from './community-find';
 
 // Test phrases only (BIP-39 vectors), never a real account's.
 const WORDS = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
@@ -63,25 +67,40 @@ const OTHER_SEED = new Uint8Array(32).fill(42);
 const SUB = '110169484474386276334';
 /** Not a real community: every request to it is answered by a stub below, and any other is refused. */
 const NODE = 'https://community.example.org';
-const LOOKUP = `${NODE}/api/recovery/lookup/`;
+/** The community's name, as the screen names the one chosen (utils/restore-community-choices.ts restoreCommunityName). */
+const COMMUNITY = 'Riverside';
 const ANCHOR = 'beanpool_anchor_url';
 const WRONG_ACCOUNT = "The account that came back isn't Marty, so nothing was saved on this phone. Try again, or use your 12 words.";
 const UNREACHABLE = "Can't reach the community right now. Try again in a minute.";
-const NO_ACCOUNT = "No account called Marty here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.";
-const TWO_ACCOUNTS = "Two accounts here have this name. Use your 12 words, or ask your community's admin.";
+const NONE_HERE = 'No account at Riverside uses this Google account. Try another community, or your 12 words.';
+const TOO_OLD = "Riverside's server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.";
+const WRONG_CLOCK = "The community couldn't accept this because this device's date and time look wrong. Check them in this device's settings (set them to automatic), then try again.";
 
-/** Google hands back a token whose `sub` is SUB; the node releases `fragments`. Records every recovery route asked. */
-function mockSignInAndNode(fragments: Array<Record<string, unknown>>) {
+/** What the community answers each route; a test overrides one. Records nothing itself: see {@link routesAsked}. */
+interface Node {
+    nonce: string;
+    found: Found[];
+    fragments: Array<Record<string, unknown>>;
+    /** Overrides for a route: its answer, or a throw for a network failure. */
+    override: Partial<Record<string, () => Response>>;
+}
+let node: Node;
+
+/** Google hands back a token whose `sub` is SUB and the nonce it was given; the community answers as {@link node} says. */
+function mockSignInAndNode() {
     const b64 = (s: string) => Buffer.from(s).toString('base64url');
-    const token = `${b64(JSON.stringify({ alg: 'RS256' }))}.${b64(JSON.stringify({ sub: SUB }))}.sig`;
-    vi.mocked(signInWithGoogle).mockResolvedValue({ idToken: token, nonce: 'n' });
+    vi.mocked(signInWithGoogle).mockImplementation(async (nonce: string) => ({
+        idToken: `${b64(JSON.stringify({ alg: 'RS256' }))}.${b64(JSON.stringify({ sub: SUB, nonce }))}.sig`,
+        nonce,
+    }));
     vi.mocked(signedPost).mockImplementation(async (_url: string, path: string) => {
-        const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body }) as unknown as Response;
-        if (path === '/api/recovery/collect') return ok({ collectionId: 'c1', threshold: 1 });
-        if (path === '/api/recovery/collect/sso-nonce') return ok({ nonce: 'n' });
-        if (path === '/api/recovery/collect/sso') return ok({ collected: 1, threshold: 1, enough: true });
-        if (path === '/api/recovery/collect/hub') return ok({ status: 'hub_released' });
-        if (path === '/api/recovery/collect/fragments') return ok({ collected: 1, threshold: 1, enough: true, fragments });
+        const over = node.override[path];
+        if (over) return over();
+        if (path === '/api/recovery/find-nonce') return answer(200, { nonce: node.nonce, expiresInSeconds: 600, clientIds: {} });
+        if (path === '/api/recovery/find') return answer(200, { accounts: node.found });
+        if (path === '/api/recovery/collect') return answer(200, { collectionId: 'c1', threshold: 1 });
+        if (path === '/api/recovery/collect/hub') return answer(200, { status: 'hub_released' });
+        if (path === '/api/recovery/collect/fragments') return answer(200, { collected: 1, threshold: 1, enough: true, fragments: node.fragments });
         throw new Error(`Unexpected path: ${path}`);
     });
 }
@@ -95,30 +114,13 @@ async function singleBlob(seed: Uint8Array, words?: string[]) {
     }];
 }
 
-/** The community's lookup answers `answer` for any name, and every other request is refused. */
-function lookupAnswers(answer: () => Response | Promise<Response>) {
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-        if (String(input).startsWith(LOOKUP)) return answer();
-        throw new Error(`No node may be contacted from a test: ${String(input)}`);
-    }));
-}
-
-function listed(accounts: Array<{ publicKey: string; callsign: string; canRecoverBySso?: boolean }>) {
-    lookupAnswers(() => new Response(JSON.stringify(accounts.map(a => ({
-        canRecoverBySso: true, joinedAt: null, avatarUrl: null, ...a,
-    }))), { status: 200, headers: { 'Content-Type': 'application/json' } }));
-}
-
-function restore(callsign = 'Marty', confirmReplace?: (outgoing: BeanPoolIdentity) => Promise<boolean>) {
-    return recoverAccountWithSso({
-        callsign, anchorUrl: NODE, provider: 'google',
-        ...(confirmReplace ? { confirmReplace } : {}),
-    });
+function restore(options: { confirmReplace?: (outgoing: BeanPoolIdentity) => Promise<boolean>; pickAccount?: (accounts: FoundAccount[]) => Promise<FoundAccount | null>; signal?: AbortSignal } = {}) {
+    return recoverAccountWithSso({ anchorUrl: NODE, provider: 'google', ...options });
 }
 
 /** What the restore screen shows for this restore's refusal: welcome.tsx shows community-restore-copy.ts `restoreRefusalText`. */
 function shown(attempt: Promise<unknown>): Promise<string | undefined> {
-    return attempt.then(() => 'no refusal', restoreRefusalText);
+    return attempt.then(() => 'no refusal', (e) => restoreRefusalText(e, COMMUNITY));
 }
 
 /** Which of the node's recovery routes were asked, in order. */
@@ -126,21 +128,30 @@ function routesAsked(): string[] {
     return vi.mocked(signedPost).mock.calls.map(([, path]) => path as string);
 }
 
+/** The body the phone sent to `path` (the last time it asked it). */
+function sentTo(path: string): unknown {
+    const calls = vi.mocked(signedPost).mock.calls.filter(([, p]) => p === path);
+    return calls[calls.length - 1]?.[2];
+}
+
 let accountPub: string;
+let otherPub: string;
 const quietError = console.error;
 
 beforeEach(async () => {
     mem.async.clear();
     mem.secure.clear();
     vi.clearAllMocks();
-    // Until a test says what the lookup answers, every request is refused.
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('No node may be contacted from a test'); }));
+    noNodeContacted();
     // identity.ts's legacy migration reaches AsyncStorage through `require`, which no vi.mock reaches: quietened.
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
         if (typeof args[0] === 'string' && args[0].startsWith('Failed to migrate legacy identity')) return;
         quietError(...args);
     });
     accountPub = (await mnemonicToKeypair(WORDS)).publicKeyHex;
+    otherPub = (await seedToKeypair(OTHER_SEED)).publicKeyHex;
+    node = { nonce: 'find-nonce-1', found: [{ publicKey: accountPub, callsign: 'Marty' }], fragments: await singleBlob(SEED, WORDS), override: {} };
+    mockSignInAndNode();
 });
 
 afterEach(() => {
@@ -159,56 +170,151 @@ async function expectEmptyPhone() {
     expect(await loadIdentity()).toBeNull();
 }
 
-describe('a sign-in restore at the community: the key must be the account the community lists for the name', () => {
-    it('opens the session for the one listed account by its key, so a name another account holds in another case still opens', async () => {
-        listed([{ publicKey: accountPub, callsign: 'Marty' }]);
-        mockSignInAndNode(await singleBlob(OTHER_SEED));
-        await restore('marty').catch(() => undefined);
-        expect(routesAsked()[0]).toBe('/api/recovery/collect');
-        expect(vi.mocked(signedPost).mock.calls[0][2]).toEqual({ callsign: 'marty', candidatePublicKey: accountPub });
+describe('a sign-in restore at the community finds the account from the sign-in, with nothing typed', () => {
+    it('one account found: it comes back with its key, its 12 words and the name the find gives it', async () => {
+        const { identity } = await restore();
+
+        expect(identity).toMatchObject({ publicKey: accountPub, callsign: 'Marty', mnemonic: WORDS });
+        expect(await loadIdentity()).toMatchObject({ publicKey: accountPub, callsign: 'Marty', mnemonic: WORDS });
+        expect(mem.async.get(ANCHOR)).toBe(NODE);
+        // The find first, then the collect for the key it named, then the copy. No name is sent anywhere, and the name
+        // routes (the lookup, /collect/sso-nonce, /collect/sso) are never asked.
+        expect(routesAsked()).toEqual(['/api/recovery/find-nonce', '/api/recovery/find', '/api/recovery/collect', '/api/recovery/collect/fragments']);
+        expect(sentTo('/api/recovery/collect')).toEqual({ candidatePublicKey: accountPub });
+        expect(JSON.stringify(vi.mocked(signedPost).mock.calls.map(([, , body]) => body))).not.toContain('callsign');
+        expect(vi.mocked(fetch)).not.toHaveBeenCalled();
     });
 
-    it('two accounts with the name and a sign-in copy each: a 409 from the community is a plain sentence, never its own English, and nothing is saved', async () => {
-        listed([{ publicKey: accountPub, callsign: 'Marty' }, { publicKey: 'ab'.repeat(32), callsign: 'MARTY' }]);
-        mockSignInAndNode(await singleBlob(OTHER_SEED));
-        vi.mocked(signedPost).mockImplementationOnce(async () => ({
-            ok: false, status: 409, json: async () => ({ error: 'That callsign is ambiguous on this node.' }),
-        }) as unknown as Response);
+    it('the find nonce goes to the sign-in, and the find carries the provider, its token and that nonce', async () => {
+        node.nonce = 'find-nonce-77';
+        await restore();
 
-        expect(await shown(restore('marty'))).toBe(TWO_ACCOUNTS);
-        expect(routesAsked()).toEqual(['/api/recovery/collect']);
+        expect(signInWithGoogle).toHaveBeenCalledWith('find-nonce-77');
+        expect(sentTo('/api/recovery/find-nonce')).toEqual({});
+        const find = sentTo('/api/recovery/find') as Record<string, string>;
+        expect(find.provider).toBe('google');
+        expect(find.nonce).toBe('find-nonce-77');
+        expect(JSON.parse(Buffer.from(find.idToken.split('.')[1], 'base64url').toString()).sub).toBe(SUB);
+        // Every call is signed by the restore's one throwaway key, never an account's: the node binds the nonce, the find's
+        // hold and the session to it.
+        const signers = new Set(vi.mocked(signedPost).mock.calls.map(([, , , who]) => (who as BeanPoolIdentity).publicKey));
+        expect(signers.size).toBe(1);
+        expect([...signers][0]).not.toBe(accountPub);
+    });
+
+    it('several accounts found: the member picks, and only the one picked is collected and saved, under its own name', async () => {
+        node.found = [{ publicKey: otherPub, callsign: 'Marty (child)' }, { publicKey: accountPub, callsign: 'Marty' }];
+        const pickAccount = vi.fn(async (accounts: FoundAccount[]) => accounts.find((a) => a.publicKey === accountPub) ?? null);
+
+        const { identity } = await restore({ pickAccount });
+
+        expect(pickAccount).toHaveBeenCalledTimes(1);
+        expect(pickAccount.mock.calls[0][0]).toEqual([{ publicKey: otherPub, callsign: 'Marty (child)' }, { publicKey: accountPub, callsign: 'Marty' }]);
+        expect(sentTo('/api/recovery/collect')).toEqual({ candidatePublicKey: accountPub });
+        expect(identity).toMatchObject({ publicKey: accountPub, callsign: 'Marty' });
+    });
+
+    it('one account found: no question, it is the one collected', async () => {
+        const pickAccount = vi.fn(async () => null);
+        await restore({ pickAccount });
+        expect(pickAccount).not.toHaveBeenCalled();
+        expect(sentTo('/api/recovery/collect')).toEqual({ candidatePublicKey: accountPub });
+    });
+
+    it('several found and the member goes back: nothing is collected or saved, and nothing is said', async () => {
+        node.found = [{ publicKey: otherPub, callsign: 'Kim' }, { publicKey: accountPub, callsign: 'Marty' }];
+
+        const failed = await restore({ pickAccount: async () => null }).then(() => null, (e) => e);
+
+        expect(failed?.reason).toBe('cancelled');
+        expect(routesAsked()).toEqual(['/api/recovery/find-nonce', '/api/recovery/find']);
         await expectEmptyPhone();
     });
 
-    it('with several accounts listed, opens by the name alone, as before (this screen has no list to pick from)', async () => {
-        listed([{ publicKey: accountPub, callsign: 'Marty' }, { publicKey: 'ab'.repeat(32), callsign: 'MARTY' }]);
-        mockSignInAndNode(await singleBlob(OTHER_SEED));
-        await restore('marty').catch(() => undefined);
-        expect(vi.mocked(signedPost).mock.calls[0][2]).toEqual({ callsign: 'marty' });
+    it('several found and the screen has no way to ask: nothing is collected or saved', async () => {
+        node.found = [{ publicKey: otherPub, callsign: 'Kim' }, { publicKey: accountPub, callsign: 'Marty' }];
+        await expect(restore()).rejects.toBeTruthy();
+        expect(routesAsked()).toEqual(['/api/recovery/find-nonce', '/api/recovery/find']);
+        await expectEmptyPhone();
     });
 
-    it('a copy that opens to another key than the listed account saves nothing, and says so', async () => {
-        listed([{ publicKey: accountPub, callsign: 'Marty' }]);
-        mockSignInAndNode(await singleBlob(OTHER_SEED));
+    it('a pick that is not one of the accounts found collects nothing', async () => {
+        node.found = [{ publicKey: otherPub, callsign: 'Kim' }, { publicKey: accountPub, callsign: 'Marty' }];
+        await expect(restore({ pickAccount: async () => ({ publicKey: 'ab'.repeat(32), callsign: 'Marty' }) })).rejects.toBeTruthy();
+        expect(routesAsked()).not.toContain('/api/recovery/collect');
+        await expectEmptyPhone();
+    });
 
+    it('an account the find names twice, or without a key or a name, is listed once or not at all', async () => {
+        node.found = [
+            { publicKey: accountPub.toUpperCase(), callsign: 'Marty' }, { publicKey: accountPub, callsign: 'Marty' },
+            { publicKey: 'not-a-key', callsign: 'Kim' }, { publicKey: otherPub, callsign: '  ' },
+        ];
+        const pickAccount = vi.fn(async () => null);
+
+        const { identity } = await restore({ pickAccount });
+
+        // One account is left, so nothing is asked.
+        expect(pickAccount).not.toHaveBeenCalled();
+        expect(identity.publicKey).toBe(accountPub);
+    });
+
+    it('the key is compared case-folded, as the web compares it, and saved as the phone makes it', async () => {
+        node.found = [{ publicKey: accountPub.toUpperCase(), callsign: 'Marty' }];
+        const { identity } = await restore();
+        expect(identity.publicKey).toBe(accountPub);
+        expect(sentTo('/api/recovery/collect')).toEqual({ candidatePublicKey: accountPub });
+    });
+
+    it('a cancel after the sign-in and before the collect releases nothing', async () => {
+        const abort = new AbortController();
+        vi.mocked(signInWithGoogle).mockImplementationOnce(async (nonce: string) => {
+            abort.abort();
+            const b64 = (s: string) => Buffer.from(s).toString('base64url');
+            return { idToken: `${b64('{}')}.${b64(JSON.stringify({ sub: SUB }))}.sig`, nonce };
+        });
+
+        await expect(restore({ signal: abort.signal })).rejects.toMatchObject({ reason: 'cancelled' });
+
+        expect(routesAsked()).not.toContain('/api/recovery/collect');
+        await expectEmptyPhone();
+    });
+});
+
+describe('a sign-in restore at the community: the key must be the account the find named', () => {
+    it('a copy that opens to another key than the account picked saves nothing, and says so by that account\'s name', async () => {
+        node.fragments = await singleBlob(OTHER_SEED);
         expect(await shown(restore())).toBe(WRONG_ACCOUNT);
-
         await expectEmptyPhone();
     });
 
     it('the old two-part kind of copy is held to the same rule', async () => {
-        listed([{ publicKey: accountPub, callsign: 'Marty' }]);
         const { hubShare, otherHalf } = await splitHubAndWhole(OTHER_SEED);
         const sso = await sealShareToSso(otherHalf, 'google', SUB);
         const hub = recordShareForHub(hubShare);
-        mockSignInAndNode([
+        node.fragments = [
             { holderType: 'sso', shareIndex: 2, payload: sso.encryptedShare, payloadIv: sso.shareIv, payloadTag: sso.shareTag, kdfParams: sso.kdfParams },
             { holderType: 'hub', shareIndex: 1, payload: hub.encryptedShare, payloadIv: hub.shareIv, payloadTag: hub.shareTag, kdfParams: hub.kdfParams },
-        ]);
+        ];
 
         expect(await shown(restore())).toBe(WRONG_ACCOUNT);
-
+        // The hub's half is asked for in the same session the find's hold opened.
+        expect(routesAsked()).toContain('/api/recovery/collect/hub');
         await expectEmptyPhone();
+    });
+
+    it('the old two-part kind of the account picked comes back', async () => {
+        const { hubShare, otherHalf } = await splitHubAndWhole(SEED);
+        const sso = await sealShareToSso(otherHalf, 'google', SUB);
+        const hub = recordShareForHub(hubShare);
+        node.fragments = [
+            { holderType: 'sso', shareIndex: 2, payload: sso.encryptedShare, payloadIv: sso.shareIv, payloadTag: sso.shareTag, kdfParams: sso.kdfParams },
+            { holderType: 'hub', shareIndex: 1, payload: hub.encryptedShare, payloadIv: hub.shareIv, payloadTag: hub.shareTag, kdfParams: hub.kdfParams },
+        ];
+
+        const { identity } = await restore();
+
+        expect(identity).toMatchObject({ publicKey: accountPub, callsign: 'Marty' });
     });
 
     it('onto a phone that holds an account: a wrong copy never asks to replace it, and the phone keeps everything', async () => {
@@ -217,113 +323,87 @@ describe('a sign-in restore at the community: the key must be the account the co
         const record = { step: 'profileSetup' as const, inviteCode: 'INV-ABC', anchorUrl: 'https://mullum.example.org', callsign: 'Kim', redeemed: true };
         await setPendingOnboarding(record);
         mem.async.set(ANCHOR, 'https://mullum.example.org');
-        // The rest of what an account and the phone keep: its saved communities, a theme, a push token.
         mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: 'https://mullum.example.org', name: 'Mullum' }]));
         mem.async.set('beanpool_theme_mode', 'dark');
         mem.secure.set(PUSH_TOKEN_STORE_KEY, 'ExponentPushToken[kims-phone]');
         const before = wholePhone();
-        listed([{ publicKey: accountPub, callsign: 'Marty' }]);
-        mockSignInAndNode(await singleBlob(OTHER_SEED));
+        node.fragments = await singleBlob(OTHER_SEED);
         const confirmReplace = vi.fn(async () => true);
 
-        expect(await shown(restore('Marty', confirmReplace))).toBe(WRONG_ACCOUNT);
+        expect(await shown(restore({ confirmReplace }))).toBe(WRONG_ACCOUNT);
 
         expect(confirmReplace).not.toHaveBeenCalled();
-        // Not one key in either store changed.
         expect(wholePhone()).toBe(before);
         expect(await loadIdentity()).toEqual(phone);
         expect(await getPendingOnboarding()).toEqual(record);
         expect(mem.async.get(ANCHOR)).toBe('https://mullum.example.org');
     });
-
-    it('the listed account comes back: its key, its 12 words, and the name the community lists for it', async () => {
-        listed([{ publicKey: accountPub, callsign: 'Marty' }]);
-        mockSignInAndNode(await singleBlob(SEED, WORDS));
-
-        const { identity } = await restore();
-
-        expect(identity.publicKey).toBe(accountPub);
-        expect(identity.callsign).toBe('Marty');
-        expect(identity.mnemonic).toEqual(WORDS);
-        expect(await loadIdentity()).toMatchObject({ publicKey: accountPub, callsign: 'Marty', mnemonic: WORDS });
-        expect(mem.async.get(ANCHOR)).toBe(NODE);
-        // Asked of the community the member named, for the name they typed, before anything was released.
-        expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
-        expect(String(vi.mocked(fetch).mock.calls[0][0])).toBe(`${LOOKUP}Marty`);
-        expect(routesAsked()[0]).toBe('/api/recovery/collect');
-    });
-
-    it('the key is compared case-folded, as the web compares it, and saved as the phone makes it', async () => {
-        listed([{ publicKey: accountPub.toUpperCase(), callsign: 'Marty' }]);
-        mockSignInAndNode(await singleBlob(SEED));
-
-        const { identity } = await restore();
-
-        expect(identity.publicKey).toBe(accountPub);
-        expect((await loadIdentity())?.publicKey).toBe(accountPub);
-    });
-
-    it('saves the name the community lists for that key, not the case it was typed in', async () => {
-        listed([{ publicKey: accountPub, callsign: 'Marty' }]);
-        mockSignInAndNode(await singleBlob(SEED));
-
-        const { identity } = await restore('marty');
-
-        expect(identity.callsign).toBe('Marty');
-        expect((await loadIdentity())?.callsign).toBe('Marty');
-    });
-
-    // Defensive only: a real community refuses a name that more than one live account answers to, at
-    // /api/recovery/collect with 409 (apps/server/src/routes/recovery-collect.ts, `resolveCallsign` ambiguous), before
-    // anything is released, and registration refuses a case namesake. This pins that the name saved is always the one
-    // listed for the rebuilt key.
-    it('two accounts listed for one name (namesakes in different case): the one whose key it is', async () => {
-        const otherPub = (await seedToKeypair(OTHER_SEED)).publicKeyHex;
-        listed([{ publicKey: otherPub, callsign: 'marty' }, { publicKey: accountPub, callsign: 'Marty' }]);
-        mockSignInAndNode(await singleBlob(SEED));
-
-        const { identity } = await restore('MARTY');
-
-        expect(identity).toMatchObject({ publicKey: accountPub, callsign: 'Marty' });
-    });
 });
 
-describe('a sign-in restore at the community: no lookup, no restore', () => {
-    for (const [what, answer] of [
-        ['the community can\'t be reached', () => { throw new TypeError('Network request failed'); }],
-        ['the lookup is rate limited', () => new Response(JSON.stringify({ error: 'slow down' }), { status: 429 })],
-        ['the community answers with something that is not a list', () => new Response(JSON.stringify({ accounts: [] }), { status: 200 })],
-    ] as const) {
-        it(`${what}: nothing is released and nothing saved, and the member is told to try again`, async () => {
-            lookupAnswers(answer);
-            mockSignInAndNode(await singleBlob(SEED));
-
-            expect(await shown(restore())).toBe(UNREACHABLE);
-
-            expect(signInWithGoogle).not.toHaveBeenCalled();
-            expect(routesAsked()).toEqual([]);
-            await expectEmptyPhone();
-        });
-    }
-
-    it('the community lists no account by that name: nothing is released and nothing saved, and the member is told why', async () => {
-        listed([]);
-        mockSignInAndNode(await singleBlob(SEED));
-
-        expect(await shown(restore())).toBe(NO_ACCOUNT);
-
-        expect(signInWithGoogle).not.toHaveBeenCalled();
-        expect(routesAsked()).toEqual([]);
+describe('a sign-in restore at the community: what stops it, and what the member is told', () => {
+    it('no account at the community uses this sign-in: nothing is collected or saved, and the member is told where and with what', async () => {
+        node.found = [];
+        expect(await shown(restore())).toBe(NONE_HERE);
+        expect(routesAsked()).toEqual(['/api/recovery/find-nonce', '/api/recovery/find']);
         await expectEmptyPhone();
     });
 
-    it('an account listed without a sign-in copy is no account a sign-in can bring back', async () => {
-        listed([{ publicKey: accountPub, callsign: 'Marty', canRecoverBySso: false }]);
-        mockSignInAndNode(await singleBlob(SEED));
-
-        expect(await shown(restore())).toBe(NO_ACCOUNT);
-
-        expect(routesAsked()).toEqual([]);
+    it('a server older than the find (no find nonce, 404): no sign-in is started, and the member is told to ask its admin', async () => {
+        node.override['/api/recovery/find-nonce'] = () => answer(404, 'Not Found');
+        expect(await shown(restore())).toBe(TOO_OLD);
+        expect(signInWithGoogle).not.toHaveBeenCalled();
+        expect(routesAsked()).toEqual(['/api/recovery/find-nonce']);
         await expectEmptyPhone();
+    });
+
+    it('the community can\'t be reached: no sign-in is started, nothing saved, and the member is told to try again', async () => {
+        node.override['/api/recovery/find-nonce'] = () => { throw new TypeError('Network request failed'); };
+        expect(await shown(restore())).toBe(UNREACHABLE);
+        expect(signInWithGoogle).not.toHaveBeenCalled();
+        await expectEmptyPhone();
+    });
+
+    it('the community drops out at the find or the collect: the same sentence, and nothing saved', async () => {
+        for (const path of ['/api/recovery/find', '/api/recovery/collect']) {
+            node.override = { [path]: () => { throw new TypeError('Network request failed'); } };
+            expect(await shown(restore()), path).toBe(UNREACHABLE);
+            await expectEmptyPhone();
+        }
+    });
+
+    it('a refused find says what the web says for the same answer (lib/web-restore.ts findRefusalMessage)', async () => {
+        const cases: Array<[Response, string]> = [
+            [answer(400, { error: 'That sign-in has expired.' }), 'That sign-in has expired.'],
+            [answer(401, { error: 'Request signature expired.' }), WRONG_CLOCK],
+            [answer(401, { error: 'x', code: 'sign_in' }), "Google sign-in couldn't be checked or took too long. Try again."],
+            [answer(429, {}), 'Too many tries from this network. Please try again later.'],
+            [answer(429, { error: 'Slow down.' }), 'Slow down.'],
+            [answer(503, { error: 'Busy finding another account. Wait a minute, then sign in again.', code: 'find_busy' }), 'Busy finding another account. Wait a minute, then sign in again.'],
+            [answer(503, {}), 'Google sign-in could not be checked right now. Please try again in a minute.'],
+            [answer(500, {}), 'The community could not bring the account back (500). Please try again.'],
+        ];
+        for (const [refusal, sentence] of cases) {
+            node.override = { '/api/recovery/find': () => refusal };
+            expect(await shown(restore()), sentence).toBe(sentence);
+            expect(routesAsked()).not.toContain('/api/recovery/collect');
+            await expectEmptyPhone();
+        }
+    });
+
+    it('a refused find nonce says the web\'s sentence for it, before any sign-in', async () => {
+        node.override['/api/recovery/find-nonce'] = () => answer(409, { error: 'This server is a standby.', code: 'standby' });
+        expect(await shown(restore())).toBe('This server is a standby.');
+        node.override['/api/recovery/find-nonce'] = () => answer(500, {});
+        expect(await shown(restore())).toBe('The community could not bring the account back (500). Please try again.');
+        expect(signInWithGoogle).not.toHaveBeenCalled();
+    });
+
+    it('a refused collect (the hold ran out) shows the community\'s words, and nothing is saved', async () => {
+        node.override['/api/recovery/collect'] = () => answer(400, { error: "Sign in with your account's sign-in first." });
+        expect(await shown(restore())).toBe("Sign in with your account's sign-in first.");
+        expect(routesAsked()).not.toContain('/api/recovery/collect/fragments');
+        await expectEmptyPhone();
+        node.override['/api/recovery/collect'] = () => answer(502, {});
+        expect(await shown(restore())).toBe('The community could not bring the account back (502). Please try again.');
     });
 });

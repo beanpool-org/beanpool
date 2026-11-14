@@ -103,12 +103,8 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
         needs: ['invites', 'knocks'],
         paths: [/^\/api\/join\/knocks?(\/|$)/],
     },
-    // "Tell me when they answer" (routes/web-push.ts, web push W1): in W1 only an applicant subscribes, so it goes with the
-    // requests to join. W2's members' browsers will take it off this gate.
-    {
-        needs: ['invites', 'knocks'],
-        paths: [/^\/api\/web-push(\/|$)/],
-    },
+    // Not /api/web-push (routes/web-push.ts): members' browsers are told whatever the switches (web push W2); an applicant's
+    // "Tell me when they answer" is refused there with the requests to join (`feature_off`, as this table would).
     // Invites (engine/invites.ts): making one (a member's code, an owner's or admin's seed invite) and joining with one
     // (a code, an offline ticket, and the pre-flight that checks either). Off on the global node, where the open door is
     // the only way in. The engine refuses underneath. A member's own invites and the invite tree still read: they make

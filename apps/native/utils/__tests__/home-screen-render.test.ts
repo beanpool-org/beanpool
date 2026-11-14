@@ -130,7 +130,9 @@ vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: wh
 const scheme = vi.hoisted(() => ({ dark: false }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors, darkColors } = await import('../../constants/colors');
-    return { useTheme: () => ({ colors: scheme.dark ? darkColors : lightColors, theme: scheme.dark ? 'dark' : 'light' }) };
+    const theme = () => ({ colors: scheme.dark ? darkColors : lightColors, theme: scheme.dark ? 'dark' : 'light' });
+    // useStyles: the Learn card's rows (components/learn/KnowledgeRowCard) make their styles through it (slice K7).
+    return { useTheme: theme, useStyles: (make: (t: ReturnType<typeof theme>) => unknown) => make(theme()) };
 });
 vi.mock('../../components/PageTitle', () => ({
     PageTitle: ({ title }: { title: string }) => createElement('h1', null, title),
@@ -227,7 +229,8 @@ function localMember(): HomeAnswer {
     const now = Date.now();
     return {
         generatedAt: iso(now), profile: 'local',
-        features: { beans: true, escrow: true, invites: true, exampleListings: false, decisions: true },
+        // Every switch on, Learn's too (slice K7): the first read, made before any answer, asks the same cards as the next.
+        features: { beans: true, escrow: true, invites: true, exampleListings: false, decisions: true, knowledge: true },
         me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member', tour: TOUR_ENDED },
         layout: everyV1Card(now),
         cards: {
@@ -1642,6 +1645,25 @@ describe('Arrange', () => {
         expect(sentIds(sent().at(-1)!)).toEqual(['pulse', 'decide', 'events', 'market']);
         expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Coming up moved to 2 of 3');
         expect(stripIds()).toEqual(['decide']);
+    });
+
+    it('↓ on the card above an arriving Learn card moves it under Learn: Learn kept first with its stamp, in one save, and said (review of #3154)', async () => {
+        mineOf(['events', 'market']);
+        const page = { id: 'k-bins', title: 'Bins day', line: 'The first line of the page.', topic: 'services', photo: null, checkedAt: iso(Date.now()), helped: 2, pinned: false, outdated: false };
+        node.answer = { ...node.answer, cards: { ...node.answer.cards, learn: { rows: [page] } } };
+        await render();
+        expect(cards().filter(id => ['events', 'market', 'learn'].includes(id))).toEqual(['events', 'market', 'learn']);
+        await open();
+        const posts = sent().length;
+        vi.mocked(AccessibilityInfo.announceForAccessibility).mockClear();
+        // Learn moves with the member's cards, so the Market's ↓ is on, and it does what it shows.
+        expect(has('home-arrange-market-down')).toBe(true);
+        await press('home-arrange-market-down');
+        expect(sent().length).toBe(posts + 1);
+        expect(sentIds(sent().at(-1)!)).toEqual(['events', 'learn', 'market']);
+        expect(Object.keys(JSON.parse(sent().at(-1)!.body).preferences['home.layout'].dismissed)).toEqual(['new:learn']);
+        expect(cards().filter(id => ['events', 'market', 'learn'].includes(id))).toEqual(['events', 'learn', 'market']);
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith(expect.stringMatching(/ moved to 3 of 3$/));
     });
 
     it('"Your way back in", when it is up, gets a band of its own in Arrange (it has none on Home) with arrows that move it; the card under it goes quiet', async () => {

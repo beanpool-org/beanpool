@@ -29,11 +29,11 @@ export type EverydayGroup = 'taking' | 'rules' | 'found' | 'connections';
 const GROUP_LOG: Record<EverydayGroup, string[]> = {
     taking: ['join', 'knocks'],
     rules: ['dmRequests', 'probation', 'autoHide', 'autoHideReports', 'autoMute', 'removalDecider', 'contacts'],
-    found: ['listed', 'doorCheck', 'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth'],
+    found: ['listed', 'doorCheck', 'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth', 'shareListingsFromHere'],
     connections: [],
 };
 
-type BoolKey = 'knocks' | 'doorCheck' | 'dmRequests' | 'probation' | 'autoHide' | 'autoMute' | 'contacts' | 'shareLocation' | 'shareMemberCount' | 'shareEmail' | 'sharePhone' | 'shareHealth';
+type BoolKey = 'knocks' | 'doorCheck' | 'dmRequests' | 'probation' | 'autoHide' | 'autoMute' | 'contacts' | 'shareLocation' | 'shareMemberCount' | 'shareEmail' | 'sharePhone' | 'shareHealth' | 'shareListingsFromHere';
 
 interface BoolRow { key: BoolKey; icon: string; name: string; summary: string; label: string; display?: (on: boolean) => string }
 
@@ -101,6 +101,9 @@ export function EverydayRuleRows({ activeNode, viewer, group, title, intro }: Ev
                 { key: 'shareEmail', icon: '📧', name: t('Share email'), summary: t('Puts the contact email in the public directory and on the map.'), label: t('Share email in directory'), display: onOff },
                 { key: 'sharePhone', icon: '📞', name: t('Share phone'), summary: t('Puts the contact phone in the public directory and on the map.'), label: t('Share phone in directory'), display: onOff },
                 { key: 'shareHealth', icon: '🖥️', name: t('Share health'), summary: t('Shares node health diagnostics with the BeanPool team for monitoring.'), label: t('Share node health diagnostics'), display: onOff },
+                // list-on-global G5: the honest sentence. A community can't stop a member posting on the global community; it says
+                // whether its own name and door go beside the post. Absent on a server from before it, and not shown.
+                { key: 'shareListingsFromHere', icon: '🏷️', name: t("Our name on members' listings on the global community"), summary: t('A member can show one of their listings on the global community. On, it appears there as from this community, with Ask to join beside it. Off, it appears with no name and no door. A member can post on the global community either way.'), label: t("Show our name on members' listings on the global community"), display: onOff },
             ],
             connections: [],
         };

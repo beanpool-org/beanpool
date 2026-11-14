@@ -24,15 +24,17 @@ const lay = (cards: HomeLayoutV2['cards'], updatedAt: string | null = AT): HomeL
 const one = (type: string) => ({ id: type, type });
 
 describe('D0: the default list (§2.2)', () => {
-    it("a newcomer's list is the sixteen, Welcome first, the Pulse after Coming up (DESIGN-pulse-home-fable.md §3.5, P0)", () => {
-        const sixteen = ['start', 'safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky'];
+    it("a newcomer's list is the seventeen, Welcome first, the Pulse after Coming up (DESIGN-pulse-home-fable.md §3.5, P0), Learn something local after Asked near you (DESIGN-local-knowledge-amend-fable.md §3.6, K7)", () => {
+        const sixteen = ['start', 'safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'learn', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky'];
         expect(HOME_DEFAULT_LIST).toEqual(sixteen);
         // The same list on the worldwide community and on a local one: the card is there on both (§3.8).
         for (const p of ['local', 'global'] as const) expect(ids(defaultCards(p))).toEqual(sixteen);
         expect(defaultHomeLayout()).toEqual({ v: 2, cards: sixteen.map(one), dismissed: {}, updatedAt: null });
-        // Each is a card the catalogue knows, one of a kind, and the list leaves eight places for the member's own.
+        // Each is a card the catalogue knows, one of a kind, and the list leaves seven places for the member's own.
         for (const id of sixteen) expect(core.homeCardType(id), id).toMatchObject({ id });
-        expect(HOME_FRAME_LIMITS.cards - sixteen.length).toBe(8);
+        expect(HOME_FRAME_LIMITS.cards - sixteen.length).toBe(7);
+        // Learn something local sits right after Asked near you (§3.6 "Starter set").
+        expect(sixteen.indexOf('learn')).toBe(sixteen.indexOf('asked') + 1);
         // The Pulse sits right after Coming up, before Your Beans (§3.5: position 7).
         expect(sixteen.indexOf('pulse')).toBe(sixteen.indexOf('events') + 1);
         // Left out on purpose (§2.2): Your enterprise, Your shop and tools, Grow your community, the member's own.
@@ -45,7 +47,7 @@ describe('D0: the default list (§2.2)', () => {
     });
 
     it('a never-saved Home asks the node for every default card it builds, so the cards are there from the first second', () => {
-        // With Learn something local arriving after the list (slice K7), asked in its catalogue place until the list holds it.
+        // Learn something local is in the list (slice K7), asked in its catalogue place.
         expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'events', 'market', 'asked', 'learn', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
     });
 
@@ -69,10 +71,10 @@ describe('D0: the default list (§2.2)', () => {
 });
 
 describe('D0: the tour ends on the default list (§2.3)', () => {
-    it('ending the tour on the default list leaves the other fifteen', () => {
+    it('ending the tour on the default list leaves the other sixteen', () => {
         const ended = endTourLayout(null, { now: NOW });
         expect(ids(ended.cards)).toEqual([...HOME_DEFAULT_LIST.slice(1)]);
-        expect(ended.cards).toHaveLength(15);
+        expect(ended.cards).toHaveLength(16);
         expect(ended.updatedAt).toBe(AT);
         expect(ids(endTourLayout(defaultHomeLayout(), { now: NOW }).cards)).toEqual([...HOME_DEFAULT_LIST.slice(1)]);
     });

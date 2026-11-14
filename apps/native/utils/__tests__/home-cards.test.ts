@@ -86,10 +86,10 @@ const find = (over: Partial<NonNullable<HomeCards['find']>> = {}): NonNullable<H
 describe('the catalogue and the newcomer\'s Home (CARD-FRAME §2.2, §3)', () => {
     it('one catalogue, core\'s: every type this build draws is in the registry; a newcomer starts with the default list, Welcome first, and the starter set is that list less Welcome', () => {
         for (const t of HOME_DRAWN) expect(homeCardType(t)).toBeDefined();
-        // DESIGN-home-default-fable.md §2.2: the sixteen (the Pulse after Coming up, DESIGN-pulse-home-fable.md §3.5), between the fixed two.
+        // DESIGN-home-default-fable.md §2.2: the seventeen (the Pulse after Coming up, DESIGN-pulse-home-fable.md §3.5; Learn something local after Asked near you, K7), between the fixed two.
         expect(ids(cardOrder(null))).toEqual(['needs', ...HOME_DEFAULT_LIST, 'community']);
         // "Asked near you" comes after the Market (cold-start N1); this build draws it since N2.
-        expect(ids(cardOrder(STARTER))).toEqual(['needs', 'safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky', 'community']);
+        expect(ids(cardOrder(STARTER))).toEqual(['needs', 'safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'learn', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky', 'community']);
         expect(HOME_DEFAULT_LIST.every(id => HOME_DRAWN.has(id as never))).toBe(true);
         expect(HOME_DRAWN.has('asked')).toBe(true);
     });
@@ -262,8 +262,9 @@ describe('the layout (§4)', () => {
 
     it('cards= is catalogue order then id, the same each time; no data-less cards; a move doesn\'t change it', () => {
         // A never-saved Home asks for every default card the node builds (DESIGN-home-default-fable.md §2.2).
-        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'events', 'market', 'asked', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
-        expect(cardsToAsk(EVERY)).toEqual(['needs', 'safety', 'find', 'steps', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
+        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'events', 'market', 'asked', 'learn', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
+        // A list saved before Learn something local: it arrives (slice K7), so it is asked in its catalogue place.
+        expect(cardsToAsk(EVERY)).toEqual(['needs', 'safety', 'find', 'steps', 'deals', 'enterprise', 'events', 'market', 'learn', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
         expect(cardsToAsk(layout({ order: ['beans', 'market'] }))).toEqual(cardsToAsk(EVERY));
     });
 
@@ -304,11 +305,11 @@ describe('the layout (§4)', () => {
         for (const off of ['beans', 'deals', 'enterprise', 'decide']) expect(asked).not.toContain(off);
         expect(asked).toEqual(['needs', 'safety', 'find', 'steps', 'events', 'market', 'groups', 'joined', 'pulse', 'notices', 'community']);
         // A local community with a feature switched off: that one alone.
-        expect(cardsToAsk(EVERY, [], answer({ features: { beans: true, escrow: false, invites: true, exampleListings: false, decisions: true } }))).toEqual(
+        expect(cardsToAsk(EVERY, [], answer({ features: { beans: true, escrow: false, invites: true, exampleListings: false, decisions: true, knowledge: true } }))).toEqual(
             cardsToAsk(EVERY).filter(id => id !== 'deals'));
         // Every type the list names on a local community that has them all on, as with no answer: the same address, so a
         // return is a 304 (Find your community is asked as before; the node builds it only where its directory is).
-        expect(cardsToAsk(EVERY, [], answer())).toEqual(cardsToAsk(EVERY));
+        expect(cardsToAsk(EVERY, [], answer({ features: { ...answer().features, knowledge: true } }))).toEqual(cardsToAsk(EVERY));
         // A saved search is asked by its id wherever it's on.
         const withSearch = { ...EVERY, cards: [{ id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } }, ...EVERY.cards] };
         expect(cardsToAsk(withSearch, [], global)).toContain('search-k2x7');
@@ -1222,7 +1223,7 @@ describe('the global node\'s Home (H4)', () => {
         const moved = moveCard(STARTER, 'market', 'up', inst('find', 'events', 'market'), NOW, pins)!;
         // First steps and What are you into? are in the starter set but not among the cards this test draws (inst(...) above):
         // they stay where they were, between the two (the default list, DESIGN-home-default-fable.md §2.2).
-        expect(ids(moved.cards)).toEqual(['safety', 'events', 'steps', 'interests', 'market', 'pulse', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky']);
+        expect(ids(moved.cards)).toEqual(['safety', 'events', 'steps', 'interests', 'market', 'pulse', 'beans', 'asked', 'learn', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky']);
         // The newcomer's list doesn't hold `find`: once the pin ends, the picker brings it back (CARD-FRAME §1.2, §3).
         expect(ids(cardOrder(moved))).not.toContain('find');
         expect(ids(cardOrder(EVERY))).toContain('find');

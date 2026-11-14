@@ -249,7 +249,14 @@ export interface TableHashes {
  * waiting is gone (its writer starts it again), a hidden forum post shows until it is reported again, and a report of a forum
  * post reads as a report of its writer; no Bean is in it.
  */
-export const TABLE_HASHES_VERSION = 40;
+/**
+ * 41: directory_cache gains listings_from_here (a community's name on its members' listings on the global community,
+ * DESIGN-list-on-global-fable.md §11 G5). Raised for the same reason as 8: a standby updated before its main server hashes the
+ * table over one more column. REPLICA_FORMAT stays: each side's import writes only the columns its own table has. What an
+ * older importer drops is a community's false: after a take-over from such a copy its name shows beside its members' copies
+ * until the new main server's first mirror run, 10 seconds after it starts, reads the registry again.
+ */
+export const TABLE_HASHES_VERSION = 41;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

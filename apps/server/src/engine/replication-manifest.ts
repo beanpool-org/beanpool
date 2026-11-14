@@ -380,7 +380,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     directory_cache: {
         kind: 'replicated', payload: 'directoryCache', watermark: 'updated_at',
-        columns: cols('community_key listed name node_url lat lng radius_km member_count contact_email contact_phone registry_updated_at first_seen_at updated_at promise accepting_knocks closing_on answers'),
+        columns: cols('community_key listed name node_url lat lng radius_km member_count contact_email contact_phone registry_updated_at first_seen_at updated_at promise accepting_knocks closing_on answers listings_from_here'),
     },
     join_requests: {
         kind: 'replicated-except', payload: 'joinRequests', watermark: 'updated_at',
@@ -879,6 +879,7 @@ export const NODE_CONFIG_BLOB_FIELDS: Record<string, SettingEntry> = {
     publishContactEmail: { kind: 'community-settings', reason: 'a directory switch; unset reads as not published (only an owner turns it on)' },
     publishContactPhone: { kind: 'community-settings', reason: 'a directory switch; unset reads as not published (only an owner turns it on)' },
     publishHealth: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
+    publishListingsFromHere: { kind: 'community-settings', reason: "a directory switch: the community's name beside members' listings on the global community; unset reads as on" },
     directoryPushIntervalHours: { kind: 'community-settings', reason: 'how often the directory is told' },
     lastDirectoryPush: { kind: 'per-server', reason: 'when this server last told the directory' },
     publicAddress: { kind: 'takeover-bundle', reason: 'the web address, with its tunnel token' },

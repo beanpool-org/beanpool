@@ -728,6 +728,12 @@ export interface NodeConfig {
     publishContactEmail?: boolean;
     publishContactPhone?: boolean;
     publishHealth?: boolean;
+    /**
+     * Whether the community's name, and Ask to join, appear beside a member's listing shown on the global community
+     * (DESIGN-list-on-global-fable.md §2, G5): the push's `listingsFromHere`. On unless an owner turned it off: only a stored
+     * `false` is off. A member can show a listing there either way.
+     */
+    publishListingsFromHere?: boolean;
     directoryPushIntervalHours?: number;
     lastDirectoryPush?: string;
     /**
@@ -9801,6 +9807,7 @@ export function getNodeConfig(): NodeConfig {
         publishContactEmail: config.publishContactEmail === true,
         publishContactPhone: config.publishContactPhone === true,
         publishHealth: config.publishHealth !== false,
+        publishListingsFromHere: config.publishListingsFromHere !== false,
         directoryPushIntervalHours: typeof config.directoryPushIntervalHours === 'number' ? config.directoryPushIntervalHours : 12,
         lastDirectoryPush: config.lastDirectoryPush,
         publicAddress: config.publicAddress ?? null,
@@ -9982,6 +9989,10 @@ export function getDirectoryInfo(): any {
     // Each only when the owner turned it on; otherwise null, so the directory drops one it was sent before.
     info.contactEmail = config.publishContactEmail && localConfig.contactEmail ? localConfig.contactEmail : null;
     info.contactPhone = config.publishContactPhone && localConfig.contactPhone ? localConfig.contactPhone : null;
+
+    // Always said, true or false: absent at the registry reads as on (a node from before the switch), so a community that
+    // turned it off says so at every push. A global node draws no from-line and no door on its members' copies while false.
+    info.listingsFromHere = config.publishListingsFromHere !== false;
 
     if (config.publishHealth) {
         const realVersion = getVersion();

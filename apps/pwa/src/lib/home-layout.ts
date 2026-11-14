@@ -22,7 +22,7 @@ import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard, resetHomeLayout, starterCards, t, word,
     newInstanceId, readChatSettings,
-    knockStillAnswerable, reorderIds,
+    knockStillAnswerable, reorderIds, arrivingCards, keepArrivedCard, type LearnHomeOpens,
     type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2,
 } from '@beanpool/core';
 import { drawnToolCardTypes } from '../tools/cards';
@@ -43,10 +43,17 @@ const FIXED: ReadonlySet<string> = new Set([FIXED_FIRST, FIXED_LAST]);
  * this build has a web half for (tools/cards.ts): Home's default branch draws it from the tool's manifest.
  */
 export const HOME_DRAWN: ReadonlySet<string> = new Set([
-    'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'shop', 'events', 'market', 'asked', 'search', 'decide', 'groups', 'chat',
+    'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'shop', 'events', 'market', 'asked', 'learn', 'search', 'decide', 'groups', 'chat',
     'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'tools', 'community',
     ...drawnToolCardTypes(),
 ]);
+
+/**
+ * The doors the Learn card may open beyond a page and Learn (core learnHomeLines): To check and the form are slice K4's
+ * views, not in LearnPage yet, so "N to check ›" and "Add the first thing…" are not drawn, and Home doesn't send
+ * `lands=learn` (the node sends `toCheck` only to an app that does). K4 turns each on with its view. The phone's is the same.
+ */
+export const LEARN_OPENS: LearnHomeOpens = {};
 
 /** Find your community is pinned for a member's first 30 days on the global node, then it can be removed (§4.1, §7). */
 export const FIND_PINNED_DAYS = 30;
@@ -223,6 +230,14 @@ export const STARTER_LAYOUT: HomeLayoutV2 = { v: 2, cards: starterCards(), dismi
 export const listOf = (layout: HomeLayoutV2 | null): HomeCardInstance[] => layout?.cards ?? defaultHomeLayout().cards;
 
 /**
+ * The cards that arrive on this Home (core `arrivingCards`, DESIGN-local-knowledge-amend-fable.md §3.6, slice K7) that this
+ * build draws: drawn once, after the member's own cards, until Keep on Home, Remove or a move writes their stamp.
+ */
+export const arrivingOn = (layout: HomeLayoutV2 | null): HomeCardInstance[] => arrivingCards(layout).filter(c => HOME_DRAWN.has(c.type));
+/** Whether this card is drawn as arriving: on Home, not yet on the member's list. */
+export const isArrivingCard = (layout: HomeLayoutV2 | null, id: string): boolean => arrivingOn(layout).some(c => c.id === id);
+
+/**
  * The cards in the member's order, drawn defensively (review of #1697, note c: only core's `addCard` keeps the limits, so
  * a stored list may hold anything): `needs` first, the list's cards of a type this build draws (a one-of-a-kind type
  * once, an instance type up to its limit, the fixed two never from the list), `community` last. A pinned `find` stands
@@ -231,7 +246,7 @@ export const listOf = (layout: HomeLayoutV2 | null): HomeCardInstance[] => layou
 export function cardOrder(layout: HomeLayoutV2 | null, pinned: readonly string[] = []): HomeCardInstance[] {
     const count = new Map<string, number>();
     const placed: HomeCardInstance[] = [];
-    for (const c of listOf(layout)) {
+    for (const c of [...listOf(layout), ...arrivingOn(layout)]) {
         const t = homeCardType(c.type);
         if (!t || t.fixed || !HOME_DRAWN.has(c.type) || pinned.includes(c.type)) continue;
         const n = count.get(c.type) ?? 0;
@@ -283,11 +298,39 @@ export function addCard(
     return frameAddCard(layout ?? defaultHomeLayout(), type, { settings: opts.settings, pinned: opts.pinned, now: editAt(layout, now), random: opts.random });
 }
 
-/** A card taken off Home: the instance goes, its settings and any dismissal with it (§1.3). Null when it can't be. */
+/**
+ * A card taken off Home: the instance goes, its settings and any dismissal with it (§1.3). A card drawn as arriving leaves
+ * only its stamp (core `removeCard`), so it never arrives again. Null when it can't be.
+ */
 export function removeCard(layout: HomeLayoutV2 | null, id: string, now: number, pinned: readonly string[] = []): HomeLayoutV2 | null {
-    const card = listOf(layout).find(c => c.id === id);
+    const card = listOf(layout).find(c => c.id === id) ?? arrivingOn(layout).find(c => c.id === id);
     if (!card || !canRemoveCard(card.type, pinned)) return null;
-    return frameRemoveCard(layout ?? defaultHomeLayout(), id, editAt(layout, now));
+    return frameRemoveCard(layout, id, editAt(layout, now));
+}
+
+/** "Keep on Home" on a card drawn as arriving: last on the list, its stamp written, in one save. Null when it isn't arriving. */
+export function keepCard(layout: HomeLayoutV2 | null, id: string, now: number): HomeLayoutV2 | null {
+    return isArrivingCard(layout, id) ? keepArrivedCard(layout, id, editAt(layout, now)) : null;
+}
+
+/** The cards Arrange moves: those of `among` that move and stand on the list, and those drawn as arriving (slice K7). */
+const movableOf = <T extends Pick<HomeCardInstance, 'id' | 'type'>>(layout: HomeLayoutV2 | null, among: readonly T[], pinned: readonly string[]): T[] => {
+    const list = listOf(layout);
+    return among.filter(c => canMoveCard(c.type, pinned) && (list.some(l => l.id === c.id) || isArrivingCard(layout, c.id)));
+};
+
+/**
+ * A move that reaches a card drawn as arriving keeps it first (core `keepArrivedCard`: on the list, its stamp written), so the
+ * move has a place on the list for it and writes its stamp, as core's own move does (review of #3154). `reached` is the card
+ * moved and every card whose place the move changes; each arriving one among them is kept, with any drawn before it, in the
+ * order Home draws them, so the list holds them in the order shown. Null when the move reaches none.
+ */
+function keepReached(layout: HomeLayoutV2 | null, id: string, movable: readonly Pick<HomeCardInstance, 'id'>[], reached: readonly string[], now: number): HomeLayoutV2 | null {
+    const drawn = arrivingOn(layout).filter(c => c.id === id || movable.some(m => m.id === c.id));
+    const last = drawn.reduce((upTo, c, k) => (reached.includes(c.id) ? k : upTo), -1);
+    let kept: HomeLayoutV2 | null = null;
+    for (const c of drawn.slice(0, last + 1)) kept = keepArrivedCard(kept ?? layout, c.id, editAt(layout, now));
+    return kept;
 }
 
 /** A card's settings changed in place (Settings… → Save): it keeps its place. Null when it isn't there or has none. */
@@ -308,22 +351,25 @@ export function changeCardSettings(layout: HomeLayoutV2 | null, id: string, sett
 }
 
 /**
- * Up or down past the card next to it in `among` (every card Arrange folds), so a move always shows. Every other card keeps its place in the list. Null when it can't move that way.
+ * Up or down past the card next to it in `among` (every card Arrange folds), so a move always shows. Every other card keeps its place in the list. Null when it can't move that way;
+ * a card drawn as arriving is kept first (on the list, stamped), whether it is the one moved or the one passed, so even a move
+ * of it that can't go further saves that.
  */
 export function moveCard(
     layout: HomeLayoutV2 | null, id: string, dir: 'up' | 'down', among: readonly Pick<HomeCardInstance, 'id' | 'type'>[], now: number,
     pinned: readonly string[] = [],
 ): HomeLayoutV2 | null {
-    const list = listOf(layout);
-    const movable = among.filter(c => canMoveCard(c.type, pinned) && list.some(l => l.id === c.id));
+    const movable = movableOf(layout, among, pinned);
     const from = movable.findIndex(c => c.id === id);
     const other = from < 0 ? undefined : movable[dir === 'up' ? from - 1 : from + 1];
-    if (!other) return null;
-    const cards = [...list];
+    const kept = keepReached(layout, id, movable, other ? [id, other.id] : [id], now);
+    const base = kept ?? layout;
+    const cards = [...listOf(base)];
     const i = cards.findIndex(c => c.id === id);
-    const j = cards.findIndex(c => c.id === other.id);
+    const j = other ? cards.findIndex(c => c.id === other.id) : -1;
+    if (i < 0 || j < 0) return kept;
     [cards[i], cards[j]] = [cards[j], cards[i]];
-    return { ...(layout ?? defaultHomeLayout()), cards, updatedAt: iso(editAt(layout, now)) };
+    return { ...(base ?? defaultHomeLayout()), cards, updatedAt: iso(editAt(layout, now)) };
 }
 
 /**
@@ -336,20 +382,27 @@ export function reorderAmong<T extends Pick<HomeCardInstance, 'id' | 'type'>>(it
 
 /**
  * A drag's drop (L3): the card to place `to` among the movable cards of `among` (every card Arrange folds), saved as the
- * same list an arrow makes, in the slots those cards already hold. Null when it would not move.
+ * same list an arrow makes, in the slots those cards already hold. Null when it would not move. `to` counts the cards drawn
+ * as arriving too, as the drag's preview does; each one the drop moves is kept first (on the list, stamped).
  */
 export function moveCardTo(
     layout: HomeLayoutV2 | null, id: string, to: number, among: readonly Pick<HomeCardInstance, 'id' | 'type'>[], now: number,
     pinned: readonly string[] = [],
 ): HomeLayoutV2 | null {
-    const list = listOf(layout);
-    const movable = among.filter(c => canMoveCard(c.type, pinned) && list.some(l => l.id === c.id));
+    const movable = movableOf(layout, among, pinned);
     const placed = reorderAmong(movable, id, to, pinned);
-    if (placed.every((c, k) => c.id === movable[k].id)) return null;
-    const slots = movable.map(c => list.findIndex(l => l.id === c.id)).sort((x, y) => x - y);
+    const kept = keepReached(layout, id, movable, [id, ...movable.filter((c, k) => placed[k].id !== c.id).map(c => c.id)], now);
+    if (placed.every((c, k) => c.id === movable[k].id)) return kept;
+    const base = kept ?? layout;
+    const list = listOf(base);
+    // The cards now on the list, before and after: an arriving card the drop doesn't reach stays drawn after them, unmoved.
+    const onList = (c: Pick<HomeCardInstance, 'id'>) => list.some(l => l.id === c.id);
+    const from = movable.filter(onList);
+    const order = placed.filter(onList);
+    const slots = from.map(c => list.findIndex(l => l.id === c.id)).sort((x, y) => x - y);
     const cards = [...list];
-    slots.forEach((slot, k) => { cards[slot] = list.find(l => l.id === placed[k].id)!; });
-    return { ...(layout ?? defaultHomeLayout()), cards, updatedAt: iso(editAt(layout, now)) };
+    slots.forEach((slot, k) => { cards[slot] = list.find(l => l.id === order[k].id)!; });
+    return { ...(base ?? defaultHomeLayout()), cards, updatedAt: iso(editAt(layout, now)) };
 }
 
 /**

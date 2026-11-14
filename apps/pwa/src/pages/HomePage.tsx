@@ -47,6 +47,7 @@ import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
 import { groupIdKey, lockedGroupsOrNull } from '../lib/group-hold';
 import { isKnownDmConversation } from '../lib/dm-guard';
 import { readChatSettings, homeChatPicked, createHomeBellSettle, HOME_BELL_SETTLE_MS } from '@beanpool/core';
+import { LEARN_HOME_WORDS, learnFigureCount, learnHomeLines } from '@beanpool/core';
 import type { ChatPickRow } from '../components/AddCardDialog';
 import { useCommunityInfo } from '../lib/features';
 import { onConversationRead } from '../lib/conversation-read';
@@ -66,7 +67,7 @@ import {
 import {
     FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, SEARCH_OFFLINE_LINE, addCard, addedLine, arrangeCards, askPinned, canMoveCard, moveCardTo, reorderIds,
     canRemoveCard, cardLabelName, cardName, cardOnNode, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings,
-    listOf, moveCard, packHome, pickLayout, pickerGroups, placeLifted, pinnedCards, readLayout, removeCard, removedLine,
+    listOf, moveCard, packHome, pickLayout, pickerGroups, placeLifted, pinnedCards, readLayout, removeCard, removedLine, LEARN_OPENS, isArrivingCard, keepCard,
     resetLayout, undoResetLayout, RESET_DONE_LINE, sameList, settleHeights, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from '../lib/home-layout';
 import { useArrangeDrag, type HeldPress } from '../lib/arrange-drag';
@@ -103,6 +104,7 @@ import { ListPhoto } from '../components/ListPhoto';
 import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-listings';
 import { VISITOR_WORDS } from '../lib/visitor-lobby';
 import { ArrangeControls, CardBody, CardMenu, HomeCard, HomeLine, HomeMore, PackedBlock, liftedStyle, packedHeight, useCardContainer, type ArrangeBand } from '../components/HomeCard';
+import { LearnHomeBody } from '../components/LearnHomeBody';
 import { ArrangeStrip, type StripRow } from '../components/ArrangeStrip';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { StarterOffersDialog } from '../components/StarterOffersDialog';
@@ -1088,6 +1090,7 @@ function CommunityBody({
     onOpenShape,
     onAddCard,
     onArrange,
+    onLearn,
 }: {
     cm: NonNullable<HomeCards['community']>;
     profile: string;
@@ -1096,6 +1099,8 @@ function CommunityBody({
     onOpenShape?: () => void;
     onAddCard: () => void;
     onArrange: () => void;
+    /** Opens Learn, from the "{n} things worth knowing" figure (slice K7). */
+    onLearn?: () => void;
 }) {
     const { wide } = useCardContainer();
     // The members' card (design §4.1): a visitor, who reads the lobby's Home, is told none of it.
@@ -1144,6 +1149,13 @@ function CommunityBody({
         typeof cm.eventsSoon === 'number' ? tn(cm.eventsSoon, '{n} event coming up', '{n} events coming up') : null,
     ].filter(Boolean).join(' · ');
 
+    // "{n} things worth knowing ›" (DESIGN-local-knowledge-amend-fable.md §3.6, slice K7): the pages Learn shows, from 1, only
+    // where Learn is on (the node sends the count only then); the card's one figure that opens a place. The phone's is the same.
+    const learnCount = learnFigureCount(cm.knowledge);
+    const learnFigure = learnCount !== null && !isVisitor && onLearn
+        ? tn(learnCount, LEARN_HOME_WORDS.figure.one, LEARN_HOME_WORDS.figure.other, { n: formatCount(learnCount) })
+        : null;
+
     const line1 = isGlobal ? globalLine1 : localLine1;
     const line2 = isGlobal ? globalLine2 : localLine2;
     const line3 = isGlobal ? globalLine3 : localLine3;
@@ -1178,6 +1190,17 @@ function CommunityBody({
                         {cm.members === 1 && !isVisitor ? t("1 member. You're first. Invite someone.") : t('{line}.', { line: communityLine(cm, profile) })}
                     </p>
                 </div>
+            )}
+            {learnFigure && (
+                <button
+                    type="button"
+                    onClick={onLearn}
+                    className="w-full min-h-[44px] text-left p-0 mb-2 bg-transparent border-none cursor-pointer flex items-center justify-between gap-2 text-sm text-text-primary hover:text-text-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
+                    data-testid="home-community-learn"
+                >
+                    <span className="break-words">{learnFigure}</span>
+                    <span aria-hidden="true" className="text-text-muted text-base shrink-0 select-none">›</span>
+                </button>
             )}
             {shapeSummary && (
                 <button
@@ -1899,12 +1922,14 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const inArrange = !!arrangeList;
     /** Whether Home draws this card now: it has something to say, and "Your way back in" has been drawn (it can put itself away). */
     const drawnNow = (c: Pick<HomeCardInstance, 'id' | 'type'>) => shown.some(s => s.id === c.id) && (c.type !== 'safety' || safetyDrawn);
-    const idle = arrangeList ? arrangeList.filter(c => !drawnNow(c)) : [];
+    // A card drawn as arriving (slice K7) is not on the member's list: with nothing to show it is not in the strip either.
+    const idle = arrangeList ? arrangeList.filter(c => !drawnNow(c) && !isArrivingCard(shownLayout(answer, layout, { tourOver }), c.id)) : [];
     const idleKey = idle.map(c => c.id).join(',');
     // The cards Arrange moves among: the drawn cards that stand on the member's list, in the saved order. The cards with
     // nothing to show keep their slots in that list, untouched, which is what lets a card move among the ones a member sees.
     const savedIds = new Set(inArrange ? listOf(shownLayout(answer, layout, { tourOver })).map(c => c.id) : []);
-    const movableNow = inArrange ? shown.filter(c => drawnNow(c) && canMoveCard(c.type, foldedPins) && savedIds.has(c.id)) : [];
+    // A card drawn as arriving (slice K7) moves too: the move keeps it first (on the list, stamped), then moves it.
+    const movableNow = inArrange ? shown.filter(c => drawnNow(c) && canMoveCard(c.type, foldedPins) && (savedIds.has(c.id) || isArrivingCard(shownLayout(answer, layout, { tourOver }), c.id))) : [];
     // Dragging a card (A2): the lifted card's place is live, so the cards are laid out in the order the drop would make.
     const movableIds = movableNow.map(c => c.id);
     const drag = useArrangeDrag({ gridRef, enabled: inArrange, onDrop: dropInArrange, ids: movableIds, place: placeInArrange });
@@ -2458,7 +2483,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         if (!card) return;
         if (card.type === 'tips') { tipsDontShow(); return; }
         const name = cardLabelName(card, profile);
-        const onList = listOf(drawnBase()).some(c => c.id === id);
+        // A card drawn as arriving (slice K7) is taken off by its stamp alone: core's removeCard writes it.
+        const onList = listOf(drawnBase()).some(c => c.id === id) || isArrivingCard(drawnBase(), id);
         // The interests card opened from Tune without being on the list just closes.
         if (onList && !changeLayout((l) => removeCard(l, id, Date.now(), pins))) return;
         focusAround(id);
@@ -3154,6 +3180,23 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     </HomeCard>
                 );
             }
+            // Learn something local (slice K7): rows open their page in Learn, See all opens Learn; Keep on Home while it arrives.
+            case 'learn': {
+                const lines = learnHomeLines(c.learn, LEARN_OPENS);
+                if (!lines) return null;
+                const arriving = !isVisitor && isArrivingCard(drawnBase(), card.id);
+                return (
+                    <HomeCard key={id} {...common}>
+                        <LearnHomeBody
+                            lines={lines}
+                            community={c.community?.name ?? ''}
+                            onOpen={postId => onNavigate('learn-page', postId)}
+                            onSeeAll={() => onNavigate('learn')}
+                            onKeep={arriving ? () => { changeLayout((l) => keepCard(l, card.id, Date.now())); } : undefined}
+                        />
+                    </HomeCard>
+                );
+            }
             case 'decide': {
                 const d = c.decide;
                 if (!d) return null;
@@ -3247,6 +3290,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                             onOpenShape={() => setShapeModalOpen(true)}
                             onAddCard={() => setPickerOpen(true)}
                             onArrange={() => startArrange()}
+                            onLearn={() => onNavigate('learn')}
                         />
                     </HomeCard>
                 );

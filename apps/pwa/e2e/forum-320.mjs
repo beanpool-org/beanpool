@@ -5,7 +5,7 @@
  * signature middleware). The web app is built as it ships and served by that node. Two members:
  *   Ana, new (joined a day ago): opens Chat → Forum, starts a topic; the sheet that anyone on the web can read it comes first;
  *     her topic waits for a first look (a row in forum_waiting, in no list).
- *   Mo, a moderator: sees "Waiting for a first look (1) ›", says OK; the topic is up; he replies.
+ *   Mo, a moderator: sees "Waiting for a first look (1) ›", says OK; the topic is up; he replies twice (the sheet once only).
  *   Ana: reads his reply, quotes it in hers, and reports it (a report naming the forum post, in abuse_reports).
  * Light for the walk; then Dark for the list, the topic and the new-topic form. Fails on any sideways scroll at 320 px, a
  * button under 44 px in the forum, or a request to any host but this machine.
@@ -221,6 +221,11 @@ async function main() {
         check(true, 'his first post on the public forum waits on the sheet too');
         await M.page.getByTestId('forum-told-post').click();
         await M.page.getByTestId('forum-post-2').waitFor({ timeout: 15_000 });
+        // A second reply in the same topic goes with no sheet: he agreed once, and the page keeps that (design §5).
+        await M.page.getByTestId('forum-reply-box').fill('Mine are climbing ones.');
+        await M.page.getByTestId('forum-send').click();
+        await M.page.getByTestId('forum-post-3').waitFor({ timeout: 15_000 });
+        check(await M.page.getByTestId('forum-told').count() === 0, 'his second reply in the topic goes with no sheet');
         await fits(M.page, 'the topic (Mo)');
         await shot(M.page, '05-topic-reply-light');
 
@@ -233,9 +238,9 @@ async function main() {
         await A.page.getByTestId('forum-menu').getByRole('button', { name: 'Reply' }).click();
         await A.page.getByTestId('forum-reply-box').fill('Runner beans, mostly.');
         await A.page.getByTestId('forum-send').click();
-        await A.page.getByTestId('forum-post-3').waitFor({ timeout: 15_000 });
-        check((await A.page.getByTestId('forum-post-3').textContent()).includes('Mo: Welcome, Ana!'), 'her reply shows the quote of his');
-        check((await node.sql('SELECT quotes FROM forum_posts WHERE number = 3'))[0]?.quotes === 2, 'the node stored the quote');
+        await A.page.getByTestId('forum-post-4').waitFor({ timeout: 15_000 });
+        check((await A.page.getByTestId('forum-post-4').textContent()).includes('Mo: Welcome, Ana!'), 'her reply shows the quote of his');
+        check((await node.sql('SELECT quotes FROM forum_posts WHERE number = 4'))[0]?.quotes === 2, 'the node stored the quote');
         await A.page.getByTestId('forum-post-menu-2').click();
         await A.page.getByTestId('forum-menu').getByRole('button', { name: 'Report' }).click();
         await A.page.getByText('Spam or scam').click();
@@ -253,7 +258,7 @@ async function main() {
         await fits(D.page, 'the list (dark)');
         await shot(D.page, '07-list-dark');
         await D.page.getByText('Hello from Ana').click();
-        await D.page.getByTestId('forum-post-3').waitFor({ timeout: 15_000 });
+        await D.page.getByTestId('forum-post-4').waitFor({ timeout: 15_000 });
         await fits(D.page, 'the topic (dark)');
         await shot(D.page, '08-topic-dark');
         await D.page.getByTestId('forum-back').click();

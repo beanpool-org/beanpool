@@ -117,6 +117,20 @@ function bellSheet() {
     fireEvent.click(within(sidebar()).getByTestId('sidebar-bell'));
     return screen.getByRole('dialog');
 }
+const FORUM_REPLY: BellNotice = {
+    id: 'n-forum', kind: 'forum.reply', title: 'Forum', body: 'There is a new reply in a topic you follow.',
+    data: { screen: 'forum_topic', topicId: 'topic-1', postId: 'post-9', number: 9 }, sentAt: Math.floor(Date.now() / 1000) - 60, seenAt: null,
+};
+function landedOnForum(way: string) {
+    expect(side(), way).toBe('Forum');
+    expect(screen.getByTestId('forum-page'), way).toBeInTheDocument();
+    expect(screen.getByTestId('chat-side-chats-page').style.display, way).toBe('none');
+}
+async function openForumNotice() {
+    fireEvent.click(within(bellSheet()).getByTestId('bell-notice'));
+    fireEvent.click(within(screen.getByTestId('bell-read')).getByTestId('bell-read-open'));
+    await settle();
+}
 function landedOnChats(way: string) {
     expect(side(), way).toBe('Chats');
     expect(screen.queryByTestId('forum-page'), way).toBeNull();
@@ -170,5 +184,33 @@ describe('every way into the Chat tab from elsewhere lands on Chats, from the Fo
         await act(async () => { fireEvent.click(within(sidebar()).getByRole('button', { name: /^💬\s*Chat$/ })); });
         await settle();
         expect(side()).toBe('Forum');
+    });
+});
+
+describe('a forum notice lands on the Forum side, from anywhere (slice F5, parity with the phone)', () => {
+    it('from Home: Open shows the Chat tab on the Forum', async () => {
+        node.bell = [FORUM_REPLY];
+        render(<App />);
+        await screen.findByTestId('home-page');
+        await settle();
+        await openForumNotice();
+        landedOnForum('from Home');
+    });
+
+    it('from the Chats side of the Chat tab: Open shows the Forum; leaving and the tab\'s own button later shows Chats, as before', async () => {
+        node.bell = [FORUM_REPLY];
+        render(<App />);
+        await screen.findByTestId('home-page');
+        await act(async () => { fireEvent.click(within(sidebar()).getByRole('button', { name: /^💬\s*Chat$/ })); });
+        await settle();
+        expect(side()).toBe('Chats');
+        await openForumNotice();
+        landedOnForum('from Chats');
+        // The arrival was taken once: away to Home and back by the tab's own button draws the tab afresh, on Chats.
+        await act(async () => { fireEvent.click(within(sidebar()).getByRole('button', { name: /Home$/ })); });
+        await settle();
+        await act(async () => { fireEvent.click(within(sidebar()).getByRole('button', { name: /^💬\s*Chat$/ })); });
+        await settle();
+        landedOnChats('back by the tab\'s button');
     });
 });

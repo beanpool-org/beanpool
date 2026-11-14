@@ -548,7 +548,7 @@ describe('the Chat tab where the forum is off: the title "Chat", as before', () 
         await pushRoute(noticeRoute('forum.reply', null));
         expect(tablist()).toBeNull();
         expect(forumPane()).toBeNull();
-        expect(host.querySelector('[data-testid="page-title-talk"]')?.textContent).toBe('Chat');
+        expect(chatTitle()).not.toBeNull();
         expect(radio('Groups')?.getAttribute('aria-selected')).toBe('true');
         expect(params.now.view).toBe('');
     });

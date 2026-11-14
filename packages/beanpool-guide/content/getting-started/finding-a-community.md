@@ -82,6 +82,16 @@ The card says **A member invited you**. Tap **Join** with the community's name.
 
 You stay a member of the global community, and can switch between them: see "More than one community".
 
+## In the web app
+
+You can ask from the **Find your community** card on the web app's **Home** too, and wait there.
+
+- While you wait, the waiting card has **Tell me when they answer**. Tap **Tell me**, and your browser asks you first; then **We'll tell you here when {name} answers.** The community you asked tells this browser itself, even with the page closed, and nothing else. The community you are on keeps nothing of your request.
+- On an iPhone it works only from the Home Screen, and the card says how. Where a browser can't be told, the card says so, with **Get the app** first on a phone; Home still checks for the answer every few minutes while it is open.
+- Tapping the notification opens **Home** at that community on the card, with **Join** and its name. A notification that didn't come from that community opens nothing and says so.
+- The bell at the top shows **🎉 {name} said yes.** too, until you tap it or **Join**. Tapping it opens the same place.
+- **Join** opens the community's page in this browser and brings your account with you: the same 12 words. When your request is answered and used, cancelled or no longer open, this browser stops being told.
+
 ## A post someone shared with you
 
 A member of a community can share one of its posts with you outside BeanPool: a link in a chat or a message. It opens that one post, in the app if you have it and in your web browser if not. It shows what the post is, its photos, its price and roughly where it is, and says that a member of that community shared it with you. Names and faces appear only once you join that community.

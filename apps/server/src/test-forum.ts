@@ -443,19 +443,26 @@ async function main(): Promise<void> {
 
     // ── 17. Delete account, removal, re-key ──────────────────────────────────────────────────────
     console.log('── 17. leaving ──');
-    const melWords = 'Mel private words 7f3a';
-    const melT = await start(mel, { sectionId: ideas, title: 'Mel title 7f3a', words: melWords, photos: [TEST_PHOTO] });
+    // Each person's words carry a mark no key or id can hold: z and q are not hex. A bare hex mark ('9c1e', '7f3a') turns up
+    // in the forum tables' random keys and ids (a marker keeps its writer_pubkey) about 1 run in 40 for each check, and
+    // failed a removal that had worked (merge queue run 43534414942; a Gus key holding 9c1e fails it every time). Each mark
+    // is seen in the tables first, so its absence afterwards is the removal's doing.
+    const forumText = () => JSON.stringify(FORUM_TABLES.map((t) => db.prepare(`SELECT * FROM ${t}`).all()));
+    const melMark = 'zq7f3a';
+    const melWords = `Mel private words ${melMark}`;
+    const melT = await start(mel, { sectionId: ideas, title: `Mel title ${melMark}`, words: melWords, photos: [TEST_PHOTO] });
     await reply(sue, melT.body?.topic?.id, { words: 'Sue answers' });
     const melR = await reply(mel, tb, { words: `${melWords} in a reply` });
     await call(mel, 'POST', `/api/forum/posts/${melR.body?.post?.id}/edit`, { words: `${melWords} edited` });
     const since = new Date(Date.now() - 1000).toISOString();
     const cut = (db.prepare('SELECT MAX(updated_at) AS u FROM forum_posts').get() as { u: string }).u;
     require_(db.prepare('SELECT 1 FROM forum_post_edits WHERE post_id = ?').get(melR.body?.post?.id) && db.prepare('SELECT 1 FROM forum_post_photos WHERE post_id = ?').get(melT.body?.post?.id), 'Mel has an earlier wording and a photo');
+    require_(forumText().includes(melMark), 'Mel\'s words are in the forum before she leaves');
     const purged = purgeMemberSelf(mel.pk);
     require_(purged.ok, `Mel deletes her account (${purged.message})`);
     const hers = db.prepare('SELECT words, removed_by FROM forum_posts WHERE writer_pubkey = ?').all(mel.pk) as { words: string; removed_by: string }[];
-    const hersAnywhere = JSON.stringify(FORUM_TABLES.map((t) => db.prepare(`SELECT * FROM ${t}`).all()));
-    assert(hers.length > 0 && hers.every((p) => p.words === '' && p.removed_by !== null) && !hersAnywhere.includes('7f3a') && !hersAnywhere.includes('Bring seeds'),
+    const hersAnywhere = forumText();
+    assert(hers.length > 0 && hers.every((p) => p.words === '' && p.removed_by !== null) && !hersAnywhere.includes(melMark) && !hersAnywhere.includes('Bring seeds'),
         `17. on the main server none of her words is left in any forum table (${hers.length} markers)`);
     assert(!db.prepare('SELECT 1 FROM forum_post_photos WHERE post_id = ?').get(melT.body?.post?.id) && tombstone('forum_post_photos', `${melT.body?.post?.id}|0`)
         && !db.prepare('SELECT 1 FROM forum_post_edits WHERE post_id = ?').get(melR.body?.post?.id) && !db.prepare('SELECT 1 FROM forum_members WHERE member_pubkey = ?').get(mel.pk),
@@ -466,13 +473,14 @@ async function main(): Promise<void> {
     const deltaText = JSON.stringify(delta.plainTables ?? {});
     const deltaTombs = JSON.stringify(delta.tombstones ?? delta);
     const wholeAfter = JSON.stringify((await exportSyncState('test-forum') as any).plainTables ?? {});
-    assert(cut && !deltaText.includes('7f3a') && (delta.plainTables?.forum_posts as any[] ?? []).some((r) => r.writer_pubkey === mel.pk && r.words === '' && r.removed_by === 'account')
-        && deltaTombs.includes(`${melT.body?.post?.id}|0`) && !wholeAfter.includes('7f3a'),
+    assert(cut && !deltaText.includes(melMark) && (delta.plainTables?.forum_posts as any[] ?? []).some((r) => r.writer_pubkey === mel.pk && r.words === '' && r.removed_by === 'account')
+        && deltaTombs.includes(`${melT.body?.post?.id}|0`) && !wholeAfter.includes(melMark),
         '17. what a standby is sent: her blanked rows and the tombstones of her photo and earlier wording, none of her words, whole or delta');
-    const gusWords = 'Gus words 9c1e';
-    await start(gus, { sectionId: ideas, title: 'Gus topic', words: gusWords });
+    const gusMark = 'zq9c1e';
+    await start(gus, { sectionId: ideas, title: 'Gus topic', words: `Gus words ${gusMark}` });
+    require_(forumText().includes(gusMark), 'Gus\'s words are in the forum before the community removes him');
     adminPruneUser(gus.pk, COMMUNITY_DECISION_ACTOR);
-    assert(!JSON.stringify(FORUM_TABLES.map((t) => db.prepare(`SELECT * FROM ${t}`).all())).includes('9c1e'), '17. a member the community removes: their forum words taken down too');
+    assert(!forumText().includes(gusMark), '17. a member the community removes: their forum words taken down too');
     const pat2 = newId('Pat2');
     const patPosts = (db.prepare('SELECT COUNT(*) AS n FROM forum_posts WHERE writer_pubkey = ?').get(pat.pk) as { n: number }).n;
     moveMemberKeyRows(pat.pk, pat2.pk, new Date().toISOString(), { keepStamps: false });

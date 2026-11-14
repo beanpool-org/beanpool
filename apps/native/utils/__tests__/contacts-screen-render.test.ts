@@ -96,9 +96,9 @@ vi.mock('../contacts-sync', async (importOriginal) => ({
     checkContactsHere: vi.fn(async () => {}),
     syncContacts: vi.fn(async () => {}),
 }));
-const BYRON = 'https://byron.example';
-const CASTLEMAINE = 'https://castlemaine.example';
-vi.mock('../nodes', () => ({ getSavedNodes: async () => [{ url: 'https://byron.example', alias: 'Byron' }, { url: 'https://castlemaine.example', alias: 'Castlemaine' }] }));
+const RIVERSIDE = 'https://riverside.example';
+const RIVERBEND = 'https://riverbend.example';
+vi.mock('../nodes', () => ({ getSavedNodes: async () => [{ url: 'https://riverside.example', alias: 'Riverside' }, { url: 'https://riverbend.example', alias: 'Riverbend' }] }));
 
 import { newContactId, putContact, emptyContactsList, type ContactsList } from '@beanpool/core';
 import ContactsScreen from '../../app/contacts';
@@ -147,7 +147,7 @@ const onPhone = async () => (await loadContacts(ME, phoneContactsDeps())).onPhon
 
 beforeEach(() => {
     mem.store.clear(); mem.files.clear(); mem.alerts.length = 0; mem.shared.length = 0; mem.blocked = []; mem.pushed.length = 0;
-    mem.store.set('beanpool_anchor_url', BYRON);
+    mem.store.set('beanpool_anchor_url', RIVERSIDE);
     vi.mocked(syncContacts).mockClear();
 });
 afterEach(async () => {
@@ -161,36 +161,36 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         mem.blocked = [BLOCKED];
         await seedList((l) => [
             person('Tom', { emails: ['tom@example.org'] }),
-            person('Sam Jones', { links: [link(SAM, BYRON, 'sam_j')] }),
+            person('Sam Jones', { links: [link(SAM, RIVERSIDE, 'sam_j')] }),
             person('Dee Walker', { phones: ['0412 345 678'] }),
-            person('Ana Li', { links: [link(ANA, CASTLEMAINE, 'ana')] }),
-            person('Mal', { links: [link(BLOCKED, BYRON, 'mal')] }),
+            person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] }),
+            person('Mal', { links: [link(BLOCKED, RIVERSIDE, 'mal')] }),
         ].reduce(putContact, l));
         await render();
         const t = text();
         expect(t).toContain("Private to you. Locked with your account's key.");
         const order = ['On BeanPool', 'Ana Li', 'Mal', 'Sam Jones', 'Not on BeanPool yet', 'Dee Walker', 'Tom'].map((s) => t.indexOf(s));
         expect(order.every((at, i) => at >= 0 && (i === 0 || at > order[i - 1]))).toBe(true);
-        expect(t).toContain('@sam_j · Byron');
+        expect(t).toContain('@sam_j · Riverside');
         expect(t).toContain('0412 345 678');
         expect(button('Message')).toBeDefined();
-        expect(button('Open Castlemaine ›')).toBeDefined();
+        expect(button('Open Riverbend ›')).toBeDefined();
         expect(t).toContain('Blocked');
         expect(button('Unblock')).toBeDefined();
-        // The phone keeps only Byron here (its anchor; nothing in its saved list): the change in its wait goes there.
-        expect(host.querySelector('[data-testid="contacts-where"]')?.textContent).toBe('Kept on this phone. Your latest changes go to Byron within 15 minutes.');
+        // The phone keeps only Riverside here (its anchor; nothing in its saved list): the change in its wait goes there.
+        expect(host.querySelector('[data-testid="contacts-where"]')?.textContent).toBe('Kept on this phone. Your latest changes go to Riverside within 15 minutes.');
         // No Import yet: the phone can't import until slice C3.
         expect(button('Import')).toBeUndefined();
         // Mutation: one list sorted by name, no sections → Dee Walker before Sam Jones, and the order check fails.
     });
 
     it('Message opens the chat with that member; Open <community> › asks before switching', async () => {
-        await seedList((l) => putContact(putContact(l, person('Sam Jones', { links: [link(SAM, BYRON, 'sam_j')] })), person('Ana Li', { links: [link(ANA, CASTLEMAINE, 'ana')] })));
+        await seedList((l) => putContact(putContact(l, person('Sam Jones', { links: [link(SAM, RIVERSIDE, 'sam_j')] })), person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
         await render();
         await press('Message');
         expect(mem.pushed).toContain('/chat/conv-1');
-        await press('Open Castlemaine ›');
-        expect(mem.alerts.at(-1)?.[1]).toBe('Ana Li is in Castlemaine. Switch to Castlemaine to message them?');
+        await press('Open Riverbend ›');
+        expect(mem.alerts.at(-1)?.[1]).toBe('Ana Li is in Riverbend. Switch to Riverbend to message them?');
     });
 
     it('Add by hand: nothing typed says what is needed; a name and a number are kept, locked, on the phone', async () => {
@@ -219,7 +219,7 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         await press('Dee Walker0412 345 678');
         expect(text()).toContain('Seedlings');
         await press('Remove from contacts');
-        expect(mem.alerts.at(-1)?.[1]).toBe('Remove Dee Walker from your contacts? Nobody is told. Your chats, and your friendship in Byron if you have one, stay as they are.');
+        expect(mem.alerts.at(-1)?.[1]).toBe('Remove Dee Walker from your contacts? Nobody is told. Your chats, and your friendship in Riverside if you have one, stay as they are.');
         await answer('Remove');
         const got = await onPhone();
         expect(got.kind === 'list' && got.list.contacts).toEqual([]);
@@ -296,29 +296,29 @@ describe('the Chat tab', () => {
 });
 
 describe('the footer: where the list is kept (design §3.6)', () => {
-    const view = (over: Partial<ContactsView['state']>, communities = [BYRON, CASTLEMAINE]): ContactsView => {
+    const view = (over: Partial<ContactsView['state']>, communities = [RIVERSIDE, RIVERBEND]): ContactsView => {
         const list = putContact(emptyContactsList(), person('Dee'));
         return {
             onPhone: { kind: 'list', list, seq: 3, copy: {} as any },
             state: { ...emptySyncState(), fileSeq: 3, ...over },
-            anchor: BYRON, communities, names: { [BYRON]: 'Byron', [CASTLEMAINE]: 'Castlemaine' },
+            anchor: RIVERSIDE, communities, names: { [RIVERSIDE]: 'Riverside', [RIVERBEND]: 'Riverbend' },
         };
     };
     const now = 1_800_000_000_000;
     it('names the communities holding exactly this copy, and when it was saved', () => {
-        expect(contactsWhereWords(view({ heard: { [BYRON]: 3, [CASTLEMAINE]: 2 }, merged: { [BYRON]: 3, [CASTLEMAINE]: 2 }, savedAt: now - 5 * 60_000 }), now))
-            .toMatch(/^Kept on this phone and at: Byron · saved 5 min/);
+        expect(contactsWhereWords(view({ heard: { [RIVERSIDE]: 3, [RIVERBEND]: 2 }, merged: { [RIVERSIDE]: 3, [RIVERBEND]: 2 }, savedAt: now - 5 * 60_000 }), now))
+            .toMatch(/^Kept on this phone and at: Riverside · saved 5 min/);
     });
     it('a change in its wait: where it goes within 15 minutes', () => {
-        expect(contactsWhereWords(view({ dueAt: now + 60_000 }), now)).toBe('Kept on this phone. Your latest changes go to Byron, Castlemaine within 15 minutes.');
+        expect(contactsWhereWords(view({ dueAt: now + 60_000 }), now)).toBe('Kept on this phone. Your latest changes go to Riverside, Riverbend within 15 minutes.');
     });
     it('none holds it and none refused: BeanPool tries again', () => {
         expect(contactsWhereWords(view({ dueAt: now - 1 }), now)).toBe('Kept on this phone only. BeanPool will try your communities again.');
     });
     it('every community keeps no lists: a file is the way to keep it safe, and each is named', () => {
         const off = { code: 'contacts_off' as const, until: now + 1 };
-        expect(contactsWhereWords(view({ refused: { [BYRON]: off, [CASTLEMAINE]: off } }), now))
-            .toBe("Kept on this phone only. Save a copy as a file to keep it safe. Byron doesn't keep contact lists. Castlemaine doesn't keep contact lists.");
+        expect(contactsWhereWords(view({ refused: { [RIVERSIDE]: off, [RIVERBEND]: off } }), now))
+            .toBe("Kept on this phone only. Save a copy as a file to keep it safe. Riverside doesn't keep contact lists. Riverbend doesn't keep contact lists.");
         // Mutation: count a refused community as one that may take it → "will try again", a promise nothing keeps.
     });
 });

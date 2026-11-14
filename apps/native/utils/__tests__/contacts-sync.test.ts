@@ -18,9 +18,9 @@ import {
 } from '../contacts-sync';
 import { PUSH_ALERTS_OFF_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
-const BYRON = 'https://byron.example';
+const RIVERSIDE = 'https://riverside.example';
 const GLOBAL = 'https://global.example';
-const CASTLEMAINE = 'https://castlemaine.example';
+const RIVERBEND = 'https://riverbend.example';
 
 function person(): ContactsAccount {
     const seed = ed25519.utils.randomSecretKey();
@@ -118,30 +118,30 @@ afterEach(() => { vi.useRealTimers(); });
 
 describe('a change leaves the phone only after its wait, and only to a community whose copy the phone has merged', () => {
     it('nothing is sent before the wait; after it, the community in use is asked its number, then given the copy', async () => {
-        const byron = new FakeCommunity();
+        const riverside = new FakeCommunity();
         const me = person();
-        const p = phone({ [BYRON]: byron }, BYRON);
+        const p = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
         await syncContacts(me, p.deps);
         expect(p.requests.filter((r) => r.method === 'PUT')).toEqual([]);
         p.clock.now += WAIT;
         await syncContacts(me, p.deps);
         expect(p.requests.map((r) => `${r.method} ${r.path}`)).toEqual(['GET /api/me/unread', `PUT ${CONTACTS_COPY_PATH}`]);
-        expect(byron.copies.get(me.publicKey)?.seq).toBe(1);
+        expect(riverside.copies.get(me.publicKey)?.seq).toBe(1);
         const s = readSyncState(p.kv.get(contactsSyncStoreKey(me.publicKey)) ?? null);
-        expect(s).toMatchObject({ heard: { [BYRON]: 1 }, merged: { [BYRON]: 1 }, dueAt: null, savedAt: p.clock.now });
+        expect(s).toMatchObject({ heard: { [RIVERSIDE]: 1 }, merged: { [RIVERSIDE]: 1 }, dueAt: null, savedAt: p.clock.now });
         // Mutation: decide() → 'put' before contactsDue → the PUT goes at once, and the server learns when Dee was added.
     });
 
     it('a community holding a copy this phone hasn\'t merged is fetched and merged before anything is saved over it', async () => {
-        const byron = new FakeCommunity();
+        const riverside = new FakeCommunity();
         const me = person();
         // Another phone of the member's saved Sam there first.
-        const other = phone({ [BYRON]: byron }, BYRON);
+        const other = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await editContacts(me, (l) => putContact(l, person1('Sam Jones')), other.deps);
         other.clock.now += WAIT;
         await syncContacts(me, other.deps);
-        // This phone, on Global alone so far, saves three times there: its number (3) goes past Byron's (1) without Sam.
+        // This phone, on Global alone so far, saves three times there: its number (3) goes past Riverside's (1) without Sam.
         const global = new FakeCommunity();
         const kept: Record<string, FakeCommunity> = { [GLOBAL]: global };
         const p = phone(kept, GLOBAL);
@@ -151,25 +151,25 @@ describe('a change leaves the phone only after its wait, and only to a community
             await syncContacts(me, p.deps);
         }
         expect(global.copies.get(me.publicKey)?.seq).toBe(3);
-        // Then the member joins Byron on this phone.
-        kept[BYRON] = byron;
+        // Then the member joins Riverside on this phone.
+        kept[RIVERSIDE] = riverside;
         p.requests.length = 0;
         await syncContacts(me, p.deps);
-        expect(p.requests.filter((r) => r.community === BYRON).map((r) => `${r.method} ${r.path}`))
+        expect(p.requests.filter((r) => r.community === RIVERSIDE).map((r) => `${r.method} ${r.path}`))
             .toEqual(['GET /api/me/unread', `GET ${CONTACTS_COPY_PATH}`, `PUT ${CONTACTS_COPY_PATH}`]);
         expect(await names(me, p.deps)).toEqual(['Ana Li', 'Ben Ode', 'Dee Walker', 'Sam Jones']);
-        // What Byron keeps now holds everyone, Sam included.
-        const q = phone({ [BYRON]: byron }, BYRON);
+        // What Riverside keeps now holds everyone, Sam included.
+        const q = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await checkContactsHere(me, q.deps);
         expect(await names(me, q.deps)).toEqual(['Ana Li', 'Ben Ode', 'Dee Walker', 'Sam Jones']);
-        // Mutation: decide() → 'put' when the phone's number is past the one heard → Byron's copy is replaced without Sam.
+        // Mutation: decide() → 'put' when the phone's number is past the one heard → Riverside's copy is replaced without Sam.
     });
 
     it('a 409 stale_copy (another phone saved meanwhile) is fetched, merged and saved again, ending with both phones\' people', async () => {
-        const byron = new FakeCommunity();
+        const riverside = new FakeCommunity();
         const me = person();
-        const a = phone({ [BYRON]: byron }, BYRON);
-        const b = phone({ [BYRON]: byron }, BYRON);
+        const a = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
+        const b = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await editContacts(me, (l) => putContact(l, person1('Ana')), a.deps);
         a.clock.now += WAIT;
         await syncContacts(me, a.deps);
@@ -183,7 +183,7 @@ describe('a change leaves the phone only after its wait, and only to a community
         await syncContacts(me, a.deps);
         expect(a.requests.some((r) => r.method === 'GET' && r.path === CONTACTS_COPY_PATH)).toBe(true);
         expect(await names(me, a.deps)).toEqual(['Ana', 'Ben', 'Cat']);
-        const kept = byron.copies.get(me.publicKey)!;
+        const kept = riverside.copies.get(me.publicKey)!;
         expect(kept.seq).toBeGreaterThanOrEqual(3);
         await checkContactsHere(me, b.deps);
         expect(await names(me, b.deps)).toEqual(['Ana', 'Ben', 'Cat']);
@@ -191,13 +191,13 @@ describe('a change leaves the phone only after its wait, and only to a community
 
     it('a save more than one number past the one last heard asks first: a copy another phone saved there meanwhile is merged, never replaced', async () => {
         // PR #3073 review 4542103140, measured there: the community lost Yan, and a new phone restored without her.
-        const byron = new FakeCommunity();
+        const riverside = new FakeCommunity();
         const me = person();
-        const one = phone({ [BYRON]: byron }, BYRON);
+        const one = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await editContacts(me, (l) => putContact(l, person1('Xia')), one.deps);
         one.clock.now += WAIT;
         await syncContacts(me, one.deps);
-        const two = phone({ [BYRON]: byron }, BYRON);
+        const two = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await checkContactsHere(me, two.deps);
         // Phone one has no connection while it adds Zed, then Wu: its save of Zed went unanswered, so its number climbs to 3.
         one.link.up = false;
@@ -205,30 +205,30 @@ describe('a change leaves the phone only after its wait, and only to a community
         one.clock.now += WAIT;
         await syncContacts(me, one.deps);
         await editContacts(me, (l) => putContact(l, person1('Wu')), one.deps);
-        // Meanwhile phone two adds Yan and saves: Byron keeps 2 (Xia, Yan). Phone one last heard 1 there.
+        // Meanwhile phone two adds Yan and saves: Riverside keeps 2 (Xia, Yan). Phone one last heard 1 there.
         await editContacts(me, (l) => putContact(l, person1('Yan')), two.deps);
         two.clock.now += WAIT;
         await syncContacts(me, two.deps);
-        expect(byron.copies.get(me.publicKey)?.seq).toBe(2);
+        expect(riverside.copies.get(me.publicKey)?.seq).toBe(2);
         one.link.up = true;
         one.requests.length = 0;
         one.clock.now += WAIT;
         await syncContacts(me, one.deps);
-        // A new phone restores from Byron alone: Yan is there.
+        // A new phone restores from Riverside alone: Yan is there.
         resetContactsCheckForTests();
-        const fresh = phone({ [BYRON]: byron }, BYRON);
+        const fresh = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await checkContactsHere(me, fresh.deps);
         expect(await names(me, fresh.deps)).toEqual(['Wu', 'Xia', 'Yan', 'Zed']);
-        // 3 is two past the 1 phone one heard: it asked Byron first, and fetched and merged Yan before its save.
+        // 3 is two past the 1 phone one heard: it asked Riverside first, and fetched and merged Yan before its save.
         expect(one.requests.map((r) => `${r.method} ${r.path}`)).toEqual(['GET /api/me/unread', `GET ${CONTACTS_COPY_PATH}`, `PUT ${CONTACTS_COPY_PATH}`]);
         expect(await names(me, one.deps)).toEqual(['Wu', 'Xia', 'Yan', 'Zed']);
-        // Mutation: drop decide()'s ask before a save more than one past → one PUT of 3 replaces Byron's 2, and Yan is gone.
+        // Mutation: drop decide()'s ask before a save more than one past → one PUT of 3 replaces Riverside's 2, and Yan is gone.
     });
 
-    it('one number past the one heard saves at once: Byron refuses it (409) if anything was saved there since', async () => {
-        const byron = new FakeCommunity();
+    it('one number past the one heard saves at once: Riverside refuses it (409) if anything was saved there since', async () => {
+        const riverside = new FakeCommunity();
         const me = person();
-        const p = phone({ [BYRON]: byron }, BYRON);
+        const p = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await editContacts(me, (l) => putContact(l, person1('Xia')), p.deps);
         p.clock.now += WAIT;
         await syncContacts(me, p.deps);
@@ -237,21 +237,21 @@ describe('a change leaves the phone only after its wait, and only to a community
         p.clock.now += WAIT;
         await syncContacts(me, p.deps);
         expect(p.requests.map((r) => `${r.method} ${r.path}`)).toEqual([`PUT ${CONTACTS_COPY_PATH}`]);
-        expect(byron.copies.get(me.publicKey)?.seq).toBe(2);
+        expect(riverside.copies.get(me.publicKey)?.seq).toBe(2);
         // Mutation: ask before every save → a request more each time, for nothing the server doesn't already check.
     });
 });
 
 describe('a new phone, and the other communities', () => {
     it('a phone with no list gets it back as soon as a community answers with one, and notes how many came back', async () => {
-        const byron = new FakeCommunity();
+        const riverside = new FakeCommunity();
         const me = person();
-        const old = phone({ [BYRON]: byron }, BYRON);
+        const old = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await editContacts(me, (l) => putContact(putContact(l, person1('Ana')), person1('Ben')), old.deps);
         old.clock.now += WAIT;
         await syncContacts(me, old.deps);
         resetContactsCheckForTests();
-        const fresh = phone({ [BYRON]: byron }, BYRON);
+        const fresh = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await checkContactsHere(me, fresh.deps);
         expect(await names(me, fresh.deps)).toEqual(['Ana', 'Ben']);
         expect((await loadContacts(me, fresh.deps)).state.back).toBe(2);
@@ -264,7 +264,7 @@ describe('a new phone, and the other communities', () => {
         const a = new FakeCommunity();
         const b = new FakeCommunity();
         const me = person();
-        const old = phone({ [BYRON]: a, [GLOBAL]: b }, BYRON);
+        const old = phone({ [RIVERSIDE]: a, [GLOBAL]: b }, RIVERSIDE);
         await editContacts(me, (l) => putContact(putContact(l, person1('Ana')), person1('Ben')), old.deps);
         old.clock.now += WAIT;
         await syncContacts(me, old.deps);
@@ -275,7 +275,7 @@ describe('a new phone, and the other communities', () => {
         other.clock.now += WAIT;
         await syncContacts(me, other.deps);
         resetContactsCheckForTests();
-        const fresh = phone({ [BYRON]: a, [GLOBAL]: b }, BYRON);
+        const fresh = phone({ [RIVERSIDE]: a, [GLOBAL]: b }, RIVERSIDE);
         await checkContactsHere(me, fresh.deps);
         expect(await names(me, fresh.deps)).toEqual(['Ana', 'Ben', 'Cat']);
         expect((await loadContacts(me, fresh.deps)).state.back).toBe(3);
@@ -283,9 +283,9 @@ describe('a new phone, and the other communities', () => {
     });
 
     it('a phone with no list asks nothing more and writes nothing when no community keeps one', async () => {
-        const byron = new FakeCommunity();
+        const riverside = new FakeCommunity();
         const me = person();
-        const p = phone({ [BYRON]: byron, [GLOBAL]: new FakeCommunity() }, BYRON);
+        const p = phone({ [RIVERSIDE]: riverside, [GLOBAL]: new FakeCommunity() }, RIVERSIDE);
         await checkContactsHere(me, p.deps);
         await contactsHeard(me, GLOBAL, { unread: 0, contacts: null }, true, p.deps);
         expect(p.requests.map((r) => `${r.method} ${r.path}`)).toEqual(['GET /api/me/unread']);
@@ -293,10 +293,10 @@ describe('a new phone, and the other communities', () => {
     });
 
     it('a round\'s answer brings another community level: the change made here reaches Global after the next round', async () => {
-        const byron = new FakeCommunity();
+        const riverside = new FakeCommunity();
         const global = new FakeCommunity();
         const me = person();
-        const p = phone({ [BYRON]: byron, [GLOBAL]: global }, BYRON);
+        const p = phone({ [RIVERSIDE]: riverside, [GLOBAL]: global }, RIVERSIDE);
         await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
         p.clock.now += WAIT;
         await syncContacts(me, p.deps);
@@ -315,24 +315,24 @@ describe('a new phone, and the other communities', () => {
         await contactsHeard(me, GLOBAL, global.answer(me.publicKey, 'GET', '/api/me/unread', undefined).body, true, p.deps);
         await syncContacts(me, p.deps);
         expect(await names(me, p.deps)).toEqual(['Dee Walker', 'Sam Jones', 'Tom']);
-        // Byron gets Tom too, in the same pass.
-        expect(byron.copies.get(me.publicKey)!.seq).toBe(global.copies.get(me.publicKey)!.seq);
+        // Riverside gets Tom too, in the same pass.
+        expect(riverside.copies.get(me.publicKey)!.seq).toBe(global.copies.get(me.publicKey)!.seq);
     });
 
     it('a community that keeps no lists, or a server from before them, is left alone, and the others still get the copy', async () => {
-        const byron = new FakeCommunity();
-        byron.off = true;
+        const riverside = new FakeCommunity();
+        riverside.off = true;
         const old = new FakeCommunity();
         old.old = true;
         const global = new FakeCommunity();
         const me = person();
-        const p = phone({ [BYRON]: byron, 'https://old.example': old, [GLOBAL]: global }, BYRON);
+        const p = phone({ [RIVERSIDE]: riverside, 'https://old.example': old, [GLOBAL]: global }, RIVERSIDE);
         await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
         p.clock.now += WAIT;
         await syncContacts(me, p.deps);
         expect(global.copies.get(me.publicKey)?.seq).toBe(1);
         const s = (await loadContacts(me, p.deps)).state;
-        expect(s.refused[BYRON]?.code).toBe('contacts_off');
+        expect(s.refused[RIVERSIDE]?.code).toBe('contacts_off');
         expect(s.refused['https://old.example']?.code).toBe('contacts_off');
         const before = p.requests.length;
         await editContacts(me, (l) => putContact(l, person1('Sam')), p.deps);
@@ -348,13 +348,13 @@ describe('a dishonest community', () => {
         liar.liar = true;
         const global = new FakeCommunity();
         const me = person();
-        const p = phone({ [BYRON]: liar, [GLOBAL]: global }, BYRON);
+        const p = phone({ [RIVERSIDE]: liar, [GLOBAL]: global }, RIVERSIDE);
         await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
         p.clock.now += WAIT;
         await syncContacts(me, p.deps);
         expect(global.copies.get(me.publicKey)?.seq).toBe(1);
         // The claim heard (a round's answer), and a change made straight after it.
-        await contactsHeard(me, BYRON, liar.answer(me.publicKey, 'GET', '/api/me/unread', undefined).body, false, p.deps);
+        await contactsHeard(me, RIVERSIDE, liar.answer(me.publicKey, 'GET', '/api/me/unread', undefined).body, false, p.deps);
         await expect(editContacts(me, (l) => putContact(l, person1('Sam Jones')), p.deps)).resolves.toBeDefined();
         p.clock.now += WAIT;
         await syncContacts(me, p.deps);
@@ -364,13 +364,13 @@ describe('a dishonest community', () => {
     });
 
     it('handing back another member\'s copy adds nobody, and it isn\'t fetched again each pass', async () => {
-        const byron = new FakeCommunity();
+        const riverside = new FakeCommunity();
         const me = person();
         const other = person();
-        byron.swapped = contactsCopyWire(makeContactsCopy({ json: writeContactsList(putContact(emptyContactsList(), person1('Mallory'))), me: other, seq: 9 }));
-        const p = phone({ [BYRON]: byron }, BYRON);
+        riverside.swapped = contactsCopyWire(makeContactsCopy({ json: writeContactsList(putContact(emptyContactsList(), person1('Mallory'))), me: other, seq: 9 }));
+        const p = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
-        await contactsHeard(me, BYRON, { contacts: { seq: 9 } }, false, p.deps);
+        await contactsHeard(me, RIVERSIDE, { contacts: { seq: 9 } }, false, p.deps);
         p.clock.now += WAIT;
         await syncContacts(me, p.deps);
         await syncContacts(me, p.deps);
@@ -382,14 +382,14 @@ describe('a dishonest community', () => {
 
 describe('cost on an old phone', () => {
     it('a round\'s answer opens the list on the phone once, not once to note it and again to decide', async () => {
-        const byron = new FakeCommunity();
+        const riverside = new FakeCommunity();
         const me = person();
-        const p = phone({ [BYRON]: byron }, BYRON);
+        const p = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
         let opens = 0;
         const counted: ContactsSyncDeps = { ...p.deps, disk: { ...p.deps.disk, read: async (pk) => { opens++; return p.deps.disk.read(pk); } } };
-        // Byron keeps none yet and the change is still in its wait: nothing to do, so no pass starts.
-        await contactsHeard(me, BYRON, { contacts: null }, true, counted);
+        // Riverside keeps none yet and the change is still in its wait: nothing to do, so no pass starts.
+        await contactsHeard(me, RIVERSIDE, { contacts: null }, true, counted);
         expect(opens).toBe(1);
         expect(p.requests).toEqual([]);
         // Mutation: decide on a second loadContacts after noting → 2 opens per round answer.
@@ -398,15 +398,15 @@ describe('cost on an old phone', () => {
 
 describe('a list on this phone that can\'t be opened', () => {
     it('set aside, the communities\' copies bring it back, and the damaged bytes are kept beside it, never written over', async () => {
-        const byron = new FakeCommunity();
+        const riverside = new FakeCommunity();
         const global = new FakeCommunity();
         const me = person();
-        const p = phone({ [BYRON]: byron, [GLOBAL]: global }, BYRON);
+        const p = phone({ [RIVERSIDE]: riverside, [GLOBAL]: global }, RIVERSIDE);
         await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
         await editContacts(me, (l) => putContact(l, person1('Sam Jones')), p.deps);
         p.clock.now += WAIT;
         await syncContacts(me, p.deps);
-        expect(byron.copies.get(me.publicKey)?.seq).toBe(1);
+        expect(riverside.copies.get(me.publicKey)?.seq).toBe(1);
         const sent = readSyncState(p.kv.get(contactsSyncStoreKey(me.publicKey)) ?? null).sentSeq;
         // The file goes bad on the phone (a disk fault): nothing opens it, and every community is skipped.
         const bad = p.files.get(me.publicKey)!.replace(/"sealed":"./, '"sealed":"!');
@@ -438,26 +438,26 @@ describe('a list on this phone that can\'t be opened', () => {
 
 describe('refusals end', () => {
     it('a community that switched lists back on keeps the copy again, and the footer no longer names it as keeping none', async () => {
-        const byron = new FakeCommunity();
-        byron.off = true;
+        const riverside = new FakeCommunity();
+        riverside.off = true;
         const me = person();
-        const p = phone({ [BYRON]: byron }, BYRON);
+        const p = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
         p.clock.now += WAIT;
         await syncContacts(me, p.deps);
         let { onPhone, state } = await loadContacts(me, p.deps);
-        expect(contactsKeptAt(state, onPhone, [BYRON])).toMatchObject({ at: [], off: [BYRON] });
-        byron.off = false;
+        expect(contactsKeptAt(state, onPhone, [RIVERSIDE])).toMatchObject({ at: [], off: [RIVERSIDE] });
+        riverside.off = false;
         p.clock.now += 25 * 60 * 60 * 1000;
         await syncContacts(me, p.deps);
         ({ onPhone, state } = await loadContacts(me, p.deps));
-        expect(byron.copies.get(me.publicKey)?.seq).toBe(1);
-        expect(contactsKeptAt(state, onPhone, [BYRON])).toMatchObject({ at: [BYRON], off: [] });
-        // Mutation: keep the refusal once Byron answers → the footer says Byron both keeps the list and keeps none.
+        expect(riverside.copies.get(me.publicKey)?.seq).toBe(1);
+        expect(contactsKeptAt(state, onPhone, [RIVERSIDE])).toMatchObject({ at: [RIVERSIDE], off: [] });
+        // Mutation: keep the refusal once Riverside answers → the footer says Riverside both keeps the list and keeps none.
     });
 
     it('a copy too big to merge with the phone\'s rests a day, and isn\'t fetched each pass', async () => {
-        const byron = new FakeCommunity();
+        const riverside = new FakeCommunity();
         const me = person();
         // About 300 KiB of contacts on each phone: each locks alone, the two together are past the 512 KiB cap.
         const big = (tag: string) => Array.from({ length: 220 }, (_, i) => ({
@@ -465,20 +465,20 @@ describe('refusals end', () => {
                 Array.from({ length: 3 }, (_, k) => `${tag.toLowerCase()}${i}.${k}.${'x'.repeat(180)}@example.org`)),
             note: `${tag} ${'n'.repeat(290)}`,
         }));
-        const other = phone({ [BYRON]: byron }, BYRON);
+        const other = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await editContacts(me, (l) => big('Bee').reduce((acc, c) => putContact(acc, c), l), other.deps);
         other.clock.now += WAIT;
         await syncContacts(me, other.deps);
-        expect(byron.copies.get(me.publicKey)?.seq).toBe(1);
-        const p = phone({ [BYRON]: byron }, BYRON);
+        expect(riverside.copies.get(me.publicKey)?.seq).toBe(1);
+        const p = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await editContacts(me, (l) => big('Ant').reduce((acc, c) => putContact(acc, c), l), p.deps);
         p.clock.now += WAIT;
         await syncContacts(me, p.deps);
         await syncContacts(me, p.deps);
         expect(p.requests.filter((r) => r.method === 'GET' && r.path === CONTACTS_COPY_PATH)).toHaveLength(1);
-        expect((await loadContacts(me, p.deps)).state.refused[BYRON]?.code).toBe('too_big');
+        expect((await loadContacts(me, p.deps)).state.refused[RIVERSIDE]?.code).toBe('too_big');
         expect((await names(me, p.deps)).length).toBe(220);
-        // Mutation: let takeInCopy's throw end the pass → Byron's copy is downloaded and merged again on every pass.
+        // Mutation: let takeInCopy's throw end the pass → Riverside's copy is downloaded and merged again on every pass.
     });
 });
 
@@ -491,17 +491,17 @@ describe('what leaves the phone (design §11: the recording node)', () => {
         }));
         vi.doMock('expo-crypto', async () => ({ getRandomBytes: (n: number) => (globalThis.crypto as Crypto).getRandomValues(new Uint8Array(n)), randomUUID: () => 'x' }));
         const { phoneContactsNet } = await import('../contacts-sync');
-        const byron = new FakeCommunity();
+        const riverside = new FakeCommunity();
         const seen: string[] = [];
         vi.stubGlobal('fetch', async (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
             seen.push(url, JSON.stringify(init.headers), init.body ?? '');
             const me = init.headers['X-Public-Key'] ?? init.headers['x-public-key'] ?? Object.values(init.headers).find((v) => /^[0-9a-f]{64}$/.test(v)) ?? '';
-            const out = byron.answer(me, init.method, new URL(url).pathname, init.body ? JSON.parse(init.body) : undefined);
+            const out = riverside.answer(me, init.method, new URL(url).pathname, init.body ? JSON.parse(init.body) : undefined);
             return { status: out.status, ok: out.status < 300, json: async () => out.body } as unknown as Response;
         });
         try {
             const me = person();
-            const p = phone({ [BYRON]: byron }, BYRON);
+            const p = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
             const deps = { ...p.deps, net: phoneContactsNet() };
             const fixtures = [
                 person1('Dee Walker', ['0412 345 678', '+61 400 000 001'], ['dee@example.org']),
@@ -513,7 +513,7 @@ describe('what leaves the phone (design §11: the recording node)', () => {
             await editContacts(me, (l) => removeEveryContact(l), deps);
             p.clock.now += WAIT;
             await syncContacts(me, deps);
-            expect(byron.copies.get(me.publicKey)).toBeDefined();
+            expect(riverside.copies.get(me.publicKey)).toBeDefined();
             expect(seen.length).toBeGreaterThan(0);
             const sent = seen.join('\n');
             // Whole values, and each number's digits alone: short pieces (a "0412") turn up by chance in hex and base64.
@@ -531,9 +531,9 @@ describe('what leaves the phone (design §11: the recording node)', () => {
 
 describe('the save set for later', () => {
     it('goes when the wait is over, and never for an account that has left the phone meanwhile', async () => {
-        const byron = new FakeCommunity();
+        const riverside = new FakeCommunity();
         const me = person();
-        const p = phone({ [BYRON]: byron }, BYRON);
+        const p = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
         await vi.advanceTimersByTimeAsync(60_000);
         await settle();
@@ -541,9 +541,9 @@ describe('the save set for later', () => {
         p.clock.now += WAIT;
         await vi.advanceTimersByTimeAsync(WAIT);
         await settle();
-        expect(byron.copies.get(me.publicKey)?.seq).toBe(1);
+        expect(riverside.copies.get(me.publicKey)?.seq).toBe(1);
 
-        const q = phone({ [BYRON]: byron }, BYRON);
+        const q = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
         const her = person();
         await editContacts(her, (l) => putContact(l, person1('Sam Jones')), q.deps);
         // Sign Out (identity.ts announces the phone's key going): the save set for her never fires.
@@ -553,40 +553,40 @@ describe('the save set for later', () => {
         await vi.advanceTimersByTimeAsync(WAIT);
         await settle();
         expect(q.requests).toEqual([]);
-        expect(byron.copies.get(her.publicKey)).toBeUndefined();
+        expect(riverside.copies.get(her.publicKey)).toBeUndefined();
         // Mutation: drop the onAccountOnPhone listener → the timer fires and her copy is sent after she signed out.
     });
 });
 
 describe('the communities a pass visits: the member\'s own, never a guest\'s look (PR #3073 review 4542103430)', () => {
     it('a community the phone only looks at as a guest is never asked, the one in use included; one with alerts off still keeps the copy', async () => {
-        const byron = new FakeCommunity();
-        const castlemaine = new FakeCommunity();
+        const riverside = new FakeCommunity();
+        const riverbend = new FakeCommunity();
         const global = new FakeCommunity();
         const me = person();
-        const p = phone({ [BYRON]: byron, [CASTLEMAINE]: castlemaine, [GLOBAL]: global }, GLOBAL);
+        const p = phone({ [RIVERSIDE]: riverside, [RIVERBEND]: riverbend, [GLOBAL]: global }, GLOBAL);
         // "Explore worldwide": the phone is on Global as a guest (global-guest-visit.ts marks the look first, spelled as it
-        // came), and keeps Byron and Castlemaine, the member's own; Castlemaine's alerts are off.
+        // came), and keeps Riverside and Riverbend, the member's own; Riverbend's alerts are off.
         p.kv.set('beanpool_anchor_url', GLOBAL);
-        p.kv.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: BYRON }, { url: GLOBAL }, { url: CASTLEMAINE }]));
+        p.kv.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: RIVERSIDE }, { url: GLOBAL }, { url: RIVERBEND }]));
         p.kv.set('beanpool_guest_nodes', JSON.stringify([`${GLOBAL}/`]));
-        p.kv.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([CASTLEMAINE]));
+        p.kv.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([RIVERBEND]));
         const deps: ContactsSyncDeps = { ...p.deps, communities: phoneSyncDeps({ disk: p.deps.disk, kv: p.deps.kv }).communities };
-        expect(await deps.communities()).toEqual({ anchor: null, kept: [BYRON, CASTLEMAINE] });
+        expect(await deps.communities()).toEqual({ anchor: null, kept: [RIVERSIDE, RIVERBEND] });
         await editContacts(me, (l) => putContact(l, person1('Dee Walker')), deps);
         p.clock.now += WAIT;
         await checkContactsHere(me, deps);
         await syncContacts(me, deps);
         expect(p.requests.filter((r) => r.community === GLOBAL)).toEqual([]);
-        expect(byron.copies.get(me.publicKey)?.seq).toBe(1);
-        expect(castlemaine.copies.get(me.publicKey)?.seq).toBe(1);
+        expect(riverside.copies.get(me.publicKey)?.seq).toBe(1);
+        expect(riverbend.copies.get(me.publicKey)?.seq).toBe(1);
         // Joining clears the mark (nodes.ts clearGuestNode): the member belongs there now, and Global keeps the copy too.
         p.kv.set('beanpool_guest_nodes', '[]');
         resetContactsCheckForTests();
         await checkContactsHere(me, deps);
         expect(global.copies.get(me.publicKey)?.seq).toBe(1);
         // Mutation: phoneSyncDeps's communities as readKeptCommunities alone → Global hears the member's key each pass;
-        // as push-registrations' communitiesForAlerts → the guest look in use is still asked, and Castlemaine keeps no copy.
+        // as push-registrations' communitiesForAlerts → the guest look in use is still asked, and Riverbend keeps no copy.
     });
 
     it('guest marks that can\'t be read stop the pass: a failed read is never taken as "no looks"', async () => {
@@ -611,22 +611,22 @@ describe('the communities a pass visits: the member\'s own, never a guest\'s loo
 
 describe('where the copy is kept (the Contacts footer)', () => {
     it('names the communities holding exactly the phone\'s copy, and those that keep no lists', async () => {
-        const byron = new FakeCommunity();
+        const riverside = new FakeCommunity();
         const global = new FakeCommunity();
         global.off = true;
         const me = person();
-        const p = phone({ [BYRON]: byron, [GLOBAL]: global }, BYRON);
+        const p = phone({ [RIVERSIDE]: riverside, [GLOBAL]: global }, RIVERSIDE);
         await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
         let { onPhone, state } = await loadContacts(me, p.deps);
-        expect(contactsKeptAt(state, onPhone, [BYRON, GLOBAL])).toEqual({ at: [], off: [], savedAt: null });
+        expect(contactsKeptAt(state, onPhone, [RIVERSIDE, GLOBAL])).toEqual({ at: [], off: [], savedAt: null });
         p.clock.now += WAIT;
         await syncContacts(me, p.deps);
         ({ onPhone, state } = await loadContacts(me, p.deps));
-        expect(contactsKeptAt(state, onPhone, [BYRON, GLOBAL])).toEqual({ at: [BYRON], off: [GLOBAL], savedAt: p.clock.now });
-        // A change not yet sent: Byron holds the one before, so it isn't named as keeping this one.
+        expect(contactsKeptAt(state, onPhone, [RIVERSIDE, GLOBAL])).toEqual({ at: [RIVERSIDE], off: [GLOBAL], savedAt: p.clock.now });
+        // A change not yet sent: Riverside holds the one before, so it isn't named as keeping this one.
         await editContacts(me, (l) => putContact(l, person1('Sam Jones')), p.deps);
         ({ onPhone, state } = await loadContacts(me, p.deps));
-        expect(contactsKeptAt(state, onPhone, [BYRON, GLOBAL]).at).toEqual([]);
+        expect(contactsKeptAt(state, onPhone, [RIVERSIDE, GLOBAL]).at).toEqual([]);
     });
 });
 
@@ -634,19 +634,19 @@ describe('decide', () => {
     const list = { kind: 'list' as const, list: { v: 1 as const, contacts: [], removed: [] }, seq: 4, copy: { header: '', signature: '', nonce: '', sealed: '' } };
     const s = (o: Partial<ReturnType<typeof readSyncState>>) => ({ ...readSyncState(null), ...o });
     it('asks a community never heard from, fetches one holding an unmerged copy, saves to one behind (asking first when far behind), and leaves the rest', () => {
-        expect(decide(BYRON, s({}), list, 0)).toBe('ask');
-        expect(decide(BYRON, s({}), { kind: 'none' }, 0)).toBe('level');
-        expect(decide(BYRON, s({ heard: { [BYRON]: 9 }, merged: { [BYRON]: 3 } }), list, 0)).toBe('fetch');
-        expect(decide(BYRON, s({ heard: { [BYRON]: 3 }, merged: { [BYRON]: 3 } }), list, 0)).toBe('put');
+        expect(decide(RIVERSIDE, s({}), list, 0)).toBe('ask');
+        expect(decide(RIVERSIDE, s({}), { kind: 'none' }, 0)).toBe('level');
+        expect(decide(RIVERSIDE, s({ heard: { [RIVERSIDE]: 9 }, merged: { [RIVERSIDE]: 3 } }), list, 0)).toBe('fetch');
+        expect(decide(RIVERSIDE, s({ heard: { [RIVERSIDE]: 3 }, merged: { [RIVERSIDE]: 3 } }), list, 0)).toBe('put');
         // More than one past the number heard (4 is past "none" and past 2): asked again first, then saved only on that answer.
         // The 'put' this line said at 64ce793c, with nothing asked, was the defect of review 4542103140.
-        expect(decide(BYRON, s({ heard: { [BYRON]: null } }), list, 0)).toBe('ask');
-        expect(decide(BYRON, s({ heard: { [BYRON]: null } }), list, 0, null)).toBe('put');
-        expect(decide(BYRON, s({ heard: { [BYRON]: 2 }, merged: { [BYRON]: 2 } }), list, 0)).toBe('ask');
-        expect(decide(BYRON, s({ heard: { [BYRON]: 2 }, merged: { [BYRON]: 2 } }), list, 0, 2)).toBe('put');
-        expect(decide(BYRON, s({ heard: { [BYRON]: 4 }, merged: { [BYRON]: 4 } }), list, 0)).toBe('level');
-        expect(decide(BYRON, s({ heard: { [BYRON]: 3 }, merged: { [BYRON]: 3 }, dueAt: 10 }), list, 5)).toBe('level');
-        expect(decide(BYRON, s({ refused: { [BYRON]: { code: 'node_full', until: 10 } } }), list, 5)).toBe('skip');
-        expect(decide(BYRON, s({}), { kind: 'unreadable', reason: 'damaged' }, 0)).toBe('skip');
+        expect(decide(RIVERSIDE, s({ heard: { [RIVERSIDE]: null } }), list, 0)).toBe('ask');
+        expect(decide(RIVERSIDE, s({ heard: { [RIVERSIDE]: null } }), list, 0, null)).toBe('put');
+        expect(decide(RIVERSIDE, s({ heard: { [RIVERSIDE]: 2 }, merged: { [RIVERSIDE]: 2 } }), list, 0)).toBe('ask');
+        expect(decide(RIVERSIDE, s({ heard: { [RIVERSIDE]: 2 }, merged: { [RIVERSIDE]: 2 } }), list, 0, 2)).toBe('put');
+        expect(decide(RIVERSIDE, s({ heard: { [RIVERSIDE]: 4 }, merged: { [RIVERSIDE]: 4 } }), list, 0)).toBe('level');
+        expect(decide(RIVERSIDE, s({ heard: { [RIVERSIDE]: 3 }, merged: { [RIVERSIDE]: 3 }, dueAt: 10 }), list, 5)).toBe('level');
+        expect(decide(RIVERSIDE, s({ refused: { [RIVERSIDE]: { code: 'node_full', until: 10 } } }), list, 5)).toBe('skip');
+        expect(decide(RIVERSIDE, s({}), { kind: 'unreadable', reason: 'damaged' }, 0)).toBe('skip');
     });
 });

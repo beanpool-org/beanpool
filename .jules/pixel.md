@@ -248,3 +248,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-03-13 - Add accessibilityState busy and disabled to stop sharing button in SharedOutsideScreen
 **Learning:** In `apps/native/app/shared-outside.tsx`, the "Stop sharing" action button disables during async link revocation (`disabled={stopping === s.id}`), but lacked an `accessibilityState={{ disabled: stopping === s.id, busy: stopping === s.id }}`, leaving screen readers without feedback that an async operation is in progress on that item.
 **Action:** Supply `accessibilityState={{ disabled: stopping === s.id, busy: stopping === s.id }}` on action buttons that disable during asynchronous list item actions.
+
+## 2027-03-20 - Add accessibilityState to sweep button in treasury-manage
+**Learning:** In `apps/native/app/treasury-manage.tsx`, the sweep surplus button (`sweepBtn`) conditionally rendered an `ActivityIndicator` during async operations and had `disabled={sweeping || balance <= 0}`, but lacked `accessibilityState={{ disabled: sweeping || balance <= 0, busy: sweeping }}`, leaving screen readers without state and busy feedback during surplus sweeps.
+**Action:** Supply `accessibilityState={{ disabled: sweeping || balance <= 0, busy: sweeping }}` on action buttons that render an `ActivityIndicator` when busy and disable based on condition.

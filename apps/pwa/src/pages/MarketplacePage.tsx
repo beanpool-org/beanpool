@@ -4257,9 +4257,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // The Market's order, one rule on both apps (core market-order, DESIGN-market-order-fable.md): the newest listed
                 // first, an event or an open poll listed again the day before its moment, no author past two places in a day
                 // until the others have had theirs. Pinned posts are out of the stream, so they never count towards that.
-                // Where the node's order stands, it is kept: under Events (soonest
-                // first, the date chips) and under a search or a tag (its ranking). The pinned posts follow in `filtered`, for
-                // what counts or fills, and are left out of what the list draws (`unpinnedFiltered`).
+                // Where the node's order stands, it is kept: under Events (soonest first, the date chips) and under a search or a
+                // tag (its ranking). The pinned posts follow in `filtered`, for what counts or fills, and are left out of what the
+                // list draws (`unpinnedFiltered`).
                 // A visitor's list draws no pinned block (it is the one list below), so for them pins stay in the stream.
                 const orderNow = Date.now();
                 const outOfStream = visitor ? new Set<string>() : pinnedIds;

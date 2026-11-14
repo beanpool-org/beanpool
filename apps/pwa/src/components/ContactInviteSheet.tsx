@@ -61,7 +61,7 @@ export function ContactInviteSheet({ contact, identity, community, onClose }: {
     const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
     const send = async (how: How, message: string): Promise<boolean> => {
         if (how === 'share') { await navigator.share({ text: message }); return true; }
-        if (how === 'email') { window.location.assign(contactMailtoLink(email!, contactInviteWords.emailSubject(), message)!); return true; }
+        if (how === 'email') { window.open(contactMailtoLink(email!, contactInviteWords.emailSubject(), message)!, '_self'); return true; }
         await navigator.clipboard.writeText(message);
         setNote(contactInviteWords.copied());
         return false;

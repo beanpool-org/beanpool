@@ -296,6 +296,9 @@ export function App() {
     }, [helpOpen, helpGuide]);
     const helpWords = helpSheetFor(helpGuide ? inShownLanguage(helpGuide) : null, webHelpKey({ tab: activeTab, settings: showSettings }));
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
+    // Each arrival at the Chat tab from elsewhere (a notice, the bell, Home, a profile's Message): the tab shows Chats, not the
+    // Forum side a member left it on (ChatTabPage). The tab's own button is not one of these.
+    const [chatNavNonce, setChatNavNonce] = useState(0);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     // The deal a door named with its listing (Home, the header's needs-you icons): the listing opens at that deal (deals S4).
     const [openMarketTxId, setOpenMarketTxId] = useState<string | null>(null);
@@ -633,6 +636,7 @@ export function App() {
             return;
         }
         setActiveTab(tab as Tab);
+        if (tab === 'messages') setChatNavNonce(n => n + 1);
         if (tab === 'messages' && contextId) setOpenConversationId(contextId);
         if (tab === 'marketplace' && contextId) { setOpenMarketPostSaysWhy(true); setOpenMarketPostId(contextId); setOpenMarketTxId(txId ?? null); }
         if (tab === 'projects' && contextId === 'start') setProjectsInitialStart(true);
@@ -1475,6 +1479,7 @@ export function App() {
                                 <ChatTabPage
                                     identity={identity}
                                     openConversationId={openConversationId}
+                                    navNonce={chatNavNonce}
                                     onConversationOpened={() => setOpenConversationId(null)}
                                     onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}

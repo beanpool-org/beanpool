@@ -85,6 +85,24 @@ describe('the Chat tab where the forum is on', () => {
         expect(seen.props.at(-1)?.openConversationId).toBe('conv-1');
     });
 
+    it('an arrival from elsewhere with no conversation (the bell\'s request notice, the unread or your-groups rows) shows Chats', () => {
+        const { rerender } = render(<ChatTabPage identity={ME} navNonce={1} />);
+        for (const nonce of [2, 3]) {
+            fireEvent.click(screen.getByRole('tab', { name: 'Forum' }));
+            expect(selected()).toEqual(['false', 'true']);
+            rerender(<ChatTabPage identity={ME} navNonce={nonce} />);
+            expect(selected(), `arrival ${nonce}`).toEqual(['true', 'false']);
+            expect(chatsBox()).toBe('contents');
+            expect(screen.queryByTestId('forum-page')).toBeNull();
+        }
+        // Drawing again with no arrival (the tab's own button, a re-render) leaves the side the member picked.
+        fireEvent.click(screen.getByRole('tab', { name: 'Forum' }));
+        rerender(<ChatTabPage identity={ME} navNonce={3} />);
+        expect(selected()).toEqual(['false', 'true']);
+        // The count is the page's own: MessagesPage is not handed it.
+        expect(seen.props.at(-1)).not.toHaveProperty('navNonce');
+    });
+
     it('in the pseudo-locale: both names and the switch\'s spoken name came through t()', async () => {
         await act(async () => { await showIn('xx'); });
         render(<ChatTabPage identity={ME} />);

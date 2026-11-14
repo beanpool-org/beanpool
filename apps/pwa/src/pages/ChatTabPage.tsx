@@ -10,7 +10,9 @@
  * - **No forum** (switched off by its owners, a server from before it, or before the info arrives): MessagesPage exactly as
  *   before, with no switch. The wrapper is `display: contents`, so it adds no box and the page lays out as it always has.
  * - MessagesPage stays mounted on the Forum side (hidden), so going back to Chats keeps the list, its chip and its scroll.
- *   A conversation opened from elsewhere (a notice, a profile's Message) shows Chats.
+ *   Every way in from elsewhere shows Chats (`navNonce`, bumped by App's navigateToTab at each arrival): a conversation (a
+ *   notice, a profile's Message), and the bell's and Home's rows that name no conversation (a message request, the unread
+ *   messages, your groups). A tap on the tab itself is not a way in from elsewhere: it leaves the side the member picked.
  */
 import { useEffect, useState, type ComponentProps } from 'react';
 import { chatSides, chatSideShown, t, type ChatSide, type ChatSideEntry } from '@beanpool/core';
@@ -54,11 +56,15 @@ export function ChatFrameSwitch({ sides, side, onChange }: {
     );
 }
 
-export function ChatTabPage(props: ComponentProps<typeof MessagesPage>) {
+export function ChatTabPage({ navNonce, ...props }: ComponentProps<typeof MessagesPage> & {
+    /** Changes at every arrival at the tab from elsewhere (App's navigateToTab), with a conversation or without one. */
+    navNonce?: number;
+}) {
     const features = useCommunityInfo()?.features;
     const sides = chatSides(features);
     const [picked, setPicked] = useState<ChatSide>('chats');
     const side = chatSideShown(picked, features);
+    useEffect(() => { setPicked('chats'); }, [navNonce]);
     useEffect(() => { if (props.openConversationId) setPicked('chats'); }, [props.openConversationId]);
     const frame = sides.length ? <ChatFrameSwitch sides={sides} side={side} onChange={setPicked} /> : undefined;
     return (

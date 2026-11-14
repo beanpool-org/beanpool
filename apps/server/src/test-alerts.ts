@@ -646,10 +646,11 @@ async function main(): Promise<void> {
     // its own clock (this stand-in's after 5 s, in its own thread, while the day above kept this one busy); a send written
     // onto it is reset, fetch never retries a POST, and the end above was told 5 minutes late (merge-queue run 43647481293).
     const channelHits = await ntfy.hits();
-    const reused = channelHits.filter((h) => h.nth !== 1 || h.headers.connection !== 'close');
-    assert(channelHits.length > 20 && reused.length === 0,
-        `11. every message the channel got came on a connection of its own (${reused.length} of ${channelHits.length} on one kept open: `
-        + `${JSON.stringify(reused.slice(0, 3).map((h) => [h.nth, h.headers.connection]))})`);
+    const onOld = channelHits.filter((h) => h.nth !== 1).length;
+    const keepOpen = channelHits.filter((h) => h.headers.connection !== 'close').length;
+    assert(channelHits.length > 20 && onOld === 0 && keepOpen === 0,
+        `11. every message the channel got came on a connection of its own (of ${channelHits.length}: ${onOld} on one kept open from an `
+        + `earlier send, ${keepOpen} asking to keep theirs open)`);
 
     // ── 12. The server's own certificates ────────────────────────────────────────────────────────────────────────────
     // An IP address this server is configured with; its certificate comes from the real renewal tick, whose order is a

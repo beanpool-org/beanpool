@@ -442,7 +442,7 @@ describe('vouchers\' budgets (tests 18, 19, 20)', () => {
     it('a plain voucher sees their own budget above the chips with Ask for more; one tap sends an empty body and the button becomes the note', async () => {
         world.sight = 'voucher';
         await mount(list());
-        expect(byId('credit-own-budget')!.textContent).toBe('Your budget: 150 of 1,000 left');
+        expect(byId('credit-own-budget')!.textContent).toBe('Vouching budget: 150 of 1,000 left');
         await press(byId('ask-for-more-button'));
         expect(world.posts).toEqual([{ path: '/api/vouchers/ask', body: {} }]);
         expect(byId('ask-for-more-note')!.textContent).toBe('Asked on 12 Nov · an owner or the credit committee will see it.');

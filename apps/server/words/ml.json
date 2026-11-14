@@ -999,7 +999,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "നിങ്ങൾ ഇതിനകം @{name}-ന് ആകെ {total} പയർ ഉറപ്പുനൽകിയിട്ടുണ്ട്. ഉയർത്താൻ ഇതിലും ഉയർന്ന ഒരു ആകെ തുക തിരഞ്ഞെടുക്കുക.",
   "Send either an amount to vouch or a total to raise to, not both.": "ഉറപ്പുനൽകാനുള്ള തുകയോ ഉയർത്തേണ്ട ആകെ തുകയോ അയയ്ക്കുക, രണ്ടും വേണ്ട.",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "മറ്റൊരാൾ നിങ്ങൾക്ക് നൽകിയ ക്രെഡിറ്റ് ലൈനിൽ {room} പയർ മാത്രമേ നിങ്ങളുടെ പക്കലുള്ളൂ, അതിനാൽ {amount} നൽകാനാവില്ല.",
-  "Your budget to vouch from": "ഉറപ്പുനൽകാനുള്ള നിങ്ങളുടെ ബജറ്റ്",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "ഉറപ്പുനൽകാനുള്ള നിങ്ങളുടെ ബജറ്റ് {level} പയർ ആയി കുറച്ചു. ഉറപ്പുനൽകാൻ നിങ്ങളുടെ പക്കൽ {left} ബാക്കിയുണ്ട്.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "ഉറപ്പുനൽകാനുള്ള നിങ്ങളുടെ ബജറ്റ് {level} പയർ ആയി ഉയർത്തി. ഉറപ്പുനൽകാൻ നിങ്ങളുടെ പക്കൽ {left} ബാക്കിയുണ്ട്.",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "ഉറപ്പുനൽകാനുള്ള നിങ്ങളുടെ ബജറ്റ് നിർത്തി. നിങ്ങൾ നൽകിയ ക്രെഡിറ്റ് ലൈനുകൾ നിങ്ങൾ ആർക്കാണോ നൽകിയത് അവരുടെ കൈവശം തന്നെ തുടരും.",

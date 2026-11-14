@@ -994,7 +994,6 @@
   "Members giving part of their credit line is a core setting: an owner changes it in Settings, Core settings, which asks for their proof once the core settings are locked. Nothing in this request was saved.": "اراکین کا اپنی کریڈٹ لائن کا حصہ دینا ایک بنیادی ترتیب ہے: ایک مالک اسے ترتیبات، بنیادی ترتیبات میں تبدیل کرتا ہے، جو بنیادی ترتیبات کے مقفل ہونے پر ان کا ثبوت مانگتا ہے۔ اس درخواست میں کچھ بھی محفوظ نہیں کیا گیا تھا۔",
   "The vouch on this invite ended before you joined; you start with no credit line": "اس دعوت نامے کی تصدیق آپ کے شامل ہونے سے پہلے ختم ہو گئی تھی؛ آپ بغیر کسی کریڈٹ لائن کے آغاز کرتے ہیں",
   "Your credit line is frozen, so you can’t vouch from your budget until an admin unfreezes it.": "آپ کی کریڈٹ لائن منجمد ہے، اس لیے جب تک کوئی ایڈمن اسے غیر منجمد نہ کرے آپ اپنے بجٹ سے تصدیق نہیں کر سکتے۔",
-  "Your budget to vouch from": "تصدیق کے لیے آپ کا بجٹ",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "تصدیق کے لیے آپ کا بجٹ روک دیا گیا تھا۔ آپ نے جو کریڈٹ لائنز دی تھیں وہ ان لوگوں کے پاس رہیں گی جنہیں آپ نے دی تھیں۔",
   "You have {left} Beans of budget left, so you can’t vouch {amount}. Pick a smaller vouch, or ask an owner for more.": "آپ کے بجٹ میں {left} پھلیاں باقی ہیں، اس لیے آپ {amount} کی تصدیق نہیں کر سکتے۔ چھوٹی تصدیق منتخب کریں، یا کسی مالک سے مزید مانگیں۔",
   "You’ve already vouched for @{name}.": "آپ پہلے ہی @{name} کی تصدیق کر چکے ہیں۔",

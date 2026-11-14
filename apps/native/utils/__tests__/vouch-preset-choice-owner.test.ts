@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The phone's vouch presets per role (Marty, 9 Nov): an owner (the node's `noLimit`) sees 25 · 50 · 75 · 100 · 200 · 500, none
- * disabled for budget, and "From your budget: No limit"; an admin or any other voucher sees the four, disabled past what is
+ * disabled for budget, and "From your vouching budget: no limit"; an admin or any other voucher sees the four, disabled past what is
  * left, and their budget. The row wraps (flexWrap) at 320 dp × 1.3; each chip is 44 dp tall at least. Every figure is whole
  * hundredths of a Bean, as the node sends them (core VOUCH_PRESETS 2500 … 10000); a chip's test id names its whole Beans.
  */
@@ -60,7 +60,7 @@ describe('the phone vouch presets per role', () => {
         const h = draw({ noLimit: true });
         expect(ids(h)).toEqual(['none', '25', '50', '75', '100', '200', '500']);
         expect(chips(h).some((e) => e.getAttribute('data-disabled') === 'true')).toBe(false);
-        expect(h.textContent).toContain('From your budget: No limit');
+        expect(h.textContent).toContain('From your vouching budget: no limit');
         expect(h.textContent).not.toContain('No budget left');
     });
 
@@ -69,7 +69,7 @@ describe('the phone vouch presets per role', () => {
         expect(ids(h)).toEqual(['none', '25', '50', '75', '100']);
         expect(off(h, '75')).toBe(true);
         expect(off(h, '50')).toBe(false);
-        expect(h.textContent).toContain(`From your budget: 60 of ${formatHundredths(100000)} left`);
+        expect(h.textContent).toContain(`From your vouching budget: 60 of ${formatHundredths(100000)} left`);
         // The chips say whole Beans, from the presets in hundredths.
         expect(chips(h).map((e) => e.textContent)).toEqual(['None', '25', '50', '75', '100']);
     });
@@ -81,7 +81,7 @@ describe('the phone vouch presets per role', () => {
         expect(h.textContent).toContain('Raise to');
         expect(h.textContent).not.toContain('Vouch for them');
         expect(h.textContent).not.toContain('None');
-        expect(h.textContent).toContain('From your budget: No limit');
+        expect(h.textContent).toContain('From your vouching budget: no limit');
     });
 
     it("offers an owner at 200 only 500, and an owner at 500 nothing to raise to", () => {
@@ -99,7 +99,7 @@ describe('the phone vouch presets per role', () => {
         expect(off(h, '75')).toBe(true);
         expect(off(h, '100')).toBe(true);
         expect(h.textContent).toContain('Raise to');
-        expect(h.textContent).toContain(`From your budget: 30 of ${formatHundredths(100000)} left`);
+        expect(h.textContent).toContain(`From your vouching budget: 30 of ${formatHundredths(100000)} left`);
     });
 
     it("never offers a voucher an owner's 200 or 500 when raising", () => {

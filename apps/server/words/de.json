@@ -999,7 +999,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "Du hast bereits Bürgschaften über {total} Bohnen für @{name} gegeben. Wähle einen höheren Gesamtbetrag, auf den du sie erhöhen willst.",
   "Send either an amount to vouch or a total to raise to, not both.": "Sende entweder einen Betrag zum Bürgen oder einen Gesamtbetrag zum Erhöhen, nicht beides.",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "Du verfügst über {room} Bohnen aus erhaltenem Kreditrahmen und kannst daher nicht {amount} abgeben.",
-  "Your budget to vouch from": "Dein Bürgschaftsbudget",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "Dein Bürgschaftsbudget wurde auf {level} Bohnen gesenkt. Dir verbleiben {left} zum Bürgen.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "Dein Bürgschaftsbudget wurde auf {level} Bohnen erhöht. Dir verbleiben {left} zum Bürgen.",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "Dein Bürgschaftsbudget wurde gestoppt. Die Kreditrahmen, die du vergeben hast, verbleiben bei den jeweiligen Personen.",

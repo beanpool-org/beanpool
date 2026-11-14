@@ -26,7 +26,7 @@ function Mark({ row }: { row: CreditSheetRow }) {
         case 'limit':
         case 'fee': {
             const ink = row.mark === 'zero' ? METER.zeroInk : row.mark === 'limit' ? METER.limitInk : METER.feeInk;
-            return <span className={`${box} text-xs font-bold tabular-nums whitespace-nowrap`} style={{ color: ink }}>{row.mark === 'zero' ? `⚖️ ${row.figure ?? ''}` : row.figure || '·'}</span>;
+            return <span className={`${box} text-xs font-bold tabular-nums whitespace-nowrap`} style={{ color: ink }}>{row.mark === 'zero' ? <>⚖️ {row.figure}</> : row.figure || '·'}</span>;
         }
         case 'strip':
             return (

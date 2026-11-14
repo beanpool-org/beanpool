@@ -990,7 +990,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "你已经为 @{name} 担保了 {total} 豆子。请选择更高的总额来提高。",
   "Send either an amount to vouch or a total to raise to, not both.": "请只发送要担保的数额或要提高到的总额，不要两个都发。",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "你持有人家赠予的信用额度仅为 {room} 豆子，因此不能赠予 {amount}。",
-  "Your budget to vouch from": "你的担保预算",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "你的担保预算已降至 {level} 豆子。你还剩 {left} 可用于担保。",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "你的担保预算已提高至 {level} 豆子。你还剩 {left} 可用于担保。",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "你的担保预算已停止。你赠予的信用额度仍归获赠者所有。",

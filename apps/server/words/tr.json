@@ -999,7 +999,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "@{name} için zaten {total} fasulye kadar kefil oldun. Yükseltmek için daha yüksek bir toplam seç.",
   "Send either an amount to vouch or a total to raise to, not both.": "Ya kefil olunacak bir tutar ya da yükseltilecek bir toplam gönder, ikisini birden değil.",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "Birinin sana verdiği kredi limitinden {room} fasulye tutuyorsun, bu yüzden {amount} veremezsin.",
-  "Your budget to vouch from": "Kefil olmak için bütçen",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "Kefil olmak için bütçen {level} fasulye seviyesine düşürüldü. Kefil olmak için {left} kaldı.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "Kefil olmak için bütçen {level} fasulye seviyesine çıkarıldı. Kefil olmak için {left} kaldı.",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "Kefil olma bütçen durduruldu. Verdiğin kredi limitleri verdiğin kişilerde kalır.",

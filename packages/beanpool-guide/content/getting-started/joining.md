@@ -110,9 +110,9 @@ Any member can invite people, unless the community has chosen that only its admi
 
 A community's admins can turn invites off for the whole community.
 
-**Vouching on an invite.** If you are a voucher (owners by role, admins an owner has made vouchers, and members set as vouchers on the names list by an owner or committee admin), **Invites** also shows **Vouch for them**: **None**, **25**, **50**, **75** or **100**, taken from your voucher budget. Under the choices, it shows your unspent budget ("From your budget: 550 of 1,000 left"). A preset above what is left is greyed ("Not enough budget left"), and with nothing left it says "No budget left. Ask an owner for more." Pick an amount and that amount is held from your budget. When the person joins with the invite, they receive that starting credit line from your budget.
+**Vouching on an invite.** If you are a voucher (owners by role, admins an owner has made vouchers, and members set as vouchers on the names list by an owner or committee admin), **Invites** also shows **Vouch for them**: **None**, **25**, **50**, **75** or **100**, taken from your voucher budget. Under the choices, it shows your unspent budget ("From your vouching budget: 550 of 1,000 left"). A preset above what is left is greyed ("Not enough budget left"), and with nothing left it says "No budget left. Ask an owner for more." Pick an amount and that amount is held from your budget. When the person joins with the invite, they receive that starting credit line from your budget.
 
-**If you are an owner,** you have no budget limit: the choices also include **200** and **500**, none is greyed for budget, and the line under them reads "From your budget: No limit". Every vouch you make is still recorded on your voucher card.
+**If you are an owner,** you have no budget limit: the choices also include **200** and **500**, none is greyed for budget, and the line under them reads "From your vouching budget: no limit". Every vouch you make is still recorded on your voucher card.
 
 - If an invite expires without being used, the held amount returns to your budget.
 - If you stop being a voucher before they join, they still join, with no credit line.

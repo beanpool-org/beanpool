@@ -999,7 +999,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "Nagpatunay ka na ng {total} munggo para kay @{name}. Pumili ng mas mataas na kabuuan na itataas dito.",
   "Send either an amount to vouch or a total to raise to, not both.": "Magpadala ng halagang patutunayan o kabuuang itataas, hindi pareho.",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "Hawak mo ang {room} munggo ng credit line na ibinigay sa iyo, kaya hindi ka makakapagbigay ng {amount}.",
-  "Your budget to vouch from": "Iyong badyet para sa pagpapatunay",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "Ang iyong badyet para sa pagpapatunay ay ibinaba sa {level} munggo. Mayroon kang natitirang {left} para magpatunay.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "Ang iyong badyet para sa pagpapatunay ay itinaas sa {level} munggo. Mayroon kang natitirang {left} para magpatunay.",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "Itinigil ang iyong badyet para sa pagpapatunay. Ang mga credit line na ibinigay mo ay mananatili sa mga taong binigyan mo nito.",

@@ -2,7 +2,7 @@
 /**
  * People → Invites vouch presets (slice V3, §4):
  * - Presets: None · 25 · 50 · 75 · 100 shown only when member is a voucher
- * - "From your budget: 550 of 1,000 left"
+ * - "From your vouching budget: 550 of 1,000 left"
  * - An invite's body carries `vouchAmount` and nothing else
  * - A refused vouch shows the node's sentence and makes NO ticket
  * - An offline ticket never carries a vouch
@@ -216,7 +216,7 @@ describe('People → Invites with vouch presets (slice V3, §4)', () => {
     it('renders presets and budget balance when node says member is a voucher', async () => {
         await open();
         expect(host.querySelector('[data-testid="invite-vouch"]')).toBeTruthy();
-        expect(host.textContent).toMatch(/From your budget: 550 of 1,?000 left/);
+        expect(host.textContent).toMatch(/From your vouching budget: 550 of 1,?000 left/);
         expect(host.querySelector('[data-testid="invite-vouch-none"]')).toBeTruthy();
         expect(host.querySelector('[data-testid="invite-vouch-25"]')).toBeTruthy();
         expect(host.querySelector('[data-testid="invite-vouch-50"]')).toBeTruthy();

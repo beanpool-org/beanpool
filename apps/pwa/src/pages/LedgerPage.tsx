@@ -639,7 +639,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                 {myVouching.noLimit ? t(VOUCH_PRESET_WORDS.ledgerBudgetNoLimit) : ledgerBudget(myVouching.budget.left, myVouching.budget.level)}
                             </span>
                             <span className="block mt-0.5 text-xs leading-snug text-nature-600 dark:text-nature-300 [overflow-wrap:anywhere]" data-testid="ledger-budget-line">
-                                {t(myVouching.noLimit ? VOUCH_PRESET_WORDS.ledgerBudgetLineNoLimit : VOUCH_PRESET_WORDS.ledgerBudgetLine)}
+                                {myVouching.noLimit ? t(VOUCH_PRESET_WORDS.ledgerBudgetLineNoLimit) : t(VOUCH_PRESET_WORDS.ledgerBudgetLine)}
                             </span>
                         </span>
                         <span aria-hidden="true" className="shrink-0 text-nature-400 font-bold ml-1">›</span>

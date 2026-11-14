@@ -994,7 +994,6 @@
   "Members giving part of their credit line is a core setting: an owner changes it in Settings, Core settings, which asks for their proof once the core settings are locked. Nothing in this request was saved.": "सदस्यों द्वारा अपनी क्रेडिट लाइन का हिस्सा देना एक मुख्य सेटिंग है: एक मालिक इसे सेटिंग्स, मुख्य सेटिंग्स में बदलता है, जो मुख्य सेटिंग्स लॉक होने के बाद उनका प्रमाण मांगता है। इस अनुरोध में कुछ भी सहेजा नहीं गया था।",
   "The vouch on this invite ended before you joined; you start with no credit line": "आपके जुड़ने से पहले इस आमंत्रण पर गारंटी समाप्त हो गई थी; आप बिना किसी क्रेडिट लाइन के शुरुआत करते हैं",
   "Your credit line is frozen, so you can’t vouch from your budget until an admin unfreezes it.": "आपकी क्रेडिट लाइन फ़्रीज़ है, इसलिए जब तक कोई एडमिन इसे अनफ़्रीज़ नहीं करता, आप अपने बजट से गारंटी नहीं दे सकते।",
-  "Your budget to vouch from": "गारंटी देने के लिए आपका बजट",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "गारंटी देने के लिए आपका बजट रोक दिया गया था। आपके द्वारा दी गई क्रेडिट लाइनें उन लोगों के पास ही रहेंगी जिन्हें आपने दी थीं।",
   "You have {left} Beans of budget left, so you can’t vouch {amount}. Pick a smaller vouch, or ask an owner for more.": "आपके पास {left} फलियाँ का बजट बचा है, इसलिए आप {amount} की गारंटी नहीं दे सकते। एक छोटी गारंटी चुनें, या किसी मालिक से और मांगें।",
   "You’ve already vouched for @{name}.": "आप पहले ही @{name} के लिए गारंटी दे चुके हैं।",

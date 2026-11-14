@@ -1017,7 +1017,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "Вы уже поручились за @{name} на {total} бобов. Выберите большую сумму, до которой повысить.",
   "Send either an amount to vouch or a total to raise to, not both.": "Отправьте либо сумму поручительства, либо итог, до которого повысить, но не оба сразу.",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "У вас доступно {room} бобов переданной вам кредитной линии, поэтому вы не можете передать {amount}.",
-  "Your budget to vouch from": "Ваш бюджет для поручительства",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "Ваш бюджет для поручительства был уменьшен до {level} бобов. Для поручительства осталось {left}.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "Ваш бюджет для поручительства был увеличен до {level} бобов. Для поручительства осталось {left}.",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "Ваш бюджет для поручительства остановлен. Каждая кредитная линия, которую вы передали, остаётся у тех, кому вы её дали.",

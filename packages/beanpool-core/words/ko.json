@@ -2111,7 +2111,6 @@
   "Budget history": "예산 내역",
   "Budget history ({count})": "예산 내역 ({count})",
   "Decrease budget": "예산 줄이기",
-  "From your budget: {left} of {total} left": "내 예산에서: 총 {total} 중 {left} 남음",
   "Has not vouched for anyone yet.": "아직 아무도 보증하지 않았어요.",
   "Increase budget": "예산 늘리기",
   "Invited by @{name}": "@{name} 님의 초대",
@@ -2133,7 +2132,6 @@
   "Vouchers": "보증인",
   "You aren’t a voucher here, so you can’t vouch for anyone. An owner or the credit committee makes vouchers.": "여기서 보증인이 아니므로 누구도 보증할 수 없어요. 소유자나 신용 위원회가 보증인을 지정해요.",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "오프라인 티켓에는 보증을 추가할 수 없어요. '없음'을 선택해 만들거나 온라인 상태일 때 다시 시도해 주세요.",
-  "Your budget: {left} of {total} left": "내 예산: 총 {total} 중 {left} 남음",
   "You’ve already vouched for @{name}.": "이미 @{name} 님을 보증했어요.",
   "no trades yet": "아직 거래 없음",
   "trading inside only": "내부에서만 거래",
@@ -2246,9 +2244,7 @@
   "{n} asked to join from this link|{n} asked to join from this link": {
     "other": "이 링크로 {n}명이 참여를 신청했어요"
   },
-  "From your budget: No limit": "내 예산에서: 한도 없음",
   "No limit": "한도 없음",
-  "Your budget: No limit": "내 예산: 한도 없음",
   "Clear all": "모두 지우기",
   "Clear this notice": "이 알림 지우기",
   "Founding member": "창립 멤버",

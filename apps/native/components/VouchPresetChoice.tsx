@@ -1,9 +1,9 @@
 /**
  * Native VouchPresetChoice component (slice V3):
  * "Vouch for them: None · 25 · 50 · 75 · 100" from core VOUCH_PRESETS,
- * with "From your budget: 550 of 1,000 left" under it;
+ * with "From your vouching budget: 550 of 1,000 left" under it;
  * presets above what is left are disabled ("Not enough budget left").
- * An owner (`noLimit`, Marty 9 Nov): 200 and 500 too, none disabled for budget, and "From your budget: No limit".
+ * An owner (`noLimit`, Marty 9 Nov): 200 and 500 too, none disabled for budget, and "From your vouching budget: no limit".
  * A raise (`raiseFrom`, slice I6): "Raise to: 200 · 500", the totals above what you vouched already (core raiseTargetsFor),
  * no None; a choice is greyed only when the difference it draws is more than the budget has left.
  * Every figure is whole hundredths of a Bean (core VOUCH_PRESETS are 2500 … 10000, the budget's `left` and `level` too),
@@ -28,7 +28,7 @@ export interface VouchPresetChoiceProps {
     raiseFrom?: number;
     /**
      * The node's `noLimit` for the signer (GET /api/vouchers/me): an owner vouches with no budget limit (Marty, 9 Nov), so
-     * the presets are core's six (200 and 500 too), none greyed for budget, 500 for one person, and "From your budget: No limit".
+     * the presets are core's six (200 and 500 too), none greyed for budget, 500 for one person, and "From your vouching budget: no limit".
      */
     noLimit?: boolean;
 }

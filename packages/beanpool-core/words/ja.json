@@ -2111,7 +2111,6 @@
   "Budget history": "予算の履歴",
   "Budget history ({count})": "予算の履歴 ({count})",
   "Decrease budget": "予算を減額",
-  "From your budget: {left} of {total} left": "あなたの予算から：残り {left} / 全体 {total}",
   "Has not vouched for anyone yet.": "まだ誰も保証していません。",
   "Increase budget": "予算を増額",
   "Invited by @{name}": "@{name}による招待",
@@ -2133,7 +2132,6 @@
   "Vouchers": "保証人",
   "You aren’t a voucher here, so you can’t vouch for anyone. An owner or the credit committee makes vouchers.": "あなたはこのコミュニティの保証人ではないため、誰も保証できません。オーナーまたは信用委員会が保証人を指名します。",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "オフラインチケットで保証をつけることはできません。「なし」を選んで作成するか、接続時にもう一度お試しください。",
-  "Your budget: {left} of {total} left": "あなたの予算：残り {left} / 全体 {total}",
   "You’ve already vouched for @{name}.": "あなたはすでに @{name} を保証しています。",
   "no trades yet": "まだ取引なし",
   "trading inside only": "コミュニティ内のみで取引",
@@ -2246,9 +2244,7 @@
   "{n} asked to join from this link|{n} asked to join from this link": {
     "other": "{n} 人がこのリンクから参加を申請しました"
   },
-  "From your budget: No limit": "あなたの予算から：上限なし",
   "No limit": "上限なし",
-  "Your budget: No limit": "あなたの予算：上限なし",
   "Clear all": "すべてクリア",
   "Clear this notice": "この通知をクリア",
   "Founding member": "創設メンバー",

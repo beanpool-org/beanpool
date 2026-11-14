@@ -990,7 +990,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "Anda sudah menjamin @{name} sebesar {total} kacang. Pilih total yang lebih tinggi untuk menaikkannya.",
   "Send either an amount to vouch or a total to raise to, not both.": "Kirim salah satu: jumlah untuk dijamin atau total untuk dinaikkan, bukan keduanya.",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "Anda memegang {room} kacang dari batas kredit yang diberikan seseorang, jadi tidak dapat memberikan {amount}.",
-  "Your budget to vouch from": "Anggaran Anda untuk menjamin",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "Anggaran jaminan Anda diturunkan menjadi {level} kacang. Anda memiliki sisa {left} untuk menjamin.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "Anggaran jaminan Anda dinaikkan menjadi {level} kacang. Anda memiliki sisa {left} untuk menjamin.",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "Anggaran jaminan Anda dihentikan. Batas kredit yang telah Anda berikan tetap berada pada orang yang menerimanya.",

@@ -999,7 +999,6 @@
   "You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.": "நீங்கள் ஏற்கனவே @{name}-க்கு மொத்தம் {total} பயறு உறுதியளித்துவிட்டீர்கள். உயர்த்த இதைவிட அதிகமான மொத்தத்தைத் தேர்ந்தெடுக்கவும்.",
   "Send either an amount to vouch or a total to raise to, not both.": "உறுதியளிக்கும் தொகை அல்லது உயர்த்த வேண்டிய மொத்தம் ஆகியவற்றில் ஒன்றை மட்டும் அனுப்பவும், இரண்டும் வேண்டாம்.",
   "You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.": "ஒருவர் உங்களுக்குக் கொடுத்த கடன் வரம்பில் {room} பயறு மட்டுமே வைத்துள்ளீர்கள், எனவே {amount} வழங்க முடியாது.",
-  "Your budget to vouch from": "உறுதியளிப்பதற்கான உங்கள் பட்ஜெட்",
   "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "உறுதியளிப்பதற்கான உங்கள் பட்ஜெட் {level} பயறு எனக் குறைக்கப்பட்டது. உறுதியளிக்க உங்களிடம் {left} மீதமுள்ளது.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "உறுதியளிப்பதற்கான உங்கள் பட்ஜெட் {level} பயறு என உயர்த்தப்பட்டது. உறுதியளிக்க உங்களிடம் {left} மீதமுள்ளது.",
   "Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.": "உறுதியளிப்பதற்கான உங்கள் பட்ஜெட் நிறுத்தப்பட்டது. நீங்கள் வழங்கிய கடன் வரம்புகள் நீங்கள் வழங்கியவர்களிடமே இருக்கும்.",

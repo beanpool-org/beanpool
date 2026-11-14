@@ -109,6 +109,11 @@ export interface ShapeSettings {
     shareEmail: ShapeSetting<boolean>;
     sharePhone: ShapeSetting<boolean>;
     shareHealth: ShapeSetting<boolean>;
+    /**
+     * Our name on members' listings on the global community (server config/community-shape.ts, list-on-global G5): the
+     * directory push's `listingsFromHere`. Absent on a server from before it, where the row isn't shown.
+     */
+    shareListingsFromHere?: ShapeSetting<boolean>;
     visitors: ShapeSetting<VisitorsView>;
     probation: ShapeSetting<boolean>;
     autoHide: ShapeSetting<boolean>;
@@ -572,6 +577,11 @@ export function getConsequenceSentence(
             return targetValue === false
                 ? t('Node health and version diagnostics will no longer be shared.')
                 : t('Node health and version diagnostics will be shared with the BeanPool team for monitoring.');
+        case 'shareListingsFromHere':
+            // Sent to the directory at once while the community is listed; the global community reads it within the hour.
+            return targetValue === false
+                ? t("Within the hour, members' listings shown on the global community appear with no name and no Ask to join. A member can still show one there.")
+                : t("Within the hour, members' listings shown on the global community say they are from this community, with Ask to join beside them.");
         case 'removalDecider': {
             const pool = s.removalDecider?.poolSize ?? 0;
             const rule = String(targetValue);

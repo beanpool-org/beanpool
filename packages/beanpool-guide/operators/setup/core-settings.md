@@ -50,7 +50,7 @@ Everything the server refuses stays refused, and its own line says why. Beans ca
 
 ## Where the everyday rules went
 
-These are everyday rules, so they need no unlocking: **Pause new members** and **Requests to join** are under **People & Safety → Invites & QR**; **First message from someone new**, **Limits on new accounts**, **Reported posts hidden and message requests cleared automatically** and **Repeat offenders muted automatically** are under **People & Safety → Triage & Moderation**; **Listed in the BeanPool directory**, **Share location & radius**, **Share member count**, **Share email**, **Share phone**, **Share health**, **Visitors** and **Private preview** are under **Appliance & Data → Node Identity**; **Connections to other communities** is under **Appliance & Data → Gateway & Peers**.
+These are everyday rules, so they need no unlocking: **Pause new members** and **Requests to join** are under **People & Safety → Invites & QR**; **First message from someone new**, **Limits on new accounts**, **Reported posts hidden and message requests cleared automatically** and **Repeat offenders muted automatically** are under **People & Safety → Triage & Moderation**; **Listed in the BeanPool directory**, **Share location & radius**, **Share member count**, **Share email**, **Share phone**, **Share health**, **Our name on members' listings on the global community**, **Visitors** and **Private preview** are under **Appliance & Data → Node Identity**; **Connections to other communities** is under **Appliance & Data → Gateway & Peers**.
 
 ## Advising the owners
 

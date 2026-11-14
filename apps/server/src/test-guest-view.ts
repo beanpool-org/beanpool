@@ -422,7 +422,7 @@ async function main(): Promise<void> {
     for (const p of [bobOffer, hiddenPost]) inShop.run(bobShop, p.id);
     db.prepare("UPDATE posts SET shop_id = ? WHERE author_pubkey = ? AND category = 'grid' AND rowid % 2 = 0").run(gridShop, grid.pk);
     writeDirectoryRows(COMMUNITIES.map(c => ({ key: c.key, name: c.name, url: `https://${c.key}.example`, lat: c.lat, lng: c.lng, radiusKm: c.radiusKm,
-        memberCount: 5, contactEmail: null, contactPhone: null, registryUpdatedAt: now, promise: null, acceptingKnocks: null, closingOn: null })), now);
+        memberCount: 5, contactEmail: null, contactPhone: null, registryUpdatedAt: now, promise: null, acceptingKnocks: null, closingOn: null, listingsFromHere: true })), now);
 
     /** Every post's place, from the database itself. */
     const truth = new Map((db.prepare('SELECT id, lat, lng FROM posts').all() as Array<{ id: string; lat: number | null; lng: number | null }>)

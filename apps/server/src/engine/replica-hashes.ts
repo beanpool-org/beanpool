@@ -250,12 +250,19 @@ export interface TableHashes {
  * post reads as a report of its writer; no Bean is in it.
  */
 /**
- * 41: the forum's notices (engine/forum-notices.ts, slice F5): a new plain table, forum_follows. Raised for the same reason
+ * 41: directory_cache gains listings_from_here (a community's name on its members' listings on the global community,
+ * DESIGN-list-on-global-fable.md §11 G5). Raised for the same reason as 8: a standby updated before its main server hashes the
+ * table over one more column. REPLICA_FORMAT stays: each side's import writes only the columns its own table has. What an
+ * older importer drops is a community's false: after a take-over from such a copy its name shows beside its members' copies
+ * until the new main server's first mirror run, 10 seconds after it starts, reads the registry again.
+ */
+/**
+ * 42: the forum's notices (engine/forum-notices.ts, slice F5): a new plain table, forum_follows. Raised for the same reason
  * as 8: a standby updated before its main server hashes one more table. REPLICA_FORMAT stays: each side's import writes only
  * the tables its own database has. What an older importer drops is who follows a topic: after a take-over from such a copy
  * nobody is told of replies until they reply or follow again, and every topic reads as read; no Bean is in it.
  */
-export const TABLE_HASHES_VERSION = 41;
+export const TABLE_HASHES_VERSION = 42;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

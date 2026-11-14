@@ -9,6 +9,7 @@ import { ReportMessageSheet } from './ReportMessageSheet';
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
+import type { OutsideChat } from '../utils/outside-chat-store';
 
 const REQUEST_CARDS_SHOWN = 50;
 const IGNORE_ALL_FROM = 6;
@@ -317,9 +318,12 @@ interface MessageRequestsPaneProps {
     /** How many wait on the global community (utils/global-requests.ts). Their cards are there: this row is the way. */
     onGlobal?: number;
     onOpenGlobal?: () => void;
+    /** Requests from people in other communities, kept on this phone (utils/outside-chat-store.ts): each opens its chat. */
+    outside?: OutsideChat[];
+    onOpenOutside?: (chat: OutsideChat) => void;
 }
 
-export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAccepted, onChanged, onBack, onGlobal = 0, onOpenGlobal }: MessageRequestsPaneProps) {
+export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAccepted, onChanged, onBack, onGlobal = 0, onOpenGlobal, outside = [], onOpenOutside }: MessageRequestsPaneProps) {
     const { theme, colors } = useTheme();
     const [ignoringAll, setIgnoringAll] = useState(false);
     const shown = entries.slice(0, REQUEST_CARDS_SHOWN);
@@ -435,7 +439,15 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
                     <Text style={styles.backText}>{t('Open their requests there')}</Text>
                 </Pressable>
             )}
-            {count === 0 && onGlobal > 0 ? null : count === 0 ? (
+            {outside.map((c) => (
+                <Pressable key={c.id} accessibilityRole="button" testID="outside-request-card" style={styles.emptyCard} onPress={() => onOpenOutside?.(c)}>
+                    <Text style={styles.title}>{t('{name} · {community}', { name: c.peerName ?? t('Someone in another community'), community: c.peerHome })}</Text>
+                    <Text style={styles.emptyText}>{t('{name} wants to message you', { name: c.peerName ?? c.peerHome })}</Text>
+                    {!!c.lastText && <Text style={styles.emptyText} numberOfLines={4}>{c.lastText}</Text>}
+                    <Text style={styles.backText}>{t('Open to accept or decline')}</Text>
+                </Pressable>
+            ))}
+            {count === 0 && (onGlobal > 0 || outside.length > 0) ? null : count === 0 ? (
                 <View style={styles.emptyCard}>
                     <Text style={styles.emptyText}>
                         {t("No requests. A first message from someone you haven't added or talked to arrives here.")}

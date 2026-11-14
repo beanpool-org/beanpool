@@ -488,7 +488,10 @@ describe('Ask to join from the web find card (front doors S2)', () => {
         render(<HomePage identity={ME} onNavigate={vi.fn()} askedCommunity="riverside.example" />);
         const find = await screen.findByTestId('home-card-find');
         const asked = await within(find).findByTestId('home-find-asked');
-        expect(within(asked).getByText('Riverside')).toBeTruthy();
+        // The box is drawn with the address first and named a task later: its useEffect asks this community's list once the
+        // box is in, so the name comes in a later render. Wait for the name itself, not only the box: on a slow runner the
+        // test got here between the two, with "riverside.example" still showing. A box that never takes the name still fails.
+        expect(await within(asked).findByText('Riverside')).toBeTruthy();
         // It stands first in the card, above the listed rows.
         expect(asked.compareDocumentPosition(within(find).getByTestId('home-find-ask-q')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         fireEvent.click(await within(asked).findByRole('button', { name: 'Ask to join Riverside' }));

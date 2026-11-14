@@ -49,6 +49,11 @@
  *   directory {url, name}       one community in the mirrored directory (engine/directory-cache.ts), as a mirror run writes it
  *   requests                    every request this node has received, `METHOD /path?query`, in order: what a test holds
  *                               against the requests the phone made, so a call from another node would show
+ * For apps/native/utils/__tests__/outside-chat-e2e.test.ts (messages across communities X3), two of these, each a community
+ * with its own names (BEANPOOL_ADDRESSES) and, with PHONE_DOOR_NODE_KEY=1, its own node key, written before it starts:
+ *   peer {home, port}           the community at `home` answers on this machine's `port`: its key document and its mailbox
+ *                               are reached there, through the server suites' own hooks (BEANPOOL_SSRF_TEST_HOOK=1, which
+ *                               nothing in production sets), as test-relay-mail reaches its other community
  *   quit                        exit
  */
 
@@ -107,6 +112,24 @@ async function main(): Promise<void> {
         if (event === 'request') requests.push(`${String(args[0]?.method)} ${String(args[0]?.url)}`);
         return (emit as (...sent: unknown[]) => boolean).call(this, event, ...args);
     } as typeof emit;
+
+    // A node key of its own (data/libp2p_key, which the libp2p node would make at a real start): the key it signs its
+    // requests to other communities with (engine/node-key.ts).
+    if (process.env.PHONE_DOOR_NODE_KEY === '1') {
+        const fs = await import('node:fs');
+        const path = await import('node:path');
+        const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
+        const file = path.join(process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data'), 'libp2p_key');
+        if (!fs.existsSync(file)) fs.writeFileSync(file, privateKeyToProtobuf(await generateKeyPair('Ed25519')));
+    }
+    // Other communities on this machine, by home: what `peer` names. Their key documents and mailboxes are reached at their port.
+    const peers = new Map<string, number>();
+    const onPeer = (url: string): string => {
+        const u = new URL(url);
+        const port = peers.get(u.host);
+        if (!port) throw new Error(`phone-door-test-harness: no community ${u.host} on this machine`);
+        return `https://127.0.0.1:${port}${u.pathname}${u.search}`;
+    };
 
     await initTls();
     initStateEngine();
@@ -277,6 +300,19 @@ async function main(): Promise<void> {
             return writeDirectoryRows(row ? [row] : [], new Date().toISOString()) && true;
         },
         requests: () => requests,
+        peer: async ({ home, port }: { home?: string; port?: number }) => {
+            const { __useNodeKeyFetchForTests } = await import('./engine/node-signature.js');
+            const { __useRelayTransportForTests } = await import('./engine/relay-outbox.js');
+            peers.set(String(home), Number(port));
+            __useNodeKeyFetchForTests(async (url) => (await fetch(onPeer(url))).json());
+            __useRelayTransportForTests(async (url, init) => {
+                const res = await fetch(onPeer(url), { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...init.headers }, body: init.body });
+                let body: unknown;
+                try { body = await res.json(); } catch { body = undefined; }
+                return { status: res.status, body };
+            });
+            return true;
+        },
         quit: () => process.exit(0),
     };
 
@@ -288,7 +324,15 @@ async function main(): Promise<void> {
             id = msg.id ?? null;
             const run = commands[String(msg.cmd)];
             if (!run) throw new Error(`no command ${String(msg.cmd)}`);
-            console.log(`PHONE-DOOR-NODE-REPLY ${JSON.stringify({ id, result: run(msg) })}`);
+            const result = run(msg);
+            if (result instanceof Promise) {
+                result.then(
+                    (r) => console.log(`PHONE-DOOR-NODE-REPLY ${JSON.stringify({ id, result: r })}`),
+                    (e) => console.log(`PHONE-DOOR-NODE-REPLY ${JSON.stringify({ id, error: (e as Error)?.message ?? String(e) })}`),
+                );
+                return;
+            }
+            console.log(`PHONE-DOOR-NODE-REPLY ${JSON.stringify({ id, result })}`);
         } catch (e) {
             console.log(`PHONE-DOOR-NODE-REPLY ${JSON.stringify({ id, error: (e as Error)?.message ?? String(e) })}`);
         }

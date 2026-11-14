@@ -22,7 +22,7 @@ import { useIdentity } from './IdentityContext';
 import { useContactsRecord } from '../utils/use-contacts';
 import { getDb, createConversationApi, getRecentChatMembers, getFriendsLocal } from '../utils/db';
 import { useNodeProfile } from '../utils/use-node-profile';
-import { membersByKey } from '../utils/node-profile';
+import { membersByKey, outsideMessagesOn } from '../utils/node-profile';
 import { keepCards, lookUpMembers, searchPath } from '../utils/members-lookup';
 import { joinedWords, pickerEmpty, pickerHeading } from '../utils/community-list-note';
 import { t, tn } from '@beanpool/core';
@@ -78,6 +78,11 @@ export default function NewMessageScreen() {
         title: { fontSize: 18, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.3 },
 
         // Search
+        outsideRow: {
+            flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 16, marginBottom: 8, minHeight: 48,
+            paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card,
+        },
+        outsideRowText: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text.body },
         searchContainer: {
             flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginVertical: 12,
             backgroundColor: colors.surface.subtle, borderRadius: 14, paddingHorizontal: 14,
@@ -175,7 +180,10 @@ export default function NewMessageScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     // On a community that says `membersOnDemand` the phone holds only the people this member has dealt with: recents and
     // friends come from those, and a search of 2 letters or more also asks the node (DESIGN-global-members-by-area §2.3).
-    const membersOnDemand = membersByKey(useNodeProfile()?.features);
+    const features = useNodeProfile()?.features;
+    const membersOnDemand = membersByKey(features);
+    // Someone in another community, by their address card (slice X3): only where this community takes such messages.
+    const outsideOn = outsideMessagesOn(features);
     const [nodeResults, setNodeResults] = useState<any[]>([]);
     const [nodeSearch, setNodeSearch] = useState<'none' | 'answered' | 'unreachable'>('none');
     const searchRef = useRef<TextInput>(null);
@@ -436,6 +444,14 @@ export default function NewMessageScreen() {
                         </Pressable>
                     )}
                 </View>
+
+                {outsideOn && (
+                    <Pressable style={styles.outsideRow} onPress={() => router.push('/address-card?mode=scan')} accessibilityRole="button" testID="new-message-outside">
+                        <MaterialCommunityIcons name="card-account-details-outline" size={22} color={colors.accent.primary} />
+                        <Text style={styles.outsideRowText}>{t('Someone in another community')}</Text>
+                        <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
+                    </Pressable>
+                )}
 
                 {/* Body */}
                 {loading ? (

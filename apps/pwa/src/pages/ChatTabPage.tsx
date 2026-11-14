@@ -18,7 +18,9 @@ import { useCommunityInfo } from '../lib/features';
 import { MessagesPage } from './MessagesPage';
 import { ForumPage } from './ForumPage';
 
-/** Two tabs across, as the phone's: the side shown underlined, the other in the quieter colour; each a 44 px target. */
+/** Two tabs across, as the phone's: the side shown underlined, the other in the accent's ink (4.5:1 or more in Light and
+ *  Dark; --text-muted is 4.3:1 on Light's page, short for words this size at 1280 px); each a 44 px target. Long names
+ *  (Tamil's, at 320 px and 1.3x) fit their half at 1.05rem; at 1.2rem they broke inside the word (e2e/chat-frame-shots.mjs). */
 export function ChatFrameSwitch({ sides, side, onChange }: {
     sides: ReadonlyArray<ChatSideEntry>;
     side: ChatSide;
@@ -39,7 +41,7 @@ export function ChatFrameSwitch({ sides, side, onChange }: {
                         style={{
                             flex: '1 1 0', minWidth: 0, minHeight: '44px', padding: '0.5rem', marginBottom: '-1px',
                             background: 'none', border: 'none', borderBottom: `3px solid ${active ? 'var(--bp-accent-fill)' : 'transparent'}`,
-                            color: active ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: active ? 800 : 700, fontSize: '1.05rem',
+                            color: active ? 'var(--text-primary)' : 'var(--bp-ink-accent)', fontWeight: active ? 800 : 700, fontSize: '1.05rem',
                             fontFamily: 'inherit', cursor: active ? 'default' : 'pointer', overflowWrap: 'anywhere',
                         }}
                     >
@@ -61,7 +63,8 @@ export function ChatTabPage(props: ComponentProps<typeof MessagesPage>) {
     return (
         <>
             <div data-testid="chat-side-chats-page" style={{ display: side === 'chats' ? 'contents' : 'none' }}>
-                <MessagesPage {...props} frame={frame} />
+                {/* Only while Chats shows: the Forum side draws its own, so the page never holds two. */}
+                <MessagesPage {...props} frame={side === 'chats' ? frame : undefined} />
             </div>
             {side === 'forum' && (
                 // MessagesPage's list padding and width, so the switch stays where it was.

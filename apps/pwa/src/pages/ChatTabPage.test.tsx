@@ -63,7 +63,9 @@ describe('the Chat tab where the forum is on', () => {
         expect(chatsBox()).toBe('none');
         // Still mounted: back on Chats the list, its chip and its scroll are as they were.
         expect(screen.getByTestId('messages-page')).toBeInTheDocument();
-        expect(screen.getAllByRole('tablist')).toHaveLength(1);
+        // One switch in the page, hidden copies counted: the hidden list is not handed one (the real browser found two).
+        expect(document.querySelectorAll('[role="tablist"]')).toHaveLength(1);
+        expect(seen.props.at(-1)?.frame).toBeUndefined();
 
         fireEvent.click(screen.getByRole('tab', { name: 'Chats' }));
         expect(selected()).toEqual(['true', 'false']);

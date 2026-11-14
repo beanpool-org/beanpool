@@ -603,8 +603,7 @@ export default function ChatsScreen() {
             // it has its own, under the name, with room to wrap (3 lines hold ~55 characters at 320 dp and 1.3x text).
             const outsideName = item.peer || t('Someone in another community');
             return (
-                <Pressable accessibilityRole="button" accessibilityLabel={`${outsideName}, ${item.outsideHome}`} style={styles.chatRow} testID="outside-chat-row"
-                    onPress={() => router.push(`/outside-chat/${item.id}`)}>
+                <Pressable accessibilityRole="button" style={styles.chatRow} testID="outside-chat-row" onPress={() => router.push(`/outside-chat/${item.id}`)}>
                     <View style={styles.avatarWrapper}>
                         <MemberAvatar avatarUrl={null} pubkey={item.peerPubkey || ''} callsign={item.peer} size={44} />
                     </View>

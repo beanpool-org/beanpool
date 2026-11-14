@@ -1,0 +1,65 @@
+Test-All shard server-1	Run test-all checks (server-1)	﻿2026-11-14T18:25:58.0743209Z ##[group]Run timeout -s INT 50m bash scripts/test-all.sh --all
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:25:58.0743643Z ^[[36;1mtimeout -s INT 50m bash scripts/test-all.sh --all^[[0m
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5030170Z 
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5031111Z ╔══════════════════════════════════════════╗
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5031536Z ║          BEANPOOL TEST-ALL REPORT        ║
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5031876Z ╠══════════════════════════════════════════╣
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5042283Z ║  server_suites    ❌ FAIL  7m40s  (started +0s)
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5076044Z ╠══════════════════════════════════════════╣
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5076570Z ║  Total: 0 passed, 1 failed, 0 skipped
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5081741Z ║  Wall clock: 7m40s (max 4 parallel jobs)
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5082211Z ╚══════════════════════════════════════════╝
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5082378Z 
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5104800Z Server suites: 98/99 passed in 7m40s (pool 6m27s at 3 jobs, serial tail 1m12s; 20m30s of suite time)
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5105223Z   Slowest 15:
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5105467Z       1m44s  test-standby-photos-by-reference
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5105756Z       1m27s  test-heavy-read-cap
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5106060Z       1m19s  test-recovery-seal-removed
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5106662Z       1m16s  test-restore-verified
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5107060Z       1m12s  test-standby-swap-at-boot
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5107541Z       48.0s  test-heavy-read-cap(1d)
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5107926Z       38.0s  test-boot-file-safety
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5108335Z       33.9s  test-never-forget-registrar-name
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5108797Z       32.1s  test-github-sign-in-removed
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5109500Z       30.6s  test-standby-community-settings
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5109912Z       28.1s  test-delete-blanks-chat
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5110386Z       26.9s  test-ws-push-index-equivalence(radius-2000)
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5111011Z       26.3s  test-suspended-and-visitor-reads
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5111584Z       26.3s  test-open-join-key-file
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5112064Z       24.0s  test-takeover-parity
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5112277Z 
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5112507Z ──── Failure Details ────
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5112701Z 
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5112871Z ━━━ server_suites ━━━
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5159900Z ── Failing tests (1) ──
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5160501Z   test-alerts: ✗ 11. once it stays down 15 minutes: resolved, told once
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5189848Z ──── Failing server suites (1) ────
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5190094Z 
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5190268Z ━━━ test-alerts ━━━
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5190686Z ✓ BEANPOOL_DATA_DIR is set
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5191086Z 🧭 Node profile: local
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5191545Z 🔐 Recovery seal: made data/recovery-seal.key.
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T00:00:00.0000000Z [… abridged for the fixture: the suite boot lines and its passing checks …]
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5272255Z ✓ 11. (nothing active or waiting to start)
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5272561Z [Push] Sent 1 notification(s) for category=marketplace
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5273004Z ✓ 11. a disk swinging 81 % ↔ 76 % every 5 minutes for a day: 1 message(s), not 288
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5273335Z ✓ 11. and 1 push(es)
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5273619Z ✓ 11. no resolved line while it keeps coming back
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5273951Z ✓ 11. an end being held counts in no banner (0)
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5274292Z ✓ 11. an end being held is not shown as active
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5274963Z ^[[90m[2026-11-14T18:28:31.264Z]^[[0m ^[[33m[WARN]^[[0m ^[[90m[SYS]^[[0m [Alerts] The alert channel did not take 1 event(s): unreachable. Next try in 5 minutes.
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5276434Z ✗ 11. once it stays down 15 minutes: resolved, told once
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5276954Z Error: Assertion failed: 11. once it stays down 15 minutes: resolved, told once
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5277432Z     at assert (/home/runner/work/beanpool/beanpool/apps/server/src/test-alerts.ts:71:15)
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5277920Z     at main (/home/runner/work/beanpool/beanpool/apps/server/src/test-alerts.ts:636:5)
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5278196Z 
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5278275Z 112/113 passed
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5278634Z ── test-alerts: exit 1, 12.1s; log /tmp/ss-JxvNdM/21/output.log
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5278842Z 
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5279106Z Logs of the failing runs copied to /home/runner/work/_temp/test-all-logs/server-suites
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5279378Z 
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5279538Z ❌ Server suites failed: test-alerts
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5279685Z 
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5279917Z Full logs of every check copied to /home/runner/work/_temp/test-all-logs
+Test-All shard server-1	Run test-all checks (server-1)	2026-11-14T18:33:38.5288070Z ##[error]Process completed with exit code 1.
+

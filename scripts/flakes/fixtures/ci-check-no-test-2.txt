@@ -1,0 +1,40 @@
+Test-All shard web-pwa	Run test-all checks (web-pwa)	﻿2026-11-14T14:14:03.1481545Z ##[group]Run timeout -s INT 50m bash scripts/test-all.sh --all
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:03.1481943Z ^[[36;1mtimeout -s INT 50m bash scripts/test-all.sh --all^[[0m
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:03.1481943Z [… abridged for the fixture: the step env and the run start …]
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:03.7569683Z 🚀 Running BeanPool checks (max 4 parallel jobs)...
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:03.7570321Z    CI: turbo capped — test --concurrency=2, lint/typecheck --concurrency=1, build uncapped (critical path)
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:03.7570659Z 
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8881345Z 
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8884059Z ╔══════════════════════════════════════════╗
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8884679Z ║          BEANPOOL TEST-ALL REPORT        ║
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8885742Z ╠══════════════════════════════════════════╣
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8895392Z ║  pwa_dark_classes ❌ FAIL  45s  (started +0s)
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8906782Z ║  pwa_wide_pages   ✅ PASS  29s  (started +0s)
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8918564Z ║  native_phone_width ✅ PASS  11s  (started +0s)
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8955575Z ╠══════════════════════════════════════════╣
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8956309Z ║  Total: 2 passed, 1 failed, 0 skipped
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8961307Z ║  Wall clock: 45s (max 4 parallel jobs)
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8961695Z ╚══════════════════════════════════════════╝
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8964534Z 
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8964915Z ──── Failure Details ────
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8965282Z 
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.8965456Z ━━━ pwa_dark_classes ━━━
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9515878Z 
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9516916Z > @beanpool/pwa@1.4.1 dark-class-check /home/runner/work/beanpool/beanpool/apps/pwa
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9518423Z > node e2e/dark-class-check.mjs
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9518787Z 
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9519272Z Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9520236Z   npx update-browserslist-db@latest
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9520940Z   Why you should do it regularly: https://github.com/browserslist/update-db#readme
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9522310Z 16 canaries as expected; 3459 class strings in 4882 places, 3718 drawn and measured in dark at rest, 4038 elements hovered, 11 focused (42.3 s).
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9523044Z 23 place(s) under AA read the same in light mode: the palette's, not dark mode's (DARK_CLASSES_PALETTE=1 lists them).
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9523389Z 
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9523558Z 1 place(s) whose words read under AA in dark mode:
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9523743Z 
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9524093Z   components/TagPicker.tsx:351 hover 4.01:1 (needs 4.5) <span> ink 192,204,192 on 82,96,82 | text-xs text-nature-600 dark:text-nature-300
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9524593Z /home/runner/work/beanpool/beanpool/apps/pwa:
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9525596Z  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @beanpool/pwa@1.4.1 dark-class-check: `node e2e/dark-class-check.mjs`
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9526032Z Exit status 1
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9526147Z 
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9561195Z Full logs of every check copied to /home/runner/work/_temp/test-all-logs
+Test-All shard web-pwa	Run test-all checks (web-pwa)	2026-11-14T14:14:48.9616448Z ##[error]Process completed with exit code 1.

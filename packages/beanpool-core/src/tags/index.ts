@@ -122,7 +122,7 @@ function nfc(text: string): string {
  * This is case only: no other mark or letter is folded (ç, ş, ğ, ö, ü stay).
  */
 function caseless(text: string): string {
-    return text.replace(/ı/g, 'i').replace(/i̇/g, 'i');
+    return text.replace(/ı/g, 'i').replace(/i\u0307/g, 'i');
 }
 
 /**

@@ -532,7 +532,7 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
  * This server's community as people know it, read here: its name, how many people are in it, and its owners (#2017
  * review N3). People only (confirmation review N9): not SYSTEM, the genesis row or the Commons pot (genesis.ts
  * notABrandNewInstall, decisions-engine.ts getActiveMembersCount30d), escrow accounts, and no treasury (is_treasury:
- * the Daily Pulse, the BeanPool enterprise, every project and enterprise), as the People directory leaves them out.
+ * the BeanPool enterprise, every project and enterprise), as the People directory leaves them out.
  * A restored database's text can be anyone's, so its name and callsigns are shown as a file's are.
  */
 function describeCommunity(db: Database.Database, name: string | null | undefined): string {

@@ -100,7 +100,7 @@ import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { startIdentityEpochWatch } from './services/identity-epoch.js';
 import { startRegistrarNameWatch } from './services/registrar-name-watch.js';
 import { startAddressCheck } from './services/address-check.js';
-import { scheduleDailyPulse } from './daily-pulse.js';
+import { removeDailyPulse } from './engine/daily-pulse-cleanup.js';
 import { initHarvester } from './services/harvester.js';
 import { startImageEvacuation } from './services/image-evacuation.js';
 import { startVoiceExpiry } from './engine/voice-lines.js';
@@ -384,8 +384,10 @@ async function main() {
     // and a standby follows the tombstones. Every six hours, the first ten minutes after boot.
     startVoiceExpiry();
 
-    // Step 8.7: Daily Pulse scheduler (auto-rotates daily 0-Bean inspirational offer at 5 AM)
-    scheduleDailyPulse();
+    // Step 8.7: CONVERSION CODE CC-daily-pulse-cleanup (expires: remove in the first node release after 1.4.3). The Daily
+    // Pulse is gone; what it left (its Pulse items, its channel, its live offer) goes, on the main server only: a standby
+    // takes it by the normal path (engine/daily-pulse-cleanup.ts). A start that finds nothing writes nothing.
+    if (getNodeRole() === 'primary') removeDailyPulse();
 
     // Step 8.8: App-store version lookup. The node checks the stores twice a day and
     // serves the answer in /api/community/health, so phones stop downloading the Play

@@ -358,8 +358,7 @@ export function knowledgeSearch(reader: string, q: string, now = Date.now()): Kn
 const DAY_MS = 86_400_000;
 
 /**
- * The node's own day, YYYY-MM-DD in its local time, as the Daily Pulse dates its item (daily-pulse.ts rotateDailyPulse):
- * the day the Home card's pick belongs to.
+ * The node's own day, YYYY-MM-DD in its local time: the day the Home card's pick belongs to.
  */
 export function nodeLocalDay(now: number): string {
     return new Date(now - new Date(now).getTimezoneOffset() * 60_000).toISOString().slice(0, 10);

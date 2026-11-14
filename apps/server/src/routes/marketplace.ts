@@ -32,7 +32,6 @@ import {
 } from '../storage/image-columns.js';
 import { getPeerOrigins } from '../connector-manager.js';
 import { respondSettlementAware } from '../federation-settlement.js';
-import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody, eventTimeAnswer } from './event-post.js';
 import { copyBody, copyUpdates, copyOfRequest, readOfCopy, EVENT_COPY_CODE } from '../engine/event-copy.js';
@@ -928,9 +927,6 @@ router.post('/api/marketplace/posts', async (ctx) => {
             return;
         }
 
-        // Synchronize Daily Pulse marketplace gate (< 2 threshold)
-        syncPulseMarketplaceGate();
-
         ctx.body = { success: true, post: readOfCopy(post, actor), ...eventTimeAnswer(timeOut) };
     } catch (e: any) {
         // A Beans price on a node with Beans off: 403 profile_no_beans, with the plain message (state-engine).
@@ -996,9 +992,6 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
         }
 
         const removed = removePost(id, actor);
-        if (removed) {
-            syncPulseMarketplaceGate();
-        }
         ctx.body = { success: removed };
     } catch (e: any) {
         // A convenor whose account is suspended (engine/posts.ts removePost) is refused as a non-member is: 403.
@@ -1620,9 +1613,6 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
         // to the engine as the body holds it, unread, so a count that isn't a whole number is refused there, never rounded.
         const tx = acceptPost(postId, buyerPublicKey, standingStart ? undefined : dealQuantityFromBody(hours),
             { authSigner: actor, standing: standingStart, item: { n: hours, option: itemOption, expect_c } });
-        if (tx) {
-            syncPulseMarketplaceGate();
-        }
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
         // A lendable Offer is asked for, never taken in one step (engine/escrow.ts acceptPost): its code goes with its words,
@@ -1761,7 +1751,6 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
             ctx.body = { error: word('Cannot complete — transaction not found or not authorized') };
             return;
         }
-        syncPulseMarketplaceGate();
         ctx.body = { success: true, transaction: tx, alreadyCompleted: !!(tx as any).alreadyCompleted };
     } catch (e: any) {
         // A per-item deal released for another number than its own (engine/escrow.ts, design D5): 400 with its code.
@@ -1822,7 +1811,6 @@ router.post('/api/marketplace/transactions/cancel', async (ctx) => {
             ctx.body = { error: word('Cannot cancel — transaction not found or not authorized'), code: TRANSACTION_GONE_CODE };
             return;
         }
-        syncPulseMarketplaceGate();
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
         respondSettlementAware(ctx, err, 'Failed to cancel transaction');
@@ -1841,7 +1829,6 @@ router.post('/api/marketplace/posts/pause', async (ctx) => {
         const actor = ctx.state?.actor as string | undefined;
         const success = pausePost(postId, authorPublicKey, actor);
         if (success) {
-            syncPulseMarketplaceGate();
             ctx.body = { success: true };
             return;
         }
@@ -1869,7 +1856,6 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
         const actor = ctx.state?.actor as string | undefined;
         const success = resumePost(postId, authorPublicKey, actor);
         if (success) {
-            syncPulseMarketplaceGate();
             ctx.body = { success: true };
             return;
         }

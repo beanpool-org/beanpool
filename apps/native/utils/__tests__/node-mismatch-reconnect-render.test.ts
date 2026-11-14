@@ -412,6 +412,10 @@ describe("the closed page for an account an owner retired as an empty duplicate 
         expect(text()).toContain('Your account in Riverside was retired');
         expect(text()).toContain(RETIRED_LINE);
         expect(t(ACCOUNT_RETIRED_WORDS.line)).toBe(RETIRED_LINE);
+        // At 320 dp and 1.3x (this file's window) the line takes several lines: neither it nor the title is clipped.
+        const drawn = Array.from(host.querySelectorAll('span')).filter(el => el.textContent === RETIRED_LINE || el.textContent === 'Your account in Riverside was retired');
+        expect(drawn).toHaveLength(2);
+        for (const el of drawn) expect(el.getAttribute('data-lines')).toBeNull();
         expect(text()).not.toContain('was closed');
         expect(text()).not.toContain('You deleted it, or the community removed it.');
         // A removed account's hint (a vote could bring you back) is not this account's: an owner's Bring back is.

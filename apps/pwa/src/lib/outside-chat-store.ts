@@ -105,7 +105,8 @@ async function read(keys: string[]): Promise<unknown[]> {
  * `keys` changed in ONE transaction: `next` gets their values and gives the new ones (undefined: left as it is). Resolves
  * once written; throws, with nothing written, when the transaction fails (a full disk aborts it) or `next` throws.
  */
-async function change(keys: string[], next: (values: any[]) => unknown[]): Promise<void> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- each caller names its documents' types as a tuple
+async function change(keys: string[], next: (values: any) => unknown[]): Promise<void> {
     const db = await openDb();
     return new Promise((resolve, reject) => {
         let tx: IDBTransaction;

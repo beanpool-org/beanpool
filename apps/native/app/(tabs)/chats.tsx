@@ -38,6 +38,9 @@ import { chatSides, chatSideShown, formatHundredths, t, tn, word, type ChatSide,
 import { ListPhoto } from '../../components/ListPhoto';
 import { ChatFrameSwitch } from '../../components/ChatFrameSwitch';
 import { ForumPane } from '../../components/forum/ForumPane';
+import { ContactsInfoSheet } from '../../components/ContactsInfoSheet';
+import { useContactsRecord } from '../../utils/use-contacts';
+import { backLineSeen, contactsHintStoreKey } from '../../utils/contacts-store';
 
 /** Talk's three panes: word() keys, shown through t() where the switch is drawn. */
 const TALK_PANES: ReadonlyArray<{ id: TalkView; label: WordKey }> = [
@@ -91,6 +94,25 @@ export default function ChatsScreen() {
     const groupsUnread = React.useMemo(() => groupsUnreadTotal(yourGroups), [yourGroups]);
     const [deals, setDeals] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    // The member's private contacts (DESIGN-private-contacts-fable.md §3.1): the button in the search row, its one-time line
+    // (kept per account: gone once used or closed), the ⓘ, and "Your contacts are back" once a community's copy came in.
+    // Only the record beside the list is read here, never the list itself (it is costly to open on an old phone).
+    const contactsRecord = useContactsRecord(identity);
+    const hasContacts = (contactsRecord?.fileSeq ?? 0) > 0;
+    const [contactsHint, setContactsHint] = useState(false);
+    const [contactsInfo, setContactsInfo] = useState(false);
+    React.useEffect(() => {
+        setContactsHint(false);
+        if (!identity?.publicKey) return;
+        let alive = true;
+        AsyncStorage.getItem(contactsHintStoreKey(identity.publicKey)).then((v) => { if (alive) setContactsHint(v === null); }).catch(() => {});
+        return () => { alive = false; };
+    }, [identity?.publicKey]);
+    const contactsHintDone = () => {
+        setContactsHint(false);
+        if (identity?.publicKey) AsyncStorage.setItem(contactsHintStoreKey(identity.publicKey), 'done').catch(() => {});
+    };
+    const openContacts = () => { contactsHintDone(); router.push('/contacts'); };
     const [sortBy, setSortBy] = useState<'recent' | 'unread' | 'credits_desc' | 'credits_asc'>('recent');
     // Sorting by Beans is not offered on a community with Beans off (the worldwide one): every figure there is 0.
     const showsBeans = beansOn(nodeProfile?.features);
@@ -312,6 +334,13 @@ export default function ChatsScreen() {
             fontWeight: '600',
             color: colors.text.body,
         },
+        contactsLine: { marginHorizontal: 16, marginBottom: 10, padding: 12, borderRadius: 12, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default },
+        contactsLineText: { fontSize: 14, lineHeight: 20, color: colors.text.body },
+        contactsLineBold: { fontWeight: '800' },
+        contactsLineRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 8 },
+        contactsLineBtn: { minHeight: 44, paddingHorizontal: 14, borderRadius: 10, backgroundColor: colors.brand.fill, justifyContent: 'center' },
+        contactsLineBtnText: { fontSize: 14, fontWeight: '800', color: colors.text.inverse },
+        contactsIconBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
     }));
 
     // Partition conversations into "Action Required" and regular
@@ -948,6 +977,9 @@ export default function ChatsScreen() {
                         </View>
                     )}
                 </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Contacts')} testID="contacts-button" hitSlop={2} style={styles.optionsToggleBtn} onPress={openContacts}>
+                    <MaterialCommunityIcons name={hasContacts ? 'account-multiple-outline' : 'account-multiple-plus-outline'} size={22} color={colors.text.secondary} />
+                </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel={t('New message')} style={[styles.optionsToggleBtn, { backgroundColor: colors.accent.tint }]} onPress={() => {
                     if (Platform.OS === 'web') {
                         const val = window.prompt(t('Enter PubKey or Callsign:'));
@@ -959,6 +991,34 @@ export default function ChatsScreen() {
                     <MaterialCommunityIcons name="pencil-outline" size={22} color={colors.accent.primary} />
                 </Pressable>
             </View>
+            {/* The Contacts button's one-time line (design §3.1): the icon has no words, so these say what it is, until used or closed. */}
+            {contactsHint && messagesFilter !== 'requests' && (
+                <View style={styles.contactsLine} testID="contacts-hint">
+                    <Text style={styles.contactsLineText}>
+                        <Text style={styles.contactsLineBold}>{t('Bring your contacts with you.')}</Text> {t('A private list only you can open, on any phone.')}
+                    </Text>
+                    <View style={styles.contactsLineRow}>
+                        <Pressable accessibilityRole="button" style={styles.contactsLineBtn} onPress={openContacts}>
+                            <Text style={styles.contactsLineBtnText}>{t('Contacts')}</Text>
+                        </Pressable>
+                        <Pressable accessibilityRole="button" accessibilityLabel={t('About your private contacts')} style={styles.contactsIconBtn} onPress={() => setContactsInfo(true)}>
+                            <MaterialCommunityIcons name="information-outline" size={22} color={colors.text.body} />
+                        </Pressable>
+                        <Pressable accessibilityRole="button" accessibilityLabel={t('Dismiss')} style={[styles.contactsIconBtn, { marginLeft: 'auto' }]} onPress={contactsHintDone}>
+                            <MaterialCommunityIcons name="close" size={22} color={colors.text.muted} />
+                        </Pressable>
+                    </View>
+                </View>
+            )}
+            {/* A list that came back from a community's copy to a phone that held none (design §4.5). */}
+            {!!contactsRecord?.back && identity && messagesFilter !== 'requests' && (
+                <View style={[styles.contactsLine, styles.contactsLineRow, { marginTop: 0 }]} accessibilityRole="text" testID="contacts-back">
+                    <Text style={[styles.contactsLineText, { flex: 1 }]}>{tn(contactsRecord.back, 'Your contacts are back: {n} person.', 'Your contacts are back: {n} people.')}</Text>
+                    <Pressable accessibilityRole="button" accessibilityLabel={t('Dismiss')} style={styles.contactsIconBtn} onPress={() => { void backLineSeen(identity); }}>
+                        <MaterialCommunityIcons name="close" size={22} color={colors.text.muted} />
+                    </Pressable>
+                </View>
+            )}
             {/* One row per other community where messages wait (design R6): lands in that community's Talk. */}
             {messagesFilter !== 'requests' && (
                 <OtherCommunityNotices notices={otherNotices} busy={switchingCommunity} onOpen={(url) => void openOtherCommunity(url)} note={switchNote} />
@@ -1013,7 +1073,7 @@ export default function ChatsScreen() {
             )}
             </View>
 
-
+            <ContactsInfoSheet visible={contactsInfo} onClose={() => setContactsInfo(false)} />
         </View>
     );
 }

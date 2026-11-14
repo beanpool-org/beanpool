@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { inCapitalsOf, t, type KnowledgeRow } from '@beanpool/core';
+import { LEARN_HOME_WORDS, inCapitalsOf, t, type KnowledgeRow } from '@beanpool/core';
 import { useStyles } from '../../app/ThemeContext';
 import { ListPhoto } from '../ListPhoto';
 import { LEARN_LINES, checkedOverAYearAgo, monthYear, topicOf } from './learn-lines';
@@ -26,7 +26,8 @@ export function TopicTile({ topic, size = TILE, testID = 'topic-tile' }: { topic
     );
 }
 
-export function KnowledgeRowCard({ row, onPress, now, testID }: { row: KnowledgeRow; onPress: () => void; now?: number; testID?: string }) {
+/** `fresh`: the Home card's newest page of the last 14 days (slice K7), led by the chip "NEW". */
+export function KnowledgeRowCard({ row, onPress, now, testID, fresh }: { row: KnowledgeRow; onPress: () => void; now?: number; testID?: string; fresh?: boolean }) {
     const styles = useStyles(({ colors }) => StyleSheet.create({
         card: {
             flexDirection: 'row', gap: 12, padding: 12, borderRadius: 14, borderWidth: 1, minHeight: 88,
@@ -61,6 +62,7 @@ export function KnowledgeRowCard({ row, onPress, now, testID }: { row: Knowledge
             </View>
             <View style={styles.body}>
                 <View style={styles.chips}>
+                    {fresh ? <ChipText bg="learn">{inCapitalsOf(t(LEARN_HOME_WORDS.fresh))}</ChipText> : null}
                     <ChipText bg="learn">{inCapitalsOf(t(topic.label))}</ChipText>
                     {row.pinned ? <ChipText bg="learn">{t(LEARN_LINES.pinned)}</ChipText> : null}
                     {row.outdated ? <ChipText bg="amber">{t(LEARN_LINES.outdatedChip)}</ChipText> : null}

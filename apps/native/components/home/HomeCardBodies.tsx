@@ -17,6 +17,7 @@ import {
     askedFacts, communitiesListed, decideOnNode, timeAgoInWords, withPin,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeNeedItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
+import { LEARN_HOME_WORDS, learnFigureCount } from '@beanpool/core';
 import { ARRANGE_WORDS, ASKED_PUSH_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, freePriceWords, inviteAskNoticeHere, isHundredths, perItemLine, perItemOf, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
@@ -722,10 +723,21 @@ export function InviteBody({ colors }: { colors: AppColors }) {
 }
 
 /**
+ * "{n} things worth knowing ›" on the community card (DESIGN-local-knowledge-amend-fable.md §3.6, slice K7): the pages Learn
+ * shows, from 1, and only where Learn is on (the node sends the count only then); the card's one figure that opens a place.
+ */
+function LearnFigure({ n, colors, onLearn }: { n: unknown; colors: AppColors; onLearn?: () => void }) {
+    const count = learnFigureCount(n);
+    if (count === null || !onLearn) return null;
+    const text = tn(count, LEARN_HOME_WORDS.figure.one, LEARN_HOME_WORDS.figure.other, { n: formatCount(count) });
+    return <HomeRow colors={colors} text={`${text} ›`} a11y={text} lines={2} onPress={onLearn} testID="home-community-learn" />;
+}
+
+/**
  * The community's card, last on Home, with the frame's two ways in (CARD-FRAME §1.1): "Add a card ›" and "Arrange ›",
  * each its own 48 dp target in a row that wraps (at 320 dp with text at 1.3× they stand on two rows, right-aligned).
  */
-export function CommunityBody({ card, profile, invitesOn, features, colors, onOpenShape, onAdd, onArrange, arrangeRef }: {
+export function CommunityBody({ card, profile, invitesOn, features, colors, onOpenShape, onAdd, onArrange, arrangeRef, onLearn }: {
     card: HomeCards['community'] | undefined;
     profile: string;
     invitesOn: boolean;
@@ -737,6 +749,8 @@ export function CommunityBody({ card, profile, invitesOn, features, colors, onOp
     onArrange?: () => void;
     /** Arrange ›, where Done gives focus back. */
     arrangeRef?: React.RefObject<View | null>;
+    /** Opens Learn, from the "{n} things worth knowing" figure (slice K7). */
+    onLearn?: () => void;
 }) {
     const shapeSummary = communityShapeSummary(features);
     const isFirstMember = profile !== 'global' && (card?.members ?? 0) <= 1;
@@ -778,6 +792,7 @@ export function CommunityBody({ card, profile, invitesOn, features, colors, onOp
                 <HomeRow colors={colors} text={row1Text} a11y={row1Text} lines={2} testID="home-community-row-members" />
                 {row2Text && <HomeRow colors={colors} text={row2Text} a11y={row2Text} lines={2} testID="home-community-row-trades" />}
                 {row3Text && <HomeRow colors={colors} text={row3Text} a11y={row3Text} lines={2} testID="home-community-row-listings" />}
+                <LearnFigure n={card.knowledge} colors={colors} onLearn={onLearn} />
                 {shapeSummary && <HomeRow colors={colors} text={`${shapeSummary} ›`} a11y={shapeSummary} lines={4} onPress={onOpenShape} testID="home-community-shape-summary" />}
                 {(onAdd || onArrange) && (
                     <View style={communityLinksStyle}>
@@ -792,6 +807,7 @@ export function CommunityBody({ card, profile, invitesOn, features, colors, onOp
     return (
         <>
             {!!line && <HomeRow colors={colors} text={line} a11y={line} lines={3} testID="home-community-line" />}
+            <LearnFigure n={card?.knowledge} colors={colors} onLearn={onLearn} />
             {shapeSummary && <HomeRow colors={colors} text={`${shapeSummary} ›`} a11y={shapeSummary} lines={4} onPress={onOpenShape} testID="home-community-shape-summary" />}
             {(onAdd || onArrange) && (
                 <View style={communityLinksStyle}>

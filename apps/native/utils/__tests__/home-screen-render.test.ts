@@ -227,7 +227,8 @@ function localMember(): HomeAnswer {
     const now = Date.now();
     return {
         generatedAt: iso(now), profile: 'local',
-        features: { beans: true, escrow: true, invites: true, exampleListings: false, decisions: true },
+        // Every switch on, Learn's too (slice K7): the first read, made before any answer, asks the same cards as the next.
+        features: { beans: true, escrow: true, invites: true, exampleListings: false, decisions: true, knowledge: true },
         me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member', tour: TOUR_ENDED },
         layout: everyV1Card(now),
         cards: {

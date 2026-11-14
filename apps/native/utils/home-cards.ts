@@ -31,7 +31,7 @@ import {
     copyFromLine, eventCopyOf, type ShownFromLine, reorderIds, newInstanceId, readChatSettings, homeChatPicked,
     HOME_BELL_SETTLE_MS, crowdBellDelayMs, createHomeBellSettle, isCrowdDoorbell, type HomeBellTimers,
     FIRST_STEPS_WORDS, firstStepsCount, firstStepsLeft, firstStepsOver, welcomeDrawn, welcomeFacts as coreWelcomeFacts, type WelcomeFacts,
-    readerMayInvite,
+    readerMayInvite, arrivingCards, keepArrivedCard, learnHomeLines, type HomeLearnCard, type LearnHomeOpens,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { TIER_WORDS } from './trust-tier';
@@ -63,10 +63,17 @@ const FIXED: ReadonlySet<HomeCardId> = new Set([FIXED_FIRST, FIXED_LAST]);
  * for every tool this build has with a Home card (tools/index.ts toolHomeCardIds), drawn by Home's `default:` branch.
  */
 export const HOME_DRAWN: ReadonlySet<HomeCardId> = new Set([
-    'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'shop', 'events', 'market', 'asked', 'search', 'decide', 'groups',
+    'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'shop', 'events', 'market', 'asked', 'learn', 'search', 'decide', 'groups',
     'chat', 'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'tools', 'community',
     ...toolHomeCardIds(),
 ]);
+/**
+ * The doors the Learn card may open beyond a page and Learn (core learnHomeLines): To check and the form are slice K4's
+ * screens, not on the phone yet, so "N to check ›" and "Add the first thing…" are not drawn, and Home doesn't send
+ * `lands=learn` (the node sends `toCheck` only to an app that does). K4 turns each on with its screen.
+ */
+export const LEARN_OPENS: LearnHomeOpens = {};
+
 /** A tool's card this build draws: worked out on the phone from the tool's document, so the node sends nothing for it. */
 export const isToolHomeCard = (type: HomeCardId): boolean => type.startsWith('tool-') && HOME_DRAWN.has(type);
 
@@ -247,6 +254,8 @@ export interface HomeCards {
     market?: { items: HomeMarketItem[]; total14d: number; more: boolean; examples?: true };
     /** "Asked near you" (cold-start N1): the open Needs of neighbours, the member's stars first; absent while there is none to show. */
     asked?: { items: HomeNeedItem[] };
+    /** "Learn something local" (slice K7, @beanpool/core HomeLearnCard): where Learn is on, to a member with something to show. */
+    learn?: HomeLearnCard;
     decide?: {
         open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean;
         items?: HomeDecideItem[]; poll?: HomeDecidePoll | null;
@@ -265,6 +274,8 @@ export interface HomeCards {
          * Each of the three is null when it is zero: there, so the card keeps its rows, and not written (§2.7).
          */
         joined7d?: number | null; eventsSoon?: number | null; commonsPot_c?: number | null;
+        /** The pages Learn shows this member, from 1 (slice K7): absent at 0, where Learn is off, and from an older node. */
+        knowledge?: number;
     };
 }
 
@@ -514,6 +525,14 @@ export function pinnedCards(
 export const listOf = (layout: HomeLayout | null): HomeCardInstance[] => layout?.cards ?? defaultHomeLayout().cards;
 
 /**
+ * The cards that arrive on this Home (core `arrivingCards`, DESIGN-local-knowledge-amend-fable.md §3.6, slice K7) that this
+ * build draws: drawn once, after the member's own cards, until Keep on Home, Remove or a move writes their stamp.
+ */
+export const arrivingOn = (layout: HomeLayout | null): HomeCardInstance[] => arrivingCards(layout).filter(c => HOME_DRAWN.has(c.type));
+/** Whether this card is drawn as arriving: on Home, not yet on the member's list. */
+export const isArrivingCard = (layout: HomeLayout | null, id: string): boolean => arrivingOn(layout).some(c => c.id === id);
+
+/**
  * The cards in the member's order, drawn defensively (review of #1697, note c: only core's `addCard` keeps the limits, so
  * a stored list may hold anything): `needs` first, the list's cards of a type this build draws (a one-of-a-kind type
  * once, an instance type up to its limit, the fixed two never from the list), `community` last. A pinned `find` stands
@@ -523,7 +542,7 @@ export const listOf = (layout: HomeLayout | null): HomeCardInstance[] => layout?
 export function cardOrder(layout: HomeLayout | null, pinned: readonly HomeCardId[] = []): HomeCardInstance[] {
     const count = new Map<string, number>();
     const placed: HomeCardInstance[] = [];
-    for (const c of listOf(layout)) {
+    for (const c of [...listOf(layout), ...arrivingOn(layout)]) {
         const t = homeCardType(c.type);
         if (!t || t.fixed || !HOME_DRAWN.has(c.type) || pinned.includes(c.type)) continue;
         const n = count.get(c.type) ?? 0;
@@ -571,12 +590,24 @@ export function addCard(
     return frameAddCard(layout ?? defaultHomeLayout(), type, { settings: opts.settings, pinned: opts.pinned, now, random: opts.random });
 }
 
-/** A card taken off Home: the instance goes, its settings and any dismissal with it (§1.3). Null when it can't be. */
+/**
+ * A card taken off Home: the instance goes, its settings and any dismissal with it (§1.3). A card drawn as arriving leaves
+ * only its stamp (core `removeCard`), so it never arrives again. Null when it can't be.
+ */
 export function removeCard(layout: HomeLayout | null, id: string, now: number, pinned: readonly HomeCardId[] = []): HomeLayout | null {
-    const card = listOf(layout).find(c => c.id === id);
+    const card = listOf(layout).find(c => c.id === id) ?? arrivingOn(layout).find(c => c.id === id);
     if (!card || !canRemoveCard(card.type, pinned)) return null;
-    return frameRemoveCard(layout ?? defaultHomeLayout(), id, now);
+    return frameRemoveCard(layout, id, now);
 }
+
+/** "Keep on Home" on a card drawn as arriving: last on the list, its stamp written, in one save. Null when it isn't arriving. */
+export function keepCard(layout: HomeLayout | null, id: string, now: number): HomeLayout | null {
+    return isArrivingCard(layout, id) ? keepArrivedCard(layout, id, now) : null;
+}
+
+/** A move of a card drawn as arriving keeps it first (core `keepArrivedCard`), so the move has a place on the list and writes its stamp. */
+const keptFirst = (layout: HomeLayout | null, id: string, now: number): HomeLayout | null =>
+    isArrivingCard(layout, id) ? keepArrivedCard(layout, id, now) : null;
 
 /** A card's settings changed in place (Settings… → Save): it keeps its place. Null when it isn't there. */
 export function changeCardSettings(layout: HomeLayout | null, id: string, settings: unknown, now: number): HomeLayout | null {
@@ -595,21 +626,24 @@ export function changeCardSettings(layout: HomeLayout | null, id: string, settin
 }
 
 /**
- * Up or down past the card next to it in `among` (every card Arrange folds), so a move always shows. Every other card keeps its place in the list. Null when it can't move that way.
+ * Up or down past the card next to it in `among` (every card Arrange folds), so a move always shows. Every other card keeps its place in the list. Null when it can't move that way;
+ * a card drawn as arriving is kept first (on the list, stamped), so even a move that can't go further saves that.
  */
 export function moveCard(
     layout: HomeLayout | null, id: string, dir: 'up' | 'down', among: readonly HomeCardInstance[], now: number, pinned: readonly HomeCardId[] = [],
 ): HomeLayout | null {
-    const list = listOf(layout);
+    const kept = keptFirst(layout, id, now);
+    const base = kept ?? layout;
+    const list = listOf(base);
     const movable = among.filter(c => canMoveCard(c.type, pinned) && list.some(l => l.id === c.id));
     const from = movable.findIndex(c => c.id === id);
     const other = from < 0 ? undefined : movable[dir === 'up' ? from - 1 : from + 1];
-    if (!other) return null;
+    if (!other) return kept;
     const cards = [...list];
     const i = cards.findIndex(c => c.id === id);
     const j = cards.findIndex(c => c.id === other.id);
     [cards[i], cards[j]] = [cards[j], cards[i]];
-    return { ...(layout ?? defaultHomeLayout()), cards, updatedAt: at(now) };
+    return { ...(base ?? defaultHomeLayout()), cards, updatedAt: at(now) };
 }
 
 /**
@@ -620,15 +654,17 @@ export function moveCard(
 export function moveCardTo(
     layout: HomeLayout | null, id: string, to: number, among: readonly HomeCardInstance[], now: number, pinned: readonly HomeCardId[] = [],
 ): HomeLayout | null {
-    const list = listOf(layout);
+    const kept = keptFirst(layout, id, now);
+    const base = kept ?? layout;
+    const list = listOf(base);
     const movable = among.filter(c => canMoveCard(c.type, pinned) && list.some(l => l.id === c.id));
-    if (!movable.some(c => c.id === id) || to < 0 || to >= movable.length) return null;
+    if (!movable.some(c => c.id === id) || to < 0 || to >= movable.length) return kept;
     const placed = reorderIds(movable, movable.map(c => c.id), id, to);
-    if (placed.every((c, k) => c.id === movable[k].id)) return null;
+    if (placed.every((c, k) => c.id === movable[k].id)) return kept;
     const slots = movable.map(c => list.findIndex(l => l.id === c.id)).sort((x, y) => x - y);
     const cards = [...list];
     slots.forEach((slot, k) => { cards[slot] = list.find(l => l.id === placed[k].id)!; });
-    return { ...(layout ?? defaultHomeLayout()), cards, updatedAt: at(now) };
+    return { ...(base ?? defaultHomeLayout()), cards, updatedAt: at(now) };
 }
 
 /**
@@ -1163,6 +1199,9 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             case 'market': return !!c.market && (c.market.items.length > 0 || !!c.market.examples);
             // Real open Needs only: drawn while the node sent a row, never an empty box (cold-start N2).
             case 'asked': return !!c.asked && Array.isArray(c.asked.items) && c.asked.items.length > 0;
+            // Learn something local (slice K7): while it has a row this app can draw (core learnHomeLines); a member with
+            // nothing to show gets no card, and an arriving card is drawn by the same rule.
+            case 'learn': return learnHomeLines(c.learn, LEARN_OPENS) !== null;
             case 'decide': return !!c.decide && decideLines(c.decide, answer.features, 0).length > 0;
             // Drawn with no body too (SEARCH_OFFLINE_LINE), so a member on 2G knows the add took; a search that finds
             // nothing says so (searchEmptyLine).

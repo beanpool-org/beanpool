@@ -10,6 +10,7 @@ import {
     HOME_CARD_TYPES, HOME_DEFAULT_LIST, HOME_FRAME_LIMITS, HOME_V1_CARD_IDS, KNOWLEDGE_PLACE_LINE, LEARN_HOME_WORDS, addCard, arrivedStamp,
     arrivingCards, cardsToAsk, checkHomeLayout, endTourLayout, homeCardHue, homeCardType, homeCardsWithArrivals, keepArrivedCard, moveCard,
     defaultHomeLayout, readHomeLayout, removeCard, resetHomeLayout, type HomeLayoutV2, type HomeNodeFacts,
+    LEARN_HOME_ROWS, learnFigureCount, learnHomeLines, type HomeLearnRow,
 } from '../index.js';
 
 const AT = '2026-11-14T09:00:00.000Z';
@@ -166,5 +167,44 @@ describe('K7: a card that arrives on an arranged Home', () => {
         expect(readHomeLayout(stamped)!.dismissed).toEqual({ [STAMP]: AT, safety: AT });
         expect(arrivedStamp('learn')).toBe(STAMP);
         expect(STAMP.length).toBeLessThanOrEqual(HOME_FRAME_LIMITS.idChars);
+    });
+});
+
+describe('K7: what the Home card draws (learnHomeLines), the same on both apps', () => {
+    const row = (id: string, isNew?: true): HomeLearnRow => ({ id, title: `Page ${id}`, line: 'A line', topic: 'services', photo: null, helped: 0, checkedAt: AT, pinned: false, outdated: false, ...(isNew ? { isNew } : {}) });
+
+    it('draws the day\'s rows, at most three, with the new mark as sent', () => {
+        const lines = learnHomeLines({ rows: [row('a', true), row('b'), row('c'), row('d')] });
+        expect(lines?.rows.map((r) => r.id)).toEqual(['a', 'b', 'c']);
+        expect(lines?.rows.length).toBe(LEARN_HOME_ROWS);
+        expect(lines?.rows[0].isNew).toBe(true);
+        expect(lines).toMatchObject({ toCheck: 0, first: false });
+    });
+
+    it('"N to check" only where the app opens To check; "Add the first" only where it opens the form and Learn shows nothing', () => {
+        const owner = { rows: [], toCheck: 3, first: true as const };
+        // An app that opens neither draws neither, and with no rows there is no card.
+        expect(learnHomeLines(owner)).toBeNull();
+        expect(learnHomeLines(owner, { toCheck: true })).toEqual({ toCheck: 3, first: false, rows: [] });
+        expect(learnHomeLines(owner, { addFirst: true })).toEqual({ toCheck: 0, first: true, rows: [] });
+        expect(learnHomeLines(owner, { toCheck: true, addFirst: true })).toEqual({ toCheck: 3, first: true, rows: [] });
+        // With rows, "first" never shows (the node sends it only while Learn shows nothing; the app holds to it too).
+        expect(learnHomeLines({ rows: [row('a')], first: true }, { addFirst: true })?.first).toBe(false);
+        // Nothing waiting: no To check row.
+        expect(learnHomeLines({ rows: [row('a')], toCheck: 0 }, { toCheck: true })?.toCheck).toBe(0);
+    });
+
+    it('a member with nothing to show gets no card; a card the node did not send is none', () => {
+        expect(learnHomeLines({ rows: [] }, { toCheck: true, addFirst: true })).toBeNull();
+        expect(learnHomeLines(undefined)).toBeNull();
+        expect(learnHomeLines(null)).toBeNull();
+    });
+
+    it('the community figure counts from 1, and is none at 0 or when the node left it out', () => {
+        expect(learnFigureCount(6)).toBe(6);
+        expect(learnFigureCount(1)).toBe(1);
+        expect(learnFigureCount(0)).toBeNull();
+        expect(learnFigureCount(undefined)).toBeNull();
+        expect(learnFigureCount('6')).toBeNull();
     });
 });

@@ -51,12 +51,13 @@ import {
     BeansBody, CommunityBody, DealsBody, DecideBody, EnterpriseBody, EventsBody, GroupsBody, InterestsBody, InviteBody, JoinedBody,
     AskedBody, MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StepsBody, TipsBody, WelcomeBody,
 } from '../../components/home/HomeCardBodies';
+import { LearnBody } from '../../components/home/LearnBody';
 import {
     HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, listOf, moveCardTo, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, homeCrowdFor, isHomeDoorbellFor,
     effectiveInterests, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, resetLayout, safetyWord, sameList, skyOf, starredFirst,
-    welcomeFacts, welcomeUp,
+    welcomeFacts, welcomeUp, LEARN_OPENS, isArrivingCard, keepCard,
     type HomeAnswer, type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
@@ -76,7 +77,7 @@ import { ChatBody } from '../../components/home/ChatBody';
 import { chatCardFor, chatPickList, chatsOnHome, type ChatChoice } from '../../utils/home-chat';
 import type { HomeChatOpenDeps } from '../../utils/home-chat-open';
 import { composeTargetFor } from '../../utils/compose-options';
-import { askedPushOn, inviteAskNoticeHere, toolHomeCardType, readToolsSettings, shapeFeaturesOf } from '@beanpool/core';
+import { askedPushOn, inviteAskNoticeHere, learnHomeLines, toolHomeCardType, readToolsSettings, shapeFeaturesOf } from '@beanpool/core';
 import { toolOfHomeCard } from '../../tools/index';
 import { ToolHomeBody } from '../../tools/frame';
 import { YourToolsBody } from '../../components/home/YourToolsBody';
@@ -1068,7 +1069,8 @@ export default function HomeScreen() {
     const movable = arrangeOn ? drawn.filter(c => canMoveCard(c.type, pins)) : [];
     // What a drag places among (slice A4): the drawn cards that move and stand on the list, the places `moveCardTo` counts.
     // Worked out on Home too, so the hold that opens Arrange can carry its card on at once.
-    const dragMovable = tailor ? drawn.filter(c => canMoveCard(c.type, pins) && listOf(shown).some(l => l.id === c.id)) : [];
+    // A card drawn as arriving (slice K7) moves too: the drop keeps it first, then places it.
+    const dragMovable = tailor ? drawn.filter(c => canMoveCard(c.type, pins) && (listOf(shown).some(l => l.id === c.id) || isArrivingCard(shown, c.id))) : [];
     const dragMovableIds = dragMovable.map(c => c.id);
     // The drag (DESIGN-home-arrange-in-place-fable.md §2.2, §2.3, slice A4): a card held is lifted, the list stops scrolling,
     // the band follows the finger and the card is laid out where it would land; let go and it is saved as an arrow saves.
@@ -1107,7 +1109,8 @@ export default function HomeScreen() {
         const from = dragMovableIds.indexOf(id);
         return arrangeOn && from >= 0 ? e => { drag.lift(id, from, e); } : undefined;
     };
-    const idle = arrangeOn && answer ? arrangeCards(ordered, drawn, type => cardOnNode(type, answer, role), pins).filter(c => !drawn.some(d => d.id === c.id)) : [];
+    // A card drawn as arriving (slice K7) is not on the member's list: with nothing to show it is not in the strip either.
+    const idle = arrangeOn && answer ? arrangeCards(ordered, drawn, type => cardOnNode(type, answer, role), pins).filter(c => !drawn.some(d => d.id === c.id) && !isArrivingCard(shown, c.id)) : [];
     const tipsAllSeen = !!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList);
     const picker = answer && tailor && addOpen
         ? pickerGroups(answer, shown, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}, welcomeUp(answer, { tourOver, tourOpen, now }) ? [] : ['start'])
@@ -1349,6 +1352,22 @@ export default function HomeScreen() {
                     onSeeAll={() => router.navigate({ pathname: '/(tabs)/market', params: { filter: 'needs' } })}
                 />,
             ) : null;
+            // Learn something local (slice K7): rows open their page, See all opens Learn; Keep on Home while it arrives.
+            case 'learn': {
+                const lines = learnHomeLines(c.learn, LEARN_OPENS);
+                if (!lines) return null;
+                return frame(
+                    <LearnBody
+                        lines={lines}
+                        community={c.community?.name ?? ''}
+                        colors={colors}
+                        now={now}
+                        onOpen={postId => router.push({ pathname: '/post/[id]', params: { id: postId, kind: 'knowledge' } })}
+                        onSeeAll={() => router.push('/learn')}
+                        onKeep={tailor && isArrivingCard(shown, id) ? () => changeLayout(keepCard(layoutRef.current, id, Date.now())) : undefined}
+                    />,
+                );
+            }
             case 'decide': return c.decide ? frame(<DecideBody card={c.decide} features={answer.features} colors={colors} now={now} />) : null;
             case 'groups': return c.groups ? frame(<GroupsBody card={c.groups} colors={colors} />) : null;
             case 'joined': return c.joined ? frame(<JoinedBody card={c.joined} profile={profile} colors={colors} />) : null;
@@ -1396,6 +1415,7 @@ export default function HomeScreen() {
                     onAdd={tailor ? () => setAddOpen(true) : undefined}
                     onArrange={tailor ? () => startArrange() : undefined}
                     arrangeRef={arrangeLink}
+                    onLearn={() => router.push('/learn')}
                 />,
             );
             case 'tools': {

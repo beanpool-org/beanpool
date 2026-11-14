@@ -22,7 +22,8 @@
  * Not applied (noted in the design): a reader's own block list (a suggestion is a word, not a listing).
  */
 import {
-    LANGS, TAG_LIBRARY, compoundWords, exactTagForms, freeTagRefusal, freeTagStored, isTagId, lookupPhrase, tagEnglish, word, wordsFor,
+    LANGS, TAG_LIBRARY, caseBornTagForms, compoundWords, exactTagForms, freeTagRefusal, freeTagStored, isTagId, lookupPhrase, tagEnglish, word,
+    wordsFor,
     type Lang,
 } from '@beanpool/core';
 import { db, deletePlainRows } from '../db/db.js';
@@ -248,25 +249,49 @@ export interface LabelElsewhere {
  * 15 Nov): across languages a fold makes one language's word another's ("Cát", sand in Vietnamese, as "cat"); folding stays
  * inside the device's own index, where a member types their own words without marks. English first, then the languages in
  * LANGS order: where two languages write a label alike and name different tags, the earlier one keeps the key (the device
- * has already resolved its own language and English before it asks). Never a top: the category is its own field. Built
- * from core's catalog files on the first ask, once, keeping nothing of the catalogs but these keys (the ids and codes are
- * the library's and LANGS' own strings); a node nobody asks never builds it.
+ * has already resolved its own language and English before it asks), except that a label as written beats a key born from
+ * case (labelMapOf). Never a top: the category is its own field. Built from core's catalog files on the first ask, once,
+ * keeping nothing of the catalogs but these keys (the ids and codes are the library's and LANGS' own strings); a node nobody
+ * asks never builds it.
  */
 let labelMap: Map<string, LabelElsewhere> | null = null;
 
-function buildLabelMap(): Map<string, LabelElsewhere> {
-    const map = new Map<string, LabelElsewhere>();
+/** Every library tag's label in every language whose catalog this node holds, English first, then LANGS order. */
+function* libraryLabels(): Generator<LabelElsewhere & { label: string }> {
     const items = TAG_LIBRARY.filter((tag) => tag.id.includes('.'));
     for (const lang of LANGS) {
         const catalog = lang === 'en' ? null : coreCatalogOnce(lang);
         if (lang !== 'en' && !catalog) continue;
         const words = wordsFor(lang, catalog ? [catalog] : []);
-        for (const tag of items) {
-            const label = lang === 'en' ? tagEnglish(tag) : words.t(tag.en) || tagEnglish(tag);
-            for (const key of exactTagForms(label)) if (key && !map.has(key)) map.set(key, { id: tag.id, lang });
+        for (const tag of items) yield { id: tag.id, lang, label: lang === 'en' ? tagEnglish(tag) : words.t(tag.en) || tagEnglish(tag) };
+    }
+}
+
+/**
+ * The map of these labels, in their order: each keyed by its exactTagForms; where two labels share a key, the earlier keeps
+ * it. One guard (Fable, 15 Nov, DECISION-tags-turkish-dotless.md): a key born from case (core caseBornTagForms: "internet"
+ * of Turkish "İnternet", whose default lower case has a combining dot) never holds a word that another label writes as it
+ * is. The label as written wins, whatever the order, so a later language's own word is never lost to an earlier language's
+ * capitals (Turkish comes before Swahili in LANGS: a Swahili label "Kazi" keeps its key from Turkish "Kazı"). Today only
+ * "Internet" meets one, and it names the same tag.
+ */
+export function labelMapOf(labels: Iterable<LabelElsewhere & { label: string }>): Map<string, LabelElsewhere> {
+    const map = new Map<string, LabelElsewhere>();
+    const fromCase: Array<[string, LabelElsewhere]> = [];
+    for (const { id, lang, label } of labels) {
+        const caseBorn = caseBornTagForms(label);
+        for (const key of exactTagForms(label)) {
+            if (!key) continue;
+            if (caseBorn.includes(key)) fromCase.push([key, { id, lang }]);
+            else if (!map.has(key)) map.set(key, { id, lang });
         }
     }
+    for (const [key, at] of fromCase) if (!map.has(key)) map.set(key, at);
     return map;
+}
+
+function buildLabelMap(): Map<string, LabelElsewhere> {
+    return labelMapOf(libraryLabels());
 }
 
 /**

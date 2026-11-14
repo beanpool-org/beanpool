@@ -59,12 +59,11 @@ export function fence(boundary: string, what: string, value: unknown, max = MEMB
 }
 
 /**
- * An id this node or its apps made, which holds no words: a UUID, or a Daily Pulse's `pulse_<date>`, each as itself or as a
- * peer's listing carries it here (`xn:` and the end of the peer's id, federation-listings.ts). Any other post id is words
- * someone chose: a member may send their post's id (up to 128 letters, digits, dots, dashes and underscores, engine/posts.ts),
- * and a peer's is the peer's, unchecked.
+ * An id this node or its apps made, which holds no words: a UUID, as itself or as a peer's listing carries it here (`xn:`
+ * and the end of the peer's id, federation-listings.ts). Any other post id is words someone chose: a member may send their
+ * post's id (up to 128 letters, digits, dots, dashes and underscores, engine/posts.ts), and a peer's is the peer's, unchecked.
  */
-const MADE_ID = /^(?:xn:[A-Za-z0-9]{1,12}:)?(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|pulse_\d{4}-\d{2}-\d{2})$/i;
+const MADE_ID = /^(?:xn:[A-Za-z0-9]{1,12}:)?[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 export const isMadeId = (id: unknown): id is string => typeof id === 'string' && MADE_ID.test(id);
 
 const TIME_CELL = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?$/i;

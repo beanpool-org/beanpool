@@ -83,7 +83,7 @@ for arg in "$@"; do
     esac
     continue
   fi
-  if [ "$mergeable" = CONFLICTING ]; then leave "$i" "conflicts with main: sync the branch (word catalogs: scripts/words-merge-3way.mjs), then board it again"; continue; fi
+  if [ "$mergeable" = CONFLICTING ]; then leave "$i" "conflicts with main: sync the branch (scripts/sync-pr.sh $p merges word catalogs per key and stops on anything else), then board it again"; continue; fi
   if ! labels=$(gh pr view "$p" -R "$REPO" --json labels --jq '.labels[].name' 2>/dev/null); then leave "$i" "labels unreadable"; continue; fi
   if ! why=$(why_alone "$i" "$labels"); then leave "$i" "changes unreadable"; continue; fi
   if [ -n "$why" ]; then ALONE+=("$i"); [ -n "$PLAN" ] && echo "queue $p first ($why)"

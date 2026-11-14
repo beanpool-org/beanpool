@@ -23,6 +23,7 @@ not repeat them; the code comments name the incident behind each rule.
 | `headless-brief-rules.md` | Appended to every headless Claude brief. |
 | `agy-brief-rules.md` | Appended to every AGY brief. |
 | `test/selftest.sh` | Proves all of the above against fake `agy`/`claude`/`gh`/`ssh`. No real model, PR or node is touched. |
+| `pr-state.mjs` | `node scripts/lanes/pr-state.mjs <PR>`: a PR's true state in one read-only look. Head, mergeable, base, merge queue; the last deciding verdict and MISMATCH when it names an older head; every check that is not success, with its log's failing lines and file:line (the summary job marked as the summary); each named file touched by the diff or not; one line `CLEAN+GREEN` / `CLEAN+RED (n reds)` / `NOT CLEAN` / `PENDING` (exit 0 / 3 / 4 / 5). It never comments, re-runs, requeues or boards. `test/pr-state.test.mjs` runs it against recorded GitHub answers, in test-all's `workflows` check. |
 
 ## Running a lane
 

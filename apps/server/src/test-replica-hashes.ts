@@ -214,6 +214,8 @@ async function main(): Promise<void> {
         return () => { delete (TABLES as Record<string, unknown>).hash_suite_table; };
     });
     moves('a table left out (NOT_HASHED)', () => { NOT_HASHED.member_badges = 'r'; return () => { delete NOT_HASHED.member_badges; }; });
+    // The list itself, apart from what it takes out of the tables hashed: a name no table hashed carries.
+    moves('the list of tables left out alone', () => { NOT_HASHED.hash_suite_table = 'r'; return () => { delete NOT_HASHED.hash_suite_table; }; });
     moves('a column left out (COLUMNS_NOT_HASHED)', () => {
         COLUMNS_NOT_HASHED.member_badges = { set_by: 'r' };
         return () => { delete COLUMNS_NOT_HASHED.member_badges; };

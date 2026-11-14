@@ -182,10 +182,20 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
     const [view, setView] = useState<View>(() => viewFor(target));
     // A page or screen a door opened straight (a link, a bell line) leaves Learn on Back; one opened from a list returns to it.
     const [pageIsEntry, setPageIsEntry] = useState(() => opensStraight(target));
+    // To check: the suggestion open, the answer just given, and "Edit first" (open, and whether its form was changed).
+    const [checkId, setCheckId] = useState<string | null>(null);
+    const [checkSaid, setCheckSaid] = useState<string | null>(null);
+    const [checkEditing, setCheckEditing] = useState(false);
+    const [checkEdited, setCheckEdited] = useState(false);
+    const closeCheckOne = () => { setCheckId(null); setCheckEditing(false); setCheckEdited(false); };
+    // Every way into a screen starts it afresh, a door (the bell's line, a push, Home) as much as a link in Learn: no answer
+    // said on an earlier visit to To check, no suggestion left open.
+    const freshScreen = () => { setCheckSaid(null); closeCheckOne(); };
     useEffect(() => {
         if (!target) return;
         setView(viewFor(target));
         setPageIsEntry(opensStraight(target));
+        freshScreen();
         onTargetTaken();
     }, [target, onTargetTaken]);
 
@@ -195,8 +205,7 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
     // A page opened from a screen (My suggestions' "Added") returns there; from a list, to the list.
     const openPage = (id: string) => { setPageIsEntry(false); setView((v) => ({ ...v, pageId: id })); };
     const closePage = () => { if (pageIsEntry) onBack(); else setView((v) => ({ ...v, pageId: null })); };
-    // A screen opened afresh starts afresh: no answer said on an earlier visit to To check, no suggestion left open.
-    const openScreen = (next: Screen) => { setPageIsEntry(false); setCheckSaid(null); setCheckId(null); setView((v) => ({ ...v, screen: next, pageId: null })); };
+    const openScreen = (next: Screen) => { setPageIsEntry(false); freshScreen(); setView((v) => ({ ...v, screen: next, pageId: null })); };
     const closeScreen = () => { if (pageIsEntry) onBack(); else setView((v) => ({ ...v, screen: 'list' })); };
 
     // The sample pages, made once per preview screen.
@@ -210,8 +219,6 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
     const checks = useChecksLearn(writes);
     const mineWaiting = useRead<number>(writes && onList ? () => getMyLearnDrafts().then((m) => m.waiting.length) : null, [writes, onList]);
     const toCheck = useRead<number>(writes && checks && onList ? () => getLearnToCheck().then((l) => l.total) : null, [writes, checks, onList]);
-    const [checkId, setCheckId] = useState<string | null>(null);
-    const [checkSaid, setCheckSaid] = useState<string | null>(null);
     const [sentBy, setSentBy] = useState<'suggest' | 'publish'>('suggest');
 
     // One topic, a page at a time.
@@ -328,13 +335,23 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
         );
     }
     if (screen === 'check' && writes) {
+        // Back from "Edit first" returns to the suggestion, asking first when the form was changed; from a suggestion, to the list.
+        const checkBack = () => {
+            if (checkEditing) {
+                if (checkEdited && !window.confirm(t("Leave without approving? Your changes won't be kept."))) return;
+                setCheckEditing(false);
+                setCheckEdited(false);
+            } else if (checkId) closeCheckOne();
+            else closeScreen();
+        };
         return (
             <Shell>
-                <Header title={t('To check')} onBack={checkId ? () => setCheckId(null) : closeScreen} />
+                <Header title={t('To check')} onBack={checkBack} />
                 {checkSaid && !checkId && <p role="status" data-testid="learn-check-said" className="m-0 mt-1 mb-2 text-sm font-bold text-bp-ink-learn">{checkSaid}</p>}
                 {checkId
-                    ? <LearnCheckOne key={checkId} id={checkId} onAnswered={(said) => { setCheckSaid(said); setCheckId(null); }} />
-                    : <LearnCheckList onOpen={(id) => { setCheckSaid(null); setCheckId(id); }} />}
+                    ? <LearnCheckOne key={checkId} id={checkId} editing={checkEditing} onEditing={setCheckEditing} onEdited={setCheckEdited}
+                        onAnswered={(said) => { setCheckSaid(said); closeCheckOne(); }} />
+                    : <LearnCheckList onOpen={(id) => { setCheckSaid(null); closeCheckOne(); setCheckId(id); }} />}
             </Shell>
         );
     }

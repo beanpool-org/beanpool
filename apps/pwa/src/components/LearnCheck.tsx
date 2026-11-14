@@ -65,12 +65,18 @@ export function LearnCheckList({ onOpen }: { onOpen: (id: string) => void }) {
     );
 }
 
-/** One suggestion, whole, and its answer. `onAnswered` returns to the list once it is answered (or was already). */
-export function LearnCheckOne({ id, onAnswered, onEditing }: { id: string; onAnswered: (said: string) => void; onEditing?: (editing: boolean) => void }) {
+/**
+ * One suggestion, whole, and its answer. `onAnswered` returns to the list once it is answered (or was already). "Edit first" is
+ * the page's to hold (`editing`, `onEditing`), so the page's Back leaves the form for this suggestion, never for the list, and
+ * `onEdited` tells it whether anything in the form was changed (Back asks before that is lost).
+ */
+export function LearnCheckOne({ id, onAnswered, editing, onEditing, onEdited }: {
+    id: string; onAnswered: (said: string) => void; editing: boolean; onEditing: (editing: boolean) => void; onEdited?: (edited: boolean) => void;
+}) {
     const [draft, setDraft] = useState<KnowledgeDraftWhole | null | 'failed' | undefined>(undefined);
     const [tries, setTries] = useState(0);
     const [ticked, setTicked] = useState(false);
-    const [mode, setMode] = useState<'read' | 'edit' | 'no'>('read');
+    const [mode, setMode] = useState<'read' | 'no'>('read');
     const [reason, setReason] = useState<string | null>(null);
     const [words, setWords] = useState('');
     const [busy, setBusy] = useState(false);
@@ -81,7 +87,6 @@ export function LearnCheckOne({ id, onAnswered, onEditing }: { id: string; onAns
         getLearnDraft(id).then((d) => { if (live) setDraft(d); }, () => { if (live) setDraft('failed'); });
         return () => { live = false; };
     }, [id, tries]);
-    useEffect(() => { onEditing?.(mode === 'edit'); }, [mode, onEditing]);
 
     if (draft === 'failed') return <Failed onAgain={() => setTries((n) => n + 1)} />;
     if (draft === undefined) return <p className={MUTED}>{t('Loading...')}</p>;
@@ -89,6 +94,8 @@ export function LearnCheckOne({ id, onAnswered, onEditing }: { id: string; onAns
         return <p data-testid="learn-check-gone" className={`py-4 ${MUTED}`}>{t('This one was already answered.')}</p>;
     }
     const d = draft;
+    // An assistant's draft (K6): its name may be empty, so it is told by the field being there, not by what it says.
+    const byAssistant = d.assistant !== null;
     const mayApprove = !d.needsSourcesTicked || ticked;
     const act = async (go: () => Promise<unknown>, said: string) => {
         if (busy) return;
@@ -104,11 +111,12 @@ export function LearnCheckOne({ id, onAnswered, onEditing }: { id: string; onAns
         }
     };
 
-    if (mode === 'edit') {
+    if (editing) {
         return (
-            <LearnForm use="approve" keepPhotosOnly={!d.assistant} initial={{ title: d.title, body: d.body, topic: d.topic, place: d.place ?? '', sources: d.sources, photos: d.photos, lang: d.lang ?? undefined }}
+            <LearnForm use="approve" keepPhotosOnly={!byAssistant} initial={{ title: d.title, body: d.body, topic: d.topic, place: d.place ?? '', sources: d.sources, photos: d.photos }}
+                onEdited={onEdited}
                 onSend={async (edits) => {
-                    await approveLearnDraft(d.id, { edits: { ...edits, lang: d.lang ?? undefined }, checkedSources: d.needsSourcesTicked });
+                    await approveLearnDraft(d.id, { edits, lang: d.lang, checkedSources: d.needsSourcesTicked });
                     onAnswered(t('Approved. It is in Learn.'));
                 }} />
         );
@@ -119,7 +127,7 @@ export function LearnCheckOne({ id, onAnswered, onEditing }: { id: string; onAns
             <div className="flex flex-wrap items-center gap-1">
                 <span className={TOPIC_CHIP}>{upperCase(topicLabel(d.topic))}</span>
                 <span className={TOPIC_CHIP}>{upperCase(kindWord(d.kind))}</span>
-                {d.assistant && <span data-testid="learn-check-gathered" className={TOPIC_CHIP}>{upperCase(t('Gathered with the assistant'))}</span>}
+                {byAssistant && <span data-testid="learn-check-gathered" className={TOPIC_CHIP}>{upperCase(t('Gathered with the assistant'))}</span>}
             </div>
             <h2 dir="auto" className="m-0 text-xl font-extrabold leading-snug text-nature-950 dark:text-white break-words">{d.title}</h2>
             <p className={`m-0 text-sm ${MUTED} break-words flex flex-wrap gap-x-2`}><span>{fromWords(d)}</span><span>{waited(d.createdAt)}</span></p>
@@ -189,7 +197,9 @@ export function LearnCheckOne({ id, onAnswered, onEditing }: { id: string; onAns
                         className="w-full py-2 px-3 rounded-xl border border-nature-200 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-bp-ink-learn" />
                     {refusal && <p role="alert" className="m-0 text-sm font-bold text-red-700 dark:text-red-300">{refusal}</p>}
                     <button type="button" data-testid="learn-check-no-send" disabled={!reason || busy}
-                        onClick={() => reason && void act(() => declineLearnDraft(d.id, reason, words), t('Answered. The writer is told.'))}
+                        onClick={() => reason && void act(() => declineLearnDraft(d.id, reason, words),
+                            // An assistant's draft has no writer to tell: its owner or admin hears how it ended through their assistant.
+                            byAssistant ? t("Answered. It won't be added to Learn.") : t('Answered. The writer is told.'))}
                         className={`${BUTTON} bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on`}>{t('Send')}</button>
                     <button type="button" onClick={() => setMode('read')} className={SECOND}>{t('Back')}</button>
                 </fieldset>
@@ -200,7 +210,7 @@ export function LearnCheckOne({ id, onAnswered, onEditing }: { id: string; onAns
                     <button type="button" data-testid="learn-check-approve" disabled={!mayApprove || busy}
                         onClick={() => void act(() => approveLearnDraft(d.id, { checkedSources: d.needsSourcesTicked }), t('Approved. It is in Learn.'))}
                         className={`${BUTTON} bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on`}>{t('Approve')}</button>
-                    <button type="button" data-testid="learn-check-edit" disabled={!mayApprove || busy} onClick={() => setMode('edit')} className={SECOND}>{t('Edit first')}</button>
+                    <button type="button" data-testid="learn-check-edit" disabled={!mayApprove || busy} onClick={() => onEditing(true)} className={SECOND}>{t('Edit first')}</button>
                     <button type="button" data-testid="learn-check-not" disabled={busy} onClick={() => setMode('no')} className={SECOND}>{t('Not this one')}</button>
                 </div>
             )}

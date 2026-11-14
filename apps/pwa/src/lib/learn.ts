@@ -287,9 +287,13 @@ export async function getLearnDraft(id: string): Promise<KnowledgeDraftWhole | n
 }
 
 /** Approve, with the checker's edits ("Edit first", the whole form) and, for an assistant's draft, the tick. */
-export function approveLearnDraft(id: string, opts: { edits?: LearnInput; checkedSources?: boolean } = {}): Promise<{ post: LearnPost }> {
+export function approveLearnDraft(id: string, opts: { edits?: LearnInput; lang?: string | null; checkedSources?: boolean } = {}): Promise<{ post: LearnPost }> {
+    // "Edit first" keeps the suggestion's own language (§2.8: the writer's), never the checker's: one sent with none stays
+    // with none, which the node keeps when no `lang` is sent.
+    const edits: Partial<LearnInput> | null = opts.edits ? learnInputToSend(opts.edits) : null;
+    if (edits) { delete edits.lang; if (opts.lang) edits.lang = opts.lang; }
     return request('POST', `/api/knowledge/drafts/${encodeURIComponent(id)}/approve`, {
-        ...(opts.edits ? learnInputToSend(opts.edits) : {}),
+        ...(edits ?? {}),
         ...(opts.checkedSources ? { checkedSources: true } : {}),
     });
 }

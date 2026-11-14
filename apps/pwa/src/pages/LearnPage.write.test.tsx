@@ -388,6 +388,196 @@ describe('an owner or admin', () => {
         await wait();
         expect(screen.getByTestId('learn-check-gone').textContent).toBe('This one was already answered.');
     });
+
+    // Every door into To check (the bell's line, a push, Home's Needs line and the Learn card's row all reach it as App's
+    // `{ kind: 'check' }`: NeedsYouIcons.learn, HomePage.learn) starts it afresh, as Learn's own "2 to check ›" does.
+    describe('a door into To check starts it afresh', () => {
+        beforeEach(() => {
+            node.toCheck = [waitingRow('d1'), waitingRow('d2')];
+            node.drafts = { d1: whole('d1'), d2: whole('d2') };
+        });
+        const door = (rerender: (ui: React.ReactElement) => void) => rerender(<LearnPage {...props} target={{ kind: 'check' }} />);
+
+        it('after an answer and Back to the front: no "Approved. It is in Learn." from before', async () => {
+            const { rerender } = render(<LearnPage {...props} />);
+            await wait();
+            await wait();
+            fireEvent.click(screen.getByTestId('learn-check-line'));
+            await wait();
+            fireEvent.click(screen.getAllByTestId('learn-check-row')[0]);
+            await wait();
+            fireEvent.click(screen.getByTestId('learn-check-approve'));
+            await wait();
+            expect(screen.getByTestId('learn-check-said').textContent).toBe('Approved. It is in Learn.');
+            fireEvent.click(screen.getByTestId('learn-back'));
+            await wait();
+            expect(screen.getByTestId('learn-check-line')).toBeInTheDocument();
+            door(rerender);
+            await wait();
+            expect(props.onTargetTaken).toHaveBeenCalled();
+            expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('To check');
+            expect(screen.getByTestId('learn-check-list')).toBeInTheDocument();
+            expect(screen.queryByTestId('learn-check-said')).toBeNull();
+        });
+
+        it('while an answer is still said on To check itself: the door clears it', async () => {
+            const { rerender } = render(<LearnPage {...props} target={{ kind: 'check' }} />);
+            await wait();
+            fireEvent.click(screen.getAllByTestId('learn-check-row')[0]);
+            await wait();
+            fireEvent.click(screen.getByTestId('learn-check-approve'));
+            await wait();
+            expect(screen.getByTestId('learn-check-said')).toBeInTheDocument();
+            door(rerender);
+            await wait();
+            expect(screen.queryByTestId('learn-check-said')).toBeNull();
+            expect(screen.getByTestId('learn-check-list')).toBeInTheDocument();
+        });
+
+        it('with a suggestion open: the door shows the list, not that suggestion', async () => {
+            const { rerender } = render(<LearnPage {...props} target={{ kind: 'check' }} />);
+            await wait();
+            fireEvent.click(screen.getAllByTestId('learn-check-row')[1]);
+            await wait();
+            expect(screen.getByTestId('learn-check-one')).toBeInTheDocument();
+            door(rerender);
+            await wait();
+            expect(screen.queryByTestId('learn-check-one')).toBeNull();
+            expect(screen.getByTestId('learn-check-list')).toBeInTheDocument();
+        });
+
+        it('during "Edit first": the door shows the list, and the next one opened is read first, not the form', async () => {
+            const { rerender } = render(<LearnPage {...props} target={{ kind: 'check' }} />);
+            await wait();
+            fireEvent.click(screen.getAllByTestId('learn-check-row')[0]);
+            await wait();
+            fireEvent.click(screen.getByTestId('learn-check-edit'));
+            expect(screen.getByTestId('learn-form')).toBeInTheDocument();
+            door(rerender);
+            await wait();
+            expect(screen.queryByTestId('learn-form')).toBeNull();
+            fireEvent.click(screen.getAllByTestId('learn-check-row')[1]);
+            await wait();
+            expect(screen.getByTestId('learn-check-one')).toBeInTheDocument();
+            expect(screen.queryByTestId('learn-form')).toBeNull();
+            expect(writes()).toEqual([]);
+        });
+    });
+
+    describe('Back during "Edit first"', () => {
+        const ASK = "Leave without approving? Your changes won't be kept.";
+        beforeEach(() => {
+            node.toCheck = [waitingRow('d1')];
+            node.drafts = { d1: whole('d1') };
+        });
+        async function editFirst() {
+            await openLearn({ target: { kind: 'check' } });
+            await wait();
+            fireEvent.click(screen.getByTestId('learn-check-row'));
+            await wait();
+            fireEvent.click(screen.getByTestId('learn-check-edit'));
+            expect(screen.getByTestId('learn-form')).toBeInTheDocument();
+        }
+
+        it('asks before the changes go; "Cancel" keeps the form as typed', async () => {
+            await editFirst();
+            type('learn-form-title', 'When the low bridge floods');
+            const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+            fireEvent.click(screen.getByTestId('learn-back'));
+            expect(ask).toHaveBeenCalledWith(ASK);
+            expect((screen.getByTestId('learn-form-title') as HTMLInputElement).value).toBe('When the low bridge floods');
+            expect(screen.queryByTestId('learn-check-list')).toBeNull();
+        });
+
+        it('"OK" returns to the same suggestion (not the list), its words as sent, and nothing is sent', async () => {
+            await editFirst();
+            type('learn-form-title', 'When the low bridge floods');
+            vi.spyOn(window, 'confirm').mockReturnValue(true);
+            fireEvent.click(screen.getByTestId('learn-back'));
+            const one = screen.getByTestId('learn-check-one');
+            expect(within(one).getByRole('heading', { level: 2 }).textContent).toBe('To check d1');
+            expect(screen.queryByTestId('learn-check-list')).toBeNull();
+            expect(writes()).toEqual([]);
+            // Edit first again starts from the suggestion, not from what was left.
+            fireEvent.click(screen.getByTestId('learn-check-edit'));
+            expect((screen.getByTestId('learn-form-title') as HTMLInputElement).value).toBe('To check d1');
+        });
+
+        it('nothing changed: Back asks nothing and returns to the suggestion; Back again, the list', async () => {
+            await editFirst();
+            const ask = vi.spyOn(window, 'confirm');
+            fireEvent.click(screen.getByTestId('learn-back'));
+            expect(ask).not.toHaveBeenCalled();
+            expect(screen.getByTestId('learn-check-one')).toBeInTheDocument();
+            fireEvent.click(screen.getByTestId('learn-back'));
+            await wait();
+            expect(screen.getByTestId('learn-check-list')).toBeInTheDocument();
+        });
+
+        it('a change typed back to how it was asks nothing', async () => {
+            await editFirst();
+            type('learn-form-title', 'Something else');
+            type('learn-form-title', 'To check d1');
+            const ask = vi.spyOn(window, 'confirm');
+            fireEvent.click(screen.getByTestId('learn-back'));
+            expect(ask).not.toHaveBeenCalled();
+            expect(screen.getByTestId('learn-check-one')).toBeInTheDocument();
+        });
+    });
+
+    it('"Edit first" keeps the suggestion\'s language, never the checker\'s: one sent with none stays with none', async () => {
+        node.toCheck = [waitingRow('d1'), waitingRow('d2')];
+        node.drafts = { d1: whole('d1', { lang: null, assistant: 'Claude', needsSourcesTicked: true }), d2: whole('d2', { lang: 'pt' }) };
+        await openLearn({ target: { kind: 'check' } });
+        await wait();
+        fireEvent.click(screen.getAllByTestId('learn-check-row')[0]);
+        await wait();
+        fireEvent.click(screen.getByTestId('learn-check-tick'));
+        fireEvent.click(screen.getByTestId('learn-check-edit'));
+        fireEvent.click(screen.getByTestId('learn-form-send'));
+        await wait();
+        expect(writes()[0].path).toBe('/api/knowledge/drafts/d1/approve');
+        // No `lang` at all: the node keeps the suggestion's own (none), and the page never says it was written in English.
+        expect('lang' in writes()[0].body).toBe(false);
+        expect(writes()[0].body.checkedSources).toBe(true);
+        fireEvent.click(screen.getAllByTestId('learn-check-row')[1]);
+        await wait();
+        fireEvent.click(screen.getByTestId('learn-check-edit'));
+        fireEvent.click(screen.getByTestId('learn-form-send'));
+        await wait();
+        expect(writes()[1].body.lang).toBe('pt');
+    });
+
+    it('"Not this one" on an assistant\'s draft never says the writer is told (no notice goes out), named or not', async () => {
+        node.toCheck = [waitingRow('d2', { assistant: 'Claude' }), waitingRow('d3', { assistant: '' })];
+        node.drafts = { d2: whole('d2', { assistant: 'Claude', needsSourcesTicked: true }), d3: whole('d3', { assistant: '', needsSourcesTicked: true }) };
+        await openLearn({ target: { kind: 'check' } });
+        await wait();
+        for (const [i, id] of [[0, 'd2'], [1, 'd3']] as const) {
+            fireEvent.click(screen.getAllByTestId('learn-check-row')[i]);
+            await wait();
+            // An assistant's draft with no name is still an assistant's: the chip shows.
+            expect(screen.getByTestId('learn-check-gathered')).toBeInTheDocument();
+            fireEvent.click(screen.getByTestId('learn-check-not'));
+            fireEvent.click(screen.getByRole('radio', { name: "I couldn't check it" }));
+            fireEvent.click(screen.getByTestId('learn-check-no-send'));
+            await wait();
+            expect(writes().at(-1)?.path).toBe(`/api/knowledge/drafts/${id}/no`);
+            expect(screen.getByTestId('learn-check-said').textContent).toBe("Answered. It won't be added to Learn.");
+        }
+    });
+
+    it('"Edit first" on an assistant\'s draft with no name still lets the checker add their own photo', async () => {
+        node.toCheck = [waitingRow('d3', { assistant: '' })];
+        node.drafts = { d3: whole('d3', { assistant: '', needsSourcesTicked: true }) };
+        await openLearn({ target: { kind: 'check' } });
+        await wait();
+        fireEvent.click(screen.getByTestId('learn-check-row'));
+        await wait();
+        fireEvent.click(screen.getByTestId('learn-check-tick'));
+        fireEvent.click(screen.getByTestId('learn-check-edit'));
+        expect(screen.getByLabelText('Add photo')).toBeInTheDocument();
+    });
 });
 
 describe('where nothing is written', () => {

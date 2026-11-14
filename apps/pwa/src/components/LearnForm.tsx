@@ -8,7 +8,7 @@
  * The node checks everything again; this only says the first thing missing before it sends (lib/learn.ts learnFormRefusal).
  * Photos are optional and the member's own (at most three, the browser's own picker, asked for nothing until 📷 is tapped).
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KNOWLEDGE_LIMITS, KNOWLEDGE_TOPICS, formatCount, t, type KnowledgeSource } from '@beanpool/core';
 import { learnFormRefusal, learnRefusalText, topicLabel, type LearnInput } from '../lib/learn';
 import { PostPhotoPicker } from './PostPhotoPicker';
@@ -21,7 +21,7 @@ const MUTED = 'text-nature-600 dark:text-nature-300';
 /** A link's box shows how an address starts: the same in every language. */
 const URL_HINT = 'https://';
 
-export function LearnForm({ use, initial, onSend, keepPhotosOnly = false }: {
+export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdited }: {
     use: LearnFormUse;
     /** "Edit first": the suggestion as it was sent. */
     initial?: LearnInput;
@@ -29,6 +29,8 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false }: {
     keepPhotosOnly?: boolean;
     /** Sends what was typed; a refusal it throws is shown under the button. */
     onSend: (input: LearnInput) => Promise<void>;
+    /** Whether anything differs from how the form opened, so a Back can ask before it is lost. */
+    onEdited?: (edited: boolean) => void;
 }) {
     const [title, setTitle] = useState(initial?.title ?? '');
     const [body, setBody] = useState(initial?.body ?? '');
@@ -38,6 +40,11 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false }: {
     const [photos, setPhotos] = useState<string[]>(initial?.photos ?? []);
     const [refusal, setRefusal] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
+    // How it opened; photos (data URLs) are compared one by one, never turned into one long string on each key.
+    const [opened] = useState(() => ({ title, body, topic, place, sources: JSON.stringify(sources), photos }));
+    const edited = title !== opened.title || body !== opened.body || topic !== opened.topic || place !== opened.place
+        || JSON.stringify(sources) !== opened.sources || photos.length !== opened.photos.length || photos.some((p, i) => p !== opened.photos[i]);
+    useEffect(() => { onEdited?.(edited); }, [edited, onEdited]);
 
     const setSource = (i: number, part: Partial<KnowledgeSource>) => setSources((list) => list.map((s, j) => (j === i ? { ...s, ...part } : s)));
     const send = async () => {

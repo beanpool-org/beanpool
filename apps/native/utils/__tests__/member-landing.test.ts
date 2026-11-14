@@ -272,25 +272,25 @@ describe('a tapped notice opens after the landing, for its community and account
     });
 
     it('another account on the phone drops it; so does its time running out', () => {
-        openAfterLanding('/(tabs)/chats', BYRON, 'key-A', NOW);
+        openAfterLanding('/(tabs)/chats?view=messages', BYRON, 'key-A', NOW);
         expect(takeOpenAfterLanding('key-B', BYRON, NOW)).toBeNull();
         expect(takeOpenAfterLanding('key-A', BYRON, NOW)).toBeNull();
-        openAfterLanding('/(tabs)/chats', BYRON, 'key-A', NOW);
+        openAfterLanding('/(tabs)/chats?view=messages', BYRON, 'key-A', NOW);
         expect(takeOpenAfterLanding('key-A', BYRON, NOW + NOTICE_LANDING_MS)).toBeNull();
         expect(takeOpenAfterLanding('key-A', BYRON, NOW + 1)).toBeNull();
     });
 
     it('the latest tap replaces any before it', () => {
-        openAfterLanding('/(tabs)/chats', BYRON, 'key-A', NOW);
+        openAfterLanding('/(tabs)/chats?view=messages', BYRON, 'key-A', NOW);
         openAfterLanding('/(tabs)/market', BYRON, 'key-A', NOW);
         expect(takeOpenAfterLanding('key-A', BYRON, NOW)).toBe('/(tabs)/market');
     });
 
     it('leaves the landings from welcome as they were', () => {
-        openAfterLanding('/(tabs)/chats', BYRON, 'key-A', NOW);
+        openAfterLanding('/(tabs)/chats?view=messages', BYRON, 'key-A', NOW);
         expect(memberRedirect(['welcome'], 'key-A')).toBe(DEFAULT_MEMBER_LANDING);
         expect(guestRedirect(['welcome'], 'key-A')).toBeNull();
-        expect(takeOpenAfterLanding('key-A', BYRON, NOW)).toBe('/(tabs)/chats');
+        expect(takeOpenAfterLanding('key-A', BYRON, NOW)).toBe('/(tabs)/chats?view=messages');
     });
 });
 

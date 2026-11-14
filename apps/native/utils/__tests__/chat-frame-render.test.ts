@@ -107,6 +107,8 @@ vi.mock('react-native', () => {
  *  screen reading them (Talk, and People inside it) draws again. */
 const params = vi.hoisted(() => ({ now: {} as Record<string, string>, heard: new Set<() => void>() }));
 const setRouteParams = vi.hoisted(() => (next: Record<string, string>) => { params.now = next; for (const draw of [...params.heard]) draw(); });
+/** Who listens for the tab bar's own tap (components/PageTitle useTabRetapScrollTop): the tap test fires it as the bar does. */
+const tabPress = vi.hoisted(() => ({ heard: new Set<() => void>() }));
 vi.mock('expo-router', async () => {
     const { useEffect: effect, useSyncExternalStore } = await import('react');
     const listen = (draw: () => void) => { params.heard.add(draw); return () => { params.heard.delete(draw); }; };
@@ -116,7 +118,14 @@ vi.mock('expo-router', async () => {
             setParams: (p: Record<string, string>) => setRouteParams({ ...params.now, ...p }),
         },
         useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
-        useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
+        useNavigation: () => ({
+            addListener: (event: string, cb: () => void) => {
+                if (event !== 'tabPress') return () => {};
+                tabPress.heard.add(cb);
+                return () => { tabPress.heard.delete(cb); };
+            },
+            isFocused: () => true,
+        }),
         useLocalSearchParams: () => useSyncExternalStore(listen, () => params.now),
         ErrorBoundary: () => null,
     };
@@ -204,7 +213,9 @@ vi.mock('../push-notice-switch', async (importOriginal) => {
     };
 });
 
-import { CHAT_SIDES, pseudoLocalise, setLanguage, t, type UiLang } from '@beanpool/core';
+import { CHAT_SIDES, PUSH_NOTICE_KINDS, pseudoLocalise, setLanguage, t, type PushNoticeKind, type UiLang } from '@beanpool/core';
+import { followTap, noticeRoute, UNREAD_NOTICE_TYPE, type NoticeRoute } from '../push-notice-check';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import { yourGroupsStore } from '../../components/useYourGroups';
 // People asks where the member is to end a Show credit visit (utils/people-visit.ts; its own test and people-show-credit-visit-render.test.ts): nothing here leaves the tab.
@@ -277,6 +288,19 @@ async function reopenIn(lang: UiLang) {
  *  groups", the needs-you rows). */
 const pushChat = async (next: Record<string, string>) => {
     await act(async () => { setRouteParams({ ...next }); });
+    await settle(4);
+};
+/** A notice's route pushed onto the mounted tab: its query becomes the tab's params, as expo-router's jump to a tab (JUMP_TO)
+ *  replaces them, so a route with no query leaves the tab with none. */
+const pushRoute = async (route: NoticeRoute) => {
+    const [where, query = ''] = route.split('?');
+    expect(where, route).toBe('/(tabs)/chats');
+    await pushChat(Object.fromEntries(new URLSearchParams(query)));
+};
+/** The tab bar's own tap on the Chat tab while it shows: tabPress, then the same route with its params as they are (the bar's
+ *  CommonActions.navigate(route)), so nothing in them changes. */
+const tapTab = async () => {
+    await act(async () => { for (const heard of [...tabPress.heard]) heard(); setRouteParams(params.now); });
     await settle(4);
 };
 const click = async (el: Element | null, what: string) => {
@@ -381,6 +405,62 @@ describe('the Chat tab where the forum is on: Chats · Forum in the title\'s pla
         }
         // Taken each time: the next push of the same view is a change again.
         expect(left).toEqual(['', '', '', '', '', '']);
+    });
+
+    it('the phone\'s own "messages waiting" notice, tapped after a Forum tap, lands on Chats, on Messages, each time (review of #3146)', async () => {
+        rememberProfile(WITH_FORUM);
+        await renderIn('en');
+        await click(radio('Groups'), 'Groups');
+        const went: NoticeRoute[] = [];
+        for (const i of [1, 2]) {
+            await click(side('Forum'), 'Forum');
+            expect(forumPane(), `tap ${i}: on the Forum before it`).not.toBeNull();
+            // The notice the app posts itself when messages wait at a community it keeps (utils/other-communities-unread.ts),
+            // here the one in use, so no switch: followTap hands its route to the router, as services/push-notifications.ts does.
+            await followTap({ identifier: `n${i}`, remote: false, title: 'BeanPool', body: 'x', data: { type: UNREAD_NOTICE_TYPE, url: NODE } }, {
+                storage: AsyncStorage, account: ME,
+                openIn: async () => { throw new Error('the community in use needs no switch'); },
+            }, (route) => { went.push(route); });
+            expect(went, `tap ${i}`).toHaveLength(i);
+            await pushRoute(went[i - 1]);
+            expect(selected(tabs()), `tap ${i}`).toEqual(['true', 'false']);
+            expect(forumPane(), `tap ${i}`).toBeNull();
+            expect(radio('Messages')?.getAttribute('aria-selected'), `tap ${i}`).toBe('true');
+            expect(host.textContent, `tap ${i}`).toContain('Kofi');
+        }
+    });
+
+    it('a chat notice whose details never came (every kind for the Chat tab), tapped or opened from the bell after a Forum tap, lands on Chats (review of #3146)', async () => {
+        rememberProfile(WITH_FORUM);
+        await renderIn('en');
+        const chatKinds = (Object.keys(PUSH_NOTICE_KINDS) as PushNoticeKind[]).filter((k) => PUSH_NOTICE_KINDS[k].tab === 'chats');
+        expect(chatKinds.sort()).toEqual(['chat.group', 'chat.mention', 'chat.message', 'group.lead']);
+        for (const kind of chatKinds) {
+            await click(side('Forum'), 'Forum');
+            expect(forumPane(), `${kind}: on the Forum before it`).not.toBeNull();
+            // What followTap lands on when the community's answer timed out, and the bell's Open (components/NeedsYouIcons.tsx).
+            await pushRoute(noticeRoute(kind, null));
+            expect(selected(tabs()), kind).toEqual(['true', 'false']);
+            expect(forumPane(), kind).toBeNull();
+            expect(host.textContent, kind).toContain('Kofi');
+        }
+    });
+
+    it('the tab\'s own tap keeps the side the member chose: Forum stays Forum, before and after a way in took the view', async () => {
+        rememberProfile(WITH_FORUM);
+        await renderIn('en');
+        await click(side('Forum'), 'Forum');
+        await tapTab();
+        expect(tabPress.heard.size, 'the screen listens for the tab bar\'s tap').toBeGreaterThan(0);
+        expect(selected(tabs())).toEqual(['false', 'true']);
+        expect(forumPane()).not.toBeNull();
+        // A way in that named Messages, then the member's own Forum tap, then the tab's tap again: still Forum.
+        await pushChat({ view: 'messages' });
+        expect(selected(tabs())).toEqual(['true', 'false']);
+        await click(side('Forum'), 'Forum');
+        await tapTab();
+        expect(selected(tabs())).toEqual(['false', 'true']);
+        expect(forumPane()).not.toBeNull();
     });
 
     it('People\'s own views in the param (friends, community, invites) are left for People to read', async () => {

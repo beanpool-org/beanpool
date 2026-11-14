@@ -415,7 +415,7 @@ describe('a tap is followed only for a valid notice; anything else goes nowhere 
         const forgotten = mullum.notice('trade.update', kim.publicKey);
         mullum.details.clear();
         await tap(push(forgotten));
-        expect(navigated).toEqual(['/(tabs)/chats', '/(tabs)/market']);
+        expect(navigated).toEqual(['/(tabs)/chats?view=messages', '/(tabs)/market']);
     });
 
     it('wrong key, replayed to another member, a community the phone doesn\'t keep: no request, no navigation, the line once each', async () => {
@@ -480,7 +480,7 @@ describe('a tap is followed only for a valid notice; anything else goes nowhere 
         down.add(BYRON);
         const data = byron.notice('chat.message', kim.publicKey, { data: { screen: 'chat', conversationId: CHAT_ID } });
         await tap(push(data));
-        expect(openedIn).toEqual([{ community: BYRON, id: data.i, route: '/(tabs)/chats' }]);
+        expect(openedIn).toEqual([{ community: BYRON, id: data.i, route: '/(tabs)/chats?view=messages' }]);
         expect(navigated).toEqual([]);
     });
 
@@ -608,7 +608,7 @@ describe('no string from a push, nor a forged target from an answer, reaches the
     it('noticeRoute takes a post or chat id only in the node\'s own shape; anything else lands on the kind\'s tab', () => {
         for (const bad of [...FORGED, 42, null, ['a'], { a: 1 }]) {
             expect(noticeRoute('market.request', { screen: 'post', postId: bad })).toBe('/(tabs)/market');
-            expect(noticeRoute('chat.message', { screen: 'chat', conversationId: bad })).toBe('/(tabs)/chats');
+            expect(noticeRoute('chat.message', { screen: 'chat', conversationId: bad })).toBe('/(tabs)/chats?view=messages');
         }
         expect(noticeRoute('market.request', { screen: 'post', postId: POST_ID })).toBe(`/post/${POST_ID}`);
         expect(noticeRoute('chat.group', { screen: 'chat', conversationId: CHAT_ID, groupId: CHAT_ID })).toBe(`/chat/${CHAT_ID}`);
@@ -698,7 +698,7 @@ describe('no string from a push, nor a forged target from an answer, reaches the
             await tap(push(mullum.notice('market.request', kim.publicKey, { data: { screen: 'post', postId: bad } })));
             await tap(push(mullum.notice('chat.message', kim.publicKey, { data: { screen: 'chat', conversationId: bad } })));
         }
-        expect(new Set(navigated)).toEqual(new Set(['/(tabs)/market', '/(tabs)/chats']));
+        expect(new Set(navigated)).toEqual(new Set(['/(tabs)/market', '/(tabs)/chats?view=messages']));
     });
 
     it('what a push itself carries (screen, postId, conversationId, url) is never read, signed or not', async () => {

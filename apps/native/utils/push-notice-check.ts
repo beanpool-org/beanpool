@@ -513,11 +513,19 @@ export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Pro
 
 // ── Where a tap lands ──────────────────────────────────────────────────────────────────────────────────────────
 
-export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | '/(tabs)/people?view=invites&from=notice' | '/find-community' | '/shared-outside'
+export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats?view=messages' | '/(tabs)/settings' | '/(tabs)/people?view=invites&from=notice' | '/find-community' | '/shared-outside'
     | '/(tabs)/chats?filter=requests' | '/(tabs)/projects?section=decide'
     | '/(tabs)/people?view=community&credit=vouchers' | `/(tabs)/people?view=community&credit=vouchers&voucher=${string}`
     | `/post/${string}` | `/chat/${string}`
     | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1`;
+
+/**
+ * The Chat tab on Chats, at Messages: where a notice for the Chat tab lands when it names no chat or screen (the phone's own
+ * notice that messages wait at a community, and a chat notice whose details never came). The tab stays mounted, so a route with no
+ * view would leave a member who last tapped Forum on the Forum; the tab reads this view as "Chats", then clears it, so the
+ * same notice again lands there again (app/(tabs)/chats.tsx). The tab bar's own tap names no view and keeps the side chosen.
+ */
+export const CHAT_MESSAGES_ROUTE = '/(tabs)/chats?view=messages' satisfies NoticeRoute;
 
 /** An enterprise's key as the node writes it: 32 bytes, lower-case hex. */
 const ENTERPRISE_KEY = /^[0-9a-f]{64}$/;
@@ -528,7 +536,8 @@ const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
     // Home is the tabs' first screen (app/(tabs)/index.tsx); the Market has its own route since Home came (H2).
     home: '/(tabs)',
     market: '/(tabs)/market',
-    chats: '/(tabs)/chats',
+    // The Chat tab's kinds (core push-notice.ts): Chats, at Messages, whatever side the tab was left on.
+    chats: CHAT_MESSAGES_ROUTE,
     settings: '/(tabs)/settings',
     // A request to join (community.knock, the People tab's only kind): Invites, where it is listed with Invite and Not now.
     // `from=notice` tells Invites a notice brought them: if another owner or admin has answered since, it says so
@@ -648,8 +657,8 @@ export async function followTap(
         } else if (decision.kind === 'route') {
             navigate(decision.route);
         } else if (decision.kind === 'unread' && ctx.account) {
-            if (decision.active) navigate('/(tabs)/chats');
-            else await ctx.openIn(decision.community, null, async () => '/(tabs)/chats');
+            if (decision.active) navigate(CHAT_MESSAGES_ROUTE);
+            else await ctx.openIn(decision.community, null, async () => CHAT_MESSAGES_ROUTE);
         } else if (decision.kind === 'warn') {
             warnAboutNotice();
         }

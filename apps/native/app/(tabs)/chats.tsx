@@ -29,6 +29,7 @@ import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections
 import { useYourGroups } from '../../components/useYourGroups';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { openNoticeIn } from '../../utils/push-notice-switch';
+import { CHAT_MESSAGES_ROUTE } from '../../utils/push-notice-check';
 import { switchCommunity, communitySwitchUnderWay } from '../../utils/use-communities';
 import { getPendingOnboarding } from '../../utils/onboarding-state';
 import { useOtherCommunitiesNotices } from '../../utils/use-notice-counts';
@@ -68,9 +69,10 @@ export default function ChatsScreen() {
     }, [talkView, side]));
 
     React.useEffect(() => {
-        // A way in that names a pane (a notice, the header's icons, Home's "All N groups", a deep link) means Chats. The
-        // param is cleared once read, as the filter's is below: a tab stays mounted, so the same view pushed again after a
-        // Forum tap would change nothing and leave the member on the Forum. Only Talk's own three are taken: People's
+        // A way in that names a pane (a notice, the header's icons, Home's "All N groups", a deep link) means Chats. Every
+        // notice for this tab names one (utils/push-notice-check.ts CHAT_MESSAGES_ROUTE); the tab bar's own tap names none,
+        // so it keeps the side the member chose. The param is cleared once read, as the filter's is below: a tab stays
+        // mounted, so the same view pushed again after a Forum tap would change nothing and leave the member on the Forum. Only Talk's own three are taken: People's
         // (friends, community, invites) are PeopleScreen's, which reads this route's params while mounted inside Talk.
         const view = talkParams.view;
         if (view !== 'people' && view !== 'groups' && view !== 'messages') return;
@@ -119,7 +121,7 @@ export default function ChatsScreen() {
         setSwitchNote(null);
         setSwitchingCommunity(true);
         try {
-            const result = await openNoticeIn(url, null, async () => '/(tabs)/chats', {
+            const result = await openNoticeIn(url, null, async () => CHAT_MESSAGES_ROUTE, {
                 storage: AsyncStorage,
                 publicKey: identity.publicKey,
                 joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),

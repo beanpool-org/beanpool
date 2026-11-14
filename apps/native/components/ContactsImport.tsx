@@ -111,13 +111,10 @@ export function ImportScreen({ full, onRead, onTypeOne, onBack }: {
     return (
         <FlatList data={[]} renderItem={null} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body} ListHeaderComponent={<>
             <Text style={styles.text}>{t("Choose where your contacts are. WhatsApp uses your phone's contacts, so this brings those too.")}</Text>
-            {phone && (
-                <Pressable accessibilityRole="button" testID="import-from-phone" style={styles.choice} disabled={reading} onPress={() => void fromPhone()}>
-                    <Text style={styles.choiceTitle}>{t("From this phone's contacts")}</Text>
-                    <Text style={styles.choiceText}>{t('BeanPool asks your phone for permission now, reads names, numbers and emails, and shows them to you first.')}</Text>
-                    <Text style={styles.small}>{t("Contacts you saved only inside WhatsApp aren't in your phone's contacts. Save them to your phone in WhatsApp first.")}</Text>
-                </Pressable>
-            )}
+            {/* What a tap brought (reading, a file refused, the phone's answer) above the choices: at 320 dp and 1.3x text anything
+                under them starts below the fold, out of sight of the finger that tapped. */}
+            {reading && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}><ActivityIndicator color={colors.text.muted} /><Text style={styles.muted}>{t('Loading...')}</Text></View>}
+            {problem && <Text style={styles.danger} accessibilityRole="alert">{problem}</Text>}
             {answer === 'denied' && (
                 <View style={styles.card} testID="import-said-no" accessibilityLiveRegion="polite">
                     <Text style={styles.text}>{t("No problem. BeanPool can't see your phone's contacts. You can pick a contacts file instead, or add people by hand.")}</Text>
@@ -136,6 +133,13 @@ export function ImportScreen({ full, onRead, onTypeOne, onBack }: {
                     </View>
                 </View>
             )}
+            {phone && (
+                <Pressable accessibilityRole="button" testID="import-from-phone" style={styles.choice} disabled={reading} onPress={() => void fromPhone()}>
+                    <Text style={styles.choiceTitle}>{t("From this phone's contacts")}</Text>
+                    <Text style={styles.choiceText}>{t('BeanPool asks your phone for permission now, reads names, numbers and emails, and shows them to you first.')}</Text>
+                    <Text style={styles.small}>{t("Contacts you saved only inside WhatsApp aren't in your phone's contacts. Save them to your phone in WhatsApp first.")}</Text>
+                </Pressable>
+            )}
             {picker && (
                 <Pressable accessibilityRole="button" testID="import-from-file" style={styles.choice} disabled={reading} onPress={() => void fromFile()}>
                     <Text style={styles.choiceTitle}>{t('From a contacts file (.vcf)')}</Text>
@@ -148,8 +152,6 @@ export function ImportScreen({ full, onRead, onTypeOne, onBack }: {
                     <Text style={styles.choiceText}>{t('Add a person by hand.')}</Text>
                 </Pressable>
             )}
-            {reading && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}><ActivityIndicator color={colors.text.muted} /><Text style={styles.muted}>{t('Loading...')}</Text></View>}
-            {problem && <Text style={styles.danger} accessibilityRole="alert">{problem}</Text>}
             {picker && (
                 <Pressable accessibilityRole="button" accessibilityState={{ expanded: help }} style={styles.link} onPress={() => setHelp(!help)}>
                     <Text style={styles.linkText}>{t('How do I export a contacts file? ›')}</Text>

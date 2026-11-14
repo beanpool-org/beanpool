@@ -495,6 +495,8 @@ describe('Import on the phone (slice C3): asked at the tap, the three answers, C
         await render();
         await pressTest('import-from-phone');
         expect(text()).toContain("No problem. BeanPool can't see your phone's contacts. You can pick a contacts file instead, or add people by hand.");
+        // Above the row it answers (the API 26 walk at 320 dp and 1.3x: under it, its buttons started below the fold).
+        expect(text().indexOf('No problem.')).toBeLessThan(text().indexOf("From this phone's contacts"));
         expect(button('Pick a file')).toBeTruthy();
         expect(button('Back')).toBeTruthy();
         mem.answer = { granted: false, canAskAgain: false };

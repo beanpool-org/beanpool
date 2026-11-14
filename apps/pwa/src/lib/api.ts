@@ -10,7 +10,7 @@ import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, Tour
 import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type KnockVia } from '@beanpool/core';
 import { readGroupInvitations, type GroupInvitations } from '@beanpool/core';
 import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
-import { communityTagsOf, type CommunityTag } from '@beanpool/core';
+import { communityTagsOf, libraryTagOf, type CommunityTag } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -587,6 +587,19 @@ export async function getCommunityTags(): Promise<CommunityTag[]> {
         return communityTagsOf(await request<unknown>('GET', '/api/free-tags'));
     } catch {
         return [];
+    }
+}
+
+/**
+ * The library tag a typed word is the label of in any of the 25 languages, as the node knows them (GET /api/free-tags?q=,
+ * slice F5), read by core's libraryTagOf; the phone's utils/community-tags.ts asks the same. Null when it names none, or
+ * when it can't be had (offline, a node older than F5): the field then adds the word as the member's own, as before.
+ */
+export async function getLibraryTagFor(text: string): Promise<string | null> {
+    try {
+        return libraryTagOf(await request<unknown>('GET', `/api/free-tags?q=${encodeURIComponent(text)}`));
+    } catch {
+        return null;
     }
 }
 

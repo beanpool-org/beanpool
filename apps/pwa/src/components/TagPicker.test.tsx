@@ -489,3 +489,86 @@ describe("this community's typed tags (DESIGN-tags-free-entry-fable.md §3, §5,
         expect(held.freeTags).toEqual(['han']);
     });
 });
+
+describe('"Did you mean …?": a word that is a library label in another language (DESIGN-tags-free-entry-fable.md §3, slice F5)', () => {
+    const held = { tags: [] as string[], freeTags: [] as string[] };
+    function Composer({ ask, tags = [] }: { ask: (text: string) => Promise<string | null>; tags?: string[] }) {
+        const [nowTags, setTags] = useState<string[]>(tags);
+        const [nowFree, setFree] = useState<string[]>([]);
+        held.tags = nowTags;
+        held.freeTags = nowFree;
+        return <TagPicker tags={nowTags} onChange={setTags} freeTags={nowFree} onFreeTagsChange={setFree} category="food"
+            communityTags={() => Promise.resolve([])} libraryTagFor={ask} />;
+    }
+    // The node as F5 answers: a Portuguese label ("laranja") names orange; anything else names none.
+    const node = () => vi.fn((text: string) => Promise.resolve(text === 'laranja' ? 'food.fruit.orange' : null));
+    const open = async (ask: (text: string) => Promise<string | null>, tags?: string[]) => {
+        render(<Composer ask={ask} tags={tags} />);
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+        await screen.findByRole('dialog');
+    };
+    const field = () => screen.getByPlaceholderText('Search tags...') as HTMLInputElement;
+    const type = (value: string) => fireEvent.change(field(), { target: { value } });
+    const meant = () => screen.queryByTestId('tag-picker-did-you-mean');
+    const still = () => act(async () => { await new Promise((r) => setTimeout(r, 600)); });
+
+    it('a Portuguese label on a device in another language: the library tag above "Add", asked once the field is still', async () => {
+        const ask = node();
+        await open(ask);
+        type('lar');
+        type('laranja');
+        expect(ask).not.toHaveBeenCalled();
+        expect(await screen.findByTestId('tag-picker-did-you-mean', {}, { timeout: 2000 })).toHaveTextContent('Did you mean “Orange”?');
+        expect(ask).toHaveBeenCalledTimes(1);
+        expect(ask).toHaveBeenCalledWith('laranja');
+        const rows = [...screen.getByRole('dialog').querySelectorAll('[data-testid^="tag-picker-"]')].map((el) => el.getAttribute('data-testid'));
+        expect(rows.indexOf('tag-picker-did-you-mean')).toBeLessThan(rows.indexOf('tag-picker-add-typed'));
+    });
+
+    it("a tap on it holds the library tag and empties the field; Enter instead adds the word as the member's own", async () => {
+        await open(node());
+        type('laranja');
+        fireEvent.click(await screen.findByTestId('tag-picker-did-you-mean', {}, { timeout: 2000 }));
+        expect(held.tags).toEqual(['food.fruit.orange']);
+        expect(held.freeTags).toEqual([]);
+        expect(field().value).toBe('');
+        type('laranja');
+        fireEvent.keyDown(field(), { key: 'Enter', code: 'Enter' });
+        expect(held.freeTags).toEqual(['laranja']);
+    });
+
+    it('none when the listing already holds the tag, nor for a word no language labels', async () => {
+        const ask = node();
+        await open(ask, ['food.fruit.orange']);
+        type('laranja');
+        await still();
+        expect(ask).toHaveBeenCalledWith('laranja');
+        expect(meant()).toBeNull();
+        type('zzqx');
+        await still();
+        expect(meant()).toBeNull();
+        expect(screen.getByTestId('tag-picker-add-typed')).toHaveTextContent('Add “#zzqx”');
+    });
+
+    it('a word asked once is not asked again, and a word the device names itself is never asked', async () => {
+        const ask = node();
+        await open(ask);
+        type('laranja');
+        await screen.findByTestId('tag-picker-did-you-mean', {}, { timeout: 2000 });
+        type('zzqx');
+        type('laranja');
+        expect(meant()).not.toBeNull();
+        type('lemon');
+        await still();
+        expect(ask.mock.calls.map(([q]) => q)).toEqual(['laranja']);
+    });
+
+    it('the node unreachable: no row, and the word is added as before', async () => {
+        await open(() => Promise.reject(new Error('offline')));
+        type('laranja');
+        await still();
+        expect(meant()).toBeNull();
+        fireEvent.keyDown(field(), { key: 'Enter', code: 'Enter' });
+        expect(held.freeTags).toEqual(['laranja']);
+    });
+});

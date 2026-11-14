@@ -39,7 +39,7 @@ export const FORUM_PUBLIC_TOPIC_OK = Object.freeze({
     lastActivityAt: '2026-11-14T01:00:00.000Z', replyCount: 3, pinned: false, closed: null, place: 'near Kyogle', lang: 'en', indexable: true,
 });
 export const FORUM_PUBLIC_POST_OK = Object.freeze({
-    id: 'fp-1', topicId: 'ft-1', number: 1, writer: { name: 'Asha', community: 'Byron' }, words: 'Bring seeds.', quotes: null,
+    id: 'fp-1', topicId: 'ft-1', number: 1, writer: { name: 'Asha', community: 'Riverside' }, words: 'Bring seeds.', quotes: null,
     createdAt: '2026-11-14T00:00:00.000Z', edited: false, removed: null, photos: 1, lang: 'en', proof: FORUM_PROOF_VECTORS[0].proof,
 });
 

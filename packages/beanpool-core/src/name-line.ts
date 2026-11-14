@@ -2,9 +2,9 @@
  * One way to write a person's name with where they are from, for both apps (DESIGN-forums-messaging-joint-fable.md §2.6, slice
  * F0): forum posts, message requests, chats with people from other communities, and guests in a group.
  *
- *   "Marty · Byron"                            their community, proved (the signed note, slice F10, or a sealed envelope)
+ *   "Marty · Riverside"                        their community, proved (the signed note, slice F10, or a sealed envelope)
  *   "Asha · waiting to join"                   their own word: nothing checks it
- *   "Asha · Castlemaine · name not confirmed"  a community named but not proved
+ *   "Asha · Hillside · name not confirmed"     a community named but not proved
  *   "Dax · guest"                              a guest in a group (slice G1)
  *   "Marty"                                    no community shown
  *

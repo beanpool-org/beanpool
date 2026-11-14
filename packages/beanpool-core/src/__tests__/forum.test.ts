@@ -144,9 +144,9 @@ describe('the proof an Ask to join carries', () => {
 
 describe('the name line (joint design §2.6)', () => {
     it('writes the four lines, and a name alone', () => {
-        expect(nameLine({ name: 'Marty', kind: 'community', community: 'Byron' })).toBe('Marty · Byron');
+        expect(nameLine({ name: 'Marty', kind: 'community', community: 'Riverside' })).toBe('Marty · Riverside');
         expect(nameLine({ name: 'Asha', kind: 'waiting' })).toBe('Asha · waiting to join');
-        expect(nameLine({ name: 'Asha', kind: 'unconfirmed', community: 'Castlemaine' })).toBe('Asha · Castlemaine · name not confirmed');
+        expect(nameLine({ name: 'Asha', kind: 'unconfirmed', community: 'Hillside' })).toBe('Asha · Hillside · name not confirmed');
         expect(nameLine({ name: 'Dax', kind: 'guest' })).toBe('Dax · guest');
         expect(nameLine({ name: 'Marty' })).toBe('Marty');
     });

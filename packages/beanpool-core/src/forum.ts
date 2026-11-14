@@ -24,6 +24,16 @@ import { t, word, type WordKey } from './words.js';
 export const FORUM_FEATURE = 'forum' as const;
 export const FORUM_PUBLIC_FEATURE = 'forumPublic' as const;
 
+/**
+ * The Home card "Forum" (DESIGN-forums-fable.md §14 "Home card 'Forum': the three newest topics and 'Open the forum ›'"), for
+ * both apps: its name and line in Add a card, and the link under its rows (each app draws the "›").
+ */
+export const FORUM_HOME_WORDS = {
+    name: word('Forum'),
+    line: word('The newest topics in the forum.'),
+    open: word('Open the forum'),
+} as const;
+
 /** Whether a node's `features` says it has a forum. Absent (a server from before it) is off. */
 export function forumOn(features: { forum?: unknown } | null | undefined): boolean {
     return features?.forum === true;

@@ -64,7 +64,7 @@ const FIXED: ReadonlySet<HomeCardId> = new Set([FIXED_FIRST, FIXED_LAST]);
  */
 export const HOME_DRAWN: ReadonlySet<HomeCardId> = new Set([
     'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'shop', 'events', 'market', 'asked', 'learn', 'search', 'decide', 'groups',
-    'chat', 'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'tools', 'community',
+    'chat', 'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'tools', 'community', 'forum',
     ...toolHomeCardIds(),
 ]);
 /**
@@ -1233,6 +1233,9 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             // Worked out on the phone; drawn only where a place is known (CARD-FRAME §4).
             case 'sky': return skyOf(answer, { settings }, ctx.place) !== null;
             case 'community': return true;
+            // The forum's newest topics (slice F3 part 2): worked out on the phone from the forum's list, a member's only (the
+            // forum is read by its members), drawn with no body yet too, so it never jumps in when the list comes.
+            case 'forum': return !!answer.me;
             // A Your tools card (home-tools-card) or a tool's card: worked out on the phone (asks: 'none').
             case 'tools': return !!answer.me;
             default: return isToolHomeCard(type) ? !!answer.me : c[id] !== undefined;

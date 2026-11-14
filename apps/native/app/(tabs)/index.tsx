@@ -53,6 +53,7 @@ import {
     AskedBody, MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StepsBody, TipsBody, WelcomeBody,
 } from '../../components/home/HomeCardBodies';
 import { LearnBody } from '../../components/home/LearnBody';
+import { ForumHomeBody } from '../../components/home/ForumHomeBody';
 import {
     HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, listOf, moveCardTo, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, homeCrowdFor, isHomeDoorbellFor,
@@ -1383,6 +1384,8 @@ export default function HomeScreen() {
                     />,
                 );
             }
+            // The forum's three newest topics (slice F3 part 2), read by the phone itself: each row opens its topic.
+            case 'forum': return frame(<ForumHomeBody colors={colors} now={now} />);
             case 'decide': return c.decide ? frame(<DecideBody card={c.decide} features={answer.features} colors={colors} now={now} />) : null;
             case 'groups': return c.groups ? frame(<GroupsBody card={c.groups} colors={colors} />) : null;
             case 'joined': return c.joined ? frame(<JoinedBody card={c.joined} profile={profile} colors={colors} />) : null;

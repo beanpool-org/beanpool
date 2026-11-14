@@ -118,6 +118,11 @@ vi.mock('../lib/api', () => ({
     // Groups' New group: the Commons form, opened on Messages.
     createGroup: vi.fn(),
     groupKeysNet: { get: vi.fn(async () => new Response('{}', { status: 404 })), post: vi.fn(async () => new Response('{}', { status: 404 })) },
+    // Contacts (opened from Import contacts) asks which community it is on, to tell an invite made here (slice C5); with no
+    // invite made, nothing reads the member's invites or cancels one.
+    nodeAddress: vi.fn(() => window.location.origin),
+    getMyInvites: vi.fn(async () => ({ invites: [] })),
+    revokeInvite: vi.fn(),
 }));
 
 // The node's own word (/api/community/info): a node that cannot be asked, unless a test says what it answers. Beans then

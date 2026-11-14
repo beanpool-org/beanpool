@@ -124,7 +124,7 @@ export function ContactInviteSheet({ contact, anchor, community, identity, onClo
     return (
         <Modal visible transparent animationType="fade" onRequestClose={onClose}>
             <View style={styles.scrim}>
-                <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('Close')} />
+                <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('Close')} />
                 <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetBody} testID="contact-invite-sheet">
                     {body}
                     {!!note && <Text style={styles.note} accessibilityLiveRegion="polite">{note}</Text>}
@@ -139,6 +139,8 @@ export function ContactInviteSheet({ contact, anchor, community, identity, onClo
 
 const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
     scrim: { flex: 1, backgroundColor: colors.overlay.scrim, justifyContent: 'center', padding: 16 },
+    // The whole scrim, written out here (not StyleSheet.absoluteFill) so the contrast check reads it (e2e/button-contrast.check.ts).
+    backdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
     sheet: { maxHeight: '90%', backgroundColor: colors.surface.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default },
     sheetBody: { padding: 16, gap: 10 },
     title: { fontSize: 18, fontWeight: '800', color: colors.text.heading },

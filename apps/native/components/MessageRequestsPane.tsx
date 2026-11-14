@@ -7,6 +7,8 @@ import { reportedAlertBody } from '../utils/reportReasons';
 import { chatActionErrorMessage, requestDecisionFailureWords, requestIsGone } from '../utils/chat-actions';
 import { ReportMessageSheet } from './ReportMessageSheet';
 import { MemberAvatar } from './MemberAvatar';
+import { heldFor } from './AddToContacts';
+import { contactsOf, useContacts } from '../utils/use-contacts';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 
@@ -19,9 +21,11 @@ interface RequestCardProps {
     onOpen: (entry: any) => void;
     onAccepted: (entry: any) => void;
     onChanged: () => void;
+    /** The member's own name for this person when their private contacts hold them (design §3.7): made on the phone. */
+    inContactsAs?: string;
 }
 
-function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: RequestCardProps) {
+function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged, inContactsAs }: RequestCardProps) {
     const { theme, colors } = useTheme();
     const peer = entry.participants?.find((p: string) => p !== myPubkey) || entry.request?.from || '';
     const name = entry.peerCallsign || entry.name || peer.slice(0, 8);
@@ -228,6 +232,7 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
                 <View style={styles.headerInfo}>
                     <Text style={styles.peerName} numberOfLines={1}>{name}</Text>
                     <Text style={styles.subtitle}>{t('{name} wants to message you', { name })}</Text>
+                    {!!inContactsAs && <Text style={styles.subtitle} testID="request-in-contacts">{t('In your contacts as {name}', { name: inContactsAs })}</Text>}
                     {entry.addedYou && (
                         <View style={styles.addedYouBadge}>
                             <Text style={styles.addedYouText}>{t('{name} added you', { name })}</Text>
@@ -321,6 +326,9 @@ interface MessageRequestsPaneProps {
 
 export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAccepted, onChanged, onBack, onGlobal = 0, onOpenGlobal }: MessageRequestsPaneProps) {
     const { theme, colors } = useTheme();
+    // The list is opened once for every card. The label only names; the request rule is the server's, unchanged (§5.5).
+    const contacts = useContacts(identity?.publicKey && identity.privateKey ? identity : null);
+    const people = contactsOf(contacts);
     const [ignoringAll, setIgnoringAll] = useState(false);
     const shown = entries.slice(0, REQUEST_CARDS_SHOWN);
     const more = count - shown.length;
@@ -451,6 +459,7 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
                             key={entry.id}
                             entry={entry}
                             myPubkey={identity?.publicKey || ''}
+                            inContactsAs={heldFor(people, entry.participants?.find((p: string) => p !== identity?.publicKey) || entry.request?.from || '')?.name}
                             onOpen={onOpen}
                             onAccepted={onAccepted}
                             onChanged={onChanged}

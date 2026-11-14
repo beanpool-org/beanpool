@@ -36,6 +36,7 @@ import { makeChatStyles } from '../../components/chat/styles';
 import { ChatMessageList, scrollChatToBottom } from '../../components/chat/ChatMessageList';
 import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
+import { AddToContactsSheet } from '../../components/AddToContacts';
 import { ChatAboutBanner, ChatAboutCard } from '../../components/chat/ChatAbout';
 import { useAboutListings } from '../../utils/about-listings';
 import { releaseLineTradeId, type PhoneTradeRow } from '../../utils/release-line-trade';
@@ -201,6 +202,7 @@ function ChatScreen({ id }: { id: string }) {
         if (header > 0 && bottom > header) setColumn((c) => (c.column === bottom - header ? c : { ...c, column: bottom - header }));
     };
     const [menuOpen, setMenuOpen] = useState(false);
+    const [addContact, setAddContact] = useState(false);
     const [muteOpen, setMuteOpen] = useState(false);
     const [mute, setMute] = useState<YourChatMute | null>(() => getKnownChatMute(String(id ?? '')));
     const flatListRef = useRef<FlatList>(null);
@@ -1520,6 +1522,13 @@ function ChatScreen({ id }: { id: string }) {
                 if (peerPubkey) router.push({ pathname: '/public-profile', params: { publicKey: peerPubkey, callsign: peerName } });
             },
         },
+        {
+            // The member's private contacts (DESIGN-private-contacts-fable.md §3.7). The sheet opens the list only when asked.
+            icon: 'account-plus-outline',
+            label: t('＋ Add to my contacts'),
+            hidden: !peerPubkey || !identity,
+            onPress: () => { setMenuOpen(false); setAddContact(true); },
+        },
     ];
 
     return (
@@ -1905,6 +1914,10 @@ function ChatScreen({ id }: { id: string }) {
                 onPickMute={setMuteTo}
                 bottomInset={insets.bottom}
             />
+
+            {addContact && peerPubkey && identity && (
+                <AddToContactsSheet account={identity} pubkey={peerPubkey} callsign={peerName} how="hand" onClose={() => setAddContact(false)} />
+            )}
 
             {promptReviewForTx && reviewModalReady && (
                 <ReviewModal

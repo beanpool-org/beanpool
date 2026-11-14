@@ -41,6 +41,7 @@ import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { InvitedByCard } from '../components/InvitedByCard';
 import { ProfileVoucherButton } from '../components/ProfileVoucherButton';
 import { CreditCard } from '../components/CreditCard';
+import { AddToContactsLink } from '../components/AddToContacts';
 import { useCreditGiver } from '../utils/use-credit-giver';
 
 
@@ -1167,6 +1168,10 @@ export default function PublicProfileScreen() {
                             </Pressable>
                         </View>
                     )
+                )}
+                {/* The member's private contacts (DESIGN-private-contacts-fable.md §3.7): a text link under Message / Add friend. */}
+                {!isSelf && !isBlocked && identity && pubKeyStr && (profile?.callsign || passedName) && (
+                    <AddToContactsLink account={identity} pubkey={pubKeyStr} callsign={profile?.callsign || passedName} />
                 )}
 
                 {/* Your own profile: who invited you ("You were invited by @x"), and whom you brought in (I3). Beans-gated as the

@@ -41,7 +41,7 @@ const feed = (items: unknown[], nextCursor: string | null = null) => ({ items: i
 function drawn(): string[] {
     return Array.from(document.querySelectorAll('article')).map((a) =>
         a.getAttribute('data-testid') === 'pulse-knowledge-card'
-            ? `knowledge: ${within(a).getByTestId('pulse-knowledge-head').querySelector('p')?.textContent}`
+            ? `knowledge: ${within(a).getByTestId('pulse-knowledge-heading').textContent}`
             : `creator: ${a.querySelector('h3')?.textContent}`);
 }
 

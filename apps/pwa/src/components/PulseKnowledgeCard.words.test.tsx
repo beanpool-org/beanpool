@@ -1,6 +1,6 @@
 /**
  * Local knowledge's card on the Pulse in the pseudo-locale (slice KP): every word the card says came through t() / tn(), the
- * phone's keys (core's PULSE_KNOWLEDGE_CARD_WORDS), its spoken lines too. What members wrote (titles, first lines, names) is
+ * phone's keys (core's PULSE_KNOWLEDGE_WORDS), its spoken lines too. What members wrote (titles, first lines, names) is
  * theirs and shows as written.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -35,7 +35,8 @@ describe('the knowledge card in the pseudo-locale', () => {
         expect(screen.getByTestId('pulse-knowledge-head')).toHaveTextContent(xx('{n}h ago').replace('{n}', '3'));
         expect(screen.getByText(xx('by {name}').replace('{name}', 'Ada'))).toBeInTheDocument();
         expect(screen.getByRole('button', { name: xx('New local knowledge: {title}. Opens it in Learn.').replace('{title}', 'How recycling works at the tip') })).toBeInTheDocument();
-        expect(screen.getByTestId('pulse-knowledge-open-learn')).toHaveTextContent(xx('Open Learn'));
+        expect(screen.getByTestId('pulse-knowledge-open-learn')).toHaveTextContent(xx('Open Learn ›'));
+        expect(screen.getByRole('button', { name: xx('Open Learn') })).toBe(screen.getByTestId('pulse-knowledge-open-learn'));
     });
 
     it('several the same day: the head, three rows, "and {n} more" and the foot\'s spoken line', async () => {
@@ -44,8 +45,10 @@ describe('the knowledge card in the pseudo-locale', () => {
         render(<PulseKnowledgeCard card={card(posts, 6)} onOpenPage={vi.fn()} onOpenLearn={vi.fn()} />);
         expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
         expect(screen.getByTestId('pulse-knowledge-head')).toHaveTextContent(xx('{n} new in Local knowledge').replace('{n}', '6'));
-        expect(screen.getByTestId('pulse-knowledge-more')).toHaveTextContent(xx('and {n} more').replace('{n}', '3'));
+        expect(screen.getByTestId('pulse-knowledge-more')).toHaveTextContent(xx('and {n} more ›').replace('{n}', '3'));
+        expect(screen.getByRole('button', { name: xx('{n} more in Learn').replace('{n}', '3') })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: xx('{n} new in Local knowledge. Opens Learn.').replace('{n}', '6') })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: xx('Local knowledge: {title}').replace('{title}', 'Who to call when the river rises') })).toBeInTheDocument();
     });
 
     it('in English nothing is bracketed', () => {

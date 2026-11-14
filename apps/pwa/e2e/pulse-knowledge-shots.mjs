@@ -117,17 +117,20 @@ try {
                     check((await order(p)) === 'ckc', `${label}: the card sits between the two creators' cards (${await order(p)})`);
                     check(!(await p.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)), `${label}: the Pulse does not scroll sideways`);
                     const t = await targets(p);
-                    const want = kind === 'single' ? 2 : 5;
+                    // One page: the head and row (one tap) and the foot. Several: the head, three rows, "and 5 more ›", the foot.
+                    const want = kind === 'single' ? 2 : 6;
                     check(t.length === want, `${label}: ${want} targets (${t.map((x) => x.id).join(', ')})`);
                     check(t.every((x) => x.h >= 44), `${label}: every target is at least 44 px tall (least ${Math.min(...t.map((x) => x.h))} px)`);
                     check(t.every((x) => x.inside && !x.cut), `${label}: every target stays inside the card, no words cut (${t.filter((x) => !x.inside || x.cut).map((x) => `${x.id}${x.inside ? '' : ' outside'}${x.cut ? ' cut' : ''}`).join(', ') || 'all'})`);
                     // "Open Learn ›", with its space: a flex button once dropped it and drew "Open Learn›".
                     const gap = await p.evaluate(() => {
                         const b = document.querySelector('[data-testid="pulse-knowledge-open-learn"]');
-                        const words = document.createRange(); words.selectNodeContents(b.firstChild);
-                        const glyph = b.querySelector('span').firstChild;
-                        const mark = document.createRange(); mark.setStart(glyph, glyph.length - 1); mark.setEnd(glyph, glyph.length);
-                        return Math.round((mark.getBoundingClientRect().left - words.getBoundingClientRect().right) * 10) / 10;
+                        const text = b.firstChild;
+                        const at = text.data.lastIndexOf('›');
+                        let before = at - 1;
+                        while (before > 0 && /\s/.test(text.data[before])) before -= 1;
+                        const range = (i) => { const r = document.createRange(); r.setStart(text, i); r.setEnd(text, i + 1); return r.getBoundingClientRect(); };
+                        return Math.round((range(at).left - range(before).right) * 10) / 10;
                     });
                     check(gap >= 2, `${label}: a space before the › on Open Learn (${gap} px)`);
                     // The card with the end of the creator's card above it and the start of the one below.

@@ -2,7 +2,8 @@
  * Local knowledge's card on the web's Pulse (slice KP; DESIGN-local-knowledge-amend-fable.md §3.8): no face and no profile,
  * no ⚑ and no Hide; one page reads "New local knowledge" with its topic chip and "by {name}" when a member wrote it; several
  * the same day read "{n} new in Local knowledge" with three rows and "and {n} more ›"; rows open the page in the app and the
- * foot "Open Learn ›" opens Learn. The spoken lines are the design's. Nothing is fetched from outside.
+ * foot "Open Learn ›" opens Learn. The taps and spoken lines are the design's, the same as the phone's card: one page, the
+ * head and the row are one tap to the page; several, the head is a tap to Learn. Nothing is fetched from outside.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
@@ -36,7 +37,7 @@ describe('the knowledge card, one page', () => {
         expect(screen.getByTestId('pulse-knowledge-card').textContent).not.toMatch(/↗|YouTube/);
     });
 
-    it('the row opens the page in the app and speaks the design\'s line; it shows the first line and "by {name}"', () => {
+    it('the head and the row are one tap to the page, speaking the design\'s line; it shows the first line and "by {name}"', () => {
         const onOpenPage = vi.fn();
         const onOpenLearn = vi.fn();
         render(<PulseKnowledgeCard card={card([post({ by: 'Ada' })])} onOpenPage={onOpenPage} onOpenLearn={onOpenLearn} />);
@@ -44,16 +45,18 @@ describe('the knowledge card, one page', () => {
         expect(row).toHaveTextContent('How recycling works at the tip');
         expect(row).toHaveTextContent('Bring glass, cans and paper sorted.');
         expect(row).toHaveTextContent('by Ada');
+        expect(row).toContainElement(screen.getByTestId('pulse-knowledge-head'));
         fireEvent.click(row);
         expect(onOpenPage).toHaveBeenCalledWith('k1');
         expect(onOpenLearn).not.toHaveBeenCalled();
     });
 
-    it('the foot "Open Learn ›" opens Learn, and there are exactly two things to tap', () => {
+    it('the foot "Open Learn ›" (spoken "Open Learn") opens Learn, and there are exactly two things to tap', () => {
         const onOpenLearn = vi.fn();
         render(<PulseKnowledgeCard card={card([post()])} onOpenPage={vi.fn()} onOpenLearn={onOpenLearn} />);
         const foot = screen.getByTestId('pulse-knowledge-open-learn');
         expect(foot.textContent).toBe('Open Learn ›');
+        expect(foot).toBe(screen.getByRole('button', { name: 'Open Learn' }));
         fireEvent.click(foot);
         expect(onOpenLearn).toHaveBeenCalledTimes(1);
         expect(screen.getAllByRole('button')).toHaveLength(2);
@@ -82,7 +85,7 @@ describe('the knowledge card, several the same day', () => {
         post({ id: 'c', title: 'The library\'s opening hours', topic: 'places-history' }),
     ];
 
-    it('heads "{n} new in Local knowledge", three rows each opening its page, no chip and no name', () => {
+    it('heads "{n} new in Local knowledge", three rows each opening its page (spoken "Local knowledge: {title}"), no chip and no name', () => {
         const onOpenPage = vi.fn();
         render(<PulseKnowledgeCard card={card(posts, 8)} onOpenPage={onOpenPage} onOpenLearn={vi.fn()} />);
         expect(screen.getByTestId('pulse-knowledge-head')).toHaveTextContent('8 new in Local knowledge');
@@ -94,20 +97,27 @@ describe('the knowledge card, several the same day', () => {
             expect.stringContaining('Who to call when the river rises'),
             expect.stringContaining('The library\'s opening hours'),
         ]);
+        expect(rows[1]).toBe(screen.getByRole('button', { name: 'Local knowledge: Who to call when the river rises' }));
         fireEvent.click(rows[1]);
         expect(onOpenPage).toHaveBeenCalledWith('b');
     });
 
-    it('"and {n} more ›" and the foot both open Learn; the foot speaks "{n} new in Local knowledge. Opens Learn."', () => {
+    it('the head ("{n} new in Local knowledge. Opens Learn."), "and {n} more ›" ("{n} more in Learn") and the foot all open Learn', () => {
         const onOpenLearn = vi.fn();
-        render(<PulseKnowledgeCard card={card(posts, 8)} onOpenPage={vi.fn()} onOpenLearn={onOpenLearn} />);
+        const onOpenPage = vi.fn();
+        render(<PulseKnowledgeCard card={card(posts, 8)} onOpenPage={onOpenPage} onOpenLearn={onOpenLearn} />);
+        const head = screen.getByRole('button', { name: '8 new in Local knowledge. Opens Learn.' });
+        expect(head).toBe(screen.getByTestId('pulse-knowledge-head'));
+        fireEvent.click(head);
         const more = screen.getByTestId('pulse-knowledge-more');
         expect(more.textContent).toBe('and 5 more ›');
+        expect(more).toBe(screen.getByRole('button', { name: '5 more in Learn' }));
         fireEvent.click(more);
-        const foot = screen.getByRole('button', { name: '8 new in Local knowledge. Opens Learn.' });
-        expect(foot).toBe(screen.getByTestId('pulse-knowledge-open-learn'));
-        fireEvent.click(foot);
-        expect(onOpenLearn).toHaveBeenCalledTimes(2);
+        fireEvent.click(screen.getByRole('button', { name: 'Open Learn' }));
+        expect(onOpenLearn).toHaveBeenCalledTimes(3);
+        expect(onOpenPage).not.toHaveBeenCalled();
+        // The head, three rows, "and 5 more ›" and the foot.
+        expect(screen.getAllByRole('button')).toHaveLength(6);
     });
 
     it('two the same day: two rows and no "and {n} more"', () => {

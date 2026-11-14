@@ -222,10 +222,15 @@ async function main(): Promise<void> {
     });
     const reasonWas = BOOT_STAMPED[0].reason;
     BOOT_STAMPED[0].reason = 'other words';
-    entry.rows = undefined;
-    assert(definitionFingerprint() === def0, 'a reason\'s words move no def (code only)');
+    const stampWords = definitionFingerprint();
     BOOT_STAMPED[0].reason = reasonWas;
+    entry.rows = { where: 'tier IS NOT NULL', reason: 'one reason' };
+    const ruleWords = definitionFingerprint();
+    entry.rows = { where: 'tier IS NOT NULL', reason: 'another reason' };
+    const ruleOtherWords = definitionFingerprint();
     delete entry.rows;
+    assert(stampWords === def0 && ruleWords === ruleOtherWords && ruleWords !== def0,
+        'a reason\'s words move no def, a boot stamp\'s or a row rule\'s (code only)');
 
     console.log('\n— 5. every cell, through every check —');
     const { checkWholeCopy, leftOutTablesCurrent } = await import('./services/backup-puller.js');
@@ -270,9 +275,10 @@ async function main(): Promise<void> {
             const differing = found.differing.some((x) => x.table === T);
             assert(JSON.stringify(where) === JSON.stringify(cell.cmp === 'differing' ? ['compared'] : [cell.cmp]) && differing === (cell.cmp === 'differing'),
                 `${name}: compareTableHashes puts ${T} in ${cell.cmp} (${JSON.stringify(where)}${differing ? ', differing' : ''})`);
-            const others = [...found.compared.filter((t) => t !== T), ...found.drift, ...found.otherRelease].filter((t) => t !== T);
-            assert(others.length === found.compared.length - (where.includes('compared') ? 1 : 0) && found.exact === (cell.verdict === 'exact'),
-                `${name}: every other table compared and equal, and exact is ${cell.verdict === 'exact'} (${found.exact})`);
+            const notOnlyT = [...found.drift, ...found.otherRelease, ...found.differing.map((x) => x.table)].filter((t) => t !== T);
+            assert(notOnlyT.length === 0 && found.compared.length === Object.keys(mine0.tables).length - (where.includes('compared') ? 0 : 1)
+                && found.exact === (cell.verdict === 'exact'),
+                `${name}: every other table compared and equal, and exact is ${cell.verdict === 'exact'} (${found.exact}; ${notOnlyT.join(', ') || 'no other'})`);
 
             // checkWholeCopy: a copy carrying these hashes, and nothing else it would count.
             checkWholeCopy({ tableHashes: theirs, accounts: [] } as any);
@@ -322,6 +328,10 @@ async function main(): Promise<void> {
         && JSON.stringify(closingHashVerdict(undefined, null, new Set(), new Set()).notCompared) === '["content"]',
         'the stager\'s closing check says the same of both');
     assert(JSON.stringify(leftOutTablesCurrent({ tableHashes: oldShape } as any, [T])) === '[]', 'leftOutTablesCurrent finds nothing current from an older release\'s hashes');
+    // Values this database's rules refused are not exact whatever the hashes, as checkWholeCopy has it, and no force-resync.
+    const refused = closingHashVerdict(oldShape, null, new Set(['members']), new Set());
+    assert(refused.verdict === 'inexact' && JSON.stringify(refused.differs) === '["members"]' && refused.mendable.length === 0,
+        `the stager's closing check: values refused, with an older release's hashes, are not exact and mend nothing (${JSON.stringify(refused)})`);
     Date.now = realNow;
 
     console.log('\n— 6. A standby\'s copy of the directory cache hashes as the main server\'s —');

@@ -322,7 +322,7 @@ describe('ModeratorView report actions', () => {
         try {
             mockNode();
             await act(async () => {
-                render(<ModeratorView nodeUrl="https://mullum.example" communityName="Mullum" onLogout={() => {}} />);
+                render(<ModeratorView nodeUrl="https://riverside.example" communityName="Riverside" onLogout={() => {}} />);
             });
             await waitFor(() => expect(screen.getAllByTestId('moderator-report')).toHaveLength(4));
             const card = screen.getAllByTestId('moderator-report')[3];

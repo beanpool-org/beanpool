@@ -151,6 +151,20 @@ async function postItems(ctx: OutsideMailContext, items: RelayItem[]): Promise<A
 }
 
 /**
+ * Report a line from another community (X5): the item as it came, kept on this phone (its sender's signed envelope and the
+ * sealed line inside), and the words it opened to, to my own community's server. That server checks the sender's signatures,
+ * blocks them for me, and tells their community, never naming me (server: engine/relay-complaint.ts). Throws
+ * OutsideMailError with my server's words when it refuses.
+ */
+export async function reportOutsideLine(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'identity' | 'store' | 'signal'>, lineId: string, reason: string): Promise<void> {
+    const kept = await ctx.store.kept(lineId);
+    let item: unknown = null;
+    try { item = kept ? JSON.parse(kept.sealed) : null; } catch { /* not kept as it came */ }
+    if (!kept || !item) throw new OutsideMailError(404, t('That did not go through. Please try again.'), 'not_kept');
+    await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/report', { item, reason, words: kept.text }, ctx.identity as BeanPoolIdentity, ctx.signal));
+}
+
+/**
  * Send `text` to the peer of chat `chatId` (a chat this phone has, open). Written first as `sending` (then `onKept` is
  * called); then the state my server answers. Throws OutsideMailError with the server's words when it refuses the line (the
  * line is then `failed`). A throw before `onKept` means no line was kept: the words are only where the caller has them.

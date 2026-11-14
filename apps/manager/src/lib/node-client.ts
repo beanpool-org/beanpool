@@ -2582,21 +2582,36 @@ export class TakeoverRequestError extends Error {
     }
 }
 
-async function takeoverPost(nodeUrl: string, apiPath: string, body: Record<string, unknown>, credential?: string): Promise<Record<string, unknown>> {
-    const res = await fetch(resolveNodeApiUrl(nodeUrl, apiPath), {
+async function takeoverPost(nodeUrl: string, apiPath: string, body: Record<string, unknown>, credential?: string,
+    limits?: ReturnType<typeof nodeReadLimits>): Promise<Record<string, unknown>> {
+    const request = fetch(resolveNodeApiUrl(nodeUrl, apiPath), {
         method: 'POST',
         headers: buildAdminHeaders(credential),
         body: JSON.stringify({ ...body }),
+        ...(limits ? { signal: limits.signal } : {}),
     });
-    const json = await res.json().catch(() => ({})) as Record<string, unknown>;
+    const res = await (limits ? limits.answer(request) : request);
+    const read = res.json().catch(() => ({}));
+    const json = await (limits ? limits.body(read) : read) as Record<string, unknown>;
     if (!res.ok) {
         throw new TakeoverRequestError(typeof json.error === 'string' && json.error ? json.error : `HTTP ${res.status}`, res.status, json);
     }
     return json;
 }
 
+/**
+ * The take-over status read fails rather than hang, as the diagnostics read does: Home holds the recovery code and the
+ * second owner as "Checking …" until it answers, so a stalled read ends in "Couldn't check" with a Retry (#3155).
+ */
+export const NODE_TAKEOVER_ANSWER_MS = 30_000;
+export const NODE_TAKEOVER_ALL_MS = 60_000;
+
 export async function fetchTakeoverStatus(nodeUrl: string, credential?: string): Promise<TakeoverStatus> {
-    return await takeoverPost(nodeUrl, '/api/local/admin/takeover/status', {}, credential) as unknown as TakeoverStatus;
+    const limits = nodeReadLimits(NODE_TAKEOVER_ANSWER_MS, NODE_TAKEOVER_ALL_MS, {
+        answer: "The node didn't answer within 30 seconds",
+        all: "The take-over status didn't all arrive within a minute",
+    });
+    return await takeoverPost(nodeUrl, '/api/local/admin/takeover/status', {}, credential, limits) as unknown as TakeoverStatus;
 }
 
 /** Null when the answer carries no backup lock status. */

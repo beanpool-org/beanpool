@@ -96,25 +96,44 @@ export function HomeScreen({
     // Who is looking: an owner (or the owners' automation token) is offered what only an owner does.
     const isOwnerViewer = viewer?.kind === 'token' || viewer?.role === 'owner';
 
-    // Whether this community has a recovery code (sealed keys; TakeoverLockPanel makes it): read for an owner only, as the
-    // node answers only an owner. Null until read, and on a read that fails, an answer that names no recovery code at all
-    // (an error body, an older server), or a standby's (it has none of its own): Home then lists nothing it can't back.
-    const [recoveryCodeMissing, setRecoveryCodeMissing] = useState<boolean | null>(null);
+    // What the take-over status (TakeoverLockPanel's) says about this server, read for an owner only: the node answers any
+    // admin, but both rows that use it are an owner's to do. Null until read, and on a read that fails or an answer that
+    // names no recovery code at all (an error body, an older server): Home then lists nothing it can't back.
+    // `mainServer`: it answered as no standby. The owner rows below go by this, never by the community shape's standby
+    // flag alone, a second read that may be slow or fail (#3147 review, note 2).
+    // `recoveryCodeMissing`: null on a standby (it has none of its own) and in the error state, which can't vouch for it.
+    const [takeoverRead, setTakeoverRead] = useState<{ mainServer: boolean; recoveryCodeMissing: boolean | null } | null>(null);
+    // Why the owner rows couldn't be checked, as Action required says it: the failed read's error, the node's own words in
+    // the error state, or '' for an answer that names no recovery code (a server from before it). Null while the read is
+    // on its way, and once it is read. Action required counts the rows unchecked until then (#3155 review).
+    const [takeoverWhy, setTakeoverWhy] = useState<string | null>(null);
+    const [takeoverTries, setTakeoverTries] = useState(0);
     useEffect(() => {
-        setRecoveryCodeMissing(null);
+        setTakeoverRead(null);
+        setTakeoverWhy(null);
         if (!activeNode || !isOwnerViewer) return;
         let mounted = true;
         fetchTakeoverStatus(activeNode.url, nodeCredential(activeNode))
             .then((s) => {
-                if (!mounted || !s || typeof s !== 'object' || !('recoveryCode' in s)) return;
-                if (s.state === 'standby' || s.state === 'error') return;
-                setRecoveryCodeMissing(s.recoveryCode === null);
+                if (!mounted) return;
+                if (!s || typeof s !== 'object' || !('recoveryCode' in s) || typeof s.state !== 'string') {
+                    setTakeoverWhy('');
+                    return;
+                }
+                const mainServer = s.state !== 'standby';
+                setTakeoverRead({
+                    mainServer,
+                    recoveryCodeMissing: mainServer && s.state !== 'error' ? s.recoveryCode === null : null,
+                });
+                if (mainServer && s.state === 'error') setTakeoverWhy(typeof s.message === 'string' ? s.message.replace(/\.$/, '') : '');
             })
-            .catch(() => {});
+            .catch((e) => {
+                if (mounted) setTakeoverWhy(e instanceof Error && e.message ? e.message : 'the request failed');
+            });
         return () => {
             mounted = false;
         };
-    }, [activeNode?.id, activeNode?.url, isOwnerViewer]);
+    }, [activeNode?.id, activeNode?.url, isOwnerViewer, takeoverTries]);
 
     const shapeCardText = useMemo(() => {
         // An answer without the four settings (a node on an older build, an error body) draws no line: Home must still render.
@@ -272,10 +291,10 @@ export function HomeScreen({
 
     // The rest of the one "what next" after claiming (DESIGN-new-operator-path-fable.md S6, decision 3), after Core settings:
     // a recovery code, then a second owner. Owners only (both are an owner's to do), only while missing, and never on a
-    // standby, whose main server's owners do both. The owners are the node's count (counts.owners); a server that sends no
-    // counts gets no row.
-    const onStandby = Boolean(communityShape?.standby);
-    if (isOwnerViewer && !onStandby && recoveryCodeMissing === true) {
+    // standby, whose main server's owners do both: both wait for the take-over status to say this is a main server. The
+    // owners are the node's count (counts.owners); a server that sends no counts gets no row.
+    const onMainServer = takeoverRead?.mainServer === true && !communityShape?.standby;
+    if (isOwnerViewer && onMainServer && takeoverRead?.recoveryCodeMissing === true) {
         actionItems.push({
             key: 'recovery-code',
             icon: '🔑',
@@ -284,7 +303,7 @@ export function HomeScreen({
             sub: 'backups',
         });
     }
-    if (isOwnerViewer && !onStandby && counts && counts.owners === 1) {
+    if (isOwnerViewer && onMainServer && counts && counts.owners === 1) {
         actionItems.push({
             key: 'second-owner',
             icon: '👑',
@@ -320,15 +339,37 @@ export function HomeScreen({
     // What Action Required could not look at yet: "All clear" only when nothing is left here and nothing is listed.
     const fromData = [pendingReportsCount === null && 'reports', pendingDisputesCount === null && 'escrow disputes'].filter(Boolean) as string[];
     const fromDiag = diag ? [] : ['storage', "the server's alerts"];
-    const unchecked = [...fromData, ...fromDiag];
-    // Data that arrived without these fields (an older server) is no load to wait for: it is unchecked, and said so.
-    const uncheckedLoading = (fromData.length > 0 && dataState === 'loading') || (fromDiag.length > 0 && diagState === 'loading');
+    // The owner rows, where Home reads the take-over status (an owner, on a node, no standby by the shape): unchecked while
+    // that read is on its way or failed, and the recovery code too in the error state, which can't vouch for it. The
+    // second owner only matters with one owner. A standby's answer leaves nothing to check (#3155 review).
+    const takeoverNeeded = Boolean(activeNode) && isOwnerViewer && !communityShape?.standby && takeoverRead?.mainServer !== false;
+    const fromTakeover = takeoverNeeded
+        ? [
+            (takeoverRead === null || takeoverRead.recoveryCodeMissing === null) && 'the recovery code',
+            takeoverRead === null && counts?.owners === 1 && 'the second owner',
+        ].filter(Boolean) as string[]
+        : [];
+    const takeoverLoading = takeoverRead === null && takeoverWhy === null;
+    const unchecked = [...fromData, ...fromDiag, ...fromTakeover];
+    // Each read still on its way says "Checking …"; the rest say why they couldn't be checked, with the Retry. One read
+    // on its way never hides another's failure (a take-over status still coming over a failed diagnostics read). Data that
+    // arrived without these fields (an older server) is no load to wait for: it is unchecked, and said so.
+    const uncheckedPending = [
+        ...(dataState === 'loading' ? fromData : []),
+        ...(diagState === 'loading' ? fromDiag : []),
+        ...(takeoverLoading ? fromTakeover : []),
+    ];
+    const uncheckedFailed = unchecked.filter((what) => !uncheckedPending.includes(what));
     const retryChecks = () => {
         if (fromData.length > 0 && dataState !== 'loading') onRetryNodeData?.();
         if (fromDiag.length > 0 && diagState === 'failed') onRetryDiag?.();
+        if (fromTakeover.length > 0 && !takeoverLoading) setTakeoverTries((n) => n + 1);
     };
-    const uncheckedWhy = [fromData.length > 0 && dataState === 'failed' && nodeDataError, fromDiag.length > 0 && diagState === 'failed' && diagError]
-        .filter(Boolean).join('; ');
+    const uncheckedWhy = [
+        fromData.length > 0 && dataState === 'failed' && nodeDataError,
+        fromDiag.length > 0 && diagState === 'failed' && diagError,
+        fromTakeover.length > 0 && takeoverWhy,
+    ].filter(Boolean).join('; ');
 
     // The four figures: each the node's value, or null (loading, or couldn't load).
     const missingFigures = [
@@ -593,17 +634,16 @@ export function HomeScreen({
                         ))}
                     </div>
                 )}
-                {unchecked.length > 0 && (
-                    uncheckedLoading ? (
-                        <p className="text-xs text-nature-400 m-0" role="status">Checking {listInWords(unchecked)}…</p>
-                    ) : (
-                        <div className="flex flex-wrap items-center gap-2" role="status">
-                            <p className="text-xs text-nature-300 m-0 min-w-0 break-words flex-1">
-                                Couldn't check {listInWords(unchecked)}{uncheckedWhy ? ` (${uncheckedWhy})` : ': this server doesn\'t send them yet, so update it'}.
-                            </p>
-                            {(onRetryNodeData || onRetryDiag) && <RetryButton onClick={retryChecks} label="Retry the checks" />}
-                        </div>
-                    )
+                {uncheckedPending.length > 0 && (
+                    <p className="text-xs text-nature-400 m-0" role="status">Checking {listInWords(uncheckedPending)}…</p>
+                )}
+                {uncheckedFailed.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2" role="status">
+                        <p className="text-xs text-nature-300 m-0 min-w-0 break-words flex-1">
+                            Couldn't check {listInWords(uncheckedFailed)}{uncheckedWhy ? ` (${uncheckedWhy})` : ': this server doesn\'t send them yet, so update it'}.
+                        </p>
+                        {(onRetryNodeData || onRetryDiag || (fromTakeover.length > 0 && !takeoverLoading)) && <RetryButton onClick={retryChecks} label="Retry the checks" />}
+                    </div>
                 )}
             </div>
 

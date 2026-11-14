@@ -175,8 +175,8 @@ const photoCount = (postId: string) => (db.prepare('SELECT COUNT(*) AS n FROM fo
  * A post as `reader` may read it: a removed one's words and photos are gone; a hidden one's are for its writer and the
  * moderators only. `known` says whose links are links (knownWriters).
  */
-const postOut = (r: PostRow, reader: string, known: Map<string, boolean>): ForumPost => {
-    const veiled = !!r.removed_by || (!!r.hidden_by_reports_at && r.writer_pubkey !== reader && !isForumModerator(reader));
+const postOut = (r: PostRow, reader: string, known: Map<string, boolean>, moderator: boolean): ForumPost => {
+    const veiled = !!r.removed_by || (!!r.hidden_by_reports_at && r.writer_pubkey !== reader && !moderator);
     return {
         id: r.id, topicId: r.topic_id, number: r.number, writer: { publicKey: r.writer_pubkey, name: nameOf(r.writer_pubkey) },
         words: veiled ? '' : r.words, quotes: r.quotes, lang: r.lang, createdAt: r.created_at, editedAt: r.edited_at, removed: r.removed_by,
@@ -185,7 +185,8 @@ const postOut = (r: PostRow, reader: string, known: Map<string, boolean>): Forum
 };
 const postsOut = (rows: PostRow[], reader: string): ForumPost[] => {
     const known = knownWriters(rows.map((r) => r.writer_pubkey));
-    return rows.map((r) => postOut(r, reader, known));
+    const moderator = isForumModerator(reader);
+    return rows.map((r) => postOut(r, reader, known, moderator));
 };
 const onePostOut = (id: string, reader: string): ForumPost => postsOut([postRow(id)!], reader)[0];
 
@@ -303,10 +304,13 @@ export function forumTopics(reader: string, opts: { sectionId?: string; offset: 
     return { topics: rows.slice(0, FORUM_LIMITS.topicsPerPage).map(topicOut), next: more ? opts.offset + FORUM_LIMITS.topicsPerPage : null };
 }
 
-/** A topic the reader may see: not gone, not by someone they blocked, not hidden from them (its opening post hidden). */
-function visibleTopic(reader: string, id: string): TopicRow {
+/**
+ * A topic the reader may see: not gone, not by someone they blocked, not hidden from them (its opening post hidden).
+ * `hiddenOk`: a writer's own post in it is still theirs to edit or remove while it is hidden (ownPost).
+ */
+function visibleTopic(reader: string, id: string, opts: { hiddenOk?: boolean } = {}): TopicRow {
     const row = db.prepare(`SELECT t.* FROM forum_topics t WHERE t.id = @id AND COALESCE(t.closed_by, '') != 'removed'
-        AND ${NOT_BLOCKED('t.writer_pubkey')} AND ${NOT_HIDDEN_TO_READER}`).get({ id, reader, mod: isForumModerator(reader) ? 1 : 0 }) as TopicRow | undefined;
+        AND ${NOT_BLOCKED('t.writer_pubkey')} AND ${NOT_HIDDEN_TO_READER}`).get({ id, reader, mod: opts.hiddenOk || isForumModerator(reader) ? 1 : 0 }) as TopicRow | undefined;
     if (!row) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.notFound);
     return row;
 }
@@ -498,7 +502,7 @@ export function replyInForum(member: string, topicId: string, raw: ReplyInput, n
 function ownPost(member: string, postId: string): { post: PostRow; topic: TopicRow } {
     const post = postRow(postId);
     if (!post || post.removed_by) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.postNotFound);
-    const topic = visibleTopic(member, post.topic_id);
+    const topic = visibleTopic(member, post.topic_id, { hiddenOk: post.writer_pubkey === member });
     if (post.writer_pubkey !== member) throw new ForumRefusal(403, 'not_yours', FORUM_WORDS.notYours);
     return { post, topic };
 }

@@ -55,6 +55,8 @@ function mockNode(opts: { role?: 'moderator' | 'admin' } = {}) {
             return reply(200, { success: true, reports: list, total: list.length, pendingCount: REPORTS.length });
         }
         if (/\/api\/local\/admin\/reports\/[^/]+\/(action|dismiss)/.test(url)) return reply(200, { success: true });
+        // A forum post hidden while moderators look: a moderator's route (server: admin-auth.ts MODERATOR_ROUTES).
+        if (/\/api\/local\/admin\/forum\/posts\/[^/]+\/restore/.test(url)) return reply(200, { success: true });
         // Anything else a moderator's screen asked for would be refused by the node.
         return reply(403, { error: 'Moderators can review reports and remove reported posts only', moderator: true });
     }));
@@ -236,6 +238,35 @@ describe('ModeratorView report actions', () => {
             expect(within(postCard).getByRole('button', { name: 'Dismiss (keep the post)' })).toBeInTheDocument();
         } finally {
             REPORTS.splice(-2, 2);
+        }
+    });
+
+    it('names a reported forum post by its topic, removes it with a reason, and restores it while hidden (the forum\'s slice F2)', async () => {
+        const forum = {
+            id: 'r-forum', reason: 'Spam or a scam', createdAt: '2026-11-14T09:00:00Z', outcome: 'open', reporterCallsign: 'Rita',
+            postId: null, pulseItem: null, targetForumPostId: 'fp-1',
+            forumPost: { id: 'fp-1', topicId: 'ft-1', topicTitle: 'Seed swap ideas', number: 2, words: 'Buy my seeds at a link', writerName: 'Oscar', hidden: true, removed: false },
+        };
+        REPORTS.push(forum as typeof REPORTS[number]);
+        try {
+            mockNode();
+            await act(async () => {
+                render(<ModeratorView nodeUrl="https://mullum.example" communityName="Mullum" onLogout={() => {}} />);
+            });
+            await waitFor(() => expect(screen.getAllByTestId('moderator-report')).toHaveLength(4));
+            const card = screen.getAllByTestId('moderator-report')[3];
+            expect(within(card).getByText(/Forum reply by Oscar · hidden while moderators look/)).toBeInTheDocument();
+            expect(within(card).getByText('Seed swap ideas')).toBeInTheDocument();
+            expect(within(card).getByText('Buy my seeds at a link')).toBeInTheDocument();
+            await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Restore (show it again)' })); });
+            expect(posted('/forum/posts/fp-1/restore')).toHaveLength(1);
+            fireEvent.click(within(screen.getAllByTestId('moderator-report')[3]).getByRole('button', { name: 'Remove the post' }));
+            const again = screen.getAllByTestId('moderator-report')[3];
+            fireEvent.change(within(again).getByRole('combobox'), { target: { value: 'spam' } });
+            await act(async () => { fireEvent.click(within(again).getByRole('button', { name: 'Remove it' })); });
+            expect(posted('/reports/r-forum/action')[0].body).toMatchObject({ deletePost: true, reasonCategory: 'spam' });
+        } finally {
+            REPORTS.splice(-1, 1);
         }
     });
 

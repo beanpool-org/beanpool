@@ -293,6 +293,11 @@ async function main(): Promise<void> {
     assert(titles(await topics(bea)).includes('Bea spam topic') && titles(await topics(mo)).includes('Bea spam topic'), 'its writer and a moderator still list it');
     assert((await topic(mo, beaTopic.body.topic.id)).body?.topic?.hidden === true, 'marked hidden for them');
     assert((await reply(vic, beaTopic.body.topic.id, { words: 'me too' })).status === 404, 'nobody else replies to it');
+    // A reply someone wrote before it hid is still theirs to remove while the topic is hidden.
+    const vicEarlier = db.prepare('INSERT INTO forum_posts (id, topic_id, number, writer_pubkey, words, created_at) VALUES (?, ?, 2, ?, ?, ?)')
+        .run('fp-vic-earlier', beaTopic.body.topic.id, vic.pk, 'Vic replied before', new Date().toISOString());
+    assert(vicEarlier.changes === 1 && (await call(vic, 'POST', '/api/forum/posts/fp-vic-earlier/remove')).status === 200,
+        'a reply written before the hide is still its writer\'s to remove');
 
     // ── 6. Settings: the list, restore, dismiss ────────────────────────────────────────────────
     console.log('── 6. Settings ──');

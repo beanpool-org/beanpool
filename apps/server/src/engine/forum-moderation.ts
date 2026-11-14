@@ -17,7 +17,8 @@
  *   OK'd. Their smaller day limits, no photos outside a waiting first topic, links shown as plain text, an hour to edit
  *   (engine/forum.ts), and their first topic waits for a look where `forumFirstLook` is on (engine/forum-first-look.ts).
  *
- * Nothing here names who reported or who acted: a writer hears "the community's moderators".
+ * Nothing here names who reported or who acted: a writer hears "the community's moderators". No socket doorbell yet: the
+ * forum's doorbells, to the people with a topic open or followed, are slice F5's; an app reads the topic again on open.
  */
 import { word, wordsFor } from '@beanpool/core';
 import { db } from '../db/db.js';
@@ -163,10 +164,14 @@ function backBody(title: string): string {
 /** The writer's notice of a moderator's removal: the reason one of the five people already read for a listing's. */
 export function forumRemovedBody(title: string, reasonCategory: string | null): string {
     const label = reasonCategory ? REMOVAL_REASON_LABELS[reasonCategory] : undefined;
-    const what = title.trim()
-        ? tr('Your post in the forum topic “{title}” was removed by the community’s moderators.', { title: quoted(title) })
+    if (title.trim()) {
+        return label
+            ? tr('Your post in the forum topic “{title}” was removed by the community’s moderators. Reason: {reason}.', { title: quoted(title), reason: label })
+            : tr('Your post in the forum topic “{title}” was removed by the community’s moderators.', { title: quoted(title) });
+    }
+    return label
+        ? tr('Your forum post was removed by the community’s moderators. Reason: {reason}.', { reason: label })
         : word('Your forum post was removed by the community’s moderators.');
-    return label ? `${what} ${tr('Reason: {reason}.', { reason: label })}` : what;
 }
 
 const forumData = (row: { id: string; topic_id: string }, kind: string, extra: Record<string, unknown> = {}) =>
@@ -185,10 +190,6 @@ function touchTopic(topicId: string, at: string): void {
     db.prepare('UPDATE forum_topics SET updated_at = ? WHERE id = ?').run(at, topicId);
 }
 
-/** A doorbell, never the post: open apps read the topic again, and get what they may see. */
-function doorbell(cb: ModerationNoticeCallbacks, row: { id: string; topic_id: string }): void {
-    try { cb.broadcast({ type: 'forum_updated', topicId: row.topic_id, postId: row.id }); } catch { /* the next read has it */ }
-}
 
 /**
  * After a new report on a forum post: hide it when reporters in enough independent circles count towards it (one for a
@@ -208,7 +209,6 @@ export function evaluateForumAutoHide(cb: ModerationNoticeCallbacks, postId: str
     })();
     if (!hid) return false;
     console.log(`🛡️ Forum post ${postId} hidden pending review: reporters in ${tally.circles.length} independent circles.`);
-    doorbell(cb, row);
     tell(cb, [row.writer_pubkey], FORUM_MOD_WORDS.hiddenTitle, hiddenBody(row.title), forumData(row, 'forum_post_hidden', { reason: 'reports', screen: 'forum_topic' }));
     return true;
 }
@@ -222,7 +222,6 @@ function unhideRow(row: ModRow, at: string): boolean {
 
 /** Shown again: everyone's open app reads it, and its writer hears it is back (unless it went since). */
 function tellShown(cb: ModerationNoticeCallbacks, row: ModRow): void {
-    doorbell(cb, row);
     if (!row.removed_by) tell(cb, [row.writer_pubkey], FORUM_MOD_WORDS.backTitle, backBody(row.title), forumData(row, 'forum_post_restored', { screen: 'forum_topic' }));
 }
 
@@ -290,7 +289,6 @@ export interface ForumRemoval { row: ModRow; wasUp: boolean }
 
 /** What a moderator's removal tells, after its transaction commits: the writer (with the reason) and the reporters. */
 export function tellForumRemoval(cb: ModerationNoticeCallbacks, removal: ForumRemoval, reporters: string[], reasonCategory: string | null): void {
-    doorbell(cb, removal.row);
     if (removal.wasUp) {
         tell(cb, [removal.row.writer_pubkey], FORUM_MOD_WORDS.removedTitle, forumRemovedBody(removal.row.title, reasonCategory), forumData(removal.row, 'forum_post_removed'));
     }

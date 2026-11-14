@@ -144,7 +144,6 @@ export function okFirstLook(cb: ModerationNoticeCallbacks, moderator: string, id
     tell(cb, [row.writer_pubkey], FIRST_LOOK_WORDS.answeredTitle,
         tr('Your first topic “{title}” is up in the forum. From now on your topics go up at once.', { title: quoted(row.title) }),
         { kind: 'forum_first_look_answered', outcome: 'ok', topicId, screen: 'forum_topic' });
-    try { cb.broadcast({ type: 'forum_updated', topicId }); } catch { /* the next read has it */ }
     return { topicId };
 }
 

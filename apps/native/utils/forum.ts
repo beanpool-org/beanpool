@@ -166,3 +166,11 @@ export const withdrawFirstLook = (id: string) => call('POST', `/api/forum/first-
 /** Whether a reply's or an opening's words fit (the node holds the same numbers and refuses past them). */
 export const forumWordsFit = (words: string, opening: boolean): boolean =>
     Array.from(words.trim()).length <= (opening ? FORUM_LIMITS.opening : FORUM_LIMITS.reply);
+
+// ── What the list says on the member's way back ──────────────────────────────────────────────────────────────────
+
+let backLine: { kind: 'sent' } | { kind: 'gone'; words: string } | null = null;
+/** A first topic sent for a look, or a topic gone by the member's own action: the list's one line when they are back on it. */
+export function noteForumBack(line: { kind: 'sent' } | { kind: 'gone'; words: string }): void { backLine = line; }
+/** That line, once. */
+export function takeForumBack(): typeof backLine { const line = backLine; backLine = null; return line; }

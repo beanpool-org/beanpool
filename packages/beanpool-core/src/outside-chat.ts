@@ -200,3 +200,34 @@ export function openOutsideLine(payload: string, envelope: RelayEnvelope, me: { 
 export function outsideReceiptPayload(itemIds: readonly string[]): string {
     return JSON.stringify({ v: 1, items: [...new Set(itemIds)] });
 }
+
+// ─── The request gate (both apps) ───────────────────────────────────────────────────────────
+
+/** A chat's standing on a device: a request waiting for the member, open (either side may write), or declined. */
+export type OutsideChatState = 'request' | 'open' | 'declined';
+
+/** What the gate makes of an item arriving from someone in another community. */
+export type OutsideGateVerdict = 'line' | 'request' | 'drop';
+
+/**
+ * The request gate, as one pure rule (design §3.5; the phone's utils/outside-chat-store.ts and the web's
+ * lib/outside-chat-store.ts both take it from here): what becomes of an item of `kind` from a sender, given the chat this
+ * device has with them (null: none), whether that chat already holds a line of theirs, the member's door, and their blocks.
+ * A block always wins; an open chat takes lines only; a stranger gets one line of words, only through an open door, and
+ * nothing at all once declined.
+ */
+export function gateOutsideItem(input: {
+    kind: string;
+    chat: { state: OutsideChatState; theirLines: number } | null;
+    doorOpen: boolean;
+    blocked: boolean;
+}): OutsideGateVerdict {
+    if (input.blocked) return 'drop';
+    const { chat } = input;
+    if (chat?.state === 'open') return input.kind === 'dm-line' ? 'line' : 'drop';
+    // From here, a stranger: words only, one line only, and only through an open door.
+    if (input.kind !== 'dm-line') return 'drop';
+    if (chat?.state === 'declined') return 'drop';
+    if (chat?.state === 'request') return chat.theirLines === 0 ? 'request' : 'drop';
+    return input.doorOpen ? 'request' : 'drop';
+}

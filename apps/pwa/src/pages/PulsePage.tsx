@@ -13,10 +13,15 @@
  * - One add button, Add to Pulse, bottom right as the Market's ADD POST; on the worldwide community no add button and no
  *   nudges until adding there has rules for new people (§3.2, §3.8; core pulseAddsHere). Your channels stays.
  * - Responsive at 320dp and 1.3x font scale with pagination and filtering.
+ * - Local knowledge's card (slice KP; DESIGN-local-knowledge-amend-fable.md §2.12, §3.8): the feed is read `with=knowledge`,
+ *   and an item with `source: 'knowledge'` is drawn by PulseKnowledgeCard, never the creator's card. It sits in the feed's
+ *   own order under Neighbours ("All" only: the node gives none under a category). Its rows open the page in Learn, its foot
+ *   Learn. A day's card can move between two page reads, so Load more keeps the newest copy where it stands (core
+ *   mergePulseFeedPages, the phone's rule).
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { CATEGORIES, PULSE_PAGE_WORDS, pulseAddsHere, t, type ChannelCategory } from '@beanpool/core';
+import { CATEGORIES, PULSE_PAGE_WORDS, isPulseKnowledgeCard, mergePulseFeedPages, pulseAddsHere, t, type ChannelCategory } from '@beanpool/core';
 import {
     type PulseFeedItem,
     type MemberCreatorChannel,
@@ -28,6 +33,7 @@ import {
 import { type BeanPoolIdentity } from '../lib/identity';
 import { isOfficialSource } from '../lib/pulse';
 import { PulseFeedCard } from '../components/PulseFeedCard';
+import { PulseKnowledgeCard } from '../components/PulseKnowledgeCard';
 import { PulseNudges } from '../components/PulseNudges';
 import { ChannelsPage } from './ChannelsPage';
 import { PulseIntakePage } from './PulseIntakePage';
@@ -40,9 +46,11 @@ interface Props {
     onOpenProfile: (pubkey: string) => void;
     /** The community's kind as its node says it (CommunityInfo.profile): no Add to Pulse on the worldwide one yet. */
     profile?: string | null;
+    /** The app's doors (App.tsx navigateToTab): the knowledge card opens `learn-page` + the page's id, or `learn`. */
+    onNavigate?: (tab: string, contextId?: string) => void;
 }
 
-export function PulsePage({ identity, onOpenProfile, profile }: Props) {
+export function PulsePage({ identity, onOpenProfile, profile, onNavigate }: Props) {
     // Add to Pulse waits on the worldwide community (Marty's pick 3 of 14 Nov 2026); a local community adds at once.
     const addsHere = pulseAddsHere(profile);
     const [view, setView] = useState<'feed' | 'channels' | 'intake'>('feed');
@@ -84,6 +92,7 @@ export function PulsePage({ identity, onOpenProfile, profile }: Props) {
             const res = await getPulseFeed({
                 category: category === 'all' ? undefined : category,
                 limit: 20,
+                withKnowledge: true,
             });
 
             if (activeCategoryRef.current !== category) return;
@@ -129,15 +138,14 @@ export function PulsePage({ identity, onOpenProfile, profile }: Props) {
                 category: selectedCategory === 'all' ? undefined : selectedCategory,
                 cursor: nextCursor,
                 limit: 20,
+                withKnowledge: true,
             });
 
             if (activeCategoryRef.current !== selectedCategory) return;
 
-            setItems(prev => {
-                const existingIds = new Set(prev.map(i => i.id));
-                const newItems = (res.items || []).filter(i => !existingIds.has(i.id));
-                return [...prev, ...newItems];
-            });
+            // An id the list holds is not added twice: a day's knowledge card the page carries again (it moved between the
+            // reads) replaces the copy shown where it stands, so the list never holds two cards for one day and nothing jumps.
+            setItems(prev => mergePulseFeedPages(prev, res.items || []));
             setNextCursor(res.nextCursor);
         } catch (e: any) {
             console.warn('[PulsePage] Failed to load more items:', e);
@@ -449,7 +457,14 @@ export function PulsePage({ identity, onOpenProfile, profile }: Props) {
             ) : (
                 <div>
                     <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-4">
-                        {visibleItems.map(item => (
+                        {visibleItems.map(item => (isPulseKnowledgeCard(item) ? (
+                            <PulseKnowledgeCard
+                                key={item.id}
+                                card={item}
+                                onOpenPage={(postId) => onNavigate?.('learn-page', postId)}
+                                onOpenLearn={() => onNavigate?.('learn')}
+                            />
+                        ) : (
                             <PulseFeedCard
                                 key={item.id}
                                 item={item}
@@ -458,7 +473,7 @@ export function PulsePage({ identity, onOpenProfile, profile }: Props) {
                                 onDelete={handleDelete}
                                 onOpenProfile={onOpenProfile}
                             />
-                        ))}
+                        )))}
                     </div>
 
                     {/* Pagination / Load more */}

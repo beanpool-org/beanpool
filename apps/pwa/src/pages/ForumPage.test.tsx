@@ -364,6 +364,26 @@ describe('a topic the member\'s own action takes away', () => {
         await screen.findAllByTestId('forum-topic-row');
         expect(screen.queryByTestId('forum-gone')).toBeNull();
     });
+
+    it('a slow answer for a topic the member already left changes nothing: they stay in the topic they opened next', async () => {
+        render(<ForumPage me={ME} />);
+        await screen.findAllByTestId('forum-topic-row');
+        let refuse: (e: unknown) => void = () => {};
+        node.answer = (c) => {
+            if (c.method === 'GET' && c.path === '/api/forum/topics/ft-1') return new Promise((_, no) => { refuse = no; });
+            if (c.method === 'GET' && c.path === '/api/forum/topics/ft-2') return { topic: state.topics[1], posts: [post(1, 'Start here.', { topicId: 'ft-2' })], next: null, lastRead: 1 };
+            if (c.method === 'POST' && c.path === '/api/forum/topics/ft-2/read') return { lastRead: 1 };
+            return standIn(c);
+        };
+        fireEvent.click(screen.getByText('Seed swap ideas'));
+        fireEvent.click(await screen.findByTestId('forum-back'));
+        fireEvent.click(await screen.findByText('Welcome: start here'));
+        expect(await screen.findByTestId('forum-words-1')).toHaveTextContent('Start here.');
+        await act(async () => { refuse(refusal(404, 'not_found', 'This topic isn’t here any more.')); await new Promise((r) => setTimeout(r, 0)); });
+        expect(screen.getByTestId('forum-topic')).toBeInTheDocument();
+        expect(screen.getByTestId('forum-words-1')).toHaveTextContent('Start here.');
+        expect(screen.queryByTestId('forum-gone')).toBeNull();
+    });
 });
 
 describe('kept copies', () => {

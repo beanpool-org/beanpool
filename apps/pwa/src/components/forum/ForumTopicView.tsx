@@ -90,6 +90,9 @@ export function ForumTopicView({ topicId, front, me, onBack, onTold, onGone, onO
     const box = useRef<HTMLTextAreaElement>(null);
     useGrowingComposer(box);
     useCoversScreen(menu !== null);
+    // Whether this topic is still the one on screen: an answer that lands after the member left it changes nothing there
+    // (a late "not here any more" for it never takes them out of the topic they opened next).
+    const shown = useRef(true);
 
     /**
      * Reads the posts after number `from` afresh, on through post `upTo` (or the topic's end), 30 a read: posts drawn up to
@@ -103,6 +106,7 @@ export function ForumTopicView({ topicId, front, me, onBack, onTold, onGone, onO
                 from = p.next;
                 p = await getForumTopic(topicId, from);
             }
+            if (!shown.current) return;
             setPage(p);
             setFailed(false);
             const last = lastOf(p);
@@ -112,13 +116,17 @@ export function ForumTopicView({ topicId, front, me, onBack, onTold, onGone, onO
             // Not there for this member any more: never the old copy left on screen with nothing said.
             if (err?.status === 404 && err.code === 'not_found') {
                 forgetForumTopic(topicId);
-                onGone(goneWords ?? err.message);
-            } else {
+                if (shown.current) onGone(goneWords ?? err.message);
+            } else if (shown.current) {
                 setFailed(true);
             }
         }
     }
-    useEffect(() => { void readThrough(0, lastOf(keptTopic(topicId))); }, [topicId]);
+    useEffect(() => {
+        shown.current = true;
+        void readThrough(0, lastOf(keptTopic(topicId)));
+        return () => { shown.current = false; };
+    }, [topicId]);
 
     const topic = page?.topic;
     const opening = page?.posts.find((p) => p.number === 1) ?? null;

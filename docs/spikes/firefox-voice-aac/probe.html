@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>probe</title>
+<script type="module">
+// Throwaway spike (docs/spikes/firefox-voice-aac.md): what can this browser encode? Nothing is played; no microphone.
+const out = { ua: navigator.userAgent, secure: isSecureContext, audioEncoder: typeof AudioEncoder, mediaRecorder: {}, encoder: [] };
+for (const t of ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/ogg;codecs=opus']) {
+    try { out.mediaRecorder[t] = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t); } catch (e) { out.mediaRecorder[t] = String(e); }
+}
+const configs = [
+    { codec: 'mp4a.40.2', sampleRate: 24000, numberOfChannels: 1, bitrate: 32000 },
+    { codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 1, bitrate: 32000 },
+    { codec: 'mp4a.40.2', sampleRate: 44100, numberOfChannels: 2, bitrate: 128000 },
+    { codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 192000, bitrateMode: 'constant' },
+    { codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 1, bitrate: 32000, aac: { format: 'aac' } },
+    { codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 1, bitrate: 32000, aac: { format: 'adts' } },
+    { codec: 'mp4a.40.5', sampleRate: 48000, numberOfChannels: 1, bitrate: 32000 },
+    { codec: 'mp4a.67', sampleRate: 48000, numberOfChannels: 1, bitrate: 32000 },
+    { codec: 'opus', sampleRate: 48000, numberOfChannels: 1, bitrate: 32000 },
+    { codec: 'flac', sampleRate: 48000, numberOfChannels: 1 },
+    { codec: 'vorbis', sampleRate: 48000, numberOfChannels: 1, bitrate: 64000 },
+];
+for (const c of configs) {
+    let r;
+    try { r = typeof AudioEncoder === 'undefined' ? 'no AudioEncoder' : (await AudioEncoder.isConfigSupported(c)).supported; } catch (e) { r = `threw ${e.name}: ${e.message}`; }
+    out.encoder.push({ config: c, supported: r });
+}
+// Beyond isConfigSupported: does configure() + encode() of one AAC frame actually produce a chunk, or error?
+out.aacEncodeTry = await new Promise((resolve) => {
+    if (typeof AudioEncoder === 'undefined') return resolve('no AudioEncoder');
+    const chunks = [];
+    let settled = false;
+    const done = (v) => { if (!settled) { settled = true; resolve(v); } };
+    try {
+        const enc = new AudioEncoder({ output: (c) => chunks.push(c.byteLength), error: (e) => done(`error ${e.name}: ${e.message}`) });
+        enc.configure({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 1, bitrate: 32000 });
+        const pcm = new Float32Array(48000);
+        for (let i = 0; i < pcm.length; i++) pcm[i] = 0.2 * Math.sin((2 * Math.PI * 440 * i) / 48000);
+        enc.encode(new AudioData({ format: 'f32', sampleRate: 48000, numberOfFrames: pcm.length, numberOfChannels: 1, timestamp: 0, data: pcm }));
+        enc.flush().then(() => done({ chunks: chunks.length, bytes: chunks.reduce((a, b) => a + b, 0) }), (e) => done(`flush rejected ${e.name}: ${e.message}`));
+    } catch (e) { done(`threw ${e.name}: ${e.message}`); }
+    setTimeout(() => done('timeout'), 10000);
+});
+await fetch('/result', { method: 'POST', body: JSON.stringify(out) });
+document.title = 'done';
+</script>

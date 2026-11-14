@@ -549,7 +549,7 @@ describe('3. a phone that installed from the store: the install referrer', () =>
 });
 
 // The name box beside the invite box (Marty, 14 Nov 2026, card callsign-link-guard: a member's invite link pasted into the
-// name box became her name on Byron). The same real screen and harness as above.
+// name box became her name on her community). The same real screen and harness as above.
 describe('4. the name box takes a name, never an invite or a link', () => {
     it('an invite link pasted into the name box goes to the invite box, the name box is left empty, and one line says why', async () => {
         await mount();

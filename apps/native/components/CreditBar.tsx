@@ -1,297 +1,161 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { CIRCULATION_FREE_BEANS, OFFER_BANDS, beans, formatHundredths, formatNumber, t, tn } from '@beanpool/core';
-import { Sentence } from './Sentence';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import {
+    CREDIT_RAINBOW,
+    creditBarPicture,
+    creditLabelColours,
+    creditMeterColours,
+    creditNoteColours,
+    creditStandingCard,
+    type BrandSet,
+    type CreditStandingAnswer,
+} from '@beanpool/core';
 
 /**
- * CreditBar — the zero-centred "sweet spot" indicator.
+ * CreditBar (phone): the member's own credit card on the Ledger (DESIGN-credit-bar-amend-fable.md, slice R1; Marty, 14 Nov
+ * 2026). The rainbow stays: same track, same dot (white with a dark ring in every look, F15), same label above it. Around
+ * it: two sentences with the totals, the limit at the bar's left end, "+200" at its own place, a word or two under each
+ * mark, the strip under the left half that shows what the line is made of (solid: earned by trading; outlined: someone
+ * stands behind it), stripes over the part Offers have not opened, one note, and the parts line, always the whole line.
  *
- * Zero sits at the middle (the goal: give ≈ receive). The ±200 comfort band always owns the
- * centre via an ANCHORED (non-linear) scale, so the deep floors and big balances compress into
- * the tails and zero stays legible for everyone. The left label is the member's real floor; once
- * past the fee-free zone the marker carries the circulation rate. Strict lanes → nothing overlaps.
- *
- * Every money figure is whole hundredths of a Bean (the node's `*_c` fields, @beanpool/core hundredths.ts): the props, the
- * ladder and the scale's breakpoints, so nothing is ever converted. Each figure it writes goes through formatHundredths.
+ * Every figure and sentence comes from core's credit-standing.ts, the same as the web's card: nothing is composed here.
+ * The Ledger wraps it in the one button (its label is `creditStandingCard().spoken`); the drawing is hidden from screen
+ * readers. Colours: the rainbow is core's picture (CREDIT_RAINBOW); everything else a library role for the look (`set`).
+ * Every money figure in `answer` is whole hundredths of a Bean, as the node sends it.
  */
-
-const RED = '#bb4b32', WARM = '#c07d2a', WARM_BG = '#e9a23e', BEAN = '#2f9e44', BEAN_DEEP = '#1c6e30', MARK = '#38bdf8';
-
-/**
- * The offer ladder's numbers, in whole hundredths (core's OFFER_BANDS, where the array INDEX is the live-offer count: index
- * 0 = 0 offers → 0 unlocked, index 3 = 3 offers → −1000 Beans). `knownGrant` (a confirmed member in a known community,
- * slice 4) is unlocked whole by one live offer; the rest of the limit keeps the bands. Mirrors @beanpool/core usableAllowance.
- */
-export function offerLadder(floor: number, knownGrant = 0): { usableAt: (n: number) => number; offersForFull: number; rungs: number[] } {
-    const limit = Math.abs(floor);
-    const known = Math.max(0, Math.min(limit, knownGrant));
-    const other = limit - known;
-    const usableAt = (n: number) => {
-        const i = Math.max(0, Math.min(OFFER_BANDS.length - 1, Math.floor(n)));
-        return Math.min(limit, (i >= 1 ? known : 0) + Math.min(other, OFFER_BANDS[i]));
-    };
-    let offersForFull = OFFER_BANDS.length - 1;
-    for (let n = 0; n < OFFER_BANDS.length; n++) if (usableAt(n) >= limit) { offersForFull = n; break; }
-    const rungs = [...new Set(OFFER_BANDS.map((_, n) => usableAt(n)))].filter(b => b > 0 && b < limit);
-    return { usableAt, offersForFull, rungs };
-}
-
-// Marginal monthly circulation rate at a positive balance in hundredths (mirrors the demurrage brackets).
-function marginalRate(b: number): number {
-    if (b <= beans(200)) return 0;
-    if (b <= beans(500)) return 1;
-    if (b <= beans(1000)) return 1.5;
-    if (b <= beans(2000)) return 2;
-    return 2.5;
-}
-
-/** −200 Beans: where a deep floor's scale changes pace. */
-const DEEP = -beans(200);
-
-// value (hundredths) → percent [0..100] on the anchored scale (zero pinned at 50%).
-function toPct(v: number, floor: number): number {
-    const F = Math.min(floor, 0);
-    let pct: number;
-    if (v >= 0) {
-        const pos: [number, number][] = [[0, 50], [beans(200), 68], [beans(500), 80], [beans(1000), 90], [beans(2000), 98]];
-        pct = 99;
-        for (let i = 0; i < pos.length - 1; i++) {
-            const [v0, p0] = pos[i], [v1, p1] = pos[i + 1];
-            if (v <= v1) { pct = p0 + (v - v0) / (v1 - v0) * (p1 - p0); break; }
-        }
-    } else if (F === 0) {
-        pct = 50;
-    } else if (F >= DEEP) {
-        // shallow floor — linear floor..0 → 6..50
-        pct = 6 + (v - F) / (0 - F) * (50 - 6);
-    } else if (v <= DEEP) {
-        // deep floor, between floor and −200 → 6..34
-        pct = 6 + (v - F) / (DEEP - F) * (34 - 6);
-    } else {
-        // deep floor, between −200 and 0 → 34..50
-        pct = 34 + (v - DEEP) / -DEEP * (50 - 34);
-    }
-    return Math.max(3, Math.min(98, pct));
-}
-
-/** A balance from whole hundredths, with its sign, in the language's numbers: "+12", "+49.25", "−9.82" ("+12,50" in French). */
-const fmt = (c: number) => `${c >= 0 ? '+' : ''}${formatHundredths(c)}`;
-
-/** Every money prop is whole hundredths of a Bean (the node's balance_c, floor_c, usableFloor_c, knownGrant_c). */
-export function CreditBar({ balance_c, floor_c, colors, feeFreeMax_c = CIRCULATION_FREE_BEANS, usableFloor_c, liveOffers = 0, knownGrant_c = 0 }: {
-    balance_c: number;
-    floor_c: number;
-    colors: any;
-    feeFreeMax_c?: number;
-    usableFloor_c?: number;   // v3: how deep offers currently unlock (≥ floor, ≤ 0). Omit → no ladder.
-    knownGrant_c?: number;    // the known floor's part of the limit: one live offer unlocks all of it
-    liveOffers?: number;      // v3: current live-offer count (for the ladder caption)
-}) {
-    const balance = balance_c;
-    const floor = floor_c;
-    const feeFreeMax = feeFreeMax_c;
-    const usableFloor = usableFloor_c;
-    const knownGrant = knownGrant_c;
-    const [tagW, setTagW] = useState(0);
-    const pct = toPct(balance, floor);
-    const overFeeFree = balance > feeFreeMax;
-    const nearLimit = floor < 0 && balance - floor < Math.abs(floor) * 0.12;
-    const rate = marginalRate(balance);
-    const tagBg = nearLimit ? RED : overFeeFree ? WARM_BG : colors.text.heading;
-    // The words on the bubble. The calm bubble is heading-coloured, so its words take the card's colour: the pair reads in
-    // both themes (white on charcoal in light, as before; charcoal on white in dark, where a white label was white on white).
-    const tagFg = nearLimit || overFeeFree ? colors.text.inverse : colors.surface.card;
-    const tagLabel = overFeeFree ? t('{balance} B · ≈{rate}%/mo', { balance: fmt(balance), rate }) : t('{balance} B', { balance: fmt(balance) });
-
-    // Offer ladder — the negative side mirrors the fee ladder above zero. usableFloor is the depth
-    // your live Offers currently unlock; earned depth beyond it (usableFloor → floor) is LOCKED.
-    const uFloor = usableFloor === undefined ? floor : usableFloor;
-    const showLadder = usableFloor !== undefined && floor < 0;
-    const hasLocked = showLadder && uFloor > floor;
-    const usablePct = toPct(uFloor, floor);
-    const floorPct = toPct(floor, floor);
-    const ladder = offerLadder(floor, knownGrant);
-    const rungs = showLadder ? ladder.rungs.map(b => ({ b, pct: toPct(-b, floor) })) : [];
-    const nextDepth = ladder.usableAt(liveOffers + 1);
-    const nextUnlock = hasLocked && nextDepth > Math.abs(uFloor) ? nextDepth : undefined;
-    const offersForFull = ladder.offersForFull;
-
-    // Fee ladder — the monthly circulation-fee brackets that live ABOVE the fee-free ceiling.
-    // It "opens up" as the balance climbs past the halfway mark: revealT ramps 0→1 between
-    // feeFreeMax/2 and the ceiling, then stays 1. Positions mirror the anchored scale
-    // (500→80%, 1000→90%, 2000→98%); the current bracket is highlighted.
-    const revealT = Math.max(0, Math.min(1, (balance - feeFreeMax / 2) / (feeFreeMax / 2)));
-    const showFees = revealT > 0;
-    const FEE_ZONES = [
-        { label: '1%', mid: 74, lo: beans(200), hi: beans(500) },
-        { label: '1.5%', mid: 85, lo: beans(500), hi: beans(1000) },
-        { label: '2%', mid: 94, lo: beans(1000), hi: beans(2000) },
-    ];
-    const FEE_TICKS = [80, 90, 98]; // 500 / 1000 / 2000 boundaries
-
+export function CreditBar({ answer, colors, set }: { answer: CreditStandingAnswer; colors: any; set: BrandSet }) {
+    const card = creditStandingCard(answer);
+    const pic = creditBarPicture(answer);
+    const meter = creditMeterColours(set);
+    const label = creditLabelColours(pic.tone, meter);
+    const note = card.note ? { ...card.note, ...creditNoteColours(card.note.tone, meter) } : null;
+    const { limit, zero, fee } = pic.marks;
+    const [barW, setBarW] = useState(0);
+    const [tag, setTag] = useState({ w: 0, h: 22 });
+    // The label sits over the dot, kept inside the card at either end; its pointer stays over the dot.
+    const dotX = (pic.dot / 100) * barW;
+    const tagLeft = barW > 0 ? Math.max(0, Math.min(barW - tag.w, dotX - tag.w / 2)) : 0;
+    const pointerLeft = Math.max(6, Math.min(tag.w - 14, dotX - tagLeft - 4));
+    const stripesW = pic.stripes ? (pic.stripes.width / 100) * barW : 0;
     const s = styles(colors);
     return (
-        <View
-            style={s.cbar}
-            accessible={true}
-            accessibilityLabel={t('Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.', { balance: formatHundredths(balance), floor: formatHundredths(floor), max: formatHundredths(feeFreeMax) })}
-        >
-            {/* Lane 2 — the track */}
-            <View style={s.track}>
-                <LinearGradient
-                    colors={[RED, '#cf6a3f', '#e0a35a', '#7ccb90', BEAN, '#7ccb90', '#e0a35a', WARM]}
-                    locations={[0.04, 0.17, 0.29, 0.4, 0.5, 0.6, 0.74, 0.96]}
-                    start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-                    style={StyleSheet.absoluteFill}
-                />
-                <View style={s.zero} />
-                {/* Offer-locked zone: earned depth your live Offers haven't unlocked yet */}
-                {hasLocked && <View style={[s.lockedZone, { left: `${floorPct}%`, width: `${usablePct - floorPct}%` }]} />}
-                {/* Offer-band rungs (the "ladder") */}
-                {rungs.map((r) => (<View key={r.b} style={[s.rung, { left: `${r.pct}%` }]} />))}
-                {/* Current usable-floor marker — how deep you can actually spend right now */}
-                {hasLocked && uFloor <= 0 && (
-                    <>
-                        <View style={[s.usableMarkBg, { left: `${usablePct}%` }]} />
-                        <View style={[s.usableMark, { left: `${usablePct}%` }]} />
-                    </>
-                )}
-                {showFees && FEE_TICKS.map((t, i) => (
-                    <View key={i} style={[s.feeTick, { left: `${t}%`, opacity: 0.5 * revealT }]} />
-                ))}
-                <View style={[s.bead, { left: `${pct}%` }]} />
+        <View>
+            <View style={s.headRow}>
+                <Text style={s.headline} testID="credit-headline">{card.headline}</Text>
+                <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+                    <MaterialCommunityIcons name="information-outline" size={20} color={colors.text.secondary} />
+                </View>
             </View>
+            <Text style={s.sentence} testID="credit-sentence">{card.sentence}</Text>
 
-            {/* Lane 1 — your marker (the only thing above the track) */}
+            {/* The drawing: hidden from screen readers, whose label (the button's) says it all. */}
             <View
-                style={[s.you, { left: `${pct}%`, marginLeft: -tagW / 2 }]}
-                onLayout={(e) => setTagW(e.nativeEvent.layout.width)}
+                style={[s.drawing, { paddingTop: tag.h + 7 }]}
+                importantForAccessibility="no-hide-descendants"
+                accessibilityElementsHidden
+                testID="credit-drawing"
+                onLayout={(e) => setBarW(e.nativeEvent.layout.width)}
             >
-                <View style={[s.bubble, { backgroundColor: tagBg }]} testID="credit-bar-bubble">
-                    <Text style={[s.youText, { color: tagFg }]} testID="credit-bar-label">{tagLabel}</Text>
+                <View style={s.track}>
+                    <LinearGradient
+                        colors={[...CREDIT_RAINBOW.stops]}
+                        locations={[...CREDIT_RAINBOW.at]}
+                        start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+                        style={[StyleSheet.absoluteFill, { borderRadius: 9 }]}
+                    />
+                    {pic.stripes && (
+                        <View testID="credit-stripes" style={[s.stripes, { left: `${pic.stripes.from}%`, width: `${pic.stripes.width}%` }]}>
+                            {Array.from({ length: Math.ceil(stripesW / 7) + 3 }, (_, i) => (
+                                <View key={i} style={[s.stripe, { left: i * 7 - 10 }]} />
+                            ))}
+                        </View>
+                    )}
+                    <View style={s.zero} />
+                    <View style={[s.dot, { left: `${pic.dot}%` }]} />
                 </View>
-                <View style={[s.pointer, { borderTopColor: tagBg }]} />
+
+                <View
+                    style={[s.tag, { left: tagLeft, backgroundColor: label.fill }]}
+                    onLayout={(e) => setTag({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+                    testID="credit-bar-bubble"
+                >
+                    <Text style={[s.tagText, { color: label.on }]} testID="credit-bar-label">{pic.label}</Text>
+                    <View style={[s.pointer, { left: pointerLeft, borderTopColor: label.fill }]} />
+                </View>
+
+                {/* The strip under the left half, to scale; the +200 stem under the right. */}
+                <View style={s.strip} testID="credit-strip">
+                    {pic.blocks.map((b, i) => (
+                        <View key={i} testID={`credit-block-${b.kind}`} style={[s.blockSlot, { left: `${b.from}%`, width: `${b.width}%` }]}>
+                            <View style={[s.block, b.solid ? { backgroundColor: meter.strip } : { borderWidth: 1.5, borderColor: meter.strip }]} />
+                        </View>
+                    ))}
+                    <View style={[s.stem, { left: `${fee.at}%`, backgroundColor: meter.feeInk }]} />
+                </View>
+
+                {/* The figures at their marks and a word or two under each, in three columns that grow with the text. */}
+                <View style={s.marks}>
+                    <View style={s.markLeft}>
+                        {limit.figure ? <Text style={[s.figure, { color: meter.limitInk }]}>{limit.figure}</Text> : null}
+                        <Text style={s.words}>{limit.words}</Text>
+                    </View>
+                    <View style={s.markMid}>
+                        <Text style={[s.figure, { color: meter.zeroInk }]}>⚖️ {zero.figure}</Text>
+                        <Text style={[s.words, { textAlign: 'center' }]}>{zero.words}</Text>
+                    </View>
+                    <View style={s.markRight}>
+                        <Text style={[s.figure, { color: meter.feeInk }]}>{fee.figure}</Text>
+                        <Text style={s.words}>{fee.words}</Text>
+                    </View>
+                </View>
             </View>
 
-            {/* Rung value labels — sit directly below each offer-band mark so the tick is self-labelled */}
-            {rungs.length > 0 && (
-                <View style={s.rungLabelRow} pointerEvents="none">
-                    {rungs.map((r) => {
-                        return (
-                            <Text
-                                key={r.b}
-                                style={[s.rungLabel, { left: `${r.pct}%`, color: colors.text.body }]}
-                            >
-                                −{formatHundredths(r.b)}
-                            </Text>
-                        );
-                    })}
+            {note && (
+                <View style={[s.note, { backgroundColor: note.tint }]} testID="credit-note">
+                    <Text style={[s.noteMark, { color: note.ink }]}>{note.icon}</Text>
+                    <Text style={[s.noteText, { color: note.ink }]}>{note.text}</Text>
                 </View>
             )}
-
-            {/* Fee ladder — the circulation-fee brackets above +feeFreeMax, revealed as you climb */}
-            {showFees && (
-                <View style={s.feeRow} pointerEvents="none">
-                    <Text style={[s.feeCaption, { opacity: revealT }]}>{t('fee/mo')}</Text>
-                    {FEE_ZONES.map((z, i) => {
-                        const active = balance > z.lo && balance <= z.hi;
-                        return (
-                            <Text
-                                key={i}
-                                style={[s.feeRate, { left: `${z.mid}%`, opacity: revealT, color: active ? WARM : colors.text.muted, fontWeight: active ? '800' : '600' }]}
-                            >{z.label}</Text>
-                        );
-                    })}
-                </View>
-            )}
-
-            {/* Lane 3 — anchors: left / centre / right (space-between can't collide) */}
-            <View style={s.anchors}>
-                <View>
-                    <Text style={[s.aVal, { color: RED }]}>{formatHundredths(floor)}</Text>
-                    <Text style={s.aSub}>{t('your limit')}</Text>
-                </View>
-                <View style={{ alignItems: 'center' }}>
-                    <Text style={[s.aVal, { color: BEAN_DEEP }]}>⚖️ 0</Text>
-                    <Text style={[s.aSub, { color: BEAN_DEEP, opacity: 0.85 }]}>{t('sweet spot')}</Text>
-                </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={[s.aVal, { color: WARM }]}>+{formatHundredths(feeFreeMax)}</Text>
-                    <Text style={s.aSub}>{t('fee-free')}</Text>
-                </View>
-            </View>
-
-            {/* Lane 4 — directional hint */}
-            <View style={s.hint}>
-                <Text style={s.hintText}>{t('← carry credit')}</Text>
-                <Text style={s.hintText}>{t('hold credit →')}</Text>
-            </View>
-
-            {/* Offer caption — below everything so it reads as context, not a track annotation */}
-            {showLadder && hasLocked && (
-                <View style={s.ladderRow} pointerEvents="none">
-                    {/* Whole sentences with the bold parts inside them (components/Sentence); each count its own plural. */}
-                    <Text style={s.ladderText}>
-                        {uFloor < 0 ? (
-                            <Sentence
-                                text={nextUnlock
-                                    ? tn(liveOffers, '🎣 {offers} unlocks\u00A0−{depth} · {more}\u00A0→\u00A0−{next}', '🎣 {offers} unlock\u00A0−{depth} · {more}\u00A0→\u00A0−{next}',
-                                        { depth: formatHundredths(Math.abs(uFloor)), next: formatHundredths(nextUnlock), more: tn(liveOffers + 1, '{n} offer', '{n} offers') })
-                                    : tn(liveOffers, '🎣 {offers} unlocks\u00A0−{depth}', '🎣 {offers} unlock\u00A0−{depth}', { depth: formatHundredths(Math.abs(uFloor)) })}
-                                parts={{ offers: <Text style={s.ladderStrong}>{tn(liveOffers, '{n} offer', '{n} offers')}</Text> }}
-                            />
-                        ) : (
-                            <Sentence
-                                text={tn(offersForFull,
-                                    '🎣 {post} to open your credit line — {count} offer unlocks your\u00A0full\u00A0−{floor}.',
-                                    '🎣 {post} to open your credit line — {count} offers unlock your\u00A0full\u00A0−{floor}.',
-                                    { floor: formatHundredths(Math.abs(floor)) })}
-                                parts={{
-                                    post: <Text style={s.ladderStrong}>{t('Post an offer')}</Text>,
-                                    count: <Text style={s.ladderStrong}>{formatNumber(offersForFull)}</Text>,
-                                }}
-                            />
-                        )}
-                    </Text>
-                </View>
-            )}
+            {card.parts && <Text style={s.parts} testID="credit-parts">{card.parts}</Text>}
         </View>
     );
 }
 
 const styles = (colors: any) => StyleSheet.create({
-    cbar: { position: 'relative', paddingTop: 26 },
-    you: { position: 'absolute', top: 0, alignItems: 'center', zIndex: 10 },
-    bubble: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7 },
-    youText: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
-    pointer: {
-        width: 0, height: 0,
-        borderLeftWidth: 4, borderRightWidth: 4, borderTopWidth: 5,
-        borderLeftColor: 'transparent', borderRightColor: 'transparent',
-    },
-    track: { height: 15, borderRadius: 9, overflow: 'visible' },
-    zero: { position: 'absolute', left: '50%', marginLeft: -1, top: -3, bottom: -3, width: 2, backgroundColor: '#fff' },
-    feeTick: { position: 'absolute', top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff' },
-    lockedZone: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.42)' },
-    rung: { position: 'absolute', top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff', opacity: 0.4 },
-    usableMarkBg: { position: 'absolute', top: -11, bottom: -3, width: 8, marginLeft: -4, backgroundColor: 'rgba(255,255,255,0.7)', zIndex: 0 },
-    usableMark: { position: 'absolute', top: -10, bottom: -2, width: 4, marginLeft: -2, backgroundColor: MARK, zIndex: 1 },
-    rungLabelRow: { position: 'relative', height: 14, marginTop: 2 },
-    rungLabel: { position: 'absolute', fontSize: 9, fontWeight: '700', textAlign: 'center', width: 32, marginLeft: -16, fontVariant: ['tabular-nums'] },
-    ladderRow: { marginTop: 6 },
-    ladderText: { fontSize: 11, lineHeight: 15, color: colors.text.body },
-    ladderStrong: { color: WARM, fontWeight: '800' },
-    feeRow: { position: 'relative', height: 12, marginTop: 4 },
-    feeRate: { position: 'absolute', top: 0, width: 44, marginLeft: -22, textAlign: 'center', fontSize: 9, fontVariant: ['tabular-nums'] },
-    feeCaption: { position: 'absolute', top: 1, left: 0, fontSize: 8, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: 0.4 },
-    bead: {
+    headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+    headline: { flex: 1, fontSize: 16, lineHeight: 20, fontWeight: '800', color: colors.text.heading },
+    sentence: { marginTop: 3, fontSize: 13.5, lineHeight: 18, color: colors.text.body },
+    drawing: { position: 'relative', marginTop: 8 },
+    track: { height: 15, borderRadius: 9 },
+    stripes: { position: 'absolute', top: 0, bottom: 0, overflow: 'hidden', borderRightWidth: 2, borderRightColor: colors.surface.card },
+    stripe: { position: 'absolute', top: -8, width: 3, height: 32, backgroundColor: colors.surface.card, transform: [{ rotate: '45deg' }] },
+    zero: { position: 'absolute', left: '50%', marginLeft: -1, top: -3, bottom: -3, width: 2, backgroundColor: CREDIT_RAINBOW.zeroLine },
+    dot: {
         position: 'absolute', top: '50%', marginTop: -9, marginLeft: -9, width: 18, height: 18, borderRadius: 9,
-        backgroundColor: '#fff', borderWidth: 4, borderColor: colors.text.heading, zIndex: 2,
+        backgroundColor: CREDIT_RAINBOW.dot, borderWidth: 4, borderColor: CREDIT_RAINBOW.ring, zIndex: 2,
     },
-    anchors: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-    aVal: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
-    aSub: { fontSize: 9, color: colors.text.body, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 1 },
-    hint: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 5 },
-    hintText: { fontSize: 10, color: colors.text.body },
+    tag: { position: 'absolute', top: 0, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7, zIndex: 3 },
+    tagText: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
+    pointer: {
+        position: 'absolute', bottom: -5, width: 0, height: 0,
+        borderLeftWidth: 4, borderRightWidth: 4, borderTopWidth: 5, borderLeftColor: 'transparent', borderRightColor: 'transparent',
+    },
+    strip: { position: 'relative', height: 9, marginTop: 5 },
+    blockSlot: { position: 'absolute', top: 0, bottom: 0, paddingHorizontal: 1 },
+    block: { flex: 1, borderRadius: 2 },
+    stem: { position: 'absolute', top: -5, height: 14, width: 2, marginLeft: -1 },
+    marks: { flexDirection: 'row', marginTop: 3 },
+    // The middle word takes its own width, up to 40 % ("balanced" is never cut inside the word); the sides share the rest
+    // equally, so it stays under 0.
+    markLeft: { flex: 1, flexBasis: 0, paddingRight: 4 },
+    markMid: { maxWidth: '40%', alignItems: 'center', paddingHorizontal: 6 },
+    markRight: { flex: 1, flexBasis: 0, paddingLeft: 2 },
+    figure: { fontSize: 12, lineHeight: 16, fontWeight: '700', fontVariant: ['tabular-nums'] },
+    words: { fontSize: 12, lineHeight: 15, color: colors.text.secondary },
+    note: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginTop: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 9 },
+    noteMark: { fontSize: 12.5, lineHeight: 17, fontWeight: '800', minWidth: 14, textAlign: 'center' },
+    noteText: { flex: 1, fontSize: 12.5, lineHeight: 17 },
+    parts: { marginTop: 10, paddingTop: 9, borderTopWidth: 1, borderTopColor: colors.border.default, fontSize: 12.5, lineHeight: 19, color: colors.text.body },
 });

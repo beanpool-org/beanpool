@@ -3,12 +3,12 @@ slug: your-channels
 title: Membagikan saluranmu
 summary: Tampilkan YouTube, blog, Instagram, dan saluran lainnya di Kabar.
 related: the-pulse, learn, your-profile, privacy
-source-hash: bc8099cfeda70bea
+source-hash: 40a7c578cf3fdbbd
 ---
 
 ## Menambahkan saluran
 
-- Di **Kabar**, ketuk **+ Kanal**. Di ponsel kamu juga dapat membuka **Pengaturan** dan mengetuk **Kanal & Etalase**.
+- Di **Kabar**, ketuk **Kanalmu** di bagian atas. Di ponsel kamu juga dapat membuka **Pengaturan** dan mengetuk **Kanal & Etalase**.
 - Ketuk **+ Tambah kanal**.
 - Di bawah **Di mana kamu memposting?**, pilih situsnya.
 - Ketik atau tempel **Tautan atau nama penggunamu**.

@@ -490,7 +490,7 @@ export function GatewayModule({
                                 onClick={() =>
                                     onChangeGateway({
                                         ...gateway,
-                                        corsAllowedOrigins: ['https://app.beanpool.org', 'https://test.beanpool.org', 'http://localhost:3001', 'http://localhost:3000'],
+                                        corsAllowedOrigins: ['https://app.beanpool.org', 'http://localhost:3001', 'http://localhost:3000'],
                                     })
                                 }
                                 className="px-2.5 py-1 rounded bg-nature-800 hover:bg-nature-700 text-nature-200 hover:text-white text-[10px] font-semibold border border-nature-700 transition-all"

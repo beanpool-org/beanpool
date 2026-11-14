@@ -74,7 +74,8 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
     }, [activeNode?.id, activeNode?.url, viewerKey]);
 
     const buildFullUrl = (code: string) => {
-        const cleanNodeUrl = activeNode?.url ? activeNode.url.replace(/\/$/, '') : 'https://test.beanpool.org';
+        // The node's own address; with none chosen, the one this page is served by (never a server of BeanPool's own).
+        const cleanNodeUrl = (activeNode?.url || window.location.origin).replace(/\/$/, '');
         return `${cleanNodeUrl}/?invite=${encodeURIComponent(code)}`;
     };
 

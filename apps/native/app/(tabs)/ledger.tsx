@@ -19,7 +19,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useIdentity } from '../IdentityContext';
-import { getBalance, getTransactions, getAllCommunityMembers, sendTransfer, getPledgeHistory, getEscrowTotal, signedRequest } from '../../utils/db';
+import { getBalance, getTransactions, getAllCommunityMembers, sendTransfer, getPledgeHistory, getEscrowTotal, signedRequest, refreshBalanceFromServer } from '../../utils/db';
 import { useOwnProfile } from '../../utils/use-own-profile';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
@@ -32,12 +32,13 @@ import { TrustInfoModal } from '../../components/info-content/TrustInfoModal';
 import { SliderInfoModal } from '../../components/info-content/SliderInfoModal';
 import { TrustBadge, TrustLevel } from '../../components/TrustBadge';
 import { CreditBar } from '../../components/CreditBar';
+import { CreditBarUnread } from '../../components/CreditBarUnread';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 import {
     PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, beans,
     t, tn, word, formatDate, formatNumber, formatHundredths, parseHundredths, amountRefusalWords, isAmbiguousAmount, type TierName, type WordKey,
-    ledgerCreditLine, ledgerBudget, formatHistoryLine, VOUCH_PRESET_WORDS,
+    ledgerBudget, formatHistoryLine, VOUCH_PRESET_WORDS, creditStandingCard,
 } from '@beanpool/core';
 import { askMyVouching, type MyVouching } from '../../utils/vouchers';
 import { AskForMore } from '../../components/AskForMore';
@@ -126,7 +127,7 @@ export default function LedgerScreen() {
     const pageTitle = useCollapsingTitle();
     const listRef = useRef<any>(null);
     useTabRetapScrollTop(listRef);
-    const { theme, colors } = useTheme();
+    const { theme, colors, set } = useTheme();
     const { identity } = useIdentity();
     // On a node that previews Beans (the showcase, DESIGN-global-showcase-fable §1 row 3), Example Valley's ledger.
     // The same screen either way: in preview it reads Example Valley (components/showcase/sample-screens.ts) instead of
@@ -175,6 +176,11 @@ export default function LedgerScreen() {
     const [heldSample, setHeldSample] = useState(false);
     const balanceState = heldSample === preview ? heldBalance : NO_BALANCE;
     const txns = heldSample === preview ? heldTxns : NO_TXNS;
+    // The credit card waits for the member's own line (round 2 of #3134): before it is read, or with none of the node's
+    // figures on this phone yet (getBalance's `lineKnown: false`, a first open), an answer reads as "no credit line yet",
+    // which is untrue for most. `balanceUnread`: that read failed, so the card says so, with Try again.
+    const [balanceUnread, setBalanceUnread] = useState(false);
+    const creditUnread = balanceState === NO_BALANCE || balanceState.lineKnown === false;
     // "What people who give credit see" (slice C6) is asked of the node only where credit lives: a community whose Beans are
     // live for this reader (never a preview, read-only or hidden: the worldwide community's are a preview, a node with Beans
     // off hides them), with no further profile read. The node still decides: it answers 404 anywhere else, and the card then
@@ -469,7 +475,16 @@ export default function LedgerScreen() {
         const latest = <T,>(set: (v: T) => void) => (v: T) => { if (gen === loadGen.current) set(v); };
         if (identity?.publicKey) {
             getCreditGiftOffer().then(latest(setGiftOffer)).catch(() => {});
-            getBalance(identity.publicKey).then(latest(setBalanceState)).catch(console.error);
+            const key = identity.publicKey;
+            // With none of the node's figures on this phone yet, the node is asked: its answer reloads the screen
+            // (sync_data_updated), and no answer at all means the line couldn't be read.
+            getBalance(identity.publicKey).then(latest((answer: any) => {
+                setBalanceState(answer);
+                if (answer?.lineKnown !== false) { setBalanceUnread(false); return; }
+                refreshBalanceFromServer(key)
+                    .then(latest((read: unknown) => setBalanceUnread(read === null)))
+                    .catch(() => latest(setBalanceUnread)(true));
+            })).catch((e) => { console.error(e); latest(setBalanceUnread)(true); });
             getTransactions(identity.publicKey).then(latest(setTxns)).catch(console.error);
             getBlockedUsers().then(list => setBlocked(new Set(list))).catch(() => {});
             getEscrowTotal(identity.publicKey).then(latest(setEscrowTotal)).catch(() => {});
@@ -1257,9 +1272,13 @@ export default function LedgerScreen() {
                 </Pressable>
             </View>
 
-            {/* ── Credit position — zero is the sweet spot. Members with no credit line yet (floor 0)
-                 see a plain-language prompt instead of the bar. ── */}
-            {creditLineCard(balanceState) === 'frozen' ? (
+            {/* ── Credit position: an admin's freeze keeps its own card; everyone else, a newcomer too, the credit card. Until
+                 the member's own line is in, the card's shape and no claim; if it couldn't be read, it says so. ── */}
+            {creditUnread ? (
+                <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
+                    <CreditBarUnread failed={balanceUnread} onRetry={() => { setBalanceUnread(false); loadData(); }} colors={colors} />
+                </View>
+            ) : creditLineCard(balanceState) === 'frozen' ? (
                 <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
                     <View testID="ledger-known-frozen" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: colors.feedback.info.bg, borderWidth: 1, borderColor: colors.feedback.info.border, borderRadius: 12, padding: 12 }}>
                         <Text style={{ fontSize: 20 }}>❄️</Text>
@@ -1272,49 +1291,21 @@ export default function LedgerScreen() {
                         </View>
                     </View>
                 </View>
-            ) : balanceState.activated === false ? (
-                <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
-                    {/* text.body on green50 was near-white on near-white in dark; the success box there. */}
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: theme === 'dark' ? colors.feedback.success.bg : palette.green50, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.success.border : palette.green200, borderRadius: 12, padding: 12 }}>
-                        <Text style={{ fontSize: 20 }}>🌱</Text>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 14, fontWeight: '800', color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark }}>{t('No credit line yet')}</Text>
-                            <Text style={{ fontSize: 12.5, color: colors.text.body, lineHeight: 18, marginTop: 2 }}>
-                                {t('You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)')}
-                            </Text>
-                            {balanceState.vouchedBy && balanceState.vouchedBy.length > 0 && (
-                                <Text testID="ledger-vouched-by" style={{ fontSize: 12, fontWeight: '700', color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.primary, marginTop: 6 }}>
-                                    {ledgerCreditLine(balanceState.vouchedBy)}
-                                </Text>
-                            )}
-                        </View>
-                    </View>
-                </View>
             ) : (
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={t('Credit position — tap to learn how it works')}
+                    // The card's words read once, in order, then what a tap opens: core's spoken sentence (slice R1).
+                    accessibilityLabel={creditStandingCard(balanceState).spoken}
                     onPress={() => setShowSliderInfo(true)}
-                    style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}
+                    testID="credit-card"
+                    style={{ minHeight: 44, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}
                 >
-                    {/* The bar itself now carries the offer ladder (locked zone, rungs, unlock caption). */}
-                    <CreditBar balance_c={balanceState.balance_c} floor_c={balanceState.floor_c} colors={colors} usableFloor_c={balanceState.usableFloor_c} liveOffers={balanceState.liveOffers} knownGrant_c={balanceState.knownGrant_c} />
+                    {/* The member's own card (DESIGN-credit-bar-amend-fable.md, slice R1): the two sentences, the rainbow with
+                        the strip of what the line is made of, one note and the parts line, all from core. A newcomer sees it
+                        too, the left half striped. The tap opens today's info until the sheet (slice R2). */}
+                    <CreditBar answer={balanceState} colors={colors} set={set} />
                     {knownFrozenPartNote(balanceState) && (
-                        <Text style={{ fontSize: 11.5, color: colors.text.body, lineHeight: 16, marginTop: 8 }}>{knownFrozenPartNote(balanceState)}</Text>
-                    )}
-                    {balanceState.vouchedBy && balanceState.vouchedBy.length > 0 && (
-                        <Text testID="ledger-vouched-by" style={{ fontSize: 12, fontWeight: '700', color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.primary, marginTop: 6 }}>
-                            {ledgerCreditLine(balanceState.vouchedBy)}
-                        </Text>
-                    )}
-                    {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}
-                    {balanceState.frozen && (
-                        <Text style={{ fontSize: 11.5, color: colors.feedback.warning.fg, lineHeight: 16, marginTop: 8 }}>
-                            {tn(balanceState.liveOffers ?? 0,
-                                '⚠️  Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.',
-                                '⚠️  Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.',
-                                { limit: formatHundredths(Math.abs(balanceState.usableFloor_c ?? balanceState.floor_c)) })}
-                        </Text>
+                        <Text style={{ fontSize: 12.5, color: colors.text.body, lineHeight: 17, marginTop: 8 }}>{knownFrozenPartNote(balanceState)}</Text>
                     )}
                 </Pressable>
             )}

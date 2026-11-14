@@ -3,12 +3,12 @@ slug: your-channels
 title: Kushiriki chaneli zako
 summary: Weka chaneli zako za YouTube, blogu, Instagram na nyinginezo kwenye Mwenendo.
 related: the-pulse, learn, your-profile, privacy
-source-hash: bc8099cfeda70bea
+source-hash: 40a7c578cf3fdbbd
 ---
 
 ## Ongeza chaneli
 
-- Kwenye **Mwenendo**, gusa **+ Njia**. Kwenye simu unaweza pia kufungua **Mipangilio** na kugusa **Vituo & Maonyesho**.
+- Kwenye **Mwenendo**, gusa **Njia zako** juu. Kwenye simu unaweza pia kufungua **Mipangilio** na kugusa **Vituo & Maonyesho**.
 - Gusa **+ Ongeza njia**.
 - Chini ya **Unachapisha wapi?**, chagua tovuti husika.
 - Andika au ubandike **Kiungo au jina lako la mtumiaji**.

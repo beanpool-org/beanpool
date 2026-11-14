@@ -3,12 +3,12 @@ slug: your-channels
 title: Condividere i tuoi canali
 summary: Porta i tuoi canali YouTube, blog, Instagram e altro all'interno di Polso.
 related: the-pulse, learn, your-profile, privacy
-source-hash: bc8099cfeda70bea
+source-hash: 40a7c578cf3fdbbd
 ---
 
 ## Aggiungere un canale
 
-- Nel **Polso**, tocca **+ Canali**. Sul telefono puoi anche aprire **Impostazioni** e toccare **Canali e Vetrina**.
+- Nel **Polso**, tocca **I tuoi canali** in alto. Sul telefono puoi anche aprire **Impostazioni** e toccare **Canali e Vetrina**.
 - Tocca **+ Aggiungi un canale**.
 - Sotto **Dove pubblichi?**, scegli il sito.
 - Digita o incolla **Il tuo link o nome utente**.

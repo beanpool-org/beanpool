@@ -3,12 +3,12 @@ slug: your-channels
 title: Pagbahagi ng mga channel
 summary: Ilagay ang iyong YouTube, blog, Instagram at iba pang mga channel sa Balita.
 related: the-pulse, learn, your-profile, privacy
-source-hash: bc8099cfeda70bea
+source-hash: 40a7c578cf3fdbbd
 ---
 
 ## Magdagdag ng channel
 
-- Sa **Balita**, i-tap ang **+ Mga Channel**. Sa telepono maaari mo ring buksan ang **Mga Setting** at i-tap ang **Mga Channel at Showcase**.
+- Sa **Balita**, i-tap ang **Mga channel mo** sa itaas. Sa telepono maaari mo ring buksan ang **Mga Setting** at i-tap ang **Mga Channel at Showcase**.
 - I-tap ang **+ Magdagdag ng channel**.
 - Sa ilalim ng **Saan ka nagpo-post?**, piliin ang site.
 - I-type o i-paste ang **Ang iyong link o handle**.

@@ -75,6 +75,10 @@ export const EMPTY_RULES: ReadonlyArray<{ rule: EmptyRule; checks: ReadonlyArray
         { table: 'join_requests', columns: ['via_sharer_pubkey'] },
         // An assistant took its posts down (engine/agent-takedowns.ts): it posted.
         { table: 'agent_takedowns', columns: ['member_pubkey'] },
+        // The forum (engine/forum.ts): a topic it started, and each opening post or reply it wrote, a removed one too (its row
+        // stays as a marker, words blanked). An edit is of its own post (forum_post_edits names no key); reports come with F2.
+        { table: 'forum_topics', columns: ['writer_pubkey'] },
+        { table: 'forum_posts', columns: ['writer_pubkey'] },
     ] },
     { rule: 'trades', checks: [
         { table: 'transactions', columns: ['from_pubkey', 'to_pubkey'] },

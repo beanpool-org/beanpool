@@ -111,6 +111,7 @@ vi.mock('./pages/ProjectsPage', () => ({
     ),
 }));
 vi.mock('./pages/MarketplacePage', () => ({ MarketplacePage: () => <div data-testid="marketplace-page" /> }));
+vi.mock('./pages/PulsePage', () => ({ PulsePage: ({ profile }: { profile?: string | null }) => <div data-testid="pulse-page" data-profile={String(profile)} /> }));
 vi.mock('./pages/MessagesPage', () => ({ MessagesPage: () => <div data-testid="messages-page" /> }));
 vi.mock('./pages/PeoplePage', () => ({ PeoplePage: ({ initialView }: { initialView?: string }) => <div data-testid="people-page" data-initial-view={initialView} /> }));
 vi.mock('./pages/SettingsPage', () => ({
@@ -241,6 +242,31 @@ describe('the sidebar\'s Settings cog opens Settings where the member sees it', 
         fireEvent.click(within(sidebar()).getByRole('button', { name: /Home/ }));
         await waitFor(() => expect(screen.queryByTestId('treasury-overlay')).toBeNull());
         expect(screen.getByTestId('home-page')).toBeInTheDocument();
+    });
+});
+
+// Marty's pick 2 of 14 Nov 2026, changed from DESIGN-pulse-home-fable.md question 2: the web's side menu gets its own
+// "Pulse" item (the phone has the Market's door and the Home card only). The bottom bar, which the same list fed, keeps
+// its seven, and lights the Market while the Pulse is open (§3.1: the Pulse's door is at the top of the Market).
+describe('the side menu has its own Pulse item', () => {
+    it('right after the Market; it opens the Pulse and is lit there; the bottom bar keeps seven and lights the Market', async () => {
+        await landed();
+        const items = Array.from(sidebar().querySelectorAll('nav button')).map(b => b.textContent ?? '');
+        const market = items.findIndex(x => x.includes('Market'));
+        expect(market).toBeGreaterThanOrEqual(0);
+        expect(items[market + 1]).toBe('📡Pulse');
+
+        const pulse = within(sidebar()).getByRole('button', { name: /Pulse/ });
+        fireEvent.click(pulse);
+        expect(await screen.findByTestId('pulse-page')).toBeInTheDocument();
+        expect(within(sidebar()).getByRole('button', { name: /Pulse/ })).toHaveAttribute('aria-current', 'page');
+        expect(within(sidebar()).getByRole('button', { name: /Market/ })).not.toHaveAttribute('aria-current');
+
+        const bottom = screen.getByTestId('mobile-bottom-nav');
+        expect(within(bottom).queryByText('Pulse')).toBeNull();
+        expect(bottom.querySelectorAll('[data-nav-label]')).toHaveLength(7);
+        const marketLabel = within(bottom).getByText('Market').closest('button')!.querySelector('[data-nav-label]')!;
+        expect(marketLabel.className).toMatch(/text-rainbow/);
     });
 });
 

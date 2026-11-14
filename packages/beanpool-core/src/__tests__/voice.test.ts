@@ -475,7 +475,7 @@ describe('the frozen voice vectors', () => {
     });
 });
 
-describe('where a community takes voice messages (the node says features.voiceLines; Byron, 14 Nov)', () => {
+describe('where a community takes voice messages (the node says features.voiceLines; a live community, 14 Nov)', () => {
     it('only where the features say voiceLines: true, outright: absent, false, a string or no features at all is no', () => {
         expect(voiceLinesOn({ voiceLines: true })).toBe(true);
         // A node from before voice V2 says nothing: it stores a voice line as words with a sound no one can play.

@@ -13,9 +13,10 @@
  *      who sent nobody an invitation; then one account per rule, each holding only that one thing, is refused with that
  *      rule's code and words (yourself, an enterprise, the node's own SYSTEM row and a row under another spelling of a
  *      key, a suspended account, a role, a balance, a post, a group invitation sent as a convenor, waiting or accepted, a
- *      payment, a message sent, mail sent to another community, credit, an enterprise kept, someone brought in, a report).
- *      Each refusal for what the account did or holds also says Suspend stays the way. Mail from another community waiting
- *      for it, and the receipt its device sent back for mail it got, leave it empty.
+ *      payment, a message sent, mail sent to another community, credit, an enterprise kept, someone brought in, a report,
+ *      a forum topic started, a forum reply written and removed since). Each refusal for what the account did or holds also
+ *      says Suspend stays the way. Mail from another community waiting for it, the receipt its device sent back for mail it
+ *      got, and being told once that the forum is public leave it empty.
  *   3. Who: an owner's own key session only. An admin is refused, an owner's automation token is refused; a refused
  *      retire writes nothing.
  *   4. The retire: 200, no vote or decision opened, nothing deleted (the row and its account stay); 'disabled' with
@@ -53,6 +54,7 @@ import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-
 import { setNodeRole } from './config/node-role.js';
 import { EMPTY_RULES, RETIRE_WORDS } from './engine/retire-duplicate.js';
 import { TABLES } from './engine/replication-manifest.js';
+import { markForumTold } from './engine/forum.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -139,6 +141,10 @@ const NOT_ACTIVITY: Record<string, string> = {
     'relay_mail_seen.sender_key': "the sender, in another community, of an item that came here: their key, no act of anyone's here",
     'relay_outbox.recipient': 'the person in another community its mail went to (or a receipt went back to): the sending is relay_outbox.sender_key',
     'invalidated_keys.public_key': "a key closed or replaced: the key's state, no act",
+    // The forum (engine/forum.ts). A topic it started or a post or reply it wrote is forum_topics/forum_posts.writer_pubkey (`posts`).
+    'forum_members.member_pubkey': 'told once that the forum is public: its own reading, no act (what it wrote is `posts`)',
+    'forum_topics.closed_by': "how a topic closed, a word ('writer', 'moderator', 'quiet', 'removed'), never a key",
+    'forum_posts.removed_by': "who removed a post, a word ('writer', 'moderator', 'account'), never a key",
 };
 
 /**
@@ -186,6 +192,17 @@ function relayOutboxFrom(sender: string, far: string, kind: 'dm-line' | 'receipt
     const now = Date.now();
     db.prepare(`INSERT INTO relay_outbox (sender_key, item_id, kind, recipient, recipient_home, state, item, attempts, next_try_at, created_at, updated_at)
                 VALUES (?, ?, ?, ?, 'far.example', 'sent', NULL, 1, NULL, ?, ?)`).run(sender, crypto.randomBytes(8).toString('hex'), kind, far, now, now);
+}
+
+/** A forum topic `writer` started, its opening post theirs too (engine/forum.ts startTopic's rows); its id. */
+function forumTopicBy(writer: string): string {
+    const tag = crypto.randomBytes(6).toString('hex');
+    const at = new Date().toISOString();
+    db.prepare(`INSERT INTO forum_topics (id, section_id, title, writer_pubkey, reply_count, last_activity_at, created_at)
+                VALUES (?, 'fs-test', 'Who has a ladder?', ?, 0, ?, ?)`).run(`ft-${tag}`, writer, at, at);
+    db.prepare(`INSERT INTO forum_posts (id, topic_id, number, writer_pubkey, words, created_at) VALUES (?, ?, 1, ?, 'Mine broke.', ?)`)
+        .run(`fp-${tag}`, `ft-${tag}`, writer, at);
+    return `ft-${tag}`;
 }
 
 /** A line `far`, in another community, sent to `recipient` here, waiting for their device (engine/relay-mail.ts). */
@@ -306,6 +323,16 @@ async function main(): Promise<void> {
     const mailedOk = await call('GET', null, `/api/local/admin/users/${mailed.pk}/retire`, undefined, owner);
     assert(mailedOk.status === 200 && mailedOk.body?.allowed === true,
         `mail from another community waiting for it, and its receipt for mail it got, leave it empty (${show(mailedOk)})`);
+    // Told once that the forum is public (forum_members, its own reading), in a forum where another member's topic was closed by
+    // a moderator and a reply removed (closed_by and removed_by hold a word, no key): nothing it wrote.
+    const told = makeMember('Told');
+    markForumTold(told.pk);
+    const othersTopic = forumTopicBy(reader.pk);
+    db.prepare("UPDATE forum_topics SET closed_at = ?, closed_by = 'moderator' WHERE id = ?").run(new Date().toISOString(), othersTopic);
+    const toldRow = db.prepare('SELECT told_public_at FROM forum_members WHERE member_pubkey = ?').get(told.pk) as { told_public_at: string | null } | undefined;
+    const toldOk = await call('GET', null, `/api/local/admin/users/${told.pk}/retire`, undefined, owner);
+    assert(!!toldRow?.told_public_at && toldOk.status === 200 && toldOk.body?.allowed === true,
+        `told that the forum is public, with nothing written in it, leaves it empty (${show(toldOk)})`);
 
     const cases: Array<{ rule: string; label?: string; make: () => Id }> = [
         { rule: 'own_account', make: () => founder },
@@ -326,6 +353,21 @@ async function main(): Promise<void> {
         { rule: 'posts', make: () => {
             const m = makeMember('Poster');
             db.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey) VALUES (?, 'offer', 'other', 'A thing', 'A thing', ?)`).run(`p-${m.pk.slice(0, 8)}`, m.pk);
+            return m;
+        } },
+        // The forum (engine/forum.ts): a topic it started; a reply it wrote in another member's topic, removed since (the row
+        // stays as a marker, so remove-and-retire resets nothing, as remove-and-repost resets no daily limit).
+        { rule: 'posts', label: 'a forum topic it started', make: () => {
+            const m = makeMember('Asker');
+            forumTopicBy(m.pk);
+            return m;
+        } },
+        { rule: 'posts', label: "a forum reply it wrote in another member's topic, removed since", make: () => {
+            const m = makeMember('Replier');
+            const topic = forumTopicBy(reader.pk);
+            const at = new Date().toISOString();
+            db.prepare(`INSERT INTO forum_posts (id, topic_id, number, writer_pubkey, words, created_at, removed_at, removed_by)
+                        VALUES (?, ?, 2, ?, '', ?, ?, 'writer')`).run(`fp-${m.pk.slice(0, 8)}`, topic, m.pk, at, at);
             return m;
         } },
         // The review's find on 8ea9647a: only a declined invitation counted; one waiting or accepted read as empty.

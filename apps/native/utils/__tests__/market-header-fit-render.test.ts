@@ -186,7 +186,9 @@ vi.mock('../../app/ThemeContext', async () => {
 });
 
 const ME = { publicKey: 'me-key', callsign: 'Ana' };
-vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME }) }));
+/** Who is looking: a member, or (null) a visitor looking in. */
+const who = vi.hoisted(() => ({ member: true }));
+vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: who.member ? ME : null }) }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/NewPollModal', () => ({ NewPollModal: () => null }));
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
@@ -206,6 +208,7 @@ vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls,
 
 import MarketScreen from '../../app/(tabs)/market';
 import { PostAuthorTrust } from '../../components/PostAuthorTrust';
+import { darkColors, lightColors } from '../../constants/colors';
 
 const POSTS = [
     {
@@ -406,5 +409,50 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
 
         act(() => { calBtn.click(); });
         expect(mockRouter.push).toHaveBeenCalledWith('/calendar');
+    });
+
+    // DESIGN-pulse-home-fable.md §3.1 (P2, Marty's pick 1 of 14 Nov 2026): the Pulse's door is a blue "Pulse ›" at the right
+    // of the Market's title row. The feed is not touched; the door asks the node for nothing until it is tapped.
+    it('6. the title row holds Market and the Pulse door on one line, the door 44 dp, blue from the tokens, opening the Pulse', async () => {
+        for (const theme of ['light', 'dark'] as const) {
+            themeState.current = theme;
+            mockRouter.push.mockClear();
+            await act(async () => { root.render(createElement(MarketScreen) as any); });
+            await act(async () => { await Promise.resolve(); });
+
+            const door = host.querySelector('[data-testid="market-pulse-door"]') as HTMLElement;
+            expect(door, `${theme}: the door is drawn`).not.toBeNull();
+            // On the title's own line: the title and the door share one row.
+            const title = host.querySelector('[data-testid="page-title-market"]') as HTMLElement;
+            expect(title.parentElement, `${theme}: one row`).toBe(door.parentElement);
+            expect(door.getAttribute('aria-label')).toBe('Open the Pulse');
+            expect(door.textContent).toContain('Pulse');
+            const style = JSON.parse(door.getAttribute('data-style') || '{}');
+            expect(style.minHeight, `${theme}: 44 dp`).toBeGreaterThanOrEqual(44);
+            const card = (theme === 'dark' ? darkColors : lightColors).card.blue;
+            expect(style.backgroundColor, `${theme}: the blue band's tint`).toBe(card.tint);
+            const word = door.querySelector('span') as HTMLElement;
+            expect(JSON.parse(word.getAttribute('data-style') || '{}').color, `${theme}: the blue band's ink`).toBe(card.ink);
+            // In a longer language the word shrinks to fit rather than pushing the title off its line.
+            expect(word.getAttribute('data-lines')).toBe('1');
+            expect(word.getAttribute('data-shrinks')).toBe('true');
+
+            act(() => { door.click(); });
+            expect(mockRouter.push).toHaveBeenCalledWith('/pulse');
+            await act(async () => { root.unmount(); });
+            root = createRoot(host);
+        }
+    });
+
+    it('7. a visitor looking in, who cannot read the Pulse, has no door; the title keeps its row', async () => {
+        who.member = false;
+        try {
+            await act(async () => { root.render(createElement(MarketScreen) as any); });
+            await act(async () => { await Promise.resolve(); });
+            expect(host.querySelector('[data-testid="page-title-market"]')).not.toBeNull();
+            expect(host.querySelector('[data-testid="market-pulse-door"]')).toBeNull();
+        } finally {
+            who.member = true;
+        }
     });
 });

@@ -477,7 +477,9 @@ export const HOME_V1_CARD_IDS: readonly string[] = [
 /**
  * The default list (scratch/fable-design/DESIGN-home-default-fable.md §2.2, Marty's picks of 13 Nov 2026): a newcomer's
  * Home from the first second, the community first and the chores second, in the phone's order (the web packs the same
- * order into its columns). Fifteen of the 24, which leaves nine for the member's own. Each is drawn only while it has
+ * order into its columns). Sixteen of the 24, which leaves eight for the member's own: the Pulse came back after Coming
+ * up on Marty's pick of 14 Nov 2026 (scratch/fable-design/DESIGN-pulse-home-fable.md §3.5, slice P0), so a new member
+ * finds it on the screen the app opens on. Each is drawn only while it has
  * something to say, by the rule it already follows (§2.1 rule 3), so a newcomer sees about six to ten on day one and the
  * rest arrive in their places as they have something:
  *
@@ -489,6 +491,7 @@ export const HOME_V1_CARD_IDS: readonly string[] = [
  * | `steps` (First steps) | A line is left, in the first 30 days (first-steps.ts `FIRST_STEPS_DAYS`) |
  * | `interests` (What are you into?) | Until the first star |
  * | `events` (Coming up) | An event is coming |
+ * | `pulse` (The Pulse) | A neighbour shared something in the last seven days (routes/home-answer.ts `PULSE_DAYS`) |
  * | `beans` (Your Beans) | Beans are on here |
  * | `asked` (Asked near you) | A neighbour has an open Need |
  * | `deals` (Your deals) | An open deal |
@@ -503,7 +506,8 @@ export const HOME_V1_CARD_IDS: readonly string[] = [
  * pinned under Needs you, and the cards it has no feature for (Your Beans, Your deals, Decide) are never asked for.
  */
 export const HOME_DEFAULT_LIST: readonly string[] = [
-    'start', 'safety', 'market', 'steps', 'interests', 'events', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky',
+    'start', 'safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined',
+    'tips', 'sky',
 ];
 
 /**

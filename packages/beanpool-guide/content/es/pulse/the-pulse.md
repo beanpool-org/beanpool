@@ -4,12 +4,14 @@ title: El Pulso
 summary: Lo que tus vecinos crean y comparten en otros sitios, reunido en un solo muro.
 related: home, learn, your-channels, reporting, the-bean
 help: Enlaces que tus vecinos crearon o compartieron en otros sitios, en un solo muro. Toca uno para abrirlo.
-source-hash: 5a5a0ba505806e0a
+source-hash: 48edba7a67cbc8e2
 ---
 
 ## Qué es
 
-Abre el Pulso desde la tarjeta **El Pulso** en **Inicio**: toca una publicación o toca **Ver todo**. Si no está en tu Inicio, tráela de vuelta con **Añadir tarjeta** en el teléfono, o **Editar inicio** en la app web. En el teléfono también puedes abrirlo desde **Ajustes**, bajo **El Pulso**.
+Abre el **Mercado** y toca **Pulso** cerca de la parte superior. La pestaña **Mercado** sigue encendida mientras el Pulso está abierto. En la app web también está en el menú lateral, bajo **Mercado**.
+
+También está en **Inicio**, como la tarjeta **El Pulso**, cuando un vecino ha compartido algo en la última semana: toca una publicación o toca **Ver todo**. Si no está en tu Inicio, tráela de vuelta con **Añadir tarjeta**. En el teléfono también puedes abrirlo desde **Ajustes**, bajo **El Pulso**.
 
 El Pulso reúne lo que los miembros de tu comunidad publican en otros sitios: videos, música, blogs, fotos. Es una forma de enterarte de lo que tus vecinos hacen y crean.
 
@@ -41,4 +43,6 @@ No puedes ocultar la publicación de otra persona solo para ti.
 
 ## Añadir el tuyo
 
-Toca **+ Canales** en la parte superior. Consulta "Compartir tus canales".
+Toca **Añadir al Pulso** abajo a la derecha. Cuando el Pulso está vacío, el botón está en medio de la página. Para compartir una publicación, añade primero el canal en el que está: toca **Tus canales** en la parte superior. Consulta "Compartir tus canales".
+
+En la comunidad global el Pulso todavía no te pide nada: no hay **Añadir al Pulso**, y la app web no sugiere publicaciones para compartir. Eso espera a que añadir allí tenga reglas para los miembros nuevos. **Tus canales** funciona allí como en cualquier comunidad: añade un canal y sus publicaciones siguen llegando, y puedes compartir una publicación desde allí.

@@ -30,7 +30,7 @@
  *  5d. W3, real content in the cards (scratch/global-node/DESIGN-home-wide-and-content-fable.md §2, §5 row W3): deals
  *      rows (the listing, the other party, whose step, when), the enterprise's balance, keepers, month and latest line for
  *      its keeper, Decide rows ("You voted" the signer's own) and the first open poll's question, each group's last line
- *      (a locked one's bytes only while short, `🔒 Message` kept), four Pulse items with `publishedAt`, the member's own
+ *      (a locked one's bytes only while short, `🔒 Message` kept), three Pulse items with `publishedAt` (none on a quiet week), the member's own
  *      month on Beans (circulation fees apart), and the community's figures; a second member's deal, balance, month,
  *      notice and group line never in the first's answer (also in the read-auth-off run); the tag moves on a new group
  *      line, and on the member's own line in a chat no card shows (the chat stamp), and not on another member's trade;
@@ -1030,10 +1030,17 @@ async function main(): Promise<void> {
         assert(garden?.last?.who === 'HomeBob' && garden.last.text === 'HomeSentinel who has a ladder?' && Number.isFinite(Date.parse(garden.last.at)) && garden.last.locked === undefined,
             `groups: her group's last line, Bob's, and when (${JSON.stringify(garden)})`);
 
-        // Pulse: four, each with when it was published.
+        // Pulse: three since the card came back into the default Home (DESIGN-pulse-home-fable.md §3.5, P0), each with when it
+        // was published.
         const pulse = c.pulse?.items ?? [];
-        assert(pulse.length === 4 && pulse[0].category === 'garden' && pulse.every((p: any) => Number.isFinite(Date.parse(p.publishedAt))),
-            `pulse: four of the week's five, her starred garden first, each with publishedAt (${JSON.stringify(pulse.map((p: any) => [p.id, p.publishedAt]))})`);
+        assert(pulse.length === 3 && pulse[0].category === 'garden' && pulse.every((p: any) => Number.isFinite(Date.parse(p.publishedAt))),
+            `pulse: at most three of the week's five, her starred garden first, each with publishedAt (${JSON.stringify(pulse.map((p: any) => [p.id, p.publishedAt]))})`);
+        // A quiet week draws no card (§3.4): nothing from the last seven days, and the answer carries no Pulse at all.
+        const kept = db.prepare('SELECT id, published_at FROM pulse_items').all() as { id: string; published_at: string | null }[];
+        db.prepare('UPDATE pulse_items SET published_at = ?').run(new Date(Date.now() - 8 * 86_400_000).toISOString());
+        const quiet = (await get('/api/home?cards=pulse', alice)).body?.cards ?? {};
+        for (const k of kept) db.prepare('UPDATE pulse_items SET published_at = ? WHERE id = ?').run(k.published_at, k.id);
+        assert(quiet.pulse === undefined, `pulse: absent with nothing from the last seven days (${JSON.stringify(quiet.pulse)})`);
 
         // Beans: the member's own month; Mia's, with a line from last month left out.
         const aliceMonth = ownMonthOf(alice);

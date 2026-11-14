@@ -56,6 +56,8 @@ export * from './need-answer-words.js';
 export * from './listing-price.js';
 export * from './post-type-lines.js';
 export * from './knowledge.js';
+export * from './forum.js';
+export * from './name-line.js';
 export * from './invite-ask.js';
 export * from './invite-and-share.js';
 export * from './invite-share-text.js';
@@ -68,6 +70,7 @@ export * from './invite-text.js';
 export * from './name-box.js';
 export * from './event-copy.js';
 export * from './show-on-global.js';
+export * from './beanpool-defaults.js';
 export * from './peek-ticket.js';
 export * from './find-community.js';
 export * from './place-circle.js';
@@ -164,6 +167,8 @@ export * from './messaging.js';
 export * from './community-shape-card.js';
 export * from './use-on-computer.js';
 export * from './credit-sight.js';
+// The member's own credit card on the Ledger: the sentences, the parts of the line and the rainbow's picture (both apps).
+export * from './credit-standing.js';
 export * from './known-rule.js';
 // People → Community: the list's five sorts and their words, one set for the phone and the web app.
 export * from './member-sort.js';

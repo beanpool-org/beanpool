@@ -92,10 +92,14 @@ vi.mock('react-native', () => {
     };
 });
 const params = vi.hoisted(() => ({ now: {} as Record<string, string> }));
+/** Where the screen sent the member (router.push), and which community it is on (utils/use-node-profile). */
+const nav = vi.hoisted(() => ({ pushed: [] as unknown[] }));
+const community = vi.hoisted(() => ({ profile: 'local' as string | null }));
+vi.mock('../use-node-profile', () => ({ useNodeProfile: () => (community.profile ? { profile: community.profile, features: {} } : null) }));
 vi.mock('expo-router', async () => {
     const { useEffect: effect } = await import('react');
     return {
-        router: { push() {}, navigate() {}, replace() {}, back() {}, setParams() {}, canGoBack: () => true },
+        router: { push: (to: unknown) => { nav.pushed.push(to); }, navigate() {}, replace() {}, back() {}, setParams() {}, canGoBack: () => true },
         useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
         useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
         useLocalSearchParams: () => params.now,
@@ -239,6 +243,8 @@ beforeEach(() => {
     alerts.said.length = 0;
     alerts.buttons.length = 0;
     params.now = {};
+    nav.pushed.length = 0;
+    community.profile = 'local';
     store.map.clear();
     clip.text = '';
     oauth.refusal = null;
@@ -481,7 +487,7 @@ describe('the Pulse tab in the pseudo-locale (words S3f)', () => {
 
         feed.items = [];
         await again('xx', createElement(PulseScreen));
-        expect(host.textContent).toContain(xx('The Pulse is quiet right now'));
+        expect(host.textContent).toContain(xx('Nothing new this week.'));
         expect(bypassing(), 'quiet').toEqual([]);
 
         feed.fail = 'Failed to load feed page (503)';
@@ -621,6 +627,77 @@ describe('Channels and the Pulse at 320 dp with 1.3× text, in the pseudo-locale
         expect(title.getAttribute('data-lines')).toBe('1');
         expect(title.getAttribute('data-shrinks')).toBe('true');
         expect(title.getAttribute('data-flex-shrink')).toBe('1');
+    });
+});
+
+// DESIGN-pulse-home-fable.md §3.2, §3.4, §3.8 (P2; Marty's picks of 14 Nov 2026): one obvious add button, Your channels in the
+// title row, a quiet week that asks nothing and points at the Learn lane, and no Add to Pulse on the worldwide community.
+describe('the Pulse page: one add button, Your channels, a quiet week (P2)', () => {
+    const adds = () => Array.from(host.querySelectorAll('[aria-label="Add to Pulse"]'));
+
+    it('the page draws one add button, bottom right, opening the add screen; the title row says Your channels', async () => {
+        await renderIn('en', createElement(PulseScreen));
+        expect(adds()).toHaveLength(1);
+        expect(adds()[0].getAttribute('data-testid')).toBe('pulse-add');
+        expect(host.textContent).not.toContain('+ Channels');
+        await click(adds()[0], 'Add to Pulse');
+        expect(nav.pushed.at(-1)).toBe('/pulse-intake');
+        await click(buttonWithText('Your channels'), 'Your channels');
+        expect(nav.pushed.at(-1)).toBe('/channels');
+    });
+
+    it('a quiet week: two plain sentences, the add button in the middle (still the only one), and the Learn line', async () => {
+        feed.items = [];
+        await renderIn('en', createElement(PulseScreen));
+        expect(host.textContent).toContain('Nothing new this week.');
+        expect(host.textContent).toContain('Have a video, a song, a blog or photos of your own? Add a link and your neighbours see it here.');
+        expect(host.textContent).toContain('Nothing to add? The Learn lane has short videos on how BeanPool works.');
+        expect(host.textContent).not.toContain('The Pulse is quiet right now');
+        expect(host.textContent).not.toContain('once syndicated');
+        expect(adds()).toHaveLength(1);
+        expect(adds()[0].getAttribute('data-testid')).toBe('pulse-add-quiet');
+        await click(adds()[0], 'Add to Pulse');
+        expect(nav.pushed.at(-1)).toBe('/pulse-intake');
+    });
+
+    it('on the worldwide community: no Add to Pulse at all, and a quiet week leads to the Learn lane', async () => {
+        community.profile = 'global';
+        await renderIn('en', createElement(PulseScreen));
+        expect(adds()).toHaveLength(0);
+        expect(buttonWithText('Your channels')).not.toBeNull();
+
+        feed.items = [];
+        await again('en', createElement(PulseScreen));
+        expect(adds()).toHaveLength(0);
+        expect(host.textContent).toContain('Nothing new this week.');
+        expect(host.textContent).toContain('The Learn lane has short videos on how BeanPool works.');
+        expect(host.textContent).not.toContain('Add a link');
+    });
+
+    it('a feed that would not load says so and Retry, never "Nothing new this week": that would be a guess', async () => {
+        feed.items = [];
+        feed.fail = 'Failed to load feed page (503)';
+        await renderIn('en', createElement(PulseScreen));
+        expect(host.textContent).toContain('Failed to load feed page (503)');
+        expect(host.textContent).not.toContain('Nothing new this week.');
+        // The add button stays where it always is: adding does not need the feed.
+        expect(adds()).toHaveLength(1);
+        expect(adds()[0].getAttribute('data-testid')).toBe('pulse-add');
+    });
+
+    it('in the pseudo-locale every new word came through t(), on a local community and the worldwide one', async () => {
+        await renderIn('xx', createElement(PulseScreen));
+        expect(host.textContent).toContain(xx('Your channels'));
+        expect(byLabel(xx('Add to Pulse'))).not.toBeNull();
+        expect(bypassing(), 'local').toEqual([]);
+        feed.items = [];
+        await again('xx', createElement(PulseScreen));
+        expect(host.textContent).toContain(xx('Nothing new this week.'));
+        expect(bypassing(), 'quiet').toEqual([]);
+        community.profile = 'global';
+        await again('xx', createElement(PulseScreen));
+        expect(host.textContent).toContain(xx('The Learn lane has short videos on how BeanPool works.'));
+        expect(bypassing(), 'global quiet').toEqual([]);
     });
 });
 

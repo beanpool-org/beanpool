@@ -8,12 +8,15 @@
  * Rules:
  * - Facade cards, NOT embeds: taps open external post on platform.
  * - Prioritizes creator attribution: "my neighbour made this".
- * - Honest empty states for newly syndicated nodes.
+ * - Honest empty states. A quiet week asks nothing: two plain sentences, the one add button in the middle, and a line to
+ *   the How it works chip (the web has no Learn lane; DESIGN-pulse-home-fable.md §3.4).
+ * - One add button, Add to Pulse, bottom right as the Market's ADD POST; on the worldwide community no add button and no
+ *   nudges until adding there has rules for new people (§3.2, §3.8; core pulseAddsHere). Your channels stays.
  * - Responsive at 320dp and 1.3x font scale with pagination and filtering.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { CATEGORIES, t, type ChannelCategory } from '@beanpool/core';
+import { CATEGORIES, PULSE_PAGE_WORDS, pulseAddsHere, t, type ChannelCategory } from '@beanpool/core';
 import {
     type PulseFeedItem,
     type MemberCreatorChannel,
@@ -29,12 +32,19 @@ import { PulseNudges } from '../components/PulseNudges';
 import { ChannelsPage } from './ChannelsPage';
 import { PulseIntakePage } from './PulseIntakePage';
 
+/** The chip whose lane holds BeanPool's how-to videos (core's label, "How it works"): the quiet week's last line names it. */
+const LEARN_CHIP = CATEGORIES.find(c => c.id === 'learn') ?? CATEGORIES[0];
+
 interface Props {
     identity: BeanPoolIdentity | null;
     onOpenProfile: (pubkey: string) => void;
+    /** The community's kind as its node says it (CommunityInfo.profile): no Add to Pulse on the worldwide one yet. */
+    profile?: string | null;
 }
 
-export function PulsePage({ identity, onOpenProfile }: Props) {
+export function PulsePage({ identity, onOpenProfile, profile }: Props) {
+    // Add to Pulse waits on the worldwide community (Marty's pick 3 of 14 Nov 2026); a local community adds at once.
+    const addsHere = pulseAddsHere(profile);
     const [view, setView] = useState<'feed' | 'channels' | 'intake'>('feed');
     const [intakeParams, setIntakeParams] = useState<{ url?: string; channelId?: string }>({});
 
@@ -193,6 +203,10 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
         }
     };
 
+    // The quiet week's page (below): no item in this lane under All, and the feed was read. A feed that would not load is
+    // no quiet week: the error box says so, with Retry, and the add button stays in its place.
+    const quiet = !loading && !error && selectedCategory === 'all' && visibleItems.length === 0;
+
     const openIntakeWithParam = (param?: string) => {
         if (!param) {
             setIntakeParams({});
@@ -257,7 +271,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-white dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-800 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700/80 cursor-pointer shadow-sm transition-colors"
                             aria-label={t('Manage your channels')}
                         >
-                            <span>{t('+ Channels')}</span>
+                            <span>{t(PULSE_PAGE_WORDS.yourChannels)}</span>
                         </button>
                     </div>
                 </div>
@@ -345,13 +359,17 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                 })}
             </div>
 
-            {/* Embedded Pulse Nudges */}
-            <PulseNudges
-                channels={memberChannels}
-                onNudgeDismissed={loadChannels}
-                onAddFromClipboard={openIntakeWithParam}
-                onShareChannel={openIntakeWithParam}
-            />
+            {/* Embedded Pulse Nudges: each one asks the member to add (the clipboard link's own Add to Pulse, a channel's
+                Share). On the worldwide community the page asks nothing yet (§3.8), as on the phone, whose Pulse page has
+                no nudges; Your channels, the path that was already there, still adds there. */}
+            {addsHere && (
+                <PulseNudges
+                    channels={memberChannels}
+                    onNudgeDismissed={loadChannels}
+                    onAddFromClipboard={openIntakeWithParam}
+                    onShareChannel={openIntakeWithParam}
+                />
+            )}
 
             {/* Error Message Box */}
             {error && (
@@ -393,21 +411,38 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                             {t('Show all categories')}
                         </button>
                     </div>
-                ) : (
+                ) : !quiet ? null : (
+                    // A quiet week (§3.4): what there is to do, said plainly, and nothing asked. The add button steps into the
+                    // middle so there is still only one; on the worldwide community there is none yet and the Learn chip leads.
                     <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-3xl p-8 text-center my-4 shadow-sm">
                         <div className="text-4xl mb-3 select-none">🗞️</div>
                         <h3 className="text-base sm:text-lg font-bold text-nature-900 dark:text-white mb-2">
-                            {t('The Pulse is quiet right now')}
+                            {t(PULSE_PAGE_WORDS.quietTitle)}
                         </h3>
-                        <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 max-w-sm mx-auto mb-5 leading-relaxed">
-                            {t("Items from neighbours' YouTube channels and blogs appear here automatically once syndicated. As more members connect their channels, this feed will fill up.")}
-                        </p>
+                        {addsHere && (
+                            <>
+                                <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 max-w-sm mx-auto mb-5 leading-relaxed">
+                                    {t(PULSE_PAGE_WORDS.quietBody)}
+                                </p>
+                                <button
+                                    type="button"
+                                    data-testid="pulse-add-quiet"
+                                    onClick={() => openIntakeWithParam()}
+                                    className="min-h-[44px] px-5 py-2.5 rounded-xl font-bold text-sm bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer shadow-sm transition-transform active:scale-95"
+                                >
+                                    {t(PULSE_PAGE_WORDS.add)}
+                                </button>
+                            </>
+                        )}
                         <button
                             type="button"
-                            onClick={() => setView('channels')}
-                            className="px-5 py-2.5 rounded-xl font-bold text-sm bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer shadow-sm transition-transform active:scale-95"
+                            onClick={() => setSelectedCategory('learn')}
+                            className="block mx-auto mt-5 min-h-[44px] max-w-sm bg-transparent border-0 p-0 text-xs sm:text-sm leading-relaxed text-link underline underline-offset-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-accent-fill"
                         >
-                            {t('+ Connect your channels')}
+                            {/* The web has no Learn lane (and its "Learn" is the Local knowledge page): name the chip this opens. */}
+                            {addsHere
+                                ? t(PULSE_PAGE_WORDS.learnLineWeb, { chip: t(LEARN_CHIP.label) })
+                                : t(PULSE_PAGE_WORDS.learnGlobalWeb, { chip: t(LEARN_CHIP.label) })}
                         </button>
                     </div>
                 )
@@ -440,6 +475,22 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                         </div>
                     )}
                 </div>
+            )}
+
+            {/* The one add button, the Market's ADD POST in shape and place (§3.2). On a quiet week it is in the middle of the
+                page instead, so there is still one. z-40, under the cards' own Hide, Delete and reflection dialogs (fixed
+                z-50 in PulseFeedCard, earlier in the page): an open dialog dims it and its backdrop takes the tap. At z-50 it
+                came later in the page, so it drew bright over the backdrop and could take a tap meant for the dialog. */}
+            {addsHere && !quiet && (
+                <button
+                    type="button"
+                    data-testid="pulse-add"
+                    onClick={() => openIntakeWithParam()}
+                    className="fixed md:bottom-6 right-4 z-40 min-h-[44px] max-w-[calc(100%-2rem)] flex items-center justify-center gap-1.5 px-4 py-3 bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-bold rounded-full shadow-lg transition-all hover:-translate-y-1 text-sm cursor-pointer"
+                    style={{ bottom: 'calc(var(--bottom-nav-offset) + 1.25rem)' }}
+                >
+                    {t(PULSE_PAGE_WORDS.add)}
+                </button>
             )}
         </div>
     );

@@ -4,12 +4,14 @@ title: Le Pouls
 summary: Ce que vos voisins créent et partagent ailleurs, réuni dans un seul flux.
 related: home, learn, your-channels, reporting, the-bean
 help: Liens partagés ou créés par vos voisins sur le web, dans un seul flux. Touchez un lien pour l'ouvrir.
-source-hash: 5a5a0ba505806e0a
+source-hash: 48edba7a67cbc8e2
 ---
 
 ## Ce que c'est
 
-Ouvrez le Pouls depuis la carte **Le Pouls** sur l'**Accueil** : touchez une publication ou touchez **Tout voir**. Si elle n'est pas sur votre Accueil, remettez-la avec **Ajouter une carte** sur le téléphone, ou **Modifier l'accueil** dans l'application web. Sur le téléphone, vous pouvez aussi l'ouvrir depuis les **Paramètres**, sous **Le Pouls**.
+Ouvrez le **Marché** et touchez **Pouls** près du haut. L'onglet **Marché** reste allumé tant que le Pouls est ouvert. Dans l'application web, il se trouve aussi dans le menu latéral, sous **Marché**.
+
+Il est aussi sur l'**Accueil**, sous forme de carte **Le Pouls**, quand un voisin a partagé quelque chose au cours de la dernière semaine : touchez une publication, ou touchez **Tout voir**. S'il n'est pas sur votre Accueil, remettez-le avec **Ajouter une carte**. Sur le téléphone, vous pouvez aussi l'ouvrir depuis les **Paramètres**, sous **Le Pouls**.
 
 Le Pouls rassemble ce que les membres de votre communauté publient sur d'autres sites : vidéos, musique, blogs, photos. C'est un moyen de découvrir ce que vos voisins créent et réalisent.
 
@@ -41,4 +43,6 @@ Vous ne pouvez pas masquer la publication de quelqu'un d'autre uniquement pour v
 
 ## Ajouter la vôtre
 
-Touchez **+ Canaux** en haut. Voir « Partager vos canaux ».
+Touchez **Ajouter au Pouls** en bas à droite. Quand le Pouls est vide, le bouton se trouve plutôt au milieu de la page. Pour partager une publication, ajoutez d'abord le canal où elle se trouve : touchez **Vos canaux** en haut. Voir « Partager vos canaux ».
+
+Sur la communauté mondiale, le Pouls ne vous demande encore rien : il n'y a pas de **Ajouter au Pouls**, et l'application web ne suggère pas de publications à partager. Cela attend que l'ajout y ait des règles pour les nouveaux membres. **Vos canaux** y fonctionne comme sur n'importe quelle communauté : ajoutez un canal et ses publications arrivent toujours, et vous pouvez partager une publication depuis là.

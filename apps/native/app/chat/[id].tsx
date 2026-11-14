@@ -145,7 +145,7 @@ function ChatScreen({ id }: { id: string }) {
     // On a community with Beans off (the worldwide one) a post has no price: the header under it says none.
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
-    // Voice messages only where the community says it takes them (core voiceLinesOn; Byron, 14 Nov): a node from before
+    // Voice messages only where the community says it takes them (core voiceLinesOn; a live community, 14 Nov): a node from before
     // voice V2 stores one as words with a sound no one can play. Read at send time from the ref, as the recorder holds the
     // onVoice it was given while a recording waits.
     const voiceHere = voiceLinesOn(nodeProfile?.features);
@@ -1553,7 +1553,7 @@ function ChatScreen({ id }: { id: string }) {
                     <View style={styles.headerTextContainer}>
                         <Text style={styles.headerTitle} numberOfLines={1}>{peerName}</Text>
                         <Text style={styles.headerSubtitle} numberOfLines={1}>
-                            {isEncrypted ? t('🔒 End-to-end encrypted') : t('Connected via Mullum Node')}
+                            {isEncrypted ? t('🔒 End-to-end encrypted') : t('Connected via your community')}
                         </Text>
                     </View>
                 </Pressable>

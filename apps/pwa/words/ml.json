@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); gemini-3.8-flash-high (machine draft, rename S3 main address line, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, balance rule S2 fix round 2: the join page answers \"Is my data private?\" as Home's tip does, 3 Nov); claude-sonnet-5-5 (machine draft, market order S2: the Newest within lines, 3 Nov); claude-sonnet-5-5 (machine draft, front doors S10, 4 Nov); claude-opus-5-5 (machine draft, apk-on-node H3: the APK page and link, install steps from the website, 4 Nov); claude-sonnet-5-5 (machine draft, words-draft-d: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-d fix round 1: the recovery kit quotes each button as its screen draws it, one label per tag, the jury push and answer sentences, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-final: the last missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, home-arrange-a1: the web's Arrange words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, the host's box on the event page: one label, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, cold-start N2: Asked near you and the First steps line for a Need, 5 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, poll-change-confirm: ask before changing vote, 5 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, web-invite-button: the phone's draft of Invite friends reused on the web; meaning-check due); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (cold-start N4: the phone's own translation of the request card's fee line, copied for the web, 7 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, home-chat-c3: the web chat card and its list, 7 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, join names N1: the join headings and the ?ask= line, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, knock-empty-landing: nobody is waiting to join, and another owner or admin may have answered, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109b: the last missing app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, invites I5: the make-voucher sheet and the owner-only voucher words, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, beans-words-addpost: Beans, not credits, in the deal release words, 11 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, colour themes T3: the Appearance list, 12 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, cash-tick-needs: the Need's own cash words, 14 Nov 2026, unreviewed)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); gemini-3.8-flash-high (machine draft, rename S3 main address line, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, balance rule S2 fix round 2: the join page answers \"Is my data private?\" as Home's tip does, 3 Nov); claude-sonnet-5-5 (machine draft, market order S2: the Newest within lines, 3 Nov); claude-sonnet-5-5 (machine draft, front doors S10, 4 Nov); claude-opus-5-5 (machine draft, apk-on-node H3: the APK page and link, install steps from the website, 4 Nov); claude-sonnet-5-5 (machine draft, words-draft-d: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-d fix round 1: the recovery kit quotes each button as its screen draws it, one label per tag, the jury push and answer sentences, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-final: the last missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, home-arrange-a1: the web's Arrange words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, the host's box on the event page: one label, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, cold-start N2: Asked near you and the First steps line for a Need, 5 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, poll-change-confirm: ask before changing vote, 5 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, web-invite-button: the phone's draft of Invite friends reused on the web; meaning-check due); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (cold-start N4: the phone's own translation of the request card's fee line, copied for the web, 7 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, home-chat-c3: the web chat card and its list, 7 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, join names N1: the join headings and the ?ask= line, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, knock-empty-landing: nobody is waiting to join, and another owner or admin may have answered, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109b: the last missing app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, invites I5: the make-voucher sheet and the owner-only voucher words, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, beans-words-addpost: Beans, not credits, in the deal release words, 11 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, colour themes T3: the Appearance list, 12 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, home D4: Welcome, First steps, the 12-words card and kit question, the notifications line, Reset’s Undo, the tour’s last step, 14 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, no-node-names: the examples name \"riverside\", not one of our communities, and the chat line says \"your community\", 14 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, cash-tick-needs: the Need's own cash words, 14 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, pulse-home r2 14 Nov: the Pulse door, Add to Pulse, Your channels, a quiet week; directed by claude-opus-5-5)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-14",
@@ -17,18 +17,6 @@
   "(100% community owned)": "(100% കമ്മ്യൂണിറ്റി ഉടമസ്ഥതയിലുള്ളത്)",
   "(You)": "(നിങ്ങൾ)",
   "(You)\u0004roster: the viewer": "(നിങ്ങൾ)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "one": "ക്രെഡിറ്റ് ലൈൻ തുറക്കാൻ **ഒരു ഓഫർ പോസ്റ്റ് ചെയ്യുക** — **{n}** ഓഫർ നിങ്ങളുടെ പൂർണ്ണ −{limit} അൺലോക്ക് ചെയ്യുന്നു.",
-    "other": "ക്രെഡിറ്റ് ലൈൻ തുറക്കാൻ **ഒരു ഓഫർ പോസ്റ്റ് ചെയ്യുക** — **{n}** ഓഫറുകൾ നിങ്ങളുടെ പൂർണ്ണ −{limit} അൺലോക്ക് ചെയ്യുന്നു."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "one": "**{n} ഓഫർ** −{limit} അൺലോക്ക് ചെയ്യുന്നു",
-    "other": "**{n} ഓഫറുകൾ** −{limit} അൺലോക്ക് ചെയ്യുന്നു"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "one": "**{n} ഓഫർ** → −{limit}",
-    "other": "**{n} ഓഫറുകൾ** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "{emoji} {tier}-ലേക്ക് ഇനി **{n}** വിശ്വാസം കൂടി",
     "other": "{emoji} {tier}-ലേക്ക് ഇനി **{n}** വിശ്വാസം കൂടി"
@@ -37,8 +25,6 @@
   "+ Add a channel": "+ ഒരു ചാനൽ ചേർക്കുക",
   "+ Add friend": "+ സുഹൃത്തായി ചേർക്കുക",
   "+ Add option": "+ ഓപ്ഷൻ ചേർക്കുക",
-  "+ Channels": "+ ചാനലുകൾ",
-  "+ Connect your channels": "+ നിങ്ങളുടെ ചാനലുകൾ ബന്ധിപ്പിക്കുക",
   "+ Create a Post": "+ ഒരു പോസ്റ്റ് സൃഷ്‌ടിക്കുക",
   "+ Propose Decision": "+ തീരുമാനം നിർദ്ദേശിക്കുക",
   "+ Share post": "+ പോസ്റ്റ് പങ്കിടുക",
@@ -644,7 +630,6 @@
   "Creating...": "ഉണ്ടാക്കുന്നു...",
   "Creator account linking:": "ക്രിയേറ്റർ അക്കൗണ്ട് ലിങ്കിംഗ്:",
   "Credit Line": "ക്രെഡിറ്റ് ലൈൻ",
-  "Credit balance gauge": "ക്രെഡിറ്റ് ബാലൻസ് ഗേജ്",
   "Credits (B)": "ക്രെഡിറ്റുകൾ (B)",
   "Credits (🫘 Beans)": "ക്രെഡിറ്റുകൾ (🫘 പയർ)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "ക്രെഡിറ്റുകൾ ഒരു പരസ്പര ക്രെഡിറ്റ് കറൻസിയാണ്. നിങ്ങൾ ഇടപാട് നടത്തുമ്പോൾ ക്രെഡിറ്റുകൾ അംഗങ്ങൾക്കിടയിൽ കൈമാറ്റം ചെയ്യപ്പെടും. ഓരോ അംഗവും പൂജ്യത്തിൽ തുടങ്ങുന്നു. പരസ്പരമുള്ള കൊടുക്കൽവാങ്ങലിനെ പ്രോത്സാഹിപ്പിക്കാനും മൂല്യം പ്രാദേശികമായി ചുറ്റിക്കൊണ്ടിരിക്കാനും വേണ്ടിയാണ് ഈ സംവിധാനം രൂപകൽപ്പന ചെയ്തിരിക്കുന്നത്.",
@@ -1084,7 +1069,6 @@
   "It's a year since you last checked them. If you lose this device, they're how you'd take over the server or open a backup.": "നിങ്ങൾ അവസാനമായി അവ പരിശോധിച്ചിട്ട് ഒരു വർഷമായി. ഈ ഉപകരണം നഷ്ടപ്പെട്ടാൽ സെർവർ ഏറ്റെടുക്കാനോ ബാക്കപ്പ് തുറക്കാനോ അവ ആവശ്യമാണ്.",
   "It's keeping your key until it can finish.": "പൂർത്തിയാക്കാനാകുന്നതുവരെ ബ്രൗസർ നിങ്ങളുടെ കീ സൂക്ഷിച്ചുവയ്ക്കുന്നു.",
   "It's keeping {name}'s key until it can finish.": "പൂർത്തിയാക്കാനാകുന്നതുവരെ ബ്രൗസർ {name}-ന്റെ കീ സൂക്ഷിച്ചുവയ്ക്കുന്നു.",
-  "Items from neighbours' YouTube channels and blogs appear here automatically once syndicated. As more members connect their channels, this feed will fill up.": "സിൻഡിക്കേറ്റ് ചെയ്‌തുകഴിഞ്ഞാൽ അയൽക്കാരുടെ YouTube ചാനലുകളിൽ നിന്നും ബ്ലോഗുകളിൽ നിന്നുമുള്ള ഇനങ്ങൾ ഇവിടെ സ്വയമേവ ദൃശ്യമാകും. കൂടുതൽ അംഗങ്ങൾ ചാനലുകൾ ബന്ധിപ്പിക്കുമ്പോൾ ഈ ഫീഡ് നിറയും.",
   "Its 12 words": "ഇതിന്റെ 12 വാക്കുകൾ",
   "Its key is kept on this device too: write down its 12 words to keep that account.": "ഇതിന്റെ കീയും ഈ ഉപകരണത്തിൽ സൂക്ഷിച്ചിട്ടുണ്ട്: ആ അക്കൗണ്ട് നിലനിർത്താൻ ഇതിന്റെ 12 വാക്കുകൾ എഴുതിവയ്ക്കുക.",
   "Its key is kept on this device. Write down its 12 words to keep it.": "അതിന്റെ കീ ഈ ഉപകരണത്തിൽ സൂക്ഷിച്ചിരിക്കുന്നു. അത് നിലനിർത്താൻ അതിന്റെ 12 വാക്കുകൾ എഴുതിയെടുക്കുക.",
@@ -1344,7 +1328,6 @@
   "No bond required.": "ബോണ്ട് ആവശ്യമില്ല.",
   "No comment provided.": "അഭിപ്രായങ്ങളൊന്നും രേഖപ്പെടുത്തിയിട്ടില്ല.",
   "No conversations yet.": "സംഭാഷണങ്ങളൊന്നുമില്ല.",
-  "No credit line yet": "ഇതുവരെ ക്രെഡിറ്റ് ലൈൻ ഇല്ല",
   "No deals in progress": "നിലവിൽ ഇടപാടുകളൊന്നുമില്ല",
   "No friends yet": "സുഹൃത്തുക്കളൊന്നും ഇതുവരെയുമില്ല",
   "No groups found": "ഗ്രൂപ്പുകളൊന്നും കണ്ടെത്തിയില്ല",
@@ -1387,7 +1370,7 @@
   "Nobody here has a name starting with that.": "ഇതിൽ ആ പേരിലുള്ള ആരും ഇവിടെയില്ല.",
   "Nobody on the roll can be chosen for this.": "ഇതിനായി പട്ടികയിലുള്ള ആരെയും തിരഞ്ഞെടുക്കാനാകില്ല.",
   "Nobody yet.": "ആരുമില്ല ഇതുവരെ.",
-  "Node API URL (e.g. https://mullum1.beanpool.org)": "നോഡ് API URL (ഉദാ. https://mullum1.beanpool.org)",
+  "Node API URL (e.g. https://riverside.example.org)": "നോഡ് API URL (ഉദാ. https://riverside.example.org)",
   "Node management & cache controls": "നോഡ് മാനേജ്‌മെന്റും കാഷെ നിയന്ത്രണങ്ങളും",
   "Node:": "നോഡ്:",
   "Node: {address}": "നോഡ്: {address}",
@@ -2053,10 +2036,6 @@
   "Spam or scam": "സ്പാം അല്ലെങ്കിൽ തട്ടിപ്പ്",
   "Specific Action / Effect": "പ്രത്യേക നടപടി / ഫലം",
   "Specific Action or Effect": "പ്രത്യേക നടപടി അല്ലെങ്കിൽ ഫലം",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "ചെലവഴിക്കൽ താൽക്കാലികമായി നിർത്തി — നിങ്ങളുടെ ബാലൻസ് നിങ്ങളുടെ {n} സജീവ ഓഫർ അൺലോക്ക് ചെയ്യുന്ന (−{limit}) തുകയേക്കാൾ താഴെയാണ്. ഇത് മാറ്റാൻ ഒരു ഓഫർ പോസ്റ്റ് ചെയ്യുക അല്ലെങ്കിൽ വ്യാപാരം നടത്തുക. നിങ്ങൾക്ക് ഇപ്പോഴും സ്വീകരിക്കാനും വിൽക്കാനും കഴിയും.",
-    "other": "ചെലവഴിക്കൽ താൽക്കാലികമായി നിർത്തി — നിങ്ങളുടെ ബാലൻസ് നിങ്ങളുടെ {n} സജീവ ഓഫറുകൾ അൺലോക്ക് ചെയ്യുന്ന (−{limit}) തുകയേക്കാൾ താഴെയാണ്. ഇത് മാറ്റാൻ ഒരു ഓഫർ പോസ്റ്റ് ചെയ്യുക അല്ലെങ്കിൽ വ്യാപാരം നടത്തുക. നിങ്ങൾക്ക് ഇപ്പോഴും സ്വീകരിക്കാനും വിൽക്കാനും കഴിയും."
-  },
   "Sprout": "മുള",
   "Square — nothing owed either way": "തുല്യം — പരസ്പരം ഒന്നും നൽകാനില്ല",
   "Start": "ആരംഭിക്കുക",
@@ -2216,7 +2195,6 @@
   "The Community Commons is a self-sustaining fund that redistributes value back to the community through democratically-voted projects.": "ജനാധിപത്യപരമായി വോട്ട് ചെയ്ത പ്രോജക്റ്റുകളിലൂടെ കമ്മ്യൂണിറ്റിയിലേക്ക് മൂല്യം പുനർവിതരണം ചെയ്യുന്ന സ്വയംപര്യാപ്തമായ ഒരു ഫണ്ടാണ് കമ്മ്യൂണിറ്റി കോമൺസ്.",
   "The Mutual Credit Ledger": "മ്യൂച്വൽ ക്രെഡിറ്റ് ലെഡ്ജർ",
   "The Pulse": "പൾസ്",
-  "The Pulse is quiet right now": "പൾസ് ഇപ്പോൾ ശാന്തമാണ്",
   "The account that came back isn't {name}, so nothing was saved in this browser. Try again, or use your 12 words.": "തിരികെ വന്ന അക്കൗണ്ട് {name} അല്ല, അതിനാൽ ഈ ബ്രൗസറിൽ ഒന്നും സേവ് ചെയ്തിട്ടില്ല. വീണ്ടും ശ്രമിക്കുക, അല്ലെങ്കിൽ നിങ്ങളുടെ 12 വാക്കുകൾ ഉപയോഗിക്കുക.",
   "The amount is a number of Beans above 0, to the cent.": "തുക 0-ന് മുകളിലുള്ള പയറുകളുടെ എണ്ണമാണ്, പൈസ വരെ കൃത്യതയുണ്ട്.",
   "The app failed to load. Error details:": "ആപ്പ് ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല. പിശകിന്റെ വിവരങ്ങൾ:",
@@ -2762,7 +2740,6 @@
   "You can propose a Decision once you have completed a trade.": "ഒരു ഇടപാട് പൂർത്തിയാക്കിയ ശേഷം നിങ്ങൾക്ക് ഒരു തീരുമാനം നിർദ്ദേശിക്കാം.",
   "You can propose once you have completed a trade.": "ഒരു വ്യാപാരം പൂർത്തിയാക്കിയ ശേഷം നിങ്ങൾക്ക് നിർദ്ദേശിക്കാം.",
   "You can still read, edit your profile and leave.": "നിങ്ങൾക്ക് ഇപ്പോഴും വായിക്കാനും പ്രൊഫൈൽ തിരുത്താനും പുറത്തുപോകാനും കഴിയും.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "നിങ്ങളുടെ കൈവശമുള്ള പയർ ഉപയോഗിച്ച് നിങ്ങൾക്ക് ഇപ്പോൾ തന്നെ വ്യാപാരം നടത്താം. നിങ്ങളുടെ ആദ്യ വ്യാപാരം പൂർത്തിയാക്കുക, നിങ്ങളുടെ ക്രെഡിറ്റ് ലൈൻ സ്വയമേവ തുറക്കും — നിങ്ങൾ കൂടുതൽ മൂല്യം വ്യാപാരം ചെയ്യുന്തോറും അത് കൂടുതൽ വികസിക്കും. (ഒരു കമ്മ്യൂണിറ്റി വൗച്ചറിനും നിങ്ങൾക്ക് ഒരു പ്രാരംഭ ലൈൻ നൽകാൻ കഴിയും.)",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "നിങ്ങൾ സമയമോ സ്ഥലമോ മാറ്റി. ഇവന്റ് UPDATED എന്ന് കാണിക്കും, പോകുന്ന എല്ലാവരെയും അറിയിക്കും.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "നിങ്ങൾ തന്നെ, നിങ്ങളുടെ കമ്പ്യൂട്ടറിലോ നിങ്ങൾ വാടകയ്‌ക്കെടുത്തതിലോ. ഇതിന് beanpool.org ഒരിക്കലും ആവശ്യമില്ല: നിങ്ങളുടെ സ്വന്തം വെബ് വിലാസവും പ്രവർത്തിക്കും.",
   "You have already rated this trade.": "നിങ്ങൾ ഈ ഇടപാട് ഇതിനകം റേറ്റുചെയ്തു.",
@@ -2942,7 +2919,7 @@
   "diverse = faster": "വൈവിധ്യം = വേഗത",
   "e.g. Alice": "ഉദാ. അനു",
   "e.g. BP-7K3X-9M2W": "ഉദാ. BP-7K3X-9M2W",
-  "e.g. Bindarrabi Garden Crew, Solar Guild": "ഉദാ: Bindarrabi Garden Crew, Solar Guild",
+  "e.g. Riverside Garden Crew, Solar Guild": "ഉദാ: Riverside Garden Crew, Solar Guild",
   "e.g. Community Tool Shed or Shade House": "ഉദാ. കമ്മ്യൂണിറ്റി ടൂൾ ഷെഡ് അല്ലെങ്കിൽ ഷേഡ് ഹൗസ്",
   "e.g. Dozen fresh eggs": "ഉദാ. പത്ത് നാടൻ മുട്ടകൾ",
   "e.g. Grant 200 beans to the Tool Library": "ഉദാ. ടൂൾ ലൈബ്രറിക്ക് 200 പയർ അനുവദിക്കുക",
@@ -2956,8 +2933,6 @@
   "execution pending grace\u0004Decision status": "നടപ്പിലാക്കൽ കാത്തിരിക്കുന്നു",
   "execution void\u0004Decision status": "റദ്ദാക്കിയത്",
   "failed\u0004Decision status": "പരാജയപ്പെട്ടത്",
-  "fee-free": "ഫീസില്ലാത്തത്",
-  "fee/mo": "ഫീസ്/മാസം",
   "for {n} day|for {n} days": {
     "one": "{n} ദിവസത്തേക്ക്",
     "other": "{n} ദിവസത്തേക്ക്"
@@ -2975,7 +2950,6 @@
   "from {who} · {when}": "{who}-ൽ നിന്ന് · {when}",
   "general\u0004group category": "പൊതുവായത്",
   "guild\u0004group category": "ഗിൽഡ്",
-  "hold credit →": "ക്രെഡിറ്റ് നീക്കിയിരിപ്പ് →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... അല്ലെങ്കിൽ tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -3024,7 +2998,6 @@
   "request to join\u0004join policy": "ചേരാൻ അഭ്യർത്ഥിക്കുക",
   "requested\u0004deal status": "അഭ്യർത്ഥിച്ചു",
   "social\u0004group category": "സാമൂഹികം",
-  "sweet spot": "അനുയോജ്യമായ പരിധി",
   "the account saved from the other tab": "മറ്റേ ടാബിൽ നിന്ന് സേവ് ചെയ്ത അക്കൗണ്ട്",
   "the lever": "നിയന്ത്രണം",
   "them\u0004the other member of a trade, name unknown": "അവർ",
@@ -3041,7 +3014,6 @@
   "working group\u0004group category": "വർക്കിംഗ് ഗ്രൂപ്പ്",
   "yesterday": "ഇന്നലെ",
   "you": "നിങ്ങൾ",
-  "your limit": "നിങ്ങളുടെ പരിധി",
   "{actor} completed a trade with {target}": "{actor}, {target}-മായി ഒരു വ്യാപാരം പൂർത്തിയാക്കി",
   "{actor} joined": "{actor} ചേർന്നു",
   "{actor} joined the community": "{actor} കമ്മ്യൂണിറ്റിയിൽ ചേർന്നു",
@@ -3057,8 +3029,6 @@
   "{actor} traded with {target}": "{actor} {target}-മായി ഇടപാട് നടത്തി",
   "{actor} traded with {target}: {title}": "{actor}, {target}-മായി വ്യാപാരം നടത്തി: {title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈{rate}%/മാസം",
-  "{amount} Beans": "{amount} പയർ",
   "{amount} Beans from the pool: {what}.": "പൂളിൽ നിന്ന് {amount} പയർ: {what}.",
   "{amount} raised of {goal} 🫘": "{goal} 🫘-ൽ {amount} ശേഖരിച്ചു",
   "{amount} · held in trust": "{amount} · എസ്ക്രോയിൽ",
@@ -3399,7 +3369,6 @@
   "← Choose another way": "← മറ്റൊരു വഴി തിരഞ്ഞെടുക്കുക",
   "← Keep it": "← നിലനിർത്തുക",
   "← Start again": "← വീണ്ടും ആരംഭിക്കുക",
-  "← carry credit": "← ക്രെഡിറ്റ് കടം",
   "↑ Sent": "↑ അയച്ചവ",
   "↓ Received": "↓ ലഭിച്ചവ",
   "↻ RECURRING": "↻ ആവർത്തിക്കുന്നത്",
@@ -4696,5 +4665,21 @@
   "Light when your device is light, Classic when it is dark": "ഉപകരണം ലൈറ്റ് ആണെങ്കിൽ ലൈറ്റ്, ഡാർക്ക് ആണെങ്കിൽ ക്ലാസിക്",
   "Dark with olive green": "ഒലിവ് പച്ചയോടുകൂടിയ ഡാർക്ക്",
   "Pale and warm": "ഇളം നിറം, ഊഷ്മളം",
-  "Charcoal and blue": "കരിക്കട്ടയും നീലയും"
+  "Charcoal and blue": "കരിക്കട്ടയും നീലയും",
+  "Welcome": "സ്വാഗതം",
+  "{name} invited you.": "{name} നിങ്ങളെ ക്ഷണിച്ചു.",
+  "Say hello ›": "ഹലോ പറയുക ›",
+  "You're the first one here.": "ഇവിടെ ആദ്യം എത്തിയത് നിങ്ങളാണ്.",
+  "Invite someone ›": "ആരെയെങ്കിലും ക്ഷണിക്കുക ›",
+  "Take the tour ›": "ടൂർ കാണുക ›",
+  "Your 12 words are how you get back in. Check you still have them, or add a sign-in.": "നിങ്ങളുടെ 12 വാക്കുകളാണ് തിരികെ കയറാനുള്ള വഴി. അവ ഇപ്പോഴും നിങ്ങളുടെ പക്കലുണ്ടോ എന്ന് പരിശോധിക്കുക, അല്ലെങ്കിൽ ഒരു സൈൻ-ഇൻ ചേർക്കുക.",
+  "Your 12 words are how you get back in. Check you still have them.": "നിങ്ങളുടെ 12 വാക്കുകളാണ് തിരികെ കയറാനുള്ള വഴി. അവ ഇപ്പോഴും നിങ്ങളുടെ പക്കലുണ്ടോ എന്ന് പരിശോധിക്കുക.",
+  "Home is back to how it started.": "ഹോം തുടക്കത്തിലെ പോലെയായി.",
+  "Undo": "പഴയപടിയാക്കുക",
+  "I still have my 12 words": "എന്റെ 12 വാക്കുകൾ എന്റെ പക്കലുണ്ട്",
+  "Did you keep it somewhere safe?": "അത് സുരക്ഷിതമായ ഒരിടത്ത് സൂക്ഷിച്ചോ?",
+  "Yes, it's kept": "അതെ, സൂക്ഷിച്ചു",
+  "Open the Pulse": "പൾസ് തുറക്കുക",
+  "📡 Pulse ›": "📡 പൾസ് ›",
+  "Pulse\u0004tab": "പൾസ്"
 }

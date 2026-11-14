@@ -157,8 +157,8 @@ const VISITOR_MARKET_ITEMS = 3;
 const EVENT_ITEMS = 3;
 const GROUP_ITEMS = 3;
 const JOINED_NAMES = 4;
-/** Four Pulse items (W3, §2), chosen from the newest PULSE_POOL: a few spare for one too old or made too long by a feed. */
-const PULSE_ITEMS = 4;
+/** Three Pulse items (DESIGN-pulse-home-fable.md §3.5, P0: four since W3), chosen from the newest PULSE_POOL: a few spare for one too old or made too long by a feed. */
+const PULSE_ITEMS = 3;
 const PULSE_POOL = 8;
 /** The open deals a card shows as rows (W3, §2). The Decide card's rows are core's HOME_DECIDE_ROWS, by its `show` setting. */
 const DEAL_ITEMS = 3;
@@ -1467,7 +1467,7 @@ function pulseCard(c: Ctx): HomeCards['pulse'] | undefined {
         category: clip(String(i.category ?? ''), CATEGORY_CHARS), url: bounded(i.url, URL_CHARS),
         // Through the node's own proxy (an <img> can't sign; no member's address reaches a CDN), as the Pulse screen.
         thumbnailUrl: i.thumbnailUrl ? `/api/pulse/items/${encodeURIComponent(i.id)}/thumbnail` : null,
-        // W3 (§2): "by Mullum Ceramics · 3 h ago".
+        // W3 (§2): "by Riverside Ceramics · 3 h ago".
         publishedAt: bounded(i.publishedAt, ID_CHARS),
     }));
     return items.length ? { items } : undefined;

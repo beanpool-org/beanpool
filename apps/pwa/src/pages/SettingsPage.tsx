@@ -2011,7 +2011,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 type="text"
                                 value={customNodeUrl}
                                 onChange={(e) => { setCustomNodeUrl(e.target.value); setNodeTestResult(null); }}
-                                placeholder={t('Node API URL (e.g. https://mullum1.beanpool.org)')}
+                                placeholder={t('Node API URL (e.g. https://riverside.example.org)')}
                                 className="w-full py-2.5 px-4 mb-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 text-nature-900 dark:text-white font-mono text-xs"
                                 autoCapitalize="none"
                             />

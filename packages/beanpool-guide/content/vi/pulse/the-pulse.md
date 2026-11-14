@@ -4,12 +4,14 @@ title: Nhịp đập
 summary: Những gì hàng xóm chia sẻ ở nơi khác, tập hợp trong một bảng tin duy nhất.
 related: home, learn, your-channels, reporting, the-bean
 help: Liên kết hàng xóm tạo hoặc chia sẻ, trong một bảng tin. Nhấn vào một mục để mở.
-source-hash: 5a5a0ba505806e0a
+source-hash: 48edba7a67cbc8e2
 ---
 
 ## Nhịp đập là gì
 
-Mở Nhịp đập từ thẻ **Nhịp đập** trên **Trang chủ**: nhấn vào một bài đăng, hoặc nhấn **Xem tất cả**. Nếu thẻ không có trên Trang chủ của bạn, hãy đưa nó trở lại bằng **Thêm thẻ** trên điện thoại, hoặc **Chỉnh sửa trang chủ** trong ứng dụng web. Trên điện thoại, bạn cũng có thể mở mục này từ **Cài đặt**, dưới mục **Nhịp đập**.
+Mở **Chợ** và nhấn **Nhịp đập** ở gần phía trên. Tab **Chợ** vẫn sáng khi Nhịp đập đang mở. Trong ứng dụng web, nó cũng nằm trong menu bên cạnh, dưới **Chợ**.
+
+Nó cũng có trên **Trang chủ**, dưới dạng thẻ **Nhịp đập**, khi có hàng xóm chia sẻ gì đó trong tuần qua: nhấn vào một bài đăng, hoặc nhấn **Xem tất cả**. Nếu thẻ không có trên Trang chủ của bạn, hãy đưa nó trở lại bằng **Thêm thẻ**. Trên điện thoại, bạn cũng có thể mở mục này từ **Cài đặt**, dưới mục **Nhịp đập**.
 
 Nhịp đập tập hợp những gì các thành viên trong cộng đồng của bạn đăng trên các trang web khác: video, âm nhạc, blog, ảnh. Đây là một cách để tìm hiểu những gì hàng xóm của bạn sáng tạo và thực hiện.
 
@@ -41,4 +43,6 @@ Bạn không thể ẩn bài đăng của người khác chỉ cho riêng bạn.
 
 ## Thêm nội dung của riêng bạn
 
-Nhấn **+ Kênh** ở trên cùng. Xem "Chia sẻ các kênh của bạn".
+Nhấn **Thêm vào Nhịp đập** ở góc dưới bên phải. Khi Nhịp đập còn trống, nút này nằm giữa trang. Để chia sẻ một bài đăng, trước hết hãy thêm kênh có bài đó: nhấn **Kênh của bạn** ở trên cùng. Xem "Chia sẻ các kênh của bạn".
+
+Ở cộng đồng toàn cầu, Nhịp đập chưa đòi hỏi gì ở bạn: không có **Thêm vào Nhịp đập**, và ứng dụng web không gợi ý bài đăng để chia sẻ. Việc đó sẽ chờ đến khi việc thêm ở đó có quy tắc cho thành viên mới. **Kênh của bạn** ở đó hoạt động như ở mọi cộng đồng: thêm một kênh thì bài đăng của kênh vẫn được đưa về, và bạn có thể chia sẻ một bài đăng từ đó.

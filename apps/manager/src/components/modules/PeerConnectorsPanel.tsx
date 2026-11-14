@@ -733,7 +733,7 @@ export function PeerConnectorsPanel({
                             type="text"
                             value={newPublicUrl}
                             onChange={(e) => setNewPublicUrl(e.target.value)}
-                            placeholder="e.g. https://eastgippy.beanpool.org:8450"
+                            placeholder="e.g. https://riverside.example.org:8450"
                             className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-terra-500 min-h-[44px]"
                         />
                         <span className="text-[10px] text-nature-500 block mt-1">

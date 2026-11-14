@@ -1001,11 +1001,11 @@ describe('a card removed on an earlier visit comes back at once when added (PR #
         await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(3));
         expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(newcomerTypes());
         expect(lastCall(vi.mocked(api.getHome))).toBeGreaterThan(lastCall(vi.mocked(api.saveHomePreferences)));
-        expect(node.reads()[2]).toEqual(expect.arrayContaining(['market', 'events']));
-        expect(node.reads()[2]).not.toContain('pulse');
-        // Your Beans is in the default list (DESIGN-home-default-fable.md §2.2): Reset asks for it; The Pulse it leaves out.
+        // The Pulse removed before is in the default list since DESIGN-pulse-home-fable.md §3.5: Reset brings it back and asks for it.
+        expect(node.reads()[2]).toEqual(expect.arrayContaining(['market', 'events', 'pulse']));
+        // Your Beans is in the default list (DESIGN-home-default-fable.md §2.2): Reset asks for it.
         expect(node.reads()[2]).toContain('beans');
-        await waitFor(() => expect(screen.queryByTestId('home-card-pulse')).toBeNull());
+        await waitFor(() => expect(screen.getByTestId('home-card-pulse')).toBeInTheDocument());
         doneArrange();
         expect(screen.getByTestId('home-card-market')).toBeInTheDocument();
     });
@@ -1603,8 +1603,8 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         expect(said).toHaveAttribute('role', 'status');
         expect(screen.queryByTestId('home-arrange-reset')).toBeNull();
         const saved = () => vi.mocked(api.saveHomePreferences).mock.calls.map(c => (c[1] as Record<string, unknown>)['home.layout'] as { cards: { type: string }[]; updatedAt: string } | undefined).filter(Boolean);
-        // The default list less Welcome; the Pulse was the catalogue's, so it goes with the reset.
-        await waitFor(() => expect(saved().at(-1)!.cards.map(c => c.type)).not.toContain('pulse'));
+        // The default list less Welcome, exactly: the Pulse in its own place after Coming up (DESIGN-pulse-home-fable.md §3.5).
+        await waitFor(() => expect(saved().at(-1)!.cards.map(c => c.type)).toEqual(newcomerTypes()));
         const reset = saved().at(-1)!;
         expect(reset.cards.map(c => c.type)).toContain('market');
         fireEvent.click(within(said).getByRole('button', { name: 'Undo' }));
@@ -2106,13 +2106,14 @@ const savedLayouts = () => vi.mocked(api.saveHomePreferences).mock.calls.map(c =
 const lastCall = (m: { mock: { invocationCallOrder: number[] } }) => m.mock.invocationCallOrder.at(-1) ?? 0;
 
 describe('the card frame (F3)', () => {
-    it('a newcomer with no layout gets the default list: Your Beans in it, no Pulse card until added', async () => {
+    it('a newcomer with no layout gets the default list: Your Beans in it, and the Pulse right after Coming up', async () => {
         nodeV2(answer(), null);
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-market');
-        // DESIGN-home-default-fable.md §2.2: Your Beans is #7 of the fifteen; The Pulse is left out on purpose.
+        // DESIGN-home-default-fable.md §2.2: Your Beans is in the sixteen; the Pulse came back after Coming up
+        // (DESIGN-pulse-home-fable.md §3.5, P0), so a new member finds it on the screen the app opens on.
         expect(cardIds()).toContain('beans');
-        expect(cardIds()).not.toContain('pulse');
+        expect(cardIds().indexOf('pulse')).toBe(cardIds().indexOf('events') + 1);
         expect(cardIds().at(-1)).toBe('community');
         expect(api.saveHomePreferences).not.toHaveBeenCalled();
     });
@@ -2312,9 +2313,8 @@ describe('what a never-edited member asks (review of #1701, finding 6)', () => {
         expect(later.length).toBeGreaterThanOrEqual(1);
         for (const l of later) {
             const asked = l.slice(4).split(',');
-            // The default list's cards (DESIGN-home-default-fable.md §2.2), Your Beans among them; never The Pulse.
-            expect(asked).toEqual(expect.arrayContaining(['needs', 'market', 'events', 'beans', 'community']));
-            expect(asked).not.toContain('pulse');
+            // The default list's cards (DESIGN-home-default-fable.md §2.2), Your Beans and The Pulse among them (DESIGN-pulse-home-fable.md §3.5).
+            expect(asked).toEqual(expect.arrayContaining(['needs', 'market', 'events', 'pulse', 'beans', 'community']));
         }
         expect(node.log).not.toContain('POST');
     });
@@ -4598,7 +4598,7 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         },
         enterprise: {
             id: 'ent-1',
-            name: 'Mullum Ceramics',
+            name: 'Riverside Ceramics',
             requests: 3,
             others: 1,
             lifecycle: 'ongoing',
@@ -4677,14 +4677,14 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
 
         // Enterprise
         const ent = screen.getByTestId('home-card-enterprise');
-        expect(ent).toHaveTextContent('Mullum Ceramics · enterprise');
+        expect(ent).toHaveTextContent('Riverside Ceramics · enterprise');
         expect(ent).toHaveTextContent('Balance 340 Beans · 3 keepers');
         expect(ent).toHaveTextContent('This month: 5 trades · +120 in · −60 out');
         expect(ent).toHaveTextContent('Latest: +12 Beans from Ana · 2h ago');
         expect(ent).toHaveTextContent('3 requests to approve');
         expect(ent).toHaveTextContent('and 1 more you keep');
         expect(within(ent).getByRole('button', {
-            name: 'Mullum Ceramics · enterprise. Balance 340 Beans · 3 keepers. This month: 5 trades · +120 in · −60 out. Latest: +12 Beans from Ana · 2h ago. 3 requests to approve. Opens the enterprise.',
+            name: 'Riverside Ceramics · enterprise. Balance 340 Beans · 3 keepers. This month: 5 trades · +120 in · −60 out. Latest: +12 Beans from Ana · 2h ago. 3 requests to approve. Opens the enterprise.',
         })).toBeInTheDocument();
 
         // Decide
@@ -4790,7 +4790,7 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
 
         // Enterprise card contains name, lifecycle, balance, month, latest, requests
         const ent = screen.getByTestId('home-card-enterprise');
-        expect(ent).toHaveTextContent('Mullum Ceramics · enterprise');
+        expect(ent).toHaveTextContent('Riverside Ceramics · enterprise');
         expect(ent).toHaveTextContent('Balance 340 Beans · 3 keepers');
         expect(ent).toHaveTextContent('This month: 5 trades · +120 in · −60 out');
         expect(ent).toHaveTextContent('Latest: +12 Beans from Ana · 2h ago');

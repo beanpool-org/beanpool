@@ -1739,6 +1739,9 @@ export async function getBalance(pubkey: string) {
     let knownFrozen = false;   // the community's admins froze this member's known floor (utils/credit-line-card.ts)
     let creditFrozen = false;  // … or their whole line (the manager's Freeze)
     let vouchedBy: any[] = [];
+    // The node's figures for the line are on this phone (refreshBalanceFromServer kept them). False on a first open: the
+    // line is then not known yet, never "no credit line" (the Ledger's card waits for it, round 2 of #3134).
+    let lineKnown = false;
 
     // Background fetch to ensure parity
     refreshBalanceFromServer(pubkey).catch(() => null);
@@ -1772,6 +1775,8 @@ export async function getBalance(pubkey: string) {
             knownFrozen = parsed.knownFrozen === true;
             creditFrozen = parsed.creditFrozen === true;
             vouchedBy = Array.isArray(parsed.vouchedBy) ? parsed.vouchedBy : [];
+            // A cache from before hundredths has no `floor_c`: the line is not known from it.
+            lineKnown = hundredthsOrNull(parsed.floor_c) !== null;
         }
     } catch { /* ignore */ }
 
@@ -1801,6 +1806,7 @@ export async function getBalance(pubkey: string) {
         knownFrozen,
         creditFrozen,
         vouchedBy,
+        lineKnown,
     };
 }
 

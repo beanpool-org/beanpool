@@ -59,7 +59,7 @@ export const VOICE_SEND_GIVE_UP_MS = 60_000;
 
 /**
  * The community says it takes voice lines: core's voiceLinesOn (#3120), the one rule both apps read, on the features of its
- * info (GET /api/community/info). Absent, false or not yet read, as on a node from before V2 (Byron 1.4.1), is no: such a node
+ * info (GET /api/community/info). Absent, false or not yet read, as on a node from before V2 (1.4.1), is no: such a node
  * stores a voice line as an empty text line.
  */
 export function nodeTakesVoice(info: { features?: unknown } | null | undefined): boolean {

@@ -1,7 +1,8 @@
 /**
- * The credit bar in the member's language (words S3, web sweep W2): its gauge label, the tag over the track, the offer
- * ladder's caption (each one sentence, its bold parts inside it), the fee ladder and the anchors under the track, all
- * through t()/tn(); the numbers in the language's digits. In English every word reads as it did.
+ * The credit card in the member's language (slice R1): the headline, the sentence, the note, the label on the dot, the
+ * words under the marks, the parts line and the button's label all come through core's t()/tn(); the figures in the
+ * language's digits. Main's words for the old bar ("sweet spot", "fee-free", "← carry credit", "hold credit →", "fee/mo",
+ * "{n} B", the 🎣 captions) are gone from it.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -10,77 +11,44 @@ import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-w2.tes
 
 afterEach(() => { cleanup(); backToEnglish(); });
 
-/**
- * The bold parts of a translated sentence (`**1 offer** unlocks …`): a <b> drawn inside a bracket its sentence opened, so
- * it came through t() with the rest of the sentence. Their own text has no bracket of its own, so they are told apart
- * here rather than read as words that bypassed t().
- */
-function boldInSentences(root: ParentNode = document.body): string[] {
-    const out: string[] = [];
-    for (const b of Array.from(root.querySelectorAll('b, strong'))) {
-        let depth = 0;
-        for (const n of Array.from(b.parentNode?.childNodes ?? [])) {
-            if (n === b) break;
-            for (const c of n.textContent ?? '') depth += c === '[' ? 1 : c === ']' ? -1 : 0;
-        }
-        if (depth > 0 && b.textContent) out.push(b.textContent);
-    }
-    return out;
-}
+const PART_CLOSED = { balance_c: -12000, floor_c: -90000, usableFloor_c: -50000, liveOffers: 1, roomHeld_c: 30000, earnedCredit_c: 60000, vouchedBy: [{ callsign: 'Damo', amount_c: 30000 }] };
 
-describe('the credit bar in the pseudo-locale', () => {
-    it('with live offers unlocking part of the line: the gauge, the tag, the caption with the next rung, the anchors', async () => {
+describe('the credit card in the pseudo-locale', () => {
+    it('with live Offers opening part of the line: every word through the words layer', async () => {
         await showIn('xx');
-        render(<CreditBar balance_c={-10000} floor_c={-100000} usableFloor_c={-20000} liveOffers={1} />);
-        expect(screen.getByRole('meter', { name: xx('Credit balance gauge') })).toHaveAttribute('aria-valuetext', xx('{amount} Beans').replace('{amount}', '−100'));
+        render(<CreditBar answer={PART_CLOSED} />);
         expect(screen.getByText(xx('your limit'))).toBeInTheDocument();
-        expect(screen.getByText(xx('sweet spot'))).toBeInTheDocument();
-        expect(screen.getByText(xx('fee-free'))).toBeInTheDocument();
-        expect(screen.getByText(xx('← carry credit'))).toBeInTheDocument();
-        expect(screen.getByText(xx('hold credit →'))).toBeInTheDocument();
-        const bold = boldInSentences();
-        expect(bold).toHaveLength(2);
+        expect(screen.getByText(xx('balanced'))).toBeInTheDocument();
+        expect(screen.getByText(xx('monthly fee starts'))).toBeInTheDocument();
         expect(bracketed()).toBeGreaterThan(5);
-        expect(bypassing(document.body, { others: bold })).toEqual([]);
+        expect(bypassing(document.body, { others: ['Damo'] })).toEqual([]);
     });
 
-    it('with no live offer: the caption that says one opens the line', async () => {
+    it('with no line yet, and above 200: the same', async () => {
         await showIn('xx');
-        render(<CreditBar balance_c={0} floor_c={-100000} usableFloor_c={0} liveOffers={0} knownGrant_c={100000} />);
-        const bold = boldInSentences();
-        expect(bold.length).toBeGreaterThan(0);
-        expect(bypassing(document.body, { others: bold })).toEqual([]);
-    });
-
-    it('above the fee-free line: the fee ladder and the tag with its monthly rate', async () => {
-        await showIn('xx');
-        render(<CreditBar balance_c={60000} floor_c={-50000} />);
-        expect(screen.getByText(xx('fee/mo'))).toBeInTheDocument();
+        render(<CreditBar answer={{ balance_c: 0, floor_c: 0 }} />);
+        expect(screen.getByText(xx('no credit line yet'))).toBeInTheDocument();
+        expect(bypassing()).toEqual([]);
+        cleanup();
+        render(<CreditBar answer={{ balance_c: 60000, floor_c: -50000, usableFloor_c: -50000, liveOffers: 1, roomHeld_c: 50000 }} />);
         expect(bypassing()).toEqual([]);
     });
 });
 
-describe('the credit bar in English', () => {
-    it('every word as it was, every figure as formatHundredths writes it (a true minus, thousands grouped)', () => {
-        render(<CreditBar balance_c={-10000} floor_c={-100000} usableFloor_c={-20000} liveOffers={1} />);
+describe('the credit card in English', () => {
+    it('every word as core writes it, and none of the old bar\'s', () => {
+        render(<CreditBar answer={PART_CLOSED} />);
         expect(bracketed()).toBe(0);
-        expect(screen.getByRole('meter', { name: 'Credit balance gauge' })).toHaveAttribute('aria-valuetext', '−100 Beans');
-        expect(screen.getByText('−100 B')).toBeInTheDocument();
-        expect(screen.getByText(/unlocks/).textContent).toBe('1 offer unlocks −200 · 2 offers → −500');
-        for (const w of ['your limit', 'sweet spot', 'fee-free', '← carry credit', 'hold credit →']) expect(screen.getByText(w)).toBeInTheDocument();
+        expect(screen.getByTestId('credit-headline').textContent).toBe('You owe 120 Beans');
+        expect(screen.getByTestId('credit-sentence').textContent).toBe('You can spend 380 more: your live Offer opens 500 of your 900 credit line.');
+        expect(screen.getByTestId('credit-note').textContent).toBe('🔒400 is closed for now. One more live Offer opens 800 of your 900, and 3 live Offers open all of it.');
+        for (const w of ['your limit', 'balanced', 'monthly fee starts']) expect(screen.getByText(w)).toBeInTheDocument();
+        const all = document.body.textContent ?? '';
+        for (const old of ['sweet spot', 'fee-free', 'carry credit', 'hold credit', 'fee/mo', '🎣', 'unlocks']) expect(all).not.toContain(old);
         cleanup();
 
-        render(<CreditBar balance_c={0} floor_c={-100000} usableFloor_c={0} liveOffers={0} />);
-        expect(screen.getByText(/to open your credit line/).textContent).toBe('Post an Offer to open your credit line — 3 offers unlock your full −1,000.');
-        cleanup();
-
-        render(<CreditBar balance_c={0} floor_c={-100000} usableFloor_c={0} liveOffers={0} knownGrant_c={100000} />);
-        expect(screen.getByText(/to open your credit line/).textContent).toBe('Post an Offer to open your credit line — 1 offer unlocks your full −1,000.');
-        cleanup();
-
-        render(<CreditBar balance_c={60000} floor_c={-50000} />);
-        expect(screen.getByText('+600 B · ≈1.5%/mo')).toBeInTheDocument();
-        expect(screen.getByText('fee/mo')).toBeInTheDocument();
-        expect(screen.getByText('1.5%')).toBeInTheDocument();
+        render(<CreditBar answer={{ balance_c: 60000, floor_c: -50000, usableFloor_c: -50000, liveOffers: 1, roomHeld_c: 50000 }} />);
+        expect(screen.getByTestId('credit-label').textContent).toBe('+600 Beans');
+        expect(screen.getByTestId('credit-note').textContent).toBe('!400 of your Beans are above 200. A small monthly fee on them goes to the Commons: about 4.50 this month.');
     });
 });

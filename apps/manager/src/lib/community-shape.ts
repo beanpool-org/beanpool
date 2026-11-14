@@ -99,6 +99,8 @@ export interface ShapeSettings {
     memberGift?: ShapeSetting<number>;
     dmRequests?: ShapeSetting<boolean>;
     decisions: ShapeSetting<boolean>;
+    /** The forum (server engine/forum.ts): on from the start, members only; the owners may switch it off. Absent on a server from before it. */
+    forum?: ShapeSetting<boolean>;
     /** Members may share one post outside the community (front doors S6). Absent on a server from before it. */
     shareOutside?: ShapeSetting<boolean>;
     listed: ShapeSetting<boolean>;
@@ -538,6 +540,10 @@ export function getConsequenceSentence(
             return targetValue === false
                 ? t('Nothing can be proposed or voted on. Open votes close. An emergency suspension lifts by itself after 7 days.')
                 : t('Members who have completed a trade, and admins, propose; members vote.');
+        case 'forum':
+            return targetValue === false
+                ? t('The forum disappears from both apps. Its topics are kept, and come back when it is turned on again.')
+                : t('Members can start topics and reply in the forum, in both apps.');
         case 'listed':
             return targetValue === false
                 ? t('This community comes off the directory and the map on beanpool.org at once; nothing new is sent.')

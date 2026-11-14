@@ -29,6 +29,7 @@ import {
     hiddenTabsFor,
     beansOn,
     shareOutsideOn,
+    outsideMessagesOn,
     pollsInformal,
     INFORMAL_POLL_NOTE,
     effectiveFeatures,
@@ -114,6 +115,15 @@ describe('readNodeProfile', () => {
         expect(shareOutsideOn(readNodeProfile({ profile: 'local', features: {} })!.features)).toBe(false);
         expect(shareOutsideOn(readNodeProfile({ profile: 'local', features: { shareOutside: 'yes' } })!.features)).toBe(false);
         expect(shareOutsideOn(null)).toBe(false);
+    });
+
+    it('keeps outsideMessages, which a community reports while it takes messages from other communities (X2, the owner\'s switch); X3 offers the address card only then', () => {
+        const local = readNodeProfile({ profile: 'local', features: { outsideMessages: true } })!;
+        expect(local.features).toEqual({ outsideMessages: true });
+        expect(outsideMessagesOn(local.features)).toBe(true);
+        expect(outsideMessagesOn(readNodeProfile({ profile: 'local', features: { outsideMessages: false } })!.features)).toBe(false);
+        expect(outsideMessagesOn(readNodeProfile({ profile: 'local', features: {} })!.features)).toBe(false);
+        expect(outsideMessagesOn(null)).toBe(false);
     });
 
     it('keeps askedPush, which a local community with Beans on reports: it tells members when a neighbour asks (cold start N3)', () => {

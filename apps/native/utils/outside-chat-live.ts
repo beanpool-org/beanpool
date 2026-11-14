@@ -8,7 +8,7 @@ import { DeviceEventEmitter } from 'react-native';
 import { t } from '@beanpool/core';
 import { loadIdentity } from './identity';
 import { isUserBlocked } from './blocklist';
-import { getCachedNodeProfile, outsideMessagesOn } from './node-profile';
+import { fetchNodeProfile, getCachedNodeProfile, outsideMessagesOn } from './node-profile';
 import { syncOutsideMail, OutsideMailError, type OutsideMailContext, type SyncOutcome } from './outside-mail';
 
 /** Emitted after a round that changed anything here: a line in, a state moved, a chat made. */
@@ -24,9 +24,12 @@ export async function outsideContext(): Promise<OutsideMailContext | null> {
     return { nodeUrl: anchor.replace(/\/+$/, ''), identity, store: outsideStore(anchor), isBlocked: isUserBlocked };
 }
 
-/** Whether the community the phone is set to takes messages from other communities, by the profile this phone keeps. */
+/**
+ * Whether the community the phone is set to takes messages from other communities, by the profile this phone keeps, read from
+ * the community when it keeps none yet (a new phone's first minute, a restore from 12 words).
+ */
 export async function outsideMessagesHere(nodeUrl: string): Promise<boolean> {
-    const profile = await getCachedNodeProfile(nodeUrl).catch(() => null);
+    const profile = (await getCachedNodeProfile(nodeUrl).catch(() => null)) ?? (await fetchNodeProfile(nodeUrl).catch(() => null));
     return outsideMessagesOn(profile?.features);
 }
 

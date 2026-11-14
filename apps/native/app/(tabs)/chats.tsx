@@ -359,7 +359,7 @@ export default function ChatsScreen() {
     const { actionRequired, regularConversations } = React.useMemo(() => {
         // A chat with someone in another community sits among the others, by its newest line; a request stays behind the row.
         let list = [...conversations, ...outsideChats.filter((c) => c.state === 'open').map((c) => ({
-            id: c.id, outside: true, peer: c.peerName ?? c.peerHome, peerPubkey: c.peerKey, outsideHome: c.peerHome,
+            id: c.id, outside: true, peer: c.peerName ?? '', peerPubkey: c.peerKey, outsideHome: c.peerHome,
             lastMessage: c.lastText ?? '', rawTimestamp: new Date(c.lastAt ?? c.updatedAt).toISOString(), unread: 0,
         }))];
 
@@ -603,7 +603,7 @@ export default function ChatsScreen() {
                     </View>
                     <View style={styles.chatDetails}>
                         <View style={styles.chatHeader}>
-                            <Text style={[styles.peerName, { flexShrink: 1 }]} numberOfLines={1}>{t('{name} · {community}', { name: item.peer, community: item.outsideHome })}</Text>
+                            <Text style={[styles.peerName, { flexShrink: 1 }]} numberOfLines={1}>{t('{name} · {community}', { name: item.peer || t('Someone in another community'), community: item.outsideHome })}</Text>
                             <Text style={styles.timestamp}>{rowTime(item.rawTimestamp)}</Text>
                         </View>
                         <View style={styles.messageRow}>

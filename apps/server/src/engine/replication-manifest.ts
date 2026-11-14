@@ -483,6 +483,9 @@ export const TABLES: Record<string, TableEntry> = {
     // Each member's locked contacts list (engine/contact-copies.ts), text no server can open: a take-over serves it to the
     // member's devices, and every delete (the member's own, leaving, the owners' switch) writes a tombstone.
     contact_copies: plain('owner_pubkey seq padded_size saved_at nonce sealed digest header signature created_at updated_at'),
+    // A re-keyed member's old locked contacts list, kept a year for the old words (engine/contact-copies.ts, contacts C6): a
+    // take-over serves it to the member's phone; a re-key writes it, and every delete leaves a tombstone.
+    contact_copies_former: plain('owner_pubkey former_pubkey seq padded_size saved_at nonce sealed digest header signature kept_until created_at updated_at'),
     // Who stopped holding a key by stopping being an admin: the write freeze travels with the copy.
     names_dropped_holders: plain('holder_pubkey key_id dropped_at updated_at'),
     // A confirmation names a key, an entry and the admins, never a name.

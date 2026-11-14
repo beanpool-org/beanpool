@@ -463,9 +463,10 @@ export default function GroupPostScreen() {
                         <View style={[styles.checkbox, cashAlsoNeeded && styles.checkboxOn]}>
                             {cashAlsoNeeded && <MaterialCommunityIcons name="check" size={16} color={colors.text.inverse} />}
                         </View>
+                        {/* On a Need the poster is the one who pays: the main composer's Need words (Marty, 14 Nov 2026). */}
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.toggleLabel}>{t('💸 Cash Also Needed')}</Text>
-                            <Text style={styles.toggleHint}>{t('At cost for fuel or materials (agreed in chat)')}</Text>
+                            <Text style={styles.toggleLabel}>{type === 'need' ? t("💸 I'll pay cash too — for fuel or materials") : t('💸 Cash Also Needed')}</Text>
+                            <Text style={styles.toggleHint}>{type === 'need' ? t('Cash covers fuel or materials the helper buys — at cost, not their time or tools.') : t('At cost for fuel or materials (agreed in chat)')}</Text>
                         </View>
                     </Pressable>
                 </KeyboardAwareScrollView>

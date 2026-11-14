@@ -583,6 +583,26 @@ describe('the Market in English', () => {
         expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(expect.arrayContaining(['Select a reason...', 'Spam or scam', 'Child safety']));
     });
 
+    // Marty, 14 Nov 2026: on a Need the poster is the one who would pay, so the listing's 💸 CASH TOO says the cash is offered.
+    it("a listing's 💸 CASH TOO: a Need's says the cash is offered, an Offer's as it was, in English and the pseudo-locale", async () => {
+        const cashNeed = { ...need, cashAlsoNeeded: true };
+        const cashOffer = { ...offer, cashAlsoNeeded: true };
+        stubNode([cashOffer, cashNeed]);
+        const chipTitleOf = async (id: string, heading: RegExp, chip: string) => {
+            const view = render(<MarketplacePage identity={identity} isMember={true} openPostId={id} onPostOpened={() => {}} />);
+            await screen.findByRole('heading', { name: heading });
+            await settle();
+            const title = screen.getByText(chip).getAttribute('title');
+            view.unmount();
+            return title;
+        };
+        expect(await chipTitleOf('need-1', /Lift to town/, '💸 CASH TOO')).toBe('Cash offered too for fuel or materials — agreed in chat');
+        expect(await chipTitleOf('offer-1', /Bicycle Repair/, '💸 CASH TOO')).toBe('Cash also needed for fuel or materials — agreed in chat');
+        await showIn('xx');
+        expect(await chipTitleOf('need-1', /Lift to town/, xx('💸 CASH TOO'))).toBe(xx('Cash offered too for fuel or materials — agreed in chat'));
+        expect(await chipTitleOf('offer-1', /Bicycle Repair/, xx('💸 CASH TOO'))).toBe(xx('Cash also needed for fuel or materials — agreed in chat'));
+    });
+
     it('the profile gate says what is missing, in the words lib/profile-status.ts gives it', async () => {
         stubNode([need]);
         for (const status of [

@@ -334,9 +334,10 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             )}
                             {post.repeatable && <span className={chip('quiet')}>{t('↻ RECURRING')}</span>}
                             {/* #108: on the card, not just the detail view — the point of the flag is
-                                that nobody discovers a cash requirement in paragraph three. */}
+                                that nobody discovers a cash requirement in paragraph three. On a Need the
+                                poster is the one who pays (Marty, 14 Nov 2026). */}
                             {post.cashAlsoNeeded && (
-                                <span className={chip('warn')} title={t('Cash also needed for fuel or materials — agreed in chat')}>
+                                <span className={chip('warn')} title={post.type === 'need' ? t('Cash offered too for fuel or materials — agreed in chat') : t('Cash also needed for fuel or materials — agreed in chat')}>
                                     {t('💸 CASH TOO')}
                                 </span>
                             )}

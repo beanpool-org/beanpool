@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { tagIndex } from '../tags/index.js';
-import { COMMUNITY_TAGS_SHOWN, communityTagsFor, communityTagsOf, mergedInto } from '../tags/community-tags.js';
+import { COMMUNITY_TAGS_SHOWN, communityTagsFor, communityTagsOf, didYouMeanTag, libraryTagOf, mergedInto } from '../tags/community-tags.js';
 import { enterTypedTags, exactLibraryTag, typedTag } from '../tags/typed-tags.js';
 import { FREE_TAGS_MAX } from '../tags/free-tags.js';
 
@@ -97,5 +97,31 @@ describe('a word an owner merged into a library tag commits as that tag', () => 
     it('a merge into an id this app cannot label is no merge', () => {
         const unknown = mergedInto([{ tag: 'limones', listings: 2, mergeInto: 'food.fruit.not-a-tag' }], tagIndex());
         expect(unknown('limones')).toBeNull();
+    });
+});
+
+describe('"Did you mean …?": the library tag a word names in another language (slice F5)', () => {
+    it("reads the node's library field: a library item, never a top, an unknown id or garbage", () => {
+        expect(libraryTagOf({ library: 'food.fruit.orange' })).toBe('food.fruit.orange');
+        for (const answer of [{ library: 'food' }, { library: 'food.fruit.not-a-tag' }, { library: null }, { library: 7 }, {}, null, 'x', { tags: [] }]) {
+            expect(libraryTagOf(answer), JSON.stringify(answer)).toBeNull();
+        }
+    });
+
+    const none = { tags: [] as string[], freeTags: [] as string[] };
+    it('offers the tag for exactly the word being added, when the listing does not hold it and no library row shows it', () => {
+        const found = { tag: 'laranja', id: 'food.fruit.orange' };
+        expect(didYouMeanTag('laranja', found, none, [])).toBe('food.fruit.orange');
+        expect(didYouMeanTag('laranja', found, none, ['food.fruit.orange']), 'already a library row').toBeNull();
+        expect(didYouMeanTag('laranja', found, { tags: ['food.fruit.orange'], freeTags: [] }, []), 'held').toBeNull();
+        expect(didYouMeanTag('laranj', found, none, []), 'an answer for another word').toBeNull();
+        expect(didYouMeanTag(null, found, none, []), 'nothing to add').toBeNull();
+        expect(didYouMeanTag('laranja', { tag: 'laranja', id: null }, none, []), 'the node named none').toBeNull();
+        expect(didYouMeanTag('laranja', null, none, []), 'not asked yet').toBeNull();
+        expect(didYouMeanTag('laranja', { tag: 'laranja', id: 'food.fruit.not-a-tag' }, none, []), 'an id this app cannot label').toBeNull();
+    });
+
+    it('Enter still adds the word as the member\'s own: a label in a third language is a suggestion, never a swap', () => {
+        expect(typedTag('laranja', none, tagIndex())).toEqual({ kind: 'free', tag: 'laranja' });
     });
 });

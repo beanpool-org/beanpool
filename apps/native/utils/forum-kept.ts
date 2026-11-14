@@ -9,6 +9,10 @@
  * - **The member's own.** Each row names the key that read it, and only that key reads it back: a members-only forum is never
  *   drawn for anyone else on this phone.
  * - **30 days.** A topic not opened for 30 days goes at the next keep, unless the member follows it.
+ * - **Drafts** (design §14 "a reply typed offline is kept as a draft on the phone"): a reply the member wrote and didn't get
+ *   posted (no connection, a refusal, or they left the topic) is kept here beside the topic's copy, for their key only, and
+ *   put back in the box when they open the topic again. It goes when the reply is posted, when the box is emptied, when the
+ *   topic is gone, and with the 30-day rule. Being in this cache table, a Force Resync drops it too.
  */
 import type { SqliteLike } from './group-chat-store';
 
@@ -29,6 +33,10 @@ export const FORUM_TOPIC_KEPT_MS = 30 * 24 * 60 * 60 * 1000;
 
 const listKey = (sectionId: string | null) => `list:${sectionId ?? ''}`;
 const topicKey = (id: string) => `topic:${id}`;
+const draftKey = (id: string) => `draft:${id}`;
+
+/** A reply waiting on the phone: its words, the post it quotes, and its photos (data addresses, each within 800 px). */
+export interface ForumDraft { words: string; quotes: number | null; photos: string[] }
 
 export interface ForumKeptStore {
     get<T>(me: string, kind: 'front' | 'list' | 'topic', id?: string | null): Promise<T | null>;
@@ -36,8 +44,12 @@ export interface ForumKeptStore {
     keepList(me: string, sectionId: string | null, list: { topics: { id: string }[] }, now?: number): Promise<void>;
     /** A topic read; `following` keeps it past 30 days. Topics older than 30 days that aren't followed go now. */
     keepTopic(me: string, id: string, page: unknown, following: boolean, now?: number): Promise<void>;
-    /** A topic that isn't there for this member any more: out of the kept read and every kept list. */
+    /** A topic that isn't there for this member any more: out of the kept read, every kept list, and its draft. */
     forgetTopic(me: string, id: string): Promise<void>;
+    /** The member's unposted reply in topic `id`, or null. */
+    getDraft(me: string, id: string): Promise<ForumDraft | null>;
+    /** Keeps that reply; one with no words and no photos takes the draft away. */
+    keepDraft(me: string, id: string, draft: ForumDraft | null, now?: number): Promise<void>;
 }
 
 const keyOf = (kind: 'front' | 'list' | 'topic', id?: string | null) => (kind === 'front' ? 'front' : kind === 'list' ? listKey(id ?? null) : topicKey(String(id)));
@@ -63,11 +75,33 @@ export function forumKeptStore(getDb: () => Promise<SqliteLike>): ForumKeptStore
         async keepTopic(me, id, page, following, now = Date.now()) {
             await put(me, topicKey(id), 'topic', page, now, following);
             const db = await getDb();
-            await db.runAsync("DELETE FROM forum_kept WHERE me = ? AND kind = 'topic' AND following = 0 AND kept_at < ?", [me, now - FORUM_TOPIC_KEPT_MS]);
+            await db.runAsync("DELETE FROM forum_kept WHERE me = ? AND kind IN ('topic', 'draft') AND following = 0 AND kept_at < ?", [me, now - FORUM_TOPIC_KEPT_MS]);
+        },
+        async getDraft(me, id) {
+            const db = await getDb();
+            const row = await db.getFirstAsync<{ body: string }>("SELECT body FROM forum_kept WHERE me = ? AND k = ? AND kind = 'draft'", [me, draftKey(id)]);
+            if (!row) return null;
+            try {
+                const d = JSON.parse(row.body) as Partial<ForumDraft>;
+                const words = typeof d.words === 'string' ? d.words : '';
+                const photos = Array.isArray(d.photos) ? d.photos.filter((p): p is string => typeof p === 'string') : [];
+                if (!words.trim() && !photos.length) return null;
+                return { words, quotes: typeof d.quotes === 'number' ? d.quotes : null, photos };
+            } catch {
+                return null;
+            }
+        },
+        async keepDraft(me, id, draft, now = Date.now()) {
+            if (!draft || (!draft.words.trim() && !draft.photos.length)) {
+                const db = await getDb();
+                await db.runAsync('DELETE FROM forum_kept WHERE me = ? AND k = ?', [me, draftKey(id)]);
+                return;
+            }
+            await put(me, draftKey(id), 'draft', { words: draft.words, quotes: draft.quotes, photos: draft.photos }, now);
         },
         async forgetTopic(me, id) {
             const db = await getDb();
-            await db.runAsync('DELETE FROM forum_kept WHERE me = ? AND k = ?', [me, topicKey(id)]);
+            await db.runAsync('DELETE FROM forum_kept WHERE me = ? AND k IN (?, ?)', [me, topicKey(id), draftKey(id)]);
             const lists = await db.getAllAsync<{ k: string; body: string; kept_at: number }>("SELECT k, body, kept_at FROM forum_kept WHERE me = ? AND kind = 'list'", [me]);
             for (const row of lists) {
                 let list: { topics: { id: string }[] };

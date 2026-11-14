@@ -17,7 +17,7 @@ import { getBlockedUsers } from './blocklist';
 import { TOPIC_WORDS } from '../components/forum/forum-words';
 import { loadIdentity } from './identity';
 import { anchorUrl, signedGet } from './node-post';
-import type { ForumKeptStore } from './forum-kept';
+import type { ForumDraft, ForumKeptStore } from './forum-kept';
 
 export interface ForumSection { id: string; starter: string | null; name: string | null; about: string | null; position: number; starts: ForumSectionStarts; listed: boolean; archived: boolean }
 export interface ForumWriter { publicKey: string; name: string }
@@ -125,6 +125,17 @@ export const keptForumTopic = async (id: string) => {
     return page ? topicWithoutBlocked(page, await blockedKeys()) : null;
 };
 export const forgetForumTopic = (id: string) => keep((k) => k.store.forgetTopic(k.me, id));
+/** The member's unposted reply in topic `id` (design §14: a reply typed offline is kept as a draft), or null. */
+export const keptForumDraft = async (id: string): Promise<ForumDraft | null> => {
+    try {
+        const k = await kept();
+        return k ? await k.store.getDraft(k.me, id) : null;
+    } catch {
+        return null;
+    }
+};
+/** Keeps that reply on the phone; null (or one with nothing in it) takes it away. */
+export const keepForumDraft = (id: string, draft: ForumDraft | null) => keep((k) => k.store.keepDraft(k.me, id, draft));
 
 // ── Reads ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -192,10 +203,12 @@ export interface NewTopicInput { sectionId: string; title: string; words: string
 export const startForumTopic = (input: NewTopicInput) =>
     call<{ topic: ForumTopic; post: ForumPost } | { waiting: ForumWaiting }>('POST', '/api/forum/topics', input);
 
-export async function replyInForum(topicId: string, input: { words: string; quotes?: number | null; lang?: string }): Promise<ForumPost> {
+/** A reply; `photos` up to 3 data addresses, each fitted within 800 px on the phone (utils/chat-photo.ts). */
+export async function replyInForum(topicId: string, input: { words: string; quotes?: number | null; lang?: string; photos?: string[] }): Promise<ForumPost> {
     const body: Record<string, unknown> = { words: input.words };
     if (input.quotes) body.quotes = input.quotes;
     if (input.lang) body.lang = input.lang;
+    if (input.photos?.length) body.photos = input.photos.slice(0, FORUM_LIMITS.photos);
     return (await call<{ post: ForumPost }>('POST', `/api/forum/topics/${enc(topicId)}/replies`, body)).post;
 }
 

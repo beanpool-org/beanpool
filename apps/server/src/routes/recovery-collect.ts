@@ -23,7 +23,7 @@
  * ## When the owner is told
  *
  * When a sign-in releases their copy (notifySeedReleased): the owner learns it worked. That is the moment that
- * matters, since a sign-in releases the copy seconds after the session opens.
+ * matters, since a sign-in releases the copy in the very request that opens the session.
  *
  * Not when a session opens, any more (defence review FABLE-sec-sso finding 5, 2026-10-01): while a session opened for a
  * typed name, that alert was a push anybody with a member's name could send, as often as the auth limiter allowed. Now a

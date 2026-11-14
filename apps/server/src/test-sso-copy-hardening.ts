@@ -362,7 +362,7 @@ async function main(): Promise<void> {
     pileUp(dee, 12);
     const again = await restore(dee);
     assert(again.status === 200 && (await fragments(fetchedLater, { seal: SEAL })).status === 200,
-        'a session that released its copy survives twelve idle ones from before and a new restore, and still hands it over');
+        'a session that released its copy is kept through twelve idle ones from before and a new restore, and still hands it over');
 
     // Storage stays bounded: a session past its sign-in window that released nothing is what a new restore pushes out.
     db.prepare(`UPDATE recovery_collections SET created_at = ? WHERE owner_pubkey = ? AND id NOT IN (SELECT collection_id FROM recovery_releases)`)

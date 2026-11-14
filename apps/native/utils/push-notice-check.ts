@@ -574,7 +574,7 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     // An owner or admin answered the member's suggestion of Local knowledge (community.knowledge-answer): My suggestions, where
     // it shows as added (a tap opens the page) or not, with the reason (slice K4).
     if (d.screen === 'learn-mine') return '/learn/mine';
-    const tab =kind && isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
+    const tab = kind && isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
     return TAB_ROUTES[tab] ?? TAB_ROUTES.home;
 }
 

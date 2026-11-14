@@ -612,8 +612,10 @@ async function main() {
     // The Mac is shared with other runs, so a round is taken again, up to three: each gate holds on its best round.
     const best = { q: Infinity, keys: Infinity, near: Infinity, all: true };
     const at = { q: '', keys: '', near: '' };
+    const rounds: Array<Awaited<ReturnType<typeof round>>> = [];
     for (let r = 1; r <= 3; r++) {
         const t = await round();
+        rounds.push(t);
         for (const form of ['q', 'keys', 'near'] as const) {
             if (t.x[form] < best[form]) { best[form] = t.x[form]; at[form] = `${t[form].toFixed(2)} ms against the floor's ${t.floor.toFixed(2)} ms`; }
         }
@@ -623,6 +625,10 @@ async function main() {
         if (!t.all || (best.q <= BOUND.q && best.keys <= BOUND.keys && best.near <= BOUND.near)) break;
     }
     const load = os.loadavg().map(x => x.toFixed(1)).join(' ');
+    // One line for the record, pass or fail: run-server-suites.mjs keeps a line starting 📏 and test-all prints it in its
+    // summary, so a passing CI run leaves the runner's ratios in its log (where the bounds below come from).
+    const each = (pick: (t: typeof rounds[number]) => number) => rounds.map(t => pick(t).toFixed(2)).join(' ');
+    note(`📏 test-members-on-demand: p95 over a plain signed read, each round: q ${each(t => t.x.q)} (bound ${BOUND.q}), keys ${each(t => t.x.keys)} (${BOUND.keys}), near ${each(t => t.x.near)} (${BOUND.near}); floor ${each(t => t.floor)} ms; load ${load} on ${os.cpus().length} cores${process.env.CI ? '; CI' : ''}`);
     if (!best.all) note('   a form or the floor did not answer as asked in every read of a round: no ratio is taken from it');
     assert(best.all && best.q <= BOUND.q, `q at ${W.size + 30_000} members: p95 ${best.q.toFixed(2)}x a plain signed read ≤ ${BOUND.q}x (${at.q}; load ${load})`);
     assert(best.all && best.keys <= BOUND.keys, `keys (100) at ${W.size + 30_000} members: p95 ${best.keys.toFixed(2)}x a plain signed read ≤ ${BOUND.keys}x (${at.keys})`);

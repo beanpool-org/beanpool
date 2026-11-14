@@ -43,6 +43,13 @@ const post = (number: number, words: string, over: Record<string, unknown> = {})
     editedAt: null, removed: null, photos: 0, hidden: false, linksOn: true, ...over,
 });
 
+/** The node's answer to a search (slice F6, engine/forum-search.ts): set per test. */
+let searched: (q: string) => unknown = () => ({ hits: [], next: null });
+const hit = (number: number, excerpt: string, over: Record<string, unknown> = {}) => ({
+    topicId: 'ft-1', sectionId: 's-general', title: 'Seed swap ideas', postId: `fp-${number}`, number, writer: { publicKey: 'ben-key', name: 'Ben' }, createdAt: AT,
+    excerpt, ...over,
+});
+
 /** `gone`: the topic ft-1 isn't there for this member any more (its opening post removed with no reply, or its writer blocked). */
 let state: { front: any; topics: any[]; posts: any[]; waiting: any[]; gone: boolean };
 /** The node's refusal as lib/api.ts request throws it: its words, its status and its code. */
@@ -75,6 +82,7 @@ function standIn(c: Call): unknown {
     if (c.method === 'POST' && p === '/api/forum/topics') return state.front.firstTopicWaits ? { waiting: { id: 'fw-1', title: c.body.title } } : { topic: topic('ft-1', c.body.title), post: post(1, c.body.words) };
     if (c.method === 'POST' && p === '/api/reports') return { success: true };
     if (c.method === 'POST' && p.startsWith('/api/forum/first-looks/fw-1/')) { state.waiting = []; return p.endsWith('/ok') ? { topicId: 'ft-9' } : { ok: true }; }
+    if (c.method === 'GET' && p === '/api/forum/search') return searched(new URLSearchParams(c.path.split('?')[1] ?? '').get('q') ?? '');
     return new Error(`not answered: ${c.method} ${c.path}`);
 }
 
@@ -427,5 +435,62 @@ describe('a new topic', () => {
         fireEvent.change(screen.getByTestId('forum-new-words'), { target: { value: 'Who has beans?' } });
         fireEvent.click(screen.getByTestId('forum-new-post'));
         expect(await screen.findByTestId('forum-topic')).toBeInTheDocument();
+    });
+});
+
+describe('search (slice F6)', () => {
+    it('asks only on Search; its hits replace the list; a hit opens its topic at the post found; back, the same hits without asking again; ✕ brings the list back', async () => {
+        searched = () => ({ hits: [hit(2, 'I have runner beans.'), hit(1, 'Who has beans to swap?', { title: '', writer: { publicKey: 'asha-key', name: 'Asha' } })], next: null });
+        const scrolled = vi.fn();
+        Element.prototype.scrollIntoView = scrolled;
+        render(<ForumPage me={ME} />);
+        await screen.findAllByTestId('forum-topic-row');
+        fireEvent.change(screen.getByTestId('forum-search-box'), { target: { value: 'runner beans' } });
+        expect(node.calls.some((c) => c.path.startsWith('/api/forum/search'))).toBe(false);
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+        const hits = await screen.findAllByTestId('forum-search-hit');
+        expect(sent('GET', '/api/forum/search?q=runner%20beans')).toHaveLength(1);
+        expect(screen.queryByTestId('forum-topics')).toBeNull();
+        expect(hits[0]).toHaveTextContent('Seed swap ideas');
+        expect(hits[0]).toHaveTextContent('Ben · General');
+        expect(hits[0]).toHaveTextContent('I have runner beans.');
+        // A topic its writer removed, its replies kept: the node sends no title.
+        expect(hits[1]).toHaveTextContent('A removed topic');
+        fireEvent.click(hits[0]);
+        await screen.findByTestId('forum-topic-title');
+        await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1));
+        expect(scrolled.mock.contexts[0]).toBe(screen.getByTestId('forum-post-2'));
+        fireEvent.click(screen.getByTestId('forum-back'));
+        expect(await screen.findAllByTestId('forum-search-hit')).toHaveLength(2);
+        expect(sent('GET', '/api/forum/search?q=runner%20beans')).toHaveLength(1);
+        expect((screen.getByTestId('forum-search-box') as HTMLInputElement).value).toBe('runner beans');
+        fireEvent.click(screen.getByRole('button', { name: 'Clear the search' }));
+        expect(await screen.findAllByTestId('forum-topic-row')).toHaveLength(2);
+        expect(screen.queryByTestId('forum-search-hit')).toBeNull();
+    });
+
+    it('says so when nothing has every word, and shows the node\'s words when it refuses (the day\'s searches spent)', async () => {
+        searched = () => ({ hits: [], next: null });
+        render(<ForumPage me={ME} />);
+        fireEvent.change(await screen.findByTestId('forum-search-box'), { target: { value: 'zebra' } });
+        fireEvent.submit(screen.getByRole('search'));
+        expect(await screen.findByTestId('forum-search-none')).toHaveTextContent('Nothing in the forum has every word of “zebra”.');
+        searched = () => refusal(429, 'searches_per_day', 'You can search the forum 100 times in any 24 hours. Try again later.');
+        fireEvent.change(screen.getByTestId('forum-search-box'), { target: { value: 'beans' } });
+        fireEvent.submit(screen.getByRole('search'));
+        expect(await screen.findByRole('alert')).toHaveTextContent('You can search the forum 100 times in any 24 hours.');
+    });
+
+    it('a second page adds its hits under the first', async () => {
+        searched = () => ({ hits: Array.from({ length: 20 }, (_, i) => hit(i + 2, `beans ${i}`)), next: 20 });
+        render(<ForumPage me={ME} />);
+        fireEvent.change(await screen.findByTestId('forum-search-box'), { target: { value: 'beans' } });
+        fireEvent.submit(screen.getByRole('search'));
+        expect(await screen.findAllByTestId('forum-search-hit')).toHaveLength(20);
+        searched = () => ({ hits: [hit(40, 'beans last')], next: null });
+        fireEvent.click(screen.getByRole('button', { name: 'Show more results' }));
+        await waitFor(() => expect(screen.getAllByTestId('forum-search-hit')).toHaveLength(21));
+        expect(sent('GET', '/api/forum/search?q=beans&offset=20')).toHaveLength(1);
+        expect(screen.queryByRole('button', { name: 'Show more results' })).toBeNull();
     });
 });

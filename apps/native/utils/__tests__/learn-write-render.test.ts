@@ -34,6 +34,7 @@ vi.mock('react-native', async () => {
     const { createElement: el } = await import('react');
     // `data-accessible` is RN's own default: a Pressable is an accessibility element unless told `accessible={false}`
     // (Pressable.js: accessible !== false), a View only when told `accessible`. On iOS such an element folds its children in.
+    // Text is left out on purpose: its words fold into the button around it, as they should.
     const host = (tag: string, accessibleByDefault = false) => function Host(props: Record<string, any>) {
         const { children, onPress, accessibilityLabel, accessibilityRole, testID, disabled, accessibilityState, accessible } = props;
         const attrs: Record<string, unknown> = {};
@@ -427,7 +428,7 @@ describe('My suggestions (§3.4)', () => {
         expect(takeBack.getAttribute('data-accessible')).toBe('true');
         expect(takeBack.getAttribute('data-role')).toBe('button');
         // The whole screen: no element a screen reader reaches sits inside another (iOS would fold it in, out of reach).
-        const reached = [...host.querySelectorAll('[data-accessible="true"]')];
+        const reached = Array.from(host.querySelectorAll('[data-accessible="true"]'));
         expect(reached.length).toBeGreaterThan(0);
         for (const el of reached) {
             expect(el.parentElement?.closest('[data-accessible="true"]'), el.getAttribute('data-testid') ?? el.textContent ?? '').toBeNull();

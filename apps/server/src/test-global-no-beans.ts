@@ -203,8 +203,8 @@ async function main() {
         assert(r.status === 404 && r.body?.code === 'feature_off', `GET ${path} (admin) → 404 feature_off (${r.status})`);
     }
 
-    // Treasuries and enterprises. The node makes its own system treasuries at boot ("BeanPool", "Daily Pulse": credit
-    // line 0, posting 0-Bean offers), so what is checked is that no route made one.
+    // Treasuries and enterprises. The node makes its own system treasury at boot ("BeanPool": credit line 0), so what is
+    // checked is that no route made one.
     const treasuries = () => (db.prepare('SELECT COUNT(*) AS c FROM members WHERE is_treasury = 1').get() as { c: number }).c;
     const treasuriesBefore = treasuries();
     const ent = await call('POST', '/api/enterprise', { name: 'Seed library' }, carol);

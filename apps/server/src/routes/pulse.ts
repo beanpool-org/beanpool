@@ -10,7 +10,6 @@
 import Router from '@koa/router';
 import { getPulseFeed, setPulseItemMute, PulseError } from '../engine/pulse-resolver.js';
 import { getPulseThumbnailService, PulseThumbnailService } from '../engine/pulse-thumbnail.js';
-import { getTodaysPulseEntry, getPulseEntry, type DailyPulseEntry } from '../daily-pulse-entries.js';
 import { knowledgePulseCards, showingTo } from '../engine/knowledge.js';
 import { featuresFor } from '../config/features-for.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -98,58 +97,8 @@ export function createPulseRoutes(deps: RouteDeps | PulseRouteDeps): Router {
     });
 
     /**
-     * Daily Pulse — answers today's (or, by ?date=YYYY-MM-DD, a recent day's) entry:
-     * { date, headline, body }. Read-only, gated like the Pulse feed beside it.
-     */
-    router.get('/api/pulse/daily', async (ctx) => {
-        const { date } = ctx.query;
-        let entry: DailyPulseEntry;
-        let dateStr: string;
-
-        if (date !== undefined && date !== '') {
-            if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-                ctx.status = 400;
-                ctx.body = { error: 'invalid_date', message: word('Invalid date') };
-                return;
-            }
-            const [y, m, d] = date.split('-').map(Number);
-            const utcMs = Date.UTC(y, m - 1, d);
-            const parsed = new Date(utcMs);
-            if (parsed.getUTCFullYear() !== y || parsed.getUTCMonth() !== m - 1 || parsed.getUTCDate() !== d) {
-                ctx.status = 400;
-                ctx.body = { error: 'invalid_date', message: word('Invalid date') };
-                return;
-            }
-
-            const now = new Date();
-            const localEpochMs = now.getTime() - (now.getTimezoneOffset() * 60 * 1000);
-            const todayStr = new Date(localEpochMs).toISOString().split('T')[0];
-            if (date > todayStr) {
-                ctx.status = 404;
-                ctx.body = { error: 'not_found', message: word('Daily Pulse entry not found') };
-                return;
-            }
-
-            const dayIndex = Math.floor(utcMs / 86400000);
-            entry = getPulseEntry(dayIndex);
-            dateStr = date;
-        } else {
-            const now = new Date();
-            const localEpochMs = now.getTime() - (now.getTimezoneOffset() * 60 * 1000);
-            dateStr = new Date(localEpochMs).toISOString().split('T')[0];
-            entry = getTodaysPulseEntry(now);
-        }
-
-        ctx.body = {
-            date: dateStr,
-            headline: entry.headline,
-            body: entry.body,
-        };
-    });
-
-    /**
      * Public thumbnail proxy for Pulse feed items (an <img> cannot sign). A member's item id is 96 random bits that only
-     * the members' feed hands out; the curated and Daily Pulse items are BeanPool's own.
+     * the members' feed hands out; the curated items are BeanPool's own.
      *
      * Serves image bytes from the node origin to satisfy CSP (img-src 'self'),
      * prevent member IP leakage to external CDNs, and survive CDN link expiry.

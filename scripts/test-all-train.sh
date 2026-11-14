@@ -155,9 +155,12 @@ rides_alone() {
 # commit is (a PR into main, or main into a PR's branch). Word catalogs both sides changed are merged per key and verified;
 # a conflict anywhere else aborts. Prints why, and returns 1, when it cannot merge.
 merge_in() {
-  local commit=$1 role=$2 msg=$3 conflicted other mb both out mainrev prrev
+  local commit=$1 role=$2 msg=$3 conflicted other mb both out mainrev prrev wmain
   if git merge-base --is-ancestor "$commit" HEAD; then return 0; fi
-  git -c core.fsmonitor=false merge --quiet --no-commit --no-ff "$commit" >/dev/null 2>&1
+  # Where the word-catalog merge driver is named (.gitattributes; scripts/lanes/lib.sh), it merges during git merge itself:
+  # tell it which side is main, so both directions give the same file.
+  if [ "$role" = pr ]; then wmain=ours; else wmain=theirs; fi
+  BEANPOOL_WORDS_MAIN=$wmain git -c core.fsmonitor=false merge --quiet --no-commit --no-ff "$commit" >/dev/null 2>&1
   conflicted=$(git diff --name-only --diff-filter=U)
   if ! git rev-parse -q --verify MERGE_HEAD >/dev/null; then
     git merge --abort >/dev/null 2>&1; echo "git could not start the merge"; return 1

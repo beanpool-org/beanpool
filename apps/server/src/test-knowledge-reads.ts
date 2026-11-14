@@ -6,7 +6,7 @@
  *     `ids=` read get none; with `types=…,knowledge` or `type=knowledge` a member gets it, with its knowledge fields.
  *  2. Never to a visitor: a signed non-member gets none, and a visitor's copy of a post drops the field.
  *  3. Never a deal, an RSVP, a vote or a pin: each refused, nothing written.
- *  4. Never a listing: the active listings count and the Daily Pulse gate don't move; no map pin (no place).
+ *  4. Never a listing: the active listings count doesn't move; no map pin (no place).
  *  5. GET /api/knowledge/front: grouped by topic in the fixed order, three rows a topic with its count; Learn's order inside
  *     a topic (out of date last, then most helped, then A to Z), never by date; a row never carries the body.
  *  6. `topic=`: every row of one topic, paged; `q=`: best match first (title, then place, then words), the topic's words
@@ -37,7 +37,6 @@ import { grantNodeRole } from './engine/node-roles.js';
 import { claimGrantor } from './claim-code.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { getActiveMemberListingCount } from './daily-pulse.js';
 import { TEST_PHOTO } from './post-test-helper.js';
 import { guestPost, getPosts } from '@beanpool/engine';
 import { KNOWLEDGE_TOPICS } from '@beanpool/core';
@@ -113,7 +112,6 @@ async function main(): Promise<void> {
     require_(offer.status === 200, `Mel posts an Offer (${show(offer)})`);
     const offerId = offer.body.post.id as string;
     const countBefore = getActivePostCount();
-    const gateBefore = getActiveMemberListingCount();
 
     // Owen's pages: two in Local services, one in Emergencies, one in Getting around, one in Good to know.
     const pages: Array<Record<string, unknown>> = [
@@ -198,7 +196,6 @@ async function main(): Promise<void> {
     // ── 4. Never a listing ───────────────────────────────────────────────────────────────────────
     console.log('── 4. never a listing ──');
     assert(getActivePostCount() === countBefore, `4. the active listings count doesn't move (${countBefore} → ${getActivePostCount()})`);
-    assert(getActiveMemberListingCount() === gateBefore, `4. nor the Daily Pulse gate (${gateBefore} → ${getActiveMemberListingCount()})`);
     const placed = db.prepare("SELECT COUNT(*) AS n FROM posts WHERE type = 'knowledge' AND (lat IS NOT NULL OR lng IS NOT NULL)").get() as { n: number };
     assert(placed.n === 0, '4. no page has a place, so no map and no distance ever meets one');
     const near = await call(mel, 'GET', '/api/marketplace/posts?lat=-28.55&lng=153.5&radiusKm=50&types=offer,need,poll,event,knowledge');

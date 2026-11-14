@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, isHundredths, formatHundredths, beans, HUNDREDTHS_PER_BEAN, hundredthsAsDecimalText, halves, shareOf, getTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer, BillView, ItemTakeUpIn } from '@beanpool/core';
-import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, standingLines, type Lang } from '@beanpool/core';
+import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, FORUM_PUSH_PREF, isLang, standingLines, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
@@ -7368,6 +7368,38 @@ function tellBell(pubkey: string, event: { type: string } & Record<string, unkno
     } catch { /* the app's next read catches up */ }
 }
 
+/**
+ * The forum's doorbells (engine/forum-notices.ts, slice F5; design §9): to these members' sockets, or with `to` null to every
+ * member's, and only those whose app said it reads them (`forum=1` on its connect, https-server.ts `_forum`): an app from
+ * before them takes any event it doesn't know for a doorbell, and an old phone runs a full sync for each. Never a visitor's
+ * socket, nor one that doesn't read as a member's (a paused member reads no forum). The event names a topic at most, never
+ * words. Never throws.
+ */
+function tellForumSockets(to: readonly string[] | null, event: { type: string } & Record<string, unknown>): void {
+    try {
+        const msg = JSON.stringify(event);
+        const keys = to ? new Set(to) : null;
+        for (const ws of keys ? wsClients.reachable([...keys], null, 0) : wsClients) {
+            if (!ws._forum || ws._visitor || !ws._memberFeed || !ws._memberPubkey || (keys && !keys.has(ws._memberPubkey))) continue;
+            try { ws.send(msg); } catch { wsClients.delete(ws); }
+        }
+    } catch { /* the app's next read catches up */ }
+}
+
+/**
+ * What the forum's notices go out by (engine/forum-notices.ts): the dispatcher, the bell's own event for a row a reply folded
+ * into (its id again: the apps read their list anew), a bell mark when a member opens a topic, and the forum's doorbells.
+ */
+const forumNoticeCallbacks = {
+    deliverPushNotices: (...args: Parameters<typeof deliverPushNotices>) => deliverPushNotices(...args),
+    bellRowChanged: (pubkey: string, id: string, kind: PushNoticeKind) => tellBell(pubkey, { type: 'push_notice', id, kind }),
+    bellSeenWhere: (pubkey: string, topicId: string) => markBellNoticesSeenWhere(pubkey, 'topicId', [topicId]),
+    tellForum: tellForumSockets,
+};
+export function forumNoticeCb(): typeof forumNoticeCallbacks {
+    return forumNoticeCallbacks;
+}
+
 /** The bell's marks told to the member's own sockets, so every open app's count follows. */
 function toldBellSeen(pubkey: string, ids: string[]): string[] {
     if (ids.length > 0) tellBell(pubkey, { type: 'push_notices_seen', ids });
@@ -7406,8 +7438,8 @@ export function markAllBellNoticesSeen(pubkey: string): string[] {
     return afterBellMark(pubkey, markAllPushNoticesSeen(pubkey));
 }
 
-/** The member opened the thing these notices are about (a chat; a kept alert acknowledged): off the bell. */
-export function markBellNoticesSeenWhere(pubkey: string, field: 'conversationId' | 'noticeId', values: readonly string[]): string[] {
+/** The member opened the thing these notices are about (a chat; a kept alert acknowledged; a forum topic): off the bell. */
+export function markBellNoticesSeenWhere(pubkey: string, field: 'conversationId' | 'noticeId' | 'topicId', values: readonly string[]): string[] {
     return toldBellSeen(pubkey, markPushNoticesSeenWhere(pubkey, field, values));
 }
 
@@ -10676,7 +10708,7 @@ export function getMemberPreference(publicKey: string, prefKey: string): string 
  * setHolidayMode alone switches it, after its open-trades check. A visitor's row sets these too (visitor-allowlist.ts). The
  * only other preferences a member sets are their Home's (HOME_PREFERENCE_KEYS, engine/home-preferences.ts), a member's alone.
  */
-export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'notify_knocks', ASKED_PUSH_PREF, 'eventReminderOffsets'];
+export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'notify_knocks', ASKED_PUSH_PREF, FORUM_PUSH_PREF, 'eventReminderOffsets'];
 
 /**
  * "Show me as a connection in common" (docs/trust-profile-and-trade-safety.md §2), on unless the member turns it off: off,
@@ -10724,6 +10756,8 @@ export function getMemberPreferences(publicKey: string, reader?: string): Record
         notify_knocks: 'false',
         // "When a neighbour asks for something I'm into" (engine/asked-push.ts): on until the member turns it off.
         [ASKED_PUSH_PREF]: 'true',
+        // The Forum switch (engine/forum-notices.ts, slice F5): its four kinds, on until the member turns it off.
+        [FORUM_PUSH_PREF]: 'true',
     };
     for (const r of rows) {
         // The stored reminders key (EVENT_REMINDER_PREF_KEY) isn't one of these either: it is served as eventReminderOffsets below.
@@ -10871,8 +10905,11 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
 
 // ===================== GENERIC PUSH DISPATCHER =====================
 
-/** A push's category: the member's preference that gates it (`notify_<category>`), and its Android channel. */
-export type PushCategory = 'chat' | 'marketplace' | 'escrow' | 'recovery' | 'knocks';
+/**
+ * A push's category: the member's preference that gates it (`notify_<category>`), and its Android channel. `forum`: the
+ * forum's four kinds (engine/forum-notices.ts), on the phone's own BeanPool channel, which every phone already has.
+ */
+export type PushCategory = 'chat' | 'marketplace' | 'escrow' | 'recovery' | 'knocks' | 'forum';
 
 /**
  * Notices to a node's owners about the server itself (services/alerts.ts, services/standby-health.ts): sent whatever the
@@ -10881,8 +10918,11 @@ export type PushCategory = 'chat' | 'marketplace' | 'escrow' | 'recovery' | 'kno
  */
 const OWNER_SERVER_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['owner.alert', 'owner.standby']);
 
-/** The kinds of push that carry a member's own line, which nobody who has blocked them gets (dispatchPushNotification). */
-const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['chat.group', 'chat.mention']);
+/**
+ * The kinds of push that carry a member's own line, which nobody who has blocked them gets (dispatchPushNotification). The
+ * forum's reply and mention too: engine/forum-notices.ts leaves those members out already, and this holds it here as well.
+ */
+const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['chat.group', 'chat.mention', 'forum.reply', 'forum.mention']);
 
 /**
  * Generic push notification dispatcher with category-based preference gating,
@@ -10935,9 +10975,11 @@ export function deliverPushNotices(
     rehearsal = false,
     /**
      * `ttlSeconds`: how long a browser's push may wait (web push W1). `detailsFor`: what one recipient's details carry beside
-     * `data` (their kept copy, `noticeId`: kept-notices.ts keptNoticeDetails), never in the push.
+     * `data` (their kept copy, `noticeId`: kept-notices.ts keptNoticeDetails), never in the push. `bellOnly`: the notices are
+     * kept and each member's open apps hear of theirs, under the same switch, but nothing goes to Expo or a browser (a forum
+     * mention from someone who was pushed about within the hour, engine/forum-notices.ts).
      */
-    options: { ttlSeconds?: number; detailsFor?: PushDetailsFor } = {},
+    options: { ttlSeconds?: number; detailsFor?: PushDetailsFor; bellOnly?: boolean } = {},
 ): { sent: number; told: number } {
     const none = { sent: 0, told: 0 };
     if (getNodeRole() === 'backup') return none;
@@ -10960,6 +11002,7 @@ export function deliverPushNotices(
         escrow: 'escrow',
         recovery: 'recovery',
         knocks: 'knocks',
+        forum: 'default',
     };
 
     // Map categoryId to notification sound
@@ -10969,6 +11012,7 @@ export function deliverPushNotices(
         escrow: 'default',
         recovery: 'default',
         knocks: 'default',
+        forum: 'default',
     };
 
     // The kind's words in each phone's language (its registration's `lang`; English without one), once per language a send.
@@ -11030,8 +11074,9 @@ export function deliverPushNotices(
                 categoryId,
             };
 
-            // iOS: a chat's notice wakes the app, as it did when a conversation id in the data decided it
-            if (platform === 'ios' && PUSH_NOTICE_KINDS[kind].tab === 'chats') {
+            // iOS: a chat's notice wakes the app, as it did when a conversation id in the data decided it. The forum's sit in the
+            // Chat tab too, but the app has nothing to fetch in the background for them.
+            if (platform === 'ios' && PUSH_NOTICE_KINDS[kind].tab === 'chats' && !kind.startsWith('forum.')) {
                 msg._contentAvailable = true;
             }
 
@@ -11058,7 +11103,7 @@ export function deliverPushNotices(
     // Each member's open apps hear of their own at once (the bell's count): the id and kind, never the words.
     for (const n of notices) tellBell(n.recipient, { type: 'push_notice', id: n.id, kind: n.kind });
     const told = notices.length;
-    if (allMessages.length === 0 && webSends.length === 0) return { sent: 0, told };
+    if (options.bellOnly || (allMessages.length === 0 && webSends.length === 0)) return { sent: 0, told };
 
     // Batch send to Expo (max 100 per request)
     for (let i = 0; i < allMessages.length; i += 100) {

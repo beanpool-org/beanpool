@@ -616,6 +616,8 @@ export const SUITES = [
     'test-forum',
     // The forum's moderation (slice F2): reports, auto-hide, restore, removal, the mute, first looks, new accounts, bursts.
     'test-forum-moderation',
+    // The forum's notices (slice F5): follows, bell rows that fold, the four push kinds, the Forum switch, doorbells.
+    'test-forum-notices',
     'test-mcp-knowledge',
     'test-names-copy',
     'test-contact-copies',

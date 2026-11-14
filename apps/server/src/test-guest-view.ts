@@ -1370,6 +1370,8 @@ async function main(): Promise<void> {
             // First looks (slice F2): the moderators' list, the writer's own, a waiting topic's photo, OK, No, withdraw; all signed.
             'GET /api/forum/first-looks', 'GET /api/forum/first-looks/mine', 'GET /api/forum/first-looks/:id/photos/:n',
             'POST /api/forum/first-looks/:id/ok', 'POST /api/forum/first-looks/:id/no', 'POST /api/forum/first-looks/:id/withdraw',
+            // Notices (slice F5): a topic's bell (follow, mute, neither) and how far its reader read; both signed.
+            'POST /api/forum/topics/:id/follow', 'POST /api/forum/topics/:id/read',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',

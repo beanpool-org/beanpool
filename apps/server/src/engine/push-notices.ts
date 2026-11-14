@@ -224,9 +224,9 @@ export function markAllPushNoticesSeen(recipient: string, now: number = nowSecon
 
 /**
  * Marks the member's unseen notices whose details name this thing (`field` in their data: `conversationId` for a chat
- * they opened, `noticeId` for a kept alert they acknowledged). Returns the ids it marked.
+ * they opened, `noticeId` for a kept alert they acknowledged, `topicId` for a forum topic they opened). Returns the ids it marked.
  */
-export function markPushNoticesSeenWhere(recipient: string, field: 'conversationId' | 'noticeId', values: readonly string[], now: number = nowSeconds()): string[] {
+export function markPushNoticesSeenWhere(recipient: string, field: 'conversationId' | 'noticeId' | 'topicId', values: readonly string[], now: number = nowSeconds()): string[] {
     if (values.length === 0) return [];
     const ids = db.prepare(`SELECT id FROM push_notices WHERE recipient = ? AND seen_at IS NULL
                                AND json_valid(data) AND json_extract(data, '$.${field}') IN (SELECT value FROM json_each(?))`)

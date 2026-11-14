@@ -3,7 +3,7 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, addressBreakPoints, addressToOpenOnAComputer, addressToShow, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, showInviterSwitchWords, t, tn, USE_ON_COMPUTER_WORDS } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, addressBreakPoints, addressToOpenOnAComputer, addressToShow, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, FORUM_PUSH_WORDS, forumNoticesOn, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, showInviterSwitchWords, t, tn, USE_ON_COMPUTER_WORDS } from '@beanpool/core';
 import { copyChatText } from '../lib/copy-chat-text';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { AreaStep, areaFailureWords } from '../components/AreaStep';
@@ -384,6 +384,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     // "When a neighbour asks for something I'm into" (cold start N3): on until the member turns it off, and shown only where
     // the community sends that push (core askedPushOn).
     const [notifAsked, setNotifAsked] = useState(true);
+    // The Forum switch (slice F5): on until the member turns it off, shown only where the community sends the forum's
+    // notices (core forumNoticesOn).
+    const [notifForum, setNotifForum] = useState(true);
     // Whether "Requests to join" means anything to this member (core knockSwitchShown): their node role, as the node says
     // it. Not known yet (or no answer): the switch waits.
     const [nodeRole, setNodeRole] = useState<unknown>(undefined);
@@ -409,6 +412,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 setNotifEscrow(prefs.notify_escrow !== 'false' && prefs.notify_escrow !== false);
                 setNotifKnocks(prefs.notify_knocks === 'true' || prefs.notify_knocks === true);
                 setNotifAsked(prefs.notify_asked !== 'false' && prefs.notify_asked !== false);
+                setNotifForum(prefs.notify_forum !== 'false' && prefs.notify_forum !== false);
                 setEventReminders(parseReminderOffsets(prefs[REMINDER_PREF_KEY]) ?? DEFAULT_REMINDER_OFFSETS);
             }
         } catch (e) {
@@ -444,18 +448,20 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         }
     };
 
-    const handleToggleNotif = async (key: 'chat' | 'marketplace' | 'escrow' | 'knocks' | 'asked') => {
+    const handleToggleNotif = async (key: 'chat' | 'marketplace' | 'escrow' | 'knocks' | 'asked' | 'forum') => {
         const nextChat = key === 'chat' ? !notifChat : notifChat;
         const nextMkt = key === 'marketplace' ? !notifMarketplace : notifMarketplace;
         const nextEscrow = key === 'escrow' ? !notifEscrow : notifEscrow;
         const nextKnocks = key === 'knocks' ? !notifKnocks : notifKnocks;
         const nextAsked = key === 'asked' ? !notifAsked : notifAsked;
+        const nextForum = key === 'forum' ? !notifForum : notifForum;
 
         if (key === 'chat') setNotifChat(nextChat);
         if (key === 'marketplace') setNotifMarketplace(nextMkt);
         if (key === 'escrow') setNotifEscrow(nextEscrow);
         if (key === 'knocks') setNotifKnocks(nextKnocks);
         if (key === 'asked') setNotifAsked(nextAsked);
+        if (key === 'forum') setNotifForum(nextForum);
 
         try {
             await updateNotificationPreferences(identity.publicKey, {
@@ -465,6 +471,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 notify_knocks: nextKnocks,
                 // Only to a community that takes it (core askedPushOn): one from before it refuses the whole save.
                 ...(askedPushOn(communityInfo?.features) ? { notify_asked: nextAsked } : {}),
+                // The same for the Forum switch (core forumNoticesOn).
+                ...(forumNoticesOn(communityInfo?.features as { forumNotices?: unknown } | undefined) ? { notify_forum: nextForum } : {}),
             });
         } catch (e) {
             console.warn('[NotifPrefs] Save failed:', e);
@@ -1797,6 +1805,20 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         label={t('Direct messages notifications')}
                                     />
                                 </div>
+
+                                {forumNoticesOn(communityInfo?.features as { forumNotices?: unknown } | undefined) && (
+                                    <div className="flex justify-between items-center gap-3 p-4 rounded-xl border border-nature-200 dark:border-nature-800" data-testid="settings-notify-forum">
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-bold text-nature-900 dark:text-white">{t(FORUM_PUSH_WORDS.switchName)}</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">{t(FORUM_PUSH_WORDS.switchLine)}</div>
+                                        </div>
+                                        <ToggleSwitch
+                                            checked={notifForum}
+                                            onChange={() => handleToggleNotif('forum')}
+                                            label={t(FORUM_PUSH_WORDS.switchName)}
+                                        />
+                                    </div>
+                                )}
 
                                 <div className="flex justify-between items-center gap-3 p-4 rounded-xl border border-nature-200 dark:border-nature-800">
                                     <div className="min-w-0">

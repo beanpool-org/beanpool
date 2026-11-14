@@ -73,11 +73,23 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); backToEnglish(); });
 
+/**
+ * The balance answer is drawn. Not the moment the read is asked, and not the first `ledger-balance`: both come before the
+ * answer, and the page draws "+0B" and a locked "🔒 Send Beans (needs 1 completed trade)" until it is in, so a loaded
+ * runner could read the words before the answer. First the page itself (until the node says Beans are live it shows
+ * "Loading your ledger…", with no Loading card to wait out), then the credit card's Loading shape gone: the answer is in
+ * (or the read failed, and the card says so).
+ */
+async function answerDrawn() {
+    await screen.findByTestId('ledger-balance');
+    await waitFor(() => expect(screen.queryByTestId('credit-card-reading')).toBeNull());
+}
+
 async function open(balance: Record<string, unknown>) {
     vi.mocked(getBalance).mockResolvedValue(balance as any);
     render(<LedgerPage identity={identity} isMember={true} onNavigate={vi.fn()} />);
     await waitFor(() => expect(getTransactions).toHaveBeenCalled());
-    await screen.findByTestId('ledger-balance');
+    await answerDrawn();
 }
 
 describe('the Ledger in the pseudo-locale', () => {
@@ -202,6 +214,9 @@ describe('the Ledger in the pseudo-locale', () => {
         vi.mocked(getMemberCards).mockRejectedValue(new TypeError('Failed to fetch'));
         vi.mocked(getBalance).mockResolvedValue({ ...RESIDENT, frozen: false } as any);
         render(<LedgerPage identity={identity} isMember={true} />);
+        // The answer first: before it, Send is the locked "🔒 Send Beans (needs 1 completed trade)", which the pattern below
+        // matches too, and a click on it opens nothing.
+        await answerDrawn();
         fireEvent.click(await screen.findByRole('button', { name: xx('💸 Wallet') }));
         fireEvent.click(await screen.findByRole('button', { name: new RegExp(xx('Send Beans').replace(/[[\]~]/g, '.')) }));
         fireEvent.click(screen.getByRole('button', { name: new RegExp(xx('Select recipient...').replace(/[[\]~.]/g, '.')) }));

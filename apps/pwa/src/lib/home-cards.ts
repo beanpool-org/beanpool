@@ -21,11 +21,12 @@ import type { CircleCard, CircleDemand, ShownFromLine } from '@beanpool/core';
 import { copyFromLine, eventCopyOf, freePriceWords, formatHundredths } from '@beanpool/core';
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
+import { learnHomeLines, type HomeLearnCard } from '@beanpool/core';
 import { FIRST_STEPS_WORDS, firstStepsLeft, firstStepsOver, welcomeDrawn } from '@beanpool/core';
 import { FIND_COMMUNITY_WORDS, communitiesNear, communityPromiseLines, findCommunityState, isNearKm, knownCommunityCount, notAnsweringLately, t, type FindCommunityState } from '@beanpool/core';
 import { formatCount, formatDate, formatNumber, tn, word, type WordKey } from '@beanpool/core';
 import { deviceLocalClock, eventWhenParts, repeatCaption, type RepeatPattern } from '@beanpool/core';
-import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
+import { LEARN_OPENS, STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
 import { formatRelativeTime } from './pulse';
 import { tierWords } from './trust-tier';
 import { VISITOR_WORDS } from './visitor-lobby';
@@ -262,6 +263,8 @@ export interface HomeCards {
     market?: { items: HomeMarketItem[]; total14d: number; more: boolean; examples?: true };
     /** "Asked near you" (cold-start N1): the open Needs of neighbours, the member's stars first; absent while there is none to show. */
     asked?: { items: HomeNeedItem[] };
+    /** "Learn something local" (slice K7, @beanpool/core HomeLearnCard): where Learn is on, to a member with something to show. */
+    learn?: HomeLearnCard;
     decide?: {
         open: number;
         soonestClosesAt: string | null;
@@ -288,6 +291,8 @@ export interface HomeCards {
         eventsSoon?: number | null;
         /** The Commons pot, whole hundredths of a Bean (home-answer.ts memberFigures). */
         commonsPot_c?: number | null;
+        /** The pages Learn shows this member, from 1 (slice K7): absent at 0, where Learn is off, and from an older node. */
+        knowledge?: number;
     };
 }
 
@@ -396,6 +401,10 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
             // Real open Needs only: drawn while the node sent a row, never an empty box (cold-start N2).
             case 'asked':
                 return Array.isArray(answer.cards.asked?.items) && answer.cards.asked!.items.length > 0;
+            // Learn something local (slice K7): while it has a row this app can draw (core learnHomeLines); a member with
+            // nothing to show gets no card, and an arriving card is drawn by the same rule.
+            case 'learn':
+                return learnHomeLines(answer.cards.learn, LEARN_OPENS) !== null;
             // Worked out in this browser; drawn only where a place is known (CARD-FRAME §4).
             case 'sky':
                 return skyOf(answer, { settings }, now) !== null;

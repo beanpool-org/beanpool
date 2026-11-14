@@ -146,7 +146,7 @@ describe('one signed read for the whole screen, and the 304', () => {
         expect(homeReads()).toHaveLength(1);
         const [r] = homeReads();
         // A newcomer's Home (DESIGN-home-default-fable.md §2.2): the fixed two and the default list's node-built cards, in catalogue order.
-        expect(r.url).toBe(`${NODE}/api/home?cards=needs,safety,steps,deals,events,market,asked,decide,groups,joined,pulse,beans,notices,community&lands=enterprise,group,invite,people,asks,first-need,words`);
+        expect(r.url).toBe(`${NODE}/api/home?cards=needs,safety,steps,deals,events,market,asked,learn,decide,groups,joined,pulse,beans,notices,community&lands=enterprise,group,invite,people,asks,first-need,words`);
         expect(r.headers['If-None-Match']).toBeUndefined();
         expect(boundSignatureValid(r, me.publicKey)).toBe(true);
         const kept = await readStoredHome(me.publicKey, NODE);

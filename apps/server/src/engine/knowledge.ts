@@ -20,8 +20,10 @@
  */
 import {
     KNOWLEDGE_FRONT_ROWS, KNOWLEDGE_LIMITS, KNOWLEDGE_SEARCH_MAX, KNOWLEDGE_TOPIC_PAGE, KNOWLEDGE_TOPICS, LANGS, LEARN_HOME_NEW_DAYS, LEARN_HOME_ROWS,
+    PULSE_KNOWLEDGE_DAYS, PULSE_KNOWLEDGE_ID_PREFIX, PULSE_KNOWLEDGE_MAX_PAGES, PULSE_KNOWLEDGE_ROWS, PULSE_KNOWLEDGE_SOURCE,
     compareKnowledge, isKnowledgeTopic, knowledgeFirstLine, knowledgeTopic, pinLive, word, wordsFor,
     type HomeLearnRow, type KnowledgeFront, type KnowledgeRow, type KnowledgeSearch, type KnowledgeSource, type KnowledgeTopicPage,
+    type PulseKnowledgeCard, type PulseKnowledgePost,
 } from '@beanpool/core';
 import { getPosts, type MarketplacePost } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -393,4 +395,70 @@ export function learnHomeRows(pages: readonly MarketplacePost[], now = Date.now(
     rest.sort((a, b) => Number(a.row.outdated) - Number(b.row.outdated) || a.rank - b.rank || (a.row.id < b.row.id ? -1 : a.row.id > b.row.id ? 1 : 0));
     for (const { row } of rest.slice(0, LEARN_HOME_ROWS - out.length)) out.push(row);
     return out;
+}
+
+// ── The Pulse's card (slice KP) ──────────────────────────────────────────────────────────
+
+/** Characters of a row's first line on the Pulse's card, as on Home's Learn card: a line, not the page. */
+export const PULSE_KNOWLEDGE_LINE_CHARS = 140;
+
+function clipLine(s: string, max: number): string {
+    const chars = Array.from(s);
+    return chars.length <= max ? s : `${chars.slice(0, max - 1).join('')}…`;
+}
+
+/**
+ * The Pulse's knowledge cards (amended §2.12, §3.8), worked out from `pages`, the pages showing to the reader (showingTo,
+ * Learn's own rule: a page that leaves Learn, taken down, hidden by reports, its writer removed or paused, leaves the Pulse
+ * at the same read, with no write of its own). Those first shown in the last PULSE_KNOWLEDGE_DAYS days, the newest
+ * PULSE_KNOWLEDGE_MAX_PAGES of them, make one card per node local day (as the Daily Pulse dates its item), newest first:
+ * id `know_<day>`, placed at the day's newest page's time, titled with its title, its rows the newest
+ * PULSE_KNOWLEDGE_ROWS of the day. "First shown" is when the post was made: an owner's or admin's own page at Publish, a
+ * member's suggestion and an assistant's draft at approval (publishKnowledge makes the post then). A fix, "Still right", a
+ * mark and a pin never move it, so they announce nothing. "by {name}" only on a single page a member wrote; none when
+ * grouped or gathered with the assistant. Nothing is stored: a standby works out the same from the posts it holds.
+ */
+export function knowledgePulseCards(pages: readonly MarketplacePost[], now = Date.now()): PulseKnowledgeCard[] {
+    const since = now - PULSE_KNOWLEDGE_DAYS * DAY_MS;
+    const shown = pages
+        .map((p) => ({ p, at: Date.parse(p.createdAt) }))
+        .filter(({ at }) => Number.isFinite(at) && at > since)
+        .sort((a, b) => b.at - a.at || (a.p.id < b.p.id ? 1 : a.p.id > b.p.id ? -1 : 0))
+        .slice(0, PULSE_KNOWLEDGE_MAX_PAGES);
+    const byDay = new Map<string, typeof shown>();
+    for (const s of shown) {
+        const day = nodeLocalDay(s.at);
+        const list = byDay.get(day);
+        if (list) list.push(s); else byDay.set(day, [s]);
+    }
+    return [...byDay.entries()].map(([day, list]): PulseKnowledgeCard => {
+        const single = list.length === 1;
+        const posts = list.slice(0, PULSE_KNOWLEDGE_ROWS).map(({ p }): PulseKnowledgePost => {
+            const gathered = p.knowledge?.gathered === true;
+            return {
+                id: p.id,
+                title: p.title,
+                topic: p.category,
+                line: clipLine(knowledgeFirstLine(p.description), PULSE_KNOWLEDGE_LINE_CHARS),
+                photo: p.photos?.[0] ?? null,
+                by: single && !gathered && p.authorCallsign ? p.authorCallsign : null,
+                gathered,
+            };
+        });
+        return {
+            id: `${PULSE_KNOWLEDGE_ID_PREFIX}${day}`,
+            source: PULSE_KNOWLEDGE_SOURCE,
+            platform: 'beanpool',
+            category: 'knowledge',
+            url: null,
+            thumbnailUrl: null,
+            ownerPubkey: '',
+            callsign: '',
+            avatarUrl: null,
+            isVerified: false,
+            title: list[0].p.title,
+            publishedAt: new Date(list[0].at).toISOString(),
+            knowledge: { count: list.length, posts },
+        };
+    });
 }

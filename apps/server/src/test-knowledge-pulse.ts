@@ -31,7 +31,7 @@ delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 import crypto from 'node:crypto';
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, broadcast, adminPruneUser, adminSetUserStatus, purgeMemberSelf } from './state-engine.js';
+import { initStateEngine, broadcast, adminPruneUser, adminSetUserStatus, purgeMemberSelf, COMMUNITY_DECISION_ACTOR } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { NODE_PROFILE_KEY } from './config/node-profile.js';
@@ -131,7 +131,7 @@ async function main(): Promise<void> {
     const claim = claimGrantor(crypto.randomBytes(4).toString('hex'));
     require_(!!registerMemberInternal(broadcast, owen.pk, owen.name, null, claim), 'Owen claims the community: its first member');
     grantNodeRole(owen.pk, 'owner', claim);
-    const names = ['Ada', 'Mel', 'Pat', 'Rhea', 'Sam', 'Tia', 'Uma', 'Vic', 'Wren', 'Xan', 'Yul', 'Zed', 'Bo', 'Cy'];
+    const names = ['Ada', 'Mel', 'Pat', 'Rhea', 'Sam', 'Tia', 'Uma', 'Vic', 'Wren', 'Xan', 'Yul', 'Zed', 'Bo', 'Cy', 'Di', 'Eli', 'Fen'];
     const people = names.map(newId);
     for (const who of people) {
         const made = await call(owen, 'POST', '/api/invite/generate', { publicKey: owen.pk });
@@ -197,15 +197,15 @@ async function main(): Promise<void> {
     const p2 = await publish(owen, 'Bins day');
     const p3 = await publish(owen, 'Recycling at the hall');
     const p4 = await publish(ada, 'Library hours');
-    const t0 = Date.now();
-    // Four pages on one day, a minute apart, the approval of Mel's first the oldest.
-    [first, p2, p3, p4].forEach((id, i) => setShown(id, t0 - (10 - i) * 60_000));
+    // Four pages on one day, a second apart, the approval of Mel's first the oldest: inside today even just after midnight.
+    const t0 = Math.max(Date.now() - 5 * 60_000, localMidnight(Date.now()) + 10_000);
+    [first, p2, p3, p4].forEach((id, i) => setShown(id, t0 + i * 1000));
     const day = await feed(mel);
     const todays = cardOn(day, today);
     assert(cardsOf(day).length === 1 && todays?.knowledge?.count === 4, `2. four pages the same day: one card, count 4 (${show(cardsOf(day))})`);
     assert(JSON.stringify((todays?.knowledge?.posts ?? []).map((p: any) => p.id)) === JSON.stringify([p4, p3, p2]) && PULSE_KNOWLEDGE_ROWS === 3,
         `2. its rows: the newest three, newest first (${show(todays?.knowledge?.posts?.map((p: any) => p.title))})`);
-    assert(todays?.title === 'Library hours' && todays.publishedAt === iso(t0 - 7 * 60_000), `2. the newest's title, at the newest's time (${todays?.title} ${todays?.publishedAt})`);
+    assert(todays?.title === 'Library hours' && todays.publishedAt === iso(t0 + 3000), `2. the newest's title, at the newest's time (${todays?.title} ${todays?.publishedAt})`);
     assert((todays?.knowledge?.posts ?? []).every((p: any) => p.by === null), '2. grouped: no name on any row');
     // Two other days.
     setShown(p2, noonDaysAgo(2));
@@ -331,7 +331,8 @@ async function main(): Promise<void> {
         { name: 'taken down by an owner', byMember: false, gone: true, act: async (p) => ok(await call(owen, 'POST', `/api/knowledge/posts/${p}/take-down`, {}), 'Owen takes it down') },
         { name: 'taken down by an admin', byMember: true, gone: true, act: async (p) => ok(await call(ada, 'POST', `/api/knowledge/posts/${p}/take-down`, { reasonCategory: 'misleading' }), 'Ada takes it down') },
         { name: 'hidden by reports', byMember: true, gone: true, act: (p) => { db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ?').run(iso(Date.now()), p); } },
-        { name: 'its writer removed (pruned)', byMember: true, gone: true, act: (_p, w) => { adminPruneUser(w.pk, owen.pk); } },
+        // Removing a member is the community's vote: the prune the passed Decision makes.
+        { name: 'its writer removed (pruned)', byMember: true, gone: true, act: (_p, w) => { adminPruneUser(w.pk, COMMUNITY_DECISION_ACTOR); } },
         { name: "its writer's account paused by an admin", byMember: true, gone: true, act: (_p, w) => { adminSetUserStatus(w.pk, 'disabled'); } },
         { name: 'its writer deletes their own account', byMember: true, gone: true, act: (_p, w) => { purgeMemberSelf(w.pk); } },
         { name: 'its writer on holiday', byMember: true, gone: false, act: async (_p, w) => ok(await call(w, 'POST', '/api/members/holiday', { enabled: true }), 'the writer goes on holiday') },
@@ -351,7 +352,8 @@ async function main(): Promise<void> {
             },
         },
     ];
-    require_(writers.length >= ways.length - 1, `a writer for each way (${writers.length} for ${ways.length})`);
+    const memberWays = ways.filter((way) => way.byMember).length;
+    require_(writers.length >= memberWays, `a writer for each way a member's page is tried (${writers.length} for ${memberWays})`);
     let w = 0;
     for (const [i, way] of ways.entries()) {
         const writer = way.byMember ? writers[w++] : owen;

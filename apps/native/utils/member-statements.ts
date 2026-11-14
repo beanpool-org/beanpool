@@ -15,7 +15,8 @@
 
 import {
     audienceOf, signAdminSignin, signSettingsSignin, buildInviteTicket, signPushLeave, signReEnroll, signStandingAuthorisation,
-    type StandingAuthorisationFields, type StandingStartBody,
+    signAddressCard, signRelayEnvelope,
+    type AddressCard, type RelayEnvelope, type RelayEnvelopeFields, type StandingAuthorisationFields, type StandingStartBody,
 } from '@beanpool/core';
 import { memberSigner } from './crypto';
 import { hallAudienceFor } from './hall-state';
@@ -112,4 +113,23 @@ export async function signReEnrollStatement(nodeUrl: string, code: string, priva
 export async function signStandingStatement(nodeUrl: string, fields: StandingAuthorisationFields, privateKeyHex: string): Promise<StandingStartBody> {
     assertPlainNodeAddress(nodeUrl);
     return signStandingAuthorisation(nodeUrl, fields, memberSigner(privateKeyHex), await hallAudienceFor(nodeUrl));
+}
+
+/**
+ * The member's relay envelope on an item crossing to another community (messages across communities X3; core relay-envelope.ts):
+ * SHA-256 of [beanpool-relay-envelope/1, kind, sender key, sender home, recipient, recipient home, item id, time, payload hash],
+ * under its own tag, so it can be taken for no other statement. Core refuses, signing nothing, fields that aren't an
+ * envelope's (a home in another spelling, a key that isn't one). The recipient and their home come from a card or an envelope
+ * whose signature the phone checked, the home this phone names from its own community's profile.
+ */
+export async function signRelayEnvelopeStatement(fields: RelayEnvelopeFields, privateKeyHex: string): Promise<RelayEnvelope> {
+    return signRelayEnvelope(fields, memberSigner(privateKeyHex));
+}
+
+/**
+ * The member's address card (core outside-chat.ts): SHA-256 of [beanpool-address-card/1, key, home, name], under its own tag.
+ * Core refuses, signing nothing, a name or home it can't carry.
+ */
+export async function signAddressCardStatement(card: { key: string; home: string; name: string }, privateKeyHex: string): Promise<AddressCard> {
+    return signAddressCard(card, memberSigner(privateKeyHex));
 }

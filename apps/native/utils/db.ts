@@ -62,6 +62,7 @@ import {
 import { oldKeySignedHere, rekeysToMe } from './key-succession';
 import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
 import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
+import { OUTSIDE_CHAT_DROP_SQL, OUTSIDE_CHAT_TABLES_SQL, outsideChatStore, type OutsideChatStore } from './outside-chat-store';
 import {
     sendSealedGroupLine, editSealedGroupLine, reportSealedGroupLine, chatIsLocked, getDecryptedGroupAttachment, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT,
     GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT, getDecryptedGroupVoiceLine,
@@ -743,6 +744,10 @@ ${GROUP_KEY_TABLES_SQL}
         -- 8. Tools: each tool's one document per owner, kept on this phone (tools/schema.ts; not a cache, so a re-sync's
         -- clearDB keeps it and only an account leaving the phone drops it).
 ${TOOL_DOCS_TABLE}
+
+        -- 9. Chats with people in other communities, kept on this phone only (utils/outside-chat-store.ts; not a cache, so a
+        -- re-sync's clearDB keeps them and only an account leaving the phone drops them).
+${OUTSIDE_CHAT_TABLES_SQL}
     `;
 
     // One step: the drops, today's schema and the copy's number land together or not at all. A clear that stops part way
@@ -839,7 +844,7 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
         await closeOpenCopy();
         cleared = openCopy(file, null, {
             // The tools' documents are the account's own, not a copy of the node's: kept by a re-sync, gone as it leaves.
-            alsoDrop: opts.identityLeaves ? ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers; DROP TABLE IF EXISTS tool_docs;' : '',
+            alsoDrop: opts.identityLeaves ? ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers; DROP TABLE IF EXISTS tool_docs;' + OUTSIDE_CHAT_DROP_SQL : '',
         });
     } finally {
         releaseSyncLock();
@@ -9996,6 +10001,19 @@ export async function newPhoneConfirmedNotes(before: Set<string> | null, groups:
     const { nodeUrl, identity } = await groupKeyContext();
     if (!before) return confirmedNotes(nodeUrl, identity.publicKey);
     return noteConfirmations({ nodeUrl, identity, store: groupKeyStore(nodeUrl), groups: await historyGroups(nodeUrl, identity, groups), before });
+}
+
+/**
+ * This phone's chats with people in other communities, for one community (utils/outside-chat-store.ts): that community's own
+ * file only. Once the phone has switched to another community, every call throws rather than read the other file.
+ */
+export function outsideStore(nodeUrl: string): OutsideChatStore {
+    const file = getDatabaseFilenameForNode(nodeUrl);
+    return outsideChatStore(async () => {
+        const database = await getDb();
+        if (dbFileOf.get(database) !== file) throw new Error('This phone has switched community since this chat was opened.');
+        return database as any;
+    });
 }
 
 const _groupKeyStores = new Map<string, GroupKeyStore>();

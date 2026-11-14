@@ -1,0 +1,253 @@
+﻿2026-11-14T18:53:34.2203724Z Current runner version: '2.338.2'
+2026-11-14T18:53:34.2228665Z ##[group]Runner Image Provisioner
+2026-11-14T18:53:34.2229697Z Hosted Compute Agent
+2026-11-14T18:53:34.2230281Z Version: 20261103.629
+2026-11-14T18:53:34.2230894Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+2026-11-14T18:53:34.2231667Z Build Date: 2026-11-03T17:26:59Z
+2026-11-14T18:53:34.2232316Z Worker ID: {7d54e1c7-c077-47c4-96b0-2bf33fd09a31}
+2026-11-14T18:53:34.2232969Z Region: westus3
+2026-11-14T18:53:34.2233531Z Cloud: Azure
+2026-11-14T18:53:34.2234051Z ##[endgroup]
+2026-11-14T18:53:34.2235842Z ##[group]Operating System
+2026-11-14T18:53:34.2236464Z Ubuntu
+2026-11-14T18:53:34.2236987Z 26.04.1
+2026-11-14T18:53:34.2237517Z LTS
+2026-11-14T18:53:34.2238261Z ##[endgroup]
+2026-11-14T18:53:34.2238886Z ##[group]Runner Image
+2026-11-14T18:53:34.2239488Z Image: ubuntu-26.04
+2026-11-14T18:53:34.2240040Z Version: 20261111.196.1
+2026-11-14T18:53:34.2241271Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261111.196/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-14T18:53:34.2242839Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261111.196
+2026-11-14T18:53:34.2243835Z ##[endgroup]
+2026-11-14T18:53:34.2244956Z ##[group]GITHUB_TOKEN Permissions
+2026-11-14T18:53:34.2247041Z Contents: read
+2026-11-14T18:53:34.2247615Z Metadata: read
+2026-11-14T18:53:34.2248555Z ##[endgroup]
+2026-11-14T18:53:34.2250584Z Secret source: Actions
+2026-11-14T18:53:34.2251511Z Cache mode: write
+2026-11-14T18:53:34.2252278Z Prepare workflow directory
+2026-11-14T18:53:34.2579451Z Prepare all required actions
+2026-11-14T18:53:34.2632119Z Getting action download info
+2026-11-14T18:53:34.5660353Z Download action repository 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-14T18:53:34.8886027Z Download action repository 'pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1' (SHA:b906affcce14559ad1aafd4ab0e942779e9f58b1)
+2026-11-14T18:53:35.5673797Z Download action repository 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-11-14T18:53:35.6778481Z Download action repository 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-14T18:53:35.9672295Z Complete job name: Test-All shard vitest-pwa-1
+2026-11-14T00:00:00.0000000Z [fixture: lines 36-308 of this job's log, its setup steps, cut]
+2026-11-14T18:54:19.7995146Z 🚀 Running BeanPool checks (max 4 parallel jobs)...
+2026-11-14T18:54:19.7996313Z    CI: turbo capped — test --concurrency=2, lint/typecheck --concurrency=1, build uncapped (critical path)
+2026-11-14T18:54:19.7996861Z 
+2026-11-14T19:01:33.1640239Z 
+2026-11-14T19:01:33.1643254Z ╔══════════════════════════════════════════╗
+2026-11-14T19:01:33.1644054Z ║          BEANPOOL TEST-ALL REPORT        ║
+2026-11-14T19:01:33.1644855Z ╠══════════════════════════════════════════╣
+2026-11-14T19:01:33.1652525Z ║  test             ❌ FAIL  7m14s  (started +0s)
+2026-11-14T19:01:33.1686924Z ╠══════════════════════════════════════════╣
+2026-11-14T19:01:33.1687452Z ║  Total: 0 passed, 1 failed, 0 skipped
+2026-11-14T19:01:33.1692307Z ║  Wall clock: 7m14s (max 4 parallel jobs)
+2026-11-14T19:01:33.1692739Z ╚══════════════════════════════════════════╝
+2026-11-14T19:01:33.1694363Z 
+2026-11-14T19:01:33.1694663Z ──── Failure Details ────
+2026-11-14T19:01:33.1694831Z 
+2026-11-14T19:01:33.1694953Z ━━━ test ━━━
+2026-11-14T19:01:33.2340272Z ── @beanpool/pwa#test (last 150 of its 9170 lines) ──
+2026-11-14T19:01:33.2647571Z ── Failing tests (1) ──
+2026-11-14T19:01:33.2648802Z   src/pages/EnterpriseNotAProfile.test.tsx > every door on the web lands on the enterprise page > the components that open someone by key do it only through onOpenProfile, and only PublicProfilePage draws a Trust Profile
+2026-11-14T19:01:33.2650182Z       AssertionError: expected [ …(21) ] to deeply equal [ …(18) ]
+2026-11-14T19:01:33.2822092Z   /* fire events that update state */
+2026-11-14T19:01:33.2822857Z });
+2026-11-14T19:01:33.2823680Z /* assert on the output */
+2026-11-14T19:01:33.2823866Z 
+2026-11-14T19:01:33.2824386Z This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+2026-11-14T19:01:33.2824876Z 
+2026-11-14T19:01:33.2825509Z  ✓ src/pages/WelcomePage.name-box.test.tsx (5 tests) 718ms
+2026-11-14T19:01:33.2826217Z  ✓ src/lib/use-growing-composer.test.tsx (7 tests) 409ms
+2026-11-14T19:01:33.2826684Z  ✓ src/components/YesJoin.listing.test.tsx (5 tests) 83ms
+2026-11-14T19:01:33.2827149Z  ✓ src/lib/onboarding-event-once.test.ts (8 tests) 86ms
+2026-11-14T19:01:33.2827620Z  ✓ src/components/MarketplaceCard.copy.test.tsx (14 tests) 157ms
+2026-11-14T19:01:33.2829394Z stderr | src/pages/PeoplePage.test.tsx > PeoplePage tabs follow the WAI-ARIA tabs pattern (#674) > links every tab to a real tabpanel, and every panel back to its tab
+2026-11-14T19:01:33.2830467Z An update to PeoplePage inside a test was not wrapped in act(...).
+2026-11-14T19:01:33.2830876Z 
+2026-11-14T19:01:33.2831302Z When testing, code that causes React state updates should be wrapped into act(...):
+2026-11-14T19:01:33.2831764Z 
+2026-11-14T19:01:33.2831890Z act(() => {
+2026-11-14T19:01:33.2832215Z   /* fire events that update state */
+2026-11-14T19:01:33.2832555Z });
+2026-11-14T19:01:33.2832862Z /* assert on the output */
+2026-11-14T19:01:33.2833058Z 
+2026-11-14T19:01:33.2833780Z This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+2026-11-14T19:01:33.2834707Z 
+2026-11-14T19:01:33.2835469Z stderr | src/pages/PeoplePage.test.tsx > PeoplePage tabs follow the WAI-ARIA tabs pattern (#674) > keeps only the selected tab in the Tab order
+2026-11-14T19:01:33.2836534Z An update to PeoplePage inside a test was not wrapped in act(...).
+2026-11-14T19:01:33.2836932Z 
+2026-11-14T19:01:33.2837384Z When testing, code that causes React state updates should be wrapped into act(...):
+2026-11-14T19:01:33.2837865Z 
+2026-11-14T19:01:33.2838181Z act(() => {
+2026-11-14T19:01:33.2838561Z   /* fire events that update state */
+2026-11-14T19:01:33.2838938Z });
+2026-11-14T19:01:33.2839248Z /* assert on the output */
+2026-11-14T19:01:33.2839467Z 
+2026-11-14T19:01:33.2840262Z This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+2026-11-14T19:01:33.2841008Z 
+2026-11-14T19:01:33.2841442Z  ✓ src/pages/PeoplePage.test.tsx (5 tests) 307ms
+2026-11-14T19:01:33.2842171Z  ✓ src/pages/SettingsPage.switch-rows.test.tsx (2 tests) 277ms
+2026-11-14T19:01:33.2842929Z  ✓ src/pages/WelcomePage.privatePreview.test.tsx (6 tests) 285ms
+2026-11-14T19:01:33.2843644Z  ✓ src/pages/PeoplePage.showcase.test.tsx (1 test) 285ms
+2026-11-14T19:01:33.2844328Z  ✓ src/components/EventChat.copy.test.tsx (4 tests) 290ms
+2026-11-14T19:01:33.2844929Z  ✓ src/lib/web-clock.test.ts (6 tests) 100ms
+2026-11-14T19:01:33.2845498Z  ✓ src/lib/last-photo.test.ts (9 tests) 12ms
+2026-11-14T19:01:33.2846196Z  ✓ src/components/PulseFeedCard.words.test.tsx (3 tests) 356ms
+2026-11-14T19:01:33.2846829Z  ✓ src/lib/words-kept.test.ts (6 tests) 14ms
+2026-11-14T19:01:33.2847467Z  ✓ src/pages/SettingsEventReminders.test.tsx (7 tests) 627ms
+2026-11-14T19:01:33.2848455Z  ✓ src/components/VouchPresetChoice.owner.test.tsx (6 tests) 365ms
+2026-11-14T19:01:33.2849195Z  ✓ src/lib/mnemonic.checksum.test.ts (4 tests) 372ms
+2026-11-14T19:01:33.2849832Z  ✓ src/components/RecoveryAlertBanner.test.tsx (3 tests) 256ms
+2026-11-14T19:01:33.2850534Z  ✓ src/components/VisitorListing.tile.test.tsx (7 tests) 191ms
+2026-11-14T19:01:33.2851172Z  ✓ src/components/MarketplaceCard.free.test.tsx (20 tests) 312ms
+2026-11-14T19:01:33.2851806Z  ✓ src/pages/InvitePage.ticket.test.tsx (2 tests) 220ms
+2026-11-14T19:01:33.2852388Z  ✓ src/App.blocklist.test.tsx (1 test) 287ms
+2026-11-14T19:01:33.2852944Z  ✓ src/darkModeSurfaces.test.ts (2 tests) 68ms
+2026-11-14T19:01:33.2853532Z  ✓ src/components/ModerationPauseCard.test.tsx (5 tests) 408ms
+2026-11-14T19:01:33.2854418Z  ✓ src/pages/SettingsForumPush.test.tsx (3 tests) 361ms
+2026-11-14T19:01:33.2855033Z  ✓ src/lib/group-hold.test.ts (8 tests) 21ms
+2026-11-14T19:01:33.2855632Z  ✓ src/pages/SettingsAskedPush.test.tsx (3 tests) 328ms
+2026-11-14T19:01:33.2856314Z  ✓ src/components/ProfileVoucherButton.test.tsx (6 tests) 66ms
+2026-11-14T19:01:33.2856934Z  ✓ src/components/ImageLightbox.words.test.tsx (3 tests) 344ms
+2026-11-14T19:01:33.2857527Z  ✓ src/components/SuggestChangeForm.test.tsx (5 tests) 298ms
+2026-11-14T19:01:33.2858330Z  ✓ src/lib/my-unread.test.ts (8 tests) 9ms
+2026-11-14T19:01:33.2858871Z  ✓ src/lib/list-photo-line.test.ts (5 tests) 28ms
+2026-11-14T19:01:33.2859451Z  ✓ src/lib/invite-join-path.test.ts (6 tests) 8ms
+2026-11-14T19:01:33.2860049Z  ✓ src/lib/signing-source-rule.test.ts (3 tests) 61ms
+2026-11-14T19:01:33.2860672Z  ✓ src/components/InstallPrompt.test.tsx (6 tests) 51ms
+2026-11-14T19:01:33.2861324Z  ✓ src/components/CreditBar.words.test.tsx (3 tests) 183ms
+2026-11-14T19:01:33.2861951Z  ✓ src/pages/SettingsShowAsConnection.test.tsx (4 tests) 599ms
+2026-11-14T19:01:33.2862609Z    ✓ Settings → Show me as a connection in common > is on unless turned off, and turning it off saves false  303ms
+2026-11-14T19:01:33.2863156Z  ✓ src/lib/offer-need-submit.test.ts (6 tests) 11ms
+2026-11-14T19:01:33.2863790Z  ✓ src/components/StepAction.test.tsx (5 tests) 164ms
+2026-11-14T19:01:33.2864335Z  ✓ src/lib/avatar.test.ts (6 tests) 8ms
+2026-11-14T19:01:33.2864870Z  ✓ src/components/MyBudgetModal.test.tsx (5 tests) 226ms
+2026-11-14T19:01:33.2865632Z  ✓ src/components/MarketplaceCard.beans.test.tsx (12 tests) 173ms
+2026-11-14T19:01:33.2866155Z  ✓ src/lib/visitor-lobby-gate.members-seen.test.ts (3 tests) 70ms
+2026-11-14T19:01:33.2866962Z  ✓ src/components/PollCard.poster-display-only.test.tsx (4 tests) 296ms
+2026-11-14T19:01:33.2867625Z  ✓ src/components/CategoryTile.test.tsx (6 tests) 77ms
+2026-11-14T19:01:33.2868548Z  ✓ src/lib/group-invitation-withdraw-api.test.ts (4 tests) 6ms
+2026-11-14T19:01:33.2869168Z  ✓ src/components/MarketplaceCard.pinned.test.tsx (5 tests) 99ms
+2026-11-14T19:01:33.2869746Z  ✓ src/lib/recovery-kit.words.test.ts (3 tests) 170ms
+2026-11-14T19:01:33.2870283Z  ✓ src/components/CategoryPickerModal.test.tsx (3 tests) 367ms
+2026-11-14T19:01:33.2870817Z  ✓ src/components/SyncChip.test.tsx (7 tests) 259ms
+2026-11-14T19:01:33.2871336Z  ✓ src/lib/library-tag-api.test.ts (3 tests) 6ms
+2026-11-14T19:01:33.2871827Z  ✓ src/components/ScrollHintRow.test.tsx (3 tests) 202ms
+2026-11-14T19:01:33.2872391Z  ✓ src/components/MemberAvatar.test.tsx (3 tests) 163ms
+2026-11-14T19:01:33.2873000Z  ✓ src/components/CreditBar.known-floor.test.tsx (5 tests) 159ms
+2026-11-14T19:01:33.2873507Z  ✓ src/lib/conversation-tabs.test.ts (3 tests) 4ms
+2026-11-14T19:01:33.2874011Z  ✓ src/lib/mnemonic.turkish.test.ts (5 tests) 18ms
+2026-11-14T19:01:33.2874689Z  ✓ src/lib/former-address.test.ts (4 tests) 6ms
+2026-11-14T19:01:33.2875171Z  ✓ src/lib/busy-verdicts.test.ts (4 tests) 4ms
+2026-11-14T19:01:33.2875678Z  ✓ src/lib/map-pin-style.test.ts (17 tests) 6ms
+2026-11-14T19:01:33.2876183Z  ✓ src/lib/open-app-doors.test.ts (4 tests) 7ms
+2026-11-14T19:01:33.2876707Z  ✓ src/components/ChatConfirmDialog.test.tsx (2 tests) 170ms
+2026-11-14T19:01:33.2877223Z  ✓ src/pages/WelcomePage.faq.test.tsx (1 test) 204ms
+2026-11-14T19:01:33.2878605Z  ✓ src/lib/starter-offers.test.ts (3 tests) 6ms
+2026-11-14T19:01:33.2879084Z  ✓ src/lib/decision-own-vote.test.ts (4 tests) 6ms
+2026-11-14T19:01:33.2879551Z  ✓ src/lib/profile-saved.test.ts (2 tests) 9ms
+2026-11-14T19:01:33.2880143Z  ✓ src/components/ChatPhotoViewer.alerts.test.tsx (2 tests) 170ms
+2026-11-14T19:01:33.2880836Z  ✓ src/components/OnboardingGuide.test.tsx (2 tests) 264ms
+2026-11-14T19:01:33.2881447Z  ✓ src/lib/marketplace-cancel-request-api.test.ts (1 test) 5ms
+2026-11-14T19:01:33.2882037Z  ✓ src/components/EnterpriseCard.tile.test.tsx (2 tests) 58ms
+2026-11-14T19:01:33.2882592Z  ✓ src/dealLinesFromLibrary.test.ts (2 tests) 4ms
+2026-11-14T19:01:33.2883468Z  ✓ src/lib/shop.test.ts (3 tests) 4ms
+2026-11-14T19:01:33.2884179Z  ✓ src/recoveryTruth.test.ts (4 tests) 4ms
+2026-11-14T19:01:33.2884694Z  ✓ src/lib/commons-sections.test.ts (3 tests) 3ms
+2026-11-14T19:01:33.2885186Z  ✓ src/lib/conversation-read.test.ts (1 test) 4ms
+2026-11-14T19:01:33.2885673Z  ✓ src/pages/HomePage.s5.test.tsx (1 test) 3ms
+2026-11-14T19:01:33.2886134Z  ✓ src/lib/contacts-vectors.test.ts (1 test) 91ms
+2026-11-14T19:01:33.2886376Z 
+2026-11-14T19:01:33.2886691Z ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+2026-11-14T19:01:33.2886892Z 
+2026-11-14T19:01:33.2887682Z  FAIL  src/pages/EnterpriseNotAProfile.test.tsx > every door on the web lands on the enterprise page > the components that open someone by key do it only through onOpenProfile, and only PublicProfilePage draws a Trust Profile
+2026-11-14T19:01:33.2888977Z AssertionError: expected [ …(21) ] to deeply equal [ …(18) ]
+2026-11-14T19:01:33.2889254Z 
+2026-11-14T19:01:33.2889413Z - Expected
+2026-11-14T19:01:33.2889708Z + Received
+2026-11-14T19:01:33.2889908Z 
+2026-11-14T19:01:33.2890120Z @@ -7,10 +7,13 @@
+2026-11-14T19:01:33.2890460Z     "components/InvitedByCard.tsx",
+2026-11-14T19:01:33.2890856Z     "components/MessageRequests.tsx",
+2026-11-14T19:01:33.2891283Z     "components/PollCard.tsx",
+2026-11-14T19:01:33.2891667Z     "components/PostAuthorTrust.tsx",
+2026-11-14T19:01:33.2892078Z     "components/PulseFeedCard.tsx",
+2026-11-14T19:01:33.2892521Z +   "components/forum/ForumTopicView.tsx",
+2026-11-14T19:01:33.2892919Z +   "pages/ChatTabPage.tsx",
+2026-11-14T19:01:33.2893353Z +   "pages/ForumPage.tsx",
+2026-11-14T19:01:33.2893751Z     "pages/LearnPage.tsx",
+2026-11-14T19:01:33.2894104Z     "pages/MarketplacePage.tsx",
+2026-11-14T19:01:33.2894452Z     "pages/MessagesPage.tsx",
+2026-11-14T19:01:33.2894802Z     "pages/PeoplePage.tsx",
+2026-11-14T19:01:33.2895207Z     "pages/PublicProfilePage.tsx",
+2026-11-14T19:01:33.2895406Z 
+2026-11-14T19:01:33.2895679Z  ❯ src/pages/EnterpriseNotAProfile.test.tsx:212:30
+2026-11-14T19:01:33.2896293Z     210|         // takes onOpenProfile as a prop and calls it from that one bu…
+2026-11-14T19:01:33.2896896Z     211|         // (checked above), so it is the same one overlay, and LearnPa…
+2026-11-14T19:01:33.2897520Z     212|         expect(doors.sort()).toEqual([
+2026-11-14T19:01:33.2898431Z        |                              ^
+2026-11-14T19:01:33.2899068Z     213|             path.join('components', 'ActivityWaterfall.tsx'),
+2026-11-14T19:01:33.2899566Z     214|             path.join('components', 'AppHeader.tsx'),
+2026-11-14T19:01:33.2899846Z 
+2026-11-14T19:01:33.2900104Z ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+2026-11-14T19:01:33.2900291Z 
+2026-11-14T19:01:33.2900298Z 
+2026-11-14T19:01:33.2900486Z  Test Files  1 failed | 266 passed (267)
+2026-11-14T19:01:33.2900890Z       Tests  1 failed | 4318 passed (4319)
+2026-11-14T19:01:33.2901287Z    Start at  18:54:21
+2026-11-14T19:01:33.2901863Z    Duration  431.78s (transform 15.54s, setup 32.63s, collect 137.86s, tests 465.84s, environment 161.72s, prepare 21.55s)
+2026-11-14T19:01:33.2902276Z 
+2026-11-14T19:01:33.2902282Z 
+2026-11-14T19:01:33.2902628Z  ELIFECYCLE  Test failed. See above for more details.
+2026-11-14T19:01:33.2903282Z [WARN] command finished with error, but continuing...
+2026-11-14T19:01:33.2903588Z 
+2026-11-14T19:01:33.2903842Z Full logs of every check copied to /home/runner/work/_temp/test-all-logs
+2026-11-14T19:01:33.2928647Z ##[error]Process completed with exit code 1.
+2026-11-14T19:01:33.3008205Z ##[group]Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+2026-11-14T19:01:33.3008742Z with:
+2026-11-14T19:01:33.3009135Z   name: test-all-logs-vitest-pwa-1
+2026-11-14T19:01:33.3009551Z   path: /home/runner/work/_temp/test-all-logs
+2026-11-14T19:01:33.3009932Z   if-no-files-found: ignore
+2026-11-14T19:01:33.3010332Z   overwrite: true
+2026-11-14T19:01:33.3010682Z   retention-days: 14
+2026-11-14T19:01:33.3011027Z   compression-level: 6
+2026-11-14T19:01:33.3011366Z   include-hidden-files: false
+2026-11-14T19:01:33.3011694Z env:
+2026-11-14T19:01:33.3012150Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-11-14T19:01:33.3012544Z ##[endgroup]
+2026-11-14T19:01:33.4749685Z (node:10928) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-14T19:01:33.4750523Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-14T19:01:33.4780136Z With the provided path, there will be 1 file uploaded
+2026-11-14T19:01:33.7209597Z Artifact name is valid!
+2026-11-14T19:01:33.7210262Z Root directory input is valid!
+2026-11-14T19:01:33.9520970Z Beginning upload of artifact content to blob storage
+2026-11-14T19:01:33.9777538Z (node:10928) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-14T19:01:34.3082241Z Uploaded bytes 42596
+2026-11-14T19:01:34.3714795Z Finished uploading artifact content to blob storage!
+2026-11-14T19:01:34.3715629Z SHA256 digest of uploaded artifact zip is c9a6aa04a994adec7df7fe24723a6eb34919612b4207606e489522c586fccd29
+2026-11-14T19:01:34.3716549Z Finalizing artifact upload
+2026-11-14T19:01:34.7542235Z Artifact test-all-logs-vitest-pwa-1.zip successfully finalized. Artifact ID 14127322723
+2026-11-14T19:01:34.7543299Z Artifact test-all-logs-vitest-pwa-1 has been successfully uploaded! Final size is 42596 bytes. Artifact ID is 14127322723
+2026-11-14T19:01:34.7548453Z Artifact download URL: https://github.com/beanpool-org/beanpool/actions/runs/43629093450/artifacts/14127322723
+2026-11-14T19:01:34.7728642Z Post job cleanup.
+2026-11-14T19:01:34.9141896Z Pruning is unnecessary.
+2026-11-14T19:01:34.9320511Z Post job cleanup.
+2026-11-14T19:01:35.0269559Z [command]/usr/bin/git version
+2026-11-14T19:01:35.0298415Z git version 2.56.1
+2026-11-14T19:01:35.0335815Z Temporarily overriding HOME='/home/runner/work/_temp/b493efd7-de94-4113-942a-8f1f75d90f57' before making global git config changes
+2026-11-14T19:01:35.0337777Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-14T19:01:35.0369681Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/beanpool/beanpool
+2026-11-14T19:01:35.0383120Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-14T19:01:35.0422066Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-14T19:01:35.0736416Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-14T19:01:35.0761169Z http.https://github.com/.extraheader
+2026-11-14T19:01:35.0776012Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-14T19:01:35.0812731Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-14T19:01:35.1093974Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-14T19:01:35.1128436Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-14T19:01:35.1537337Z Cleaning up orphan processes
+2026-11-14T19:01:35.1842561Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02, pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

@@ -7405,6 +7405,9 @@ function tellForumSockets(to: readonly string[] | null, event: { type: string } 
     } catch { /* the app's next read catches up */ }
 }
 
+/** The bell rows opening a forum topic takes off (POST /api/forum/topics/:id/read): the forum's own kinds that name a topic. */
+const FORUM_TOPIC_READ_KINDS: readonly PushNoticeKind[] = ['forum.reply', 'forum.mention', 'forum.first-look-answer'];
+
 /**
  * What the forum's notices go out by (engine/forum-notices.ts): the dispatcher, the bell's own event for a row a reply folded
  * into (its id again: the apps read their list anew), a bell mark when a member opens a topic, and the forum's doorbells.
@@ -7412,7 +7415,11 @@ function tellForumSockets(to: readonly string[] | null, event: { type: string } 
 const forumNoticeCallbacks = {
     deliverPushNotices: (...args: Parameters<typeof deliverPushNotices>) => deliverPushNotices(...args),
     bellRowChanged: (pubkey: string, id: string, kind: PushNoticeKind) => tellBell(pubkey, { type: 'push_notice', id, kind }),
-    bellSeenWhere: (pubkey: string, topicId: string) => markBellNoticesSeenWhere(pubkey, 'topicId', [topicId]),
+    // Only the forum's own rows for the topic (a reply's fold, a mention, a first look's answer), never a moderation notice
+    // that names it; and through afterBellMark, so a first look's answer (a kept notice) is marked with its kept copy and the
+    // web app never shows that alert again after the topic was opened.
+    bellSeenWhere: (pubkey: string, topicId: string) =>
+        afterBellMark(pubkey, markPushNoticesSeenWhere(pubkey, 'topicId', [topicId], undefined, FORUM_TOPIC_READ_KINDS)),
     tellForum: tellForumSockets,
 };
 export function forumNoticeCb(): typeof forumNoticeCallbacks {
@@ -7457,8 +7464,9 @@ export function markAllBellNoticesSeen(pubkey: string): string[] {
     return afterBellMark(pubkey, markAllPushNoticesSeen(pubkey));
 }
 
-/** The member opened the thing these notices are about (a chat; a kept alert acknowledged; a forum topic): off the bell. */
-export function markBellNoticesSeenWhere(pubkey: string, field: 'conversationId' | 'noticeId' | 'topicId', values: readonly string[]): string[] {
+/** The member opened the thing these notices are about (a chat; a kept alert acknowledged): off the bell. A forum topic
+ *  opened goes by forumNoticeCallbacks.bellSeenWhere, which marks the forum's own kinds only. */
+export function markBellNoticesSeenWhere(pubkey: string, field: 'conversationId' | 'noticeId', values: readonly string[]): string[] {
     return toldBellSeen(pubkey, markPushNoticesSeenWhere(pubkey, field, values));
 }
 

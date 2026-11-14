@@ -2,11 +2,14 @@
  * This community's typed tags in the Tags field (tags/community-tags.ts, DESIGN-tags-free-entry-fable.md §3 and §5, slice
  * F3): what both apps' pickers make of GET /api/free-tags, and what a word an owner merged into a library tag commits as.
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { exactTagForms, tagIndex } from '../tags/index.js';
+import { TAG_LIBRARY, buildTagIndex, exactTagForms, tagIndex } from '../tags/index.js';
 import { COMMUNITY_TAGS_SHOWN, communityTagsFor, communityTagsOf, didYouMeanTag, libraryTagOf, mergedInto } from '../tags/community-tags.js';
 import { enterTypedTags, exactLibraryTag, typedTag } from '../tags/typed-tags.js';
-import { FREE_TAGS_MAX } from '../tags/free-tags.js';
+import { FREE_TAGS_MAX, freeTagStored } from '../tags/free-tags.js';
+import { compoundWords } from '../search-terms.js';
+import { wordsFor, type Catalog } from '../words.js';
 
 const LEMON = 'food.fruit.lemon';
 const none = { tags: [], freeTags: [] };
@@ -169,5 +172,74 @@ describe("exactTagForms: how the node keys every language's labels, marks kept (
         expect(exactTagForms('cat')).not.toEqual(exactTagForms('Cát'));
         expect(exactTagForms('maca')).not.toEqual(exactTagForms('maçã'));
         expect(exactTagForms('man')).not.toEqual(exactTagForms('Mận'));
+    });
+});
+
+// Turkish writes I as the capital of ı and İ as the capital of i; every other language writes I as the capital of i. The
+// apps ask the node with the stored form (freeTagStored, the default lower case), so "BALIK" (balık) arrives as "balik" and
+// "İncir" as "i" with a combining dot. Case never mattering means i, ı and İ are one letter in the node's key.
+describe("exactTagForms: case never matters in Turkish either (i, ı, İ, I), and no mark is folded", () => {
+    const trCatalog = JSON.parse(readFileSync(new URL('../../words/tr.json', import.meta.url), 'utf8')) as Catalog;
+    const tr = wordsFor('tr', [trCatalog]);
+    const items = TAG_LIBRARY.filter((tag) => tag.id.includes('.'));
+    const label = (id: string) => tr.t(items.find((tag) => tag.id === id)!.en);
+    // What the node looks a typed word up by (apps/server engine/free-tags.ts libraryTagNamed): the stored form the apps
+    // send, its words with each compound whole, read by exactTagForms.
+    const asked = (typed: string) => exactTagForms(compoundWords(freeTagStored(typed)).join(' '));
+    const meets = (typed: string, written: string) => asked(typed).some((key) => exactTagForms(written).includes(key));
+    // Every way a member may type a label: as written, lower and upper case by Turkish's rule and by the default rule.
+    const typings = (written: string) => [
+        written, written.toLocaleLowerCase('tr'), written.toLocaleUpperCase('tr'), written.toLowerCase(), written.toUpperCase(),
+    ];
+
+    it('the twelve Turkish tags the review of #3164 named are found typed lower case and with the capital', () => {
+        const twelve: Array<[string, string, string]> = [
+            ['food.fruit.fig', 'İncir', 'incir'],
+            ['food.drinks', 'İçecekler', 'içecekler'],
+            ['food.seafood.oysters', 'İstiridye', 'istiridye'],
+            ['labour.garden-help.spraying', 'İlaçlama', 'ilaçlama'],
+            ['services.trades.fabrication', 'İmalat', 'imalat'],
+            ['services.business', 'İş ve ofis', 'iş ve ofis'],
+            ['goods.materials', 'İnşaat malzemeleri', 'inşaat malzemeleri'],
+            ['goods.materials.building-supplies', 'İnşaat gereçleri', 'inşaat gereçleri'],
+            ['arts.art.illustration', 'İllüstrasyon', 'illüstrasyon'],
+            ['health.first-aid', 'İlk yardım', 'ilk yardım'],
+            ['animals.livestock.cows', 'İnekler', 'inekler'],
+            ['food.vegetables.spinach', 'Ispanak', 'ıspanak'],
+        ];
+        for (const [id, written, lower] of twelve) {
+            expect(label(id), id).toBe(written);
+            for (const typed of [written, lower, written.toLocaleUpperCase('tr')]) expect(meets(typed, written), `${typed} → ${written}`).toBe(true);
+        }
+    });
+
+    it('closes the class: every Turkish label with i, ı, İ or I anywhere is found typed every way', () => {
+        const rows = items.map((tag) => [tag.id, tr.t(tag.en)] as const).filter(([, written]) => /[İIıi]/.test(written));
+        expect(rows.length).toBeGreaterThan(300);
+        expect(rows.filter(([, written]) => /[İI]/.test(written)).length).toBeGreaterThanOrEqual(13);
+        expect(rows.filter(([, written]) => written.includes('ı')).length).toBeGreaterThan(100);
+        const missed = rows.flatMap(([id, written]) => typings(written).filter((typed) => !meets(typed, written)).map((typed) => `${id}: ${typed}`));
+        expect(missed).toEqual([]);
+    });
+
+    it("the device's own Turkish index (tagText) finds every one of them typed every way, as it did", () => {
+        const index = buildTagIndex(tr);
+        const rows = items.map((tag) => [tag.id, tr.t(tag.en)] as const).filter(([, written]) => /[İIıi]/.test(written));
+        const missed = rows.flatMap(([id, written]) => typings(written).filter((typed) => !index.byLabel(typed).includes(id)).map((typed) => `${id}: ${typed}`));
+        expect(missed).toEqual([]);
+    });
+
+    it('reads i, ı and İ as one letter, and keeps every other mark and letter', () => {
+        expect(exactTagForms('İncir')).toEqual(['incir']);
+        expect(exactTagForms('İNCİR')).toEqual(['incir']);
+        expect(exactTagForms('Ispanak')).toEqual(exactTagForms('ıspanak'));
+        expect(exactTagForms('BALIK')).toEqual(exactTagForms('balık'));
+        expect(exactTagForms('Çarkıfelek meyvesi')).toEqual(['çarkifelek meyvesi']);
+        expect(exactTagForms('İnşaat gereçleri')).toEqual(['inşaat gereçleri']);
+        expect(exactTagForms('İllüstrasyon')).toEqual(['illüstrasyon']);
+        expect(exactTagForms('Dağ')).toEqual(['dağ']);
+        expect(exactTagForms('Maçã')).toEqual(['maçã']);
+        expect(exactTagForms('Cát')).toEqual(['cát']);
+        expect(exactTagForms('cat')).not.toEqual(exactTagForms('Cát'));
     });
 });

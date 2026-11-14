@@ -13,8 +13,9 @@
  *   read or follow); the rest see the unread dot. The row is this server's own (push_notices), never copied: after a
  *   take-over a follower may be told once more.
  * - **A mention** (an @name of someone already in the topic, or a quote of their post) by a writer who is known (a new
- *   member's mentions tell nobody, design §5): one bell row per sender while it is unseen (later mentions fold into it), and
- *   at most one push an hour from the same sender (`forum.mention`): within the hour after one, a new row comes with no push.
+ *   member's mentions tell nobody, design §5): one bell row per sender per topic while it is unseen (later mentions there
+ *   fold into it; opening that topic takes it off), and at most one push an hour from the same sender, any topic
+ *   (`forum.mention`): within the hour after one, a new row comes with no push.
  *   A member a reply mentions is told by the mention, not by that reply's fold as well.
  * - **The Forum switch** (`notify_forum`, Settings → Notifications) holds all four kinds, the first looks' too
  *   (engine/forum-first-look.ts): off, nothing of the forum reaches their bell, phone or browser.
@@ -75,17 +76,25 @@ export function followForumTopic(member: string, topicId: string, now: number, r
         .run(topicId, member, readTo, iso(now));
 }
 
-/** Sets a member's follow of a topic they may read (engine/forum.ts followTopic checks that): following, muted, or neither. */
+/**
+ * Sets a member's follow of a topic they may read (engine/forum.ts followTopic checks that): following, muted, or neither.
+ * A new row keeps what they already read: how far their last read lately went (POST /read stores nothing on disk before a
+ * follow, so it is held with the doorbell's readers), else the topic's last post (they follow it from now on). An
+ * existing row keeps its own read point, which every read moves.
+ */
 export function setForumFollow(member: string, topicId: string, follow: ForumFollow | null, now: number): ForumFollow | null {
     assertPlainTablesWritable();
     if (follow === null) {
         deletePlainRows('forum_follows', 'topic_id = ? AND member_pubkey = ?', topicId, member);
         return null;
     }
-    db.prepare(`INSERT INTO forum_follows (topic_id, member_pubkey, state, last_read, created_at) VALUES (?, ?, ?, 0, ?)
-        ON CONFLICT(topic_id, member_pubkey) DO UPDATE SET state = excluded.state`).run(topicId, member, follow, iso(now));
+    const readTo = readPointOf(topicId, member, now) ?? lastPostNumber(topicId);
+    db.prepare(`INSERT INTO forum_follows (topic_id, member_pubkey, state, last_read, created_at) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(topic_id, member_pubkey) DO UPDATE SET state = excluded.state`).run(topicId, member, follow, readTo, iso(now));
     return follow;
 }
+
+const lastPostNumber = (topicId: string) => (db.prepare('SELECT MAX(number) FROM forum_posts WHERE topic_id = ?').pluck().get(topicId) as number | null) ?? 0;
 
 /** A member's follows, every one: an account deleted or removed (engine/forum.ts dropForumOf), with their tombstones. */
 export function dropForumFollowsOf(member: string): void {
@@ -98,9 +107,8 @@ export function dropForumFollowsOf(member: string): void {
  * the next FORUM_READING_MS. The topic is one they may read (engine/forum.ts). Returns how far they have now read.
  */
 export function markForumTopicRead(cb: Pick<ForumNoticeCallbacks, 'bellSeenWhere'>, member: string, topicId: string, upTo: number, now = Date.now()): { lastRead: number } {
-    noteForumReader(topicId, member, now);
-    const last = (db.prepare('SELECT MAX(number) FROM forum_posts WHERE topic_id = ?').pluck().get(topicId) as number | null) ?? 0;
-    const to = Math.max(0, Math.min(upTo, last));
+    const to = Math.max(0, Math.min(upTo, lastPostNumber(topicId)));
+    noteForumReader(topicId, member, now, to);
     if (getNodeRole() === 'primary') {
         db.prepare('UPDATE forum_follows SET last_read = ? WHERE topic_id = ? AND member_pubkey = ? AND last_read < ?').run(to, topicId, member, to);
         cb.bellSeenWhere(member, topicId);
@@ -176,11 +184,16 @@ function mentionedIn(topic: TopicFacts, post: { writer: string; words: string; q
 
 interface BellRow { id: string; data: Record<string, unknown> }
 
-/** The member's unseen row of this kind, within its lifetime, whose data says `field` = `value`; the newest. */
-function unseenRow(recipient: string, kind: PushNoticeKind, field: 'topicId' | 'from', value: string, nowS: number): BellRow | null {
+/**
+ * The member's unseen row of this kind, within its lifetime, for this topic (and, given `from`, from this sender); the
+ * newest. A row never folds across topics: opening a topic takes its own rows off the bell (bellSeenWhere), and each
+ * row's Open lands where it says.
+ */
+function unseenRow(recipient: string, kind: PushNoticeKind, topicId: string, from: string | null, nowS: number): BellRow | null {
     const row = db.prepare(`SELECT id, data FROM push_notices WHERE recipient = ? AND kind = ? AND seen_at IS NULL AND sent_at >= ?
-            AND json_valid(data) AND json_extract(data, '$.${field}') = ? ORDER BY sent_at DESC LIMIT 1`)
-        .get(recipient, kind, nowS - PUSH_NOTICE_LIFETIME_SECONDS, value) as { id: string; data: string } | undefined;
+            AND json_valid(data) AND json_extract(data, '$.topicId') = ? AND (? IS NULL OR json_extract(data, '$.from') = ?)
+          ORDER BY sent_at DESC LIMIT 1`)
+        .get(recipient, kind, nowS - PUSH_NOTICE_LIFETIME_SECONDS, topicId, from, from) as { id: string; data: string } | undefined;
     if (!row) return null;
     try {
         const data = JSON.parse(row.data);
@@ -227,7 +240,7 @@ export function tellForumReply(cb: ForumNoticeCallbacks, post: ForumReplyFacts, 
         const mentionPush: string[] = [];
         const mentionBell: string[] = [];
         for (const pk of mentioned) {
-            const row = unseenRow(pk, 'forum.mention', 'from', post.writer, nowS);
+            const row = unseenRow(pk, 'forum.mention', topic.id, post.writer, nowS);
             if (row) {
                 const n = countOf(row.data) + 1;
                 foldInto(cb, pk, 'forum.mention', row, title, mentionBody(n, name), { ...where, count: n }, nowS);
@@ -247,7 +260,7 @@ export function tellForumReply(cb: ForumNoticeCallbacks, post: ForumReplyFacts, 
         const told = new Set(mentioned);
         const followers = mayBeTold(following.filter((pk) => !told.has(pk)), topic, post.writer, true).slice(0, FORUM_PUSH_FOLLOWERS_MAX);
         for (const pk of followers) {
-            const row = unseenRow(pk, 'forum.reply', 'topicId', topic.id, nowS);
+            const row = unseenRow(pk, 'forum.reply', topic.id, null, nowS);
             if (!row) { out.pushed.push(pk); continue; }
             const n = countOf(row.data) + 1;
             foldInto(cb, pk, 'forum.reply', row, title, replyBody(n), { ...where, count: n }, nowS);
@@ -271,17 +284,26 @@ export function tellForumTopic(cb: Pick<ForumNoticeCallbacks, 'tellForum'>, now 
 
 // ── Doorbells ───────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Who read each topic lately, for its replies' doorbell: topic → reader → when (ms). The least recently read topic first. */
-const readers = new Map<string, Map<string, number>>();
+/**
+ * Who read each topic lately, for its replies' doorbell: topic → reader → when (ms) and how far their reads went (the
+ * post number a follow started now keeps, setForumFollow; null: they opened it but said no number). The least recently
+ * read topic first.
+ */
+const readers = new Map<string, Map<string, { at: number; upTo: number | null }>>();
 let readersHeld = 0;
 
-/** A member read a topic now: they hear its replies' doorbell for FORUM_READING_MS. Bounded; nothing is kept on disk. */
-export function noteForumReader(topicId: string, member: string, now = Date.now()): void {
+/**
+ * A member read a topic now, up to post number `upTo` when they said (POST /read): they hear its replies' doorbell for
+ * FORUM_READING_MS, and a follow in that time keeps how far they read. Bounded; nothing is kept on disk.
+ */
+export function noteForumReader(topicId: string, member: string, now = Date.now(), upTo: number | null = null): void {
     let byReader = readers.get(topicId);
     if (byReader) readers.delete(topicId);
     else byReader = new Map();
-    if (!byReader.has(member)) readersHeld++;
-    byReader.set(member, now);
+    const before = byReader.get(member);
+    if (!before) readersHeld++;
+    const held = before && now - before.at <= FORUM_READING_MS ? before.upTo : null;
+    byReader.set(member, { at: now, upTo: upTo === null ? held : Math.max(upTo, held ?? 0) });
     readers.set(topicId, byReader);
     while (readersHeld > READERS_HELD_MAX) {
         const oldest = readers.keys().next().value as string | undefined;
@@ -294,9 +316,15 @@ export function noteForumReader(topicId: string, member: string, now = Date.now(
 function readersOf(topicId: string, now: number): string[] {
     const byReader = readers.get(topicId);
     if (!byReader) return [];
-    for (const [pk, at] of byReader) if (now - at > FORUM_READING_MS) { byReader.delete(pk); readersHeld--; }
+    for (const [pk, { at }] of byReader) if (now - at > FORUM_READING_MS) { byReader.delete(pk); readersHeld--; }
     if (byReader.size === 0) readers.delete(topicId);
     return [...byReader.keys()];
+}
+
+/** How far a member's reads of a topic went in the last FORUM_READING_MS, when they said (POST /read); else null. */
+function readPointOf(topicId: string, member: string, now: number): number | null {
+    const held = readers.get(topicId)?.get(member);
+    return held && now - held.at <= FORUM_READING_MS ? held.upTo : null;
 }
 
 let lastNudgeAt = 0;

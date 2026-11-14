@@ -4,13 +4,15 @@
  * here contacts any host but this machine. "The clock" is moved by writing rows back in time, which is all a rule reads.
  *
  *  1. Follows: who starts or replies in a topic follows it; anyone who reads it follows, mutes or leaves it by its bell;
- *     the topic says the reader's follow and how far they read.
+ *     the topic says the reader's follow and how far they read. A follow keeps what was read: how far a read in the last 15
+ *     minutes went (a part read leaves the rest unread), else the topic's last post.
  *  2. Ten replies make one row and one push: each follower gets one bell row for the topic, its count 10, and one push
  *     with the kind's words alone; opening the topic takes the row off, moves the unread dot, and the next reply pushes
  *     again.
  *  3. A mention from one sender pushes once an hour: an @name of someone in the topic, or a quote of their post, tells them
- *     by a mention (not the reply's fold too); a second from the same sender folds into its row; within the hour after a
- *     push a new row comes with no push, after it one pushes again. A name not in the topic tells nobody.
+ *     by a mention (not the reply's fold too); a second from the same sender in that topic folds into its row (another
+ *     topic's is its own row, and opening a topic takes its own rows off); within the hour after a push a new row comes
+ *     with no push, whatever the topic, after it one pushes again. A name not in the topic tells nobody.
  *  4. A muted topic tells nothing: no reply, no mention, a reply of their own keeps it muted.
  *  5. The Forum switch: off, nothing of the forum reaches the member; the features say forumNotices.
  *  6. Who may read: someone who blocked the writer is not told; while the opening post is hidden only the topic's writer and
@@ -42,7 +44,7 @@ import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { markForumTold, resetForumStartersCheckForTests } from './engine/forum.js';
-import { resetForumDoorbellsForTests } from './engine/forum-notices.js';
+import { FORUM_READING_MS, noteForumReader, resetForumDoorbellsForTests } from './engine/forum-notices.js';
 import { webPushDelivery } from './engine/web-push-subscriptions.js';
 import { moveMemberKeyRows } from './engine/key-move.js';
 import { TABLES } from './engine/replication-manifest.js';
@@ -170,9 +172,21 @@ async function main(): Promise<void> {
     assert((await follow(eve, 'ft-nope', 'following')).status === 404, 'a topic that is not there can\'t be followed (404)');
     assert((await call(null, 'POST', `/api/forum/topics/${T}/follow`, { follow: 'following' })).status === 401, 'unsigned: 401');
     const eveOn = await follow(eve, T, 'following');
+    const eveOnTopic = await topic(eve, T);
     const eveOff = await follow(eve, T, null);
     assert(eveOn.body?.follow === 'following' && eveOff.status === 200 && eveOff.body?.follow === null && (await topic(eve, T)).body?.topic?.follow === null,
         'and leaves it again with null');
+    assert(eveOnTopic.body?.topic?.unread === false && eveOnTopic.body?.lastRead === 2,
+        `a follow with no read said lately starts at the topic's last post: no unread dot for what was there before (${show(eveOnTopic)})`);
+    // Reading, then following by the topic's bell: POST /read keeps nothing on disk before a follow, so the follow takes it.
+    const lastOfT = (await topic(eve, T)).body?.posts?.slice(-1)[0]?.number as number;
+    require_(lastOfT === 2 && (await readTo(eve, T, lastOfT)).status === 200, 'Eve opens it and reads to its last post');
+    require_((await follow(eve, T, 'following')).status === 200, 'then follows it by its bell');
+    const eveFollowsRead = await topic(eve, T);
+    const eveFollowsList = (await topics(eve)).body?.topics?.find((t: any) => t.id === T);
+    assert(eveFollowsRead.body?.lastRead === lastOfT && eveFollowsRead.body?.topic?.unread === false && eveFollowsList?.unread === false,
+        `following a topic just read keeps what was read: no unread dot, and it opens where she was (${show(eveFollowsRead)})`);
+    require_((await follow(eve, T, null)).status === 200, 'and she leaves it again');
 
     // ── 2. Ten replies make one row and one push ────────────────────────────────────────────────
     console.log('── 2. ten replies, one row, one push ──');
@@ -212,7 +226,21 @@ async function main(): Promise<void> {
         'once he opened it, the next reply makes a new row and a push');
     assert(rows(cleo, 'forum.reply').length === 1 && rows(cleo, 'forum.reply')[0].data.count === 11 && pushesTo(cleo, 'forum.reply', mark).length === 0,
         'Cleo, who has not opened it: the eleventh folds in, no push');
-    assert((await readTo(eve, T, 1)).status === 200, 'a reader who follows nothing may still say how far they read (nothing is kept)');
+    assert((await readTo(eve, T, 1)).status === 200, 'a reader who follows nothing may still say how far they read (nothing is kept on disk)');
+    // A part read: what she has not read stays unread once she follows, and a read from long ago is not held.
+    const lastNow = (await topic(ben, T)).body?.posts?.slice(-1)[0]?.number as number;
+    resetForumDoorbellsForTests();
+    require_((await readTo(eve, T, 3)).status === 200 && (await follow(eve, T, 'following')).status === 200, 'Eve reads the first three posts, then follows it');
+    const evePart = await topic(eve, T);
+    assert(evePart.body?.lastRead === 3 && evePart.body?.topic?.unread === true && lastNow > 3,
+        `a follow after a part read keeps that read: the rest stays unread, and it opens at post 4 (${show(evePart)})`);
+    require_((await follow(eve, T, null)).status === 200, 'she leaves it again');
+    resetForumDoorbellsForTests();
+    noteForumReader(T, eve.pk, Date.now() - FORUM_READING_MS - 1000, 3);
+    require_((await follow(eve, T, 'following')).status === 200, 'Eve follows it again, her read more than 15 minutes old');
+    const eveLate = await topic(eve, T);
+    assert(eveLate.body?.lastRead === lastNow && eveLate.body?.topic?.unread === false, `a read from long ago is not held: the follow starts at the last post (${show(eveLate)})`);
+    require_((await follow(eve, T, null)).status === 200, 'she leaves it again');
 
     // ── 3. A mention from one sender pushes once an hour ────────────────────────────────────────
     console.log('── 3. mentions ──');
@@ -252,6 +280,33 @@ async function main(): Promise<void> {
     require_((await reply(dev, T, { words: 'Quoting that.', quotes: 1 })).status === 201, 'Dev quotes Asha\'s opening post');
     await settle();
     assert(pushesTo(asha, 'forum.mention', mark).length === 1 && rows(asha, 'forum.mention')[0]?.body === 'Dev mentioned you in the forum.', 'a quote tells the writer quoted, as a mention');
+    // Two topics: one sender's mentions fold within a topic, never across, and opening a topic takes its own row off.
+    const tb = await start(ben, { sectionId: general, title: 'Bean soup', words: 'Recipes please' });
+    require_(tb.status === 201, `Ben starts a second topic (${show(tb)})`);
+    const TB = tb.body.topic.id as string;
+    require_((await reply(cleo, TB, { words: 'Mine has onion.' })).status === 201, 'Cleo replies there, so she is in it too');
+    db.prepare(`UPDATE push_notices SET seen_at = 1, data = json_set(data, '$.pushedAt', json_extract(data, '$.pushedAt') - 3601)
+        WHERE kind LIKE 'forum.%' AND json_extract(data, '$.pushedAt') IS NOT NULL`).run();
+    db.prepare("UPDATE push_notices SET seen_at = 1 WHERE kind LIKE 'forum.%'").run();
+    mark = expo.length;
+    require_((await reply(ben, T, { words: '@Cleo seeds here' })).status === 201, 'Ben mentions Cleo in the first topic');
+    require_((await reply(ben, TB, { words: '@Cleo soup here' })).status === 201, 'and in his second topic');
+    await settle();
+    const byTopic = (id: Id, t: string) => rows(id, 'forum.mention').filter((r) => r.data.topicId === t);
+    const mentionRows = () => JSON.stringify(rows(cleo, 'forum.mention').map((r) => [r.title, r.body, r.data.topicId === T ? 'T' : r.data.topicId === TB ? 'TB' : '?', r.data.count]));
+    assert(rows(cleo, 'forum.mention').length === 2 && byTopic(cleo, T).length === 1 && byTopic(cleo, TB).length === 1
+        && byTopic(cleo, T)[0].title === 'Seed swap ideas' && byTopic(cleo, TB)[0].title === 'Bean soup'
+        && byTopic(cleo, T)[0].body === 'Ben mentioned you in the forum.' && byTopic(cleo, TB)[0].body === 'Ben mentioned you in the forum.',
+        `a mention in another topic is its own row; the first topic's row stays (${mentionRows()})`);
+    assert(pushesTo(cleo, 'forum.mention', mark).length === 1, 'and still one push an hour from the same sender, whatever the topic');
+    require_((await reply(ben, T, { words: '@Cleo and more seeds' })).status === 201, 'Ben mentions her in the first topic again');
+    await settle();
+    assert(rows(cleo, 'forum.mention').length === 2 && byTopic(cleo, T)[0]?.data.count === 2 && byTopic(cleo, T)[0]?.body === 'Ben mentioned you 2 times in the forum.'
+        && byTopic(cleo, TB)[0]?.data.count === 1, `it folds into that topic's row alone (${mentionRows()})`);
+    require_((await readTo(cleo, T, 999)).status === 200, 'Cleo opens the first topic');
+    assert(byTopic(cleo, T).length === 0 && byTopic(cleo, TB).length === 1, `opening a topic takes its own mention row off, and leaves the other topic's (${mentionRows()})`);
+    require_((await readTo(cleo, TB, 999)).status === 200, 'then the second');
+    assert(rows(cleo, 'forum.mention').length === 0, 'and that one comes off too');
 
     // ── 4. A muted topic tells nothing ──────────────────────────────────────────────────────────
     console.log('── 4. muted ──');

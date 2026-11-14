@@ -96,11 +96,14 @@ const OLDTOWN = { host: 'oldtown.example.org', name: 'Oldtown Exchange' };
 const QUIET = { host: 'quietvalley.example.org', name: 'Quiet Valley' };
 const FORGED = { host: 'oddhill.example.org', name: 'Odd Hill' };
 
+/** When every community last pushed, as the registry says: one moment, so a run changes a row only where the switch moved. */
+const LAST_SEEN = new Date().toISOString();
+
 /** A row of the registry's view, as the website and a global node's mirror read it; `listings_from_here` as given, or left out. */
 function viewRow(c: { host: string; name: string }, listingsFromHere?: unknown): Record<string, unknown> {
     return {
         node_id: `peer-${c.host}`, shown_name: c.name, community_name: c.name, node_url: `https://${c.host}`,
-        last_seen_at: new Date().toISOString(), accepting_knocks: true,
+        last_seen_at: LAST_SEEN, accepting_knocks: true,
         ...(listingsFromHere === undefined ? {} : { listings_from_here: listingsFromHere }),
     };
 }
@@ -189,11 +192,12 @@ async function main() {
         shownFrom: { host: c.host, postId: crypto.randomUUID(), name: 'A name the phone made up' },
     });
     const made: Record<string, Answer> = {
-        riverbend: await offer(RIVERBEND, 'Riverbend loaves'),
-        riverbendEvent: await event(RIVERBEND, 'Riverbend street party'),
-        oldtown: await offer(OLDTOWN, 'Oldtown honey'),
-        quiet: await offer(QUIET, 'Quiet Valley eggs'),
-        forged: await offer(FORGED, 'Odd Hill apples'),
+        riverbend: await offer(RIVERBEND, 'Sourdough loaves'),
+        riverbendEvent: await event(RIVERBEND, 'Street party'),
+        oldtown: await offer(OLDTOWN, 'Raw honey'),
+        // Its words name no community, so a read that holds the name or the address can only have it from the directory.
+        quiet: await offer(QUIET, 'Free-range eggs'),
+        forged: await offer(FORGED, 'Bramley apples'),
     };
     for (const [what, a] of Object.entries(made)) assert(a.status === 200 && a.body?.post?.shownCopy === true, `${what}: a copy is made (${a.status} ${a.text.slice(0, 120)})`);
     const idOf = (what: string): string => made[what].body?.post?.id;
@@ -238,7 +242,8 @@ async function main() {
     }
     assert((await read(idOf('riverbend'), robin))?.shownNameOff === true, 'and its author\'s read says why');
     const all = (await call('GET', '/api/marketplace/posts', sam)).body ?? [];
-    assert(Array.isArray(all) && all.length >= 5 && !all.some((p: any) => p?.shownFrom?.host === RIVERBEND.host), `no copy in the whole list draws Riverbend's line (${all.length} read)`);
+    assert(Array.isArray(all) && all.some((p: any) => p?.id === idOf('riverbend')) && !all.some((p: any) => p?.shownFrom?.host === RIVERBEND.host),
+        `the whole list holds the Riverbend copy, and no copy in it draws Riverbend's line (${all.length} read)`);
     assert(all.some((p: any) => p?.shownFrom?.host === OLDTOWN.host), 'another community\'s line is untouched');
     const rsvp = await call('POST', `/api/marketplace/posts/${idOf('riverbendEvent')}/rsvp`, sam, { status: 'going' });
     assert(rsvp.status === 409 && rsvp.body?.code === EVENT_COPY_CODE && !String(rsvp.body?.error).includes(RIVERBEND.name),

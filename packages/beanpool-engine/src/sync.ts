@@ -570,6 +570,8 @@ export interface SyncCommunitySettings {
         publishContactEmail?: boolean;
         publishContactPhone?: boolean;
         publishHealth?: boolean;
+        /** The community's name beside its members' listings on the global community; left out by a main server from before it. */
+        publishListingsFromHere?: boolean;
         directoryPushIntervalHours?: number;
         /** The town or area a stranger's card names while the place is shared, or null for none (apps/server routes/community-card.ts). */
         areaName?: string | null;
@@ -604,6 +606,11 @@ export interface SyncDirectoryCommunity {
     closingOn?: string | null;
     /** How promptly the community answers requests to join ('week' | 'slow' | 'none'), or null. */
     answers?: 'week' | 'slow' | 'none' | null;
+    /**
+     * Whether its name and door are drawn beside its members' listings on the global community (list-on-global G5): false only
+     * where its push said so. Left out by a main server from before it: on.
+     */
+    listingsFromHere?: boolean;
 }
 
 /**
@@ -1521,6 +1528,7 @@ function directoryCommunityOfRow(r: any): SyncDirectoryCommunity {
         acceptingKnocks: r.accepting_knocks === 1 ? true : r.accepting_knocks === 0 ? false : null,
         closingOn: r.closing_on ?? null,
         answers: r.answers ?? null,
+        listingsFromHere: r.listings_from_here !== 0,
     };
 }
 

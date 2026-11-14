@@ -530,6 +530,12 @@ export function initSchema() {
     // CONVERSION CODE (schema step), log row PERITEM-S4, remove in the release after the one that ships per-item.
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN item_option TEXT CHECK (item_option IS NULL OR item_option IN ('each', 'lot'))`).run(); } catch { }
 
+    // Born with the community's name on its members' listings on the global community (list-on-global G5): one empty column on
+    // the directory mirror's cache, with schema.sql's own CHECK, NULL on every row that is there, which reads as on. Nothing is
+    // read, filled in or rewritten: the mirror's next run writes it where a community says false. An addition, as Local
+    // knowledge's are (Marty's pick 6, 11 Nov 2026). On a fresh install it finds its column and does nothing.
+    try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN listings_from_here INTEGER CHECK (listings_from_here IS NULL OR listings_from_here IN (0, 1))`).run(); } catch { }
+
     // An older conversion pass not yet removed: it finds nothing to do on a file the gate opens (every kept node ran it;
     // MEASURE-conversion-code.md M2), and goes in its own removal with the seal's half (the split-off N1b lists it). Push
     // tokens stored in the clear go aside for the boot to lock or drop (services/push-token-seal.ts, A25).

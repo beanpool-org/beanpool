@@ -79,6 +79,7 @@ export function logSettingName(setting: string): string {
         shareEmail: t('Share email'),
         sharePhone: t('Share phone'),
         shareHealth: t('Share health'),
+        shareListingsFromHere: t("Our name on members' listings on the global community"),
         probation: t('Limits on new accounts'),
         autoHide: t('Reported posts hidden and message requests cleared automatically'),
         autoHideReports: t('Reported posts hidden and message requests cleared automatically'),

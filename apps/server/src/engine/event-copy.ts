@@ -12,6 +12,10 @@
  *   (createPost), and of the sockets (state-engine.ts broadcast, as a post hidden by reports).
  * - **The from-line and the door are drawn at each read** from the row of the directory, and never from anything the
  *   phone said. So a row that is gone takes its line with it, whatever the copy holds.
+ * - **A community keeps its name off if it wants (slice G5; DESIGN-list-on-global-fable.md §2, §4).** Its directory push
+ *   says `listingsFromHere`; a row that says false (engine/directory-cache.ts) draws no from-line and no door on any copy
+ *   from it, from the mirror's next run, and an RSVP refusal names nobody. The copy keeps the host of a listed community
+ *   either way, so its line comes back if the community says yes again. Its author's own read says why (`shownNameOff`).
  * - **No read goes by who wrote it.** A reader's block list, the author's holiday, a paused account and a new name or face
  *   move their listings and leave a copy where it is, in every list, count and tag (@beanpool/engine posts.ts UNNAMED_COPY_SQL)
  *   and on the socket (state-engine.ts listingReach): a copy that came and went with its author's row would say whose it is.
@@ -66,9 +70,13 @@ const QUESTIONS_NEED_REQUESTS = word("This community isn't taking message reques
 const NO_DOOR_WORDS = word('This event is run by another community, so you can\'t say you are going from here.');
 const POST_ID_MOST_CHARS = 128;
 
+/** The row a copy's host may be kept for: one a stranger is shown now, whether or not it lets its name be drawn on copies. */
+const shownRowAt = (host: string): DirectoryRow | null => (host ? shownCommunityAt(host) : null);
+
+/** The from-line and door for a copy's host: a shown row that lets its name be drawn on its members' copies, or nothing. */
 function doorOf(host: string): (ShownFrom & { row: DirectoryRow }) | null {
-    const row = host ? shownCommunityAt(host) : null;
-    return row ? { host, postId: null, name: row.name!, url: row.url!, door: row.acceptingKnocks === false ? 'invite' : 'ask', row } : null;
+    const row = shownRowAt(host);
+    return row?.listingsFromHere ? { host, postId: null, name: row.name!, url: row.url!, door: row.acceptingKnocks === false ? 'invite' : 'ask', row } : null;
 }
 
 /** Whether a create asks for a copy here: a node that keeps no directory makes a plain post of it, and the phone sees that. */
@@ -101,7 +109,7 @@ export function copyOfRequest(raw: unknown, body: { type?: unknown; eventOnline?
     const asked = raw as { host?: unknown; postId?: unknown; takesQuestions?: unknown };
     const takesQuestions = asked.takesQuestions === true && isListing(body.type) && getProfileSwitches().dmRequests;
     const host = typeof asked.host === 'string' ? audienceOf(`https://${asked.host}`) : null;
-    if (!host || !doorOf(host)) return { host: '', postId: null, price, takesQuestions };
+    if (!host || !shownRowAt(host)) return { host: '', postId: null, price, takesQuestions };
     const id = asked.postId;
     return { host, postId: typeof id === 'string' && id.length > 0 && id.length <= POST_ID_MOST_CHARS ? id : null, price, takesQuestions };
 }
@@ -144,8 +152,8 @@ export function copyUpdates(updates: Record<string, any>): void {
 
 /**
  * A post as `reader` reads it. Every other post comes back as it is. A copy loses its stored columns for `shownCopy` and,
- * while the directory shows the community, `shownFrom`; its `shownPrice` stays, for a reader to word; for anyone but its
- * author it is a visitor's read. One that takes questions adds its author's name and key, and nothing else of them, for a
+ * while the directory shows the community and it lets its name be drawn, `shownFrom`; its `shownPrice` stays, for a reader to
+ * word; for anyone but its author it is a visitor's read. Its author's read says when the community keeps its name off. One that takes questions adds its author's name and key, and nothing else of them, for a
  * member while it is up: a read that is a removal, or a copy off the board, has nothing to ask about.
  */
 export function readOfCopy(post: MarketplacePost, reader: string | null | undefined): MarketplacePost {
@@ -156,7 +164,10 @@ export function readOfCopy(post: MarketplacePost, reader: string | null | undefi
         ...rest, shownCopy: true,
         ...(door ? { shownFrom: { host: door.host, postId: shownFromPostId ?? null, name: door.name, url: door.url, door: door.door } } : {}),
     };
-    if (reader && reader === post.authorPublicKey) return { ...read, ...(takesQuestions ? { takesQuestions: true } : {}) };
+    if (reader && reader === post.authorPublicKey) {
+        const nameOff = !door && shownRowAt(shownFromHost)?.listingsFromHere === false;
+        return { ...read, ...(takesQuestions ? { takesQuestions: true } : {}), ...(nameOff ? { shownNameOff: true } : {}) };
+    }
     const seen = guestPost(read);
     const open = takesQuestions && !!reader && post.status === 'active' && post.active !== false && !post.hiddenByReportsAt && readsAsMember(db, reader);
     return open ? { ...seen, takesQuestions: true, authorPublicKey: post.authorPublicKey, authorCallsign: post.authorCallsign } : seen;

@@ -166,6 +166,12 @@ export interface ShapeSettings {
     shareEmail: ShapeSetting<boolean>;
     sharePhone: ShapeSetting<boolean>;
     shareHealth: ShapeSetting<boolean>;
+    /**
+     * Our name on members' listings on the global community (DESIGN-list-on-global-fable.md §2, slice G5): the directory push's
+     * `listingsFromHere`. On out of the box; off, a member's listing shown there carries no name and no Ask to join. A member
+     * can show one either way. No lock, and nobody is told: it is a directory switch, as the five above are.
+     */
+    shareListingsFromHere: ShapeSetting<boolean>;
     visitors: ShapeSetting<VisitorsView>;
     probation: ShapeSetting<boolean>;
     autoHide: ShapeSetting<boolean>;
@@ -336,7 +342,7 @@ export const LOCKS_AFTER_A_CHANGE = {
 
 // ── The community's rows ───────────────────────────────────────────────────────────────────
 
-const DIRECTORY_FIELDS = ['publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours'] as const;
+const DIRECTORY_FIELDS = ['publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'publishListingsFromHere', 'directoryPushIntervalHours'] as const;
 type DirectoryField = (typeof DIRECTORY_FIELDS)[number];
 type Directory = Required<Pick<NodeConfig, DirectoryField>>;
 
@@ -358,6 +364,7 @@ interface CommunityRows {
 /** What getNodeConfig reads each directory switch as when nothing is stored (state-engine.ts): the share switches' `default`. */
 export const DIRECTORY_SWITCH_DEFAULTS: Readonly<Record<Exclude<DirectoryField, 'directoryPushIntervalHours'>, boolean>> = {
     publishLocation: true, publishMembers: true, publishContactEmail: false, publishContactPhone: false, publishHealth: true,
+    publishListingsFromHere: true,
 };
 
 function row(key: string): string | null {
@@ -587,6 +594,7 @@ export function readShape(): Shape {
         shareEmail: share('publishContactEmail'),
         sharePhone: share('publishContactPhone'),
         shareHealth: share('publishHealth'),
+        shareListingsFromHere: share('publishListingsFromHere'),
         visitors,
         probation: plain('probation'),
         autoHide: plain('autoHideReports'),

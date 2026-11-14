@@ -9,10 +9,10 @@
  * member's communities keep, when the member asks (contacts-store.ts `setAsideDamaged`).
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { DeviceEventEmitter, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { BackHandler, DeviceEventEmitter, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, ErrorBoundary } from 'expo-router';
+import { router, ErrorBoundary, useNavigation } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
     CONTACTS_LIMITS, cleanContactName, formatCount, newContactId, putContact, removeContact, removeEveryContact, t, tn,
@@ -20,7 +20,7 @@ import {
 } from '@beanpool/core';
 import { Alert } from '../utils/keyboard-alert';
 import { useIdentity } from './IdentityContext';
-import { useTheme, useStyles } from './ThemeContext';
+import { useTheme, useStyles, type ThemeContextType } from './ThemeContext';
 import { ContactsInfoSheet } from '../components/ContactsInfoSheet';
 import { communityLabel, contactsOf, contactsWhereWords, shareContactsFile, useContacts, type ContactsView } from '../utils/use-contacts';
 import { checkContactsHere, editContacts, syncContacts } from '../utils/contacts-sync';
@@ -45,32 +45,17 @@ export default function ContactsScreen() {
     const [busy, setBusy] = useState(false);
     // The community in use is asked for its copy as the screen opens (design §4.5), at most once a minute.
     useEffect(() => { if (identity) void checkContactsHere(identity); }, [identity?.publicKey]);
-    const styles = useStyles(({ colors }) => StyleSheet.create({
-        safe: { flex: 1, backgroundColor: colors.surface.app },
-        header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border.default },
-        iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-        title: { flex: 1, fontSize: 18, fontWeight: '800', color: colors.text.heading },
-        body: { padding: 16, paddingBottom: 40 },
-        muted: { fontSize: 14, lineHeight: 20, color: colors.text.muted, marginBottom: 12 },
-        text: { fontSize: 15, lineHeight: 21, color: colors.text.body, marginBottom: 12 },
-        btnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-        btn: { minHeight: 44, minWidth: 44, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center' },
-        btnText: { fontSize: 15, fontWeight: '700', color: colors.text.body },
-        go: { minHeight: 44, paddingHorizontal: 16, borderRadius: 10, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
-        goText: { fontSize: 15, fontWeight: '800', color: colors.text.inverse },
-        card: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 12, marginBottom: 8 },
-        menuRow: { minHeight: 44, justifyContent: 'center' },
-        field: { minHeight: 44, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 10, paddingHorizontal: 12, fontSize: 15, color: colors.text.body, backgroundColor: colors.surface.card, marginBottom: 12 },
-        label: { fontSize: 14, fontWeight: '700', color: colors.text.body, marginBottom: 4 },
-        head: { fontSize: 15, fontWeight: '800', color: colors.text.heading, marginTop: 12, marginBottom: 8 },
-        row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 10, marginBottom: 8 },
-        // Never squeezed (design §8): when the name's 160 dp and the button don't fit side by side, the button drops under it.
-        rowMain: { flexGrow: 1, flexShrink: 0, flexBasis: 160, minHeight: 44, justifyContent: 'center' },
-        name: { fontSize: 16, fontWeight: '700', color: colors.text.body },
-        sub: { fontSize: 13, color: colors.text.muted, marginTop: 2 },
-        blocked: { fontSize: 13, fontWeight: '800', color: colors.feedback.danger.fg },
-        danger: { fontSize: 14, color: colors.feedback.danger.fg, marginBottom: 12 },
-    }));
+    // "Add a contact" and a contact's page are this one route's own pages: Android's Back returns to the list from them, as
+    // the arrow does, and iOS's swipe from the edge is off while one is open (it would close Contacts, and what was typed).
+    const navigation = useNavigation();
+    const onPage = screen.kind !== 'list';
+    useEffect(() => {
+        navigation.setOptions({ gestureEnabled: !onPage });
+        if (!onPage) return undefined;
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => { setScreen({ kind: 'list' }); return true; });
+        return () => sub.remove();
+    }, [navigation, onPage]);
+    const styles = useStyles(makeStyles);
 
     const back = () => (screen.kind === 'list' ? router.back() : setScreen({ kind: 'list' }));
     const header = (title: string) => (
@@ -135,7 +120,7 @@ export default function ContactsScreen() {
     const people = contactsOf(view);
 
     if (screen.kind === 'add') {
-        return shell(t('Add a contact'), <AddByHand styles={styles} busy={busy} full={people.length >= CONTACTS_LIMITS.contacts}
+        return shell(t('Add a contact'), <AddByHand busy={busy} full={people.length >= CONTACTS_LIMITS.contacts}
             onAdd={async (c) => { if (await change((l) => putContact(l, { id: newContactId(), links: [], invite: null, ...c }))) setScreen({ kind: 'list' }); }} />);
     }
     if (screen.kind === 'contact') {
@@ -165,12 +150,38 @@ export default function ContactsScreen() {
             </View>
         ));
     }
-    return shell(t('Contacts'), <ListScreen view={view} list={list} styles={styles} busy={busy} me={identity.publicKey}
+    return shell(t('Contacts'), <ListScreen view={view} list={list} busy={busy} me={identity.publicKey}
         onOpen={(id) => setScreen({ kind: 'contact', id })} onAdd={() => setScreen({ kind: 'add' })} onInfo={() => setInfo(true)}
         onRemoveAll={() => change((l) => removeEveryContact(l))} />);
 }
 
-type Styles = ReturnType<typeof StyleSheet.create<Record<string, any>>>;
+/** The screen's styles, from the central colour tokens; each part of the screen reads them itself (useStyles), never as a prop. */
+const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.surface.app },
+    header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border.default },
+    iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+    title: { flex: 1, fontSize: 18, fontWeight: '800', color: colors.text.heading },
+    body: { padding: 16, paddingBottom: 40 },
+    muted: { fontSize: 14, lineHeight: 20, color: colors.text.muted, marginBottom: 12 },
+    text: { fontSize: 15, lineHeight: 21, color: colors.text.body, marginBottom: 12 },
+    btnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+    btn: { minHeight: 44, minWidth: 44, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center' },
+    btnText: { fontSize: 15, fontWeight: '700', color: colors.text.body },
+    go: { minHeight: 44, paddingHorizontal: 16, borderRadius: 10, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
+    goText: { fontSize: 15, fontWeight: '800', color: colors.text.inverse },
+    card: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 12, marginBottom: 8 },
+    menuRow: { minHeight: 44, justifyContent: 'center' },
+    field: { minHeight: 44, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 10, paddingHorizontal: 12, fontSize: 15, color: colors.text.body, backgroundColor: colors.surface.card, marginBottom: 12 },
+    label: { fontSize: 14, fontWeight: '700', color: colors.text.body, marginBottom: 4 },
+    head: { fontSize: 15, fontWeight: '800', color: colors.text.heading, marginTop: 12, marginBottom: 8 },
+    row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 10, marginBottom: 8 },
+    // Never squeezed (design §8): when the name's 160 dp and the button don't fit side by side, the button drops under it.
+    rowMain: { flexGrow: 1, flexShrink: 0, flexBasis: 160, minHeight: 44, justifyContent: 'center' },
+    name: { fontSize: 16, fontWeight: '700', color: colors.text.body },
+    sub: { fontSize: 13, color: colors.text.muted, marginTop: 2 },
+    blocked: { fontSize: 13, fontWeight: '800', color: colors.feedback.danger.fg },
+    danger: { fontSize: 14, color: colors.feedback.danger.fg, marginBottom: 12 },
+});
 
 /** "Save a copy as a file (.vcf)", after its warning (design §3.9). */
 function saveFile(list: ContactsList | null) {
@@ -181,11 +192,12 @@ function saveFile(list: ContactsList | null) {
     ]);
 }
 
-function ListScreen({ view, list, styles, busy, me, onOpen, onAdd, onInfo, onRemoveAll }: {
-    view: ContactsView; list: ContactsList | null; styles: Styles; busy: boolean; me: string;
+function ListScreen({ view, list, busy, me, onOpen, onAdd, onInfo, onRemoveAll }: {
+    view: ContactsView; list: ContactsList | null; busy: boolean; me: string;
     onOpen: (id: string) => void; onAdd: () => void; onInfo: () => void; onRemoveAll: () => Promise<boolean>;
 }) {
     const { colors } = useTheme();
+    const styles = useStyles(makeStyles);
     const [q, setQ] = useState('');
     const [menu, setMenu] = useState(false);
     const [blocked, setBlocked] = useState<string[]>([]);
@@ -321,8 +333,9 @@ function ListScreen({ view, list, styles, busy, me, onOpen, onAdd, onInfo, onRem
     );
 }
 
-function AddByHand({ styles, busy, full, onAdd }: { styles: Styles; busy: boolean; full: boolean; onAdd: (c: { name: string; phones: string[]; emails: string[]; note: string }) => void }) {
+function AddByHand({ busy, full, onAdd }: { busy: boolean; full: boolean; onAdd: (c: { name: string; phones: string[]; emails: string[]; note: string }) => void }) {
     const { colors } = useTheme();
+    const styles = useStyles(makeStyles);
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [email, setEmail] = useState('');

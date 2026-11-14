@@ -22,6 +22,9 @@ const mem = vi.hoisted(() => ({
     blocked: [] as string[],
     pushed: [] as unknown[],
     reads: 0,
+    // Android's hardware Back (BackHandler's listeners, newest first, as React Native asks them) and the route's options (iOS swipe-back).
+    back: [] as Array<() => boolean>,
+    options: [] as Array<Record<string, unknown>>,
 }));
 // The store loads Expo's file system, AsyncStorage and the share sheet with require() (utils/contacts-store.ts
 // phoneContactsDeps, use-contacts.ts shareContactsFile), which vi.mock doesn't reach: Node's loader hands these out instead.
@@ -70,9 +73,20 @@ vi.mock('react-native', () => {
         Modal: ({ visible, children }: { visible: boolean; children?: ReactNode }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
         StyleSheet: { create: (s: unknown) => s },
         DeviceEventEmitter: { addListener: () => ({ remove() {} }), emit: () => {} },
+        BackHandler: {
+            addEventListener: (_: string, fn: () => boolean) => {
+                mem.back.unshift(fn);
+                return { remove() { mem.back.splice(mem.back.indexOf(fn), 1); } };
+            },
+        },
     };
 });
-vi.mock('expo-router', () => ({ router: { push: (to: unknown) => mem.pushed.push(to), back: () => mem.pushed.push('back') }, ErrorBoundary: () => null }));
+const NAV = vi.hoisted(() => ({ setOptions: (o: Record<string, unknown>) => { mem.options.push(o); } }));
+vi.mock('expo-router', () => ({
+    router: { push: (to: unknown) => mem.pushed.push(to), back: () => mem.pushed.push('back') },
+    useNavigation: () => NAV,
+    ErrorBoundary: () => null,
+}));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: { children?: ReactNode }) => createElement('div', null, children) }));
 vi.mock('react-native-keyboard-controller', () => ({ KeyboardAvoidingView: ({ children }: { children?: ReactNode }) => createElement('div', null, children) }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
@@ -135,6 +149,15 @@ async function press(label: string) {
     await act(async () => { b.click(); });
     await settle();
 }
+/** Android's Back key: React Native asks each listener, newest first, until one says it handled it; else the stack pops the route. */
+async function pressBack() {
+    let handled = false;
+    await act(async () => { handled = mem.back.some((fn) => fn()); });
+    if (!handled) mem.pushed.push('back');
+    await settle();
+}
+/** Whether iOS's swipe from the edge may close the route now (the last gestureEnabled the screen set; on unless it turned it off). */
+const swipeCloses = () => [...mem.options].reverse().find((o) => 'gestureEnabled' in o)?.gestureEnabled !== false;
 async function answer(choice: string) {
     const alert = mem.alerts[mem.alerts.length - 1];
     const b = alert?.[2]?.find((x) => x.text === choice);
@@ -147,6 +170,7 @@ const onPhone = async () => (await loadContacts(ME, phoneContactsDeps())).onPhon
 
 beforeEach(() => {
     mem.store.clear(); mem.files.clear(); mem.alerts.length = 0; mem.shared.length = 0; mem.blocked = []; mem.pushed.length = 0;
+    mem.back.length = 0; mem.options.length = 0;
     mem.store.set('beanpool_anchor_url', RIVERSIDE);
     vi.mocked(syncContacts).mockClear();
 });
@@ -211,6 +235,30 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         expect(mem.files.get(FILE)).not.toContain('Dee Walker');
         expect(text()).toContain('Not on BeanPool yet');
         // Mutation: onAdd without editContacts → the list on the phone stays empty.
+    });
+
+    it('Android\'s Back and iOS\'s swipe from "Add a contact" or a contact\'s page return to the list, as the arrow does; from the list they leave', async () => {
+        await seedList((l) => putContact(l, person('Dee Walker', { phones: ['0412 345 678'] })));
+        await render();
+        await press('＋ Add');
+        expect(text()).toContain('Phone number');
+        expect(swipeCloses()).toBe(false);
+        await pressBack();
+        expect(mem.pushed).toEqual([]);
+        expect(text()).toContain('Not on BeanPool yet');
+        expect(swipeCloses()).toBe(true);
+        await press('Dee Walker0412 345 678');
+        expect(host.querySelector('[data-testid="contact-detail"]')).not.toBeNull();
+        expect(swipeCloses()).toBe(false);
+        await pressBack();
+        expect(mem.pushed).toEqual([]);
+        expect(host.querySelector('[data-testid="contact-detail"]')).toBeNull();
+        expect(text()).toContain('Dee Walker');
+        // On the list nothing holds Back: it leaves Contacts, as any screen does.
+        await pressBack();
+        expect(mem.pushed).toEqual(['back']);
+        // Mutation: drop the BackHandler listener → Back from Add pops the whole route ('back') and what was typed is lost.
+        // Mutation: drop setOptions({ gestureEnabled }) → swipeCloses() stays true on Add, and an edge swipe closes Contacts.
     });
 
     it('a contact: Remove asks first, in the design\'s words, then the contact is gone from the phone', async () => {

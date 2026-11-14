@@ -1,13 +1,13 @@
 /**
  * A name box that holds no name (Marty, 14 Nov 2026, card callsign-link-guard: "Yes, both apps"). On 5 Sep a member pasted
- * her invite link into the name box, and her account on Byron is named "https://mullum.beanpool.org/?inv…". Every name
+ * her invite link into the name box, and her account was named after it ("https://riverside.example.org/?i…" here). Every name
  * box on both apps (joining, the open door, a claim, asking to join, the profile, Settings) and every node route that
  * writes a name refuse the same two things, read here once:
  *
  *   - an invite: the code the invite step reads (invite-text.ts inviteCodeIn: a link's `invite=`, an `INV-xxxx-xxxx`
  *     or `BP-xxxx-xxxx` anywhere, a whole long `BP-` ticket), with or without its link;
  *   - a web address: a scheme (`https://`, any `x://`), `www.`, a host with a path, a host on a common ending (a
- *     community's `byron.beanpool.org`, `example.com`) or a bare IPv4 address.
+ *     community's `riverside.example.org`, `example.com`) or a bare IPv4 address.
  *
  * A name with a dot in it stays a name ("J.R. Smith", "St.Kilda", "Dr.Who"): a dot alone is no address. Names already
  * held are never changed (no conversion code): only a new name, or a change of one, is refused.

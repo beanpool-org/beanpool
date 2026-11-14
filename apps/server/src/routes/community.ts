@@ -1054,7 +1054,7 @@ router.get('/api/community/members', async (ctx) => {
 
 /**
  * A new name refused as an invite or a web address (engine/members.ts CallsignNotANameError): 400 `callsign_link`, in the
- * words for what the member sent whole. These routes cut a name to 20 first, and a cut invite link ("https://mullum.beanp")
+ * words for what the member sent whole. These routes cut a name to 20 first, and a cut invite link ("https://riverside.ex")
  * no longer says it was an invite. True when it answered.
  */
 function respondNotAName(ctx: any, e: unknown, sent: unknown): boolean {

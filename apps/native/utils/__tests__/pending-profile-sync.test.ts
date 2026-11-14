@@ -412,7 +412,7 @@ const NAME_REFUSALS = [
     ['too short (400 callsign_too_short)', 'M', 400, TOO_SHORT_WORDS],
     // A name that is a link, copied from the community where it is held ("Use this name and photo in another community"):
     // a rename here, which the node refuses (#3122 review on profile-feature-gate.ts:212).
-    ['a web address (400 callsign_link)', 'https://mullum.beanpool.org/?inv', 400, NAME_BOX_WORDS.webLink],
+    ['a web address (400 callsign_link)', 'https://riverside.example.org/?i', 400, NAME_BOX_WORDS.webLink],
 ] as const;
 
 describe('a name the community refuses for good leaves the change, and the rest goes without it', () => {

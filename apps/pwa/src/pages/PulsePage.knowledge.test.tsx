@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import type { PulseKnowledgeCard, PulseKnowledgePost } from '@beanpool/core';
 import { PulsePage } from './PulsePage';
 import { getPulseFeed, type PulseFeedItem } from '../lib/api';
+import type { BeanPoolIdentity } from '../lib/identity';
 
 vi.mock('../lib/api', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../lib/api')>()),
@@ -20,7 +21,7 @@ vi.mock('../lib/api', async (importOriginal) => ({
 }));
 vi.mock('./PulseIntakePage', () => ({ PulseIntakePage: () => <div data-testid="pulse-intake-page" /> }));
 
-const identity: any = { publicKey: 'me-pk', privateKey: 'priv', callsign: 'Me' };
+const identity = { publicKey: 'me-pk', privateKey: 'priv', callsign: 'Me' } as unknown as BeanPoolIdentity;
 const creator = (id: string, title: string, over: Partial<PulseFeedItem> = {}): PulseFeedItem => ({
     id, ownerPubkey: `owner-${id}`, url: `https://youtube.com/watch?v=${id}`, platform: 'youtube', category: 'food',
     title, thumbnailUrl: null, callsign: `Maker ${id}`, avatarUrl: 'bundled://leaf', source: 'oauth', isVerified: false,

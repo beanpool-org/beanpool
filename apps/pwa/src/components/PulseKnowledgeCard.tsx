@@ -120,7 +120,8 @@ export function PulseKnowledgeCard({ card, onOpenPage, onOpenLearn }: Props) {
                     onClick={onOpenLearn}
                     // One page: the row carries the card's spoken line, and this button says what it shows. Several: it does.
                     aria-label={lines.single ? undefined : lines.spoken}
-                    className={`min-h-[44px] w-full flex items-center justify-center px-4 py-2 rounded-xl text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 text-nature-900 dark:text-white border border-nature-200 dark:border-nature-700 transition-colors cursor-pointer ${FOCUS}`}
+                    // Not flex: a flex item drops the space before the ›, which drew "Open Learn›" (seen in the 320 shots).
+                    className={`min-h-[44px] w-full block text-center px-4 py-2 rounded-xl text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 text-nature-900 dark:text-white border border-nature-200 dark:border-nature-700 transition-colors cursor-pointer ${FOCUS}`}
                 >
                     {t(PULSE_KNOWLEDGE_CARD_WORDS.openLearn)}<span aria-hidden="true"> ›</span>
                 </button>

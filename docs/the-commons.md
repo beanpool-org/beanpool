@@ -885,6 +885,37 @@ require broad alignment, not a 51% factional win. **Reinstatement needs only a s
 the standard 20% quorum. Without a reinstatement path every removal is permanent by inertia, and the
 first unjust one poisons the mechanism for good.
 
+**Admins pause, the community removes (2026-10/11; `scratch/fable-design/DESIGN-removal-by-vote-fable.md` and its Amendment A,
+built in slices S1–S6).** Marty, 22 Oct: "words now, rule later"; the rule is now in the code. It replaces point 1's quarantine: the
+vote opens in the same step as the pause, not within 24 hours, and a pause never outlives its vote. What the code does:
+
+- **One pause** (`pauseMember`, `apps/server/src/decisions-engine.ts`). An admin's emergency suspension and a report acted on with
+  suspend are the same act: the account is `disabled`, reads what a non-member reads, its listings are off the board, it brings
+  nobody in, and a role it holds is set aside. It keeps its vote on every other Decision, so a pause cannot swing one.
+- **The pause's vote.** The pause opens `remove_member`, "Remove …?", authored by the node, for 7 days. Nobody proposes a removal,
+  member or admin (Amendment A point 1). Yes starts the 7-day grace window and the tick removes them; No, a tie or too few voters
+  lift the pause when it closes. The member is not in its electorate, and it needs at least 3 Yes (`REMOVAL_MIN_YES`) whatever the
+  share. A member who holds an owner or admin role is removed by no vote: the pause ends when its vote closes and the role comes back.
+- **The doors are closed** (`removalVoteRefusal`, `assertMayPrune`, `apps/server/src/state-engine.ts`). Where votes are on, no admin,
+  owner or the server's password removes a member: "Removing a member is the community's vote here. Pause them instead: that opens
+  the vote, and the community decides." Left open: the member's own leaving; **Offboard** settling a removal in its grace window;
+  an owner's **Prune Branch**, until a branch's vote reaches the apps (the server's is J2c, below).
+- **Too few to vote** (S6, `ownerDecideTooFew`). Where fewer than 3 members other than the subject can vote, an owner (never an
+  admin) may decide it while it is open, with a reason members read beside the case; it is carried out at close only if still too
+  few could vote. An owner cannot decide a vote a jury decides.
+- **The chain** (S4). Whoever brought a case that ended without removing the member can't pause them again for 90 days
+  (`REMOVAL_COOL_DOWN_DAYS`); for 30 days only an owner can, with a new reason, and the card says "Second pause in 30 days"
+  (`REPAUSE_NEEDS_OWNER_DAYS`); a third pause within 90 days of the first is refused to everyone (`THIRD_PAUSE_DAYS`). The owners hear
+  of every pause, never whom; an admin with five pauses whose votes are open makes a sixth only with an owner's fresh proof.
+- **A fair vote** (Amendment A). The member is told at once and replies beside the case; the card names the admin who paused; an
+  admin can hide a case shown to be false, or take down a reply that harms someone, each with a reason members read; every member
+  who may vote (where a jury decides, only the jurors) gets an alert that never says who the vote is about, and the member is told too.
+- **Votes off** (the global node, or an operator's switch): a pause lasts 7 days and lifts by itself, nobody votes on it, and the
+  admins remove members themselves.
+
+The member guide (`about/rules.md`), the operators' manual (`commons/decisions-and-emergencies.md`) and beanpool.org's rules page
+(§12) say the same in members' words.
+
 **Who decides: everyone, or a jury (2026-10/11; `scratch/fable-design/DESIGN-removal-jury-fable.md`, built in slices J1–J3).**
 Past a certain size, putting every removal to everyone asks the same members case after case and lets a campaign reach all of them,
 so a community's rule **Who decides a removal** (`apps/server/src/config/removal-decider.ts`) says who votes. Marty accepted all ten

@@ -51,7 +51,10 @@ let request: MockInstance<typeof api.request>;
 const asked = () => request.mock.calls.map((c) => String(c[1]));
 
 function stubNode() {
+    // A plain member (K4's writing screens: LearnPage.write.test.tsx); their own suggestions are none.
+    vi.spyOn(api, 'myNodeRoleOnce').mockResolvedValue(null);
     request = vi.spyOn(api, 'request').mockImplementation((async (_m: string, path: string) => {
+        if (path === '/api/knowledge/drafts/mine') return { waiting: [], answered: [] };
         if (path === '/api/knowledge/front') {
             if (node.failFront) throw new Error('offline');
             return learnFrontOf(node.posts);
@@ -204,11 +207,11 @@ describe('the front', () => {
         expect(within(old).queryByTestId('learn-row-helped')).toBeNull();
     });
 
-    it('says "Nothing here yet." when nothing is showing, and offers no way to add (that is a later slice)', async () => {
+    it('says "Nothing here yet." when nothing is showing, and asks a member for what they know (slice K4: the form)', async () => {
         node.posts = [];
         await openLearn();
-        expect(screen.getByTestId('learn-empty').textContent).toBe('Nothing here yet.');
-        expect(screen.queryByRole('button', { name: /suggest|add/i })).toBeNull();
+        expect(screen.getByTestId('learn-empty').textContent).toBe('Nothing here yet. Know something locals should know?');
+        expect(screen.getByRole('button', { name: '＋ Suggest knowledge' })).toBeInTheDocument();
     });
 
     it('says it could not load, and asks again on Try again', async () => {

@@ -3746,7 +3746,8 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     // N2): the node keeps First steps up for that line alone only for an app that says it draws it (home-answer.ts HomeLanding).
     // `words`: and First steps' line "Keep your 12 words safe" (DESIGN-home-default-fable.md §2.4, slice D3): the node keeps the
     // card up for that line only for an app that says it draws it.
-    q.set('lands', 'enterprise,group,invite,people,asks,first-need,words');
+    // `learn`: and Learn's To check (slice K4): "Local knowledge to check: 3" in Needs you, and the Learn card's "3 to check ›".
+    q.set('lands', 'enterprise,group,invite,people,asks,first-need,words,learn');
     if (typeof params.lat === 'number' && typeof params.lng === 'number' && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
         q.set('lat', String(params.lat));
         q.set('lng', String(params.lng));

@@ -14,7 +14,8 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-const sent = vi.hoisted(() => ({ identity: true, picked: [] as string[] }));
+const sent = vi.hoisted(() => ({ identity: true, picked: [] as string[], learn: 'hidden' as 'live' | 'preview' | 'hidden' | undefined }));
+vi.mock('../use-learn-mode', () => ({ useLearnMode: () => sent.learn }));
 vi.mock('react-native', async () => {
     // Modal and Platform are the shared harness's: iOS's dismissals are `modalControl`'s (profile-events-words-harness.ts).
     const { modalStandIn, platformStandIn } = await import('./profile-events-words-harness');
@@ -47,7 +48,7 @@ import { modalControl } from './profile-events-words-harness';
 
 let host: HTMLDivElement;
 let root: Root;
-beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); sent.identity = true; sent.picked.length = 0; });
+beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); sent.identity = true; sent.picked.length = 0; sent.learn = 'hidden'; });
 afterEach(() => { vi.useRealTimers(); modalControl.reset(); act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
 const show = async () => { await act(async () => { root.render(createElement(NewPostTypeSheet as any, { visible: true, onClose: () => {}, onSelect: (t: string) => { sent.picked.push(t); } }) as any); }); };
@@ -99,6 +100,59 @@ describe('the + chooser: one short line under each choice', () => {
         await show();
         expect(host.querySelector('[data-testid="new-post-join"]')).not.toBeNull();
         expect(host.textContent).not.toContain("Something you'll give");
+    });
+});
+
+describe('the fifth row, 📖 Local knowledge (slice K4): only where Learn is live here', () => {
+    it('where Learn is live it comes after Event, in the same words as the web, and choosing it opens that kind', async () => {
+        sent.learn = 'live';
+        await show();
+        expect(rows().map((r) => r.getAttribute('aria-label'))).toEqual([
+            "Offer: Something you'll give or do for others",
+            "Need: Something you're looking for",
+            'Community Poll: Ask a question with 2–4 options in the feed',
+            'Event: A gathering with a time and a place',
+            'Local knowledge: Something worth knowing about this place',
+        ]);
+        expect(rows()[4].textContent).toContain('📖');
+        await act(async () => { rows()[4].click(); });
+        expect(sent.picked).toEqual(['knowledge']);
+    });
+
+    for (const mode of ['hidden', 'preview', undefined] as const) {
+        it(`not where Learn is ${mode ?? 'not known yet'}: four rows, as before`, async () => {
+            sent.learn = mode;
+            await show();
+            expect(rows()).toHaveLength(4);
+            expect(host.textContent).not.toContain('Local knowledge');
+        });
+    }
+
+    it('a visitor with no account never sees it, even where Learn is live', async () => {
+        sent.identity = false;
+        sent.learn = 'live';
+        await show();
+        expect(host.textContent).not.toContain('Local knowledge');
+    });
+
+    it('in the pseudo-locale its name and line come through t()', async () => {
+        sent.learn = 'live';
+        setLanguage('xx');
+        await show();
+        expect(host.textContent).toContain(pseudoLocalise('Something worth knowing about this place'));
+        expect(host.textContent).toContain(pseudoLocalise('Local knowledge'));
+    });
+
+    it('on iOS it waits for the chooser to go before the screen is pushed, as the Poll and Event forms do', async () => {
+        sent.learn = 'live';
+        modalControl.ios = true;
+        const closed: boolean[] = [];
+        await ask(closed);
+        await act(async () => { row('Local knowledge').click(); });
+        expect(closed).toEqual([true]);
+        expect(sent.picked).toEqual([]);
+        await dismissalEnds();
+        expect(sent.picked).toEqual(['knowledge']);
     });
 });
 

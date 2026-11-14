@@ -49,11 +49,11 @@ export const HOME_DRAWN: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The doors the Learn card may open beyond a page and Learn (core learnHomeLines): To check and the form are slice K4's
- * views, not in LearnPage yet, so "N to check ›" and "Add the first thing…" are not drawn, and Home doesn't send
- * `lands=learn` (the node sends `toCheck` only to an app that does). K4 turns each on with its view. The phone's is the same.
+ * The doors the Learn card may open beyond a page and Learn (core learnHomeLines): To check and the form, Learn's own views
+ * since slice K4 (LearnPage's `check` and `suggest`), so "N to check ›" and "Add the first thing…" are drawn, and Home sends
+ * `lands=learn` (lib/api.ts getHome: the node sends `toCheck` only to an app that does). The phone's is the same.
  */
-export const LEARN_OPENS: LearnHomeOpens = {};
+export const LEARN_OPENS: LearnHomeOpens = { toCheck: true, addFirst: true };
 
 /** Find your community is pinned for a member's first 30 days on the global node, then it can be removed (§4.1, §7). */
 export const FIND_PINNED_DAYS = 30;

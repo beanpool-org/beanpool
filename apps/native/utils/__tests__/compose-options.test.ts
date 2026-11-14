@@ -8,8 +8,10 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
+    KNOWLEDGE_COMPOSE_OPTION,
     NEW_POST_TYPES,
     TOOL_DRAFT_FRESH_MS,
+    composeOptions,
     clearDraftToolMarker,
     composeCarriesPin,
     composeOptionA11yLabel,
@@ -45,6 +47,28 @@ describe('the compose chooser', () => {
 
     it('lists each type exactly once', () => {
         expect(new Set(NEW_POST_TYPES.map(o => o.id)).size).toBe(NEW_POST_TYPES.length);
+    });
+});
+
+describe('the fifth row: Local knowledge (slice K4)', () => {
+    it("is offered after the four only where Learn is live, in the design's words", () => {
+        expect(composeOptions({ learn: true }).map(o => o.id)).toEqual(['offer', 'need', 'poll', 'event', 'knowledge']);
+        expect(composeOptions({ learn: false }).map(o => o.id)).toEqual(['offer', 'need', 'poll', 'event']);
+        expect(KNOWLEDGE_COMPOSE_OPTION).toEqual({ id: 'knowledge', emoji: '📖', title: 'Local knowledge', description: 'Something worth knowing about this place' });
+        expect(composeOptionA11yLabel(KNOWLEDGE_COMPOSE_OPTION)).toBe('Local knowledge: Something worth knowing about this place');
+    });
+
+    it("opens Learn's form, a screen of its own, and never carries a map pin", () => {
+        expect(composeTargetFor('knowledge')).toBe('knowledge-screen');
+        expect(composeCarriesPin('knowledge')).toBe(false);
+    });
+
+    it('each host opens that screen for it, so no choice is dropped (Home, the Market, the listing screen the map forwards to)', () => {
+        const root = path.resolve(__dirname, '../..');
+        for (const rel of ['app/(tabs)/index.tsx', 'app/(tabs)/market.tsx', 'app/new-listing.tsx']) {
+            const src = fs.readFileSync(path.join(root, rel), 'utf8');
+            expect(src, rel).toMatch(/'knowledge-screen'\) \{ router\.(push|replace)\('\/learn\/new'\)/);
+        }
     });
 });
 

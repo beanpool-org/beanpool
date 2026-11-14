@@ -23,6 +23,7 @@ import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-na
 import { router } from 'expo-router';
 import { PULSE_KNOWLEDGE_WORDS as W, formatCount, formatDate, inCapitalsOf, t, tn, type PulseKnowledgePost } from '@beanpool/core';
 import { useStyles } from '../app/ThemeContext';
+import type { AppColors } from '../constants/colors';
 import { pulseAge, type PulseFeedItem } from '../utils/pulse';
 import { ListPhoto } from './ListPhoto';
 import { ChipText, TopicTile } from './learn/KnowledgeRowCard';
@@ -167,7 +168,7 @@ export function PulseKnowledgeCard({ item }: { item: PulseFeedItem }) {
     );
 }
 
-const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
+const makeStyles = ({ colors, theme }: { colors: AppColors; theme: string }) =>
     StyleSheet.create({
         // The creator's card's frame (PulseFeedCard cardContainer), so one list reads as one kind of thing.
         card: {

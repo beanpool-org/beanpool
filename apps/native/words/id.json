@@ -2293,7 +2293,6 @@
   "Connect to a community before proposing a decision.": "Hubungkan ke komunitas sebelum mengajukan keputusan.",
   "Neighbours": "Tetangga",
   "Local": "Lokal",
-  "Learn": "Belajar",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "other": "Feed Tetangga, {n} item"
   },
@@ -2302,14 +2301,8 @@
     "other": "Feed Lokal, {n} item"
   },
   "Local feed": "Feed Lokal",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "other": "Feed Belajar, {n} item"
-  },
-  "Learn feed": "Feed Belajar",
   "Could not load community feed.": "Tidak dapat memuat feed komunitas.",
   "Could not hide that item.": "Tidak dapat menyembunyikan item tersebut.",
-  "No learning guides yet": "Belum ada panduan belajar",
-  "Curated guides and reflections will appear here.": "Panduan dan refleksi pilihan akan muncul di sini.",
   "No posts in this category yet": "Belum ada postingan di kategori ini",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "Coba pilih \"Semua\" atau periksa kategori lain untuk melihat apa yang diposting tetangga.",
   "Show all categories": "Tampilkan semua kategori",
@@ -2318,7 +2311,6 @@
   "Pulse": "Kabar",
   "Manage your channels": "Kelola kanalmu",
   "‹ Back": "‹ Kembali",
-  "How BeanPool works and daily reflections": "Cara kerja BeanPool dan refleksi harian",
   "News and notices from around the shire": "Berita dan pengumuman dari sekitar wilayah",
   "What your neighbours are creating and sharing": "Apa yang dibuat dan dibagikan tetanggamu",
   "All categories": "Semua kategori",

@@ -2392,7 +2392,6 @@
   "Connect to a community before proposing a decision.": "निर्णय का प्रस्ताव रखने से पहले किसी समुदाय से कनेक्ट करें।",
   "Neighbours": "पड़ोसी",
   "Local": "स्थानीय",
-  "Learn": "सीखें",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "one": "पड़ोसी फ़ीड, {n} आइटम",
     "other": "पड़ोसी फ़ीड, {n} आइटम"
@@ -2403,15 +2402,8 @@
     "other": "स्थानीय फ़ीड, {n} आइटम"
   },
   "Local feed": "स्थानीय फ़ीड",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "one": "सीखने की फ़ीड, {n} आइटम",
-    "other": "सीखने की फ़ीड, {n} आइटम"
-  },
-  "Learn feed": "सीखने की फ़ीड",
   "Could not load community feed.": "सामुदायिक फ़ीड लोड नहीं की जा सकी।",
   "Could not hide that item.": "उस आइटम को छिपाया नहीं जा सका।",
-  "No learning guides yet": "अभी कोई सीखने की गाइड नहीं है",
-  "Curated guides and reflections will appear here.": "चुनिंदा गाइड और विचार यहाँ दिखाई देंगे।",
   "No posts in this category yet": "इस श्रेणी में अभी कोई पोस्ट नहीं है",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "पड़ोसियों ने क्या पोस्ट किया है यह देखने के लिए \"सभी\" चुनें या कोई अन्य श्रेणी देखें।",
   "Show all categories": "सभी श्रेणियाँ दिखाएँ",
@@ -2420,7 +2412,6 @@
   "Pulse": "पल्स",
   "Manage your channels": "अपने चैनल प्रबंधित करें",
   "‹ Back": "‹ वापस",
-  "How BeanPool works and daily reflections": "BeanPool कैसे काम करता है और दैनिक विचार",
   "News and notices from around the shire": "इलाके भर से समाचार और सूचनाएँ",
   "What your neighbours are creating and sharing": "आपके पड़ोसी क्या बना रहे हैं और साझा कर रहे हैं",
   "All categories": "सभी श्रेणियाँ",

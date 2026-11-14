@@ -2392,7 +2392,6 @@
   "Connect to a community before proposing a decision.": "முடிவை முன்மொழிவதற்கு முன் ஒரு சமூகத்துடன் இணையுங்கள்.",
   "Neighbours": "அண்டை வீட்டார்",
   "Local": "உள்ளூர்",
-  "Learn": "கற்றுக்கொள்",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "one": "அண்டை வீட்டார் ஊட்டம், {n} உருப்படி",
     "other": "அண்டை வீட்டார் ஊட்டம், {n} உருப்படிகள்"
@@ -2403,15 +2402,8 @@
     "other": "உள்ளூர் ஊட்டம், {n} உருப்படிகள்"
   },
   "Local feed": "உள்ளூர் ஊட்டம்",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "one": "கற்றல் ஊட்டம், {n} உருப்படி",
-    "other": "கற்றல் ஊட்டம், {n} உருப்படிகள்"
-  },
-  "Learn feed": "கற்றல் ஊட்டம்",
   "Could not load community feed.": "சமூக ஊட்டத்தை ஏற்ற முடியவில்லை.",
   "Could not hide that item.": "அந்த உருப்படியை மறைக்க முடியவில்லை.",
-  "No learning guides yet": "கற்றல் வழிகாட்டிகள் இன்னும் இல்லை",
-  "Curated guides and reflections will appear here.": "தேர்ந்தெடுக்கப்பட்ட வழிகாட்டிகளும் சிந்தனைகளும் இங்கே தோன்றும்.",
   "No posts in this category yet": "இந்தப் பிரிவில் இன்னும் பதிவுகள் இல்லை",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "அண்டை வீட்டார் என்ன பதிவிட்டுள்ளனர் என்பதைப் பார்க்க \"அனைத்தும்\" என்பதைத் தேர்ந்தெடுக்கவும் அல்லது மற்றொரு வகையைப் பார்க்கவும்.",
   "Show all categories": "அனைத்து வகைகளையும் காட்டு",
@@ -2420,7 +2412,6 @@
   "Pulse": "பல்ஸ்",
   "Manage your channels": "உங்கள் சேனல்களை நிர்வகியுங்கள்",
   "‹ Back": "‹ பின்செல்",
-  "How BeanPool works and daily reflections": "BeanPool செயல்படும் விதம் மற்றும் தினசரி சிந்தனைகள்",
   "News and notices from around the shire": "பகுதியைச் சுற்றியுள்ள செய்திகள் மற்றும் அறிவிப்புகள்",
   "What your neighbours are creating and sharing": "உங்கள் அண்டை வீட்டார் உருவாக்குவதும் பகிர்வதும்",
   "All categories": "அனைத்து வகைகள்",

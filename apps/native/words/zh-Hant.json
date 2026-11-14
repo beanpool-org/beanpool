@@ -2291,7 +2291,6 @@
   "Connect to a community before proposing a decision.": "發起決策提案前請先連線至社群。",
   "Neighbours": "鄰居",
   "Local": "在地",
-  "Learn": "學習",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "other": "鄰居動態，{n} 則內容"
   },
@@ -2300,14 +2299,8 @@
     "other": "在地動態，{n} 則內容"
   },
   "Local feed": "在地動態",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "other": "學習動態，{n} 則內容"
-  },
-  "Learn feed": "學習動態",
   "Could not load community feed.": "無法載入社群動態。",
   "Could not hide that item.": "無法隱藏該項目。",
-  "No learning guides yet": "尚無學習指南",
-  "Curated guides and reflections will appear here.": "精選指南與心得將會顯示在這裡。",
   "No posts in this category yet": "此分類下尚無內容",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "嘗試選擇「全部」或查看其他分類，看看鄰居發布了什麼。",
   "Show all categories": "顯示所有分類",
@@ -2316,7 +2309,6 @@
   "Pulse": "Pulse 動態",
   "Manage your channels": "管理你的頻道",
   "‹ Back": "‹ 返回",
-  "How BeanPool works and daily reflections": "BeanPool 運作方式與日常心得",
   "News and notices from around the shire": "來自社區各處的新聞與公告",
   "What your neighbours are creating and sharing": "鄰居們正在創作與分享的內容",
   "All categories": "所有分類",

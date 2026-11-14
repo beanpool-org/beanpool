@@ -2390,7 +2390,6 @@
   "Connect to a community before proposing a decision.": "Kumonekta muna sa isang komunidad bago magmungkahi ng desisyon.",
   "Neighbours": "Mga Kapitbahay",
   "Local": "Lokal",
-  "Learn": "Alamin",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "one": "Feed ng mga kapitbahay, {n} item",
     "other": "Feed ng mga kapitbahay, {n} item"
@@ -2401,15 +2400,8 @@
     "other": "Lokal na feed, {n} item"
   },
   "Local feed": "Lokal na feed",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "one": "Feed ng Alamin, {n} item",
-    "other": "Feed ng Alamin, {n} item"
-  },
-  "Learn feed": "Feed ng Alamin",
   "Could not load community feed.": "Hindi ma-load ang feed ng komunidad.",
   "Could not hide that item.": "Hindi maitago ang item na iyon.",
-  "No learning guides yet": "Wala pang mga gabay sa pag-aaral",
-  "Curated guides and reflections will appear here.": "Lalabas dito ang mga piling gabay at repleksyon.",
   "No posts in this category yet": "Wala pang mga post sa kategoryang ito",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "Subukang piliin ang \"Lahat\" o suriin ang ibang kategorya para makita ang na-post ng mga kapitbahay.",
   "Show all categories": "Ipakita ang lahat ng kategorya",
@@ -2418,7 +2410,6 @@
   "Pulse": "Pulse",
   "Manage your channels": "Pamahalaan ang iyong mga channel",
   "‹ Back": "‹ Bumalik",
-  "How BeanPool works and daily reflections": "Kung paano gumagana ang BeanPool at pang-araw-araw na repleksyon",
   "News and notices from around the shire": "Mga balita at paunawa mula sa buong bayan",
   "What your neighbours are creating and sharing": "Kung ano ang nililikha at ibinabahagi ng iyong mga kapitbahay",
   "All categories": "Lahat ng kategorya",

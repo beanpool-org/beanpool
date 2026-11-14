@@ -2390,7 +2390,6 @@
   "Connect to a community before proposing a decision.": "Συνδέσου σε μια κοινότητα πριν προτείνεις μια απόφαση.",
   "Neighbours": "Γείτονες",
   "Local": "Τοπικά",
-  "Learn": "Μάθηση",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "one": "Ροή γειτόνων, {n} στοιχείο",
     "other": "Ροή γειτόνων, {n} στοιχεία"
@@ -2401,15 +2400,8 @@
     "other": "Τοπική ροή, {n} στοιχεία"
   },
   "Local feed": "Τοπική ροή",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "one": "Ροή μάθησης, {n} στοιχείο",
-    "other": "Ροή μάθησης, {n} στοιχεία"
-  },
-  "Learn feed": "Ροή μάθησης",
   "Could not load community feed.": "Δεν ήταν δυνατή η φόρτωση της ροής της κοινότητας.",
   "Could not hide that item.": "Δεν ήταν δυνατή η απόκρυψη αυτού του στοιχείου.",
-  "No learning guides yet": "Δεν υπάρχουν οδηγοί μάθησης ακόμα",
-  "Curated guides and reflections will appear here.": "Επιλεγμένοι οδηγοί και σκέψεις θα εμφανίζονται εδώ.",
   "No posts in this category yet": "Δεν υπάρχουν δημοσιεύσεις σε αυτήν την κατηγορία ακόμα",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "Δοκίμασε να επιλέξεις «Όλα» ή έλεγξε άλλη κατηγορία για να δεις τι έχουν δημοσιεύσει οι γείτονες.",
   "Show all categories": "Εμφάνιση όλων των κατηγοριών",
@@ -2418,7 +2410,6 @@
   "Pulse": "Παλμός",
   "Manage your channels": "Διαχείριση των καναλιών σου",
   "‹ Back": "‹ Πίσω",
-  "How BeanPool works and daily reflections": "Πώς λειτουργεί το BeanPool και καθημερινές σκέψεις",
   "News and notices from around the shire": "Νέα και ανακοινώσεις από την περιοχή",
   "What your neighbours are creating and sharing": "Τι δημιουργούν και μοιράζονται οι γείτονές σου",
   "All categories": "Όλες οι κατηγορίες",

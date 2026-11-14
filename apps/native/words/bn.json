@@ -2390,7 +2390,6 @@
   "Connect to a community before proposing a decision.": "সিদ্ধান্তের প্রস্তাব দেওয়ার আগে একটি কমিউনিটির সাথে যুক্ত হন।",
   "Neighbours": "প্রতিবেশী",
   "Local": "স্থানীয়",
-  "Learn": "শিখুন",
   "Neighbours feed, {n} item|Neighbours feed, {n} items": {
     "one": "প্রতিবেশী ফিড, {n}টি আইটেম",
     "other": "প্রতিবেশী ফিড, {n}টি আইটেম"
@@ -2401,15 +2400,8 @@
     "other": "স্থানীয় ফিড, {n}টি আইটেম"
   },
   "Local feed": "স্থানীয় ফিড",
-  "Learn feed, {n} item|Learn feed, {n} items": {
-    "one": "শেখার ফিড, {n}টি আইটেম",
-    "other": "শেখার ফিড, {n}টি আইটেম"
-  },
-  "Learn feed": "শেখার ফিড",
   "Could not load community feed.": "কমিউনিটি ফিড লোড করা যায়নি।",
   "Could not hide that item.": "ঐ আইটেমটি লুকানো যায়নি।",
-  "No learning guides yet": "এখনও কোনো শেখার গাইড নেই",
-  "Curated guides and reflections will appear here.": "বাছাই করা গাইড এবং ভাবনাগুলো এখানে দেখা যাবে।",
   "No posts in this category yet": "এই বিভাগে এখনও কোনো পোস্ট নেই",
   "Try selecting \"All\" or check another category to see what neighbours have posted.": "প্রতিবেশীরা কী পোস্ট করেছেন তা দেখতে \"সব\" নির্বাচন করে দেখুন বা অন্য বিভাগ দেখুন।",
   "Show all categories": "সব বিভাগ দেখান",
@@ -2418,7 +2410,6 @@
   "Pulse": "পালস",
   "Manage your channels": "আপনার চ্যানেলগুলো পরিচালনা করুন",
   "‹ Back": "‹ ফিরে যান",
-  "How BeanPool works and daily reflections": "BeanPool কীভাবে কাজ করে এবং প্রতিদিনের ভাবনা",
   "News and notices from around the shire": "এলাকা জুড়ে খবর ও নোটিশ",
   "What your neighbours are creating and sharing": "আপনার প্রতিবেশীরা কী তৈরি ও শেয়ার করছেন",
   "All categories": "সব বিভাগ",

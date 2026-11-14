@@ -75,6 +75,8 @@ vi.mock('../../app/ThemeContext', async () => {
 });
 
 import { TagPicker } from '../../components/TagPicker';
+import { setLanguage, t, tagIndex, type LibraryLabel } from '@beanpool/core';
+import ES_WORDS from '@beanpool/core/words/es.json';
 
 let host: HTMLDivElement;
 let root: Root;
@@ -517,7 +519,7 @@ describe("this community's typed tags (DESIGN-tags-free-entry-fable.md §3, §5,
 
 describe('"Did you mean …?": a word that is a library label in another language (DESIGN-tags-free-entry-fable.md §3, slice F5)', () => {
     const held = { tags: [] as string[], freeTags: [] as string[] };
-    type Ask = (text: string) => Promise<string | null>;
+    type Ask = (text: string) => Promise<LibraryLabel | null>;
     function Composer({ ask, tags }: { ask: Ask; tags: string[] }) {
         const [nowTags, setTags] = useState<string[]>(tags);
         const [nowFree, setFree] = useState<string[]>([]);
@@ -528,8 +530,14 @@ describe('"Did you mean …?": a word that is a library label in another languag
             communityTags: () => Promise.resolve([]), libraryTagFor: ask,
         });
     }
-    // The node as F5 answers: a Portuguese label ("laranja") names orange; anything else names none.
-    const node = () => vi.fn((text: string) => Promise.resolve(text === 'laranja' ? 'food.fruit.orange' : null));
+    // The node as F5 answers, exactly and with the label's language (its pinned cases, test-free-tag-suggestions.ts §9).
+    const ANSWERS: Record<string, LibraryLabel> = {
+        laranja: { id: 'food.fruit.orange', lang: 'pt' },
+        mist: { id: 'garden.soil.manure', lang: 'de' },
+        pan: { id: 'food.bakery.bread', lang: 'es' },
+        'limão': { id: 'food.fruit.lime', lang: 'pt' },
+    };
+    const node = () => vi.fn((text: string) => Promise.resolve(ANSWERS[text] ?? null));
     async function compose(ask: Ask, tags: string[] = []) {
         await act(async () => { root.render(createElement(Composer, { ask, tags }) as any); });
         await press(addButton(), '+ Add');
@@ -546,7 +554,7 @@ describe('"Did you mean …?": a word that is a library label in another languag
         expect(ask).not.toHaveBeenCalled();
         await still();
         expect(ask.mock.calls).toEqual([['laranja']]);
-        expect(meant()?.textContent).toBe('Did you mean “Orange”?');
+        expect(meant()?.textContent).toBe('Did you mean “Orange”? (Português)');
         const ids = Array.from(sheet()!.querySelectorAll('[data-testid^="tag-picker-"]')).map((el) => el.getAttribute('data-testid'));
         expect(ids.indexOf('tag-picker-did-you-mean')).toBeLessThan(ids.indexOf('tag-picker-add-typed'));
     });
@@ -580,6 +588,61 @@ describe('"Did you mean …?": a word that is a library label in another languag
         await typeInSearch('laranja');
         await still();
         expect(meant()).toBeNull();
+    });
+
+    it('a failed ask is not kept as "none": the next time the field rests on the word it is asked again, and the row comes', async () => {
+        const ask = vi.fn<Ask>()
+            .mockImplementationOnce(() => Promise.reject(new Error('offline')))
+            .mockImplementation((text) => Promise.resolve(ANSWERS[text] ?? null));
+        await compose(ask);
+        await typeInSearch('laranja');
+        await still();
+        expect(meant()).toBeNull();
+        await typeInSearch('zzqx');
+        await still();
+        await typeInSearch('laranja');
+        await still();
+        expect(meant()?.textContent).toBe('Did you mean “Orange”? (Português)');
+        expect(ask.mock.calls.map(([q]) => q)).toEqual(['laranja', 'zzqx', 'laranja']);
+    });
+
+    it('pan on an English phone: its own search lists frying pans, so no row (and the node is never asked)', async () => {
+        const ask = node();
+        await compose(ask);
+        await typeInSearch('pan');
+        await still();
+        expect(sheet()!.textContent).toContain('Frying pans');
+        expect(meant()).toBeNull();
+        expect(host.querySelector('[data-testid="tag-picker-add-typed"]')?.textContent).toContain('Add “#pan”');
+        expect(ask).not.toHaveBeenCalled();
+    });
+
+    it('mist on an English phone: nothing of its own lists it, so the row names the German label in its own name', async () => {
+        await compose(node());
+        await typeInSearch('mist');
+        await still();
+        expect(meant()?.textContent).toBe('Did you mean “Manure”? (Deutsch)');
+    });
+
+    it('limão on a Spanish phone (its real words): no Spanish row for it, so the row offers lime, read in Portuguese', async () => {
+        try {
+            setLanguage('es', [ES_WORDS as Record<string, string>]);
+            const ask = node();
+            await act(async () => { root.render(createElement(Composer, { ask, tags: [] }) as any); });
+            await press(host.querySelector(`[aria-label="${t('+ Add tag')}"]`), '+ Add');
+            const field = host.querySelector(`input[aria-label="${t('Search tags')}"]`) as HTMLInputElement;
+            await act(async () => {
+                Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, 'limão');
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+            await still();
+            expect(tagIndex().search('limão', 12)).toEqual([]);
+            expect(ask).toHaveBeenCalledWith('limão');
+            expect(meant()?.textContent).toContain('“Lima”');
+            expect(meant()?.textContent).toContain('(Português)');
+        } finally {
+            setLanguage('en');
+        }
     });
 
     for (const theme of ['light', 'dark'] as const) {

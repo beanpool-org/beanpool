@@ -7,12 +7,18 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
     FREE_TAGS_MAX, FREE_TAG_TOO_SHORT, LIBRARY_ASK_MS, POST_TAGS_MAX, TAG_COMMA, TOO_MANY_TAGS, TYPED_TAG_WORDS, communityTagsFor,
     didYouMeanTag, enterTypedTags, exactLibraryTag, lastTagOff, mergedInto, suggestTags, tagChildren, tagIndex, t, tn, typedTag,
-    type CommunityTag, type LibraryElsewhere, type RefusedTag,
+    isLang, type CommunityTag, type LibraryElsewhere, type LibraryLabel, type RefusedTag,
 } from '@beanpool/core';
 import { loadCommunityTags, loadLibraryTagFor } from '../utils/community-tags';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { hapticTick, hapticWarning } from '../utils/haptics';
 import { dismissKeyboardWithin } from '../utils/keyboard-dismiss';
+import { LANGUAGE_NAMES } from '../utils/language-choice';
+
+/** A language as the language list names it, in itself ("Deutsch"); a code this app has no name for, as the code. */
+function languageName(lang: string): string {
+    return isLang(lang) ? LANGUAGE_NAMES[lang] : lang;
+}
 
 /**
  * How long the field has been still when a Backspace is a fresh press. React Native's key press has no repeat flag, and a
@@ -35,8 +41,9 @@ export interface TagPickerProps {
     testID?: string;
     /** Where this community's typed tags come from (GET /api/free-tags); read once each time the sheet opens. */
     communityTags?: () => Promise<CommunityTag[]>;
-    /** The library tag a word is the label of in another language (GET /api/free-tags?q=, slice F5), or null. */
-    libraryTagFor?: (text: string) => Promise<string | null>;
+    /** The library tag a word is the label of in another language, and that language (GET /api/free-tags?q=, slice F5), or
+     *  null; rejects when it can't be had, and the picker then asks again later. */
+    libraryTagFor?: (text: string) => Promise<LibraryLabel | null>;
 }
 
 export function TagPicker({
@@ -435,22 +442,25 @@ export function TagPicker({
     const usedHere = canType ? communityTagsFor(searchQuery, community, held, { shadowed: (tag) => exactLibraryTag(tag, index) !== null }) : [];
     const addable = typed?.kind === 'free' && !freeTags.includes(typed.tag) ? typed.tag : null;
     // A word "Add" would make that is a library tag's label in another language (slice F5): the node is asked once the field
-    // is still, once per word, and the field offers that tag above the "Add" row. Return still adds the member's own word.
+    // is still, once per word, and the field offers that tag above the "Add" row, naming the language. Never while the
+    // library rows list anything for the word (core didYouMeanTag), and then not asked at all. Only an answer is kept: a
+    // failed ask is asked again. Return still adds the member's own word. The web's picker does the same.
     const [elsewhere, setElsewhere] = useState<LibraryElsewhere | null>(null);
-    const askedNode = useRef(new Map<string, string | null>());
+    const askedNode = useRef(new Map<string, LibraryLabel | null>());
+    const listed = searchResults.length > 0;
     useEffect(() => {
-        if (!sheetVisible || !addable) return;
+        if (!sheetVisible || !addable || listed) return;
         const known = askedNode.current.get(addable);
-        if (known !== undefined) { setElsewhere({ tag: addable, id: known }); return; }
+        if (known !== undefined) { setElsewhere({ tag: addable, found: known }); return; }
         let live = true;
         const timer = setTimeout(() => {
-            libraryTagFor(addable).then((id) => {
-                askedNode.current.set(addable, id);
-                if (live) setElsewhere({ tag: addable, id });
+            libraryTagFor(addable).then((found) => {
+                askedNode.current.set(addable, found);
+                if (live) setElsewhere({ tag: addable, found });
             }, () => {});
         }, LIBRARY_ASK_MS);
         return () => { live = false; clearTimeout(timer); };
-    }, [sheetVisible, addable, libraryTagFor]);
+    }, [sheetVisible, addable, listed, libraryTagFor]);
     const meant = didYouMeanTag(addable, elsewhere, held, searchResults, index);
     const shownRefusal = refused ?? (typed?.kind === 'refused' && typed.why !== FREE_TAG_TOO_SHORT ? typed : null);
 
@@ -738,9 +748,9 @@ export function TagPicker({
 
                         {/* The library tag the typed word names in another language, just above the row that adds the word itself. */}
                         {meant && (
-                            <Pressable style={styles.addTypedRow} onPress={() => pickFound(meant)} accessibilityRole="button" testID="tag-picker-did-you-mean">
+                            <Pressable style={styles.addTypedRow} onPress={() => pickFound(meant.id)} accessibilityRole="button" testID="tag-picker-did-you-mean">
                                 <MaterialCommunityIcons name="tag-outline" size={18} color={colors.brand.primary} />
-                                <Text style={styles.addTypedText}>{t(TYPED_TAG_WORDS.didYouMean, { tag: index.label(meant) })}</Text>
+                                <Text style={styles.addTypedText}>{t(TYPED_TAG_WORDS.didYouMean, { tag: index.label(meant.id), language: languageName(meant.lang) })}</Text>
                             </Pressable>
                         )}
                         {/* The last row, and held below the list: on a short sheet twelve results would push it under the keyboard. */}

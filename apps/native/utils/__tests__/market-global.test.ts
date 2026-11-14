@@ -235,12 +235,13 @@ describe('nearest first', () => {
         expect(d.has('zero')).toBe(false);
     });
 
-    it('under Events it is soonest first, under a search the order given stands, and the Daily Pulse leads either way', () => {
+    it('under Events it is soonest first, under a search the order given stands, and a post by "Daily Pulse" is not put first', () => {
+        // The Daily Pulse is gone (Marty, 15 Nov 2026), and with it the rule that put its post first.
         const ev = (id: string, start: string) => ({ id, type: 'event', created_at: '2026-09-01T00:00:00Z', event_start_at: start });
-        const pulse = { id: 'pulse', type: 'offer', author_callsign: 'Daily Pulse', created_at: '2026-09-01T00:00:00Z' };
-        const listed = [ev('later', '2026-10-05T10:00:00Z'), ev('soon', '2026-09-28T10:00:00Z'), pulse];
-        expect(marketStream(listed, now, { eventsOnly: true }).map(p => p.id)).toEqual(['pulse', 'soon', 'later']);
-        expect(marketStream(listed, now, { narrowedBySearch: true }).map(p => p.id)).toEqual(['pulse', 'later', 'soon']);
+        const named = { id: 'pulse', type: 'offer', author_callsign: 'Daily Pulse', created_at: '2026-09-01T00:00:00Z' };
+        const listed = [ev('later', '2026-10-05T10:00:00Z'), ev('soon', '2026-09-28T10:00:00Z'), named];
+        expect(marketStream(listed, now, { eventsOnly: true }).map(p => p.id)).toEqual(['soon', 'later', 'pulse']);
+        expect(marketStream(listed, now, { narrowedBySearch: true }).map(p => p.id)).toEqual(['later', 'soon', 'pulse']);
     });
 
     it('the Market search asks for distance order only where the node sorts by it and the phone knows where it is', () => {
@@ -345,7 +346,7 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
         const i = lines.findIndex(l => l.includes('<CurrencyDisplay amount={formatHundredths(post.price_c)}'));
         expect(i).toBeGreaterThan(0);
         // The card's condition, then its View, label and row, then the figure.
-        expect(lines.slice(i - 5, i).join('\n')).toContain('{!isPulsePost && showsBeans && (');
+        expect(lines.slice(i - 5, i).join('\n')).toContain('{showsBeans && (');
         expect(src).toContain('{!showsBeans ? (');
         // Beans off: no price is read, and the post is saved at 0 (the price read in the language's way since #2202).
         expect(src).toContain('const price = showsBeans ? parseHundredths(editCredits) : null;');

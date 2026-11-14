@@ -137,16 +137,13 @@ describe('the web style box holds core\'s numbers', () => {
         expect(classes(listCard()).some(c => /^h-/.test(c))).toBe(false);
     });
 
-    it('the variants: an Elder\'s left border 3, Daily Pulse\'s border 2', () => {
+    it('the variant: an Elder\'s left border 3', () => {
         const elder = classes(listCard({ elder: true })).find(c => /^border-l-\[\d+px\]$/.test(c));
         expect(Number(elder?.match(/\d+/)?.[0])).toBe(MARKET_CARD_SHELL.variant.elderBorderLeft);
-        expect(classes(listCard({ pulse: true }))).toContain(`border-${MARKET_CARD_SHELL.variant.pulseBorder}`);
-        // Every list card, Pulse too, is on the card ground (the who-line's nature-600 is 4.37:1 on the Pulse tint, under AA),
-        // and has one ground class only; a Pulse card has one border colour only.
-        for (const card of [listCard(), listCard({ elder: true }), listCard({ pulse: true })]) {
+        // Every list card is on the card ground and has one ground class only.
+        for (const card of [listCard(), listCard({ elder: true })]) {
             expect(classes(card).filter(c => c.startsWith('bg-'))).toEqual(['bg-[var(--bg-card)]']);
         }
-        expect(classes(listCard({ pulse: true })).filter(c => /^border-(nature|amber)-/.test(c))).toEqual(['border-amber-400/80']);
     });
 
     it('an Elder\'s left border is gold in light AND in dark, as the built CSS settles it (#2873)', async () => {
@@ -213,7 +210,7 @@ describe('the web style box holds core\'s numbers', () => {
     });
 
     it('every colour is core\'s role or the card token: no raw violet, purple, blue or nature-950', () => {
-        const all = [listCard(), listCard({ elder: true }), listCard({ pulse: true }), CHIP, CHIP_SENTENCE, LIST_PHOTO, LIST_TEXT,
+        const all = [listCard(), listCard({ elder: true }), CHIP, CHIP_SENTENCE, LIST_PHOTO, LIST_TEXT,
             POP_UP, POP_UP_CLOSE, POP_UP_CLOSE_DOT,
             ...Object.values(CHIP_TONE), ...Object.values(LIST_TYPE), ...Object.values(CARD_INK)].join(' ');
         expect(all).not.toMatch(/violet-|purple-|blue-|indigo-|nature-950/);
@@ -257,14 +254,13 @@ describe('the grid tile holds core\'s numbers', () => {
     });
 
     it('the tile: the card\'s corners, border and ground, filling its cell; the photo 4:3 and never squeezed', () => {
-        for (const tile of [gridTile(), gridTile({ elder: true }), gridTile({ pulse: true })]) {
+        for (const tile of [gridTile(), gridTile({ elder: true })]) {
             expect(radius(tile)).toBe(MARKET_CARD_SHELL.radius);
             expect(classes(tile)).toEqual(expect.arrayContaining(['h-full', 'flex', 'flex-col', 'overflow-hidden']));
             expect(classes(tile).filter(c => c.startsWith('bg-'))).toEqual(['bg-[var(--bg-card)]']);
         }
         expect(classes(gridTile())).toContain('border');
         expect(classes(gridTile({ elder: true }))).toEqual(expect.arrayContaining(['border-l-[3px]', 'dark:border-l-amber-400']));
-        expect(classes(gridTile({ pulse: true }))).toContain(`border-${MARKET_CARD_SHELL.variant.pulseBorder}`);
         const { aspectWidth, aspectHeight } = MARKET_CARD_SHELL.photo.grid;
         expect(classes(GRID_PHOTO)).toEqual(expect.arrayContaining([`aspect-[${aspectWidth}/${aspectHeight}]`, 'shrink-0', 'w-full']));
     });
@@ -360,7 +356,7 @@ describe('the grid tile holds core\'s numbers', () => {
 
     it('no raw violet, purple, blue or nature-950 in the grid\'s classes', () => {
         const all = [GRID, GRID_POLL_CELL, GRID_POLL_GHOST, GRID_POLL_TILE, GRID_POLL_HEAD, GRID_POLL_QUESTION, GRID_POLL_ANSWERS, GRID_POLL_ROW,
-            ...Object.values(GRID_POLL_ROW_EDGE), GRID_POLL_BAR, GRID_POLL_ANSWER, GRID_POLL_PCT, GRID_POLL_NOTE, GRID_POLL_FOOT, GRID_POLL_ACTION, gridTile(), gridTile({ elder: true }), gridTile({ pulse: true }), GRID_PHOTO, GRID_TEXT,
+            ...Object.values(GRID_POLL_ROW_EDGE), GRID_POLL_BAR, GRID_POLL_ANSWER, GRID_POLL_PCT, GRID_POLL_NOTE, GRID_POLL_FOOT, GRID_POLL_ACTION, gridTile(), gridTile({ elder: true }), GRID_PHOTO, GRID_TEXT,
             GRID_TITLE, GRID_ROW, GRID_ROW_CHIP, GRID_SCRIM_PILL, GRID_SCRIM_MARK, GRID_ROW_LABEL, GRID_TIME_ROW, GRID_TIME_PIECE, ...Object.values(GRID_TYPE)].join(' ');
         expect(all).not.toMatch(/violet-|purple-|blue-|indigo-|nature-950/);
     });

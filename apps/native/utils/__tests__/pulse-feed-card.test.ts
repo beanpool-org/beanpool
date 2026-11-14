@@ -40,15 +40,6 @@ const mockLinking = vi.hoisted(() => ({
     openURL: vi.fn(async () => true),
 }));
 
-const mockFetchDailyPulse = vi.hoisted(() => vi.fn());
-vi.mock('../pulse', async (importOriginal) => {
-    const mod = await importOriginal<typeof import('../pulse')>();
-    return {
-        ...mod,
-        fetchDailyPulse: mockFetchDailyPulse,
-    };
-});
-
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert' };
     const flat = (style: unknown): Record<string, any> => {
@@ -73,10 +64,9 @@ vi.mock('react-native', () => {
         View: el('div'),
         Text: el('span'),
         Pressable: el('button'),
-        ScrollView: el('div'),
         ActivityIndicator: el('span'),
         Modal: function MockModal(props: any) {
-            return props.visible ? createElement('div', { role: 'dialog', 'data-testid': 'pulse-reflection-modal' }, props.children) : null;
+            return props.visible ? createElement('div', { role: 'dialog' }, props.children) : null;
         },
         StyleSheet: { create: (s: unknown) => s, flatten: (s: unknown) => flat(s) },
         Alert: { alert: vi.fn() },
@@ -165,7 +155,6 @@ beforeEach(() => {
     document.body.appendChild(host);
     root = createRoot(host);
     mockLinking.openURL.mockClear();
-    mockFetchDailyPulse.mockClear();
     lastImageProps = null;
 });
 
@@ -324,8 +313,8 @@ describe('PulseFeedCard Instagram link card (native)', () => {
         expect(host.textContent).toContain('Planting garlic by the moon');
     });
 
-    describe('Daily Pulse card (native)', () => {
-        const dailyPulseItem: PulseFeedItem = {
+    it('an old Daily Pulse id with no link is an ordinary card now: its title, no Daily Reflection, no sheet', async () => {
+        const oldDailyItem: PulseFeedItem = {
             id: 'item_pulse_2026-10-26',
             ownerPubkey: 'pulse-treasury-key',
             callsign: 'Daily Pulse',
@@ -339,84 +328,14 @@ describe('PulseFeedCard Instagram link card (native)', () => {
             source: 'curated',
             isVerified: true,
         };
-
-        it('renders as a tappable card with accessible name, and tap opens reflection with headline and body', async () => {
-            mockFetchDailyPulse.mockResolvedValueOnce({
-                date: '2026-10-26',
-                headline: 'Plant seeds of kindness',
-                body: 'Kindness is the soil in which trust grows.',
-            });
-
-            await act(async () => {
-                root.render(createElement(PulseFeedCard, { item: dailyPulseItem }) as any);
-            });
-
-            // Card has accessible name and is not disabled
-            const trigger = Array.from(host.querySelectorAll('button')).find(
-                (b) => b.getAttribute('aria-label')?.includes('Daily Reflection') || b.textContent?.includes('Daily Reflection')
-            );
-            expect(trigger, 'Daily Pulse card trigger should exist and not be disabled').toBeDefined();
-
-            // Tapping the card opens the reflection modal
-            await act(async () => {
-                trigger?.click();
-            });
-
-            const modal = host.querySelector('[data-testid="pulse-reflection-modal"]');
-            expect(modal, 'Reflection modal should be opened').not.toBeNull();
-            expect(modal?.textContent).toContain('Plant seeds of kindness');
-            expect(modal?.textContent).toContain('Kindness is the soil in which trust grows.');
-            expect(modal?.textContent).toContain('2026-10-26');
-
-            // Close button works
-            const closeBtn = Array.from(modal?.querySelectorAll('button') || []).find(
-                (b) => b.textContent?.trim() === 'Close' || b.getAttribute('aria-label') === 'Close'
-            );
-            expect(closeBtn, 'Close button should exist in modal').toBeDefined();
-            await act(async () => {
-                closeBtn?.click();
-            });
-
-            expect(host.querySelector('[data-testid="pulse-reflection-modal"]')).toBeNull();
+        await act(async () => {
+            root.render(createElement(PulseFeedCard, { item: oldDailyItem, nodeUrl: 'https://node.example' }) as any);
         });
 
-        it('shows a line in the app words with Retry on failed read, and Retry re-fetches', async () => {
-            mockFetchDailyPulse.mockRejectedValueOnce(new Error('Network error'));
-
-            await act(async () => {
-                root.render(createElement(PulseFeedCard, { item: dailyPulseItem }) as any);
-            });
-
-            const trigger = Array.from(host.querySelectorAll('button')).find(
-                (b) => b.getAttribute('aria-label')?.includes('Daily Reflection') || b.textContent?.includes('Daily Reflection')
-            );
-            await act(async () => {
-                trigger?.click();
-            });
-
-            const modal = host.querySelector('[data-testid="pulse-reflection-modal"]');
-            expect(modal, 'Modal opens on tap').not.toBeNull();
-
-            // Shows error message and Retry button
-            expect(modal?.textContent).toContain('Failed to load');
-            const retryBtn = Array.from(modal?.querySelectorAll('button') || []).find(
-                (b) => b.textContent?.trim() === 'Retry'
-            );
-            expect(retryBtn, 'Retry button should exist on error').toBeDefined();
-
-            // Clicking Retry re-fetches
-            mockFetchDailyPulse.mockResolvedValueOnce({
-                date: '2026-10-26',
-                headline: 'Plant seeds of kindness',
-                body: 'Kindness is the soil in which trust grows.',
-            });
-
-            await act(async () => {
-                retryBtn?.click();
-            });
-
-            expect(mockFetchDailyPulse).toHaveBeenCalledTimes(2);
-            expect(modal?.textContent).toContain('Kindness is the soil in which trust grows.');
-        });
+        expect(host.textContent).toContain('Plant seeds of kindness');
+        expect(host.textContent).not.toContain('Daily Reflection');
+        expect(host.querySelector('[role="dialog"]')).toBeNull();
+        const labels = Array.from(host.querySelectorAll('[aria-label]')).map((e) => e.getAttribute('aria-label') ?? '');
+        expect(labels.filter((l) => l.includes('Daily Reflection'))).toEqual([]);
     });
 });

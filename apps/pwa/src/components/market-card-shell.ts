@@ -25,21 +25,14 @@ const BORDER = 'border-nature-200 dark:border-nature-800';
 const GROUND = 'bg-[var(--bg-card)]';
 
 /**
- * Daily Pulse: a 2 px warning border (§1.1 variants), on the card's own ground. Not the Pulse tile's tint the design names:
- * the who-line's name (nature-600, #647664) measures 4.37:1 on #fef3c7, under AA, and the card ground keeps it at 4.87.
- */
-const PULSE = 'border-2 border-amber-400/80 dark:border-amber-500/70 shadow-[0_4px_20px_rgba(245,158,11,0.15)]';
-
-/**
  * An Elder's card: a 3 px gold left border (§1.1 variants), in both schemes. `dark:border-l-amber-400` is not a repeat:
  * a `dark:` class comes later in the stylesheet than a plain one of the same weight, so without it `BORDER`'s
  * `dark:border-nature-800` (every side) turns the left side green-grey in dark (#2873: measured rgb(67, 78, 67)).
  */
 const ELDER = 'border-l-[3px] border-l-amber-400 dark:border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.1)]';
 
-/** The list card's outer box. A Pulse card has its own border; an Elder's adds its left border. */
-export function listCard({ pulse = false, elder = false }: { pulse?: boolean; elder?: boolean } = {}): string {
-    if (pulse) return `${LIST_FRAME} ${GROUND} ${PULSE}`;
+/** The list card's outer box. An Elder's adds its left border. */
+export function listCard({ elder = false }: { elder?: boolean } = {}): string {
     return `${LIST_FRAME} ${BORDER} ${GROUND}${elder ? ` ${ELDER}` : ''}`;
 }
 
@@ -80,7 +73,7 @@ export const CHIP_TONE = {
     pinned: 'bg-bp-chip-accent-tint text-bp-chip-accent-ink',
     /** ↻ RECURRING, the category, 🔒 the group: chips that carry no news. */
     quiet: 'bg-bp-chip-quiet-tint text-bp-chip-quiet-ink',
-    /** 💸 CASH TOO, ⏸ PAUSED, ⏳ PENDING, PULSE, a deal asked: money or caution. */
+    /** 💸 CASH TOO, ⏸ PAUSED, ⏳ PENDING, a deal asked: money or caution. */
     warn: 'bg-bp-chip-warn-tint text-bp-chip-warn-ink',
     /** A deal held. */
     ok: 'bg-bp-chip-ok-tint text-bp-chip-ok-ink',
@@ -243,9 +236,8 @@ export const GRID_POLL_ACTION_HERE = 'ms-auto flex min-w-0 font-bold text-bp-chi
 /** A grid tile's outer box: the list card's corners, border, ground and shadow, the photo on top, filling its cell. */
 const GRID_FRAME = 'relative flex flex-col h-full w-full min-w-0 overflow-hidden rounded-[14px] border shadow-sm';
 
-/** The grid tile's outer box. A Pulse tile has its own border; an Elder's adds its left border. */
-export function gridTile({ pulse = false, elder = false }: { pulse?: boolean; elder?: boolean } = {}): string {
-    if (pulse) return `${GRID_FRAME} ${GROUND} ${PULSE}`;
+/** The grid tile's outer box. An Elder's adds its left border. */
+export function gridTile({ elder = false }: { elder?: boolean } = {}): string {
     return `${GRID_FRAME} ${BORDER} ${GROUND}${elder ? ` ${ELDER}` : ''}`;
 }
 

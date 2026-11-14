@@ -7,8 +7,8 @@
  *
  * Widths: 320, 320 at 1.3x text, 640, and with a 256 px left shim standing in for the app's sidebar (the harness has no
  * App shell; the Tailwind breakpoints are the viewport's, the columns are not) 768, 768 at 1.3x, 1024, 1280 and 1920.
- * Cases: the fixture (e2e/fixtures.mjs), the node's Daily Pulse (shown while there are under two listings), one pin, three
- * pins (the cap: a listing, the event and the poll), from three columns up the poll in the last column of the first row,
+ * Cases: the fixture (e2e/fixtures.mjs), one pin, three pins (the cap: a listing, the event and the poll), from three
+ * columns up the poll in the last column of the first row,
  * the events (W3': a group-only event, an online one, a Byron event read across the zone line, one that ends the next day,
  * your Going and your Interested) and a member's copy of an event on the global community. The reader is in Queensland
  * (Australia/Brisbane, UTC+10, no daylight time), so a NSW event in November is an hour ahead of them. Light and dark, a
@@ -16,9 +16,9 @@
  *
  * Checks, every grid of every case and scheme (a non-zero exit names each miss):
  *   - the column count for the width;
- *   - every cell in a row is the row's height (the grid's own tracks), and every listing / event / Pulse tile fills its cell;
- *   - every listing / event / Pulse tile's text block is core's MARKET_GRID_TEXT_BLOCK_REM (7.0625rem) at the root size, +-1 px;
- *   - a row of only listing / event / Pulse tiles is no taller than its tiles' own photo + text block (+-1 px): one tile height;
+ *   - every cell in a row is the row's height (the grid's own tracks), and every listing / event tile fills its cell;
+ *   - every listing / event tile's text block is core's MARKET_GRID_TEXT_BLOCK_REM (7.0625rem) at the root size, +-1 px;
+ *   - a row of only listing / event tiles is no taller than its tiles' own photo + text block (+-1 px): one tile height;
  *   - no tile row is cut: a row of the text block wider inside than it is (scrollWidth > clientWidth) is a miss; on an event
  *     tile the date, the time's shown pieces, "🕒 your time" and every pill on the photo are whole too (a title or a place
  *     that ends in its own "…" inside its row is the design); and an event's time row never ends in a dash;
@@ -141,12 +141,6 @@ const WIDTHS = [
 
 const HOUR = 60 * 60 * 1000;
 const iso = (ms) => new Date(Date.now() + ms).toISOString();
-/** The node's own Daily Pulse, drawn as the Pulse tile (its author is "Daily Pulse"). */
-const PULSE = {
-    id: 'pulse-1', type: 'offer', category: 'community', status: 'active', active: true, price_c: 0, priceType: 'fixed',
-    title: 'Daily Pulse: what the village is up to', description: 'Three new offers, a working bee on Saturday and the shed poll.',
-    authorPublicKey: 'daily-pulse', authorCallsign: 'Daily Pulse', createdAt: iso(-HOUR / 2), photos: [],
-};
 const pin = (posts, ids) => posts.map(p => (ids.includes(p.id)
     ? { ...p, pinnedUntil: iso(48 * HOUR), pinnedAt: iso(-HOUR * (ids.indexOf(p.id) + 1)) }
     : p));
@@ -275,9 +269,6 @@ const POLL_LANGS = ['en', 'de'];
 
 const CASES = [
     { name: 'fixture', posts: POSTS, pins: [] },
-    // The Market shows the node's Pulse only while it has fewer than two listings (MarketplacePage): one listing, the
-    // event, the poll and the Pulse.
-    { name: 'pulse', posts: [PULSE, ...POSTS.filter(p => ['m-1', 'e-1', 'p-1'].includes(p.id))], pins: [], needs: 'pulse' },
     { name: 'one-pin', posts: pin(POSTS, ['m-2']), pins: ['m-2'] },
     // Newest pin first: the listing, then the event, then the poll.
     { name: 'three-pins', posts: pin(POSTS, ['m-2', 'e-1', 'p-1']), pins: ['m-2', 'e-1', 'p-1'] },
@@ -352,8 +343,7 @@ function measure() {
             // The poll by its tile (PollGridTile) or, on a branch before it, its card: never by its words, which are German too.
             const pollTile = cell.querySelector('[data-testid="poll-grid-tile"]') || cell.querySelector('[data-testid="poll-card"]');
             const kind = cell.querySelector('[data-testid="event-card"]') ? 'event'
-                : cell.querySelector('[data-testid="listing-grid-tile"]')
-                    ? ((cell.getAttribute('aria-label') || '').startsWith('Daily Pulse') ? 'pulse' : 'listing')
+                : cell.querySelector('[data-testid="listing-grid-tile"]') ? 'listing'
                     : (pollTile ? 'poll' : 'other');
             const tile = pollTile || cell.firstElementChild;
             const t = tile ? tile.getBoundingClientRect() : r;
@@ -482,8 +472,8 @@ function check(m, spec, pins, events = [], votable = null) {
     m.grids.forEach((g, gi) => {
         const at = m.grids.length > 1 ? `grid ${gi + 1}: ` : '';
         if (g.cols !== spec.columns) fail(`${at}${g.cols} columns (expected ${spec.columns})`);
-        // W3': the event tile is on the lattice, as the listing and the Pulse are.
-        const lattice = (c) => c.kind === 'listing' || c.kind === 'pulse' || c.kind === 'event';
+        // W3': the event tile is on the lattice, as the listing is.
+        const lattice = (c) => c.kind === 'listing' || c.kind === 'event';
         for (const c of g.cells) {
             if (Math.abs(c.cellH - c.tracksHeight) > 1) fail(`${at}"${c.label}" cell is ${c.cellH.toFixed(1)}px in a ${c.tracksHeight.toFixed(1)}px row: not the row's height`);
             if (lattice(c)) {

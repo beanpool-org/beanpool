@@ -482,58 +482,6 @@ function PostDetailModal() {
             fontSize: 10,
             fontWeight: 'bold',
         },
-        pulseInspirationBox: {
-            backgroundColor: colors.feedback.warning.bg,
-            borderRadius: 16,
-            padding: 20,
-            alignItems: 'center',
-            borderWidth: 1,
-            borderColor: colors.feedback.warning.border,
-            marginVertical: 16,
-        },
-        pulseIcon: {
-            fontSize: 36,
-            marginBottom: 8,
-        },
-        pulseInspirationTitle: {
-            fontSize: 18,
-            fontWeight: '800',
-            color: colors.text.heading,
-            marginBottom: 6,
-            textAlign: 'center',
-        },
-        pulseInspirationText: {
-            fontSize: 14,
-            color: colors.text.secondary,
-            lineHeight: 20,
-            textAlign: 'center',
-            marginBottom: 16,
-        },
-        pulsePostOfferBtn: {
-            backgroundColor: palette.amber700,
-            paddingVertical: 12,
-            paddingHorizontal: 20,
-            borderRadius: 12,
-            alignItems: 'center',
-            justifyContent: 'center',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 4,
-            elevation: 2,
-        },
-        pulsePostOfferBtnText: {
-            color: '#ffffff',
-            fontWeight: '800',
-            fontSize: 15,
-        },
-        pulseFooterText: {
-            fontSize: 11,
-            color: colors.text.muted,
-            marginTop: 12,
-            fontStyle: 'italic',
-            textAlign: 'center',
-        },
     }));
 
     const { id, txId, cameFor: cameForParam } = useLocalSearchParams<{ id?: string | string[]; txId?: string | string[]; cameFor?: string | string[] }>();
@@ -1093,7 +1041,6 @@ function PostDetailModal() {
 
     const isOperatorOfAuthor = !!(post.author_pubkey && operatedTreasuries.includes(post.author_pubkey));
     const isOwnPost = identity?.publicKey === post.author_pubkey || isOperatorOfAuthor;
-    const isPulsePost = (post.author_callsign || post.authorCallsign) === 'Daily Pulse';
     
     // --- Escrow Roles ---
     const isAcceptedByMe = activeTx 
@@ -1711,7 +1658,7 @@ function PostDetailModal() {
 
     // The peer's part of the page, as one condition (it was one block): the rating with the action, Message in the quiet row,
     // the convenor's box and Report at the foot. Message is not drawn where the deal's own box has it (a deal pending to them).
-    const peerActions = !!identity && ((!isOwnPost && !isPulsePost) || post.status === 'pending' || post.status === 'completed' || !!activeTx);
+    const peerActions = !!identity && (!isOwnPost || post.status === 'pending' || post.status === 'completed' || !!activeTx);
     const peerMessage = peerActions && !!targetPeerPubkey && !((post.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee));
     // The take-up on the first screen (DESIGN-detail-pages-frame-fable.md §2): the note under IN RETURN runs to seven or eight
     // lines at 320 dp and 1.3x (the worldwide community's, which says what a local community does), so it clamps to three with
@@ -1761,13 +1708,9 @@ function PostDetailModal() {
                 {/* 1. The chip row and the time: the list card's own chips, in its order (components/market-card-shell.ts), "3d ago" at the right. */}
                 <View style={styles.chipLine} testID="post-chip-row">
                     <View style={[shell.chipRow, styles.chipLineChips]}>
-                        {isPulsePost ? (
-                            <CardChip shell={shell} role="warn" label={t('🗞️ DAILY PULSE')} testID="post-type-chip" />
-                        ) : (
-                            <CardChip shell={shell} role={isOffer ? 'offer' : 'need'} label={isOffer ? t('OFFER') : t('NEED')} testID="post-type-chip" />
-                        )}
+                        <CardChip shell={shell} role={isOffer ? 'offer' : 'need'} label={isOffer ? t('OFFER') : t('NEED')} testID="post-type-chip" />
                         {isPostPinned(post) && <CardChip shell={shell} role="pinned" label={t('📌 PINNED')} testID="pinned-chip" />}
-                        {!isPulsePost && <CardChip shell={shell} role="quiet" label={emoji + ' ' + categoryLabel(post.category)} testID="post-category-chip" />}
+                        <CardChip shell={shell} role="quiet" label={emoji + ' ' + categoryLabel(post.category)} testID="post-category-chip" />
                         {!!post.repeatable && <CardChip shell={shell} role="quiet" label={t('↻ RECURRING')} testID="post-recurring-chip" />}
                         {post.cash_also_needed === 1 && <CardChip shell={shell} role="warn" label={t('💸 CASH TOO')} />}
                         {post.status === 'paused' && <CardChip shell={shell} role="warn" label={t('⏸ PAUSED')} />}
@@ -1840,7 +1783,7 @@ function PostDetailModal() {
                   * reader; the marker's line sits beside them, in the box but outside that group, so VoiceOver reads it and reaches it as a
                   * button (review of #1852, finding 8).
                   */}
-                {!isPulsePost && !showsBeans && (
+                {!showsBeans && (
                     <View style={[shell.pageBox, styles.termsBox]} testID="no-beans-terms">
                         <View accessible accessibilityLabel={t('{terms}. {note}', { terms: t(NO_BEANS_TERMS.value), note: noBeansTermsNote(beansPreview) })}>
                             <Text style={[shell.boxLabel, styles.termsLabel]}>{t(NO_BEANS_TERMS.label)}</Text>
@@ -1856,7 +1799,7 @@ function PostDetailModal() {
                         {beansPreview && <LocalCommunityMark variant="line" feature="beans" text={t(LOCAL_COMMUNITY_LINES.price)} />}
                     </View>
                 )}
-                {!isPulsePost && showsBeans && (
+                {showsBeans && (
                     <View style={[shell.pageBox, styles.termsBox]} testID="price-terms">
                         <Text style={[shell.boxLabel, styles.termsLabel]}>{priceLabel}</Text>
                         <View style={styles.priceRow}>
@@ -2277,7 +2220,7 @@ function PostDetailModal() {
                 )}
 
                 {/* Where deals are previewed, the deal action keeps its place as the marker's action: it opens the sheet. */}
-                {!isPulsePost && !isOwnPost && post.status === 'active' && escrowPreview && (
+                {!isOwnPost && post.status === 'active' && escrowPreview && (
                     <View style={styles.otherPostActions}>
                         <LocalCommunityMark variant="action" feature="escrow" label={t(LOCAL_COMMUNITY_LINES.dealAction).replace(LOCAL_COMMUNITY_EMOJI, '').trim()} />
                     </View>
@@ -2311,30 +2254,7 @@ function PostDetailModal() {
                 )}
 
                 {/* 3. Unaccepted Posts Displayed to Browsers */}
-                {isPulsePost ? (
-                    <View style={styles.pulseInspirationBox}>
-                        <Text style={styles.pulseIcon} aria-hidden={true} accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants">🗞️</Text>
-                        <Text style={styles.pulseInspirationTitle}>{t('Feeling Inspired?')}</Text>
-                        <Text style={styles.pulseInspirationText}>
-                            {t('The best way to participate in BeanPool is by offering your skills, surplus produce, or lending tools to your neighbors.')}
-                        </Text>
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={t('Post your own offer')}
-                            style={styles.pulsePostOfferBtn}
-                            onPress={() => {
-                                router.push({ pathname: '/new-listing', params: { newPost: 'true' } });
-                            }}
-                        >
-                            <Text style={styles.pulsePostOfferBtnText}>
-                                <Text aria-hidden={true} accessibilityElementsHidden={true}>💡 </Text>{t('Post Your Own Offer →')}
-                            </Text>
-                        </Pressable>
-                        <Text style={styles.pulseFooterText}>
-                            {t('Daily Pulse — a daily thought for the post-extraction economy')}
-                        </Text>
-                    </View>
-                ) : !isOwnPost && post.status === 'active' && !isAcceptedByMe && escrowOn && (myRequest || deals.canTakeUp) && (
+                {!isOwnPost && post.status === 'active' && !isAcceptedByMe && escrowOn && (myRequest || deals.canTakeUp) && (
                     // Accept only where core's canTakeUp says (as the web): not while the reader's own deal on it is open,
                     // a standing one short or between its periods included (its row is no held one, so isAcceptedByMe misses it).
                     <View style={styles.otherPostActions} testID="post-take-up-area" onLayout={(e) => { takeUpTop.current = e.nativeEvent.layout.y; }}>
@@ -2579,7 +2499,7 @@ function PostDetailModal() {
 
                 {/* A visitor with no account, looking around (slice S12, utils/look-around.ts): nothing here can be signed, so
                     the one action is the door, where the key is made. */}
-                {!identity && !isPulsePost && (
+                {!identity && (
                     <View style={[styles.otherPostActions, { marginTop: 10 }]}>
                         <Pressable accessibilityRole="button" style={styles.messageBtn} onPress={openLookDoor} testID="post-join-to-message">
                             <Text style={styles.messageBtnText}>{t('Join to message')}</Text>
@@ -2642,7 +2562,7 @@ function PostDetailModal() {
                     <View style={styles.tileBanner} testID="post-tile-banner">
                         <CategoryTile
                             category={post.category}
-                            kind={isPulsePost ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')}
+                            kind={post.type === 'event' ? 'event' : 'listing'}
                             size="banner"
                         />
                     </View>

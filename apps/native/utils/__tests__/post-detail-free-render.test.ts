@@ -157,12 +157,10 @@ const MINE_HELD = { ...HOURLY, id: 'p-mine-held', status: 'pending', author_pubk
 const MINE_HELD_TX = { id: 'tx-mine', post_id: 'p-mine-held', status: 'pending', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign, seller_pubkey: ME.publicKey, amount_c: 2400, hours: 2 };
 const DONE = { ...OFFER, id: 'p-done', status: 'completed', target_group_id: null, audience_scope: 'public', pending_transaction_id: 'tx-done', accepted_by: ME.publicKey };
 const PAUSED = { ...HOURLY, id: 'p-paused', status: 'paused', author_pubkey: ME.publicKey, author_callsign: ME.callsign };
-const PULSE = { id: 'p-pulse', type: 'offer', status: 'active', title: 'Gift economies grow trust', description: 'Today’s thought.', category: 'general', author_pubkey: 'pulse-key', author_callsign: 'Daily Pulse', price_c: 0, price_type: 'fixed', photos: '[]', created_at: iso(now - 60_000) };
-
 /** What members and the node wrote: shown as written. */
 const OTHERS = [
-    ...[OFFER, NEED, PULSE].flatMap((p) => [p.title, p.description]),
-    KOFI.callsign, 'Mia', ME.callsign, 'Garden club', 'Daily Pulse',
+    ...[OFFER, NEED].flatMap((p) => [p.title, p.description]),
+    KOFI.callsign, 'Mia', ME.callsign, 'Garden club',
 ].sort((a, b) => b.length - a.length);
 
 function answers(post: Record<string, unknown>, db: { first?: (sql: string, params?: unknown[]) => unknown; all?: (sql: string) => unknown[] } = {}) {

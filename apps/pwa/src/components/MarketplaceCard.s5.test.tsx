@@ -93,23 +93,23 @@ describe('MarketplaceCard S5 design requirements', () => {
         expect(screen.queryByText('No description provided.')).toBeNull();
     });
 
-    // G2 (DESIGN-market-grid-sizes-fable.md §2.2): the Pulse tile's four rows are its title (two), its pill, and one line of
-    // its news. The DAILY PULSE foot label (a div that looked like a button and was not one) leaves the tile: the pill says it.
-    it('Daily Pulse grid tile: its title, its pill and one line of its news, and no DAILY PULSE foot label', () => {
-        const pulsePost = {
+    // The Daily Pulse is gone (Marty, 15 Nov 2026): a post whose author is named "Daily Pulse" is drawn as any listing is, with
+    // its type chip, its price, who and row 4, and no Pulse pill, border or tile.
+    it('a post by an author named "Daily Pulse" is an ordinary tile: type chip, price, who and row 4, no Pulse pill', () => {
+        const named = {
             ...basePost,
             authorCallsign: 'Daily Pulse',
             id: 'daily-pulse',
             title: 'Daily Pulse 27 Oct',
             description: 'Today in the community',
         } as unknown as MarketplacePost;
-        const { getByTestId } = render(<MarketplaceCard post={pulsePost} viewMode="grid" />);
+        const { getByTestId } = render(<MarketplaceCard post={named} viewMode="grid" />);
 
-        const block = getByTestId('grid-text-block');
-        const rows = Array.from(block.children) as HTMLElement[];
-        expect(rows.map(r => r.textContent)).toEqual(['Daily Pulse 27 Oct', '🗞️ DAILY PULSE', 'Today in the community']);
-        expect(screen.getByText('Today in the community').className).toContain('truncate');
-        expect(screen.queryByText('DAILY PULSE')).toBeNull();
+        expect(screen.queryByText('🗞️ DAILY PULSE')).toBeNull();
+        expect(screen.getByText('OFFER')).toBeInTheDocument();
+        expect(getByTestId('grid-row-4')).toBeInTheDocument();
+        expect(getByTestId('listing-grid-tile').className).toBe(`${gridTile()} cursor-pointer transition-shadow duration-300 hover:shadow-md`);
+        expect(screen.queryByText('Today in the community')).toBeNull();
     });
 
     it('title clamps to two lines in grid mode', () => {

@@ -2,7 +2,8 @@
  * Local knowledge on the web's Pulse (slice KP, apps; DESIGN-local-knowledge-amend-fable.md §2.12, §3.8): the page asks the
  * node for knowledge cards (`with=knowledge`), draws the card with its own component in the feed's own order between the
  * creators' cards, under the Neighbours lane; its rows open the page in Learn and its foot opens Learn. A day's card can move
- * between two page reads (the KP node review note), so the list keeps the newest copy and never two cards for one day.
+ * between two page reads (the KP node review note), so the list keeps the newest copy, in the place already shown (as the
+ * phone does: nothing above the member jumps), and never two cards for one day.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -106,7 +107,7 @@ describe('the knowledge card in the list', () => {
         expect(onNavigate).toHaveBeenLastCalledWith('learn');
     });
 
-    it('a day\'s card that moved to the next page between reads shows once, the newest copy, where that read put it', async () => {
+    it('a day\'s card that moved to the next page between reads shows once, the newest copy, in the place already shown', async () => {
         vi.mocked(getPulseFeed)
             .mockResolvedValueOnce(feed([
                 creator('a', 'Seed saving at the hall'),
@@ -125,7 +126,7 @@ describe('the knowledge card in the list', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Load more posts' }));
         await screen.findByText('Choir practice');
         await waitFor(() => expect(drawn()).toEqual([
-            'creator: Seed saving at the hall', 'creator: Repair café', 'creator: Choir practice', 'knowledge: New local knowledge', 'creator: Seed swap',
+            'creator: Seed saving at the hall', 'knowledge: New local knowledge', 'creator: Repair café', 'creator: Choir practice', 'creator: Seed swap',
         ]));
         expect(screen.getAllByTestId('pulse-knowledge-card')).toHaveLength(1);
         expect(screen.queryByText('How recycling works at the tip')).toBeNull();

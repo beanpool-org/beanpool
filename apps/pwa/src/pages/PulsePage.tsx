@@ -16,7 +16,8 @@
  * - Local knowledge's card (slice KP; DESIGN-local-knowledge-amend-fable.md §2.12, §3.8): the feed is read `with=knowledge`,
  *   and an item with `source: 'knowledge'` is drawn by PulseKnowledgeCard, never the creator's card. It sits in the feed's
  *   own order under Neighbours ("All" only: the node gives none under a category). Its rows open the page in Learn, its foot
- *   Learn. A day's card can move between two page reads, so Load more keeps the newest copy (core mergePulseFeedPages).
+ *   Learn. A day's card can move between two page reads, so Load more keeps the newest copy where it stands (core
+ *   mergePulseFeedPages, the phone's rule).
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -142,8 +143,8 @@ export function PulsePage({ identity, onOpenProfile, profile, onNavigate }: Prop
 
             if (activeCategoryRef.current !== selectedCategory) return;
 
-            // A creator's item a page repeats keeps its place; a day's knowledge card the page carries again replaces the
-            // copy shown (it moved between the reads), so the list never holds two cards for one day.
+            // An id the list holds is not added twice: a day's knowledge card the page carries again (it moved between the
+            // reads) replaces the copy shown where it stands, so the list never holds two cards for one day and nothing jumps.
             setItems(prev => mergePulseFeedPages(prev, res.items || []));
             setNextCursor(res.nextCursor);
         } catch (e: any) {

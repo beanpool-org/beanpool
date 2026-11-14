@@ -12,7 +12,7 @@
  *
  * Pure and universal.
  */
-import { PULSE_KNOWLEDGE_ID_PREFIX, PULSE_KNOWLEDGE_ROWS, type PulseKnowledgeCard, type PulseKnowledgePost } from './knowledge.js';
+import { PULSE_KNOWLEDGE_ROWS, type PulseKnowledgeCard, type PulseKnowledgePost } from './knowledge.js';
 import { PULSE_KNOWLEDGE_WORDS as W } from './pulse-knowledge-words.js';
 import { formatCount, t as activeT, tn as activeTn, type Words } from './words.js';
 
@@ -81,26 +81,26 @@ export function pulseKnowledgeCardLines(
     };
 }
 
-/** Whether a feed item's id is a knowledge card's (`know_<local date>`): one id a day. */
-export function isPulseKnowledgeId(id: unknown): boolean {
-    return typeof id === 'string' && id.startsWith(PULSE_KNOWLEDGE_ID_PREFIX);
-}
-
 /**
- * The next page of the Pulse feed added to the items a list already shows (the KP node review note). A day's knowledge card
- * is worked out at each read, so it can move between two reads: a newer page that day moves it up, a takedown moves it older
- * and onto a later page. So a knowledge card the next page carries replaces the copy already shown (the newest copy wins, in
- * the place the newer read gives it), and a list never holds two cards for one day. A creator's item a page repeats keeps
- * the place it already has. Neither list is changed.
+ * The next page of the Pulse feed added to the items a list already shows (the KP node review note), as the phone's
+ * utils/pulse.ts mergePulsePage does. A day's knowledge card is worked out at each read, so it can move between two reads: a
+ * takedown moves it older and a later page carries the same `know_<day>` id again; a page published today moves it newer, out
+ * of a scroll already past it (the list keeps its copy until a refresh). So an id the list already holds is not added twice:
+ * the page's copy replaces the one shown, where it stands. The newest copy wins (a taken-down page's title leaves the card),
+ * and it keeps the place the member already scrolled past, so nothing above them jumps. One id is one day, so a list never
+ * holds two cards for one day. A creator's item that comes again is the same item. Neither list is changed.
  */
 export function mergePulseFeedPages<T extends { id: string }>(shown: readonly T[], next: readonly T[]): T[] {
-    const moved = new Set(next.filter((i) => isPulseKnowledgeId(i.id)).map((i) => i.id));
-    const out = shown.filter((i) => !moved.has(i.id));
-    const seen = new Set(out.map((i) => i.id));
+    const out = [...shown];
+    const at = new Map(out.map((item, i) => [item.id, i]));
     for (const item of next) {
-        if (seen.has(item.id)) continue;
-        seen.add(item.id);
-        out.push(item);
+        const i = at.get(item.id);
+        if (i === undefined) {
+            at.set(item.id, out.length);
+            out.push(item);
+        } else {
+            out[i] = item;
+        }
     }
     return out;
 }

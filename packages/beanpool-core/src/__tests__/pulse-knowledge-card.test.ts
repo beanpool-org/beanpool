@@ -113,11 +113,12 @@ describe('mergePulseFeedPages: one card a day across pages', () => {
         expect(mergePulseFeedPages([creator('a'), creator('b')], [creator('c')]).map((i) => i.id)).toEqual(['a', 'b', 'c']);
     });
 
-    it('a day\'s card that moved older between reads (a takedown) shows once, the newest copy, where the newer read put it', () => {
+    it('a day\'s card that moved older between reads (a takedown) shows once, the newest copy, in the place already shown', () => {
         const first = [creator('a'), know('2026-11-14', 3), creator('b')];
         const next = [creator('c'), know('2026-11-14', 2), creator('d')];
         const merged = mergePulseFeedPages(first, next);
-        expect(merged.map((i) => i.id)).toEqual(['a', 'b', 'c', 'know_2026-11-14', 'd']);
+        // Nothing above the member jumps: the card stays where they scrolled past it, with the newer read's rows.
+        expect(merged.map((i) => i.id)).toEqual(['a', 'know_2026-11-14', 'b', 'c', 'd']);
         expect(merged.filter((i) => i.id === 'know_2026-11-14')).toEqual([know('2026-11-14', 2)]);
     });
 
@@ -128,6 +129,7 @@ describe('mergePulseFeedPages: one card a day across pages', () => {
     it('never two cards for one day, even when one page carries the same day twice', () => {
         const merged = mergePulseFeedPages([know('2026-11-15', 1)], [know('2026-11-13', 1), know('2026-11-13', 4)]);
         expect(merged.map((i) => i.id)).toEqual(['know_2026-11-15', 'know_2026-11-13']);
+        expect(merged[1]).toEqual(know('2026-11-13', 4));
         expect(new Set(merged.map((i) => i.id)).size).toBe(merged.length);
     });
 

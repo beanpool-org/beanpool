@@ -93,6 +93,10 @@ export const EMPTY_RULES: ReadonlyArray<{ rule: EmptyRule; checks: ReadonlyArray
         { table: 'withheld_overlays', columns: ['author_pubkey'] },
         { table: 'dm_requests', columns: ['from_pubkey', 'accepted_by'] },
         { table: 'request_limits', columns: ['sender_pubkey'] },
+        // Mail it sent to someone in another community (engine/relay-outbox.ts: a line, a photo or voice, or a delete of one),
+        // while the outbox keeps the row: 30 days after its last change, and never on a standby (`local`). A receipt is its
+        // device saying mail came to it: reading, not sending. Mail waiting for it (relay_mail.recipient) is done to it.
+        { table: 'relay_outbox', columns: ['sender_key'], where: "kind != 'receipt'" },
     ] },
     { rule: 'credit', checks: [
         { table: 'members', columns: ['public_key'], where: 'COALESCE(earned_credit_c, 0) != 0' },

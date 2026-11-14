@@ -5,7 +5,7 @@
  *
  *   1. The schema, measured: every column that holds a member's key is either in one of EMPTY_RULES' checks or named below
  *      as no activity of the account's, with why. "Holds a member's key" is each foreign key to members AND each TEXT
- *      column whose name says it (MEMBER_KEY_COLUMN: …_pubkey, public_key, …_by, author, keeper, recipient, voter…),
+ *      column whose name says it (MEMBER_KEY_COLUMN: …_pubkey, public_key, …_by, author, keeper, recipient, voter…, sender_key),
  *      since most member columns have no foreign key. A new table must say which; the name rule is what catches a column
  *      with no foreign key, so a member's key under a name it doesn't know (no "pubkey", "_by" or role word) still slips
  *      past: name such a column so it says what it holds.
@@ -13,8 +13,9 @@
  *      who sent nobody an invitation; then one account per rule, each holding only that one thing, is refused with that
  *      rule's code and words (yourself, an enterprise, the node's own SYSTEM row and a row under another spelling of a
  *      key, a suspended account, a role, a balance, a post, a group invitation sent as a convenor, waiting or accepted, a
- *      payment, a message sent, credit, an enterprise kept, someone brought in, a report). Each refusal for what the
- *      account did or holds also says Suspend stays the way.
+ *      payment, a message sent, mail sent to another community, credit, an enterprise kept, someone brought in, a report).
+ *      Each refusal for what the account did or holds also says Suspend stays the way. Mail from another community waiting
+ *      for it, and the receipt its device sent back for mail it got, leave it empty.
  *   3. Who: an owner's own key session only. An admin is refused, an owner's automation token is refused; a refused
  *      retire writes nothing.
  *   4. The retire: 200, no vote or decision opened, nothing deleted (the row and its account stay); 'disabled' with
@@ -132,14 +133,20 @@ const NOT_ACTIVITY: Record<string, string> = {
     'rekey_audit_log.new_pubkey': "its own key's replacement: the account moving, no act",
     'community_copies.owner_pubkey': 'its own sealed key and 12 words: no act',
     'bring_back_log.member_pubkey': 'its own account brought back to a new phone by an admin: no act',
+    // Messages across communities (X2, engine/relay-mail.ts, engine/relay-outbox.ts). Mail it SENT is relay_outbox.sender_key (`messages`).
+    'relay_mail.recipient': 'mail from another community waiting for it: done to it, not its act',
+    'relay_mail.sender_key': "the sender, in another community, of mail waiting here: their key, no act of anyone's here",
+    'relay_mail_seen.sender_key': "the sender, in another community, of an item that came here: their key, no act of anyone's here",
+    'relay_outbox.recipient': 'the person in another community its mail went to (or a receipt went back to): the sending is relay_outbox.sender_key',
     'invalidated_keys.public_key': "a key closed or replaced: the key's state, no act",
 };
 
 /**
  * A TEXT column whose name says it holds a member's key (see §1). Read with each foreign key to members; INTEGER and REAL
- * columns (flags and counts such as agent_takedowns.by_author) are no key.
+ * columns (flags and counts such as agent_takedowns.by_author) are no key. A role word may end in `_key` (relay_outbox.sender_key,
+ * the mailbox between communities): a name like storage_key or pref_key has no role word, so stays out.
  */
-const MEMBER_KEY_COLUMN = /^(?:pubkey|(?:[a-z_]*_)?(?:pubkey|public_key|account|actor|author|owner|member|voter|rater|reporter|target|recipient|keeper|enterprise|subject|holder|sender|payer|payee|buyer|seller|candidate|proposer|creator|lead|convenor|inviter|invitee|viewer)|[a-z_]*_by)$/;
+const MEMBER_KEY_COLUMN = /^(?:pubkey|(?:[a-z_]*_)?(?:pubkey|public_key|account|actor|author|owner|member|voter|rater|reporter|target|recipient|keeper|enterprise|subject|holder|sender|payer|payee|buyer|seller|candidate|proposer|creator|lead|convenor|inviter|invitee|viewer)(?:_key)?|[a-z_]*_by)$/;
 
 function keypair(name: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -172,6 +179,19 @@ function groupWithConvenor(lead: string, convenor: string): string {
     add.run(`g-${tag}`, lead);
     add.run(`g-${tag}`, convenor);
     return `g-${tag}`;
+}
+
+/** An item `sender` here sent to `far`, a key in another community, as the outbox keeps it once that server took it (engine/relay-outbox.ts). */
+function relayOutboxFrom(sender: string, far: string, kind: 'dm-line' | 'receipt'): void {
+    const now = Date.now();
+    db.prepare(`INSERT INTO relay_outbox (sender_key, item_id, kind, recipient, recipient_home, state, item, attempts, next_try_at, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'far.example', 'sent', NULL, 1, NULL, ?, ?)`).run(sender, crypto.randomBytes(8).toString('hex'), kind, far, now, now);
+}
+
+/** A line `far`, in another community, sent to `recipient` here, waiting for their device (engine/relay-mail.ts). */
+function relayMailFor(recipient: string, far: string): void {
+    db.prepare(`INSERT INTO relay_mail (sender_key, item_id, kind, recipient, sender_home, envelope, payload, bytes, received_at)
+                VALUES (?, ?, 'dm-line', ?, 'far.example', '{}', 'sealed', 6, ?)`).run(far, crypto.randomBytes(8).toString('hex'), recipient, Date.now());
 }
 
 function resetLimits(): void {
@@ -251,9 +271,10 @@ async function main(): Promise<void> {
         `the schema check sees member columns with and without a foreign key (${memberColumns.size}, ${byForeignKey.size} of them by foreign key)`);
     assert(unclassified.length === 0, `every column holding a member's key is a rule or named as no activity (unclassified: ${unclassified.join(', ') || 'none'})`);
     // The name rule finds the columns the review found with no foreign key (convenor elections, a guide page sent, a
-    // names-list confirmation), so a table like them can't slip past again.
+    // names-list confirmation) and the merge queue's find (mail sent to another community, #3127), so a table like them
+    // can't slip past again.
     const noForeignKey = ['group_convenor_proposals.proposer_pubkey', 'group_convenor_proposals.candidate_pubkey', 'group_convenor_votes.voter_pubkey',
-        'knowledge_drafts.member_pubkey', 'confirmations.member_pubkey'];
+        'knowledge_drafts.member_pubkey', 'confirmations.member_pubkey', 'relay_outbox.sender_key'];
     const unseen = noForeignKey.filter(c => byForeignKey.has(c) || !memberColumns.has(c) || !ruled.has(c));
     assert(unseen.length === 0, `columns with no foreign key are seen by name and ruled (not: ${unseen.join(', ') || 'none'})`);
     const both = Object.keys(NOT_ACTIVITY).filter(c => ruled.has(c));
@@ -276,6 +297,15 @@ async function main(): Promise<void> {
     const helperOk = await call('GET', null, `/api/local/admin/users/${helper.pk}/retire`, undefined, owner);
     assert(helperOk.status === 200 && helperOk.body?.allowed === true,
         `a convenor in a group another member made, who invited nobody, may be retired (${show(helperOk)})`);
+    // Mail from another community waiting for it, and the receipt its device sent back for mail it got: done to it, and its
+    // own reading (engine/relay-mail.ts; relay-outbox.ts counts no receipt as writing to anyone either).
+    const mailed = makeMember('Mailed');
+    const far = keypair('Far').pk;
+    relayMailFor(mailed.pk, far);
+    relayOutboxFrom(mailed.pk, far, 'receipt');
+    const mailedOk = await call('GET', null, `/api/local/admin/users/${mailed.pk}/retire`, undefined, owner);
+    assert(mailedOk.status === 200 && mailedOk.body?.allowed === true,
+        `mail from another community waiting for it, and its receipt for mail it got, leave it empty (${show(mailedOk)})`);
 
     const cases: Array<{ rule: string; label?: string; make: () => Id }> = [
         { rule: 'own_account', make: () => founder },
@@ -324,6 +354,12 @@ async function main(): Promise<void> {
             const conv = `c-${m.pk.slice(0, 8)}`;
             db.prepare(`INSERT INTO conversations (id, type) VALUES (?, 'dm')`).run(conv);
             db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce) VALUES (?, ?, ?, 'x', 'y')`).run(`m-${m.pk.slice(0, 8)}`, conv, m.pk);
+            return m;
+        } },
+        // Messages across communities (X2, #3127): what it sent another community is in the outbox, not in messages.
+        { rule: 'messages', label: 'a line it sent to someone in another community', make: () => {
+            const m = makeMember('Writing far');
+            relayOutboxFrom(m.pk, keypair('Far').pk, 'dm-line');
             return m;
         } },
         { rule: 'credit', make: () => { const m = makeMember('Granted'); db.prepare('UPDATE members SET earned_credit_c = 10000 WHERE public_key = ?').run(m.pk); return m; } },

@@ -78,7 +78,7 @@ Only an owner moves the two lines. A tighter line applies 14 days after the chan
 
 In any community, confirmed or not:
 
-- **When your account is removed.** In a community that votes, that is after it voted to remove you, or after an owner decided it because too few members could vote; where votes are switched off, it is when an admin removes your account. The admin who settles it sees your balance and how many trades you have open, so that what you hold or owe can be settled. The other admins and the owner can see who looked, at whose balance, and when.
+- **When your account is removed.** In a community that votes, that is after it voted to remove you, or after an owner decided it because too few members could vote; where votes are switched off, it is when an admin removes your account. In any community, it is also when an owner removes a member together with everyone they invited, and you are among them. The admin who settles it sees your balance and how many trades you have open, so that what you hold or owe can be settled. The other admins and the owner can see who looked, at whose balance, and when.
 - **When your community votes on removing you.** Everyone who can vote in it sees your balance and any debt, in that vote only. An admin or an owner who can't vote in it doesn't see them there. Those looks are not logged.
 - **Whoever runs your community's server** holds its whole database, your balance and trades included, and its backups, snapshots and standby copies.
 

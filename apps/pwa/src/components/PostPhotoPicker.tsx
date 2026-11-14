@@ -11,7 +11,8 @@ import { resizePhotoFile } from '../lib/photo-resize';
 /** The most photos a listing holds (the node keeps five). */
 export const MAX_POST_PHOTOS = 5;
 
-export function PostPhotoPicker({ photos, onChange, label }: { photos: string[]; onChange: (update: (prev: string[]) => string[]) => void; label?: string }) {
+/** `max`: the most this form holds (a listing five, Local knowledge three). */
+export function PostPhotoPicker({ photos, onChange, label, max = MAX_POST_PHOTOS }: { photos: string[]; onChange: (update: (prev: string[]) => string[]) => void; label?: string; max?: number }) {
     return (
         <div>
             {label && (
@@ -33,7 +34,7 @@ export function PostPhotoPicker({ photos, onChange, label }: { photos: string[];
                         </button>
                     </div>
                 ))}
-                {photos.length < MAX_POST_PHOTOS && (
+                {photos.length < max && (
                     <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 dark:border-nature-600 flex items-center justify-center cursor-pointer bg-nature-50 dark:bg-nature-900 text-2xl text-nature-400 dark:text-nature-300 hover:border-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 transition-all shadow-sm">
                         📷
                         <input
@@ -46,7 +47,7 @@ export function PostPhotoPicker({ photos, onChange, label }: { photos: string[];
                                 e.target.value = '';
                                 if (!file) return;
                                 resizePhotoFile(file)
-                                    .then((dataUrl) => onChange(prev => [...prev, dataUrl].slice(0, MAX_POST_PHOTOS)))
+                                    .then((dataUrl) => onChange(prev => [...prev, dataUrl].slice(0, max)))
                                     .catch((err) => console.error('Could not read the picked photo:', err));
                             }}
                         />

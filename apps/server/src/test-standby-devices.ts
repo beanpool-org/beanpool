@@ -255,6 +255,16 @@ async function child(): Promise<void> {
                 .run(`-${a.days} days`, ...(a.strangers ? [] : a.keys ?? [])).changes;
         },
         /**
+         * `keys` each asked to join here and wait for the answer, as the knock door leaves them: a key with no row keeps a
+         * phone only then (web push W4, routes/community.ts POST /api/push-tokens).
+         */
+        'waiting-to-join': async (a: { keys: string[] }) => {
+            const { db } = await import('./db/db.js');
+            const ask = db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message) VALUES (?, ?, 'Waiting', 'May I join?')`);
+            for (const k of a.keys) ask.run(crypto.randomUUID(), k);
+            return a.keys.length;
+        },
+        /**
          * invite_codes held to a stricter rule than the main server's, as an older standby's CHECK that doesn't know a value
          * would be (`on`), or given its own text back (`off`): a used invite's `used_by` is a value this table refuses, and
          * the invite `refuse` is a row it refuses whatever is left out (its key).
@@ -785,6 +795,8 @@ async function main(): Promise<void> {
         ];
         const oddTaken = odd.filter(([, r]) => r.status !== 400);
         assert(oddTaken.length === 0, `and ${odd.map(([what]) => what).join(', ')} (${oddTaken.map(([what, r]) => `${what}: ${brief(r)}`).join('; ') || 'each 400'})`);
+        // A key with no row keeps a phone only while its request to join is open (web push W4): these five have asked.
+        await main.send('waiting-to-join', { keys: strangers.map((st) => st.pk) });
         const took: number[] = [];
         for (const [i, st] of strangers.entries()) took.push((await phone(st, longest(`stranger-${i}`), 100)).status);
         assert(took.every((st) => st === 200), `each fresh key registers a 512-character token, the longest a phone can leave (${took.join(', ')})`);

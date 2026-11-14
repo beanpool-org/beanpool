@@ -684,8 +684,8 @@
         "sourceHash": "788011833a5a0f22"
       },
       "summary": {
-        "text": "Piliin kung aling mga alerto ang darating sa telepono, at kailan magpapaalala ang mga event.",
-        "sourceHash": "70c8aa586befc843"
+        "text": "Piliin kung aling mga alerto ang darating sa telepono o browser, at kailan magpapaalala ang mga event.",
+        "sourceHash": "c5a783869bd5981b"
       },
       "help": {
         "text": "Piliin kung aling mga alerto ang darating sa iyo, at kailan magpapaalala ang mga event.",

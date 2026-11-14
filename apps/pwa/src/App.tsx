@@ -529,12 +529,17 @@ export function App() {
             setOpenMapCalendar(true);
             return;
         }
-        // Learn: the front, one topic, a search (the Market's "In Learn: 2 for …" line) or one page (a link, a bell line).
-        if (tab === 'learn' || tab === 'learn-topic' || tab === 'learn-search' || tab === 'learn-page') {
+        // Learn: the front, one topic, a search (the Market's "In Learn: 2 for …" line) or one page (a link, a bell line); and
+        // (slice K4) the form (the New Post panel's fifth button, Home's first row), My suggestions and To check (a bell line).
+        if (tab === 'learn' || tab === 'learn-topic' || tab === 'learn-search' || tab === 'learn-page'
+            || tab === 'learn-suggest' || tab === 'learn-mine' || tab === 'learn-check') {
             setShowSettings(false);
             setLearnTarget(tab === 'learn-topic' ? { kind: 'topic', topic: contextId ?? '' }
                 : tab === 'learn-search' ? { kind: 'search', q: contextId ?? '' }
                 : tab === 'learn-page' && contextId ? { kind: 'page', id: contextId }
+                : tab === 'learn-suggest' ? { kind: 'suggest' }
+                : tab === 'learn-mine' ? { kind: 'mine' }
+                : tab === 'learn-check' ? { kind: 'check' }
                 : { kind: 'front' });
             // Asked for from another tab: Back returns there (from Learn itself, to where Learn was opened from).
             if (activeTab !== 'learn') setLearnReturnTab(activeTab);

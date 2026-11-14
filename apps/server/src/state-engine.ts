@@ -10485,8 +10485,17 @@ export function registerPushToken(
 
 export type PushRegistration = 'registered' | 'left' | 'key_rate_limited' | 'rate_limited' | 'busy' | 'failed';
 
-function hasMembersRow(publicKey: string): boolean {
+/** Whether this key has a row here, a member's or a visitor's (a key with none is a stranger: STRANGER_PUSH_RULES). */
+export function hasMembersRow(publicKey: string): boolean {
     return !!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(publicKey);
+}
+
+/**
+ * Whether this key already holds a row for this phone's token (a registration again adds none, and is never refused:
+ * routes/community.ts POST /api/push-tokens). Throws without this server's key ({@link registerPushToken} then fails too).
+ */
+export function holdsPushToken(publicKey: string, token: string): boolean {
+    return !!db.prepare('SELECT 1 FROM push_tokens WHERE public_key = ? AND token_id = ?').get(publicKey, pushTokenId(token));
 }
 
 /**
@@ -10540,9 +10549,12 @@ function dropStalestTokens(publicKey: string, kept: string): void {
 
 /**
  * What a key with no row here (neither a member's nor a visitor's) may store of push tokens (registerPushToken). Such a
- * key registers before its account here exists (a knock waiting for its answer, a join under way). Nothing is sent to
- * it until it has a row, and then none of this applies. Refused, the app tries again within a minute, then less often,
- * and lands once its row is made (apps/native utils/push-registrations.ts).
+ * key registers while it waits for the answer to its request to join here: the route takes a new token of one only with a
+ * request members can still answer (routes/community.ts POST /api/push-tokens; web push W4), and what it sends such a key
+ * is that answer, `join.answered`, and nothing else (engine/knocks.ts tellAskerAnswered). Its rows go when the request is
+ * cancelled, declined or lapses (engine/knocks.ts dropAskerPhonesOf, tidyKnocks); once the key joins, none of this
+ * applies. A key joining by an invite has its row by then. Refused, the app tries again within a minute, then less often
+ * (apps/native utils/push-registrations.ts).
  */
 export const STRANGER_PUSH_RULES = {
     /**
@@ -11028,8 +11040,12 @@ export function deliverPushNotices(
 
         // The bell (DESIGN-web-notifications-fable.md §2.1): the notice is kept for every member here it is for, a phone
         // or not, so the web app, and a phone with no push, list what the phone is buzzed with. Not for a key that can't
-        // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before.
-        const tokens = getPushTokens(pk, open);
+        // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before;
+        // a key with no row at all is a phone waiting for the answer to its request to join (web push W4), and is told
+        // that answer and nothing else, as its browser is (engine/web-push-subscriptions.ts webPushTargetOpener). The row
+        // is looked up only for a key with a phone here.
+        const held = getPushTokens(pk, open);
+        const tokens = held.length === 0 || kind === 'join.answered' || hasMembersRow(pk) ? held : [];
         const browsers = browsersOf(pk, kind);
         if (tokens.length === 0 && browsers.length === 0 && !passesReadGate(pk)) continue;
 

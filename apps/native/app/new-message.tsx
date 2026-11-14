@@ -396,7 +396,7 @@ export default function NewMessageScreen() {
                 </Text>
             </View>
         </>
-    ), [showRecents, recents, searchQuery, filteredMembers.length, renderRecentCard, membersOnDemand, styles, colors]);
+    ), [showRecents, recents, searchQuery, filteredMembers.length, renderRecentCard, membersOnDemand, styles, colors, hasContacts]);
 
     // ── Main Return ─────────────────────────────────────────────────────────
     return (

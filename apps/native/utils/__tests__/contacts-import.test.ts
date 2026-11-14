@@ -1,6 +1,6 @@
 /**
  * Import on the phone (utils/contacts-import.ts, DESIGN-private-contacts-fable.md §3.4, §5.4, §11, slice C3): the
- * permission asked once, at the tap, with its three answers; the phone's contacts read in pages, names, numbers and emails
+ * permission asked once, at the tap, with its three answers; the phone's contacts read in one call, names, numbers and emails
  * only; a contacts file picked, held to its size, read once and never left behind; the review rows; and the import made in
  * one change. Each check names the change that turns it red.
  */
@@ -8,11 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
-    CONTACTS_FILE_MAX_BYTES, CONTACTS_FILE_WORDS, contactAlreadyInList, emptyContactsList, newContactId, putContact, writeContactsVcard,
+    CONTACTS_FILE_MAX_BYTES, CONTACTS_FILE_WORDS, CONTACTS_READ_MAX, contactAlreadyInList, emptyContactsList, newContactId, putContact, writeContactsVcard,
     type ContactCandidate, type ContactsList,
 } from '@beanpool/core';
 import {
-    PHONE_CONTACT_FIELDS, PHONE_CONTACTS_PAGE, askForPhoneContacts, candidateOfPhoneContact, importChosen, pickContactsFile, readPhoneContacts,
+    PHONE_CONTACT_FIELDS, askForPhoneContacts, candidateOfPhoneContact, importChosen, pickContactsFile, readPhoneContacts,
     reviewRows, type ContactsPickerModules, type PhoneContact, type PhoneContactsModule,
 } from '../contacts-import';
 import { loadContacts, type ContactsAccount } from '../contacts-store';
@@ -73,16 +73,26 @@ describe('the permission is asked once, at the tap, and each answer has its own 
     });
 });
 
-describe('the phone\'s contacts are read in pages, names, numbers and emails only', () => {
-    it('asks for those fields alone (never a note, a picture or an address) in pages, and makes candidates', async () => {
+describe('the phone\'s contacts are read in one call, names, numbers and emails only', () => {
+    it('asks for those fields alone (never a note, a picture or an address) in one call, and makes candidates', async () => {
         const { m, calls } = library({ granted: true, canAskAgain: true }, addressBook(1234));
         const got = await readPhoneContacts(m);
         expect(got).toHaveLength(1234);
         // Mutation: drop `fields` (expo-contacts then returns every field, notes and pictures included) → fails.
         expect([...PHONE_CONTACT_FIELDS].sort()).toEqual(['emails', 'firstName', 'lastName', 'name', 'phoneNumbers']);
         for (const q of calls.queries) expect(q.fields).toEqual(PHONE_CONTACT_FIELDS);
-        expect(calls.queries.map((q) => q.pageOffset)).toEqual([0, PHONE_CONTACTS_PAGE, 2 * PHONE_CONTACTS_PAGE]);
+        // One call (PR #3157's deciding review): expo-contacts reads the whole address book on every call and keeps the page,
+        // so pages multiply the read. Mutation: read in pages of 500 again → three queries.
+        expect(calls.queries.map((q) => [q.pageOffset, q.pageSize])).toEqual([[0, CONTACTS_READ_MAX]]);
         expect(got[7]).toEqual({ name: 'Person 7', phones: ['0412 000007'], emails: ['p7@mail.example'], note: '' });
+    });
+
+    it('a book past the cap: one call still, and at most CONTACTS_READ_MAX people come back', async () => {
+        const { m, calls } = library({ granted: true, canAskAgain: true }, addressBook(CONTACTS_READ_MAX + 50));
+        const got = await readPhoneContacts(m);
+        expect(calls.queries).toHaveLength(1);
+        expect(got).toHaveLength(CONTACTS_READ_MAX);
+        expect(got[CONTACTS_READ_MAX - 1].name).toBe(`Person ${CONTACTS_READ_MAX - 1}`);
     });
 
     it('a person: the name, else first and last; numbers as written, each once, at most 5; emails each once, at most 3', () => {
@@ -100,17 +110,24 @@ describe('the phone\'s contacts are read in pages, names, numbers and emails onl
 
 describe('a contacts file: picked with no permission, held to its size, read once, never left on the phone', () => {
     const vcf = writeContactsVcard([{ name: 'Dee Walker', phones: ['0412 345 678'], emails: [], note: '' }, { name: 'Sam Jones', phones: [], emails: ['sam@mail.example'], note: '' }]);
-    function picker(asset: { uri: string; size?: number } | null, text: string | Error = vcf) {
+    /** The picker and the file system, faked. `copy` is what the file system says of the picker's copy (its real size). */
+    function picker(
+        asset: { uri: string; size?: number | null } | null,
+        text: string | Error = vcf,
+        copy: { exists: boolean; size?: number } | Error = { exists: true, size: typeof text === 'string' ? text.length : 0 },
+    ) {
         const removed: string[] = [];
         const read: string[] = [];
+        const looked: string[] = [];
         const m: ContactsPickerModules = {
             DocumentPicker: { getDocumentAsync: async () => (asset ? { canceled: false, assets: [asset] } : { canceled: true, assets: null }) },
             FileSystem: {
                 readAsStringAsync: async (uri) => { read.push(uri); if (text instanceof Error) throw text; return text; },
                 deleteAsync: async (uri) => { removed.push(uri); },
+                getInfoAsync: async (uri) => { looked.push(uri); if (copy instanceof Error) throw copy; return copy; },
             },
         };
-        return { m, removed, read };
+        return { m, removed, read, looked };
     }
 
     it('reads the people in it, and removes the copy the picker made', async () => {
@@ -133,6 +150,33 @@ describe('a contacts file: picked with no permission, held to its size, read onc
         const unreadable = picker({ uri: 'file:///x.bin', size: 10 }, new Error('binary'));
         expect(await pickContactsFile(unreadable.m)).toEqual({ kind: 'refused', words: CONTACTS_FILE_WORDS.notVcard });
         expect(unreadable.removed).toEqual(['file:///x.bin']);
+    });
+
+    it('a picker that gives no size: the copy\'s size decides, and a file whose size can\'t be found is never read whole', async () => {
+        // An Android provider that leaves its size column empty: expo-document-picker gives null (PR #3157's deciding review).
+        // Mutation: back to `asset.size ?? 0` → the big copy is read whole.
+        for (const size of [null, undefined]) {
+            const big = picker({ uri: 'file:///cache/DocumentPicker/big.vcf', size }, vcf, { exists: true, size: CONTACTS_FILE_MAX_BYTES + 1 });
+            expect(await pickContactsFile(big.m)).toEqual({ kind: 'refused', words: CONTACTS_FILE_WORDS.tooBig });
+            expect(big.looked).toEqual(['file:///cache/DocumentPicker/big.vcf']);
+            expect(big.read).toEqual([]);
+            expect(big.removed).toEqual(['file:///cache/DocumentPicker/big.vcf']);
+        }
+        // A small copy with no size from the picker reads as any other.
+        const small = picker({ uri: 'file:///cache/DocumentPicker/a.vcf', size: null });
+        expect((await pickContactsFile(small.m)).kind).toBe('read');
+        expect(small.removed).toEqual(['file:///cache/DocumentPicker/a.vcf']);
+        // Neither the picker nor the file system knows its size (no size given, the copy gone, the look failing): not read.
+        for (const copy of [{ exists: true }, { exists: false }, new Error('no look')]) {
+            const unknown = picker({ uri: 'file:///cache/DocumentPicker/u.vcf', size: null }, vcf, copy);
+            expect(await pickContactsFile(unknown.m)).toEqual({ kind: 'refused', words: CONTACTS_FILE_WORDS.notVcard });
+            expect(unknown.read).toEqual([]);
+            expect(unknown.removed).toEqual(['file:///cache/DocumentPicker/u.vcf']);
+        }
+        // A size the picker gave is used as it is: no extra look.
+        const told = picker({ uri: 'file:///cache/DocumentPicker/t.vcf', size: vcf.length });
+        await pickContactsFile(told.m);
+        expect(told.looked).toEqual([]);
     });
 
     it('closed without choosing: nothing to say', async () => {

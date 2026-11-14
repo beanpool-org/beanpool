@@ -23,8 +23,6 @@ import { editContacts, phoneSyncDeps, type ContactsSyncDeps } from './contacts-s
 
 /** The fields read from the phone's contacts: names, numbers, emails. Never notes, pictures, addresses or birthdays. */
 export const PHONE_CONTACT_FIELDS = ['name', 'firstName', 'lastName', 'phoneNumbers', 'emails'] as const;
-/** How many are read at a time, so a big address book never holds the screen. */
-export const PHONE_CONTACTS_PAGE = 500;
 
 /** A person as expo-contacts gives one, with the fields asked for. */
 export interface PhoneContact {
@@ -92,27 +90,31 @@ export function candidateOfPhoneContact(c: PhoneContact): ContactCandidate | nul
 }
 
 /**
- * The phone's contacts, read once, now (design §3.4: "It doesn't watch them"), a page at a time with a breath between
- * pages, at most {@link CONTACTS_READ_MAX}. Call only after {@link askForPhoneContacts} said yes. Throws what the library throws.
+ * The phone's contacts, read once, now (design §3.4: "It doesn't watch them"), in ONE call of at most
+ * {@link CONTACTS_READ_MAX}. Never in pages: expo-contacts runs the whole address-book query on every call and then keeps
+ * the page asked for (Android ContactsModule.kt `fetchContacts`, iOS ContactsModule.swift), so 2,000 contacts in pages of
+ * 500 would be read four times over, and 10,000 twenty times. Call only after {@link askForPhoneContacts} said yes. Throws
+ * what the library throws.
  */
 export async function readPhoneContacts(m: PhoneContactsModule): Promise<ContactCandidate[]> {
+    const { data } = await m.getContactsAsync({ fields: PHONE_CONTACT_FIELDS, pageSize: CONTACTS_READ_MAX, pageOffset: 0 });
     const out: ContactCandidate[] = [];
-    for (let offset = 0; out.length < CONTACTS_READ_MAX; offset += PHONE_CONTACTS_PAGE) {
-        const page = await m.getContactsAsync({ fields: PHONE_CONTACT_FIELDS, pageSize: PHONE_CONTACTS_PAGE, pageOffset: offset });
-        for (const p of page.data) {
-            const c = candidateOfPhoneContact(p);
-            if (c && out.length < CONTACTS_READ_MAX) out.push(c);
-        }
-        if (!page.hasNextPage || page.data.length === 0) break;
-        await new Promise((r) => setTimeout(r, 0));
+    for (const p of data) {
+        if (out.length >= CONTACTS_READ_MAX) break;
+        const c = candidateOfPhoneContact(p);
+        if (c) out.push(c);
     }
     return out;
 }
 
 /** The modules a file import uses. Tests pass their own. */
 export interface ContactsPickerModules {
-    DocumentPicker: { getDocumentAsync(o: { type: string; copyToCacheDirectory: boolean; multiple: boolean }): Promise<{ canceled: boolean; assets: { uri: string; size?: number }[] | null }> };
-    FileSystem: { readAsStringAsync(uri: string): Promise<string>; deleteAsync(uri: string, o: { idempotent: boolean }): Promise<void> };
+    DocumentPicker: { getDocumentAsync(o: { type: string; copyToCacheDirectory: boolean; multiple: boolean }): Promise<{ canceled: boolean; assets: { uri: string; size?: number | null }[] | null }> };
+    FileSystem: {
+        readAsStringAsync(uri: string): Promise<string>;
+        deleteAsync(uri: string, o: { idempotent: boolean }): Promise<void>;
+        getInfoAsync(uri: string): Promise<{ exists: boolean; size?: number }>;
+    };
 }
 
 /** expo-document-picker and the file system, or null in an app built without the picker. */
@@ -128,17 +130,35 @@ export type PickedFile =
     | { kind: 'read'; candidates: ContactCandidate[]; more: number; cutOff: boolean };
 
 /**
+ * How big the picked file is: what the picker said, or, when it said nothing (an Android provider that leaves its size column
+ * empty: expo-document-picker then gives null), the size of the copy it made in the cache. Null when neither is known.
+ */
+async function pickedSize(m: ContactsPickerModules, asset: { uri: string; size?: number | null }): Promise<number | null> {
+    if (typeof asset.size === 'number' && Number.isFinite(asset.size)) return asset.size;
+    try {
+        const info = await m.FileSystem.getInfoAsync(asset.uri);
+        return info.exists && typeof info.size === 'number' && Number.isFinite(info.size) ? info.size : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
  * A contacts file from the phone's own file picker (design §3.4: no permission). Any file may be picked (other apps label a
- * .vcf in several ways); one over 25 MB is refused before it is read, one that isn't a contacts file says so. The picker
- * copies the file into the app's cache; that copy is not locked, so it is removed as soon as it is read, whatever happens
- * (and at the next start, should the app be ended first: use-contacts.ts `sweepContactsFile`).
+ * .vcf in several ways); one over 25 MB is refused before it is read (its size from the picker, else from the copy), one
+ * whose size can't be found is never read whole (it says it isn't a contacts file, as one that can't be read does), one
+ * that isn't a contacts file says so. The picker copies the file into the app's cache; that copy is not locked, so it is
+ * removed as soon as it is read, whatever happens (and at the next start, should the app be ended first: use-contacts.ts
+ * `sweepContactsFile`).
  */
 export async function pickContactsFile(m: ContactsPickerModules): Promise<PickedFile> {
     const picked = await m.DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true, multiple: false });
     const asset = picked.canceled ? null : picked.assets?.[0];
     if (!asset) return { kind: 'cancelled' };
     try {
-        if ((asset.size ?? 0) > CONTACTS_FILE_MAX_BYTES) return { kind: 'refused', words: CONTACTS_FILE_WORDS.tooBig };
+        const size = await pickedSize(m, asset);
+        if (size === null) return { kind: 'refused', words: CONTACTS_FILE_WORDS.notVcard };
+        if (size > CONTACTS_FILE_MAX_BYTES) return { kind: 'refused', words: CONTACTS_FILE_WORDS.tooBig };
         let text: string;
         try {
             text = await m.FileSystem.readAsStringAsync(asset.uri);

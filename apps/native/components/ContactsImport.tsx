@@ -50,12 +50,6 @@ const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
     bar: { padding: 12, borderTopWidth: 1, borderTopColor: colors.border.default, backgroundColor: colors.surface.app },
 });
 
-/** Text with its **bold** parts bold (the export cards' button names, as the web's BoldWords). */
-function Bold({ text, style }: { text: string; style: object }) {
-    const styles = useStyles(makeStyles);
-    return <Text style={style}>{text.split('**').map((part, i) => (i % 2 ? <Text key={i} style={styles.bold}>{part}</Text> : part))}</Text>;
-}
-
 /** "Import contacts" (design §3.4): from this phone's contacts, from a contacts file, or by hand. */
 export function ImportScreen({ full, onRead, onTypeOne, onBack }: {
     full: boolean; onRead: (r: ImportRead) => void; onTypeOne: () => void; onBack: () => void;
@@ -160,7 +154,9 @@ export function ImportScreen({ full, onRead, onTypeOne, onBack }: {
             {help && cards.map(([title, steps]) => (
                 <View key={title} style={styles.card}>
                     <Text style={styles.choiceTitle}>{title}</Text>
-                    <Bold text={steps} style={styles.choiceText} />
+                    {/* The steps with their **bold** parts bold (the button names, as the web's BoldWords). Written here, on this
+                        screen's own table, so the contrast check (e2e/button-contrast.check.ts) reads them on the card's ground. */}
+                    <Text style={styles.choiceText}>{steps.split('**').map((part, i) => (i % 2 ? <Text key={i} style={styles.bold}>{part}</Text> : part))}</Text>
                 </View>
             ))}
         </>} />

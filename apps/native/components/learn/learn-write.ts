@@ -70,6 +70,25 @@ export function knowledgeFormPath(checks: boolean): '/api/knowledge/posts' | '/a
     return checks ? '/api/knowledge/posts' : '/api/knowledge/drafts';
 }
 
+/**
+ * A refusal as the form and My suggestions show it: the node's own sentence (it answers in the member's language) only when the
+ * node answered, else "Couldn't send it. Check your connection and try again.". utils/db.ts signedRequestWithMethod adds `status`
+ * only to an answer; a dropped connection throws the client's own English ("Network request failed", "You are off-grid…"), and an
+ * answer without the node's words (`unsaid`: a proxy's page, an empty 500) is no answer. The app's rule (app/shop/mine.tsx), and
+ * the web's learnRefusalText says the same.
+ */
+export function learnRefusal(e: unknown): string {
+    const err = (e ?? {}) as { message?: unknown; status?: unknown; unsaid?: unknown };
+    const answered = typeof err.status === 'number' && err.unsaid !== true && typeof err.message === 'string' && err.message.trim() !== '';
+    return answered ? (err.message as string) : t(LEARN_WRITE.couldNotSend);
+}
+
+/** The node's code on a refusal (`publish_instead`, `admins_only`, `not_found`…), or undefined. */
+export function refusalCode(e: unknown): string | undefined {
+    const code = (e as { code?: unknown } | null | undefined)?.code;
+    return typeof code === 'string' ? code : undefined;
+}
+
 /** A row's state on My suggestions: "Waiting since 3 Nov", "Added", or "Not added: {reason}" in the member's words. */
 export function mineRowStatus(d: Pick<KnowledgeDraftMine, 'state' | 'createdAt' | 'reason'>): string {
     if (d.state === 'approved') return t(LEARN_WRITE.added);

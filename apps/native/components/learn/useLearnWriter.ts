@@ -6,14 +6,15 @@
  *
  * The role is the header's own read (utils/node-admin.ts cachedNodeRoleHeard: ten minutes in memory, never on disk). Not heard
  * (offline, an older node) reads as a member: the form then sends a suggestion, and a node that knows better answers
- * `publish_instead`, which the form takes (app/learn/new.tsx). Only a member's waiting count is asked for: an owner or admin
- * never has one.
+ * `publish_instead`, which the form takes (app/learn/new.tsx). An owner or admin who lost the role inside those ten minutes is
+ * answered `admins_only`, and the form sends it as a suggestion instead, once. Either answer forgets the remembered role
+ * (forgetLearnRole). Only a member's waiting count is asked for: an owner or admin never has one.
  */
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import type { KnowledgeDraftMine } from '@beanpool/core';
 import { useIdentity } from '../../app/IdentityContext';
-import { cachedNodeRoleHeard } from '../../utils/node-admin';
+import { cachedNodeRoleHeard, forgetNodeRole } from '../../utils/node-admin';
 import { anchorUrl } from '../../utils/node-post';
 import { signedGet } from '../../utils/db';
 
@@ -35,6 +36,16 @@ export async function readMyDrafts(signal?: AbortSignal): Promise<{ waiting: Kno
     } catch {
         return null;
     }
+}
+
+/**
+ * The node said otherwise about this member's role (`publish_instead`, or `admins_only` from an owner or admin no longer): the
+ * remembered role is out of date, so it is asked again the next time Learn comes into view, not ten minutes later.
+ */
+export async function forgetLearnRole(identity: { publicKey?: string } | null | undefined): Promise<void> {
+    if (!identity?.publicKey) return;
+    const url = await anchorUrl().catch(() => null);
+    if (url) forgetNodeRole(url, identity.publicKey);
 }
 
 export function useLearnWriter(live: boolean): LearnWriter {

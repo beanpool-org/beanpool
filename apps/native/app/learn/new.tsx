@@ -3,7 +3,8 @@
  * + chooser's 📖 Local knowledge row, pushed over the tabs with its own Back row, like the calendar. A member's page goes to the
  * waiting list (POST /api/knowledge/drafts) and shows to nobody until an owner or admin approves it; an owner's or admin's own
  * page publishes at once (POST /api/knowledge/posts). The node words every refusal in the member's language, and it is shown as
- * it comes; the form checks first what it can (a title, what to know, a topic, a link's start).
+ * it comes; no answer at all reads "Couldn't send it. Check your connection and try again." (learnRefusal). The form checks first
+ * what it can (a title, what to know, a topic, a link's start).
  *
  * `?from=learn`: opened from Learn, so "Open Learn" after publishing goes back to it rather than opening a second.
  */
@@ -17,9 +18,11 @@ import { KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TOPICS, currentLanguage, f
 import { useStyles, useTheme } from '../ThemeContext';
 import { LEARN_LINES } from '../../components/learn/learn-lines';
 import {
-    EMPTY_KNOWLEDGE_FORM, LEARN_WRITE, LINK_START, knowledgeFormBody, knowledgeFormPath, knowledgeFormProblem, type KnowledgeFormValues,
+    EMPTY_KNOWLEDGE_FORM, LEARN_WRITE, LINK_START, knowledgeFormBody, knowledgeFormPath, knowledgeFormProblem, learnRefusal, refusalCode,
+    type KnowledgeFormValues,
 } from '../../components/learn/learn-write';
-import { useLearnWriter } from '../../components/learn/useLearnWriter';
+import { forgetLearnRole, useLearnWriter } from '../../components/learn/useLearnWriter';
+import { useIdentity } from '../IdentityContext';
 import { useLearnMode } from '../../utils/use-learn-mode';
 import { askForPostPhoto } from '../../utils/post-photo';
 import { signedRequestWithMethod } from '../../utils/db';
@@ -31,9 +34,11 @@ export default function NewKnowledgeScreen() {
     const { from } = useLocalSearchParams<{ from?: string }>();
     const live = useLearnMode() === 'live';
     const writer = useLearnWriter(live);
-    // The node knows best: a member it says is an owner or admin publishes instead (`publish_instead`).
-    const [publishes, setPublishes] = useState(false);
-    const checks = writer.checks || publishes;
+    const { identity } = useIdentity();
+    // The node knows best, over the role remembered for ten minutes: a member it says is an owner or admin publishes instead
+    // (`publish_instead`), and an owner or admin no longer suggests (`admins_only`).
+    const [heard, setHeard] = useState<'checks' | 'member' | null>(null);
+    const checks = heard ? heard === 'checks' : writer.checks;
     const [form, setForm] = useState<KnowledgeFormValues>(EMPTY_KNOWLEDGE_FORM);
     const [problem, setProblem] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
@@ -100,13 +105,28 @@ export default function NewKnowledgeScreen() {
         const wrong = knowledgeFormProblem(form);
         if (wrong) { setProblem(wrong); return; }
         setBusy(true);
+        const body = knowledgeFormBody(form, currentLanguage());
+        const post = (publish: boolean) => signedRequestWithMethod('POST', knowledgeFormPath(publish), body, { withStatus: true });
         try {
-            await signedRequestWithMethod('POST', knowledgeFormPath(checks), knowledgeFormBody(form, currentLanguage()), { withStatus: true });
-            setDone(checks ? 'published' : 'sent');
+            let published = checks;
+            try {
+                await post(checks);
+            } catch (e) {
+                // An owner or admin no longer (the remembered role is out of date): it goes as a suggestion instead, once.
+                if (!checks || refusalCode(e) !== 'admins_only') throw e;
+                setHeard('member');
+                void forgetLearnRole(identity);
+                published = false;
+                await post(false);
+            }
+            setDone(published ? 'published' : 'sent');
         } catch (e) {
-            const err = (e ?? {}) as { code?: unknown; message?: unknown; unsaid?: unknown };
-            if (err.code === 'publish_instead') setPublishes(true);
-            setProblem(err.unsaid || typeof err.message !== 'string' || !err.message ? t(LEARN_WRITE.couldNotSend) : err.message);
+            if (refusalCode(e) === 'publish_instead') {
+                setHeard('checks');
+                void forgetLearnRole(identity);
+            }
+            // The node's own words only when it answered; a dropped connection's message is the phone's English.
+            setProblem(learnRefusal(e));
         } finally {
             setBusy(false);
         }

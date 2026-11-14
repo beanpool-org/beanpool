@@ -32,9 +32,12 @@ vi.mock('react-native-keyboard-controller', () => ({ KeyboardAwareScrollView: ({
 vi.mock('expo-image', () => ({ Image: ({ source, accessibilityLabel }: any) => createElement('img', { src: source?.uri, alt: accessibilityLabel }) }));
 vi.mock('react-native', async () => {
     const { createElement: el } = await import('react');
-    const host = (tag: string) => function Host(props: Record<string, any>) {
-        const { children, onPress, accessibilityLabel, accessibilityRole, testID, disabled, accessibilityState } = props;
+    // `data-accessible` is RN's own default: a Pressable is an accessibility element unless told `accessible={false}`
+    // (Pressable.js: accessible !== false), a View only when told `accessible`. On iOS such an element folds its children in.
+    const host = (tag: string, accessibleByDefault = false) => function Host(props: Record<string, any>) {
+        const { children, onPress, accessibilityLabel, accessibilityRole, testID, disabled, accessibilityState, accessible } = props;
         const attrs: Record<string, unknown> = {};
+        attrs['data-accessible'] = String(accessibleByDefault ? accessible !== false : accessible === true);
         if (onPress && !disabled) attrs.onClick = () => onPress({ stopPropagation() {} });
         if (disabled) attrs['data-disabled'] = 'true';
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
@@ -44,7 +47,7 @@ vi.mock('react-native', async () => {
         return el(tag, attrs, children);
     };
     return {
-        View: host('div'), Text: host('span'), Pressable: host('button'), ScrollView: host('div'), ActivityIndicator: host('i'),
+        View: host('div'), Text: host('span'), Pressable: host('button', true), ScrollView: host('div'), ActivityIndicator: host('i'),
         Modal: ({ visible, children }: any) => (visible ? el('div', { 'data-testid': 'modal' }, children) : null),
         TextInput: ({ value, onChangeText, testID, placeholder, accessibilityLabel }: any) =>
             el('input', { value, placeholder, 'aria-label': accessibilityLabel, 'data-testid': testID, onChange: (e: any) => onChangeText(e.target.value) }),
@@ -63,6 +66,7 @@ vi.mock('../use-learn-mode', () => ({ useLearnMode: () => h.mode }));
 vi.mock('../../components/learn/useLearnWriter', () => ({
     useLearnWriter: (live: boolean) => (live ? { checks: h.checks, waiting: h.waiting } : { checks: false, waiting: 0 }),
     readMyDrafts: vi.fn(async () => h.mine),
+    forgetLearnRole: vi.fn(async () => {}),
 }));
 vi.mock('../post-photo', () => ({ askForPostPhoto: (add: (p: string) => void) => add('data:image/jpeg;base64,AAAA') }));
 vi.mock('../db', () => ({
@@ -81,6 +85,7 @@ vi.mock('../../components/showcase/LocalCommunityMark', () => ({
 vi.mock('../../components/ListPhoto', () => ({ ListPhoto: ({ fallback }: any) => createElement('div', null, fallback) }));
 
 import { pseudoLocalise, setLanguage } from '@beanpool/core';
+import { forgetLearnRole, readMyDrafts } from '../../components/learn/useLearnWriter';
 import LearnScreen from '../../app/learn';
 import NewKnowledgeScreen from '../../app/learn/new';
 import MySuggestionsScreen from '../../app/learn/mine';
@@ -254,6 +259,32 @@ describe('the form, a member (§3.3)', () => {
         expect((q('learn-new-title') as HTMLInputElement).value).toBe('How recycling works at the tip');
     });
 
+    it('no answer from the node reads "Couldn’t send it…", never the phone’s own English, and the form keeps what was written', async () => {
+        const noAnswers: Array<[string, unknown]> = [
+            // React Native's fetch with no signal, and utils/db.ts's own throws before it asks: no status, so not the node's words.
+            ['no signal', new TypeError('Network request failed')],
+            ['off-grid', new Error('You are off-grid. Please connect to a BeanPool Node.')],
+            ['no identity', new Error('No identity found. You must be logged in.')],
+            // An answer without the node's words: a proxy's 502 page, an empty 500.
+            ['unsaid', Object.assign(new Error('Bad Gateway'), { status: 502, unsaid: true })],
+            ['empty', Object.assign(new Error('  '), { status: 500 })],
+        ];
+        for (const [name, thrown] of noAnswers) {
+            h.answer = () => { throw thrown; };
+            h.sent = [];
+            act(() => root.unmount());
+            root = createRoot(host);
+            await show(createElement(NewKnowledgeScreen, { key: name }));
+            fill();
+            await click(q('learn-new-topic-emergencies'));
+            await click(q('learn-new-send'));
+            expect(h.sent.map((x) => x.path), name).toEqual(['/api/knowledge/drafts']);
+            expect(q('learn-new-problem')?.textContent, name).toBe('Couldn’t send it. Check your connection and try again.');
+            expect((q('learn-new-title') as HTMLInputElement).value, name).toBe('How recycling works at the tip');
+            expect(q('learn-new-done-screen'), name).toBeNull();
+        }
+    });
+
     it('an owner or admin the phone took for a member: the node says publish instead, and the button becomes Publish', async () => {
         h.answer = (path) => {
             if (path === '/api/knowledge/drafts') throw Object.assign(new Error('You’re an owner or admin here, so your own page goes into Learn at once: publish it instead.'), { status: 409, code: 'publish_instead' });
@@ -264,6 +295,7 @@ describe('the form, a member (§3.3)', () => {
         await click(q('learn-new-topic-emergencies'));
         await click(q('learn-new-send'));
         expect(q('learn-new-send')?.textContent).toBe('Publish');
+        expect(forgetLearnRole).toHaveBeenCalledTimes(1);
         await click(q('learn-new-send'));
         expect(h.sent.map((s) => s.path)).toEqual(['/api/knowledge/drafts', '/api/knowledge/posts']);
         expect(text()).toContain('Published');
@@ -293,6 +325,52 @@ describe('the form, an owner or admin (§3.3 as amended)', () => {
         expect(text()).toContain('It’s in Learn.');
         await click(q('learn-new-open-learn'));
         expect(router.replace).toHaveBeenCalledWith('/learn');
+    });
+
+    it('an owner or admin no longer (the remembered role is out of date): the node says admins only, and it goes as a suggestion, once', async () => {
+        h.checks = true;
+        h.answer = (path) => {
+            if (path === '/api/knowledge/posts') throw Object.assign(new Error('Only this community’s owners and admins can do this to Local knowledge.'), { status: 403, code: 'admins_only' });
+            return { draft: { id: 'd1' } };
+        };
+        await show(createElement(NewKnowledgeScreen));
+        fill();
+        await click(q('learn-new-topic-health-help'));
+        await click(q('learn-new-send'));
+        expect(h.sent.map((s) => s.path)).toEqual(['/api/knowledge/posts', '/api/knowledge/drafts']);
+        expect(h.sent[1].body).toEqual(h.sent[0].body);
+        expect(forgetLearnRole).toHaveBeenCalledTimes(1);
+        expect(text()).toContain('Sent');
+        expect(text()).toContain('An owner or admin will check it. You’ll hear back here.');
+        expect(text()).not.toContain('Published');
+    });
+
+    it('…and when the suggestion is refused too, it says why, reads "Send to the admins", and asks nothing more', async () => {
+        h.checks = true;
+        h.answer = (path) => {
+            if (path === '/api/knowledge/posts') throw Object.assign(new Error('Only this community’s owners and admins can do this to Local knowledge.'), { status: 403, code: 'admins_only' });
+            throw Object.assign(new Error('You have 3 waiting already. Wait for an answer, or take one back.'), { status: 429, code: 'too_many_waiting' });
+        };
+        await show(createElement(NewKnowledgeScreen));
+        fill();
+        await click(q('learn-new-topic-health-help'));
+        await click(q('learn-new-send'));
+        expect(h.sent.map((s) => s.path)).toEqual(['/api/knowledge/posts', '/api/knowledge/drafts']);
+        expect(q('learn-new-problem')?.textContent).toBe('You have 3 waiting already. Wait for an answer, or take one back.');
+        expect(q('learn-new-send')?.textContent).toBe('Send to the admins');
+        expect(text()).toContain('An owner or admin checks it before anyone sees it.');
+        await click(q('learn-new-send'));
+        expect(h.sent.map((s) => s.path)).toEqual(['/api/knowledge/posts', '/api/knowledge/drafts', '/api/knowledge/drafts']);
+    });
+
+    it('a member refused admins_only is not sent round again (only an owner’s or admin’s page falls back)', async () => {
+        h.answer = () => { throw Object.assign(new Error('Only this community’s owners and admins can do this to Local knowledge.'), { status: 403, code: 'admins_only' }); };
+        await show(createElement(NewKnowledgeScreen));
+        fill();
+        await click(q('learn-new-topic-health-help'));
+        await click(q('learn-new-send'));
+        expect(h.sent.map((s) => s.path)).toEqual(['/api/knowledge/drafts']);
+        expect(q('learn-new-problem')?.textContent).toBe('Only this community’s owners and admins can do this to Local knowledge.');
     });
 
     it('opened from Learn, Open Learn goes back to it rather than opening a second', async () => {
@@ -330,6 +408,67 @@ describe('My suggestions (§3.4)', () => {
         await settle();
         expect(h.sent).toEqual([{ method: 'POST', path: '/api/knowledge/drafts/w1/withdraw', body: {} }]);
         expect(q('learn-mine-row-w1')).toBeNull();
+    });
+
+    it('to a screen reader, only an "Added" row is one element; a waiting row’s "Take it back" is its own button', async () => {
+        h.mine = {
+            waiting: [draft({ id: 'w1', title: 'Bin days' })],
+            answered: [
+                draft({ id: 'a1', title: 'Tip hours', state: 'approved', answeredAt: at, postId: 'p9' }),
+                draft({ id: 'a2', title: 'Ferry', state: 'declined', answeredAt: at, reason: 'elsewhere', reasonWords: 'That ferry is two towns over.' }),
+            ],
+        };
+        await show(createElement(MySuggestionsScreen));
+        expect(q('learn-mine-row-w1')?.getAttribute('data-accessible')).toBe('false');
+        expect(q('learn-mine-row-a2')?.getAttribute('data-accessible')).toBe('false');
+        expect(q('learn-mine-row-a1')?.getAttribute('data-accessible')).toBe('true');
+        expect(q('learn-mine-row-a1')?.getAttribute('data-role')).toBe('button');
+        const takeBack = q('learn-mine-take-back-w1')!;
+        expect(takeBack.getAttribute('data-accessible')).toBe('true');
+        expect(takeBack.getAttribute('data-role')).toBe('button');
+        // The whole screen: no element a screen reader reaches sits inside another (iOS would fold it in, out of reach).
+        const reached = [...host.querySelectorAll('[data-accessible="true"]')];
+        expect(reached.length).toBeGreaterThan(0);
+        for (const el of reached) {
+            expect(el.parentElement?.closest('[data-accessible="true"]'), el.getAttribute('data-testid') ?? el.textContent ?? '').toBeNull();
+        }
+    });
+
+    it('a "Take it back" the node didn’t take says so under its row, which stays; a 404 reads the list again', async () => {
+        const standby = 'This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.';
+        const couldNot = 'Couldn’t send it. Check your connection and try again.';
+        const refusals: Array<[string, unknown, string]> = [
+            ['standby', Object.assign(new Error(standby), { status: 503, code: 'standby' }), standby],
+            ['no signal', new TypeError('Network request failed'), couldNot],
+            ['unsaid', Object.assign(new Error('Bad Gateway'), { status: 502, unsaid: true }), couldNot],
+        ];
+        for (const [name, thrown, words] of refusals) {
+            h.mine = { waiting: [draft({ id: 'w1', title: 'Bin days' })], answered: [] };
+            h.alerts = [];
+            h.answer = () => { throw thrown; };
+            act(() => root.unmount());
+            root = createRoot(host);
+            await show(createElement(MySuggestionsScreen, { key: name }));
+            vi.mocked(readMyDrafts).mockClear();
+            await click(q('learn-mine-take-back-w1'));
+            await act(async () => { h.alerts[0].buttons![1].onPress!(); });
+            await settle();
+            expect(q('learn-mine-row-w1'), name).not.toBeNull();
+            expect(q('learn-mine-problem-w1')?.textContent, name).toBe(words);
+            expect(q('learn-mine-row-w1')?.textContent, name).toContain(words);
+            expect(readMyDrafts, name).not.toHaveBeenCalled();
+        }
+        // Answered or taken back meanwhile: the node's 404 is no failure; the list is read again as the node has it.
+        h.answer = () => { throw Object.assign(new Error('This suggestion isn’t waiting any more: it was answered or taken back.'), { status: 404, code: 'not_found' }); };
+        h.alerts = [];
+        h.mine = { waiting: [], answered: [draft({ id: 'w1', title: 'Bin days', state: 'approved', answeredAt: at, postId: 'p9' })] };
+        await click(q('learn-mine-take-back-w1'));
+        await act(async () => { h.alerts[0].buttons![1].onPress!(); });
+        await settle();
+        expect(readMyDrafts).toHaveBeenCalled();
+        expect(q('learn-mine-problem-w1')).toBeNull();
+        expect(q('learn-mine-take-back-w1')).toBeNull();
+        expect(q('learn-mine-row-w1')?.textContent).toContain('Added');
     });
 
     it('answered rows stay: "Added" opens its page; "Not added: {reason}" shows the admin’s own words', async () => {

@@ -49,8 +49,8 @@ import { knowsItsNames } from './own-addresses.js';
 import { ssrfSafeFetch } from './pulse-resolver.js';
 import { logger } from '../logger.js';
 
-/** The paths only another community's server may call, each with its node signature (routes/node-key.ts). */
-export const NODE_SIGNED_PATHS: ReadonlySet<string> = new Set<string>(['/api/node/check']);
+/** The paths only another community's server may call, each with its node signature (routes/node-key.ts, routes/relay.ts). */
+export const NODE_SIGNED_PATHS: ReadonlySet<string> = new Set<string>(['/api/node/check', '/api/relay/mail']);
 
 /**
  * Whether `path` is one of NODE_SIGNED_PATHS, matched ignoring case and one trailing slash, as the router dispatches it:

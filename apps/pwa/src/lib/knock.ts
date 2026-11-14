@@ -7,7 +7,7 @@
  * lib/api.ts's (signedFetchAt): the member key becomes a signer in that one file only (lib/signing-source-rule.test.ts).
  */
 
-import { isPeekTicket, isPublicIpv4, knockStillAnswerable, retryAfterSecondsOf, t, tn, word } from '@beanpool/core';
+import { isPeekTicket, isPublicIpv4, knockStillAnswerable, notANameLine, retryAfterSecondsOf, t, tn, word } from '@beanpool/core';
 import { getNodeApiUrl, signedFetchAt } from './api';
 import type { BeanPoolIdentity } from './identity';
 import { isNodeTooOldError } from './node-version-gate';
@@ -115,6 +115,10 @@ const chars = (s: string) => Array.from(s).length;
 export function knockFormProblem(req: KnockRequest): string | null {
     const name = req.callsign.replace(/\s+/g, ' ').trim();
     if (chars(name) < 2) return t('Please give a name of at least 2 characters.');
+    // An invite or a web address is no name (core name-box.ts; card callsign-link-guard): a yes joins under it, and the
+    // node refuses it. Before the length, as a pasted link is longer than a name.
+    const notAName = notANameLine(req.callsign);
+    if (notAName) return notAName;
     if (chars(name) > KNOCK_CALLSIGN_CHARS) return tn(KNOCK_CALLSIGN_CHARS, 'Please keep your name to {n} character.', 'Please keep your name to {n} characters.');
     const message = req.message.trim();
     if (!message) return t('Please say a few words about yourself.');

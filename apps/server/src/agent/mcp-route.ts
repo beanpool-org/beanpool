@@ -38,10 +38,10 @@ import { logAddressTag } from '../log-address.js';
 import { clientLimiterKey, isTrustedProxy } from '../client-ip.js';
 import { cleanMemberText, newBoundary } from './fence.js';
 import { admitAgentCall } from './limits.js';
-import { grantModerates, grantPosts, offersSuggestions, toolDescription, toolsFor, unlistedToolWords, type AgentGrant } from './tools.js';
+import { grantDraftsKnowledge, grantModerates, grantPosts, offersSuggestions, toolDescription, toolsFor, unlistedToolWords, type AgentGrant } from './tools.js';
 import { AGENT_CREATE_BODY_MAX } from './owner-posts.js';
 import { dropEveryPhotoLink } from './owner-photos.js';
-import { PROMPTS, promptText, welcomeInstructions, type WelcomeFacts } from './welcome.js';
+import { promptsFor, promptText, welcomeInstructions, type WelcomeFacts } from './welcome.js';
 
 export const MCP_PATH = '/mcp';
 export const AGENT_SWITCH_PATH = '/api/local/admin/agent/switch';
@@ -206,6 +206,7 @@ function welcomeFacts(ctx: any, grant: AgentGrant): WelcomeFacts {
         canSuggest: offersSuggestions(),
         canPost: grantPosts(grant),
         canModerate: grantModerates(grant),
+        canDraftKnowledge: grantDraftsKnowledge(grant),
     };
 }
 
@@ -256,17 +257,19 @@ export function buildAgentServer(grant: AgentGrant, facts: WelcomeFacts): Server
             ...(out.ok && typeof out.result.postId === 'string' ? { post: out.result.postId } : {}),
             // The posts it removed (remove_post, remove_all_i_made): the audit names each.
             ...(out.ok && Array.isArray(out.result.removed) ? { removed: (out.result.removed as string[]).slice(0, 200) } : {}),
+            // A draft of Local knowledge it filed (agent/knowledge.ts): the audit names it, never its words.
+            ...(out.ok && typeof out.result.draftId === 'string' ? { draft: out.result.draftId } : {}),
         });
         if (!out.ok) return { content: [{ type: 'text' as const, text: out.error }], isError: true };
         return { content: [{ type: 'text' as const, text: JSON.stringify(out.result) }], structuredContent: out.result };
     });
 
     server.setRequestHandler(ListPromptsRequestSchema, async () => ({
-        prompts: PROMPTS.map((p) => ({ name: p.name, description: p.description, arguments: p.arguments })),
+        prompts: promptsFor(facts).map((p) => ({ name: p.name, description: p.description, arguments: p.arguments })),
     }));
 
     server.setRequestHandler(GetPromptRequestSchema, async (req) => {
-        const p = PROMPTS.find((x) => x.name === req.params.name);
+        const p = promptsFor(facts).find((x) => x.name === req.params.name);
         if (!p) throw new McpError(ErrorCode.InvalidParams, `There is no prompt "${String(req.params.name).slice(0, 60)}"`);
         const args: Record<string, string> = {};
         for (const [k, v] of Object.entries(req.params.arguments ?? {})) if (typeof v === 'string') args[k] = v;

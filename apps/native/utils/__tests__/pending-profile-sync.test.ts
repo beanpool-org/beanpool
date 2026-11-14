@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import Module from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
+import { NAME_BOX_WORDS, notANameIn } from '@beanpool/core';
 
 // A profile change waiting to reach a community is kept for THAT community (utils/pending-profile-sync.ts). Before it,
 // one flag for the phone (`pending_profile_sync`, with the photo parked beside it in `pending_profile_avatar`) said
@@ -94,7 +95,8 @@ const pendingModule = () => import('../pending-profile-sync');
  * Each community's node: what it holds of the member (from accepted updates), every profile update it was sent, and
  * how it answers the next ones: 'ok', 'offline' (the request throws), 'refuse' (a 409 whose code says nothing about the
  * name) or 'busy' (503). Like the server's profile route (apps/server/src/routes/community.ts), it refuses for good a new
- * name someone else holds there (`taken`: 409 `callsign_taken`) or one under 2 characters (400 `callsign_too_short`).
+ * name someone else holds there (`taken`: 409 `callsign_taken`), one under 2 characters (400 `callsign_too_short`) or
+ * an invite or a web address (400 `callsign_link`, core name-box.ts).
  */
 type NodeMode = 'ok' | 'offline' | 'refuse' | 'busy';
 const TAKEN_WORDS = 'That name is already taken on this community. Try another.';
@@ -128,6 +130,8 @@ const fetchMock = vi.fn(async (url: string, init?: { method?: string; body?: str
         if (node.mode === 'busy') return answer(503, JSON.stringify({ error: 'busy' }));
         if (typeof body.callsign === 'string' && body.callsign.trim() !== node.held.callsign) {
             if (body.callsign.trim().length < 2) return answer(400, JSON.stringify({ error: 'callsign_too_short', message: TOO_SHORT_WORDS }));
+            const notAName = notANameIn(body.callsign);
+            if (notAName) return answer(400, JSON.stringify({ error: 'callsign_link', message: NAME_BOX_WORDS[notAName], code: 'callsign_link' }));
             if (node.taken.has(body.callsign.trim())) return answer(409, JSON.stringify({ error: 'callsign_taken', message: TAKEN_WORDS }));
         }
         if (body.callsign !== undefined) node.held.callsign = body.callsign;
@@ -406,6 +410,9 @@ const rowName = async () =>
 const NAME_REFUSALS = [
     ['given to someone else there (409 callsign_taken)', 'Taken', 409, TAKEN_WORDS],
     ['too short (400 callsign_too_short)', 'M', 400, TOO_SHORT_WORDS],
+    // A name that is a link, copied from the community where it is held ("Use this name and photo in another community"):
+    // a rename here, which the node refuses (#3122 review on profile-feature-gate.ts:212).
+    ['a web address (400 callsign_link)', 'https://mullum.beanpool.org/?inv', 400, NAME_BOX_WORDS.webLink],
 ] as const;
 
 describe('a name the community refuses for good leaves the change, and the rest goes without it', () => {

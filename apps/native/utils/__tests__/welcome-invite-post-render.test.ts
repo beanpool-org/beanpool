@@ -11,6 +11,7 @@
  *   2. a link or paste the screen reads itself (the full address pasted into the invite box);
  *   3. a phone that installed from the store, the install referrer (`invite=…&server=…&post=…`).
  * And the cases that must change nothing: an invite with no listing, a listing that is no id, a refused redeem.
+ * And 4: the name box beside the invite box refuses an invite or a link, and moves an invite into the invite box.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -170,6 +171,8 @@ const phone = vi.hoisted(() => ({
     invite: { valid: true, inviterCallsign: 'Ana', communityName: 'Mullum' } as Record<string, unknown>,
     outgoing: null as any,
     redeemFails: null as string | null,
+    /** Every redeem the screen sent: the code and the name. */
+    redeems: [] as Array<{ code: string; callsign: string }>,
     /** Every wizard record the screen wrote, in order. */
     records: [] as any[],
 }));
@@ -217,7 +220,7 @@ vi.mock('../onboarding-state', async (importOriginal) => {
 });
 vi.mock('../db', () => ({
     checkInvite: async () => phone.invite,
-    redeemInvite: async () => { if (phone.redeemFails) throw new Error(phone.redeemFails); return {}; },
+    redeemInvite: async (code: string, callsign: string) => { phone.redeems.push({ code, callsign }); if (phone.redeemFails) throw new Error(phone.redeemFails); return {}; },
     updateMemberProfile: async () => {},
     fetchNodeCallsign: async () => 'Sally',
     recordOnboardingEvent: async () => {},
@@ -367,7 +370,7 @@ vi.mock('../../components/SsoButton', () => {
 });
 
 
-import { setLanguage } from '@beanpool/core';
+import { NAME_BOX_WORDS, setLanguage } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import WelcomeScreen from '../../app/welcome';
 import { noVault } from './fake-vault';
@@ -387,7 +390,7 @@ beforeEach(() => {
     nav.replaced.length = 0; nav.pushed.length = 0;
     work.started.length = 0; work.keysDrafted = 0;
     clip.has = false; clip.text = '';
-    phone.stored = { ...KNOCKER }; phone.pending = null; phone.records = []; phone.redeemFails = null; phone.outgoing = null;
+    phone.stored = { ...KNOCKER }; phone.pending = null; phone.records = []; phone.redeemFails = null; phone.outgoing = null; phone.redeems = [];
     phone.invite = { valid: true, inviterCallsign: 'Ana', communityName: 'Riverside' };
     keyItem.value = null; keyItem.throws = false;
     knocking.asked = [knockAt(RIVERSIDE, 'Riverside')];
@@ -542,5 +545,34 @@ describe('3. a phone that installed from the store: the install referrer', () =>
         await press('Next');
         expect(host!.textContent).toContain('Your Photo');
         expect(store.map.has(HELD_KEY)).toBe(false);
+    });
+});
+
+// The name box beside the invite box (Marty, 14 Nov 2026, card callsign-link-guard: a member's invite link pasted into the
+// name box became her name on Byron). The same real screen and harness as above.
+describe('4. the name box takes a name, never an invite or a link', () => {
+    it('an invite link pasted into the name box goes to the invite box, the name box is left empty, and one line says why', async () => {
+        await mount();
+        await press('🎟️ Join with an invite');
+        await type('Your name or nickname', `${RIVERSIDE}/?invite=INV-ABCD-EFGH`);
+        expect(field('Invite link or code')?.value).toBe('INV-ABCD-EFGH');
+        expect(field('Your name or nickname')?.value).toBe('');
+        expect(host!.textContent).toContain(NAME_BOX_WORDS.inviteLink);
+        expect(phone.redeems).toEqual([]);
+        // A name, and Next joins with the invite under it.
+        await type('Your name or nickname', 'Rowan');
+        await press('Next');
+        expect(phone.redeems).toEqual([{ code: 'INV-ABCD-EFGH', callsign: 'Rowan' }]);
+    });
+
+    it('a web address as the name is refused on Next with its line, and nothing joins', async () => {
+        await mount();
+        await press('🎟️ Join with an invite');
+        await type('Invite link or code', `${RIVERSIDE}/?invite=INV-ABCD-EFGH`);
+        await type('Your name or nickname', 'www.rowan.com');
+        await press('Next');
+        expect(host!.textContent).toContain(NAME_BOX_WORDS.webLink);
+        expect(phone.redeems).toEqual([]);
+        expect(field('Your name or nickname')?.value).toBe('www.rowan.com');
     });
 });

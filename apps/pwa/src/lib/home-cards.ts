@@ -1043,6 +1043,8 @@ export const CHAT_CARD_WORDS = {
     gone: word("You're no longer in this chat."),
     /** A photo's line. */
     photo: word('📷 Photo'),
+    /** A voice message's line (voice messages V4): its words are empty; the phone's card says the same. */
+    voice: word('🎤 Voice message'),
     /** A sealed line that can't be shown here: too long to carry, or one that didn't open. */
     locked: word('🔒 Message'),
     /** A locked group's line while its key isn't in this browser's memory: the card never asks the node for one (§1). */
@@ -1057,6 +1059,13 @@ export const CHAT_CARD_WORDS = {
 
 /** The longest a line's words are on the card once opened here (the node cuts what it sends; this cuts what opens). */
 export const CHAT_LINE_CHARS = 200;
+
+/** What a photo's or a voice message's line says on the card, whose words are its caption or nothing; null for any other line. */
+function mediaLineWords(type: string | null | undefined): string | null {
+    if (type === 'image') return t(CHAT_CARD_WORDS.photo);
+    if (type === 'voice') return t(CHAT_CARD_WORDS.voice);
+    return null;
+}
 
 /**
  * The node's body for this chat card, when it is one: `gone` alone, or a chat of the kind the card holds now with its
@@ -1149,7 +1158,7 @@ function dmLinesShown(card: ChatWithLines, conversationId: string, me: ChatOpene
         // line in a member's name, Talk's words for it.
         if (v.text === null) return nobodys(l, v.mark === 'not-encrypted' ? chatLineWords(dmLineShownText(v)) : t(CHAT_CARD_WORDS.locked));
         const mine = !!me && l.author === me.publicKey;
-        return { id: l.id, who: mine ? t(CHAT_CARD_WORDS.you) : l.who, mine, at: l.at, text: l.type === 'image' ? t(CHAT_CARD_WORDS.photo) : cut(v.text) };
+        return { id: l.id, who: mine ? t(CHAT_CARD_WORDS.you) : l.who, mine, at: l.at, text: mediaLineWords(l.type) ?? cut(v.text) };
     });
 }
 
@@ -1196,7 +1205,7 @@ function groupLinesShown(card: ChatWithLines, conversationId: string, open: Chat
             // key (metadata.sender, a line from before a key change) by the display rule, which with no roster here is
             // "A former member", as Talk and the phone name it. Opened words are never drawn with no name.
             const who = mine ? t(CHAT_CARD_WORDS.you) : v.signer === l.author ? l.who : chatAuthorWords(v.name ?? GROUP_LINE_FORMER_MEMBER);
-            out.push({ id: l.id, who, mine, at: l.at, text: l.type === 'image' ? t(CHAT_CARD_WORDS.photo) : cut(v.text) });
+            out.push({ id: l.id, who, mine, at: l.at, text: mediaLineWords(l.type) ?? cut(v.text) });
         } else if (!isReadable(l)) {
             // Sealed some other way, or too long to carry (`🔒 Message`, no bytes).
             out.push(nobodys(l, t(CHAT_CARD_WORDS.locked)));
@@ -1206,7 +1215,7 @@ function groupLinesShown(card: ChatWithLines, conversationId: string, open: Chat
             out.push(nobodys(l, CHAT_LINE_PENDING));
         } else {
             const mine = !!me && l.author === me;
-            out.push({ id: l.id, who: mine ? t(CHAT_CARD_WORDS.you) : l.who, mine, at: l.at, text: l.type === 'image' ? t(CHAT_CARD_WORDS.photo) : cut(l.text ?? '') });
+            out.push({ id: l.id, who: mine ? t(CHAT_CARD_WORDS.you) : l.who, mine, at: l.at, text: mediaLineWords(l.type) ?? cut(l.text ?? '') });
         }
     }
     return out;

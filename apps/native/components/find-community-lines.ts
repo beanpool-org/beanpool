@@ -7,7 +7,7 @@
  * None of those files is touched. A community's or the worldwide node's own words are shown exactly as given (slice S4).
  * utils/__tests__/find-community-lines.test.ts holds each to the constant or builder it stands for.
  */
-import { FIND_TOWN_SEARCH_WORDS, t, tn, word, type AddressSearchWords, type WordKey } from '@beanpool/core';
+import { FIND_TOWN_SEARCH_WORDS, NAME_BOX_WORDS, t, tn, word, type AddressSearchWords, type WordKey } from '@beanpool/core';
 import { KNOCK_CALLSIGN_CHARS, KNOCK_MESSAGES, KNOCK_MESSAGE_CHARS } from '../utils/knock';
 import type { TypedPlace } from '../utils/typed-place';
 
@@ -21,6 +21,10 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     // utils/knock.ts knockFormProblem (the two with a limit are below).
     'Please give a name of at least 2 characters.': word('Please give a name of at least 2 characters.'),
     'Please say a few words about yourself.': word('Please say a few words about yourself.'),
+    // utils/knock.ts knockFormProblem: an invite or a web address as the name (core name-box.ts).
+    [NAME_BOX_WORDS.inviteLink]: NAME_BOX_WORDS.inviteLink,
+    [NAME_BOX_WORDS.inviteCode]: NAME_BOX_WORDS.inviteCode,
+    [NAME_BOX_WORDS.webLink]: NAME_BOX_WORDS.webLink,
     // utils/typed-place.ts LOCATION_NOTES.
     'Location is off for BeanPool. Type your town instead, or search by name below.': word('Location is off for BeanPool. Type your town instead, or search by name below.'),
     "Couldn't find where you are. Type your town instead, or search by name below.": word("Couldn't find where you are. Type your town instead, or search by name below."),

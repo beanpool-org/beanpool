@@ -401,6 +401,11 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         expect(host.textContent).toContain(xx('Tap a community to include it'));
         // A Need while the member must list an Offer first: the note and the button say so.
         await click(buttonHolding(xx('🟠 Need')), 'Need');
+        // On a Need the poster is the one who would pay (Marty, 14 Nov 2026): the same ticked box, its words the other way round.
+        expect(buttonHolding(xx("💸 I'll pay cash too — for fuel or materials")), 'the Need cash box').not.toBeNull();
+        expect(host.textContent).toContain(xx('Cash covers fuel or materials the helper buys — at cost, not their time or tools.'));
+        expect(host.textContent).not.toContain(xx('💸 Cash also needed — for fuel or materials'));
+        expect(host.textContent).not.toContain(xx('Cash is for fuel and consumables you paid for — not your time, not your tools. At cost, no markup. Agree the details in chat; the app never handles the money.'));
         expect(host.textContent).toContain(xx('💡 Contributions First'));
         expect(byText(xx('🟢 List an Offer first to post Needs'))).not.toBeNull();
         expect(host.textContent).toContain(xx('1.5% fee: Fulfiller receives {amount} B.').replace('{amount}', '9.85'));
@@ -972,6 +977,16 @@ describe('the Map at 320 dp with 1.3× text, in the pseudo-locale', () => {
         // The sheet's title shares its row (space-between) with the 32 dp ✕ only, and fits beside it (18 dp, 0.5 letter-spacing).
         const title = xx('New Post');
         expect(widthOf(title, 18 * SCALE) + Array.from(title).length * 0.5 * SCALE + 32).toBeLessThanOrEqual(320 - 2 * 14);
+    });
+
+    it("a Need's cash box and its note (Marty, 14 Nov 2026): no word wider than the sheet, nothing new stuck in a row", async () => {
+        await openForm('xx');
+        await click(buttonHolding(xx('🟠 Need')), 'Need');
+        await click(buttonHolding(xx("💸 I'll pay cash too — for fuel or materials")), "I'll pay cash too");
+        expect(host.textContent).toContain(xx('Cash covers fuel or materials the helper buys — at cost, not their time or tools.'));
+        const found = unfit(host, 320 - 2 * 14, WRITTEN);
+        const KNOWN = [`stuck in a row: ${xx('My location')}`, `stuck in a row: ${xx('Drop a pin')}`, `stuck in a row: ${xx('New Post')}`];
+        expect(found.filter((line) => !KNOWN.includes(line))).toEqual([]);
     });
 
     it('ADD POST in xx clears the left pill on a 320 dp phone', async () => {

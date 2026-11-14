@@ -64,7 +64,7 @@ The button next to **Your deals** changes how the list looks: a list, a grid, or
 - **OFFER** or **NEED**;
 - the price in beans, with **/Hr** if it is priced by the hour;
 - **RECURRING** if it stays open after each deal;
-- **CASH TOO** if the person also needs some cash, for fuel or materials;
+- **CASH TOO** if some cash changes hands too, for fuel or materials: on an Offer the person also needs it, on a Need they will pay it;
 - **🤝 IN TRUST** if you have a deal on it with beans held, or **✋ ASKED** if you have asked for it, or someone has asked for yours. Only the two people in the deal see this: nobody else is told who traded;
 - a lock and a group name if only that group can see it;
 - who posted it, with their trust badge and stars. A member who has not traded yet shows 🔑 on their author line.

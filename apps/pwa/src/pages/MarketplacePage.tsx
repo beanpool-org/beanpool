@@ -2139,7 +2139,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             )}
                             {selectedPost.repeatable && <span data-testid="listing-recurring-chip" className={chip('quiet')}>{t('↻ RECURRING')}</span>}
                             {selectedPost.cashAlsoNeeded && (
-                                <span className={chip('warn')} title={t('Cash also needed for fuel or materials — agreed in chat')}>{t('💸 CASH TOO')}</span>
+                                <span className={chip('warn')} title={selectedPost.type === 'need' ? t('Cash offered too for fuel or materials — agreed in chat') : t('Cash also needed for fuel or materials — agreed in chat')}>{t('💸 CASH TOO')}</span>
                             )}
                             {selectedPost.status === 'paused' && <span data-testid="listing-paused-chip" className={chip('warn')}>{upperCase(t('⏸ Paused'))}</span>}
                             <span data-testid="listing-ago" className={`ms-auto shrink-0 ${PAGE_TYPE.note} font-semibold ${PAGE_INK.secondary}`}>{ago}</span>

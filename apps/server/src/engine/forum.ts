@@ -154,7 +154,7 @@ export interface ForumTopic {
     hidden: boolean;
     /** The reader's follow of it (slice F5, engine/forum-notices.ts): each reply tells them, nothing does, or neither. */
     follow: ForumFollow | null;
-    /** They follow it and it has a post past the last one they opened: the list's unread dot. */
+    /** They follow it and it has a post they are shown (none by someone they blocked) past the last one they opened: the list's unread dot. */
     unread: boolean;
 }
 export interface ForumPost {
@@ -178,10 +178,19 @@ const topicOut = (r: TopicRowRead): ForumTopic => ({
     removed: !!r.opening_removed, hidden: !!r.opening_hidden,
     follow: r.follow_state ?? null, unread: r.follow_state === 'following' && (r.last_number ?? 0) > (r.last_read ?? 0),
 });
-/** The reader's follow of topic `t` (@reader), the last post they opened, and the topic's last post number. */
+/** Leaves out what `reader` blocked: `col` names the writer's key column. */
+const NOT_BLOCKED = (col: string) => `${col} NOT IN (SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = @reader)`;
+/**
+ * The number of the last post in topic `topic` (a column or @id) that the reader (@reader) is shown: a post by someone
+ * they blocked is never shown to them, so it never keeps their unread dot on. Newest first down the topic's index, so it
+ * stops at the first post they may see.
+ */
+const LAST_SHOWN = (topic: string) => `(SELECT p.number FROM forum_posts p WHERE p.topic_id = ${topic} AND ${NOT_BLOCKED('p.writer_pubkey')}
+    ORDER BY p.number DESC LIMIT 1)`;
+/** The reader's follow of topic `t` (@reader), the last post they opened, and the last post they are shown there. */
 const READER_FOLLOW = `(SELECT f.state FROM forum_follows f WHERE f.topic_id = t.id AND f.member_pubkey = @reader) AS follow_state,
     (SELECT f.last_read FROM forum_follows f WHERE f.topic_id = t.id AND f.member_pubkey = @reader) AS last_read,
-    (SELECT MAX(p.number) FROM forum_posts p WHERE p.topic_id = t.id) AS last_number`;
+    ${LAST_SHOWN('t.id')} AS last_number`;
 const photoCount = (postId: string) => (db.prepare('SELECT COUNT(*) AS n FROM forum_post_photos WHERE post_id = ?').get(postId) as { n: number }).n;
 /**
  * A post as `reader` may read it: a removed one's words and photos are gone; a hidden one's are for its writer and the
@@ -202,8 +211,6 @@ const postsOut = (rows: PostRow[], reader: string): ForumPost[] => {
 };
 const onePostOut = (id: string, reader: string): ForumPost => postsOut([postRow(id)!], reader)[0];
 
-/** Leaves out what `reader` blocked: `col` names the writer's key column. */
-const NOT_BLOCKED = (col: string) => `${col} NOT IN (SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = @reader)`;
 const OPENING_REMOVED = `(SELECT p.removed_by IS NOT NULL FROM forum_posts p WHERE p.topic_id = t.id AND p.number = 1) AS opening_removed`;
 const OPENING_HIDDEN = `(SELECT p.hidden_by_reports_at IS NOT NULL FROM forum_posts p WHERE p.topic_id = t.id AND p.number = 1) AS opening_hidden`;
 /** A topic whose opening post is hidden is for its writer and the moderators only (@reader, @mod). */
@@ -342,7 +349,7 @@ export function forumTopic(reader: string, id: string, after: number): { topic: 
     const more = rows.length > FORUM_LIMITS.postsPerPage;
     const posts = rows.slice(0, FORUM_LIMITS.postsPerPage);
     const { follow, lastRead } = forumFollowOf(reader, id);
-    const lastNumber = (db.prepare('SELECT MAX(number) FROM forum_posts WHERE topic_id = ?').pluck().get(id) as number | null) ?? 0;
+    const lastNumber = (db.prepare(`SELECT ${LAST_SHOWN('@id')}`).pluck().get({ id, reader }) as number | null) ?? 0;
     return {
         topic: topicOut({ ...t, opening_removed: opening?.removed_by ? 1 : 0, opening_hidden: opening?.hidden_by_reports_at ? 1 : 0, follow_state: follow, last_read: lastRead, last_number: lastNumber }),
         posts: postsOut(posts, reader),

@@ -79,8 +79,9 @@ export function followForumTopic(member: string, topicId: string, now: number, r
 /**
  * Sets a member's follow of a topic they may read (engine/forum.ts followTopic checks that): following, muted, or neither.
  * A new row keeps what they already read: how far their last read lately went (POST /read stores nothing on disk before a
- * follow, so it is held with the doorbell's readers), else the topic's last post (they follow it from now on). An
- * existing row keeps its own read point, which every read moves.
+ * follow, so it is held with the doorbell's readers), else the topic's last post (they follow it from now on), and never
+ * less than their own newest post there (what they wrote they have read). An existing row keeps its own read point, which
+ * every read moves.
  */
 export function setForumFollow(member: string, topicId: string, follow: ForumFollow | null, now: number): ForumFollow | null {
     assertPlainTablesWritable();
@@ -88,13 +89,15 @@ export function setForumFollow(member: string, topicId: string, follow: ForumFol
         deletePlainRows('forum_follows', 'topic_id = ? AND member_pubkey = ?', topicId, member);
         return null;
     }
-    const readTo = readPointOf(topicId, member, now) ?? lastPostNumber(topicId);
+    const readTo = Math.max(readPointOf(topicId, member, now) ?? lastPostNumber(topicId), ownLastPostNumber(topicId, member));
     db.prepare(`INSERT INTO forum_follows (topic_id, member_pubkey, state, last_read, created_at) VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(topic_id, member_pubkey) DO UPDATE SET state = excluded.state`).run(topicId, member, follow, readTo, iso(now));
     return follow;
 }
 
 const lastPostNumber = (topicId: string) => (db.prepare('SELECT MAX(number) FROM forum_posts WHERE topic_id = ?').pluck().get(topicId) as number | null) ?? 0;
+const ownLastPostNumber = (topicId: string, member: string) =>
+    (db.prepare('SELECT MAX(number) FROM forum_posts WHERE topic_id = ? AND writer_pubkey = ?').pluck().get(topicId, member) as number | null) ?? 0;
 
 /** A member's follows, every one: an account deleted or removed (engine/forum.ts dropForumOf), with their tombstones. */
 export function dropForumFollowsOf(member: string): void {

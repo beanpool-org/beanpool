@@ -241,6 +241,28 @@ async function main(): Promise<void> {
     const eveLate = await topic(eve, T);
     assert(eveLate.body?.lastRead === lastNow && eveLate.body?.topic?.unread === false, `a read from long ago is not held: the follow starts at the last post (${show(eveLate)})`);
     require_((await follow(eve, T, null)).status === 200, 'she leaves it again');
+    // Her own reply after that read: turning the bell off and on within 15 minutes starts at her reply, not at the older read.
+    const te = await start(asha, { sectionId: general, title: 'Tool library', words: 'Who lends tools?' });
+    require_(te.status === 201, `Asha starts a third topic (${show(te)})`);
+    const TE = te.body.topic.id as string;
+    require_((await reply(asha, TE, { words: 'I have a spade.' })).status === 201, 'and replies in it');
+    resetForumDoorbellsForTests();
+    require_((await readTo(eve, TE, 2)).status === 200, 'Eve reads it to its last post');
+    const eveOwn = await reply(eve, TE, { words: 'I have a rake.' });
+    require_(eveOwn.status === 201, `then replies (${show(eveOwn)})`);
+    const eveOwnNumber = eveOwn.body.post.number as number;
+    require_(eveOwnNumber === 3 && (await topic(eve, TE)).body?.lastRead === eveOwnNumber, 'her reply follows it, read to that reply');
+    require_((await follow(eve, TE, null)).status === 200 && (await follow(eve, TE, 'following')).status === 200, 'she turns its bell off and on again at once');
+    const eveRefollow = await topic(eve, TE);
+    const eveRefollowList = (await topics(eve)).body?.topics?.find((t: any) => t.id === TE);
+    assert(eveRefollow.body?.lastRead === eveOwnNumber && eveRefollow.body?.topic?.unread === false && eveRefollowList?.unread === false,
+        `a new follow never starts behind her own newest post: her reply is not unread (${show(eveRefollow)})`);
+    require_((await reply(asha, TE, { words: 'And a wheelbarrow.' })).status === 201, 'Asha replies after her');
+    require_((await follow(eve, TE, null)).status === 200 && (await follow(eve, TE, 'following')).status === 200, 'Eve turns the bell off and on again');
+    const eveRefollowAfter = await topic(eve, TE);
+    assert(eveRefollowAfter.body?.lastRead === eveOwnNumber && eveRefollowAfter.body?.topic?.unread === true,
+        `and no further: Asha's later reply stays unread, opening at post 4 (${show(eveRefollowAfter)})`);
+    require_((await follow(eve, TE, null)).status === 200, 'she leaves it');
 
     // ── 3. A mention from one sender pushes once an hour ────────────────────────────────────────
     console.log('── 3. mentions ──');
@@ -346,6 +368,18 @@ async function main(): Promise<void> {
     await settle();
     assert(rows(ben, 'forum.reply').length === 0 && pushesTo(ben, 'forum.reply', mark).length === 0 && rows(asha, 'forum.reply').length === 1,
         'Ben, who blocked Dev, is not told of his reply; Asha is');
+    // Dev's reply is the newest post, and Ben, who follows the topic, is never shown it: reading all he is shown clears his dot.
+    const benShown = await topic(ben, T);
+    const benLastShown = benShown.body?.posts?.slice(-1)[0]?.number as number;
+    const lastOfAll = db.prepare('SELECT MAX(number) FROM forum_posts WHERE topic_id = ?').pluck().get(T) as number;
+    require_(benShown.body?.topic?.follow === 'following' && benShown.body?.next === null && benLastShown === lastOfAll - 1
+        && benShown.body.posts.every((p: any) => p.writer.publicKey !== dev.pk), `Ben is shown every post but Dev's, the newest (${benLastShown} of ${lastOfAll})`);
+    const benReadShown = await readTo(ben, T, benLastShown);
+    const benTopicAfter = await topic(ben, T);
+    const benListAfter = (await topics(ben)).body?.topics?.find((t: any) => t.id === T);
+    assert(benReadShown.body?.lastRead === benLastShown && benTopicAfter.body?.topic?.unread === false && benListAfter?.unread === false,
+        `a follower who blocked the newest post's writer reads to his last post shown: no unread dot, on the topic or the list (${show(benTopicAfter)}; list ${JSON.stringify(benListAfter?.unread)})`);
+    assert((await topics(asha)).body?.topics?.find((t: any) => t.id === T)?.unread === true, 'Asha, who blocked nobody, still has Dev\'s reply unread');
     const t2 = await start(asha, { sectionId: general, title: 'A topic to hide', words: 'Hello' });
     const T2 = t2.body.topic.id as string;
     require_((await reply(ben, T2, { words: 'Ben here' })).status === 201 && (await follow(mo, T2, 'following')).status === 200, 'Ben replies in it, Mo follows it');

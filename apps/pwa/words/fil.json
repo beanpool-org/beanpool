@@ -1435,7 +1435,6 @@
   "On the map": "Sa mapa",
   "On the map at {lat}, {lng}": "Nasa mapa sa {lat}, {lng}",
   "On your Home": "Sa iyong Home",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Kapag tumatakbo na ang iyong server, papangalanan mo ang iyong komunidad sa settings app nito, iimbitahan ang mga unang miyembro, at sila ang mag-iimbita sa iba pa. I-on ang \"ilathala ang lokasyon\" doon, at malalaman ito ng mga taong malapit sa iyo na humiling na masabihan.",
   "One device at a time: the copy you changed last is the one kept.": "Isang device sa bawat pagkakataon: ang kopyang huli mong binago ang siyang itinatago.",
   "One moment…": "Sandali lang…",
   "One more comes back {when}.": "Babalik ang isa pa {when}.",
@@ -4681,5 +4680,8 @@
     "one": "Ang pag-pause para sa panahon ay nagpapanatili sa iyong credit line sa {n} munggo nang hanggang 90 araw at nagpo-pause sa mga aktibong listing upang hindi makabili ang mga miyembro. Maaaring magpatuloy ang sinumang tagapangalaga anumang oras.",
     "other": "Ang pag-pause para sa panahon ay nagpapanatili sa iyong credit line sa {n} munggo nang hanggang 90 araw at nagpo-pause sa mga aktibong listing upang hindi makabili ang mga miyembro. Maaaring magpatuloy ang sinumang tagapangalaga anumang oras."
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Muling ina-activate ng pagpapatuloy ang lahat ng listing at ibinabalik ang credit line sa normal na pang-araw-araw na kalkulasyon."
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Muling ina-activate ng pagpapatuloy ang lahat ng listing at ibinabalik ang credit line sa normal na pang-araw-araw na kalkulasyon.",
+  "{name} has no owner yet": "Wala pang may-ari ang {name}",
+  "If you installed it, claim it with the one-time code on the server.": "Kung ikaw ang nag-install nito, i-claim ito gamit ang one-time code sa server.",
+  "Claim {name}": "I-claim ang {name}"
 }

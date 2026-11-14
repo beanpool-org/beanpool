@@ -1435,7 +1435,6 @@
   "On the map": "En el mapa",
   "On the map at {lat}, {lng}": "En el mapa en {lat}, {lng}",
   "On your Home": "En tu Inicio",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Una vez que tu nodo esté funcionando, nombras a tu comunidad en su app de configuración, invitas a los primeros miembros y ellos invitan al resto. Activa «publicar ubicación» allí, y las personas cercanas que solicitaron ser avisadas se enterarán.",
   "One device at a time: the copy you changed last is the one kept.": "Un dispositivo a la vez: la copia que modificaste por última vez es la que se conserva.",
   "One moment…": "Un momento…",
   "One more comes back {when}.": "Se recupera uno más {when}.",
@@ -4682,5 +4681,8 @@
     "one": "Pausar por la temporada mantiene tu línea de crédito en {n} frijol hasta por 90 días y pausa los anuncios activos para que los miembros no puedan comprar. Cualquier custodio puede reanudar en cualquier momento.",
     "other": "Pausar por la temporada mantiene tu línea de crédito en {n} frijoles hasta por 90 días y pausa los anuncios activos para que los miembros no puedan comprar. Cualquier custodio puede reanudar en cualquier momento."
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Reanudar reactiva todos los anuncios y restaura la línea de crédito al cálculo diario normal."
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Reanudar reactiva todos los anuncios y restaura la línea de crédito al cálculo diario normal.",
+  "{name} has no owner yet": "{name} aún no tiene propietario",
+  "If you installed it, claim it with the one-time code on the server.": "Si lo instalaste, reclámalo con el código de un solo uso en el servidor.",
+  "Claim {name}": "Reclamar {name}"
 }

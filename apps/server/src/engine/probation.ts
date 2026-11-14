@@ -11,7 +11,7 @@
  * two-doors-fable.md). Every feature is the same for both; only the length and size of the limits differ, and they end
  * by themselves. Adding a sign-in (`POST /api/join/link`) moves the member to the ordinary rules at once, counted from
  * their original join. A kept post is one they wrote that a moderator has not removed and that is not hidden by reports;
- * a post they took down themselves still counts. By account age and kept posts only, never by tier (tiers are merit
+ * a post they took down themselves still counts. A forum post still up counts too (keptForumPosts, the forum's slice F2). By account age and kept posts only, never by tier (tiers are merit
  * badges and gate nothing). Not on probation: anyone holding a node role (owner, admin, moderator), who the owner
  * trusted by granting it, and everyone on a node whose `probation` switch is off, which is every local community.
  *
@@ -143,7 +143,19 @@ export function keptPostCount(pubkey: string): number {
           WHERE author_pubkey = ? AND origin_node IS NULL AND type != 'knowledge'
             AND removed_by_moderator_at IS NULL AND hidden_by_reports_at IS NULL`
     ).get(pubkey) as { c: number };
-    return row.c;
+    return row.c + keptForumPosts(pubkey, PROBATION.keptPosts);
+}
+
+/**
+ * Forum posts still up count as kept posts too (DESIGN-forums-fable.md §5, slice F2), so someone who only ever writes in the
+ * forum does not stay new for good: an opening post or a reply nobody removed (its writer included: a removed one is a
+ * marker, no longer up) and that is not hidden while the moderators look. At most `limit`, as probation needs no more.
+ */
+export function keptForumPosts(pubkey: string, limit: number): number {
+    return (db.prepare(
+        `SELECT COUNT(*) AS c FROM (SELECT 1 FROM forum_posts
+          WHERE writer_pubkey = ? AND removed_by IS NULL AND hidden_by_reports_at IS NULL LIMIT ?)`
+    ).get(pubkey, limit) as { c: number }).c;
 }
 
 /**
@@ -232,7 +244,8 @@ export function isEstablishedMember(pubkey: string, now: number = Date.now()): b
               WHERE author_pubkey = ? AND origin_node IS NULL AND type != 'knowledge'
                 AND removed_by_moderator_at IS NULL AND hidden_by_reports_at IS NULL LIMIT ?)`
         ).get(pubkey, PROBATION.keptPosts) as { c: number };
-        return kept.c >= PROBATION.keptPosts;
+        // Forum posts still up count as probation counts them (keptPostCount).
+        return kept.c >= PROBATION.keptPosts || kept.c + keptForumPosts(pubkey, PROBATION.keptPosts - kept.c) >= PROBATION.keptPosts;
     } catch {
         return false;
     }

@@ -174,6 +174,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('forum_topics', 'writer_pubkey');
     move('forum_posts', 'writer_pubkey');
     move('forum_members', 'member_pubkey');
+    // A first topic of theirs waiting for a moderator's look (engine/forum-first-look.ts): still theirs to withdraw, and OK
+    // makes the topic in the key they hold then.
+    move('forum_waiting', 'writer_pubkey');
     // Their tools' private copies (engine/tool-state.ts): the new phone gets them back from here.
     move('member_tool_state', 'public_key');
     // Their shop (engine/shops.ts): the same front window, under the new key. Keyed by its own id, so its listings and its

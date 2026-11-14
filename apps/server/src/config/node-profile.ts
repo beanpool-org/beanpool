@@ -228,6 +228,12 @@ export interface ProfileSwitches {
      *  server's kind: a local community's forum is for its members. While on, a member's first post is refused until they
      *  were told so (engine/forum.ts assertTold). Reported in `features` only while on, beside `forum`. */
     forumPublic: boolean;
+    /** A new member's first topic waits for one look by a moderator before it shows (engine/forum-first-look.ts; design §4,
+     *  §5, slice F2). New is on probation here (engine/probation.ts), holding no node role, with no topic a moderator OK'd:
+     *  so it only bites where probation is on. On (the global community), off (a local community). Set by the server's kind
+     *  in this build (KIND_ONLY_SWITCHES); the owners' setting beside probation comes with a Settings slice. Not in
+     *  `features`: the forum's front tells each member whether their own topic would wait. */
+    forumFirstLook: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -271,6 +277,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         bills: true,
         forum: true,
         forumPublic: false,
+        forumFirstLook: false,
     },
     global: {
         openJoin: true,
@@ -329,6 +336,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         // The worldwide forum, readable on the web once its public pages are built (slice F7).
         forum: true,
         forumPublic: true,
+        // A stranger's first topic waits for one look (design §5; Marty Q4, 14 Nov 2026: owners, admins and moderators look).
+        forumFirstLook: true,
     },
 };
 

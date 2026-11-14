@@ -29,10 +29,11 @@ import { validateMnemonic } from '../lib/mnemonic';
 import {
     redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile,
     recordOnboardingEvent, initPairingApi, pollPairingApi, confirmPairingApi, cancelPairingApi, getNodeApiUrl,
-    getCommunityCard, getCommunityInfo, signedFetchWithKey, type CommunityInfo,
+    getCommunityCard, getCommunityInfo, signedFetchWithKey, nodeAddress, nodeHasNoOwner, type CommunityInfo,
 } from '../lib/api';
 import { keepWordsOnAccount } from '../lib/words-kept';
 import { CommunityCardPanel } from '../components/CommunityCardPanel';
+import { NoOwnerCard } from '../components/NoOwnerCard';
 import { takeWelcomeDoor } from '../lib/community-card';
 import { inviteHeading, ownCommunityAddress } from '../lib/join-names';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
@@ -393,6 +394,16 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
         getCommunityCard()
             .then((card) => { if (!cancelled) setCommunityCard(card); })
             .catch(() => { if (!cancelled) setCommunityCard(null); });
+        return () => { cancelled = true; };
+    }, [readCard]);
+    // A server nobody has claimed yet (DESIGN-new-operator-path-fable.md S4): its card's Ask to join has nobody to answer
+    // it, so the phone's no-owner card stands in its place, with Claim (components/NoOwnerCard.tsx). Asked once, beside
+    // the card; any answer but `unclaimed: true` leaves the page as it was.
+    const [noOwner, setNoOwner] = useState(false);
+    useEffect(() => {
+        if (!readCard) return;
+        let cancelled = false;
+        void nodeHasNoOwner().then((yes) => { if (!cancelled) setNoOwner(yes); });
         return () => { cancelled = true; };
     }, [readCard]);
     // Joined through the open door: the member exists on the node, so the steps after it have nothing to redeem, and
@@ -2954,7 +2965,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                     {t('← Back to my request')}
                                 </button>
                             )}
-                            {localCommunity && communityCard && communityCard !== 'loading' && (
+                            {noOwner ? (
+                                <NoOwnerCard
+                                    name={communityCard && communityCard !== 'loading' ? communityCardName(communityCard, { t }) : ownCommunityAddress()}
+                                    origin={nodeAddress()}
+                                />
+                            ) : localCommunity && communityCard && communityCard !== 'loading' && (
                                 <CommunityCardPanel
                                     card={communityCard}
                                     compact={welcomeDoor === 'invite' || !!onBackToRequest}

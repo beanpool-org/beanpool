@@ -9,6 +9,18 @@ vi.mock('../../lib/qr', () => ({
 }));
 
 describe('UnclaimedCard', () => {
+    // The one claim path (DESIGN-new-operator-path-fable.md S4): the phone's two routes by the phone's own labels, the claim
+    // is the phone's, and the QR carries the address only. Find a community is no way in from a local community.
+    it("names the phone's two routes, says the claim is the phone's, and that the QR carries no code", () => {
+        render(<UnclaimedCard codeId="c123" origin="https://town.beanpool.org" />);
+        const steps = screen.getByTestId('claim-phone-steps');
+        expect(steps).toHaveTextContent('Claiming is done from the phone app only.');
+        expect(steps).toHaveTextContent('Installed BeanPool on a server? Claim it');
+        expect(steps).toHaveTextContent('tap the bean at the top, then Set up a new community server');
+        expect(screen.getByTestId('claim-card')).not.toHaveTextContent('Find a community');
+        expect(screen.getByTestId('claim-qr-no-code')).toHaveTextContent("This QR code carries this server's address and the waiting code's short name, never the code itself: the code is read on the server.");
+    });
+
     it('renders heading, claim command, and QR code when address list is empty', () => {
         render(<UnclaimedCard codeId="c123" origin="http://localhost:3000" />);
 

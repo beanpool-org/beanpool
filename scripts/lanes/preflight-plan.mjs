@@ -223,8 +223,8 @@ function classify(pkg, mine, repo) {
       // Closest first when the cap bites: co-located, then the tests that name the most touched files.
       score.set(t, (keys.has(base) ? 1000 : 0) + pins + imports);
       if (keys.has(base) || pins) cls.pins.push(t);
-      else if (SCANNER.test(text)) cls.scanners.push(t);
       else if (imports) cls.importers.push(t);
+      else if (SCANNER.test(text)) cls.scanners.push(t);
     }
     for (const c of CLASSES) cls[c].sort((a, b) => (score.get(b) || 0) - (score.get(a) || 0) || (a < b ? -1 : 1));
   }

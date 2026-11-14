@@ -105,23 +105,26 @@ TOTAL=$(grep -c . "$PLAN")
 echo "preflight: $TOTAL steps, about $(fmt $EST_TOTAL) (against $BASE; logs in $LOGDIR)"
 while IFS=$'\t' read -r name est why cmd <&3; do
   [ -n "$name" ] || continue
-  if ! wait_for_lock; then
-    STOPPED="the heavy-test lock is still held after ${WAITED}s"
-    echo "WAIT  $STOPPED: stopped before step $((N + 1)) of $TOTAL ($name)."
-    break
-  fi
-  step_est=$est; is_secs "$step_est" || step_est=$HARD
-  elapsed=$(( $(date +%s) - START ))
-  if [ $((elapsed + step_est)) -gt "$HARD" ]; then
-    STOPPED="step $((N + 1)) ($name, about ${step_est}s) would end past ${HARD}s at ${elapsed}s in"
-    echo "TIME  $STOPPED: stopped before it."
-    break
+  # A line with no command or no whole-second estimate (read folds an empty field) would run nothing and read as a pass,
+  # or as a time stop: it is red, checked before the lock and the clock.
+  bad=0; { [ -n "$cmd" ] && is_secs "$est"; } || bad=1
+  if [ $bad -eq 0 ]; then
+    if ! wait_for_lock; then
+      STOPPED="the heavy-test lock is still held after ${WAITED}s"
+      echo "WAIT  $STOPPED: stopped before step $((N + 1)) of $TOTAL ($name)."
+      break
+    fi
+    elapsed=$(( $(date +%s) - START ))
+    if [ $((elapsed + est)) -gt "$HARD" ]; then
+      STOPPED="step $((N + 1)) ($name, about ${est}s) would end past ${HARD}s at ${elapsed}s in"
+      echo "TIME  $STOPPED: stopped before it."
+      break
+    fi
   fi
   N=$((N + 1))
   log="$LOGDIR/$N-$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '_').log"
   s=$(date +%s)
-  if [ -z "$cmd" ] || ! is_secs "$est"; then
-    # A line with no command (or no why: read folds an empty field) would run nothing and read as a pass.
+  if [ $bad -eq 1 ]; then
     echo "plan line $N is not name TAB est-seconds TAB why TAB command" > "$log"
     rc=2
   else

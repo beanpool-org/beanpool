@@ -239,6 +239,14 @@ test('a pin names the touched file by its real path: app/(tabs)/_layout.tsx is n
   assert.deepEqual(filesOf(c), ['components/__tests__/card.test.ts']);
 });
 
+test('a tree scanner that imports a touched file ranks with the importers, ahead of the other scanners', () => {
+  const files = { 'apps/manager/src/api.ts': '', 'apps/manager/src/a-scan.test.ts': 'fs.readdirSync(dir)',
+    'apps/manager/src/z-scan-imports.test.ts': "import { x } from './api'; fs.readdirSync(dir)" };
+  const s = step(planSteps(parseDiff(diff({ 'apps/manager/src/api.ts': 'x' })), fakeRepo(files), { maxExtra: 1 }), 'vitest:@beanpool/manager');
+  assert.deepEqual(filesOf(s), ['src/z-scan-imports.test.ts']);
+  assert.match(s.why, /1 importers, 0 tree scanners; left to CI .*: 1 scanners/);
+});
+
 test('namedPaths resolves from the test\'s folder, the package root and an @/ alias; a bare name only when unique', () => {
   const t = 'apps/native/utils/__tests__/x.test.ts';
   const n = namedPaths("read('../db.ts'); import a from '@/components/A'; read('app/welcome.tsx'); read('_layout.tsx')", t, 'apps/native',
@@ -386,6 +394,10 @@ test('a plan line whose estimate is not whole seconds is red, never a free step'
   assert.equal(r.rc, 1, r.out);
   assert.match(r.out, /^FAIL  odd/m);
   assert.ok(!fs.existsSync(`${d}/ran`));
+  // Also as a later step, once time has passed: red, not a time stop (75) that reads as "run it again".
+  const later = run(planFile(d, [['one', '1', 'first', 'sleep 1'], ['odd', 'soon', 'why', `touch ${d}/ran`]]));
+  assert.equal(later.rc, 1, later.out);
+  assert.match(later.out, /^FAIL  odd/m);
 });
 
 test('a step whose estimate would end past the hard limit is not started: exit 75, named, the steps before it ran', () => {
@@ -407,7 +419,7 @@ test('a step whose estimate would end past the hard limit is not started: exit 7
 test('MUTANT: a runner without the hard-limit check starts the late step, so the test above can fail', () => {
   const d = tmpdir();
   const src = fs.readFileSync(RUNNER, 'utf8');
-  const check = 'if [ $((elapsed + step_est)) -gt "$HARD" ]; then';
+  const check = 'if [ $((elapsed + est)) -gt "$HARD" ]; then';
   assert.ok(src.includes(check), 'the line this mutant changes is in the runner');
   fs.mkdirSync(path.join(d, 'scripts/lanes'), { recursive: true });
   const mutant = path.join(d, 'scripts/lanes/preflight.sh');

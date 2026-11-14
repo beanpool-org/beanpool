@@ -505,12 +505,12 @@ export const TABLES: Record<string, TableEntry> = {
     // Each typed tag's day on each listing (engine/free-tags.ts noteFreeTagsSeen): each server stamps the words it sees on the
     // listings it holds, at each read of the count and on an hourly pass on every role. A standby sees a listing's change
     // when its copy does and stamps it at its next pass, so its days are no earlier than its main server's, and a listing it
-    // never stamped starts its week at the take-over. One case is not seen: a word taken off a listing and put back on the
-    // same listing between two of the standby's passes (an hour at most) keeps the standby's older day for that listing,
-    // where the main server started it again at the edit; after a take-over inside that week, that one listing's week is
-    // short by the time it had carried the word before.
+    // never stamped starts its week at the take-over. One case is not seen: a listing that stops carrying a word live and
+    // carries it again between two of the standby's passes (the word taken off and put back, or the listing paused and
+    // resumed, within the hour) keeps the standby's older day for that listing where the main server may have started it
+    // again; after a take-over inside that week, that one listing's week is short by the time it had carried the word before.
     free_tag_seen: {
-        kind: 'local', reason: "each server's own day for each typed tag on each listing it holds (engine/free-tags.ts), stamped at each read and hourly on every role; a promoted standby's days are no earlier than its main server's, except a word taken off and put back on the same listing between two of its hourly passes",
+        kind: 'local', reason: "each server's own day for each typed tag on each listing it holds (engine/free-tags.ts), stamped at each read and hourly on every role; a promoted standby's days are no earlier than its main server's, except a listing that left a word and came back to it between two of its hourly passes",
     },
     // Vouchers and their budgets (engine/vouchers.ts): who vouches, every line of each budget, and the credit line each vouch
     // or member's gift gave. Plain rows, no name; a promoted standby carries on every budget and every member's line.

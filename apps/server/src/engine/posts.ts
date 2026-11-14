@@ -849,8 +849,8 @@ export function createPost(
     // A suggestion's photos, approved as a page's, were charged to their sender when sent (photosPaidFor): never twice.
     const photoColumns = storedPhotoColumns(finalId, (photos || []).slice(0, 5), options?.createdBy ?? authorPublicKey, options?.photosPaidFor ? 0 : undefined);
 
-    // A typed tag's week runs from when the word reached a live listing (engine/free-tags.ts): a word gone from every live
-    // listing since the last count starts again with this one, and a new word starts now.
+    // A typed tag's week is each listing's own (engine/free-tags.ts): this listing's words start theirs now, and a stamp left
+    // under its id that no pass saw go is marked gone first, so it starts again too.
     if (freeTags.length > 0) noteFreeTagsSeen();
     db.transaction(() => {
         // An owner or admin acting (a keeper for an enterprise, by their own role) is held to the owners' "Owner and admin
@@ -1698,8 +1698,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         : null;
 
     let openedLine: EventThreadMessage | null = null;
-    // An edit of the typed tags starts a new word's week now, however old the listing (engine/free-tags.ts), and a word gone
-    // from every live listing since the last count starts again with it.
+    // An edit of the typed tags starts a word's week on this listing now, however old the listing (engine/free-tags.ts): the
+    // pass before marks a word taken off it since the last count as gone, so putting it back starts again at this edit.
     const freeTagsEdited = updates.freeTags !== undefined;
     if (freeTagsEdited) noteFreeTagsSeen();
     db.transaction(() => {

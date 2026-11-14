@@ -73,7 +73,7 @@ export function NewPostTypeSheet({ visible, onClose, onSelect, onShow }: NewPost
                         </Pressable>
                     )}
 
-                    {identity && <ChoiceRows styles={styles} pick={pick} />}
+                    {identity && <ChoiceRows pick={pick} />}
 
                     <Pressable
                         style={styles.actionSheetCancel}
@@ -93,7 +93,9 @@ export function NewPostTypeSheet({ visible, onClose, onSelect, onShow }: NewPost
  * The choices, in their order: the four kinds, and 📖 Local knowledge after them where Learn is live here (slice K4). Drawn
  * inside the sheet, so the community's switches are read only while it is open, never by a screen that merely holds it.
  */
-function ChoiceRows({ styles, pick }: { styles: ReturnType<typeof makeStyles>; pick: (type: ComposePostType) => void }) {
+function ChoiceRows({ pick }: { pick: (type: ComposePostType) => void }) {
+    // Its own read of the style table (not one handed down), so the contrast check can follow every colour here.
+    const styles = useStyles(makeStyles);
     const options = composeOptions({ learn: useLearnMode() === 'live' });
     return (
         <>

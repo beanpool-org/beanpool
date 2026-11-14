@@ -76,7 +76,7 @@ import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { useOwnProfile } from '../../utils/use-own-profile';
 import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
-import { beansOn, effectiveFeatures, invitesOn, shareOutsideOn } from '../../utils/node-profile';
+import { beansOn, effectiveFeatures, invitesOn, outsideMessagesOn, shareOutsideOn } from '../../utils/node-profile';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
 import { UseOnComputerRow } from '../../components/UseOnComputerRow';
@@ -2343,6 +2343,16 @@ export default function SettingsScreen() {
                                 <View style={[styles.toggleThumb, inviterShown && styles.toggleThumbOn]} />
                             </Pressable>
                         </View>
+                    )}
+                    {outsideMessagesOn(nodeProfile?.features) && (
+                        <Pressable style={styles.menuBtn} onPress={() => router.push('/address-card')} accessibilityRole="button" testID="settings-address-card">
+                            <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🪪</Text></View>
+                            <View style={styles.menuTextBesideSwitch}>
+                                <Text style={styles.menuText}>{t('My address card')}</Text>
+                                <Text style={styles.menuSub}>{t('Who in other communities can send you a message request')}</Text>
+                            </View>
+                            <Text style={styles.menuChevron} aria-hidden={true} importantForAccessibility="no">›</Text>
+                        </Pressable>
                     )}
                     <Pressable style={styles.menuBtn} onPress={() => Linking.openURL('https://beanpool.org/privacy.html')} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🛡️</Text></View>

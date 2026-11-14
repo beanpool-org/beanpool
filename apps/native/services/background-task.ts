@@ -43,6 +43,14 @@ TaskManager.defineTask(TASK_NAME, async () => {
             console.warn('[Pillar] The sync\'s notices were not posted:', e);
         }
 
+        // Mail from other communities (slice X3): fetched, written on this phone, then confirmed, so it is deleted there.
+        try {
+            const { syncOutsideMailNow } = await import('../utils/outside-chat-live');
+            await syncOutsideMailNow();
+        } catch (e) {
+            console.warn('[Pillar] Mail from other communities waits for the next round:', e);
+        }
+
         if (result.success || result.deltaCount > 0) {
             // Tell the OS we got new data (improves wake-up frequency)
             return BackgroundFetch.BackgroundFetchResult.NewData;

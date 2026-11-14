@@ -121,6 +121,11 @@ export interface NodeFeatures {
      */
     shareOutside?: boolean;
     /**
+     * This community takes messages from other communities and lets its members send to them (the owner's switch, on by
+     * default: the mailbox, apps/server engine/relay-mail.ts). An older node says nothing, and the phone offers no address card.
+     */
+    outsideMessages?: boolean;
+    /**
      * The community tells a member when a neighbour posts a Need in a category they starred (`market.asked`, cold start N3;
      * core askedPushOn). The What are you into? card says so and Settings → Notifications shows its switch only then: a
      * node that doesn't say (the worldwide one, Beans off, a node from before it) sends no such push and takes no switch.
@@ -469,6 +474,11 @@ export function privatePreviewOn(features: NodeFeatures | null | undefined): boo
 /** Whether members may share a post outside this community (front doors S6): only where the node says so. */
 export function shareOutsideOn(features: NodeFeatures | null | undefined): boolean {
     return features?.shareOutside === true;
+}
+
+/** Whether members here can chat with people in other communities: only where the node says so (absent = off). */
+export function outsideMessagesOn(features: NodeFeatures | null | undefined): boolean {
+    return features?.outsideMessages === true;
 }
 
 export function onlineEventsOn(features: NodeFeatures | null | undefined): boolean {

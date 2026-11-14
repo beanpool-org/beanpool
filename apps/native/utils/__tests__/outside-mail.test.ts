@@ -58,6 +58,16 @@ vi.mock('../node-post', () => ({
     }),
 }));
 
+// The member's statements as core signs them, without the phone's native modules (the e2e test signs through the real ones).
+vi.mock('../member-statements', async () => {
+    const core = await import('@beanpool/core');
+    const toKey = (hex: string) => Uint8Array.from(Buffer.from(hex, 'hex'));
+    return {
+        signRelayEnvelopeStatement: (f: any, k: string) => core.signRelayEnvelope(f, core.ed25519Signer(toKey(k))),
+        signAddressCardStatement: (c: any, k: string) => core.signAddressCard(c, core.ed25519Signer(toKey(k))),
+    };
+});
+
 import { outsideChatStore, gateIncoming, OUTSIDE_CHAT_TABLES_SQL, type OutsideChatState } from '../outside-chat-store';
 import { syncOutsideMail, sendOutsideLine, setDoor, type OutsideMailContext } from '../outside-mail';
 
@@ -238,7 +248,7 @@ describe('5  a line that is not its envelope\'s', () => {
         await ctx.store.openChat(BEN.key, relayConversationId(BEN.key, ANA.key), { key: ANA.key, home: ANA_HOME, name: 'Ana' });
         await heldLine(ANA, 'Not Ana', { sealer: CY });
         const changed = await heldLine(ANA, 'Changed');
-        changed.payload = changed.payload.replace(/"c":"./, '"c":"A');
+        changed.payload = String(changed.payload).replace(/"c":"./, '"c":"A');
         const other = await heldLine(ANA, 'For Cy');
         other.envelope = { ...other.envelope, recipient: CY.key };
         const out = await syncOutsideMail(ctx);

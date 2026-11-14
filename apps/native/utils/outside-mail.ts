@@ -20,11 +20,11 @@
  * marked restored, so the chat opens with the reason it is empty.
  */
 import {
-    ADDRESS_CARD_NAME_MAX, addressCardName, ed25519Signer, newDmMessageId, openOutsideLine, outsideReceiptPayload, readRelayEnvelope,
-    relayConversationId, relayEnvelopeVerifies, relayPayloadHash, sealOutsideLine, signAddressCard, signRelayEnvelope, nodeHomeOf, audienceOf,
-    type AddressCard, type RelayEnvelope, type RelayItem,
+    ADDRESS_CARD_NAME_MAX, addressCardName, newDmMessageId, openOutsideLine, outsideReceiptPayload, readRelayEnvelope,
+    relayConversationId, relayEnvelopeVerifies, relayPayloadHash, sealOutsideLine, nodeHomeOf, audienceOf, t,
+    type AddressCard, type RelayEnvelope, type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
-import { hexToBytes } from '@noble/hashes/utils.js';
+import { signAddressCardStatement, signRelayEnvelopeStatement } from './member-statements';
 import { signedGet, signedPost } from './node-post';
 import { gateIncoming, type OutsideChatStore, type OutsideLineState } from './outside-chat-store';
 import type { BeanPoolIdentity } from './identity';
@@ -85,7 +85,7 @@ export async function myAddressCard(ctx: OutsideMailContext): Promise<AddressCar
     const home = await myHome(ctx);
     if (!home) return null;
     const name = addressCardName(String(ctx.identity.callsign ?? '').replace(/\s+/g, ' ').trim().slice(0, ADDRESS_CARD_NAME_MAX)) ?? '…';
-    return signAddressCard({ key: ctx.identity.publicKey, home, name }, ed25519Signer(hexToBytes(ctx.identity.privateKey)));
+    return signAddressCardStatement({ key: ctx.identity.publicKey, home, name }, ctx.identity.privateKey);
 }
 
 export async function doorOpen(store: OutsideChatStore): Promise<boolean> {
@@ -96,11 +96,11 @@ export async function setDoor(store: OutsideChatStore, open: boolean): Promise<v
     await store.setMeta(DOOR_META, open ? 'open' : 'closed');
 }
 
-async function envelopeFor(ctx: OutsideMailContext, fields: Omit<Parameters<typeof signRelayEnvelope>[0], 'senderKey' | 'senderHome' | 'payloadHash'>, payload: string): Promise<RelayEnvelope> {
+async function envelopeFor(ctx: OutsideMailContext, fields: Omit<RelayEnvelopeFields, 'senderKey' | 'senderHome' | 'payloadHash'>, payload: string): Promise<RelayEnvelope> {
     const home = await myHome(ctx);
-    if (!home) throw new OutsideMailError(503, "This community's server knows none of its own names yet, so it can't send to another community.", 'no_home');
-    return signRelayEnvelope({ ...fields, senderKey: ctx.identity.publicKey, senderHome: home, payloadHash: relayPayloadHash(payload) },
-        ed25519Signer(hexToBytes(ctx.identity.privateKey)));
+    if (!home) throw new OutsideMailError(503, t("This community's server knows none of its own names yet, so it can't send to another community."), 'no_home');
+    return signRelayEnvelopeStatement({ ...fields, senderKey: ctx.identity.publicKey, senderHome: home, payloadHash: relayPayloadHash(payload) },
+        ctx.identity.privateKey);
 }
 
 async function postItems(ctx: OutsideMailContext, items: RelayItem[]): Promise<Array<{ itemId: string; state: string }>> {
@@ -115,7 +115,7 @@ async function postItems(ctx: OutsideMailContext, items: RelayItem[]): Promise<A
 export async function sendOutsideLine(ctx: OutsideMailContext, chatId: string, text: string, replyTo: string | null = null): Promise<OutsideLineState> {
     const me = ctx.identity.publicKey;
     const chat = await ctx.store.chat(me, chatId);
-    if (!chat || chat.state !== 'open') throw new OutsideMailError(400, 'Accept the request first.');
+    if (!chat || chat.state !== 'open') throw new OutsideMailError(400, t('Accept the request first.'), 'not_accepted');
     const messageId = newDmMessageId();
     const payload = sealOutsideLine({ text, name: ctx.identity.callsign, myEdPrivHex: ctx.identity.privateKey, myKey: me, peerKey: chat.peerKey, messageId, replyToId: replyTo });
     const at = Date.now();

@@ -37,6 +37,8 @@ import { OtherCommunityNotices } from '../../components/OtherCommunityNotices';
 import { chatSides, chatSideShown, formatHundredths, t, tn, word, type ChatSide, type WordKey } from '@beanpool/core';
 import { ListPhoto } from '../../components/ListPhoto';
 import { ChatFrameSwitch } from '../../components/ChatFrameSwitch';
+import { OUTSIDE_CHATS_UPDATED, outsideContext, syncOutsideMailNow } from '../../utils/outside-chat-live';
+import type { OutsideChat } from '../../utils/outside-chat-store';
 import { ForumPane } from '../../components/forum/ForumPane';
 import { ContactsInfoSheet } from '../../components/ContactsInfoSheet';
 import { useContactsRecord } from '../../utils/use-contacts';
@@ -139,9 +141,12 @@ export default function ChatsScreen() {
     const [messagesFilter, setMessagesFilter] = useState<'all' | 'requests'>('all');
     // Requests waiting on the global community for a member who takes questions there (utils/global-requests.ts): behind the same row.
     const [onGlobal, setOnGlobal] = useState(0);
+    // Chats with people in other communities, on this phone only; a request among them waits behind the same row.
+    const [outsideChats, setOutsideChats] = useState<OutsideChat[]>([]);
+    const outsideRequests = React.useMemo(() => outsideChats.filter((c) => c.state === 'request'), [outsideChats]);
     const { recheck } = useNodeStatus();
     const otherNotices = useOtherCommunitiesNotices();
-    const requestsHere = requests ?? (onGlobal > 0 ? { count: 0, conversations: [] } : null);
+    const requestsHere = requests ?? (onGlobal > 0 || outsideRequests.length > 0 ? { count: 0, conversations: [] } : null);
     const [switchingCommunity, setSwitchingCommunity] = useState(false);
     // A tap that moved nothing says so: a join or a switch under way (held), or a switch that failed.
     const [switchNote, setSwitchNote] = useState<string | null>(null);
@@ -167,8 +172,8 @@ export default function ChatsScreen() {
     // Requests with no list kept here: the pills go, so the list goes back to All, never to an empty Requests with no way
     // back (the web's MessagesPage; PR #2540 review 4395541801). Not before the list is read, so a push tap still opens it.
     React.useEffect(() => {
-        if (requests === null && onGlobal === 0 && messagesFilter === 'requests') setMessagesFilter('all');
-    }, [requests, onGlobal, messagesFilter]);
+        if (requests === null && onGlobal === 0 && outsideRequests.length === 0 && messagesFilter === 'requests') setMessagesFilter('all');
+    }, [requests, onGlobal, outsideRequests.length, messagesFilter]);
     // The header's message and group icons land here with view=messages&filter=unread, when there is more
     // than one chat to show. Both are cleared after use: the filter stays the member's own choice from then on,
     // and a leftover view=messages would reach People (mounted inside Talk, reading this route's params).
@@ -352,7 +357,11 @@ export default function ChatsScreen() {
 
     // Partition conversations into "Action Required" and regular
     const { actionRequired, regularConversations } = React.useMemo(() => {
-        let list = conversations;
+        // A chat with someone in another community sits among the others, by its newest line; a request stays behind the row.
+        let list = [...conversations, ...outsideChats.filter((c) => c.state === 'open').map((c) => ({
+            id: c.id, outside: true, peer: c.peerName ?? c.peerHome, peerPubkey: c.peerKey, outsideHome: c.peerHome,
+            lastMessage: c.lastText ?? '', rawTimestamp: new Date(c.lastAt ?? c.updatedAt).toISOString(), unread: 0,
+        }))];
 
         // 1. Text Search Filter
         if (searchQuery.trim() !== '') {
@@ -436,7 +445,7 @@ export default function ChatsScreen() {
         });
 
         return { actionRequired, regularConversations: regular };
-    }, [conversations, deals, searchQuery, sortBy, readFilter, peopleFilter, friendPubkeys]);
+    }, [conversations, outsideChats, deals, searchQuery, sortBy, readFilter, peopleFilter, friendPubkeys]);
 
     const resetFilters = () => {
         setSearchQuery('');
@@ -502,6 +511,11 @@ export default function ChatsScreen() {
                             });
                         })
                         .catch(console.error);
+                    // Chats with people in other communities, kept on this phone (utils/outside-chat-store.ts).
+                    outsideContext()
+                        .then((ctx) => (ctx ? ctx.store.chats(ctx.identity.publicKey) : []))
+                        .then((list) => { if (active) setOutsideChats(prev => keepIfSame(prev, list)); })
+                        .catch(() => {});
                 }
             };
 
@@ -512,9 +526,11 @@ export default function ChatsScreen() {
                 syncMessages(identity.publicKey).then(() => {
                     loadData();
                 });
+                void syncOutsideMailNow().then(() => { if (active) loadData(); });
             }
 
             const sub = DeviceEventEmitter.addListener('sync_data_updated', loadData);
+            const outsideSub = DeviceEventEmitter.addListener(OUTSIDE_CHATS_UPDATED, loadData);
             const blockSub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, loadData);
 
             const wsSub = DeviceEventEmitter.addListener('ws_activity', () => {
@@ -528,6 +544,7 @@ export default function ChatsScreen() {
             return () => {
                 active = false;
                 sub.remove();
+                outsideSub.remove();
                 blockSub.remove();
                 wsSub.remove();
             };
@@ -577,6 +594,25 @@ export default function ChatsScreen() {
     );
 
     const renderItem = ({ item }: { item: any }) => {
+        if (item.outside) {
+            // Someone in another community: their community always shows (joint design §2.6), the chat is this phone's own.
+            return (
+                <Pressable accessibilityRole="button" style={styles.chatRow} testID="outside-chat-row" onPress={() => router.push(`/outside-chat/${item.id}`)}>
+                    <View style={styles.avatarWrapper}>
+                        <MemberAvatar avatarUrl={null} pubkey={item.peerPubkey || ''} callsign={item.peer} size={44} />
+                    </View>
+                    <View style={styles.chatDetails}>
+                        <View style={styles.chatHeader}>
+                            <Text style={[styles.peerName, { flexShrink: 1 }]} numberOfLines={1}>{t('{name} · {community}', { name: item.peer, community: item.outsideHome })}</Text>
+                            <Text style={styles.timestamp}>{rowTime(item.rawTimestamp)}</Text>
+                        </View>
+                        <View style={styles.messageRow}>
+                            <Text style={styles.lastMessage} numberOfLines={1}>{item.lastMessage || t('Kept on this phone only. Your community keeps no copy.')}</Text>
+                        </View>
+                    </View>
+                </Pressable>
+            );
+        }
         const needsAction = item.actionableCount > 0 || item.reviewCount > 0;
 
         let actionText = '';
@@ -1031,7 +1067,7 @@ export default function ChatsScreen() {
                 <OtherCommunityNotices notices={otherNotices} busy={switchingCommunity} onOpen={(url) => void openOtherCommunity(url)} note={switchNote} />
             )}
             {/* One row for every kind of outside request (Marty, 1 Nov 2026), plain: no count and no badge until one is accepted. */}
-            {requestsHere && requestsHere.count + onGlobal > 0 && messagesFilter !== 'requests' && (
+            {requestsHere && requestsHere.count + onGlobal + outsideRequests.length > 0 && messagesFilter !== 'requests' && (
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={t('Message requests')}
@@ -1050,6 +1086,8 @@ export default function ChatsScreen() {
                     count={requestsHere.count}
                     onGlobal={onGlobal}
                     onOpenGlobal={() => void openGlobalRequests(identity?.publicKey, recheck)}
+                    outside={outsideRequests}
+                    onOpenOutside={(c) => router.push(`/outside-chat/${c.id}`)}
                     identity={identity}
                     qr={qr}
                     onOpen={(entry) => router.push(`/chat/${entry.id}`)}

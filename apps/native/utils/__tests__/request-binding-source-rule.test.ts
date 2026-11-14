@@ -157,6 +157,11 @@ describe('the member key signs only through core\'s builders', () => {
             // its own tag, and hashes the result. The home id is the node's to choose, and that's safe here because nothing
             // sees the signature: only its hash leaves the phone, as the copy's id.
             'utils/show-on-global.ts copyIdFor',
+            // Messages across communities (X3): core's signRelayEnvelope, `beanpool-relay-envelope/1` over the fields the phone
+            // built (its own key and home, a recipient from a card or an envelope it verified, a fresh id, a payload hash), and
+            // core's signAddressCard, `beanpool-address-card/1` over its own key, home and name. Each under its own tag.
+            'utils/member-statements.ts signRelayEnvelopeStatement',
+            'utils/member-statements.ts signAddressCardStatement',
         ]);
         expect(sites.filter(s => s.callee === 'memberSigner' && !allowed.has(key(s))).map(key)).toEqual([]);
     });

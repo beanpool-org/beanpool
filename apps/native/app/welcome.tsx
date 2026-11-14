@@ -3901,7 +3901,9 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} bottomOffset={24}>
+                {/* "handled", as the 12 words' screen: after typing an address, one tap on a sign-in starts it. Without it,
+                    Android before API 30 swallowed that first tap while the field kept focus (measured on API 26). */}
+                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">
                                 {t('🌐 Recover with Social Sign-In')}
@@ -3935,7 +3937,7 @@ export default function WelcomeScreen() {
                                             <Text style={{ flex: 1, color: colors.text.heading, fontWeight: '600', fontSize: 16 }}>{c.callsign}</Text>
                                         </Pressable>
                                     ))}
-                                    <Pressable style={styles.backBtn} onPress={() => answerPick(null)} accessibilityRole="button" accessibilityLabel={t('← Start again')}>
+                                    <Pressable style={styles.backBtn} onPress={() => answerPick(null)} accessibilityRole="button" accessibilityLabel={t('Start again')}>
                                         <Text style={styles.backBtnText}>{t('← Start again')}</Text>
                                     </Pressable>
                                 </>

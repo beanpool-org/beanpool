@@ -10,4 +10,4 @@
 #
 #   bash scripts/test-directory-register.sh
 cd "$(dirname "$0")/.." || exit 1
-exec node --import tsx --test scripts/directory-register-rules.test.mjs scripts/directory-listed-migration.test.mjs
+exec node --import tsx --test scripts/directory-register-rules.test.mjs scripts/directory-listed-migration.test.mjs scripts/directory-listings-from-here-migration.test.mjs

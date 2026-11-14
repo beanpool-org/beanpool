@@ -2,7 +2,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { keys } from 'npm:@libp2p/crypto@5.1.13';
 import { peerIdFromPublicKey } from 'npm:@libp2p/peer-id@6.0.4';
 // v6 (front doors S13): the decisions with no dependency, shared with the node's tests (rules.ts).
-import { checkBeforeSignature, decideAfterSignature, parseDenyHosts } from './rules.ts';
+// v7 (list-on-global G5): listings_from_here, after supabase/migrations/2026111500_directory_listings_from_here.sql.
+import { checkBeforeSignature, decideAfterSignature, listingsFromHereOf, parseDenyHosts } from './rules.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -163,6 +164,8 @@ Deno.serve(async (req: Request) => {
         promise,
         accepting_knocks: typeof payload.acceptingKnocks === 'boolean' ? payload.acceptingKnocks : null,
         closing_on: realDay(payload.closingOn) ? payload.closingOn : null,
+        // Always set, null when the push says nothing (an older node) or no boolean: every reader takes null as on.
+        listings_from_here: listingsFromHereOf(payload),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'node_id' });
 

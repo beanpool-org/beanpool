@@ -437,6 +437,17 @@ export async function namesCopiesBeforeSignOut(
     }
 }
 
+/** outside-chat-live.ts forgetThisPhoneForMail, loaded only here; anything that fails on the way is nothing to wait for. */
+async function forgetThisPhoneForMailBeforeLeaving(): Promise<{ done: Promise<void> }> {
+    try {
+        const { forgetThisPhoneForMail } = await import('./outside-chat-live');
+        return await forgetThisPhoneForMail();
+    } catch (e) {
+        console.warn('[Account] This phone\'s mail from other communities was not forgotten; it lapses after 7 days', e instanceof Error ? e.message : e);
+        return { done: Promise.resolve() };
+    }
+}
+
 /**
  * "Sign Out (Device Only)", and the phone's half of the self-delete purge at the member's last community on the phone
  * once the node has answered (settings.tsx, delete-here.ts `planDelete`):
@@ -458,10 +469,14 @@ export async function signOutOfThisPhone(account: LeavingAccount | null, opts: {
             console.warn('[Account] The open community\'s DM memory could not be kept', e);
         }
     }
+    // Mail from other communities (X2b): this phone's mail id is read before its tables go, and the open community is asked
+    // to forget it while the rest of the leave runs (4 s at most). Never a reason Sign Out stops.
+    const forgetting = await forgetThisPhoneForMailBeforeLeaving();
     const { clearDB } = db;
     // The identity leaves this phone: what it knew of its groups' keys goes with it (utils/db.ts clearDB).
     await clearDB({ identityLeaves: true });
     await releaseAccountFromPhone(account, AsyncStorage, { keepDmMemoryOf });
+    await forgetting.done;
     await wipeIdentity();
     // No community and no account on the phone now: the update screen's block, if one was up, comes down
     // (utils/community-switch.ts).

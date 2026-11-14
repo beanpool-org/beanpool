@@ -16,6 +16,15 @@
  *      written once, confirmed, and receipted to its sender's home, and nothing is left owed
  *  12  owed receipts: one per line, a refused one tried again behind the rest, none kept past 30 days, 200 ids a round at most
  *  13  typed words are never lost on a failed send: in the box, or kept as the line with its state
+ *  14  each device for itself (X2b, scratch/fable-design/decisions/DECISION-outside-door.md): the gate table (kind x chat x
+ *      door x block) through a round with a second device listed: after every row, drops included, the second device is
+ *      still served the item; the round names this phone's id on every fetch and confirm, the same id each round
+ *  15  the two round fixes: my ticks are applied before held items are gated (a new device's first page), and a tick for a
+ *      line I wrote elsewhere opens that chat here from a request or a decline
+ *  16  a source rule: no fetch of /api/mail and no confirm without the device, in either app's round
+ *
+ * The mailbox is played as the server keeps it since X2b: each device listed by its fetch, an item gone once every listed
+ * device has confirmed it (apps/server/src/engine/relay-mail.ts settleMailFor).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
@@ -58,13 +67,25 @@ const server = vi.hoisted(() => ({
      * or my server answering no (403, 400) or busy (503).
      */
     stop: null as null | { at: 'confirm' | 'receipt'; nth: number; taken: boolean; how: string },
+    /** Ticks a page at a time (test 15): each fetch takes the next, `more` saying another follows; empty: `outbox` in one. */
+    outboxPages: [] as Array<{ ticks: any[]; more: boolean }>,
     seen: { confirm: 0, receipt: 0 },
     stopped: false,
     /** The round's deadline, which a `deadline` stop fires. */
     deadline: null as null | AbortController,
     /** Every receipt posted, taken or not: to whom, at which home, naming which ids. */
     receiptTries: [] as Array<{ to: string; ids: string[] }>,
+    /** The devices listed (each by its fetch), and which device has confirmed which item (X2b). */
+    devices: new Set<string>(),
+    got: new Map<string, Set<string>>(),
+    /** The device each fetch and confirm named, in order. */
+    named: [] as Array<{ at: 'fetch' | 'confirm'; device: string | null }>,
 }));
+
+/** What waits for `device` at the server: every held item it has not confirmed. */
+function servedTo(device: string): any[] {
+    return server.held.filter((h) => !server.got.get(h.envelope.itemId)?.has(device));
+}
 
 /** A stop the round meets (test 11): throws, never settles, or my server's answer. */
 function stopHere(how: string): Promise<Response> | Response {
@@ -84,7 +105,13 @@ vi.mock('../node-post', () => ({
         if (server.stallGet) {
             await new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
         }
-        return new Response(JSON.stringify({ items: server.held.slice(0, 50), more: false, outbox: server.outbox, outboxMore: false }), { status: 200 });
+        // As routes/relay.ts answers since X2b: no device, 400; else the device is listed and served what it has not confirmed.
+        const device = new URLSearchParams(path.split('?')[1] ?? '').get('device');
+        server.named.push({ at: 'fetch', device });
+        if (!device || !/^[0-9a-f]{32}$/.test(device)) return new Response(JSON.stringify({ error: 'No device.', code: 'bad_device' }), { status: 400 });
+        server.devices.add(device);
+        const outbox = server.outboxPages.length ? server.outboxPages.shift()! : { ticks: server.outbox, more: false };
+        return new Response(JSON.stringify({ items: servedTo(device).slice(0, 50), more: false, outbox: outbox.ticks, outboxMore: outbox.more }), { status: 200 });
     }),
     signedPost: vi.fn(async (_url: string, path: string, body: any, _identity: unknown, signal?: AbortSignal) => {
         server.calls.push(`POST ${path}`);
@@ -100,10 +127,23 @@ vi.mock('../node-post', () => ({
         if (stop && !stop.taken) return stopHere(stop.how);
         let answer: Response;
         if (path === '/api/mail/confirm') {
+            const device = typeof body.device === 'string' ? body.device : null;
+            server.named.push({ at: 'confirm', device });
+            if (!device) return new Response(JSON.stringify({ error: 'No device.', code: 'bad_device' }), { status: 400 });
             server.confirmed.push(body.ids);
-            const before = server.held.length;
-            server.held = server.held.filter((h) => !body.ids.includes(h.envelope.itemId));
-            answer = new Response(JSON.stringify({ confirmed: before - server.held.length }), { status: 200 });
+            let marked = 0;
+            for (const h of server.held) {
+                if (!body.ids.includes(h.envelope.itemId)) continue;
+                const got = server.got.get(h.envelope.itemId) ?? new Set<string>();
+                if (!got.has(device)) { got.add(device); marked++; }
+                server.got.set(h.envelope.itemId, got);
+            }
+            // Gone once a device has it and every listed device has (engine/relay-mail.ts settleMailFor).
+            server.held = server.held.filter((h) => {
+                const got = server.got.get(h.envelope.itemId);
+                return !got?.size || ![...server.devices].every((d) => got.has(d));
+            });
+            answer = new Response(JSON.stringify({ confirmed: marked }), { status: 200 });
         } else if (path === '/api/mail/send') {
             if (server.sendFails) throw new TypeError('Network request failed');
             if (server.stallSend) {
@@ -136,7 +176,7 @@ vi.mock('../member-statements', async () => {
 });
 
 import { outsideChatStore, gateIncoming, OUTSIDE_CHAT_TABLES_SQL, type OutsideChatState } from '../outside-chat-store';
-import { failUnsent, myHome, syncOutsideMail, sendFromBox, sendOutsideLine, setDoor, type OutsideMailContext } from '../outside-mail';
+import { DEVICE_META, failUnsent, mailDevice, myHome, syncOutsideMail, sendFromBox, sendOutsideLine, setDoor, type OutsideMailContext } from '../outside-mail';
 
 const seedKey = () => { const seed = randomBytes(32); return { seed: bytesToHex(seed), key: bytesToHex(ed25519.getPublicKey(seed)) }; };
 const BEN = seedKey(), ANA = seedKey(), SOL = seedKey(), CY = seedKey();
@@ -163,6 +203,7 @@ beforeEach(async () => {
     server.held = []; server.outbox = []; server.calls = []; server.sent = []; server.confirmed = []; server.sendFails = false; server.sendState = 'sent';
     server.batches = []; server.refuse = null; server.signals = []; server.stallGet = false; server.stallSend = false;
     server.stop = null; server.seen = { confirm: 0, receipt: 0 }; server.stopped = false; server.deadline = null; server.receiptTries = [];
+    server.devices = new Set(); server.got = new Map(); server.named = []; server.outboxPages = [];
     const s = sqlStore();
     sql = s.sql;
     blocked = new Set();
@@ -697,4 +738,147 @@ describe('13  typed words are never lost on a failed send (PR #3168 review note)
         expect(card).not.toMatch(/\bsetFirst\(\s*(''|""|\()/);
         expect(card).toMatch(/if \(kept\) router\.replace\(/);
     });
+});
+
+describe('14  each device for itself: the gate table through a round, a second device listed', () => {
+    /** Ben's browser, which fetched once (so it is listed) and has not run a round since. */
+    const BROWSER = 'f'.repeat(32);
+    // The kinds the mailbox holds for a member (apps/server/src/engine/relay-mail.ts HELD_KINDS); group items never reach it.
+    const kinds = ['dm-line', 'dm-blob', 'dm-delete'];
+    const chats: Array<{ state: OutsideChatState; theirLines: number } | null> = [
+        null, { state: 'request', theirLines: 0 }, { state: 'request', theirLines: 1 }, { state: 'open', theirLines: 0 }, { state: 'open', theirLines: 5 },
+        { state: 'declined', theirLines: 1 },
+    ];
+    const expected = (kind: string, chat: typeof chats[number], doorOpen: boolean, isBlocked: boolean) => {
+        if (isBlocked) return 'drop';
+        if (chat?.state === 'open') return kind === 'dm-line' ? 'line' : 'drop';
+        if (kind !== 'dm-line' || chat?.state === 'declined') return 'drop';
+        if (chat?.state === 'request') return chat.theirLines === 0 ? 'request' : 'drop';
+        return doorOpen ? 'request' : 'drop';
+    };
+    for (const kind of kinds) for (const chat of chats) for (const doorOpen of [false, true]) for (const isBlocked of [false, true]) {
+        const want = expected(kind, chat, doorOpen, isBlocked);
+        it(`${kind}, chat ${chat ? `${chat.state}/${chat.theirLines}` : 'none'}, door ${doorOpen ? 'open' : 'closed'}${isBlocked ? ', blocked' : ''}: ${want} on this phone, and the browser is still served it`, async () => {
+            server.devices.add(BROWSER);
+            const chatId = relayConversationId(BEN.key, SOL.key);
+            if (chat) {
+                await ctx.store.openChat(BEN.key, chatId, { key: SOL.key, home: ANA_HOME, name: 'Sol' });
+                for (let i = 0; i < chat.theirLines; i++) {
+                    await ctx.store.writeTheirs(BEN.key, { id: uuid(), chatId, author: SOL.key, text: `Earlier ${i}`, replyTo: null, at: Date.now() - 10_000 + i, sealed: '{}' }, { home: ANA_HOME, name: null }, 'line');
+                }
+                sql.prepare('UPDATE outside_chats SET state = ? WHERE id = ?').run(chat.state, chatId);
+            }
+            await setDoor(ctx.store, doorOpen);
+            if (isBlocked) blocked.add(SOL.key);
+            const item = await heldLine(SOL, 'The row\'s line', { kind });
+            const id = item.envelope.itemId;
+            const out = await syncOutsideMail(ctx);
+            const phone = await ctx.store.getMeta(DEVICE_META);
+            // This phone did its part: the item judged as the gate says, then confirmed, under this phone's own id.
+            const rowText = sql.prepare('SELECT 1 AS x FROM outside_lines WHERE id = ?').get(id);
+            if (want === 'line') expect([out.written, !!rowText, chatOf(SOL.key)?.state]).toEqual([1, true, chat?.state]);
+            if (want === 'request') expect([out.requests, !!rowText, chatOf(SOL.key)?.state]).toEqual([1, true, 'request']);
+            if (want === 'drop') expect([out.dropped, !!rowText]).toEqual([1, false]);
+            expect(phone).toMatch(/^[0-9a-f]{32}$/);
+            expect(phone).not.toBe(BROWSER);
+            expect(server.got.get(id)).toEqual(new Set([phone]));
+            // The browser is still served it, drops included: its own door, chats and blocks decide there.
+            expect(servedTo(BROWSER).map((h) => h.envelope.itemId)).toContain(id);
+            expect(servedTo(phone!).map((h) => h.envelope.itemId)).not.toContain(id);
+        });
+    }
+
+    it('every fetch and confirm of a round names this phone\'s id, the same one round after round; with this phone alone, its confirm is the last', async () => {
+        await ctx.store.openChat(BEN.key, relayConversationId(BEN.key, ANA.key), { key: ANA.key, home: ANA_HOME, name: 'Ana' });
+        await heldLine(ANA, 'One');
+        await syncOutsideMail(ctx);
+        await heldLine(ANA, 'Two');
+        await syncOutsideMail(ctx);
+        const id = await mailDevice(ctx.store);
+        expect(server.named.length).toBeGreaterThanOrEqual(4);
+        expect(server.named.every((n) => n.device === id)).toBe(true);
+        expect(server.named.filter((n) => n.at === 'confirm')).toHaveLength(2);
+        expect(server.held).toEqual([]);
+    });
+});
+
+describe('15  the two round fixes', () => {
+    const tickTo = (key: string, at = 1763020900000) => ({ itemId: uuid(), kind: 'dm-line', recipient: key, recipientHome: ANA_HOME, state: 'delivered', at });
+
+    it('my ticks before any held item is judged: a new device\'s first page writes the line of a chat I wrote to, door closed', async () => {
+        // A new device (this store holds no chat): Ben wrote to Ana elsewhere, and her answer waits. His door here is closed.
+        server.outbox = [tickTo(ANA.key)];
+        await heldLine(ANA, 'Answering you');
+        const out = await syncOutsideMail(ctx);
+        expect(out).toMatchObject({ written: 1, requests: 0, dropped: 0 });
+        expect(chatOf(ANA.key)).toMatchObject({ state: 'open' });
+        expect(lineRows().map((r) => r.text)).toEqual(['Answering you']);
+    });
+
+    it('every page of ticks first: a tick on the second page still opens the chat before the held line is judged', async () => {
+        server.outboxPages = [{ ticks: [tickTo(CY.key, 1763020900000)], more: true }, { ticks: [tickTo(ANA.key, 1763020900001)], more: false }];
+        await heldLine(ANA, 'Second page');
+        const out = await syncOutsideMail(ctx);
+        expect(out).toMatchObject({ written: 1, dropped: 0 });
+        expect(lineRows().map((r) => r.text)).toEqual(['Second page']);
+        expect(server.confirmed).toHaveLength(1);
+    });
+
+    it('a tick for a line I wrote elsewhere opens the chat here from a request: their next line is written', async () => {
+        await setDoor(ctx.store, true);
+        await heldLine(SOL, 'May I ask about the bikes?');
+        await syncOutsideMail(ctx);
+        expect(chatOf(SOL.key)).toMatchObject({ state: 'request' });
+        // Ben accepted and answered on his browser: this phone sees his line's tick, and Sol's next line, in one round.
+        server.outbox = [tickTo(SOL.key)];
+        await heldLine(SOL, 'Thanks for answering');
+        const out = await syncOutsideMail(ctx);
+        expect(chatOf(SOL.key)).toMatchObject({ state: 'open', restored: 0 });
+        expect(out).toMatchObject({ written: 1, dropped: 0 });
+        expect(lineRows().map((r) => r.text)).toEqual(['May I ask about the bikes?', 'Thanks for answering']);
+    });
+
+    it('and from a decline', async () => {
+        await setDoor(ctx.store, true);
+        await heldLine(SOL, 'Hello');
+        await syncOutsideMail(ctx);
+        await ctx.store.decide(BEN.key, relayConversationId(BEN.key, SOL.key), 'declined');
+        server.outbox = [tickTo(SOL.key)];
+        await heldLine(SOL, 'After your answer');
+        expect(await syncOutsideMail(ctx)).toMatchObject({ written: 1, dropped: 0 });
+        expect(chatOf(SOL.key)).toMatchObject({ state: 'open' });
+    });
+
+    it('an open chat stays as it is: not marked restored, its lines kept', async () => {
+        const chatId = relayConversationId(BEN.key, ANA.key);
+        await ctx.store.openChat(BEN.key, chatId, { key: ANA.key, home: ANA_HOME, name: 'Ana' });
+        await heldLine(ANA, 'Kept');
+        await syncOutsideMail(ctx);
+        const before = chatOf(ANA.key);
+        server.outbox = [tickTo(ANA.key)];
+        expect(await syncOutsideMail(ctx)).toMatchObject({ ticks: 0 });
+        expect(chatOf(ANA.key)).toEqual({ ...before, state: 'open', restored: 0 });
+        expect(lineRows().map((r) => r.text)).toEqual(['Kept']);
+    });
+});
+
+describe('16  a source rule: no fetch or confirm without the device', () => {
+    // Each app's round (the web's lib/outside-mail.ts, X4, is held to it once it is on main). Since X2b the server refuses
+    // both without one (400 bad_device), and a confirm with another device's id would take an item from that device.
+    const ROUNDS = ['apps/native/utils/outside-mail.ts', 'apps/pwa/src/lib/outside-mail.ts'];
+    const repo = join(__dirname, '../../../..');
+    for (const file of ROUNDS) {
+        it(file, () => {
+            let src: string;
+            try { src = readFileSync(join(repo, file), 'utf8'); } catch { return; }   // not on this branch (the web's, before X4)
+            src = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');   // the code, not what its comments say
+            const fetches = src.match(/['`]\/api\/mail(?:\?[^'`]*)?['`]/g) ?? [];
+            expect(fetches.length, 'the round fetches /api/mail').toBeGreaterThan(0);
+            for (const f of fetches) expect(f, 'every fetch of /api/mail names the device').toMatch(/[?&]device=\$\{/);
+            const confirms = [...src.matchAll(/'\/api\/mail\/confirm',\s*(\{[^}]*\})/g)].map((m) => m[1]);
+            expect(confirms.length, 'the round confirms').toBeGreaterThan(0);
+            for (const c of confirms) expect(c, 'every confirm names the device').toMatch(/\bdevice\b/);
+            expect(src.match(/\/api\/mail\/confirm/g)?.length, 'no confirm the rule does not see').toBe(confirms.length);
+        });
+    }
 });

@@ -40,6 +40,14 @@ vi.mock('../db', () => ({
     seedDmPinsHere: vi.fn(async () => {}), seedDmPinsBeforeLeaving: vi.fn(async () => {}),
 }));
 vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => {}) }));
+// This phone's mail from other communities (outside-chat-live.ts forgetThisPhoneForMail, tested in outside-chat-live.test.ts):
+// here, only when Sign Out reads the id and how long it waits for the forget.
+const mailForget = vi.hoisted(() => ({ settled: vi.fn() }));
+vi.mock('../outside-chat-live', () => ({
+    forgetThisPhoneForMail: vi.fn(async () => ({
+        done: new Promise<void>((resolve) => setTimeout(() => { mailForget.settled(); resolve(); }, 20)),
+    })),
+}));
 // For the real community-cache below.
 vi.mock('expo-sqlite', () => ({ defaultDatabaseDirectory: '/data/user/0/org.beanpool.app/files/SQLite' }));
 vi.mock('expo-file-system/legacy', () => ({ deleteAsync: vi.fn(async () => {}), readDirectoryAsync: vi.fn(async () => []) }));
@@ -315,6 +323,27 @@ describe('Sign Out keeps the account\'s DM memory of each community file before 
         await releaseAccountFromPhone(kim);   // Replace (restore-account.ts) takes this door
         expect(seedDmPinsHere).not.toHaveBeenCalled();
         expect(seedDmPinsBeforeLeaving).not.toHaveBeenCalled();
+    });
+});
+
+describe('Sign Out forgets this phone\'s mail from other communities (X2b, DECISION-outside-door.md)', () => {
+    it('reads the mail id before the open community\'s tables go, and wipes the key only once the forget has settled', async () => {
+        const { forgetThisPhoneForMail } = await import('../outside-chat-live');
+        await kimsPhone();
+        nodes();
+        await signOutOfThisPhone(kim);
+        expect(forgetThisPhoneForMail).toHaveBeenCalledTimes(1);
+        expect(callOrder(forgetThisPhoneForMail)).toBeLessThan(callOrder(clearDB));
+        expect(callOrder(mailForget.settled)).toBeLessThan(identityRemovedAt());
+    });
+
+    it('a forget that can\'t even start never stops Sign Out', async () => {
+        const { forgetThisPhoneForMail } = await import('../outside-chat-live');
+        vi.mocked(forgetThisPhoneForMail).mockRejectedValueOnce(new Error('the store was already gone'));
+        await kimsPhone();
+        nodes();
+        await expect(signOutOfThisPhone(kim)).resolves.toBeUndefined();
+        expect(await loadIdentity()).toBeNull();
     });
 });
 

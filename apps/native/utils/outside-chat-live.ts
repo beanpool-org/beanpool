@@ -9,7 +9,7 @@ import { t } from '@beanpool/core';
 import { loadIdentity } from './identity';
 import { isUserBlocked } from './blocklist';
 import { fetchNodeProfile, getCachedNodeProfile, outsideMessagesOn } from './node-profile';
-import { failUnsent, syncOutsideMail, OutsideMailError, type OutsideMailContext, type SyncOutcome } from './outside-mail';
+import { failUnsent, forgetMailDevice, mailDeviceIfAny, syncOutsideMail, OutsideMailError, type OutsideMailContext, type SyncOutcome } from './outside-mail';
 
 /** Emitted after a round that changed anything here: a line in, a state moved, a chat made. */
 export const OUTSIDE_CHATS_UPDATED = 'outside_chats_updated';
@@ -126,4 +126,33 @@ export function outsideErrorWords(e: unknown, kept = true): string {
     return kept
         ? t("That didn't go through. It will be tried again when you're back online.")
         : t("That didn't go through. Your message is still there to send again.");
+}
+
+/** How long Sign Out lets its community take this phone's forget: as long as it lets each push unregister take (4 s). */
+export const FORGET_DEVICE_MS = 4_000;
+
+/**
+ * At Sign Out (account-leaves-phone.ts signOutOfThisPhone), before the account's tables leave this phone: this phone's mail
+ * id is read now, while the store still holds it, and its community is asked to forget it (outside-mail.ts
+ * forgetMailDevice, X2b), so it holds no more mail for this phone and what the account's other devices have goes. The
+ * request runs while the rest of the leave does: `done` settles when it has, or after FORGET_DEVICE_MS. Never throws, never
+ * rejects: a community that doesn't answer lets this phone lapse after 7 days unseen.
+ */
+export async function forgetThisPhoneForMail(budgetMs = FORGET_DEVICE_MS): Promise<{ done: Promise<void> }> {
+    const nothing = { done: Promise.resolve() };
+    try {
+        const ctx = await outsideContext();
+        // Read here, before the tables go: the request then needs only the id and the key, both held in memory.
+        const device = ctx ? await mailDeviceIfAny(ctx.store) : null;
+        if (!ctx || !device) return nothing;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), budgetMs);
+        const done = forgetMailDevice({ ...ctx, signal: controller.signal }, device)
+            .catch((e) => { console.warn('[OutsideMail] This phone was not forgotten at Sign Out; it lapses after 7 days:', (e as Error)?.message ?? e); })
+            .finally(() => clearTimeout(timer));
+        return { done };
+    } catch (e) {
+        console.warn('[OutsideMail] This phone was not forgotten at Sign Out; it lapses after 7 days:', (e as Error)?.message ?? e);
+        return nothing;
+    }
 }

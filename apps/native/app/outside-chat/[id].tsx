@@ -12,13 +12,16 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { OUTSIDE_LINE_TEXT_MAX, t } from '@beanpool/core';
+import { OUTSIDE_LINE_TEXT_MAX, OUTSIDE_WRITES_STAY_THERE, t } from '@beanpool/core';
 import { Alert } from '../../utils/keyboard-alert';
 import { useTheme, useStyles } from '../ThemeContext';
 import { blockUser } from '../../utils/blocklist';
 import { sendFromBox } from '../../utils/outside-mail';
 import { OUTSIDE_CHATS_UPDATED, OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, syncOutsideMailNow } from '../../utils/outside-chat-live';
 import type { OutsideChat, OutsideLine, OutsideLineState } from '../../utils/outside-chat-store';
+
+/** Core's sentence, the web's too (@beanpool/core outside-devices.ts). */
+const LINES = { writesStayThere: OUTSIDE_WRITES_STAY_THERE };
 
 /** How often an open chat asks for what waits, while it is on screen. */
 const POLL_MS = 15_000;
@@ -179,6 +182,8 @@ export default function OutsideChatScreen() {
                         ListHeaderComponent={(
                             <View style={styles.banner} testID="outside-chat-kept-here">
                                 <Text style={styles.bannerStrong}>{t('Kept on this phone only. Your community keeps no copy.')}</Text>
+                                {/* Each device for itself (X2b): their lines reach every device; mine stay where I wrote them. */}
+                                <Text style={styles.bannerText} testID="outside-chat-writes-stay">{t(LINES.writesStayThere)}</Text>
                                 {chat.restored && lines.length === 0 && (
                                     <Text style={styles.bannerText} testID="outside-chat-restored">
                                         {t("This phone was set up from your 12 words, so earlier messages in this chat aren't here. Messages with people in other communities are kept only on the phone that got them.")}

@@ -8,11 +8,19 @@
  * posted: `POST /api/mail/send`. The server forwards it to the peer's home and answers its state; a line the server never
  * answered is posted again at the next sync, the same item (the server keeps one row per id), while it is still fresh.
  *
- * **Fetch, write, then confirm** ({@link syncOutsideMail}). `GET /api/mail` gives what waits, oldest first. Each item is
- * checked here again (the envelope is the sender's and is to me; a line opens as the envelope's), passed through the request
- * gate (outside-chat-store.ts gateIncoming), and written. Only then is it confirmed (`POST /api/mail/confirm`), which deletes
- * it at the server: an item whose write failed is never confirmed, so it is fetched again, never lost. An item the gate
- * drops, or that doesn't check out, is confirmed too (it can never be shown, and an unconfirmed one would hold the page).
+ * **Fetch, write, then confirm** ({@link syncOutsideMail}). `GET /api/mail?device=` gives what waits that this phone has not
+ * confirmed, oldest first. Each item is checked here again (the envelope is the sender's and is to me; a line opens as the
+ * envelope's), passed through the request gate (outside-chat-store.ts gateIncoming), and written. Only then is it confirmed
+ * (`POST /api/mail/confirm { ids, device }`): an item whose write failed is never confirmed, so it is fetched again, never
+ * lost. An item the gate drops, or that doesn't check out, is confirmed too (it can never be shown here, and an unconfirmed
+ * one would hold the page).
+ *
+ * **Each device for itself** (X2b: scratch/fable-design/decisions/DECISION-outside-door.md). This phone names itself to its
+ * server by a random id kept in its outside-chat store ({@link mailDevice}; @beanpool/core newOutsideDeviceId), gone at Sign
+ * Out with the store, after the server is told to forget it ({@link forgetMailDevice}). The server deletes an item once
+ * every device of the account has confirmed it, so a confirm here, of a line written or of one dropped (this phone's door
+ * closed, say), never takes it from another phone or browser whose door is open. The door, Accept and Decline are this
+ * phone's own; a block is the account's.
  *
  * **Receipts.** Each line written is receipted to its sender's home (kind `receipt`): their phone shows Delivered. The
  * receipt is owed on the phone (outside_receipts) before its line is confirmed, and owed until my server takes it: a round
@@ -22,15 +30,17 @@
  * delivered" for a line that was. A receipt posted twice (taken, its answer lost) does no harm: a line delivered stays so.
  *
  * **Ticks.** The same fetch carries what became of my own items (the outbox's states, paged by time and id from the cursor
- * kept here). A tick for a line this phone doesn't have (a phone restored from 12 words) brings its chat back empty and
- * marked restored, so the chat opens with the reason it is empty.
+ * kept here). They are applied before any held item is gated, every page of them: a chat I wrote to opens here first, so its
+ * lines are never judged as a stranger's. A tick for a line this phone doesn't have (a phone restored from 12 words, or a line
+ * I wrote on another device) opens that chat here: brought back empty and marked restored when this phone has none, and
+ * opened from a request or a decline when it has one.
  *
  * **A deadline.** Every request a round or a send makes carries the context's `signal` (React Native's fetch never gives up
  * by itself), so the caller's deadline (outside-chat-live.ts) ends a stalled request, and the round with it.
  */
 import {
-    ADDRESS_CARD_NAME_MAX, addressCardName, newDmMessageId, openOutsideLine, outsideReceiptPayload, readRelayEnvelope,
-    relayConversationId, relayEnvelopeVerifies, relayPayloadHash, sealOutsideLine, nodeHomeOf, audienceOf, t,
+    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, newDmMessageId, newOutsideDeviceId, openOutsideLine, outsideReceiptPayload,
+    readRelayEnvelope, relayConversationId, relayEnvelopeVerifies, relayPayloadHash, sealOutsideLine, nodeHomeOf, audienceOf, t,
     type AddressCard, type RelayEnvelope, type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
 import { signAddressCardStatement, signRelayEnvelopeStatement } from './member-statements';
@@ -42,6 +52,8 @@ import type { BeanPoolIdentity } from './identity';
 export const DOOR_META = 'door';
 /** The outbox cursor: the last tick this phone has, `<at>:<itemId>`. */
 export const CURSOR_META = 'outbox-cursor';
+/** This phone's mail id (X2b): made at its first round, kept with the chats, gone with them at Sign Out. */
+export const DEVICE_META = 'device';
 const HOME_META = 'home';
 /** How long the home read from the community is used before it is read again. */
 const HOME_FRESH_MS = 60 * 60_000;
@@ -128,6 +140,30 @@ export async function myAddressCard(ctx: OutsideMailContext): Promise<AddressCar
     if (!home) return null;
     const name = addressCardName(String(ctx.identity.callsign ?? '').replace(/\s+/g, ' ').trim().slice(0, ADDRESS_CARD_NAME_MAX)) ?? '…';
     return signAddressCardStatement({ key: ctx.identity.publicKey, home, name }, ctx.identity.privateKey);
+}
+
+/** This phone's mail id, made and kept the first time it is asked for. Every fetch and confirm names it. */
+export async function mailDevice(store: OutsideChatStore): Promise<string> {
+    const kept = await mailDeviceIfAny(store);
+    if (kept) return kept;
+    const made = newOutsideDeviceId();
+    await store.setMeta(DEVICE_META, made);
+    return made;
+}
+
+/** This phone's mail id when it has one (it has run a round), else null. Never makes one. */
+export async function mailDeviceIfAny(store: OutsideChatStore): Promise<string | null> {
+    const kept = await store.getMeta(DEVICE_META);
+    return kept && OUTSIDE_DEVICE_ID.test(kept) ? kept : null;
+}
+
+/**
+ * My server forgets `device`, this phone's mail id (`POST /api/mail/device/forget`): it holds no more mail for it, and what
+ * every other device of the account has goes there. For Sign Out, with the id read before the store goes
+ * (outside-chat-live.ts forgetThisPhoneForMail). Throws as any request here does.
+ */
+export async function forgetMailDevice(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'identity' | 'signal'>, device: string): Promise<void> {
+    await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/device/forget', { device }, ctx.identity as BeanPoolIdentity, ctx.signal));
 }
 
 export async function doorOpen(store: OutsideChatStore): Promise<boolean> {
@@ -266,14 +302,16 @@ export interface SyncOutcome {
 }
 
 /**
- * One round: unsent lines sent again, then what waits fetched, checked, gated, written, confirmed and receipted, then my
- * items' ticks applied. Throws only when the server can't be read at all; a write that fails leaves its item unconfirmed.
+ * One round: unsent lines sent again, then my items' ticks applied (every page of them first), then what waits for this phone
+ * fetched, checked, gated, written, confirmed and receipted. Throws only when the server can't be read at all; a write that
+ * fails leaves its item unconfirmed.
  */
 export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now()): Promise<SyncOutcome> {
     const out: SyncOutcome = { written: 0, requests: 0, dropped: 0, confirmed: 0, ticks: 0 };
     const me = ctx.identity.publicKey;
     await resendUnsent(ctx, now).catch((e) => console.warn('[OutsideMail] Unsent lines wait for the next round:', e?.message ?? e));
     const open = await doorOpen(ctx.store);
+    const device = await mailDevice(ctx.store);
     /** Owed receipts this round tried and my server didn't take: tried again at the next round, not this one. */
     const tried = new Set<string>();
     /** A line of theirs written here: its receipt owed before the line is confirmed. */
@@ -285,7 +323,14 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
         if (ctx.signal?.aborted) throw Object.assign(new Error('This round ran out of time.'), { name: 'AbortError' });
         const cursor = (await ctx.store.getMeta(CURSOR_META)) ?? '0:';
         const [since, sinceId] = [cursor.slice(0, cursor.indexOf(':')), cursor.slice(cursor.indexOf(':') + 1)];
-        const answer = await answerOf(await signedGet(ctx.nodeUrl, `/api/mail?since=${encodeURIComponent(since)}&sinceId=${encodeURIComponent(sinceId)}`, ctx.identity as BeanPoolIdentity, ctx.signal));
+        const answer = await answerOf(await signedGet(ctx.nodeUrl,
+            `/api/mail?device=${encodeURIComponent(device)}&since=${encodeURIComponent(since)}&sinceId=${encodeURIComponent(sinceId)}`,
+            ctx.identity as BeanPoolIdentity, ctx.signal));
+        // My own items' ticks before any held item is judged: a chat I wrote to (from this phone before a restore, or from
+        // another device) opens here first. While more ticks wait, this page's items are left: unconfirmed, they come again
+        // with the next page, and are judged once every tick is in.
+        out.ticks += await applyTicks(ctx, Array.isArray(answer?.outbox) ? answer.outbox : [], now);
+        if (answer?.outboxMore) continue;
         const held: any[] = Array.isArray(answer?.items) ? answer.items : [];
         const done: string[] = [];
         let writeFailed = false;
@@ -335,13 +380,12 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
             }
         }
         if (done.length) {
-            const confirmed = await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/confirm', { ids: done }, ctx.identity as BeanPoolIdentity, ctx.signal));
+            const confirmed = await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/confirm', { ids: done, device }, ctx.identity as BeanPoolIdentity, ctx.signal));
             out.confirmed += Number(confirmed?.confirmed) || 0;
         }
         // This page's receipts, and any an earlier round didn't get to post.
         await flushReceipts(ctx, now, tried);
-        out.ticks += await applyTicks(ctx, Array.isArray(answer?.outbox) ? answer.outbox : [], now);
-        if (writeFailed || (!answer?.more && !answer?.outboxMore)) break;
+        if (writeFailed || !answer?.more) break;
     }
     return out;
 }
@@ -381,7 +425,10 @@ async function flushReceipts(ctx: OutsideMailContext, now: number, tried: Set<st
     }
 }
 
-/** My items' ticks: each line's state, a chat this phone lacks brought back empty, the cursor moved past them. */
+/**
+ * My items' ticks: each line's state; for a line this phone lacks, its chat opened here (brought back empty, or from a request
+ * or a decline: outside-chat-store.ts noteRestored); the cursor moved past them. Counts what changed here.
+ */
 async function applyTicks(ctx: OutsideMailContext, ticks: any[], now: number): Promise<number> {
     const me = ctx.identity.publicKey;
     let applied = 0;
@@ -394,7 +441,7 @@ async function applyTicks(ctx: OutsideMailContext, ticks: any[], now: number): P
             await ctx.store.setMineState(t.itemId, t.state);
             applied++;
         } else if (typeof t.recipient === 'string' && /^[0-9a-f]{64}$/.test(t.recipient) && t.recipient !== me && typeof t.recipientHome === 'string') {
-            await ctx.store.noteRestored(me, relayConversationId(me, t.recipient), { key: t.recipient, home: t.recipientHome }, now);
+            if (await ctx.store.noteRestored(me, relayConversationId(me, t.recipient), { key: t.recipient, home: t.recipientHome }, now)) applied++;
         }
     }
     if (last) await ctx.store.setMeta(CURSOR_META, `${last.at}:${last.itemId}`);

@@ -2,8 +2,9 @@
  * Chats with people in other communities, kept on this phone only (messages across communities X3: scratch/fable-design/
  * DESIGN-cross-chat-voice-fable.md §3.2, §3.4, §3.5; DESIGN-cross-community-chat-fable.md §2.4 "History and recovery").
  *
- * Nobody else keeps these lines: the other community's server held each one sealed until this phone had it, then deleted it
- * (the mailbox, X2). So the tables are not a copy of the node's. They sit in the community's file beside the group key tables
+ * Nobody else keeps these lines: the member's community held each one sealed until every device of theirs had it, then
+ * deleted it (the mailbox, X2; each device for itself, X2b). Their lines reach each phone and browser signed in when they
+ * came; what I write shows only where I wrote it. So the tables are not a copy of the node's. They sit in the community's file beside the group key tables
  * (utils/db.ts), are never dropped by a Force Resync (CACHE_TABLES does not name them), and go when the account leaves the
  * phone (clearDB identityLeaves). A phone restored from 12 words starts with none of them: a chat it learns of from the
  * outbox (this account wrote to them within 30 days) comes back empty and `restored`, and its banner says why.
@@ -162,15 +163,20 @@ export function outsideChatStore(getDb: () => Promise<SqliteLike>) {
             );
         },
         /**
-         * A chat this account wrote to before this phone had it (the outbox says so, and no line of it is here): open and
-         * `restored`, so its banner says why it is empty. Nothing changes for a chat this phone already has.
+         * A chat this account wrote to that this phone lacks the line of (the outbox says so): a phone restored from 12 words,
+         * or a line written on another phone or browser (X2b). None here: made open and `restored`, so its banner says why it
+         * is empty. A request or a decline here: opened, since I wrote to them (DECISION-outside-door.md). An open chat stays
+         * as it is. True when this changed anything.
          */
-        async noteRestored(me: string, id: string, peer: { key: string; home: string }, now = Date.now()): Promise<void> {
-            await (await db()).runAsync(
+        async noteRestored(me: string, id: string, peer: { key: string; home: string }, now = Date.now()): Promise<boolean> {
+            const r = await (await db()).runAsync(
                 `INSERT INTO outside_chats (id, me, peer_key, peer_home, peer_name, state, restored, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, NULL, 'open', 1, ?, ?) ON CONFLICT(id) DO NOTHING`,
+                 VALUES (?, ?, ?, ?, NULL, 'open', 1, ?, ?)
+                 ON CONFLICT(id) DO UPDATE SET state = 'open', updated_at = excluded.updated_at
+                     WHERE outside_chats.me = excluded.me AND outside_chats.state IN ('request', 'declined')`,
                 [id, me, peer.key, peer.home, now, now],
             );
+            return Number((r as { changes?: number } | null)?.changes ?? 0) > 0;
         },
         /** A line from the peer, past the gate: written, and the chat made (a request) or moved on. Idempotent by its id. */
         async writeTheirs(me: string, line: { id: string; chatId: string; author: string; text: string; replyTo: string | null; at: number; sealed: string },

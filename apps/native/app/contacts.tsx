@@ -21,8 +21,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, ErrorBoundary, useLocalSearchParams, useNavigation } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
-    CONTACTS_LIMITS, cleanContactName, contactInviteAsk, contactInviteAskWords, contactInviteCancelWords, contactInviteCodes, contactInviteNoWords, contactInviteOut,
-    contactInviteWords, contactInvitedLine, emptyContactsList, forgetContactInvite, formatCount, linkContactToInvite, newContactId, putContact,
+    CONTACTS_LIMITS, addPeopleWords, cleanContactName, contactInviteAsk, contactInviteAskWords, contactInviteCancelWords, contactInviteCodes, contactInviteNoWords, contactInviteOut,
+    contactInviteWords, contactInvitedLine, emptyContactsList, forgetContactInvite, formatCount, formerContactsWords, linkContactToInvite, newContactId, putContact,
     removeContact, removeEveryContact, t, tn, type Contact, type ContactInviteUsed, type ContactsList, type MyInviteSeen,
 } from '@beanpool/core';
 import { Alert } from '../utils/keyboard-alert';
@@ -37,7 +37,7 @@ import { setAsideDamaged } from '../utils/contacts-store';
 import { sameCommunity } from '../utils/push-pins';
 import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser } from '../utils/blocklist';
 import { createConversationApi, getChattedWithMembers, getFriendsLocal } from '../utils/db';
-import { CONTACTS_FORMER_CHANGED_EVENT, addPeopleWords, deleteFormerCopies, formerContactsWords, formerNoticeHere, peopleToAdd, withPeopleAdded, type BeanPoolPerson } from '../utils/contacts-former';
+import { CONTACTS_FORMER_CHANGED_EVENT, deleteFormerCopies, formerNoticeHere, peopleToAdd, withPeopleAdded, type BeanPoolPerson } from '../utils/contacts-former';
 import { switchCommunity } from '../utils/use-communities';
 import { signedRequestWords } from '../components/signed-request-lines';
 import { cancelContactInvite, readMyInvites } from '../utils/contact-invites';
@@ -501,15 +501,17 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onR
 }
 
 /**
- * After a re-key (C6, design §6.2): while the community in use keeps the list the member's old key locked, and this phone
- * hasn't merged it in, it says so, with the way in (the old-words screen) and Delete it. Asked as the screen opens, again
- * when the list changes, and when the old-words screen has tried the old list (CONTACTS_FORMER_CHANGED_EVENT): a merge hides
- * it, even one that added nobody new.
+ * After a re-key (C6, design §6.2): while the community in use keeps the list the member's old key locked, it says so. Before
+ * this phone merged it in: the way in (the old-words screen) and Delete it. After: that it is in the list now, and "Delete
+ * the old copy" only (#3170 round 2: the community keeps it until it is deleted, and this is the one way to). Asked as the
+ * screen opens, again when the list changes, and when the old-words screen has tried the old list
+ * (CONTACTS_FORMER_CHANGED_EVENT): a merge turns it to the merged form, even one that added nobody new. It goes once the
+ * community in use confirmed the delete; whenever a community didn't, the member is told.
  */
 function FormerNotice({ me, seen }: { me: string; seen: number }) {
     const { identity } = useIdentity();
     const styles = useStyles(makeStyles);
-    const [shown, setShown] = useState(false);
+    const [shown, setShown] = useState<null | 'open' | 'merged'>(null);
     const [busy, setBusy] = useState(false);
     // Also asked when the old-words screen has tried the old list: a merge that added nobody new changes no list, and the
     // notice still goes. Only the latest answer is kept.
@@ -518,7 +520,7 @@ function FormerNotice({ me, seen }: { me: string; seen: number }) {
         let latest = 0;
         const ask = () => {
             const mine = ++latest;
-            void formerNoticeHere(identity).then((f) => { if (mine === latest) setShown(!!f); });
+            void formerNoticeHere(identity).then((f) => { if (mine === latest) setShown(f ? (f.merged ? 'merged' : 'open') : null); });
         };
         ask();
         const sub = DeviceEventEmitter.addListener(CONTACTS_FORMER_CHANGED_EVENT, ask);
@@ -529,24 +531,28 @@ function FormerNotice({ me, seen }: { me: string; seen: number }) {
         setBusy(true);
         try {
             const r = await deleteFormerCopies(identity);
-            if (r.complete) setShown(false);
-            else Alert.alert(formerContactsWords.removeFailed());
+            if (r.here) setShown(null);
+            if (!r.complete) Alert.alert(formerContactsWords.removeFailed());
         } finally {
             setBusy(false);
         }
     };
+    const merged = shown === 'merged';
+    const removeLabel = merged ? formerContactsWords.removeOld() : formerContactsWords.remove();
     return (
         <View style={styles.card} testID="contacts-former">
-            <Text style={styles.text}>{formerContactsWords.notice()}</Text>
+            <Text style={styles.text}>{merged ? formerContactsWords.merged() : formerContactsWords.notice()}</Text>
             <View style={styles.btnRow}>
-                <Pressable accessibilityRole="button" style={styles.go} disabled={busy} onPress={() => router.push('/old-words-unlock?for=contacts')}>
-                    <Text style={styles.goText}>{formerContactsWords.open()}</Text>
-                </Pressable>
+                {!merged && (
+                    <Pressable accessibilityRole="button" style={styles.go} disabled={busy} onPress={() => router.push('/old-words-unlock?for=contacts')}>
+                        <Text style={styles.goText}>{formerContactsWords.open()}</Text>
+                    </Pressable>
+                )}
                 <Pressable accessibilityRole="button" style={styles.btn} disabled={busy} onPress={() => Alert.alert(formerContactsWords.removeTitle(), formerContactsWords.removeAsk(), [
                     { text: t('Cancel'), style: 'cancel' },
                     { text: formerContactsWords.remove(), style: 'destructive', onPress: () => { void remove(); } },
                 ])}>
-                    <Text style={styles.btnText}>{formerContactsWords.remove()}</Text>
+                    <Text style={styles.btnText}>{removeLabel}</Text>
                 </Pressable>
             </View>
         </View>

@@ -351,6 +351,20 @@ export async function hasFormerContacts(me: ContactsKeys): Promise<boolean> {
     }
 }
 
+/**
+ * "Delete the old copy" (C6, design §6.2; #3170 round 2): this community's copy of the list `me`'s old key locked goes, by
+ * the same signed DELETE as the phone's (no body: nothing about the list is sent). True only when the community answered
+ * 200; any other answer, or none, keeps it.
+ */
+export async function deleteFormerContacts(me: ContactsKeys): Promise<boolean> {
+    try {
+        const res = await signedFetchWithKey('DELETE', '/api/contacts/former', undefined, me.privateKey, me.publicKey);
+        return res.status === 200;
+    } catch {
+        return false;
+    }
+}
+
 /** Mark the row for `address` (what the community keeps), keeping its copy; null when there is no row. */
 async function markKept(key: string, s: number, address: string, mark: Pick<Held, 'kept' | 'keptAt' | 'refused'>): Promise<Held | null> {
     return withHeld(key, s, (held) => {

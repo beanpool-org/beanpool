@@ -16,7 +16,7 @@ import {
 import { loadContacts, type ContactsAccount } from '../contacts-store';
 import { CONTACTS_COPY_PATH, editContacts, resetContactsCheckForTests, type ContactsNet, type ContactsSyncDeps } from '../contacts-sync';
 import {
-    CONTACTS_FORMER_PATH, deleteFormerCopies, formerAlreadyMerged, formerCopyAt, openFormerWithWords, peopleToAdd, withPeopleAdded,
+    CONTACTS_FORMER_PATH, deleteFormerCopies, formerAlreadyMerged, formerCopyAt, formerNoticeHere, openFormerWithWords, peopleToAdd, withPeopleAdded,
 } from '../contacts-former';
 import { oldKeyFromWords } from '../old-key-from-words';
 
@@ -50,7 +50,13 @@ const copyOf = (who: ContactsAccount, list: ContactsList, seq = 3) => contactsCo
 class FakeCommunity {
     former = new Map<string, { copy: ContactsCopyWire; formerKey: string; keptUntil: string }>();
     off = false;
-    answer(owner: string, method: string, path: string): { status: number; body: unknown } {
+    /** Never answers (offline, or out of reach). */
+    silent = false;
+    /** Answers, but with a server error: not an answer about the old copy. */
+    broken = false;
+    answer(owner: string, method: string, path: string): { status: number; body: unknown } | null {
+        if (this.silent) return null;
+        if (this.broken) return { status: 503, body: { error: 'Service unavailable' } };
         if (path === '/api/me/unread') return { status: 200, body: { unread: 0, requests: 0, alerts: 0, contacts: null, asOf: '' } };
         // The current list: none kept, and no save reaches it in these checks (a change waits 2 to 15 minutes to leave).
         if (path === CONTACTS_COPY_PATH) return { status: 404, body: { code: 'no_copy' } };
@@ -195,10 +201,68 @@ describe('the old 12 words open the old list and merge it into the new one', () 
         const [riverside, riverbend] = [new FakeCommunity(), new FakeCommunity()];
         riverside.former.set(me.publicKey, { copy: copyOf(oldMe, listOf(contact('Dee Walker'))), formerKey: oldMe.publicKey, keptUntil: '2027-11-15T00:00:00.000Z' });
         const p = phone({ [RIVERSIDE]: riverside, [RIVERBEND]: riverbend }, RIVERSIDE);
-        expect(await deleteFormerCopies(me, p.deps)).toEqual({ deleted: 1, complete: true });
+        expect(await deleteFormerCopies(me, p.deps)).toEqual({ deleted: 1, here: true, complete: true });
         expect(riverside.former.size).toBe(0);
         expect(p.requests.filter((q) => q.method === 'DELETE').map((q) => q.community)).toEqual([RIVERSIDE]);
         expect(p.requests.every((q) => q.body === '')).toBe(true);
+    });
+
+    it('"Delete it" is done only when the community in use confirmed: silent or a server error there is not done, whatever another says', async () => {
+        const oldMe = wordsAccount();
+        const me = person();
+        const [riverside, riverbend] = [new FakeCommunity(), new FakeCommunity()];
+        riverside.former.set(me.publicKey, { copy: copyOf(oldMe, listOf(contact('Dee Walker'))), formerKey: oldMe.publicKey, keptUntil: '2027-11-15T00:00:00.000Z' });
+        const p = phone({ [RIVERSIDE]: riverside, [RIVERBEND]: riverbend }, RIVERSIDE);
+        // The review's probe: the community in use doesn't answer, another answers 404 no_former.
+        riverside.silent = true;
+        expect(await deleteFormerCopies(me, p.deps)).toEqual({ deleted: 0, here: false, complete: false });
+        // A 503 there is no answer about the copy either (it was read as "keeps none").
+        riverside.silent = false;
+        riverside.broken = true;
+        expect(await deleteFormerCopies(me, p.deps)).toEqual({ deleted: 0, here: false, complete: false });
+        expect(riverside.former.size).toBe(1);
+        // Mutation: `complete = answered` (any community) → { deleted: 0, complete: true } and the notice hides.
+    });
+
+    it('"Delete it" where the community in use confirmed but another community stayed silent: gone here, not complete', async () => {
+        const oldMe = wordsAccount();
+        const me = person();
+        const [riverside, riverbend] = [new FakeCommunity(), new FakeCommunity()];
+        riverside.former.set(me.publicKey, { copy: copyOf(oldMe, listOf(contact('Dee Walker'))), formerKey: oldMe.publicKey, keptUntil: '2027-11-15T00:00:00.000Z' });
+        riverbend.silent = true;
+        const p = phone({ [RIVERSIDE]: riverside, [RIVERBEND]: riverbend }, RIVERSIDE);
+        expect(await deleteFormerCopies(me, p.deps)).toEqual({ deleted: 1, here: true, complete: false });
+        // Nothing kept here any more: the community in use answering 404 is confirmed too.
+        riverbend.silent = false;
+        expect(await deleteFormerCopies(me, p.deps)).toEqual({ deleted: 0, here: true, complete: true });
+    });
+});
+
+describe('the Contacts notice (formerNoticeHere)', () => {
+    it('before a merge: the old copy, not merged; after the old words merged it: still offered, merged, so Delete stays reachable', async () => {
+        const oldMe = wordsAccount();
+        const me = person();
+        const riverside = new FakeCommunity();
+        riverside.former.set(me.publicKey, { copy: copyOf(oldMe, listOf(contact('Dee Walker'))), formerKey: oldMe.publicKey, keptUntil: '2027-11-15T00:00:00.000Z' });
+        const p = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
+        expect((await formerNoticeHere(me, p.deps))?.merged).toBe(false);
+        expect(await openFormerWithWords(oldMe.words, me, p.deps)).toMatchObject({ kind: 'merged' });
+        const after = await formerNoticeHere(me, p.deps);
+        expect(after?.community).toBe(RIVERSIDE);
+        expect(after?.merged).toBe(true);
+        // "Delete the old copy" from it: the copy goes, and the notice with it.
+        expect(await deleteFormerCopies(me, p.deps)).toEqual({ deleted: 1, here: true, complete: true });
+        expect(await formerNoticeHere(me, p.deps)).toBeNull();
+        // Mutation: return null once merged (the reviewed head) → `after` is null and Delete can't be reached.
+    });
+
+    it('no notice when the community in use keeps none, or does not answer', async () => {
+        const me = person();
+        const riverside = new FakeCommunity();
+        const p = phone({ [RIVERSIDE]: riverside }, RIVERSIDE);
+        expect(await formerNoticeHere(me, p.deps)).toBeNull();
+        riverside.silent = true;
+        expect(await formerNoticeHere(me, p.deps)).toBeNull();
     });
 });
 

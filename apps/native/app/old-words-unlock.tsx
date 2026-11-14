@@ -20,10 +20,10 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { RecoveryWordsEntry } from '../components/RecoveryWordsEntry';
 import { LOCKED_HISTORY_WORDS } from '../utils/group-history-unlock';
 import { keyLineWords, oldWordsEndWords, oldWordsProgressWords } from '../components/key-lines';
-import { CONTACTS_FORMER_CHANGED_EVENT, formerContactsEndWords, formerContactsWords, openFormerWithWords } from '../utils/contacts-former';
+import { CONTACTS_FORMER_CHANGED_EVENT, openFormerWithWords } from '../utils/contacts-former';
 import { phoneSyncDeps } from '../utils/contacts-sync';
 import { useIdentity } from './IdentityContext';
-import { t } from '@beanpool/core';
+import { formerContactsEndWords, formerContactsWords, t } from '@beanpool/core';
 
 export { ErrorBoundary };
 

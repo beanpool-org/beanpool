@@ -131,7 +131,7 @@
  * (`mergeReplicatedKnocks`).
  */
 import crypto from 'node:crypto';
-import { db, writeTombstone, rethrowUnlessRowRefused } from '../db/db.js';
+import { db, deletePlainRows, writeTombstone, rethrowUnlessRowRefused } from '../db/db.js';
 import { alreadyJoined, getMember, type SyncJoinRequest } from '@beanpool/engine';
 import { generateInvite } from './invites.js';
 import { addEntry, assertNamesAdmin, reconcileHolders } from './names-list.js';
@@ -455,9 +455,21 @@ export function cancelKnock(pubkey: string, now = Date.now()): { ok: true } | { 
         db.prepare(`UPDATE join_requests SET status = 'cancelled', decided_at = ?, updated_at = ? WHERE id = ? AND status = 'pending'`)
             .run(at, at, standing.row.id);
     }
-    // The browser it asked to be told on goes with it (engine/web-push-subscriptions.ts).
+    // The browser it asked to be told on goes with it (engine/web-push-subscriptions.ts), and its phone (W4).
     dropAskerSubscriptionsOf(standing.row.pubkey);
+    dropAskerPhonesOf(standing.row.pubkey);
     return { ok: true };
+}
+
+/**
+ * The phone of a key with no row here, gone (web push W4: the waiting phone registers its token under the key that asked;
+ * routes/community.ts POST /api/push-tokens): its request was cancelled or declined, so nothing will be sent to it. Only
+ * while the key has no row: a member's and a visitor's phones are theirs. Such rows never travel
+ * (engine/replication-manifest.ts MEMBERS_OWN), so no tombstone is written. How many went.
+ */
+export function dropAskerPhonesOf(pubkey: string): number {
+    return deletePlainRows('push_tokens', 'public_key = ? AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = push_tokens.public_key)',
+        pubkey.toLowerCase());
 }
 
 // ── The members ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -767,9 +779,9 @@ export function approveKnock(id: string, member: string, now = Date.now(), names
 }
 
 /**
- * After a yes is committed: `join.answered` to the browser the applicant asked to be told on, if any (W1; the phone's waiting
- * mode is W4), with the fixed sentence and a signed notice, for as long as the invite works (joinAnsweredTtl). A decline
- * sends nothing: it reads as waiting, by design. Never throws: the yes stands, and the waiting page reads it anyway.
+ * After a yes is committed: `join.answered` to the browser the applicant asked to be told on (W1) and to the phone that
+ * registered under the key while waiting (W4), if any, with the fixed sentence and a signed notice, for as long as the
+ * invite works (joinAnsweredTtl). A decline sends nothing: it reads as waiting, by design. Never throws: the yes stands, and the waiting page reads it anyway.
  */
 function tellAskerAnswered(asker: string, member: string, inviteExpiresAt: number): void {
     try {
@@ -790,8 +802,10 @@ export function declineKnock(id: string, member: string, now = Date.now()): Answ
         const at = iso(now);
         db.prepare(`UPDATE join_requests SET status = 'declined', decided_by = ?, decided_at = ?, updated_at = ? WHERE id = ? AND status = 'pending'`)
             .run(member, at, at, id);
-        // Nothing will be sent to it now: the browser it asked to be told on goes (engine/web-push-subscriptions.ts).
+        // Nothing will be sent to it now: the browser it asked to be told on goes (engine/web-push-subscriptions.ts), and
+        // its phone (W4).
         dropAskerSubscriptionsOf(found.row.pubkey);
+        dropAskerPhonesOf(found.row.pubkey);
         return { ok: true, knockId: id, status: 'declined' };
     })();
 }
@@ -902,6 +916,13 @@ export function tidyKnocks(now = Date.now()): { cleared: number; deleted: number
                             AND NOT EXISTS (SELECT 1 FROM join_requests j WHERE j.pubkey = web_push_subscriptions.public_key
                                 AND ((j.status = 'pending' AND j.created_at >= ?) OR (j.status = 'approved' AND j.decided_at >= ?)))))`)
             .run(openSince(now), iso(now - INVITE_LIFETIME_MS));
+        // The waiting phone's token (web push W4) by the same rule: a key with no row here keeps it only while its request
+        // is open or its yes still works (routes/community.ts POST /api/push-tokens). Those rows never travel: no tombstone.
+        deletePlainRows('push_tokens', `NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = push_tokens.public_key)
+                AND (EXISTS (SELECT 1 FROM invalidated_keys i WHERE i.public_key = push_tokens.public_key)
+                    OR NOT EXISTS (SELECT 1 FROM join_requests j WHERE j.pubkey = push_tokens.public_key
+                        AND ((j.status = 'pending' AND j.created_at >= ?) OR (j.status = 'approved' AND j.decided_at >= ?))))`,
+            openSince(now), iso(now - INVITE_LIFETIME_MS));
         // A member's browsers (web push W2) go once the key is no member here (removed, replaced).
         dropLapsedMemberBrowsers();
         return { cleared: unread.length + keepNewestPhotos(now), deleted: past.length };

@@ -135,6 +135,7 @@ export const SUITES = [
     'test-knock',
     'test-web-push',
     'test-web-push-members',
+    'test-push-waiting-asker',
     'test-knock-ceiling',
     'test-knock-notices',
     'test-knock-provenance',

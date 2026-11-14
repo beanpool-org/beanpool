@@ -116,6 +116,8 @@ const NOT_ACTIVITY: Record<string, string> = {
     'withheld_conversations.other_pubkey': "the member who blocked a sender: not its act (the sender's is `messages`)",
     'dm_requests.to_pubkey': 'someone asked to message it: not its act (answering is `messages`)',
     'contact_copies.owner_pubkey': 'its own locked contacts list: its own setting',
+    'contact_copies_former.owner_pubkey': 'its own old contacts list, kept a year after a re-key: its own setting',
+    'contact_copies_former.former_pubkey': 'the key that old list is locked with: a key it held before a re-key, no act',
     'health_access_log.subject_pubkey': 'an admin looked at it: not its act',
     'credit_look_log.subject_pubkey': 'a giver looked at its credit: not its act',
     'names_access_log.subject_pubkey': 'an admin acted on its names-list entry: not its act (a confirmation is `names_list`)',

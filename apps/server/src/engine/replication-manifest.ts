@@ -483,6 +483,9 @@ export const TABLES: Record<string, TableEntry> = {
     // Each member's locked contacts list (engine/contact-copies.ts), text no server can open: a take-over serves it to the
     // member's devices, and every delete (the member's own, leaving, the owners' switch) writes a tombstone.
     contact_copies: plain('owner_pubkey seq padded_size saved_at nonce sealed digest header signature created_at updated_at'),
+    // A re-keyed member's old locked contacts list, kept a year for the old words (engine/contact-copies.ts, contacts C6): a
+    // take-over serves it to the member's phone; a re-key writes it, and every delete leaves a tombstone.
+    contact_copies_former: plain('owner_pubkey former_pubkey seq padded_size saved_at nonce sealed digest header signature kept_until created_at updated_at'),
     // Who stopped holding a key by stopping being an admin: the write freeze travels with the copy.
     names_dropped_holders: plain('holder_pubkey key_id dropped_at updated_at'),
     // A confirmation names a key, an entry and the admins, never a name.
@@ -640,6 +643,7 @@ export const TABLES: Record<string, TableEntry> = {
     web_push_subscriptions: { kind: 'local', reason: "the browsers that asked this server to say when their request to join is answered (engine/web-push-subscriptions.ts), sealed with its key: after a take-over the waiting page's own check and the 30-day invite still carry the yes" },
     push_notices: { kind: 'local', reason: "the details of the pushes this server sent, for a week (engine/push-notices.ts): a standby sends none, and after a take-over a tap on an older notice opens its kind's tab" },
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
+    forum_search: { kind: 'local', reason: "the forum's search index (engine/forum-search.ts), kept from forum_posts and forum_topics by their triggers on each server, a standby's import included" },
     peek_tickets: { kind: 'local', reason: "the links members shared outside, each opening one post for seven days (engine/peek-tickets.ts): a promoted server starts with none, so each reads as stopped, never as open, and its member shares again" },
     photo_url_heals: { kind: 'local', reason: "where each phone's heal of its listing-photo URLs is on this server, for this server's own URL shape (engine/photo-keys.ts)" },
     photo_budget_log: { kind: 'local', reason: "this server's own sliding-window photo upload byte log (engine/photo-upload-budget.ts), pruned > 48h; a promoted server starts its day afresh" },

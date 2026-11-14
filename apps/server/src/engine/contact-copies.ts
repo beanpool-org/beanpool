@@ -18,14 +18,22 @@
  *
  * Where it goes: one row per member in `contact_copies`, a plain table (engine/replication-manifest.ts): a standby keeps
  * the main server's rows and writes none itself (config/node-role.ts assertPlainTablesWritable); every delete leaves a
- * tombstone, so a standby deletes its copy too. The row goes with the member (removed, account deleted, a re-key), on
- * the owner's own DELETE, and with every other row when the owners switch the community's copies off
- * (config/contact-copies.ts). Slice C6 keeps a re-keyed member's old copy for a year instead (§6.2): its seam is
- * {@link dropContactCopyOf}'s call in engine/key-move.ts.
+ * tombstone, so a standby deletes its copy too. The row goes with the member (removed, account deleted), on the owner's
+ * own DELETE, and with every other row when the owners switch the community's copies off (config/contact-copies.ts).
+ *
+ * **After a re-key** (design §6.2, slice C6): the old key's copy can't be opened by the new key, nor by anyone but whoever
+ * finds the old 12 words. So it isn't deleted: the re-key moves it to `contact_copies_former` under the new key, with the
+ * old key beside it and a last day a year on (engine/key-move.ts, inside the re-key's transaction), and the member's phone
+ * opens it there with the old words and merges it into the new list. At most one per member: a second re-key keeps the
+ * newest copy (the old key's own current one, or else the former one it held, moved with its year as it was). The member's
+ * key now reads it (GET /api/contacts/former, {@link readFormerContactCopyOf}) and deletes it
+ * ({@link deleteFormerContactCopy}); nobody else does, admins and owners included. After its last day it is no longer
+ * served, and {@link forgetExpiredFormerCopies} deletes it, with a tombstone, on the main server's hourly sweep. It goes,
+ * like the current copy, with the member and with the owners' switch, and it counts toward the node's budget.
  */
 import { CONTACTS_COPY_MAX_BYTES, readContactsCopy, word, type ContactsCopyWire } from '@beanpool/core';
 import { db, deletePlainRows } from '../db/db.js';
-import { assertPlainTablesWritable } from '../config/node-role.js';
+import { assertPlainTablesWritable, getNodeRole } from '../config/node-role.js';
 import { keepsContactCopies } from '../config/contact-copies.js';
 
 /** Saves an hour per member (design §4.4): the 13th is refused. */
@@ -50,7 +58,11 @@ export const CONTACT_COPY_WORDS = {
     stale: word('This community already keeps a newer copy of your contacts list.'),
     tooMany: word('Your contacts list was saved here too often in the last hour. It is kept on your phone; try again later.'),
     full: word("This community's server has no room for more contact lists. Your list stays on your phone and at your other communities."),
+    noFormer: word('This community keeps no copy of a contacts list locked with an old key of yours.'),
 };
+
+/** How long a re-keyed member's old copy is kept (design §6.2): a year. */
+export const CONTACT_FORMER_KEEP_MS = 365 * 24 * 60 * 60 * 1000;
 
 /** A refusal: the status, a code the app reads, the sentence, and anything it carries (`seq` with `stale_copy`). */
 export class ContactCopyError extends Error {
@@ -99,9 +111,10 @@ function chargeSave(actor: string, now = Date.now()): void {
     saves.set(actor, recent);
 }
 
-/** How many padded bytes the copies here hold together. */
+/** How many padded bytes the copies here hold together, a re-keyed member's former copies included. */
 export function contactCopiesBytes(): number {
-    return (db.prepare('SELECT COALESCE(SUM(padded_size), 0) AS n FROM contact_copies').get() as { n: number }).n;
+    return (db.prepare(`SELECT (SELECT COALESCE(SUM(padded_size), 0) FROM contact_copies)
+                             + (SELECT COALESCE(SUM(padded_size), 0) FROM contact_copies_former) AS n`).get() as { n: number }).n;
 }
 
 /**
@@ -143,20 +156,65 @@ export function saveContactCopy(actor: string, body: Record<string, unknown>): {
 /** The signer's own copy removed (leaving a community; the member's own choice), with a tombstone. Whether there was one. */
 export function deleteContactCopy(actor: string): { deleted: boolean } {
     assertPlainTablesWritable();
-    return { deleted: dropContactCopyOf(actor) > 0 };
+    return { deleted: deletePlainRows('contact_copies', 'owner_pubkey = ?', actor) > 0 };
 }
 
 /**
- * The copy of a key that stopped being a member here (removed, account deleted, replaced by a re-key), with a tombstone
- * so a standby drops it too. Returns how many rows went (0 or 1).
+ * The copies of a key that stopped being a member here (removed, account deleted): its current copy and a former one,
+ * each with a tombstone so a standby drops them too. Returns how many rows went (0 to 2).
  */
 export function dropContactCopyOf(pubkey: string): number {
-    return deletePlainRows('contact_copies', 'owner_pubkey = ?', pubkey);
+    return deletePlainRows('contact_copies', 'owner_pubkey = ?', pubkey) + deletePlainRows('contact_copies_former', 'owner_pubkey = ?', pubkey);
 }
 
-/** Every copy here, each with a tombstone: the owners switched the community's copies off (config/contact-copies.ts). */
+/** Every copy here, former ones too, each with a tombstone: the owners switched the community's copies off (config/contact-copies.ts). */
 export function dropEveryContactCopy(): number {
-    return deletePlainRows('contact_copies', '1 = 1');
+    return deletePlainRows('contact_copies', '1 = 1') + deletePlainRows('contact_copies_former', '1 = 1');
+}
+
+// ── After a re-key: the former copy (design §6.2, slice C6) ───────────────────────────────────────────────────────
+
+/** What GET /api/contacts/former answers: the old key's copy as it was sent, the key it is locked with, and its last day. */
+export interface FormerContactCopy extends ContactsCopyWire {
+    formerKey: string;
+    keptUntil: string;
+}
+
+/**
+ * The signer's former copy: the list their key before a re-key locked, kept until its last day. 404 `no_former` when there
+ * is none, or its year is over: the same answer for every member. Where the community keeps no lists, 404 `contacts_off`.
+ */
+export function readFormerContactCopyOf(actor: string, now = Date.now()): FormerContactCopy {
+    assertKept();
+    const r = db.prepare('SELECT former_pubkey, header, signature, nonce, sealed, kept_until FROM contact_copies_former WHERE owner_pubkey = ?').get(actor) as
+        { former_pubkey: string; header: string; signature: string; nonce: string; sealed: string; kept_until: string } | undefined;
+    if (!r || !(Date.parse(r.kept_until) > now)) throw new ContactCopyError(404, 'no_former', CONTACT_COPY_WORDS.noFormer);
+    return { header: r.header, signature: r.signature, nonce: r.nonce, sealed: r.sealed, formerKey: r.former_pubkey, keptUntil: r.kept_until };
+}
+
+/** The signer's former copy removed ("Delete it"), with a tombstone. Whether there was one. Answers where copies are off too. */
+export function deleteFormerContactCopy(actor: string): { deleted: boolean } {
+    assertPlainTablesWritable();
+    return { deleted: deletePlainRows('contact_copies_former', 'owner_pubkey = ?', actor) > 0 };
+}
+
+/**
+ * The former copies past their last day deleted, each with a tombstone. On the main server only: a standby's are its main
+ * server's, and their tombstones come in its copy (a standby serves none past its day meanwhile). Returns how many went.
+ */
+export function forgetExpiredFormerCopies(now = Date.now()): number {
+    if (getNodeRole() !== 'primary') return 0;
+    return deletePlainRows('contact_copies_former', 'kept_until < ?', new Date(now).toISOString());
+}
+
+let formerSweep: NodeJS.Timeout | null = null;
+/** The hourly sweep of former copies past their year (https-server.ts, with the other tidying timers). */
+export function startForgettingFormerCopies(everyMs = 60 * 60 * 1000): void {
+    if (formerSweep) return;
+    formerSweep = setInterval(() => {
+        try { forgetExpiredFormerCopies(); } catch (e) { console.warn('[Contacts] Old contact lists past their year were not cleared:', (e as Error)?.message || e); }
+    }, everyMs);
+    formerSweep.unref?.();
 }
 
 /** Forget the hourly counts (a suite between its parts). */

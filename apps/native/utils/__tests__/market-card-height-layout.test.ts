@@ -706,12 +706,11 @@ describe('the grid is rows on a lattice: a pair is one height, the text block fo
     });
 });
 
-// Slice P3' (DESIGN-market-grid-sizes-fable.md §2.2, §3 P3'; DESIGN-card-style-box-fable.md §2): an event and the Daily Pulse
-// in the grid are tiles like the listing beside them, from the same box: the 4:3 photo, the type chip at its top-left, the foot
-// row of pills, then the listing tiles' own four-row text block (an event's date, time, title and place; the Pulse's title, its
-// pill and one line of its news). So a pair is one height by construction and an event's text block is a listing's, row for
-// row. Laid out with Yoga at 320 dp and 1.3x text.
-describe("an event and the Daily Pulse in the grid are tiles: the listing's shell and its text block, row for row", () => {
+// Slice P3' (DESIGN-market-grid-sizes-fable.md §2.2, §3 P3'; DESIGN-card-style-box-fable.md §2): an event in the grid is a
+// tile like the listing beside it, from the same box: the 4:3 photo, the type chip at its top-left, the foot row of pills, then
+// the listing tiles' own four-row text block (an event's date, time, title and place). So a pair is one height by construction
+// and an event's text block is a listing's, row for row. Laid out with Yoga at 320 dp and 1.3x text.
+describe("an event in the grid is a tile: the listing's shell and its text block, row for row", () => {
     const DAY = 86_400_000;
     const SCALE = 1.3;
     const BLOCK = 24 + (4 * 18 + 3 * 4) * SCALE;
@@ -732,11 +731,6 @@ describe("an event and the Daily Pulse in the grid are tiles: the listing's shel
         id: 'ev-repair', type: 'event', status: 'active', title: 'Repair Café', category: 'events', author_pubkey: 'hall-key',
         author_callsign: 'Civic Hall', created_at: iso(now - 3 * 60_000), event_start_at: iso(now + DAY), event_end_at: iso(now + DAY + 2 * 3_600_000),
         event_state: 'scheduled', photos: [],
-    };
-    const PULSE = {
-        ...LONE, id: 'pulse-1', title: 'Byron Shire: water limits end on Monday after the weekend rain', author_callsign: 'Daily Pulse',
-        author_pubkey: 'pulse-key', repeatable: 0, credits: 0, created_at: iso(now - 90_000),
-        description: 'Council says the dam is at 92% after the weekend rain, and the level-2 limits end on Monday.',
     };
     const byId = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement;
     const blockOf = (card: Element) => card.querySelector('[data-testid="grid-text-block"]') as HTMLElement;
@@ -807,29 +801,6 @@ describe("an event and the Daily Pulse in the grid are tiles: the listing's shel
         expect(l.height(a)).toBe(l.height(b));
         for (const card of [a, b]) expect(l.height(blockOf(card))).toBeCloseTo(BLOCK, 3);
         expect(rowsOf(l, a)).toEqual(rowsOf(l, b));
-    });
-
-    it('the Daily Pulse beside a listing: one height, the same block; its pill in row 3, one line of its news in row 4, and no second pill on the photo', async () => {
-        await show([PULSE, LISTING], 'grid');
-        const pulse = byId('market-card-pulse-1');
-        const li = byId('market-card-l-eggs');
-        expect(pulse).not.toBeNull();
-        const l = lay(569);
-        expect(at(l, pulse).top).toBe(at(l, li).top);
-        expect(l.width(pulse)).toBe(136);
-        expect(l.height(pulse)).toBe(l.height(li));
-        expect(l.height(blockOf(pulse))).toBeCloseTo(BLOCK, 3);
-        const rows = Array.from(blockOf(pulse).children);
-        expect(rows).toHaveLength(3);
-        expect(rows[1].querySelector('[data-testid="pulse-chip"]')?.textContent).toBe('🗞️ PULSE');
-        const news = rows[2].querySelector('[data-testid="pulse-line"]')!;
-        expect(news.textContent).toBe(PULSE.description);
-        expect(news.getAttribute('data-lines')).toBe('1');
-        expect(byId('grid-badge-row') && pulse.querySelector('[data-testid="grid-badge-row"]')!.textContent).toBe('');
-        const bottom = at(l, blockOf(pulse)).top + l.height(blockOf(pulse)) - 12;
-        for (const r of rows) expect(at(l, r).top + l.height(r), r.textContent ?? '').toBeLessThanOrEqual(bottom + 0.01);
-        const right = at(l, pulse).left + l.width(pulse);
-        for (const el of Array.from(pulse.querySelectorAll('*'))) expect(at(l, el).left + l.width(el), el.textContent ?? el.tagName).toBeLessThanOrEqual(right + 0.5);
     });
 });
 

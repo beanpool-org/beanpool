@@ -2,7 +2,7 @@
  * Tests for web Market ordering (pinning-s0):
  * The web Market orders held rows newest created first, as the phone does.
  * - A post edited or RSVPed later than a newer post stays below it.
- * - The Daily Pulse post stays first.
+ * - A post by an author named "Daily Pulse" takes its place by date like any other (the Daily Pulse is gone).
  * - On a node that reads by area the order is the same newest listed, and the node is asked for it (market order S2).
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -222,9 +222,8 @@ describe('MarketplacePage order (pinning-s0)', () => {
         expect(titles).toEqual(['Newer Post', 'Older Event RSVPed Later']);
     });
 
-    it('the Daily Pulse post stays first even with an older creation date', async () => {
-        // With fewer than 2 real member listings, Daily Pulse is pinned first.
-        // Node returns postNew and pulsePost.
+    it('a post by an author named "Daily Pulse" is not put first: it takes its place by date', async () => {
+        // The Daily Pulse is gone (Marty, 15 Nov 2026), and with it the rule that put its post first.
         stubNode([postNew, pulsePost]);
         render(<MarketplacePage identity={identity} isMember={true} />);
 
@@ -234,7 +233,7 @@ describe('MarketplacePage order (pinning-s0)', () => {
         });
 
         const titles = screen.getAllByTestId('market-post-card').map(el => el.textContent);
-        expect(titles).toEqual(['Daily Pulse Reflection', 'Newer Post']);
+        expect(titles).toEqual(['Newer Post', 'Daily Pulse Reflection']);
     });
 
     it('on a node that reads by area the order is newest listed first, not nearest first', async () => {

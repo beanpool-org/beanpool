@@ -49,6 +49,7 @@ import { HomePage, WATCH_WORDS } from './HomePage';
 import { rememberKnock } from '../lib/knock';
 import { circleIntents, setCircleIntent } from '../lib/circle-intent';
 import * as knockModule from '../lib/knock';
+import * as webPushModule from '../lib/web-push';
 
 const { done: WATCH_DONE, joinFirst: WATCH_JOIN_FIRST, needsPlace: WATCH_NEEDS_PLACE } = WATCH_WORDS;
 import { resetHomeCacheForTest } from '../lib/home-cache';
@@ -1274,5 +1275,87 @@ describe('a yes shows itself on the Find card (Damo, 9 Nov 2026: it only showed 
         hideTab(true);
         await act(async () => { await new Promise(r => setTimeout(r, 60)); });
         expect(readSpy).not.toHaveBeenCalled();
+    });
+});
+
+describe('told from another origin on the waiting row (global yes Y2)', () => {
+    const BYRON = { key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12 };
+    const LISMORE = { key: 'lismore', name: 'Lismore BeanPool', url: 'https://lismore.example.org', memberCount: 30, distanceKm: 40 };
+    async function askedOf(...comms: Array<typeof BYRON>) {
+        for (const [i, c] of comms.entries()) await rememberKnock(ME.publicKey, c, new Date(Date.now() - (5 - i) * 3_600_000));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: comms }, true)));
+    }
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it('a waiting row has "Tell me when they answer", and its tap asks to be told by that community, with the key that asked (fails before: no card)', async () => {
+        await askedOf(BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        const tap = vi.spyOn(webPushModule, 'tellMeAtHome').mockResolvedValue({ ok: true, place: { kind: 'ok', device: 'computer', browser: 'Firefox' } });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId(`home-tell-me-${BYRON.url}-card`);
+        expect(within(screen.getByTestId(`home-waiting-card-${BYRON.url}`)).getByTestId(`home-tell-me-${BYRON.url}-card`)).toBe(card);
+        expect(card).toHaveTextContent('Tell me when they answer');
+        expect(card).toHaveTextContent("We'll tell you on this device when Byron Shire BeanPool answers, even with this page closed. Nothing else.");
+        fireEvent.click(within(card).getByTestId(`home-tell-me-${BYRON.url}`));
+        expect(tap).toHaveBeenCalledTimes(1);
+        expect(tap.mock.calls[0][0]).toBe(BYRON.url);
+        expect(tap.mock.calls[0][1]).toBe(ME);
+        expect(await within(card).findByTestId(`home-tell-me-${BYRON.url}-on`)).toHaveTextContent("✓ We'll tell you here when Byron Shire BeanPool answers.");
+        expect(card).toHaveTextContent("We'll tell you here while Firefox is running.");
+    });
+
+    it('a yes, a cancelled request or one that is closed has no Tell me', async () => {
+        await askedOf(BYRON, LISMORE);
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === BYRON.url
+            ? { ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } }
+            : { ok: true, value: { status: 'none' } }));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId(`home-find-invited-${BYRON.url}`);
+        await waitFor(() => expect(screen.getByTestId(`home-waiting-arrived-${LISMORE.url}`)).not.toHaveTextContent('Checking…'));
+        expect(screen.queryByTestId(`home-tell-me-${BYRON.url}-card`)).toBeNull();
+        expect(screen.queryByTestId(`home-tell-me-${LISMORE.url}-card`)).toBeNull();
+    });
+
+    it('a click on its notice lands on that row: into view, its Join in focus, then the landing is done (fails before: nothing)', async () => {
+        await askedOf(LISMORE, BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === BYRON.url
+            ? { ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } }
+            : { ok: true, value: { status: 'pending' } }));
+        const scrolled: string[] = [];
+        const was = Element.prototype.scrollIntoView;
+        Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this.getAttribute('data-testid') ?? ''); };
+        const seen = vi.fn();
+        try {
+            render(<HomePage identity={ME} onNavigate={vi.fn()} knockRow={BYRON.url} onKnockRowSeen={seen} />);
+            await waitFor(() => expect(seen).toHaveBeenCalledTimes(1));
+            expect(scrolled).toEqual([`home-find-invited-${BYRON.url}`]);
+            expect(document.activeElement).toBe(screen.getByTestId(`home-find-invited-join-${BYRON.url}`));
+        } finally {
+            Element.prototype.scrollIntoView = was;
+        }
+    });
+
+    it('a landing for a community this browser never asked brings nothing into view and focuses nothing', async () => {
+        await askedOf(BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } });
+        const seen = vi.fn();
+        render(<HomePage identity={ME} onNavigate={vi.fn()} knockRow="https://elsewhere.example" onKnockRowSeen={seen} />);
+        await screen.findByTestId(`home-find-invited-${BYRON.url}`);
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        expect(seen).not.toHaveBeenCalled();
+        expect(document.activeElement).toBe(document.body);
+    });
+
+    it('a request that is done lets go of the browser it asked to be told on: its yes used, or nothing open there any more; a waiting one does not', async () => {
+        const CASTLE = { key: 'castle', name: 'Castle BeanPool', url: 'https://castle.example.org', memberCount: 9, distanceKm: 70 };
+        await askedOf(BYRON, LISMORE, CASTLE);
+        localStorage.setItem('beanpool_web_push', JSON.stringify([BYRON.url, LISMORE.url, CASTLE.url].map(origin => ({ origin, publicKey: ME.publicKey, subId: 'e'.repeat(64), pushKey: 'd'.repeat(64), vapidKey: 'v', for: 'asker' }))));
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === BYRON.url
+            ? { ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null, member: true } }
+            : url === LISMORE.url ? { ok: true, value: { status: 'none' } } : { ok: true, value: { status: 'pending' } }));
+        const letGo = vi.spyOn(webPushModule, 'stopTellingMeAtHome').mockResolvedValue(undefined);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(new Set(letGo.mock.calls.map(c => c[0]))).toEqual(new Set([BYRON.url, LISMORE.url])));
+        expect(letGo.mock.calls.every(c => c[1] === ME)).toBe(true);
     });
 });

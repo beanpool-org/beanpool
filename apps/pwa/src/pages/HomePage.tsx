@@ -1419,7 +1419,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         try { row.scrollIntoView({ block: 'center' }); } catch { /* an old browser: the row is still on the card */ }
         row.querySelector<HTMLElement>('[data-knock-join] button')?.focus();
         onKnockRowSeen?.();
-    }, [knockRow, knockStatuses, knocks, onKnockRowSeen]);
+        // `answer`: the Find card is drawn once Home's read is in, which can come after the community's answer.
+    }, [knockRow, knockStatuses, knocks, answer, onKnockRowSeen]);
 
     const handleCancelKnock = async (k: RememberedKnock) => {
         if (!identity) return;

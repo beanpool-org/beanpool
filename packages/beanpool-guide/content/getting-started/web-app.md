@@ -140,9 +140,13 @@ Screen 1 of joining in a browser says the same the other way round: if you are a
 - The phone then shows **four digits**. Type them on the computer and press **Confirm**. Your account goes to the computer only after that. Three wrong tries and nothing is sent: make a new code. Never read the digits out or send them to anyone.
 - If the phone says its app is too old, update the BeanPool app on it, then scan a new code.
 
+## Notifications
+
+The web app can tell you what happened, as the phone does: the same alerts, under the same switches. Turn them on in **Settings**, then **Notifications**, on the first row, **On this device**. Your browser asks you first, at that tap. A computer's browser is told while it is running, Safari on a Mac and a phone's browser even when closed, and an iPhone only from the Home Screen. Where a browser can't be told, the bell at the top still lists what happened, and on a phone's browser **Get the app** comes first. See "Notifications".
+
 ## Installing it
 
-On a computer, you can install the web app so it opens in its own window, like an app, from your dock or taskbar: look for the install icon in your browser's address bar, or use **Settings** → **Install on this computer**. It is still the web app at your community's address, not a separate desktop app. On a phone, use the phone app from Google Play, the App Store, or beanpool.org/android instead: it keeps your account safe, supports notifications, and avoids creating a second account or icon.
+On a computer, you can install the web app so it opens in its own window, like an app, from your dock or taskbar: look for the install icon in your browser's address bar, or use **Settings** → **Install on this computer**. It is still the web app at your community's address, not a separate desktop app. On a phone, use the phone app from Google Play, the App Store, or beanpool.org/android instead: it keeps your account safe, gets notifications with nothing more to set up, and avoids creating a second account or icon.
 
 ## Keep your 12 words
 

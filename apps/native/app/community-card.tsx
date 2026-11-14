@@ -241,6 +241,10 @@ export default function CommunityCardScreen() {
         setSending(false);
         if (r.kind === 'waiting' || r.kind === 'invited') {
             await rememberKnock(signer.publicKey, { url: origin, name: c.name });
+            // A phone that allows notifications and is waiting to be let in sends its token to the community it just asked, so
+            // the yes buzzes it, again where an earlier request there ended (web push W4; utils/push-registrations.ts
+            // registerAfterKnock). Never asks for permission.
+            void import('../services/push-notifications').then((m) => m.registerAfterKnock(origin)).catch(() => {});
             if (listing) await keepListingAfterJoin(origin, listing).catch(() => {});
             setFormOpen(false);
             setMessage('');

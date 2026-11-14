@@ -44,7 +44,7 @@ While you wait, the waiting card on **Home** shows when you asked (**You asked t
 
 If you change your mind while waiting, tap **Cancel my request**. The request is really withdrawn, and you can ask again after 24 hours.
 
-When an admin or member invites you, you get a notification: **A community answered your request.** Your phone checks for an answer in the background every 15 minutes when the app isn't open.
+When an admin or member invites you, you get a notification: **A community answered your request to join.** It comes to a phone waiting with no community yet too, if the phone allows notifications. Your phone checks for an answer in the background every 15 minutes when the app isn't open.
 
 If nobody answers within 30 days, the card says **This request is no longer open. You can ask again.**
 

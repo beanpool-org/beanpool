@@ -616,7 +616,8 @@ export default function ChatsScreen() {
                             <MaterialCommunityIcons name="earth" size={14} color={colors.text.secondary} />
                             {/* Cut at its head here, in whole labels, when it must be: the tail names the real domain. Not by
                                 the platform: Android draws no head ellipsis past a line limit and would cut the tail. So no
-                                line limit either: what homeTail leaves fits 3 lines at 320 dp and 1.3x, and a longer one wraps.
+                                line limit either: what homeTail leaves takes up to 3 lines at 320 dp and 1.3x for an everyday
+                                name (measured, API 26), and anything longer wraps rather than lose its end.
                                 A screen reader hears the whole home. */}
                             <Text style={styles.outsideHome} accessibilityLabel={item.outsideHome} testID="outside-chat-community">{homeTail(item.outsideHome)}</Text>
                         </View>

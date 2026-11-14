@@ -128,8 +128,9 @@ export function addressCardFromText(text: unknown): AddressCard | null {
 // ─── A home, short enough for a list's line ─────────────────────────────────────────────────
 
 /**
- * The most of a home a list's line shows ({@link homeTail}): at 320 dp with text at 1.3×, the Chats row's community line
- * holds this in 3 lines (measured on Android API 26, and by the phone's render test).
+ * The most of a home a list's line shows ({@link homeTail}). Measured on Android API 26 at 320 dp with text at 1.3× (the
+ * Chats row's community line, 178 dp wide): an everyday 48 (letters, hyphens, dots) takes 3 lines; one of only wide letters
+ * (w, m) takes a 4th, which wraps, since the line has no limit to cut it at.
  */
 export const HOME_LINE_MAX = 48;
 

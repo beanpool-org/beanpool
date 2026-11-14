@@ -13,13 +13,13 @@
  * - **Older nodes and errors:** the forum's routes answer `feature_off` where the owners switched it off; the page says the
  *   node's words, with Try again.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { forumSectionName, t, timeAgo, tn, word, wordn } from '@beanpool/core';
 import { myNodeRoleOnce } from '../lib/api';
 import {
     getForumFront, getForumTopics, keepForumFor, keptFront, keptList, myFirstLook, withdrawFirstLook, type ForumFront, type ForumTopic, type ForumWaiting,
 } from '../lib/forum';
-import { ForumTopicView } from '../components/forum/ForumTopicView';
+import { ForumTopicView, TOPIC_WORDS } from '../components/forum/ForumTopicView';
 import { ForumNewTopic } from '../components/forum/ForumNewTopic';
 import { ForumFirstLooks } from '../components/forum/ForumFirstLooks';
 
@@ -54,6 +54,11 @@ export function ForumPage({ me, onOpenProfile }: { me: string; onOpenProfile?: (
     const [mine, setMine] = useState<{ waiting: ForumWaiting | null; usuallyWithinHours: number | null } | null>(null);
     const [sent, setSent] = useState(false);
     const [staff, setStaff] = useState(false);
+    // A topic the member's own action took away (or one gone meanwhile): the one line the list says on their way back.
+    const [gone, setGone] = useState<string | null>(null);
+    // The section picked now: a slower answer for one picked before it is dropped, never drawn under the newer pick.
+    const picked = useRef(section);
+    useEffect(() => { picked.current = section; }, [section]);
 
     async function loadFront() {
         try {
@@ -67,10 +72,12 @@ export function ForumPage({ me, onOpenProfile }: { me: string; onOpenProfile?: (
         }
     }
     async function loadList(offset = 0) {
+        const asked = section;
         try {
-            setList(await getForumTopics(section, offset));
+            const answer = await getForumTopics(asked, offset);
+            if (picked.current === asked) setList(answer);
         } catch (e) {
-            setFailed((e as Error)?.message || t(FORUM_WORDS.failed));
+            if (picked.current === asked) setFailed((e as Error)?.message || t(FORUM_WORDS.failed));
         }
     }
     useEffect(() => {
@@ -84,11 +91,19 @@ export function ForumPage({ me, onOpenProfile }: { me: string; onOpenProfile?: (
     }, [section, view.kind]);
 
     const toList = () => setView({ kind: 'list' });
-    if (view.kind === 'topic') return <ForumTopicView topicId={view.id} front={front} me={me} onBack={toList} onOpenProfile={onOpenProfile} />;
+    const open = (next: View) => { setGone(null); setView(next); };
+    // The member agreed to the public forum's sheet: this page's front says so at once, so it never asks again (design §5).
+    const told = () => setFront((f) => (f ? { ...f, told: true } : f));
+    if (view.kind === 'topic') {
+        return (
+            <ForumTopicView topicId={view.id} front={front} me={me} onBack={toList} onTold={told} onOpenProfile={onOpenProfile}
+                onGone={(words) => { setGone(words); toList(); }} />
+        );
+    }
     if (view.kind === 'firstLooks') return <ForumFirstLooks front={front} onBack={toList} />;
     if (view.kind === 'new' && front) {
         return (
-            <ForumNewTopic front={front} sectionId={section} usuallyWithinHours={mine?.usuallyWithinHours ?? null} staff={staff} onCancel={toList}
+            <ForumNewTopic front={front} sectionId={section} usuallyWithinHours={mine?.usuallyWithinHours ?? null} staff={staff} onCancel={toList} onTold={told}
                 onPosted={(out) => {
                     if ('topicId' in out) setView({ kind: 'topic', id: out.topicId });
                     else { setSent(true); toList(); }
@@ -114,7 +129,7 @@ export function ForumPage({ me, onOpenProfile }: { me: string; onOpenProfile?: (
                     {sections.map((s) => <option key={s.id} value={s.id}>{s.archived ? t(FORUM_WORDS.archived, { name: forumSectionName(s) }) : forumSectionName(s)}</option>)}
                 </select>
                 {front && (
-                    <button type="button" onClick={() => { setSent(false); setView({ kind: 'new' }); }} data-testid="forum-new" disabled={!!waiting && front.firstTopicWaits}
+                    <button type="button" onClick={() => { setSent(false); open({ kind: 'new' }); }} data-testid="forum-new" disabled={!!waiting && front.firstTopicWaits}
                         className={`${button} font-bold disabled:opacity-50`} style={{ flex: '1 1 auto', background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)' }}>{t(FORUM_WORDS.newTopic)}</button>
                 )}
             </div>
@@ -127,12 +142,13 @@ export function ForumPage({ me, onOpenProfile }: { me: string; onOpenProfile?: (
             )}
 
             {front?.moderator && (front.firstLooksWaiting ?? 0) > 0 && (
-                <button type="button" onClick={() => setView({ kind: 'firstLooks' })} data-testid="forum-first-looks-row"
+                <button type="button" onClick={() => open({ kind: 'firstLooks' })} data-testid="forum-first-looks-row"
                     className="min-h-[48px] px-3 rounded-lg text-left font-bold" style={{ background: 'var(--bp-chip-warn-tint)', color: 'var(--bp-chip-warn-ink)' }}>
                     {t(FORUM_WORDS.firstLooks, { n: front.firstLooksWaiting! })}
                 </button>
             )}
 
+            {gone && <p role="status" data-testid="forum-gone" className="m-0 text-sm" style={{ color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{gone}</p>}
             {sent && !waiting && <p className="m-0 text-sm" style={{ color: 'var(--text-secondary)' }}>{t(FORUM_WORDS.sentForLook)}</p>}
             {waiting && (
                 <div data-testid="forum-mine-waiting" className="flex flex-col gap-2 p-3 rounded-lg" style={{ background: 'var(--bp-info-fill)', color: 'var(--bp-info-on)' }}>
@@ -145,7 +161,7 @@ export function ForumPage({ me, onOpenProfile }: { me: string; onOpenProfile?: (
 
             {list && list.topics.length === 0 && !failed && <p className="m-0 text-sm" style={{ color: 'var(--text-secondary)' }}>{t(FORUM_WORDS.none)}</p>}
             <ul className="m-0 p-0 list-none flex flex-col" data-testid="forum-topics">
-                {list?.topics.map((topic) => <TopicRow key={topic.id} topic={topic} sectionName={section ? '' : nameOf(topic.sectionId)} onOpen={() => setView({ kind: 'topic', id: topic.id })} />)}
+                {list?.topics.map((topic) => <TopicRow key={topic.id} topic={topic} sectionName={section ? '' : nameOf(topic.sectionId)} onOpen={() => open({ kind: 'topic', id: topic.id })} />)}
             </ul>
             {list?.next != null && <button type="button" onClick={() => void loadList(list.next!)} className={button} style={quiet}>{t(FORUM_WORDS.more)}</button>}
         </div>
@@ -161,7 +177,8 @@ function TopicRow({ topic, sectionName, onOpen }: { topic: ForumTopic; sectionNa
             <button type="button" onClick={onOpen} data-testid="forum-topic-row" className="w-full min-h-[56px] py-2 text-left flex items-start gap-2">
                 <span className="flex-1 min-w-0 flex flex-col gap-0.5">
                     <span className="font-bold text-[0.95rem] leading-snug" style={{ color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
-                        {topic.pinned && <span aria-hidden="true">📌 </span>}{topic.title}
+                        {/* Its opening post removed, with others' replies kept: the node sends no title (the topic view's words). */}
+                        {topic.pinned && <span aria-hidden="true">📌 </span>}{topic.removed ? t(TOPIC_WORDS.removedTopic) : topic.title}
                     </span>
                     <span className="text-xs" style={{ color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>
                         {[topic.writer.name, sectionName].filter(Boolean).join(' · ')}

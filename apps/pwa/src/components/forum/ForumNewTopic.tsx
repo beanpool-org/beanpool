@@ -27,9 +27,10 @@ export const NEW_TOPIC_WORDS = {
 const field = 'w-full min-h-[44px] rounded-lg px-3 py-2 text-[0.95rem]';
 const fieldStyle = { background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-input)' } as const;
 
-export function ForumNewTopic({ front, sectionId, usuallyWithinHours, staff, onPosted, onCancel }: {
+/** `onTold`: the member agreed to the public forum's sheet; the page marks its front told, so the topic they open asks no more. */
+export function ForumNewTopic({ front, sectionId, usuallyWithinHours, staff, onPosted, onCancel, onTold }: {
     front: ForumFront; sectionId: string | null; usuallyWithinHours: number | null; staff: boolean;
-    onPosted: (out: { topicId: string } | { waiting: ForumWaiting }) => void; onCancel: () => void;
+    onPosted: (out: { topicId: string } | { waiting: ForumWaiting }) => void; onCancel: () => void; onTold: () => void;
 }) {
     const open = front.sections.filter((s) => !s.archived && (s.starts === 'members' || staff));
     const [section, setSection] = useState(open.some((s) => s.id === sectionId) ? sectionId! : open[0]?.id ?? '');
@@ -95,7 +96,7 @@ export function ForumNewTopic({ front, sectionId, usuallyWithinHours, staff, onP
             {telling && (
                 <ForumToldSheet busy={busy} onNotNow={() => setTelling(false)} onPost={() => {
                     setTelling(false);
-                    void markForumTold().then(() => post(true)).catch((e) => setError((e as Error)?.message || t('Couldn’t save this in the forum.')));
+                    void markForumTold().then(() => { onTold(); return post(true); }).catch((e) => setError((e as Error)?.message || t('Couldn’t save this in the forum.')));
                 }} />
             )}
         </form>

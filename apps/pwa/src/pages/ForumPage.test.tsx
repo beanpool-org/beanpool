@@ -24,7 +24,7 @@ vi.mock('../lib/api', async (orig) => ({
 vi.mock('../lib/blocklist', () => ({ blockUser: vi.fn(async () => true) }));
 
 import { ForumPage } from './ForumPage';
-import { forgetForum } from '../lib/forum';
+import { forgetForum, keptTopic } from '../lib/forum';
 import { blockUser } from '../lib/blocklist';
 
 const ME = 'me-key';
@@ -43,12 +43,30 @@ const post = (number: number, words: string, over: Record<string, unknown> = {})
     editedAt: null, removed: null, photos: 0, hidden: false, linksOn: true, ...over,
 });
 
-let state: { front: any; topics: any[]; posts: any[]; waiting: any[] };
+/** `gone`: the topic ft-1 isn't there for this member any more (its opening post removed with no reply, or its writer blocked). */
+let state: { front: any; topics: any[]; posts: any[]; waiting: any[]; gone: boolean };
+/** The node's refusal as lib/api.ts request throws it: its words, its status and its code. */
+const refusal = (status: number, code: string, words: string) => Object.assign(new Error(words), { status, code });
 function standIn(c: Call): unknown {
     const p = c.path.split('?')[0];
     if (c.method === 'GET' && p === '/api/forum') return state.front;
-    if (c.method === 'GET' && p === '/api/forum/topics') return { topics: state.topics, next: null };
-    if (c.method === 'GET' && p === '/api/forum/topics/ft-1') return { topic: state.topics[0], posts: state.posts, next: null, lastRead: 1 };
+    if (c.method === 'GET' && p === '/api/forum/topics') return { topics: state.gone ? state.topics.filter((x) => x.id !== 'ft-1') : state.topics, next: null };
+    if (c.method === 'GET' && p === '/api/forum/topics/ft-1') {
+        if (state.gone) return refusal(404, 'not_found', 'This topic isn’t here any more.');
+        // Paged as engine/forum.ts forumTopic pages: 30 posts after `after`; `next` is the last one's number while more follow.
+        const after = Number(new URLSearchParams(c.path.split('?')[1] ?? '').get('after') ?? 0);
+        const rest = state.posts.filter((x) => x.number > after);
+        const posts = rest.slice(0, 30);
+        return { topic: state.topics[0], posts, next: rest.length > 30 ? posts[posts.length - 1].number : null, lastRead: 1 };
+    }
+    if (c.method === 'POST' && p === '/api/forum/topics/ft-1/follow') { state.topics[0] = { ...state.topics[0], follow: c.body.follow }; return { follow: c.body.follow }; }
+    if (c.method === 'POST' && /^\/api\/forum\/posts\/fp-\d+\/remove$/.test(p)) {
+        const n = Number(p.split('/')[4].slice(3));
+        // Its opening post removed with no one else's reply: the whole topic goes (engine/forum.ts blankTopic).
+        if (n === 1 && state.posts.length === 1) state.gone = true;
+        else state.posts = state.posts.map((x) => (x.number === n ? { ...x, words: '', removed: 'writer' } : x));
+        return { ok: true };
+    }
     if (c.method === 'GET' && p === '/api/forum/first-looks/mine') return { waiting: null, usuallyWithinHours: 5 };
     if (c.method === 'GET' && p === '/api/forum/first-looks') return { waiting: state.waiting };
     if (c.method === 'POST' && p === '/api/forum/topics/ft-1/read') return { lastRead: c.body.upTo };
@@ -65,9 +83,9 @@ beforeEach(() => {
     node.calls.length = 0;
     node.role = 'member';
     node.answer = standIn;
-    state = { front: front(), topics: [topic('ft-1', 'Seed swap ideas', { unread: true, follow: 'following' }), topic('ft-2', 'Welcome: start here', { pinned: true, replyCount: 1 })], posts: [post(1, 'Who has beans to swap?'), post(2, 'I have runner beans.', { writer: { publicKey: 'ben-key', name: 'Ben' } })], waiting: [] };
+    state = { front: front(), topics: [topic('ft-1', 'Seed swap ideas', { unread: true, follow: 'following' }), topic('ft-2', 'Welcome: start here', { pinned: true, replyCount: 1 })], posts: [post(1, 'Who has beans to swap?'), post(2, 'I have runner beans.', { writer: { publicKey: 'ben-key', name: 'Ben' } })], waiting: [], gone: false };
 });
-afterEach(() => { cleanup(); vi.mocked(blockUser).mockClear(); });
+afterEach(() => { cleanup(); vi.mocked(blockUser).mockReset(); vi.mocked(blockUser).mockImplementation(async () => true); });
 
 const sent = (method: string, path: string) => node.calls.filter((c) => c.method === method && c.path === path);
 const openTopic = async () => {
@@ -95,6 +113,32 @@ describe('the list', () => {
         await screen.findAllByTestId('forum-topic-row');
         fireEvent.change(screen.getByTestId('forum-section-pick'), { target: { value: 's-news' } });
         await waitFor(() => expect(node.calls.some((c) => c.path === '/api/forum/topics?section=s-news')).toBe(true));
+    });
+
+    it('a topic whose opening post was removed, with others\' replies, is listed as "A removed topic", never a blank title', async () => {
+        state.topics = [topic('ft-1', '', { removed: true }), topic('ft-2', 'Welcome: start here')];
+        render(<ForumPage me={ME} />);
+        const rows = await screen.findAllByTestId('forum-topic-row');
+        expect(rows[0]).toHaveTextContent('A removed topic');
+        expect(rows[0]).toHaveTextContent('Asha · General');
+    });
+
+    it('a slow answer for a section picked before is dropped: the list is always the picked section\'s', async () => {
+        render(<ForumPage me={ME} />);
+        await screen.findAllByTestId('forum-topic-row');
+        let release: (v: unknown) => void = () => {};
+        node.answer = (c) => {
+            if (c.path === '/api/forum/topics?section=s-general') return new Promise((r) => { release = r; });
+            if (c.path === '/api/forum/topics?section=s-news') return { topics: [topic('ft-3', 'Market day moved', { sectionId: 's-news' })], next: null };
+            return standIn(c);
+        };
+        fireEvent.change(screen.getByTestId('forum-section-pick'), { target: { value: 's-general' } });
+        fireEvent.change(screen.getByTestId('forum-section-pick'), { target: { value: 's-news' } });
+        expect(await screen.findByText('Market day moved')).toBeInTheDocument();
+        // General's answer comes last: it is filed under General, and the screen stays News's.
+        await act(async () => { release({ topics: [topic('ft-1', 'Seed swap ideas')], next: null }); await new Promise((r) => setTimeout(r, 0)); });
+        expect(screen.queryByText('Seed swap ideas')).toBeNull();
+        expect(screen.getByText('Market day moved')).toBeInTheDocument();
     });
 
     it('moderators see "Waiting for a first look (n) ›"; OK puts one up, No takes one of the five reasons', async () => {
@@ -192,6 +236,133 @@ describe('a topic', () => {
         expect(within(menu).getByRole('button', { name: 'Remove' })).toBeInTheDocument();
         expect(screen.getByTestId('forum-closed')).toBeInTheDocument();
         expect(screen.queryByTestId('forum-reply-box')).toBeNull();
+    });
+
+    it('a writer\'s name opens their profile by key, only through onOpenProfile', async () => {
+        const opened: string[] = [];
+        render(<ForumPage me={ME} onOpenProfile={(k) => opened.push(k)} />);
+        fireEvent.click(await screen.findByText('Seed swap ideas'));
+        fireEvent.click(within(await screen.findByTestId('forum-post-2')).getByRole('button', { name: 'Ben' }));
+        expect(opened).toEqual(['ben-key']);
+    });
+});
+
+describe('the sheet on a public forum shows once', () => {
+    const reply = async (words: string, n: number) => {
+        fireEvent.change(screen.getByTestId('forum-reply-box'), { target: { value: words } });
+        fireEvent.click(screen.getByTestId('forum-send'));
+        await waitFor(() => expect(sent('POST', '/api/forum/topics/ft-1/replies')).toHaveLength(n));
+    };
+
+    it('after agreeing, a second reply in the same topic goes with no sheet', async () => {
+        state.front = front({ public: true, told: false });
+        await openTopic();
+        fireEvent.change(screen.getByTestId('forum-reply-box'), { target: { value: 'Hello' } });
+        fireEvent.click(screen.getByTestId('forum-send'));
+        fireEvent.click(await screen.findByTestId('forum-told-post'));
+        expect(await screen.findByTestId('forum-post-3')).toHaveTextContent('Hello');
+        await reply('Hello again', 2);
+        expect(screen.queryByTestId('forum-told')).toBeNull();
+        expect(await screen.findByTestId('forum-post-4')).toHaveTextContent('Hello again');
+        expect(sent('POST', '/api/forum/told')).toHaveLength(1);
+    });
+
+    it('after agreeing for a topic that goes up at once, its first reply goes with no sheet', async () => {
+        state.front = front({ public: true, told: false });
+        render(<ForumPage me={ME} />);
+        fireEvent.click(await screen.findByTestId('forum-new'));
+        fireEvent.change(screen.getByTestId('forum-new-title'), { target: { value: 'Seed swap ideas' } });
+        fireEvent.change(screen.getByTestId('forum-new-words'), { target: { value: 'Who has beans?' } });
+        fireEvent.click(screen.getByTestId('forum-new-post'));
+        fireEvent.click(await screen.findByTestId('forum-told-post'));
+        await screen.findByTestId('forum-topic-title');
+        await reply('Me too', 1);
+        expect(screen.queryByTestId('forum-told')).toBeNull();
+        expect(sent('POST', '/api/forum/told')).toHaveLength(1);
+    });
+});
+
+describe('a long topic keeps the reader\'s place', () => {
+    const many = (n: number) => Array.from({ length: n }, (_, i) => post(i + 1, `Post ${i + 1}`, i ? { writer: { publicKey: 'ben-key', name: 'Ben' } } : {}));
+    const send = (words: string) => {
+        fireEvent.change(screen.getByTestId('forum-reply-box'), { target: { value: words } });
+        fireEvent.click(screen.getByTestId('forum-send'));
+    };
+
+    it('read to the end of 40 posts, Send draws the reply after #40, and every post read stays', async () => {
+        state.posts = many(40);
+        await openTopic();
+        expect(screen.queryByTestId('forum-post-31')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Show more replies' }));
+        expect(await screen.findByTestId('forum-post-40')).toHaveTextContent('Post 40');
+        send('My reply');
+        expect(await screen.findByTestId('forum-post-41')).toHaveTextContent('My reply');
+        for (const n of [2, 30, 31, 40]) expect(screen.getByTestId(`forum-post-${n}`)).toBeInTheDocument();
+    });
+
+    it('Send from the first 30 of 70 draws the reply too, reading on to it', async () => {
+        state.posts = many(70);
+        await openTopic();
+        send('Late to this');
+        expect(await screen.findByTestId('forum-post-71')).toHaveTextContent('Late to this');
+        expect(screen.getByTestId('forum-post-30')).toBeInTheDocument();
+    });
+
+    it('a ⋯ action keeps every post read, each read afresh', async () => {
+        state.posts = many(40);
+        await openTopic();
+        fireEvent.click(screen.getByRole('button', { name: 'Show more replies' }));
+        await screen.findByTestId('forum-post-40');
+        // Meanwhile a moderator removed #35: the read after the member's own action draws that too.
+        state.posts = state.posts.map((x) => (x.number === 35 ? { ...x, words: '', removed: 'moderator' } : x));
+        fireEvent.click(screen.getByTestId('forum-follow'));
+        await waitFor(() => expect(screen.getByTestId('forum-post-35')).toHaveTextContent('Removed by a moderator'));
+        expect(screen.getByTestId('forum-post-40')).toBeInTheDocument();
+        // ft-1 was followed: the bell stopped following it, and the re-read drew that too.
+        expect(sent('POST', '/api/forum/topics/ft-1/follow')[0]?.body).toEqual({ follow: null });
+        expect(screen.getByTestId('forum-follow')).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('reopening a topic read to #40 reads all 40 again, not only the first 30', async () => {
+        state.posts = many(40);
+        await openTopic();
+        fireEvent.click(screen.getByRole('button', { name: 'Show more replies' }));
+        await screen.findByTestId('forum-post-40');
+        fireEvent.click(screen.getByTestId('forum-back'));
+        fireEvent.click(await screen.findByText('Seed swap ideas'));
+        await screen.findByTestId('forum-topic-title');
+        await waitFor(() => expect(sent('GET', '/api/forum/topics/ft-1?after=30')).toHaveLength(2));
+        expect(screen.getByTestId('forum-post-40')).toBeInTheDocument();
+    });
+});
+
+describe('a topic the member\'s own action takes away', () => {
+    it('removing their opening post in a topic nobody answered goes back to the list, in the node\'s words', async () => {
+        state.posts = [post(1, 'Mine', { writer: { publicKey: ME, name: 'Me' } })];
+        state.topics = [topic('ft-1', 'Seed swap ideas', { writer: { publicKey: ME, name: 'Me' }, replyCount: 0 }), topic('ft-2', 'Welcome: start here')];
+        await openTopic();
+        fireEvent.click(screen.getByTestId('forum-post-menu-1'));
+        fireEvent.click(within(screen.getByTestId('forum-menu')).getByRole('button', { name: 'Remove' }));
+        fireEvent.click(within(screen.getByTestId('forum-menu')).getByRole('button', { name: 'Remove' }));
+        expect(await screen.findByTestId('forum-gone')).toHaveTextContent('This topic isn’t here any more.');
+        expect(screen.queryByTestId('forum-topic')).toBeNull();
+        expect(keptTopic('ft-1')).toBeNull();
+        await waitFor(() => expect(screen.getAllByTestId('forum-topic-row').map((r) => r.textContent)).toEqual([expect.stringContaining('Welcome: start here')]));
+    });
+
+    it('blocking the topic\'s own writer goes back to the list, saying why it went', async () => {
+        vi.mocked(blockUser).mockImplementation(async () => { state.gone = true; return true; });
+        await openTopic();
+        fireEvent.click(screen.getByTestId('forum-post-menu-1'));
+        fireEvent.click(within(screen.getByTestId('forum-menu')).getByRole('button', { name: 'Block Asha' }));
+        fireEvent.click(within(screen.getByTestId('forum-menu')).getByRole('button', { name: 'Block Asha' }));
+        expect(await screen.findByTestId('forum-gone')).toHaveTextContent('You blocked Asha, so their topic no longer shows for you.');
+        expect(screen.queryByTestId('forum-topic')).toBeNull();
+        // Opening another topic takes the line away.
+        fireEvent.click(await screen.findByText('Welcome: start here'));
+        fireEvent.click(await screen.findByTestId('forum-back'));
+        await screen.findAllByTestId('forum-topic-row');
+        expect(screen.queryByTestId('forum-gone')).toBeNull();
     });
 });
 

@@ -59,6 +59,11 @@ export function keepForumFor(me: string): void {
     forgetForum();
     keptFor = me;
 }
+/** A topic that isn't there for this member any more (removed, or its writer blocked): out of the kept read and every kept list. */
+export function forgetForumTopic(id: string): void {
+    kept.topics.delete(id);
+    for (const [key, list] of kept.lists) kept.lists.set(key, { ...list, topics: list.topics.filter((t) => t.id !== id) });
+}
 /** For tests, and for a new account in this tab: nothing kept. */
 export function forgetForum(): void {
     keptFor = null;

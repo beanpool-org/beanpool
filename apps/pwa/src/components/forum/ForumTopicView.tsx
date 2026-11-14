@@ -5,13 +5,19 @@
  * only where it applies. The topic's bell follows or leaves it; its ⋯ mutes it or closes it. The reply box is the chat's
  * shape: words, 📎, Send, and a quoted reply above it. Opening the topic marks it read up to the last post drawn, which takes
  * the forum's own bell rows for it off (POST /read, slice F5).
+ *
+ * - **The reader's range.** A topic is read 30 posts at a time. Every read again (opening it, a reply sent, a ⋯ action) reads
+ *   through the last post the member had drawn, never only the first 30, and after Send on through their own reply.
+ * - **Gone.** When the node says the topic isn't there for this member any more (`not_found`: its opening post removed with
+ *   no reply, or its writer blocked), the kept copy is dropped and the member is back on the list with one line saying so.
+ * - **The sheet** on a public forum: the page holds the told stamp (`onTold`), so it shows once, not again on the next reply.
  */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FORUM_LIMITS, currentLanguage, forumSectionName, t, timeAgo, word } from '@beanpool/core';
 import {
-    closeForumTopic, followForumTopic, getForumTopic, keptTopic, markForumTold, readForumTopic, removeForumPost, replyInForum, reportForumPost,
-    type ForumFront, type ForumPost, type ForumTopicPage,
+    closeForumTopic, followForumTopic, forgetForumTopic, getForumTopic, keptTopic, markForumTold, readForumTopic, removeForumPost, replyInForum,
+    reportForumPost, type ForumFront, type ForumPost, type ForumTopicPage,
 } from '../../lib/forum';
 import { blockUser } from '../../lib/blocklist';
 import { useCoversScreen } from '../../lib/screen-cover';
@@ -46,6 +52,7 @@ export const TOPIC_WORDS = {
     block: word('Block {name}'),
     remove: word('Remove'),
     blockSure: word('Block {name}? You won’t see their posts or messages. You can unblock them in Settings.'),
+    goneBlocked: word('You blocked {name}, so their topic no longer shows for you.'),
     removeSure: word('Remove this post? Its words and photos go for everyone.'),
     reportTitle: word('Report this post'),
     reportNote: word('The community’s moderators see this post and your reason.'),
@@ -58,8 +65,17 @@ export const TOPIC_WORDS = {
 type Menu = { kind: 'post'; post: ForumPost; confirm?: 'block' | 'remove' } | { kind: 'topic' } | null;
 type MenuItem = [string, (() => void) | null, boolean?];
 
-export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
-    topicId: string; front: ForumFront | null; me: string; onBack: () => void; onOpenProfile?: (pubkey: string) => void;
+/** The number of the last post a read drew (0: none). */
+const lastOf = (p: ForumTopicPage | null) => (p?.posts.length ? p.posts[p.posts.length - 1].number : 0);
+
+/**
+ * `onTold`: the member agreed to the public forum's sheet (the page marks its front told, so it shows once).
+ * `onGone`: the topic isn't there for them any more; the page goes back to its list and says `words`.
+ * `onOpenProfile`: a writer's name opens their profile by key, only through this (App.tsx's one profile overlay).
+ */
+export function ForumTopicView({ topicId, front, me, onBack, onTold, onGone, onOpenProfile }: {
+    topicId: string; front: ForumFront | null; me: string; onBack: () => void; onTold: () => void; onGone: (words: string) => void;
+    onOpenProfile?: (pubkey: string) => void;
 }) {
     const [page, setPage] = useState<ForumTopicPage | null>(() => keptTopic(topicId));
     const [failed, setFailed] = useState(false);
@@ -75,18 +91,34 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
     useGrowingComposer(box);
     useCoversScreen(menu !== null);
 
-    async function load(after = 0) {
+    /**
+     * Reads the posts after number `from` afresh, on through post `upTo` (or the topic's end), 30 a read: posts drawn up to
+     * `from` stay as they are, so a long topic keeps the reader's range. `goneWords`: what to say if the topic went because
+     * of the member's own action (else the node's words).
+     */
+    async function readThrough(from: number, upTo: number, goneWords?: string) {
         try {
-            const p = await getForumTopic(topicId, after);
+            let p = await getForumTopic(topicId, from);
+            while (p.next != null && p.next > from && lastOf(p) < upTo) {
+                from = p.next;
+                p = await getForumTopic(topicId, from);
+            }
             setPage(p);
             setFailed(false);
-            const last = p.posts.length ? p.posts[p.posts.length - 1].number : 0;
+            const last = lastOf(p);
             if (last > p.lastRead) void readForumTopic(topicId, last).catch(() => { /* the next open marks it */ });
-        } catch {
-            setFailed(true);
+        } catch (e) {
+            const err = e as Error & { status?: number; code?: string };
+            // Not there for this member any more: never the old copy left on screen with nothing said.
+            if (err?.status === 404 && err.code === 'not_found') {
+                forgetForumTopic(topicId);
+                onGone(goneWords ?? err.message);
+            } else {
+                setFailed(true);
+            }
         }
     }
-    useEffect(() => { void load(0); }, [topicId]);
+    useEffect(() => { void readThrough(0, lastOf(keptTopic(topicId))); }, [topicId]);
 
     const topic = page?.topic;
     const opening = page?.posts.find((p) => p.number === 1) ?? null;
@@ -101,28 +133,33 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
         if (front?.public && !front.told && !told) { setTelling(true); return; }
         setBusy(true);
         setError(null);
+        let mine: ForumPost;
         try {
-            await replyInForum(topic.id, { words: words.trim(), quotes: quote?.number ?? null, lang: currentLanguage(), photos });
-            setWords('');
-            setPhotos([]);
-            setQuote(null);
-            await load(0);
+            mine = await replyInForum(topic.id, { words: words.trim(), quotes: quote?.number ?? null, lang: currentLanguage(), photos });
         } catch (e) {
             setError((e as Error)?.message || t('Couldn’t save this in the forum.'));
-        } finally {
             setBusy(false);
+            return;
         }
+        setWords('');
+        setPhotos([]);
+        setQuote(null);
+        // On from the last post drawn, through their own reply: it shows where it went, and nothing read is lost.
+        await readThrough(lastOf(page), mine.number);
+        setBusy(false);
     }
 
-    async function act(fn: () => Promise<unknown>) {
+    /** One of the member's own ⋯ actions, then every post they had drawn read again. `goneWords`: if it takes the topic away. */
+    async function act(fn: () => Promise<unknown>, goneWords?: string) {
         setMenu(null);
         setError(null);
         try {
             await fn();
-            await load(0);
         } catch (e) {
             setError((e as Error)?.message || t('Couldn’t save this in the forum.'));
+            return;
         }
+        await readThrough(0, lastOf(page), goneWords);
     }
 
     const quoted = (n: number | null) => (n ? page?.posts.find((p) => p.number === n) ?? null : null);
@@ -173,7 +210,7 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
             {failed && !page && (
                 <div className="flex flex-col items-start gap-2">
                     <p className="m-0 text-sm" style={{ color: 'var(--text-secondary)' }}>{t(TOPIC_WORDS.failed)}</p>
-                    <button type="button" onClick={() => void load(0)} className="min-h-[44px] px-4 rounded-lg font-semibold" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }}>{t(TOPIC_WORDS.again)}</button>
+                    <button type="button" onClick={() => void readThrough(0, 0)} className="min-h-[44px] px-4 rounded-lg font-semibold" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }}>{t(TOPIC_WORDS.again)}</button>
                 </div>
             )}
 
@@ -204,7 +241,7 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
                 );
             })}
             {page?.next != null && (
-                <button type="button" onClick={() => void load(page.next!)} className="min-h-[44px] rounded-lg font-semibold" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }}>{t(TOPIC_WORDS.moreReplies)}</button>
+                <button type="button" onClick={() => void readThrough(page.next!, 0)} className="min-h-[44px] rounded-lg font-semibold" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }}>{t(TOPIC_WORDS.moreReplies)}</button>
             )}
 
             {error && <p role="alert" className="m-0 text-sm" style={{ color: 'var(--bp-ink-danger)' }}>{error}</p>}
@@ -254,7 +291,7 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
                 <ForumToldSheet busy={busy} onNotNow={() => setTelling(false)} onPost={() => {
                     setTelling(false);
                     setBusy(true);
-                    void markForumTold().then(() => { setBusy(false); return send(true); })
+                    void markForumTold().then(() => { onTold(); setBusy(false); return send(true); })
                         .catch((e) => { setBusy(false); setError((e as Error)?.message || t('Couldn’t save this in the forum.')); });
                 }} />
             )}
@@ -278,7 +315,8 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
         if (m.confirm === 'block') {
             return [
                 [t(TOPIC_WORDS.blockSure, { name: name(post) }), null],
-                [t(TOPIC_WORDS.block, { name: name(post) }), () => void act(() => blockUser(post.writer.publicKey)), true],
+                // Blocking the topic's own writer takes their topic away for this member: the list says why.
+                [t(TOPIC_WORDS.block, { name: name(post) }), () => void act(() => blockUser(post.writer.publicKey), t(TOPIC_WORDS.goneBlocked, { name: name(post) })), true],
                 [t(TOPIC_WORDS.cancel), () => setMenu(null)],
             ];
         }

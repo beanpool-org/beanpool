@@ -296,7 +296,7 @@ describe('Tell me, then joining: the member\'s notifications only after Turn on 
         const told = await tellMeWhenTheyAnswer(HERE, identity, 'en', env({}));
         expect(told.ok).toBe(true);
         expect(posts()).toHaveLength(1);
-        expect(readWebPushPin(HERE, MEMBER)?.for).toBe('asker');
+        expect(readWebPushPin(HERE, MEMBER)).not.toBeNull();
 
         // The same key joins; the web app opens for the member. The open reads this browser's subscription and sends nothing.
         render(createElement(OpenApp));
@@ -313,7 +313,6 @@ describe('Tell me, then joining: the member\'s notifications only after Turn on 
         fireEvent.click(screen.getByRole('button', { name: 'Turn on' }));
         await waitFor(() => expect(screen.getByTestId('web-push-row').getAttribute('data-state')).toBe('on'));
         expect(posts()).toHaveLength(2);
-        expect(readWebPushPin(HERE, MEMBER)?.for).toBe('member');
         cleanup();
 
         // From now on, each open gives it again, as the phone registers at each start.

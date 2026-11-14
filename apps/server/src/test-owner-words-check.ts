@@ -288,7 +288,9 @@ async function main() {
     console.log('\n5. nothing reads the record to allow or refuse');
     {
         const srcDir = path.dirname(fileURLToPath(import.meta.url));
-        const allowed = new Set(['engine/owner-words-checks.ts', 'routes/owner-words-check.ts', 'test-owner-words-check.ts']);
+        // test-retire-empty-duplicate.ts names both tables only to classify their member column as no activity of an account
+        // (its schema check, which every member-keyed column must pass): it reads no row and nothing gates on it.
+        const allowed = new Set(['engine/owner-words-checks.ts', 'routes/owner-words-check.ts', 'test-owner-words-check.ts', 'test-retire-empty-duplicate.ts']);
         // The replication manifest names every table in schema.sql to say how a standby holds it (both of these are
         // 'local', never copied): a classification, not a read. Only its entry line for each table is skipped; any
         // other mention in that file still counts.
@@ -313,7 +315,8 @@ async function main() {
         assert(hits.length === 0, `no other server source reads it (found: ${hits.join(', ') || 'none'})`);
 
         // The open-check records, likewise: written by their route, read only by the list.
-        const openAllowed = new Set(['engine/owner-lock-opens.ts', 'engine/owner-words-checks.ts', 'routes/owner-unlock.ts', 'test-owner-words-check.ts', 'test-owner-lock-open-check.ts']);
+        const openAllowed = new Set(['engine/owner-lock-opens.ts', 'engine/owner-words-checks.ts', 'routes/owner-unlock.ts', 'test-owner-words-check.ts', 'test-owner-lock-open-check.ts',
+            'test-retire-empty-duplicate.ts']);
         const openHits: string[] = [];
         const walkOpen = (dir: string) => {
             for (const e of fs.readdirSync(dir, { withFileTypes: true })) {

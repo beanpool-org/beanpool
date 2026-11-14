@@ -2247,6 +2247,17 @@ CREATE TABLE IF NOT EXISTS known_floor_exceptions (
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- An empty duplicate an owner retired (engine/retire-duplicate.ts; Marty, 14 Nov 2026): who and when. While the member's
+-- row is 'disabled' with this row beside it, the account acts, signs and lists as nothing; no vote opened and nothing was
+-- deleted. Bring back deletes this row and makes the account active. No row: not retired.
+CREATE TABLE IF NOT EXISTS retired_accounts (
+    member_pubkey  TEXT PRIMARY KEY,
+    retired_by     TEXT NOT NULL,
+    retired_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- A tier badge (engine/badges.ts; Marty, 12 Nov 2026: "tiers badge only"): one an owner or admin gave a member, or a genesis
 -- invite gave its joiner. Recognition only: it gives no credit and no floor reads it; the tier a member shows is the higher
 -- of it and what they did (@beanpool/engine trust.ts). No row: no badge. Each change is a line in known_floor_log ('badge').

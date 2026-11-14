@@ -19,15 +19,16 @@
 // Exit: 0 CLEAN+GREEN, 3 CLEAN+RED, 4 NOT CLEAN, 5 PENDING, 2 the PR could not be read or bad arguments.
 // PR_STATE_GH names the gh binary (the tests' stand-in); LANE_CI_CHECK the required check (lib.sh's default).
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
+// PR_STATE_ROOT: the checkout whose files a failure names (the tests run mutated copies of this script from a temp dir).
+const ROOT = process.env.PR_STATE_ROOT || join(dirname(fileURLToPath(import.meta.url)), '../..');
 export const REQUIRED_CHECK = process.env.LANE_CI_CHECK || 'Run BeanPool Test-All Pipeline';
 const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']); // a stranger's "CLEAN" comment on a public PR is not a verdict
-const RED = new Set(['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure', 'stale', 'error']);
 const WIDTH = 240;
+const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, 'g'); // colour codes, or every pattern below misses
 
 // ── gh, read-only ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -130,7 +131,7 @@ export function normaliseChecks(checkRuns, status) {
 
 // ── failure lines in a job log ────────────────────────────────────────────────────────────────────────────────────────────
 
-const clean = (l) => l.replace(/^﻿/, '').replace(/^\d{4}-\d\d-\d\dT[\d:.]+Z ?/, '').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/\r$/, '');
+const clean = (l) => l.replace(/^\uFEFF/, '').replace(/^\d{4}-\d\d-\d\dT[\d:.]+Z ?/, '').replace(ANSI, '').replace(/\r$/, '');
 const clip = (s) => (s.length > WIDTH ? `${s.slice(0, WIDTH)} …` : s);
 const FAIL_LINE = [
   /^\s*[✗✘]/, /^\s*FAIL\s/, /^\s*not ok \d+/, /AssertionError/, /^\s*❯ \S+:\d+/, /^\s*❌/, /^\s*Error:/,
@@ -270,7 +271,10 @@ export function summarize({ review, checks, checksError }) {
   const ci = checksError ? 'checks unreadable'
     : n ? redWord : pending.length ? `${pending.length} pending` : !required ? 'the required check has not reported' : 'green';
   if (review.none) return { line: `NOT CLEAN (no deciding review on this PR; CI: ${ci})`, code: 4 };
-  if (review.verdict !== 'CLEAN') return { line: `NOT CLEAN (the last deciding review says NOT CLEAN; CI: ${ci})`, code: 4 };
+  if (review.verdict !== 'CLEAN') {
+    const of = review.named && !review.headMatch ? `, about ${review.named.sha.slice(0, 8)} and not this head,` : '';
+    return { line: `NOT CLEAN (the last deciding review${of} says NOT CLEAN; CI: ${ci})`, code: 4 };
+  }
   if (!review.named) return { line: `NOT CLEAN (the CLEAN verdict names no head, so it cannot be tied to this one; CI: ${ci})`, code: 4 };
   if (!review.headMatch) return { line: `NOT CLEAN (MISMATCH: the CLEAN verdict is about ${review.named.sha.slice(0, 8)}, not this head; CI: ${ci})`, code: 4 };
   if (checksError) return { line: `PENDING (the checks could not be read: ${checksError})`, code: 5 };
@@ -318,8 +322,9 @@ export function collect(pr, repo, limit) {
     if (c.state !== 'red' || !c.jobId) continue;
     const log = attempt(() => readGh(['api', `${base}/actions/jobs/${c.jobId}/logs`]));
     if (!log.ok) { c.logError = log.error; continue; }
+    // The log decides, not the name: before the shards (#2000) the job with the required name ran the tests itself.
     const summary = isSummaryLog(log.value);
-    if (summary) c.aggregate = true;
+    c.aggregate = summary;
     c.lines = failureLines(log.value, limit).filter((l) => !summary || /^Shards: /.test(l.text));
     c.files = namedFiles(c.lines).map((f) => ({ ...f, touched: files.ok ? touches(f, files.value) : undefined }));
   }
@@ -333,7 +338,8 @@ export function render(s) {
   const { pr: p, review: r, checks, repo } = s;
   const out = [];
   const row = (k, v) => out.push(`${k.padEnd(12)}${v}`);
-  out.push(`PR #${p.number}  ${p.headRefName} → ${p.baseRefName}  ${p.state}${p.isDraft ? ' (draft)' : ''}  ${p.title || ''}`.trimEnd());
+  const title = (p.title || '').length > 90 ? `${p.title.slice(0, 90)} …` : p.title || '';
+  out.push(`PR #${p.number}  ${p.headRefName} → ${p.baseRefName}  ${p.state}${p.isDraft ? ' (draft)' : ''}  ${title}`.trimEnd());
   row('head', p.headRefOid);
   row('base', p.baseRefName);
   row('mergeable', `${p.mergeable} (merge state ${p.mergeStateStatus})`);
@@ -411,4 +417,6 @@ function main(argv) {
   }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] || '').href) process.exitCode = main(process.argv.slice(2));
+// Run as a command, not imported. Through realpath: on macOS a temp path (/var/…) is a symlink to /private/var/….
+const invoked = (() => { try { return pathToFileURL(realpathSync(process.argv[1])).href; } catch { return ''; } })();
+if (import.meta.url === invoked) process.exitCode = main(process.argv.slice(2));

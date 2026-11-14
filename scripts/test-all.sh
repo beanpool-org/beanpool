@@ -445,8 +445,9 @@ run_check "directory_register" bash scripts/test-directory-register.sh
 # the repository's workflows and each edit the check exists to catch. check-ci-shards.test.mjs: every check here runs in
 # exactly one of CI's shards (.github/workflows/ci.yml), the required check's name is on the aggregate job alone, and the
 # merge queue's ruleset and trigger are what the gate rests on. scripts/merge-queue: the board, requeue, tripwire and self-test
-# against a stand-in gh and a throwaway origin; selftest.test.mjs is the test the self-test's throwaway PRs make fail. Seconds.
-run_check "workflows" node --test scripts/check-workflows.test.mjs scripts/check-ci-shards.test.mjs scripts/merge-queue/merge-queue.test.mjs scripts/merge-queue/selftest.test.mjs
+# against a stand-in gh and a throwaway origin; selftest.test.mjs is the test the self-test's throwaway PRs make fail.
+# scripts/lanes/test/pr-state.test.mjs: the director's read-only PR state against recorded GitHub answers. Seconds.
+run_check "workflows" node --test scripts/check-workflows.test.mjs scripts/check-ci-shards.test.mjs scripts/merge-queue/merge-queue.test.mjs scripts/merge-queue/selftest.test.mjs scripts/lanes/test/pr-state.test.mjs
 
 # No page in apps/ asks Google for a font: the web app, Settings, the website and its guide serve their own files
 # (with their licences), and the node's document policies allow fonts from the node only. Instant.

@@ -39,9 +39,10 @@ import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } 
 import { markForumTold, resetForumStartersCheckForTests } from './engine/forum.js';
 import { hideBurstPosts, undoBurstHide } from './engine/burst-cleanup.js';
 import { TABLES } from './engine/replication-manifest.js';
-import { TEST_PHOTO } from './post-test-helper.js';
+import { TEST_PHOTO, TEST_PHOTOS } from './post-test-helper.js';
 import { resetPhotoBudgetForTests } from './engine/photo-upload-budget.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -69,6 +70,8 @@ function member(name: string, daysAgo: number, opts: { words?: boolean } = {}): 
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, ?, 'TEST', 'active')`)
         .run(id.pk, name, ago(daysAgo * DAY), owner.pk);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    // Posting a listing needs a profile photo.
+    setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
     if (opts.words) db.prepare(`INSERT INTO open_joins (member_pubkey, provider, join_hash) VALUES (?, 'words', ?)`).run(id.pk, crypto.randomBytes(16).toString('hex'));
     markForumTold(id.pk);
     return id;
@@ -77,7 +80,7 @@ function member(name: string, daysAgo: number, opts: { words?: boolean } = {}): 
 function established(name: string): Id {
     const id = member(name, 60);
     for (let i = 0; i < 3; i++) {
-        const p = createPost('offer', 'other', `${name} kept ${i}`, 'kept', 0, 'fixed', id.pk)!;
+        const p = createPost('offer', 'other', `${name} kept ${i}`, 'kept', 0, 'fixed', id.pk, undefined, undefined, TEST_PHOTOS)!;
         db.prepare('UPDATE posts SET created_at = ? WHERE id = ?').run(ago(2 * DAY), p.id);
     }
     return id;

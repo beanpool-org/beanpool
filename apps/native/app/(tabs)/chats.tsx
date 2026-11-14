@@ -70,10 +70,11 @@ export default function ChatsScreen() {
 
     React.useEffect(() => {
         // A way in that names a pane (a notice, the header's icons, Home's "All N groups", a deep link) means Chats. Every
-        // notice for this tab names one (utils/push-notice-check.ts CHAT_MESSAGES_ROUTE); the tab bar's own tap names none,
-        // so it keeps the side the member chose. The param is cleared once read, as the filter's is below: a tab stays
-        // mounted, so the same view pushed again after a Forum tap would change nothing and leave the member on the Forum. Only Talk's own three are taken: People's
-        // (friends, community, invites) are PeopleScreen's, which reads this route's params while mounted inside Talk.
+        // notice for this tab names one (utils/push-notice-check.ts noticeRoute); the tab bar's own tap names none, so it
+        // keeps the side the member chose. The param is cleared once read, as the filter's is below: a tab stays mounted, so
+        // the same view pushed again after a Forum tap would change nothing and leave the member on the Forum. Only Talk's
+        // own three are taken: People's (friends, community, invites) are PeopleScreen's, which reads this route's params
+        // while mounted inside Talk.
         const view = talkParams.view;
         if (view !== 'people' && view !== 'groups' && view !== 'messages') return;
         setTalkView(view);

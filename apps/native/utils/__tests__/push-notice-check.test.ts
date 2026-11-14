@@ -620,6 +620,19 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         expect(noticeRoute('community.knock-shared', null)).toBe('/(tabs)/settings');
     });
 
+    it('a Chat tab notice whose details never came names the pane its chat is in, so the tab lands on Chats from the Forum side (review of #3146)', () => {
+        // Chats at Messages for a person's message; at Groups for the group kinds. Never the bare tab, which keeps the Forum.
+        for (const details of [null, undefined, {}, { screen: 'nowhere' }]) {
+            expect(noticeRoute('chat.message', details)).toBe('/(tabs)/chats?view=messages');
+            for (const kind of ['chat.group', 'chat.mention', 'group.lead'] as const) expect(noticeRoute(kind, details), kind).toBe('/(tabs)/chats?view=groups');
+        }
+        // Every kind the core sends to the Chat tab is one of those four.
+        expect(Object.entries(PUSH_NOTICE_KINDS).filter(([, k]) => k.tab === 'chats').map(([kind]) => kind).sort())
+            .toEqual(['chat.group', 'chat.mention', 'chat.message', 'group.lead']);
+        // Each still has somewhere of its own, so the bell offers Open.
+        for (const kind of ['chat.message', 'chat.group', 'chat.mention', 'group.lead'] as const) expect(noticeHasDestination(kind, null), kind).toBe(true);
+    });
+
     it('noticeHasDestination: the bell offers "Open" only where the notice lands somewhere of its own', () => {
         // A kind's tab (Chats, Market, People, Settings) or a place the details name is somewhere.
         expect(noticeHasDestination('chat.message', {})).toBe(true);

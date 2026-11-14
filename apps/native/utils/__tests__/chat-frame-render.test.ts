@@ -430,19 +430,23 @@ describe('the Chat tab where the forum is on: Chats · Forum in the title\'s pla
         }
     });
 
-    it('a chat notice whose details never came (every kind for the Chat tab), tapped or opened from the bell after a Forum tap, lands on Chats (review of #3146)', async () => {
+    it('a chat notice whose details never came (every kind for the Chat tab), tapped or opened from the bell after a Forum tap, lands on Chats, at its chat\'s pane (review of #3146)', async () => {
         rememberProfile(WITH_FORUM);
         await renderIn('en');
         const chatKinds = (Object.keys(PUSH_NOTICE_KINDS) as PushNoticeKind[]).filter((k) => PUSH_NOTICE_KINDS[k].tab === 'chats');
         expect(chatKinds.sort()).toEqual(['chat.group', 'chat.mention', 'chat.message', 'group.lead']);
-        for (const kind of chatKinds) {
+        // A person's message is listed under Messages; group, enterprise and event chats under Groups.
+        const pane: Record<string, string> = { 'chat.message': 'Messages', 'chat.group': 'Groups', 'chat.mention': 'Groups', 'group.lead': 'Groups' };
+        // Each from the other pane first, so the landing is the route's doing.
+        for (const kind of [...chatKinds, ...chatKinds]) {
+            await click(radio(pane[kind] === 'Groups' ? 'Messages' : 'Groups'), 'the other pane');
             await click(side('Forum'), 'Forum');
             expect(forumPane(), `${kind}: on the Forum before it`).not.toBeNull();
             // What followTap lands on when the community's answer timed out, and the bell's Open (components/NeedsYouIcons.tsx).
             await pushRoute(noticeRoute(kind, null));
             expect(selected(tabs()), kind).toEqual(['true', 'false']);
             expect(forumPane(), kind).toBeNull();
-            expect(host.textContent, kind).toContain('Kofi');
+            expect(radio(pane[kind])?.getAttribute('aria-selected'), kind).toBe('true');
         }
     });
 

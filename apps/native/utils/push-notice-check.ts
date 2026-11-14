@@ -513,19 +513,24 @@ export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Pro
 
 // ── Where a tap lands ──────────────────────────────────────────────────────────────────────────────────────────
 
-export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats?view=messages' | '/(tabs)/settings' | '/(tabs)/people?view=invites&from=notice' | '/find-community' | '/shared-outside'
+export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats?view=messages' | '/(tabs)/chats?view=groups' | '/(tabs)/settings' | '/(tabs)/people?view=invites&from=notice' | '/find-community' | '/shared-outside'
     | '/(tabs)/chats?filter=requests' | '/(tabs)/projects?section=decide'
     | '/(tabs)/people?view=community&credit=vouchers' | `/(tabs)/people?view=community&credit=vouchers&voucher=${string}`
     | `/post/${string}` | `/chat/${string}`
     | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1`;
 
 /**
- * The Chat tab on Chats, at Messages: where a notice for the Chat tab lands when it names no chat or screen (the phone's own
- * notice that messages wait at a community, and a chat notice whose details never came). The tab stays mounted, so a route with no
- * view would leave a member who last tapped Forum on the Forum; the tab reads this view as "Chats", then clears it, so the
- * same notice again lands there again (app/(tabs)/chats.tsx). The tab bar's own tap names no view and keeps the side chosen.
+ * The Chat tab on Chats, at Messages: where a notice about messages lands when it names no chat or screen (the phone's own
+ * notice that messages wait at a community, and a person's message whose details never came). The tab stays mounted, so a
+ * route with no view would leave a member who last tapped Forum on the Forum. The tab reads the view as "Chats", then clears
+ * it, so the same notice again lands there again (app/(tabs)/chats.tsx). The tab bar's own tap names no view and keeps the
+ * side the member chose.
  */
 export const CHAT_MESSAGES_ROUTE = '/(tabs)/chats?view=messages' satisfies NoticeRoute;
+/** The same, at Groups, where group, enterprise and event chats are listed: a group notice whose details never came. */
+const CHAT_GROUPS_ROUTE = '/(tabs)/chats?view=groups' satisfies NoticeRoute;
+/** The Chat tab's kinds about a group (core push-notice.ts): a message in one, a mention in one, news of one the member leads. */
+const GROUP_CHAT_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['chat.group', 'chat.mention', 'group.lead']);
 
 /** An enterprise's key as the node writes it: 32 bytes, lower-case hex. */
 const ENTERPRISE_KEY = /^[0-9a-f]{64}$/;
@@ -536,7 +541,7 @@ const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
     // Home is the tabs' first screen (app/(tabs)/index.tsx); the Market has its own route since Home came (H2).
     home: '/(tabs)',
     market: '/(tabs)/market',
-    // The Chat tab's kinds (core push-notice.ts): Chats, at Messages, whatever side the tab was left on.
+    // A person's message (core push-notice.ts); the group kinds land at Groups (noticeRoute). Chats, whatever side the tab was left on.
     chats: CHAT_MESSAGES_ROUTE,
     settings: '/(tabs)/settings',
     // A request to join (community.knock, the People tab's only kind): Invites, where it is listed with Invite and Not now.
@@ -580,6 +585,7 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     // Someone asked to join after a listing this member shared (community.knock-shared, shared-listing door A3): their
     // Shared outside, where that link's row counts who asked.
     if (d.screen === 'shared-outside') return '/shared-outside';
+    if (kind && GROUP_CHAT_KINDS.has(kind)) return CHAT_GROUPS_ROUTE;
     const tab = kind && isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
     return TAB_ROUTES[tab] ?? TAB_ROUTES.home;
 }

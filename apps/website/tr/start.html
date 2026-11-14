@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bir topluluk başlatın — BeanPool</title>
-    <meta name="description" content="Her topluluk kendi düğümünde çalışır: o topluluğun üyelerini, gönderilerini ve defterini tutan küçük bir sunucu. Yerel biri bunu çalıştırır. Kasabanızda veya vadinizde henüz bir tane yoksa, o kişi siz olabilirsiniz.">
+    <meta name="description" content="Evde boşta duran bir bilgisayarda ya da kiralık küçük bir sunucuda bir BeanPool topluluğu başlatın: ne gerektiği, adresinizi nasıl seçeceğiniz ve kurmak için yapıştıracağınız tek blok.">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="../style.css?v=2.9">
@@ -49,7 +49,7 @@
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="BeanPool">
     <meta property="og:title" content="Bir topluluk başlatın — BeanPool">
-    <meta property="og:description" content="Her topluluk kendi düğümünde çalışır: o topluluğun üyelerini, gönderilerini ve defterini tutan küçük bir sunucu. Yerel biri bunu çalıştırır. Kasabanızda veya vadinizde henüz bir tane yoksa, o kişi siz olabilirsiniz.">
+    <meta property="og:description" content="Evde boşta duran bir bilgisayarda ya da kiralık küçük bir sunucuda bir BeanPool topluluğu başlatın: ne gerektiği, adresinizi nasıl seçeceğiniz ve kurmak için yapıştıracağınız tek blok.">
     <meta property="og:url" content="https://beanpool.org/tr/start">
     <meta property="og:image" content="https://beanpool.org/og-image.jpg">
     <meta property="og:image:width" content="1200">
@@ -234,8 +234,8 @@ docker compose exec beanpool-node beanpool claim</code>
 
         <h3 class="run-node-sub">Son satır: beanpool claim</h3>
         <ol class="run-node-steps">
-            <li><strong>Kod ve QR.</strong> Tek seferlik bir talep kodu ve bir QR kodu gösterir. QR kodunu telefonunuzun kamerasıyla tarayın veya BeanPool'u açın, <strong>Topluluğunuzu bulun</strong> altına sunucunun adresini yazın ve <strong>Talep Et</strong>'e dokunun. O telefon sahip olur.</li>
-            <li><strong>Ayarlar.</strong> Adresinizi (veya sunucunun kendi adresini) ardından <strong>/settings</strong> yazarak açın. Kurulum sihirbazı topluluğunuza ad verir, ikinci bir sahip eklemenizi ister ve üç kurucu davet oluşturur. Yakındaki kişilerin sizi bulabilmesi için Düğüm Kimliği altında haritadaki yerinizi belirleyin.</li>
+            <li><strong>Kod ve QR.</strong> Tek seferlik bir talep kodu, bir QR kodu ve numaralı olarak sonraki adımları gösterir. Önce topluluğun sahibi olacak telefona BeanPool'u <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=tr" target="_blank" rel="noopener">Google Play</a> veya <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a>'dan yükleyin. Ardından QR kodunu telefonunuzun kamerasıyla tarayın ya da BeanPool'u açıp <strong>BeanPool'u bir sunucuya mı kurdunuz? Sahiplenin</strong> seçeneğine dokunun (telefonda zaten bir hesap varsa: üstteki fasulyeye, ardından <strong>Yeni bir topluluk sunucusu kur</strong> seçeneğine dokunun). Sahiplenme yalnızca telefon uygulamasından yapılır. Sahiplenme, davet olmadan ve BeanPool projesinden hiçbir şey gerekmeden o telefonda BeanPool hesabınızı oluşturur: adınızı yazın, <strong>Sahiplen ve sahip ol</strong> seçeneğine dokunun ve gösterilen 12 kelimeyi bir yere yazın. Zaten hesabı olan bir telefon o hesapla sahiplenir. O telefon sahip olur.</li>
+            <li><strong>Ayarlar.</strong> Adresinizi (veya sunucunun kendi adresini) ardından <strong>/settings</strong> yazarak açın: temel ayarlarınızı (Core settings) onaylayın, bir kurtarma kodu oluşturun, ikinci bir sahip ekleyin ve ilk üyelerinizi davet edin. İlk üçünden biri yapılmadığı sürece Ayarlar'ın ana sayfası (Home) onu <strong>Action Required</strong> (Eylem Gerekli) altında listeler. Home'daki Cold-Start sihirbazı isteğe bağlıdır: son adımı, yazdırabileceğiniz üç kurucu davet oluşturur. Yakındaki kişilerin sizi bulabilmesi için Node Identity altında haritadaki yerinizi belirleyin.</li>
         </ol>
         <p class="run-node-note">Blok <strong>No claim code after 5 minutes</strong> diyorsa veya <code>beanpool claim</code> komutu <strong>This community has no claim code waiting</strong> diyorsa sunucunun başlatılması henüz bitmemiştir: <code>docker compose logs beanpool-node</code> nerede olduğunu gösterir. Günlük topluluğun henüz bir sahibi olmadığını ve bir talep koduna sahip olduğunu söylediğinde, son satırı tekrar çalıştırın. Tüm adımlar operatör kılavuzunun <a href="../guide/operators/first-time-setup.html">ilk kurulum</a> bölümündedir.</p>
 

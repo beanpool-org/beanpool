@@ -19,10 +19,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
-import { OUTSIDE_DOOR_EACH_DEVICE, OUTSIDE_LINE_TEXT_MAX, addressCardFromText, addressCardLink, relayConversationId, t, type AddressCard } from '@beanpool/core';
+import { OUTSIDE_DOOR_EACH_DEVICE, OUTSIDE_LINE_TEXT_MAX, addressCardFromText, addressCardLink, t, type AddressCard } from '@beanpool/core';
 import { Alert } from '../utils/keyboard-alert';
 import { useTheme, useStyles } from './ThemeContext';
-import { doorOpen, myAddressCard, myHome, sendFromBox, setDoor } from '../utils/outside-mail';
+import { doorOpen, myAddressCard, myHome, openChatFromCard, sendFromBox, setDoor } from '../utils/outside-mail';
 import { OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, outsideMessagesHere } from '../utils/outside-chat-live';
 
 /** Core's sentence, the web's too (@beanpool/core outside-devices.ts). */
@@ -83,6 +83,8 @@ export default function AddressCardScreen() {
         if (!ctx) return false;
         if (card.key === ctx.identity.publicKey) { setCardNote(t("That's your own card.")); return true; }
         if (card.home === await myHome(ctx).catch(() => null)) { setCardNote(t('{name} is in this community: write to them here.', { name: card.name })); return true; }
+        // A block is the account's: no box to write to them, and their chat here stays as it is (outside-mail.ts openChatFromCard).
+        if (await ctx.isBlocked(card.key)) { setCardNote(t('You have blocked this user. Messaging is disabled.')); return true; }
         setCardNote(null);
         setTheirs(card);
         return true;
@@ -100,8 +102,8 @@ export default function AddressCardScreen() {
         try {
             const ctx = await outsideContext();
             if (!ctx) return;
-            const chatId = relayConversationId(ctx.identity.publicKey, theirs.key);
-            await ctx.store.openChat(ctx.identity.publicKey, chatId, { key: theirs.key, home: theirs.home, name: theirs.name });
+            const chatId = await openChatFromCard(ctx, theirs);
+            if (!chatId) { setTheirs(null); setCardNote(t('You have blocked this user. Messaging is disabled.')); return; }
             // The words stay in this box while the line goes. Kept on this phone: on to the chat, which shows it (Sending… or
             // Not delivered). Not kept: this screen stays, with the words, to send again.
             const { kept, error } = await sendFromBox(ctx, chatId, words, OUTSIDE_SEND_MS, () => {});

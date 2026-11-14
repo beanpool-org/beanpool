@@ -20,7 +20,8 @@
  * Out with the store, after the server is told to forget it ({@link forgetMailDevice}). The server deletes an item once
  * every device of the account has confirmed it, so a confirm here, of a line written or of one dropped (this phone's door
  * closed, say), never takes it from another phone or browser whose door is open. The door, Accept and Decline are this
- * phone's own; a block is the account's.
+ * phone's own; a block is the account's: no way a chat can change here (their line, a tick of mine from any device, their
+ * card) makes, reopens or lists a chat with someone blocked ({@link chatsShown}, {@link openChatFromCard}).
  *
  * **Receipts.** Each line written is receipted to its sender's home (kind `receipt`): their phone shows Delivered. The
  * receipt is owed on the phone (outside_receipts) before its line is confirmed, and owed until my server takes it: a round
@@ -33,7 +34,7 @@
  * kept here). They are applied before any held item is gated, every page of them: a chat I wrote to opens here first, so its
  * lines are never judged as a stranger's. A tick for a line this phone doesn't have (a phone restored from 12 words, or a line
  * I wrote on another device) opens that chat here: brought back empty and marked restored when this phone has none, and
- * opened from a request or a decline when it has one.
+ * opened from a request or a decline when it has one; never one with someone the account blocked.
  *
  * **A deadline.** Every request a round or a send makes carries the context's `signal` (React Native's fetch never gives up
  * by itself), so the caller's deadline (outside-chat-live.ts) ends a stalled request, and the round with it.
@@ -45,7 +46,7 @@ import {
 } from '@beanpool/core';
 import { signAddressCardStatement, signRelayEnvelopeStatement } from './member-statements';
 import { signedGet, signedPost } from './node-post';
-import { gateIncoming, type OutsideChatStore, type OutsideLineState } from './outside-chat-store';
+import { gateIncoming, type OutsideChat, type OutsideChatStore, type OutsideLineState } from './outside-chat-store';
 import type { BeanPoolIdentity } from './identity';
 
 /** The member's door (design §3.5): opened by showing their card here the first time, closed in Settings → Privacy. */
@@ -181,10 +182,61 @@ export async function mailDeviceIfAny(store: OutsideChatStore): Promise<string |
 /**
  * My server forgets `device`, this phone's mail id (`POST /api/mail/device/forget`): it holds no more mail for it, and what
  * every other device of the account has goes there. For Sign Out, with the id read before the store goes
- * (outside-chat-live.ts forgetThisPhoneForMail). Throws as any request here does.
+ * ({@link forgetThisPhoneForMail}). Throws as any request here does.
  */
 export async function forgetMailDevice(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'identity' | 'signal'>, device: string): Promise<void> {
     await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/device/forget', { device }, ctx.identity as BeanPoolIdentity, ctx.signal));
+}
+
+/** How long Sign Out lets its community take this phone's forget: as long as it lets each push unregister take (4 s). */
+export const FORGET_DEVICE_MS = 4_000;
+
+/**
+ * At Sign Out (account-leaves-phone.ts signOutOfThisPhone), before the account's tables leave this phone: this phone's mail
+ * id is read now, while `store` still holds it, and my server is asked to forget it ({@link forgetMailDevice}), signed with
+ * the key in memory. The request runs while the rest of the leave does: `done` settles when it has, or at `budgetMs` (the
+ * request aborted then), whichever is first, even if a fetch never gives up. Never throws, never rejects: a community that
+ * doesn't answer lets this phone lapse after 7 days unseen.
+ */
+export async function forgetThisPhoneForMail(
+    ctx: { nodeUrl: string; identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>; store: OutsideChatStore }, budgetMs = FORGET_DEVICE_MS,
+): Promise<{ done: Promise<void> }> {
+    const warn = (e: unknown) => console.warn('[OutsideMail] This phone was not forgotten at Sign Out; it lapses after 7 days:', (e as Error)?.message ?? e);
+    try {
+        const device = await mailDeviceIfAny(ctx.store);
+        if (!device) return { done: Promise.resolve() };
+        const controller = new AbortController();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const budget = new Promise<void>((resolve) => { timer = setTimeout(() => { controller.abort(); resolve(); }, budgetMs); });
+        const asked = forgetMailDevice({ nodeUrl: ctx.nodeUrl, identity: ctx.identity as OutsideMailContext['identity'], signal: controller.signal }, device)
+            .catch(warn);
+        return { done: Promise.race([asked, budget]).finally(() => clearTimeout(timer)) };
+    } catch (e) {
+        warn(e);
+        return { done: Promise.resolve() };
+    }
+}
+
+/**
+ * The chats the Chats tab may list (app/(tabs)/chats.tsx: its open rows and its requests row): none with someone the account
+ * blocked, whatever state their chat is in here (blocked from another screen, or before this phone had the chat). Their chat
+ * stays as it is in the store: unblocked, it shows again.
+ */
+export async function chatsShown(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked'>): Promise<OutsideChat[]> {
+    const shown: OutsideChat[] = [];
+    for (const c of await ctx.store.chats(ctx.identity.publicKey)) if (!(await ctx.isBlocked(c.peerKey))) shown.push(c);
+    return shown;
+}
+
+/**
+ * A chat begun from someone's card (app/address-card.tsx): opened here, a declined one too, and its id. Null, with nothing
+ * changed, when the account blocked them.
+ */
+export async function openChatFromCard(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked'>, card: Pick<AddressCard, 'key' | 'home' | 'name'>): Promise<string | null> {
+    if (await ctx.isBlocked(card.key)) return null;
+    const chatId = relayConversationId(ctx.identity.publicKey, card.key);
+    await ctx.store.openChat(ctx.identity.publicKey, chatId, { key: card.key, home: card.home, name: card.name });
+    return chatId;
 }
 
 export async function doorOpen(store: OutsideChatStore): Promise<boolean> {
@@ -449,7 +501,8 @@ async function flushReceipts(ctx: OutsideMailContext, now: number, tried: Set<st
 
 /**
  * My items' ticks: each line's state; for a line this phone lacks, its chat opened here (brought back empty, or from a request
- * or a decline: outside-chat-store.ts noteRestored); the cursor moved past them. Counts what changed here.
+ * or a decline: outside-chat-store.ts noteRestored), unless the account blocked them; the cursor moved past them. Counts what
+ * changed here.
  */
 async function applyTicks(ctx: OutsideMailContext, ticks: any[], now: number): Promise<number> {
     const me = ctx.identity.publicKey;
@@ -462,7 +515,9 @@ async function applyTicks(ctx: OutsideMailContext, ticks: any[], now: number): P
         if (await ctx.store.hasLine(t.itemId)) {
             await ctx.store.setMineState(t.itemId, t.state);
             applied++;
-        } else if (typeof t.recipient === 'string' && /^[0-9a-f]{64}$/.test(t.recipient) && t.recipient !== me && typeof t.recipientHome === 'string') {
+        } else if (typeof t.recipient === 'string' && /^[0-9a-f]{64}$/.test(t.recipient) && t.recipient !== me && typeof t.recipientHome === 'string'
+            // A block is the account's: a line I wrote them before it (on any device) never makes, nor reopens, their chat here.
+            && !(await ctx.isBlocked(t.recipient))) {
             if (await ctx.store.noteRestored(me, relayConversationId(me, t.recipient), { key: t.recipient, home: t.recipientHome }, now)) applied++;
         }
     }

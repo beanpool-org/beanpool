@@ -38,14 +38,16 @@ vi.mock('expo-crypto', async () => {
 vi.mock('../db', () => ({
     clearDB: vi.fn(async () => {}), closeDB: vi.fn(async () => {}),
     seedDmPinsHere: vi.fn(async () => {}), seedDmPinsBeforeLeaving: vi.fn(async () => {}),
+    outsideStore: vi.fn((anchor: string) => ({ storeOf: anchor })),
 }));
 vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => {}) }));
-// This phone's mail from other communities (outside-chat-live.ts forgetThisPhoneForMail, tested in outside-chat-live.test.ts):
-// here, only when Sign Out reads the id and how long it waits for the forget.
-const mailForget = vi.hoisted(() => ({ settled: vi.fn() }));
-vi.mock('../outside-chat-live', () => ({
+// This phone's mail from other communities (outside-mail.ts forgetThisPhoneForMail, tested in outside-mail.test.ts): here,
+// only what Sign Out hands it, when, and how long Sign Out waits for it.
+const mailForget = vi.hoisted(() => ({ settled: vi.fn(), takesMs: 20 }));
+vi.mock('../outside-mail', async (importOriginal) => ({
+    ...await importOriginal<typeof import('../outside-mail')>(),
     forgetThisPhoneForMail: vi.fn(async () => ({
-        done: new Promise<void>((resolve) => setTimeout(() => { mailForget.settled(); resolve(); }, 20)),
+        done: new Promise<void>((resolve) => setTimeout(() => { mailForget.settled(); resolve(); }, mailForget.takesMs)),
     })),
 }));
 // For the real community-cache below.
@@ -77,6 +79,7 @@ import {
 } from '../account-leaves-phone';
 import { removeCommunityCaches } from '../community-cache';
 import { clearDB, closeDB, seedDmPinsHere, seedDmPinsBeforeLeaving } from '../db';
+import { FORGET_DEVICE_MS, forgetThisPhoneForMail } from '../outside-mail';
 import { resetSyncFingerprints } from '../../services/pillar-sync';
 import { wipeToolDataOnThisPhone } from '../../tools/store';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
@@ -327,22 +330,50 @@ describe('Sign Out keeps the account\'s DM memory of each community file before 
 });
 
 describe('Sign Out forgets this phone\'s mail from other communities (X2b, DECISION-outside-door.md)', () => {
-    it('reads the mail id before the open community\'s tables go, and wipes the key only once the forget has settled', async () => {
-        const { forgetThisPhoneForMail } = await import('../outside-chat-live');
+    beforeEach(() => { mailForget.takesMs = 20; });
+
+    it('hands the open community\'s store and the leaving key over before the tables go, and ends only once the forget has settled', async () => {
         await kimsPhone();
         nodes();
-        await signOutOfThisPhone(kim);
+        let ended = false;
+        await signOutOfThisPhone(kim).then(() => { ended = true; });
         expect(forgetThisPhoneForMail).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(forgetThisPhoneForMail).mock.calls[0][0]).toEqual({ nodeUrl: MULLUM, identity: kim, store: { storeOf: MULLUM } });
         expect(callOrder(forgetThisPhoneForMail)).toBeLessThan(callOrder(clearDB));
-        expect(callOrder(mailForget.settled)).toBeLessThan(identityRemovedAt());
+        expect(ended).toBe(true);
+        expect(mailForget.settled).toHaveBeenCalledTimes(1);
     });
 
-    it('a forget that can\'t even start never stops Sign Out', async () => {
-        const { forgetThisPhoneForMail } = await import('../outside-chat-live');
+    it('its 4 s overlap the push unregisters\' 4 s: a community that answers neither keeps Sign Out within one wait, not two', async () => {
+        await kimsPhone();
+        // Mullum never answers its push unregister, and its forget takes its whole 4 s.
+        mailForget.takesMs = FORGET_DEVICE_MS;
+        const sent = nodes(() => 'silent');
+        const started = Date.now();
+
+        await signOutOfThisPhone(kim);
+
+        // One wait, not the two end to end (8 s): the update screen is told, and the key is gone.
+        expect(Date.now() - started).toBeLessThan(Math.max(UNREGISTER_TIMEOUT_MS, FORGET_DEVICE_MS) + 2000);
+        expect(mailForget.settled).toHaveBeenCalledTimes(1);
+        const unregisters = sent.filter((s) => s.url.endsWith('/api/push-tokens'));
+        expect(unregisters.length).toBeGreaterThan(0);
+        expect(unregisters.every((s) => s.signal?.aborted)).toBe(true);
+        expect(await loadIdentity()).toBeNull();
+    }, UNREGISTER_TIMEOUT_MS + FORGET_DEVICE_MS + 10_000);
+
+    it('a forget that can\'t even start never stops Sign Out; a phone set to no community asks none', async () => {
         vi.mocked(forgetThisPhoneForMail).mockRejectedValueOnce(new Error('the store was already gone'));
         await kimsPhone();
         nodes();
         await expect(signOutOfThisPhone(kim)).resolves.toBeUndefined();
+        expect(await loadIdentity()).toBeNull();
+
+        vi.mocked(forgetThisPhoneForMail).mockClear();
+        await kimsPhone();
+        mem.async.delete(ANCHOR);
+        await signOutOfThisPhone(kim);
+        expect(forgetThisPhoneForMail).not.toHaveBeenCalled();
         expect(await loadIdentity()).toBeNull();
     });
 });

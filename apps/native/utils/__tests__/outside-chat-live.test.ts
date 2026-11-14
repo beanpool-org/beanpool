@@ -9,8 +9,6 @@
  *   3  the background step's budget fits what is left of iOS's ~30 s after the sync and its notices, or is skipped
  *   4  the community reads its switch off: no round asks, and my lines still `sending` fail with the words why
  *   5  what a failed send says: tried again when its line was kept, still there to send when it wasn't
- *   6  Sign Out's forget (X2b): this phone's mail id read at once, the forget asked with it and settled within its 4 s, never
- *      a throw; a phone that never ran a round asks nothing
  *
  * The round itself (utils/outside-mail.ts) is played here; its own test (outside-mail.test.ts) shows every request it makes
  * carries the signal it is given.
@@ -22,10 +20,6 @@ const live = vi.hoisted(() => ({
     profile: { features: { outsideMessages: true } } as null | { features: Record<string, unknown> },
     failed: [] as string[],
     emitted: [] as string[],
-    /** This phone's mail id in its store (null: it never ran a round), and each forget asked: with what id, and its signal. */
-    device: null as null | string,
-    forgets: [] as Array<{ device: string; signal: AbortSignal | undefined }>,
-    forgetAnswer: 'ok' as 'ok' | 'refused' | 'never',
 }));
 
 vi.mock('react-native', () => ({ DeviceEventEmitter: { emit: (e: string) => { live.emitted.push(e); } } }));
@@ -46,20 +40,10 @@ vi.mock('../outside-mail', () => ({
         ctx.signal?.addEventListener('abort', () => reject(Object.assign(new Error('Aborted'), { name: 'AbortError' })));
     }),
     failUnsent: async (_ctx: unknown, words: string) => { live.failed.push(words); return 2; },
-    mailDeviceIfAny: async () => live.device,
-    forgetMailDevice: (ctx: { signal?: AbortSignal }, device: string) => {
-        live.forgets.push({ device, signal: ctx.signal });
-        if (live.forgetAnswer === 'refused') return Promise.reject(new Error('HTTP 503'));
-        if (live.forgetAnswer === 'never') {
-            return new Promise((_, reject) => ctx.signal?.addEventListener('abort', () => reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }))));
-        }
-        return Promise.resolve();
-    },
 }));
 
 import {
-    FORGET_DEVICE_MS, OUTSIDE_BACKGROUND_MS, OUTSIDE_ROUND_MS, OUTSIDE_CHATS_UPDATED, backgroundMailBudget, forgetThisPhoneForMail,
-    outsideErrorWords, syncOutsideMailNow,
+    OUTSIDE_BACKGROUND_MS, OUTSIDE_ROUND_MS, OUTSIDE_CHATS_UPDATED, backgroundMailBudget, outsideErrorWords, syncOutsideMailNow,
 } from '../outside-chat-live';
 import { OutsideMailError } from '../outside-mail';
 
@@ -73,9 +57,6 @@ beforeEach(() => {
     live.profile = { features: { outsideMessages: true } };
     live.failed = [];
     live.emitted = [];
-    live.device = null;
-    live.forgets = [];
-    live.forgetAnswer = 'ok';
     vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
@@ -177,40 +158,5 @@ describe('5  what a failed send says (PR #3168 review note: "the typed words are
         expect(outsideErrorWords(offline, false)).toBe("That didn't go through. Your message is still there to send again.");
         const refused = new (OutsideMailError as any)('Accept the request first.');
         for (const kept of [true, false]) expect(outsideErrorWords(refused, kept)).toBe('Accept the request first.');
-    });
-});
-
-describe('6  Sign Out\'s forget (X2b)', () => {
-    const ID = 'a'.repeat(32);
-
-    it('asks the community to forget this phone\'s id, read before anything else goes', async () => {
-        live.device = ID;
-        const { done } = await forgetThisPhoneForMail();
-        // The id was read and the request started before `done` is awaited: the tables may go meanwhile.
-        live.device = null;
-        await done;
-        expect(live.forgets.map((f) => f.device)).toEqual([ID]);
-    });
-
-    it('a phone that never ran a round has no id, and asks nothing', async () => {
-        const { done } = await forgetThisPhoneForMail();
-        await done;
-        expect(live.forgets).toEqual([]);
-    });
-
-    it('a community that never answers: settled at its 4 s, the request aborted; a refusal settles too; neither throws', async () => {
-        live.device = ID;
-        live.forgetAnswer = 'never';
-        const { done } = await forgetThisPhoneForMail();
-        let settled = false;
-        void done.then(() => { settled = true; });
-        await vi.advanceTimersByTimeAsync(FORGET_DEVICE_MS - 1);
-        expect(settled).toBe(false);
-        await vi.advanceTimersByTimeAsync(1);
-        await settle();
-        expect(settled).toBe(true);
-        expect(live.forgets[0].signal?.aborted).toBe(true);
-        live.forgetAnswer = 'refused';
-        await expect((await forgetThisPhoneForMail()).done).resolves.toBeUndefined();
     });
 });

@@ -24,11 +24,17 @@
  *  16  the two round fixes: my ticks are applied before held items are gated (a new device's first page), and a tick for a
  *      line I wrote elsewhere opens that chat here from a request or a decline
  *  17  a source rule: no fetch of /api/mail and no confirm without the device, in either app's round
+ *  18  a blocked person's chat stays closed (PR #3188 review): one table over every way a chat can change here (a tick for a
+ *      line written on another device, its receipt, its expiry, a second page of a new device's history, a tick for a line
+ *      written here, their line, their card) x the chat's state here, with them blocked: never made, reopened, listed or
+ *      counted as new; and the same ways without the block do change it, so the table can fail
+ *  19  Sign Out's forget (X2b): this phone's id read at once, the forget asked with it, settled within its 4 s whatever the
+ *      community does (a fetch that never gives up included), never a throw; a phone that never ran a round asks nothing
  *
  * The mailbox is played as the server keeps it since X2b: each device listed by its fetch, an item gone once every listed
  * device has confirmed it (apps/server/src/engine/relay-mail.ts settleMailFor).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -82,6 +88,9 @@ const server = vi.hoisted(() => ({
     got: new Map<string, Set<string>>(),
     /** The device each fetch and confirm named, in order. */
     named: [] as Array<{ at: 'fetch' | 'confirm'; device: string | null }>,
+    /** Each forget asked (test 19): with what id, and its signal; and how my server answers it. */
+    forgets: [] as Array<{ device: string; signal: AbortSignal | undefined }>,
+    forgetAnswer: 'ok' as 'ok' | 'refused' | 'never' | 'deaf',
 }));
 
 /** What waits for `device` at the server: every held item it has not confirmed. */
@@ -158,6 +167,15 @@ vi.mock('../node-post', () => ({
             }
             server.sent.push(...body.items);
             answer = new Response(JSON.stringify({ items: body.items.map((i: RelayItem) => ({ itemId: i.envelope.itemId, state: server.sendState })) }), { status: 200 });
+        } else if (path === '/api/mail/device/forget') {
+            server.forgets.push({ device: body.device, signal });
+            if (server.forgetAnswer === 'refused') return new Response(JSON.stringify({ error: 'Busy.', code: 'busy' }), { status: 503 });
+            if (server.forgetAnswer === 'never') {
+                await new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
+            }
+            // A fetch that never gives up, even when aborted.
+            if (server.forgetAnswer === 'deaf') await new Promise(() => {});
+            answer = new Response(JSON.stringify({ success: true }), { status: 200 });
         } else {
             return new Response('{}', { status: 404 });
         }
@@ -178,7 +196,10 @@ vi.mock('../member-statements', async () => {
 });
 
 import { outsideChatStore, gateIncoming, OUTSIDE_CHAT_TABLES_SQL, type OutsideChatState } from '../outside-chat-store';
-import { DEVICE_META, failUnsent, mailDevice, myAddressCard, myHome, syncOutsideMail, sendFromBox, sendOutsideLine, setDoor, type OutsideMailContext } from '../outside-mail';
+import {
+    DEVICE_META, FORGET_DEVICE_MS, chatsShown, failUnsent, forgetThisPhoneForMail, mailDevice, myAddressCard, myHome, openChatFromCard,
+    syncOutsideMail, sendFromBox, sendOutsideLine, setDoor, type OutsideMailContext, type SyncOutcome,
+} from '../outside-mail';
 
 const seedKey = () => { const seed = randomBytes(32); return { seed: bytesToHex(seed), key: bytesToHex(ed25519.getPublicKey(seed)) }; };
 const BEN = seedKey(), ANA = seedKey(), SOL = seedKey(), CY = seedKey();
@@ -205,7 +226,7 @@ beforeEach(async () => {
     server.held = []; server.outbox = []; server.calls = []; server.sent = []; server.confirmed = []; server.sendFails = false; server.sendState = 'sent';
     server.batches = []; server.refuse = null; server.signals = []; server.stallGet = false; server.stallSend = false;
     server.stop = null; server.seen = { confirm: 0, receipt: 0 }; server.stopped = false; server.deadline = null; server.receiptTries = [];
-    server.devices = new Set(); server.got = new Map(); server.named = []; server.outboxPages = [];
+    server.devices = new Set(); server.got = new Map(); server.named = []; server.outboxPages = []; server.forgets = []; server.forgetAnswer = 'ok';
     const s = sqlStore();
     sql = s.sql;
     blocked = new Set();
@@ -944,4 +965,151 @@ describe('17  a source rule: no fetch or confirm without the device', () => {
             expect(src.match(/\/api\/mail\/confirm/g)?.length, 'no confirm the rule does not see').toBe(confirms.length);
         });
     }
+});
+
+describe('18  a blocked person\'s chat stays closed: every way a chat can change here x blocked (PR #3188 review)', () => {
+    // Sol, blocked on this account (a block is the account's: utils/blocklist.ts). Ben's door here is open, so the block alone
+    // stands between Sol and Ben's Chats tab. Each start: no chat here (a new device, or a phone restored from 12 words), a
+    // request, an open chat (blocked from another screen, so not declined here), a declined one (Block in the chat declines it).
+    const starts = ['none', 'request', 'open', 'declined'] as const;
+    type Start = typeof starts[number];
+    const chatId = () => relayConversationId(BEN.key, SOL.key);
+    const sol = { key: SOL.key, home: ANA_HOME, name: 'Sol' };
+    const tick = (state: string, at = 1763020900000) => ({ itemId: uuid(), kind: 'dm-line', recipient: SOL.key, recipientHome: ANA_HOME, state, at });
+    const round = async () => ({ round: await syncOutsideMail(ctx) });
+
+    async function start(s: Start) {
+        server.outbox = [];
+        await setDoor(ctx.store, true);
+        if (s === 'request') { await heldLine(SOL, 'Hello'); await syncOutsideMail(ctx); }
+        if (s === 'open' || s === 'declined') await ctx.store.openChat(BEN.key, chatId(), sol);
+        if (s === 'declined') await ctx.store.decide(BEN.key, chatId(), 'declined');
+        expect(chatOf(SOL.key)?.state).toBe(s === 'none' ? undefined : s);
+    }
+
+    /** Every way a chat can change here. `here`: a tick for a line this phone has (its state moves; the chat doesn't). */
+    const ways: Array<{ way: string; only?: Start[]; here?: true; act: () => Promise<{ round?: SyncOutcome; opened?: string | null }> }> = [
+        { way: 'a tick for a line I wrote on another device', act: async () => { server.outbox = [tick('sent')]; return round(); } },
+        { way: 'its receipt: Delivered', act: async () => { server.outbox = [tick('delivered')]; return round(); } },
+        { way: 'it expired', act: async () => { server.outbox = [tick('expired')]; return round(); } },
+        {
+            way: 'a tick on the second page of a new device\'s history',
+            act: async () => {
+                server.outboxPages = [{ ticks: [{ ...tick('delivered'), kind: 'receipt' }], more: true }, { ticks: [tick('sent', 1763020900001)], more: false }];
+                return round();
+            },
+        },
+        {
+            way: 'a tick for a line I wrote here before the block', only: ['open', 'declined'], here: true,
+            act: async () => {
+                const id = uuid();
+                await ctx.store.addMine({ id, chatId: chatId(), author: BEN.key, text: 'Before the block', replyTo: null, at: Date.now(), item: '{}' });
+                await ctx.store.setMineState(id, 'sent');
+                server.outbox = [{ ...tick('delivered'), itemId: id }];
+                return round();
+            },
+        },
+        { way: 'a line from them', act: async () => { await heldLine(SOL, 'Still there?'); return round(); } },
+        { way: 'I write to them from their card', act: async () => ({ opened: await openChatFromCard(ctx, sol) }) },
+        { way: 'nothing new: the block alone', act: async () => ({}) },
+    ];
+
+    for (const s of starts) for (const w of ways) {
+        if (w.only && !w.only.includes(s)) continue;
+        it(`${s === 'none' ? 'no chat here' : `a chat ${s} here`}, ${w.way}: not made, not reopened, not listed, nothing new`, async () => {
+            await start(s);
+            blocked.add(SOL.key);
+            const before = chatOf(SOL.key);
+            const theirs = () => lineRows().filter((r) => r.author === SOL.key).length;
+            const theirsBefore = theirs();
+
+            const { round: out, opened } = await w.act();
+
+            // The chat is as it was: none made, none reopened, none marked restored.
+            expect(chatOf(SOL.key)).toEqual(before);
+            // Listed nowhere: neither among the open chats nor behind the requests row (app/(tabs)/chats.tsx reads chatsShown).
+            expect((await chatsShown(ctx)).map((c) => c.peerKey)).not.toContain(SOL.key);
+            // Nothing of theirs kept, and nothing counted as new: the round's counts are what tells the screens (OUTSIDE_CHATS_UPDATED).
+            expect(theirs()).toBe(theirsBefore);
+            if (out) expect(out).toMatchObject({ written: 0, requests: 0, ticks: w.here ? 1 : 0 });
+            if (w.way.includes('card')) expect(opened).toBeNull();
+        });
+    }
+
+    it('the same ways without the block do change the chat: so each row above can fail', async () => {
+        // A tick for a line written elsewhere: made open and restored when none, opened from a request or a decline.
+        for (const s of ['none', 'request', 'declined'] as const) {
+            sql.exec('DELETE FROM outside_chats; DELETE FROM outside_lines;');
+            await start(s);
+            server.outbox = [tick('sent')];
+            expect((await syncOutsideMail(ctx)).ticks).toBe(1);
+            expect(chatOf(SOL.key)).toMatchObject({ state: 'open', restored: s === 'none' ? 1 : 0 });
+            expect((await chatsShown(ctx)).map((c) => c.peerKey)).toContain(SOL.key);
+        }
+        // Their line, with no chat here: a request, behind the requests row.
+        sql.exec('DELETE FROM outside_chats; DELETE FROM outside_lines;');
+        await start('none');
+        await heldLine(SOL, 'May I ask?');
+        expect(await syncOutsideMail(ctx)).toMatchObject({ requests: 1 });
+        expect((await chatsShown(ctx)).find((c) => c.peerKey === SOL.key)?.state).toBe('request');
+        // Their card, after a decline: opened again.
+        await ctx.store.decide(BEN.key, chatId(), 'declined');
+        expect(await openChatFromCard(ctx, sol)).toBe(chatId());
+        expect(chatOf(SOL.key)?.state).toBe('open');
+    });
+
+    it('unblocked, a chat blocked from another screen shows again as it was', async () => {
+        await start('open');
+        blocked.add(SOL.key);
+        expect((await chatsShown(ctx)).map((c) => c.peerKey)).toEqual([]);
+        blocked.delete(SOL.key);
+        expect((await chatsShown(ctx)).map((c) => [c.peerKey, c.state])).toEqual([[SOL.key, 'open']]);
+    });
+});
+
+describe('19  Sign Out\'s forget (X2b)', () => {
+    const settle = async () => { for (let i = 0; i < 20; i++) await new Promise<void>((r) => setImmediate(r)); };
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('asks my server to forget this phone\'s id, read before anything else goes', async () => {
+        const id = await mailDevice(ctx.store);
+        const { done } = await forgetThisPhoneForMail(ctx);
+        // The id was read and the request started before `done` is awaited: the tables may go meanwhile.
+        sql.exec('DELETE FROM outside_meta;');
+        await done;
+        expect(server.forgets.map((f) => f.device)).toEqual([id]);
+    });
+
+    it('a phone that never ran a round has no id, and asks nothing', async () => {
+        await (await forgetThisPhoneForMail(ctx)).done;
+        expect(server.forgets).toEqual([]);
+        expect(server.calls).toEqual([]);
+    });
+
+    for (const how of ['never', 'deaf'] as const) {
+        it(`my server ${how === 'never' ? 'never answers' : 'never answers and its fetch ignores the abort'}: settled at its 4 s, the request aborted, no throw`, async () => {
+            await mailDevice(ctx.store);
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+            server.forgetAnswer = how;
+            const { done } = await forgetThisPhoneForMail(ctx);
+            let settled = false;
+            void done.then(() => { settled = true; });
+            await vi.advanceTimersByTimeAsync(FORGET_DEVICE_MS - 1);
+            expect(settled).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            await settle();
+            expect(settled).toBe(true);
+            expect(server.forgets[0].signal?.aborted).toBe(true);
+        });
+    }
+
+    it('a refusal settles too, without a throw; so does a store that can\'t be read', async () => {
+        await mailDevice(ctx.store);
+        server.forgetAnswer = 'refused';
+        await expect((await forgetThisPhoneForMail(ctx)).done).resolves.toBeUndefined();
+        expect(server.forgets).toHaveLength(1);
+        const broken = { ...ctx, store: { ...ctx.store, getMeta: async () => { throw new Error('the file is gone'); } } };
+        await expect((await forgetThisPhoneForMail(broken)).done).resolves.toBeUndefined();
+        expect(server.forgets).toHaveLength(1);
+    });
 });

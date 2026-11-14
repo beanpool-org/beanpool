@@ -61,4 +61,8 @@ None of these asks your server anything. Leaving asks it, in passing, to stop se
 
 The web app has no floor. It is your server's own copy, loaded fresh every time a page opens, so it is always the server's version. A page left open across a server update shows a banner asking to refresh, and refreshing loads the new one. The floors are for the phone apps only.
 
+The one piece a browser keeps is the small notification worker (sw.js), and only in a browser where someone tapped **Turn on** or **Tell me** for notifications. It holds none of the app: it only shows a notification your server sent and opens the web app when it is clicked. The browser fetches it again from your server as the web app opens, and at least once a day, so it follows your server's version too.
+
+A phone waiting for an answer to its request to join, with no community yet, registers for notifications with the community it asked, so a yes reaches it. Your server keeps that phone only while the request is open or its yes still works, and refuses a phone from anyone else with no account here. Nothing to set.
+
 Each server sets its own floor. A phone that holds several communities follows each one's floor while it is using that one.

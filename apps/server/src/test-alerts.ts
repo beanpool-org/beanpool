@@ -29,7 +29,9 @@
  * 10. The owners' pushes: one per minute at most, the disk's levels as one; three days at 92 % is three pushes, with
  *     "Marketplace Activity" turned off.
  * 11. An end is told after 15 minutes, and not at all if the condition is back before that: a disk swinging 81 % ↔ 76 %
- *     every 5 minutes for a day is one message. While the end is held, the banner and the panel no longer count it.
+ *     every 5 minutes for a day is one message. While the end is held, the banner and the panel no longer count it. The
+ *     end is told once. Every message the channel got came on a connection of its own, never one kept open from an
+ *     earlier send (which the channel may already have closed: the send is reset and waits 5 minutes).
  * 12. The server's own certificates (HTTPS-anywhere S7; the real renewal tick, a stand-in order, no CA asked; the TLS and
  *     renewal clocks are the alert book's): no ACME certificate, an address no renewal check has looked at yet, or one
  *     never issued a certificate (a proxy may hold it) raises none of the three; a renewal due and not done for 24 hours
@@ -85,9 +87,11 @@ const log = [];
 const faults = [];
 const server = http.createServer((req, res) => {
     const chunks = [];
+    // Which request on its connection this is: 1 on a new one, 2 or more on one kept open from an earlier send.
+    const nth = (req.socket.requestsSeen = (req.socket.requestsSeen || 0) + 1);
     req.on('data', (c) => chunks.push(c));
     req.on('end', () => {
-        log.push({ method: req.method, path: req.url, headers: req.headers, body: Buffer.concat(chunks).toString('utf8') });
+        log.push({ method: req.method, path: req.url, headers: req.headers, body: Buffer.concat(chunks).toString('utf8'), nth });
         const f = faults[0];
         if (f) {
             if (--f.count <= 0) faults.shift();
@@ -123,7 +127,7 @@ parentPort.on('message', (msg) => {
 server.listen(0, '127.0.0.1', () => parentPort.postMessage({ ready: server.address().port }));
 `;
 
-interface NtfyHit { method: string; path: string; headers: Record<string, string>; body: string }
+interface NtfyHit { method: string; path: string; headers: Record<string, string>; body: string; nth: number }
 
 async function startFakeNtfy() {
     const worker = new Worker(NTFY_SOURCE, { eval: true });
@@ -632,8 +636,20 @@ async function main(): Promise<void> {
     assert(!alerts.getAlertsStatus().active.some((a) => a.key === 'disk.80'), '11. an end being held is not shown as active');
     advance(15 * MIN);
     await tick();
-    hits = await ntfyHits();
-    assert(/RESOLVED \(disk 80% full/.test(hits[hits.length - 1].body) && !alerts.getAlertsStatus().active.length, '11. once it stays down 15 minutes: resolved, told once');
+    await alerts.flushAlerts(); // a send still on its way (or a second one queued behind it) is counted too
+    const end11 = (await ntfyHits()).slice(before11 + day11.length);
+    const st11 = alerts.getAlertsStatus();
+    assert(end11.length === 1 && /RESOLVED \(disk 80% full/.test(end11[0].body) && !st11.active.length,
+        `11. once it stays down 15 minutes: resolved, told once (${end11.length} told: ${JSON.stringify(end11.map((h) => h.body.replace(/\s+/g, ' ').slice(0, 90)))}; `
+        + `channel ${st11.error ?? 'ok'}, ${st11.waiting} waiting, active ${st11.active.map((a) => a.key)})`);
+    // Every message so far came on a connection of its own. One kept open from an earlier send is closed by the channel on
+    // its own clock (this stand-in's after 5 s, in its own thread, while the day above kept this one busy); a send written
+    // onto it is reset, fetch never retries a POST, and the end above was told 5 minutes late (merge-queue run 43647481293).
+    const channelHits = await ntfy.hits();
+    const reused = channelHits.filter((h) => h.nth !== 1 || h.headers.connection !== 'close');
+    assert(channelHits.length > 20 && reused.length === 0,
+        `11. every message the channel got came on a connection of its own (${reused.length} of ${channelHits.length} on one kept open: `
+        + `${JSON.stringify(reused.slice(0, 3).map((h) => [h.nth, h.headers.connection]))})`);
 
     // ── 12. The server's own certificates ────────────────────────────────────────────────────────────────────────────
     // An IP address this server is configured with; its certificate comes from the real renewal tick, whose order is a

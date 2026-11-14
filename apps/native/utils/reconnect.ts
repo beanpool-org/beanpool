@@ -30,8 +30,8 @@ export type ReconnectAnswer =
     | { kind: 'guest' }
     /** A stranger there: nothing moved. What the community is, for its page. */
     | { kind: 'stranger'; profile: NodeProfile | null; reachable: boolean }
-    /** It closed this key's account: nothing moved. */
-    | { kind: 'closed'; profile: NodeProfile | null; reachable: boolean }
+    /** It closed this key's account (`retired`: an owner retired it as an empty duplicate): nothing moved. */
+    | { kind: 'closed'; retired?: true; profile: NodeProfile | null; reachable: boolean }
     /** No answer: nothing moved. */
     | { kind: 'unreachable' };
 
@@ -119,5 +119,6 @@ export async function askBeforeSwitch(
         await deps.switchTo(url);
         return { kind: 'guest' };
     }
-    return { kind: answer.kind === 'closed' ? 'closed' : 'stranger', ...(await profileOf(url, deps)) };
+    if (answer.kind === 'closed') return { kind: 'closed', ...(answer.retired ? { retired: true as const } : {}), ...(await profileOf(url, deps)) };
+    return { kind: 'stranger', ...(await profileOf(url, deps)) };
 }

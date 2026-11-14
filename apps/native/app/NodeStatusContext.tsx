@@ -16,7 +16,9 @@ import { membershipAnswerOf } from '../utils/membership-answer';
  *  - 'closed'   : the node closed this key's account there (403 `account_closed`: removed, or
  *                 deleted by its owner). A definite answer, diverted like 'stranger' to the
  *                 not-recognised screen's closed page (DESIGN-global-entry-fable.md §C.3),
- *                 never read as a connection problem.
+ *                 never read as a connection problem. An owner's retiring of an empty duplicate
+ *                 (403 `account_retired`) is 'closed' too, with `retired` set: the same page and
+ *                 guards, its own words (core ACCOUNT_RETIRED_LINE).
  * 'stranger' and 'closed' drive the not-recognised screen. The probe's answer is read by
  * utils/membership-answer.ts, the one reader every place that asks shares.
  */
@@ -24,12 +26,15 @@ export type NodeRecognition = 'unknown' | 'member' | 'stranger' | 'closed' | 're
 
 interface NodeStatusState {
     recognition: NodeRecognition;
+    /** 'closed' because an owner retired the account as an empty duplicate (403 `account_retired`); false otherwise. */
+    retired: boolean;
     nodeUrl: string | null;
     recheck: () => Promise<NodeRecognition>;
 }
 
 const NodeStatusContext = createContext<NodeStatusState>({
     recognition: 'unknown',
+    retired: false,
     nodeUrl: null,
     recheck: async () => 'unknown',
 });
@@ -37,6 +42,7 @@ const NodeStatusContext = createContext<NodeStatusState>({
 export function NodeStatusProvider({ children }: { children: React.ReactNode }) {
     const { identity } = useIdentity();
     const [recognition, setRecognition] = useState<NodeRecognition>('unknown');
+    const [retired, setRetired] = useState(false);
     const [nodeUrl, setNodeUrl] = useState<string | null>(null);
     const mounted = useRef(true);
 
@@ -44,14 +50,14 @@ export function NodeStatusProvider({ children }: { children: React.ReactNode }) 
 
     const recheck = useCallback(async (): Promise<NodeRecognition> => {
         if (!identity?.publicKey) {
-            if (mounted.current) { setRecognition('unknown'); setNodeUrl(null); }
+            if (mounted.current) { setRecognition('unknown'); setRetired(false); setNodeUrl(null); }
             return 'unknown';
         }
         const url = await AsyncStorage.getItem('beanpool_anchor_url');
         if (mounted.current) setNodeUrl(url);
         if (!url) {
             // No node configured at all — onboarding's job, not a rejection.
-            if (mounted.current) setRecognition('unknown');
+            if (mounted.current) { setRecognition('unknown'); setRetired(false); }
             return 'unknown';
         }
         try {
@@ -66,7 +72,10 @@ export function NodeStatusProvider({ children }: { children: React.ReactNode }) 
                 : answer.kind === 'member' ? 'member'
                 : answer.kind === 'closed' ? 'closed'
                 : answer.recovering ? 'recovering' : 'stranger';
-            if (mounted.current) setRecognition(result);
+            if (mounted.current) {
+                setRecognition(result);
+                setRetired(answer?.kind === 'closed' && answer.retired === true);
+            }
             if (result === 'member') {
                 const plain = url.replace(/\/+$/, '');
                 void import('../utils/nodes')
@@ -87,7 +96,7 @@ export function NodeStatusProvider({ children }: { children: React.ReactNode }) 
             return result;
         } catch {
             // Unreachable / network error — leave it as unknown, never 'stranger'.
-            if (mounted.current) setRecognition('unknown');
+            if (mounted.current) { setRecognition('unknown'); setRetired(false); }
             return 'unknown';
         }
     }, [identity?.publicKey]);
@@ -103,7 +112,7 @@ export function NodeStatusProvider({ children }: { children: React.ReactNode }) 
     }, [recheck]);
 
     return (
-        <NodeStatusContext.Provider value={{ recognition, nodeUrl, recheck }}>
+        <NodeStatusContext.Provider value={{ recognition, retired, nodeUrl, recheck }}>
             {children}
         </NodeStatusContext.Provider>
     );

@@ -57,7 +57,6 @@ export function useContacts(account: ContactsAccount | null | undefined): Contac
         const stop = onContactsChanged((pk) => { if (pk.toLowerCase() === key) void read().catch(() => {}); });
         return () => { alive = false; stop(); };
         // The account's key is what matters: a new identity object for the same account reads nothing again.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [key]);
     return view;
 }

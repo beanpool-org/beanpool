@@ -945,7 +945,7 @@ export default function ChatsScreen() {
                     )}
                 </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel={t('Contacts')} testID="contacts-button" hitSlop={2} style={styles.optionsToggleBtn} onPress={openContacts}>
-                    <MaterialCommunityIcons name={hasContacts ? 'account-multiple-outline' : 'account-multiple-plus-outline'} size={22} color={palette.gray600} />
+                    <MaterialCommunityIcons name={hasContacts ? 'account-multiple-outline' : 'account-multiple-plus-outline'} size={22} color={colors.text.secondary} />
                 </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel={t('New message')} style={[styles.optionsToggleBtn, { backgroundColor: colors.accent.tint }]} onPress={() => {
                     if (Platform.OS === 'web') {

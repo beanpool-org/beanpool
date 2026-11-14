@@ -64,7 +64,8 @@ export default function ContactsScreen() {
         label: { fontSize: 14, fontWeight: '700', color: colors.text.body, marginBottom: 4 },
         head: { fontSize: 15, fontWeight: '800', color: colors.text.heading, marginTop: 12, marginBottom: 8 },
         row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 10, marginBottom: 8 },
-        rowMain: { flexGrow: 1, flexShrink: 1, flexBasis: 150, minHeight: 44, justifyContent: 'center' },
+        // Never squeezed (design §8): when the name's 160 dp and the button don't fit side by side, the button drops under it.
+        rowMain: { flexGrow: 1, flexShrink: 0, flexBasis: 160, minHeight: 44, justifyContent: 'center' },
         name: { fontSize: 16, fontWeight: '700', color: colors.text.body },
         sub: { fontSize: 13, color: colors.text.muted, marginTop: 2 },
         blocked: { fontSize: 13, fontWeight: '800', color: colors.feedback.danger.fg },

@@ -43,6 +43,14 @@ export const TELL_ME_WORDS = {
 
 export const FORGED_NOTICE_LINE = TELL_ME_WORDS.forged;
 
+/** The phone's "Turn on notifications?" words, word for word (apps/native utils/notification-permission.ts), for a member's tap. */
+export const NOTIFICATION_CARD_WORDS = {
+    title: word('Turn on notifications?'),
+    body: word('So you hear when someone answers you, messages you, or asks to join. Nothing else.'),
+    turnOn: word('Turn on'),
+    notNow: word('Not now'),
+} as const;
+
 /** Where this browser stands for push, by feature tests in the design's order (§2.4). */
 export type PushPlace =
     /** Push works: a computer's Chrome, Edge, Firefox or Brave, which deliver while the browser runs. */
@@ -172,6 +180,18 @@ const TIMEOUT_MS = 20_000;
  * the permission prompt, the subscription. Never throws.
  */
 export async function tellMeWhenTheyAnswer(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv = pushEnv()): Promise<TellMeResult> {
+    return subscribeAtTap(origin, identity, lang, env);
+}
+
+/**
+ * The tap on Turn on (a member: the "Turn on notifications?" card, or Settings → Notifications' row; web push W2): the same
+ * steps as Tell me, and the node keeps this browser as the member's, told every kind their phone is. Never throws.
+ */
+export async function turnOnWebPush(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv = pushEnv()): Promise<TellMeResult> {
+    return subscribeAtTap(origin, identity, lang, env);
+}
+
+async function subscribeAtTap(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv): Promise<TellMeResult> {
     const place = pushPlace(env);
     if (place.kind === 'home-screen' || place.kind === 'none') return { ok: false, place, reason: 'cannot' };
     if (place.kind === 'blocked') return { ok: false, place, reason: 'blocked' };
@@ -196,15 +216,99 @@ export async function tellMeWhenTheyAnswer(origin: string, identity: BeanPoolIde
             subscription = null;
         }
         subscription ??= await ready.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromBase64url(vapidKey) as BufferSource });
-        const json = subscription.toJSON();
-        const body = JSON.stringify({ subscription: { endpoint: json.endpoint, keys: json.keys }, lang });
-        const res = await signedFetchAt('POST', origin, WEB_PUSH_PATH, body, identity);
-        const answer = res.ok ? await res.json().catch(() => null) : null;
-        if (!answer?.success || typeof answer.subId !== 'string') return { ok: false, place, reason: 'failed' };
-        writeWebPushPin({ origin, publicKey: identity.publicKey, subId: answer.subId, pushKey: typeof answer.pushKey === 'string' ? answer.pushKey : null, vapidKey });
-        return { ok: true, place };
+        return (await postSubscription(origin, identity, subscription, lang, vapidKey)) ? { ok: true, place } : { ok: false, place, reason: 'failed' };
     } catch {
         return { ok: false, place, reason: 'failed' };
+    }
+}
+
+/** Gives the node this browser's subscription, signed; pins its answer's notice key. Whether the node kept it. */
+async function postSubscription(origin: string, identity: BeanPoolIdentity, subscription: PushSubscription, lang: string, vapidKey: string): Promise<boolean> {
+    const json = subscription.toJSON();
+    const body = JSON.stringify({ subscription: { endpoint: json.endpoint, keys: json.keys }, lang });
+    const res = await signedFetchAt('POST', origin, WEB_PUSH_PATH, body, identity);
+    const answer = res.ok ? await res.json().catch(() => null) : null;
+    if (!answer?.success || typeof answer.subId !== 'string') return false;
+    writeWebPushPin({
+        origin, publicKey: identity.publicKey, subId: answer.subId, pushKey: typeof answer.pushKey === 'string' ? answer.pushKey : null,
+        vapidKey: typeof answer.vapidKey === 'string' ? answer.vapidKey : vapidKey,
+    });
+    return true;
+}
+
+/** This browser's push subscription at the worker's scope, if a worker was ever registered here; never registers one. */
+async function currentSubscription(): Promise<PushSubscription | null> {
+    try {
+        if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
+        const registration = await navigator.serviceWorker.getRegistration(SERVICE_WORKER_SCOPE);
+        return (await registration?.pushManager?.getSubscription()) ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Turn off (Settings), and sign-out or delete-everything (before the key goes): the node lets go of this browser, signed
+ * while the key is still here, and the browser's own subscription ends, so nothing more can arrive. At most
+ * STOP_WAIT_MS: a sign-out never waits long on a slow node (which lets the row go itself once the key is no member).
+ * Never throws.
+ */
+const STOP_WAIT_MS = 5_000;
+export async function turnOffWebPush(origin: string, identity: BeanPoolIdentity): Promise<void> {
+    const pin = readWebPushPin(origin, identity.publicKey);
+    const work = (async () => {
+        if (pin) await signedFetchAt('DELETE', origin, WEB_PUSH_PATH, JSON.stringify({ subId: pin.subId }), identity).catch(() => null);
+        const subscription = await currentSubscription();
+        await subscription?.unsubscribe().catch(() => false);
+    })();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([work, new Promise(resolve => { timer = setTimeout(resolve, STOP_WAIT_MS); })]).catch(() => {});
+    clearTimeout(timer);
+    forgetWebPushPin(origin, identity.publicKey);
+}
+
+/** What Settings → Notifications says for this browser (design §2.3): on, off, or blocked by the browser; or no push here. */
+export type WebPushState = 'on' | 'off' | 'blocked' | 'cannot';
+
+export function webPushState(origin: string | null, publicKey: string, env: PushEnv = pushEnv()): WebPushState {
+    if (!origin) return 'cannot';
+    const place = pushPlace(env);
+    if (place.kind === 'blocked') return 'blocked';
+    if (place.kind !== 'ok') return 'cannot';
+    return env.permission === 'granted' && readWebPushPin(origin, publicKey) ? 'on' : 'off';
+}
+
+/**
+ * The community this page can take pushes from: the page's own address, when the web app talks to it (a worker serves
+ * only its own origin, and the node that sends must be the one whose key the browser subscribed with). Null when the app
+ * talks to another community from here: no push, the bell still works.
+ */
+export function webPushOrigin(nodeApiUrl: string): string | null {
+    if (typeof window === 'undefined') return null;
+    const here = window.location.origin;
+    return !nodeApiUrl || nodeApiUrl === here ? here : null;
+}
+
+/**
+ * Each time the web app opens for a member (web push W2), with nothing asked and no worker installed:
+ * - turned on here before, and the browser now blocks or forgot the permission, or holds no subscription: the node lets go
+ *   of this browser (DELETE) and the pin goes; Settings says Blocked or Off;
+ * - turned on here and still allowed: the subscription is given again, signed, as the phone registers at every start, so
+ *   the language is current and a community that took over from its main server has this browser again.
+ * Only for a browser this account turned on here (a pin); never throws. Answers what it did.
+ */
+export async function keepWebPushAtOpen(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv = pushEnv()): Promise<'none' | 'dropped' | 'kept' | 'failed'> {
+    const pin = readWebPushPin(origin, identity.publicKey);
+    if (!pin) return 'none';
+    try {
+        const subscription = env.permission === 'granted' ? await currentSubscription() : null;
+        if (!subscription) {
+            await turnOffWebPush(origin, identity);
+            return 'dropped';
+        }
+        return (await postSubscription(origin, identity, subscription, lang, pin.vapidKey)) ? 'kept' : 'failed';
+    } catch {
+        return 'failed';
     }
 }
 
@@ -254,17 +358,37 @@ function fromBase64url(text: string): Uint8Array {
  * which opens nothing and shows {@link FORGED_NOTICE_LINE} once.
  */
 export function noticeInLocation(hash: string, publicKey: string, pushKey: string | null, now?: number): 'none' | 'ok' | 'forged' {
+    const data = noticeInHash(hash);
+    if (data === undefined) return 'none';
+    const check = checkClickedNotice(data, publicKey, pushKey, now);
+    if (check.kind === 'ok') return check.notice.kind === 'join.answered' ? 'ok' : 'forged';
+    return check.kind;
+}
+
+/** The notice in an address's fragment (`#notice=`, public/sw.js), as it came: undefined with none, null when unreadable. */
+export function noticeInHash(hash: string): unknown {
     const m = /(?:^#|&)notice=([^&]*)/.exec(hash);
-    if (!m) return 'none';
-    let data: unknown;
+    if (!m) return undefined;
     try {
-        data = JSON.parse(decodeURIComponent(m[1]));
+        return JSON.parse(decodeURIComponent(m[1]));
     } catch {
-        return 'forged';
+        return null;
     }
-    if (!pushKey) return 'forged';
+}
+
+/**
+ * A click on a member's notice (web push W2), from the address's fragment or the worker's message: the phone's checkTap
+ * (apps/native utils/push-notice-check.ts). Signed by the community key pinned when this browser was turned on, for this
+ * account: `ok`, and the app reads where it lands from the node (GET /api/notices/push/:id) and goes there only through
+ * its fixed table (components/NeedsYouIcons.tsx goToNoticeTarget). Anything else: `forged`, which opens nothing and shows
+ * {@link FORGED_NOTICE_LINE} once. A notice this community signed for this key that is only late, or from a slow clock:
+ * `none`, nothing opened and no warning, as the phone does. Nothing here trusts the worker, which only passes on what came.
+ */
+export function checkClickedNotice(data: unknown, publicKey: string, pushKey: string | null, now?: number):
+    { kind: 'ok'; notice: { kind: string; id: string } } | { kind: 'none' } | { kind: 'forged' } {
+    if (!pushKey || data === null || data === undefined) return { kind: 'forged' };
     const check = verifyPushNotice(data, { recipient: publicKey, pushKey, ...(now === undefined ? {} : { now }) });
-    if (check.ok) return check.kind === 'join.answered' ? 'ok' : 'forged';
+    if (check.ok) return { kind: 'ok', notice: { kind: check.kind, id: check.id } };
     // Core checks the signature before the time: these two come only from a notice this community signed for this key.
-    return check.reason === 'too-old' || check.reason === 'from-the-future' ? 'none' : 'forged';
+    return check.reason === 'too-old' || check.reason === 'from-the-future' ? { kind: 'none' } : { kind: 'forged' };
 }

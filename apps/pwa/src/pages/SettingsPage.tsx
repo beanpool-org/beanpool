@@ -10,6 +10,8 @@ import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
 import { Fragment, useState, useEffect, useRef } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
+import { turnOffWebPush, webPushOrigin } from '../lib/web-push';
+import { WebPushRow } from '../components/WebPushRow';
 import { clearAccountStorage } from '../lib/device-prefs';
 import { clearHomeCache } from '../lib/home-cache';
 import {
@@ -365,6 +367,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         } finally {
             setHolidayLoading(false);
         }
+    };
+
+    /** Sign-out and delete-everything: this community lets go of this browser while the key is still here (web push W2). */
+    const stopWebPushHere = async () => {
+        const origin = webPushOrigin(getNodeApiUrl());
+        if (origin) await turnOffWebPush(origin, identity).catch(() => {});
     };
 
     // Notification Preferences
@@ -1418,6 +1426,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             onClick={async () => {
                                                 setIsPurging(true);
                                                 try {
+                                                    // The community lets go of this browser first, signed while the key is here (web push W2).
+                                                    await stopWebPushHere();
                                                     await wipeIdentity();
                                                     await clearAccountStorage();
                                                     setDeletionMode('purged');
@@ -1513,10 +1523,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                         }
                                                         if (plan.kind === 'this-one') {
                                                             // The page's own community keeps the key: back to it, key and settings kept.
+                                                            await stopWebPushHere();
                                                             await leaveThisCommunity();
                                                             setPurgedNote(t('Account deleted at {here}. This browser keeps your key for {kept}. Reloading app...', { here: hostOf(plan.here), kept: hostOf(plan.keeps.url) }));
                                                         } else {
                                                             try {
+                                                                await stopWebPushHere();
                                                                 await wipeIdentity();
                                                                 await clearAccountStorage();
                                                             } catch (e) {
@@ -1753,39 +1765,37 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 {mode === 'notifications' && (
                     <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
                         <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">{t('🔔 Notification Preferences')}</h3>
-                        <div className="p-3.5 mb-5 rounded-xl bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
-                            <div className="font-bold flex items-center gap-1.5 mb-1 text-amber-800 dark:text-amber-300">
-                                <span>📱</span> {t('Phone App Only')}
-                            </div>
-                            <p>{t('These preferences govern push notifications delivered to the mobile app for this account. Web browsers do not receive push notifications.')}</p>
-                            <p className="mt-1.5">{t('Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.')}</p>
-                        </div>
+                        {/* The phone's words (apps/native app/(tabs)/settings.tsx): the switches now reach this browser too (web push W2). */}
+                        <p className="m-0 mb-1 text-xs text-nature-600 dark:text-nature-300 leading-relaxed">{t('Control which push notifications wake up your device. Changes are saved automatically.')}</p>
+                        <p className="m-0 mb-5 text-xs text-nature-600 dark:text-nature-300 leading-relaxed">{t('Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.')}</p>
 
                         {notifLoading ? (
                             <div className="py-8 text-center text-sm text-nature-400 animate-pulse">{t('Loading preferences...')}</div>
                         ) : (
                             <div className="space-y-4 mb-6">
+                                <WebPushRow identity={identity} />
+
                                 <div className="flex justify-between items-center gap-3 p-4 rounded-xl border border-nature-200 dark:border-nature-800">
                                     <div className="min-w-0">
-                                        <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Chat Messages')}</div>
-                                        <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts on your phone when someone messages you')}</div>
+                                        <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Direct Messages')}</div>
+                                        <div className="text-xs text-nature-500 dark:text-nature-400">{t('Get notified when someone messages you')}</div>
                                     </div>
                                     <ToggleSwitch
                                         checked={notifChat}
                                         onChange={() => handleToggleNotif('chat')}
-                                        label={t('Chat Messages Notifications')}
+                                        label={t('Direct messages notifications')}
                                     />
                                 </div>
 
                                 <div className="flex justify-between items-center gap-3 p-4 rounded-xl border border-nature-200 dark:border-nature-800">
                                     <div className="min-w-0">
                                         <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Marketplace Activity')}</div>
-                                        <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts on your phone for new offers & needs in your area')}</div>
+                                        <div className="text-xs text-nature-500 dark:text-nature-400">{t('Requests, approvals & rejections')}</div>
                                     </div>
                                     <ToggleSwitch
                                         checked={notifMarketplace}
                                         onChange={() => handleToggleNotif('marketplace')}
-                                        label={t('Marketplace Activity Notifications')}
+                                        label={t('Marketplace activity notifications')}
                                     />
                                 </div>
 
@@ -1805,13 +1815,13 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                                 <div className="flex justify-between items-center gap-3 p-4 rounded-xl border border-nature-200 dark:border-nature-800">
                                     <div className="min-w-0">
-                                        <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Held in Trust & Deals')}</div>
-                                        <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts on your phone for trade updates & credit transfers')}</div>
+                                        <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Held in Trust & System')}</div>
+                                        <div className="text-xs text-nature-500 dark:text-nature-400">{t('Credits held in trust, released, or disputed')}</div>
                                     </div>
                                     <ToggleSwitch
                                         checked={notifEscrow}
                                         onChange={() => handleToggleNotif('escrow')}
-                                        label={t('Held in Trust & Deals Notifications')}
+                                        label={t('Held in trust and system notifications')}
                                     />
                                 </div>
 
@@ -1820,7 +1830,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <div className="flex justify-between items-center gap-3 p-4 rounded-xl border border-nature-200 dark:border-nature-800">
                                         <div className="min-w-0">
                                             <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Requests to join')}</div>
-                                            <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts when someone asks to join your community')}</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">{t('When someone asks to join your community')}</div>
                                         </div>
                                         <ToggleSwitch
                                             checked={notifKnocks}

@@ -575,6 +575,15 @@ export async function getBellNotices(): Promise<BellNotice[]> {
     return unseenBellNotices(await request<{ notices?: unknown[] }>('GET', '/api/notices/push?unseen=1'));
 }
 
+/**
+ * One push's details, read after a click on its notification (web push W2): what the sender wrote and where it lands; reading
+ * it takes it off the bell, as the phone's tap does. Null for an id not in the node's shape, or one it no longer has (7 days).
+ */
+export async function getPushNoticeDetails(id: string): Promise<{ id: string; kind: string; title: string; body: string; data: unknown } | null> {
+    if (!/^[0-9a-f]{32}$/.test(id)) return null;
+    return request<{ id: string; kind: string; title: string; body: string; data: unknown }>('GET', `/api/notices/push/${id}`).catch(() => null);
+}
+
 /** Takes these of the signer's own notices off the bell (a tap on the row, or its ✕); the node ignores an id that is not theirs. */
 export async function markBellNoticesSeen(ids: string[]): Promise<number> {
     const answer = await request<{ marked?: number }>('POST', '/api/notices/push/seen', { ids });

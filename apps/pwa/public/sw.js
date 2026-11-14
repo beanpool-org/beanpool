@@ -2,9 +2,9 @@
  * BeanPool's service worker (scratch/fable-design/DESIGN-web-notifications-fable.md §2.2-§2.3, slice W1): push and
  * notificationclick, nothing else. Written by hand, served by the node as it is (apps/pwa/public → apps/server/public).
  *
- * Registered by the web app only at a tap ("Tell me when they answer" on the waiting page, src/lib/web-push.ts), never on
- * load, at scope /app/. No fetch handler and no cache: the app works exactly as without it. It holds no key, signs nothing
- * and reads no storage of the member's.
+ * Registered by the web app only at a tap ("Tell me when they answer" on the waiting page; a member's "Turn on", slice W2;
+ * src/lib/web-push.ts), never on load, at scope /app/. No fetch handler and no cache: the app works exactly as without it.
+ * It holds no key, signs nothing and reads no storage of the member's (src/lib/sw-rules.test.ts holds it to that).
  *
  * What it shows is fixed: the title is always "BeanPool", never the payload's; the text is the payload's one sentence (its
  * kind's fixed words, which the community's own server encrypted to this browser; anything that is not a short plain
@@ -14,7 +14,9 @@
  * A click opens /app?door=ask for `join.answered` (/app for anything else), with the signed notice in the address's
  * fragment, which no server is sent: the waiting page checks the notice's signature with the community key it pinned
  * (src/lib/web-push.ts noticeInLocation) and opens nothing for a forgery. Only a tab this worker controls (under /app/) is
- * taken there instead; the waiting page's own tab never is (see landOn).
+ * taken there instead; the waiting page's own tab never is (see landOn). A member's notice (any other kind) goes to the
+ * member's open app tab instead, when there is one: brought forward and handed the notice as a message, which the app
+ * checks exactly as one in its address (src/lib/web-push.ts checkClickedNotice, the phone's checkTap).
  *
  * Registered anywhere but /app/ (a browser that kept the old self-removing worker's registration at /), it removes itself.
  */
@@ -79,7 +81,8 @@ function landingOf(notice) {
  * a new tab opens there at once, with nothing focused first: a click allows one window call, and in Chromium focus() spends
  * it exactly as openWindow() does (e2e/sw-click-check.mjs). The old tab reads the status itself within 5 minutes.
  */
-async function landOn(target) {
+async function landOn(target, notice) {
+    if (notice && notice.k !== 'join.answered' && (await toOpenApp(notice))) return;
     const tabs = await self.clients.matchAll({ type: 'window' });
     const tab = tabs.find((c) => {
         const u = new URL(c.url);
@@ -100,7 +103,29 @@ async function landOn(target) {
     await self.clients.openWindow(target);
 }
 
+/**
+ * A member's notice, to the member's app already open in a tab of this site (/app, not the waiting page; this worker
+ * controls none of them, so it looks at every tab of its origin): brought forward with the click's one window call, then
+ * handed the notice as a message (`beanpool-notice`). False when no such tab took it: the caller opens a new one.
+ */
+async function toOpenApp(notice) {
+    const tabs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const app = tabs.find((c) => {
+        const u = new URL(c.url);
+        return u.origin === self.location.origin && (u.pathname === '/app' || u.pathname.startsWith('/app/')) && !/[?&]door=/.test(u.search);
+    });
+    if (!app) return false;
+    try {
+        const shown = (await app.focus()) || app;
+        shown.postMessage({ type: 'beanpool-notice', notice });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    event.waitUntil(landOn(landingOf(event.notification.data && event.notification.data.notice)));
+    const notice = event.notification.data && event.notification.data.notice;
+    event.waitUntil(landOn(landingOf(notice), notice));
 });

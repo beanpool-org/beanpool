@@ -125,7 +125,7 @@ While your account is suspended, you cannot start a group, join one, ask to join
 
 ## Joining by invitation
 
-When someone invites you to a group, your phone gets an alert, "You were invited to join a group.", and **Needs you** shows the invitation, on Home and, on the phone and in the web app, as an icon at the top (an envelope). Tap the alert or the line to open the invitation. It stays in **Needs you** until you join or say no, or the convenor takes it back. The alert comes with your **Direct Messages** alerts (**Chat Messages** in the web app's settings), so it doesn't come if you switch those off.
+When someone invites you to a group, your phone gets an alert, "You were invited to join a group.", and **Needs you** shows the invitation, on Home and, on the phone and in the web app, as an icon at the top (an envelope). Tap the alert or the line to open the invitation. It stays in **Needs you** until you join or say no, or the convenor takes it back. The alert comes with your **Direct Messages** alerts, so it doesn't come if you switch those off.
 
 A group you are invited to also shows in **Commons**, under **Groups**, marked **INVITED**. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Chat**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat. On the phone:
 

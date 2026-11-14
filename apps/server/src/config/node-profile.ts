@@ -191,6 +191,14 @@ export interface ProfileSwitches {
      *  runs on members writing to each other, so a direct message arrives as before. The operator's switch in Settings
      *  (`dmRequests`) is this switch's override. Off again, a request still waiting is an ordinary chat. */
     dmRequests: boolean;
+    /** Messages from other communities (messages across communities X2: engine/relay-mail.ts, engine/relay-outbox.ts;
+     *  scratch/fable-design/DESIGN-cross-chat-voice-fable.md §3.5): another community's server may bring sealed items for a
+     *  member here, held until their device has them, and members here may send to someone in another community. On by
+     *  default on every kind (decided 1 Nov 2026: the owner's outside-messages switch is on by default; a member's own door
+     *  is their address card, X3). Off: every item another server brings is answered 202 and dropped, exactly as for a key
+     *  that is no member here, and a member's send is refused. The owners' setting under How this community works
+     *  (`outsideMessages`) is this switch's override. */
+    outsideMessages: boolean;
     /** A member may share one listing or event outside the community: a link that opens that post, under the
      *  visitors' rules (the engine's guestPost), to whoever holds it, for seven days or until the member stops it
      *  (engine/peek-tickets.ts; front doors S6, DESIGN-entry-points-fable.md §3.4, Marty 2026-10-27). On (a local
@@ -248,6 +256,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         openMembership: false,
         retention: false,
         dmRequests: false,
+        outsideMessages: true,
         shareOutside: true,
         knowledge: true,
         bills: true,
@@ -298,6 +307,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         retention: true,
         // A stranger's first message waits until it is accepted (Marty, 2026-10-23): the lobby is where strangers are.
         dmRequests: true,
+        // On, as on every kind (decided 1 Nov 2026): a line from outside is always a request on the phone, whatever this says.
+        outsideMessages: true,
         // Its listings are a visitor's read already (guestListingsOnly): a plain link to one shows it to anyone.
         shareOutside: false,
         // Not a place (Marty, 11 Nov 2026): Local knowledge lives in a local community; global previews it (showcase).
@@ -381,6 +392,11 @@ export interface NodeFeatures {
      *  conversation in the lists says whether it is one (`request`), and a member's list holds the requests waiting for
      *  them apart (`requests`). Absent (a local community, or a server from before it): every message arrives as before. */
     dmRequests?: true;
+    /** Present, and true, only where `outsideMessages` is on: another community's server may bring sealed mail for members
+     *  here (POST /api/relay/mail), and a member may send to someone in another community (POST /api/mail/send) and fetch
+     *  what waits for them (GET /api/mail). Absent (switched off, or a server from before it): nothing from outside is
+     *  taken, and the apps offer no outside chat. */
+    outsideMessages?: true;
     /** Present only on member-authenticated reads (GET /api/community/me, GET /api/home) when Beans and the confirmation
      *  dial are on: the community's known floor amount (design §4.2, §4.3, §6.2, S5). Absent for non-members and on public info. */
     knownFloor?: number;
@@ -681,6 +697,7 @@ export function getNodeFeatures(): NodeFeatures {
         ...(s.showcase ? { showcase: true as const } : {}),
         ...(s.openMembership ? { openMembership: true as const } : {}),
         ...(s.dmRequests ? { dmRequests: true as const } : {}),
+        ...(s.outsideMessages ? { outsideMessages: true as const } : {}),
         ...(s.shareOutside ? { shareOutside: true as const } : {}),
         ...(askedPushSent(getNodeProfile(), s.beans) ? { askedPush: true as const } : {}),
         ...(s.knowledge ? { knowledge: true as const } : {}),

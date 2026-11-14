@@ -90,7 +90,8 @@ export function memoryGroupLockStore(): GroupLockStore & { rows: Map<string, Gro
 /** How the keyring reaches the node: signed requests as this member (the web's lib/api.ts signedFetch). */
 export interface GroupKeysTransport {
     get(path: string): Promise<Response>;
-    post(path: string, body: unknown): Promise<Response>;
+    /** `signal`: the caller giving up (a voice send's 60 s, lib/voice.ts voiceSendWithin) aborts the request. */
+    post(path: string, body: unknown, signal?: AbortSignal): Promise<Response>;
 }
 
 /** What GET /api/groups/:id/keys answers (engine/group-keys.ts getGroupKeys). */

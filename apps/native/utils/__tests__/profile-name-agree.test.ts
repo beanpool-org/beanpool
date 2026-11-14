@@ -298,6 +298,7 @@ import SettingsScreen from '../../app/(tabs)/settings';
 import { InvitePeopleSheet } from '../../components/InvitePeopleSheet';
 import { resolveProfilePublishAvatar } from '../avatar-value';
 import { CANONICAL_PROFILE_STORE_KEY } from '../storage-keys';
+import { NAME_BOX_WORDS, notANameIn } from '@beanpool/core';
 
 let host: HTMLDivElement;
 let root: Root;
@@ -337,7 +338,8 @@ const settle = async (n = 10) => {
 };
 
 // The node behind fetch: every profile Save it receives, or a transport failure for an offline one. A name in `taken` is
-// someone else's there: refused as the server's profile route refuses it (409 `callsign_taken`, in its words).
+// someone else's there: refused as the server's profile route refuses it (409 `callsign_taken`, in its words). A new
+// name that is an invite or a web address is refused as it refuses that (400 `callsign_link`, core name-box.ts).
 const TAKEN_WORDS = 'That name is already taken on this community. Try another.';
 const mockNode = ({ offline = false, taken = [] as string[] } = {}) => {
     const updates: any[] = [];
@@ -348,6 +350,10 @@ const mockNode = ({ offline = false, taken = [] as string[] } = {}) => {
             updates.push(body);
             if (typeof body.callsign === 'string' && taken.includes(body.callsign)) {
                 return new Response(JSON.stringify({ error: 'callsign_taken', message: TAKEN_WORDS }), { status: 409 });
+            }
+            const notAName = typeof body.callsign === 'string' && body.callsign !== mockDb.remoteCallsign ? notANameIn(body.callsign) : null;
+            if (notAName) {
+                return new Response(JSON.stringify({ error: 'callsign_link', message: NAME_BOX_WORDS[notAName], code: 'callsign_link' }), { status: 400 });
             }
             if (typeof body.callsign === 'string') mockDb.remoteCallsign = body.callsign;
             return new Response(JSON.stringify({ success: true, profile: { publicKey: KEY, callsign: mockDb.remoteCallsign } }), { status: 200 });
@@ -777,6 +783,33 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         expect(mockDb.remoteCallsign).toBe('Marty party');
         expect(mockDb.localProfile.callsign).toBe('Marty party');
         expect(alerts.said.filter((s) => s === 'Name Taken')).toHaveLength(1);
+        expect(waitingIn(NODE)?.callsign).toBeUndefined();
+    });
+
+    // #3122 review (profile-feature-gate.ts:212): a link name copied here from the community that holds it ("Use this name
+    // and photo in another community") waits as a rename here, and the node refuses it (400 `callsign_link`). Every Save
+    // here sent it again and failed "Could Not Save" until the member typed a new name.
+    it('a Save told the waiting name is a link drops it: said in the community\'s words, and the next Save goes without it', async () => {
+        const LINK = 'https://mullum.beanpool.org/?inv';
+        const { keepPendingProfileChange } = await import('../pending-profile-sync');
+        await keepPendingProfileChange(NODE, KEY, { callsign: LINK });
+        mockDb.localProfile = { public_key: KEY, callsign: 'Marty party' };
+        mockDb.remoteCallsign = 'Marty party';
+        const { updates } = mockNode();
+        await renderSettings();
+        await press('✏️ Edit');
+        await type('Bio', 'Grows tomatoes');
+        await press('Save Profile');
+        expect(updates.map((u) => u.callsign)).toEqual([LINK]);
+        expect(alerts.said).toContain('Could Not Save');
+        expect(alerts.said).toContain(NAME_BOX_WORDS.webLink);
+
+        await press('Save Profile');
+        expect(updates.filter((u) => u.callsign === LINK)).toHaveLength(1);
+        expect(updates).toHaveLength(2);
+        expect(updates[1].bio).toBe('Grows tomatoes');
+        expect(alerts.said.filter((s) => s === 'Could Not Save')).toHaveLength(1);
+        expect(mockDb.remoteCallsign).toBe('Marty party');
         expect(waitingIn(NODE)?.callsign).toBeUndefined();
     });
 

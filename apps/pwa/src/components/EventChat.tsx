@@ -27,6 +27,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { sendRouteOf, GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
 import { blankedWithAccount } from '../lib/chat-tombstone';
 import { eventChatWaitingText, eventChatSystemText, isWaitingForHost } from '../lib/events';
+import { useGrowingComposer } from '../lib/use-growing-composer';
 
 /**
  * Messages are stored base64 `plaintext-v1`: node-readable by design, not end-to-end encrypted. A removed one is the
@@ -78,6 +79,9 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
     // says so in one line here rather than failing silently or in an alert().
     const [imageNotice, setImageNotice] = useState<string | null>(null);
     const bottomRef = useRef<HTMLDivElement | null>(null);
+    // The box grows with the draft up to five lines, then scrolls (lib/use-growing-composer.ts).
+    const draftRef = useRef<HTMLTextAreaElement | null>(null);
+    useGrowingComposer(draftRef);
 
     const load = useCallback(async () => {
         try {
@@ -336,6 +340,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                     }}
                 >
                     <textarea
+                        ref={draftRef}
                         value={draft}
                         onChange={e => setDraft(e.target.value.slice(0, EVENT_CHAT_MESSAGE_MAX))}
                         onPaste={e => {
@@ -358,7 +363,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                         maxLength={EVENT_CHAT_MESSAGE_MAX}
                         placeholder={t('Message everyone going…')}
                         aria-label={t('Message everyone going')}
-                        className="flex-1 min-w-0 min-h-[48px] resize-y rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 px-3 py-3 text-sm text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                        className="flex-1 min-w-0 min-h-[48px] resize-none placeholder:truncate rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 px-3 py-3 text-sm text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
                     />
                     <button
                         type="submit"

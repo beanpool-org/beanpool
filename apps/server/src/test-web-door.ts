@@ -64,8 +64,8 @@ const TODAYS_DOCUMENT_CSP = "default-src 'self'; script-src 'self' 'unsafe-inlin
 /** Hosts only the old Settings page loaded from: no header this node sends names them. */
 const OLD_SETTINGS_PAGE_HOSTS = ['unpkg.com', 'static.cloudflareinsights.com', 'api.qrserver.com'];
 
-/** The app document's policy, as design G11 §3.6 change 3 states it, with the tile host the web app uses today. */
-const APP_DOCUMENT_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
+/** The app document's policy, as design G11 §3.6 change 3 states it, with the tile host the web app uses today, and blob: media for a voice message opened in the page (voice messages V4). */
+const APP_DOCUMENT_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; media-src 'self' blob:; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
 
 /** A GET with the path sent exactly as written. fetch() would normalise dot segments and backslashes first. */
 function rawGet(rawPath: string): Promise<{ status: number; type: string; csp: string | null; referrer: string | null; body: string }> {

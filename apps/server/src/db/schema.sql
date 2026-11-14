@@ -3610,3 +3610,73 @@ CREATE TABLE IF NOT EXISTS peek_tickets (
 -- A member's open links (their list, and the cap on how many), and the prune by when they ran out.
 CREATE INDEX IF NOT EXISTS idx_peek_tickets_sharer ON peek_tickets(sharer_pubkey, expires_at);
 CREATE INDEX IF NOT EXISTS idx_peek_tickets_expires ON peek_tickets(expires_at);
+
+-- 32. The mailbox between communities (messages across communities X2: scratch/fable-design/DESIGN-cross-chat-voice-fable.md
+-- §3.2, §3.3, §7, §11 row X2; engine/relay-mail.ts, engine/relay-outbox.ts, routes/relay.ts). All three tables are this
+-- server's own: never copied to a standby (engine/replication-manifest.ts, `local`), emptied in every snapshot and backup
+-- file (services/address-retention.ts forgetAddressesInCopy), and a promoted standby starts with an empty mailbox: what was
+-- waiting is gone, and the sender sees "Not delivered" and can send again. Day zero: new tables, nothing converted.
+--
+-- relay_mail: an item another community's server brought for a member here, held sealed until the member's device confirms
+-- it has it, then deleted; 30 days at most. `envelope` is the sender's signed relay envelope as it came (@beanpool/core
+-- relay-envelope.ts); `payload` the sealed line or delete as it came. A blob's sealed bytes are a file of their own under
+-- <data>/relay-mail/in/ (never in the image store, so never in a backup's objects), `payload` NULL. `bytes` counts the
+-- payload either way, for the caps.
+CREATE TABLE IF NOT EXISTS relay_mail (
+    sender_key  TEXT NOT NULL CHECK (length(sender_key) = 64),
+    item_id     TEXT NOT NULL CHECK (length(item_id) BETWEEN 8 AND 64),
+    kind        TEXT NOT NULL CHECK (kind IN ('dm-line', 'dm-blob', 'dm-delete')),
+    recipient   TEXT NOT NULL CHECK (length(recipient) = 64),
+    sender_home TEXT NOT NULL CHECK (length(sender_home) BETWEEN 1 AND 260),
+    envelope    TEXT NOT NULL CHECK (length(envelope) <= 2000),
+    payload     TEXT CHECK (payload IS NULL OR length(payload) <= 70000),
+    bytes       INTEGER NOT NULL CHECK (bytes >= 0),
+    received_at INTEGER NOT NULL,
+    PRIMARY KEY (sender_key, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_relay_mail_recipient ON relay_mail(recipient, received_at);
+CREATE INDEX IF NOT EXISTS idx_relay_mail_received ON relay_mail(received_at);
+
+-- relay_mail_seen: every item another server brought here that passed its envelope's checks, held or dropped alike, by its
+-- sender and id, for 7 days: a replay is dropped, and the caps on a sending server and on this server count from it, so
+-- what they answer never depends on whether the recipient is a member here. `stranger_to` is the member an item was held
+-- for while its sender was a stranger to them (they had never written to that key): the stranger's caps, 5 a day to one
+-- member and 50 a day across this server, count those (engine/relay-mail.ts MAIL_STRANGER_*); NULL for every other item.
+CREATE TABLE IF NOT EXISTS relay_mail_seen (
+    sender_key  TEXT NOT NULL,
+    item_id     TEXT NOT NULL,
+    sender_home TEXT NOT NULL,
+    seen_at     INTEGER NOT NULL,
+    stranger_to TEXT CHECK (stranger_to IS NULL OR length(stranger_to) = 64),
+    PRIMARY KEY (sender_key, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_home ON relay_mail_seen(sender_home, seen_at);
+CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_stranger ON relay_mail_seen(sender_key, stranger_to, seen_at);
+CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_at ON relay_mail_seen(seen_at);
+
+-- relay_outbox: an item a member here sent to someone in another community, and what became of it: `queued` (the other
+-- server has not taken it yet; retried with backoff for 24 hours), `sent` (it answered 2xx), `delivered` (the recipient's
+-- device confirmed it: their signed receipt came back), `failed` (24 hours and never taken), `expired` (sent, and no receipt
+-- within the 30 days the other server holds mail). No words: the sealed item is kept only while it is queued, in `item`
+-- (envelope and payload as they travel) or, for a blob, a file under <data>/relay-mail/out/, and goes at the first 2xx.
+-- A row goes 30 days after its last change.
+CREATE TABLE IF NOT EXISTS relay_outbox (
+    sender_key     TEXT NOT NULL CHECK (length(sender_key) = 64),
+    item_id        TEXT NOT NULL CHECK (length(item_id) BETWEEN 8 AND 64),
+    kind           TEXT NOT NULL CHECK (kind IN ('dm-line', 'dm-blob', 'dm-delete', 'receipt')),
+    recipient      TEXT NOT NULL CHECK (length(recipient) = 64),
+    recipient_home TEXT NOT NULL CHECK (length(recipient_home) BETWEEN 1 AND 260),
+    state          TEXT NOT NULL CHECK (state IN ('queued', 'sent', 'delivered', 'failed', 'expired')),
+    -- JSON: a line's 65,536 characters may escape to six each (\u0000), so room for that and the envelope.
+    item           TEXT CHECK (item IS NULL OR length(item) <= 400000),
+    attempts       INTEGER NOT NULL DEFAULT 0,
+    next_try_at    INTEGER,
+    created_at     INTEGER NOT NULL,
+    updated_at     INTEGER NOT NULL,
+    PRIMARY KEY (sender_key, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_relay_outbox_due ON relay_outbox(state, next_try_at);
+-- A member's ticks, paged by (updated_at, item_id); and whether a member has written to a key (a stranger's caps).
+CREATE INDEX IF NOT EXISTS idx_relay_outbox_sender ON relay_outbox(sender_key, updated_at, item_id);
+CREATE INDEX IF NOT EXISTS idx_relay_outbox_pair ON relay_outbox(sender_key, recipient);
+CREATE INDEX IF NOT EXISTS idx_relay_outbox_updated ON relay_outbox(updated_at);

@@ -429,6 +429,13 @@ run_check "balance_writes" node scripts/check-balance-writes.mjs
 # address lives in core's beanpool-defaults.ts alone. The test shows the check can fail. Instant.
 run_check "no_node_names" bash -c 'node scripts/check-no-node-names.mjs && node --test scripts/check-no-node-names.test.mjs'
 
+# Known flaky test shapes do not land (Marty, 15 Nov 2026: "stop the known flaky test shapes landing"): a focus read straight
+# after an await that is not act(), outside waitFor (#3161); a time the test measured held under fixed milliseconds (#3166:
+# hold it to a baseline measured in the same run); rows that each read the clock for a field the product sorts by (the
+# notice bell, 15 Nov). Today's hits are a per-file ceiling (scripts/flake-patterns-ceiling.json) that only falls; a new hit
+# that is not the shape takes `// flake-ok(<rule>): <why>`. The test plants a bad and a good sample for each rule. Seconds.
+run_check "flake_patterns" bash -c 'node scripts/flake-patterns.mjs && node --test scripts/flake-patterns.test.mjs'
+
 # A migration file that is on origin/main has run on the live registrar and will never run there again, so an edit
 # to it reaches only new databases. New numbered files only. Instant; with no origin/main it reports as skipped, not as a
 # pass, and CI's shard fetches origin/main for it (.github/workflows/ci.yml, "Fetch origin/main").

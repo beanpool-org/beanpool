@@ -764,7 +764,7 @@ const LONG_REFUSAL_MS = 100;
 /** The way out over one refused answer in French, as Koa runs it: the error it left, and how long it held the loop (wall and CPU). */
 async function wayOutOver(text: string): Promise<{ error: unknown; ms: number; cpuMs: number }> {
     const ctx: any = {
-        status: 400, path: '/api/recovery/collect/sso', body: { error: text },
+        status: 400, path: '/api/recovery/find', body: { error: text },
         get: (h: string) => (h.toLowerCase() === 'x-language' ? 'fr' : ''), vary: () => {},
     };
     const c0 = process.cpuUsage();
@@ -776,7 +776,7 @@ async function wayOutOver(text: string): Promise<{ error: unknown; ms: number; c
 
 async function testLongRefusals(): Promise<void> {
     console.log('\n--- 7. A long refusal ---');
-    // As recovery-collect.ts wrote a provider it could not verify, the whole of what the request sent.
+    // As recovery-collect.ts wrote a provider it could not verify (its find, now at most 40 characters), the whole of what the request sent.
     const echoed = (sent: string) => `'${sent}' is not a sign-in provider this node can verify.`;
     const LONG: [string, string][] = [
         ['160 KB of a request echoed', echoed('a. B'.repeat(40_000))],
@@ -800,7 +800,7 @@ async function testLongRefusals(): Promise<void> {
     const timed = async (i: number, lang?: string) => {
         const started = performance.now();
         const c0 = process.cpuUsage();
-        const res = await fetch(`${base}/api/recovery/collect/sso?i=${i}`, { headers: lang ? { 'X-Language': lang } : {} });
+        const res = await fetch(`${base}/api/recovery/find?i=${i}`, { headers: lang ? { 'X-Language': lang } : {} });
         const text = await res.text();
         const cpu = process.cpuUsage(c0);
         return { status: res.status, text, ms: performance.now() - started, cpuMs: (cpu.user + cpu.system) / 1000 };

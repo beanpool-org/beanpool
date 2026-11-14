@@ -13,8 +13,8 @@ import { clientLimiterKey } from './client-ip.js';
  * They still share one bucket, so across them a guesser gets the 15 a minute per address they got before. Most admin
  * routes never called this limiter: the node has no admin password, and the one secret checkAdminAuth still checks (an
  * owner's break-glass code, on the enrol routes) is bounded by the brake (password-brake.ts), not by this bucket.
- * `names` is the name check and the recovery lookup together: both tell whether a name is here, so a prober gets the 15
- * a minute it got before across the two (the privacy review's F5, test-privacy-defaults.ts). Every other route that
+ * `names` is the name check, which tells whether a name is here: 15 a minute per address (the privacy review's F5,
+ * test-privacy-defaults.ts). The recovery lookup by name shared it until S3 deleted it. Every other route that
  * guards nothing a guess can win has its own. The open door's own name check is not here at all
  * (`doorRateLimit` below). Chat lines do NOT come through here — they have their own per-member bucket
  * (chat-rate-limit.ts), so members chatting behind one NAT cannot lock each other out of recovery.
@@ -72,7 +72,7 @@ export function pruneAuthAttempts(now = Date.now()): void {
  * The door's own limiter (global two-doors design §4.4), in place of the auth limiter's 15 a minute per address on the
  * open door's routes (routes/open-join.ts) and on the name check a joining key signs (routes/community.ts): 20 a minute
  * per signing key, and 600 a minute per address as a flood ceiling. The auth limiter is right for what it guards (a
- * password, a recovery lookup, a pairing), but at the door it turned a hall away after a handful of joins: a join takes
+ * password, a restore by sign-in, a pairing), but at the door it turned a hall away after a handful of joins: a join takes
  * at least three of these requests. The door guards nothing a key can't already ask, and its real cost is the work.
  *
  * Both are counted before either is charged, so a request one refuses spends nothing of the other. Answered as the auth

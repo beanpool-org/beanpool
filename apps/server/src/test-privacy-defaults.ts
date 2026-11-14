@@ -739,16 +739,15 @@ async function main() {
             && typeof info.body?.commonsBalance_c === 'number' && !people.some(p => pot.text.includes(p) || info.text.includes(p)),
             `the Commons pot and the community's counts stay public, naming nobody (${pot.status}, ${info.status})`);
 
-        // F2: the recovery lookup finds the whole name only (case forgiven), with no photo or join date.
+        // F2: the recovery lookup by name is gone (S3): a restore finds its account from a verified sign-in. Asked by a prefix
+        // or by the whole name, for a member with a sign-in copy, it answers 404 and names nobody.
         db.prepare(`INSERT INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag)
                     VALUES (?, 'sso', 'google', 1, 'c2hhcmU=', 'aXY=', 'dGFn')`).run(alice.pk);
-        const prefix = await get('/api/recovery/lookup/priv');
-        assert(prefix.status === 200 && Array.isArray(prefix.body) && prefix.body.length === 0, `a prefix finds nobody (got ${prefix.status} ${prefix.text.slice(0, 90)})`);
-        const exact = await get('/api/recovery/lookup/privalice');
-        const hit = Array.isArray(exact.body) ? exact.body : [];
-        assert(hit.length === 1 && hit[0].publicKey === alice.pk && hit[0].callsign === 'PrivAlice' && hit[0].canRecoverBySso === true
-            && hit[0].avatarUrl === null && hit[0].joinedAt === null && !exact.text.includes('data:image'),
-            `the whole name finds Alice, with her key and no photo or join date (got ${exact.text.slice(0, 160)})`);
+        for (const typed of ['priv', 'privalice', 'PrivAlice']) {
+            const r = await get(`/api/recovery/lookup/${typed}`);
+            assert(r.status === 404 && r.body?.code === 'no_restore_by_name' && !r.text.includes(alice.pk) && !r.text.includes('PrivAlice') && !r.text.includes('data:image'),
+                `the lookup by name for "${typed}" answers 404, naming nobody (got ${r.status} ${r.text.slice(0, 90)})`);
+        }
 
         // F3: the membership probe answers only the key it asks about (multi-community review F3, 2026-10-01): to anyone
         // else, whether the key is a member is as private as its name.
@@ -761,14 +760,13 @@ async function main() {
         assert(own.body?.isMember === true && own.body?.callsign === 'PrivAlice', `signed by Alice's own key, it names her (got ${own.text.slice(0, 90)})`);
 
         // F5: the name check stays public (the join wizard asks it before there is a member), rate-limited per address: 15
-        // a minute, shared with the recovery lookup. What it tells anyone: whether a name is taken here.
+        // a minute. What it tells anyone: whether a name is taken here.
         pruneAuthAttempts(Date.now() + 120_000);
         resetGatewayRateLimit();
         const statuses: number[] = [];
         for (let i = 0; i < 16; i++) statuses.push((await fetch(`${BASE}/api/members/callsign-available/PrivAlice`)).status);
-        const taken = await (await fetch(`${BASE}/api/recovery/lookup/privalice`)).json().catch(() => null);
-        assert(statuses.slice(0, 15).every(st => st === 200) && statuses[15] === 429 && taken?.error?.startsWith('Too many attempts'),
-            `the name check answers 15 times a minute from one address, then 429, and the recovery lookup shares the limit (got ${statuses.join(',')})`);
+        assert(statuses.slice(0, 15).every(st => st === 200) && statuses[15] === 429,
+            `the name check answers 15 times a minute from one address, then 429 (got ${statuses.join(',')})`);
         pruneAuthAttempts(Date.now() + 120_000);
         const check = await get('/api/members/callsign-available/PrivAlice');
         assert(check.body?.available === false && !check.text.includes(alice.pk), `and says only that the name is taken (got ${check.text.slice(0, 90)})`);

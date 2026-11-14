@@ -118,7 +118,9 @@ async function main(): Promise<void> {
     assert((await call('/api/recovery/collect', undefined, { candidatePublicKey: owner.pubkey })).status === 401,
         'an UNSIGNED open is refused — there would be nobody to bind the session to');
     const noKey = await call('/api/recovery/collect', device, {});
-    assert(noKey.status === 400 && noKey.body?.error === 'Which account are you recovering?', 'and one that names no account is refused');
+    const notAString = await call('/api/recovery/collect', device, { candidatePublicKey: 42 });
+    assert(noKey.status === 400 && noKey.body?.error === 'Which account are you recovering?' && notAString.status === 400
+        && notAString.body?.error === 'Which account are you recovering?', 'and one that names no account, or a key that is not a string, is refused');
     const byName = await call('/api/recovery/collect', device, { callsign: owner.callsign });
     assert(byName.status === 400 && sessionsOf(owner.pubkey) === 0,
         `a name alone opens nothing: no account is found by a typed name (${byName.status} ${JSON.stringify(byName.body)})`);

@@ -485,9 +485,6 @@ async function main(): Promise<void> {
         { path: `/api/treasury/${enterprise}` },
         { path: `/api/enterprise/${enterprise}` },
         { path: '/api/commons/decisions/dec-sentinel' },
-        { path: '/api/recovery/lookup/sentinel' },
-        // The exact name: the lookup names who was asked for, by the name typed and the key recovery may need.
-        { path: '/api/recovery/lookup/SentinelAlice', echoes: ['SentinelAlice', alice.pk] },
         { path: `/api/marketplace/posts/${offer.id}/photos/0` },
         { path: '/api/messages/msg-sentinel/attachment' },
         { path: '/api/pulse/items/item_sentinel/thumbnail' },
@@ -528,8 +525,7 @@ async function main(): Promise<void> {
         // tree's branch is a fixed placeholder (state-engine getCommunityHealth), never a member.
         (route === '/api/node/info' && /^\$\.peerNodes\[\d+\]\.callsign$/.test(p))
         || (route.startsWith('/api/members/callsign-available/') && p === '$.callsign')
-        || (route === '/api/community/health' && p === '$.tree.widestBranch.callsign')
-        || (route === '/api/recovery/lookup/SentinelAlice' && /^\$\[0\]\.(publicKey|callsign)$/.test(p));
+        || (route === '/api/community/health' && p === '$.tree.widestBranch.callsign');
     for (const [who, id] of guests) {
         const failures: string[] = [];
         const persons: string[] = [];
@@ -998,15 +994,12 @@ async function main(): Promise<void> {
         const guestPosts = await call('GET', null, `${POSTS}?${ALL_TYPES}`);
         assert((guestPosts.body as any[]).every(p => p.authorAvatarUrl === null) && !guestPosts.text.includes('k='),
             "a guest's carry no face at all");
-        // The recovery lookup: a stranger there can't list members by typing a letter, or see their faces.
-        for (const [q, want] of [['sentinel', 0], ['S', 0], ['SentinelAl', 0], ['SentinelAlice', 1], ['sentinelalice', 1], [' SENTINELALICE ', 1]] as const) {
+        // The recovery lookup by name is gone (S3: a restore finds its account from a verified sign-in): a stranger typing a
+        // letter, a prefix or the whole name there gets 404 and its sentence, and no name, key or face.
+        for (const q of ['sentinel', 'S', 'SentinelAl', 'SentinelAlice', 'sentinelalice', ' SENTINELALICE ']) {
             const r = await call('GET', null, `/api/recovery/lookup/${encodeURIComponent(q)}`);
-            const found = Array.isArray(r.body) ? r.body : [];
-            assert(r.status === 200 && found.length === want, `the recovery lookup for "${q}" finds ${want} (got ${r.status} ${found.length})`);
-            if (want) {
-                assert(found[0].publicKey === alice.pk && found[0].callsign === 'SentinelAlice' && found[0].avatarUrl === null && found[0].joinedAt === null
-                    && found[0].canRecoverBySso === true, `the exact match names her by the name typed and her key, with no photo or join date (${JSON.stringify(found[0])})`);
-            }
+            assert(r.status === 404 && r.body?.code === 'no_restore_by_name' && leaks(r.text).length === 0 && !r.text.includes('/api/avatar/'),
+                `the deleted recovery lookup for "${q}" answers 404 and names nobody (got ${r.status} ${r.text.slice(0, 90)})`);
         }
     }
 
@@ -1118,11 +1111,10 @@ async function main(): Promise<void> {
         const ticketB64 = offlineTicket(bob.priv, bob.pk);
         const noPerson = (r: Res, sent: string[] = []) => !leaks(r.text, sent).length && !r.text.includes('/api/avatar/') && !KEYED_FACE.test(r.text);
 
-        // 11a. The review's walk: a name typed at the recovery lookup gives a key, as designed; that key opens nothing more.
+        // 11a. The review's walk: a member's key, however a stranger came by it (the recovery lookup by name gave one out for a
+        // typed name until S3 deleted it), opens nothing more.
         {
-            const typed = await call('GET', null, '/api/recovery/lookup/SentinelAlice');
-            const key = typed.body?.[0]?.publicKey as string | undefined;
-            assert(typed.status === 200 && key === alice.pk, `the exact recovery lookup gives Alice's key, as designed (${typed.status})`);
+            const key = alice.pk;
             assert((await call('GET', null, `/api/avatar/${key}?size=thumb`)).status === 404, 'her face by that key alone is 404');
             const walk: Array<[string, Id | null, number]> = [['unsigned', null, 401], ['a non-member signer', newId(), 403], ['a pruned account', pruned, 403]];
             for (const [who, id, want] of walk) {
@@ -1281,8 +1273,6 @@ async function main(): Promise<void> {
                 subject: alice.pk },
             'POST /api/groups/:id/decisions/:decisionId/vote': { support: true },
         };
-        /** What a read answers by design with more than was asked: the exact recovery match names its key (section 9). */
-        const ECHOES: Record<string, string[]> = { 'GET /api/recovery/lookup/:callsign': [alice.pk] };
         /** A read's query, for every GET: each parameter a read names someone by, naming Alice. */
         const BAIT_QUERY = `member=${alice.pk}&publicKey=${alice.pk}&pubkey=${alice.pk}&targetPubkey=${alice.pk}`;
         /** Every route this node serves. A route not listed here fails below: list it, with a body in BODIES if BAIT won't reach its data. */
@@ -1514,8 +1504,8 @@ async function main(): Promise<void> {
             'POST /api/recovery/collect', 'POST /api/recovery/collect/cancel', 'POST /api/recovery/collect/fragments',
             'POST /api/recovery/collect/hub',
             'POST /api/recovery/community-copy', 'POST /api/recovery/community-copy/half', 'POST /api/recovery/community-copy/status', 'DELETE /api/recovery/community-copy',
-            'POST /api/recovery/collect/mine', 'POST /api/recovery/collect/sso', 'POST /api/recovery/collect/sso-nonce',
-            'POST /api/recovery/collect/status', 'GET /api/recovery/lookup/:callsign', 'DELETE /api/recovery/shares',
+            'POST /api/recovery/collect/mine',
+            'POST /api/recovery/collect/status', 'DELETE /api/recovery/shares',
             'POST /api/recovery/shares/hub-fragment', 'POST /api/recovery/shares/sso', 'DELETE /api/recovery/shares/sso/:provider',
             'POST /api/recovery/shares/status', 'POST /api/recovery/sso-nonce',
             // A restore that finds the account from the sign-in alone (routes/recovery-collect.ts, design S0).
@@ -1618,7 +1608,7 @@ async function main(): Promise<void> {
                 if (r.status >= 500) serverErrors.add(`${route} ${r.status}`);
                 // What the request itself sent may come back (a key or a name it asked about), and so may the caller's own.
                 const sent = [...url.split('?')[0].split('/'), ...(url.match(/[0-9a-f]{64}/g) ?? []),
-                    ...Object.values(body ?? {}).filter((v): v is string => typeof v === 'string'), ...(ECHOES[route] ?? [])];
+                    ...Object.values(body ?? {}).filter((v): v is string => typeof v === 'string')];
                 const own = id ? [id.pk, ...memberRows.filter(m => m.public_key === id.pk).map(m => m.callsign)] : [];
                 const found = leaks(r.text, [...sent, ...own]);
                 if (found.length) failures.push(`${route} → ${r.status}: ${found.slice(0, 3).map(f => f.slice(0, 16)).join(', ')}`);
@@ -1937,11 +1927,11 @@ async function main(): Promise<void> {
             assert(pot.status === 200 && Number.isSafeInteger(pot.body?.balance_c), `${who}: the Commons pot, a total, stays public (${pot.status})`);
             const face = await call('GET', id, `/api/avatar/${alice.pk}?size=thumb`);
             assert(face.status === 404 && face.headers.get('content-type') !== 'image/png', `${who}: a face asked by a member's key alone is refused, 404 (${face.status})`);
-            const lookup = await call('GET', id, '/api/recovery/lookup/sentinel');
-            assert(Array.isArray(lookup.body) && lookup.body.length === 0, `${who}: the recovery lookup finds nobody by a prefix (${lookup.text.slice(0, 80)})`);
-            const exact = await call('GET', id, '/api/recovery/lookup/sentinelalice');
-            assert(Array.isArray(exact.body) && exact.body.length === 1 && exact.body[0].publicKey === alice.pk && exact.body[0].avatarUrl === null && exact.body[0].joinedAt === null,
-                `${who}: the whole name, case forgiven, finds her, with no photo or join date (${exact.text.slice(0, 120)})`);
+            for (const typed of ['sentinel', 'sentinelalice']) {
+                const lookup = await call('GET', id, `/api/recovery/lookup/${typed}`);
+                assert(lookup.status === 404 && lookup.body?.code === 'no_restore_by_name' && leaks(lookup.text).length === 0,
+                    `${who}: the deleted recovery lookup for "${typed}" answers 404 and names nobody (${lookup.status} ${lookup.text.slice(0, 80)})`);
+            }
         }
         for (const p of ['/api/commons/decisions', '/api/pulse/feed', `/api/enterprise/${enterprise}`]) {
             const r = await call('GET', bob, p);

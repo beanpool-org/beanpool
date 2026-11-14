@@ -107,7 +107,7 @@ async function main(): Promise<void> {
     let eph6: Id | null = null;
     await section('6. a released copy is no more readable in the database than a stored one', async () => {
         const { eph, collectionId, released } = await collectGoogle(callsign1, GOOGLE_SUB);
-        collection6 = collectionId; eph6 = eph;
+        collection6 = collectionId ?? ''; eph6 = eph;
         check(released.status === 200 && released.body?.enough === true, `a verified sign-in releases the copy (got ${released.status} ${JSON.stringify(released.body)})`);
         const rel = db.prepare('SELECT * FROM recovery_releases WHERE collection_id = ?').get(collectionId) as any;
         check(!!rel, 'the release is recorded in recovery_releases');

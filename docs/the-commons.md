@@ -909,7 +909,7 @@ vote opens in the same step as the pause, not within 24 hours, and a pause never
   of every pause, never whom; an admin with five pauses whose votes are open makes a sixth only with an owner's fresh proof.
 - **A fair vote** (Amendment A). The member is told at once and replies beside the case; the card names the admin who paused; an
   admin can hide a case shown to be false, or take down a reply that harms someone, each with a reason members read; every member
-  who may vote (where a jury decides, every juror) and the member get an alert that names nobody.
+  who may vote (where a jury decides, only the jurors) gets an alert that never says who the vote is about, and the member is told too.
 - **Votes off** (the global node, or an operator's switch): a pause lasts 7 days and lifts by itself, nobody votes on it, and the
   admins remove members themselves.
 

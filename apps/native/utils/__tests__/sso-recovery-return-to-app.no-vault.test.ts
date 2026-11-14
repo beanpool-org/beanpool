@@ -1,15 +1,16 @@
 /**
  * A sign-in restore at the community that is refused AFTER the sign-in brings the app back to the front, so the member
  * reads why (deciding review of #1951, pre-existing P2). On Android the provider's page (a Custom Tab) can still be in
- * front of the app when the release is refused, the copy doesn't open, or the copy is another account's; the welcome
+ * front of the app when the find or the release is refused, the copy doesn't open, or the copy is another account's; the welcome
  * screen showed its sentence behind it. Success and "Replace this phone's account?" already came back to the front.
  *
  * `recoverAccountWithSso` says when the sign-in is done (`onSignedIn`, as the vault's `startSsoRestore` does), and
  * welcome.tsx `handleSsoRecoverAtCommunity` calls `returnToApp()` in its catch when it was. A refusal before the sign-in
- * (no lookup, no such account) has opened no page, and brings nothing forward.
+ * (no find nonce: the community can't be reached, or its server is too old) has opened no page, and brings nothing
+ * forward.
  *
- * Nothing here contacts a node or a provider: the lookup is a stubbed fetch (community-lookup.ts), the recovery routes a
- * stubbed signedPost, Google's sheet a stub.
+ * Nothing here contacts a node or a provider: the recovery routes are a stubbed signedPost (community-find.ts), Google's
+ * sheet a stub.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
@@ -52,7 +53,7 @@ import { signInWithGoogle, SsoSignInError } from '../sso-signin';
 import { CommunityRestoreRefused, recoverAccountWithSso } from '../sso-recovery';
 import { restoreRefusalText } from '../community-restore-copy';
 import { seedToKeypair } from '../crypto';
-import { stubCommunityLookup } from './community-lookup';
+import { findAnswer, noNodeContacted } from './community-find';
 
 const NODE = 'https://community.example.org';
 const SEED = new Uint8Array(32).fill(42);
@@ -62,18 +63,22 @@ const SUB = '110169484474386276334';
 /** What happened, in order: the sign-in being done, and each recovery route asked. */
 let events: string[];
 
-/** Google hands back a token; the node answers each route, the release with `releaseStatus`, the copy of `seed`. */
+/**
+ * Google hands back a token; the node answers each route: its find names Marty, its collect (which releases the copy, by
+ * the find's hold) with `releaseStatus`, and the copy of `seed`.
+ */
 async function node(seed: Uint8Array, releaseStatus = 200) {
+    const marty = (await seedToKeypair(SEED)).publicKeyHex;
     const sealed = await sealSeedToSso(seed, 'google', SUB);
     const b64 = (s: string) => Buffer.from(s).toString('base64url');
     vi.mocked(signInWithGoogle).mockResolvedValue({ idToken: `${b64('{"alg":"RS256"}')}.${b64(JSON.stringify({ sub: SUB }))}.sig`, nonce: 'n' });
     vi.mocked(signedPost).mockImplementation(async (_url: string, route: string) => {
         events.push(route);
         const answer = (status: number, body: unknown) => ({ ok: status === 200, status, json: async () => body }) as unknown as Response;
-        if (route === '/api/recovery/collect') return answer(200, { collectionId: 'c1' });
-        if (route === '/api/recovery/collect/sso-nonce') return answer(200, { nonce: 'n' });
-        if (route === '/api/recovery/collect/sso') {
-            return releaseStatus === 200 ? answer(200, { collected: 1 }) : answer(releaseStatus, { error: 'That sign-in is not a way back into Marty.' });
+        const found = findAnswer(route, [{ publicKey: marty, callsign: 'Marty' }], 'n');
+        if (found) return found;
+        if (route === '/api/recovery/collect') {
+            return releaseStatus === 200 ? answer(200, { collectionId: 'c1' }) : answer(releaseStatus, { error: 'That sign-in is not a way back into Marty.' });
         }
         if (route === '/api/recovery/collect/fragments') {
             return answer(200, { fragments: [{
@@ -86,7 +91,7 @@ async function node(seed: Uint8Array, releaseStatus = 200) {
 }
 
 const onSignedIn = vi.fn(() => { events.push('signed in'); });
-const restore = () => recoverAccountWithSso({ callsign: 'Marty', anchorUrl: NODE, provider: 'google', onSignedIn });
+const restore = () => recoverAccountWithSso({ anchorUrl: NODE, provider: 'google', onSignedIn });
 
 const quietError = console.error;
 
@@ -95,7 +100,7 @@ beforeEach(async () => {
     mem.secure.clear();
     vi.clearAllMocks();
     events = [];
-    stubCommunityLookup(NODE, [{ publicKey: (await seedToKeypair(SEED)).publicKeyHex, callsign: 'Marty' }]);
+    noNodeContacted();
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
         if (typeof args[0] === 'string' && args[0].startsWith('Failed to migrate legacy identity')) return;
@@ -109,15 +114,15 @@ afterEach(() => {
 });
 
 describe('the restore says when the sign-in is done, so the screen knows a page may be in front of it', () => {
-    it('once the provider hands back its token, before the release', async () => {
+    it('once the provider hands back its token, before the find and the release', async () => {
         await node(SEED);
 
         await restore();
 
         expect(onSignedIn).toHaveBeenCalledTimes(1);
         expect(events).toEqual([
-            '/api/recovery/collect', '/api/recovery/collect/sso-nonce', 'signed in',
-            '/api/recovery/collect/sso', '/api/recovery/collect/fragments',
+            '/api/recovery/find-nonce', 'signed in',
+            '/api/recovery/find', '/api/recovery/collect', '/api/recovery/collect/fragments',
         ]);
     });
 
@@ -127,7 +132,7 @@ describe('the restore says when the sign-in is done, so the screen knows a page 
         const refused = await restore().catch((e: unknown) => e);
         expect(refused).toBeInstanceOf(CommunityRestoreRefused);
         expect(refused).toMatchObject({ refusal: { code: 'not_that_account', name: 'Marty' } });
-        expect(restoreRefusalText(refused)).toBe("The account that came back isn't Marty, so nothing was saved on this phone. Try again, or use your 12 words.");
+        expect(restoreRefusalText(refused, 'Riverside')).toBe("The account that came back isn't Marty, so nothing was saved on this phone. Try again, or use your 12 words.");
 
         expect(onSignedIn).toHaveBeenCalledTimes(1);
     });
@@ -135,7 +140,9 @@ describe('the restore says when the sign-in is done, so the screen knows a page 
     it('a release the community refuses, after the sign-in: the sign-in was said to be done', async () => {
         await node(SEED, 400);
 
-        await expect(restore()).rejects.toThrow('That sign-in is not a way back into Marty.');
+        const refused = await restore().catch((e: unknown) => e);
+        expect(refused).toMatchObject({ refusal: { code: 'refused', step: 'collect', status: 400 } });
+        expect(restoreRefusalText(refused, 'Riverside')).toBe('That sign-in is not a way back into Marty.');
 
         expect(onSignedIn).toHaveBeenCalledTimes(1);
     });
@@ -149,15 +156,33 @@ describe('the restore says when the sign-in is done, so the screen knows a page 
         expect(onSignedIn).not.toHaveBeenCalled();
     });
 
-    it('a refusal before any sign-in (the lookup can\'t be had) opens no page and says nothing of one', async () => {
+    it('a refusal before any sign-in (the find nonce can\'t be had) opens no page and says nothing of one', async () => {
         await node(SEED);
-        stubCommunityLookup('https://elsewhere.example.org', []);
+        const answers = vi.mocked(signedPost).getMockImplementation()!;
+        vi.mocked(signedPost).mockImplementation(async (...args) => {
+            if (args[1] === '/api/recovery/find-nonce') throw new TypeError('Network request failed');
+            return answers(...args);
+        });
 
         const refused = await restore().catch((e: unknown) => e);
         expect(refused).toBeInstanceOf(CommunityRestoreRefused);
-        expect(refused).toMatchObject({ refusal: { code: 'lookup_unreachable' } });
-        expect(restoreRefusalText(refused)).toBe("Can't reach the community right now. Try again in a minute.");
+        expect(refused).toMatchObject({ refusal: { code: 'unreachable' } });
+        expect(restoreRefusalText(refused, 'Riverside')).toBe("Can't reach the community right now. Try again in a minute.");
 
+        expect(signInWithGoogle).not.toHaveBeenCalled();
+        expect(onSignedIn).not.toHaveBeenCalled();
+    });
+
+    it('a server older than the find: no page opens, and the member is told to ask its admin', async () => {
+        await node(SEED);
+        const answers = vi.mocked(signedPost).getMockImplementation()!;
+        vi.mocked(signedPost).mockImplementation(async (...args) => {
+            if (args[1] === '/api/recovery/find-nonce') return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+            return answers(...args);
+        });
+
+        const refused = await restore().catch((e: unknown) => e);
+        expect(refused).toMatchObject({ refusal: { code: 'server_too_old' } });
         expect(signInWithGoogle).not.toHaveBeenCalled();
         expect(onSignedIn).not.toHaveBeenCalled();
     });

@@ -621,7 +621,9 @@ async function main(): Promise<void> {
         'both say that look is logged where the admins and the owner read it (section 8)');
     assert(/opens the list of balances, the node records who and when;/.test(policy) && /can see who opened it and when/.test(guide),
         'both say an opening of the list records who and when, not whose (section 6: exceptions_opened has no subject)');
-    assert(/except in the four cases below/.test(policy) && (policy.match(/<h2>8\.[\s\S]*?<\/ul>/)?.[0].match(/<li><strong>(Only once an admin has confirmed you|When an admin removes|When the community votes|The server's operator)/g) ?? []).length === 4,
+    // Removal by vote: where the community votes, no admin removes a member (state-engine removalVoteRefusal), so the removal
+    // case is named for the removal ("When your account is removed"), not for an admin, as the guide's page names it.
+    assert(/except in the four cases below/.test(policy) && (policy.match(/<h2>8\.[\s\S]*?<\/ul>/)?.[0].match(/<li><strong>(Only once an admin has confirmed you|When your account is removed|When the community votes|The server's operator)/g) ?? []).length === 4,
         'the policy counts its cases as it lists them: confirmed, removal, a vote, the operator');
     assert(/sees your balance and how many trades you have open/.test(policy) && /sees your balance and how many trades you have open/.test(guide),
         'both name the open-trade count the removal preview answers (pendingEscrowsCount)');

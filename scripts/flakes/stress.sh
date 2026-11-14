@@ -87,7 +87,7 @@ cd "$ROOT" || refuse "no tree at $ROOT"
 git rev-parse --verify --quiet "$BASE" > /dev/null || refuse "$BASE is not a ref here (the caller fetches)."
 is_test() {
   case "$1" in
-    */node_modules/*|*/e2e/*|*/dist/*) return 1 ;;
+    node_modules/*|*/node_modules/*|e2e/*|*/e2e/*|dist/*|*/dist/*) return 1 ;;   # browser e2e runs are not a lane's
     apps/server/src/test-*.ts) return 0 ;;
     *.test.ts|*.test.tsx|*.test.js|*.test.mjs|*.test.cjs|*.test.jsx|*.spec.ts|*.spec.tsx) return 0 ;;
   esac

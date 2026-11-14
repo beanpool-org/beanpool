@@ -535,6 +535,11 @@ run_check "token_scripts" node --test scripts/automation-token.test.mjs scripts/
 # localhost: one read a run, each item kept once, the topic file kept private and never printed. A second.
 run_check "reddit_inbox" node --test scripts/reddit-inbox.test.mjs
 
+# The flake tools (scripts/flakes/): record.mjs reads captured CI job logs onto the flake ledger and says SECOND-HIT, through
+# a fake gh that serves them; stress.sh picks main's changed tests and runs them under its lock, clock and budget rules,
+# with a fake runner and `sleep` as the load. A mutant per rule. About 75 s, mostly waiting.
+run_check "flake_tools" node --test scripts/flakes/record.test.mjs scripts/flakes/stress.test.mjs
+
 # The words layer (translation, DESIGN-translation-fable.md S0): every t()/tn() call is a whole sentence written as a
 # literal, every catalog keeps the English placeholders and its language's plural forms, and the English a member reads
 # outside t() (JSX text, text props, alerts) does not grow past scripts/words/lint-baseline.json. A second or two.

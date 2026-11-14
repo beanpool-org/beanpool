@@ -11,11 +11,12 @@ export const SECOND_HIT_DAYS = 14;
 
 // `gh run view --log-failed` puts "<job>\t<step>\t<ISO time> " before every line, and prints a colour code as the two
 // characters ^[ rather than ESC. A raw local log has neither.
-const GH_PREFIX = /^[^\t\n]*\t[^\t\n]*\t﻿?\d{4}-\d\d-\d\dT[\d:.]+Z ?/;
+const GH_PREFIX = /^[^\t\n]*\t[^\t\n]*\t\uFEFF?\d{4}-\d\d-\d\dT[\d:.]+Z ?/;
+// eslint-disable-next-line no-control-regex -- ESC is exactly what a raw log carries
 const ANSI = /(?:\x1b|\^\[)\[[0-9;]*[A-Za-z]/g;
 
 export function cleanLine(raw) {
-    return raw.replace(GH_PREFIX, '').replace(ANSI, '').replace(/\r/g, '').replace(/^﻿/, '');
+    return raw.replace(GH_PREFIX, '').replace(ANSI, '').replace(/\r/g, '').replace(/^\uFEFF/, '');
 }
 
 /** One name per test however often a log repeats it: colour, spacing and a trailing vitest duration are not identity. */
@@ -136,7 +137,7 @@ function readRawLines(section, add) {
         else if (/^✗/.test(t)) {
             const name = suite && !t.includes(suite) ? `${suite}: ${t}` : t;
             add(classify(name, section.check, null));
-        } else if ((m = ROLLUP.exec(t))) [classify(t, section.check, null)].flat().forEach(add);
+        } else if (ROLLUP.test(t)) [classify(t, section.check, null)].flat().forEach(add);
     }
 }
 
@@ -155,7 +156,7 @@ function stackFile(lines) {
 export function workspace(root) {
     const map = new Map();
     for (const top of ['apps', 'packages']) {
-        let names = [];
+        let names;
         try { names = fs.readdirSync(path.join(root, top)); } catch { continue; }
         for (const n of names) {
             const pj = path.join(root, top, n, 'package.json');
@@ -244,14 +245,14 @@ export function judgeTouch(root, testFile, diffFiles, { kind = null, ws = worksp
     const queue = [testFile];
     while (queue.length && seen.size < maxFiles) {
         const rel = queue.shift();
-        let src = '';
+        let src;
         try { src = fs.readFileSync(path.join(root, rel), 'utf8'); } catch { continue; }
         const owner = pkgOf(ws, rel);
         const al = owner ? aliases(root, owner[1].dir) : [];
         for (const re of SPEC) {
             for (const m of src.matchAll(re)) {
                 const spec = m[1];
-                let abs = null;
+                let abs;
                 if (spec.startsWith('.')) abs = path.resolve(root, path.dirname(rel), spec);
                 else {
                     const a = al.find((x) => spec.startsWith(x.from));
@@ -286,7 +287,7 @@ export function judgeTouch(root, testFile, diffFiles, { kind = null, ws = worksp
 // ── The ledger ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export function readLedger(file) {
-    let text = '';
+    let text;
     try { text = fs.readFileSync(file, 'utf8'); } catch { return []; }
     return text.split('\n').filter(Boolean).flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } });
 }

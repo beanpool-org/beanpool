@@ -12,6 +12,11 @@ import type { BeanPoolIdentity } from './identity';
 
 const NONE: ReadonlyMap<string, string> = new Map();
 
+/** Two community addresses as one (a trailing slash or a capital in the host is the same community). */
+export function sameOrigin(a: string, b: string): boolean {
+    try { return new URL(a).origin === new URL(b).origin; } catch { return a === b; }
+}
+
 export function useContactInviteNames(identity: BeanPoolIdentity, need: boolean): ReadonlyMap<string, string> {
     const snap = useContacts();
     useEffect(() => { if (need) void openContacts(identity); }, [need, identity]);
@@ -20,6 +25,6 @@ export function useContactInviteNames(identity: BeanPoolIdentity, need: boolean)
         const list = need && snap.key === key ? snap.list : null;
         if (!list?.contacts.length) return NONE;
         const here = nodeAddress();
-        return contactInviteNames(list.contacts, (c) => c === here);
+        return contactInviteNames(list.contacts, (c) => sameOrigin(c, here));
     }, [snap, need, key]);
 }

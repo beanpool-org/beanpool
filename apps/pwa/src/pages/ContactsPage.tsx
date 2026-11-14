@@ -29,6 +29,7 @@ import { ContactsInfo } from '../components/ContactsInfo';
 import { BoldWords } from '../components/BoldWords';
 import { UsePhoneAppCard, isUsePhoneAppDismissed } from '../components/UsePhoneAppCard';
 import { ContactInviteSheet } from '../components/ContactInviteSheet';
+import { sameOrigin } from '../lib/contact-invite-names';
 
 type View =
     | { kind: 'list' } | { kind: 'import' } | { kind: 'add' } | { kind: 'contact'; id: string } | { kind: 'done'; added: number; fromPhone: boolean }
@@ -85,7 +86,7 @@ export function ContactsPage({ identity, start = 'list', onBack, onMessage }: {
 
     const list = snap.key === identity.publicKey.toLowerCase() ? snap.list : null;
     const here = nodeAddress();
-    const isHere = (c: string) => c === here;
+    const isHere = (c: string) => sameOrigin(c, here);
     // Read only while some contact holds an invite made here (a first invite made sets it, and so reads).
     const invitedHere = !!list?.contacts.some((c) => !!c.invite && isHere(c.invite.community));
     useEffect(() => {

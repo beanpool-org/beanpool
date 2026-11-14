@@ -325,6 +325,38 @@ describe('Invite from a contact on the phone', () => {
         expect((await listNow())?.contacts[0].invite).toBeNull();
     });
 
+    it('Copy then Share hands over the same invite: one code made for one person', async () => {
+        await seedList((l) => putContact(l, DEE));
+        await render();
+        await press('Invite');
+        await sheetOpen();
+        await press('Copy');
+        await press('Share…');
+        expect(mem.sent.filter((s) => s.includes('/api/invite/generate'))).toHaveLength(1);
+        expect(mem.shares[0].message).toBe(mem.copied[0]);
+        // Mutation: make the invite on every tap (drop the sheet's `made`) → two generates, red.
+    });
+
+    it('"Also cancel the invite I sent" ticked on one contact is not ticked on the next one opened', async () => {
+        const at = new Date().toISOString();
+        await seedList((l) => putContact(putContact(l, { ...DEE, invite: { code: 'INV-TEST-0001', community: RIVERSIDE, at } }), { ...TOM, invite: { code: 'INV-TEST-0002', community: RIVERSIDE, at } }));
+        mem.mine = [{ code: 'INV-TEST-0001', createdAt: at, usedBy: null }, { code: 'INV-TEST-0002', createdAt: at, usedBy: null }];
+        await render();
+        const open = async (name: string) => {
+            const row = Array.from(host.querySelectorAll('[data-testid="contact-row"]')).find((r) => r.textContent?.includes(name))!;
+            await act(async () => { (row.querySelector('button') as HTMLButtonElement).click(); });
+            await settle();
+        };
+        await open('Dee Walker');
+        await act(async () => { (host.querySelector('[data-testid="contact-cancel-invite"]') as HTMLButtonElement).click(); });
+        await settle();
+        expect(host.querySelector('[data-testid="contact-cancel-invite"] i')?.getAttribute('data-icon')).toBe('checkbox-marked');
+        await press('Go back');
+        await open('Tom Riley');
+        expect(host.querySelector('[data-testid="contact-cancel-invite"] i')?.getAttribute('data-icon')).toBe('checkbox-blank-outline');
+        // Mutation: drop the reset on opening a contact → Tom's tick is already on, red.
+    });
+
     it('No: the contact stays unlinked, the invite is forgotten (not asked again), and the member is told what it means', async () => {
         await seedList((l) => putContact(l, { ...DEE, invite: { code: 'INV-TEST-0009', community: RIVERSIDE, at: new Date().toISOString() } }));
         mem.mine = [{ code: 'INV-TEST-0009', createdAt: new Date().toISOString(), usedBy: DEE_KEY, usedByCallsign: 'someone_else' }];

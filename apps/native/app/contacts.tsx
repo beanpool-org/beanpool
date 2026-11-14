@@ -36,9 +36,10 @@ import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser } from '../utils/
 import { createConversationApi } from '../utils/db';
 import { switchCommunity } from '../utils/use-communities';
 import { signedRequestWords } from '../components/signed-request-lines';
+import { cancelContactInvite, readMyInvites } from '../utils/contact-invites';
+
 // Loaded when a row's Invite is tapped: the sheet brings the clipboard and the ask, which the list itself never needs.
 const ContactInviteSheet = lazy(() => import('../components/ContactInviteSheet').then((m) => ({ default: m.ContactInviteSheet })));
-import { cancelContactInvite, readMyInvites } from '../utils/contact-invites';
 
 export { ErrorBoundary };
 
@@ -239,7 +240,7 @@ export default function ContactsScreen() {
     };
     return shell(t('Contacts'), <>
         <ListScreen view={view} list={list} busy={busy} me={identity.publicKey}
-            onOpen={(id) => setScreen({ kind: 'contact', id })} onAdd={() => setScreen({ kind: 'add' })} onImport={() => setScreen({ kind: 'import' })} onInfo={() => setInfo(true)}
+            onOpen={(id) => { setCancelToo(false); setScreen({ kind: 'contact', id }); }} onAdd={() => setScreen({ kind: 'add' })} onImport={() => setScreen({ kind: 'import' })} onInfo={() => setInfo(true)}
             onRemoveAll={() => change((l) => removeEveryContact(l))}
             onInvite={anchor ? setInviting : null} ask={(c) => (anchor ? contactInviteAsk(c, mine ?? [], isHere) : null)} onAnswer={(c, used, yes) => void answer(c, used, yes)} />
         {inviting && anchor && (

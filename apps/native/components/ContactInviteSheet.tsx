@@ -58,18 +58,24 @@ export function ContactInviteSheet({ contact, anchor, community, identity, onClo
     }, [adminsOnly, anchor, identity.publicKey]);
 
     const phone = contact.phones.find((p) => contactSmsLink(p, '', Platform.OS) !== null);
+    // The invite's message once made: Copy then Share, or a send that failed, uses the same one (one invite for one person).
+    const [made, setMade] = useState<string | null>(null);
     const go = async (how: How) => {
         setBusy(true);
         setNote(null);
+        let message = made;
         try {
-            const made = await makeInviteForShare(anchor, identity, features);
-            if (!made.ok) { setNote(made.message); return; }
-            // Kept in the locked list only. The invite stands even if this phone couldn't save the change: it is still shared.
-            await editContacts(identity, (l) => {
-                const held = l.contacts.find((c) => c.id === contact.id);
-                return held ? putContact(l, withContactInvite(held, made.code, anchor)) : l;
-            }).catch(() => {});
-            const message = inviteShareText({ name: community, link: inviteAndShareLink(anchor, made.code), code: made.code, address: shareAddress(anchor) });
+            if (!message) {
+                const r = await makeInviteForShare(anchor, identity, features);
+                if (!r.ok) { setNote(r.message); return; }
+                // Kept in the locked list only. The invite stands even if this phone couldn't save the change: it is still shared.
+                await editContacts(identity, (l) => {
+                    const held = l.contacts.find((c) => c.id === contact.id);
+                    return held ? putContact(l, withContactInvite(held, r.code, anchor)) : l;
+                }).catch(() => {});
+                message = inviteShareText({ name: community, link: inviteAndShareLink(anchor, r.code), code: r.code, address: shareAddress(anchor) });
+                setMade(message);
+            }
             if (how === 'copy') {
                 await Clipboard.setStringAsync(message);
                 setNote(contactInviteWords.copied());
@@ -79,7 +85,8 @@ export function ContactInviteSheet({ contact, anchor, community, identity, onClo
             else await Share.share({ message });
             onClose();
         } catch {
-            setNote(t('The invite was not made.'));
+            // Made but not handed over (the text app or the share sheet didn't open): never "not made" when it was.
+            setNote(message ? t('Your invite is ready. Tap the same button again to send it.') : t('The invite was not made.'));
         } finally {
             setBusy(false);
         }

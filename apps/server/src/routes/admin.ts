@@ -31,11 +31,12 @@ import {
     runLedgerAudit,
     getEscrowDisputes, countEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
     lastActiveForViewer,
-    restoreHiddenPost, liftModerationMute, liftRequestsLimit, pushServiceRefusals,
+    restoreHiddenPost, restoreHiddenForumPost, liftModerationMute, liftRequestsLimit, pushServiceRefusals,
     hideBurst, undoBurst,
     removalVoteRefusal, branchRemovalRefusal, REMOVAL_IS_THE_VOTE_CODE, reportPauseRefusal, branchPrunePreview,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
+import { forumPostWriter } from '../engine/forum-moderation.js';
 import { listRequestLimits } from '../engine/request-limits.js';
 import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
 import { logAlertsLook, logBalanceLook, logDisputesLook, type TradeLookAction } from '../engine/community-health.js';
@@ -1524,6 +1525,38 @@ router.post('/api/local/admin/posts/:id/restore', async (ctx) => {
     settleSuggestion(ctx, '', { logged: true });
 });
 
+/** The same refusal for a forum post of the moderator's own (slice F2): what members did about it is someone else's to undo. */
+function refuseModeratorsOwnForumPost(ctx: any, postId: string | null | undefined, doing: string): boolean {
+    if (!postId || !isModeratorsOwn(ctx, forumPostWriter(postId))) return false;
+    ctx.status = 403;
+    ctx.body = { success: false, error: `A moderator cannot ${doing} their own forum post. Ask another moderator, an admin or an owner.` };
+    return true;
+}
+
+/**
+ * Restore a forum post hidden while the moderators look (slice F2, engine/forum-moderation.ts). Owners, admins and
+ * moderators: every open report on it is dismissed (its reporters hear it was kept, and cannot hide it again), and everyone
+ * reads it again. A moderator can't restore their own. No assistant's suggestion reaches it (DESIGN-forums-fable.md §6).
+ */
+router.post('/api/local/admin/forum/posts/:id/restore', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (refuseModeratorsOwnForumPost(ctx, ctx.params.id, 'restore')) return;
+    const result = restoreHiddenForumPost(ctx.params.id);
+    if (result === 'not_found') {
+        ctx.status = 404;
+        ctx.body = { success: false, error: 'Forum post not found' };
+        return;
+    }
+    if (result === 'not_hidden') {
+        ctx.status = 409;
+        ctx.body = { success: false, error: 'This forum post is not hidden, so there is nothing to restore' };
+        return;
+    }
+    const by = ctx.state?.actor ? String(ctx.state.actor).substring(0, 12) : 'owner:password';
+    logger.info('ADMIN', `Restored forum post ${ctx.params.id}, hidden while moderators looked, by ${by} (${(ctx.state as any)?.adminRole})`);
+    ctx.body = { success: true };
+});
+
 /**
  * Members muted after 3 posts were removed in 30 days (G3), for the moderators who lift it.
  */
@@ -2211,8 +2244,10 @@ router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
         // A Pulse report is about its item, whatever post id it carries (state-engine reportSubjectOf).
-        const reported = db.prepare('SELECT CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as { target_post_id: string | null } | undefined;
+        const reported = db.prepare('SELECT CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id, target_forum_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
+            { target_post_id: string | null; target_forum_post_id: string | null } | undefined;
         if (refuseModeratorsOwnPost(ctx, reported?.target_post_id, 'dismiss a report on')) return;
+        if (refuseModeratorsOwnForumPost(ctx, reported?.target_forum_post_id, 'dismiss a report on')) return;
         if (!admitSuggestion(ctx, { kind: 'dismiss_report', reportId: ctx.params.id })) return;
         const ok = dismissReport(ctx.params.id);
         if (!ok) {
@@ -2268,8 +2303,9 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             ctx.body = { success: false, error: chain.error, code: chain.code };
             return;
         } else if (suspendUser && !(await ownerRemovalProof(ctx, 'report-suspend', ctx.params.id))) return;
-        const report = db.prepare('SELECT status, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
-            { status: string | null; target_post_id: string | null } | undefined;
+        const report = db.prepare('SELECT status, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id, target_forum_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
+            { status: string | null; target_post_id: string | null; target_forum_post_id: string | null } | undefined;
+        if (!deletePost && refuseModeratorsOwnForumPost(ctx, report?.target_forum_post_id, 'close a report on')) return;
         // Closing a report on a moderator's own post, or one by an enterprise they keep, without taking the post down
         // is a dismissal by another name (G3): a closed report no longer counts towards the 3 that hide it, and its
         // reporter hears nothing. Refused as restore and dismiss are. A Pulse removal takes nothing off a post, so only

@@ -18,7 +18,7 @@ import { AncestryTreePanel } from './AncestryTreePanel';
 import { NodeRolesPanel, type RolesViewer } from './NodeRolesPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, pruneInviteBranch, removeReportedPulseItem, dismissNodeReport, fetchReports, reportSubject, fetchAllPosts, type NodeReport } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders, pruneInviteBranch, removeReportedPulseItem, actionNodeReport, restoreForumPost, dismissNodeReport, fetchReports, reportSubject, fetchAllPosts, type NodeReport } from '../../lib/node-client';
 import { LoadMoreRow } from '../../lib/node-data-pages';
 import { bulkDeleteInBatches, sendBulkDeleteBatch, describeBulkDeleteOutcome } from '../../lib/bulk-delete-posts';
 import { nodeCredential } from '../../lib/profiles';
@@ -131,6 +131,31 @@ export function PeopleSafetySection({
     const [bulkDeleteResult, setBulkDeleteResult] = useState<string | null>(null);
     const [removingReportId, setRemovingReportId] = useState<string | null>(null);
     const [pulseRemoveError, setPulseRemoveError] = useState<string | null>(null);
+
+    // A forum post's report (the forum's slice F2): removed through the report, as a listing is, or restored when hidden.
+    const handleForumPost = async (report: NodeReport, action: 'remove' | 'restore') => {
+        const forum = report.forumPost;
+        if (!forum || !report.id) return;
+        const confirmed = action === 'remove'
+            ? await ask({ title: 'Remove this forum post?', body: 'Its writer is told it was removed by the moderators. They are not suspended.', confirmLabel: 'Remove it' })
+            : await ask({ title: 'Restore this forum post?', body: 'Everyone reads it again, and every open report on it is dismissed.', confirmLabel: 'Restore it' });
+        if (!confirmed) return;
+        setRemovingReportId(String(report.id));
+        setPulseRemoveError(null);
+        try {
+            if (action === 'remove') {
+                await actionNodeReport(activeNode.url, String(report.id), { deletePost: true }, nodeCredential(activeNode));
+                setActionedReportIds((prev) => new Set(prev).add(String(report.id)));
+            } else {
+                await restoreForumPost(activeNode.url, forum.id, nodeCredential(activeNode));
+            }
+            refreshReports();
+        } catch (e: unknown) {
+            setPulseRemoveError(e instanceof Error ? e.message : 'That did not work');
+        } finally {
+            setRemovingReportId(null);
+        }
+    };
 
     const handleRemovePulseItem = async (reportId: string) => {
         if (!(await ask({ title: 'Remove this item from the Pulse?', body: 'The member is not suspended.', confirmLabel: 'Remove it' }))) return;
@@ -590,6 +615,25 @@ export function PeopleSafetySection({
                                                     </div>
                                                 )}
 
+                                                {report.forumPost && (
+                                                    <div className="text-xs space-y-1 text-nature-300 bg-nature-900/60 px-2.5 py-1 rounded-lg border border-nature-800/80" data-testid="reported-forum-post">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="text-nature-400">{report.forumPost.number === 1 ? 'Forum topic:' : 'Forum reply in:'}</span>
+                                                            <span className="font-semibold text-white">{report.forumPost.topicTitle || 'A removed topic'}</span>
+                                                            {report.forumPost.writerName && (
+                                                                <span className="text-nature-400">by <span className="text-bp-ink-terra font-medium">@{report.forumPost.writerName.replace(/^@/, '')}</span></span>
+                                                            )}
+                                                            {report.forumPost.hidden && !report.forumPost.removed && (
+                                                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/30">Hidden</span>
+                                                            )}
+                                                            {report.forumPost.removed && (
+                                                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-zinc-800 text-zinc-400 border border-zinc-700">Removed</span>
+                                                            )}
+                                                        </div>
+                                                        {report.forumPost.words && <p className="m-0 text-nature-200 whitespace-pre-line">{report.forumPost.words}</p>}
+                                                    </div>
+                                                )}
+
                                                 {/* The node lists these first (getReports); the alert told the owners to look at them first. */}
                                                 {report.childSafety && (
                                                     <p className="m-0">
@@ -641,6 +685,26 @@ export function PeopleSafetySection({
                                                 )}
                                             </div>
                                             <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
+                                                {report.forumPost && !report.forumPost.removed && report.id && getOutcome(report) === 'open' && (
+                                                    <>
+                                                        {report.forumPost.hidden && (
+                                                            <button
+                                                                onClick={() => void handleForumPost(report, 'restore')}
+                                                                disabled={removingReportId === report.id}
+                                                                className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white transition-all disabled:opacity-50 min-h-[48px] lg:min-h-0"
+                                                            >
+                                                                Restore
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => void handleForumPost(report, 'remove')}
+                                                            disabled={removingReportId === report.id}
+                                                            className="px-3 py-1.5 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover border border-bp-danger-fill text-xs font-bold text-bp-danger-on transition-all disabled:opacity-50 min-h-[48px] lg:min-h-0"
+                                                        >
+                                                            {removingReportId === report.id ? 'Working...' : 'Remove forum post'}
+                                                        </button>
+                                                    </>
+                                                )}
                                                 {report.pulseItem && typeof report.pulseItem === 'object' && !report.pulseItem.removed && report.id && (
                                                     <button
                                                         onClick={() => handleRemovePulseItem(String(report.id))}

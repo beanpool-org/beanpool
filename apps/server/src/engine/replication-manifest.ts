@@ -298,7 +298,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     abuse_reports: {
         kind: 'replicated-except', payload: 'abuseReports', watermark: 'updated_at',
-        columns: cols('id reporter_pubkey target_pubkey target_post_id target_pulse_item_id reason status created_at updated_at target_message_id disclosure request_conversation_id request_wording'),
+        columns: cols('id reporter_pubkey target_pubkey target_post_id target_pulse_item_id reason status created_at updated_at target_message_id disclosure request_conversation_id request_wording target_forum_post_id target_home'),
         except: {
             suspended_member: { reason: "read only by a cancel of a re-key code made before codes kept the member's earlier status (member-wizards.ts cancelRekeyCode); a server that took over reads it as not known, which keeps the member suspended, and Lift suspension lifts it" },
         },
@@ -555,10 +555,15 @@ export const TABLES: Record<string, TableEntry> = {
     // each server, with no tombstone.
     forum_sections: plain('id starter name about position starts listed archived_at created_at updated_at'),
     forum_topics: plain('id section_id title writer_pubkey place lang reply_count last_activity_at pinned_at closed_at closed_by created_at updated_at'),
-    forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at'),
+    forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at hidden_by_reports_at'),
     forum_post_photos: plain('post_id order_num photo_data bytes updated_at'),
     forum_post_edits: plain('post_id edited_at words title updated_at', { agedOut: { column: 'edited_at', days: 30 } }),
-    forum_members: plain('member_pubkey told_public_at updated_at'),
+    forum_members: plain('member_pubkey told_public_at updated_at known_at'),
+    // A new member's first topic waiting for a moderator's look, and its photos (engine/forum-first-look.ts, slice F2): a
+    // promoted standby still has it to answer. It is not a topic, so the standby's topics hold no row for it until OK makes
+    // one; every delete (answered 30 days ago, the member gone) goes with a tombstone.
+    forum_waiting: plain('id section_id writer_pubkey title words place lang state reason topic_id created_at answered_at updated_at'),
+    forum_waiting_photos: plain('waiting_id order_num photo_data bytes updated_at'),
     // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
     thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),
     // A group chat's keys (engine/group-keys.ts): each epoch's signed record and one wrap per member, none of which the
@@ -635,6 +640,7 @@ export const TABLES: Record<string, TableEntry> = {
     // server that takes over keeps them hidden, and its moderators restore them one at a time.
     burst_actions: { kind: 'local', reason: "this server's record of the moderators' burst actions, for their undo, 30 days: the posts a hide hid travel hidden in posts, and after a take-over are restored one at a time (engine/burst-cleanup.ts)" },
     burst_action_posts: { kind: 'local', reason: "the posts each burst hide hid, for its undo on this server (engine/burst-cleanup.ts)" },
+    burst_action_forum_posts: { kind: 'local', reason: "the forum posts each burst hide hid, for its undo on this server (engine/burst-cleanup.ts)" },
     // What an owner's assistant took down (engine/agent-takedowns.ts). As a burst's record: the posts travel hidden in posts, so
     // after a take-over they stay hidden. A person removes one from the posts screen or a report on it; bringing one back takes an
     // assistant's suggestion to restore it, approved: no screen does that by itself.

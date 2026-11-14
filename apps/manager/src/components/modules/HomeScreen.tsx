@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { HelpLink } from '../manual/Manual';
-import type { DiagnosticsResponse, NodeDataPayload, MemberItem, NodeReport } from '../../lib/node-client';
+import { fetchTakeoverStatus, type DiagnosticsResponse, type NodeDataPayload, type MemberItem, type NodeReport } from '../../lib/node-client';
 import { FEEDBACK_LIVE, isHundredths } from '@beanpool/core';
 import { beansFigure } from '../../lib/beans';
 import { SuggestChangePanel } from './SuggestChangePanel';
@@ -92,6 +92,29 @@ export function HomeScreen({
             mounted = false;
         };
     }, [shape, activeNode?.id, activeNode?.url]);
+
+    // Who is looking: an owner (or the owners' automation token) is offered what only an owner does.
+    const isOwnerViewer = viewer?.kind === 'token' || viewer?.role === 'owner';
+
+    // Whether this community has a recovery code (sealed keys; TakeoverLockPanel makes it): read for an owner only, as the
+    // node answers only an owner. Null until read, and on a read that fails, an answer that names no recovery code at all
+    // (an error body, an older server), or a standby's (it has none of its own): Home then lists nothing it can't back.
+    const [recoveryCodeMissing, setRecoveryCodeMissing] = useState<boolean | null>(null);
+    useEffect(() => {
+        setRecoveryCodeMissing(null);
+        if (!activeNode || !isOwnerViewer) return;
+        let mounted = true;
+        fetchTakeoverStatus(activeNode.url, nodeCredential(activeNode))
+            .then((s) => {
+                if (!mounted || !s || typeof s !== 'object' || !('recoveryCode' in s)) return;
+                if (s.state === 'standby' || s.state === 'error') return;
+                setRecoveryCodeMissing(s.recoveryCode === null);
+            })
+            .catch(() => {});
+        return () => {
+            mounted = false;
+        };
+    }, [activeNode?.id, activeNode?.url, isOwnerViewer]);
 
     const shapeCardText = useMemo(() => {
         // An answer without the four settings (a node on an older build, an error body) draws no line: Home must still render.
@@ -231,7 +254,6 @@ export function HomeScreen({
     }
 
     // Core settings nobody has confirmed (Core settings design §3): offered to owners, never forced; it ends when the lock row exists.
-    const isOwnerViewer = viewer?.kind === 'token' || viewer?.role === 'owner';
     const coreUnconfirmed = Boolean(communityShape && !communityShape.standby && communityShape.core && !communityShape.core.lock);
     const coreOwnerItem = coreUnconfirmed && isOwnerViewer;
     const coreAdminLine = coreUnconfirmed && !isOwnerViewer && viewer?.role === 'admin';
@@ -245,6 +267,30 @@ export function HomeScreen({
                 : 'Core settings not confirmed yet · six settings, about five minutes ›',
             tab: 'shape',
             sub: joined > 0 ? 'review' : 'walk',
+        });
+    }
+
+    // The rest of the one "what next" after claiming (DESIGN-new-operator-path-fable.md S6, decision 3), after Core settings:
+    // a recovery code, then a second owner. Owners only (both are an owner's to do), only while missing, and never on a
+    // standby, whose main server's owners do both. The owners are the node's count (counts.owners); a server that sends no
+    // counts gets no row.
+    const onStandby = Boolean(communityShape?.standby);
+    if (isOwnerViewer && !onStandby && recoveryCodeMissing === true) {
+        actionItems.push({
+            key: 'recovery-code',
+            icon: '🔑',
+            text: 'No recovery code yet · make one, so a backup can bring this community back on a new server ›',
+            tab: 'appliance',
+            sub: 'backups',
+        });
+    }
+    if (isOwnerViewer && !onStandby && counts && counts.owners === 1) {
+        actionItems.push({
+            key: 'second-owner',
+            icon: '👑',
+            text: 'One owner so far · add a second owner, so a lost phone never locks the community out ›',
+            tab: 'people',
+            sub: 'roles',
         });
     }
 

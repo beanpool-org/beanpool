@@ -243,7 +243,35 @@ export interface NodeReport {
     groupMessage?: { groupId: string | null; groupName: string | null; photo: boolean; removed: boolean } | null;
     /** The same for one direct message line, which names no chat (open it with fetchReportedDirectMessage). */
     directMessage?: { photo: boolean; removed: boolean } | null;
+    /** A report of one forum post (the server's engine/forum-moderation.ts): its id. */
+    targetForumPostId?: string;
+    /** That forum post: its topic's title, its words (the first 500), its writer, hidden while moderators look, or already down. */
+    forumPost?: ReportedForumPost | null;
     [key: string]: unknown;
+}
+
+export interface ReportedForumPost {
+    id: string;
+    topicId: string;
+    topicTitle: string;
+    /** 1 is the topic's opening post, 2 on its replies. */
+    number: number;
+    words: string;
+    writerName: string | null;
+    hidden: boolean;
+    removed: boolean;
+}
+
+/**
+ * Restores a forum post hidden while the moderators look (POST /api/local/admin/forum/posts/:id/restore): everyone reads it
+ * again, and every open report on it is dismissed. Owners, admins and moderators; not a moderator's own.
+ */
+export async function restoreForumPost(nodeUrl: string, postId: string, credential?: string): Promise<{ success: boolean; error?: string }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/forum/posts/${encodeURIComponent(postId)}/restore`);
+    const res = await fetch(endpoint, { method: 'POST', headers: buildAdminHeaders(credential), credentials: 'same-origin', body: '{}' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    return data;
 }
 
 export type MemberNodeRole = 'owner' | 'admin' | 'moderator';

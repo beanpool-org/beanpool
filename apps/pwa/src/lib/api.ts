@@ -476,6 +476,19 @@ export async function getCommunityInfo(): Promise<CommunityInfo> {
 }
 
 /**
+ * Whether this node has no owner yet: its GET /api/local/claim (apps/server routes/node-claim.ts) answers `unclaimed: true`.
+ * Any other answer (an owner, a standby), a failure, or a node too old to say is false, and the page stays as it was.
+ */
+export async function nodeHasNoOwner(): Promise<boolean> {
+    try {
+        const body = await request<{ unclaimed?: unknown } | null>('GET', '/api/local/claim');
+        return body?.unclaimed === true;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * This community's public card (front doors S15, the node's GET /api/community/card): what a stranger at its address
  * reads. Null from a node too old to have one, or an answer that isn't one (core readCommunityCard).
  */

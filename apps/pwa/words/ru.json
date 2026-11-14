@@ -1473,7 +1473,6 @@
   "On the map": "На карте",
   "On the map at {lat}, {lng}": "На карте: {lat}, {lng}",
   "On your Home": "На Главной",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "После запуска узла укажите название сообщества в приложении настроек, пригласите первых участников, а они пригласят остальных. Включите там «опубликовать местоположение», и заинтересованные соседи получат оповещение.",
   "One device at a time: the copy you changed last is the one kept.": "Одно устройство за раз: сохраняется копия, которую вы изменили последней.",
   "One moment…": "Минутку…",
   "One more comes back {when}.": "Ещё один станет доступен {when}.",
@@ -5021,5 +5020,8 @@
     "many": "Сезонная пауза фиксирует кредитную линию на уровне {n} бобов на срок до 90 дней и приостанавливает активные объявления, чтобы участники не могли покупать. Любой хранитель может возобновить работу в любое время.",
     "other": "Сезонная пауза фиксирует кредитную линию на уровне {n} боба на срок до 90 дней и приостанавливает активные объявления, чтобы участники не могли покупать. Любой хранитель может возобновить работу в любое время."
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Возобновление возвращает активность всем объявлениям и возвращает кредитную линию к обычному ежедневному расчёту."
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Возобновление возвращает активность всем объявлениям и возвращает кредитную линию к обычному ежедневному расчёту.",
+  "{name} has no owner yet": "У {name} пока нет владельца",
+  "If you installed it, claim it with the one-time code on the server.": "Если вы установили его, заявите права с помощью одноразового кода на сервере.",
+  "Claim {name}": "Привязать {name}"
 }

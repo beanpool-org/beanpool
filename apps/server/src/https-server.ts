@@ -81,7 +81,7 @@ import {
     registerPushToken, removePushToken,
     getMemberPreferences, setMemberPreferences, setHolidayMode,
     getMemberStats,
-    dispatchPushNotification
+    dispatchPushNotification, moderationNoticesCb
 } from './state-engine.js';
 import { getCrowdfundProjects, getCrowdfundProject, createCrowdfundProject, updateCrowdfundProject, pledgeToProject, deleteCrowdfundProject, db, getDbDataVersion } from './db/db.js';
 import { initDirectoryPublisher, pushDirectoryNow } from './services/directory-publisher.js';
@@ -175,6 +175,7 @@ import { startTidyingKnocks } from './engine/knocks.js';
 import { startTidyingInviteAsks } from './engine/invite-asks.js';
 import { startTidyingKnowledgeDrafts } from './engine/knowledge-drafts.js';
 import { startTidyingForumEdits } from './engine/forum.js';
+import { startTidyingFirstLooks } from './engine/forum-first-look.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { startForgettingOldAddresses } from './services/address-retention.js';
 import { createChannelRoutes } from './routes/channels.js';
@@ -1616,6 +1617,8 @@ export async function startHttpsServer(port: number): Promise<number> {
     startTidyingKnowledgeDrafts();
     // The forum's wording before an edit, 30 days after (engine/forum.ts).
     startTidyingForumEdits();
+    // First topics nobody looked at in 30 days go back to their writers; answered ones go 30 days after (engine/forum-first-look.ts).
+    startTidyingFirstLooks(moderationNoticesCb());
 
     // The split-brain guard (services/identity-epoch.ts): once this server has seen that another took over its
     // identity, members' writes are refused here, before a body is read. The admin control plane stays open.

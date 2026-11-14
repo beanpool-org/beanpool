@@ -1434,7 +1434,6 @@
   "On the map": "Στον χάρτη",
   "On the map at {lat}, {lng}": "Στον χάρτη στις {lat}, {lng}",
   "On your Home": "Στην Αρχική σας",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Μόλις ο διακομιστής σου τεθεί σε λειτουργία, ονομάζεις την κοινότητά σου στην εφαρμογή ρυθμίσεών του, προσκαλείς τα πρώτα μέλη και αυτά προσκαλούν τα υπόλοιπα. Ενεργοποίησε τη «δημοσίευση τοποθεσίας» εκεί και οι άνθρωποι κοντά σου που ζήτησαν να ενημερώνονται θα το μάθουν.",
   "One device at a time: the copy you changed last is the one kept.": "Μία συσκευή κάθε φορά: το αντίγραφο που άλλαξες τελευταίο είναι αυτό που διατηρείται.",
   "One moment…": "Μια στιγμή…",
   "One more comes back {when}.": "Ένα ακόμα επιστρέφει {when}.",
@@ -4681,5 +4680,8 @@
     "one": "Η εποχική παύση διατηρεί το πιστωτικό σου όριο σε {n} φασόλι για έως και 90 ημέρες και θέτει σε παύση τις ενεργές καταχωρίσεις ώστε να μην μπορούν να αγοράσουν τα μέλη. Οποιοσδήποτε υπεύθυνος μπορεί να το επαναφέρει ανά πάσα στιγμή.",
     "other": "Η εποχική παύση διατηρεί το πιστωτικό σου όριο σε {n} φασόλια για έως και 90 ημέρες και θέτει σε παύση τις ενεργές καταχωρίσεις ώστε να μην μπορούν να αγοράσουν τα μέλη. Οποιοσδήποτε υπεύθυνος μπορεί να το επαναφέρει ανά πάσα στιγμή."
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Η επαναφορά επανενεργοποιεί όλες τις καταχωρίσεις και επαναφέρει το πιστωτικό όριο στον κανονικό ημερήσιο υπολογισμό."
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Η επαναφορά επανενεργοποιεί όλες τις καταχωρίσεις και επαναφέρει το πιστωτικό όριο στον κανονικό ημερήσιο υπολογισμό.",
+  "{name} has no owner yet": "Το {name} δεν έχει ακόμα κάτοχο",
+  "If you installed it, claim it with the one-time code on the server.": "Αν το εγκατέστησες εσύ, διεκδίκησέ το με τον κωδικό μίας χρήσης στον διακομιστή.",
+  "Claim {name}": "Διεκδίκηση της κοινότητας {name}"
 }

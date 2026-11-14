@@ -241,13 +241,22 @@ export interface TableHashes {
  * start and its topics are gone; no Bean is in it.
  */
 /**
- * 40: owners' and admins' rules on typed tags (engine/free-tags.ts, DESIGN-tags-free-entry-fable.md §5, slice F3): a new plain
+ * 40: the forum's moderation (engine/forum-moderation.ts, engine/forum-first-look.ts; slice F2): two new plain tables,
+ * forum_waiting and forum_waiting_photos, and new columns abuse_reports.target_forum_post_id and target_home,
+ * forum_posts.hidden_by_reports_at and forum_members.known_at. Raised for the same reason as 8: a standby updated before its
+ * main server hashes more columns and tables. REPLICA_FORMAT stays: each side's import writes only the columns and tables its
+ * own database has. What an older importer drops is the forum's moderation: after a take-over from such a copy a first topic
+ * waiting is gone (its writer starts it again), a hidden forum post shows until it is reported again, and a report of a forum
+ * post reads as a report of its writer; no Bean is in it.
+ */
+/**
+ * 41: owners' and admins' rules on typed tags (engine/free-tags.ts, DESIGN-tags-free-entry-fable.md §5, slice F3): a new plain
  * table, free_tag_rules. Raised for the same reason as 22: a standby updated before its main server hashes the new table too.
  * REPLICA_FORMAT stays: each side's import writes only the tables its own database has. What an older importer drops is the
  * rules: after a take-over from such a copy a hidden tag may be offered again and a merged one offered as typed, until an
  * owner or admin sets the rule again; no listing and no Bean is in it.
  */
-export const TABLE_HASHES_VERSION = 40;
+export const TABLE_HASHES_VERSION = 41;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

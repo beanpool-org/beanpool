@@ -1435,7 +1435,6 @@
   "On the map": "মানচিত্রে",
   "On the map at {lat}, {lng}": "মানচিত্রে {lat}, {lng}-এ",
   "On your Home": "আপনার হোমে",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "একবার আপনার নোড চালু হলে, আপনি এর সেটিংস অ্যাপে আপনার কমিউনিটির নাম দেন, প্রথম সদস্যদের আমন্ত্রণ জানান এবং তারা বাকিদের আমন্ত্রণ জানান। সেখানে \"লোকেশন প্রকাশ করুন\" চালু করুন, এবং আপনার কাছাকাছি যারা জানতে চেয়েছিল তারা এটি সম্পর্কে জানতে পারবে।",
   "One device at a time: the copy you changed last is the one kept.": "একবারে একটি ডিভাইস: আপনি সবশেষে যে অনুলিপিটি পরিবর্তন করেছেন সেটিই রাখা হয়।",
   "One moment…": "একটু অপেক্ষা করুন…",
   "One more comes back {when}.": "আরও একটি ফিরে আসবে {when}।",
@@ -4689,5 +4688,8 @@
     "one": "মৌসুমের জন্য স্থগিত করলে আপনার ক্রেডিট লাইন 90 দিন পর্যন্ত {n} শিমে থাকবে এবং সক্রিয় তালিকাগুলি স্থগিত হবে যাতে সদস্যরা কিনতে না পারেন। যে কোনো কিপার যে কোনো সময় এটি পুনরায় শুরু করতে পারেন।",
     "other": "মৌসুমের জন্য স্থগিত করলে আপনার ক্রেডিট লাইন 90 দিন পর্যন্ত {n} শিমে থাকবে এবং সক্রিয় তালিকাগুলি স্থগিত হবে যাতে সদস্যরা কিনতে না পারেন। যে কোনো কিপার যে কোনো সময় এটি পুনরায় শুরু করতে পারেন।"
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "পুনরায় শুরু করলে সমস্ত তালিকা সক্রিয় হয় এবং ক্রেডিট লাইন স্বাভাবিক দৈনিক গণনায় ফিরে আসে।"
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "পুনরায় শুরু করলে সমস্ত তালিকা সক্রিয় হয় এবং ক্রেডিট লাইন স্বাভাবিক দৈনিক গণনায় ফিরে আসে।",
+  "{name} has no owner yet": "{name}-এর এখনও কোনো মালিক নেই",
+  "If you installed it, claim it with the one-time code on the server.": "আপনি এটি ইনস্টল করে থাকলে, সার্ভারের ওয়ান-টাইম কোড দিয়ে মালিকানা দাবি করুন।",
+  "Claim {name}": "{name} দাবি করুন"
 }

@@ -8,7 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    COMMUNITY_CARD_WORDS as W, communityCardFacts, communityCardName, isPeekTicket, knockTickOf, readCommunityCard, t, tn, word, type CommunityCard, type KnockWatchTick,
+    COMMUNITY_CARD_WORDS as W, communityCardFacts, communityCardName, isPeekTicket, knockTickOf, landingPostId, readCommunityCard, t, tn, word, type CommunityCard, type KnockWatchTick,
 } from '@beanpool/core';
 import { useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
@@ -22,6 +22,7 @@ import {
 import { knockFromNode } from '../utils/knock-address';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { joinedNudgeWords } from '../utils/joined-nudge-words';
+import { joinedForListing, keepListingAfterJoin } from '../utils/listing-after-join';
 import { useKnockStatusWatch } from '../utils/use-knock-status-watch';
 import { copiesAtFor } from '../utils/copies-rule';
 import { findLineWords } from '../components/find-community-lines';
@@ -83,11 +84,14 @@ async function readCard(origin: string): Promise<CommunityCard | 'unreachable' |
  * Nothing is read but the community's public card; nothing is written or sent until Send is tapped.
  */
 export default function CommunityCardScreen() {
-    const params = useLocalSearchParams<{ node?: string; peek?: string }>();
+    const params = useLocalSearchParams<{ node?: string; peek?: string; listing?: string }>();
     const origin = communityOrigin(params.node);
     // Opened from a shared post's screen: its link's ticket, sent with the request (shared-listing door A3), so the
     // members who answer read which listing it came after and who shared it. Nothing of it is shown here.
     const peekTicket = isPeekTicket(params.peek) ? params.peek : null;
+    // Opened from a copy on the global community: the listing here it stands for (list on global G4), kept on the phone at
+    // Send and opened once the yes is joined (utils/listing-after-join.ts). Nothing of it is sent or shown here.
+    const listing = landingPostId(params.listing);
     const { identity, setIdentity } = useIdentity();
     const insets = useSafeAreaInsets();
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
@@ -237,6 +241,7 @@ export default function CommunityCardScreen() {
         setSending(false);
         if (r.kind === 'waiting' || r.kind === 'invited') {
             await rememberKnock(signer.publicKey, { url: origin, name: c.name });
+            if (listing) await keepListingAfterJoin(origin, listing).catch(() => {});
             setFormOpen(false);
             setMessage('');
             // Asked from a phone that had no account: it is waiting to be let in now, and welcome is where it waits (its
@@ -275,6 +280,8 @@ export default function CommunityCardScreen() {
         try {
             const joined = await joinAnotherCommunity({ targetUrl: origin, code: invite, identity, returnUrl, knownName: c.name });
             await forgetKnock(identity.publicKey, origin);
+            // The yes this phone asked for is joined: a listing it asked from opens once Home has nothing else to show.
+            await joinedForListing(origin).catch(() => {});
             const nudge = joinedNudgeWords(joinedNudge(joined.name, await copiesAtFor(joined.url)), joined.name);
             Alert.alert(nudge.title, nudge.body, [
                 { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },

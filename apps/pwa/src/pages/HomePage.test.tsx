@@ -232,6 +232,18 @@ describe('one request, the cached answer first (§5)', () => {
         expect(screen.queryByTestId('home-card-market')).toBeNull();
     });
 
+    it('refusal with account_retired: drops copy, shows the retired line, never offline (#3124)', async () => {
+        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer(), layout: null, layoutUnsaved: false, savedAt: 1 });
+        vi.mocked(api.getHome).mockRejectedValue(Object.assign(new Error('This account was retired as an empty duplicate.'), {
+            status: 403,
+            code: 'account_retired',
+        }));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-failed')).toHaveTextContent("An owner retired this account as an empty duplicate. Sign in with your other account. If that's wrong, ask an owner to bring it back.");
+        expect(screen.queryByTestId('home-offline')).toBeNull();
+        expect(screen.queryByTestId('home-card-market')).toBeNull();
+    });
+
     it('pointed at a server below 1.4.0: the version gate\'s own line, with or without a copy, never "couldn\'t reach" or "what we had"', async () => {
         const line = new NodeTooOldError('1.2.37').message;
         expect(line).toBe("This community's server runs BeanPool 1.2.37. This app needs 1.4.0 or newer. Its operator must update.");

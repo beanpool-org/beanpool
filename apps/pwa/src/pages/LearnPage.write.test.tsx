@@ -335,6 +335,30 @@ describe('an owner or admin', () => {
         } }]);
     });
 
+    it('"Edit first" keeps or takes off a member\'s own photo but adds none (the node refuses it); an assistant\'s draft takes the checker\'s', async () => {
+        const PHOTO = 'data:image/jpeg;base64,AAAA';
+        node.drafts = { d1: whole('d1', { photos: [PHOTO] }), d2: whole('d2', { assistant: 'Claude', needsSourcesTicked: true }) };
+        node.toCheck = [waitingRow('d1'), waitingRow('d2', { assistant: 'Claude' })];
+        await openLearn({ target: { kind: 'check' } });
+        await wait();
+        fireEvent.click(screen.getAllByTestId('learn-check-row')[0]);
+        await wait();
+        fireEvent.click(screen.getByTestId('learn-check-edit'));
+        expect(screen.getByAltText('photo 1')).toHaveAttribute('src', PHOTO);
+        expect(screen.queryByLabelText('Add photo')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Remove photo' }));
+        expect(screen.queryByLabelText('Add photo')).toBeNull();
+        fireEvent.click(screen.getByTestId('learn-form-send'));
+        await wait();
+        expect(writes()[0].body.photos).toEqual([]);
+        // The assistant's: no photo of its own, and the checker may add theirs.
+        fireEvent.click(screen.getAllByTestId('learn-check-row')[1]);
+        await wait();
+        fireEvent.click(screen.getByTestId('learn-check-tick'));
+        fireEvent.click(screen.getByTestId('learn-check-edit'));
+        expect(screen.getByLabelText('Add photo')).toBeInTheDocument();
+    });
+
     it('"Not this one" needs a reason from the list; the few words go with it, and the writer is told', async () => {
         node.drafts = { d1: whole('d1') };
         node.toCheck = [waitingRow('d1')];

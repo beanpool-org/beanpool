@@ -106,7 +106,7 @@ export function LearnCheckOne({ id, onAnswered, onEditing }: { id: string; onAns
 
     if (mode === 'edit') {
         return (
-            <LearnForm use="approve" initial={{ title: d.title, body: d.body, topic: d.topic, place: d.place ?? '', sources: d.sources, photos: d.photos, lang: d.lang ?? undefined }}
+            <LearnForm use="approve" keepPhotosOnly={!d.assistant} initial={{ title: d.title, body: d.body, topic: d.topic, place: d.place ?? '', sources: d.sources, photos: d.photos, lang: d.lang ?? undefined }}
                 onSend={async (edits) => {
                     await approveLearnDraft(d.id, { edits: { ...edits, lang: d.lang ?? undefined }, checkedSources: d.needsSourcesTicked });
                     onAnswered(t('Approved. It is in Learn.'));

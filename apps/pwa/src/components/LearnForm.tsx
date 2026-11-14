@@ -21,10 +21,12 @@ const MUTED = 'text-nature-600 dark:text-nature-300';
 /** A link's box shows how an address starts: the same in every language. */
 const URL_HINT = 'https://';
 
-export function LearnForm({ use, initial, onSend }: {
+export function LearnForm({ use, initial, onSend, keepPhotosOnly = false }: {
     use: LearnFormUse;
     /** "Edit first": the suggestion as it was sent. */
     initial?: LearnInput;
+    /** "Edit first" on a member's suggestion: their own photos may be kept or taken off, never added to (the node refuses). */
+    keepPhotosOnly?: boolean;
     /** Sends what was typed; a refusal it throws is shown under the button. */
     onSend: (input: LearnInput) => Promise<void>;
 }) {
@@ -117,7 +119,7 @@ export function LearnForm({ use, initial, onSend }: {
                 </div>
             </fieldset>
             <div>
-                <PostPhotoPicker photos={photos} onChange={setPhotos} max={KNOWLEDGE_LIMITS.photos} label={t('Photo (optional)')} />
+                <PostPhotoPicker photos={photos} onChange={setPhotos} max={keepPhotosOnly ? photos.length : KNOWLEDGE_LIMITS.photos} label={t('Photo (optional)')} />
                 <p className={`m-0 mt-1 text-xs ${MUTED}`}>{t('Your own photo. Without one, a picture for the topic is shown.')}</p>
             </div>
             {refusal && <p role="alert" data-testid="learn-form-refusal" className="m-0 text-sm font-bold text-red-700 dark:text-red-300">{refusal}</p>}

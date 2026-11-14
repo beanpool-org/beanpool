@@ -7,11 +7,14 @@
  *   PUT    /api/contacts/copy   { header, signature, nonce, sealed } → { seq } | { seq, code: exists }; 400 bad_copy,
  *                               403 not_yours, 409 stale_copy { seq } | node_full, 413 copy_too_big, 429 too_many_saves
  *   DELETE /api/contacts/copy   → { deleted }: the signer's copy removed, with a tombstone
+ *   GET    /api/contacts/former → { header, signature, nonce, sealed, formerKey, keptUntil }: the list the signer's key
+ *                               before a re-key locked, kept a year (design §6.2, slice C6) | 404 no_former
+ *   DELETE /api/contacts/former → { deleted }: that old copy removed, with a tombstone ("Delete it")
  *
  * Refusals, before anything is read or written: unsigned 401; a key that isn't an active member's here (a visitor, a
  * guest, a stranger, a suspended or removed member) 403 `not_a_member`, the member gates' own code (engine/members.ts);
- * where the owners switched the community's copies off, GET and PUT 404 `contacts_off` (a DELETE still removes the
- * member's own); a standby's writes 409 `standby`
+ * where the owners switched the community's copies off, the GETs and the PUT 404 `contacts_off` (a DELETE still removes
+ * the member's own); a standby's writes 409 `standby`
  * (routes/standby-ledger-gate.ts, and the engine's assertPlainTablesWritable), while a standby still answers a GET from
  * the copy it keeps. The body is capped at 1 MiB before it is read (https-server.ts ROUTE_BODY_LIMITS).
  */
@@ -20,7 +23,7 @@ import { word } from '@beanpool/core';
 import { getMember, isVisitorKey } from '../state-engine.js';
 import { NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { STANDBY_CODE } from '../config/node-role.js';
-import { ContactCopyError, deleteContactCopy, readContactCopyOf, saveContactCopy } from '../engine/contact-copies.js';
+import { ContactCopyError, deleteContactCopy, deleteFormerContactCopy, readContactCopyOf, readFormerContactCopyOf, saveContactCopy } from '../engine/contact-copies.js';
 
 const NOT_MEMBER = word('Not an active member of this community.');
 
@@ -63,5 +66,9 @@ export function createContactsRoutes(): Router {
         return out.exists ? { seq: out.seq, code: 'exists' } : { seq: out.seq };
     }));
     router.delete('/api/contacts/copy', (ctx) => asMember(ctx, (actor) => deleteContactCopy(actor)));
+    // A re-keyed member's old list, locked with the key they had before (engine/contact-copies.ts, design §6.2): the
+    // signer's own only, as above; the phone opens it with the old 12 words.
+    router.get('/api/contacts/former', (ctx) => asMember(ctx, (actor) => readFormerContactCopyOf(actor)));
+    router.delete('/api/contacts/former', (ctx) => asMember(ctx, (actor) => deleteFormerContactCopy(actor)));
     return router;
 }

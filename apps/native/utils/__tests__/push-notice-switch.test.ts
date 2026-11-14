@@ -256,7 +256,7 @@ describe('a verified tap for another community the phone keeps: the phone moves 
         communities.delete(BYRON);
         await tap(push(byron.notice(kim.publicKey, {}, 'chat.message')));
         expect(mem.async.get(ANCHOR)).toBe(BYRON);
-        expect(await guardOnWelcome()).toEqual(['router.replace /(tabs)', 'router.push /(tabs)/chats']);
+        expect(await guardOnWelcome()).toEqual(['router.replace /(tabs)', 'router.push /(tabs)/chats?view=messages']);
     });
 
     it('Byron can\'t be reached for recognition either (unknown): the guard still lets Kim in, and the notice opens', async () => {

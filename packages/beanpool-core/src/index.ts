@@ -60,6 +60,7 @@ export * from './knowledge.js';
 export * from './knowledge-write-words.js';
 export * from './forum.js';
 export * from './name-line.js';
+export * from './chat-frame.js';
 export * from './invite-ask.js';
 export * from './invite-and-share.js';
 export * from './invite-share-text.js';

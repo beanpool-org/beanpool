@@ -30,9 +30,9 @@ appId: org.beanpool.pillar
 
 - tapOn:
     id: "tab-talk"
+# The tab's top: the title "Chat", or, where the community's forum is on, the Chats · Forum switch in its place (slice T0).
 - assertVisible:
     id: "page-title-talk"
-    text: "Chat"
 
 - tapOn:
     id: "tab-commons"

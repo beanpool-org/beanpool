@@ -1054,7 +1054,7 @@ describe('the community in use, while the app is closed: no socket, and the phon
         await followTap({ identifier: 'n', remote: false, title: 'BeanPool', body: 'x', data: posted[0].data }, {
             storage: AsyncStorage, account: kim, openIn: async (community) => { opened.push(community); },
         }, (route) => { went.push(route); });
-        expect(went).toEqual(['/(tabs)/chats']);
+        expect(went).toEqual(['/(tabs)/chats?view=messages']);
         expect(opened).toEqual([]);
     });
 });
@@ -1129,7 +1129,7 @@ describe('a tap goes where the notice said', () => {
         answers.set(CASTLEMAINE, { unread: 1 });
         await round();
         await tap(local(posted[0].data));
-        expect(opened).toEqual([{ community: CASTLEMAINE, id: null, route: '/(tabs)/chats' }]);
+        expect(opened).toEqual([{ community: CASTLEMAINE, id: null, route: '/(tabs)/chats?view=messages' }]);
         expect(went).toEqual([]);
     });
 
@@ -1139,7 +1139,7 @@ describe('a tap goes where the notice said', () => {
         await round();
         mem.async.set(ANCHOR, CASTLEMAINE);
         await tap(local(posted[0].data));
-        expect(went).toEqual(['/(tabs)/chats']);
+        expect(went).toEqual(['/(tabs)/chats?view=messages']);
         expect(opened).toEqual([]);
     });
 

@@ -1,6 +1,6 @@
 /**
  * The web join's name box refuses an invite or a web address (Marty, 14 Nov 2026, card callsign-link-guard: a member's
- * invite link pasted into the name box became her name on Byron). A pasted invite goes to the invite box, the name box is
+ * invite link pasted into the name box became her name on her community). A pasted invite goes to the invite box, the name box is
  * left empty and one line says why; a web address is refused on Join with that line; nothing is sent to the node.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,7 +18,7 @@ function json(status: number, body: unknown): Response {
 }
 
 const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false } };
-const HER_LINK = 'https://mullum.beanpool.org/?invite=INV-K7Q2-BSXA';
+const HER_LINK = 'https://riverside.example.org/?invite=INV-K7Q2-BSXA';
 
 function stubNode() {
     const calls: Call[] = [];
@@ -77,10 +77,10 @@ describe('the web join\'s name box takes a name, never an invite or a link', () 
         render(<WelcomePage onComplete={vi.fn()} />);
         await screen.findByText(/Join with Invite Code/);
         fireEvent.change(inviteBox(), { target: { value: 'BP-7K3X-9M2W' } });
-        fireEvent.change(nameBox(), { target: { value: 'mullum.beanpool.org' } });
+        fireEvent.change(nameBox(), { target: { value: 'riverside.org' } });
         join();
         expect(await screen.findByText(NAME_BOX_WORDS.webLink)).toBeInTheDocument();
-        expect(nameBox().value).toBe('mullum.beanpool.org');
+        expect(nameBox().value).toBe('riverside.org');
         expect(node.sent()).toHaveLength(0);
     });
 

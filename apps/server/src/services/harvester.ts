@@ -37,7 +37,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { generateKeyPair, privateKeyFromProtobuf, privateKeyToProtobuf } from '@libp2p/crypto/keys';
 import { peerIdFromPrivateKey, peerIdFromString } from '@libp2p/peer-id';
-import { readSealedHeader, verifySealedHeader, type CodeStanza, type SealedEnvelopeHeader } from '@beanpool/core';
+import { fleetNodeSlug, readSealedHeader, verifySealedHeader, type CodeStanza, type SealedEnvelopeHeader } from '@beanpool/core';
 import { sealFileVerified, MISSING_MEMBER, IN_BUCKET_MEMBER } from './sealed-backup.js';
 import { extractBackupArchive } from './restore-checks.js';
 import { peerIdOfKeyFile } from './takeover-envelope.js';
@@ -118,43 +118,13 @@ const NODES_FILE = path.join(DATA_DIR, 'manager-nodes.json');
 const DEFAULT_HARVEST_INTERVAL_MS = 60_000;
 let harvesterTimer: NodeJS.Timeout | null = null;
 
-// Default starter nodes if manager-nodes.json doesn't exist yet
-const DEFAULT_NODES: FleetNodeConfig[] = [
-    { id: 'test', name: 'Test Staging Node', url: 'https://test.beanpool.org' },
-    { id: 'mullum', name: 'Mullumbimby', url: 'https://byron.beanpool.org' },
-    { id: 'bris', name: 'Brisbane', url: 'https://bris.beanpool.org' },
-    { id: 'bindarrabi', name: 'Bindarrabi', url: 'https://bindarrabi.beanpool.org' },
-    { id: 'eastgippy', name: 'East Gippsland', url: 'https://eastgippy.beanpool.org' },
-    { id: 'gippsland', name: 'Gippsland', url: 'https://gippsland.beanpool.org' },
-    { id: 'castlemaine', name: 'Castlemaine', url: 'https://castlemaine.beanpool.org' },
-    { id: 'melb', name: 'Melbourne', url: 'https://melb.beanpool.org' },
-    { id: 'review', name: 'Review Node', url: 'https://review.beanpool.org' },
-];
+// With no manager-nodes.json, no nodes: the harvester pulls only what its operator lists. Until 14 Nov 2026 this was a list
+// of BeanPool's own servers, so anyone who turned the harvester on without a list would have pulled from ours.
+const DEFAULT_NODES: FleetNodeConfig[] = [];
 
+/** The node's folder under backups/ and its key in harvester-state.json: core's fleetNodeSlug, which the manager reads too. */
 export function nodeSlug(target: string | { id: string; url?: string; name?: string }): string {
-    if (!target) return 'unknown';
-    const rawId = typeof target === 'string' ? target : (target?.id || '');
-    const cleanId = rawId.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const url = typeof target === 'object' ? (target?.url || '') : '';
-    const name = typeof target === 'object' ? (target?.name || '') : '';
-
-    if (['test', 'mullum', 'bris', 'bindarrabi', 'eastgippy', 'gippsland', 'castlemaine', 'melb', 'review', 'local-node'].includes(cleanId)) {
-        return cleanId;
-    }
-
-    const str = `${rawId} ${url} ${name}`.toLowerCase();
-    if (str.includes('test')) return 'test';
-    if (str.includes('mullum')) return 'mullum';
-    if (str.includes('bris')) return 'bris';
-    if (str.includes('bindarrabi')) return 'bindarrabi';
-    if (str.includes('eastgippy') || str.includes('east-gippsland')) return 'eastgippy';
-    if (str.includes('gippsland')) return 'gippsland';
-    if (str.includes('castlemaine')) return 'castlemaine';
-    if (str.includes('melb') || str.includes('melbourne')) return 'melb';
-    if (str.includes('review')) return 'review';
-    if (str.includes('localhost') || str.includes('127.0.0.1')) return 'local-node';
-
-    return cleanId || 'unknown';
+    return fleetNodeSlug(target);
 }
 
 export function getNodes(): FleetNodeConfig[] {
@@ -169,7 +139,7 @@ export function getNodes(): FleetNodeConfig[] {
         // the file holds owner tokens and passwords. Only the position is kept from it.
         const at = e instanceof SyntaxError ? /(line \d+ column \d+|position \d+)/.exec(e.message)?.[1] : null;
         const what = e instanceof SyntaxError ? `not valid JSON${at ? ` (at ${at})` : ''}` : ((e as NodeJS.ErrnoException)?.code ?? 'unreadable');
-        console.warn(`[Harvester] Failed to read ${NODES_FILE}: ${what}. Using the built-in node list.`);
+        console.warn(`[Harvester] Failed to read ${NODES_FILE}: ${what}. Harvesting no nodes until it reads.`);
     }
     return DEFAULT_NODES;
 }

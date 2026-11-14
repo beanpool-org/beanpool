@@ -565,7 +565,7 @@ async function harvestLocalNode(): Promise<void> {
 
         // ── A node whose pull fails: backed off, not pulled every minute ──
         assert(backoffDelayMs(1) === 5 * 60_000 && backoffDelayMs(2) === 10 * 60_000 && backoffDelayMs(20) === 6 * 3_600_000, 'back-off: 5 min, doubling, at most 6 hours');
-        const down: FleetNodeConfig = { id: 'melb', name: 'Down Node', url: url + '/down-node', automationToken: fleetTok.token };
+        const down: FleetNodeConfig = { id: 'down-node', name: 'Down Node', url: url + '/down-node', automationToken: fleetTok.token };
         const f1 = await harvestNode(down, false);
         assert(hits.down === 1 && f1.status === 'error' && /HTTP 500/.test(f1.error || '') && f1.pullBackoff?.failures === 1,
             `a failing node: one pull, an error, backing off (${hits.down} pulls, ${f1.error})`);
@@ -579,7 +579,7 @@ async function harvestLocalNode(): Promise<void> {
         assert(hits.down === 2 && f4.pullBackoff?.failures === 2, `…a forced harvest still pulls, and the wait doubles (${hits.down} pulls, failures ${f4.pullBackoff?.failures})`);
 
         // ── An old node: its readable archive is kept as before, pulled once, not every minute ──
-        const oldNode: FleetNodeConfig = { id: 'bris', name: 'Old Node', url: url + '/old-node', automationToken: fleetTok.token };
+        const oldNode: FleetNodeConfig = { id: 'old-node', name: 'Old Node', url: url + '/old-node', automationToken: fleetTok.token };
         const oldNodeForCheck = oldNode;
         const oldDir = path.join(dataDir, 'backups', nodeSlug(oldNode));
         const o1 = await harvestNode(oldNode, false);
@@ -639,9 +639,8 @@ async function harvestLocalNode(): Promise<void> {
         // fail every night from now on, leaving it with NO backup, which is strictly worse than one short by a
         // photo and saying so. Since round 4 the node ships the short one straight away, so there is nothing
         // for the harvester to count to three before it has a copy of anything.
-        // `castlemaine` so nodeSlug gives it a directory and a state entry of its own rather than the
-        // localhost fallback every other stand-in here shares.
-        const shortNode: FleetNodeConfig = { id: 'castlemaine', name: 'Short Node', url: url + '/short-node', automationToken: fleetTok.token };
+        // Its own id, so nodeSlug gives it a directory and a state entry of its own.
+        const shortNode: FleetNodeConfig = { id: 'short-node', name: 'Short Node', url: url + '/short-node', automationToken: fleetTok.token };
         const s4 = await harvestNode(shortNode, true);
         assert(s4.status === 'ok' && s4.error === null,
             `a node missing an object is backed up on the FIRST pull, not the fourth (${s4.status}: ${s4.error})`);
@@ -684,7 +683,7 @@ async function harvestLocalNode(): Promise<void> {
         const madeUp = /203\.0\.113\.\d{1,3}|198\.51\.100\.\d{1,3}|2001:db8:/g;
         const addressesInFile = (file: string) => [...new Set(fs.readFileSync(file).toString('latin1').match(madeUp) ?? [])];
         assert(addressesInFile(olderDbFile).length >= 3, `(the older server's backup has addresses in it: ${addressesInFile(olderDbFile).length})`);
-        const olderNode: FleetNodeConfig = { id: 'bindarrabi', name: 'Older Node', url: url + '/older-node', automationToken: fleetTok.token };
+        const olderNode: FleetNodeConfig = { id: 'older-node', name: 'Older Node', url: url + '/older-node', automationToken: fleetTok.token };
         const h1 = await harvestNode(olderNode, true);
         const olderDir = path.join(dataDir, 'backups', nodeSlug(olderNode));
         for (const kept of [path.join(olderDir, 'state.db'), path.join(olderDir, 'history', `beanpool-${today}.db`)]) {
@@ -701,7 +700,7 @@ async function harvestLocalNode(): Promise<void> {
                 && access?.lastPullAuth === 'token' && lines === 2500,
                 `an older server's readable backup is kept without its internet addresses, file bytes included, with its record's entries and ${lines}/2500 log lines (${path.relative(dataDir, kept)}: ${left.join(', ') || 'none'})`);
         }
-        const cleanNode: FleetNodeConfig = { id: 'gippsland', name: 'Clean Node', url: url + '/clean-node', automationToken: fleetTok.token };
+        const cleanNode: FleetNodeConfig = { id: 'clean-node', name: 'Clean Node', url: url + '/clean-node', automationToken: fleetTok.token };
         const h2 = await harvestNode(cleanNode, true);
         const cleanKept = path.join(dataDir, 'backups', nodeSlug(cleanNode), 'state.db');
         assert(h2.status === 'ok' && fs.existsSync(cleanKept) && fs.readFileSync(cleanKept).equals(cleanDbBytes),
@@ -768,7 +767,7 @@ async function harvestLocalNode(): Promise<void> {
                 `an older entry's password is never sent nor repeated in the error (got ${t6.status}: ${t6.error})`);
         }
     } finally {
-        try { fs.chmodSync(path.join(dataDir, 'backups', 'local-node', 'sealed'), 0o700); } catch { /* ignore */ }
+        try { fs.chmodSync(path.join(dataDir, 'backups', nodeSlug('tok-node'), 'sealed'), 0o700); } catch { /* ignore */ }
         await new Promise<void>(r => server.close(() => r()));
     }
 }
@@ -778,15 +777,18 @@ async function main() {
 
     // 1. Test nodeSlug
     assert(nodeSlug('') === 'unknown', 'nodeSlug handles empty target');
-    assert(nodeSlug('mullum') === 'mullum', 'nodeSlug handles exact default node id');
-    assert(nodeSlug({ id: 'custom-1', name: 'Mullumbimby Node', url: 'https://mullum.example.com' }) === 'mullum', 'nodeSlug detects mullum keyword in name/url');
-    assert(nodeSlug({ id: 'custom-2', name: 'Local Dev Node', url: 'http://localhost:8450' }) === 'local-node', 'nodeSlug detects localhost url');
+    assert(nodeSlug('riverside') === 'riverside', "nodeSlug is the node's own id");
+    // Never a guess from words in the name or the address: until 14 Nov 2026 a list of BeanPool's own servers was matched
+    // against them, and this node was filed as `test`.
+    assert(nodeSlug({ id: 'custom-1', name: 'Contest Node', url: 'https://test.example.com' }) === 'custom-1', 'nodeSlug never guesses from words in the name or address');
+    assert(nodeSlug({ id: 'custom-2', name: 'Local Dev Node', url: 'http://localhost:8450' }) === 'custom-2', 'nodeSlug keeps the id of a node on this machine');
+    assert(nodeSlug({ id: '', name: 'Local Dev Node', url: 'http://localhost:8450' }) === 'local-node', 'a node listed without an id, on this machine: local-node');
+    assert(nodeSlug({ id: '', name: 'Riverside', url: 'https://riverside.example.org:8443/' }) === 'riverside_example_org', 'a node listed without an id: named for its host');
     assert(nodeSlug({ id: 'special@node/1', name: 'Special Node', url: 'https://special.org' }) === 'special_node_1', 'nodeSlug sanitizes special characters');
 
     // 2. Test getNodes default fallback
     const initialNodes = getNodes();
-    assert(Array.isArray(initialNodes) && initialNodes.length > 0, 'getNodes returns default nodes when no config file exists');
-    assert(initialNodes.some(n => n.id === 'mullum'), 'default nodes include mullum');
+    assert(Array.isArray(initialNodes) && initialNodes.length === 0, 'getNodes returns no nodes when no config file exists: never a built-in list of servers');
 
     // 3. Test saveNodes & getNodes persistence roundtrip
     const customNodes: FleetNodeConfig[] = [
@@ -812,7 +814,7 @@ async function main() {
     let fellBack: FleetNodeConfig[];
     try { fellBack = getNodes(); } finally { console.warn = origWarn; }
     const warnedText = warned.join('\n');
-    assert(fellBack.some(n => n.id === 'mullum') && warnedText.includes(nodesFile) && !warnedText.includes('dddd') && !warnedText.includes('"x"'),
+    assert(fellBack.length === 0 && warnedText.includes(nodesFile) && !warnedText.includes('dddd') && !warnedText.includes('"x"'),
         `a manager-nodes.json that does not parse: the warning names the file and holds none of its contents (got: ${warnedText.replace(/d{4,}/g, '<d…>')})`);
     saveNodes(customNodes);
 

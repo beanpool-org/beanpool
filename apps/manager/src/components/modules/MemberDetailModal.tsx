@@ -8,7 +8,7 @@ import { BringBackMemberWizard } from './BringBackMemberWizard';
 import { OffboardMemberWizard } from './OffboardMemberWizard';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { useTimeout } from '../../lib/use-timeout';
-import { emergencySuspendMember, liftMemberSuspension, fetchNodeDecisionsOn, fetchAdminDecisions, fetchRekeyStatusApi, fetchBranchPruneFigures } from '../../lib/node-client';
+import { emergencySuspendMember, liftMemberSuspension, fetchNodeDecisionsOn, fetchAdminDecisions, fetchRekeyStatusApi, fetchBranchPruneFigures, fetchRetireCheck, retireEmptyDuplicate, bringBackRetiredMember, fetchMemberStanding } from '../../lib/node-client';
 import { MemberKnownFloorPanel, type KnownFloorException } from './MemberKnownFloorPanel';
 import { MemberVoucherPanel } from './MemberVoucherPanel';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
@@ -132,12 +132,22 @@ export function MemberDetailModal({
     const [freezeBusy, setFreezeBusy] = useState(false);
     const [freezeNote, setFreezeNote] = useState<string | null>(null);
     const [freezeError, setFreezeError] = useState<string | null>(null);
+    // Retire an empty duplicate (an owner, by their own key; no vote): whether the node allows it for this member now,
+    // and the member's retired mark as the node holds it.
+    const [retireAllowed, setRetireAllowed] = useState(false);
+    const [showRetire, setShowRetire] = useState(false);
+    const [retireBusy, setRetireBusy] = useState(false);
+    const [retireNote, setRetireNote] = useState<string | null>(null);
+    const [retireError, setRetireError] = useState<string | null>(null);
+    const [localRetiredAt, setLocalRetiredAt] = useState<string | null | undefined>(undefined);
     // Freezing an owner from a stale phone hand-off asks the phone's unlock again (server stepUpIfOwnerOnly 'freeze').
     const freezeProof = useFreshProof();
 
     const pubkey = member?.publicKey || member?.pubkey || '';
     const memberStatus = localStatus ?? (member?.status ? String(member.status) : 'active');
     const isSuspended = memberStatus === 'disabled' || memberStatus === 'suspended';
+    const retiredAt = localRetiredAt !== undefined ? localRetiredAt : (typeof member?.retiredAt === 'string' ? member.retiredAt : null);
+    const isRetired = memberStatus === 'disabled' && !!retiredAt;
     const canSuspendHere = Boolean(nodeUrl) && (memberStatus === 'active' || isSuspended);
     const suspendReasonTrimmed = suspendReason.trim();
 
@@ -239,6 +249,66 @@ export function MemberDetailModal({
             setSuspendError(e instanceof Error ? e.message : 'Failed to lift the suspension');
         } finally {
             setSuspendBusy(false);
+        }
+    };
+
+    // Whether the node lets this viewer retire this member as an empty duplicate now: asked only of an owner and an active
+    // person's account (never the node's own SYSTEM row, "System Node Operator", nor any row under another key spelling,
+    // which the node refuses as no person's); the node answers no for anyone else and for an account that holds or did anything.
+    useEffect(() => {
+        setRetireAllowed(false);
+        if (!nodeUrl || !pubkey || strayRow || memberStatus !== 'active' || viewerRole !== 'owner') return;
+        let live = true;
+        fetchRetireCheck(nodeUrl, pubkey, credential).then((r) => { if (live) setRetireAllowed(r.allowed); }).catch(() => { });
+        return () => { live = false; };
+    }, [nodeUrl, pubkey, strayRow, credential, memberStatus, viewerRole]);
+
+    // After Retire or Bring back: the member's status and mark as the node now holds them.
+    const readBackStanding = async () => {
+        const standing = nodeUrl ? await fetchMemberStanding(nodeUrl, pubkey, credential).catch(() => null) : null;
+        if (standing) {
+            setLocalStatus(standing.status);
+            setLocalRetiredAt(standing.retiredAt);
+        }
+        return standing;
+    };
+
+    const handleRetire = async () => {
+        if (!nodeUrl) return;
+        setRetireBusy(true);
+        setRetireError(null);
+        setRetireNote(null);
+        try {
+            await retireEmptyDuplicate(nodeUrl, pubkey, credential);
+            const standing = await readBackStanding();
+            setShowRetire(false);
+            setRetireNote(standing?.retiredAt
+                ? `Retired ${displayName} as an empty duplicate. No vote opened and nothing was deleted; Bring back undoes it.`
+                : 'Sent. The node’s answer could not be read back; refresh to see it.');
+            onSuspensionChanged?.();
+        } catch (e: unknown) {
+            setRetireError(e instanceof Error ? e.message : 'The account was not retired.');
+        } finally {
+            setRetireBusy(false);
+        }
+    };
+
+    const handleBringBackRetired = async () => {
+        if (!nodeUrl) return;
+        setRetireBusy(true);
+        setRetireError(null);
+        setRetireNote(null);
+        try {
+            await bringBackRetiredMember(nodeUrl, pubkey, credential);
+            const standing = await readBackStanding();
+            setRetireNote(standing && !standing.retiredAt
+                ? `Brought back: ${displayName} is active again.`
+                : 'Sent. The node’s answer could not be read back; refresh to see it.');
+            onSuspensionChanged?.();
+        } catch (e: unknown) {
+            setRetireError(e instanceof Error ? e.message : 'The account was not brought back.');
+        } finally {
+            setRetireBusy(false);
         }
     };
 
@@ -707,7 +777,46 @@ export function MemberDetailModal({
                             {suspendDone && <p className="m-0 text-emerald-300 font-semibold">{suspendDone}</p>}
                             {suspendError && <p className="m-0 text-red-300 font-semibold">{suspendError}</p>}
                             <FreshProofBox proof={suspendProof} testId="suspend-proof" />
-                            {isSuspended ? (
+                            {retireNote && <p className="m-0 text-emerald-300 font-semibold" data-testid="retire-note">{retireNote}</p>}
+                            {retireError && <p className="m-0 text-red-300 font-semibold" data-testid="retire-error">{retireError}</p>}
+                            {isRetired ? (
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <span className="text-nature-300 font-semibold" data-testid="retired-state">🗄️ Retired (empty duplicate)</span>
+                                    {viewerRole === 'owner' && (
+                                        <button
+                                            onClick={handleBringBackRetired}
+                                            disabled={retireBusy}
+                                            data-testid="bring-back-retired"
+                                            className="px-3 py-2 rounded-xl font-bold border bg-bp-chip-ok-tint text-bp-chip-ok-ink border-emerald-800 hover:opacity-90 text-[11px] disabled:opacity-50"
+                                        >
+                                            {retireBusy ? 'Bringing back…' : 'Bring back'}
+                                        </button>
+                                    )}
+                                </div>
+                            ) : showRetire ? (
+                                <div className="space-y-2" data-testid="retire-confirm">
+                                    <p className="m-0 text-nature-300">
+                                        Retires <strong>{displayName}</strong> now as an empty duplicate: no vote, nothing deleted. They can't sign
+                                        in or act, and leave the member list and counts. Bring back undoes it.
+                                    </p>
+                                    <div className="flex flex-wrap justify-end gap-2">
+                                        <button
+                                            onClick={() => { setShowRetire(false); setRetireError(null); }}
+                                            disabled={retireBusy}
+                                            className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-white font-semibold text-[11px]"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleRetire}
+                                            disabled={retireBusy}
+                                            className="px-3 py-1.5 rounded-lg bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold text-[11px] disabled:opacity-50"
+                                        >
+                                            {retireBusy ? 'Retiring…' : 'Retire now'}
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : isSuspended ? (
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <span className="text-amber-300 font-semibold">⏸️ Suspended</span>
                                     <button
@@ -777,12 +886,24 @@ export function MemberDetailModal({
                                                 ? 'Suspend now: members then vote, but no vote removes an owner or admin, so it lifts when the vote closes.'
                                                 : 'Suspend now: the community then votes on removing them.'}
                                     </span>
-                                    <button
-                                        onClick={() => { setShowSuspend(true); setSuspendDone(null); }}
-                                        className="px-3 py-2 rounded-xl font-bold border bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink border-amber-800/80 text-[11px] whitespace-nowrap"
-                                    >
-                                        ⏸️ Suspend
-                                    </button>
+                                    <div className="flex flex-wrap gap-2">
+                                        {retireAllowed && (
+                                            <button
+                                                onClick={() => { setShowRetire(true); setRetireNote(null); setRetireError(null); }}
+                                                data-testid="retire-button"
+                                                title="An account made in error that holds and did nothing: no vote, nothing deleted"
+                                                className="px-3 py-2 rounded-xl font-bold border bg-nature-900 hover:bg-nature-800 text-nature-200 border-nature-600 text-[11px] whitespace-nowrap"
+                                            >
+                                                🗄️ Retire empty duplicate
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => { setShowSuspend(true); setSuspendDone(null); }}
+                                            className="px-3 py-2 rounded-xl font-bold border bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink border-amber-800/80 text-[11px] whitespace-nowrap"
+                                        >
+                                            ⏸️ Suspend
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -830,18 +951,21 @@ export function MemberDetailModal({
                                 </button>
                             )}
 
-                            <button
-                                onClick={() => { void handleFreeze(); }}
-                                disabled={freezeBusy || !pubkey}
-                                data-testid="freeze-button"
-                                className={`px-3 py-2 rounded-xl font-bold transition-all border text-[11px] disabled:opacity-50 disabled:cursor-wait ${
-                                    isFrozen
-                                        ? 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-bp-commit-fill'
-                                        : 'bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on border-bp-gold-fill'
-                                }`}
-                            >
-                                <span>{freezeBusy ? (isFrozen ? 'Unfreezing…' : 'Freezing…') : isFrozen ? '🟢 Unfreeze' : '🛑 Freeze'}</span>
-                            </button>
+                            <span className="flex items-center gap-2">
+                                {isFrozen && <span className="text-red-300 font-semibold text-[11px]" data-testid="frozen-state">🧊 Frozen</span>}
+                                <button
+                                    onClick={() => { void handleFreeze(); }}
+                                    disabled={freezeBusy || !pubkey}
+                                    data-testid="freeze-button"
+                                    className={`px-3 py-2 rounded-xl font-bold transition-all border text-[11px] disabled:opacity-50 disabled:cursor-wait ${
+                                        isFrozen
+                                            ? 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-bp-commit-fill'
+                                            : 'bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on border-bp-gold-fill'
+                                    }`}
+                                >
+                                    <span>{freezeBusy ? (isFrozen ? 'Unfreezing…' : 'Freezing…') : isFrozen ? '🟢 Unfreeze' : '🛑 Freeze'}</span>
+                                </button>
+                            </span>
 
                             <button
                                 disabled={isFrozen}
@@ -856,7 +980,7 @@ export function MemberDetailModal({
                                 <span>🔑 Re-Key</span>
                             </button>
 
-                            <button
+                            {!isRetired && <button
                                 disabled={isFrozen}
                                 onClick={() => setShowBringBack(true)}
                                 className={`px-3 py-2 rounded-xl font-bold transition-all border text-[11px] ${
@@ -868,7 +992,7 @@ export function MemberDetailModal({
                                 data-testid="bring-back-button"
                             >
                                 <span>↩️ Bring back</span>
-                            </button>
+                            </button>}
 
                             {mayOffboard && (
                                 <button

@@ -61,7 +61,7 @@ export const VOICE_EXPIRED_CODE = 'voice_expired';
 /**
  * Whether a community takes voice messages: only where its features say `voiceLines: true` outright (apps/server
  * config/node-profile.ts, on every node from voice V2). A node from before it says nothing, and stores a voice line as a
- * text line carrying a sound no one can play (Byron, 14 Nov); its version can't tell it apart. Both apps offer the
+ * text line carrying a sound no one can play (a live community, 14 Nov); its version can't tell it apart. Both apps offer the
  * microphone only where this is true, and send no recording where it isn't (VOICE_LINES_WORDS.notTaken).
  */
 export function voiceLinesOn(features: { voiceLines?: unknown } | null | undefined): boolean {

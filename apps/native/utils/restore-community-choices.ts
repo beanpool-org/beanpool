@@ -128,17 +128,17 @@ export function releaseFieldHints(
     if (holds.kind === 'copy') {
         return {
             hint: t('{community}, from your copy, is filled in. To open your account in another community, pick it above or type its name or address. Your name and picture come back from it.', { community: holds.name }),
-            a11y: t("{community}, from your copy, is filled in. Enter your community's name, like mullum, or its full address", { community: holds.name }),
+            a11y: t("{community}, from your copy, is filled in. Enter your community's name, like riverside, or its full address", { community: holds.name }),
         };
     }
     if (holds.kind === 'global') {
         return {
             hint: t('The global community is filled in. If you belong to a local community, type its name or address. Your name and picture come back from it.'),
-            a11y: t("The global community is filled in. Enter your community's name, like mullum, or its full address"),
+            a11y: t("The global community is filled in. Enter your community's name, like riverside, or its full address"),
         };
     }
     return {
         hint: t("Type your community's name or address, or pick one above. Your name and picture come back from it."),
-        a11y: t("Enter your community's name, like mullum, or its full address"),
+        a11y: t("Enter your community's name, like riverside, or its full address"),
     };
 }

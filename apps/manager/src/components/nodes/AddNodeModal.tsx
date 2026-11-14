@@ -46,7 +46,7 @@ export function AddNodeModal({ onClose, onAdd }: AddNodeModalProps) {
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            placeholder="e.g. Byron Community Node"
+                            placeholder="e.g. Riverside Community Node"
                             required
                             className="w-full bg-nature-950 border border-nature-800 px-3.5 py-2.5 rounded-xl text-white focus:outline-none focus:border-terra-500 shadow-inner"
                         />

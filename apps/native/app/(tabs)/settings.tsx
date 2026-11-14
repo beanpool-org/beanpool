@@ -1541,13 +1541,11 @@ export default function SettingsScreen() {
                         setResyncProgressStage('Clearing Local Database Cache...');
                         setResyncModalVisible(true);
                         try {
+                            // This phone's own communities only: until 14 Nov 2026 three of BeanPool's servers were listed here too.
                             const urlsToClear = [
                                 targetUrl,
                                 await AsyncStorage.getItem('beanpool_anchor_url'),
                                 null,
-                                'https://test.beanpool.org',
-                                'https://review.beanpool.org:8443',
-                                'https://beanpool.org:8443'
                             ];
                             const keysToRemove: string[] = [
                                 'beanpool_last_version_check_time',

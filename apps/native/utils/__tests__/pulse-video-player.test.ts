@@ -28,7 +28,7 @@ import type { PulseFeedItem } from '../pulse';
 const item = (over: Partial<PulseFeedItem> = {}): PulseFeedItem => ({
     id: 'item_1',
     ownerPubkey: 'a'.repeat(64),
-    callsign: 'Mullum Ceramics',
+    callsign: 'Riverside Ceramics',
     avatarUrl: null,
     platform: 'youtube',
     category: 'craft',

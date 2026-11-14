@@ -325,7 +325,7 @@ describe('the form', () => {
 
     it('refuses an invite or a web address as the name, in English as its other lines, shown in the member\'s language', () => {
         // Card callsign-link-guard: a yes joins under this name, and the community refuses one that is a link.
-        expect(knockFormProblem({ callsign: 'https://mullum.beanp', message: 'Hi' })).toBe(NAME_BOX_WORDS.webLink);
+        expect(knockFormProblem({ callsign: 'https://riverside.ex', message: 'Hi' })).toBe(NAME_BOX_WORDS.webLink);
         expect(knockFormProblem({ callsign: 'INV-ABCD-EFGH', message: 'Hi' })).toBe(NAME_BOX_WORDS.inviteCode);
         expect(knockFormProblem({ callsign: 'J.R. St.Kilda', message: 'Hi' })).toBeNull();
         expect(findLineWords(NAME_BOX_WORDS.webLink)).toBe(NAME_BOX_WORDS.webLink);

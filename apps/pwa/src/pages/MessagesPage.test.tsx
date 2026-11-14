@@ -846,7 +846,7 @@ describe("MessagesPage: Groups, as the phone's Talk → Groups (Marty, 16 Oct: \
         // The Beans hand-off belongs to Commons, where the project and enterprise forms are.
         expect(within(dialog).queryByTestId('create-group-with-beans')).not.toBeInTheDocument();
         // By its placeholder: the Picture row's file input comes first now (Pictures S4).
-        const nameField = within(dialog).getByPlaceholderText('e.g. Bindarrabi Garden Crew, Solar Guild');
+        const nameField = within(dialog).getByPlaceholderText('e.g. Riverside Garden Crew, Solar Guild');
         fireEvent.change(nameField, { target: { value: 'Bike fixers' } });
         fireEvent.submit(nameField.closest('form')!);
 
@@ -898,7 +898,7 @@ describe("MessagesPage: Groups, as the phone's Talk → Groups (Marty, 16 Oct: \
         // The node's answer lands after the form opens: the bridge goes, the form stays.
         await waitFor(() => expect(within(dialog).queryByRole('button', { name: BRIDGE })).not.toBeInTheDocument());
         expect(within(dialog).queryByText(/Start a project or an enterprise/)).not.toBeInTheDocument();
-        expect(within(dialog).getByPlaceholderText('e.g. Bindarrabi Garden Crew, Solar Guild')).toBeInTheDocument();
+        expect(within(dialog).getByPlaceholderText('e.g. Riverside Garden Crew, Solar Guild')).toBeInTheDocument();
     });
 });
 

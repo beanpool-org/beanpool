@@ -49,7 +49,7 @@ describe('CreateGroupModal Accessibility', () => {
         expect(closeBtn.className).toContain('min-w-[44px]');
         expect(closeBtn.className).toContain('min-h-[44px]');
 
-        const nameInput = screen.getByPlaceholderText(/e\.g\. Bindarrabi/i);
+        const nameInput = screen.getByPlaceholderText(/e\.g\. Riverside/i);
         expect(nameInput.className).toContain('focus-visible:ring-2');
 
         const optionBtns = screen.getAllByRole('button', { pressed: true });
@@ -108,7 +108,7 @@ describe('CreateGroupModal Picture (Pictures S4, §4.3)', () => {
         expect(previewImg.src).toContain('avatar_leaf');
 
         // Fill name and submit
-        const nameInput = screen.getByPlaceholderText(/e\.g\. Bindarrabi/i);
+        const nameInput = screen.getByPlaceholderText(/e\.g\. Riverside/i);
         fireEvent.change(nameInput, { target: { value: 'Herbalists' } });
         fireEvent.click(screen.getByRole('button', { name: /Create Group/i }));
 

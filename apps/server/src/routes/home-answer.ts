@@ -1467,7 +1467,7 @@ function pulseCard(c: Ctx): HomeCards['pulse'] | undefined {
         category: clip(String(i.category ?? ''), CATEGORY_CHARS), url: bounded(i.url, URL_CHARS),
         // Through the node's own proxy (an <img> can't sign; no member's address reaches a CDN), as the Pulse screen.
         thumbnailUrl: i.thumbnailUrl ? `/api/pulse/items/${encodeURIComponent(i.id)}/thumbnail` : null,
-        // W3 (§2): "by Mullum Ceramics · 3 h ago".
+        // W3 (§2): "by Riverside Ceramics · 3 h ago".
         publishedAt: bounded(i.publishedAt, ID_CHARS),
     }));
     return items.length ? { items } : undefined;

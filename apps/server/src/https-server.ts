@@ -210,7 +210,8 @@ import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
 import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
 import { APP_TOO_OLD_CODE, APP_TOO_OLD_ERROR, requestNonces, STORE_FULL_CODE, STORE_FULL_RETRY_AFTER_SEC, verifyMemberSignature } from './engine/member-signature.js';
 import { checkEnvAddresses } from './engine/own-addresses.js';
-import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason, word } from '@beanpool/core';
+import { DEFAULT_GLOBAL_COMMUNITY_URL, REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason, word } from '@beanpool/core';
+import { isRetiredKey, RETIRE_WORDS } from './engine/retire-duplicate.js';
 import { APP_VERSION_HEADER, noteAppVersion, parseAppVersionHeader } from './app-version-counts.js';
 import { floorLetsThrough, floorRefusing } from './app-store-versions.js';
 import { sharedCachesKeepOnlyAnonymousReads } from './guest-cache.js';
@@ -549,7 +550,7 @@ export { LISTINGS_MEMBERS_ONLY };
 export const COMMUNITY_MEMBERS_ONLY = {
     error: word("This is for this community's members. Join with an invite from a member, or look around the global community at global.beanpool.org."),
     code: 'members_only',
-    global: 'https://global.beanpool.org',
+    global: DEFAULT_GLOBAL_COMMUNITY_URL,
 } as const;
 
 /**
@@ -1847,6 +1848,13 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (closedAccount && !isOwnDeleteAccount(ctx.method, ctx.path)) {
                 ctx.status = 403;
                 ctx.body = { error: CLOSED_ACCOUNT_REFUSAL, code: 'account_closed' };
+                return;
+            }
+            // Nor does a retired empty duplicate's (engine/retire-duplicate.ts): it signs in to nothing until an owner brings it
+            // back, with the same one exception, deleting its own account.
+            if (!closedAccount && isRetiredKey(signerKey) && !isOwnDeleteAccount(ctx.method, ctx.path)) {
+                ctx.status = 403;
+                ctx.body = { error: RETIRE_WORDS.signedOut, code: 'account_retired' };
                 return;
             }
             // Nor does a visitor's row write anything the rule doesn't give it (visitor-allowlist.ts VISITOR_WRITES): its own

@@ -9296,6 +9296,24 @@ export async function fetchFriendsFromServer(publicKey: string): Promise<any[]> 
     return [];
 }
 
+/**
+ * Everyone this member has a chat of two with on this phone, a Market chat too, but not a request someone sent them that
+ * they haven't accepted: "Add people I've chatted with and my friends" (private contacts C6, utils/contacts-former.ts).
+ */
+export async function getChattedWithMembers(myPubkey: string): Promise<{ publicKey: string; callsign: string }[]> {
+    const database = await getDb();
+    return database.getAllAsync<{ publicKey: string; callsign: string }>(
+        `SELECT DISTINCT m.public_key as publicKey, m.callsign
+         FROM conversation_participants cp
+         JOIN conversations c ON cp.conversation_id = c.id
+         JOIN conversation_participants cp2 ON cp2.conversation_id = c.id AND cp2.public_key != ?
+         JOIN members m ON m.public_key = cp2.public_key
+         WHERE cp.public_key = ? AND c.type = 'dm'
+           AND ${NOT_A_REQUEST_FOR_ME('c.request')}`,
+        [myPubkey, myPubkey, myPubkey]
+    );
+}
+
 /** Get recent chat peers (for "Recents" section in contact picker) */
 export async function getRecentChatMembers(myPubkey: string, limit = 10): Promise<any[]> {
     const database = await getDb();

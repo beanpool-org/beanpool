@@ -34,7 +34,7 @@ import { switchCommunity, communitySwitchUnderWay } from '../../utils/use-commun
 import { getPendingOnboarding } from '../../utils/onboarding-state';
 import { useOtherCommunitiesNotices } from '../../utils/use-notice-counts';
 import { OtherCommunityNotices } from '../../components/OtherCommunityNotices';
-import { chatSides, chatSideShown, formatHundredths, t, tn, word, type ChatSide, type WordKey } from '@beanpool/core';
+import { chatSides, chatSideShown, formatHundredths, homeTail, t, tn, word, type ChatSide, type WordKey } from '@beanpool/core';
 import { ListPhoto } from '../../components/ListPhoto';
 import { ChatFrameSwitch } from '../../components/ChatFrameSwitch';
 import { OUTSIDE_CHATS_UPDATED, outsideContext, syncOutsideMailNow } from '../../utils/outside-chat-live';
@@ -614,8 +614,12 @@ export default function ChatsScreen() {
                         </View>
                         <View style={styles.outsideHomeRow}>
                             <MaterialCommunityIcons name="earth" size={14} color={colors.text.secondary} />
-                            {/* Cut at its head when it must be: the tail names the real domain. */}
-                            <Text style={styles.outsideHome} numberOfLines={3} ellipsizeMode="head" testID="outside-chat-community">{item.outsideHome}</Text>
+                            {/* Cut at its head here, in whole labels, when it must be: the tail names the real domain. Not by
+                                the platform: Android draws no head ellipsis past a line limit and would cut the tail. So no
+                                line limit either: what homeTail leaves takes up to 3 lines at 320 dp and 1.3x for an everyday
+                                name (measured, API 26), and anything longer wraps rather than lose its end.
+                                A screen reader hears the whole home. */}
+                            <Text style={styles.outsideHome} accessibilityLabel={item.outsideHome} testID="outside-chat-community">{homeTail(item.outsideHome)}</Text>
                         </View>
                         <View style={styles.messageRow}>
                             <Text style={styles.lastMessage} numberOfLines={1}>{item.lastMessage || t('Kept on this phone only. Your community keeps no copy.')}</Text>

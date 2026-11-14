@@ -116,6 +116,8 @@ export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
     /^\/api\/names(\/|$)/,
     // A member's locked contacts list saved or removed (engine/contact-copies.ts): its GET still answers from the copy kept.
     /^\/api\/contacts\/copy\/?$/,
+    // A re-keyed member's old contacts list removed (engine/contact-copies.ts, contacts C6): its GET still answers too.
+    /^\/api\/contacts\/former\/?$/,
 ];
 
 /** What a standby answers this request here: a write to a route above, refused with its message; null when it goes on. */

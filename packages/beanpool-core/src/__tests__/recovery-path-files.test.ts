@@ -36,11 +36,13 @@ const CORE_WORD_MODULES = [
     'packages/beanpool-core/src/recovery-kit.ts',
     'packages/beanpool-core/src/recovery-split.ts',
 ];
-/** The apps' own: the derivation (native utils/crypto.ts, web lib/mnemonic.ts, lib/bip39-wordlist.ts), and the identity
- *  modules' functions that make an account from words, keep them, or read them back to show (words-behind-lock.ts). */
+/** The apps' own: the derivation (native utils/crypto.ts, web lib/mnemonic.ts, lib/bip39-wordlist.ts), the identity
+ *  modules' functions that make an account from words, keep them, or read them back to show (words-behind-lock.ts), and the
+ *  old key from a re-keyed member's old words (native utils/old-key-from-words.ts: group history and the old contacts list). */
 const APP_WORD_HELPERS = [
     'WORDLIST', 'validateMnemonic', 'mnemonicToKeypair', 'generateMnemonic',
     'identityFromMnemonic', 'createIdentityFromMnemonic', 'restoreFromWords', 'addMnemonicToIdentity', 'getMnemonic', 'readWordsBehindLock',
+    'oldKeyFromWords',
 ];
 /** The layers below the screens. */
 const SCAN_DIRS = ['packages/beanpool-core/src', 'apps/native/utils', 'apps/pwa/src/lib'];
@@ -141,6 +143,9 @@ describe('the 12 words\' key path, computed', () => {
             'packages/beanpool-core/src/recovery-split.ts',
             'apps/pwa/src/lib/web-restore.ts',
             'apps/native/utils/words-behind-lock.ts',
+            // A re-keyed member's old words (contacts C6): the old key from them, and the old contacts list they open.
+            'apps/native/utils/old-key-from-words.ts',
+            'apps/native/utils/contacts-former.ts',
         ]));
     });
 

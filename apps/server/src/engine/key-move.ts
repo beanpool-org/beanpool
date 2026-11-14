@@ -396,10 +396,36 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // can't open it; it goes, never moves. On the main server with a tombstone; a standby drops it here as well.
     if (keepStamps) db.prepare('DELETE FROM names_copies WHERE owner_pubkey = ?').run(oldKey);
     else deletePlainRows('names_copies', 'owner_pubkey = ?', oldKey);
-    // The old key's locked contacts list (engine/contact-copies.ts): locked under the old key, so the new one can't open it;
-    // it goes, never moves, as the names copy does. (Contacts slice C6 keeps it a year for the old words instead, §6.2.)
-    if (keepStamps) db.prepare('DELETE FROM contact_copies WHERE owner_pubkey = ?').run(oldKey);
-    else deletePlainRows('contact_copies', 'owner_pubkey = ?', oldKey);
+    // The old key's locked contacts list (engine/contact-copies.ts): locked under the old key, so the new one can't open it,
+    // and only the old 12 words can. Kept a year beside the new key instead (contact_copies_former; contacts design §6.2,
+    // slice C6), at most one: the old key's current copy, or else the former one it held, moved with its year as it was.
+    // On the main server the old key's rows go with tombstones and the kept one is written under the new key, stamped, so
+    // a standby's copy brings it; a standby drops the old key's rows here and writes none of its own.
+    moveContactCopies(oldKey, newKey, at, keepStamps);
+}
+
+/** How long a re-keyed member's old contacts list is kept (engine/contact-copies.ts CONTACT_FORMER_KEEP_MS): a year. */
+const CONTACT_FORMER_KEEP_MS = 365 * 24 * 60 * 60 * 1000;
+
+/** The contacts copies of a re-key (see {@link moveMemberKeyRows}, at its end). */
+function moveContactCopies(oldKey: string, newKey: string, at: string, keepStamps: boolean): void {
+    if (keepStamps) {
+        db.prepare('DELETE FROM contact_copies WHERE owner_pubkey = ?').run(oldKey);
+        db.prepare('DELETE FROM contact_copies_former WHERE owner_pubkey = ?').run(oldKey);
+        return;
+    }
+    type Copy = { seq: number; padded_size: number; saved_at: string; nonce: string; sealed: string; digest: string; header: string; signature: string };
+    const current = db.prepare('SELECT seq, padded_size, saved_at, nonce, sealed, digest, header, signature FROM contact_copies WHERE owner_pubkey = ?').get(oldKey) as Copy | undefined;
+    const former = db.prepare(`SELECT former_pubkey, seq, padded_size, saved_at, nonce, sealed, digest, header, signature, kept_until
+                               FROM contact_copies_former WHERE owner_pubkey = ?`).get(oldKey) as (Copy & { former_pubkey: string; kept_until: string }) | undefined;
+    const from = Number.isFinite(Date.parse(at)) ? Date.parse(at) : Date.now();
+    const kept = current ? { ...current, former_pubkey: oldKey, kept_until: new Date(from + CONTACT_FORMER_KEEP_MS).toISOString() } : former;
+    deletePlainRows('contact_copies', 'owner_pubkey = ?', oldKey);
+    deletePlainRows('contact_copies_former', 'owner_pubkey = ?', oldKey);
+    if (!kept) return;
+    db.prepare(`INSERT INTO contact_copies_former (owner_pubkey, former_pubkey, seq, padded_size, saved_at, nonce, sealed, digest, header, signature, kept_until)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(newKey, kept.former_pubkey, kept.seq, kept.padded_size, kept.saved_at, kept.nonce, kept.sealed, kept.digest, kept.header, kept.signature, kept.kept_until);
 }
 
 /**

@@ -48,9 +48,9 @@ const REFUSAL_WAIT: Record<ContactsRefusal, number> = {
 /** The most steps one visit to a community takes: ask, fetch, save, and once more after a 409 (fetch, save). */
 const STEPS_MAX = 5;
 
-/** A signed request to one of the member's communities. Null when it didn't answer. */
+/** A signed request to one of the member's communities. Null when it didn't answer. A DELETE (contacts-former.ts) has no body. */
 export interface ContactsNet {
-    call(community: string, account: ContactsAccount, method: 'GET' | 'PUT', path: string, body?: unknown): Promise<{ status: number; body: unknown } | null>;
+    call(community: string, account: ContactsAccount, method: 'GET' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<{ status: number; body: unknown } | null>;
 }
 
 export interface ContactsSyncDeps extends ContactsStoreDeps {
@@ -386,18 +386,18 @@ export async function savePassWhenDue(account: ContactsAccount | null, deps: Con
     }
 }
 
-/** The phone's own requests: signed with the member's key for that community's host, with no body on a GET. */
+/** The phone's own requests: signed with the member's key for that community's host, with no body on a GET or a DELETE. */
 export function phoneContactsNet(): ContactsNet {
     return {
         async call(community, account, method, path, body) {
             const url = `${community.replace(/\/+$/, '')}${path}`;
-            const raw = method === 'GET' ? '' : JSON.stringify(body ?? {});
+            const raw = method === 'PUT' ? JSON.stringify(body ?? {}) : '';
             const controller = new AbortController();
             const stop = setTimeout(() => controller.abort(), CONTACTS_REQUEST_MS);
             try {
                 const { buildSignedHeaders } = await import('./crypto');
                 const headers = await buildSignedHeaders(method, url, raw, account.privateKey, account.publicKey);
-                if (method === 'GET') delete headers['Content-Type'];
+                if (!raw) delete headers['Content-Type'];
                 const res = await fetch(url, { method, headers: { Accept: 'application/json', ...headers }, ...(raw ? { body: raw } : {}), signal: controller.signal });
                 return { status: res.status, body: await res.json().catch(() => null) };
             } catch (e) {

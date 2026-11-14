@@ -21,9 +21,22 @@
  * exactly JSON.stringify(parsed, null, 2) + '\n' (so no key is written twice); every key either side added is in it; every
  * key either side removed is not; every other value is main's or the PR's. Any problem exits 1 and names it. --verify alone
  * checks files git merged by itself.
+ *
+ * AS GIT'S MERGE DRIVER (15 Nov: most sync rounds were catalog-only). .gitattributes sends every catalog to the driver
+ * "beanpool-words"; a checkout needs it named once (scripts/lanes/lib.sh sets it; scripts/sync-pr.sh passes it on its own git command):
+ *
+ *   git config merge.beanpool-words.name 'BeanPool word catalogs, per key'
+ *   git config merge.beanpool-words.driver 'node scripts/words-merge-3way.mjs --driver %O %A %B %P'
+ *
+ * Git then runs  --driver <base> <ours> <theirs> <path>  for each catalog both sides changed, from the top of the
+ * worktree. The per-key merge and the VERIFY above are written into <ours> (exit 0); anything they refuse leaves git's own
+ * conflict markers there (exit 1), so the file stays unmerged for a person. Without the config line git merges the
+ * catalogs as text, as before. GitHub's own merges (the queue, "Update branch") never run a custom driver.
+ * Which side is "main": theirs (a sync merges main INTO a branch), ours during a rebase; BEANPOOL_WORDS_MAIN=ours|theirs
+ * says it outright (test-all-train.sh merges both ways and sets it).
  */
-import { execFileSync } from 'node:child_process';
-import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 export const CATALOG = /^(apps|packages)\/[^/]+\/words\/[^/]+\.json$/;
@@ -149,7 +162,54 @@ export function verifyCatalog(file, b, m, p, text) {
     return problems;
 }
 
+/** "ours" or "theirs": the side of a git merge that is main (see AS GIT'S MERGE DRIVER). */
+export function mainSide(env = process.env) {
+    const said = env.BEANPOOL_WORDS_MAIN;
+    if (said === 'ours' || said === 'theirs') return said;
+    if (said) throw new Error(`BEANPOOL_WORDS_MAIN is "${said}": it must be ours or theirs`);
+    // A rebase replays the branch onto main: there "ours" is main.
+    for (const dir of ['rebase-merge', 'rebase-apply']) {
+        try {
+            const p = execFileSync('git', ['rev-parse', '--git-path', dir], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+            if (p && existsSync(p)) return 'ours';
+        } catch { /* not in a repository: the default below */ }
+    }
+    return 'theirs';
+}
+
+/** The merge driver: base, ours, theirs (git's temp files) and the catalog's path. 0 = merged into ours, 1 = left conflicted. */
+export function driver([basePath, oursPath, theirsPath, file], env = process.env) {
+    if (!basePath || !oursPath || !theirsPath || !file) { console.error('usage: words-merge-3way.mjs --driver %O %A %B %P'); return 2; }
+    const textMerge = (why) => {
+        // git's own three-way text merge, markers and all, so the file is left as plain git would leave it.
+        const r = spawnSync('git', ['merge-file', '-L', 'ours', '-L', 'base', '-L', 'theirs', oursPath, basePath, theirsPath], { stdio: ['ignore', 'ignore', 'pipe'] });
+        if (why) console.error(`words-merge-3way: ${file}: NOT merged per key: ${String(why).split(`${file}: `).join('')}`);
+        return why || r.status !== 0 ? 1 : 0;
+    };
+    // Only a catalog: an attribute put on another file gets git's text merge, unchanged.
+    if (!CATALOG.test(file)) return textMerge(null);
+    let side, b, ours, theirs;
+    try {
+        side = mainSide(env);
+        const baseText = readFileSync(basePath, 'utf8');
+        b = baseText.trim() === '' ? null : JSON.parse(baseText); // empty: both sides added the file
+        ours = JSON.parse(readFileSync(oursPath, 'utf8'));
+        theirs = JSON.parse(readFileSync(theirsPath, 'utf8'));
+    } catch (e) {
+        return textMerge(e.message);
+    }
+    const [m, p] = side === 'ours' ? [ours, theirs] : [theirs, ours];
+    let merged;
+    try { merged = mergeCatalog(file, b, m, p); } catch (e) { return textMerge(e.message); }
+    const text = JSON.stringify(merged, null, 2) + '\n';
+    const problems = verifyCatalog(file, b, m, p, text);
+    if (problems.length) return textMerge(problems.slice(0, 3).join('; '));
+    writeFileSync(oursPath, text);
+    return 0;
+}
+
 function main(argv) {
+    if (argv[0] === '--driver') return driver(argv.slice(1));
     const opt = { resolve: [], verify: [] };
     let list = null;
     for (let i = 0; i < argv.length; i++) {

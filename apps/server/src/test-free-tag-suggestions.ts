@@ -29,7 +29,10 @@
  *      the 25 languages, and that language: a Portuguese, German, Spanish, Russian or Japanese label, marks kept, any case,
  *      typed decomposed, a plural; Turkish in any case too (incir, İNCİR, ıspanak, BALIK), and the table: every Turkish
  *      label with i, ı, İ or I typed as written, lower and upper case by Turkish's rule and the default rule, one answer,
- *      its own tag; none for a word only a fold makes a label (cat, man, maca), a top's label, an unknown
+ *      its own tag; German ß in capitals (SÜSSKARTOFFEL) and Greek capitals (ΛΕΜΟΝΙ, ΛΑΪΜ); the class table: every label in
+ *      all 25 languages typed as written, lower and upper case by its own language's rule and the default, answers as the
+ *      label as written; the guard: a key born from case never holds a word another language's label writes as it is
+ *      (planted collisions, either order); none for a word only a fold makes a label (cat, man, maca), a top's label, an unknown
  *      word, a word no listing could carry, two q's; members only; the map's size and heap
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-free-tag-suggestions.ts
@@ -52,9 +55,10 @@ import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { TABLES } from './engine/replication-manifest.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import {
-    FREE_TAG_COUNT_MS, FREE_TAG_OFFER_DAYS, forgetFreeTagCounts, freeTagCounts, libraryLabelCount, libraryTagNamed, offeredFreeTags, setFreeTagRule,
+    FREE_TAG_COUNT_MS, FREE_TAG_OFFER_DAYS, forgetFreeTagCounts, freeTagCounts, labelMapOf, libraryLabelCount, libraryTagNamed, offeredFreeTags,
+    setFreeTagRule,
 } from './engine/free-tags.js';
-import { TAG_LIBRARY, wordsFor } from '@beanpool/core';
+import { LANGS, TAG_LIBRARY, caseBornTagForms, exactTagForms, freeTagRefusal, tagEnglish, wordsFor } from '@beanpool/core';
 import { coreCatalogOnce } from './member-words.js';
 
 delete process.env.CF_RECORD_NAME;
@@ -597,6 +601,16 @@ async function main(): Promise<void> {
         ['BALIK', 'food.seafood.fish', 'tr', 'Turkish Balık in capitals (stored as "balik")'],
         ['ACI BİBER', 'food.vegetables.chilli', 'tr', 'Turkish Acı biber in capitals, ı and i in one label'],
         ['halı temizliği', 'labour.cleaning.carpet-cleaning', 'tr', 'a Turkish label with ı inside, as written'],
+        // German capitals write ß as SS, and Greek capitals drop the tonos and the dialytika (Fable, 15 Nov, Q2 and Q3).
+        ['SÜSSKARTOFFEL', 'food.vegetables.sweet-potato', 'de', 'German Süßkartoffel in capitals'],
+        ['süßkartoffel', 'food.vegetables.sweet-potato', 'de', 'the same as written'],
+        ['SOSSEN', 'food.preserves.sauces', 'de', 'German Soßen in capitals'],
+        ['SCHWEISSEN', 'services.trades.welding', 'de', 'German Schweißen in capitals'],
+        ['SCHWEISSGERÄTE', 'tools.power.welders', 'de', 'German Schweißgeräte in capitals'],
+        ['ΛΕΜΟΝΙ', 'food.fruit.lemon', 'el', 'Greek Λεμόνι in Greek capitals, the tonos dropped'],
+        ['Λεμόνι', 'food.fruit.lemon', 'el', 'the same as written'],
+        ['ΛΑΪΜ', 'food.fruit.lime', 'el', 'Greek Λάιμ in Greek capitals: the tonos dropped, a dialytika written'],
+        ['ΜΑΪΝΤΑΝΟΣ', 'food.herbs.parsley', 'el', 'Greek Μαϊντανός in capitals, a final sigma'],
     ] as const) {
         const r = await asked(q);
         assert(r.status === 200 && r.body?.library === want && r.body?.lang === lang && !('tags' in (r.body ?? {})),
@@ -635,6 +649,91 @@ async function main(): Promise<void> {
         assert(rows.length > 300 && rows.filter(([, w]) => /[İI]/.test(w)).length >= 13 && rows.filter(([, w]) => w.includes('ı')).length > 100,
             `the table holds every Turkish label with i, ı, İ or I (${rows.length}, ${inTurkish} answered in Turkish)`);
         assert(wrong.length === 0, `each of them typed as written, lower and upper case by both rules: its own tag, one answer (${wrong.length} wrong${wrong.length ? `: ${wrong.slice(0, 12).join('; ')}` : ''})`);
+    }
+    // The class table, all 25 languages (Fable, 15 Nov, Q3): every label, typed as written, lower and upper case by its own
+    // language's rule and the default, answers as the label as written answers (its own tag, or the earlier language's that
+    // writes it alike). A label no listing could carry (over 30 characters) answers nothing, typed any way.
+    const everyLabel = LANGS.flatMap((lang) => {
+        const catalog = lang === 'en' ? null : coreCatalogOnce(lang);
+        const words = wordsFor(lang, catalog ? [catalog] : []);
+        return TAG_LIBRARY.filter((tag) => tag.id.includes('.'))
+            .map((tag) => ({ lang, id: tag.id, label: lang === 'en' ? tagEnglish(tag) : words.t(tag.en) || tagEnglish(tag) }));
+    });
+    {
+        const missed: Record<string, string[]> = {};
+        let answered = 0, asWritten = 0;
+        for (const { lang, label } of everyLabel) {
+            const want = libraryTagNamed(label);
+            if (want) answered++;
+            const typings = [label.toLocaleLowerCase(lang), label.toLocaleUpperCase(lang), label.toLowerCase(), label.toUpperCase()];
+            for (const typed of typings) {
+                const a = libraryTagNamed(typed);
+                if (a?.id !== want?.id || a?.lang !== want?.lang) (missed[lang] ??= []).push(`${typed} → ${a ? `${a.id} (${a.lang})` : 'null'}, as written ${want ? `${want.id} (${want.lang})` : 'null'}`);
+            }
+            if (want?.lang === lang) asWritten++;
+        }
+        const misses = Object.values(missed).flat();
+        // The two languages the new lines are for: every German label with ß and every Greek label, as written, is its own tag.
+        const notOwn = everyLabel.filter((row) => (row.lang === 'el' || (row.lang === 'de' && row.label.includes('ß'))) && freeTagRefusal(row.label) === null)
+            .filter((row) => libraryTagNamed(row.label)?.id !== row.id).map((row) => `${row.lang} ${row.label}`);
+        assert(notOwn.length === 0, `every Greek label, and every German label with ß, answers its own tag (${notOwn.length}${notOwn.length ? `: ${notOwn.slice(0, 6).join('; ')}` : ''})`);
+        assert(new Set(everyLabel.map((row) => row.lang)).size === 25 && everyLabel.filter((row) => row.lang === 'el').length > 400 && answered > everyLabel.length * 0.9,
+            `the table holds every label in all 25 languages (${everyLabel.length}; ${answered} answer a tag, ${asWritten} in their own language)`);
+        assert(misses.length === 0, `each typed every way answers as the label as written: no miss in any language (${misses.length}${misses.length ? `: ${JSON.stringify(Object.fromEntries(Object.entries(missed).map(([lang, list]) => [lang, list.slice(0, 3)])))}` : ''})`);
+    }
+    // The guard (Fable, 15 Nov, Q3): a key born from case never holds a word another language writes as the label of a
+    // different tag; the label as written wins, whatever LANGS' order. Today only Turkish "İnternet" meets one ("internet",
+    // the same tag), and the label as written holds it.
+    {
+        const writtenBy = new Map<string, Array<{ id: string; lang: string }>>();
+        const bornBy = new Map<string, Array<{ id: string; lang: string; label: string }>>();
+        for (const { lang, id, label } of everyLabel) {
+            const born = caseBornTagForms(label);
+            for (const key of exactTagForms(label)) {
+                if (born.includes(key)) (bornBy.get(key) ?? bornBy.set(key, []).get(key)!).push({ id, lang, label });
+                else (writtenBy.get(key) ?? writtenBy.set(key, []).get(key)!).push({ id, lang });
+            }
+        }
+        // No two labels of different tags meet only by case (Fable measured none: ß and Greek merge no labels): such a pair has
+        // no label as written to win, so one would be lost.
+        const merged = [...bornBy].filter(([key, owners]) => !writtenBy.has(key) && new Set(owners.map((o) => o.id)).size > 1)
+            .map(([key, owners]) => `"${key}": ${owners.map((o) => `${o.lang} ${o.label} (${o.id})`).join(', ')}`);
+        assert(bornBy.size > 500 && merged.length === 0, `no two labels of different tags meet only by case (${bornBy.size} keys born from case; ${merged.length}${merged.length ? `: ${merged.slice(0, 6).join('; ')}` : ''})`);
+        const map = labelMapOf(everyLabel);
+        assert(map.size === libraryLabelCount(), `the table's labels build the node's map (${map.size} keys, the node's ${libraryLabelCount()})`);
+        const meetings: string[] = [];
+        const lost: string[] = [];
+        for (const { lang, id, label } of everyLabel) {
+            for (const key of caseBornTagForms(label)) {
+                const others = (writtenBy.get(key) ?? []).filter((other) => other.lang !== lang);
+                if (others.length === 0) continue;
+                meetings.push(`${lang} "${label}" meets ${others.map((o) => `${o.lang}${o.id === id ? '' : ` ${o.id}`}`).join(', ')} on "${key}"`);
+                const holder = map.get(key);
+                if (holder?.id !== writtenBy.get(key)![0].id || holder?.lang !== writtenBy.get(key)![0].lang) lost.push(`"${key}" held by ${holder?.id} (${holder?.lang})`);
+            }
+        }
+        assert(lost.length === 0,
+            `every key born from case that a label writes as it is is held by that label (${meetings.join('; ') || 'none'}${lost.length ? `; lost: ${lost.join('; ')}` : ''})`);
+        assert(libraryTagNamed('İNTERNET')?.lang === 'en' && libraryTagNamed('internet')?.lang === 'en', 'Internet in any case is the English label as written');
+        // Planted: Turkish "Kazı" (excavation) makes "kazi" by case; a Swahili label "Kazi" (work) writes it. Swahili comes
+        // after Turkish in LANGS, and still keeps its word; in either order, and the same for German "Soßen" against a label
+        // "Sossen" written so. With no label written so, the key born from case answers, as today.
+        const kazi = { lang: 'tr' as const, id: 'labour.land.excavation', label: 'Kazı' };
+        const swahili = { lang: 'sw' as const, id: 'labour.help', label: 'Kazi' };
+        const sauces = { lang: 'de' as const, id: 'food.preserves.sauces', label: 'Soßen' };
+        const sossen = { lang: 'fil' as const, id: 'goods.materials', label: 'Sossen' };
+        for (const [planted, key, want, why] of [
+            [[kazi, swahili], 'kazi', swahili, 'Turkish first, Swahili written'],
+            [[swahili, kazi], 'kazi', swahili, 'Swahili first'],
+            [[kazi], 'kazi', kazi, 'Turkish alone: its key born from case answers'],
+            [[sauces, sossen], 'sossen', sossen, 'German ß first, a later label written with ss'],
+            [[sauces], 'sossen', sauces, 'German alone'],
+            [[{ ...kazi, label: 'Kazı' }, { ...kazi, lang: 'sw' as const, label: 'Kazı' }], 'kazi', kazi, 'both born from case: the earlier keeps it'],
+            [[{ ...swahili, lang: 'id' as const, id: 'food.fruit.fig' }, swahili], 'kazi', { ...swahili, lang: 'id' as const, id: 'food.fruit.fig' }, 'both written: the earlier keeps it'],
+        ] as const) {
+            const held = labelMapOf(planted).get(key);
+            assert(held?.id === want.id && held?.lang === want.lang, `planted collision, ${why}: "${key}" → ${want.id} (${want.lang}) (${held ? `${held.id} (${held.lang})` : 'null'})`);
+        }
     }
     const twice = await call('GET', bea, '/api/free-tags?q=laranja&q=limão', undefined, es);
     assert(twice.status === 200 && twice.body?.library === null && twice.body?.lang === null, `two q's are no word (${show(twice)})`);

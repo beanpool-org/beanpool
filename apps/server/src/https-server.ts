@@ -158,6 +158,9 @@ import { createGlobalDirectoryRoutes } from './routes/global-directory.js';
 import { createKnockRoutes } from './routes/knocks.js';
 import { createWebPushRoutes } from './routes/web-push.js';
 import { createNodeKeyRoutes } from './routes/node-key.js';
+import { createRelayRoutes } from './routes/relay.js';
+import { sweepRelayMail } from './engine/relay-mail.js';
+import { retryRelayOutbox, sweepRelayOutbox } from './engine/relay-outbox.js';
 import { isNodeSignedPath, pruneNodeRequestNonces, requireNodeSignature } from './engine/node-signature.js';
 import { createInviteAskRoutes } from './routes/invite-asks.js';
 import { createKnowledgeRoutes } from './routes/knowledge.js';
@@ -1588,6 +1591,9 @@ export async function startHttpsServer(port: number): Promise<number> {
         pruneChatLines(now);
         requestNonces.prune(now);
         pruneNodeRequestNonces(now);
+        // The mailbox between communities: due forwards tried again, old mail, ids and outbox rows settled or gone.
+        try { sweepRelayMail(now); sweepRelayOutbox(now); } catch (e: any) { console.warn('[Mail] The mailbox sweep failed:', e?.message || e); }
+        retryRelayOutbox(now).catch((e: any) => console.warn('[Mail] Forwarding the waiting mail failed:', e?.message || e));
     }, 60 * 1000);
     if (rateLimitCleaner.unref) rateLimitCleaner.unref();
     // The open door's sign-up limiter keeps hashed addresses in the database, not in memory: they are cleared once
@@ -2080,6 +2086,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createAppleReturnRoutes(),
         // This server's key, and the check another community's server can make of its signed requests (routes/node-key.ts).
         createNodeKeyRoutes(),
+        createRelayRoutes(),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),
         createNamesListRoutes(deps),
@@ -2270,6 +2277,9 @@ const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
     [/^\/api\/join\/knocks\//, 4 * 1024],
     // Another community's server's check (routes/node-key.ts): at most 16 relay items; the mailbox's own limits come with it (X2).
     [/^\/api\/node\/check\/?$/, 256 * 1024],
+    // The mailbox (routes/relay.ts): another server's items and a member's send carry at most one blob of 1,200,000
+    // characters (engine/relay-mail.ts RELAY_BLOB_MAX_CHARS) and take the global cap; a confirm is at most 50 ids.
+    [/^\/api\/mail\/confirm\/?$/, 16 * 1024],
     // A browser's push subscription (routes/web-push.ts): an endpoint of at most 1,000 characters and two short keys.
     [/^\/api\/web-push$/, 4 * 1024],
     // An admin's locked copy of their names-list record: at most 1 MiB of ciphertext, base64 (engine/names-list.ts).

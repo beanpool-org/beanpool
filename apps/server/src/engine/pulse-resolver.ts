@@ -121,7 +121,10 @@ export interface ParsedPulseFeed {
 }
 
 export interface SsrfSafeFetchOptions {
-    method?: 'GET' | 'HEAD';
+    method?: 'GET' | 'HEAD' | 'POST';
+    /** A POST's body, sent as is with its length (its Content-Type in `headers`). Only with `maxRedirects: 0`, so a
+     *  redirect never carries it anywhere else (engine/relay-outbox.ts, the one POST). */
+    body?: string;
     headers?: Record<string, string>;
     timeoutMs?: number;
     maxBytes?: number;
@@ -584,6 +587,9 @@ async function ssrfSafeFetchInternal(
     const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
     const method = options.method ?? 'GET';
     const allowedTypes = options.allowedContentTypes ?? DEFAULT_ALLOWED_CONTENT_TYPES;
+    if (options.body !== undefined && (method !== 'POST' || maxRedirects !== 0)) {
+        throw new SsrfSecurityError('A request body is sent only by a POST that follows no redirect (maxRedirects: 0)');
+    }
 
     // One budget for the whole call, not one per phase and not one per redirect hop. Every phase
     // below — the SSRF DNS pre-flight, connect, TLS, response headers, body streaming, and each
@@ -692,6 +698,7 @@ async function ssrfSafeFetchInternal(
                 headers: {
                     ...requestHeaders,
                     Host: hostname,
+                    ...(options.body !== undefined ? { 'Content-Length': String(Buffer.byteLength(options.body)) } : {}),
                 },
                 lookup: customLookup,
                 agent,
@@ -721,7 +728,7 @@ async function ssrfSafeFetchInternal(
                 reject(err);
             });
 
-            client.end();
+            client.end(options.body);
         });
 
         const status = response.statusCode;

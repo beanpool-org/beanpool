@@ -154,6 +154,9 @@ export interface ShapeSettings {
     decisions: ShapeSetting<boolean>;
     /** The forum (engine/forum.ts; Marty Q3, 14 Nov 2026): on from the start, members only; an owner may switch it off. */
     forum: ShapeSetting<boolean>;
+    /** Messages from other communities (engine/relay-mail.ts, X2): on by default; off, nothing from outside is taken and no
+     *  member here sends out. No lock. */
+    outsideMessages: ShapeSetting<boolean>;
     /** Members may share one post outside the community (front doors S6, engine/peek-tickets.ts): off while the private
      *  preview is on, which shows visitors nothing. */
     shareOutside: ShapeSetting<boolean>;
@@ -251,6 +254,7 @@ export const SHAPE_SWITCH_PLACES: Readonly<Record<ProfileSwitch | 'dmRequests', 
     dmRequests: 'dmRequests',
     decisions: 'decisions',
     forum: 'forum',
+    outsideMessages: 'outsideMessages',
     shareOutside: 'shareOutside',
     publishToDirectory: 'listed',
     guestListingsOnly: 'visitors',
@@ -571,6 +575,7 @@ export function readShape(): Shape {
         ...(dmRequests ? { dmRequests } : {}),
         decisions: plain('decisions'),
         forum: plain('forum'),
+        outsideMessages: plain('outsideMessages'),
         shareOutside: {
             ...plain('shareOutside'),
             value: s.shareOutside && !preview,

@@ -51,6 +51,7 @@ async function main() {
         openMembership: true,
         retention: true,
         dmRequests: true,
+        outsideMessages: true,
         shareOutside: false,
         knowledge: false,
         bills: false,

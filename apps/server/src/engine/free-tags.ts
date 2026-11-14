@@ -21,9 +21,12 @@
  *
  * Not applied (noted in the design): a reader's own block list (a suggestion is a word, not a listing).
  */
-import { freeTagRefusal, freeTagStored, isTagId, word } from '@beanpool/core';
+import {
+    LANGS, TAG_LIBRARY, compoundWords, freeTagRefusal, freeTagStored, isTagId, lookupPhrase, tagEnglish, tagForms, word, wordsFor,
+} from '@beanpool/core';
 import { db, deletePlainRows } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
+import { coreCatalogOnce } from '../member-words.js';
 
 /** Distinct authors whose live listings carry a tag before it is offered. */
 export const FREE_TAG_OFFER_AUTHORS = 2;
@@ -225,4 +228,55 @@ export function setFreeTagRule(actor: string, key: unknown, action: unknown, int
     }
     if (changed) forgetFreeTagCounts();
     return { tag, rule: action === 'clear' ? null : action, mergeInto: action === 'merge' ? target as string : null, changed };
+}
+
+// ── "Did you mean …?" from every language's labels (DESIGN-tags-free-entry-fable.md §3, slice F5) ─────────────────────
+
+/**
+ * Every library tag's label in all 25 languages, folded as the apps' index folds a label (core tagForms: words, lower case,
+ * no accents, a compound joined too), each to the tag it names. A device holds its own language and English, so a word that
+ * is a label in a third language ("limão-siciliano" on a Spanish phone) is found here, and the field offers that tag above
+ * the member's own word. English first, then the languages in LANGS order: where two languages' labels fold the same and
+ * name different tags, the earlier one keeps the form (the device has already resolved its own language and English before
+ * it asks). Never a top: the category is its own field. Built from core's catalog files on the first ask, once, keeping
+ * nothing of the catalogs but these keys (the ids are the library's own strings); a node nobody asks never builds it.
+ */
+let labelMap: Map<string, string> | null = null;
+
+function buildLabelMap(): Map<string, string> {
+    const map = new Map<string, string>();
+    const items = TAG_LIBRARY.filter((tag) => tag.id.includes('.'));
+    for (const lang of LANGS) {
+        const catalog = lang === 'en' ? null : coreCatalogOnce(lang);
+        if (lang !== 'en' && !catalog) continue;
+        const words = wordsFor(lang, catalog ? [catalog] : []);
+        for (const tag of items) {
+            const label = lang === 'en' ? tagEnglish(tag) : words.t(tag.en) || tagEnglish(tag);
+            for (const key of tagForms(label)) if (key && !map.has(key)) map.set(key, tag.id);
+        }
+    }
+    return map;
+}
+
+/**
+ * The library tag a typed word is the label of, in any of the 25 languages (an English plural's singular too, as the apps'
+ * exactLibraryTag reads one), or null. What GET /api/free-tags?q= answers as `library`. Only a word a listing could carry as
+ * its own tag is looked up (freeTagRefusal), so the work is bounded by the tag rule's 30 characters.
+ */
+export function libraryTagNamed(text: unknown): string | null {
+    if (typeof text !== 'string' || freeTagRefusal(text) !== null) return null;
+    const map = labelMap ?? (labelMap = buildLabelMap());
+    const named = (phrase: string): readonly string[] => {
+        for (const key of tagForms(phrase)) {
+            const id = map.get(key);
+            if (id) return [id];
+        }
+        return [];
+    };
+    return lookupPhrase(compoundWords(freeTagStored(text)), named)[0] ?? null;
+}
+
+/** How many folded labels the map holds, building it if it was not (the tests, and the measure in the F5 PR). */
+export function libraryLabelCount(): number {
+    return (labelMap ?? (labelMap = buildLabelMap())).size;
 }

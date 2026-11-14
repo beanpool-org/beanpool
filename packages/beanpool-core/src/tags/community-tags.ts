@@ -75,3 +75,39 @@ export function mergedInto(tags: readonly CommunityTag[], index: TagIndex = tagI
     for (const c of tags) if (c.mergeInto && index.label(c.mergeInto)) merges.set(c.tag, c.mergeInto);
     return (text) => merges.get(freeTagStored(text)) ?? null;
 }
+
+/**
+ * How long the field is still before the picker asks the node whether the word being added is a library tag's label in
+ * another language (slice F5): one ask per word a member pauses on, never one per letter.
+ */
+export const LIBRARY_ASK_MS = 350;
+
+/**
+ * The library tag a node's answer to GET /api/free-tags?q=<word> names (slice F5): the word is that tag's label in one of
+ * the 25 languages. Null for none, for an id this app's library does not know (a newer node's), and for a top (the
+ * category is its own field).
+ */
+export function libraryTagOf(answer: unknown): string | null {
+    const id = (answer as { library?: unknown } | null | undefined)?.library;
+    return typeof id === 'string' && id.includes('.') && isTagId(id) ? id : null;
+}
+
+/** What the node said of one typed word, in its stored form: the library tag it is a label of elsewhere, or null for none. */
+export interface LibraryElsewhere {
+    tag: string;
+    id: string | null;
+}
+
+/**
+ * The library tag the field offers as "Did you mean …?" above the "Add" row (slice F5): the node's answer for exactly the
+ * word "Add" would make (`adding`, stored form; null when Enter would make no new tag of the member's own), when it names a
+ * tag this app labels that the listing does not hold and the library rows do not already show. Enter still adds the
+ * member's own word: a label in a third language is a suggestion, never a swap.
+ */
+export function didYouMeanTag(
+    adding: string | null, found: LibraryElsewhere | null, held: TagsHeld, shown: readonly string[], index: TagIndex = tagIndex(),
+): string | null {
+    if (!adding || !found?.id || found.tag !== freeTagStored(adding)) return null;
+    if (held.tags.includes(found.id) || shown.includes(found.id) || !index.label(found.id)) return null;
+    return found.id;
+}

@@ -97,8 +97,9 @@ export function tagText(text: string): string {
 }
 
 /** The forms a text is keyed and found by: tagText, and tagText with each compound joined as a search looks it up ("wi-fi" →
- *  wifi, search-terms.ts queryWords), so "Wi-Fi" finds the label "Wifi" and "tshirt" a label "T-shirt". */
-function tagForms(text: string): string[] {
+ *  wifi, search-terms.ts queryWords), so "Wi-Fi" finds the label "Wifi" and "tshirt" a label "T-shirt". The node's map of
+ *  every language's labels (slice F5, apps/server engine/free-tags.ts) keys by the same forms. */
+export function tagForms(text: string): string[] {
     const words = tagText(text);
     const joined = tagText(joinCompounds(text));
     return joined === words ? [words] : [words, joined];

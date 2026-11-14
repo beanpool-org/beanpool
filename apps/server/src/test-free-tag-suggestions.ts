@@ -25,6 +25,9 @@
  *      takedown, a report-hide) × the uphold before the move, 3 or 8 days after it, with or without taking it down, or the
  *      report left open: the author's copy elsewhere is not offered until a week after the latest of the move and the
  *      uphold, nor ever while the report is open; the unreported control is offered after its own week
+ *   9. "Did you mean …?" (slice F5): GET /api/free-tags?q= names the library tag a word is the label of in any of the 25
+ *      languages: a Portuguese, Russian or Japanese label on a Spanish device, with or without its accents, a plural; none
+ *      for a top's label, an unknown word, a word no listing could carry, two q's; members only; the map's size and heap
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-free-tag-suggestions.ts
  */
@@ -45,7 +48,9 @@ import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { TABLES } from './engine/replication-manifest.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
-import { FREE_TAG_COUNT_MS, FREE_TAG_OFFER_DAYS, forgetFreeTagCounts, freeTagCounts, offeredFreeTags, setFreeTagRule } from './engine/free-tags.js';
+import {
+    FREE_TAG_COUNT_MS, FREE_TAG_OFFER_DAYS, forgetFreeTagCounts, freeTagCounts, libraryLabelCount, offeredFreeTags, setFreeTagRule,
+} from './engine/free-tags.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -550,6 +555,53 @@ async function main(): Promise<void> {
     }
     console.log('\n| case | routes (status) | report after | expected | measured | result |\n|---|---|---|---|---|---|');
     for (const row of tableRows) console.log(row);
+
+    // ── 9. "Did you mean …?" from every language's labels (slice F5) ────────────────────────────────
+    console.log('\n── 9. GET /api/free-tags?q=: the library tag a word is the label of in any of the 25 languages ──');
+    const es = { 'X-Language': 'es' };
+    const asked = async (q: string, who: Id | null = bea, extra: Record<string, string> = es) =>
+        call('GET', who, `/api/free-tags?q=${encodeURIComponent(q)}`, undefined, extra);
+    const heapBefore = (globalThis as { gc?: () => void }).gc ? ((globalThis as { gc: () => void }).gc(), process.memoryUsage().heapUsed) : process.memoryUsage().heapUsed;
+    const builtAt = performance.now();
+    const labels = libraryLabelCount();
+    const buildMs = performance.now() - builtAt;
+    const heapAfter = (globalThis as { gc?: () => void }).gc ? ((globalThis as { gc: () => void }).gc(), process.memoryUsage().heapUsed) : process.memoryUsage().heapUsed;
+    console.log(`  label map: ${labels} folded labels, built in ${buildMs.toFixed(0)} ms, heap ${((heapAfter - heapBefore) / 1024).toFixed(0)} KiB after${(globalThis as { gc?: unknown }).gc ? ' (gc before and after)' : ' (no --expose-gc: rough)'}`);
+    assert(labels > 5000, `the map holds every language's labels, folded (${labels})`);
+    for (const [q, want, why] of [
+        ['laranja', 'food.fruit.orange', 'a Portuguese label on a Spanish device'],
+        ['Laranjas', 'food.fruit.orange', 'its plural, any case'],
+        ['maçã', 'food.fruit.apple', 'a Portuguese label with its accents'],
+        ['maca', 'food.fruit.apple', 'the same without them'],
+        ['limão-siciliano', 'food.fruit.lemon', 'a Portuguese compound label'],
+        ['limão', 'food.fruit.lime', "Portuguese's own lime, not Spanish lemon"],
+        ['апельсин', 'food.fruit.orange', 'a Russian label'],
+        ['オレンジ', 'food.fruit.orange', 'a Japanese label'],
+        ['lemons', 'food.fruit.lemon', 'an English plural'],
+    ] as const) {
+        const r = await asked(q);
+        assert(r.status === 200 && r.body?.library === want && !('tags' in (r.body ?? {})), `${why}: "${q}" → ${want} (${show(r)})`);
+    }
+    for (const [q, why] of [
+        ['zzqx unheard', 'a word no language labels'],
+        ['food & produce', "a top's label: the category is its own field"],
+        ['call 0412 345 678', 'a word no listing could carry'],
+        ['x', 'one letter'],
+    ] as const) {
+        const r = await asked(q);
+        assert(r.status === 200 && r.body?.library === null, `${why}: "${q}" → null (${show(r)})`);
+    }
+    const twice = await call('GET', bea, '/api/free-tags?q=laranja&q=limão', undefined, es);
+    assert(twice.status === 200 && twice.body?.library === null, `two q's are no word (${show(twice)})`);
+    const noLanguage = await asked('laranja', bea, {});
+    assert(noLanguage.body?.library === 'food.fruit.orange', `no X-Language: the same answer (${show(noLanguage)})`);
+    const listAgain = await call('GET', bea, '/api/free-tags');
+    assert(listAgain.status === 200 && Array.isArray(listAgain.body?.tags) && !('library' in listAgain.body),
+        `without q the answer is the offered tags, as before (${show(listAgain)})`);
+    const unsignedQ = await asked('laranja', null);
+    assert(unsignedQ.status === 401 && !('library' in (unsignedQ.body ?? {})), `unsigned: 401, no library (${show(unsignedQ)})`);
+    const strangerQ = await asked('laranja', newId('Stranger2'));
+    assert(strangerQ.status === 403 && !('library' in (strangerQ.body ?? {})), `a stranger: 403, no library (${show(strangerQ)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

@@ -302,6 +302,9 @@ export function App() {
     // Each arrival at the Chat tab from elsewhere (a notice, the bell, Home, a profile's Message): the tab shows Chats, not the
     // Forum side a member left it on (ChatTabPage). The tab's own button is not one of these.
     const [chatNavNonce, setChatNavNonce] = useState(0);
+    // The tour's Chat step lands on Chats, as every arrival from elsewhere does, even when the member was already on the tab's
+    // Forum side (T0's note); its words name both sides (core TOUR_WORDS.chatForum), so a switch during the step stays true.
+    useEffect(() => { if (tourTab === 'messages') setChatNavNonce((n) => n + 1); }, [tourTab, tourIndex]);
     // The one arrival that shows the Forum side instead: a forum notice, from the bell or a web push (slice F5).
     const [openChatForum, setOpenChatForum] = useState(false);
     useEffect(() => { if (activeTab !== 'messages') setOpenChatForum(false); }, [activeTab]);

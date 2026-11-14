@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useIdentity } from '../IdentityContext';
 import { usePathname, router } from 'expo-router';
 import { useMemo } from 'react';
-import { dealsNeedingMe, helpSheetFor, isOthersListingDoorbell, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
+import { dealsNeedingMe, forumOn, helpSheetFor, isOthersListingDoorbell, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
 import { webSocketAliveSince } from '../../services/ws-client';
 import { useWords } from '../../components/LanguageProvider';
 import { TourBar, tourSceneInset } from '../../components/TourBar';
@@ -312,7 +312,9 @@ export default function TabLayout() {
     const guide = useGuide();
     const isGlobal = strip.profile?.profile === 'global';
     const moneyShown = !hiddenTabs.includes('ledger');
-    const steps = useMemo(() => coreTourSteps('phone', { global: isGlobal, beans: moneyShown }), [isGlobal, moneyShown]);
+    // Where the forum is on, the Chat step names both sides of the tab's Chats · Forum switch (core tourSteps).
+    const forumShown = forumOn(strip.profile?.features);
+    const steps = useMemo(() => coreTourSteps('phone', { global: isGlobal, beans: moneyShown, forum: forumShown }), [isGlobal, moneyShown, forumShown]);
     const tourRunning = !!tour && !!identity && tour.publicKey === identity.publicKey;
     const tourIndex = tour ? Math.min(tour.step, steps.length - 1) : 0;
     const tourTab = tourRunning ? steps[tourIndex]?.tab ?? null : null;

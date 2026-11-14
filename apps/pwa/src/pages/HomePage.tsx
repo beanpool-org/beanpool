@@ -47,7 +47,7 @@ import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
 import { groupIdKey, lockedGroupsOrNull } from '../lib/group-hold';
 import { isKnownDmConversation } from '../lib/dm-guard';
 import { readChatSettings, homeChatPicked, createHomeBellSettle, HOME_BELL_SETTLE_MS } from '@beanpool/core';
-import { LEARN_HOME_WORDS, knowledgeToCheckLine, learnFigureCount, learnHomeLines } from '@beanpool/core';
+import { LEARN_HOME_WORDS, knowledgeToCheckLine, learnFigureCount, learnHomeLines, forumOn } from '@beanpool/core';
 import type { ChatPickRow } from '../components/AddCardDialog';
 import { useCommunityInfo } from '../lib/features';
 import { onConversationRead } from '../lib/conversation-read';
@@ -2164,7 +2164,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     // The bar is App's (lib/tour-store.ts); Home lends it the chips (Add's own path) and applies the end as it opens: one
     // layout write, then the account's record. Nothing here starts a tour by itself.
     // With the global showcase on, Commons and Ledger are previews there and the tour has their steps, as the phone's does (T5).
-    const tourNode = { global: String(answer?.profile) === 'global', beans: answer?.features.beans !== false, showcase: answer?.features.showcase === true };
+    const tourNode = { global: String(answer?.profile) === 'global', beans: answer?.features.beans !== false, showcase: answer?.features.showcase === true, forum: forumOn(answer?.features) };
     const tourTotal = tourSteps('web', tourNode).length;
     const member = !!answer?.me && !answer.welcome && !visitor;
     // The last step offers no chips any more (DESIGN-home-default-fable.md §2.3: Home already holds the default list); the

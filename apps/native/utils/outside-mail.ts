@@ -18,6 +18,9 @@
  * **Ticks.** The same fetch carries what became of my own items (the outbox's states, paged by time and id from the cursor
  * kept here). A tick for a line this phone doesn't have (a phone restored from 12 words) brings its chat back empty and
  * marked restored, so the chat opens with the reason it is empty.
+ *
+ * **A deadline.** Every request a round or a send makes carries the context's `signal` (React Native's fetch never gives up
+ * by itself), so the caller's deadline (outside-chat-live.ts) ends a stalled request, and the round with it.
  */
 import {
     ADDRESS_CARD_NAME_MAX, addressCardName, newDmMessageId, openOutsideLine, outsideReceiptPayload, readRelayEnvelope,
@@ -47,6 +50,8 @@ export interface OutsideMailContext {
     store: OutsideChatStore;
     /** Whether the account blocked this key (utils/blocklist.ts). */
     isBlocked: (key: string) => Promise<boolean>;
+    /** The caller's deadline: every request made with this context is aborted with it. */
+    signal?: AbortSignal;
 }
 
 const STATES: readonly OutsideLineState[] = ['queued', 'sent', 'delivered', 'failed', 'expired'];
@@ -59,6 +64,19 @@ export class OutsideMailError extends Error {
     }
 }
 
+/**
+ * My server answered no for good: a 4xx but a 429 (try later), 401 (a request signed with a clock that is off), 408 or 425.
+ * A line it refused this way will never go, as it is.
+ */
+export function refusedForGood(e: unknown): e is OutsideMailError {
+    return e instanceof OutsideMailError && e.status >= 400 && e.status < 500 && ![401, 408, 425, 429].includes(e.status);
+}
+
+/** Why a refused line didn't go, in my server's words, or ours when it sent none. */
+function refusalWords(e: OutsideMailError): string {
+    return e.message && !/^HTTP \d+$/.test(e.message) ? e.message : t('Your community refused this message.');
+}
+
 async function answerOf(res: Response): Promise<any> {
     const body = await res.json().catch(() => null);
     if (!res.ok) throw new OutsideMailError(res.status, typeof body?.error === 'string' ? body.error : `HTTP ${res.status}`, body?.code);
@@ -69,14 +87,14 @@ async function answerOf(res: Response): Promise<any> {
  * This community's home as other servers name it: its primary address (GET /api/community/info), on the port this phone
  * reaches it at when the two hosts agree. Kept once read. Null while the community knows none of its names.
  */
-export async function myHome(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'store'>, now = Date.now()): Promise<string | null> {
+export async function myHome(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'store' | 'signal'>, now = Date.now()): Promise<string | null> {
     // Kept as `<home> <when read>`, and read again after HOME_FRESH_MS: a community that moves to a new address signs its
     // requests as the new home, and an envelope naming the old one would be refused (relay-outbox.ts itemProblem).
     const kept = (await ctx.store.getMeta(HOME_META))?.split(' ');
     if (kept?.[0] && now - Number(kept[1]) < HOME_FRESH_MS) return kept[0];
     let primary: string | null = null;
     try {
-        const res = await fetch(`${ctx.nodeUrl.replace(/\/+$/, '')}/api/community/info`);
+        const res = await fetch(`${ctx.nodeUrl.replace(/\/+$/, '')}/api/community/info`, ctx.signal ? { signal: ctx.signal } : undefined);
         const info: any = res.ok ? await res.json().catch(() => null) : null;
         primary = typeof info?.primaryAddress === 'string' ? info.primaryAddress : null;
     } catch {
@@ -113,7 +131,7 @@ async function envelopeFor(ctx: OutsideMailContext, fields: Omit<RelayEnvelopeFi
 }
 
 async function postItems(ctx: OutsideMailContext, items: RelayItem[]): Promise<Array<{ itemId: string; state: string }>> {
-    const answer = await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/send', { items }, ctx.identity as BeanPoolIdentity));
+    const answer = await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/send', { items }, ctx.identity as BeanPoolIdentity, ctx.signal));
     return Array.isArray(answer?.items) ? answer.items : [];
 }
 
@@ -135,8 +153,8 @@ export async function sendOutsideLine(ctx: OutsideMailContext, chatId: string, t
     try {
         answered = await postItems(ctx, [item]);
     } catch (e) {
-        // My server answered no: this line will never go. Unreached: it stays `sending`, and goes at the next sync.
-        if (e instanceof OutsideMailError && e.status >= 400 && e.status < 500 && e.status !== 429) await ctx.store.setMineState(messageId, 'failed');
+        // My server answered no: this line will never go, and says why. Unreached: it stays `sending`, and goes at the next sync.
+        if (refusedForGood(e)) await ctx.store.setMineState(messageId, 'failed', refusalWords(e));
         throw e;
     }
     const state = answered.find((a) => a.itemId === messageId)?.state as OutsideLineState | undefined;
@@ -144,14 +162,61 @@ export async function sendOutsideLine(ctx: OutsideMailContext, chatId: string, t
     return state && STATES.includes(state) ? state : 'sending';
 }
 
-/** Lines my server never answered, sent again (the same items) while they are fresh; older ones are failed. */
+/**
+ * Lines my server never answered, sent again (the same items) while they are fresh; older ones are failed. My server takes
+ * a request whole or refuses it at its first bad item (relay-outbox.ts sendRelayItems), so a refused batch is sent again one
+ * line at a time, and only the lines refused on their own fail, each with my server's words: one bad line never holds the
+ * others. A 403 is about the member or the community (outside messages switched off, a suspended member), never one line:
+ * every line in the batch fails with its words. Anything else (429, 5xx, no answer) leaves them for the next round.
+ */
 async function resendUnsent(ctx: OutsideMailContext, now: number): Promise<void> {
     const unsent = await ctx.store.unsent(ctx.identity.publicKey);
     const fresh = unsent.filter((u) => now - u.at < RESEND_WITHIN_MS);
     for (const u of unsent) if (now - u.at >= RESEND_WITHIN_MS) await ctx.store.setMineState(u.id, 'failed');
     if (!fresh.length) return;
-    const answered = await postItems(ctx, fresh.map((u) => JSON.parse(u.item) as RelayItem));
-    for (const a of answered) if (STATES.includes(a.state as OutsideLineState)) await ctx.store.setMineState(a.itemId, a.state as OutsideLineState);
+    const apply = async (answered: Array<{ itemId: string; state: string }>) => {
+        for (const a of answered) if (STATES.includes(a.state as OutsideLineState)) await ctx.store.setMineState(a.itemId, a.state as OutsideLineState);
+    };
+    try {
+        await apply(await postItems(ctx, fresh.map((u) => JSON.parse(u.item) as RelayItem)));
+        return;
+    } catch (e) {
+        if (!refusedForGood(e)) throw e;
+        if (e.status === 403 || fresh.length === 1) {
+            for (const u of fresh) await ctx.store.setMineState(u.id, 'failed', refusalWords(e));
+            return;
+        }
+    }
+    for (const u of fresh) {
+        try {
+            await apply(await postItems(ctx, [JSON.parse(u.item) as RelayItem]));
+        } catch (e) {
+            if (!refusedForGood(e)) throw e;
+            await ctx.store.setMineState(u.id, 'failed', refusalWords(e));
+            if (e.status === 403) {
+                // Not this line's fault: the rest fail with it, unasked.
+                for (const rest of fresh.slice(fresh.indexOf(u) + 1)) await ctx.store.setMineState(rest.id, 'failed', refusalWords(e));
+                return;
+            }
+        }
+    }
+}
+
+/**
+ * Every line of mine still `sending` fails with `words`, nothing asked: the phone reads its community's switch off, so no
+ * round runs to send them, and my server would refuse them (403) if one did.
+ */
+export async function failUnsent(ctx: Pick<OutsideMailContext, 'identity' | 'store'>, words: string): Promise<number> {
+    const seen = new Set<string>();
+    for (;;) {
+        // unsent() reads 16 at a time; a line read twice was not changed, so the loop stops rather than spin.
+        const unsent = (await ctx.store.unsent(ctx.identity.publicKey)).filter((u) => !seen.has(u.id));
+        if (!unsent.length) return seen.size;
+        for (const u of unsent) {
+            seen.add(u.id);
+            await ctx.store.setMineState(u.id, 'failed', words);
+        }
+    }
 }
 
 export interface SyncOutcome {
@@ -172,9 +237,11 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
     await resendUnsent(ctx, now).catch((e) => console.warn('[OutsideMail] Unsent lines wait for the next round:', e?.message ?? e));
     const open = await doorOpen(ctx.store);
     for (let page = 0; page < PAGES_MAX; page++) {
+        // A plain check: React Native's AbortSignal has no throwIfAborted.
+        if (ctx.signal?.aborted) throw Object.assign(new Error('This round ran out of time.'), { name: 'AbortError' });
         const cursor = (await ctx.store.getMeta(CURSOR_META)) ?? '0:';
         const [since, sinceId] = [cursor.slice(0, cursor.indexOf(':')), cursor.slice(cursor.indexOf(':') + 1)];
-        const answer = await answerOf(await signedGet(ctx.nodeUrl, `/api/mail?since=${encodeURIComponent(since)}&sinceId=${encodeURIComponent(sinceId)}`, ctx.identity as BeanPoolIdentity));
+        const answer = await answerOf(await signedGet(ctx.nodeUrl, `/api/mail?since=${encodeURIComponent(since)}&sinceId=${encodeURIComponent(sinceId)}`, ctx.identity as BeanPoolIdentity, ctx.signal));
         const held: any[] = Array.isArray(answer?.items) ? answer.items : [];
         const done: string[] = [];
         const receipts = new Map<string, { home: string; key: string; ids: string[] }>();
@@ -224,7 +291,7 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
             }
         }
         if (done.length) {
-            const confirmed = await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/confirm', { ids: done }, ctx.identity as BeanPoolIdentity));
+            const confirmed = await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/confirm', { ids: done }, ctx.identity as BeanPoolIdentity, ctx.signal));
             out.confirmed += Number(confirmed?.confirmed) || 0;
         }
         for (const r of receipts.values()) {

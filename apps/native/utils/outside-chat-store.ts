@@ -40,7 +40,8 @@ export const OUTSIDE_CHAT_TABLES_SQL = `
             at INTEGER NOT NULL,
             state TEXT,
             item TEXT,
-            sealed TEXT
+            sealed TEXT,
+            note TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_outside_lines_chat ON outside_lines(chat_id, at);
         CREATE TABLE IF NOT EXISTS outside_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
@@ -53,7 +54,8 @@ export const OUTSIDE_CHAT_DROP_SQL = ' DROP TABLE IF EXISTS outside_chats; DROP 
 export type OutsideChatState = 'request' | 'open' | 'declined';
 /**
  * A line of mine: `sending` until my community's server has it (kept with its signed item, sent again at each sync),
- * then the outbox's own states (relay-outbox.ts): queued, sent, delivered, failed, expired.
+ * then the outbox's own states (relay-outbox.ts): queued, sent, delivered, failed, expired. A line my server refused is
+ * `failed` with its words kept beside it (`note`): why it will never go.
  */
 export type OutsideLineState = 'sending' | 'queued' | 'sent' | 'delivered' | 'failed' | 'expired';
 
@@ -77,6 +79,8 @@ export interface OutsideLine {
     replyTo: string | null;
     at: number;
     state: OutsideLineState | null;
+    /** Why a line of mine failed, in my server's words (or ours when it gave none); null otherwise. */
+    note: string | null;
 }
 
 /** What the gate makes of an item arriving from `peer`. */
@@ -108,6 +112,7 @@ const rowToChat = (r: any): OutsideChat => ({
 });
 const rowToLine = (r: any): OutsideLine => ({
     id: r.id, chatId: r.chat_id, author: r.author, text: r.text, replyTo: r.reply_to ?? null, at: r.at, state: r.state ?? null,
+    note: r.state === 'failed' ? r.note ?? null : null,
 });
 
 const CHAT_COLUMNS = `c.*, (SELECT text FROM outside_lines l WHERE l.chat_id = c.id ORDER BY at DESC LIMIT 1) AS last_text,
@@ -186,11 +191,15 @@ export function outsideChatStore(getDb: () => Promise<SqliteLike>) {
             );
             await d.runAsync('UPDATE outside_chats SET updated_at = ? WHERE id = ?', [now, line.chatId]);
         },
-        /** My line's state as my server tells it. The signed item goes once the server has it (any state but `sending`). */
-        async setMineState(id: string, state: OutsideLineState): Promise<void> {
+        /**
+         * My line's state as my server tells it. The signed item goes once the server has it (any state but `sending`).
+         * `note`: why a `failed` line will never go (my server's words); kept only on a failed line.
+         */
+        async setMineState(id: string, state: OutsideLineState, note: string | null = null): Promise<void> {
             await (await db()).runAsync(
-                `UPDATE outside_lines SET state = ?, item = CASE WHEN ? = 'sending' THEN item ELSE NULL END WHERE id = ? AND state IS NOT NULL`,
-                [state, state, id],
+                `UPDATE outside_lines SET state = ?, item = CASE WHEN ? = 'sending' THEN item ELSE NULL END,
+                     note = CASE WHEN ? = 'failed' THEN ? ELSE NULL END WHERE id = ? AND state IS NOT NULL`,
+                [state, state, state, note, id],
             );
         },
         /** My lines my server has not yet taken, with their signed items, oldest first. */

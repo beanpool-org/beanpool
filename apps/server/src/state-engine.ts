@@ -2134,19 +2134,29 @@ export function getAllMembers(): Member[] {
     return getAllMembersEngine(db);
 }
 
+/**
+ * A retired empty duplicate's rows leave the directory (engine/retire-duplicate.ts): nobody lists, finds or opens one. The
+ * few retired keys, read once a call.
+ */
+function withoutRetired(rows: DirectoryRow[]): DirectoryRow[] {
+    const retired = new Set(db.prepare(`SELECT r.member_pubkey FROM retired_accounts r JOIN members m ON m.public_key = r.member_pubkey
+        WHERE m.status = 'disabled'`).pluck().all() as string[]);
+    return retired.size === 0 ? rows : rows.filter(r => !retired.has(r.public_key as string));
+}
+
 /** The member directory's rows, every one or those changed after a delta cursor (engine members.ts). */
 export function getMemberDirectoryRows(updatedAfter?: unknown): DirectoryRow[] {
-    return getMemberDirectoryRowsEngine(db, updatedAfter);
+    return withoutRetired(getMemberDirectoryRowsEngine(db, updatedAfter));
 }
 
 /** The directory's rows of these members, in the order asked; with `updatedAfter`, only those changed after it (engine members.ts). */
 export function getMemberDirectoryRowsByKeys(keys: string[], updatedAfter?: string): DirectoryRow[] {
-    return getMemberDirectoryRowsByKeysEngine(db, keys, updatedAfter);
+    return withoutRetired(getMemberDirectoryRowsByKeysEngine(db, keys, updatedAfter));
 }
 
 /** The members whose name starts with `prefix`, shortest first, at most `limit` (engine members.ts). */
 export function searchMemberDirectoryRows(prefix: string, limit: number): DirectoryRow[] {
-    return searchMemberDirectoryRowsEngine(db, prefix, limit);
+    return withoutRetired(searchMemberDirectoryRowsEngine(db, prefix, limit));
 }
 
 // ===================== INVITE CODES =====================
@@ -7204,7 +7214,9 @@ interface CommunityCounts { memberCount: number; postCount: number; transactionC
 
 function countCommunity(): CommunityCounts {
     return {
-        memberCount: (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c,
+        // A retired empty duplicate is no member to count (engine/retire-duplicate.ts).
+        memberCount: (db.prepare(`SELECT COUNT(*) as c FROM members WHERE status != 'pruned'
+            AND NOT (status = 'disabled' AND public_key IN (SELECT member_pubkey FROM retired_accounts))`).get() as any).c,
         postCount: getActivePostCount(),
         transactionCount: (db.prepare("SELECT COUNT(*) as c FROM transactions").get() as any).c,
     };
@@ -8692,6 +8704,11 @@ export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled
     if (status !== 'pruned' && isDeletedByOwner(publicKey)) throw new Error(OWNER_DELETED_REFUSAL);
     const was = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(publicKey) as { status: string | null } | undefined)?.status;
     db.prepare("UPDATE members SET status=? WHERE public_key=?").run(status, publicKey);
+    // A retired empty duplicate's mark (retired_accounts, engine/retire-duplicate.ts) holds only while the account stays
+    // 'disabled' from that retire. Every way out of 'disabled' but one comes through here (Bring back, a passed unsuspend
+    // or reinstate vote, Lift, a prune), so the mark goes here: a later pause is then a pause, with its own vote and its
+    // own Lift, and never reads as "retired". The one, the account deleting itself, drops it too (purgeMemberSelf).
+    if (status !== 'disabled') deletePlainRows('retired_accounts', 'member_pubkey = ?', publicKey);
     // A paused account's listings are off the board (engine posts.ts ENTERPRISE_ON_BOARD_SQL), and back when it is active
     // again; members_touch_board_standing moves its standing, which a phone's delta reads. Every other socket hears the
     // listings' doorbell, as for a holiday (setHolidayMode). Asked inside the caller's transaction, it goes once that is
@@ -9411,6 +9428,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // with a tombstone each, so a standby drops them too.
         deletePlainRows('push_tokens', 'public_key = ?', publicKey);
         deletePlainRows('member_badges', 'member_pubkey = ?', publicKey);
+        // A retired empty duplicate may delete itself (https-server.ts isOwnDeleteAccount): its mark goes too, as
+        // setUserStatusRow drops it on every other way out of 'disabled' (this one writes 'pruned' itself, above).
+        deletePlainRows('retired_accounts', 'member_pubkey = ?', publicKey);
         dropPlaceWatches(publicKey);
         scrubKnocksOf(publicKey);
         deletePlainRows('invite_asks', 'asker_pubkey = ?', publicKey);

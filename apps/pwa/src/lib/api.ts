@@ -10,7 +10,7 @@ import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, Tour
 import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type KnockVia } from '@beanpool/core';
 import { readGroupInvitations, type GroupInvitations } from '@beanpool/core';
 import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
-import { communityTagsOf, type CommunityTag } from '@beanpool/core';
+import { communityTagsOf, libraryTagOf, type CommunityTag, type LibraryLabel } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -385,6 +385,9 @@ export interface CommunityInfo {
         /** Present, and true, only once this node takes up an Offer priced for each one (DESIGN-per-item-price-fable.md §6; core
          *  perItemOffered): the create and edit forms offer the unit Each only then. Absent (until every slice is merged, or an older node): not offered. */
         perItem?: true;
+        /** Present, and true, only where this community has a forum (core forumOn): the Chat tab's top is then Chats · Forum
+         *  (pages/ChatTabPage.tsx, slice T0). Absent (its owners switched it off, or an older node): the tab as before. */
+        forum?: true;
     };
     /** Where Start a community's "how to run a node" leads (lib/features.ts startCommunityUrl). Absent: beanpool.org's. */
     startCommunityUrl?: string;
@@ -588,6 +591,17 @@ export async function getCommunityTags(): Promise<CommunityTag[]> {
     } catch {
         return [];
     }
+}
+
+/**
+ * The library tag a typed word is exactly the label of in one of the 25 languages, and that language, as the node knows
+ * them (GET /api/free-tags?q=, slice F5), read by core's libraryTagOf; the phone's utils/community-tags.ts asks the same.
+ * Null when the node names none (an F3 node answers its tag list, which names none). A failed ask REJECTS (offline, a
+ * refusal, a node without the route): the picker keeps only an answer, so a word asked during a network blip is asked again
+ * the next time the field rests on it, and meanwhile the field adds the word as the member's own, as before.
+ */
+export async function getLibraryTagFor(text: string): Promise<LibraryLabel | null> {
+    return libraryTagOf(await request<unknown>('GET', `/api/free-tags?q=${encodeURIComponent(text)}`));
 }
 
 /** The signer's own notices they have not marked seen, oldest first. A node older than the route answers 404. */

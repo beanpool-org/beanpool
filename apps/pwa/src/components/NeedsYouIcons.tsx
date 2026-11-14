@@ -70,8 +70,16 @@ export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: strin
 }
 
 /**
+ * The forum's kinds (core push-notice.ts, slice F5) and the places their details name (server engine/forum-notices.ts,
+ * forum-first-look.ts): a topic, and the first topics waiting for a moderator's look. The web has no page for either yet
+ * (slice F4), so every one lands on the Chat tab's Forum side, as on the phone.
+ */
+const FORUM_NOTICE_KINDS: ReadonlySet<string> = new Set(['forum.reply', 'forum.mention', 'forum.first-look', 'forum.first-look-answer']);
+
+/**
  * Where a tap on a notice lands in the web app: parity with the phone's push tap (apps/native utils/push-notice-check.ts
- * noticeRoute). A post, a chat, an enterprise, a group or an invitation when the notice names one; else its kind's tab.
+ * noticeRoute). A post, a chat, an enterprise, a group or an invitation when the notice names one; the Forum side for the
+ * forum's; else its kind's tab.
  */
 export function goToNoticeTarget(kind: string, data: Record<string, unknown>, onNavigate?: (tab: string, ctxId?: string, txId?: string) => void): void {
     if (!onNavigate) return;
@@ -87,11 +95,14 @@ export function goToNoticeTarget(kind: string, data: Record<string, unknown>, on
         // Local knowledge (slice K4): a member's suggestion to check lands on To check; the answer to one's own, on My suggestions.
         case 'learn-check': return onNavigate('learn-check');
         case 'learn-mine': return onNavigate('learn-mine');
+        case 'forum_topic': case 'forum_first_looks': return onNavigate('messages-forum');
         // A voucher's Ask for more (credit on the People list C3): People → Community, Show credit on, the Vouchers chip and that
         // voucher's row. A build without this screen lands on the kind's tab (People) through the default below.
         case 'credit': return onNavigate('people-credit', typeof data.by === 'string' && /^[0-9a-f]{64}$/.test(data.by) ? `vouchers:${data.by}` : 'vouchers');
         default: break;
     }
+    // The forum's, with no details or none in their shape: the Forum side, never the bare tab (which shows Chats).
+    if (FORUM_NOTICE_KINDS.has(kind)) return onNavigate('messages-forum');
     const tab = isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
     // A request to join lands on Invites as a notice's visit, as the phone's `from=notice` and the "N people asked to join"
     // line: if every request is answered by now, Invites says so instead of showing nothing (WantsToJoin, #3003).

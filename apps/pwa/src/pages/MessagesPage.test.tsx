@@ -118,6 +118,11 @@ vi.mock('../lib/api', () => ({
     // Groups' New group: the Commons form, opened on Messages.
     createGroup: vi.fn(),
     groupKeysNet: { get: vi.fn(async () => new Response('{}', { status: 404 })), post: vi.fn(async () => new Response('{}', { status: 404 })) },
+    // Contacts (opened from Import contacts) asks which community it is on, to tell an invite made here (slice C5); with no
+    // invite made, nothing reads the member's invites or cancels one.
+    nodeAddress: vi.fn(() => window.location.origin),
+    getMyInvites: vi.fn(async () => ({ invites: [] })),
+    revokeInvite: vi.fn(),
 }));
 
 // The node's own word (/api/community/info): a node that cannot be asked, unless a test says what it answers. Beans then
@@ -1923,5 +1928,38 @@ describe('MessagesPage: private contacts in Chat (DESIGN-private-contacts-fable.
         expect(row).toHaveTextContent('👥 Import contacts');
         fireEvent.click(row);
         expect(await screen.findByTestId('contacts-page')).toBeInTheDocument();
+    });
+});
+
+describe('MessagesPage: the Chat tab\'s Chats · Forum switch (pages/ChatTabPage.tsx, slice T0)', () => {
+    beforeEach(() => {
+        mockConversations = [{
+            id: 'conv-1', type: 'dm', name: null, participants: ['my-pubkey', 'peer-pubkey'], createdBy: 'my-pubkey',
+            peerCallsign: 'Bob', unreadCount: 0, createdAt: '2026-09-14T00:00:00Z',
+        } as Conversation];
+        mockMessagesByConv = { 'conv-1': [] };
+    });
+
+    it('draws the switch it is handed first in the list, above the heading and the chips', async () => {
+        render(<MessagesPage identity={mockIdentity} frame={<div data-testid="the-frame" />} />);
+        const chips = await screen.findByTestId('conversation-filter-chips');
+        const frame = screen.getByTestId('the-frame');
+        expect(frame.parentElement!.firstElementChild).toBe(frame);
+        expect(frame.compareDocumentPosition(screen.getByRole('heading', { level: 2 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(frame.compareDocumentPosition(chips) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('not over an open conversation, which keeps the whole height it has today', async () => {
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" frame={<div data-testid="the-frame" />} />);
+        await screen.findByPlaceholderText('Message...');
+        expect(screen.queryByTestId('the-frame')).toBeNull();
+        expect(screen.queryByTestId('conversation-filter-chips')).toBeNull();
+    });
+
+    it('with none handed to it (no forum here), the list is as it was', async () => {
+        render(<MessagesPage identity={mockIdentity} />);
+        const chips = await screen.findByTestId('conversation-filter-chips');
+        expect(chips.parentElement!.querySelector('[role="tablist"]')).toBeNull();
+        expect(screen.getByRole('heading', { level: 2 }).parentElement!.parentElement!.firstElementChild).toBe(screen.getByRole('heading', { level: 2 }).parentElement);
     });
 });

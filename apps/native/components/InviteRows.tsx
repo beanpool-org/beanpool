@@ -4,7 +4,8 @@
  * so a second, plain invite was made for her. Now:
  *
  *   Pending (n) ›  and  Joined (n) ›   folded, closed until opened (and kept open for the session once opened), count in the row
- *   each Pending row   who it is for (the name opened from the names list on this phone, else the note, else the code), what it
+ *   each Pending row   who it is for (the name opened from the names list on this phone, else the name of the contact it was made
+ *                      for, from the private contacts list on this phone (C5), else the note, else the code), what it
  *                      carries ("200 vouch · voucher budget 1,000 · confirms them as known"), "23 days left" (red at 3 or fewer)
  *   the whole row      opens the invite: its QR and Share (the caller's, the text message)
  *   the made card      "Invite for Sam · 200 vouch · voucher budget 1,000 · 30 days left" and Share
@@ -38,12 +39,12 @@ const dayWords = (iso: string | null | undefined): string => {
 };
 
 /** The three lines of an invite: who, what it carries, how long. */
-function InviteLines({ inv, name, now, nameOnPhone }: { inv: InviteRowSource; name?: string | null; now: number; nameOnPhone?: boolean }) {
+function InviteLines({ inv, name, contactName, now, nameOnPhone }: { inv: InviteRowSource; name?: string | null; contactName?: string | null; now: number; nameOnPhone?: boolean }) {
     const styles = useStyles(makeStyles);
     const left = inviteTimeLeft(inv, now);
     return (
         <View style={styles.lines}>
-            <Text style={styles.who} maxFontSizeMultiplier={1.3} numberOfLines={2} testID="invite-who">{inviteWho(inv, { name, nameOnPhone })}</Text>
+            <Text style={styles.who} maxFontSizeMultiplier={1.3} numberOfLines={2} testID="invite-who">{inviteWho(inv, { name, nameOnPhone, contactName })}</Text>
             <Text style={styles.carries} maxFontSizeMultiplier={1.3} testID="invite-carries">{inviteCarries(inv)}</Text>
             {left ? <Text style={[styles.left, left.urgent && styles.leftUrgent]} maxFontSizeMultiplier={1.3} testID="invite-left">{left.text}</Text> : null}
         </View>
@@ -83,6 +84,10 @@ export interface PendingInvitesProps {
     names: ReadonlyMap<string, string>;
     /** Pending is open with an invite bound to a names-list entry in it: the caller opens the list so the names can be shown. */
     onNeedNames?: (need: boolean) => void;
+    /** Names from the member's private contacts on this phone, by code in lower case (core contactInviteNames; C5). */
+    contactNames?: ReadonlyMap<string, string>;
+    /** A fold is open with an invite in it that has no note and no names-list entry: the caller opens the contacts list. */
+    onNeedContacts?: (need: boolean) => void;
     /** What the QR of an open invite holds: its link. */
     qrValue: (code: string) => string;
     /** What goes under an open invite's QR: the Share button (or, where invites are only previewed, the marker that says so). */
@@ -91,7 +96,7 @@ export interface PendingInvitesProps {
     onRevoke?: (inv: InviteRowSource) => Promise<boolean>;
 }
 
-export function PendingInvites({ invites, now, names, onNeedNames, qrValue, shareSlot, onRevoke }: PendingInvitesProps) {
+export function PendingInvites({ invites, now, names, onNeedNames, contactNames, onNeedContacts, qrValue, shareSlot, onRevoke }: PendingInvitesProps) {
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
     const [pendingOpen, togglePending] = useFold('pending');
@@ -102,8 +107,12 @@ export function PendingInvites({ invites, now, names, onNeedNames, qrValue, shar
     // A name is read from the list only for a fold that is open and holds an invite bound to an entry.
     const needNames = (pendingOpen && pending.some((i) => !!i.namesEntryId)) || (joinedOpen && joined.some((i) => !!i.namesEntryId));
     useEffect(() => { onNeedNames?.(needNames); }, [needNames, onNeedNames]);
+    const plain = (i: InviteRowSource) => !i.namesEntryId && !i.forKnock && !i.intendedFor?.trim();
+    const needContacts = (pendingOpen && pending.some(plain)) || (joinedOpen && joined.some(plain));
+    useEffect(() => { onNeedContacts?.(needContacts); }, [needContacts, onNeedContacts]);
     const opened = openCode ? pending.find((i) => i.code === openCode) ?? null : null;
     const nameFor = (inv: InviteRowSource) => (inv.namesEntryId ? names.get(inv.namesEntryId) ?? null : null);
+    const contactFor = (inv: InviteRowSource) => contactNames?.get(inv.code.toLowerCase()) ?? null;
 
     const fold = (label: string, open: boolean, toggle: () => void, testID: string) => (
         <Pressable
@@ -131,7 +140,7 @@ export function PendingInvites({ invites, now, names, onNeedNames, qrValue, shar
                             style={styles.row}
                             testID="invite-pending-row"
                         >
-                            <InviteLines inv={inv} name={nameFor(inv)} now={now} />
+                            <InviteLines inv={inv} name={nameFor(inv)} contactName={contactFor(inv)} now={now} />
                             <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
                         </Pressable>
                     )) : null}
@@ -142,7 +151,7 @@ export function PendingInvites({ invites, now, names, onNeedNames, qrValue, shar
                 <View>
                     {fold(joinedHeading(joined.length), joinedOpen, toggleJoined, 'invites-joined-fold')}
                     {joinedOpen ? joined.map((inv) => {
-                        const who = inviteWho(inv, { name: nameFor(inv) });
+                        const who = inviteWho(inv, { name: nameFor(inv), contactName: contactFor(inv) });
                         return (
                             <View key={inv.code} style={[styles.row, styles.joinedRow]} testID="invite-joined-row">
                                 <View style={styles.lines}>
@@ -162,7 +171,7 @@ export function PendingInvites({ invites, now, names, onNeedNames, qrValue, shar
                     <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpenCode(null)} accessibilityRole="button" accessibilityLabel={t('Close')} />
                     {opened ? (
                         <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetBody} testID="invite-sheet">
-                            <InviteLines inv={opened} name={nameFor(opened)} now={now} />
+                            <InviteLines inv={opened} name={nameFor(opened)} contactName={contactFor(opened)} now={now} />
                             <View style={styles.qrBox}>
                                 <QRCode value={qrValue(opened.code)} size={180} />
                             </View>

@@ -4,7 +4,7 @@ import * as api from '../lib/api';
 import * as sync from '../lib/sync';
 import { HeaderControls, HeaderTitle } from './HeaderControls';
 import { goToNoticeTarget, NeedsYouIcons, noticeHasDestination } from './NeedsYouIcons';
-import { BELL_PAGE_EVENT, type BellNotice } from '@beanpool/core';
+import { BELL_PAGE_EVENT, PUSH_NOTICE_KINDS, type BellNotice } from '@beanpool/core';
 import { HomePage } from '../pages/HomePage';
 import type { NeedsItem } from '../lib/home-cards';
 import { freshHomeForHeader, recordHomeAnswer, resetHomeStoreForTests } from '../lib/home-store';
@@ -714,6 +714,35 @@ describe('goToNoticeTarget: where a row lands, as the phone\'s push tap', () => 
             nav.mockClear();
             goToNoticeTarget(kind, data, nav);
             expect(nav).toHaveBeenCalledWith(...args);
+        }
+    });
+
+    it('every Chat tab kind with no details: Chats for the four chat kinds, the Forum side for the forum\'s four; the forum\'s places too (slice F5, parity with the phone)', () => {
+        const nav = vi.fn();
+        const lands: Record<string, string> = {
+            'chat.message': 'messages', 'chat.group': 'messages', 'chat.mention': 'messages', 'group.lead': 'messages',
+            'forum.reply': 'messages-forum', 'forum.mention': 'messages-forum', 'forum.first-look': 'messages-forum', 'forum.first-look-answer': 'messages-forum',
+        };
+        const chatKinds = (Object.keys(PUSH_NOTICE_KINDS) as Array<keyof typeof PUSH_NOTICE_KINDS>).filter((k) => PUSH_NOTICE_KINDS[k].tab === 'chats');
+        expect([...chatKinds].sort()).toEqual(Object.keys(lands).sort());
+        for (const kind of chatKinds) {
+            nav.mockClear();
+            goToNoticeTarget(kind, {}, nav);
+            expect(nav, kind).toHaveBeenCalledWith(lands[kind]);
+            expect(noticeHasDestination(kind, {}), kind).toBe(true);
+        }
+        // What the node answers for them (server engine/forum-notices.ts, forum-first-look.ts): the Forum side, ids unread.
+        const answers: Array<[string, Record<string, unknown>]> = [
+            ['forum.reply', { screen: 'forum_topic', topicId: 't1', postId: 'p1', number: 3 }],
+            ['forum.mention', { screen: 'forum_topic', topicId: 't1', postId: 'p2', number: 4 }],
+            ['forum.first-look', { kind: 'forum_first_look_waiting', waitingId: 'w1', screen: 'forum_first_looks' }],
+            ['forum.first-look-answer', { kind: 'forum_first_look_answered', outcome: 'ok', topicId: 't1', screen: 'forum_topic' }],
+            ['not.a.kind', { screen: 'forum_topic', topicId: 't1' }],
+        ];
+        for (const [kind, data] of answers) {
+            nav.mockClear();
+            goToNoticeTarget(kind, data, nav);
+            expect(nav, kind).toHaveBeenCalledWith('messages-forum');
         }
     });
 

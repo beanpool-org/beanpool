@@ -3,8 +3,8 @@
  * F3): what both apps' pickers make of GET /api/free-tags, and what a word an owner merged into a library tag commits as.
  */
 import { describe, expect, it } from 'vitest';
-import { tagIndex } from '../tags/index.js';
-import { COMMUNITY_TAGS_SHOWN, communityTagsFor, communityTagsOf, mergedInto } from '../tags/community-tags.js';
+import { exactTagForms, tagIndex } from '../tags/index.js';
+import { COMMUNITY_TAGS_SHOWN, communityTagsFor, communityTagsOf, didYouMeanTag, libraryTagOf, mergedInto } from '../tags/community-tags.js';
 import { enterTypedTags, exactLibraryTag, typedTag } from '../tags/typed-tags.js';
 import { FREE_TAGS_MAX } from '../tags/free-tags.js';
 
@@ -97,5 +97,77 @@ describe('a word an owner merged into a library tag commits as that tag', () => 
     it('a merge into an id this app cannot label is no merge', () => {
         const unknown = mergedInto([{ tag: 'limones', listings: 2, mergeInto: 'food.fruit.not-a-tag' }], tagIndex());
         expect(unknown('limones')).toBeNull();
+    });
+});
+
+describe('"Did you mean …?": the library tag a word names in another language (slice F5)', () => {
+    it("reads the node's library and lang: a library item with its language; never a top, an unknown id, no language, garbage", () => {
+        expect(libraryTagOf({ library: 'food.fruit.orange', lang: 'pt' })).toEqual({ id: 'food.fruit.orange', lang: 'pt' });
+        expect(libraryTagOf({ library: 'food.fruit.orange', lang: 'zh-Hant' })).toEqual({ id: 'food.fruit.orange', lang: 'zh-Hant' });
+        for (const answer of [
+            { library: 'food', lang: 'pt' }, { library: 'food.fruit.not-a-tag', lang: 'pt' }, { library: null, lang: null },
+            { library: 7, lang: 'pt' }, { library: 'food.fruit.orange' }, { library: 'food.fruit.orange', lang: null },
+            { library: 'food.fruit.orange', lang: '<b>pt</b>' }, { library: 'food.fruit.orange', lang: 'Português' },
+            {}, null, 'x', { tags: [] },
+        ]) {
+            expect(libraryTagOf(answer), JSON.stringify(answer)).toBeNull();
+        }
+    });
+
+    const none = { tags: [] as string[], freeTags: [] as string[] };
+    const orange = { id: 'food.fruit.orange', lang: 'pt' };
+    it('offers the tag for exactly the word being added, when the listing does not hold it and no library row shows at all', () => {
+        const found = { tag: 'laranja', found: orange };
+        expect(didYouMeanTag('laranja', found, none, [])).toEqual(orange);
+        expect(didYouMeanTag('laranja', found, none, ['food.fruit.orange']), 'already a library row').toBeNull();
+        expect(didYouMeanTag('laranja', found, none, ['food.fruit.mandarin']), 'any library row: the member\'s own words reach it').toBeNull();
+        expect(didYouMeanTag('laranja', found, { tags: ['food.fruit.orange'], freeTags: [] }, []), 'held').toBeNull();
+        expect(didYouMeanTag('laranj', found, none, []), 'an answer for another word').toBeNull();
+        expect(didYouMeanTag(null, found, none, []), 'nothing to add').toBeNull();
+        expect(didYouMeanTag('laranja', { tag: 'laranja', found: null }, none, []), 'the node named none').toBeNull();
+        expect(didYouMeanTag('laranja', null, none, []), 'not asked yet').toBeNull();
+        expect(didYouMeanTag('laranja', { tag: 'laranja', found: { id: 'food.fruit.not-a-tag', lang: 'pt' } }, none, []),
+            'an id this app cannot label').toBeNull();
+    });
+
+    it("on an English index a word the member's own search reaches gets no row (pan, cat, man); one it reaches nowhere does (mist)", () => {
+        const en = tagIndex();
+        const bread = { id: 'food.bakery.bread', lang: 'es' };
+        for (const typed of ['pan', 'cat', 'man']) {
+            const shown = en.search(typed, 12);
+            expect(shown.length, `${typed}: the English index lists rows`).toBeGreaterThan(0);
+            expect(didYouMeanTag(typed, { tag: typed, found: bread }, none, shown), typed).toBeNull();
+        }
+        const manure = { id: 'garden.soil.manure', lang: 'de' };
+        expect(en.search('mist', 12)).toEqual([]);
+        expect(didYouMeanTag('mist', { tag: 'mist', found: manure }, none, en.search('mist', 12))).toEqual(manure);
+    });
+
+    it('Enter still adds the word as the member\'s own: a label in a third language is a suggestion, never a swap', () => {
+        expect(typedTag('laranja', none, tagIndex())).toEqual({ kind: 'free', tag: 'laranja' });
+    });
+});
+
+describe("exactTagForms: how the node keys every language's labels, marks kept (slice F5)", () => {
+    it("keeps every mark and letter, lower case and NFC, with the index's word split and compound join", () => {
+        expect(exactTagForms('Maçã')).toEqual(['maçã']);
+        expect(exactTagForms('Cát')).toEqual(['cát']);
+        expect(exactTagForms('Mận')).toEqual(['mận']);
+        expect(exactTagForms('Œufs')).toEqual(['œufs']);
+        expect(exactTagForms('Limão-siciliano')).toEqual(['limão siciliano', 'limãosiciliano']);
+        expect(exactTagForms('Wi-Fi')).toEqual(['wi fi', 'wifi']);
+    });
+
+    it('reads a word typed decomposed (NFD) as the same key', () => {
+        const nfd = 'Limão'.normalize('NFD');
+        expect(nfd).not.toBe('Limão');
+        expect(exactTagForms(nfd)).toEqual(['limão']);
+        expect(exactTagForms('Limão-siciliano'.normalize('NFD'))).toEqual(['limão siciliano', 'limãosiciliano']);
+    });
+
+    it("never folds one language's word into another's: cat is no Cát, maca no maçã, man no Mận", () => {
+        expect(exactTagForms('cat')).not.toEqual(exactTagForms('Cát'));
+        expect(exactTagForms('maca')).not.toEqual(exactTagForms('maçã'));
+        expect(exactTagForms('man')).not.toEqual(exactTagForms('Mận'));
     });
 });

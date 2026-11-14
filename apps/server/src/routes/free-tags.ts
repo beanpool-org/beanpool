@@ -3,12 +3,16 @@
  * Signed; a member of this community who reads as one (readsAsMember): a visitor does not compose, so anyone else 403
  * `not_member`, a paused member 403 `not_active`, unsigned 401 `unsigned`.
  *   GET /api/free-tags → { tags: [{ tag, listings, mergeInto? }] }   (most used first; the apps filter as the member types)
+ *   GET /api/free-tags?q=<word> → { library: '<tag id>' | null, lang: '<code>' | null }   (slice F5: the library tag the
+ *     word is exactly a label of in one of the 25 languages, and that language, so the field can ask "Did you mean …?
+ *     (Deutsch)" above the member's own word; the apps ask only for a word their own language and English do not name, once
+ *     the field is still. One q, a word a listing could carry, else nulls.)
  * The owners' and admins' page and its rules are routes/admin.ts (/api/local/admin/free-tags).
  */
 import Router from '@koa/router';
 import { word } from '@beanpool/core';
 import { isNodeMember, readsAsMember } from '../state-engine.js';
-import { offeredFreeTags } from '../engine/free-tags.js';
+import { libraryTagNamed, offeredFreeTags } from '../engine/free-tags.js';
 import type { RouteDeps } from './types.js';
 
 const ONLY_MEMBERS = word("Only a member of this community can see the tags its members use.");
@@ -23,6 +27,11 @@ export function createFreeTagRoutes(_deps?: RouteDeps): Router {
         if (!isNodeMember(key)) { ctx.status = 403; ctx.body = { error: ONLY_MEMBERS, code: 'not_member' }; return; }
         if (!readsAsMember(key)) { ctx.status = 403; ctx.body = { error: PAUSED, code: 'not_active' }; return; }
         ctx.set('Cache-Control', 'private, no-store');
+        if (ctx.query.q !== undefined) {
+            const found = libraryTagNamed(ctx.query.q);
+            ctx.body = { library: found?.id ?? null, lang: found?.lang ?? null };
+            return;
+        }
         ctx.body = { tags: offeredFreeTags() };
     });
 

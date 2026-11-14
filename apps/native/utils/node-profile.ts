@@ -144,6 +144,12 @@ export interface NodeFeatures {
      */
     voiceLines?: boolean;
     /**
+     * This community has a forum (apps/server engine/forum.ts; core forumOn): on from the start, members only, until its
+     * owners switch it off. The Chat tab's top is then Chats · Forum (core chatSides, slice T0). A node that doesn't say has
+     * none, or is from before it: the title "Chat", as before.
+     */
+    forum?: boolean;
+    /**
      * This node sends the forum's notices and takes the member's Forum switch (`notify_forum`; apps/server
      * engine/forum-notices.ts, slice F5; core forumNoticesOn): Settings → Notifications shows that switch only then. A node
      * that doesn't say (no forum, or from before F5) sends none and refuses the key.
@@ -163,7 +169,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
-    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forumNotices',
+    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forum', 'forumNotices',
 ];
 
 export interface NodeProfile {

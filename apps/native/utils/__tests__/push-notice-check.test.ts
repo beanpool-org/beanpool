@@ -415,7 +415,7 @@ describe('a tap is followed only for a valid notice; anything else goes nowhere 
         const forgotten = mullum.notice('trade.update', kim.publicKey);
         mullum.details.clear();
         await tap(push(forgotten));
-        expect(navigated).toEqual(['/(tabs)/chats', '/(tabs)/market']);
+        expect(navigated).toEqual(['/(tabs)/chats?view=messages', '/(tabs)/market']);
     });
 
     it('wrong key, replayed to another member, a community the phone doesn\'t keep: no request, no navigation, the line once each', async () => {
@@ -480,7 +480,7 @@ describe('a tap is followed only for a valid notice; anything else goes nowhere 
         down.add(BYRON);
         const data = byron.notice('chat.message', kim.publicKey, { data: { screen: 'chat', conversationId: CHAT_ID } });
         await tap(push(data));
-        expect(openedIn).toEqual([{ community: BYRON, id: data.i, route: '/(tabs)/chats' }]);
+        expect(openedIn).toEqual([{ community: BYRON, id: data.i, route: '/(tabs)/chats?view=messages' }]);
         expect(navigated).toEqual([]);
     });
 
@@ -608,7 +608,7 @@ describe('no string from a push, nor a forged target from an answer, reaches the
     it('noticeRoute takes a post or chat id only in the node\'s own shape; anything else lands on the kind\'s tab', () => {
         for (const bad of [...FORGED, 42, null, ['a'], { a: 1 }]) {
             expect(noticeRoute('market.request', { screen: 'post', postId: bad })).toBe('/(tabs)/market');
-            expect(noticeRoute('chat.message', { screen: 'chat', conversationId: bad })).toBe('/(tabs)/chats');
+            expect(noticeRoute('chat.message', { screen: 'chat', conversationId: bad })).toBe('/(tabs)/chats?view=messages');
         }
         expect(noticeRoute('market.request', { screen: 'post', postId: POST_ID })).toBe(`/post/${POST_ID}`);
         expect(noticeRoute('chat.group', { screen: 'chat', conversationId: CHAT_ID, groupId: CHAT_ID })).toBe(`/chat/${CHAT_ID}`);
@@ -618,6 +618,42 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         // Someone asked to join after a listing this member shared (A3): their Shared outside; without details, Settings.
         expect(noticeRoute('community.knock-shared', { screen: 'shared-outside' })).toBe('/shared-outside');
         expect(noticeRoute('community.knock-shared', null)).toBe('/(tabs)/settings');
+    });
+
+    it('a Chat tab notice whose details never came names the pane its chat is in, or the Forum for the forum\'s, so the tab lands there from the other side (review of #3146, slice F5)', () => {
+        // Chats at Messages for a person's message; at Groups for the group kinds; the Forum side for the forum's. Never the bare
+        // tab, which keeps whichever side the member left it on.
+        const pane: Record<string, NoticeRoute> = {
+            'chat.message': '/(tabs)/chats?view=messages',
+            'chat.group': '/(tabs)/chats?view=groups',
+            'chat.mention': '/(tabs)/chats?view=groups',
+            'group.lead': '/(tabs)/chats?view=groups',
+            'forum.reply': '/(tabs)/chats?view=forum',
+            'forum.mention': '/(tabs)/chats?view=forum',
+            'forum.first-look': '/(tabs)/chats?view=forum',
+            'forum.first-look-answer': '/(tabs)/chats?view=forum',
+        };
+        // Every kind the core sends to the Chat tab is one of those eight.
+        const chatKinds = (Object.keys(PUSH_NOTICE_KINDS) as PushNoticeKind[]).filter((k) => PUSH_NOTICE_KINDS[k].tab === 'chats');
+        expect(chatKinds.sort()).toEqual(Object.keys(pane).sort());
+        for (const details of [null, undefined, {}, { screen: 'nowhere' }]) {
+            for (const kind of chatKinds) expect(noticeRoute(kind, details), kind).toBe(pane[kind]);
+        }
+        // Each still has somewhere of its own, so the bell offers Open.
+        for (const kind of chatKinds) expect(noticeHasDestination(kind, null), kind).toBe(true);
+    });
+
+    it('a forum notice with its details lands on the Forum side too: the topic, or the first topics waiting, as the node names them (slice F5)', () => {
+        // What the node answers (server engine/forum-notices.ts, forum-first-look.ts). Neither app has a topic page yet.
+        const topic = { screen: 'forum_topic', topicId: POST_ID, postId: CHAT_ID, number: 3 };
+        for (const kind of ['forum.reply', 'forum.mention'] as const) expect(noticeRoute(kind, topic), kind).toBe('/(tabs)/chats?view=forum');
+        expect(noticeRoute('forum.first-look', { kind: 'forum_first_look_waiting', waitingId: POST_ID, screen: 'forum_first_looks' })).toBe('/(tabs)/chats?view=forum');
+        expect(noticeRoute('forum.first-look-answer', { kind: 'forum_first_look_answered', outcome: 'ok', topicId: POST_ID, screen: 'forum_topic' })).toBe('/(tabs)/chats?view=forum');
+        // A kind this build doesn't know, naming a forum place: the Forum, with Open in the bell.
+        expect(noticeRoute(null, topic)).toBe('/(tabs)/chats?view=forum');
+        expect(noticeHasDestination(null, { screen: 'forum_first_looks' })).toBe(true);
+        // The ids are never read: nothing from the answer reaches the route.
+        expect(noticeRoute('forum.reply', { screen: 'forum_topic', topicId: '../settings' })).toBe('/(tabs)/chats?view=forum');
     });
 
     it('an answer to a suggestion of Local knowledge lands on My suggestions, added or not, with somewhere to Open (slice K4)', () => {
@@ -706,7 +742,7 @@ describe('no string from a push, nor a forged target from an answer, reaches the
             await tap(push(mullum.notice('market.request', kim.publicKey, { data: { screen: 'post', postId: bad } })));
             await tap(push(mullum.notice('chat.message', kim.publicKey, { data: { screen: 'chat', conversationId: bad } })));
         }
-        expect(new Set(navigated)).toEqual(new Set(['/(tabs)/market', '/(tabs)/chats']));
+        expect(new Set(navigated)).toEqual(new Set(['/(tabs)/market', '/(tabs)/chats?view=messages']));
     });
 
     it('what a push itself carries (screen, postId, conversationId, url) is never read, signed or not', async () => {

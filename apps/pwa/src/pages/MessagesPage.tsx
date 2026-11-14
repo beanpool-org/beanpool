@@ -179,6 +179,8 @@ interface Props {
     onNavigate?: (tab: string, contextId?: string, txId?: string) => void;
     /** A person's profile: a request's sender, from their card or the chat's header in request mode. */
     onOpenProfile?: (pubkey: string) => void;
+    /** The Chat tab's Chats · Forum switch (pages/ChatTabPage.tsx, slice T0), drawn at the top of the list only. */
+    frame?: ReactNode;
 }
 
 // ⚡ Bolt: O(1) Map lookup helper for transaction seller resolution in system messages
@@ -267,7 +269,7 @@ function GroupChatImageBubble({ photoKey, open, onOpen }: { photoKey: string; op
 /** A tab flicked back and forth asks global at most this often (the phone's ASK_EVERY_MS, apps/native utils/global-requests.ts). */
 const ASK_GLOBAL_EVERY_MS = 5 * 60 * 1000;
 
-export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate, onOpenProfile }: Props) {
+export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate, onOpenProfile, frame }: Props) {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     // The message requests waiting for this member (lib/dm-requests.ts), as the node lists them apart from their chats;
     // null where the community has requests off (its list has no `requests`).
@@ -3914,6 +3916,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     return (
         <div className="p-4 md:p-6 max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full">
+            {/* The Chat tab's Chats · Forum switch where this community's forum is on (pages/ChatTabPage.tsx): the list's top only. */}
+            {frame}
             {/* Wraps: at 320px with 1.3x text, Groups' two buttons go under the title rather than squeeze it. */}
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                 <h2 style={{ fontSize: '1.3rem', margin: 0 }}>{t('💬 Messages')}</h2>

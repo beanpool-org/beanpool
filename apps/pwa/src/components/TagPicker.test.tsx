@@ -2,7 +2,8 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import React, { useState } from 'react';
 import { TagPicker } from './TagPicker';
-import { POST_TAGS_MAX, SUGGESTED_TAGS_MAX, searchTagsFor, tagIndex, postTagsOf, buildTagIndex, wordKey, wordsFor, setLanguage } from '@beanpool/core';
+import { POST_TAGS_MAX, SUGGESTED_TAGS_MAX, searchTagsFor, tagIndex, postTagsOf, buildTagIndex, wordKey, wordsFor, setLanguage, type LibraryLabel } from '@beanpool/core';
+import ES_WORDS from '@beanpool/core/words/es.json';
 import { matchesExpandedSearch } from '../lib/search';
 
 // FIXTURE, not a real translation: a Spanish catalog that names ONE tag (lemon) and leaves every other tag in English. The
@@ -487,5 +488,146 @@ describe("this community's typed tags (DESIGN-tags-free-entry-fable.md §3, §5,
         expect(screen.queryByTestId('tag-picker-used-here')).toBeNull();
         fireEvent.keyDown(field(), { key: 'Enter', code: 'Enter' });
         expect(held.freeTags).toEqual(['han']);
+    });
+});
+
+describe('"Did you mean …?": a word that is a library label in another language (DESIGN-tags-free-entry-fable.md §3, slice F5)', () => {
+    const held = { tags: [] as string[], freeTags: [] as string[] };
+    type Ask = (text: string) => Promise<LibraryLabel | null>;
+    function Composer({ ask, tags = [] }: { ask: Ask; tags?: string[] }) {
+        const [nowTags, setTags] = useState<string[]>(tags);
+        const [nowFree, setFree] = useState<string[]>([]);
+        held.tags = nowTags;
+        held.freeTags = nowFree;
+        return <TagPicker tags={nowTags} onChange={setTags} freeTags={nowFree} onFreeTagsChange={setFree} category="food"
+            communityTags={() => Promise.resolve([])} libraryTagFor={ask} />;
+    }
+    // The node as F5 answers, exactly and with the label's language (its pinned cases, test-free-tag-suggestions.ts §9).
+    const ANSWERS: Record<string, LibraryLabel> = {
+        laranja: { id: 'food.fruit.orange', lang: 'pt' },
+        mist: { id: 'garden.soil.manure', lang: 'de' },
+        pan: { id: 'food.bakery.bread', lang: 'es' },
+        'limão': { id: 'food.fruit.lime', lang: 'pt' },
+    };
+    const node = () => vi.fn((text: string) => Promise.resolve(ANSWERS[text] ?? null));
+    const open = async (ask: Ask, tags?: string[]) => {
+        render(<Composer ask={ask} tags={tags} />);
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+        await screen.findByRole('dialog');
+    };
+    const field = () => screen.getByPlaceholderText('Search tags...') as HTMLInputElement;
+    const type = (value: string) => fireEvent.change(field(), { target: { value } });
+    const meant = () => screen.queryByTestId('tag-picker-did-you-mean');
+    const still = () => act(async () => { await new Promise((r) => setTimeout(r, 600)); });
+
+    it('a Portuguese label on a device in another language: the library tag above "Add", asked once the field is still', async () => {
+        const ask = node();
+        await open(ask);
+        type('lar');
+        type('laranja');
+        expect(ask).not.toHaveBeenCalled();
+        expect(await screen.findByTestId('tag-picker-did-you-mean', {}, { timeout: 2000 })).toHaveTextContent('Did you mean “Orange”? (Português)');
+        expect(ask).toHaveBeenCalledTimes(1);
+        expect(ask).toHaveBeenCalledWith('laranja');
+        const rows = [...screen.getByRole('dialog').querySelectorAll('[data-testid^="tag-picker-"]')].map((el) => el.getAttribute('data-testid'));
+        expect(rows.indexOf('tag-picker-did-you-mean')).toBeLessThan(rows.indexOf('tag-picker-add-typed'));
+    });
+
+    it("a tap on it holds the library tag and empties the field; Enter instead adds the word as the member's own", async () => {
+        await open(node());
+        type('laranja');
+        fireEvent.click(await screen.findByTestId('tag-picker-did-you-mean', {}, { timeout: 2000 }));
+        expect(held.tags).toEqual(['food.fruit.orange']);
+        expect(held.freeTags).toEqual([]);
+        expect(field().value).toBe('');
+        type('laranja');
+        fireEvent.keyDown(field(), { key: 'Enter', code: 'Enter' });
+        expect(held.freeTags).toEqual(['laranja']);
+    });
+
+    it('none when the listing already holds the tag, nor for a word no language labels', async () => {
+        const ask = node();
+        await open(ask, ['food.fruit.orange']);
+        type('laranja');
+        await still();
+        expect(ask).toHaveBeenCalledWith('laranja');
+        expect(meant()).toBeNull();
+        type('zzqx');
+        await still();
+        expect(meant()).toBeNull();
+        expect(screen.getByTestId('tag-picker-add-typed')).toHaveTextContent('Add “#zzqx”');
+    });
+
+    it('a word asked once is not asked again, and a word the device names itself is never asked', async () => {
+        const ask = node();
+        await open(ask);
+        type('laranja');
+        await screen.findByTestId('tag-picker-did-you-mean', {}, { timeout: 2000 });
+        type('zzqx');
+        type('laranja');
+        expect(meant()).not.toBeNull();
+        type('lemon');
+        await still();
+        expect(ask.mock.calls.map(([q]) => q)).toEqual(['laranja']);
+    });
+
+    it('the node unreachable: no row, and the word is added as before', async () => {
+        await open(() => Promise.reject(new Error('offline')));
+        type('laranja');
+        await still();
+        expect(meant()).toBeNull();
+        fireEvent.keyDown(field(), { key: 'Enter', code: 'Enter' });
+        expect(held.freeTags).toEqual(['laranja']);
+    });
+
+    it('a failed ask is not kept as "none": the next time the field rests on the word it is asked again, and the row comes', async () => {
+        const ask = vi.fn<Ask>()
+            .mockImplementationOnce(() => Promise.reject(new Error('offline')))
+            .mockImplementation((text) => Promise.resolve(ANSWERS[text] ?? null));
+        await open(ask);
+        type('laranja');
+        await still();
+        expect(meant()).toBeNull();
+        type('zzqx');
+        await still();
+        type('laranja');
+        expect(await screen.findByTestId('tag-picker-did-you-mean', {}, { timeout: 2000 })).toHaveTextContent('Did you mean “Orange”? (Português)');
+        expect(ask.mock.calls.map(([q]) => q)).toEqual(['laranja', 'zzqx', 'laranja']);
+    });
+
+    it('pan on an English device: its own search lists frying pans, so no row (and the node is never asked)', async () => {
+        const ask = node();
+        await open(ask);
+        type('pan');
+        await still();
+        expect(screen.getByRole('dialog').textContent).toContain('Frying pans');
+        expect(meant()).toBeNull();
+        expect(screen.getByTestId('tag-picker-add-typed')).toHaveTextContent('Add “#pan”');
+        expect(ask).not.toHaveBeenCalled();
+    });
+
+    it('mist on an English device: nothing of its own lists it, so the row names the German label in its own name', async () => {
+        await open(node());
+        type('mist');
+        expect(await screen.findByTestId('tag-picker-did-you-mean', {}, { timeout: 2000 })).toHaveTextContent('Did you mean “Manure”? (Deutsch)');
+    });
+
+    it('limão on a Spanish device (its real words): no Spanish row for it, so the row offers lime, read in Portuguese', async () => {
+        try {
+            setLanguage('es', [ES_WORDS]);
+            const ask = node();
+            render(<Composer ask={ask} />);
+            fireEvent.click(screen.getByTestId('tag-picker').querySelector('button') as HTMLButtonElement);
+            await screen.findByRole('dialog');
+            const input = screen.getByRole('dialog').querySelector('input') as HTMLInputElement;
+            fireEvent.change(input, { target: { value: 'limão' } });
+            expect(tagIndex().search('limão', 12)).toEqual([]);
+            const row = await screen.findByTestId('tag-picker-did-you-mean', {}, { timeout: 2000 });
+            expect(row.textContent).toContain('“Lima”');
+            expect(row.textContent).toContain('(Português)');
+            expect(ask).toHaveBeenCalledWith('limão');
+        } finally {
+            setLanguage('en');
+        }
     });
 });

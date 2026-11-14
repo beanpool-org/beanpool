@@ -399,6 +399,8 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         // reads back with parseBeans to the same 17950.
         expect(DEBT_COPY.shareCode(DEBT)).toContain(`beanpool://pay-commons?code=${DEBT.id}&amount=179.50 `);
         expect(DEBT_COPY.shareCode(DEBT)).toContain('(179.50 Beans), pay it with this code: each payment comes off the debt as you pay it, and when nothing is left it is settled.');
+        // Credit bar R3: Pay the Commons is a row in the Wallet now, so the admin's message names it (amendment §7b).
+        expect(DEBT_COPY.shareCode(DEBT)).toContain(`or open BeanPool, go to Ledger, then Wallet, tap Pay the Commons, enter this pay-back code: ${DEBT.id} and pay 179.50 Beans.`);
         expect(parseBeans('179.50')).toBe(leftOf(DEBT));
         expect(REPAYMENT_COPY.paid(8000, 'tx-7', false)).toBe('Paid 80 Beans to the Commons.');
     });

@@ -614,7 +614,7 @@ describe('"Did you mean …?": a word that is a library label in another languag
 
     it('limão on a Spanish device (its real words): no Spanish row for it, so the row offers lime, read in Portuguese', async () => {
         try {
-            setLanguage('es', [ES_WORDS as Record<string, string>]);
+            setLanguage('es', [ES_WORDS]);
             const ask = node();
             render(<Composer ask={ask} />);
             fireEvent.click(screen.getByTestId('tag-picker').querySelector('button') as HTMLButtonElement);

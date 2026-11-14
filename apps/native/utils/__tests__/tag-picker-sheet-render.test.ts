@@ -626,7 +626,7 @@ describe('"Did you mean …?": a word that is a library label in another languag
 
     it('limão on a Spanish phone (its real words): no Spanish row for it, so the row offers lime, read in Portuguese', async () => {
         try {
-            setLanguage('es', [ES_WORDS as Record<string, string>]);
+            setLanguage('es', [ES_WORDS]);
             const ask = node();
             await act(async () => { root.render(createElement(Composer, { ask, tags: [] }) as any); });
             await press(host.querySelector(`[aria-label="${t('+ Add tag')}"]`), '+ Add');

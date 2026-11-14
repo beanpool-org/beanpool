@@ -10,7 +10,7 @@ import { Text, View } from 'react-native';
 import { LEARN_HOME_WORDS, t, tn, formatCount, type LearnHomeLines } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { KnowledgeRowCard } from '../learn/KnowledgeRowCard';
-import { FabAware, HomeButton, HomeLink, HomeRow, homeStyles } from './HomeParts';
+import { FabAware, HomeButton, HomeLink, HomeRow } from './HomeParts';
 
 export function LearnBody({ lines, community, colors, now, onOpen, onSeeAll, onToCheck, onAddFirst, onKeep }: {
     lines: LearnHomeLines;
@@ -25,7 +25,6 @@ export function LearnBody({ lines, community, colors, now, onOpen, onSeeAll, onT
     /** Only while the card arrives (core `arrivingCards`): Keep on Home puts it on the member's list. */
     onKeep?: () => void;
 }) {
-    const s = homeStyles(colors);
     const toCheck = lines.toCheck > 0 ? tn(lines.toCheck, LEARN_HOME_WORDS.toCheck.one, LEARN_HOME_WORDS.toCheck.other, { n: formatCount(lines.toCheck) }) : '';
     const first = lines.first ? t(LEARN_HOME_WORDS.first, { community }) : '';
     return (
@@ -38,8 +37,9 @@ export function LearnBody({ lines, community, colors, now, onOpen, onSeeAll, onT
                     strong
                     onPress={onToCheck}
                     testID="home-learn-check"
-                    // Never colour alone: the amber is a ▲ too, as Needs you draws it.
-                    left={<Text style={[s.trailing, { width: 14, color: colors.feedback.warning.fg }]} importantForAccessibility="no">▲</Text>}
+                    // Never colour alone: the amber is a ▲ too, as Needs you draws it. Its style inline (homeStyles' `trailing`),
+                    // where the contrast check reads the colour: s.* from homeStyles is a table it cannot follow.
+                    left={<Text style={{ fontSize: 13, fontWeight: '700', flexShrink: 0, width: 14, color: colors.feedback.warning.fg }} importantForAccessibility="no">▲</Text>}
                 />
             )}
             {!!first && onAddFirst && <HomeRow colors={colors} text={`${first} ›`} a11y={first} strong onPress={onAddFirst} testID="home-learn-first" />}
@@ -54,7 +54,7 @@ export function LearnBody({ lines, community, colors, now, onOpen, onSeeAll, onT
                 <HomeLink id="learn:all" colors={colors} text={t('See all')} a11y={t(LEARN_HOME_WORDS.seeAllSpoken)} onPress={onSeeAll} testID="home-learn-all" />
             )}
             {onKeep && (
-                <FabAware id="learn:keep" style={s.buttonRow}>
+                <FabAware id="learn:keep" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6, marginBottom: 4 }}>
                     <HomeButton colors={colors} text={t(LEARN_HOME_WORDS.keep)} onPress={onKeep} testID="home-learn-keep" />
                 </FabAware>
             )}

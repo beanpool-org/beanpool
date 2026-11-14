@@ -8,7 +8,7 @@
  * page. One row per key (a second browser replaces the first). No reference to `members`: the key is no member yet. The row
  * goes when the request is cancelled or declined (engine/knocks.ts cancelKnock, declineKnock) and when it lapses (tidyKnocks,
  * every minute); it stays once the request is approved (the yes is what it waits for) and when the key joins (the same key,
- * now a member). What it is sent: `join.answered`, and nothing else (`webPushTargetsFor`). Bound: a row needs an open
+ * now a member). What it is sent: `join.answered`, and nothing else (`webPushTargetOpener`). Bound: a row needs an open
  * request, and requests have the knock rules' ceilings (30 a day on the node, 50 open made in three days, one per key).
  *
  * `member` (W2): a member's own browser, from "Turn on" (the web app's card or its Settings row). One row per browser, as
@@ -197,32 +197,42 @@ function openBox(keys: Keys, publicKey: string, subId: string, box: string): Sea
 
 export interface WebPushRecipient { subId: string; lang: Lang | null; target: WebPushTarget }
 
+/** The browsers a push of this kind reaches for one key: {@link webPushTargetOpener}'s answer. */
+export type WebPushTargetOpener = (publicKey: string, kind: PushNoticeKind) => WebPushRecipient[];
+
 /**
- * The browsers a push of this kind reaches for this key: a member's own browsers for every kind (W2), and the browser an
+ * The browsers a push of this kind reaches for a key: a member's own browsers for every kind (W2), and the browser an
  * asker tapped "Tell me when they answer" on for `join.answered` only (W1), which asked for nothing else. A row this
- * server's key does not open is skipped. Never throws.
+ * server's key does not open is skipped.
+ *
+ * This server's key is read, and the two reads prepared, once, when the opener is made: for a send to many members (an
+ * announcement reaches every one), which would otherwise read the key file for each, as services/push-token-seal.ts
+ * pushTokenOpener is for phones. With no key (or one that can't be read) it finds none. Never throws.
  */
-export function webPushTargetsFor(publicKey: string, kind: PushNoticeKind): WebPushRecipient[] {
+export function webPushTargetOpener(): WebPushTargetOpener {
     let keys: Keys;
     try {
         keys = requireKeys();
     } catch {
-        return [];
+        return () => [];
     }
-    const kinds = kind === 'join.answered' ? `kind IN ('member', 'asker')` : `kind = 'member'`;
-    const rows = db.prepare(`SELECT sub_id, sub_box, lang FROM web_push_subscriptions WHERE public_key = ? AND ${kinds}`).all(publicKey) as
-        { sub_id: string; sub_box: string; lang: string | null }[];
-    const out: WebPushRecipient[] = [];
-    for (const r of rows) {
-        const s = openBox(keys, publicKey, r.sub_id, r.sub_box);
-        if (!s) continue;
-        out.push({
-            subId: r.sub_id, lang: isLang(r.lang) ? r.lang : null,
-            target: { endpoint: s.endpoint, p256dh: Buffer.from(s.p256dh, 'base64url'), auth: Buffer.from(s.auth, 'base64url'), contact: s.contact },
-        });
-    }
-    return out;
+    const memberRows = db.prepare(`SELECT sub_id, sub_box, lang FROM web_push_subscriptions WHERE public_key = ? AND kind = 'member'`);
+    const answerRows = db.prepare(`SELECT sub_id, sub_box, lang FROM web_push_subscriptions WHERE public_key = ? AND kind IN ('member', 'asker')`);
+    return (publicKey, kind) => {
+        const rows = (kind === 'join.answered' ? answerRows : memberRows).all(publicKey) as { sub_id: string; sub_box: string; lang: string | null }[];
+        const out: WebPushRecipient[] = [];
+        for (const r of rows) {
+            const s = openBox(keys, publicKey, r.sub_id, r.sub_box);
+            if (!s) continue;
+            out.push({
+                subId: r.sub_id, lang: isLang(r.lang) ? r.lang : null,
+                target: { endpoint: s.endpoint, p256dh: Buffer.from(s.p256dh, 'base64url'), auth: Buffer.from(s.auth, 'base64url'), contact: s.contact },
+            });
+        }
+        return out;
+    };
 }
+
 
 /**
  * How a kind is delivered (design §2.2, "TTL, urgency, topic by kind"):

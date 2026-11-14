@@ -4,7 +4,7 @@
  * at the tap, with the phone's card's reason above it (memory permissions-only-when-asked: never on load, no worker
  * installed before it); Turn off lets the
  * community go of this browser and ends the browser's subscription. Where push can't reach this browser (an iPhone outside
- * the Home Screen, a private window, a page reached over http, the app talking to another community), it says so and
+ * the Home Screen, a private window, a page reached over http), it says so and
  * offers nothing. The switches under it now reach this browser too: the same ones as the phone.
  */
 import { useState } from 'react';
@@ -61,13 +61,13 @@ export function WebPushRow({ identity }: { identity: BeanPoolIdentity }) {
                 </div>
                 {state === 'off' && (
                     <button type="button" onClick={turnOn} disabled={busy}
-                        className="min-h-[48px] px-4 rounded-xl font-bold text-sm bg-nature-700 hover:bg-nature-800 text-white dark:bg-nature-600 dark:hover:bg-nature-500 border-none cursor-pointer disabled:opacity-60 disabled:cursor-wait">
+                        className="min-h-[48px] px-4 rounded-xl font-bold text-sm bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer disabled:opacity-60 disabled:cursor-wait">
                         {t(NOTIFICATION_CARD_WORDS.turnOn)}
                     </button>
                 )}
                 {state === 'on' && (
                     <button type="button" onClick={turnOff} disabled={busy}
-                        className="min-h-[48px] px-4 rounded-xl font-bold text-sm bg-oat-100 hover:bg-oat-200 text-nature-800 dark:bg-nature-800 dark:hover:bg-nature-700 dark:text-nature-200 border-none cursor-pointer disabled:opacity-60 disabled:cursor-wait">
+                        className="min-h-[48px] px-4 rounded-xl font-bold text-sm bg-transparent border border-bp-ink-info text-bp-ink-info cursor-pointer disabled:opacity-60 disabled:cursor-wait">
                         {t(WEB_PUSH_ROW_WORDS.turnOff)}
                     </button>
                 )}

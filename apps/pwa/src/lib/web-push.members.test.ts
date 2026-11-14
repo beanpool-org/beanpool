@@ -2,20 +2,28 @@
  * Members' web push (DESIGN-web-notifications-fable.md §2.2-§2.3, §3 W2 row) on the web app: the worker signs nothing (a
  * rule over public/sw.js as it ships); a member's click goes to their open app tab, or opens one; a click is checked as the
  * phone's checkTap (a forged payload opens nothing); the open keeps or lets go of this browser ('denied' deletes the row);
- * Turn off and sign-out delete it; Settings' row says On, Off or Blocked.
+ * Turn off and sign-out delete it; Settings' row says On, Off or Blocked. An applicant's Tell me, kept after the key joins,
+ * is never given again at an open and reads Off (end to end in the client, review of 67cdc710); with a community address
+ * set in Settings, the pin is the node the app talks to's, so its genuine notice opens.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import { createElement } from 'react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { pushCommunityTag, pushNoticeBytes } from '@beanpool/core';
-import { checkClickedNotice, keepWebPushAtOpen, turnOffWebPush, webPushState, readWebPushPin, type PushEnv } from './web-push';
-import { openClickedNotice } from './use-web-push-member';
-import { signedFetchAt } from './api';
+import {
+    checkClickedNotice, keepWebPushAtOpen, tellMeWhenTheyAnswer, turnOffWebPush, webPushOrigin, webPushState, readWebPushPin, type PushEnv,
+} from './web-push';
+import { openClickedNotice, useWebPushMember } from './use-web-push-member';
+import { getNodeApiUrl, getPushNoticeDetails, signedFetchAt } from './api';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
+import { WebPushRow } from '../components/WebPushRow';
 
-vi.mock('./api', () => ({ signedFetchAt: vi.fn(), getNodeApiUrl: () => '', getPushNoticeDetails: vi.fn() }));
+vi.mock('./api', () => ({ signedFetchAt: vi.fn(), getNodeApiUrl: vi.fn(() => ''), getPushNoticeDetails: vi.fn() }));
 
 const SW_SOURCE = fs.readFileSync(path.resolve(__dirname, '../../public/sw.js'), 'utf8');
 
@@ -27,7 +35,9 @@ function notice(kind = 'chat.message', recipient = MEMBER, key = KEY, sentAt = M
     const fields = { c: pushCommunityTag(PUSH_KEY), k: kind as any, i: 'cd'.repeat(16), t: sentAt };
     return { bp: 1, ...fields, s: bytesToHex(ed25519.sign(pushNoticeBytes(fields, recipient), key)) };
 }
-const pin = () => localStorage.setItem('beanpool_web_push', JSON.stringify([{ origin: ORIGIN, publicKey: MEMBER, subId: 'e'.repeat(64), pushKey: PUSH_KEY, vapidKey: 'BAAA' }]));
+/** A pin as Turn on keeps it (`member`), or as the waiting page's Tell me does (`asker`). */
+const pin = (made: 'member' | 'asker' = 'member', origin = ORIGIN) =>
+    localStorage.setItem('beanpool_web_push', JSON.stringify([{ origin, publicKey: MEMBER, subId: 'e'.repeat(64), pushKey: PUSH_KEY, vapidKey: 'BAAA', for: made }]));
 const identity = { publicKey: MEMBER, privateKey: '00'.repeat(48) } as any;
 const env = (over: Partial<PushEnv>): PushEnv => ({
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
@@ -203,5 +213,148 @@ describe("Settings' row (webPushState)", () => {
         expect(webPushState(ORIGIN, MEMBER, env({ permission: 'denied' }))).toBe('blocked');
         expect(webPushState(ORIGIN, MEMBER, env({ secure: false }))).toBe('cannot');
         expect(webPushState(null, MEMBER, env({}))).toBe('cannot');
+    });
+    it("a Tell me kept from the waiting page is no Turn on: Off, though the browser allows notifications", () => {
+        pin('asker');
+        expect(webPushState(ORIGIN, MEMBER, env({}))).toBe('off');
+    });
+});
+
+describe('at each open, a Tell me kept after joining', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        vi.mocked(signedFetchAt).mockReset();
+        vi.mocked(signedFetchAt).mockImplementation(async () => new Response(JSON.stringify({ success: true }), { status: 200 }));
+        const registration = { pushManager: { getSubscription: async () => ({ unsubscribe: vi.fn(async () => true), toJSON: () => ({ endpoint: 'https://fcm.googleapis.com/fcm/send/x', keys: { p256dh: 'P', auth: 'A' } }) }) } };
+        Object.defineProperty(navigator, 'serviceWorker', { value: { register: vi.fn(), getRegistration: vi.fn(async () => registration) }, configurable: true });
+        (globalThis as any).Notification = { permission: 'granted', requestPermission: vi.fn() };
+    });
+    it('still allowed: nothing is sent (a post would make the community keep it as the member\'s, every kind)', async () => {
+        pin('asker');
+        expect(await keepWebPushAtOpen(ORIGIN, identity, 'en', env({}))).toBe('none');
+        expect(signedFetchAt).not.toHaveBeenCalled();
+        expect(readWebPushPin(ORIGIN, MEMBER)?.for).toBe('asker');
+    });
+    it("the browser now blocks them: it still goes (DELETE, signed), as a member's does", async () => {
+        pin('asker');
+        expect(await keepWebPushAtOpen(ORIGIN, identity, 'en', env({ permission: 'denied' }))).toBe('dropped');
+        expect(vi.mocked(signedFetchAt).mock.calls.map(c => c[0])).toEqual(['DELETE']);
+        expect(readWebPushPin(ORIGIN, MEMBER)).toBeNull();
+    });
+});
+
+/** The app's own open for a member (App.tsx's useWebPushMember), drawn as App draws it. */
+function OpenApp({ go = () => {} }: { go?: (kind: string, data: Record<string, unknown>) => void }) {
+    const { forged } = useWebPushMember(identity, true, 'en', go);
+    return createElement('div', { 'data-testid': 'open-app', 'data-forged': String(forged) });
+}
+
+/**
+ * The whole way in the client, with only the browser's push and the network faked: an applicant taps Tell me on the
+ * waiting page and allows; the community says yes and they join with the same key; the web app opens for the member
+ * (App's useWebPushMember, which runs keepWebPushAtOpen) and Settings draws its row. The node's route turns an asker's
+ * row into the member's on any POST from a member (routes/web-push.ts, putMemberSubscription), so the client must send
+ * none until Turn on.
+ */
+describe('Tell me, then joining: the member\'s notifications only after Turn on (end to end in the client)', () => {
+    const HERE = window.location.origin;
+    const vapidKey = Buffer.from(new Uint8Array(65).fill(4)).toString('base64url');
+    let subscription: any;
+    let registration: any;
+    beforeEach(() => {
+        localStorage.clear();
+        vi.mocked(getNodeApiUrl).mockReturnValue('');
+        vi.mocked(signedFetchAt).mockReset();
+        vi.mocked(signedFetchAt).mockImplementation(async () => new Response(JSON.stringify({ success: true, subId: 'c'.repeat(64), pushKey: PUSH_KEY, vapidKey }), { status: 201 }));
+        subscription = null;
+        const subscribe = vi.fn(async () => (subscription = {
+            options: { applicationServerKey: new Uint8Array(65).fill(4).buffer },
+            unsubscribe: vi.fn(async () => { subscription = null; return true; }),
+            toJSON: () => ({ endpoint: 'https://fcm.googleapis.com/fcm/send/x', keys: { p256dh: 'P', auth: 'A' } }),
+        }));
+        registration = { installing: null, waiting: null, active: {}, pushManager: { getSubscription: async () => subscription, subscribe } };
+        Object.defineProperty(navigator, 'serviceWorker', {
+            value: { register: vi.fn(async () => registration), getRegistration: vi.fn(async () => registration), addEventListener() {}, removeEventListener() {} },
+            configurable: true,
+        });
+        (globalThis as any).Notification = { permission: 'granted', requestPermission: vi.fn(async () => 'granted') };
+        (window as any).PushManager = function PushManager() {};
+        Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true });
+        resetNodeVersionGateForTests();
+        hearNodeVersionForTests(HERE);
+        vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ vapidKey }), { status: 200 }));
+    });
+    afterEach(() => {
+        cleanup();
+        vi.mocked(fetch as any).mockRestore?.();
+    });
+
+    const posts = () => vi.mocked(signedFetchAt).mock.calls.filter(c => c[0] === 'POST');
+
+    it('Tell me, join, open: no post at the open, Settings says Off; Turn on posts once, then On, and each open after gives it again', async () => {
+        // The waiting page: Tell me, allowed. One post, as the applicant (the node keeps an `asker` row).
+        const told = await tellMeWhenTheyAnswer(HERE, identity, 'en', env({}));
+        expect(told.ok).toBe(true);
+        expect(posts()).toHaveLength(1);
+        expect(readWebPushPin(HERE, MEMBER)?.for).toBe('asker');
+
+        // The same key joins; the web app opens for the member. The open reads this browser's subscription and sends nothing.
+        render(createElement(OpenApp));
+        await waitFor(() => expect(navigator.serviceWorker.getRegistration).toHaveBeenCalled());
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(posts()).toHaveLength(1);
+        cleanup();
+
+        // Settings → Notifications: Off, with Turn on.
+        render(createElement(WebPushRow, { identity }));
+        expect(screen.getByTestId('web-push-row').getAttribute('data-state')).toBe('off');
+
+        // Turn on: the member's own tap, the one post that makes this browser the member's.
+        fireEvent.click(screen.getByRole('button', { name: 'Turn on' }));
+        await waitFor(() => expect(screen.getByTestId('web-push-row').getAttribute('data-state')).toBe('on'));
+        expect(posts()).toHaveLength(2);
+        expect(readWebPushPin(HERE, MEMBER)?.for).toBe('member');
+        cleanup();
+
+        // From now on, each open gives it again, as the phone registers at each start.
+        render(createElement(OpenApp));
+        await waitFor(() => expect(posts()).toHaveLength(3));
+    });
+});
+
+/**
+ * Settings → Sovereign Node Connection set: the web app talks to another node than the page's. That node is the one the
+ * browser subscribes with at Turn on, and the one whose notice key a click is checked by: a genuine notice from it opens,
+ * and the forged line is not shown (review of 67cdc710: the pin was the page's, so none was found).
+ */
+describe('with a community address set in Settings, the pin follows the node the app talks to', () => {
+    const OTHER = 'https://other.example';
+    beforeEach(() => {
+        localStorage.clear();
+        vi.mocked(getPushNoticeDetails).mockReset();
+        vi.mocked(getPushNoticeDetails).mockResolvedValue({ id: 'cd'.repeat(16), kind: 'chat.message', title: '', body: '', data: { screen: 'chat' } });
+        Object.defineProperty(navigator, 'serviceWorker', { value: { getRegistration: vi.fn(async () => null), addEventListener() {}, removeEventListener() {} }, configurable: true });
+        (globalThis as any).Notification = { permission: 'granted', requestPermission: vi.fn() };
+    });
+    afterEach(() => {
+        cleanup();
+        vi.mocked(getNodeApiUrl).mockReturnValue('');
+        window.history.replaceState(null, '', '/');
+    });
+
+    it("webPushOrigin: the address the app talks to (as the browser writes an origin), else the page's own; none for no web address", () => {
+        expect(webPushOrigin('')).toBe(window.location.origin);
+        expect(webPushOrigin('https://Other.Example')).toBe(OTHER);
+        expect(webPushOrigin('https://other.example:443')).toBe(OTHER);
+        expect(webPushOrigin('not an address')).toBeNull();
+    });
+    it("a click on that node's genuine notice opens it, and says nothing of a forgery", async () => {
+        vi.mocked(getNodeApiUrl).mockReturnValue(OTHER);
+        pin('member', OTHER);
+        window.history.replaceState(null, '', `/app#notice=${encodeURIComponent(JSON.stringify(notice()))}`);
+        const go = vi.fn();
+        render(createElement(OpenApp, { go }));
+        await waitFor(() => expect(go).toHaveBeenCalledWith('chat.message', { screen: 'chat' }));
+        expect(screen.getByTestId('open-app').getAttribute('data-forged')).toBe('false');
     });
 });

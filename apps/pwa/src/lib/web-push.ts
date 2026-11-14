@@ -142,7 +142,18 @@ export function cannotLines(place: PushPlace): { lines: string[]; getApp: string
 
 // ── What this browser keeps: the subscription's id and the community's notice key, with the request ──────────────
 
-export interface WebPushPin { origin: string; publicKey: string; subId: string; pushKey: string | null; vapidKey: string }
+/**
+ * What this browser keeps for a key at a community. `for` is the tap that made it: `asker`, Tell me on the waiting page (the
+ * yes, nothing else); `member`, a member's Turn on (every kind their phone is told). Only a member's pin is given again at
+ * each open and reads On in Settings: a Tell me kept after the key joined never becomes the member's notifications without
+ * a tap on Turn on.
+ */
+export interface WebPushPin { origin: string; publicKey: string; subId: string; pushKey: string | null; vapidKey: string; for: 'asker' | 'member' }
+
+/** Whether this pin is a member's own Turn on (anything else, a Tell me's included, is not). */
+export function isMemberPin(pin: WebPushPin | null): boolean {
+    return pin?.for === 'member';
+}
 
 export function readWebPushPin(origin: string, publicKey: string): WebPushPin | null {
     try {
@@ -180,7 +191,7 @@ const TIMEOUT_MS = 20_000;
  * the permission prompt, the subscription. Never throws.
  */
 export async function tellMeWhenTheyAnswer(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv = pushEnv()): Promise<TellMeResult> {
-    return subscribeAtTap(origin, identity, lang, env);
+    return subscribeAtTap(origin, identity, lang, env, 'asker');
 }
 
 /**
@@ -188,10 +199,10 @@ export async function tellMeWhenTheyAnswer(origin: string, identity: BeanPoolIde
  * steps as Tell me, and the node keeps this browser as the member's, told every kind their phone is. Never throws.
  */
 export async function turnOnWebPush(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv = pushEnv()): Promise<TellMeResult> {
-    return subscribeAtTap(origin, identity, lang, env);
+    return subscribeAtTap(origin, identity, lang, env, 'member');
 }
 
-async function subscribeAtTap(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv): Promise<TellMeResult> {
+async function subscribeAtTap(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv, made: WebPushPin['for']): Promise<TellMeResult> {
     const place = pushPlace(env);
     if (place.kind === 'home-screen' || place.kind === 'none') return { ok: false, place, reason: 'cannot' };
     if (place.kind === 'blocked') return { ok: false, place, reason: 'blocked' };
@@ -216,14 +227,14 @@ async function subscribeAtTap(origin: string, identity: BeanPoolIdentity, lang: 
             subscription = null;
         }
         subscription ??= await ready.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromBase64url(vapidKey) as BufferSource });
-        return (await postSubscription(origin, identity, subscription, lang, vapidKey)) ? { ok: true, place } : { ok: false, place, reason: 'failed' };
+        return (await postSubscription(origin, identity, subscription, lang, vapidKey, made)) ? { ok: true, place } : { ok: false, place, reason: 'failed' };
     } catch {
         return { ok: false, place, reason: 'failed' };
     }
 }
 
-/** Gives the node this browser's subscription, signed; pins its answer's notice key. Whether the node kept it. */
-async function postSubscription(origin: string, identity: BeanPoolIdentity, subscription: PushSubscription, lang: string, vapidKey: string): Promise<boolean> {
+/** Gives the node this browser's subscription, signed; pins its answer's notice key, and which tap it was for. Whether the node kept it. */
+async function postSubscription(origin: string, identity: BeanPoolIdentity, subscription: PushSubscription, lang: string, vapidKey: string, made: WebPushPin['for']): Promise<boolean> {
     const json = subscription.toJSON();
     const body = JSON.stringify({ subscription: { endpoint: json.endpoint, keys: json.keys }, lang });
     const res = await signedFetchAt('POST', origin, WEB_PUSH_PATH, body, identity);
@@ -231,7 +242,7 @@ async function postSubscription(origin: string, identity: BeanPoolIdentity, subs
     if (!answer?.success || typeof answer.subId !== 'string') return false;
     writeWebPushPin({
         origin, publicKey: identity.publicKey, subId: answer.subId, pushKey: typeof answer.pushKey === 'string' ? answer.pushKey : null,
-        vapidKey: typeof answer.vapidKey === 'string' ? answer.vapidKey : vapidKey,
+        vapidKey: typeof answer.vapidKey === 'string' ? answer.vapidKey : vapidKey, for: made,
     });
     return true;
 }
@@ -275,18 +286,25 @@ export function webPushState(origin: string | null, publicKey: string, env: Push
     const place = pushPlace(env);
     if (place.kind === 'blocked') return 'blocked';
     if (place.kind !== 'ok') return 'cannot';
-    return env.permission === 'granted' && readWebPushPin(origin, publicKey) ? 'on' : 'off';
+    // A Tell me kept from before the key joined is no Turn on: Off, and Turn on asks for the member's notifications.
+    return env.permission === 'granted' && isMemberPin(readWebPushPin(origin, publicKey)) ? 'on' : 'off';
 }
 
 /**
- * The community this page can take pushes from: the page's own address, when the web app talks to it (a worker serves
- * only its own origin, and the node that sends must be the one whose key the browser subscribed with). Null when the app
- * talks to another community from here: no push, the bell still works.
+ * The community this browser's pushes come from, and its pin is kept under: the node the web app talks to (api.ts
+ * `getNodeApiUrl`: the address set in Settings → Sovereign Node Connection, else this page's own), so the node that sends
+ * is the one whose key the browser subscribed with and whose notice key a click is checked by. The worker is this page's
+ * (public/sw.js): it shows what came and opens this page's /app, which talks to that same node. Null for an address that
+ * is no web address: no push, the bell still works.
  */
 export function webPushOrigin(nodeApiUrl: string): string | null {
     if (typeof window === 'undefined') return null;
-    const here = window.location.origin;
-    return !nodeApiUrl || nodeApiUrl === here ? here : null;
+    try {
+        const origin = new URL(nodeApiUrl || window.location.origin).origin;
+        return /^https?:\/\//.test(origin) ? origin : null;
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -296,6 +314,10 @@ export function webPushOrigin(nodeApiUrl: string): string | null {
  * - turned on here and still allowed: the subscription is given again, signed, as the phone registers at every start, so
  *   the language is current and a community that took over from its main server has this browser again.
  * Only for a browser this account turned on here (a pin); never throws. Answers what it did.
+ *
+ * A Tell me from the waiting page, kept after the key joined (an `asker` pin), is never given again: that post would make
+ * the community's row for it the member's (every kind), which only Turn on asks for. It still goes once the browser blocks
+ * or forgets the permission.
  */
 export async function keepWebPushAtOpen(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv = pushEnv()): Promise<'none' | 'dropped' | 'kept' | 'failed'> {
     const pin = readWebPushPin(origin, identity.publicKey);
@@ -306,7 +328,8 @@ export async function keepWebPushAtOpen(origin: string, identity: BeanPoolIdenti
             await turnOffWebPush(origin, identity);
             return 'dropped';
         }
-        return (await postSubscription(origin, identity, subscription, lang, pin.vapidKey)) ? 'kept' : 'failed';
+        if (!isMemberPin(pin)) return 'none';
+        return (await postSubscription(origin, identity, subscription, lang, pin.vapidKey, 'member')) ? 'kept' : 'failed';
     } catch {
         return 'failed';
     }

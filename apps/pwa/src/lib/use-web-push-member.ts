@@ -3,8 +3,10 @@
  * does at each open and with each click on a notification, and nothing else. Nothing here asks the browser or installs a
  * worker: that is the tap's alone (lib/web-push.ts turnOnWebPush).
  *
- * - **At each open** (a member, the page's own community): {@link keepWebPushAtOpen}: a browser turned on here that now
- *   blocks notifications, or forgot them, is let go of at the node (DELETE); one still allowed gives its subscription again.
+ * - **At each open** (a member, at the community the app talks to: web-push.ts webPushOrigin): {@link keepWebPushAtOpen}:
+ *   a browser turned on here that now blocks notifications, or forgot them, is let go of at the node (DELETE); one still
+ *   allowed gives its subscription again. A Tell me kept from the waiting page is never given again: only Turn on makes
+ *   this browser the member's.
  * - **A click** brings the signed notice, in the address's fragment (`/app#notice=`, a new tab) or as the worker's message
  *   (`beanpool-notice`, the open tab). {@link openClickedNotice} checks it as the phone's checkTap does and opens it
  *   through the bell's fixed table (components/NeedsYouIcons.tsx goToNoticeTarget), or opens nothing and shows

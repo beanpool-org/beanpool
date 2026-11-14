@@ -72,7 +72,7 @@ import {
     newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, markPushNoticesSeen, markPushNoticesSeenWhere, markAllPushNoticesSeen,
     keptNoticeIdsOf, type PushNoticeRow,
 } from './engine/push-notices.js';
-import { sendWebPushes, webPushDelivery, webPushTargetsFor, type WebPushSend } from './engine/web-push-subscriptions.js';
+import { sendWebPushes, webPushDelivery, webPushTargetOpener, type WebPushSend } from './engine/web-push-subscriptions.js';
 import type { PushDetailsFor } from './engine/kept-notices.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
 import { linesPushedAbout } from './engine/chat-mutes.js';
@@ -10843,7 +10843,7 @@ const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoti
  * recipient reads (engine/push-notices.ts, GET /api/notices/push/:id), and none of them reaches Expo, Apple or Google.
  *
  * Browsers too (services/web-push.ts, DESIGN-web-notifications-fable.md §2.2), after Expo's part, with the same words and
- * notice, encrypted to the browser (engine/web-push-subscriptions.ts webPushTargetsFor): every kind to a member's own
+ * notice, encrypted to the browser (engine/web-push-subscriptions.ts webPushTargetOpener): every kind to a member's own
  * browsers (W2), under the same switch as their phones, and `join.answered` to the browser an applicant asked to be told
  * on (W1), for `options.ttlSeconds`. Each kind's TTL, urgency and topic are webPushDelivery's (a chat's topic is its kind,
  * so a browser away for a while gets one message of it, not every one).
@@ -10926,8 +10926,9 @@ export function deliverPushNotices(
     const phones: { publicKey: string; tokenId: string; token: string }[] = [];
     const notices: PushNoticeRow[] = [];
     const webSends: WebPushSend[] = [];
-    // The key read once for the whole send (an announcement reaches every member's phones).
+    // The key read once for the whole send (an announcement reaches every member's phones and browsers).
     const open = pushTokenOpener();
+    const browsersOf = webPushTargetOpener();
 
     for (const pk of recipients) {
         // Check user's notification preference for this category
@@ -10946,7 +10947,7 @@ export function deliverPushNotices(
         // or not, so the web app, and a phone with no push, list what the phone is buzzed with. Not for a key that can't
         // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before.
         const tokens = getPushTokens(pk, open);
-        const browsers = webPushTargetsFor(pk, kind);
+        const browsers = browsersOf(pk, kind);
         if (tokens.length === 0 && browsers.length === 0 && !passesReadGate(pk)) continue;
 
         // One notice per recipient, the same on each of their phones and browsers.

@@ -744,12 +744,17 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         setTestingNode(false);
     };
 
-    const handleSaveNodeUrl = () => {
-        setNodeApiUrl(customNodeUrl.trim() || null);
+    // Pointed at another community: the one the app talked to lets go of this browser first, while the key can sign for it
+    // (web push W2: the pin follows the node the app talks to, so the old one's notices would only be refused here).
+    const handleSaveNodeUrl = async () => {
+        const next = customNodeUrl.trim().replace(/\/+$/, '') || null;
+        if (next !== getStoredNodeApiUrl()) await stopWebPushHere();
+        setNodeApiUrl(next);
         window.location.reload();
     };
 
-    const handleResetNodeUrl = () => {
+    const handleResetNodeUrl = async () => {
+        if (getStoredNodeApiUrl() !== null) await stopWebPushHere();
         setNodeApiUrl(null);
         setCustomNodeUrl('');
         window.location.reload();

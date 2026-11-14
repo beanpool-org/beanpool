@@ -271,7 +271,7 @@ async function main(): Promise<void> {
     const first = await findBy(phone, 'google', DAMO_SUB);
     check(first.nonce.status === 200 && typeof first.nonce.body?.nonce === 'string' && first.nonce.body?.expiresInSeconds === 600
         && typeof first.nonce.body?.clientIds === 'object' && first.nonce.body?.clientIds?.google === AUD.google,
-        `find-nonce answers as /collect/sso-nonce does, with no session: a nonce, 600 s, the web client ids (${first.nonce.status} ${brief(first.nonce.body)})`);
+        `find-nonce answers with no session: a nonce, 600 s, the web client ids (${first.nonce.status} ${brief(first.nonce.body)})`);
     check(first.found.status === 200 && brief(names(first.found)) === brief([`${damoName}:${damo.pk}`]),
         `find with the same Google names the one account, by name and key, with nothing typed (${first.found.status} ${brief(first.found.body)})`);
     check(sessionsFor(damo.pk) === 0 && pushesTo(damo.pk).length === pushesBefore, 'a find opens no session and sends no push');

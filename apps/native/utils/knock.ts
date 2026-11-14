@@ -33,7 +33,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { KNOCK_ANSWERABLE_DAYS, isPeekTicket, knockStillAnswerable, t, word, retryAfterSecondsOf } from '@beanpool/core';
+import { KNOCK_ANSWERABLE_DAYS, isPeekTicket, knockStillAnswerable, notANameIn, notANameWords, t, word, retryAfterSecondsOf } from '@beanpool/core';
 import { signedGet, signedPost } from './node-post';
 import { communityOrigin } from './community-directory';
 import { GLOBAL_NODE_URL } from './node-profile';
@@ -122,6 +122,11 @@ const chars = (s: string) => Array.from(s).length;
 export function knockFormProblem(req: KnockRequest): string | null {
     const name = req.callsign.replace(/\s+/g, ' ').trim();
     if (chars(name) < 2) return 'Please give a name of at least 2 characters.';
+    // An invite or a web address is no name (core name-box.ts; card callsign-link-guard): a yes joins under it, and the
+    // node refuses it. In English, as the lines here are (components/find-community-lines.ts says it). Before the length,
+    // as a pasted link is longer than a name.
+    const notAName = notANameIn(req.callsign);
+    if (notAName) return notANameWords(notAName);
     if (chars(name) > KNOCK_CALLSIGN_CHARS) return `Please keep your name to ${KNOCK_CALLSIGN_CHARS} characters.`;
     const message = req.message.trim();
     if (!message) return 'Please say a few words about yourself.';

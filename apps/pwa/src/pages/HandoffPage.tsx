@@ -16,7 +16,7 @@
  *      from hears `joined` once the key is a member here (lib/handoff.ts handoffJoined). Not mine: `declined`, nothing kept.
  */
 import { useEffect, useRef, useState } from 'react';
-import { communityCardName, t, type CommunityCard } from '@beanpool/core';
+import { communityCardName, notANameLine, t, type CommunityCard } from '@beanpool/core';
 import { getCommunityCard } from '../lib/api';
 import {
     HANDOFF_LISTEN_MS, accountFrom, answerMessage, awaitHandoffJoin, dropOpener, markHandedOver, readyMessage, type HandoffAnswer,
@@ -161,6 +161,13 @@ export function HandoffPage({ handoff, onOpen, onJoin, onMember }: {
         const typed = callsign.replace(/\s+/g, ' ').trim();
         if (Array.from(typed).length < 2) {
             setView({ ...view, error: t('Please give a name of at least 2 characters.') });
+            return;
+        }
+        // The name a request to join goes under: an invite or a web address is none (core name-box.ts), and the community
+        // refuses it. A member here already sends no name, so theirs is kept as it is.
+        const notAName = view.member ? null : notANameLine(typed);
+        if (notAName) {
+            setView({ ...view, error: notAName });
             return;
         }
         setView({ ...view, busy: true, error: null });

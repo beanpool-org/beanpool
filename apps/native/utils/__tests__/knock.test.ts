@@ -23,7 +23,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import { getPublicKey } from '@noble/ed25519';
-import { toEd25519Pkcs8, KNOCK_ANSWERABLE_DAYS as coreKnockAnswerableDays, knockStillAnswerable as coreKnockStillAnswerable } from '@beanpool/core';
+import { toEd25519Pkcs8, KNOCK_ANSWERABLE_DAYS as coreKnockAnswerableDays, knockStillAnswerable as coreKnockStillAnswerable, NAME_BOX_WORDS } from '@beanpool/core';
+import { findLineWords } from '../../components/find-community-lines';
 import { bytesToHex } from '../crypto';
 import { boundSignatureValid } from './server-signature-check';
 import {
@@ -320,6 +321,14 @@ describe('the form', () => {
         expect(knockFormProblem({ callsign: 'Robin', message: '   ' })).toBe('Please say a few words about yourself.');
         expect(knockFormProblem({ callsign: 'Robin', message: 'é'.repeat(281) })).toBe('Please keep your message to 280 characters.');
         expect(knockFormProblem({ callsign: 'Robin', message: '🌱'.repeat(280) })).toBeNull();
+    });
+
+    it('refuses an invite or a web address as the name, in English as its other lines, shown in the member\'s language', () => {
+        // Card callsign-link-guard: a yes joins under this name, and the community refuses one that is a link.
+        expect(knockFormProblem({ callsign: 'https://mullum.beanp', message: 'Hi' })).toBe(NAME_BOX_WORDS.webLink);
+        expect(knockFormProblem({ callsign: 'INV-ABCD-EFGH', message: 'Hi' })).toBe(NAME_BOX_WORDS.inviteCode);
+        expect(knockFormProblem({ callsign: 'J.R. St.Kilda', message: 'Hi' })).toBeNull();
+        expect(findLineWords(NAME_BOX_WORDS.webLink)).toBe(NAME_BOX_WORDS.webLink);
     });
 
     it('sends only a picture the community will take', () => {

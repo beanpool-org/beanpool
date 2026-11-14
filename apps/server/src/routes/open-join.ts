@@ -150,6 +150,7 @@ import {
     VAULT_TICKET_TTL_MS,
     type DoorWorkDoor,
     type VaultTicketRefusal, word, wordsFor,
+    CALLSIGN_LINK_CODE, notANameIn, notANameWords,
 } from '@beanpool/core';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { alreadyJoined, broadcast, getActingMember } from '../state-engine.js';
@@ -187,6 +188,7 @@ import {
     type OpenJoinOutcome,
     type OpenJoinRefusal,
 } from '../engine/open-join.js';
+import { CallsignNotANameError } from '../engine/members.js';
 import { doorCeilingReached, doorLevel, doorNumbers, noteWordsJoin, WORDS_PROVIDER, type DoorCeiling } from '../engine/door-signal.js';
 import { checkDoorWork, issueDoorWork, type DoorWorkRefusal } from '../services/door-work.js';
 import { doorCheckAsked, doorCheckPassed, forgetDoorCheckPass, siteverifyUp, verifyDoorCheck, type DoorCheckPage } from '../services/door-check.js';
@@ -203,6 +205,17 @@ const { t: tr } = wordsFor('en');
 
 /** The same cap `/api/invite/redeem` puts on a joining name; the wizard-on-join renames with the full rules. */
 const MAX_JOIN_CALLSIGN = 20;
+
+/**
+ * 400 `callsign_link` for a name that is an invite or a web address (core name-box.ts), read whole before the cut, so
+ * the door refuses it before any sign-in, nonce or work is spent. True when it answered.
+ */
+function refuseNotAName(ctx: any, raw: unknown): boolean {
+    const kind = typeof raw === 'string' ? notANameIn(raw) : null;
+    if (!kind) return false;
+    badRequest(ctx, notANameWords(kind), CALLSIGN_LINK_CODE);
+    return true;
+}
 
 function joinNonceSubject(actor: string): string {
     return `open-join:${actor}`;
@@ -632,6 +645,7 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
         }
         const callsign = typeof body.callsign === 'string' ? body.callsign.trim().slice(0, MAX_JOIN_CALLSIGN).trim() : '';
         if (callsign.length < 2) return badRequest(ctx, word('Please choose a name of at least 2 characters.'));
+        if (refuseNotAName(ctx, body.callsign)) return;
 
         recordFunnelEvent('open_join_attempt', WORDS_PROVIDER);
         // Refused before the work is checked, so these never spend it. registerOpenJoin checks them again with its writes.
@@ -652,6 +666,9 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
         try {
             outcome = registerOpenJoin(broadcast, { publicKey: actor, callsign, provider: WORDS_PROVIDER, joinHash: wordsJoinHash(), ipHash });
         } catch (e) {
+            // The name as the door cut it (20) is an address where the whole was not ("ann.comet" → "ann.com"): refused, and
+            // nothing was written. Never the 503's "try again", which would be refused the same way.
+            if (e instanceof CallsignNotANameError) return badRequest(ctx, e.message, e.code);
             console.error('[OpenJoin] join could not be recorded:', (e as Error)?.message || e);
             recordFunnelEvent('open_join_failed', 'join_failed');
             ctx.status = 503;
@@ -689,6 +706,7 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
         if (!nonce) return badRequest(ctx, "'nonce' is required.");
         const callsign = typeof body.callsign === 'string' ? body.callsign.trim().slice(0, MAX_JOIN_CALLSIGN).trim() : '';
         if (callsign.length < 2) return badRequest(ctx, word('Please choose a name of at least 2 characters.'));
+        if (refuseNotAName(ctx, body.callsign)) return;
 
         const recoveryShares = readRecoveryShares(ctx, body, provider, actor);
         if (recoveryShares === false) return;
@@ -736,6 +754,8 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
         } catch (e) {
             // The key went between the check above and the hash: refused as above, and nothing was written.
             if (e instanceof OpenJoinKeyMissing) return doorKeyMissing(ctx, provider);
+            // The cut name is an address where the whole was not (as the 12-words door above): refused, nothing written.
+            if (e instanceof CallsignNotANameError) return badRequest(ctx, e.message, e.code);
             // Nothing was kept: the member row and the open_joins row roll back together (engine/open-join.ts). The
             // exception's text names tables and constraints, so it goes to the log and never into the answer.
             console.error('[OpenJoin] join could not be recorded:', (e as Error)?.message || e);

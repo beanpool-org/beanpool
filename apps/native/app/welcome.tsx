@@ -21,7 +21,8 @@ import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
 import {
-    bundledAvatarForPubkey, combineKnockTicks, joinRuleLines, knockTickOf, landingPostId, lowercaseRecoveryWords, photoStepNote, postIdFromInviteLink, splitBold,
+    bundledAvatarForPubkey, combineKnockTicks, inviteForInviteBox, joinRuleLines, knockTickOf, landingPostId, lowercaseRecoveryWords, NAME_BOX_WORDS, notANameIn,
+    photoStepNote, postIdFromInviteLink, splitBold,
     type KnockWatchTick, type KnownRule,
     shareAddress,
 } from '@beanpool/core';
@@ -1310,9 +1311,35 @@ export default function WelcomeScreen() {
         return () => { cancelled = true; clearTimeout(timer); };
     }, [mode, inviteCode, createAnchorUrl]);
 
+    /**
+     * The name box given an invite (Marty, 14 Nov 2026, card callsign-link-guard: a member's invite link pasted there became
+     * her name): the invite goes to the invite box as a paste there goes (its code, and the community its link names), the
+     * name box is left empty, and the one line says why. False when `text` holds no invite.
+     */
+    function inviteFromNameBox(text: string): boolean {
+        const moved = inviteForInviteBox(text);
+        if (!moved) return false;
+        setCallsign('');
+        if (callsignSuggestions.length) setCallsignSuggestions([]);
+        void processFullUrl(moved).then(() => setError(t(NAME_BOX_WORDS[notANameIn(moved) ?? 'inviteCode'])));
+        return true;
+    }
+
+    /** The one line for a name that is a web address or an invite (core name-box.ts), in the screen's language; else null. */
+    function notANameHere(name: string): string | null {
+        const kind = notANameIn(name);
+        return kind ? t(NAME_BOX_WORDS[kind]) : null;
+    }
+
     async function handleCreate() {
         // A second tap while Next is out starts nothing, not even its checks below.
         if (nextOutRef.current) return;
+        if (inviteFromNameBox(callsign)) return;
+        const notAName = notANameHere(callsign);
+        if (notAName) {
+            setError(notAName);
+            return;
+        }
         if (!inviteCode.trim()) {
             setError(t('An invite code is required to join the network.'));
             return;
@@ -2061,6 +2088,12 @@ export default function WelcomeScreen() {
             setError(t('Please choose a name of at least 2 characters.'));
             return;
         }
+        // An invite or a web address is no name (core name-box.ts): the door refuses it too, before any work is spent.
+        const notAName = notANameHere(callsign);
+        if (notAName) {
+            setError(notAName);
+            return;
+        }
         setLoading(true);
         setError(null);
         nameCheckRef.current?.abort();
@@ -2110,6 +2143,12 @@ export default function WelcomeScreen() {
         const name = callsign.trim().slice(0, MAX_JOIN_NAME).trim();
         if (name.length < 2) {
             setError(t('Please choose a name of at least 2 characters.'));
+            return;
+        }
+        // An invite or a web address is no name (core name-box.ts): the door refuses it too, before any work is spent.
+        const notAName = notANameHere(callsign);
+        if (notAName) {
+            setError(notAName);
             return;
         }
         setLoading(true);
@@ -3279,13 +3318,17 @@ export default function WelcomeScreen() {
                         )}
 
                         <Text style={styles.callsignLabel}>{t('What should we call you?')}</Text>
+                        {/* No maxLength: the box would cut a pasted invite link to 20 before it is read. The 20 is kept here. */}
                         <TextInput
                             style={styles.callsignInput}
                             placeholder={t('Your name or nickname')}
                             placeholderTextColor={colors.text.muted}
                             value={callsign}
-                            onChangeText={(text) => { setCallsign(text); if (callsignSuggestions.length) setCallsignSuggestions([]); }}
-                            maxLength={MAX_JOIN_NAME}
+                            onChangeText={(text) => {
+                                if (inviteFromNameBox(text)) return;
+                                setCallsign(text.slice(0, MAX_JOIN_NAME));
+                                if (callsignSuggestions.length) setCallsignSuggestions([]);
+                            }}
                             autoFocus={true}
                             autoCapitalize="words"
                             accessibilityLabel={t('Your name or nickname')}

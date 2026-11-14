@@ -64,6 +64,8 @@ export * from './invite-rows.js';
 export * from './vouchers-block.js';
 // What a pasted invite says (its code, the community it is for), read the same in both apps' invite step.
 export * from './invite-text.js';
+// A name box that holds an invite or a web address instead of a name: refused the same on both apps and the node.
+export * from './name-box.js';
 export * from './event-copy.js';
 export * from './show-on-global.js';
 export * from './beanpool-defaults.js';

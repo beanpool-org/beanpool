@@ -18,8 +18,8 @@
  *  13  typed words are never lost on a failed send: in the box, or kept as the line with its state
  *  14  a first send with no home read here says the true reason: can't reach (offline, the deadline), had a problem (an
  *      answer that is not the info), or knows none of its names (only when my server answered so)
- *  15  each device for itself (X2b, scratch/fable-design/decisions/DECISION-outside-door.md): the gate table (kind x chat x
- *      door x block) through a round with a second device listed: after every row, drops included, the second device is
+ *  15  each device for itself (X2b, scratch/fable-design/decisions/DECISION-outside-door.md): section 3's gate table (kind x
+ *      chat x door x block, 96 rows) through a round with a second device listed: after every row, drops included, the second device is
  *      still served the item; the round names this phone's id on every fetch and confirm, the same id each round
  *  16  the two round fixes: my ticks are applied before held items are gated (a new device's first page), and a tick for a
  *      line I wrote elsewhere opens that chat here from a request or a decline
@@ -805,8 +805,9 @@ describe('14  a first send on a phone that never read its home says the true rea
 describe('15  each device for itself: the gate table through a round, a second device listed', () => {
     /** Ben's browser, which fetched once (so it is listed) and has not run a round since. */
     const BROWSER = 'f'.repeat(32);
-    // The kinds the mailbox holds for a member (apps/server/src/engine/relay-mail.ts HELD_KINDS); group items never reach it.
-    const kinds = ['dm-line', 'dm-blob', 'dm-delete'];
+    // Section 3's kinds: the three the mailbox holds for a member (apps/server/src/engine/relay-mail.ts HELD_KINDS), and a
+    // group line, which it never holds but which the gate drops here all the same.
+    const kinds = ['dm-line', 'dm-blob', 'dm-delete', 'group-line'];
     const chats: Array<{ state: OutsideChatState; theirLines: number } | null> = [
         null, { state: 'request', theirLines: 0 }, { state: 'request', theirLines: 1 }, { state: 'open', theirLines: 0 }, { state: 'open', theirLines: 5 },
         { state: 'declined', theirLines: 1 },

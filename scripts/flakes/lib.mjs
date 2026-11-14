@@ -139,7 +139,8 @@ function readSummaryBlocks(section, add) {
 
 // node --test's spec reporter (what node v26 prints to a file as well as a terminal) ends with this list of the failed
 // tests themselves: `test at <file>:L:C`, then `✖ name (1.2ms)`. A describe that failed only through a child prints its
-// own `✖` above the list, not in it.
+// own `✖` above the list, not in it. So with a list in the log, only a `✖` right under its `test at` line counts (a log
+// can hold several runs, each with its own list); with none (the tail was cut), every `✖` does.
 const SPEC_LIST = '✖ failing tests:';
 
 /** The YAML block under a TAP `not ok` line at i (`---` … `...`), trimmed. */
@@ -152,7 +153,7 @@ function tapBlock(lines, i) {
 function readRawLines(section, add) {
     let suite = null;
     const L = section.lines.map((l) => l.trim());
-    const specList = L.indexOf(SPEC_LIST);
+    const specList = L.includes(SPEC_LIST);
     for (let i = 0; i < L.length; i++) {
         const t = L[i];
         const h = /^━━━\s*(.+?)\s*━━━$/.exec(t);
@@ -164,7 +165,7 @@ function readRawLines(section, add) {
             if (yaml.includes("failureType: 'subtestsFailed'")) continue;
             const loc = yaml.map((y) => /^location: '\S*?\/beanpool\/beanpool\/([^':]+):\d+:\d+'$/.exec(y)?.[1]).find(Boolean) ?? null;
             add({ test: m[1], kind: 'node-test', check: section.check, file: loc, pkg: null });
-        } else if (t !== SPEC_LIST && (specList < 0 || i > specList) && (m = /^✖ (.+?)(?: \(\d+(?:\.\d+)?m?s\))?$/.exec(t))) {
+        } else if (t !== SPEC_LIST && (!specList || /^test at /.test(L[i - 1] ?? '')) && (m = /^✖ (.+?)(?: \(\d+(?:\.\d+)?m?s\))?$/.exec(t))) {
             add({ test: m[1], kind: 'node-test', check: section.check, file: null, pkg: null });
         } else if (/^✗/.test(t)) {
             const name = suite && !t.includes(suite) ? `${suite}: ${t}` : t;

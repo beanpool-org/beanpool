@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // record.mjs: put a PR's failing CI tests on the flake ledger, and say SECOND-HIT when one of them failed on a
-// different PR within 14 days, so a flake is acted on at its second hit rather than its third (Marty, 15 Nov).
+// different PR within 14 days, so a flake is acted on at its second hit rather than its third (Marty, 15 Nov). Only a
+// named test (or a suite's named assertion) pairs: a failed check whose log names no test is recorded and said as
+// "check red, no test named", and never counts toward a second hit (lib.mjs namesATest says why).
 //
 //   node scripts/flakes/record.mjs <PR> [run id]        record the PR's newest failed CI run (or that run)
 //   node scripts/flakes/record.mjs --seen <repo file> [--log <run log>]

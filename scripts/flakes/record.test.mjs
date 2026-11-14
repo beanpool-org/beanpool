@@ -228,7 +228,8 @@ const RULES = {
     // On this Mac (node v26) a node --test run logged to a file prints the spec reporter: `✖ name (1.2ms)`, and at the
     // end a `✖ failing tests:` list of the failed tests themselves (a describe's own `✖` is above it).
     'node v26 spec output is read, so SEEN-ON-CI fires for a node --test file': async ({ lib, rec }) => {
-        const local = fixture('local-node26-spec.txt');
+        // stress.sh hands over its red runs joined into one log, so the second run's describe line comes after a list.
+        const local = fixture('local-node26-spec.txt') + fixture('local-node26-spec.txt');
         assert.deepEqual(lib.parseFailures(local).map((x) => [x.test, x.kind]), [
             ['a member sees the bell once', 'node-test'], ['a quote keeps its author', 'node-test'],
         ]);
@@ -327,7 +328,8 @@ const MUTANTS = [
     ['node --test on CI: each failed test with its file, never the describe around it', 'lib.mjs', "add({ test: m[1], kind: 'node-test', check: section.check, file: loc, pkg: null });", "add({ test: m[1], kind: 'node-test', check: section.check, file: null, pkg: null });"],
     ['node v26 spec output is read, so SEEN-ON-CI fires for a node --test file', 'lib.mjs', "(m = /^✖ (.+?)(?: \\(\\d+(?:\\.\\d+)?m?s\\))?$/.exec(t))", 'false'],
     ['node v26 spec output is read, so SEEN-ON-CI fires for a node --test file', 'lib.mjs', '/^✖ (.+?)(?: \\(\\d+(?:\\.\\d+)?m?s\\))?$/', '/^✖ (.+?)$/'],
-    ['node v26 spec output is read, so SEEN-ON-CI fires for a node --test file', 'lib.mjs', '(specList < 0 || i > specList) && ', ''],
+    ['node v26 spec output is read, so SEEN-ON-CI fires for a node --test file', 'lib.mjs', "(!specList || /^test at /.test(L[i - 1] ?? '')) && ", ''],
+    ['node v26 spec output is read, so SEEN-ON-CI fires for a node --test file', 'lib.mjs', "/^test at /.test(L[i - 1] ?? '')", 'true'],
 ];
 
 for (const [name, check] of Object.entries(RULES)) {

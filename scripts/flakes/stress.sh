@@ -30,10 +30,12 @@
 # Env: STRESS_RUNS, STRESS_BUDGET_SECS, STRESS_FILE_SECS (a file's share), STRESS_HOGS, STRESS_LOCK (default
 # ~/.cache/heavy-test.lock), STRESS_BASE, STRESS_SINCE ("24 hours ago"), STRESS_OUT (the run logs; default a new temp
 # dir), FLAKE_LEDGER (record.mjs). For the tests: STRESS_ROOT, STRESS_CMD (runs instead of the real runner, with the
-# file as its argument), STRESS_HOG_CMD, STRESS_NOW_HHMMSS (the clock the window check reads).
+# file as its argument), STRESS_HOG_CMD, STRESS_NOW_HHMMSS (the clock the window check reads), STRESS_CLOCK (a command
+# that prints the epoch seconds the budget and each file's share are counted in; default `date +%s`).
 # bash 3.2: no associative arrays, no `timeout`.
 set -u
-START=$(date +%s)   # the budget counts from here: picking the files is inside it too
+now_s() { if [ -n "${STRESS_CLOCK:-}" ]; then $STRESS_CLOCK; else date +%s; fi; }
+START=$(now_s)   # the budget counts from here: picking the files is inside it too
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="${STRESS_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 RUNS="${STRESS_RUNS:-20}"
@@ -101,6 +103,8 @@ add_pick() { case "$PICK" in *"|$2|"*) return 1 ;; esac; PICK="$PICK$1|$2|"$'\n'
 N_CHANGED=0; N_BESIDE=0
 while read -r count f; do
   [ -n "${f:-}" ] || continue
+  # Not its own tests (or a test beside its own scripts): it would stress itself, up to a file's share each night.
+  case "$f" in scripts/flakes/*) continue ;; esac
   if is_test "$f"; then
     [ -f "$f" ] && add_pick "$count" "$f" && N_CHANGED=$((N_CHANGED + 1))
     continue
@@ -196,7 +200,7 @@ run_once() {
   fi
   RUN_PID=$!
   while kill -0 "$RUN_PID" 2>/dev/null; do
-    if [ "$(date +%s)" -ge "$until" ]; then stop_run; return 124; fi
+    if [ "$(now_s)" -ge "$until" ]; then stop_run; return 124; fi
     sleep 0.2
   done
   wait "$RUN_PID"; local rc=$?
@@ -209,13 +213,13 @@ REPORT=""
 NOT_REACHED=""
 while IFS= read -r f; do
   [ -n "$f" ] || continue
-  now=$(date +%s)
+  now=$(now_s)
   if [ "$now" -ge "$DEADLINE" ]; then NOT_REACHED="$NOT_REACHED $f"; continue; fi
   if ! runner_for "$f"; then REPORT="$REPORT"$'\n'"skipped $f (no runner known for it)"; continue; fi
   file_until=$(( now + FILE_SECS )); [ $file_until -gt $DEADLINE ] && file_until=$DEADLINE
   slug=$(printf '%s' "$f" | tr '/' '_')
   runs=0; reds=0; red_logs=""
-  while [ $runs -lt "$RUNS" ] && [ "$(date +%s)" -lt $file_until ]; do
+  while [ $runs -lt "$RUNS" ] && [ "$(now_s)" -lt $file_until ]; do
     log="$OUT/$slug.$((runs + 1)).log"
     run_once "$file_until" "$log"; rc=$?
     if [ $rc -eq 124 ]; then rm -f "$log"; break; fi
@@ -238,7 +242,7 @@ while IFS= read -r f; do
   fi
 done <<< "$ORDER"
 
-ELAPSED=$(( $(date +%s) - START ))
+ELAPSED=$(( $(now_s) - START ))
 printf '%s\n' "$REPORT" | grep .
 if [ -n "$NOT_REACHED" ]; then
   set -- $NOT_REACHED

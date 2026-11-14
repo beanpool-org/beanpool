@@ -1,6 +1,9 @@
 // stress.sh in a throwaway git repo with a fake runner (STRESS_CMD) and `sleep` standing in for the CPU load (no CPU is
-// burned here), the clock faked through STRESS_NOW_HHMMSS so a CI run at 03:20 UTC still tests the same thing. Each rule
-// has a check and a MUTANT, a copy of stress.sh with that rule broken, which the same check must reject.
+// burned here), the time of day faked through STRESS_NOW_HHMMSS so a CI run at 03:20 UTC still tests the same thing, and
+// the budget's clock injected (STRESS_CLOCK reads a file the fake runner moves on: one second a run, ten for the slow
+// file), so every count here is exact however long a run really takes on a busy runner. Each rule has a check and a
+// MUTANT, a copy of stress.sh with that rule broken, which the same check must reject.
+//   STRESS_TEST_DELAY_MS=700 node --test scripts/flakes/stress.test.mjs     the same checks with every run slowed
 //   node --test scripts/flakes/stress.test.mjs        (test-all.sh's flake_tools check)
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,20 +27,23 @@ git('init', '-q');
 write(REPO, 'lib/util.test.mjs', '// beside lib/util.mjs\n');
 write(REPO, 'b/__tests__/thing.test.mjs', '// beside b/thing.mjs, in __tests__\n');
 write(REPO, 'old/old.test.mjs', '// changed three days ago\n');
+write(REPO, 'scripts/flakes/record.test.mjs', "// the flake tools' own test: never stressed\n");
 git('add', '.');
 const OLD = new Date(Date.now() - 3 * 86400e3).toISOString();
 git.env = { GIT_AUTHOR_DATE: OLD, GIT_COMMITTER_DATE: OLD };
 git('commit', '-q', '-m', 'old');
 git.env = {};
-for (const f of ['a/flaky.test.mjs', 'a/solid.test.mjs', 'a/slow.test.mjs', 'lib/util.mjs', 'b/thing.mjs', 'e2e/skip.test.mjs', 'notes.md']) write(REPO, f, `// ${f}\n`);
+for (const f of ['a/flaky.test.mjs', 'a/solid.test.mjs', 'a/slow.test.mjs', 'lib/util.mjs', 'b/thing.mjs', 'e2e/skip.test.mjs', 'notes.md',
+    'scripts/flakes/stress.test.mjs', 'scripts/flakes/record.mjs']) write(REPO, f, `// ${f}\n`);
 git('add', '.');
 git('commit', '-q', '-m', 'recent');
 git('update-ref', 'refs/remotes/origin/main', 'HEAD');
 // The ledger's two first, then by how often changed (once each), then by path.
 const EXPECTED_ORDER = ['a/flaky.test.mjs', 'a/solid.test.mjs', 'a/slow.test.mjs', 'b/__tests__/thing.test.mjs', 'lib/util.test.mjs'];
 
-// The fake runner: counts runs per file, notes whether every load process was alive, fails flaky.test.mjs on every
-// second run with a vitest-shaped FAIL line, and keeps slow.test.mjs going for 16 s.
+// The fake runner: counts runs per file, notes whether every load process was alive, moves the injected clock on one
+// second (ten for slow.test.mjs, a whole file's share), fails flaky.test.mjs on every second run with a vitest-shaped
+// FAIL line, and keeps slow.test.mjs going for 16 s, so only the clock can end it. STRESS_TEST_DELAY_MS slows every run.
 const RUNNER = path.join(tmp('runner'), 'runner.mjs');
 fs.writeFileSync(RUNNER, `import fs from 'node:fs'; import path from 'node:path';
 const f = process.argv[2]; const S = process.env.STRESS_TEST_STATE; const base = path.basename(f);
@@ -47,7 +53,14 @@ fs.appendFileSync(path.join(S, 'order'), f + '\\n');
 const pids = (process.env.STRESS_HOG_PIDS || '').trim().split(/\\s+/).filter(Boolean);
 const on = pids.length > 0 && pids.every((p) => { try { process.kill(Number(p), 0); return true; } catch { return false; } });
 fs.appendFileSync(path.join(S, 'load'), (on ? 'on' : 'off') + '\\n');
-if (base === 'slow.test.mjs') { fs.writeFileSync(path.join(S, 'slow-pid'), String(process.pid)); setTimeout(() => {}, 16000); }
+// The pid before the clock moves: once it has, stress.sh may stop this run at its next look.
+if (base === 'slow.test.mjs') fs.writeFileSync(path.join(S, 'slow-pid'), String(process.pid));
+const C = process.env.STRESS_TEST_CLOCK;
+fs.writeFileSync(C + '.next', String(Number(fs.readFileSync(C, 'utf8')) + (base === 'slow.test.mjs' ? 10 : 1)));
+fs.renameSync(C + '.next', C);
+const ms = Number(process.env.STRESS_TEST_DELAY_MS || 0);
+if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+if (base === 'slow.test.mjs') setTimeout(() => {}, 16000);
 else if (base === 'flaky.test.mjs' && n % 2 === 0) { console.log(' FAIL  a/flaky.test.mjs > group > sometimes'); console.log('AssertionError: expected 1 to be 2'); process.exit(1); }
 `);
 
@@ -59,6 +72,8 @@ function setup(extra = {}) {
     const state = path.join(W, 'state');
     fs.mkdirSync(state);
     const ledger = path.join(W, 'flakes.jsonl');
+    const clock = path.join(W, 'clock');
+    fs.writeFileSync(clock, '1000');
     const now = Date.now();
     fs.writeFileSync(ledger, [
         { test: 'a/solid.test.mjs > g > never', file: 'a/solid.test.mjs', pr: 40, run: 1, job: 1, time: new Date(now - 2 * 86400e3).toISOString(), touched: 'not-seen' },
@@ -66,8 +81,9 @@ function setup(extra = {}) {
     ].map((e) => JSON.stringify(e)).join('\n') + '\n');
     const env = {
         ...process.env, STRESS_ROOT: REPO, STRESS_LOCK: lock, STRESS_CMD: `${process.execPath} ${RUNNER}`,
-        STRESS_HOG_CMD: 'sleep 300', STRESS_HOGS: '1', STRESS_RUNS: '4', STRESS_BUDGET_SECS: '14', STRESS_FILE_SECS: '2',
+        STRESS_HOG_CMD: 'sleep 300', STRESS_HOGS: '1', STRESS_RUNS: '4', STRESS_BUDGET_SECS: '40', STRESS_FILE_SECS: '10',
         STRESS_OUT: path.join(W, 'out'), STRESS_NOW_HHMMSS: '120000', FLAKE_LEDGER: ledger, FLAKE_ROOT: REPO, STRESS_TEST_STATE: state,
+        STRESS_CLOCK: `cat ${clock}`, STRESS_TEST_CLOCK: clock,
         ...extra,
     };
     return { W, lock, state, env, read: (n) => { try { return fs.readFileSync(path.join(state, n), 'utf8'); } catch { return ''; } } };
@@ -126,6 +142,13 @@ const RULES = {
         assert.deepEqual([...listed].sort(), [...EXPECTED_ORDER].sort(), r.out);
         assert.match(r.out, /5 test file\(s\) \(3 changed, 2 beside changed source\)/);
     },
+    // Else its own tests are stressed the night after every change to them (up to a file's share, 300 s, each).
+    "never stresses the flake tools' own tests (scripts/flakes/)": (script) => {
+        const r = runStress(script, setup(), ['--list']);
+        assert.equal(r.code, 0, r.out);
+        assert.ok(!/^scripts\/flakes\//m.test(r.out), r.out);
+        assert.match(r.out, /: 5 test file\(s\) /);
+    },
     'files the ledger holds go first': (script) => {
         const r = runStress(script, setup(), ['--list']);
         assert.deepEqual(r.out.split('\n').filter((l) => /\.test\.mjs$/.test(l)), EXPECTED_ORDER, r.out);
@@ -139,7 +162,8 @@ const RULES = {
         assert.match(r.out, /^clean {3}a\/solid\.test\.mjs 4\/4$/m);
         assert.match(r.out, /^clean {3}lib\/util\.test\.mjs 4\/4$/m);
         assert.match(r.out, /^clean {3}b\/__tests__\/thing\.test\.mjs 4\/4$/m);
-        assert.match(r.out, /stress: 5 of 5 file\(s\) run in \d+s; 1 SUSPECT\(s\)/);
+        // 4 + 4 runs, the slow file's 10, 4 + 4: on the injected clock, however long each run really took.
+        assert.match(r.out, /^stress: 5 of 5 file\(s\) run in 26s; 1 SUSPECT\(s\)$/m);
         assert.equal(s.read('order').split('\n').filter(Boolean).filter((f) => f === 'a/flaky.test.mjs').length, 4, 'each file runs N times');
     },
     'a suspect seen on CI says SEEN-ON-CI': (script) => {
@@ -149,7 +173,8 @@ const RULES = {
     'never exceeds the budget: a run still going is stopped and counted as cut': (script) => {
         const s = setup();
         const r = runStress(script, s);
-        assert.ok(r.secs <= 14, `took ${r.secs}s against a 14 s budget\n${r.out}`);
+        const took = Number(/ run in (\d+)s;/.exec(r.out)?.[1]);
+        assert.ok(took <= 40, `took ${took}s on the clock against a 40 s budget\n${r.out}`);
         assert.match(r.out, /^cut {5}a\/slow\.test\.mjs/m);
         const slow = Number(s.read('slow-pid'));
         assert.ok(slow > 0 && !alive(slow), 'the cut run is gone');
@@ -191,10 +216,13 @@ const MUTANTS = [
     ['picks the tests main changed in the window, and the tests beside changed source', 'e2e/*|*/e2e/*|', ''],
     ['picks the tests main changed in the window, and the tests beside changed source', ' "$dir/__tests__/$stem".test.{ts,tsx,js,mjs}; do', '; do'],
     ['picks the tests main changed in the window, and the tests beside changed source', 'for cand in "$dir/$stem".test.{ts,tsx,js,mjs} ', 'for cand in '],
+    ["never stresses the flake tools' own tests (scripts/flakes/)", '  case "$f" in scripts/flakes/*) continue ;; esac\n', ''],
     ['files the ledger holds go first', 'print ((f in inl) ? 0 : 1)', 'print 1'],
     ['a red is SUSPECT with its count', 'if [ $rc -ne 0 ]; then reds=$((reds + 1));', 'if false; then reds=$((reds + 1));'],
+    // The wall clock instead of the injected one: the counts would hang on how fast the machine is.
+    ['a red is SUSPECT with its count', 'now_s() { if [ -n "${STRESS_CLOCK:-}" ]; then $STRESS_CLOCK; else date +%s; fi; }', 'now_s() { date +%s; }'],
     ['a suspect seen on CI says SEEN-ON-CI', 'node "$SCRIPT_DIR/record.mjs" --seen', 'true'],
-    ['never exceeds the budget: a run still going is stopped and counted as cut', 'if [ "$(date +%s)" -ge "$until" ]; then stop_run; return 124; fi', ':'],
+    ['never exceeds the budget: a run still going is stopped and counted as cut', 'if [ "$(now_s)" -ge "$until" ]; then stop_run; return 124; fi', ':'],
     ['the load runs during every run and is gone after', '  for p in $HOG_PIDS; do kill "$p" 2>/dev/null; done\n  for p in $HOG_PIDS; do wait "$p" 2>/dev/null; done', '  :'],
     // bash runs the EXIT trap when a signal ends it too (the INT/TERM trap only adds the line and the 130), so the EXIT
     // trap is what a signal depends on.

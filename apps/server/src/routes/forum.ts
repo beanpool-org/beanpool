@@ -9,6 +9,10 @@
  *        ETag, so an unchanged list answers 304)
  *   GET  /api/forum/topics/:id?after=<n>    → { topic, posts: [post], next }   (30 posts after number n) | 404 `not_found`
  *   GET  /api/forum/posts/:id/photos/:n     → the photo's bytes | 404
+ *   GET  /api/forum/search?q&offset         → { hits: [hit], next }   (slice F6, engine/forum-search.ts: every word found, newest
+ *        first, 20 a page; never a removed, hidden or waiting post, an archived section's, or a blocked writer's) 400 `no_words`
+ *        or `too_long`; 429 `searches_per_day` with Retry-After (100 in any 24 hours). A hit: { topicId, sectionId, title,
+ *        postId, number, writer, createdAt, excerpt }
  * An active member, on the main server (a standby 503 `standby`), not muted (403 `moderation_muted`):
  *   POST /api/forum/told                    → { told: true }   (they read that anyone on the web can read this forum)
  *   POST /api/forum/topics                  { sectionId, title, words, place?, lang?, photos? } → 201 { topic, post }
@@ -61,6 +65,7 @@ import {
     forumTopics, markForumTold, moveForumTopic, pinForumTopic, readTopic, removeForumPost, replyInForum, startForumTopic,
 } from '../engine/forum.js';
 import { noteForumReader, tellForumReply, tellForumTopic } from '../engine/forum-notices.js';
+import { ForumSearchRefusal, FORUM_SEARCH_OFFSET_MAX, searchForum } from '../engine/forum-search.js';
 import { FORUM_LIMITS, word } from '@beanpool/core';
 import {
     firstLookPhoto, listFirstLooks, myFirstLook, noFirstLook, okFirstLook, tellFirstLookWaiting, withdrawFirstLook,
@@ -112,6 +117,8 @@ function writer(ctx: any): string | null {
 
 /** A refusal in the member's words: the forum's own, or a mute, a standby or a photo budget (profile-feature-gate.ts). */
 function refused(ctx: any, e: unknown): void {
+    // The day's searches spent: when the oldest one counted leaves the day.
+    if (e instanceof ForumSearchRefusal) ctx.set('Retry-After', String(e.retryAfterSec));
     if (e instanceof ForumRefusal) return answer(ctx, e.status, e.message, e.code);
     if (respondProfileRefusal(ctx, e)) return;
     ctx.status = 400;
@@ -186,6 +193,13 @@ export function createForumRoutes(_deps: RouteDeps): Router {
             noteForumReader(ctx.params.id, key);
             return out;
         });
+    });
+
+    // A member's search (slice F6): counted against their day's searches once the words are good, so a refusal costs none.
+    router.get('/api/forum/search', (ctx) => {
+        const offset = whole(ctx.query.offset, 0, FORUM_SEARCH_OFFSET_MAX);
+        if (offset === null || Array.isArray(ctx.query.q)) return answer(ctx, 400, 'q is one text; offset a whole number.', 'bad_request');
+        read(ctx, (key) => searchForum(key, ctx.query.q ?? '', offset));
     });
 
     router.get('/api/forum/posts/:id/photos/:n', (ctx) => {

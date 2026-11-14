@@ -202,7 +202,108 @@ export async function turnOnWebPush(origin: string, identity: BeanPoolIdentity, 
     return subscribeAtTap(origin, identity, lang, env, 'member');
 }
 
-async function subscribeAtTap(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv, made: WebPushPin['for']): Promise<TellMeResult> {
+/**
+ * Told from another origin (DESIGN-global-yes-join-fable.md §2.4, slice Y2): the scope of the worker registration this
+ * browser keeps for one community a member asked from Home's Find card, `/app/knock/<host>/`. A registration holds one
+ * subscription, bound to one community's key, so each asked community has its own, and the member's own at /app/ (Turn on,
+ * this community's key) is never touched. Null for an address that is no https origin.
+ */
+export function knockScope(origin: string): string | null {
+    try {
+        const u = new URL(origin);
+        return u.protocol === 'https:' && u.origin === origin && /^[a-z0-9.-]+(?::\d{1,5})?$/.test(u.host) ? `/app/knock/${u.host}/` : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The tap on Tell me on Home's Find card, on the row of a community this member asked from here (slice Y2): the same steps
+ * as the waiting page's, with this browser's registration for that community ({@link knockScope}), that community's key,
+ * and the subscription given to that community, signed by the key that asked (the community keeps it only for a key with a
+ * request open there: anyone else 403). The click on its notice lands on Home's row (public/sw.js, lib/knock-landing.ts).
+ * Never throws.
+ */
+export async function tellMeAtHome(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv = pushEnv()): Promise<TellMeResult> {
+    const scope = knockScope(origin);
+    if (!scope) return { ok: false, place: pushPlace(env), reason: 'failed' };
+    const result = await subscribeAtTap(origin, identity, lang, env, 'asker', scope);
+    // A tap that failed after the registration was made (the key read refused, the subscription not taken) leaves it with no
+    // pin, so Home's let-go would never find it: it ends here, unless an earlier Tell me for this key is still kept there.
+    if (!result.ok && !readWebPushPin(origin, identity.publicKey)) await endRegistration(scope).catch(() => {});
+    return result;
+}
+
+/**
+ * Home lets go of a community it asked to be told by (slice Y2): the request was answered and used (the key joined there),
+ * cancelled, or has nothing open there any more. The community lets go of this browser (DELETE, signed, never awaited:
+ * it lets the row go with the request anyway), the pin goes, and this browser's registration for that community ends, so
+ * nothing more can arrive from it. Only that registration: its scope is checked exactly, so the member's own at /app/
+ * stays. At most LET_GO_WAIT_MS. Never throws.
+ */
+export async function stopTellingMeAtHome(origin: string, identity: BeanPoolIdentity): Promise<void> {
+    const pin = readWebPushPin(origin, identity.publicKey);
+    const scope = knockScope(origin);
+    if (pin) forgetWebPushPin(origin, identity.publicKey);
+    const work = Promise.allSettled([
+        pin ? sendSignedAt('DELETE', origin, WEB_PUSH_PATH, JSON.stringify({ subId: pin.subId }), identity) : Promise.resolve(),
+        scope ? endRegistration(scope) : Promise.resolve(),
+    ]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([work, new Promise(resolve => { timer = setTimeout(resolve, LET_GO_WAIT_MS); })]);
+    clearTimeout(timer);
+}
+
+/** The registration at exactly `scope`, if this browser has one: its subscription ends and it goes. */
+async function endRegistration(scope: string): Promise<void> {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    const registration = await navigator.serviceWorker.getRegistration(scope);
+    // getRegistration answers the registration whose scope covers the address best, which can be the member's own at /app/.
+    if (!registration || new URL(registration.scope).pathname !== scope) return;
+    await endThis(registration);
+}
+
+async function endThis(registration: ServiceWorkerRegistration): Promise<void> {
+    await (await registration.pushManager?.getSubscription())?.unsubscribe().catch(() => false);
+    await registration.unregister();
+}
+
+/** A registration's scope is one asked community's, /app/knock/<host>/ (as public/sw.js reads it), never the member's own. */
+const KNOCK_SCOPE_PATH = /^\/app\/knock\/[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::\d{1,5})?\/$/;
+
+/**
+ * Sign-out and delete-everything, before the key and the pins go (web push W2's promise, kept for Home's Tell me: review of
+ * #3167): every other community this browser keeps a pin for, for this key (each one asked from Home's Find card and told
+ * to tell this browser, slice Y2), lets go of it, signed while the key is still here; and every registration this browser
+ * keeps for an asked community ends, one a failed Tell me left with no pin among them, so no yes for the account that has
+ * gone can arrive here. `own` is the community the web app talks to, which {@link turnOffWebPush} lets go of itself. The
+ * DELETEs leave with keepalive (lib/api.ts sendSignedAt), so the reload that follows doesn't cut them. At most STOP_WAIT_MS,
+ * beside turnOffWebPush's own. Never throws.
+ */
+export async function stopEveryTellMeAtHome(identity: BeanPoolIdentity, own: string | null): Promise<void> {
+    let pins: WebPushPin[] = [];
+    try {
+        const all = JSON.parse(localStorage.getItem(STORE_KEY) ?? '[]') as WebPushPin[];
+        pins = Array.isArray(all) ? all.filter(p => p && p.publicKey === identity.publicKey && p.origin !== own && typeof p.subId === 'string') : [];
+    } catch { /* nothing kept */ }
+    for (const pin of pins) forgetWebPushPin(pin.origin, pin.publicKey);
+    const work = Promise.allSettled([
+        ...pins.map(pin => sendSignedAt('DELETE', pin.origin, WEB_PUSH_PATH, JSON.stringify({ subId: pin.subId }), identity)),
+        endEveryKnockRegistration(),
+    ]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([work, new Promise(resolve => { timer = setTimeout(resolve, STOP_WAIT_MS); })]).catch(() => {});
+    clearTimeout(timer);
+}
+
+/** Every registration this browser keeps at an asked community's scope ends; the member's own at /app/ stays. */
+async function endEveryKnockRegistration(): Promise<void> {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator) || typeof navigator.serviceWorker.getRegistrations !== 'function') return;
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.allSettled(registrations.filter(r => KNOCK_SCOPE_PATH.test(new URL(r.scope).pathname)).map(endThis));
+}
+
+async function subscribeAtTap(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv, made: WebPushPin['for'], scope: string = SERVICE_WORKER_SCOPE): Promise<TellMeResult> {
     const place = pushPlace(env);
     if (place.kind === 'home-screen' || place.kind === 'none') return { ok: false, place, reason: 'cannot' };
     if (place.kind === 'blocked') return { ok: false, place, reason: 'blocked' };
@@ -210,7 +311,7 @@ async function subscribeAtTap(origin: string, identity: BeanPoolIdentity, lang: 
         const permission = await Notification.requestPermission();
         if (permission === 'denied') return { ok: false, place: { kind: 'blocked', phone: place.device === 'phone' }, reason: 'blocked' };
         if (permission !== 'granted') return { ok: false, place, reason: 'dismissed' };
-        const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, { scope: SERVICE_WORKER_SCOPE });
+        const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, { scope });
         // The key read goes past api.ts, so it asks the version first, as the signed post after it does (lib/node-version-gate.ts).
         const keySignal = AbortSignal.timeout(TIMEOUT_MS);
         await refuseIfNodeTooOld(origin, keySignal);

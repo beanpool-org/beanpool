@@ -20,6 +20,8 @@ import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { useLanguage } from './lib/useLanguage';
 import { useWebPushMember } from './lib/use-web-push-member';
+import { knockLandingFor, takeKnockLanding } from './lib/knock-landing';
+import { KNOCK_ROW_EVENT } from './lib/yes-bell';
 import { goToNoticeTarget } from './components/NeedsYouIcons';
 import { TELL_ME_WORDS } from './lib/web-push';
 import { setTitleUnread } from './lib/page-words';
@@ -711,6 +713,37 @@ export function App() {
     }, [identity, askParam]);
     const clearAskedCommunity = useCallback(() => setAskedCommunity(null), []);
 
+    // `/app?knock=<host>#notice=…`, a click on a notice from a community this member asked from Home (global yes Y2,
+    // lib/knock-landing.ts): taken out of the address as the page opens, before the member's own notice check reads the
+    // fragment; then, at the first identity, Home with the Find card on that community's row, or for a forgery nothing
+    // opened and the warning once.
+    const [knockLanding] = useState(() => takeKnockLanding());
+    const [knockRow, setKnockRow] = useState<string | null>(null);
+    const [knockForged, setKnockForged] = useState(false);
+    const knockTaken = useRef(false);
+    useEffect(() => {
+        if (!identity || !knockLanding || knockTaken.current) return;
+        knockTaken.current = true;
+        if (knockLandingFor(knockLanding, identity.publicKey) === 'forged') {
+            setKnockForged(true);
+            return;
+        }
+        setActiveTab('home');
+        setKnockRow(knockLanding.origin);
+    }, [identity, knockLanding]);
+    const clearKnockRow = useCallback(() => setKnockRow(null), []);
+    // The bell's row for a yes (global yes Y3, lib/yes-bell.ts): the same landing, from a tap.
+    useEffect(() => {
+        const land = (e: Event) => {
+            const url = (e as CustomEvent<unknown>).detail;
+            if (typeof url !== 'string') return;
+            setActiveTab('home');
+            setKnockRow(url);
+        };
+        window.addEventListener(KNOCK_ROW_EVENT, land);
+        return () => window.removeEventListener(KNOCK_ROW_EVENT, land);
+    }, []);
+
     // `/?shop=<id>` — a shared shop link.
     const [linkedShop, setLinkedShop] = useState<string | null>(null);
     useEffect(() => { setLinkedShop(takeShopParam()); }, []);
@@ -1311,10 +1344,10 @@ export function App() {
             {/* Main Content Viewport */}
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
                 {/* A click on a notification this community did not sign for this account (web push W2): said once, nothing opened. */}
-                {webPush.forged && (
+                {(webPush.forged || knockForged) && (
                     <div role="alert" data-testid="forged-notice" className="w-full bg-bp-gold-fill text-bp-gold-on px-3 sm:px-4 py-2.5 flex items-start justify-between gap-2 text-sm font-medium shrink-0 z-[120]">
                         <span className="leading-snug min-w-0">{t(TELL_ME_WORDS.forged)}</span>
-                        <button type="button" onClick={webPush.dismissForged} aria-label={t('Close')}
+                        <button type="button" onClick={() => { webPush.dismissForged(); setKnockForged(false); }} aria-label={t('Close')}
                             className="min-w-[48px] min-h-[48px] -my-2 -mr-2 flex items-center justify-center bg-transparent border-none cursor-pointer text-bp-gold-on text-lg shrink-0">✕</button>
                     </div>
                 )}
@@ -1469,6 +1502,8 @@ export function App() {
                                     onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
                                     askedCommunity={askedCommunity}
                                     onAskedCommunitySeen={clearAskedCommunity}
+                                    knockRow={knockRow}
+                                    onKnockRowSeen={clearKnockRow}
                                 />
                             )}
                             {activeTab === 'marketplace' && (

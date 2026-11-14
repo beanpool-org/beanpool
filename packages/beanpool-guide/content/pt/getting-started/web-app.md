@@ -127,6 +127,12 @@ A tela 1 da entrada no navegador diz o mesmo no sentido inverso: se você já us
 - O celular exibirá **quatro dígitos**. Digite-os no computador e pressione **Confirmar**. Sua conta é transferida para o computador somente depois disso. Três tentativas incorretas e nada é enviado: gere um novo código. Nunca leia os dígitos em voz alta nem os envie para ninguém.
 - Se o celular avisar que o aplicativo é muito antigo, atualize o aplicativo BeanPool nele e escaneie um novo código.
 
+## Notificações
+
+O app web pode avisar você do que aconteceu, como o celular: os mesmos alertas, com os mesmos interruptores. Ative-os em **Configurações**, depois **Notificações**, na primeira linha, **Neste dispositivo**. Seu navegador pergunta primeiro, nesse toque. O navegador de um computador é avisado enquanto está aberto, o Safari em um Mac e o navegador de um celular mesmo fechado, e um iPhone só a partir da Tela de Início. Onde não dá para avisar um navegador, o sino no alto continua listando o que aconteceu, e no navegador de um celular **Baixar o app** vem primeiro. Consulte "Notificações".
+
+Pediu a outra comunidade que deixe você entrar, pelo cartão **Encontre sua comunidade** no **Início**? O cartão de espera dela tem **Avise-me quando responderem**, e essa comunidade avisa este navegador da resposta por conta própria. Tocar na notificação, ou em **🎉 {name} aceitou.** no sino, abre o **Início** nessa comunidade, com **Entrar**. Consulte "Encontrar uma comunidade próxima".
+
 ## Como instalar
 
 O aplicativo web pode oferecer **Instalar o BeanPool** para que ele abra na sua tela inicial como um app. Se o seu navegador não puder fazer isso, toque em **Como?** para ver as instruções.

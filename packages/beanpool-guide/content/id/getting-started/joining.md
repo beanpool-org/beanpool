@@ -12,7 +12,7 @@ source-hash: 5a1feb7390e4c3fb
 - **Dengan undangan**, kamu bergabung ke komunitas: orang-orang di dekatmu, dengan Kacang, transaksi, dan Sarana Bersama miliknya sendiri. Anggota dari komunitas tersebut mengundangmu.
 - **Tanpa undangan**, kamu bisa bergabung dengan **komunitas global** saat dibuka: orang-orang dari mana saja, tempat kamu bisa memposting, berkirim pesan, dan menemukan komunitas di dekatmu. Tidak ada Kacang dan tidak ada pemungutan suara komunitas di sana. Kacang, kredit, Sarana Bersama, dan Keputusannya berada di komunitas lokal. Komunitas global menunjukkan cara kerjanya, dalam sebuah komunitas contoh. Lihat "Kacang dan komunitas global".
 
-Tidak punya undangan, tapi ada komunitas di dekatmu? Bergabunglah dengan komunitas global, lalu minta komunitas itu untuk mengizinkanmu masuk: setiap anggotanya bisa mengizinkanmu, atau, di komunitas yang hanya adminnya yang mengundang, adminnya yang bisa mengizinkanmu. Lihat "Finding a community near you".
+Tidak punya undangan, tapi ada komunitas di dekatmu? Bergabunglah dengan komunitas global, lalu minta komunitas itu untuk mengizinkanmu masuk: setiap anggotanya bisa mengizinkanmu, atau, di komunitas yang hanya adminnya yang mengundang, adminnya yang bisa mengizinkanmu. Sudah menjadi anggota di suatu tempat, dan meminta dari **Beranda** web app? Kartu menunggunya juga punya **Beri tahu saya saat mereka menjawab**, dan jawaban ya muncul di lonceng. Lihat "Finding a community near you".
 
 Apa pun caranya, akunmu adalah kunci yang disimpan di ponselmu, dengan 12 kata bahasa Inggris yang memulihkannya kembali. Tidak ada kata sandi.
 

@@ -127,6 +127,12 @@ Bir tarayıcıda katılmanın 1. ekranı da tam tersini söyler: herhangi bir te
 - Telefon ardından **dört basamak** gösterir. Bunları bilgisayara yazın ve **Onayla**'ya basın. Hesabınız ancak bundan sonra bilgisayara aktarılır. Üç yanlış denemede hiçbir şey gönderilmez: yeni bir kod oluşturun. Basamakları asla sesli okumayın veya kimseye göndermeyin.
 - Telefon uygulamasının çok eski olduğunu söylerse üzerindeki BeanPool uygulamasını güncelleyin, ardından yeni bir kod tarayın.
 
+## Bildirimler
+
+Web uygulaması size olanları telefon gibi söyleyebilir: aynı uyarılar, aynı anahtarlar altında. Bunları **Ayarlar**'da, sonra **Bildirimler**'de, ilk satırda, **Bu cihazda** açın. Tarayıcınız önce size sorar, o dokunuşta. Bilgisayardaki tarayıcıya çalışırken haber verilir, Mac'te Safari'ye ve telefondaki tarayıcıya ise kapalıyken bile; iPhone'a yalnızca Ana Ekran'dan. Bir tarayıcıya haber verilemiyorsa üstteki zil olanları yine de listeler ve telefondaki tarayıcıda önce **Uygulamayı edin** gelir. "Bildirimler" bölümüne bakın.
+
+Başka bir topluluktan sizi içeri almasını, **Ana Sayfa**'daki **Topluluğunu bul** kartından mı istediniz? Bekleme kartında **Yanıtladıklarında bana söyle** vardır ve o topluluk yanıtını bu tarayıcıya kendisi söyler. Bildirime veya zildeki **🎉 {name}: üyeler evet dedi.** satırına dokunmak, **Ana Sayfa**'yı o toplulukta, **Katıl** ile birlikte açar. "Yakınınızda bir topluluk bulma" bölümüne bakın.
+
 ## Yükleme
 
 Web uygulaması, bir uygulama gibi ana ekranınızdan açılması için **BeanPool'u Yükle** seçeneğini sunabilir. Tarayıcınız bunu yapamıyorsa adımlar için **Nasıl?** seçeneğine dokunun.

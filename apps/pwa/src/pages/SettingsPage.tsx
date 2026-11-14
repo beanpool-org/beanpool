@@ -10,7 +10,7 @@ import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
 import { Fragment, useState, useEffect, useRef } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
-import { letGoOfWebPushAt, turnOffWebPush, webPushOrigin } from '../lib/web-push';
+import { letGoOfWebPushAt, stopEveryTellMeAtHome, turnOffWebPush, webPushOrigin } from '../lib/web-push';
 import { WebPushRow } from '../components/WebPushRow';
 import { clearAccountStorage } from '../lib/device-prefs';
 import { clearHomeCache } from '../lib/home-cache';
@@ -369,10 +369,17 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         }
     };
 
-    /** Sign-out and delete-everything: this community lets go of this browser while the key is still here (web push W2). */
-    const stopWebPushHere = async () => {
+    /**
+     * Sign-out and delete-everything: this community lets go of this browser while the key is still here (web push W2). Where
+     * the key leaves this browser (`keyGoes`), so does every community asked from Home and told to tell it (Tell me, global
+     * yes Y2), and their registrations end: nothing for the account that has gone can arrive here.
+     */
+    const stopWebPushHere = async (keyGoes: boolean) => {
         const origin = webPushOrigin(getNodeApiUrl());
-        if (origin) await turnOffWebPush(origin, identity).catch(() => {});
+        await Promise.all([
+            origin ? turnOffWebPush(origin, identity).catch(() => {}) : undefined,
+            keyGoes ? stopEveryTellMeAtHome(identity, origin).catch(() => {}) : undefined,
+        ]);
     };
 
     // Notification Preferences
@@ -1446,7 +1453,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 setIsPurging(true);
                                                 try {
                                                     // The community lets go of this browser first, signed while the key is here (web push W2).
-                                                    await stopWebPushHere();
+                                                    await stopWebPushHere(true);
                                                     await wipeIdentity();
                                                     await clearAccountStorage();
                                                     setDeletionMode('purged');
@@ -1542,12 +1549,13 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                         }
                                                         if (plan.kind === 'this-one') {
                                                             // The page's own community keeps the key: back to it, key and settings kept.
-                                                            await stopWebPushHere();
+                                                            // The key stays here, and Home's Tell me with it: the page's own Home lets those go.
+                                                            await stopWebPushHere(false);
                                                             await leaveThisCommunity();
                                                             setPurgedNote(t('Account deleted at {here}. This browser keeps your key for {kept}. Reloading app...', { here: hostOf(plan.here), kept: hostOf(plan.keeps.url) }));
                                                         } else {
                                                             try {
-                                                                await stopWebPushHere();
+                                                                await stopWebPushHere(true);
                                                                 await wipeIdentity();
                                                                 await clearAccountStorage();
                                                             } catch (e) {

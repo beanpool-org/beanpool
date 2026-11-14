@@ -62,7 +62,9 @@ export function useWebPushMember(
             });
         };
         // A click that opened this tab: the notice is in the fragment (never sent to a server). The waiting page reads its own.
-        if (new URLSearchParams(window.location.search).get('door') === null) {
+        // Nor one from a community this member asked from here (`?knock=`, lib/knock-landing.ts): checked by that community's key.
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('door') === null && !params.has('knock')) {
             const inHash = noticeInHash(window.location.hash);
             if (inHash !== undefined) {
                 try { window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`); } catch { /* the fragment stays */ }

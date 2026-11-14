@@ -127,6 +127,12 @@ Layar 1 saat bergabung di browser menyatakan hal yang sama secara terbalik: jika
 - Ponsel kemudian menampilkan **empat digit angka**. Ketikkan angka tersebut di komputer dan tekan **Konfirmasi**. Akunmu berpindah ke komputer hanya setelah proses itu. Tiga kali percobaan salah dan tidak ada yang dikirim: buat kode baru. Jangan pernah membacakan angka-angka tersebut dengan keras atau mengirimkannya kepada siapa pun.
 - Jika ponsel menyatakan aplikasinya terlalu usang, perbarui aplikasi BeanPool di ponsel, lalu pindai kode baru.
 
+## Notifikasi
+
+Web app bisa memberi tahumu apa yang terjadi, seperti ponsel: peringatan yang sama, di bawah sakelar yang sama. Aktifkan di **Pengaturan**, lalu **Notifikasi**, di baris pertama, **Di perangkat ini**. Browser-mu bertanya dulu, saat kamu mengetuk itu. Browser di komputer diberi tahu selama berjalan, Safari di Mac dan browser di ponsel bahkan saat ditutup, dan iPhone hanya dari Layar Utama. Jika sebuah browser tidak bisa diberi tahu, lonceng di atas tetap mencantumkan apa yang terjadi, dan di browser ponsel **Dapatkan aplikasinya** muncul lebih dulu. Lihat "Notifikasi".
+
+Meminta komunitas lain untuk mengizinkanmu masuk, dari kartu **Temukan komunitasmu** di **Beranda**? Kartu menunggunya punya **Beri tahu saya saat mereka menjawab**, dan komunitas itu memberi tahu browser ini jawabannya sendiri. Mengetuk notifikasi, atau **🎉 {name} menjawab ya.** di lonceng, membuka **Beranda** di komunitas itu, dengan **Gabung**. Lihat "Menemukan komunitas di dekatmu".
+
 ## Memasangnya
 
 Web app mungkin menawarkan **Pasang BeanPool** sehingga dapat dibuka dari layar utama seperti sebuah aplikasi. Jika browsermu tidak dapat melakukannya, ketuk **Bagaimana caranya?** untuk melihat langkah-langkatnya.

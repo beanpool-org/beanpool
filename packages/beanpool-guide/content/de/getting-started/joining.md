@@ -12,7 +12,7 @@ source-hash: 5a1feb7390e4c3fb
 - **Mit einer Einladung** trittst du einer Community bei: den Menschen in deiner Nähe, mit ihren eigenen Bohnen, Handelsgeschäften und dem Gemeingut. Ein Mitglied dieser Community lädt dich ein.
 - **Ohne Einladung** kannst du der **globalen Community** beitreten, wenn sie geöffnet ist: Menschen von überall, wo du Beiträge veröffentlichen, Personen Nachrichten senden und eine Community in deiner Nähe finden kannst. Dort gibt es keine Bohnen und keine Community-Abstimmungen. Bohnen, Kredite, das Gemeingut und seine Entscheidungen existieren in lokalen Communitys. Die globale Community zeigt dir anhand einer Beispiel-Community, wie sie funktionieren. Siehe „Bohnen und die globale Community“.
 
-Keine Einladung, aber eine Community in deiner Nähe? Tritt der globalen Community bei und bitte dann diese Community um Aufnahme: Jedes ihrer Mitglieder kann dich hereinlassen, oder in einer Community, in der nur die Admins einladen, deren Admins. Siehe „Community in deiner Nähe finden“.
+Keine Einladung, aber eine Community in deiner Nähe? Tritt der globalen Community bei und bitte dann diese Community um Aufnahme: Jedes ihrer Mitglieder kann dich hereinlassen, oder in einer Community, in der nur die Admins einladen, deren Admins. Schon anderswo Mitglied und von der **Startseite** der Web-App aus gefragt? Auch deren Wartekarte hat **Benachrichtige mich, wenn sie antworten**, und ein Ja erscheint in der Glocke. Siehe „Community in deiner Nähe finden“.
 
 In jedem Fall ist dein Konto ein Schlüssel, der auf deinem Telefon aufbewahrt wird, mit 12 Wörtern, die es wiederherstellen. Es gibt kein Passwort.
 

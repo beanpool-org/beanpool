@@ -144,6 +144,8 @@ Screen 1 of joining in a browser says the same the other way round: if you are a
 
 The web app can tell you what happened, as the phone does: the same alerts, under the same switches. Turn them on in **Settings**, then **Notifications**, on the first row, **On this device**. Your browser asks you first, at that tap. A computer's browser is told while it is running, Safari on a Mac and a phone's browser even when closed, and an iPhone only from the Home Screen. Where a browser can't be told, the bell at the top still lists what happened, and on a phone's browser **Get the app** comes first. See "Notifications".
 
+Asked another community to let you in, from the **Find your community** card on **Home**? Its waiting card has **Tell me when they answer**, and that community tells this browser its answer itself. Tapping the notification, or **🎉 {name} said yes.** in the bell, opens **Home** at that community, with **Join**. See "Finding a community near you".
+
 ## Installing it
 
 On a computer, you can install the web app so it opens in its own window, like an app, from your dock or taskbar: look for the install icon in your browser's address bar, or use **Settings** → **Install on this computer**. It is still the web app at your community's address, not a separate desktop app. On a phone, use the phone app from Google Play, the App Store, or beanpool.org/android instead: it keeps your account safe, gets notifications with nothing more to set up, and avoids creating a second account or icon.

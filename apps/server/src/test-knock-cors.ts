@@ -19,6 +19,11 @@
  *      an unlisted origin no allowance. (Until S2 the knock itself was on this list: the web app had no Ask to join, and
  *      the phone, which sent it, is no browser.)
  *   4. An origin the operator lists keeps its own rule on the same two routes: its origin back, with credentials.
+ *   5. Told from another origin (DESIGN-global-yes-join-fable.md §2.4, slice Y2): the asker's web app on another community
+ *      ("Tell me" on Home's waiting row) reads this node's web push key and gives it the browser's subscription, signed by
+ *      the asking key, so POST and DELETE /api/web-push and GET /api/web-push/key are open the same way (`*`, never
+ *      credentials, the signature's headers alone). A key with no open request here is still refused, 403, and the refusal
+ *      is readable; the key that asked is kept, 201, and lets go with DELETE. Nothing else under /api/web-push is opened.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-knock-cors.ts
  */
@@ -65,18 +70,18 @@ async function preflight(path: string, method: string, origin: string, headers: 
 }
 
 /** A call signed the way the web app signs it, from `origin`. */
-async function signedCall(id: Id, method: 'GET' | 'POST', path: string, origin: string, sent: unknown = {}): Promise<{ res: Response; body: any }> {
+async function signedCall(id: Id, method: 'GET' | 'POST' | 'DELETE', path: string, origin: string, sent: unknown = {}): Promise<{ res: Response; body: any }> {
     pruneAuthAttempts(Date.now() + 120_000);
     resetGatewayRateLimit();
     const url = `${BASE}${path}`;
-    const text = method === 'POST' ? JSON.stringify(sent) : '';
+    const text = method === 'GET' ? '' : JSON.stringify(sent);
     const bound = await buildBoundRequestHeaders({
         method, url, body: text, publicKeyHex: id.pk, sign: bytes => crypto.sign(null, Buffer.from(bytes), id.priv),
     });
     const res = await fetch(url, {
         method,
-        headers: { ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}), ...bound, Origin: origin },
-        body: method === 'POST' ? text : undefined,
+        headers: { ...(method === 'GET' ? {} : { 'Content-Type': 'application/json' }), ...bound, Origin: origin },
+        body: method === 'GET' ? undefined : text,
     });
     const raw = await res.text();
     let body: any;
@@ -186,6 +191,50 @@ async function main(): Promise<void> {
         `an unlisted origin on cancel while others are listed: still the open, credential-free answer (ACAO ${header(stillOpen, 'access-control-allow-origin')})`);
     const stillClosed = await preflight('/api/join/knocks', 'GET', WEB);
     assert(header(stillClosed, 'access-control-allow-origin') === null, 'an unlisted origin on the members\' list: nothing');
+
+    // ── 5. told from another origin (Y2) ──
+    console.log('\n── 5. told from another origin: the web push routes (global yes Y2) ──');
+    updateGatewayConfig({ corsAllowedOrigins: [] });
+    const pushPre = await preflight('/api/web-push', 'POST', WEB);
+    assert(pushPre.status === 204 && header(pushPre, 'access-control-allow-origin') === '*' && header(pushPre, 'access-control-allow-credentials') === null,
+        `OPTIONS /api/web-push (POST): any origin, never credentials (${pushPre.status}, ACAO ${header(pushPre, 'access-control-allow-origin')}, ACAC ${header(pushPre, 'access-control-allow-credentials')})`);
+    const pushMethods = lower(header(pushPre, 'access-control-allow-methods'));
+    assert(pushMethods.includes('post') && pushMethods.includes('delete') && !pushMethods.includes('get') && !pushMethods.includes('put'),
+        `web push: POST and DELETE alone (ACAM ${header(pushPre, 'access-control-allow-methods')})`);
+    const pushHeaders = lower(header(pushPre, 'access-control-allow-headers'));
+    assert(SIGNED_HEADERS.every(h => pushHeaders.includes(h)) && !pushHeaders.includes('authorization') && !pushHeaders.includes('x-csrf-token'),
+        `web push: the signature's headers and no session header (ACAH ${header(pushPre, 'access-control-allow-headers')})`);
+    const keyPre = await preflight('/api/web-push/key', 'GET', WEB, []);
+    assert(header(keyPre, 'access-control-allow-origin') === '*' && lower(header(keyPre, 'access-control-allow-methods')).includes('get')
+        && !lower(header(keyPre, 'access-control-allow-methods')).includes('post'), `OPTIONS /api/web-push/key: any origin, GET alone (ACAM ${header(keyPre, 'access-control-allow-methods')})`);
+    resetGatewayRateLimit();
+    const keyRead = await fetch(`${BASE}/api/web-push/key`, { headers: { Origin: WEB } });
+    const keyBody = await keyRead.json().catch(() => null) as { vapidKey?: unknown } | null;
+    assert(keyRead.status === 200 && typeof keyBody?.vapidKey === 'string' && header(keyRead, 'access-control-allow-origin') === '*',
+        `the node's web push key is readable from another origin (${keyRead.status}, ACAO ${header(keyRead, 'access-control-allow-origin')})`);
+
+    const ecdh = crypto.createECDH('prime256v1');
+    ecdh.generateKeys();
+    const browser = {
+        subscription: { endpoint: `https://fcm.googleapis.com/fcm/send/${crypto.randomBytes(12).toString('hex')}`, keys: { p256dh: ecdh.getPublicKey().toString('base64url'), auth: crypto.randomBytes(16).toString('base64url') } },
+        lang: 'en',
+    };
+    const stranger = newId();
+    const refused = await signedCall(stranger, 'POST', '/api/web-push', WEB, browser);
+    assert(refused.res.status === 403 && refused.body?.code === 'no_open_request' && header(refused.res, 'access-control-allow-origin') === '*',
+        `a key with no open request here, from another origin: 403 no_open_request, readable (${refused.res.status} ${JSON.stringify(refused.body)})`);
+    const kept = await signedCall(applicant, 'POST', '/api/web-push', WEB, browser);
+    assert(kept.res.status === 201 && kept.body?.success === true && typeof kept.body?.subId === 'string' && 'pushKey' in (kept.body ?? {})
+        && header(kept.res, 'access-control-allow-origin') === '*' && header(kept.res, 'access-control-allow-credentials') === null,
+        `the key that asked, from another origin: 201 with its id and the notice key to pin (none here: no P2P signer in this suite), readable, no credentials (${kept.res.status})`);
+    const letGo = await signedCall(applicant, 'DELETE', '/api/web-push', WEB, { subId: kept.body?.subId });
+    assert(letGo.res.status === 200 && letGo.body?.success === true && header(letGo.res, 'access-control-allow-origin') === '*',
+        `its DELETE from another origin: done, readable (${letGo.res.status} ${JSON.stringify(letGo.body)})`);
+    for (const [p, method] of [['/api/web-push/key', 'POST'], ['/api/web-push/other', 'POST'], ['/api/web-pushes', 'POST'], ['/api/notices/push/1', 'GET']] as const) {
+        const r = await preflight(p, method, WEB);
+        assert(header(r, 'access-control-allow-origin') === null || !lower(header(r, 'access-control-allow-methods')).includes(method.toLowerCase()),
+            `OPTIONS ${p} (${method}): not opened by the web push allowance (ACAO ${header(r, 'access-control-allow-origin')}, ACAM ${header(r, 'access-control-allow-methods')})`);
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

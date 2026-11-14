@@ -52,6 +52,16 @@ O cartão exibirá **Um membro convidou você**. Toque em **Entrar** com o nome 
 
 Você continua sendo membro da comunidade global e pode alternar entre elas: consulte "Mais de uma comunidade".
 
+## No app web
+
+Você também pode pedir pelo cartão **Encontre sua comunidade** no **Início** do app web, e esperar ali.
+
+- Enquanto espera, o cartão de espera tem **Avise-me quando responderem**. Toque em **Avisar-me**, e seu navegador pergunta primeiro; depois, **Avisaremos você aqui quando {name} responder.** A comunidade que você pediu avisa este navegador por conta própria, mesmo com a página fechada, e mais nada. A comunidade em que você está não guarda nada do seu pedido.
+- No iPhone, só funciona a partir da Tela de Início, e o cartão explica como. Onde não dá para avisar um navegador, o cartão diz isso, com **Baixar o app** primeiro no celular; o Início continua verificando a resposta a cada poucos minutos enquanto está aberto.
+- Tocar na notificação abre o **Início** nessa comunidade no cartão, com **Entrar** e o nome dela. Uma notificação que não veio dessa comunidade não abre nada e avisa isso.
+- O sino no alto também mostra **🎉 {name} aceitou.**, até você tocar nele ou em **Entrar**. Tocar nele abre o mesmo lugar.
+- **Entrar** abre a página da comunidade neste navegador e leva sua conta junto: as mesmas 12 palavras. Quando seu pedido é respondido e usado, cancelado ou não está mais aberto, este navegador deixa de ser avisado.
+
 ## Nada perto de você
 
 - **Avise-me quando uma começar aqui:** você recebe uma notificação quando uma comunidade começar perto de onde você está. Apenas a região é guardada, com cerca de 10 km de extensão, nunca sua localização exata. Você pode monitorar até 3 locais e parar de monitorar qualquer um com **Parar**.

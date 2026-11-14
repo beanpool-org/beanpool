@@ -17,15 +17,15 @@ May dalawang tab ang Talaan: **Mga Antas** (iyong tiwala, tingnan ang "Mga trust
 
 ## Ang tab na Wallet
 
-- **Iyong balanse**, at humigit-kumulang kung ilang oras ng tulong ang katumbas nito, sa 40 munggo bawat oras.
+- **Iyong balanse**, at humigit-kumulang kung ilang oras ng tulong ang katumbas nito, sa 40 munggo bawat oras, at ang iyong credit line.
 - **Komun:** ang pinagsasaluhang imbakan ng iyong komunidad.
-- **Credit Floor:** kung gaano kababa sa zero ang maaari mong abutin.
+- **Credit line:** kung gaano kababa sa zero ang maaari mong abutin, bilang isang numero: ang 500 ay nangangahulugang maaari kang bumaba hanggang −500. Tingnan ang "Iyong credit line".
 - Gaano karami sa iyong mga munggo ang hawak sa mga deal na kasalukuyang isinasagawa, kapag mayroon man.
 - **Sirkulasyon sa Komunidad:** lumalabas kapag may hawak kang munggo. Tingnan ang "Ang circulation fee".
 - **Mga pledge sa proyekto:** mga munggo na ipinangako mo sa mga proyekto, kung mayroon man.
 - **Magpadala ng Munggo:** magpadala ng regalo. Tingnan ang "Magpadala ng regalo".
 
-Sa web app mas maikli ang tab na Wallet: **Hangganan ng Overdraft**, **Commons Pool**, **Magpadala ng Munggo** at **Sirkulasyon sa Komunidad**. Ang iyong balanse ay nasa itaas ng Talaan.
+Sa web app mas maikli ang tab na Wallet: **Credit line**, **Commons Pool**, **Magpadala ng Munggo** at **Sirkulasyon sa Komunidad**. Ang iyong balanse ay nasa itaas ng Talaan.
 
 ## Mga kamakailang transaksyon
 
@@ -37,4 +37,4 @@ Wala pang paghahanap o mga filter ang listahan sa ngayon.
 
 ## Mga button na ⓘ
 
-Sa telepono, i-tap ang **ⓘ** sa tabi ng Iyong balanse para sa maikling paliwanag ng iyong balanse at ng iyong floor.
+Sa telepono, i-tap ang **ⓘ** sa tabi ng Iyong balanse para sa maikling paliwanag ng iyong balanse at ng iyong credit line. Ang card sa itaas ng Talaan ay nagpapaliwanag sa sarili nito: i-tap ito, sa telepono o sa web, para sa **Iyong munggo at iyong credit line**.

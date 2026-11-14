@@ -12,18 +12,24 @@ Tu línea de crédito te permite gastar más frijoles de los que tienes y pasar 
 
 ## Dónde verla
 
-En el **Registro**, debajo de tu saldo, una barra muestra dónde te encuentras:
+En el **Registro**, arriba, una tarjeta muestra dónde te encuentras. Dos frases dan los totales, por ejemplo "Debes 50 frijoles" y "Puedes gastar 450 más de tu línea de crédito de 500."
 
-- el cero está en el medio;
-- el extremo izquierdo es **tu límite**, lo más bajo a lo que puedes llegar;
-- las marcas de la izquierda muestran hasta dónde te permiten llegar tus Ofertas;
-- más allá de **+200** a la derecha es donde comienza la comisión de circulación.
+Debajo hay una barra, de colores como un arcoíris:
 
-En el teléfono, toca la barra para ver **Información del control deslizante de crédito**, que explica cada parte.
+- el punto es donde está tu saldo ahora;
+- el **0**, en el medio, es **equilibrado**: has dado tanto como has recibido;
+- el extremo izquierdo es **tu límite**: lo más bajo que puede llegar tu saldo;
+- **+200** es donde **empieza la cuota mensual**: si tienes más de 200 frijoles, empieza una pequeña cuota mensual sobre la parte que queda por encima (consulta "La cuota de circulación");
+- la franja delgada bajo la mitad izquierda es de lo que se compone tu línea de crédito: un bloque sólido es crédito que ganaste intercambiando, un bloque con contorno es crédito que alguien avala por ti;
+- una parte rayada está cerrada por ahora: tus Ofertas activas la abren.
+
+Una línea bajo la barra nombra las partes, y siempre la línea completa, por ejemplo "Línea de crédito 500: ■ Ganado intercambiando 0 hasta ahora · □ @Jane avaló 500". Antes de tener una línea de crédito, la mitad izquierda está rayada y dice **aún sin línea de crédito**.
+
+Toca la tarjeta, en el teléfono o en la web, para ver **Tus frijoles y tu línea de crédito**, que explica cada parte.
 
 ## Cómo se abre
 
-Comienza en cero. Se abre cuando completas tu primer intercambio en el mercado (un intercambio de solo 1 o 2 frijoles es demasiado pequeño para contar), o cuando alguien elegido para recibir a los recién llegados te avala. Hasta entonces, el Registro dice **Sin línea de crédito aún**. Todavía puedes intercambiar con los frijoles que tienes.
+Comienza en cero. Se abre cuando completas tu primer intercambio en el mercado, por pequeño que sea, o cuando un avalista te avala en la invitación que te trajo o en tu perfil. Hasta entonces, la tarjeta dice **aún sin línea de crédito**. Todavía puedes intercambiar con los frijoles que tienes.
 
 ## Cómo crece
 
@@ -33,16 +39,12 @@ Comienza en cero. Se abre cuando completas tu primer intercambio en el mercado (
 
 ## Tus Ofertas determinan cuánto puedes usar
 
-Solo puedes usar de tu línea de crédito lo que tus Ofertas activas permitan:
+Solo puedes usar de tu línea de crédito lo que abren tus Ofertas activas. Sin ninguna Oferta activa, nada de ella está abierto.
 
-- sin Ofertas: nada;
-- 1 Oferta: hasta −200;
-- 2: −500;
-- 3: −1,000;
-- 4: −1,500;
-- 5: −2,000.
+- Una Oferta activa abre todo lo que otras personas avalan por ti (un aval, un regalo de línea de crédito, el límite mínimo conocido) y los primeros 200 que ganaste.
+- Lo que ganaste intercambiando se abre por pasos: 2 Ofertas abren 500 de ello, 3 abren 1,000, 4 abren 1,500 y 5 abren 2,000.
 
-La línea debajo de la barra te lo indica, por ejemplo "Publica una oferta para abrir tu línea de crédito".
+La tarjeta dice qué está abierto. Por ejemplo: "Puedes gastar 380 más: tu Oferta activa abre 500 de tu línea de crédito de 900.", y debajo "400 está cerrado por ahora. Una Oferta activa más abre 800 de tus 900, y 3 Ofertas activas lo abren todo." Sin ninguna Oferta activa dice, por ejemplo, "Tu línea de crédito de 500 está dormida. Publica una Oferta y se abre toda."
 
 ## En una comunidad conocida
 

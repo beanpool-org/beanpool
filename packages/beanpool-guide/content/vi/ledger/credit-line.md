@@ -12,18 +12,24 @@ Hạn mức tín dụng cho phép bạn chi tiêu nhiều hơn số đậu bạn
 
 ## Nơi xem hạn mức tín dụng
 
-Trên **Sổ cái**, bên dưới số dư của bạn, một thanh trượt sẽ hiển thị vị trí hiện tại của bạn:
+Trên **Sổ cái**, ở đầu trang, một thẻ cho bạn biết bạn đang ở đâu. Hai câu cho biết tổng số, ví dụ "Bạn nợ 50 đậu" và "Bạn có thể chi thêm 450 trong hạn mức tín dụng 500."
 
-- số 0 nằm ở chính giữa;
-- đầu bên trái là **hạn mức của bạn**, mức thấp nhất bạn có thể đạt tới;
-- các vạch đánh dấu bên trái hiển thị độ sâu mà các Lời đề nghị của bạn cho phép đạt tới;
-- vượt qua **+200** ở bên phải là nơi phí lưu thông bắt đầu được áp dụng.
+Bên dưới là một thanh có màu như cầu vồng:
 
-Trên điện thoại, nhấn vào thanh này để xem **Thông tin thanh trượt tín dụng**, giải thích từng phần.
+- chấm là vị trí số dư của bạn hiện tại;
+- **0**, ở giữa, là **cân bằng**: bạn đã cho đi bằng số bạn đã nhận;
+- đầu bên trái là **hạn mức của bạn**: mức thấp nhất số dư của bạn có thể xuống;
+- **+200** là nơi **bắt đầu tính phí tháng**: nếu bạn giữ hơn 200 đậu, một khoản phí hằng tháng nhỏ sẽ bắt đầu tính trên phần vượt quá (xem "Phí lưu thông");
+- dải mỏng bên dưới nửa trái là thứ tạo nên hạn mức tín dụng của bạn: khối đặc là tín dụng bạn kiếm được qua giao dịch, khối viền là tín dụng có người đứng ra bảo lãnh cho bạn;
+- phần có sọc là phần tạm đóng: các Lời đề nghị đang đăng của bạn sẽ mở nó.
+
+Một dòng dưới thanh nêu tên các phần, và luôn là toàn bộ hạn mức, ví dụ "Hạn mức tín dụng 500: ■ Kiếm được qua giao dịch 0 cho đến nay · □ @Jane đã bảo lãnh 500". Trước khi bạn có hạn mức tín dụng, nửa bên trái có sọc và ghi **chưa có hạn mức tín dụng**.
+
+Nhấn vào thẻ, trên điện thoại hoặc trên web, để xem **Đậu và hạn mức tín dụng của bạn**, nơi giải thích từng phần.
 
 ## Cách mở hạn mức
 
-Hạn mức bắt đầu từ số 0. Nó mở ra khi bạn hoàn thành giao dịch đầu tiên trên chợ (giao dịch chỉ có 1 hoặc 2 đậu là quá nhỏ để được tính), hoặc khi một người được chọn để chào đón thành viên mới đứng ra bảo lãnh cho bạn. Cho đến lúc đó, Sổ cái sẽ báo **Chưa có hạn mức tín dụng**. Bạn vẫn có thể giao dịch bằng số đậu bạn đang có.
+Hạn mức bắt đầu từ số 0. Nó mở ra khi bạn hoàn thành giao dịch đầu tiên trên chợ, dù nhỏ đến đâu, hoặc khi một người bảo lãnh bảo lãnh cho bạn trên lời mời đưa bạn vào hoặc trên hồ sơ của bạn. Cho đến lúc đó, thẻ ghi **chưa có hạn mức tín dụng**. Bạn vẫn có thể giao dịch bằng số đậu bạn đang có.
 
 ## Cách hạn mức tăng lên
 
@@ -33,16 +39,12 @@ Hạn mức bắt đầu từ số 0. Nó mở ra khi bạn hoàn thành giao d�
 
 ## Lời đề nghị quyết định mức bạn có thể sử dụng
 
-Bạn chỉ có thể sử dụng hạn mức tín dụng trong phạm vi mà các Lời đề nghị đang mở của bạn cho phép:
+Bạn chỉ có thể sử dụng phần hạn mức tín dụng mà các Lời đề nghị đang đăng của bạn mở ra. Không có Lời đề nghị nào đang đăng thì không phần nào được mở.
 
-- không có Lời đề nghị: 0;
-- 1 Lời đề nghị: xuống đến −200;
-- 2: −500;
-- 3: −1.000;
-- 4: −1.500;
-- 5: −2.000.
+- Một Lời đề nghị đang đăng mở toàn bộ phần có người đứng ra bảo lãnh cho bạn (lời bảo lãnh, quà tặng hạn mức tín dụng, mức sàn quy định) và 200 đầu tiên bạn kiếm được.
+- Phần bạn kiếm được qua giao dịch mở theo từng bước: 2 Lời đề nghị mở 500 trong đó, 3 mở 1.000, 4 mở 1.500 và 5 mở 2.000.
 
-Dòng chữ bên dưới thanh trượt sẽ cho bạn biết điều này, ví dụ "Hãy đăng một lời đề nghị để mở hạn mức tín dụng của bạn".
+Thẻ cho biết phần nào đang mở. Ví dụ: "Bạn có thể chi thêm 380: 1 Lời đề nghị đang đăng của bạn mở 500 trong hạn mức tín dụng 900.", và bên dưới là "400 đang tạm đóng. Thêm một Lời đề nghị đang đăng mở 800 trong 900 của bạn, và 3 Lời đề nghị đang đăng mở toàn bộ." Khi không có Lời đề nghị nào đang đăng, thẻ ghi, ví dụ, "Hạn mức tín dụng 500 của bạn đang ngủ yên. Đăng một Lời đề nghị là toàn bộ được mở."
 
 ## Trong cộng đồng quy định
 

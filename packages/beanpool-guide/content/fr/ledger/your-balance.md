@@ -17,15 +17,15 @@ Le Registre comporte deux onglets : **Niveaux** (votre confiance, voir « Badges
 
 ## L'onglet Portefeuille
 
-- **Votre solde**, et approximativement le nombre d'heures d'aide qu'il représente, sur la base de 40 haricots de l'heure.
+- **Votre solde**, et approximativement le nombre d'heures d'aide qu'il représente, sur la base de 40 haricots de l'heure, et votre ligne de crédit.
 - **Communs :** la réserve partagée de votre communauté.
-- **Plancher de crédit :** jusqu'où vous pouvez descendre sous zéro.
+- **Ligne de crédit :** jusqu'où vous pouvez descendre sous zéro, sous forme de chiffre : 500 signifie que vous pouvez descendre jusqu'à −500. Voir « Votre ligne de crédit ».
 - La part de vos haricots retenue dans des accords en cours, lorsqu'il y en a.
 - **Circulation communautaire :** apparaît dès que vous détenez des haricots. Voir « Frais de circulation ».
 - **Engagements de projets :** les haricots engagés sur des projets, le cas échéant.
 - **Envoyer des haricots :** envoyer un don. Voir « Envoyer un don ».
 
-Dans l'application web, l'onglet Portefeuille est plus concis : **Plafond de découvert**, **Fonds des Communs**, **Envoyer des haricots** et **Circulation communautaire**. Votre solde figure en haut du Registre.
+Dans l'application web, l'onglet Portefeuille est plus concis : **Ligne de crédit**, **Fonds des Communs**, **Envoyer des haricots** et **Circulation communautaire**. Votre solde figure en haut du Registre.
 
 ## Transactions récentes
 
@@ -37,4 +37,4 @@ La liste ne dispose pas encore de recherche ni de filtres.
 
 ## Boutons ⓘ
 
-Sur le téléphone, touchez le **ⓘ** à côté de Votre solde pour obtenir une brève explication sur votre solde et votre plancher.
+Sur le téléphone, touchez le **ⓘ** à côté de Votre solde pour obtenir une brève explication sur votre solde et votre ligne de crédit. La carte en haut du Registre s'explique d'elle-même : touchez-la, sur le téléphone ou sur le web, pour **Vos haricots et votre ligne de crédit**.

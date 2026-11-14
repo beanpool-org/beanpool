@@ -30,6 +30,8 @@ Phí được tích lũy theo từng ngày và được trừ dần từng chút
 
 ## Nơi xem phí
 
+Trên **Sổ cái**, thẻ ở đầu trang đánh dấu **+200** trên thanh của nó: **bắt đầu tính phí tháng**. Khi bạn giữ hơn 200, thẻ sẽ cho bạn biết, ví dụ "400 đậu của bạn vượt quá 200. Một khoản phí hằng tháng nhỏ trên số đó chuyển vào Quỹ Commons: khoảng 4,50 trong tháng này." Nhấn vào thẻ để xem **Đậu và hạn mức tín dụng của bạn**: phần **Hai loại phí** nêu mọi mức phí.
+
 Trên **Sổ cái**, mục **Ví**, ô **Luân chuyển cộng đồng** hiển thị số tiền ước tính bạn sẽ phải trả trong tháng này. Ô này chỉ hiển thị khi bạn đang nắm giữ đậu. Khi vượt quá 1.000 đậu, ô sẽ chuyển sang màu hổ phách. Trên điện thoại, ứng dụng cũng gợi ý chi tiêu bớt, và bạn có thể nhấn vào đó để xem **Lưu thông hệ thống**, giải thích chi tiết về khoản phí này.
 
 Chế độ nghỉ lễ không tạm dừng khoản phí này.

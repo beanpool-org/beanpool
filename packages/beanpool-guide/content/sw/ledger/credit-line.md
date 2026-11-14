@@ -12,18 +12,24 @@ Kikomo chako cha mkopo kinakuruhusu kutumia maharagwe mengi zaidi kuliko uliyo n
 
 ## Mahali pa kukiona
 
-Kwenye **Leja**, chini ya salio lako, upau huonyesha mahali ulipo:
+Kwenye **Leja**, juu kabisa, kadi inaonyesha mahali ulipo. Sentensi mbili zinatoa jumla, kwa mfano "Unadaiwa maharagwe 50" na "Unaweza kutumia 450 zaidi kati ya kikomo chako cha mkopo cha 500."
 
-- sifuri ipo katikati;
-- upande wa kushoto ni **kikomo chako**, kiwango cha chini kabisa unachoweza kufika;
-- alama zilizo upande wa kushoto huonyesha jinsi Ofa zako zinavyokuruhusu kwenda chini zaidi;
-- zaidi ya **+200** upande wa kulia ndipo ada ya mzunguko inapoanzia.
+Chini yake kuna upau wenye rangi kama upinde wa mvua:
 
-Kwenye simu, gusa upau huo kwa ajili ya **Maelezo ya Kitelezi cha Mkopo**, ambayo yanaeleza kila sehemu.
+- nukta ni mahali salio lako lilipo sasa;
+- **0**, katikati, ni **usawa**: umetoa kadiri ulivyopokea;
+- upande wa kushoto kabisa ni **kikomo chako**: kiwango cha chini kabisa ambacho salio lako linaweza kufika;
+- **+200** ni mahali **ada ya mwezi inaanza**: ukishikilia zaidi ya maharagwe 200, ada ndogo ya kila mwezi huanza kwenye sehemu iliyo juu yake (tazama "Ada ya mzunguko");
+- mstari mwembamba chini ya nusu ya kushoto unaonyesha kikomo chako cha mkopo kimeundwa na nini: kizuizi kilichojazwa ni mkopo uliojipatia kwa biashara, kizuizi chenye mstari wa nje ni mkopo ambao mtu anakudhamini kwa ajili yake;
+- sehemu yenye mistari imefungwa kwa sasa: Ofa zako zinazotumika huifungua.
+
+Mstari mmoja chini ya upau hutaja sehemu, na daima kikomo chote, kwa mfano "Kikomo cha mkopo 500: ■ Kilichopatikana kwa biashara hadi sasa 0 · □ @Jane alidhamini 500". Kabla ya kuwa na kikomo cha mkopo, nusu ya kushoto ina mistari na inasema **bado hakuna kikomo cha mkopo**.
+
+Gusa kadi, kwenye simu au wavuti, kwa ajili ya **Maharagwe yako na kikomo chako cha mkopo**, inayoeleza kila sehemu.
 
 ## Jinsi kinavyofunguka
 
-Huanzia sifuri. Hufunguka unapokamilisha biashara yako ya kwanza sokoni (biashara ya maharagwe 1 au 2 tu ni ndogo mno kuhesabiwa), au wakati mtu aliyechaguliwa kukaribisha wageni anapokudhamini. Hadi wakati huo Leja husema **Bado huna mstari wa mkopo**. Bado unaweza kufanya biashara kwa maharagwe unayoshikilia.
+Huanzia sifuri. Hufunguka unapokamilisha biashara yako ya kwanza sokoni, hata iwe ndogo kiasi gani, au mdhamini anapokudhamini kwenye mwaliko uliokuleta au kwenye wasifu wako. Hadi wakati huo kadi husema **bado hakuna kikomo cha mkopo**. Bado unaweza kufanya biashara kwa maharagwe unayoshikilia.
 
 ## Jinsi kinavyokua
 
@@ -33,16 +39,12 @@ Huanzia sifuri. Hufunguka unapokamilisha biashara yako ya kwanza sokoni (biashar
 
 ## Ofa zako huamua kiasi unachoweza kutumia
 
-Unaweza tu kutumia kiasi cha kikomo chako cha mkopo ambacho Ofa zako zinazotumika zinaruhusu:
+Unaweza kutumia tu kiasi cha kikomo chako cha mkopo ambacho Ofa zako zinazotumika zinafungua. Bila Ofa inayotumika, hakuna kinachofunguka.
 
-- hakuna Ofa: huwezi kutumia chochote;
-- Ofa 1: hadi −200;
-- 2: −500;
-- 3: −1,000;
-- 4: −1,500;
-- 5: −2,000.
+- Ofa moja inayotumika hufungua kila kitu ambacho watu wanakudhamini (dhamana, zawadi ya kikomo cha mkopo, kima cha chini kinachojulikana) na 200 za kwanza ulizojipatia.
+- Ulichojipatia kwa biashara hufunguka kwa hatua: Ofa 2 hufungua 500 yake, 3 hufungua 1,000, 4 hufungua 1,500 na 5 hufungua 2,000.
 
-Mstari ulio chini ya upau hukuambia, kwa mfano "Weka ofa ili kufungua mstari wako wa mkopo".
+Kadi hukueleza kilichofunguka. Kwa mfano: "Unaweza kutumia 380 zaidi: Ofa yako inayotumika inafungua 500 ya kikomo chako cha mkopo cha 900.", na chini yake "400 imefungwa kwa sasa. Ofa moja zaidi inayotumika itafungua 800 kati ya 900 yako, na Ofa 3 zinazotumika zitafungua yote." Bila Ofa inayotumika inasema, kwa mfano, "Kikomo chako cha mkopo cha 500 kimelala. Weka Ofa moja na kitafunguka chote."
 
 ## Katika jumuiya inayojulikana
 

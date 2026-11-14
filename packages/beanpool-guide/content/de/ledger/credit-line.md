@@ -12,18 +12,24 @@ Dein Kreditrahmen ermöglicht es dir, mehr Bohnen auszugeben, als du hast, und u
 
 ## Wo du ihn siehst
 
-Im **Buch** zeigt unter deinem Kontostand eine Leiste an, wo du stehst:
+Im **Buch** zeigt oben eine Karte, wo du stehst. Zwei Sätze nennen die Summen, zum Beispiel „Du schuldest 50 Bohnen“ und „Du kannst 450 mehr von deinem Kreditrahmen von 500 ausgeben.“
 
-- Null ist in der Mitte;
-- das linke Ende ist **dein Limit**, das Tiefste, bis zu dem du gehen kannst;
-- die Markierungen auf der linken Seite zeigen, wie weit deine Angebote dich gehen lassen;
-- rechts ab **+200** beginnt die Umlaufgebühr.
+Darunter ist eine Leiste, regenbogenfarben:
 
-Tippe auf dem Smartphone auf die Leiste, um **Info zum Schieberegler** zu öffnen, wo jeder Teil erläutert wird.
+- der Punkt ist dort, wo dein Guthaben jetzt steht;
+- **0**, in der Mitte, ist **ausgeglichen**: Du hast so viel gegeben, wie du erhalten hast;
+- das linke Ende ist **dein Limit**: das Tiefste, bis zu dem dein Kontostand gehen kann;
+- **+200** heißt **Monatsgebühr beginnt**: Hältst du mehr als 200 Bohnen, beginnt auf den Teil darüber eine kleine Monatsgebühr (siehe „Die Umlaufgebühr“);
+- der dünne Streifen unter der linken Hälfte zeigt, woraus dein Kreditrahmen besteht: Ein voller Block ist Kredit, den du durch Handeln erarbeitet hast, ein Block mit Umriss ist Kredit, für den jemand für dich bürgt;
+- ein gestreifter Teil ist vorerst geschlossen: Deine aktiven Angebote öffnen ihn.
+
+Eine Zeile unter der Leiste nennt die Teile, immer den ganzen Rahmen, zum Beispiel „Kreditrahmen 500: ■ Durch Handeln bisher erarbeitet 0 · □ @Jane hat mit 500 gebürgt“. Bevor du einen Kreditrahmen hast, ist die linke Hälfte gestreift und sagt **noch kein Kreditrahmen**.
+
+Tippe auf die Karte, auf dem Smartphone oder im Web, für **Deine Bohnen und dein Kreditrahmen**, das jeden Teil erklärt.
 
 ## Wie er sich öffnet
 
-Er beginnt bei null. Er öffnet sich, sobald du deinen ersten Handel im Markt abschließt (ein Handel von nur 1 oder 2 Bohnen ist zu klein, um zu zählen), oder wenn jemand, der zur Begrüßung von Neulingen ausgewählt wurde, für dich bürgt. Bis dahin steht im Buch **Noch kein Kreditrahmen**. Du kannst weiterhin mit Bohnen handeln, die du besitzt.
+Er beginnt bei null. Er öffnet sich, sobald du deinen ersten Handel im Markt abschließt, wie klein auch immer, oder wenn ein Bürge für dich bürgt, in der Einladung, die dich hereingebracht hat, oder auf deinem Profil. Bis dahin steht auf der Karte **noch kein Kreditrahmen**. Du kannst weiterhin mit Bohnen handeln, die du besitzt.
 
 ## Wie er wächst
 
@@ -33,16 +39,12 @@ Er beginnt bei null. Er öffnet sich, sobald du deinen ersten Handel im Markt ab
 
 ## Deine Angebote bestimmen, wie viel du nutzen kannst
 
-Du kannst nur so viel von deinem Kreditrahmen nutzen, wie deine aktiven Angebote erlauben:
+Du kannst nur so viel von deinem Kreditrahmen nutzen, wie deine aktiven Angebote öffnen. Ohne aktives Angebot ist nichts davon offen.
 
-- keine Angebote: nichts;
-- 1 Angebot: bis zu −200;
-- 2: −500;
-- 3: −1.000;
-- 4: −1.500;
-- 5: −2.000.
+- Ein aktives Angebot öffnet alles, wofür Leute für dich bürgen (eine Bürgschaft, ein Geschenk an Kreditrahmen, den bekannten Kreditrahmen) und die ersten 200, die du erarbeitet hast.
+- Was du durch Handeln erarbeitet hast, öffnet sich in Stufen: 2 Angebote öffnen 500 davon, 3 öffnen 1.000, 4 öffnen 1.500 und 5 öffnen 2.000.
 
-Die Zeile unter der Leiste informiert dich darüber, zum Beispiel „Veröffentliche ein Angebot, um deinen Kreditrahmen zu eröffnen“.
+Die Karte sagt, was offen ist. Zum Beispiel: „Du kannst 380 mehr ausgeben: Dein aktives Angebot öffnet 500 von deinem Kreditrahmen von 900.“ und darunter „400 sind vorerst geschlossen. Ein weiteres aktives Angebot öffnet 800 von deinen 900, und 3 aktive Angebote öffnen alles.“ Ohne aktives Angebot steht dort zum Beispiel: „Dein Kreditrahmen von 500 ruht. Veröffentliche ein Angebot, und alles öffnet sich.“
 
 ## In einer bekannten Community
 

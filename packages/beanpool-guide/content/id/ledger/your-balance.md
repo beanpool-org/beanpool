@@ -17,15 +17,15 @@ Buku kas memiliki dua tab: **Level** (kepercayaanmu, lihat "Lencana percaya") da
 
 ## Tab Dompet
 
-- **Saldo Anda**, dan perkiraan berapa jam bantuan yang setara dengannya, dengan patokan 40 kacang per jam.
+- **Saldo Anda**, dan perkiraan berapa jam bantuan yang setara dengannya, dengan patokan 40 kacang per jam, dan batas kreditmu.
 - **Sarana Bersama:** penampungan bersama milik komunitasmu.
-- **Batas Kredit:** seberapa jauh kamu bisa berada di bawah nol.
+- **Batas kredit:** seberapa jauh kamu bisa berada di bawah nol, sebagai angka: 500 berarti kamu bisa turun sampai −500. Lihat "Batas kreditmu".
 - Berapa banyak kacangmu yang ditahan dalam kesepakatan yang sedang berjalan, jika ada.
 - **Peredaran Komunitas:** muncul saat kamu memiliki kacang. Lihat "Biaya peredaran".
 - **Komitmen proyek:** kacang yang telah kamu komitmenkan ke proyek, jika ada.
 - **Kirim Kacang:** mengirim hadiah. Lihat "Mengirim hadiah".
 
-Di web app tab Dompet lebih ringkas: **Batas Bawah Cerukan**, **Pool Bersama**, **Kirim Kacang**, dan **Peredaran Komunitas**. Saldomu berada di bagian atas Buku kas.
+Di web app tab Dompet lebih ringkas: **Batas kredit**, **Pool Bersama**, **Kirim Kacang**, dan **Peredaran Komunitas**. Saldomu berada di bagian atas Buku kas.
 
 ## Transaksi terbaru
 
@@ -37,4 +37,4 @@ Daftar ini belum memiliki fitur pencarian atau filter.
 
 ## Tombol ⓘ
 
-Di ponsel, ketuk tombol **ⓘ** di samping Saldo Anda untuk penjelasan singkat tentang saldomu dan batas kreditmu.
+Di ponsel, ketuk tombol **ⓘ** di samping Saldo Anda untuk penjelasan singkat tentang saldomu dan batas kreditmu. Kartu di bagian atas Buku kas menjelaskan dirinya sendiri: ketuk kartu itu, di ponsel maupun di web, untuk membuka **Kacang dan batas kredit Anda**.

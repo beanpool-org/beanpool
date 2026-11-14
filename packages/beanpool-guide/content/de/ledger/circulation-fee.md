@@ -30,6 +30,8 @@ Die Gebühr baut sich Tag für Tag auf und wird nach und nach in kleinen Teilen 
 
 ## Wie du sie siehst
 
+Im **Buch** markiert die Karte oben auf ihrer Leiste **+200**: **Monatsgebühr beginnt**. Hältst du mehr als 200, sagt die Karte das, zum Beispiel „400 deiner Bohnen liegen über 200. Eine kleine Monatsgebühr darauf geht an das Gemeingut: etwa 4,50 in diesem Monat.“ Tippe auf die Karte für **Deine Bohnen und dein Kreditrahmen**: Der Teil **Die zwei Gebühren** nennt jeden Satz.
+
 Im **Buch** unter **Wallet** zeigt das Feld **Community-Umlauf** ungefähr an, wie viel du diesen Monat zahlen wirst. Es wird nur angezeigt, wenn du Bohnen besitzt. Ab 1.000 Bohnen wird es bernsteinfarben. Auf dem Smartphone schlägt es zudem vor, etwas davon auszugeben, und du kannst darauf tippen, um **Systemumlauf** zu öffnen, was die Gebühr näher erläutert.
 
 Der Urlaubsmodus pausiert die Gebühr nicht.

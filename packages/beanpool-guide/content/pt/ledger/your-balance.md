@@ -17,15 +17,15 @@ O Registro tem duas abas: **Níveis** (sua confiança, consulte "Emblemas") e **
 
 ## A aba Carteira
 
-- **Seu saldo**, e aproximadamente quantas horas de ajuda ele vale, a 40 feijões por hora.
+- **Seu saldo**, e aproximadamente quantas horas de ajuda ele vale, a 40 feijões por hora, e a sua linha de crédito.
 - **Bens comuns:** o fundo compartilhado da sua comunidade.
-- **Piso de crédito:** até quanto você poderia ficar abaixo de zero.
+- **Linha de crédito:** até quanto você pode ficar abaixo de zero, em número: 500 significa que você pode descer até −500. Consulte "Sua linha de crédito".
 - Quantos dos seus feijões estão retidos em negociações em andamento, quando houver algum.
 - **Circulação comunitária:** aparece quando você possui feijões. Consulte "A taxa de circulação".
 - **Contribuições a projetos:** feijões que você comprometeu com projetos, se houver.
 - **Enviar feijões:** envie um presente. Consulte "Enviar um presente".
 
-No aplicativo web, a aba Carteira é mais curta: **Piso de cheque especial**, **Fundo dos Bens comuns**, **Enviar feijões** e **Circulação comunitária**. Seu saldo fica no topo do Registro.
+No aplicativo web, a aba Carteira é mais curta: **Linha de crédito**, **Fundo dos Bens comuns**, **Enviar feijões** e **Circulação comunitária**. Seu saldo fica no topo do Registro.
 
 ## Transações recentes
 
@@ -37,4 +37,4 @@ A lista ainda não tem pesquisa nem filtros.
 
 ## Botões ⓘ
 
-No celular, toque no **ⓘ** ao lado do seu saldo para uma breve explicação sobre o seu saldo e o seu piso.
+No celular, toque no **ⓘ** ao lado do seu saldo para uma breve explicação sobre o seu saldo e a sua linha de crédito. O cartão no topo do Registro se explica sozinho: toque nele, no celular ou na web, para abrir **Seus feijões e sua linha de crédito**.

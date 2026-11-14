@@ -30,6 +30,8 @@ Biaya bertambah dari hari ke hari dan diambil sedikit demi sedikit, setiap kali 
 
 ## Melihatnya
 
+Di **Buku kas**, kartu di bagian atas menandai **+200** pada bilahnya: **biaya bulanan dimulai**. Saat kamu memegang lebih dari 200, kartu menyebutkannya, misalnya "400 kacang Anda berada di atas 200. Biaya bulanan kecil atasnya masuk ke Sarana Bersama: sekitar 4,50 bulan ini." Ketuk kartu untuk membuka **Kacang dan batas kredit Anda**: bagian **Dua biaya** memberikan setiap tarifnya.
+
 Di **Buku kas**, **Dompet**, kotak **Peredaran Komunitas** menampilkan perkiraan berapa banyak yang akan kamu bayar bulan ini. Kotak ini hanya muncul saat kamu memiliki kacang. Di atas 1.000 kacang warnanya berubah menjadi kuning jingga. Di ponsel aplikasi juga menyarankan untuk membelanjakan sebagian, dan kamu dapat mengetuknya untuk membuka **Sirkulasi Sistem**, yang menjelaskan tentang biaya tersebut.
 
 Mode Liburan tidak menjeda biaya ini.

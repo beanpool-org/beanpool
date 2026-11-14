@@ -17,15 +17,15 @@ Il Mastro ha due schede: **Livelli** (la tua fiducia, vedi "Badge di fiducia") e
 
 ## La scheda Portafoglio
 
-- **Il tuo saldo**, e all'incirca a quante ore di aiuto corrisponde, a 40 fagioli l'ora.
+- **Il tuo saldo**, e all'incirca a quante ore di aiuto corrisponde, a 40 fagioli l'ora, e la tua linea di credito.
 - **Beni comuni:** il fondo condiviso della tua comunità.
-- **Limite di credito:** quanto puoi scendere sotto lo zero.
+- **Linea di credito:** quanto puoi scendere sotto lo zero, come cifra: 500 significa che puoi scendere fino a −500. Vedi "Linea di credito".
 - Quanti dei tuoi fagioli sono trattenuti in accordi in corso, se presenti.
 - **Circolazione nella comunità:** compare quando possiedi fagioli. Vedi "Tassa di circolazione".
 - **Promesse di progetto:** fagioli che hai promesso ai progetti, se presenti.
 - **Invia fagioli:** invia un dono. Vedi "Inviare un dono".
 
-Nell'app web la scheda Portafoglio è più breve: **Soglia di scoperto**, **Fondo Comune**, **Invia fagioli** e **Circolazione nella comunità**. Il tuo saldo si trova in cima al Mastro.
+Nell'app web la scheda Portafoglio è più breve: **Linea di credito**, **Fondo Comune**, **Invia fagioli** e **Circolazione nella comunità**. Il tuo saldo si trova in cima al Mastro.
 
 ## Transazioni recenti
 
@@ -37,4 +37,4 @@ L'elenco non include ancora funzioni di ricerca o filtri.
 
 ## Pulsanti ⓘ
 
-Sul telefono, tocca la **ⓘ** accanto al tuo saldo per una breve spiegazione del saldo e del tuo limite.
+Sul telefono, tocca la **ⓘ** accanto al tuo saldo per una breve spiegazione del saldo e della tua linea di credito. La scheda in cima al Mastro si spiega da sola: toccala, sul telefono o sul web, per aprire **I tuoi fagioli e la tua linea di credito**.

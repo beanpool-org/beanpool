@@ -30,6 +30,8 @@ Araw-araw na naiipon ang bayad at kinukuha nang paunti-unti, tuwing susunod na g
 
 ## Pagtingin dito
 
+Sa **Talaan**, minamarkahan ng card sa itaas ang **+200** sa bar nito: **simula ng buwanang bayad**. Kapag humawak ka ng higit sa 200, sinasabi ito ng card, halimbawa "400 ng iyong munggo ay lampas sa 200. Napupunta sa Komun ang maliit na buwanang bayad dito: mga 4.50 ngayong buwan." I-tap ang card para sa **Iyong munggo at iyong credit line**: ang bahagi nitong **Ang dalawang bayad** ang nagbibigay ng bawat rate.
+
 Sa **Talaan**, **Wallet**, ipinapakita ng kahon ng **Sirkulasyon sa Komunidad** ang humigit-kumulang kung magkano ang babayaran mo ngayong buwan. Lumalabas lamang ito kapag may hawak kang munggo. Sa itaas ng 1,000 munggo ay nagiging kulay amber ito. Sa telepono ay nagmumungkahi rin ito na gumastos ng ilan, at maaari mo itong i-tap para sa **Sirkulasyon ng Sistema**, na nagpapaliwanag sa bayad.
 
 Hindi ipinopausa ng Holiday Mode ang bayad.

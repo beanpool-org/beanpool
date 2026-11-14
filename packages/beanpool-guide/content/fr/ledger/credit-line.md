@@ -12,18 +12,24 @@ Votre ligne de crédit vous permet de dépenser plus de haricots que vous n'en p
 
 ## Où la voir
 
-Sur le **Registre**, sous votre solde, une barre indique votre position :
+Sur le **Registre**, en haut, une carte indique où vous en êtes. Deux phrases donnent les totaux, par exemple « Vous devez 50 haricots » et « Vous pouvez dépenser 450 de plus sur votre ligne de crédit de 500. »
 
-- zéro se trouve au milieu ;
-- l'extrémité gauche représente **votre limite**, le niveau le plus bas où vous pouvez descendre ;
-- les repères à gauche indiquent jusqu'où vos Offres vous permettent d'aller ;
-- au-delà de **+200** sur la droite commence l'application des frais de circulation.
+Dessous se trouve une barre aux couleurs de l'arc-en-ciel :
 
-Sur le téléphone, touchez la barre pour ouvrir les **Infos sur le curseur de crédit**, qui expliquent chaque partie.
+- le point est l'endroit où se trouve votre solde en ce moment ;
+- **0**, au milieu, est **équilibré** : vous avez donné autant que vous avez reçu ;
+- l'extrémité gauche est **votre limite** : le plus bas que votre solde puisse aller ;
+- **+200** marque le **début des frais mensuels** : détenez plus de 200 haricots et de petits frais mensuels commencent sur la part au-dessus (voir « Frais de circulation ») ;
+- la fine bande sous la moitié gauche montre de quoi est faite votre ligne de crédit : un bloc plein est du crédit gagné par vos échanges, un bloc en contour est du crédit dont quelqu'un se porte garant pour vous ;
+- une partie rayée est fermée pour l'instant : vos Offres actives l'ouvrent.
+
+Une ligne sous la barre nomme les parts, toujours pour toute la ligne, par exemple « Ligne de crédit 500 : ■ Gagné par les échanges 0 jusqu'ici · □ @Jane a parrainé 500 ». Tant que vous n'avez pas de ligne de crédit, la moitié gauche est rayée et indique **pas encore de ligne de crédit**.
+
+Touchez la carte, sur le téléphone ou sur le web, pour **Vos haricots et votre ligne de crédit**, qui explique chaque partie.
 
 ## Comment elle s'ouvre
 
-Elle commence à zéro. Elle s'ouvre dès que vous concluez votre premier échange sur le marché (un échange de 1 ou 2 haricots seulement est trop petit pour compter), ou lorsque quelqu'un désigné pour accueillir les nouveaux arrivants se porte garant pour vous. Jusque-là, le Registre indique **Pas encore de ligne de crédit**. Vous pouvez toujours échanger avec les haricots que vous détenez.
+Elle commence à zéro. Elle s'ouvre dès que vous concluez votre premier échange sur le marché, aussi petit soit-il, ou lorsqu'un parrain se porte garant pour vous, sur l'invitation qui vous a fait entrer ou sur votre profil. Jusque-là, la carte indique **pas encore de ligne de crédit**. Vous pouvez toujours échanger avec les haricots que vous détenez.
 
 ## Comment elle augmente
 
@@ -33,16 +39,12 @@ Elle commence à zéro. Elle s'ouvre dès que vous concluez votre premier échan
 
 ## Vos Offres déterminent ce que vous pouvez utiliser
 
-Vous ne pouvez utiliser de votre ligne de crédit que ce que vos Offres actives permettent :
+Vous ne pouvez utiliser de votre ligne de crédit que ce que vos Offres actives ouvrent. Sans Offre active, rien n'est ouvert.
 
-- aucune Offre : rien ;
-- 1 Offre : jusqu'à −200 ;
-- 2 : −500 ;
-- 3 : −1 000 ;
-- 4 : −1 500 ;
-- 5 : −2 000.
+- Une Offre active ouvre tout ce dont des personnes se portent garantes pour vous (un parrainage, un don de ligne de crédit, le plancher connu) et les 200 premiers haricots que vous avez gagnés.
+- Ce que vous avez gagné par vos échanges s'ouvre par paliers : 2 Offres en ouvrent 500, 3 en ouvrent 1 000, 4 en ouvrent 1 500 et 5 en ouvrent 2 000.
 
-La ligne sous la barre vous indique la marche à suivre, par exemple « Publiez une offre pour ouvrir votre ligne de crédit ».
+La carte dit ce qui est ouvert. Par exemple : « Vous pouvez dépenser 380 de plus : votre Offre active ouvre 500 de votre ligne de crédit de 900. », et dessous « 400 sont fermés pour l'instant. Une Offre active de plus ouvre 800 de votre ligne de 900, et 3 Offres actives l'ouvrent en entier. » Sans Offre active, elle dit, par exemple, « Votre ligne de crédit de 500 est en sommeil. Publiez une Offre et elle s'ouvre en entier. »
 
 ## Dans une communauté avec identités confirmées
 

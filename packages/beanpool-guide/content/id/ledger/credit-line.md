@@ -12,18 +12,24 @@ Batas kreditmu memungkinkanmu membelanjakan lebih banyak kacang daripada yang ka
 
 ## Di mana melihatnya
 
-Di **Buku kas**, di bawah saldomu, sebuah bilah menunjukkan posisimu:
+Di **Buku kas**, di bagian atas, sebuah kartu menunjukkan posisimu. Dua kalimat memberi totalnya, misalnya "Anda berutang 50 kacang" dan "Anda bisa membelanjakan 450 lagi dari batas kredit Anda sebesar 500."
 
-- nol berada di tengah;
-- ujung kiri adalah **batasmu**, posisi terendah yang bisa kamu capai;
-- tanda di sebelah kiri menunjukkan seberapa jauh Penawaranmu memungkinkanmu untuk berbelanja di bawah nol;
-- melewati **+200** di sebelah kanan adalah tempat biaya peredaran dimulai.
+Di bawahnya ada sebuah bilah, berwarna seperti pelangi:
 
-Di ponsel, ketuk bilah tersebut untuk membuka **Info Penggeser Kredit**, yang menjelaskan setiap bagiannya.
+- titiknya adalah posisi saldomu sekarang;
+- **0**, di tengah, berarti **seimbang**: kamu sudah memberi sebanyak yang kamu terima;
+- ujung kiri adalah **batasmu**: posisi terendah yang bisa dicapai saldomu;
+- **+200** adalah tempat **biaya bulanan dimulai**: jika kamu memegang lebih dari 200 kacang, biaya bulanan kecil mulai berlaku pada bagian di atasnya (lihat "Biaya peredaran");
+- strip tipis di bawah separuh kiri adalah isi batas kreditmu: blok penuh adalah kredit yang kamu peroleh lewat transaksi, blok berbingkai adalah kredit yang dijamin orang lain untukmu;
+- bagian bergaris-garis tertutup untuk sekarang: Penawaran aktifmu yang membukanya.
+
+Satu baris di bawah bilah menyebutkan bagian-bagiannya, dan selalu seluruh batasnya, misalnya "Batas kredit 500: ■ Diperoleh dari transaksi 0 sejauh ini · □ @Jane menjamin 500". Sebelum kamu punya batas kredit, separuh kiri bergaris-garis dan bertuliskan **belum ada batas kredit**.
+
+Ketuk kartu itu, di ponsel maupun di web, untuk membuka **Kacang dan batas kredit Anda**, yang menjelaskan setiap bagiannya.
 
 ## Cara membukanya
 
-Batas kredit dimulai dari nol. Batas ini terbuka ketika kamu menyelesaikan transaksi pertamamu di pasar (transaksi yang hanya bernilai 1 atau 2 kacang terlalu kecil untuk dihitung), atau ketika seseorang yang dipilih untuk menyambut pendatang baru memberikan jaminan untukmu. Sampai saat itu Buku kas menyatakan **Belum ada jalur kredit**. Kamu tetap dapat bertransaksi dengan kacang yang kamu miliki.
+Batas kredit dimulai dari nol. Batas ini terbuka ketika kamu menyelesaikan transaksi pertamamu di pasar, sekecil apa pun, atau ketika seseorang yang dipilih untuk menyambut pendatang baru memberikan jaminan untukmu. Sampai saat itu kartu menyatakan **belum ada batas kredit**. Kamu tetap dapat bertransaksi dengan kacang yang kamu miliki.
 
 ## Bagaimana batas ini bertambah
 
@@ -33,16 +39,12 @@ Batas kredit dimulai dari nol. Batas ini terbuka ketika kamu menyelesaikan trans
 
 ## Penawaranmu menentukan seberapa banyak yang dapat kamu gunakan
 
-Kamu hanya dapat menggunakan batas kreditmu sebanyak yang diizinkan oleh Penawaran aktifmu:
+Kamu hanya dapat menggunakan batas kreditmu sebanyak yang dibuka oleh Penawaran aktifmu. Tanpa Penawaran aktif, tidak ada yang terbuka.
 
-- tanpa Penawaran: tidak ada;
-- 1 Penawaran: hingga −200;
-- 2: −500;
-- 3: −1.000;
-- 4: −1.500;
-- 5: −2.000.
+- Satu Penawaran aktif membuka semua yang dijamin orang lain untukmu (jaminan, hadiah batas kredit, batas dasar yang diketahui) dan 200 pertama yang kamu peroleh.
+- Yang kamu peroleh lewat transaksi terbuka bertahap: 2 Penawaran membuka 500 darinya, 3 membuka 1.000, 4 membuka 1.500 dan 5 membuka 2.000.
 
-Baris di bawah bilah memberi tahumu, misalnya "Pasang penawaran untuk membuka jalur kreditmu".
+Kartu menyebutkan apa yang terbuka. Misalnya: "Anda bisa membelanjakan 380 lagi: 1 Penawaran aktif Anda membuka 500 dari batas kredit Anda sebesar 900.", dan di bawahnya "400 tertutup untuk sekarang. Satu Penawaran aktif lagi membuka 800 dari 900 Anda, dan 3 Penawaran aktif membuka semuanya." Tanpa Penawaran aktif tertulis, misalnya, "Batas kredit Anda sebesar 500 sedang tidur. Pasang satu Penawaran dan semuanya terbuka."
 
 ## Di komunitas yang saling mengenal
 

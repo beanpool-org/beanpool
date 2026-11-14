@@ -12,18 +12,24 @@ La tua linea di credito ti consente di spendere più fagioli di quanti ne possie
 
 ## Dove vederla
 
-Nel **Mastro**, sotto il tuo saldo, una barra mostra la tua posizione:
+Nel **Mastro**, in alto, una scheda mostra a che punto sei. Due frasi ne danno i totali, ad esempio "Devi 50 fagioli" e "Puoi spendere ancora 450 della tua linea di credito da 500."
 
-- lo zero è al centro;
-- l'estremità sinistra è **il tuo limite**, il punto più basso a cui puoi arrivare;
-- i riferimenti a sinistra indicano fino a quanto ti consentono di scendere le tue Offerte;
-- oltre **+200** a destra è dove inizia la tassa di circolazione.
+Sotto c'è una barra, colorata come un arcobaleno:
 
-Sul telefono, tocca la barra per visualizzare **Informazioni sul cursore del credito**, che spiega ciascuna parte.
+- il punto è dove si trova ora il tuo saldo;
+- **0**, al centro, è **in pari**: hai dato tanto quanto hai ricevuto;
+- l'estremità sinistra è **il tuo limite**: il punto più basso che il tuo saldo può toccare;
+- **+200** è dove **inizia la commissione mensile**: se possiedi più di 200 fagioli, sulla parte oltre inizia una piccola commissione mensile (vedi "Tassa di circolazione");
+- la sottile striscia sotto la metà sinistra mostra di cosa è fatta la tua linea di credito: un blocco pieno è credito che hai guadagnato scambiando, un blocco con il solo contorno è credito per cui qualcuno garantisce per te;
+- una parte a strisce è chiusa per ora: si apre con le tue Offerte attive.
+
+Una riga sotto la barra elenca le parti, e sempre l'intera linea, ad esempio "Linea di credito 500: ■ Guadagnati scambiando finora 0 · □ @Jane ha garantito 500". Prima di avere una linea di credito, la metà sinistra è a strisce e riporta **ancora nessuna linea di credito**.
+
+Tocca la scheda, sul telefono o sul web, per aprire **I tuoi fagioli e la tua linea di credito**, che spiega ogni parte.
 
 ## Come si apre
 
-Inizia da zero. Si apre quando completi il tuo primo scambio nel mercato (uno scambio di soli 1 o 2 fagioli è troppo piccolo per essere conteggiato), o quando qualcuno incaricato di accogliere i nuovi arrivati ti fa da garante. Fino ad allora il Mastro riporta **Nessuna linea di credito al momento**. Puoi comunque scambiare con i fagioli in tuo possesso.
+Inizia da zero. Si apre quando completi il tuo primo scambio nel mercato, per quanto piccolo, o quando qualcuno incaricato di accogliere i nuovi arrivati ti fa da garante. Fino ad allora la scheda riporta **ancora nessuna linea di credito**. Puoi comunque scambiare con i fagioli in tuo possesso.
 
 ## Come cresce
 
@@ -33,16 +39,12 @@ Inizia da zero. Si apre quando completi il tuo primo scambio nel mercato (uno sc
 
 ## Le tue Offerte stabiliscono quanto puoi utilizzare
 
-Puoi utilizzare della tua linea di credito solo quanto consentito dalle tue Offerte attive:
+Puoi usare della tua linea di credito solo quanto aprono le tue Offerte attive. Senza Offerte attive, non se ne apre nulla.
 
-- nessuna Offerta: nulla;
-- 1 Offerta: fino a −200;
-- 2: −500;
-- 3: −1.000;
-- 4: −1.500;
-- 5: −2.000.
+- Un'Offerta attiva apre tutto ciò per cui gli altri garantiscono per te (una garanzia, un dono di linea di credito, la soglia nota) e i primi 200 che hai guadagnato.
+- Ciò che hai guadagnato scambiando si apre a gradini: 2 Offerte ne aprono 500, 3 ne aprono 1.000, 4 ne aprono 1.500 e 5 ne aprono 2.000.
 
-La riga sotto la barra lo indica, ad esempio "Pubblica un'offerta per aprire la tua linea di credito".
+La scheda dice cosa è aperto. Ad esempio: "Puoi spendere ancora 380: con 1 Offerta attiva si aprono 500 della tua linea di credito da 900.", e sotto "400 della tua linea sono chiusi per ora. Un'altra Offerta attiva apre 800 della tua linea da 900, e 3 Offerte attive aprono tutto." Senza Offerte attive dice, ad esempio, "La tua linea di credito da 500 è inattiva. Pubblica un'Offerta e si apre tutta."
 
 ## In una comunità con identità note
 

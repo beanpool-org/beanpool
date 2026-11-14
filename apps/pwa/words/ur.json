@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); gemini-3.8-flash-high (machine draft, rename S3 main address line, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, balance rule S2 fix round 2: the join page answers \"Is my data private?\" as Home's tip does, 3 Nov); claude-sonnet-5-5 (machine draft, market order S2: the Newest within lines, 3 Nov); claude-sonnet-5-5 (machine draft, front doors S10, 4 Nov); claude-opus-5-5 (machine draft, apk-on-node H3: the APK page and link, install steps from the website, 4 Nov); claude-sonnet-5-5 (machine draft, words-draft-c: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-final: the last missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, home-arrange-a1: the web's Arrange words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, the host's box on the event page: one label, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, cold-start N2: Asked near you and the First steps line for a Need, 5 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, poll-change-confirm: ask before changing vote, 5 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, web-invite-button: the phone's draft of Invite friends reused on the web; meaning-check due); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (cold-start N4: the phone's own translation of the request card's fee line, copied for the web, 7 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, home-chat-c3: the web chat card and its list, 7 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, join names N1: the join headings and the ?ask= line, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, knock-empty-landing: nobody is waiting to join, and another owner or admin may have answered, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109b: the last missing app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, invites I5: the make-voucher sheet and the owner-only voucher words, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, beans-words-addpost: Beans, not credits, in the deal release words, 11 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, colour themes T3: the Appearance list, 12 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, home D4: Welcome, First steps, the 12-words card and kit question, the notifications line, Reset’s Undo, the tour’s last step, 14 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, no-node-names: the examples name \"riverside\", not one of our communities, and the chat line says \"your community\", 14 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, cash-tick-needs: the Need's own cash words, 14 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, pulse-home r2 14 Nov: the Pulse door, Add to Pulse, Your channels, a quiet week; directed by claude-opus-5-5)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); gemini-3.8-flash-high (machine draft, rename S3 main address line, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, balance rule S2 fix round 2: the join page answers \"Is my data private?\" as Home's tip does, 3 Nov); claude-sonnet-5-5 (machine draft, market order S2: the Newest within lines, 3 Nov); claude-sonnet-5-5 (machine draft, front doors S10, 4 Nov); claude-opus-5-5 (machine draft, apk-on-node H3: the APK page and link, install steps from the website, 4 Nov); claude-sonnet-5-5 (machine draft, words-draft-c: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-final: the last missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, home-arrange-a1: the web's Arrange words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, the host's box on the event page: one label, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, cold-start N2: Asked near you and the First steps line for a Need, 5 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, poll-change-confirm: ask before changing vote, 5 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, web-invite-button: the phone's draft of Invite friends reused on the web; meaning-check due); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (cold-start N4: the phone's own translation of the request card's fee line, copied for the web, 7 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, home-chat-c3: the web chat card and its list, 7 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, join names N1: the join headings and the ?ask= line, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, knock-empty-landing: nobody is waiting to join, and another owner or admin may have answered, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109b: the last missing app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, invites I5: the make-voucher sheet and the owner-only voucher words, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, beans-words-addpost: Beans, not credits, in the deal release words, 11 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, colour themes T3: the Appearance list, 12 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, home D4: Welcome, First steps, the 12-words card and kit question, the notifications line, Reset’s Undo, the tour’s last step, 14 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, no-node-names: the examples name \"riverside\", not one of our communities, and the chat line says \"your community\", 14 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, cash-tick-needs: the Need's own cash words, 14 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, pulse-home r2 14 Nov: the Pulse door, Add to Pulse, Your channels, a quiet week; directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, credit bar R4: the credit card, its sheet, the vouching budget, Pay back now and one name for the credit line, directed by claude-opus-5-5, 14 Nov 2026, unreviewed)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-11-14",
@@ -938,7 +938,6 @@
   "Group votes": "گروپ کے ووٹ",
   "Groups": "گروپس",
   "Groups.": "گروپس۔",
-  "Grows deeper as you trade more": "زیادہ لین دین کے ساتھ بڑھتا ہے",
   "Guide version {version} · built into the app": "گائیڈ ورژن {version} · ایپ میں پہلے سے موجود",
   "Guide version {version} · updated from beanpool.org": "گائیڈ ورژن {version} · beanpool.org سے اپ ڈیٹ شدہ",
   "Guides": "رہنما ہدایات",
@@ -957,8 +956,6 @@
   "Help": "مدد",
   "Help & how it works": "مدد اور کام کا طریقہ",
   "Help for this screen": "اس اسکرین کے لیے مدد",
-  "Help run this enterprise. You can back it with your earned trading standing to expand its credit floor.": "اس انٹرپرائز کو چلانے میں مدد کریں۔ آپ کریڈٹ کی کم از کم حد بڑھانے کے لیے اپنی کمائی ہوئی تجارتی ساکھ سے اس کی پشت پناہی کر سکتے ہیں۔",
-  "Help run this project. You can back it with your earned trading standing to expand its credit floor.": "اس منصوبے کو چلانے میں مدد کریں۔ آپ کریڈٹ کی کم از کم حد بڑھانے کے لیے اپنی کمائی ہوئی تجارتی ساکھ سے اس کی پشت پناہی کر سکتے ہیں۔",
   "Helps us see how many places ask for the same thing.": "اس سے ہمیں یہ جاننے میں مدد ملتی ہے کہ کتنی جگہیں ایک ہی چیز مانگ رہی ہیں۔",
   "Here is what you can do here.": "یہاں آپ یہ سب کر سکتے ہیں۔",
   "Hidden\u0004who can see your contact details": "پوشیدہ",
@@ -1211,7 +1208,6 @@
   "Local community": "مقامی کمیونٹی",
   "Local storage metrics & integrity checks": "مقامی اسٹوریج میٹرکس اور سالمیت کی جانچ",
   "Location is off for this site. Type a town instead, or skip for now.": "اس سائٹ کے لیے لوکیشن بند ہے۔ اس کے بجائے قصبے کا نام لکھیں، یا فی الحال چھوڑ دیں۔",
-  "Lock credit floor to zero": "کریڈٹ کی حد صفر پر مقفل کریں",
   "Longitude": "طول بلد",
   "Look at an example Ledger": "ایک نمونہ بہی کھاتہ دیکھیں",
   "Look for the {icon} (⊕) in your browser's address bar, or use your browser menu → \"Install app\"": "اپنے براؤزر کے ایڈریس بار میں {icon} (⊕) تلاش کریں، یا براؤزر مینو → \"ایپ انسٹال کریں\" استعمال کریں",
@@ -1496,7 +1492,6 @@
   "Or sign in": "یا سائن اِن کریں",
   "Other": "دیگر",
   "Overall": "مجموعی",
-  "Overdraft Floor": "اوور ڈرافٹ کی کم از کم حد",
   "PARTNERS": "پارٹنرز",
   "PAUSED\u0004listing status": "موقوف",
   "PAY-BACK CODE (IF YOU HAVE ONE)": "ادائیگی واپسی کا کوڈ (اگر آپ کے پاس ہو)",
@@ -1512,11 +1507,6 @@
   "Paste a code": "ایک کوڈ پیسٹ کریں",
   "Paste recovery words from clipboard": "کلپ بورڈ سے ریکوری الفاظ پیسٹ کریں",
   "Pause": "روکیں",
-  "Pause credit floor snapshot expires in {n} day|Pause credit floor snapshot expires in {n} days": {
-    "one": "کریڈٹ کی کم از کم حد کا اسنیپ شاٹ {n} دن میں ختم ہو جائے گا",
-    "other": "کریڈٹ کی کم از کم حد کا اسنیپ شاٹ {n} دنوں میں ختم ہو جائے گا"
-  },
-  "Pause credit floor snapshot has expired": "کریڈٹ کی کم از کم حد کا اسنیپ شاٹ ختم ہو چکا ہے",
   "Pause for Season": "موسم کے لیے موقوف کریں",
   "Pause for season": "سیزن کے لیے وقفہ کریں",
   "Paused for season": "موسم کی وجہ سے موقوف",
@@ -1529,22 +1519,6 @@
   "Paused for the season. Credit held at {n} beans.|Paused for the season. Credit held at {n} beans.": {
     "one": "موسم کے لیے موقوف۔ کریڈٹ {n} پھلی پر برقرار ہے۔",
     "other": "موسم کے لیے موقوف۔ کریڈٹ {n} پھلیوں پر برقرار ہے۔"
-  },
-  "Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.|Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.": {
-    "one": "موسم کے لیے موقوف کرنے سے آپ کے کریڈٹ کی کم از کم حد 90 دن تک کے لیے {n} پھلی پر برقرار رہتی ہے اور فعال لسٹنگز موقوف ہو جاتی ہیں تاکہ ارکان خرید نہ سکیں۔ کوئی بھی معاون کسی بھی وقت بحال کر سکتا ہے۔",
-    "other": "موسم کے لیے موقوف کرنے سے آپ کے کریڈٹ کی کم از کم حد 90 دن تک کے لیے {n} پھلیوں پر برقرار رہتی ہے اور فعال لسٹنگز موقوف ہو جاتی ہیں تاکہ ارکان خرید نہ سکیں۔ کوئی بھی معاون کسی بھی وقت بحال کر سکتا ہے۔"
-  },
-  "Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.|Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.": {
-    "one": "موسم کے لیے موقوف کرنے سے آپ کے کریڈٹ کی کم از کم حد 90 دن تک کے لیے {n} پھلی پر برقرار رہتی ہے اور فعال لسٹنگز موقوف ہو جاتی ہیں تاکہ ارکان خرید نہ سکیں۔ کوئی بھی نگران کسی بھی وقت بحال کر سکتا ہے۔",
-    "other": "موسم کے لیے موقوف کرنے سے آپ کے کریڈٹ کی کم از کم حد 90 دن تک کے لیے {n} پھلیوں پر برقرار رہتی ہے اور فعال لسٹنگز موقوف ہو جاتی ہیں تاکہ ارکان خرید نہ سکیں۔ کوئی بھی نگران کسی بھی وقت بحال کر سکتا ہے۔"
-  },
-  "Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.|Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.": {
-    "one": "موسم کے لیے موقوف کرنے سے آپ کے کریڈٹ کی کم از کم حد {date} تک {n} پھلی پر برقرار رہتی ہے اور فعال لسٹنگز موقوف ہو جاتی ہیں تاکہ ارکان خرید نہ سکیں۔ کوئی بھی معاون کسی بھی وقت بحال کر سکتا ہے۔",
-    "other": "موسم کے لیے موقوف کرنے سے آپ کے کریڈٹ کی کم از کم حد {date} تک {n} پھلیوں پر برقرار رہتی ہے اور فعال لسٹنگز موقوف ہو جاتی ہیں تاکہ ارکان خرید نہ سکیں۔ کوئی بھی معاون کسی بھی وقت بحال کر سکتا ہے۔"
-  },
-  "Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.|Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.": {
-    "one": "موسم کے لیے موقوف کرنے سے آپ کے کریڈٹ کی کم از کم حد {date} تک {n} پھلی پر برقرار رہتی ہے اور فعال لسٹنگز موقوف ہو جاتی ہیں تاکہ ارکان خرید نہ سکیں۔ کوئی بھی نگران کسی بھی وقت بحال کر سکتا ہے۔",
-    "other": "موسم کے لیے موقوف کرنے سے آپ کے کریڈٹ کی کم از کم حد {date} تک {n} پھلیوں پر برقرار رہتی ہے اور فعال لسٹنگز موقوف ہو جاتی ہیں تاکہ ارکان خرید نہ سکیں۔ کوئی بھی نگران کسی بھی وقت بحال کر سکتا ہے۔"
   },
   "Pausing…": "روکا جا رہا ہے…",
   "Pay Ali for the stall repairs": "اسٹال کی مرمت کے لیے علی کو ادائیگی کریں",
@@ -1862,7 +1836,6 @@
   "Resolving post preview...": "پوسٹ کا پیش نظارہ تیار کیا جا رہا ہے...",
   "Resolving preview...": "پیش نظارہ لوڈ ہو رہا ہے...",
   "Restore community {id} on {host}?": "{host} پر کمیونٹی {id} کو بحال کریں؟",
-  "Restore credit floor (simple majority)": "کریڈٹ کی حد بحال کریں (سادہ اکثریت)",
   "Restore existing identity": "موجودہ شناخت بحال کریں",
   "Restore member to active standing (simple majority)": "رکن کی فعال حیثیت بحال کریں (سادہ اکثریت)",
   "Restore with my 12 words": "میرے 12 الفاظ کے ذریعے بحال کریں",
@@ -1871,7 +1844,6 @@
   "Restore {name} on {host}?": "{host} پر {name} کو بحال کریں؟",
   "Resume Enterprise": "انٹرپرائز بحال کریں",
   "Resume Project": "منصوبہ بحال کریں",
-  "Resuming reactivates all listings and restores the credit floor to normal daily calculation.": "بحال کرنے سے تمام لسٹنگز دوبارہ فعال ہو جاتی ہیں اور کریڈٹ کی کم از کم حد معمول کے روزانہ کے حساب پر بحال ہو جاتی ہے۔",
   "Resuming…": "بحال ہو رہا ہے…",
   "Resync failed: {error}": "دوبارہ ہم آہنگی میں ناکامی: {error}",
   "Retake community working style quiz": "کمیونٹی ورکنگ اسٹائل کوئز دوبارہ لیں",
@@ -2846,7 +2818,6 @@
   "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "آپ کی کمیونٹی کا سرور اب اس اوزار کی کاپی نہیں رکھتا، اس لیے یہ صرف اسی براؤزر میں محفوظ ہے۔ آپ سیٹنگز میں کاپی کو دوبارہ آن کر سکتے ہیں۔",
   "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "آپ کی کاپی کا آدھا حصہ BeanPool کے کی والٹ میں ہے، جہاں صرف فون ایپ پہنچ سکتی ہے۔ ایڈمن سے نیا کوڈ مانگیں، اور اسے فون ایپ میں استعمال کریں۔",
   "Your credit line is frozen": "آپ کی کریڈٹ لائن منجمد کر دی گئی ہے",
-  "Your current floor": "آپ کا موجودہ فلور",
   "Your deals: {line}": "آپ کے سودے: {line}",
   "Your earlier join didn't go through": "آپ کی پہلے والی شمولیت مکمل نہیں ہو سکی",
   "Your earlier join may still go through": "آپ کی پہلے والی شمولیت اب بھی مکمل ہو سکتی ہے",
@@ -4595,7 +4566,6 @@
   "Budget history": "بجٹ کی تاریخ",
   "No budget history yet.": "ابھی تک بجٹ کی کوئی تاریخ نہیں ہے۔",
   "Ask for more": "مزید طلب کریں",
-  "To get a bigger budget to vouch from, ask an owner of this community.": "تصدیق کے لیے بڑا بجٹ حاصل کرنے کے لیے، اس کمیونٹی کے کسی مالک سے کہیں۔",
   "You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.": "آپ پہلے ہی @{name} کے لیے {prior} پھلیاں کی تصدیق کر چکے ہیں۔ آپ اسے زیادہ سے زیادہ {max} پھلیاں تک بڑھا سکتے ہیں۔",
   "Raised vouch for @{name} to {total} Beans.": "@{name} کے لیے تصدیق بڑھا کر {total} پھلیاں کر دی گئی۔",
   "Could not vouch.": "تصدیق نہیں ہو سکی۔",
@@ -4688,5 +4658,36 @@
   "Yes, it's kept": "ہاں، رکھ لیا",
   "Open the Pulse": "نبض کھولیں",
   "📡 Pulse ›": "📡 نبض ›",
-  "Pulse\u0004tab": "نبض"
+  "Pulse\u0004tab": "نبض",
+  "Vouching budget: {left} of {level} left": "تصدیق کا بجٹ: {level} میں سے {left} باقی",
+  "Pay back now": "ابھی واپس ادا کریں",
+  "Give Beans you hold to your community’s shared pot, or pay back a debt with a code from an admin.": "اپنے پاس موجود پھلیاں اپنی کمیونٹی کے مشترکہ پول کو دیں، یا ایڈمن کے دیے ہوئے کوڈ سے قرض ادا کریں۔",
+  "You’re working off a debt to the Commons: {left} left of {amount}. Every Bean you receive above 0 goes to the Commons until it is cleared. You can also pay some or all of it yourself: it comes off at once.": "آپ کامنز کا قرض اتار رہے ہیں: {amount} میں سے {left} باقی ہے۔ 0 سے اوپر جو بھی پھلی آپ وصول کرتے ہیں وہ قرض ختم ہونے تک کامنز میں جاتی ہے۔ آپ خود بھی کچھ یا پورا ادا کر سکتے ہیں: یہ فوراً کٹ جاتا ہے۔",
+  "Lock the credit line at zero": "کریڈٹ لائن کو صفر پر لاک کریں",
+  "Restore the credit line (simple majority)": "کریڈٹ لائن بحال کریں (سادہ اکثریت)",
+  "Grows as you trade more": "زیادہ سودے کرنے سے بڑھتی ہے",
+  "Help run this project. You can back it with your earned trading standing to expand its credit line.": "اس پروجیکٹ کو چلانے میں مدد کریں۔ آپ اس کی کریڈٹ لائن بڑھانے کے لیے اسے اپنی کمائی ہوئی تجارتی حیثیت سے سہارا دے سکتے ہیں۔",
+  "Help run this enterprise. You can back it with your earned trading standing to expand its credit line.": "اس ادارے کو چلانے میں مدد کریں۔ آپ اس کی کریڈٹ لائن بڑھانے کے لیے اسے اپنی کمائی ہوئی تجارتی حیثیت سے سہارا دے سکتے ہیں۔",
+  "The credit line held for the pause has ended": "وقفے کے لیے روکی گئی کریڈٹ لائن کی مدت ختم ہو گئی",
+  "The credit line held for the pause ends in {n} day|The credit line held for the pause ends in {n} days": {
+    "one": "وقفے کے لیے روکی گئی کریڈٹ لائن {n} دن میں ختم ہو جائے گی",
+    "other": "وقفے کے لیے روکی گئی کریڈٹ لائن {n} دنوں میں ختم ہو جائے گی"
+  },
+  "Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.|Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.": {
+    "one": "موسمی وقفہ آپ کی کریڈٹ لائن کو {date} تک {n} پھلیوں پر روک دیتا ہے اور فعال لسٹنگز کو موقوف کر دیتا ہے تاکہ اراکین خرید نہ سکیں۔ کوئی بھی معاون کسی بھی وقت بحال کر سکتا ہے۔",
+    "other": "موسمی وقفہ آپ کی کریڈٹ لائن کو {date} تک {n} پھلیوں پر روک دیتا ہے اور فعال لسٹنگز کو موقوف کر دیتا ہے تاکہ اراکین خرید نہ سکیں۔ کوئی بھی معاون کسی بھی وقت بحال کر سکتا ہے۔"
+  },
+  "Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.|Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.": {
+    "one": "موسمی وقفہ آپ کی کریڈٹ لائن کو 90 دن تک {n} پھلیوں پر روک دیتا ہے اور فعال لسٹنگز کو موقوف کر دیتا ہے تاکہ اراکین خرید نہ سکیں۔ کوئی بھی معاون کسی بھی وقت بحال کر سکتا ہے۔",
+    "other": "موسمی وقفہ آپ کی کریڈٹ لائن کو 90 دن تک {n} پھلیوں پر روک دیتا ہے اور فعال لسٹنگز کو موقوف کر دیتا ہے تاکہ اراکین خرید نہ سکیں۔ کوئی بھی معاون کسی بھی وقت بحال کر سکتا ہے۔"
+  },
+  "Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.|Pausing for the season holds your credit line at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.": {
+    "one": "موسمی وقفہ آپ کی کریڈٹ لائن کو {date} تک {n} پھلیوں پر روک دیتا ہے اور فعال لسٹنگز کو موقوف کر دیتا ہے تاکہ اراکین خرید نہ سکیں۔ کوئی بھی نگران کسی بھی وقت بحال کر سکتا ہے۔",
+    "other": "موسمی وقفہ آپ کی کریڈٹ لائن کو {date} تک {n} پھلیوں پر روک دیتا ہے اور فعال لسٹنگز کو موقوف کر دیتا ہے تاکہ اراکین خرید نہ سکیں۔ کوئی بھی نگران کسی بھی وقت بحال کر سکتا ہے۔"
+  },
+  "Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.|Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.": {
+    "one": "موسمی وقفہ آپ کی کریڈٹ لائن کو 90 دن تک {n} پھلیوں پر روک دیتا ہے اور فعال لسٹنگز کو موقوف کر دیتا ہے تاکہ اراکین خرید نہ سکیں۔ کوئی بھی نگران کسی بھی وقت بحال کر سکتا ہے۔",
+    "other": "موسمی وقفہ آپ کی کریڈٹ لائن کو 90 دن تک {n} پھلیوں پر روک دیتا ہے اور فعال لسٹنگز کو موقوف کر دیتا ہے تاکہ اراکین خرید نہ سکیں۔ کوئی بھی نگران کسی بھی وقت بحال کر سکتا ہے۔"
+  },
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "بحال کرنے سے تمام لسٹنگز دوبارہ فعال ہو جاتی ہیں اور کریڈٹ لائن معمول کے روزانہ حساب پر لوٹ آتی ہے۔"
 }

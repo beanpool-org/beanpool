@@ -100,6 +100,24 @@ describe('SyncStatus', () => {
         expect(screen.getByTestId('sync-chip').getAttribute('aria-label')).toBe(`Network status: Guest. ${sentence}`);
     });
 
+    // #3124's deciding review: a retired empty duplicate's key (403 `account_retired`) read as Offline.
+    it('treats 403 account_retired probe rejection as Guest with the retired line, never Offline', async () => {
+        vi.spyOn(api, 'checkMembership').mockRejectedValue(Object.assign(new Error('This account was retired as an empty duplicate.'), {
+            status: 403,
+            code: 'account_retired',
+        }));
+
+        render(<SyncStatus />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Guest')).toBeInTheDocument();
+        });
+        expect(screen.queryByText('Offline')).toBeNull();
+        const sentence = "An owner retired this account as an empty duplicate. Sign in with your other account. If that's wrong, ask an owner to bring it back.";
+        expect(screen.getByTestId('sync-note')).toHaveTextContent(sentence);
+        expect(screen.getByTestId('sync-chip').getAttribute('aria-label')).toBe(`Network status: Guest. ${sentence}`);
+    });
+
     // jsdom lays nothing out, so the chip's place and the sentence's width are given as a 320 px screen measures them.
     // Before the fix the sentence was always `left: 0` under the chip: a chip at x 223 put a 289 px sentence over 223..512.
     it.each([

@@ -8,15 +8,23 @@
  *   under way for the key, an UNSIGNED claim that only ever prompts, never moves the member: _layout.tsx NAT-20).
  * - 403 `account_closed` (the signature gate's answer for a key whose account there was closed, removed or deleted by its
  *   owner) is a definite answer too: closed.
+ * - 403 `account_retired` (the same gate's answer for a key an owner retired as an empty duplicate: server
+ *   engine/retire-duplicate.ts) is closed too, marked `retired`: every place that acts on a closed account acts the same
+ *   (the not-recognised screen, Settings kept for Delete account, the global door not offered), and only the words differ
+ *   (core ACCOUNT_RETIRED_WORDS: an owner did it, and Bring back undoes it). Before, it was no answer, and the phone sat on
+ *   tabs that read every refusal as "trouble connecting".
  * - 403 `members_only` or `private_preview`: the node keeps its reads for members, and this key isn't one. A stranger.
  * - Anything else (401 unsigned, 403 `not_your_key`, a 5xx, a body that isn't the probe's) is no answer: null, and each
  *   caller keeps what it had. Never "stranger" for a flaky connection.
  */
 
+import { ACCOUNT_RETIRED_CODE } from '@beanpool/core';
+
 export type MembershipAnswer =
     | { kind: 'member' }
     | { kind: 'stranger'; recovering: boolean }
-    | { kind: 'closed' };
+    /** `retired`: an owner retired it as an empty duplicate (403 `account_retired`), present only then. */
+    | { kind: 'closed'; retired?: true };
 
 /** The refusal codes that mean "not a member here" (a definite answer about the key, not about the connection). */
 const STRANGER_CODES: ReadonlySet<string> = new Set(['members_only', 'private_preview']);
@@ -31,6 +39,7 @@ export function readMembershipAnswer(status: number, body: unknown): MembershipA
     }
     if (status === 403 && b && typeof b.code === 'string') {
         if (b.code === 'account_closed') return { kind: 'closed' };
+        if (b.code === ACCOUNT_RETIRED_CODE) return { kind: 'closed', retired: true };
         if (STRANGER_CODES.has(b.code)) return { kind: 'stranger', recovering: false };
     }
     return null;

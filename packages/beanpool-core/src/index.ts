@@ -115,6 +115,7 @@ export * from './poll-length.js';
 export * from './recovery-kit.js';
 export * from './recovery-kit-lines.js';
 export * from './auth-bounce-words.js';
+export * from './account-retired-words.js';
 export * from './home-tips.js';
 export * from './home-frame.js';
 export * from './home-place.js';

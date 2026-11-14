@@ -3,21 +3,24 @@
  * not about connectivity (DESIGN-global-entry-fable.md §1.3, slice W2).
  *
  * In a private preview the node answers 403 `private_preview` to any non-member read. When an account was closed (pruned or
- * deleted by its owner), every signed request is answered with 403 `account_closed`.
+ * deleted by its owner), every signed request is answered with 403 `account_closed`; when an owner retired it as an empty
+ * duplicate (server engine/retire-duplicate.ts), with 403 `account_retired`.
  *
- * The web app reads both as "not a member" and shows the node's sentence (for private_preview, the 403 body's `error` text;
- * for account_closed, "Your account in this community was closed." through t()), NEVER "Offline" or "Having trouble connecting".
+ * The web app reads all three as "not a member" and shows a sentence (for private_preview, the 403 body's `error` text;
+ * for account_closed, "Your account in this community was closed." through t(); for account_retired, core's
+ * ACCOUNT_RETIRED_WORDS.line through t(), the phone's words too), NEVER "Offline" or "Having trouble connecting".
  * "Offline" is kept strictly for when there was no answer from the node at all.
  */
-import { isBusyStatus, t } from '@beanpool/core';
+import { ACCOUNT_RETIRED_CODE, ACCOUNT_RETIRED_WORDS, isBusyStatus, t } from '@beanpool/core';
 import type { SyncMode } from '../components/SyncChip';
 
 export const PRIVATE_PREVIEW = 'private_preview';
 export const ACCOUNT_CLOSED = 'account_closed';
+export const ACCOUNT_RETIRED = ACCOUNT_RETIRED_CODE;
 
 export const DEFAULT_PRIVATE_PREVIEW_MESSAGE = 'This community is in a private preview. Ask its owner for an invite.';
 
-export type StandingCode = typeof PRIVATE_PREVIEW | typeof ACCOUNT_CLOSED;
+export type StandingCode = typeof PRIVATE_PREVIEW | typeof ACCOUNT_CLOSED | typeof ACCOUNT_RETIRED;
 
 export interface StandingRefusal {
     code: StandingCode;
@@ -30,7 +33,7 @@ export interface StandingRefusal {
 }
 
 /**
- * Pure reader that identifies standing refusals (403 `private_preview` or `account_closed`).
+ * Pure reader that identifies standing refusals (403 `private_preview`, `account_closed` or `account_retired`).
  * Returns a StandingRefusal with the appropriate sentence, or null if the error is a network failure,
  * a 403 with another code, or any other response.
  */
@@ -48,11 +51,11 @@ export function standingFromRefusal(e: unknown): StandingRefusal | null {
     };
 
     const status = err.status ?? err.statusCode ?? err.response?.status;
-    // 403 status is required for standing refusals. If status is undefined, we check if code is explicitly one of the two.
+    // 403 status is required for standing refusals. If status is undefined, we check if code is explicitly one of the three.
     if (status !== undefined && status !== 403) return null;
 
     const code = (err.code ?? err.body?.code) as unknown;
-    if (code !== PRIVATE_PREVIEW && code !== ACCOUNT_CLOSED) return null;
+    if (code !== PRIVATE_PREVIEW && code !== ACCOUNT_CLOSED && code !== ACCOUNT_RETIRED) return null;
 
     if (code === PRIVATE_PREVIEW) {
         // The node sends its sentence as `error` (lib/api's request makes that the thrown Error's message).
@@ -60,6 +63,19 @@ export function standingFromRefusal(e: unknown): StandingRefusal | null {
         const sentence = typeof text === 'string' && text.trim() ? text.trim() : DEFAULT_PRIVATE_PREVIEW_MESSAGE;
         return {
             code: PRIVATE_PREVIEW,
+            standing: 'not_member',
+            isMember: false,
+            sentence,
+            message: sentence,
+        };
+    }
+
+    // ACCOUNT_RETIRED: an owner retired this account as an empty duplicate. Core's line through t(), the phone's words
+    // too, never the node's own error text (that is the server's catalog; this is what the member's app says).
+    if (code === ACCOUNT_RETIRED) {
+        const sentence = t(ACCOUNT_RETIRED_WORDS.line);
+        return {
+            code: ACCOUNT_RETIRED,
             standing: 'not_member',
             isMember: false,
             sentence,
@@ -101,7 +117,7 @@ export type SyncStatusAction =
 
 /**
  * Pure reducer for sync status:
- * - Each standing refusal code (`private_preview`, `account_closed`) → "not a member" (guest) with its sentence
+ * - Each standing refusal code (`private_preview`, `account_closed`, `account_retired`) → "not a member" (guest) with its sentence
  * - A network error → offline
  * - A 403 with another code → unchanged behaviour (offline)
  * - A 429 (the network in front of the node is busy) → the chip keeps what it showed; a 5xx does too while the live socket is up

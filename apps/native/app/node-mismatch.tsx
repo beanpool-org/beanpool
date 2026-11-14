@@ -5,7 +5,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, ErrorBoundary } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import { t, tn } from '@beanpool/core';
+import { t, tn, ACCOUNT_RETIRED_WORDS } from '@beanpool/core';
 
 export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
@@ -62,7 +62,7 @@ export default function NodeMismatchScreen() {
     const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     const router = useRouter();
     const { identity, setIdentity } = useIdentity();
-    const { nodeUrl, recognition, recheck } = useNodeStatus();
+    const { nodeUrl, recognition, retired: retiredHere, recheck } = useNodeStatus();
     const [input, setInput] = useState(nodeUrl || '');
     const [loading, setLoading] = useState(false);
     // The delete asks each community to stop the push alerts first, which can take a few seconds (UNREGISTER_TIMEOUT_MS):
@@ -116,7 +116,7 @@ export default function NodeMismatchScreen() {
 
     // The community the page is about: the one in use, or one that a Reconnect (or a saved pick) asked and that said no.
     // The phone is still on the one in use then: nothing was written.
-    const [asked, setAsked] = useState<{ url: string; answer: 'stranger' | 'closed'; profile: NodeProfile | null; reachable: boolean } | null>(null);
+    const [asked, setAsked] = useState<{ url: string; answer: 'stranger' | 'closed'; retired?: boolean; profile: NodeProfile | null; reachable: boolean } | null>(null);
     const pageUrl = asked?.url ?? nodeUrl;
     const pageIsGlobal = isGlobalCommunity(pageUrl);
     const plan = mismatchPlan({
@@ -189,7 +189,7 @@ export default function NodeMismatchScreen() {
                 setAsked(null);
                 setHere({ profile: answer.profile, reachable: answer.reachable });
             } else {
-                setAsked({ url, answer: answer.kind, profile: answer.profile, reachable: answer.reachable });
+                setAsked({ url, answer: answer.kind, retired: answer.kind === 'closed' && answer.retired === true, profile: answer.profile, reachable: answer.reachable });
                 setAddressUnfolded(false);
             }
         } catch (e: any) {
@@ -314,12 +314,18 @@ export default function NodeMismatchScreen() {
         );
     }
 
+    // The closed page is about an account an owner retired as an empty duplicate (403 `account_retired`), not one the
+    // community removed or its owner deleted: its own title and one line saying what to do (core ACCOUNT_RETIRED_WORDS, the
+    // web app's words too). Everything else on the page, Delete my account included, is the closed page's.
+    const retiredPage = plan.page === 'closed' && (asked ? asked.retired === true : retiredHere === true);
     // The page's words (§E). A page about a community the phone isn't on says so: nothing was changed.
     const title = plan.page === 'open' ? t("You're not a member here yet")
+        : retiredPage ? t('Your account in {name} was retired', { name: pageName })
         : plan.page === 'closed' ? t('Your account in {name} was closed', { name: pageName })
         : t("This community doesn't recognise you");
     const body = plan.page === 'open'
         ? t('{name} lets anyone join. Your account is fine: join with it, or go back to one of your communities.', { name: pageIsGlobal ? t('The global community') : nameOf(pageUrl) })
+        : retiredPage ? t(ACCOUNT_RETIRED_WORDS.line)
         : plan.page === 'closed' ? t('You deleted it, or the community removed it. Your other communities are not affected.')
         : plan.page === 'preview' ? t('This community is in a private preview. Ask its owner for an invite.')
         : asked ? t("Your account is fine, but that community doesn't have you as a member. This usually means the address is wrong, or you haven't joined it yet.")
@@ -471,9 +477,13 @@ export default function NodeMismatchScreen() {
                             community the phone is on, so not for one a Reconnect asked). */}
                         {plan.page === 'closed' && !asked && (
                             <View style={styles.closedDeleteBox}>
-                                <Text style={styles.hint}>
-                                    {t('If {name} removed you, it still keeps your profile, so a vote could bring you back. Deleting your account there erases it.', { name: pageName })}
-                                </Text>
+                                {/* A retired account was not removed, and no vote brings it back (an owner's Bring back
+                                    does): this hint is a removed account's. */}
+                                {!retiredPage && (
+                                    <Text style={styles.hint}>
+                                        {t('If {name} removed you, it still keeps your profile, so a vote could bring you back. Deleting your account there erases it.', { name: pageName })}
+                                    </Text>
+                                )}
                                 <Pressable
                                     style={styles.outlineBtn}
                                     onPress={() => router.push(CLOSED_ACCOUNT_DELETE)}

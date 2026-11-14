@@ -94,7 +94,8 @@ test('the translations of /start are of today\'s English', () => {
 test('each translation of /start says what the English says: the same links and bold words, block by block; the phone\'s own labels for the claim; its own description', () => {
     const blocks = (html) => {
         const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
-        return [...main.matchAll(/<(h1|h2|h3|p|li)\b[^>]*>([\s\S]*?)<\/\1>/g)].map((m) => `<${m[1]}>${(m[2].match(/<[^>]+>/g) || []).join('')}`);
+        // A dir="ltr" (a right-to-left page keeping "/settings" whole) is the language's own, not a change of shape.
+        return [...main.matchAll(/<(h1|h2|h3|p|li)\b[^>]*>([\s\S]*?)<\/\1>/g)].map((m) => `<${m[1]}>${(m[2].match(/<[^>]+>/g) || []).map((t) => t.replace(/ dir="ltr"/, '')).join('')}`);
     };
     const between = (html, from, to) => html.slice(html.indexOf(from), html.indexOf(to, html.indexOf(from)));
     const english = read('en', 'start.html');
@@ -112,9 +113,11 @@ test('each translation of /start says what the English says: the same links and 
         }
         assert.ok(steps.includes('<strong>Action Required</strong>'), `${lang}: Settings Home's list, as the Settings app names it`);
         // In a right-to-left paragraph the slash takes the paragraph's direction and shows as "settings/" (measured in Chromium
-        // on ar, fa and ur, 15 Nov 2026); a left-to-right mark keeps it "/settings".
-        const settings = RTL_LANGS.includes(lang) ? '<strong>&lrm;/settings</strong>' : '<strong>/settings</strong>';
+        // on ar, fa and ur, 15 Nov 2026). dir="ltr" on the bold word keeps it "/settings"; a left-to-right MARK would too, but it is
+        // copied with the word and the address it makes is not a URL (review of #3150, measured), so no mark anywhere.
+        const settings = RTL_LANGS.includes(lang) ? '<strong dir="ltr">/settings</strong>' : '<strong>/settings</strong>';
         assert.ok(steps.includes(settings), `${lang}: the address to open reads ${settings}`);
+        assert.ok(!/&lrm;|\u200e/i.test(src), `${lang}: no invisible left-to-right mark (it is copied into the address)`);
         const description = src.match(/<meta name="description" content="([^"]*)"/)?.[1] ?? '';
         const lede = (src.match(/<p class="lede">([\s\S]*?)<\/p>/)?.[1] ?? '').trim();
         assert.ok(description && lede && description !== lede, `${lang}: the description is the page's own, not a copy of the lede`);

@@ -23,9 +23,11 @@ const APP_PATH = /^(?:beanpool:\/\/\/?|\/)?community-card\/?(?:\?([^#]*))?(?:#.*
 /**
  * The card screen's route for a community's origin. `peek`: from a shared post's screen, its link's ticket, which the
  * request to join then carries (shared-listing door A3); only an in-app route, never from a link a system hands over.
+ * `listing`: from a copy on the global community, the listing there it stands for (list on global G4), kept at Send so
+ * the member lands on it once they have joined (utils/listing-after-join.ts); an in-app route only, as `peek` is.
  */
-export function communityCardRoute(origin: string, peek?: string): string {
-    return `${COMMUNITY_CARD_ROUTE}?node=${encodeURIComponent(origin)}${peek ? `&peek=${encodeURIComponent(peek)}` : ''}`;
+export function communityCardRoute(origin: string, peek?: string, listing?: string | null): string {
+    return `${COMMUNITY_CARD_ROUTE}?node=${encodeURIComponent(origin)}${peek ? `&peek=${encodeURIComponent(peek)}` : ''}${listing ? `&listing=${encodeURIComponent(listing)}` : ''}`;
 }
 
 /**

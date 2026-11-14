@@ -138,7 +138,7 @@ async function copyOnlyAtCommunity() {
 }
 
 const restoreAtCommunity = (provider: 'google' | 'facebook' = 'google') =>
-    recoverAccountWithSso({ callsign: 'Sam', anchorUrl: COMMUNITY, provider });
+    recoverAccountWithSso({ anchorUrl: COMMUNITY, provider });
 
 describe('finding 3: on the vault\'s signed "no copy", a vault build restores at the community, as a build without a vault does', () => {
     it('the member gets back in with the community\'s copy, and the move card is offered at once', async () => {
@@ -156,15 +156,16 @@ describe('finding 3: on the vault\'s signed "no copy", a vault build restores at
         expect((await loadIdentity())?.publicKey).toBe(member.publicKey);
         expect(mem.async.get(ANCHOR)).toBe(COMMUNITY);
 
-        // The vault was asked for a ticket and the restore, and nothing else; the community for its restore, as main does.
+        // The vault was asked for a ticket and the restore, and nothing else; the community for its find and collect, as a
+        // build without a vault asks it (recovery S2): nothing typed, no name sent.
         expect(paths(VAULT)).toEqual(['POST /v1/ticket', 'POST /v1/restore']);
         expect(paths(COMMUNITY)).toEqual([
-            'GET /api/recovery/lookup/Sam',
-            'POST /api/recovery/collect', 'POST /api/recovery/collect/sso-nonce', 'POST /api/recovery/collect/sso', 'POST /api/recovery/collect/fragments',
+            'POST /api/recovery/find-nonce', 'POST /api/recovery/find', 'POST /api/recovery/collect', 'POST /api/recovery/collect/fragments',
         ]);
-        // The community's sign-in carried the community's own nonce, never the vault ticket's.
-        const collectSso = to(COMMUNITY).find(s => s.path === '/api/recovery/collect/sso')!;
-        expect(collectSso.body.nonce).toMatch(/^collect-nonce-/);
+        // The community's find carried the community's own nonce, never the vault ticket's.
+        const find = to(COMMUNITY).find(s => s.path === '/api/recovery/find')!;
+        expect(find.body.nonce).toMatch(/^find-nonce-/);
+        expect(to(COMMUNITY).find(s => s.path === '/api/recovery/collect')!.body).toEqual({ candidatePublicKey: member.publicKey });
 
         // The move card's offer holds the moment the account is back: the community keeps a copy, the vault none.
         expect(await vaultMoveOffer(result.identity, COMMUNITY)).toEqual({ kind: 'move', provider: 'google', communityUrl: COMMUNITY });
@@ -192,7 +193,7 @@ describe('finding 3: on the vault\'s signed "no copy", a vault build restores at
         // And the restore itself refuses in a vault build without the vault's signed "no copy" for that sign-in.
         const recovery = fs.readFileSync(path.resolve(__dirname, '../sso-recovery.ts'), 'utf8');
         const restore = recovery.slice(recovery.indexOf('export async function recoverAccountWithSso('));
-        expect(restore.slice(0, restore.indexOf('const rawCallsign'))).toMatch(
+        expect(restore.slice(0, restore.indexOf('const rawAnchor'))).toMatch(
             /\n {4}if \(hasVault\(\) && !vaultKeepsNoCopyFor\(options\.provider\)\) throw new Error\(COMMUNITY_RESTORE_NOT_OFFERED\);\n/,
         );
         expect(recovery.match(/noCopyAtVault\.add\(/g)).toHaveLength(1);
@@ -434,7 +435,7 @@ describe('N2: a 2xx status answer that isn\'t a status is never recorded as "non
 });
 
 describe('a build without a vault is unchanged: the community restore, and not one request to the vault', () => {
-    it('restores from the community with the callsign and the sign-in, as main does, and asks the vault nothing', async () => {
+    it('restores from the community with the sign-in, which finds the account there, and asks the vault nothing', async () => {
         noVault();
         await copyOnlyAtCommunity();
         const result = await restoreAtCommunity();

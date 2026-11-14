@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>建立社群 — BeanPool</title>
-    <meta name="description" content="每個社群都運作在自己的節點上：一台保存該社群成員、貼文與帳本的小型伺服器。由在地人員負責維護。如果你所在的城鎮或山谷還沒有節點，你可以成為發起人。">
+    <meta name="description" content="在家中閒置的電腦或租用的小型伺服器上建立 BeanPool 社群：需要什麼、如何選擇你的網址，以及安裝時只需貼上的那一段指令。">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="../style.css?v=2.9">
@@ -49,7 +49,7 @@
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="BeanPool">
     <meta property="og:title" content="建立社群 — BeanPool">
-    <meta property="og:description" content="每個社群都運作在自己的節點上：一台保存該社群成員、貼文與帳本的小型伺服器。由在地人員負責維護。如果你所在的城鎮或山谷還沒有節點，你可以成為發起人。">
+    <meta property="og:description" content="在家中閒置的電腦或租用的小型伺服器上建立 BeanPool 社群：需要什麼、如何選擇你的網址，以及安裝時只需貼上的那一段指令。">
     <meta property="og:url" content="https://beanpool.org/zh-Hant/start">
     <meta property="og:image" content="https://beanpool.org/og-image.jpg">
     <meta property="og:image:width" content="1200">
@@ -234,8 +234,8 @@ docker compose exec beanpool-node beanpool claim</code>
 
         <h3 class="run-node-sub">最後一行：beanpool claim</h3>
         <ol class="run-node-steps">
-            <li><strong>代碼與 QR 碼。</strong>畫面會顯示一次性認領代碼與 QR 碼。使用手機鏡頭掃描 QR 碼，或開啟 BeanPool，在<strong>尋找你的社群</strong>下方輸入伺服器網址，然後點擊<strong>認領</strong>。該手機即成為所有者。</li>
-            <li><strong>設定。</strong>在網址（或伺服器專屬位址）後加上 <strong>/settings</strong> 開啟。設定精靈會引導你為社群命名、要求新增第二位所有者，並產生三份創始邀請。在「節點身分」下設定地圖上的位置，以便附近的人能找到你。</li>
+            <li><strong>代碼與 QR 碼。</strong>畫面會顯示一次性認領代碼、QR 碼，以及編號列出的後續步驟。首先，在將擁有這個社群的手機上，從 <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=zh-Hant" target="_blank" rel="noopener">Google Play</a> 或 <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a> 安裝 BeanPool。接著使用手機鏡頭掃描 QR 碼，或開啟 BeanPool 並點擊<strong>在伺服器上安裝了 BeanPool？認領它</strong>（若手機上已有帳號：點擊頂端的豆子圖示，再點擊<strong>設定新社群伺服器</strong>）。認領只能在手機 App 中進行。認領會在這支手機上建立你的 BeanPool 帳號，不需要邀請，也不需要 BeanPool 專案提供任何東西：輸入你的名字，點擊<strong>認領並成為所有者</strong>，並抄下畫面顯示的 12 個助記詞。已有帳號的手機會以該帳號認領。該手機即成為所有者。</li>
+            <li><strong>設定。</strong>在網址（或伺服器專屬位址）後加上 <strong>/settings</strong> 開啟：確認你的核心設定（Core settings）、建立還原代碼、新增第二位所有者，並邀請你的第一批成員。前三項中任何一項尚未完成時，設定首頁（Home）會在<strong>Action Required</strong>（需要處理）下列出它。Home 上的 Cold-Start 精靈是選用的：最後一步會產生三份可列印的創始邀請。在 Node Identity 下設定地圖上的位置，以便附近的人能找到你。</li>
         </ol>
         <p class="run-node-note">如果指令區塊顯示 <strong>No claim code after 5 minutes</strong>，或 <code>beanpool claim</code> 顯示 <strong>This community has no claim code waiting</strong>，表示伺服器尚未完成啟動：<code>docker compose logs beanpool-node</code> 會顯示目前進度。一旦記錄檔顯示社群尚無所有者且已有認領代碼，請重新執行最後一行。完整步驟請參閱營運者手冊的<a href="../guide/operators/first-time-setup.html">首次設定</a>。</p>
 

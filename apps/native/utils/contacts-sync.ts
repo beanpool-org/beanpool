@@ -207,13 +207,16 @@ function refuse(s: ContactsSyncState, community: string, code: ContactsRefusal |
     return undefined;
 }
 
-/** `edit` applied to the record, in the account's turn, and written when it changed anything. Returns what `edit` returns. */
-async function note<T>(account: ContactsAccount, deps: ContactsSyncDeps, edit: (s: ContactsSyncState) => T): Promise<T> {
+/**
+ * `edit` applied to the record, in the account's turn, and written when it changed anything. Returns what `edit` returns.
+ * `edit` is handed the list as this turn opened it, so a caller that needs it too doesn't open it a second time.
+ */
+async function note<T>(account: ContactsAccount, deps: ContactsSyncDeps, edit: (s: ContactsSyncState, onPhone: ContactsOnPhone) => T): Promise<T> {
     return inTurn(account.publicKey, async () => {
         const onPhone = await readOnPhone(account, deps.disk);
         const s = await readStateFor(account, deps.kv, onPhone);
         const before = JSON.stringify(s);
-        const result = edit(s);
+        const result = edit(s, onPhone);
         // Nothing is written for an account with no list and nothing heard: nothing exists until a first contact.
         if (JSON.stringify(s) !== before && (onPhone.kind !== 'none' || Object.values(s.heard).some((n) => n !== null))) {
             await writeState(account, deps.kv, s);
@@ -285,7 +288,9 @@ async function forgetLeft(account: ContactsAccount, kept: readonly string[], dep
 
 /**
  * A round's answer from `community` (other-communities-unread.ts): the number of the member's copy kept there, written
- * down, and a pass started when that community needs one. Only while the app is open: a closed round only notes it.
+ * down, and a pass started when that community needs one. Only while the app is open: a closed round only notes it. The
+ * list is opened once for both: opening it is the costly part on an old phone (PR #3073's review; measured in the PR that
+ * made this change, at 2,000 contacts on the API 26 emulator).
  */
 export async function contactsHeard(account: ContactsAccount | null, community: string, body: unknown, open: boolean, deps: ContactsSyncDeps = phoneSyncDeps()): Promise<void> {
     if (!account?.publicKey || !account.privateKey) return;
@@ -294,14 +299,11 @@ export async function contactsHeard(account: ContactsAccount | null, community: 
     const seq = contacts === null ? null : seqOf(contacts);
     if (contacts !== null && seq === null) return;
     try {
-        await note(account, deps, (s) => {
+        const what = await note(account, deps, (s, onPhone) => {
             s.heard[community] = seq;
-            return true;
+            return decide(community, s, onPhone, (deps.now ?? Date.now)());
         });
-        if (!open) return;
-        const { onPhone, state } = await loadContacts(account, deps);
-        const what = decide(community, state, onPhone, (deps.now ?? Date.now)());
-        if (what !== 'level' && what !== 'skip') void syncContacts(account, deps);
+        if (open && what !== 'level' && what !== 'skip') void syncContacts(account, deps);
     } catch (e) {
         console.warn('[Contacts] A round\'s answer was not noted', e);
     }

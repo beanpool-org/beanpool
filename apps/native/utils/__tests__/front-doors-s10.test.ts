@@ -67,11 +67,13 @@ describe('Join with an invite: Scan a QR code, beside Paste', () => {
 });
 
 describe('Recover with Social asks "Which community?" first', () => {
-    it('without a key vault: the chips come before the callsign, and the address is typed only for another address', () => {
+    it('without a key vault: the chips come before the sign-ins, no name is asked, and the address is typed only for another address', () => {
         const screen = between("    if (mode === 'ssoRecover' && (!hasVault() || ssoAtCommunity)) {", "    if (mode === 'ssoRecover') {");
         const chips = screen.indexOf('<RestoreCommunityChips');
         expect(chips).toBeGreaterThan(-1);
-        expect(chips).toBeLessThan(screen.indexOf("accessibilityLabel={t('Callsign')}"));
+        // The sign-in finds the account (recovery S2): the callsign field is gone.
+        expect(screen).not.toContain("accessibilityLabel={t('Callsign')}");
+        expect(screen).not.toContain('Your Callsign');
         expect(chips).toBeLessThan(screen.indexOf("handleSsoRecoverAtCommunity('google')"));
         // The old "your communities on this phone" list is gone from this screen: the chips are the same choice.
         expect(screen).not.toContain('<SavedNodePicker');
@@ -82,7 +84,7 @@ describe('Recover with Social asks "Which community?" first', () => {
         expect(screen).toContain('pick={anchorAddressPick}');
         expect(screen).toContain("onChangeText={(text) => { setAnchorAddressPick('another'); setRecoveryAnchorUrl(text); }}");
         expect(screen).not.toContain('chosenRestoreChoice');
-        expect(screen).toContain("'Choose your community, then enter your callsign to restore your account with any linked sign-in.'");
+        expect(screen).toContain("'Choose your community, then sign in with the account you linked. It finds your account, so there is nothing else to type.'");
         // The restore itself and its address checks are the same as before.
         expect(screen).toContain('handleSsoRecoverAtCommunity');
     });

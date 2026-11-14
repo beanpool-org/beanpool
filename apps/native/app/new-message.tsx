@@ -99,6 +99,14 @@ export default function NewMessageScreen() {
         // List
         list: { paddingBottom: 100 },
 
+        // Contacts
+        contactsRow: {
+            flexDirection: 'row', alignItems: 'center', minHeight: 48, marginHorizontal: 16, marginTop: 4, paddingHorizontal: 14,
+            borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card,
+        },
+        contactsRowText: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text.body },
+        contactsRowNote: { fontSize: 12, color: colors.text.muted, marginHorizontal: 16, marginTop: 6, marginBottom: 4 },
+
         // Recents
         recentsSection: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border.default },
         recentsList: { gap: 12, paddingTop: 12 },
@@ -354,6 +362,12 @@ export default function NewMessageScreen() {
     // ── Header component (Recents + Directory label) ────────────────────────
     const ListHeader = useMemo(() => (
         <>
+            {/* The member's private contacts (DESIGN-private-contacts-fable.md §3.1): the first row, as the web's New Message. */}
+            <Pressable accessibilityRole="button" testID="new-message-contacts" style={styles.contactsRow} onPress={() => router.push('/contacts')}>
+                <Text style={styles.contactsRowText}>{t('👥 Your contacts')}</Text>
+                <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
+            </Pressable>
+            <Text style={styles.contactsRowNote}>{t('Chats between two people are end-to-end encrypted.')}</Text>
             {/* Recents */}
             {showRecents && (
                 <View style={styles.recentsSection}>
@@ -379,7 +393,7 @@ export default function NewMessageScreen() {
                 </Text>
             </View>
         </>
-    ), [showRecents, recents, searchQuery, filteredMembers.length, renderRecentCard, membersOnDemand]);
+    ), [showRecents, recents, searchQuery, filteredMembers.length, renderRecentCard, membersOnDemand, styles, colors]);
 
     // ── Main Return ─────────────────────────────────────────────────────────
     return (

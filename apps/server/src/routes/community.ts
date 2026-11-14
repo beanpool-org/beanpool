@@ -22,7 +22,7 @@ import {
     getFriends, addFriend, removeFriend,
     recordActivity,
     markConversationRead, getUnreadCounts,
-    registerPushToken, removePushToken, applyPushLeave,
+    registerPushToken, removePushToken, applyPushLeave, hasMembersRow, holdsPushToken,
     getMemberPreferences, setMemberPreferences, setHolidayMode, homePreferencesNamed,
     getMemberStats,
     dispatchPushNotification, broadcast,
@@ -43,6 +43,7 @@ import { VoucherError, vouchFromProfile, myVouching, tellVoucherNotice } from '.
 import { CreditGiftError, creditGiftOffer, giveCreditLine } from '../engine/credit-gift.js';
 import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { pushKeyHex } from '../engine/push-notices.js';
+import { askerStanding } from '../engine/knocks.js';
 import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
 import { cleanRekeyCode, proposeRekey, rekeyRedeemStatus, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
 import { NodeKeyNotReady, withVoucher } from '../services/node-voucher.js';
@@ -1960,6 +1961,24 @@ router.post('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
+    // A key with no row here (neither a member's nor a visitor's) keeps a new phone only while it waits for the answer to
+    // its request to join here (web push W4, DESIGN-web-notifications-fable.md §3, Marty's Decision 4): the phone in
+    // waiting mode is told the yes, `join.answered`, and nothing else. Anyone else: 403, nothing kept. A declined key in
+    // its block is answered as an open one and nothing is kept (a no is never a message; routes/web-push.ts does the same
+    // for a browser). The same phone again is never refused: it adds no row.
+    if (!hasMembersRow(activeKey) && !heldAlready(activeKey, token)) {
+        const standing = askerStanding(activeKey);
+        if (standing === 'none') {
+            ctx.status = 403;
+            ctx.body = { error: 'Only a member, or someone waiting for an answer to their request to join, can register a phone here.', code: 'no_open_request' };
+            return;
+        }
+        if (standing === 'held') {
+            const pushKey = pushKeyHex();
+            ctx.body = pushKey ? { success: true, pushKey } : { success: true };
+            return;
+        }
+    }
     // The language the phone writes in, so its pushes are in it (Marty's M6). One BeanPool writes, else none (English): a
     // tag from a newer app this server doesn't know never refuses the phone.
     const pushLang = typeof lang === 'string' ? normaliseLang(lang) : null;
@@ -1992,6 +2011,15 @@ router.post('/api/push-tokens', async (ctx) => {
     const pushKey = success ? pushKeyHex() : null;
     ctx.body = pushKey ? { success, pushKey } : { success };
 });
+
+/** Whether this key holds this phone's row already; false without this server's key, where the registration fails anyway. */
+function heldAlready(publicKey: string, token: string): boolean {
+    try {
+        return holdsPushToken(publicKey, token);
+    } catch {
+        return false;
+    }
+}
 
 /**
  * A push registration or leave refused for a day cap (state-engine.ts KEY_PUSH_RULES, STRANGER_PUSH_RULES,

@@ -52,6 +52,7 @@ import { noteRemovedNewcomer } from './engine/door-signal.js';
 import { admitByAddress } from './db/writes-by-address.js';
 import { pruneAgedOut } from './engine/plain-tables.js';
 import { pruneOldLooks } from './engine/credit-looks.js';
+import { noteFreeTagsSeen } from './engine/free-tags.js';
 import { avatarValueRefusal, photoValueRefusal, photoRefusalError, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './engine/photo-upload-budget.js';
 import { stripImageValue } from './storage/image-metadata.js';
@@ -1051,6 +1052,16 @@ export function initStateEngine(): void {
     // Every role: the sessions are each server's own.
     startSweepingRecoveryCollections();
 
+    // Each typed tag's day on each listing (engine/free-tags.ts), kept to the listings when nobody has read the count for a
+    // while: a listing back from a pause starts its week again. Every role, hourly: the stamps are each server's own, and a
+    // standby's follow its copy, so a take-over does not start from stamps last made at a read long ago.
+    if (!freeTagsTickArmed) {
+        freeTagsTickArmed = true;
+        setInterval(() => {
+            try { noteFreeTagsSeen(); } catch (e) { console.warn('[Tags] Could not keep the typed tags\' days:', e); }
+        }, 60 * 60 * 1000);
+    }
+
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
     const postCount = db.prepare("SELECT COUNT(*) as c FROM posts").get() as any;
     console.log(`📒 SQLite DB initialized: ${memberCount.c} members, ${postCount.c} posts`);
@@ -1090,6 +1101,8 @@ function runMainServerMigrations(): void {
 
 /** Whether this process armed the main server's timers (armMainServerTimers): once, whatever promotes it. */
 let mainServerTimersArmed = false;
+/** The hourly pass over the typed tags' days (initStateEngine), armed once on every role. */
+let freeTagsTickArmed = false;
 
 // Marketplace hygiene: expire stale requests, nudge lingering escrows (hourly + once at
 // boot). Primary only — it dispatches real push notifications to members, which a
@@ -10504,8 +10517,17 @@ export function registerPushToken(
 
 export type PushRegistration = 'registered' | 'left' | 'key_rate_limited' | 'rate_limited' | 'busy' | 'failed';
 
-function hasMembersRow(publicKey: string): boolean {
+/** Whether this key has a row here, a member's or a visitor's (a key with none is a stranger: STRANGER_PUSH_RULES). */
+export function hasMembersRow(publicKey: string): boolean {
     return !!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(publicKey);
+}
+
+/**
+ * Whether this key already holds a row for this phone's token (a registration again adds none, and is never refused:
+ * routes/community.ts POST /api/push-tokens). Throws without this server's key ({@link registerPushToken} then fails too).
+ */
+export function holdsPushToken(publicKey: string, token: string): boolean {
+    return !!db.prepare('SELECT 1 FROM push_tokens WHERE public_key = ? AND token_id = ?').get(publicKey, pushTokenId(token));
 }
 
 /**
@@ -10559,9 +10581,12 @@ function dropStalestTokens(publicKey: string, kept: string): void {
 
 /**
  * What a key with no row here (neither a member's nor a visitor's) may store of push tokens (registerPushToken). Such a
- * key registers before its account here exists (a knock waiting for its answer, a join under way). Nothing is sent to
- * it until it has a row, and then none of this applies. Refused, the app tries again within a minute, then less often,
- * and lands once its row is made (apps/native utils/push-registrations.ts).
+ * key registers while it waits for the answer to its request to join here: the route takes a new token of one only with a
+ * request members can still answer (routes/community.ts POST /api/push-tokens; web push W4), and what it sends such a key
+ * is that answer, `join.answered`, and nothing else (engine/knocks.ts tellAskerAnswered). Its rows go when the request is
+ * cancelled, declined or lapses (engine/knocks.ts dropAskerPhonesOf, tidyKnocks); once the key joins, none of this
+ * applies. A key joining by an invite has its row by then. Refused, the app tries again within a minute, then less often
+ * (apps/native utils/push-registrations.ts).
  */
 export const STRANGER_PUSH_RULES = {
     /**
@@ -11059,8 +11084,12 @@ export function deliverPushNotices(
 
         // The bell (DESIGN-web-notifications-fable.md §2.1): the notice is kept for every member here it is for, a phone
         // or not, so the web app, and a phone with no push, list what the phone is buzzed with. Not for a key that can't
-        // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before.
-        const tokens = getPushTokens(pk, open);
+        // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before;
+        // a key with no row at all is a phone waiting for the answer to its request to join (web push W4), and is told
+        // that answer and nothing else, as its browser is (engine/web-push-subscriptions.ts webPushTargetOpener). The row
+        // is looked up only for a key with a phone here.
+        const held = getPushTokens(pk, open);
+        const tokens = held.length === 0 || kind === 'join.answered' || hasMembersRow(pk) ? held : [];
         const browsers = browsersOf(pk, kind);
         if (tokens.length === 0 && browsers.length === 0 && !passesReadGate(pk)) continue;
 

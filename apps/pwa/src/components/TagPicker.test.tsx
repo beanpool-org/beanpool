@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import React, { useState } from 'react';
 import { TagPicker } from './TagPicker';
@@ -421,5 +421,71 @@ describe('a tag the member types (DESIGN-tags-free-entry-fable.md §3, slice F2)
         type('vintage');
         const targets = [...screen.getByRole('dialog').querySelectorAll('button')].filter(b => !b.className.includes('min-h-[44px]'));
         expect(targets.map(b => b.textContent)).toEqual([]);
+    });
+});
+
+describe("this community's typed tags (DESIGN-tags-free-entry-fable.md §3, §5, slice F3)", () => {
+    const held = { tags: [] as string[], freeTags: [] as string[] };
+    const USED = [
+        { tag: '2nd hand', listings: 12 }, { tag: 'handmade', listings: 1 }, { tag: 'lemon curd', listings: 2 }, { tag: 'lemon', listings: 9 },
+        { tag: 'limones', listings: 0, mergeInto: 'food.fruit.lemon' },
+    ];
+    type Used = { tag: string; listings: number; mergeInto?: string }[];
+    function Composer({ load }: { load: () => Promise<Used> }) {
+        const [nowTags, setTags] = useState<string[]>([]);
+        const [nowFree, setFree] = useState<string[]>([]);
+        held.tags = nowTags;
+        held.freeTags = nowFree;
+        return <TagPicker tags={nowTags} onChange={setTags} freeTags={nowFree} onFreeTagsChange={setFree} category="food" communityTags={load} />;
+    }
+    const open = async (load: () => Promise<Used> = () => Promise.resolve(USED)) => {
+        render(<Composer load={load} />);
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+        await screen.findByRole('dialog');
+        await act(async () => { await Promise.resolve(); });
+    };
+    const field = () => screen.getByPlaceholderText('Search tags...') as HTMLInputElement;
+    const type = (value: string) => fireEvent.change(field(), { target: { value } });
+    const rows = () => [...(screen.queryByTestId('tag-picker-used-here')?.querySelectorAll('button') ?? [])].map(b => b.textContent);
+
+    it('under the library matches, the tags used here that the typing reaches, with their counts', async () => {
+        await open();
+        type('han');
+        expect(await screen.findByText('Tags used here')).toBeInTheDocument();
+        expect(rows()).toEqual(['#2nd handUsed on 12 listings', '#handmadeUsed on 1 listing']);
+    });
+
+    it("a tap on one makes it the listing's tag, as typed", async () => {
+        await open();
+        type('han');
+        fireEvent.click((await screen.findByText('#handmade')).closest('button')!);
+        expect(held.freeTags).toEqual(['handmade']);
+        expect(held.tags).toEqual([]);
+    });
+
+    it("never shadows the library: a tag with a library label's letters is left to the library rows", async () => {
+        await open();
+        type('lem');
+        await screen.findByText('Tags used here');
+        expect(rows()).toEqual(['#lemon curdUsed on 2 listings']);
+    });
+
+    it('a merged tag shows as its library tag, and Enter on its word stores the library id', async () => {
+        await open();
+        type('lim');
+        expect(await screen.findByText('#limones')).toBeInTheDocument();
+        expect(rows()).toEqual(['Lemon#limones']);
+        type('limones');
+        fireEvent.keyDown(field(), { key: 'Enter', code: 'Enter' });
+        expect(held.tags).toEqual(['food.fruit.lemon']);
+        expect(held.freeTags).toEqual([]);
+    });
+
+    it("none when the community's tags cannot be had: the field works as before", async () => {
+        await open(() => Promise.reject(new Error('offline')));
+        type('han');
+        expect(screen.queryByTestId('tag-picker-used-here')).toBeNull();
+        fireEvent.keyDown(field(), { key: 'Enter', code: 'Enter' });
+        expect(held.freeTags).toEqual(['han']);
     });
 });

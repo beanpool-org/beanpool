@@ -1363,6 +1363,7 @@ async function main(): Promise<void> {
             'POST /api/knowledge/drafts', 'GET /api/knowledge/drafts/mine', 'POST /api/knowledge/drafts/:id/withdraw', 'GET /api/knowledge/drafts',
             'GET /api/knowledge/drafts/:id', 'POST /api/knowledge/drafts/:id/approve', 'POST /api/knowledge/drafts/:id/no',
             // The forum (routes/forum.ts, slice F1): members' reads and writes, all signed; the public pages are slice F7's.
+            'GET /api/free-tags',
             'GET /api/forum', 'GET /api/forum/topics', 'GET /api/forum/topics/:id', 'GET /api/forum/posts/:id/photos/:n', 'POST /api/forum/told',
             'POST /api/forum/topics', 'POST /api/forum/topics/:id/replies', 'POST /api/forum/topics/:id/close', 'POST /api/forum/topics/:id/pin',
             'POST /api/forum/topics/:id/move', 'POST /api/forum/posts/:id/edit', 'POST /api/forum/posts/:id/remove', 'POST /api/forum/sections',
@@ -1447,6 +1448,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/users/:pubkey/freeze', 'POST /api/local/admin/users/:pubkey/operator',
             'POST /api/local/admin/users/:pubkey/prune', 'GET /api/local/admin/users/:pubkey/retire', 'POST /api/local/admin/users/:pubkey/retire',
             'POST /api/local/admin/users/:pubkey/status', 'POST /api/local/admin/users/:pubkey/suspend',
+            'GET /api/local/admin/free-tags', 'POST /api/local/admin/free-tags/:key/:action',
             'POST /api/local/admin/users/:pubkey/tier', 'POST /api/local/admin/users/:pubkey/unretire', 'GET /api/local/admin/web-visits',
             'POST /api/local/admin/ws-connections', 'POST /api/local/admin/ws-ticket',
             'GET /api/local/community-info', 'GET /api/local/connectors', 'POST /api/local/connectors',

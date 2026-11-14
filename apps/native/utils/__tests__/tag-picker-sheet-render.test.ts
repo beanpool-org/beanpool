@@ -514,3 +514,81 @@ describe("this community's typed tags (DESIGN-tags-free-entry-fable.md §3, §5,
         });
     }
 });
+
+describe('"Did you mean …?": a word that is a library label in another language (DESIGN-tags-free-entry-fable.md §3, slice F5)', () => {
+    const held = { tags: [] as string[], freeTags: [] as string[] };
+    type Ask = (text: string) => Promise<string | null>;
+    function Composer({ ask, tags }: { ask: Ask; tags: string[] }) {
+        const [nowTags, setTags] = useState<string[]>(tags);
+        const [nowFree, setFree] = useState<string[]>([]);
+        held.tags = nowTags;
+        held.freeTags = nowFree;
+        return createElement(TagPicker, {
+            value: nowTags, onChange: setTags, freeTags: nowFree, onFreeTagsChange: setFree, category: 'food',
+            communityTags: () => Promise.resolve([]), libraryTagFor: ask,
+        });
+    }
+    // The node as F5 answers: a Portuguese label ("laranja") names orange; anything else names none.
+    const node = () => vi.fn((text: string) => Promise.resolve(text === 'laranja' ? 'food.fruit.orange' : null));
+    async function compose(ask: Ask, tags: string[] = []) {
+        await act(async () => { root.render(createElement(Composer, { ask, tags }) as any); });
+        await press(addButton(), '+ Add');
+    }
+    const key = (name: string) => act(async () => { search()!.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true })); });
+    const still = () => act(async () => { await new Promise((r) => setTimeout(r, 500)); });
+    const meant = () => host.querySelector('[data-testid="tag-picker-did-you-mean"]');
+
+    it('a Portuguese label on a phone in another language: the library tag above "Add", asked once the field is still', async () => {
+        const ask = node();
+        await compose(ask);
+        await typeInSearch('lar');
+        await typeInSearch('laranja');
+        expect(ask).not.toHaveBeenCalled();
+        await still();
+        expect(ask.mock.calls).toEqual([['laranja']]);
+        expect(meant()?.textContent).toBe('Did you mean “Orange”?');
+        const ids = Array.from(sheet()!.querySelectorAll('[data-testid^="tag-picker-"]')).map((el) => el.getAttribute('data-testid'));
+        expect(ids.indexOf('tag-picker-did-you-mean')).toBeLessThan(ids.indexOf('tag-picker-add-typed'));
+    });
+
+    it("a tap on it holds the library tag and empties the field; Return instead adds the word as the member's own", async () => {
+        await compose(node());
+        await typeInSearch('laranja');
+        await still();
+        await press(meant(), 'Did you mean');
+        expect(held.tags).toEqual(['food.fruit.orange']);
+        expect(held.freeTags).toEqual([]);
+        expect(search()!.value).toBe('');
+        await typeInSearch('laranja');
+        await key('Enter');
+        expect(held.freeTags).toEqual(['laranja']);
+    });
+
+    it('none when the listing already holds the tag, for a word no language labels, or with the node unreachable', async () => {
+        const ask = node();
+        await compose(ask, ['food.fruit.orange']);
+        await typeInSearch('laranja');
+        await still();
+        expect(ask).toHaveBeenCalledWith('laranja');
+        expect(meant()).toBeNull();
+        await typeInSearch('zzqx');
+        await still();
+        expect(meant()).toBeNull();
+        act(() => root.unmount());
+        root = createRoot(host);
+        await compose(() => Promise.reject(new Error('offline')));
+        await typeInSearch('laranja');
+        await still();
+        expect(meant()).toBeNull();
+    });
+
+    for (const theme of ['light', 'dark'] as const) {
+        it(`the row is a 44 dp target, in ${theme}`, async () => {
+            device.theme = theme;
+            await compose(node());
+            await typeInSearch('laranja');
+            await still();
+            expect(Number(meant()!.getAttribute('data-min-h'))).toBeGreaterThanOrEqual(44);
+        });
+    }
+});

@@ -9,7 +9,9 @@
  * What it shows is fixed: the title is always "BeanPool", never the payload's; the text is the payload's one sentence (its
  * kind's fixed words, which the community's own server encrypted to this browser; anything that is not a short plain
  * sentence shows as no text); the icon is BeanPool's; no image, action, link or sound from the payload. The tag is the
- * kind, so a second notice of one kind takes the first one's place.
+ * kind, so a second notice of one kind takes the first one's place; in an asked community's registration (below) it is the
+ * kind and that community's host, `join.answered:<host>`, as every registration of a site shares its notifications' tags,
+ * so two communities' yeses each keep their own.
  *
  * A click opens /app?door=ask for `join.answered` (/app for anything else), with the signed notice in the address's
  * fragment, which no server is sent: the waiting page checks the notice's signature with the community key it pinned
@@ -80,7 +82,9 @@ self.addEventListener('push', (event) => {
     const p = payloadOf(event);
     const notice = noticeOf(p.data);
     const kind = notice && typeof notice.k === 'string' && KIND.test(notice.k) ? notice.k : 'beanpool';
-    event.waitUntil(self.registration.showNotification(TITLE, { body: sentenceOf(p.body), tag: kind, icon: ICON, data: { notice } }));
+    const host = knockHost();
+    const tag = host ? `${kind}:${host}` : kind;
+    event.waitUntil(self.registration.showNotification(TITLE, { body: sentenceOf(p.body), tag, icon: ICON, data: { notice } }));
 });
 
 /**

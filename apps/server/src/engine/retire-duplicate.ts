@@ -164,6 +164,7 @@ export const EMPTY_RULES: ReadonlyArray<{ rule: EmptyRule; checks: ReadonlyArray
         { table: 'treasury_operators', columns: ['granted_by'] },
         { table: 'retired_accounts', columns: ['retired_by'] },
         { table: 'member_badges', columns: ['set_by'] },
+        { table: 'free_tag_rules', columns: ['set_by'] },
         { table: 'known_floor_exceptions', columns: ['set_by'] },
         { table: 'known_floor_log', columns: ['actor_pubkey'] },
         { table: 'credit_look_log', columns: ['actor_pubkey'] },

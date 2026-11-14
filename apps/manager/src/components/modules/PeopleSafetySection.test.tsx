@@ -12,6 +12,8 @@ vi.mock('./EverydayRuleRows', () => ({ EverydayRuleRows: () => null }));
 vi.mock('./AgentSuggestionsPanel', () => ({ AgentSuggestionsPanel: () => null }));
 // So does "Taken down by assistants" (its own tests: AssistantTakedownsPanel.test.tsx).
 vi.mock('./AssistantTakedownsPanel', () => ({ AssistantTakedownsPanel: () => null }));
+// So does "Tags members typed" (its own tests: FreeTagsPanel.test.tsx), which reads its list on its own.
+vi.mock('./FreeTagsPanel', () => ({ FreeTagsPanel: () => null }));
 // So does the posts screen, which reads the takedown record on mount for an owner or admin (its own tests: PostModerationPanel.test.tsx and
 // PostModerationPanel.types.test.tsx); here it only shows who it was told is looking.
 vi.mock('./PostModerationPanel', () => ({

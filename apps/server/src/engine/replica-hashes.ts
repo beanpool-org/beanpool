@@ -256,7 +256,14 @@ export interface TableHashes {
  * older importer drops is a community's false: after a take-over from such a copy its name shows beside its members' copies
  * until the new main server's first mirror run, 10 seconds after it starts, reads the registry again.
  */
-export const TABLE_HASHES_VERSION = 41;
+/**
+ * 42: owners' and admins' rules on typed tags (engine/free-tags.ts, DESIGN-tags-free-entry-fable.md §5, slice F3): a new plain
+ * table, free_tag_rules. Raised for the same reason as 22: a standby updated before its main server hashes the new table too.
+ * REPLICA_FORMAT stays: each side's import writes only the tables its own database has. What an older importer drops is the
+ * rules: after a take-over from such a copy a hidden tag may be offered again and a merged one offered as typed, until an
+ * owner or admin sets the rule again; no listing and no Bean is in it.
+ */
+export const TABLE_HASHES_VERSION = 42;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

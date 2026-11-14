@@ -10,6 +10,7 @@ import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, Tour
 import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type KnockVia } from '@beanpool/core';
 import { readGroupInvitations, type GroupInvitations } from '@beanpool/core';
 import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
+import { communityTagsOf, type CommunityTag } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -575,6 +576,18 @@ export interface KeptNotice {
     data: Record<string, unknown>;
     createdAt: string;
     seenAt: string | null;
+}
+
+/**
+ * The tags members of this community typed that the Tags field offers (GET /api/free-tags, slice F3), held to the rule by
+ * core's communityTagsOf. None when it can't be had (offline, a visitor, a node older than the route): never an error.
+ */
+export async function getCommunityTags(): Promise<CommunityTag[]> {
+    try {
+        return communityTagsOf(await request<unknown>('GET', '/api/free-tags'));
+    } catch {
+        return [];
+    }
 }
 
 /** The signer's own notices they have not marked seen, oldest first. A node older than the route answers 404. */

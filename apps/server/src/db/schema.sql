@@ -2288,6 +2288,33 @@ CREATE TABLE IF NOT EXISTS member_badges (
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- An owner's or admin's rule on a tag members typed (engine/free-tags.ts, DESIGN-tags-free-entry-fable.md §5, slice F3), by
+-- the tag's stored form: 'hide' = never offered to members as they type; 'merge' = offered as the library tag `into_tag`,
+-- and the Tags field stores that id when the word is committed. Listings keep their text either way. No row: no rule.
+CREATE TABLE IF NOT EXISTS free_tag_rules (
+    tag            TEXT PRIMARY KEY CHECK (length(tag) BETWEEN 2 AND 200),
+    action         TEXT NOT NULL CHECK (action IN ('hide', 'merge')),
+    into_tag       TEXT CHECK ((action = 'merge') = (into_tag IS NOT NULL)),
+    set_by         TEXT NOT NULL,
+    set_at         DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- Each tag members typed (by its stored form) on each listing here that carries or carried it live (engine/free-tags.ts
+-- noteFreeTagsSeen): the week of the two-authors-or-a-week rule is one listing's own, from `first_seen`, when that listing
+-- began to carry the word live in its present run (an edit that adds it, or the listing back from a pause, starts it
+-- again). `gone_at`: when the listing stopped carrying it live (taken off, paused, deleted, hidden, taken down), NULL while
+-- it does. A gone row is kept a week, and while a report on its listing is open, so a report or a takedown holds the word
+-- when it moves to another listing. Each server keeps its own (engine/replication-manifest.ts: local).
+CREATE TABLE IF NOT EXISTS free_tag_seen (
+    tag            TEXT NOT NULL,
+    post_id        TEXT NOT NULL,
+    first_seen     DATETIME NOT NULL,
+    gone_at        DATETIME,
+    PRIMARY KEY (tag, post_id)
+);
+
 -- Every change to the known floor, the cap, the dial or a member's exception (design §4.2, §7.3), and to a member's badge
 -- (action 'badge'): every owner and admin reads it. `member_pubkey` is null for a community-wide setting.
 CREATE TABLE IF NOT EXISTS known_floor_log (

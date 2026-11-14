@@ -5,7 +5,7 @@
  *
  * - Where the community's forum is on (`features.forum`), the Chats · Forum switch takes the big "Chat" title's place, and
  *   under Chats nothing moves: Messages · Groups · People, the search row, the conversations.
- * - The Forum side is the forum's empty pane (slice F3 fills it): no chat list, no search, no Messages · Groups · People.
+ * - The Forum side is the forum's own pane (slice F3 filled it): no chat list, no search, no Messages · Groups · People.
  * - Where the owners switched it off, or the server is from before the forum, there is no switch: the title "Chat", as before.
  * - **No height added** (the design's own claim, "T0's render test at 320 x 569 x 1.3 is the proof"): the switch's row is no
  *   taller than the title's row it replaces, read from the styles the screen really draws with.
@@ -347,14 +347,15 @@ describe('the Chat tab where the forum is on: Chats · Forum in the title\'s pla
         expect(host.querySelector('[data-testid="page-title-talk"]')).toBe(tablist());
     });
 
-    it('Forum: the forum\'s empty pane under the switch, with no chat list, search or Messages · Groups · People; Chats brings them back', async () => {
+    it('Forum: the forum\'s pane under the switch, with no chat list, search or Messages · Groups · People; Chats brings them back', async () => {
         rememberProfile(WITH_FORUM);
         await renderIn('en');
         await click(side('Forum'), 'Forum');
         expect(selected(tabs())).toEqual(['false', 'true']);
         expect(forumPane()).not.toBeNull();
-        // Empty: slice F3 fills it.
-        expect(forumPane()!.childNodes.length).toBe(0);
+        // Slice F3 filled it: the forum's own list (its sections and its topics), none of the chat's parts.
+        expect(forumPane()!.querySelector('[data-testid="forum-section-pick"]')).not.toBeNull();
+        expect(forumPane()!.querySelector('[data-testid="forum-topics"]')).not.toBeNull();
         expect(radios()).toEqual([]);
         expect(search()).toBeNull();
         expect(host.textContent).not.toContain('Kofi');

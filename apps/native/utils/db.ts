@@ -63,6 +63,7 @@ import { oldKeySignedHere, rekeysToMe } from './key-succession';
 import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
 import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
 import { OUTSIDE_CHAT_DROP_SQL, OUTSIDE_CHAT_TABLES_SQL, outsideChatStore, type OutsideChatStore } from './outside-chat-store';
+import { FORUM_KEPT_TABLE_SQL, forumKeptStore, type ForumKeptStore } from './forum-kept';
 import {
     sendSealedGroupLine, editSealedGroupLine, reportSealedGroupLine, chatIsLocked, getDecryptedGroupAttachment, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT,
     GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT, getDecryptedGroupVoiceLine,
@@ -399,13 +400,16 @@ const NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE = `
  * NULL on every listing not priced for each one. A copy at 5 has none of them, so it is cleared and read again with them.
  * 7 (per-item prices, slice P3): `marketplace_transactions.item_option` ('each' or 'lot', the node's), NULL on every other deal,
  * so Your deals and the item page say "3 × Solar Panels". A copy at 6 has no such column: it is cleared and read again with it.
+ * 8 (the forum on the phone, slice F3, DESIGN-forums-fable.md §18, §20): a new cache table, `forum_kept` (utils/forum-kept.ts),
+ * the forum's front, lists and topics as the node answered them. A copy at 7 is cleared and read again with it, as the rule says.
  */
-export const COPY_SCHEMA = 7;
+export const COPY_SCHEMA = 8;
 
 /** The tables that are a copy of the node's: clearDB drops them, and so does an open of a copy below COPY_SCHEMA. */
 const CACHE_TABLES = [
     'messages', 'conversation_participants', 'conversations', 'posts', 'marketplace_transactions', 'transactions', 'accounts', 'members',
     'projects', 'friends', 'ratings', 'member_reviews_read', 'poll_votes', 'event_rsvps', 'nearby_tied', 'nearby_held', 'knowledge_posts',
+    'forum_kept',
 ] as const;
 const DROP_CACHE_TABLES_SQL = CACHE_TABLES.map((table) => `DROP TABLE IF EXISTS ${table};`).join(' ');
 
@@ -748,6 +752,9 @@ ${TOOL_DOCS_TABLE}
         -- 9. Chats with people in other communities, kept on this phone only (utils/outside-chat-store.ts; not a cache, so a
         -- re-sync's clearDB keeps them and only an account leaving the phone drops them).
 ${OUTSIDE_CHAT_TABLES_SQL}
+
+        -- 10. The forum's kept copies (utils/forum-kept.ts): a copy of the node's, so a cache table (CACHE_TABLES).
+${FORUM_KEPT_TABLE_SQL}
     `;
 
     // One step: the drops, today's schema and the copy's number land together or not at all. A clear that stops part way
@@ -9994,6 +10001,19 @@ export function outsideStore(nodeUrl: string): OutsideChatStore {
     return outsideChatStore(async () => {
         const database = await getDb();
         if (dbFileOf.get(database) !== file) throw new Error('This phone has switched community since this chat was opened.');
+        return database as any;
+    });
+}
+
+/**
+ * The forum's kept copies for one community (utils/forum-kept.ts): that community's own file only. Once the phone has switched
+ * to another community, every call throws rather than read or write the other file.
+ */
+export function forumKept(nodeUrl: string): ForumKeptStore {
+    const file = getDatabaseFilenameForNode(nodeUrl);
+    return forumKeptStore(async () => {
+        const database = await getDb();
+        if (dbFileOf.get(database) !== file) throw new Error('This phone has switched community since the forum was opened.');
         return database as any;
     });
 }

@@ -162,7 +162,7 @@ async function main(): Promise<void> {
     const columnsLeftOutNow = { ...COLUMNS_NOT_HASHED };
     const madeUpDb = new Database(':memory:');
     madeUpDb.exec(MADE_UP.schema);
-    let madeUp: { d?: string; hash?: string; rows?: number; order?: string; def?: string } = {};
+    let madeUp: { d?: string; hash?: string; rows?: number; order?: string; def?: string };
     try {
         (TABLES as Record<string, unknown>)[MADE_UP.table] = MADE_UP.entry;
         BOOT_STAMPED.push(MADE_UP.stamp);

@@ -73,6 +73,17 @@ export function hostDenied(host: string | null, denyList: readonly string[]): bo
     });
 }
 
+/**
+ * The column `listings_from_here` for a push (list-on-global G5, supabase/migrations/2026111500_directory_listings_from_here.sql):
+ * whether the community's name and Ask to join go beside its members' listings on the global community. The push's boolean,
+ * else null: a node from before the switch says nothing, and something that is no boolean is stored as null, never refused
+ * (refusing would cost the community its listing). Every reader takes null as true.
+ */
+export function listingsFromHereOf(payload: unknown): boolean | null {
+    const v = asRecord(payload)?.listingsFromHere;
+    return typeof v === 'boolean' ? v : null;
+}
+
 /** An unlist is a payload whose `unlist` is exactly `true`; anything else is a push. */
 export function isUnlistPayload(payload: unknown): boolean {
     return asRecord(payload)?.unlist === true;

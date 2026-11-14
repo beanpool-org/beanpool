@@ -47,12 +47,12 @@ describe('state banners every member sees', () => {
     });
 
     it("paused: carries the server's expiry warning, or builds it inside 14 days", () => {
-        const fromServer = seasonBanner(enterprise({ paused: true, pauseWarning: 'Pause credit floor snapshot expires in 3 days' }), NOW);
-        expect(fromServer?.kind === 'paused' && fromServer.warning).toBe('Pause credit floor snapshot expires in 3 days');
+        const fromServer = seasonBanner(enterprise({ paused: true, pauseWarning: 'The credit line held for the pause ends in 3 days' }), NOW);
+        expect(fromServer?.kind === 'paused' && fromServer.warning).toBe('The credit line held for the pause ends in 3 days');
         const built = seasonBanner(enterprise({ paused: true, pauseDaysRemaining: 1 }), NOW);
-        expect(built?.kind === 'paused' && built.warning).toBe('Pause credit floor snapshot expires in 1 day');
+        expect(built?.kind === 'paused' && built.warning).toBe('The credit line held for the pause ends in 1 day');
         const expired = seasonBanner(enterprise({ paused: true, pauseDaysRemaining: 0 }), NOW);
-        expect(expired?.kind === 'paused' && expired.warning).toBe('Pause credit floor snapshot has expired');
+        expect(expired?.kind === 'paused' && expired.warning).toBe('The credit line held for the pause has ended');
     });
 
     it('winding up: days left and who started it', () => {
@@ -162,7 +162,7 @@ describe('plain words before the tap', () => {
 
     it('pause names the floor it holds', () => {
         expect(pauseConfirmText(enterprise())).toBe(
-            'Pausing for the season holds your credit floor at 300 beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.'
+            'Pausing for the season holds your credit line at 300 beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.'
         );
     });
 

@@ -227,7 +227,7 @@ describe('the Ledger in English', () => {
         expect(screen.getByText('3 reviews')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: '🛡️ Levels' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: '💸 Wallet' }));
-        expect(await screen.findByText('Overdraft Floor')).toBeInTheDocument();
+        expect(await screen.findByText('Credit line')).toBeInTheDocument();
         expect(screen.getByText('≈ 11.3 hrs capacity')).toBeInTheDocument();
         expect(screen.getByText('🌱 View Solvency & Tax')).toBeInTheDocument();
         expect(screen.getByText('Recent Transactions')).toBeInTheDocument();
@@ -241,9 +241,10 @@ describe('the Ledger in English', () => {
             tier: { name: 'Newcomer' }, callsign: 'Visitor',
         });
         const detail = screen.getByTestId('level-detail');
-        expect(within(detail).getByText('Your current floor')).toBeInTheDocument();
-        // Its own floor as every figure is written: a true minus, thousands grouped.
-        expect(within(detail).getByText('−1,000')).toBeInTheDocument();
+        expect(within(detail).getByText('Your credit line')).toBeInTheDocument();
+        // Its own line as the card names it (credit bar R4): a figure, never below zero, thousands grouped ("−1,000" before).
+        expect(within(detail).getByText('1,000')).toBeInTheDocument();
+        expect(within(detail).queryByText('−1,000')).toBeNull();
         expect(screen.queryByText('Floor starts at')).toBeNull();
         expect(screen.queryByText('Floor from this tier')).toBeNull();
         // Their line is open already: no 'your first completed trade … opens your credit line' above it

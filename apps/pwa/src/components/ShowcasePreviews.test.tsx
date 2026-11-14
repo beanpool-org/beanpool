@@ -314,11 +314,11 @@ describe('the Ledger in preview is the member\'s real screen, drawn from Example
         expect(builders).toHaveTextContent(`${S.reviews} reviews`);
     });
 
-    it('Wallet: the floor, the Commons pool, and the six recent rows with who each was with and when', () => {
+    it('Wallet: the credit line, the Commons pool, and the six recent rows with who each was with and when', () => {
         render(<LedgerPage identity={MEMBER} preview />);
         fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
         const wallet = screen.getByTestId('ledger-wallet');
-        expect(wallet).toHaveTextContent(`Overdraft Floor${formatHundredths(S.floor * 100)}`);
+        expect(wallet).toHaveTextContent(`Credit line${formatHundredths(-S.floor * 100)}`);
         expect(wallet).toHaveTextContent(`Commons Pool ⓘ${formatHundredths(S.pool * 100)}`);
         for (const tx of S.transactions) {
             expect(wallet).toHaveTextContent(tx.what);

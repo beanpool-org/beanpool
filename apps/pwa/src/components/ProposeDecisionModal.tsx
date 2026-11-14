@@ -36,8 +36,8 @@ const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label:
         { id: 'suspend_member', label: word('Suspend Member'), desc: word('Temporary freeze of trading and messaging') },
         { id: 'unsuspend_member', label: word('Unsuspend Member'), desc: word('Restore member to active standing (simple majority)') },
         { id: 'reinstate_member', label: word('Reinstate Member'), desc: word('Cancel pending removal and restore account (simple majority)') },
-        { id: 'freeze_credit', label: word('Freeze Credit'), desc: word('Lock credit floor to zero') },
-        { id: 'unfreeze_credit', label: word('Unfreeze Credit'), desc: word('Restore credit floor (simple majority)') },
+        { id: 'freeze_credit', label: word('Freeze Credit'), desc: word('Lock the credit line at zero') },
+        { id: 'unfreeze_credit', label: word('Unfreeze Credit'), desc: word('Restore the credit line (simple majority)') },
         { id: 'remove_lead_keeper', label: word('Remove a lead keeper or project leader'), desc: word("Replace an enterprise's lead keeper or a project's leader") },
     ],
     pool: [

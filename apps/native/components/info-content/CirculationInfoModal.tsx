@@ -127,7 +127,7 @@ export function CirculationInfoModal({ isOpen, onClose }: Props) {
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        {richWords(t("If you have a **negative balance** (you've spent more than you've earned using your Floor Limit), your account goes into debt recovery mode."), styles.boldWhiteText)}
+                        {richWords(t("If you have a **negative balance** (you've spent more than you've received, using your credit line), your account goes into debt recovery mode."), styles.boldWhiteText)}
                     </Text>
 
                     <View style={styles.limitContainer}>

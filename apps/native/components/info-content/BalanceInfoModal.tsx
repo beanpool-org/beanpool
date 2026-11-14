@@ -172,22 +172,22 @@ export function BalanceInfoModal({ isOpen, onClose }: Props) {
         },
         {
             id: 'floor',
-            label: t('Floor Balance'),
+            label: t('Credit line'),
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        {richWords(t('Every member has access to a **Floor Balance** (credit line) earned through completed trades and community vouches. This allows you to trade even if you temporarily have zero credits.'), styles.boldWhiteText)}
+                        {richWords(t('Every member can have a **credit line**, earned through completed trades or given by people who vouch for them. It lets you trade even when you hold no Beans.'), styles.boldWhiteText)}
                     </Text>
 
                     <View style={styles.limitContainer}>
                         <Text style={styles.limitTitle}>{t('Negative Balances')}</Text>
                         <Text style={styles.limitText}>
-                            {richWords(t('If you spend past zero, your balance becomes **negative** down to your **earned credit floor**. When you earn credits again, they will first pay off this negative balance.'), styles.boldWhiteText)}
+                            {richWords(t('If you spend past zero, your balance goes **below zero**, as far as your **credit line** allows. Beans you receive after that bring it back towards zero first.'), styles.boldWhiteText)}
                         </Text>
                     </View>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>{t('WHY A FLOOR?')}</Text>
+                        <Text style={styles.cardLabel}>{t('WHY A CREDIT LINE?')}</Text>
                         <Text style={styles.cardText}>
                             {richWords(t("Traditional systems stop you from trading when you're broke. A **mutual credit system** like BeanPool allows the community to **extend trust** so trade can continue flowing."), styles.boldWhiteText)}
                         </Text>
@@ -196,7 +196,7 @@ export function BalanceInfoModal({ isOpen, onClose }: Props) {
                     <View style={styles.warningBox}>
                         <MaterialCommunityIcons name="alert" size={24} color={colors.feedback.warning.fg} style={styles.warningIcon} />
                         <Text style={styles.warningText}>
-                            {richWords(t('When you reach your credit floor, **further spending is paused** until you earn credits back by trading on the Marketplace.'), styles.boldWhiteText)}
+                            {richWords(t('When you have used all of your credit line, **spending pauses** until you sell or receive Beans.'), styles.boldWhiteText)}
                         </Text>
                     </View>
                 </View>

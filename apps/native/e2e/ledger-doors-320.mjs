@@ -267,7 +267,7 @@ try {
             // The metrics of the wallet strip start together: each one's icon, value and label sit at the top whatever the neighbours' labels do
             // (a label that wraps to two lines beside one that doesn't must not push the shorter one's content down).
             const metrics = [...document.querySelectorAll('div[dir]')]
-                .filter((el) => el.children.length === 0 && /^(COMMONS|CREDIT FLOOR|HELD IN TRUST)/.test(el.textContent.trim()))
+                .filter((el) => el.children.length === 0 && /^(COMMONS|CREDIT LINE|HELD IN TRUST)/.test(el.textContent.trim()))
                 .map((label) => label.parentElement);
             if (metrics.length < 2) out.push('the wallet strip: expected two or three metrics, found ' + metrics.length);
             for (let i = 0; i < 3; i++) {

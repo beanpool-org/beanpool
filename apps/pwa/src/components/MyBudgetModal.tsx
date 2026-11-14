@@ -88,7 +88,7 @@ export function MyBudgetModal({ vouching, onClose }: MyBudgetModalProps) {
                         </h3>
                         {vouching.ask === undefined ? (
                             <p className="m-0 text-xs text-nature-600 dark:text-nature-300 leading-relaxed">
-                                {t('To get a bigger budget to vouch from, ask an owner of this community.')}
+                                {t('To get a bigger vouching budget, ask an owner of this community.')}
                             </p>
                         ) : (
                             <AskForMore ask={vouching.ask} />

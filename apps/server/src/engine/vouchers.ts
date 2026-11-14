@@ -126,7 +126,7 @@ export const VOUCHER_WORDS = {
     voucherEnded: word('The vouch on this invite ended before you joined; you start with no credit line'),
     frozen: word('Your credit line is frozen, so you can’t vouch from your budget until an admin unfreezes it.'),
     noticeTitle: word('Your vouching budget'),
-    noticeStopped: word('Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.'),
+    noticeStopped: word('Your vouching budget was stopped. The credit lines you gave stay with the people you gave them to.'),
     askTitle: word('A voucher asks for more'),
     askOwner: word('You vouch as an owner, with no limit, so there is no budget to ask for.'),
     askFrozen: word('Your credit line is frozen, so your budget can’t be raised until an admin unfreezes it.'),
@@ -158,11 +158,11 @@ const openDebt = (amount: number) => tr('The person on this entry left owing the
 const raisePaused = (name: string) => tr('@{name}’s account is paused, so their budget can’t be raised while it lasts. You can still lower it.', { name });
 const raiseFrozen = (name: string) => tr('@{name}’s credit line is frozen, so their budget can’t be raised until an admin unfreezes it. You can still lower it.', { name });
 const noticeMade = (level: number) => tr('You’re a voucher now: you have a budget of {level} Beans to vouch for people, up to {max} each.', { level: B(level), max: B(VOUCH_MAX) });
-const noticeRaised = (level: number, left: number) => tr('Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.', { level: B(level), left: B(left) });
+const noticeRaised = (level: number, left: number) => tr('Your vouching budget was raised to {level} Beans. You have {left} of it left to vouch with.', { level: B(level), left: B(left) });
 /** A day as the refusal says it, "12 Nov" (UTC); the apps get the moment itself beside it and say it in their own language. */
 const dayOf = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const askedThisWeek = (asked: string, again: string) => tr('You asked on {asked}. You can ask again on {again}.', { asked: dayOf(asked), again: dayOf(again) });
-const askAsks = (name: string) => tr('@{name} asks for a bigger budget to vouch from.', { name });
+const askAsks = (name: string) => tr('@{name} asks for a bigger vouching budget.', { name });
 const askLeft = (left: number, level: number) => tr('They have {left} of {level} Beans left.', { left: B(left), level: B(level) });
 const askBranch = (vouched: number, people: number, below: number, writtenOff: number, pct: number, inside: number) => trn(people,
     'Vouched {vouched} to {n} person: {below} below zero, written off {writtenOff} ({pct}%), {inside} trading only inside their own circle.',
@@ -171,7 +171,7 @@ const askBranch = (vouched: number, people: number, below: number, writtenOff: n
 const askVoucherAge = (days: number) => trn(days, 'A voucher for {n} day.', 'A voucher for {n} days.');
 const askConfirmedAge = (days: number) => trn(days, 'Confirmed for {n} day.', 'Confirmed for {n} days.');
 const askNotConfirmed = () => tr('Not confirmed on the names list.');
-const noticeLowered = (level: number, left: number) => tr('Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.', { level: B(level), left: B(left) });
+const noticeLowered = (level: number, left: number) => tr('Your vouching budget was lowered to {level} Beans. You have {left} of it left to vouch with.', { level: B(level), left: B(left) });
 
 const now = () => new Date().toISOString();
 const newId = () => crypto.randomBytes(16).toString('hex');

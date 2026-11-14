@@ -899,8 +899,8 @@ export default function TreasuryDetailScreen() {
                                 <Text style={styles.joinTitle}>{project ? t('🤝 ASK TO JOIN AS A COLLABORATOR') : t('🤝 ASK TO JOIN AS A KEEPER')}</Text>
                                 <Text style={styles.joinDesc}>
                                     {project
-                                        ? t('Help run this project. You can back it with your earned trading standing to expand its credit floor.')
-                                        : t('Help run this enterprise. You can back it with your earned trading standing to expand its credit floor.')}
+                                        ? t('Help run this project. You can back it with your earned trading standing to expand its credit line.')
+                                        : t('Help run this enterprise. You can back it with your earned trading standing to expand its credit line.')}
                                 </Text>
                                 <LocalCommunityMark variant="action" feature="enterprises" label={project ? t('Join as collaborator') : t('Join as keeper')} />
                             </View>
@@ -922,8 +922,8 @@ export default function TreasuryDetailScreen() {
                                     <Text style={styles.joinTitle}>{project ? t('🤝 ASK TO JOIN AS A COLLABORATOR') : t('🤝 ASK TO JOIN AS A KEEPER')}</Text>
                                     <Text style={styles.joinDesc}>
                                         {project
-                                            ? t('Help run this project. You can back it with your earned trading standing to expand its credit floor.')
-                                            : t('Help run this enterprise. You can back it with your earned trading standing to expand its credit floor.')}
+                                            ? t('Help run this project. You can back it with your earned trading standing to expand its credit line.')
+                                            : t('Help run this enterprise. You can back it with your earned trading standing to expand its credit line.')}
                                     </Text>
 
                                     <Text style={[styles.sectionLabel, { marginBottom: 6 }]}>

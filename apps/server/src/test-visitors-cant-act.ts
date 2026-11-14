@@ -682,7 +682,7 @@ async function main(): Promise<void> {
         .some(prefix => p.startsWith(prefix)) || p === '/api/invite/redeem' || p === '/api/invite/redeem-offline'
         || p.startsWith('/api/push-tokens/leave/')
         // Another community's server's only, behind the node signature door (engine/node-signature.ts; test-node-signature).
-        || p === '/api/node/check' || p === '/api/relay/mail';
+        || p === '/api/node/check' || p === '/api/relay/mail' || p === '/api/relay/complaint';
     const app = getKoaApp() as any;
     const writes = [...new Set<string>(app.middleware.filter((m: any) => m.router).flatMap((m: any) => m.router.stack)
         .flatMap((l: any) => (l.methods as string[]).filter(m => m !== 'HEAD' && m !== 'GET').map(m => `${m} ${l.path}`)))].sort();

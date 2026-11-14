@@ -139,6 +139,25 @@ test('the address the apps open for Start a community is the /start page in this
     }
 });
 
+// The one claim path and the one "what next" (scratch/fable-design/DESIGN-new-operator-path-fable.md S5; Marty's decision 3,
+// 9 Nov 2026): /start and the README name both phone routes by their labels, and send the owner to Core settings, a recovery
+// code, a second owner and the first members, listed on Settings Home's Action required. The Cold-Start wizard stays as the
+// optional founding-invites tool; neither page calls it the next step.
+test('/start and the README: both phone routes to the claim, then the one "what next"; the setup wizard is not the next step', () => {
+    const start = markup('en', 'start.html');
+    const steps = start.slice(start.indexOf('<h3 class="run-node-sub">'), start.indexOf('<p class="run-node-note">'));
+    const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+    for (const [where, text, b] of [['/start', steps, (s) => `<strong>${s}</strong>`], ['README.md', readme, (s) => `**${s}**`]]) {
+        assert.ok(text.includes(b('Installed BeanPool on a server? Claim it')), `${where}: the route with no account`);
+        assert.ok(text.includes('the bean at the top') && text.includes(b('Set up a new community server')), `${where}: the route with an account`);
+        assert.ok(text.includes('Claiming is done from the phone app only'), `${where}: the claim is the phone's`);
+        assert.ok(text.includes('confirm your Core settings, make a recovery code, add a second owner and invite your first members'), `${where}: the one what next`);
+        assert.ok(text.includes(b('Action required')), `${where}: Settings Home lists them`);
+        assert.ok(!/setup wizard names your community/i.test(text), `${where}: the setup wizard is not the next step`);
+        assert.ok(text.includes('Cold-Start wizard on Home is optional'), `${where}: the wizard is named as optional`);
+    }
+});
+
 // ── In Chromium, at 320 px with text at 130 %, light and dark ─────────────────────────────────────────────────────────
 
 const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2' };

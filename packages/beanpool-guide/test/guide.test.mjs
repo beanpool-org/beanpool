@@ -1254,3 +1254,51 @@ test("robots.txt points search engines at the guide's sitemap as well as the sit
     assert.ok(robots.includes('Sitemap: https://beanpool.org/sitemap.xml\n'));
     assert.ok(robots.includes('Sitemap: https://beanpool.org/guide/sitemap.xml\n'));
 });
+
+// The claim path (scratch/fable-design/DESIGN-new-operator-path-fable.md, S5; Marty's decisions, 9 Nov 2026): one way to
+// claim, said the same on every page that says it, by the labels the phone draws. A phone with no account claims from the
+// first screen's link; a phone with an account taps the bean at the top, then the BeanPool sheet's row. Find a community is
+// no way in from a local community (it is on the global community's Home only), so no claim line sends anyone there.
+const NATIVE_APP = path.resolve(CONTENT_DIR, '..', '..', '..', 'apps', 'native');
+const CLAIM_PATH_PAGES = [
+    path.join(OPERATORS_DIR, 'setup', 'first-time-setup.md'),
+    path.join(OPERATORS_DIR, 'setup', 'signing-in.md'),
+    path.join(OPERATORS_DIR, 'setup', 'install-with-ai.md'),
+    path.join(CONTENT_DIR, 'getting-started', 'beans-and-the-global-community.md'),
+];
+/** Where the phone draws the claim path: the claim screen, the first screen's link, the BeanPool sheet and its row, Settings. */
+const CLAIM_PATH_PHONE_FILES = [
+    'app/claim-community.tsx', 'app/welcome.tsx', 'app/beanpool.tsx', 'components/SetUpServerRow.tsx',
+    'components/NoOwnerCard.tsx', 'app/(tabs)/settings.tsx',
+];
+/** Each line of a page that tells someone how to claim: it names the first screen's claim link. */
+const claimLines = (file) => fs.readFileSync(file, 'utf8').split('\n').filter(l => l.includes('Claim it**'));
+
+test("the claim path (operator path S5): every page names both phone routes, and each bold label on a claim line is a t() string the phone draws", () => {
+    const phone = CLAIM_PATH_PHONE_FILES.map(rel => fs.readFileSync(path.join(NATIVE_APP, rel), 'utf8')).join('\n');
+    // ‹name› on a page is {name} in the phone's words; a link's trailing arrow is drawn after the words.
+    const onPhone = (label) => {
+        const key = label.replace(/‹name›/g, '{name}');
+        return [key, `${key} →`].some(k => phone.includes(`t('${k}'`) || phone.includes(`t("${k}"`));
+    };
+    for (const file of CLAIM_PATH_PAGES) {
+        const rel = path.relative(path.resolve(CONTENT_DIR, '..'), file);
+        const lines = claimLines(file);
+        assert.ok(lines.length > 0, `${rel} says how to claim`);
+        const text = lines.join('\n');
+        assert.ok(text.includes('**Installed BeanPool on a server? Claim it**'), `${rel}: the route with no account, the first screen's link`);
+        assert.ok(text.includes('the bean at the top') && text.includes('**Set up a new community server**'),
+            `${rel}: the route with an account, the bean at the top and then Set up a new community server`);
+        assert.ok(!text.includes('**Find a community**') && !text.includes('**Start a community**'),
+            `${rel}: no claim line sends a phone to Find a community or Start a community, which a local community has no way to`);
+        // A list item's bold lead-in ("- **The claim.** …") is the item's own heading, not a label on a screen.
+        const labels = lines.map(l => l.replace(/^- \*\*[^*]+\*\*/, '')).join('\n');
+        for (const m of labels.matchAll(/\*\*([^*]+)\*\*/g)) assert.ok(onPhone(m[1]), `${rel}: **${m[1]}** is a t() string on the phone`);
+    }
+});
+
+test('the claim path (operator path S5): First-time setup says, where the claim starts, that claiming is done from the phone app only', () => {
+    const page = fs.readFileSync(path.join(OPERATORS_DIR, 'setup', 'first-time-setup.md'), 'utf8');
+    const claim = page.slice(page.indexOf('## Claim your community'), page.indexOf('The last step of an install'));
+    assert.ok(claim.includes('Claiming is done from the phone app only'), 'the section says where the claim is done');
+});

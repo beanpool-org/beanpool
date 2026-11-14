@@ -71,7 +71,7 @@ docker compose exec -T beanpool-node test -f /data/claim-code.txt </dev/null 2>/
 docker compose exec beanpool-node beanpool claim
 ```
 
-The last line, `beanpool claim`, shows a one-time claim code and a QR code, with the address you chose, and what to do next. First, on the phone that will own the community, install BeanPool from [Google Play](https://play.google.com/store/apps/details?id=org.beanpool.pillar) or the [App Store](https://apps.apple.com/app/id6761870086). Then scan the QR code with your phone's camera, or open BeanPool and tap **Installed BeanPool on a server? Claim it**. The claim makes your BeanPool account on that phone, with no invite and nothing from the BeanPool project: type your name, tap **Claim and become owner**, and write down the 12 words it shows you. A phone that already has an account claims with it. That phone becomes the community's owner.
+The last line, `beanpool claim`, shows a one-time claim code and a QR code, with the address you chose, and what to do next. First, on the phone that will own the community, install BeanPool from [Google Play](https://play.google.com/store/apps/details?id=org.beanpool.pillar) or the [App Store](https://apps.apple.com/app/id6761870086). Then scan the QR code with your phone's camera, or open BeanPool and tap **Installed BeanPool on a server? Claim it** (with an account already on the phone: tap the bean at the top, then **Set up a new community server**). Claiming is done from the phone app only. The claim makes your BeanPool account on that phone, with no invite and nothing from the BeanPool project: type your name, tap **Claim and become owner**, and write down the 12 words it shows you. A phone that already has an account claims with it. That phone becomes the community's owner.
 
 Phones reach a community on the internet only over https. The choices for the last line:
 
@@ -81,7 +81,7 @@ Phones reach a community on the internet only over https. The choices for the la
 
 A plain `http://` address works only on a home network, and `beanpool claim` warns you before it shows a QR code that a phone will refuse.
 
-Then open your address followed by `/settings`. The setup wizard names your community and asks you to add a second owner. Everything the server keeps is in the `data` folder next to `docker-compose.yml`, so back that folder up.
+Then open your address followed by `/settings`: confirm your Core settings, make a recovery code, add a second owner and invite your first members. Settings Home lists each one under **Action required** until it is done. The Cold-Start wizard on Home is optional: its last step makes three founding invites you can print. Everything the server keeps is in the `data` folder next to `docker-compose.yml`, so back that folder up.
 
 **Recommended: keep your community running when Docker updates.** With Docker live-restore on, Docker can restart, or take a patch update, without stopping your community. The step below needs root or `sudo` and is safe to skip: your community runs without it, and the operator manual's Updates and health page has the steps for doing it later. An AI assistant doing the install always does this step ([Setting up your server with an AI assistant](packages/beanpool-guide/operators/setup/install-with-ai.md)).
 

@@ -65,7 +65,7 @@ function HarnessApp() {
     }
 
     if (view === 'budget') {
-        // The Ledger's "Your budget to vouch from" dialog, open (#2915 round 4, finding 3).
+        // The Ledger's "Your vouching budget" dialog, open (#2915 round 4, finding 3).
         return (
             <div className="p-2 min-h-screen bg-oat-100 dark:bg-nature-950">
                 <MyBudgetModal

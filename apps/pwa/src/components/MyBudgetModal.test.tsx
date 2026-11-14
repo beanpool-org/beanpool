@@ -1,5 +1,5 @@
 /**
- * The Ledger's "Your budget to vouch from" dialog (#2915 round 4, finding 3): a ✕ at least 44 × 44 px, named by its heading,
+ * The Ledger's "Your vouching budget" dialog (#2915 round 4, finding 3): a ✕ at least 44 × 44 px, named by its heading,
  * Escape closes it, focus goes in on open and back to what opened it on close, as VoucherCardModal does.
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -41,7 +41,7 @@ describe('MyBudgetModal (the Ledger budget dialog)', () => {
 
     it('is named by its heading (aria-labelledby)', () => {
         render(<MyBudgetModal vouching={VOUCHING} onClose={() => {}} />);
-        expect(screen.getByRole('dialog', { name: 'Your budget to vouch from' })).toBeInTheDocument();
+        expect(screen.getByRole('dialog', { name: 'Your vouching budget' })).toBeInTheDocument();
     });
 
     it('Escape closes it', () => {
@@ -56,7 +56,7 @@ describe('MyBudgetModal (the Ledger budget dialog)', () => {
         const opener = screen.getByRole('button', { name: 'Open budget' });
         opener.focus();
         fireEvent.click(opener);
-        expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Your budget to vouch from' }));
+        expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Your vouching budget' }));
         fireEvent.click(screen.getByRole('button', { name: 'Close' }));
         expect(screen.queryByRole('dialog')).toBeNull();
         expect(document.activeElement).toBe(opener);

@@ -1,6 +1,9 @@
 /**
- * The Ledger's repayment card on the web (#1597 item 4): while the member works a debt off, what is left and why their
- * incoming Beans go to the Commons; and, always, Pay the Commons, where a member paying back a debt enters the pay-back
+ * The Ledger's repayment card on the web (#1597 item 4; credit bar amendment §7b, slice R3, Marty's pick 2 of 14 Nov 2026).
+ * Two places. At the top (`place="top"`): only while the member works a debt off, what is left and why their incoming Beans
+ * go to the Commons, with a real button, Pay back now, that opens the form with their own code filled in; or the form on
+ * its own when an admin's pay-back link opened the page. Nothing at all otherwise. In the Wallet tab (`place="wallet"`):
+ * for everyone, the row Pay the Commons with its line, which opens the same form there. The form: a member paying back a debt enters the pay-back
  * code an admin shared (a link's ?payback=<code>&amount=<n> fills both in; n is what was left when the admin shared it, and
  * the node refuses a payment above what is left now, in its words). A member working a debt off finds their own code filled
  * in (the repayment's debtId) unless they typed in the field; a payment without it is said, before and after, not to come
@@ -8,7 +11,7 @@
  * the payment covers what is left. Asked first; one payment at a time; the node's refusals in its own words. Each confirmed
  * payment has one id (lib/payment-request.ts): a lost answer keeps it here for Try again with the same id, never paid twice. The banner says nothing when the node answers nothing (an older node, no signal). Wraps at 320px and 130% text: no fixed widths, every control at least 48px tall.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { hundredthsAsDecimalText, t } from '@beanpool/core';
 import { getMyRepayment, payTheCommons, confirmCommonsPayment, unansweredPayment, parseBeans, debtCodeOk, payFailureWords, PAY_WORDS, REPAYMENT_WORDS, type Repayment, type CommonsPayment } from '../lib/debts';
 import type { ConfirmedPayment } from '../lib/payment-request';
@@ -23,10 +26,12 @@ function linkParams(): { code: string; left: number | null } {
     } catch { return { code: '', left: null }; }
 }
 
-export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
+export function RepaymentCard({ onPaid, place = 'top' }: { onPaid?: () => void; place?: 'top' | 'wallet' }) {
     const [repayment, setRepayment] = useState<Repayment | null>(null);
-    // A link with ?payback=<code>&amount=<n> opens the form with both in it.
-    const [link] = useState(linkParams);
+    // A link with ?payback=<code>&amount=<n> opens the form at the top with both in it (the Wallet's row never reads it).
+    const [link] = useState(() => (place === 'top' ? linkParams() : { code: '', left: null }));
+    const rowTitle = useId();
+    const rowLine = useId();
     const [code, setCode] = useState(link.code);
     const [open, setOpen] = useState(() => code !== '');
     const [amount, setAmount] = useState(link.left !== null ? hundredthsAsDecimalText(link.left) : '');
@@ -83,17 +88,37 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
     };
 
     const input = 'w-full min-h-[48px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-950 text-nature-950 dark:text-white';
+    // At the top, nothing about the Commons unless they work a debt off or a pay-back link opened the form.
+    if (place === 'top' && !repayment && !open) return null;
     return (
-        <div className="mb-4 flex flex-col gap-2">
-            {repayment && (
-                <div role="status" className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm leading-relaxed text-amber-800 dark:text-amber-200">
-                    {REPAYMENT_WORDS.banner(repayment)}
+        <div className={`${place === 'top' ? 'mb-4' : ''} flex flex-col gap-2`} data-testid={place === 'top' ? 'ledger-repayment' : 'ledger-pay-commons'}>
+            {place === 'top' && repayment && (
+                <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 flex flex-col gap-2.5">
+                    <p role="status" className="m-0 text-sm leading-relaxed text-amber-800 dark:text-amber-200">{REPAYMENT_WORDS.banner(repayment)}</p>
+                    {!open && (
+                        <button type="button" onClick={() => setOpen(true)} data-testid="ledger-pay-back-now" className="self-start min-h-[48px] px-4 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold">
+                            {t(REPAYMENT_WORDS.payBackNow)}
+                        </button>
+                    )}
                 </div>
             )}
             {!open ? (
-                <button type="button" onClick={() => setOpen(true)} className="self-start min-h-[48px] px-1 text-sm font-semibold text-terra-600 dark:text-terra-500">
-                    {t(REPAYMENT_WORDS.payTitle)}
-                </button>
+                place === 'wallet' && (
+                    <button
+                        type="button"
+                        onClick={() => setOpen(true)}
+                        aria-labelledby={rowTitle}
+                        aria-describedby={rowLine}
+                        data-testid="ledger-pay-commons-row"
+                        className="w-full min-h-[48px] text-left bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-4 py-3 shadow-sm flex items-center justify-between gap-3 hover:bg-nature-50 dark:hover:bg-nature-800 cursor-pointer transition-colors"
+                    >
+                        <span className="min-w-0">
+                            <span id={rowTitle} className="block text-sm font-extrabold text-nature-950 dark:text-white">{t(REPAYMENT_WORDS.payTitle)}</span>
+                            <span id={rowLine} className="block mt-0.5 text-xs leading-snug text-nature-600 dark:text-nature-300 [overflow-wrap:anywhere]">{t(REPAYMENT_WORDS.payRowLine)}</span>
+                        </span>
+                        <span aria-hidden="true" className="shrink-0 text-lg font-bold text-nature-500 dark:text-nature-300">›</span>
+                    </button>
+                )
             ) : (
                 <div className="rounded-2xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 px-4 py-3 flex flex-col gap-2">
                     <h3 className="font-bold text-nature-950 dark:text-white">{t(REPAYMENT_WORDS.payTitle)}</h3>

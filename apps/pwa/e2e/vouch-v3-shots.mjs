@@ -38,7 +38,7 @@ const cases = [
     { view: 'notice', theme: 'dark', name: 'pwa-make-voucher-320px-dark.png' },
     { view: 'profile', theme: 'light', prior: 75, name: 'pwa-profile-raise-320px-light.png' },
     { view: 'profile', theme: 'dark', prior: 75, name: 'pwa-profile-raise-320px-dark.png' },
-    // An owner vouches with no limit (Marty, 9 Nov): 200 and 500 too, "From your budget: No limit", and an owner's card
+    // An owner vouches with no limit (Marty, 9 Nov): 200 and 500 too, "From your vouching budget: no limit", and an owner's card
     // and row read No limit with no Set budget to.
     ...['light', 'dark'].flatMap((theme) => ['invite', 'profile', 'card', 'budget'].map((view) => (
         { view, theme, owner: true, name: `pwa-owner-${view}-320px-${theme}.png` }))),

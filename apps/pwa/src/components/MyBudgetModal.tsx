@@ -1,5 +1,5 @@
 /**
- * "Your budget to vouch from" (the Ledger's budget line, opened by a voucher): what is left, vouched and held, the budget
+ * "Your vouching budget" (the Ledger's Vouching budget row, opened by a voucher): what is left, vouched and held, the budget
  * history in plain words, and Ask for more. A dialog as the app's others are (VoucherCardModal, Home's AddCardDialog): named
  * by its heading, focus in on open and back to what opened it on close, Escape and the ✕ (44 × 44 px) close it.
  */
@@ -35,7 +35,7 @@ export function MyBudgetModal({ vouching, onClose }: MyBudgetModalProps) {
             >
                 <div className="flex items-center justify-between gap-2 mb-3">
                     <h2 id="my-budget-title" tabIndex={-1} className="m-0 text-base font-extrabold text-nature-950 dark:text-white outline-none">
-                        {t('Your budget to vouch from')}
+                        {t(VOUCH_PRESET_WORDS.budgetTitle)}
                     </h2>
                     <button
                         type="button"

@@ -25,6 +25,7 @@ import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { MyBudgetModal } from '../components/MyBudgetModal';
 import { CreditBar } from '../components/CreditBar';
 import { CreditBarUnread } from '../components/CreditBarUnread';
+import { CreditSheet } from '../components/CreditSheet';
 import { RepaymentCard } from '../components/RepaymentCard';
 import { CreditSeenByGivers } from '../components/CreditSeenByGivers';
 import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerBudget, VOUCH_PRESET_WORDS, type TierName } from '@beanpool/core';
@@ -165,6 +166,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     const balanceInfo = sample ? sample.balance : ownBalanceInfo;
     const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
     const [showBudgetModal, setShowBudgetModal] = useState(false);
+    // The sheet a tap on the credit card opens, "Your Beans and your credit line" (slice R2).
+    const [showCreditSheet, setShowCreditSheet] = useState(false);
     const [txns, setTxns] = useState<Transaction[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(true);
@@ -611,10 +614,10 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
             ) : (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 pt-3 pb-4 mb-4 shadow-sm">
                     {/* The member's own card (DESIGN-credit-bar-amend-fable.md, slice R1): the two sentences, the rainbow with
-                        the strip of what the line is made of, one note and the parts line, all from core. One button: until
-                        the sheet (slice R2) it opens the guide's page on the credit line. A newcomer sees it too, the left
-                        half striped. */}
-                    <CreditBar answer={balanceInfo} onOpen={onNavigate ? () => onNavigate('guide', 'credit-line') : undefined} />
+                        the strip of what the line is made of, one note and the parts line, all from core. One button: it
+                        opens the sheet "Your Beans and your credit line" (slice R2). A newcomer sees it too, the left half
+                        striped. */}
+                    <CreditBar answer={balanceInfo} onOpen={() => setShowCreditSheet(true)} />
                     {knownFrozenPartNote(balanceInfo) && (
                         <p className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-2">{knownFrozenPartNote(balanceInfo)}</p>
                     )}
@@ -629,15 +632,23 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         className="w-full text-left bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 py-3.5 shadow-sm flex items-center justify-between gap-2 hover:bg-oat-50 dark:hover:bg-nature-800/40 cursor-pointer transition-colors border-0"
                         data-testid="ledger-budget-row"
                     >
-                        <span className="text-sm font-extrabold text-nature-900 dark:text-white">
-                            {myVouching.noLimit ? t(VOUCH_PRESET_WORDS.ledgerBudgetNoLimit) : ledgerBudget(myVouching.budget.left, myVouching.budget.level)}
+                        {/* The budget to vouch from, never their own spending (credit bar amendment §7a, slice R3): its line says so. */}
+                        <span className="min-w-0">
+                            <span className="block text-sm font-extrabold text-nature-900 dark:text-white">
+                                <span aria-hidden="true" className="mr-1.5">🤝</span>
+                                {myVouching.noLimit ? t(VOUCH_PRESET_WORDS.ledgerBudgetNoLimit) : ledgerBudget(myVouching.budget.left, myVouching.budget.level)}
+                            </span>
+                            <span className="block mt-0.5 text-xs leading-snug text-nature-600 dark:text-nature-300 [overflow-wrap:anywhere]" data-testid="ledger-budget-line">
+                                {t(myVouching.noLimit ? VOUCH_PRESET_WORDS.ledgerBudgetLineNoLimit : VOUCH_PRESET_WORDS.ledgerBudgetLine)}
+                            </span>
                         </span>
-                        <span className="text-nature-400 font-bold ml-1">›</span>
+                        <span aria-hidden="true" className="shrink-0 text-nature-400 font-bold ml-1">›</span>
                     </button>
                 </div>
             )}
 
-            {/* Working off a debt (#1597): what is left, and Pay the Commons (a pay-back code from an admin). */}
+            {/* Working off a debt (#1597): what is left, and Pay back now with their own code. An admin's pay-back link opens
+                the form here. Nothing about the Commons otherwise: Pay the Commons is a row in the Wallet (slice R3). */}
             {viewerIsMember && !preview && <RepaymentCard onPaid={refresh} />}
 
             {/* Tab Bar */}
@@ -913,6 +924,10 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             </button>
                         )}
                     </div>
+
+                    {/* Pay the Commons, for everyone, beside the Commons Pool: a row with its line that opens the form here
+                        (credit bar amendment §7b, slice R3). A member working a debt off finds their own code filled in. */}
+                    {viewerIsMember && !preview && <RepaymentCard place="wallet" onPaid={refresh} />}
 
                     {/* Send credits */}
                     {/* In preview the marker's action: it keeps its place, and opens the sheet. */}
@@ -1250,6 +1265,20 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                 onClose={() => setShowCommonsInfo(false)} 
                 commonsBalance={balanceInfo?.commonsBalance_c ?? 0} 
             />
+
+            {showCreditSheet && balanceInfo && (
+                <CreditSheet
+                    answer={balanceInfo}
+                    earning={{ qualifiedValue: balanceInfo.qualifiedValue, avgRating: balanceInfo.avgRating, reviewCount: balanceInfo.reviewCount }}
+                    onClose={() => setShowCreditSheet(false)}
+                    onGivers={viewerIsMember && !preview && readsBeans && ownBalanceInfo ? () => {
+                        setShowCreditSheet(false);
+                        setActiveTab('trust');
+                        setTimeout(() => document.querySelector('[data-testid="credit-seen-by-givers"]')?.scrollIntoView({ block: 'start' }), 60);
+                    } : undefined}
+                    onGuide={onNavigate ? (slug) => { setShowCreditSheet(false); onNavigate('guide', slug); } : undefined}
+                />
+            )}
 
             {showBudgetModal && myVouching?.budget && (
                 <MyBudgetModal

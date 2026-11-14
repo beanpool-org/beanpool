@@ -1,6 +1,6 @@
 /**
  * The vouch presets per role (Marty, 9 Nov): an owner (the node's `noLimit`) sees 25 · 50 · 75 · 100 · 200 · 500, none greyed
- * for budget, and "From your budget: No limit"; an admin or any other voucher sees the four, greyed past what is left, and
+ * for budget, and "From your vouching budget: no limit"; an admin or any other voucher sees the four, greyed past what is left, and
  * their budget. Both at 320 px wrap (flex-wrap), each choice 44 px tall.
  */
 import { describe, it, expect } from 'vitest';
@@ -14,7 +14,7 @@ describe('VouchPresetChoice per role', () => {
         render(<VouchPresetChoice value={null} onChange={() => {}} budgetLeft={0} budgetTotal={0} noLimit />);
         expect(amounts()).toEqual(['none', '25', '50', '75', '100', '200', '500']);
         expect(screen.getAllByRole('radio').every((r) => !(r as HTMLInputElement).disabled)).toBe(true);
-        expect(screen.getByText('From your budget: No limit')).toBeTruthy();
+        expect(screen.getByText('From your vouching budget: no limit')).toBeTruthy();
         expect(screen.queryByText(/No budget left/)).toBeNull();
     });
 
@@ -24,7 +24,7 @@ describe('VouchPresetChoice per role', () => {
         expect(amounts()).toEqual(['none', '25', '50', '75', '100']);
         expect((screen.getByTestId('invite-vouch-75') as HTMLInputElement).disabled).toBe(true);
         expect((screen.getByTestId('invite-vouch-50') as HTMLInputElement).disabled).toBe(false);
-        expect(screen.getByText('From your budget: 60 of 1,000 left')).toBeTruthy();
+        expect(screen.getByText('From your vouching budget: 60 of 1,000 left')).toBeTruthy();
     });
 
     it("offers an owner's raise as the totals above what they vouched, headed Raise to, with no None and nothing greyed (slice I6)", () => {
@@ -35,7 +35,7 @@ describe('VouchPresetChoice per role', () => {
         expect(screen.getByText('Raise to')).toBeTruthy();
         expect(screen.queryByText('Vouch for them')).toBeNull();
         expect(screen.queryByText('None')).toBeNull();
-        expect(screen.getByText('From your budget: No limit')).toBeTruthy();
+        expect(screen.getByText('From your vouching budget: no limit')).toBeTruthy();
     });
 
     it('offers an owner at 200 only 500, and at 500 nothing to raise to', () => {
@@ -53,7 +53,7 @@ describe('VouchPresetChoice per role', () => {
         expect((screen.getByTestId('invite-vouch-50') as HTMLInputElement).disabled).toBe(false);
         expect((screen.getByTestId('invite-vouch-75') as HTMLInputElement).disabled).toBe(true);
         expect((screen.getByTestId('invite-vouch-100') as HTMLInputElement).disabled).toBe(true);
-        expect(screen.getByText('From your budget: 30 of 1,000 left')).toBeTruthy();
+        expect(screen.getByText('From your vouching budget: 30 of 1,000 left')).toBeTruthy();
     });
 
     it("never offers a voucher an owner's 200 or 500 when raising, and a first vouch still has None", () => {

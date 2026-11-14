@@ -108,7 +108,7 @@ export const CREDIT_LIST_WORDS = {
     giveCredit: word('Give credit'),
     showMore: word('Show more people'),
     door: word('Give credit to people already here ›'),
-    yourBudget: word('Your budget: {left} of {level} left'),
+    yourBudget: word('Vouching budget: {left} of {level} left'),
     usedAtOnce: word('Credit you give can be used at once.'),
     cantTakeBack: word('Credit you give can’t be taken back.'),
     sheetTitle: word('Give @{name} credit'),

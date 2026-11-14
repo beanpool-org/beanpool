@@ -3,13 +3,13 @@
  * (core VOUCH_PRESETS; InvitePage owns the choice, and None is what it holds each time the screen opens).
  *
  * Shows:
- *   - "From your budget: 550 of 1,000 left" under it
+ *   - "From your vouching budget: 550 of 1,000 left" under it
  *   - A preset above what is left is greyed ("Not enough budget left")
  *   - A raise (`raiseFrom`, slice I6): "Raise to: 200 · 500", the totals above what you vouched for this person already
  *     (core raiseTargetsFor, up to your most), no None; a choice is greyed only when the difference it draws is more than the
  *     budget has left
  *   - Nothing left: "No budget left. Ask an owner for more."
- *   - An owner (`noLimit`, Marty 9 Nov): 200 and 500 too, none greyed for budget, and "From your budget: No limit"
+ *   - An owner (`noLimit`, Marty 9 Nov): 200 and 500 too, none greyed for budget, and "From your vouching budget: no limit"
  *
  * Accessible radios, wrapping cleanly at 320 px with 1.3x text; each choice >= 44 px tall.
  */
@@ -29,7 +29,7 @@ export interface VouchPresetChoiceProps {
     raiseFrom?: number;
     /**
      * The node's `noLimit` for the signer (GET /api/vouchers/me): an owner vouches with no budget limit (Marty, 9 Nov), so
-     * the presets are core's six (200 and 500 too), none greyed for budget, 500 for one person, and "From your budget: No limit".
+     * the presets are core's six (200 and 500 too), none greyed for budget, 500 for one person, and "From your vouching budget: no limit".
      */
     noLimit?: boolean;
 }

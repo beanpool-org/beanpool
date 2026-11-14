@@ -4,8 +4,8 @@
  */
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
-import { setLanguage } from '../words.js';
-import { buildTagIndex, tagIndex } from '../tags/index.js';
+import { LANGS, setLanguage, wordsFor } from '../words.js';
+import { TAG_LIBRARY, buildTagIndex, tagIndex } from '../tags/index.js';
 import {
     FREE_TAGS_MAX, FREE_TAGS_TOO_LONG_TOGETHER, FREE_TAGS_TOO_MANY, FREE_TAG_HOLDS_A_COMMA, FREE_TAG_NOT_A_CONTACT, FREE_TAG_TOO_LONG,
     FREE_TAG_TOO_MANY_WORDS, FREE_TAG_TOO_SHORT, freeTagsOf, listingFreeTags,
@@ -170,5 +170,28 @@ describe("a listing's typed tags, however it reached the app", () => {
         expect(listingFreeTags({ free_tags: '' })).toEqual([]);
         expect(listingFreeTags(null)).toEqual([]);
         expect(listingFreeTags(undefined)).toEqual([]);
+    });
+});
+
+describe('no two library tags show one label in a language (slice T5)', () => {
+    // Two tags with the same label are two rows the member cannot tell apart in the picker, two chips that read alike on
+    // listings, and a typed label that can pick only one of them. Measured on main before T5: French and Italian fishing
+    // and peach (Pêche, Pesca), Italian tents and curtains (Tende), French studio space and workshop (Atelier), Ukrainian
+    // carpentry and woodwork, Chinese towing and trailers (拖车), tutoring and coaching (辅导, 輔導). Compared as shown,
+    // in any case: accents are kept, so Vietnamese Bơ (avocado) and Bò (cows) are two labels, though the index folds them.
+    const langs = LANGS.filter((lang) => lang !== 'en');
+    it.each(langs)('%s', (lang) => {
+        const catalog = JSON.parse(readFileSync(new URL(`../../words/${lang}.json`, import.meta.url), 'utf8'));
+        const index = buildTagIndex(wordsFor(lang, [catalog]));
+        const shown = new Map<string, string[]>();
+        for (const tag of TAG_LIBRARY) {
+            if (!tag.id.includes('.')) continue;
+            const label = index.label(tag.id).normalize('NFC').trim().toLowerCase();
+            shown.set(label, [...(shown.get(label) ?? []), tag.id]);
+        }
+        expect([...shown].filter(([, ids]) => ids.length > 1).map(([label, ids]) => `${label}: ${ids.join(', ')}`)).toEqual([]);
+        for (const [label, [id]] of shown) {
+            if (index.byLabel(label).filter((named) => named.includes('.')).length === 1) expect(exactLibraryTag(label, index), label).toBe(id);
+        }
     });
 });

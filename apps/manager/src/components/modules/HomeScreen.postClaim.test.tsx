@@ -20,7 +20,7 @@ vi.mock('../../lib/node-client', async (importOriginal) => ({
 
 import { HomeScreen } from './HomeScreen';
 
-const NODE = { id: 'n1', name: 'Apollo Bay', url: 'https://apollobay.beanpool.org', token: 't' } as any;
+const NODE = { id: 'n1', name: 'Riverside Exchange', url: 'https://riverside.example.org', token: 't' } as any;
 const OWNER = { kind: 'key', memberPubkey: 'o', role: 'owner' } as const;
 const ADMIN = { kind: 'key', memberPubkey: 'a', role: 'admin' } as const;
 const LOCKED_SHAPE = {
@@ -39,8 +39,8 @@ const status = (recoveryCode: TakeoverStatus['recoveryCode'], state: TakeoverSta
 });
 
 const props = {
-    communityName: 'Apollo Bay',
-    publicDomain: 'apollobay.beanpool.org',
+    communityName: 'Riverside Exchange',
+    publicDomain: 'riverside.example.org',
     diag,
     onInviteMember: vi.fn(),
     onCreateEnterprise: vi.fn(),

@@ -18,7 +18,7 @@ function json(status: number, body: unknown): Response {
 
 const LOCAL = { memberCount: 1, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { door: 'members' } };
 const CARD = {
-    name: 'Apollo Bay', host: 'apollobay.beanpool.org', members: 1, area: null,
+    name: 'Riverside Exchange', host: 'riverside.example.org', members: 1, area: null,
     joining: 'requests', askUrl: null, globalUrl: null,
 };
 
@@ -49,14 +49,14 @@ afterEach(() => {
 
 describe('the welcome page at a server with no owner yet', () => {
     it("shows the phone's no-owner card in the phone's order, and Claim opens this server's Settings", async () => {
-        const asked = stubNode({ unclaimed: true, codeId: 'a1b2c3d4e5f60718', salt: 'ab'.repeat(16), communityName: 'Apollo Bay', password: false });
+        const asked = stubNode({ unclaimed: true, codeId: 'a1b2c3d4e5f60718', salt: 'ab'.repeat(16), communityName: 'Riverside Exchange', password: false });
         render(<WelcomePage onComplete={vi.fn()} />);
         const card = await screen.findByTestId('no-owner-card');
         expect(asked).toContain('/api/local/claim');
-        const heading = screen.getByRole('heading', { name: 'Apollo Bay has no owner yet' });
+        const heading = screen.getByRole('heading', { name: 'Riverside Exchange has no owner yet' });
         const address = screen.getByTestId('no-owner-card-address');
         const note = screen.getByText('If you installed it, claim it with the one-time code on the server.');
-        const claim = screen.getByRole('link', { name: 'Claim Apollo Bay' });
+        const claim = screen.getByRole('link', { name: 'Claim Riverside Exchange' });
         expect(address.textContent).toBe(window.location.origin);
         expect(claim.getAttribute('href')).toBe(`${window.location.origin}/settings`);
         // The phone's order: the name, the address, the sentence, then Claim.

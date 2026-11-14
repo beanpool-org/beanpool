@@ -152,6 +152,11 @@ export function forumSearchQuery(asked: ForumSearchWord[], at: { reader: string;
             params[`l${i}`] = likeOf(w.inside!);
             // Two sets of posts by rowid, so no search walks the table: the index's, and the newest posts' own scan (a range of
             // idx_forum_posts_created, FORUM_SEARCH_SCAN_MAX rows at most).
+            // That plan holds while no server runs ANALYZE (none does; the engine's place-readers-plan.test.ts relies on
+            // the same). The deciding review of #3186 measured it after ANALYZE on a 60,000-post forum: SQLite then drives
+            // this look from `SCAN nt` with idx_forum_posts_number, which reads every post. If ANALYZE ever comes, pin the
+            // order here with `forum_posts n CROSS JOIN forum_topics nt ON nt.id = n.topic_id` (test-forum-search reads
+            // this plan).
             where.push(`(p.rowid IN (SELECT rowid FROM forum_search WHERE forum_search MATCH @m${i})
                 OR p.rowid IN (SELECT n.rowid FROM forum_posts n JOIN forum_topics nt ON nt.id = n.topic_id WHERE n.created_at >= @since
                     AND (n.words LIKE @l${i} ESCAPE '\\' OR (n.number = 1 AND (nt.title LIKE @l${i} ESCAPE '\\' OR COALESCE(nt.place, '') LIKE @l${i} ESCAPE '\\')))))`);

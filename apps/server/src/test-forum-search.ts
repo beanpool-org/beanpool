@@ -19,6 +19,8 @@
  *  6. A standby answers the same: the index is this server's own (manifest 'local', in no copy, not hashed, so
  *     TABLE_HASHES_VERSION stays as it is); a standby's import of the whole copy rebuilds it by the triggers, FTS5's own check
  *     passes, and every search answers the same posts in the same order.
+ *  7. A boot again leaves the index's own tables byte for byte (FTS5 counts each setting it is told in the index's header,
+ *     so `secure-delete` is told once, when the index is made), and `secure-delete` is still on.
  *
  * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-forum-search" node ../../scripts/run-server-suites.mjs
  */
@@ -31,7 +33,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, grantNodeRole, exportSyncState, purgeMemberSelf, adminPruneUser, COMMUNITY_DECISION_ACTOR, broadcast, dispatchPushNotification } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { db } from './db/db.js';
+import { db, initSchema } from './db/db.js';
 import { setNodeRole } from './config/node-role.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
@@ -272,6 +274,21 @@ async function main(): Promise<void> {
     const danPost = await replyOf(dan);
     require_(purgeMemberSelf(dan.pk).ok, 'Dan deletes their account');
     assert(inBytes(danPost.word) === 0, '4. an account deleted: none of its words left in the index');
+
+    // ── 7. A boot again changes nothing in the index ─────────────────────────────────────────────
+    // Here, with rows in the index and removals done: initSchema runs schema.sql again, as every boot does.
+    console.log('── 7. a boot again ──');
+    const indexTables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'forum\\_search%' ESCAPE '\\' ORDER BY name").all() as { name: string }[]).map((t) => t.name);
+    const indexBytes = () => JSON.stringify(indexTables.map((t) => [t, db.prepare(`SELECT * FROM "${t}"`).raw().all()]),
+        (_k, v) => (typeof v === 'bigint' ? String(v) : Buffer.isBuffer(v) ? v.toString('hex') : v));
+    const secureDelete = () => (db.prepare("SELECT v FROM forum_search_config WHERE k = 'secure-delete'").get() as { v: number } | undefined)?.v;
+    require_(indexTables.includes('forum_search_data') && indexTables.includes('forum_search_config') && (db.prepare('SELECT COUNT(*) AS n FROM forum_search').get() as { n: number }).n > 0,
+        `the index and its own tables are there, with rows (${indexTables.join(', ')})`);
+    const bytesBefore = indexBytes();
+    initSchema();
+    initSchema();
+    assert(indexBytes() === bytesBefore, `7. two boots: every row of ${indexTables.join(', ')} as it was, byte for byte`);
+    assert(secureDelete() === 1, `7. secure-delete is still on (${secureDelete()})`);
 
     // ── 5. The day limit, and who may search ─────────────────────────────────────────────────────
     console.log('── 5. the day limit ──');

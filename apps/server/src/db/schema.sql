@@ -3349,7 +3349,11 @@ CREATE TABLE IF NOT EXISTS forum_waiting_photos (
 -- post's old words leave the index's own bytes the moment its row changes or goes (a removal blanks them; FTS5 otherwise
 -- keeps them until a merge), so a removed or deleted account's words are in no search and no page of the file.
 CREATE VIRTUAL TABLE IF NOT EXISTS forum_search USING fts5(title, place, words);
-INSERT INTO forum_search(forum_search, rank) VALUES ('secure-delete', 1);
+-- Set once, when the index is made: each time FTS5 is told a setting it counts one more change in the index's own header
+-- (the cookie at the head of forum_search_data's row 10), even when the value is the one it has. Told at every boot, it
+-- would change the file with nothing in it changed (test-contact-copies 8, test-forum-search 7).
+INSERT INTO forum_search(forum_search, rank)
+SELECT 'secure-delete', 1 WHERE NOT EXISTS (SELECT 1 FROM forum_search_config WHERE k = 'secure-delete' AND v = 1);
 -- Each trigger rewrites the whole row from the post and its topic as they stand, so the order two of them fire in, a
 -- standby's import order included (topics before posts, or a whole copy's deletes), never leaves a stale title. The UPDATE
 -- triggers fire only when an indexed value changed: a touch trigger's nested stamp (forum_posts_touch_updated_at) never

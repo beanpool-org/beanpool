@@ -22,7 +22,7 @@ const H = { two: '33a37470c694b654786ef73f3b44cfe90d1a8825', three: '5550edf6389
 const TMP = mkdtempSync(join(tmpdir(), 'pr-state-test-'));
 process.on('exit', () => rmSync(TMP, { recursive: true, force: true }));
 const json = (f) => JSON.parse(readFileSync(join(FIX, f), 'utf8'));
-const log = (id) => readFileSync(join(FIX, 'logs', `${id}.log`), 'utf8');
+const log = (id) => readFileSync(join(FIX, 'logs', `${id}.txt`), 'utf8');
 
 // The stand-in gh: answers `gh api <path>` from the scenario's files, 404 for anything it has no file for, and refuses every
 // other command. Every call is logged, one JSON array per line.
@@ -41,7 +41,7 @@ if (/\/pulls\/\d+\/commits/.test(p)) send('commits.json');
 if (/\/pulls\/\d+\/files/.test(p)) send('files.json');
 if ((m = /\/commits\/([0-9a-f]+)\/check-runs/.exec(p))) send('check-runs-' + m[1] + '.json');
 if ((m = /\/commits\/([0-9a-f]+)\/status$/.exec(p))) send('status.json');
-if ((m = /\/actions\/jobs\/(\d+)\/logs$/.exec(p))) send('logs/' + m[1] + '.log');
+if ((m = /\/actions\/jobs\/(\d+)\/logs$/.exec(p))) send('logs/' + m[1] + '.txt');
 console.error('stand-in gh: no route for ' + a.join(' ')); process.exit(1);
 `;
 const GH = join(TMP, 'gh');
@@ -53,19 +53,23 @@ const comment = (body, at, who = 'MEMBER') => ({ id: 1, html_url: 'https://examp
 const runsOf = (head) => json(`check-runs-${head.slice(0, 8)}.json`);
 
 let n = 0;
-/** A scenario directory: the PR at `head`, its comments, the check runs GitHub recorded for that head (optionally edited). */
-function scenario({ head, cs = comments(), runs = runsOf(head), logs = [], logAs = {}, state = 'OPEN', mergeable = 'MERGEABLE' }) {
+/**
+ * A scenario directory: the PR at `head`, its comments, the check runs GitHub recorded for that head (optionally edited). The
+ * PR is GitHub's recorded GraphQL answer for a queued PR (graphql-queued.json), set to #3169 out of the queue unless `pr` says.
+ */
+function scenario({ head, cs = comments(), runs = runsOf(head), logs = [], logAs = {}, pr: over = {} }) {
   const dir = join(TMP, `s${n++}`);
   mkdirSync(join(dir, 'logs'), { recursive: true });
-  const pr = { number: 3169, title: 'Recorded #3169', state, isDraft: false, headRefOid: head, headRefName: 'feat/example', baseRefName: 'main',
-    mergeable, mergeStateStatus: 'BLOCKED', isInMergeQueue: false, mergeQueueEntry: null };
-  writeFileSync(join(dir, 'pr.json'), JSON.stringify({ data: { repository: { pullRequest: pr } } }));
+  const answer = json('graphql-queued.json');
+  Object.assign(answer.data.repository.pullRequest, { number: 3169, title: 'Recorded #3169', headRefOid: head, headRefName: 'feat/example',
+    mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED', isInMergeQueue: false, mergeQueueEntry: null }, over);
+  writeFileSync(join(dir, 'pr.json'), JSON.stringify(answer));
   writeFileSync(join(dir, 'comments.json'), JSON.stringify(cs));
   writeFileSync(join(dir, `check-runs-${head}.json`), JSON.stringify(runs));
   for (const f of ['reviews', 'commits', 'files']) cpSync(join(FIX, `${f}-3169.json`), join(dir, `${f}.json`));
   cpSync(join(FIX, 'status-none.json'), join(dir, 'status.json'));
-  for (const id of logs) cpSync(join(FIX, 'logs', `${id}.log`), join(dir, 'logs', `${id}.log`));
-  for (const [job, id] of Object.entries(logAs)) cpSync(join(FIX, 'logs', `${id}.log`), join(dir, 'logs', `${job}.log`)); // job answers with log id
+  for (const id of logs) cpSync(join(FIX, 'logs', `${id}.txt`), join(dir, 'logs', `${id}.txt`));
+  for (const [job, id] of Object.entries(logAs)) cpSync(join(FIX, 'logs', `${id}.txt`), join(dir, 'logs', `${job}.txt`)); // job answers with log id
   return dir;
 }
 
@@ -100,6 +104,11 @@ const SCENARIOS = {
   twoReds: {
     make: () => scenario({ head: H.two, logs: [132569745348, 132571592359] }),
     expect: ({ code, out }) => {
+      assert.match(out, /^PR #3169 {2}feat\/example → main {2}OPEN {2}Recorded #3169$/m);
+      assert.match(out, /^head {8}33a37470c694b654786ef73f3b44cfe90d1a8825$/m);
+      assert.match(out, /^base {8}main$/m);
+      assert.match(out, /^mergeable {3}MERGEABLE \(merge state BLOCKED\)$/m);
+      assert.match(out, /^merge queue not in the queue$/m);
       assert.match(out, /names 33a37470 = the current head/);
       assert.match(out, /RED {5}Test-All shard checks — failure\n/);
       assert.match(out, /│ check no_google_fonts +❌ FAIL/);
@@ -145,6 +154,28 @@ const SCENARIOS = {
       assert.match(out, /names a8738323 = the current head/);
       assert.match(out, /19 on this head: 19 success, 0 red, 0 pending/);
       assert.match(out, /SUMMARY: CLEAN\+GREEN$/m);
+      assert.equal(code, 0);
+    },
+  },
+  // In the merge queue, as GitHub recorded it for a queued PR (its mergeable reads UNKNOWN there).
+  queued: {
+    make: () => scenario({
+      head: H.green, cs: [[comment('CLEAN: at head a8738323', '2026-11-14T20:30:00Z')]],
+      pr: { mergeable: 'UNKNOWN', mergeStateStatus: 'UNKNOWN', isInMergeQueue: true, mergeQueueEntry: json('graphql-queued.json').data.repository.pullRequest.mergeQueueEntry },
+    }),
+    expect: ({ code, out }) => {
+      assert.match(out, /^merge queue IN THE QUEUE \(AWAITING_CHECKS, position 2\)$/m);
+      assert.match(out, /^mergeable {3}UNKNOWN \(merge state UNKNOWN\)$/m);
+      assert.match(out, /SUMMARY: CLEAN\+GREEN$/m);
+      assert.equal(code, 0);
+    },
+  },
+  // Clean and green but conflicting with its base: the summary says so.
+  conflicting: {
+    make: () => scenario({ head: H.green, cs: [[comment('CLEAN: at head a8738323', '2026-11-14T20:30:00Z')]], pr: { mergeable: 'CONFLICTING', mergeStateStatus: 'DIRTY' } }),
+    expect: ({ code, out }) => {
+      assert.match(out, /^mergeable {3}CONFLICTING \(merge state DIRTY\)$/m);
+      assert.match(out, /SUMMARY: CLEAN\+GREEN {2}\[CONFLICTING with its base\]$/m);
       assert.equal(code, 0);
     },
   },
@@ -299,6 +330,8 @@ const MUTANTS = [
   { why: 'stack frames under an assertion dropped', scenario: 'twoReds', edits: [['keep(l); frames = 2; continue;', 'keep(l); frames = 0; continue;']] },
   { why: 'every file reported untouched', scenario: 'twoReds', edits: [['return diff.some(', 'return !diff.length && diff.some(']] },
   { why: 'a head with no required check read as green', scenario: 'noRequired', edits: [['if (!required) return { line: `PENDING', 'if (false) return { line: `PENDING']] },
+  { why: 'a queued PR shown as out of the queue', scenario: 'queued', edits: [["row('merge queue', p.isInMergeQueue ?", "row('merge queue', false ?"]] },
+  { why: 'a conflict with the base left out of the summary', scenario: 'conflicting', edits: [["p.mergeable === 'CONFLICTING' ?", 'false ?']] },
   { why: 'a stranger\'s verdict trusted', scenario: 'stranger', edits: [['.filter((c) => TRUSTED.has(c.who))', '.filter(() => true)']] },
   { why: 'pending checks read as green', scenario: 'pending', edits: [["if (c.status !== 'completed') state = 'pending';", "if (c.status !== 'completed') state = 'success';"]] },
   { why: 'a gh write, with the guard in place: refused, so the run fails', scenario: 'twoReds',

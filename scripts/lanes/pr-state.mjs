@@ -141,7 +141,7 @@ const FRAME = /(?:\/home\/runner\/work\/[^/\s]+\/[^/\s]+\/|file:\/\/\/)(?!.*node
 const LOCATION = /^\s*[\w@.[\]()+-]+(?:\/[\w@.[\]()+-]+)+\.[a-z]{1,5}:\d+/; // esbuild / tsc: "apps/x/y.tsx:14:32: ERROR …"
 
 /**
- * The lines that say what failed, in log order, each with the turbo package and server suite it sits under. Reads
+ * The lines that say what failed, in log order, each with the turbo package it sits under. Reads
  * test-all's "Failure Details" (its ❌ report lines from anywhere); a log without it (a setup failure, the summary job) gives
  * its last lines before the first ##[error] instead.
  */
@@ -149,12 +149,12 @@ export function failureLines(raw, limit = 24) {
   const lines = String(raw).split('\n').map(clean);
   const out = [];
   const seen = new Set();
-  let pkg = '', suite = '';
+  let pkg = '';
   const keep = (text) => {
     const t = clip(text.trim());
     if (!t || seen.has(t) || out.length >= limit) return;
     seen.add(t);
-    out.push({ text: t, pkg, suite });
+    out.push({ text: t, pkg });
   };
   for (const l of lines) if (/^║.*❌/.test(l)) keep(l.replace(/^║\s*/, 'check '));
   const start = lines.findIndex((l) => l.startsWith('──── Failure Details'));
@@ -171,7 +171,7 @@ export function failureLines(raw, limit = 24) {
       const yaml = /^(\s*)(actual|expected):\s*(.*)$/.exec(l);
       if (yaml) { keep(l); if (!yaml[3]) { under = yaml[1].length; items = 3; } continue; }
       const h = /^━━━ (.+?) ━━━$/.exec(l);
-      if (h) { suite = h[1]; pkg = ''; keep(l); continue; }
+      if (h) { pkg = ''; keep(l); continue; }
       const task = /^── (@?[\w./-]+)#\w+/.exec(l);
       if (task) { pkg = task[1]; continue; }
       const block = /^── Failing tests \((\d+)\) ──$/.exec(l);
@@ -305,7 +305,7 @@ export function collect(pr, repo, limit) {
   const [owner, name] = repo.split('/');
   const q = 'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){'
     + 'number title state isDraft headRefOid headRefName baseRefName mergeable mergeStateStatus isInMergeQueue mergeQueueEntry{state position}}}}';
-  const p = JSON.parse(readGh(['api', 'graphql', '-f', `query=${q}`, '-F', `owner=${owner}`, '-F', `name=${name}`, '-F', `number=${pr}`]))
+  const p = JSON.parse(readGh(['api', 'graphql', '-f', `query=${q}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `number=${pr}`]))
     ?.data?.repository?.pullRequest;
   if (!p) throw new Error(`PR #${pr} not found in ${repo}`);
   const base = `repos/${repo}`;
@@ -329,7 +329,7 @@ export function collect(pr, repo, limit) {
     c.files = namedFiles(c.lines).map((f) => ({ ...f, touched: files.ok ? touches(f, files.value) : undefined }));
   }
   return {
-    repo, pr: p, review, checks, files, errors: { comments, reviews, commits, runs, status },
+    repo, pr: p, review, checks, errors: { comments, reviews, commits, runs, status },
     checksError: runs.ok ? null : runs.error,
   };
 }

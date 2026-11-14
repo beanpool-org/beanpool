@@ -463,7 +463,7 @@ describe("this community's typed tags (DESIGN-tags-free-entry-fable.md §3, §5,
     }
     const key = (name: string) => act(async () => { search()!.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true })); });
     const usedHere = () => host.querySelector('[data-testid="tag-picker-used-here"]');
-    const rows = () => [...(usedHere()?.querySelectorAll('button') ?? [])];
+    const rows = (): HTMLButtonElement[] => Array.from(usedHere()?.querySelectorAll('button') ?? []);
 
     it('under the library matches, the tags used here that the typing reaches, with their counts', async () => {
         await compose();

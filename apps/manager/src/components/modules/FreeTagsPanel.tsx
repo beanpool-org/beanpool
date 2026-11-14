@@ -36,7 +36,7 @@ export interface FreeTagsPanelProps {
     viewer?: RolesViewer;
 }
 
-const day = (at: string | null) => (at ? new Date(at).toLocaleDateString(undefined, { dateStyle: 'medium' }) : 'no live listing now');
+const seen = (at: string | null) => (at ? `first seen ${new Date(at).toLocaleDateString(undefined, { dateStyle: 'medium' })}` : 'no live listing now');
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
 /** One line per tag, tab-separated, for an issue or a pull request to the library. */
@@ -130,7 +130,7 @@ export function FreeTagsPanel({ activeNode, viewer = { kind: 'token' } }: FreeTa
                             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                                 <span className="font-bold text-white break-words min-w-0">#{t.tag}</span>
                                 <span className="text-xs text-nature-300">
-                                    {plural(t.listings, 'listing')} · {plural(t.authors, 'author')} · first seen {day(t.firstSeen)}
+                                    {plural(t.listings, 'listing')} · {plural(t.authors, 'author')} · {seen(t.firstSeen)}
                                 </span>
                             </div>
                             <div className="text-xs font-semibold text-nature-200">

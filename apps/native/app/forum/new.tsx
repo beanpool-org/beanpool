@@ -18,7 +18,7 @@ import { usePinRole } from '../../utils/use-pin-role';
 import { getForumFront, keptForumFront, markForumTold, noteForumBack, startForumTopic, type ForumFront } from '../../utils/forum';
 import { askForumTold } from '../../components/forum/ForumBits';
 import { useForumStyles } from '../../components/forum/forum-style';
-import { NEW_TOPIC_WORDS, TOPIC_WORDS } from '../../components/forum/forum-words';
+import { FORUM_WORDS, NEW_TOPIC_WORDS, TOPIC_WORDS } from '../../components/forum/forum-words';
 
 export default function NewForumTopicScreen() {
     const params = useLocalSearchParams<{ section?: string; hours?: string }>();
@@ -39,7 +39,8 @@ export default function NewForumTopicScreen() {
     useEffect(() => {
         void loadIdentity().then((i) => setMe(i?.publicKey ?? null));
         void keptForumFront().then((f) => { if (f) setFront((now) => now ?? f); });
-        void getForumFront().then(setFront).catch((e) => setError((e as Error)?.message || t(TOPIC_WORDS.saveFailed)));
+        // A read, not a save: with no answer from the node, the forum's own line for a load (its refusal says its own words).
+        void getForumFront().then(setFront).catch((e) => setError((e as Error)?.message || t(FORUM_WORDS.failed)));
     }, []);
     const open = (front?.sections ?? []).filter((s) => !s.archived && (s.starts === 'members' || staff));
     // The section the list showed, if the member may start there; else the first they may.

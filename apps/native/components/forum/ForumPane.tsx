@@ -9,7 +9,7 @@
  *   topic), ● where a followed topic has a reply they haven't opened.
  * - **A topic, a new topic, the first looks** are their own screens (app/forum/), each with ‹ back to this list.
  * - **Kept copies:** what was last read draws at once from this phone's copy (utils/forum-kept.ts), then the node is asked
- *   again; with no connection the copy is what shows, with the node's words and Try again.
+ *   again; with no connection the copy is what shows, with the forum's own line (a refusal: the node's sentence) and Try again.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
@@ -119,7 +119,7 @@ export function ForumPane() {
                     <Text style={[styles.infoText, { fontWeight: '700' }]}>{t(FORUM_WORDS.waitingMine, { title: waiting.title })}</Text>
                     {mine?.usuallyWithinHours ? <Text style={styles.infoText}>{tn(mine.usuallyWithinHours, FORUM_WORDS.usually.one, FORUM_WORDS.usually.other, { n: mine.usuallyWithinHours })}</Text> : null}
                     <Pressable accessibilityRole="button" style={[styles.quiet, { alignSelf: 'flex-start' }]}
-                        onPress={() => void withdrawFirstLook(waiting.id).then(loadFront).catch((e) => setFailed((e as Error)?.message || t(FORUM_WORDS.failed)))}>
+                        onPress={() => void withdrawFirstLook(waiting.id).then(loadFront).catch((e) => setFailed((e as Error)?.message || t(TOPIC_WORDS.saveFailed)))}>
                         <Text style={styles.quietText}>{t(FORUM_WORDS.withdraw)}</Text>
                     </Pressable>
                 </View>

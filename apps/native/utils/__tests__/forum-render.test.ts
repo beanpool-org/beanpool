@@ -77,12 +77,18 @@ vi.mock('../../components/ReportMessageSheet', () => ({ ReportMessageSheet: () =
 
 const ME = 'm'.repeat(64);
 const ANA = 'a'.repeat(64);
-const node = vi.hoisted(() => ({ offline: false, front: null as any, list: null as any, topic: null as any, kept: { front: null as any, list: null as any, topic: null as any }, mine: null as any }));
+// No connection: what utils/forum.ts throws with no answer (forumRefusal), no words of its own, so the screen says its line. `refused`:
+// the node's sentence, as forumRefusal hands it on.
+const node = vi.hoisted(() => ({ offline: false, refused: null as string | null, front: null as any, list: null as any, topic: null as any, kept: { front: null as any, list: null as any, topic: null as any }, mine: null as any }));
+const unanswered = () => {
+    if (node.refused) throw Object.assign(new Error(node.refused), { status: 403, code: 'not_active' });
+    if (node.offline) throw Object.assign(new Error(''), { unsaid: true });
+};
 vi.mock('../forum', () => ({
     FIRST_LOOK_NO_REASONS: ['spam', 'offensive', 'misleading', 'unsafe', 'rules'],
-    getForumFront: vi.fn(async () => { if (node.offline) throw new Error('You are off-grid.'); return node.front; }),
-    getForumTopics: vi.fn(async () => { if (node.offline) throw new Error('You are off-grid.'); return node.list; }),
-    getForumTopic: vi.fn(async () => { if (node.offline) throw new Error('You are off-grid.'); return node.topic; }),
+    getForumFront: vi.fn(async () => { unanswered(); return node.front; }),
+    getForumTopics: vi.fn(async () => { unanswered(); return node.list; }),
+    getForumTopic: vi.fn(async () => { unanswered(); return node.topic; }),
     keptForumFront: vi.fn(async () => node.kept.front),
     keptForumList: vi.fn(async () => node.kept.list),
     keptForumTopic: vi.fn(async () => node.kept.topic),
@@ -186,7 +192,7 @@ beforeEach(() => {
     nav.pushed = [];
     nav.back = 0;
     nav.params = { id: 't1' };
-    Object.assign(node, { offline: false, front: FRONT, list: LIST, topic: TOPIC, kept: { front: null, list: null, topic: null }, mine: null });
+    Object.assign(node, { offline: false, refused: null, front: FRONT, list: LIST, topic: TOPIC, kept: { front: null, list: null, topic: null }, mine: null });
 });
 
 describe.each(LOOKS)('the forum list in %s (%s)', (_name, set) => {
@@ -230,14 +236,24 @@ describe.each(LOOKS)('the forum list in %s (%s)', (_name, set) => {
         expectHoldsSmall(host);
     });
 
-    it('with no connection, the kept list draws, with the node\'s words and Try again', async () => {
+    it('with no connection, the kept list draws, with the forum\'s own line and Try again (never the platform\'s English)', async () => {
         node.offline = true;
         node.kept = { front: FRONT, list: LIST, topic: null };
         const host = await render(set, ForumPane);
         expect(allById(host, 'forum-topic-row')).toHaveLength(3);
-        expect(words(host)).toContain('You are off-grid.');
+        expect(words(host)).toContain('Couldn’t load the forum. Check your connection and try again.');
         expect(buttonsIn(host).map(words)).toContain('Try again');
         expectReadable(host, set);
+    });
+
+    it('a refusal from the node: the kept list draws, with the node\'s sentence and Try again', async () => {
+        node.refused = 'Your account here is paused for now, so you can’t read or write in the forum.';
+        node.kept = { front: FRONT, list: LIST, topic: null };
+        const host = await render(set, ForumPane);
+        expect(allById(host, 'forum-topic-row')).toHaveLength(3);
+        expect(words(host)).toContain(node.refused);
+        expect(words(host)).not.toContain('Couldn’t load the forum.');
+        expect(buttonsIn(host).map(words)).toContain('Try again');
     });
 });
 

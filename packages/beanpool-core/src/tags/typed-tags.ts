@@ -16,8 +16,8 @@ export const TYPED_TAG_WORDS = {
     /** The last row of the sheet: what pressing Enter would add. `{tag}` is the tag with its `#`. */
     add: word('Add “{tag}”'),
     /** The row above it when the typed word is a library tag's label in another language (slice F5). `{tag}` is the label in
-     *  the member's language. */
-    didYouMean: word('Did you mean “{tag}”?'),
+     *  the member's language; `{language}` the language whose label the word is, in its own name ("Deutsch"). */
+    didYouMean: word('Did you mean “{tag}”? ({language})'),
     /** The composer's two hints, under the field (§5, §7). */
     arePublic: word('Tags are public with your listing'),
     yourWords: word('A tag you type is in your own words. Pick a library tag to be found in every language.'),

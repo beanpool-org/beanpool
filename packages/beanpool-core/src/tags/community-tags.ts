@@ -82,32 +82,45 @@ export function mergedInto(tags: readonly CommunityTag[], index: TagIndex = tagI
  */
 export const LIBRARY_ASK_MS = 350;
 
+/** What a node says of one typed word (slice F5): the library tag it is a label of, and the language that label is in. */
+export interface LibraryLabel {
+    id: string;
+    /** The label's language as the node names it: a code from LANGS (a newer node's may be one this app has no name for). */
+    lang: string;
+}
+
+const LANG_CODE = /^[a-z]{2,3}(?:-[A-Za-z]{2,8})?$/;
+
 /**
- * The library tag a node's answer to GET /api/free-tags?q=<word> names (slice F5): the word is that tag's label in one of
- * the 25 languages. Null for none, for an id this app's library does not know (a newer node's), and for a top (the
- * category is its own field).
+ * The library tag a node's answer to GET /api/free-tags?q=<word> names (slice F5), with the language whose label the word
+ * is: `{ library, lang }`. Null for none, for an id this app's library does not know (a newer node's), for a top (the
+ * category is its own field), and for an answer without a language code (the row always says which language it read).
  */
-export function libraryTagOf(answer: unknown): string | null {
-    const id = (answer as { library?: unknown } | null | undefined)?.library;
-    return typeof id === 'string' && id.includes('.') && isTagId(id) ? id : null;
+export function libraryTagOf(answer: unknown): LibraryLabel | null {
+    const { library: id, lang } = (answer ?? {}) as { library?: unknown; lang?: unknown };
+    if (typeof id !== 'string' || !id.includes('.') || !isTagId(id)) return null;
+    return typeof lang === 'string' && LANG_CODE.test(lang) ? { id, lang } : null;
 }
 
 /** What the node said of one typed word, in its stored form: the library tag it is a label of elsewhere, or null for none. */
 export interface LibraryElsewhere {
     tag: string;
-    id: string | null;
+    found: LibraryLabel | null;
 }
 
 /**
  * The library tag the field offers as "Did you mean …?" above the "Add" row (slice F5): the node's answer for exactly the
  * word "Add" would make (`adding`, stored form; null when Enter would make no new tag of the member's own), when it names a
- * tag this app labels that the listing does not hold and the library rows do not already show. Enter still adds the
- * member's own word: a label in a third language is a suggestion, never a swap.
+ * tag this app labels that the listing does not hold. Never while the member's own library search lists a row for the
+ * word (`shown`: the rows the picker shows, index.search of the field and a plural's label): a word the member's own
+ * language and English already reach is theirs, so "pan" on an English device (frying pans) is never offered Spanish
+ * bread. Enter still adds the member's own word: a label in a third language is a suggestion, never a swap.
  */
 export function didYouMeanTag(
-    adding: string | null, found: LibraryElsewhere | null, held: TagsHeld, shown: readonly string[], index: TagIndex = tagIndex(),
-): string | null {
-    if (!adding || !found?.id || found.tag !== freeTagStored(adding)) return null;
-    if (held.tags.includes(found.id) || shown.includes(found.id) || !index.label(found.id)) return null;
-    return found.id;
+    adding: string | null, elsewhere: LibraryElsewhere | null, held: TagsHeld, shown: readonly string[], index: TagIndex = tagIndex(),
+): LibraryLabel | null {
+    const found = elsewhere?.found;
+    if (!adding || !found || elsewhere.tag !== freeTagStored(adding) || shown.length > 0) return null;
+    if (held.tags.includes(found.id) || !index.label(found.id)) return null;
+    return found;
 }

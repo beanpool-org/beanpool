@@ -727,6 +727,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         };
     }, []);
 
+    // A chat opened: its box starts empty, in the commit that draws it (a layout effect). Emptied from the effect below, which
+    // React 19 runs in a later task, it threw away words already typed into the new chat's box (CI, 14 Nov; the voice test
+    // "words typed the moment the chat shows"). A prefill (below) still lands after it.
+    const openChatId = activeConv?.id ?? null;
+    useLayoutEffect(() => {
+        if (openChatId) setDraft('');
+    }, [openChatId]);
+
     useEffect(() => {
         activeConvIdRef.current = activeConv?.id ?? null;
         setChatMute(null);
@@ -741,7 +749,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             setReplyToMessage(null);
             setEditingMessage(null);
             setActiveEmojiPickerId(null);
-            setDraft('');
+            // The box was emptied in the layout effect above, before anyone could type in it.
             // The initial load happens in startPolling() below; calling it here as well fired two
             // concurrent loads (and two decrypt passes) for the same conversation on open, which
             // could land out of order and overwrite the newer result with the older one.

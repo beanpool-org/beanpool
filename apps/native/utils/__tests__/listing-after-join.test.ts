@@ -106,7 +106,7 @@ describe('where the listing they came for has gone', () => {
     });
 
     it('in the member\'s language', () => {
-        const es = JSON.parse(readFileSync(fileURLToPath(new URL('../../../../packages/beanpool-core/words/es.json', import.meta.url)), 'utf8'));
+        const es = JSON.parse(readFileSync(fileURLToPath(new URL('../../../../packages/beanpool-core/words/es.json', import.meta.url).href), 'utf8'));
         setLanguage('es', [es]);
         expect(missingListingLine(true)).toBe('El anuncio por el que viniste ya no está publicado.');
     });

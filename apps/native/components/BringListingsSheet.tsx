@@ -31,7 +31,7 @@ const LOOK_GAP_MS = 5 * 60 * 1000;
  */
 let busy = false;
 
-export function BringListingsSheet({ onQuiet }: { onQuiet?: () => void } = {}) {
+export function BringListingsSheet({ onQuiet }: { onQuiet?: () => void }) {
     const { identity } = useIdentity();
     const quietRef = useRef(onQuiet);
     quietRef.current = onQuiet;

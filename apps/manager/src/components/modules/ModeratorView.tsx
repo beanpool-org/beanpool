@@ -7,6 +7,7 @@ import { BurstDigestCard, BurstPanel } from './BurstCleanup';
 import { RequestLimitsCard } from './RequestLimitsCard';
 import { ReportedGroupMessage } from './ReportedGroupMessage';
 import { ReportedDirectMessage } from './ReportedDirectMessage';
+import { ReportedComplaint } from './ReportedComplaint';
 import {
     REMOVAL_REASONS,
     actionNodeReport,
@@ -260,25 +261,12 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
             </div>
 
             {report.fromAnotherCommunity ? (
-                <div className="space-y-1" data-testid="report-from-another-community">
-                    <p className="text-xs font-bold uppercase tracking-wider text-nature-500 m-0">
-                        A message {report.targetCallsign || 'this member'} sent to {report.fromAnotherCommunity.from}
-                    </p>
-                    <p className="text-xs text-nature-400 m-0">Who reported it isn't shown. The words are what their reporter says it said.</p>
-                    {report.fromAnotherCommunity.words && <p className="text-sm text-nature-200 m-0 whitespace-pre-line">{report.fromAnotherCommunity.words}</p>}
-                </div>
+                // A complaint another community's server sent about a member here: never who reported.
+                <ReportedComplaint nodeUrl={nodeUrl} reportId={report.id} />
             ) : report.directMessage ? (
                 // One direct message line: its sender's signature checked, its words the reporter's. A line from another community
-                // opens the same way, from what its reporter handed over; only its own community can act on its sender.
-                <>
-                    {report.targetHome && (
-                        <p className="text-xs text-nature-400 m-0" data-testid="report-outside-line">
-                            From another community, {report.targetHome}: they are blocked for the member who reported them, and
-                            {report.complaintTold === 'sent' ? ' their community has been told.' : report.complaintTold === 'failed' ? " their community's server didn't take the complaint." : ' their community is being told.'}
-                        </p>
-                    )}
-                    <ReportedDirectMessage nodeUrl={nodeUrl} reportId={report.id} />
-                </>
+                // opens the same way, from what its reporter handed over, and says whether their community was told.
+                <ReportedDirectMessage nodeUrl={nodeUrl} reportId={report.id} />
             ) : report.targetMessageId ? (
                 // A locked group chat's message, reported with its key: opened here, verified, and nothing else of the chat.
                 <ReportedGroupMessage nodeUrl={nodeUrl} reportId={report.id} groupName={report.groupMessage?.groupName} />

@@ -676,16 +676,15 @@ export interface AbuseReport {
     forumPost?: ReportedForumPost | null;
     /**
      * A report of a line from another community (messages across communities X5, engine/relay-complaint.ts): the sender's
-     * community, `host[:port]`. The moderators open the line as a direct message's (directMessage). Null for every other report.
+     * community, `host[:port]`. The moderators open the line as a direct message's (directMessage), with whether that
+     * community has the complaint. Null for every other report.
      */
     targetHome?: string | null;
-    /** Whether the sender's community has the complaint about it: 'queued' (still trying), 'sent', 'failed'. Null otherwise. */
-    complaintTold?: 'queued' | 'sent' | 'failed' | null;
     /**
-     * A complaint from another community's server about a member here: which community, and its reporter's word for the
-     * line. It never names its reporter: reporterCallsign is the community then. Null for every other report.
+     * A complaint from another community's server about a member here: which community. Its reporter is that community
+     * (reporterPubkey `community:<home>`), never a person; its words are opened with the message, as a line's are.
      */
-    fromAnotherCommunity?: { from: string; words: string; signedAt: string | null } | null;
+    fromAnotherCommunity?: { from: string } | null;
 }
 
 export type { FriendEntry };
@@ -7825,21 +7824,10 @@ export function getReportablePulseItemOwner(itemId: string): string | null {
 
 /** How a DM line report's disclosure begins, as submitDmLineReport writes it: {"kind":"dm-line" then , or }. */
 const DM_LINE_DISCLOSURE_HEAD = JSON.stringify({ kind: DM_LINE_DISCLOSURE_KIND }).slice(0, -1);
-// A line from another community, and a complaint from another community's server (engine/relay-complaint.ts writes both).
+// A line from another community (engine/relay-complaint.ts submitOutsideLineReport), read from its disclosure's first
+// characters as a direct line's is; a complaint from another community by its reporter, `community:<home>` (receiveComplaint).
 const OUTSIDE_LINE_HEAD = '{"kind":"outside-line",';
-const RELAY_COMPLAINT_HEAD = '{"kind":"relay-complaint",';
-
-/** A complaint from another community, from its report's disclosure (engine/relay-complaint.ts receiveComplaint), or null. */
-function complaintInReport(disclosure: string | null): AbuseReport['fromAnotherCommunity'] {
-    if (!disclosure) return null;
-    try {
-        const d = JSON.parse(disclosure) as { from?: unknown; words?: unknown; at?: unknown };
-        if (typeof d.from !== 'string' || typeof d.words !== 'string') return null;
-        return { from: d.from, words: d.words, signedAt: Number.isSafeInteger(d.at) ? new Date(d.at as number).toISOString() : null };
-    } catch {
-        return null;
-    }
-}
+const COMPLAINT_REPORTER = 'community:';
 
 export function getReports(statusFilter?: string, limit?: number, offset?: number): { reports: AbuseReport[]; total: number; pendingCount: number } {
     // Open child-safety reports first, read as the alerts read them, in SQL so a page of the queue holds the right ones
@@ -7882,12 +7870,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                gm.conversation_id as gm_group_id, gm.type as gm_type, gg.name as gm_group_name,
                CASE WHEN substr(ar.disclosure, 1, ${DM_LINE_DISCLOSURE_HEAD.length + 1}) IN ('${DM_LINE_DISCLOSURE_HEAD},', '${DM_LINE_DISCLOSURE_HEAD}}')
                     THEN '${DM_LINE_DISCLOSURE_KIND}'
-                    WHEN substr(ar.disclosure, 1, ${OUTSIDE_LINE_HEAD.length}) = '${OUTSIDE_LINE_HEAD}' THEN 'outside-line'
-                    WHEN substr(ar.disclosure, 1, ${RELAY_COMPLAINT_HEAD.length}) = '${RELAY_COMPLAINT_HEAD}' THEN 'relay-complaint' END as disclosure_kind,
-               ar.target_home,
-               -- A complaint's disclosure is a few fields and the reporter's word (8,000 characters at most); a line's is not read.
-               CASE WHEN substr(ar.disclosure, 1, ${RELAY_COMPLAINT_HEAD.length}) = '${RELAY_COMPLAINT_HEAD}' THEN ar.disclosure END as complaint_disclosure,
-               CASE WHEN substr(ar.disclosure, 1, ${OUTSIDE_LINE_HEAD.length}) = '${OUTSIDE_LINE_HEAD}' THEN json_extract(ar.disclosure, '$.told.state') END as complaint_told
+                    WHEN substr(ar.disclosure, 1, ${OUTSIDE_LINE_HEAD.length}) = '${OUTSIDE_LINE_HEAD}' THEN 'outside-line' END as disclosure_kind,
+               ar.target_home
         FROM abuse_reports ar
         LEFT JOIN members mr ON ar.reporter_pubkey = mr.public_key
         LEFT JOIN members mt ON ar.target_pubkey = mt.public_key
@@ -7921,7 +7905,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
     const billsOf = billsReportedIn(rows.map((r) => r.id));
     const reports = rows.map(r => {
         const outside = r.disclosure_kind === 'outside-line';
-        const complaint = r.disclosure_kind === 'relay-complaint' ? complaintInReport(r.complaint_disclosure) : null;
+        const complaint = typeof r.reporter_pubkey === 'string' && r.reporter_pubkey.startsWith(COMPLAINT_REPORTER)
+            ? { from: r.reporter_pubkey.slice(COMPLAINT_REPORTER.length) } : null;
         return {
         // Who the report is about (reportSubjectOf, what actionReport acts on): on a Pulse item its owner, read from the
         // item, whatever post id the row carries; on a post its author, read from the post, never the key the reporter
@@ -7934,7 +7919,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         childSafety: reportKind(r.reason) === 'child safety',
         status: r.status || 'pending',
         outcome: (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open') as AbuseReport['outcome'],
-        // A complaint from another community names that community, never a person: its reporter is that community's server.
+        // A complaint from another community names that community, never a person: its reporter is that community.
         reporterCallsign: complaint ? complaint.from
             : r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),
         targetCallsign: r.target_pulse_item_id && r.pulse_owner_pubkey
@@ -7977,12 +7962,11 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
             : outside ? { photo: false, voice: false, removed: false }
             : null,
         targetHome: outside ? (r.target_home || null) : null,
-        complaintTold: outside && ['queued', 'sent', 'failed'].includes(r.complaint_told) ? r.complaint_told : null,
         fromAnotherCommunity: complaint,
         // A forum post's report (slice F2): the post with its topic's title, for Settings' list beside reported listings.
         ...(r.target_forum_post_id ? { targetForumPostId: r.target_forum_post_id as string } : {}),
         forumPost: r.target_forum_post_id ? reportedForumPost(r.target_forum_post_id) : null,
-        groupMessage: r.target_message_id && !r.disclosure_kind
+        groupMessage: r.target_message_id && !r.disclosure_kind && !complaint
             ? {
                 groupId: r.gm_group_id ?? null,
                 groupName: r.gm_group_name ?? null,

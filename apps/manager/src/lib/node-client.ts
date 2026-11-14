@@ -249,10 +249,8 @@ export interface NodeReport {
     forumPost?: ReportedForumPost | null;
     /** A report of a line from another community (the server's engine/relay-complaint.ts): that community, `host[:port]`. */
     targetHome?: string | null;
-    /** Whether that community has the complaint about it: 'queued' (still trying), 'sent', 'failed'. */
-    complaintTold?: 'queued' | 'sent' | 'failed' | null;
-    /** A complaint from another community about a member here: which community, and its reporter's word. Never its reporter. */
-    fromAnotherCommunity?: { from: string; words: string; signedAt: string | null } | null;
+    /** A complaint from another community about a member here: which community, never who reported (open it with fetchReportedComplaint). */
+    fromAnotherCommunity?: { from: string } | null;
     [key: string]: unknown;
 }
 
@@ -1510,6 +1508,32 @@ export interface ReportedDirectLine {
     words: { state: 'reported'; text: string };
     photo: boolean;
     line: 'same' | 'changed' | 'gone';
+    /** A line from another community: that community, and whether it has the complaint ('queued' still trying, 'sent', 'failed'). */
+    from?: string | null;
+    told?: 'queued' | 'sent' | 'failed' | null;
+}
+
+/** A complaint from another community, opened (the server's engine/relay-complaint.ts openReportedComplaint). */
+export interface ReportedComplaint {
+    from: string;
+    authorCallsign: string | null;
+    signedAt: string | null;
+    words: string;
+}
+
+/** Opens a complaint from another community (GET /api/local/admin/reports/:id/message): where from, and its reporter's word. */
+export async function fetchReportedComplaint(nodeUrl: string, reportId: string, credential?: string): Promise<ReportedComplaint> {
+    if (!reportId || typeof reportId !== 'string' || !reportId.trim()) throw new Error('Valid report ID is required');
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/reports/${encodeURIComponent(reportId.trim())}/message`);
+    const res = await fetch(endpoint, { headers: buildAdminHeaders(credential), credentials: 'same-origin' });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}: ${res.statusText}`);
+    const m = json?.message ?? {};
+    if (m.kind !== 'complaint' || typeof m.from !== 'string') throw new Error('This report is not a complaint from another community');
+    return {
+        from: m.from, authorCallsign: typeof m.authorCallsign === 'string' && m.authorCallsign ? m.authorCallsign : null,
+        signedAt: typeof m.signedAt === 'string' ? m.signedAt : null, words: typeof m.words?.text === 'string' ? m.words.text : '',
+    };
 }
 
 /**
@@ -1535,6 +1559,7 @@ export async function fetchReportedDirectMessage(
         authorPubkey: str(m.authorPubkey), authorCallsign: str(m.authorCallsign), signer: signature === 'verified' ? signer : null, signature,
         words: { state: 'reported', text: typeof m.words?.text === 'string' ? m.words.text : '' }, photo: m.photo === true,
         line: m.line === 'changed' || m.line === 'gone' ? m.line : 'same',
+        from: str(m.from), told: m.told === 'queued' || m.told === 'sent' || m.told === 'failed' ? m.told : null,
     };
 }
 

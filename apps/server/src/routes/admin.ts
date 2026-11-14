@@ -60,7 +60,7 @@ import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { logger } from '../logger.js';
 import { openReportedGroupLine } from '../engine/group-chat-report.js';
 import { openReportedDmLine } from '../engine/dm-line-report.js';
-import { openReportedOutsideLine } from '../engine/relay-complaint.js';
+import { openReportedComplaint, openReportedOutsideLine } from '../engine/relay-complaint.js';
 import { admitSuggestion, settleSuggestion, suggestionAuditSuffix } from '../agent/suggestions.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
@@ -2231,7 +2231,7 @@ router.get('/api/local/admin/reports', async (ctx) => {
  */
 router.get('/api/local/admin/reports/:id/message', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const message = openReportedDmLine(ctx.params.id) ?? openReportedOutsideLine(ctx.params.id) ?? await openReportedGroupLine(ctx.params.id);
+    const message = openReportedDmLine(ctx.params.id) ?? openReportedOutsideLine(ctx.params.id) ?? openReportedComplaint(ctx.params.id) ?? await openReportedGroupLine(ctx.params.id);
     if (!message) {
         ctx.status = 404;
         ctx.body = { success: false, error: 'This report does not name a message' };

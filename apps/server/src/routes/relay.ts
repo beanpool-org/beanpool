@@ -28,7 +28,9 @@ import { StorageNearlyFullError } from '../engine/photo-upload-budget.js';
 import type { NodeOrigin } from '../engine/node-signature.js';
 import { MAIL_FETCH_PAGE, confirmMail, heldBlobFor, heldMailFor, receiveRelayItems } from '../engine/relay-mail.js';
 import { OutboxError, outboxStatesFor, sendRelayItems } from '../engine/relay-outbox.js';
-import { checkOutsideLineReport, receiveComplaint, submitOutsideLineReport, tellHomeOf } from '../engine/relay-complaint.js';
+import { COMPLAINT_REPORTER_PREFIX, checkOutsideLineReport, readComplaintBody, receiveComplaint, submitOutsideLineReport, tellHomeOf } from '../engine/relay-complaint.js';
+import { noteNewReport } from '../services/alerts.js';
+import { logger } from '../logger.js';
 import { GroupLineReportError } from '../engine/group-chat-report.js';
 import { fileMessageReport } from './message-report.js';
 
@@ -149,10 +151,16 @@ export function createRelayRoutes(): Router {
             ctx.body = { error: 'This path takes only requests signed by a community\'s server.', code: 'node_signature_missing' };
             return;
         }
-        const answer = receiveComplaint(from.origin, from.key, (ctx.request as any).body);
+        const answer = receiveComplaint(from.origin, (ctx.request as any).body);
         ctx.status = answer.status;
         if ('retryAfterSec' in answer && answer.retryAfterSec) ctx.set('Retry-After', String(answer.retryAfterSec));
         ctx.body = answer.body;
+        // The owners and admins hear of it as of any report, by kind and count, never who or what (services/alerts.ts).
+        if (answer.filed) {
+            const reason = readComplaintBody((ctx.request as any).body)?.reason ?? 'other';
+            noteNewReport(reason === 'child safety' ? 'Child safety' : reason, `${COMPLAINT_REPORTER_PREFIX}${from.origin}`)
+                .catch((e) => logger.warn('SYS', `[Alerts] A complaint from another community could not be told: ${e instanceof Error ? e.message : String(e)}`));
+        }
     });
 
     return router;

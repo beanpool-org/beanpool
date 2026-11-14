@@ -22,8 +22,9 @@
  * tried again by the minute timer with the outbox's backoff for a day, its state kept beside the report (`told`).
  *
  * **At the sender's home** a complaint lands in Settings → Moderation beside the community's own reports, marked "from
- * another community": abuse_reports with the complaining server's key as its reporter (a server, never a person), the
- * member, the line's id, and `{"kind":"relay-complaint","from":<home>,...}` as its disclosure. It is answered 202 alike
+ * another community": abuse_reports with `community:<home>` as its reporter (a community, never a person), the member,
+ * the line's id, and `{"kind":"relay-complaint","from":<home>,...}` as its disclosure, which the reports queue never reads:
+ * the moderators open its words with the message (GET /api/local/admin/reports/:id/message, {@link openReportedComplaint}). It is answered 202 alike
  * whether it was filed or dropped (no line by that id went to that community, a key that is no member here, one on file
  * already, the owner's switch off), so no server learns from the answer who is a member here, nor whom they wrote. Refused:
  * a request that is not one (400 bad_complaint), and past COMPLAINTS_PER_ORIGIN_DAY from one server (429).
@@ -37,7 +38,7 @@ import {
     OUTSIDE_LINE_TEXT_MAX, type RelayEnvelope, type ReportKind,
 } from '@beanpool/core';
 import { db } from '../db/db.js';
-import { isNodeMember, readsAsMember } from '../state-engine.js';
+import { getNodeRole, isNodeMember, readsAsMember } from '../state-engine.js';
 import { addBlocks, BlockRefusal } from './member-blocks.js';
 import { isOwnNodeHome } from './node-key.js';
 import { GroupLineReportError, type GroupLineReport } from './group-chat-report.js';
@@ -50,8 +51,10 @@ export const RELAY_COMPLAINT_PATH = '/api/relay/complaint';
 /** What a report of an outside line keeps as its disclosure, and a complaint from another community as its. */
 export const OUTSIDE_LINE_DISCLOSURE_KIND = 'outside-line';
 export const RELAY_COMPLAINT_DISCLOSURE_KIND = 'relay-complaint';
-/** Complaints one server may bring in any 24 hours; past it, 429. */
+/** Complaints one community may bring in any 24 hours; past it, 429. */
 export const COMPLAINTS_PER_ORIGIN_DAY = 100;
+/** A complaint's reporter: the community it came from, `community:<home>`. Never a person; never a member key. */
+export const COMPLAINT_REPORTER_PREFIX = 'community:';
 const DAY_MS = 24 * 60 * 60_000;
 
 export const OUTSIDE_REPORT_FORM = 'A report of a message from another community hands over the item as it came and says why: { item: { envelope, payload }, reason, words }.';
@@ -206,9 +209,12 @@ export async function tellHomeOf(reportId: string): Promise<void> {
 
 let telling = false;
 
-/** The minute timer's turn (https-server.ts): complaints that are due are tried again. Counts in the log, never names. */
+/**
+ * The minute timer's turn (https-server.ts): complaints that are due are tried again. Counts in the log, never names. Never
+ * on a standby: its reports are a copy of the main server's, which tells their homes itself.
+ */
 export async function retryComplaints(now = Date.now()): Promise<number> {
-    if (telling || !outsideMessagesOn()) return 0;
+    if (telling || !outsideMessagesOn() || getNodeRole() === 'backup') return 0;
     telling = true;
     try {
         const rows = db.prepare(`SELECT id, target_pubkey, target_home, reason, disclosure, created_at FROM abuse_reports
@@ -229,9 +235,13 @@ export async function retryComplaints(now = Date.now()): Promise<number> {
 
 // ── A complaint from another community ──────────────────────────────────────────────────────
 
+/**
+ * What the route answers (`status`, `body`, `retryAfterSec`), and whether a report was filed (`filed`: the owners' notice,
+ * told by the route). `filed` is never in the answer: the body is the same whether it was filed or dropped.
+ */
 export type ComplaintAnswer =
-    | { status: 202; body: { received: true } }
-    | { status: 400 | 429; body: { error: string; code: string }; retryAfterSec?: number };
+    | { status: 202; body: { received: true }; filed: boolean }
+    | { status: 400 | 429; body: { error: string; code: string }; retryAfterSec?: number; filed?: false };
 
 /** A complaint's body read back in exactly its fields, or null. */
 export function readComplaintBody(json: unknown): ComplaintBody | null {
@@ -244,16 +254,18 @@ export function readComplaintBody(json: unknown): ComplaintBody | null {
 }
 
 /**
- * What this server makes of a complaint `origin` signed with `originKey` (the file header): filed, or dropped and answered
+ * What this server makes of a complaint the server of `origin` signed (the file header): filed, or dropped and answered
  * alike, or refused for its form or past the cap.
  */
-export function receiveComplaint(origin: string, originKey: string, body: unknown, now = Date.now()): ComplaintAnswer {
+export function receiveComplaint(origin: string, body: unknown, now = Date.now()): ComplaintAnswer {
     const c = readComplaintBody(body);
     if (!c) return { status: 400, body: { error: 'A complaint is { complaint: { v: 1, id, member, itemId, at, reason, words } }.', code: 'bad_complaint' } };
-    const received = { status: 202 as const, body: { received: true as const } };
+    const received = { status: 202 as const, body: { received: true as const }, filed: false };
     if (!outsideMessagesOn()) return received;
-    const fromOrigin = (db.prepare(`SELECT COUNT(*) AS n FROM abuse_reports WHERE json_extract(disclosure, '$.kind') = ? AND json_extract(disclosure, '$.from') = ?
-                                    AND created_at > ?`).get(RELAY_COMPLAINT_DISCLOSURE_KIND, origin, new Date(now - DAY_MS).toISOString()) as { n: number }).n;
+    // Counted by the community (its complaints' reporter, read on idx_abuse_reports_reporter), never from a disclosure.
+    const reporter = `${COMPLAINT_REPORTER_PREFIX}${origin}`;
+    const fromOrigin = (db.prepare(`SELECT COUNT(*) AS n FROM abuse_reports WHERE reporter_pubkey = ? AND created_at > ?`)
+        .get(reporter, new Date(now - DAY_MS).toISOString()) as { n: number }).n;
     if (fromOrigin >= COMPLAINTS_PER_ORIGIN_DAY) {
         return { status: 429, body: { error: word("This community isn't taking more complaints from there today."), code: 'rate_limited' }, retryAfterSec: 3_600 };
     }
@@ -261,32 +273,43 @@ export function receiveComplaint(origin: string, originKey: string, body: unknow
     const sent = db.prepare("SELECT 1 FROM relay_outbox WHERE sender_key = ? AND item_id = ? AND recipient_home = ? AND kind = 'dm-line'")
         .get(c.member, c.itemId, origin);
     if (!sent || !isNodeMember(c.member)) return received;
-    const onFile = db.prepare(`SELECT 1 FROM abuse_reports WHERE target_pubkey = ? AND target_message_id = ? AND json_extract(disclosure, '$.kind') = ?
-                               AND json_extract(disclosure, '$.from') = ?`).get(c.member, c.itemId, RELAY_COMPLAINT_DISCLOSURE_KIND, origin);
-    if (onFile) return received;
+    // One complaint a line from one community.
+    if (db.prepare('SELECT 1 FROM abuse_reports WHERE reporter_pubkey = ? AND target_message_id = ?').get(reporter, c.itemId)) return received;
     db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_message_id, disclosure, reason, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)`).run(crypto.randomUUID(), originKey, c.member, c.itemId,
+                VALUES (?, ?, ?, ?, ?, ?, ?)`).run(crypto.randomUUID(), reporter, c.member, c.itemId,
         JSON.stringify({ kind: RELAY_COMPLAINT_DISCLOSURE_KIND, v: 1, from: origin, complaintId: c.id, at: c.at, words: c.words }),
         c.reason === 'child safety' ? 'Child safety' : c.reason, new Date(now).toISOString());
     logger.info('SYS', `Complaints from other communities: 1 filed from ${origin}.`);
-    return received;
+    return { ...received, filed: true };
 }
 
 // ── What the moderators read ────────────────────────────────────────────────────────────────
 
-/** A complaint from another community, as the moderators' list shows it: where from, and the reporter's word. */
-export interface ComplaintFromAnotherCommunity { from: string; words: string; signedAt: string | null }
+/** A complaint from another community, as the moderators open it: where from, about whom, and its reporter's word. */
+export interface ReportedComplaint {
+    kind: 'complaint';
+    /** The line's id, as the member's own outbox names it. */
+    id: string;
+    from: string;
+    authorPubkey: string;
+    authorCallsign: string | null;
+    /** When the member signed the line, by their clock, as the complaint says. */
+    signedAt: string | null;
+    words: { state: 'reported'; text: string };
+}
 
-/** The complaint a report row holds, from its disclosure, or null for any other report. */
-export function complaintOfReport(disclosure: string | null): ComplaintFromAnotherCommunity | null {
-    if (!disclosure?.startsWith(`{"kind":"${RELAY_COMPLAINT_DISCLOSURE_KIND}"`)) return null;
-    try {
-        const d = JSON.parse(disclosure) as { from?: unknown; words?: unknown; at?: unknown };
-        if (typeof d.from !== 'string' || typeof d.words !== 'string') return null;
-        return { from: d.from, words: d.words, signedAt: Number.isSafeInteger(d.at) ? new Date(d.at as number).toISOString() : null };
-    } catch {
-        return null;
-    }
+export function openReportedComplaint(reportId: string): ReportedComplaint | null {
+    const row = db.prepare(`SELECT ar.target_pubkey, ar.target_message_id, ar.disclosure, m.callsign FROM abuse_reports ar
+                            LEFT JOIN members m ON m.public_key = ar.target_pubkey WHERE ar.id = ? AND ar.reporter_pubkey LIKE ?`)
+        .get(reportId, `${COMPLAINT_REPORTER_PREFIX}%`) as { target_pubkey: string; target_message_id: string | null; disclosure: string | null; callsign: string | null } | undefined;
+    if (!row?.disclosure || !row.target_message_id) return null;
+    let d: { kind?: unknown; from?: unknown; at?: unknown; words?: unknown };
+    try { d = JSON.parse(row.disclosure); } catch { return null; }
+    if (d.kind !== RELAY_COMPLAINT_DISCLOSURE_KIND || typeof d.from !== 'string' || typeof d.words !== 'string') return null;
+    return {
+        kind: 'complaint', id: row.target_message_id, from: d.from, authorPubkey: row.target_pubkey, authorCallsign: row.callsign ?? null,
+        signedAt: Number.isSafeInteger(d.at) ? new Date(d.at as number).toISOString() : null, words: { state: 'reported', text: d.words },
+    };
 }
 
 /** A reported outside line, as the moderators open it (GET /api/local/admin/reports/:id/message): signatures checked again. */

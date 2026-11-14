@@ -190,8 +190,8 @@ async function main(): Promise<void> {
     // ── 2. The moderators ─────────────────────────────────────────────────────────────────
     console.log('\n2. The moderators\' list here');
     const l2 = listed(reportId);
-    assert(l2?.targetHome === 'a.example' && l2.complaintTold === 'sent' && l2.directMessage && l2.groupMessage === null && l2.fromAnotherCommunity === null,
-        `2a. listed as a line from a.example, its complaint taken, opened as a direct message's (got ${JSON.stringify({ h: l2?.targetHome, t: l2?.complaintTold, d: l2?.directMessage, g: l2?.groupMessage })})`);
+    assert(l2?.targetHome === 'a.example' && l2.directMessage && l2.groupMessage === null && l2.fromAnotherCommunity === null,
+        `2a. listed as a line from a.example, opened as a direct message's (got ${JSON.stringify({ h: l2?.targetHome, d: l2?.directMessage, g: l2?.groupMessage })})`);
     const open2 = complaints.openReportedOutsideLine(reportId);
     assert(open2?.signature === 'verified' && open2.signer === ana.key && open2.from === 'a.example' && open2.words.text === 'Buy my miracle seeds now, today only'
         && open2.told === 'sent', `2b. opened, the sender's signatures checked again from what is stored: verified, Ana's, from a.example (got ${open2?.signature})`);
@@ -227,16 +227,17 @@ async function main(): Promise<void> {
     const r4 = await asMember(ben, '/api/mail/report', { item: base, reason: 'Offensive content', words: 'Another line' });
     otherUnreachable = false;
     const id4 = r4.body?.report?.id as string;
-    assert(r4.status === 200 && listed(id4)?.complaintTold === 'queued', `4a. the report is filed; its complaint waits (got ${r4.status} ${listed(id4)?.complaintTold})`);
+    const toldOf = (id: string) => complaints.openReportedOutsideLine(id)?.told;
+    assert(r4.status === 200 && toldOf(id4) === 'queued', `4a. the report is filed; its complaint waits (got ${r4.status} ${toldOf(id4)})`);
     const sentBefore4 = complaintsSent().length;
     await complaints.retryComplaints(Date.now());
     assert(complaintsSent().length === sentBefore4, '4b. not tried again before its wait is over');
     await complaints.retryComplaints(Date.now() + outbox.RETRY_BACKOFF_MS[0] + 1);
-    assert(complaintsSent().length === sentBefore4 + 1 && listed(id4)?.complaintTold === 'sent', `4c. tried again after a minute, and taken (got ${listed(id4)?.complaintTold})`);
+    assert(complaintsSent().length === sentBefore4 + 1 && toldOf(id4) === 'sent', `4c. tried again after a minute, and taken (got ${toldOf(id4)})`);
     otherAnswers = 400;
     const r4b = await asMember(ben, '/api/mail/report', { item: await line(ana, 'a.example', ben, 'b.example', 'Third'), reason: 'Other', words: 'Third' });
     otherAnswers = 202;
-    assert(listed(r4b.body?.report?.id)?.complaintTold === 'failed', '4d. a complaint a.example refuses as not one (400) is not tried again');
+    assert(toldOf(r4b.body?.report?.id) === 'failed', '4d. a complaint a.example refuses as not one (400) is not tried again');
 
     // ── 5. A complaint from a.example about Ben ───────────────────────────────────────────
     console.log('\n5. a.example complains about a line Ben sent Ana');
@@ -248,12 +249,14 @@ async function main(): Promise<void> {
     const r5 = await complain(complaint5);
     assert(r5.status === 202 && r5.text === '{"received":true}', `5b. answered 202 { received: true } (got ${r5.status} ${r5.text})`);
     const row5 = db.prepare("SELECT * FROM abuse_reports WHERE target_pubkey = ? AND json_extract(disclosure, '$.kind') = 'relay-complaint'").get(ben.key) as any;
-    assert(reportsCount() === before5 + 1 && row5?.reporter_pubkey === A.key && row5.target_message_id === benToAna.envelope.itemId && row5.target_home === null
-        && JSON.parse(row5.disclosure).from === 'a.example', '5c. filed: about Ben, the line by its id, from a.example, its reporter a.example\'s server key (a server, never a person)');
+    assert(reportsCount() === before5 + 1 && row5?.reporter_pubkey === 'community:a.example' && row5.target_message_id === benToAna.envelope.itemId && row5.target_home === null
+        && JSON.parse(row5.disclosure).from === 'a.example', '5c. filed: about Ben, the line by its id, its reporter the community a.example (community:a.example, never a person)');
     const l5 = listed(row5?.id);
-    assert(l5?.fromAnotherCommunity?.from === 'a.example' && l5.fromAnotherCommunity.words === 'Rude words for Ana' && l5.reporterCallsign === 'a.example'
-        && l5.targetPubkey === ben.key && l5.groupMessage === null && l5.directMessage === null,
-        `5d. Settings' list: from another community (a.example), its word for the line, about Ben (got ${JSON.stringify(l5?.fromAnotherCommunity)} / ${l5?.reporterCallsign})`);
+    assert(l5?.fromAnotherCommunity?.from === 'a.example' && l5.reporterCallsign === 'a.example' && l5.targetPubkey === ben.key && l5.groupMessage === null
+        && l5.directMessage === null, `5d. Settings' list: from another community (a.example), about Ben (got ${JSON.stringify(l5?.fromAnotherCommunity)} / ${l5?.reporterCallsign})`);
+    const open5 = complaints.openReportedComplaint(row5?.id);
+    assert(open5?.kind === 'complaint' && open5.from === 'a.example' && open5.words.text === 'Rude words for Ana' && open5.authorPubkey === ben.key
+        && open5.id === benToAna.envelope.itemId, `5f. the moderators open it: from a.example, its reporter's word, about Ben's line (got ${JSON.stringify(open5)?.slice(0, 120)})`);
     assert(r5.text === '{"received":true}', '5e. the answer says received, nothing of what was filed');
 
     // ── 6. Dropped, answered alike ────────────────────────────────────────────────────────
@@ -302,9 +305,9 @@ async function main(): Promise<void> {
     const memberSigned = await asMember(ben, '/api/relay/complaint', { complaint: complaint5 });
     assert(memberSigned.status === 401 && memberSigned.body?.code === 'node_signature_missing', `7c. a member's signature is no server's: refused (got ${memberSigned.status})`);
     const fill = db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_message_id, disclosure, reason, created_at) VALUES (?, ?, ?, ?, ?, 'other', ?)`);
-    const already = (db.prepare("SELECT COUNT(*) AS n FROM abuse_reports WHERE json_extract(disclosure, '$.from') = 'a.example'").get() as { n: number }).n;
+    const already = (db.prepare("SELECT COUNT(*) AS n FROM abuse_reports WHERE reporter_pubkey = 'community:a.example'").get() as { n: number }).n;
     for (let i = already; i < complaints.COMPLAINTS_PER_ORIGIN_DAY; i++) {
-        fill.run(crypto.randomUUID(), A.key, bea.key, crypto.randomUUID(), JSON.stringify({ kind: 'relay-complaint', v: 1, from: 'a.example', complaintId: crypto.randomUUID(), at: 1, words: '' }), new Date().toISOString());
+        fill.run(crypto.randomUUID(), 'community:a.example', bea.key, crypto.randomUUID(), JSON.stringify({ kind: 'relay-complaint', v: 1, from: 'a.example', complaintId: crypto.randomUUID(), at: 1, words: '' }), new Date().toISOString());
     }
     const over = await complain({ ...complaint5, id: crypto.randomUUID() });
     assert(over.status === 429 && over.body?.code === 'rate_limited', `7d. past ${complaints.COMPLAINTS_PER_ORIGIN_DAY} a day from one server: 429 (got ${over.status})`);
@@ -329,7 +332,8 @@ async function main(): Promise<void> {
     ];
     const anaPaths: Array<[string, string]> = [
         ['this server\'s answers to complaints', answersAlike.join('\n') + r5.text],
-        ['the moderators\' list', JSON.stringify(getReports('all').reports.filter((r: any) => r.fromAnotherCommunity))],
+        ['the moderators\' list, and each complaint opened', JSON.stringify(getReports('all').reports.filter((r: any) => r.fromAnotherCommunity)
+            .map((r: any) => ({ listed: r, opened: complaints.openReportedComplaint(r.id) })))],
         ['the stored complaints', JSON.stringify(db.prepare("SELECT * FROM abuse_reports WHERE json_extract(disclosure, '$.kind') = 'relay-complaint'").all())],
         ['every log line', logs.join('')],
         ['the owners\' notice', alerts],

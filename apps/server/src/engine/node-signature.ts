@@ -50,7 +50,7 @@ import { ssrfSafeFetch } from './pulse-resolver.js';
 import { logger } from '../logger.js';
 
 /** The paths only another community's server may call, each with its node signature (routes/node-key.ts, routes/relay.ts). */
-export const NODE_SIGNED_PATHS: ReadonlySet<string> = new Set<string>(['/api/node/check', '/api/relay/mail']);
+export const NODE_SIGNED_PATHS: ReadonlySet<string> = new Set<string>(['/api/node/check', '/api/relay/mail', '/api/relay/complaint']);
 
 /**
  * Whether `path` is one of NODE_SIGNED_PATHS, matched ignoring case and one trailing slash, as the router dispatches it:

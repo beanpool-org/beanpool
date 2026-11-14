@@ -7,6 +7,7 @@ import { BurstDigestCard, BurstPanel } from './BurstCleanup';
 import { RequestLimitsCard } from './RequestLimitsCard';
 import { ReportedGroupMessage } from './ReportedGroupMessage';
 import { ReportedDirectMessage } from './ReportedDirectMessage';
+import { ReportedComplaint } from './ReportedComplaint';
 import {
     REMOVAL_REASONS,
     actionNodeReport,
@@ -253,12 +254,18 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
                     </span>
                 )}
                 <span className="text-nature-400">
-                    Reported by {report.reporterCallsign || 'a member'}{report.createdAt ? ` · ${when(report.createdAt)}` : ''}
+                    {/* A complaint from another community names that community, never who reported (server: engine/relay-complaint.ts). */}
+                    {report.fromAnotherCommunity ? `From another community, ${report.fromAnotherCommunity.from}` : `Reported by ${report.reporterCallsign || 'a member'}`}
+                    {report.createdAt ? ` · ${when(report.createdAt)}` : ''}
                 </span>
             </div>
 
-            {report.directMessage ? (
-                // One direct message line: its sender's signature checked, its words the reporter's.
+            {report.fromAnotherCommunity ? (
+                // A complaint another community's server sent about a member here: never who reported.
+                <ReportedComplaint nodeUrl={nodeUrl} reportId={report.id} />
+            ) : report.directMessage ? (
+                // One direct message line: its sender's signature checked, its words the reporter's. A line from another community
+                // opens the same way, from what its reporter handed over, and says whether their community was told.
                 <ReportedDirectMessage nodeUrl={nodeUrl} reportId={report.id} />
             ) : report.targetMessageId ? (
                 // A locked group chat's message, reported with its key: opened here, verified, and nothing else of the chat.

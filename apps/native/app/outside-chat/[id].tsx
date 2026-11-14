@@ -16,7 +16,9 @@ import { OUTSIDE_LINE_TEXT_MAX, t } from '@beanpool/core';
 import { Alert } from '../../utils/keyboard-alert';
 import { useTheme, useStyles } from '../ThemeContext';
 import { blockUser } from '../../utils/blocklist';
-import { sendFromBox } from '../../utils/outside-mail';
+import { OutsideMailError, reportOutsideLine, sendFromBox } from '../../utils/outside-mail';
+import { reportedAlertBody } from '../../utils/reportReasons';
+import { ReportMessageSheet } from '../../components/ReportMessageSheet';
 import { OUTSIDE_CHATS_UPDATED, OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, syncOutsideMailNow } from '../../utils/outside-chat-live';
 import type { OutsideChat, OutsideLine, OutsideLineState } from '../../utils/outside-chat-store';
 
@@ -43,6 +45,9 @@ export default function OutsideChatScreen() {
     const [lines, setLines] = useState<OutsideLine[]>([]);
     const [text, setText] = useState('');
     const [busy, setBusy] = useState(false);
+    // A line of theirs being reported (X5): the sheet asks why; the server blocks them and tells their community.
+    const [reporting, setReporting] = useState<OutsideLine | null>(null);
+    const [picked, setPicked] = useState<string | null>(null);
     const listRef = useRef<FlatList<OutsideLine>>(null);
 
     const load = useCallback(async () => {
@@ -110,6 +115,22 @@ export default function OutsideChatScreen() {
         ]);
     };
 
+    // Report on a line from another community always blocks its sender (the sheet says so). The line goes to my community's
+    // moderators with its sender's signatures; their community is told, never who reported. The sheet stays until OK.
+    const submitReport = async (reason: string) => {
+        const ctx = await outsideContext();
+        if (!reporting || !chat || !ctx) return;
+        try {
+            await reportOutsideLine(ctx, reporting.id, reason);
+            await blockUser(chat.peerKey).catch(() => false);
+            await ctx.store.decide(ctx.identity.publicKey, chat.id, 'declined');
+            Alert.alert(t('Reported'), reportedAlertBody(undefined, reason), [{ text: t('OK'), onPress: () => { setReporting(null); router.back(); } }]);
+        } catch (e) {
+            Alert.alert(e instanceof OutsideMailError && e.message && !/^HTTP \d+$/.test(e.message) ? e.message : t('That did not go through. Please try again.'));
+            throw e; // the sheet keeps the choice and the words
+        }
+    };
+
     const styles = useStyles(({ colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.page },
         container: { flex: 1 },
@@ -136,6 +157,7 @@ export default function OutsideChatScreen() {
         plain: { flex: 1, minWidth: 80, minHeight: 44, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
         plainText: { color: colors.text.body, fontWeight: '700', fontSize: 14 },
         danger: { color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 14 },
+        reportLine: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 4, alignSelf: 'flex-start' },
         composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 8, borderTopWidth: 1, borderTopColor: colors.border.default },
         input: { flex: 1, minHeight: 44, maxHeight: 140, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: colors.text.body, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default },
         sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent.fill },
@@ -188,9 +210,19 @@ export default function OutsideChatScreen() {
                         )}
                         renderItem={({ item }) => {
                             if (item.author !== me) {
+                                // Tap a line of theirs for Report message under it, as in a chat here; the words stay selectable.
                                 return (
-                                    <View style={[styles.bubble, styles.theirs]} accessibilityLabel={item.text}>
-                                        <Text style={styles.theirsText} selectable>{item.text}</Text>
+                                    <View>
+                                        <Pressable style={[styles.bubble, styles.theirs]} accessibilityLabel={item.text} testID="outside-line-theirs"
+                                            onPress={() => setPicked((p) => (p === item.id ? null : item.id))}>
+                                            <Text style={styles.theirsText} selectable>{item.text}</Text>
+                                        </Pressable>
+                                        {picked === item.id && (
+                                            <Pressable style={styles.reportLine} onPress={() => setReporting(item)} accessibilityRole="button" testID="outside-line-report">
+                                                <MaterialCommunityIcons name="flag-outline" size={16} color={colors.feedback.danger.fg} />
+                                                <Text style={styles.danger}>{t('Report message')}</Text>
+                                            </Pressable>
+                                        )}
                                     </View>
                                 );
                             }
@@ -243,6 +275,7 @@ export default function OutsideChatScreen() {
                     </View>
                 ) : null}
             </KeyboardAvoidingView>
+            <ReportMessageSheet isOpen={!!reporting} photo={false} blocks onSubmit={submitReport} onClose={() => setReporting(null)} />
         </SafeAreaView>
     );
 }

@@ -161,6 +161,7 @@ import { createNodeKeyRoutes } from './routes/node-key.js';
 import { createRelayRoutes } from './routes/relay.js';
 import { sweepRelayMail } from './engine/relay-mail.js';
 import { retryRelayOutbox, sweepRelayOutbox } from './engine/relay-outbox.js';
+import { retryComplaints } from './engine/relay-complaint.js';
 import { isNodeSignedPath, pruneNodeRequestNonces, requireNodeSignature } from './engine/node-signature.js';
 import { createInviteAskRoutes } from './routes/invite-asks.js';
 import { createKnowledgeRoutes } from './routes/knowledge.js';
@@ -1606,6 +1607,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         // The mailbox between communities: due forwards tried again, old mail, ids and outbox rows settled or gone.
         try { sweepRelayMail(now); sweepRelayOutbox(now); } catch (e: any) { console.warn('[Mail] The mailbox sweep failed:', e?.message || e); }
         retryRelayOutbox(now).catch((e: any) => console.warn('[Mail] Forwarding the waiting mail failed:', e?.message || e));
+        retryComplaints(now).catch((e: any) => console.warn('[Mail] Telling other communities of reports failed:', e?.message || e));
     }, 60 * 1000);
     if (rateLimitCleaner.unref) rateLimitCleaner.unref();
     // The open door's sign-up limiter keeps hashed addresses in the database, not in memory: they are cleared once

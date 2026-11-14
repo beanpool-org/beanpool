@@ -144,6 +144,11 @@ export function outsideChatStore(getDb: () => Promise<SqliteLike>) {
         async lines(chatId: string): Promise<OutsideLine[]> {
             return (await (await db()).getAllAsync<any>('SELECT * FROM outside_lines WHERE chat_id = ? ORDER BY at ASC, id ASC', [chatId])).map(rowToLine);
         },
+        /** A line of theirs as it came (its sender's signed envelope and sealed line) and its words: what a report hands over. */
+        async kept(id: string): Promise<{ sealed: string; text: string } | null> {
+            const r = await (await db()).getFirstAsync<{ sealed: string; text: string }>('SELECT sealed, text FROM outside_lines WHERE id = ? AND sealed IS NOT NULL', [id]);
+            return r ? { sealed: r.sealed, text: r.text } : null;
+        },
         async hasLine(id: string): Promise<boolean> {
             return !!(await (await db()).getFirstAsync<any>('SELECT 1 AS x FROM outside_lines WHERE id = ?', [id]));
         },

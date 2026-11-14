@@ -35,6 +35,8 @@ const readReceiptPayloadForTests = (payload: string): string[] | null => {
 };
 
 const server = vi.hoisted(() => ({
+    /** What each report of an outside line handed my server (X5). */
+    reports: [] as any[],
     held: [] as any[],
     outbox: [] as any[],
     calls: [] as string[],
@@ -116,6 +118,9 @@ vi.mock('../node-post', () => ({
             }
             server.sent.push(...body.items);
             answer = new Response(JSON.stringify({ items: body.items.map((i: RelayItem) => ({ itemId: i.envelope.itemId, state: server.sendState })) }), { status: 200 });
+        } else if (path === '/api/mail/report') {
+            server.reports.push(body);
+            answer = new Response(JSON.stringify({ success: true, report: { id: 'r-1' } }), { status: 200 });
         } else {
             return new Response('{}', { status: 404 });
         }
@@ -136,7 +141,7 @@ vi.mock('../member-statements', async () => {
 });
 
 import { outsideChatStore, gateIncoming, OUTSIDE_CHAT_TABLES_SQL, type OutsideChatState } from '../outside-chat-store';
-import { failUnsent, myHome, syncOutsideMail, sendFromBox, sendOutsideLine, setDoor, type OutsideMailContext } from '../outside-mail';
+import { failUnsent, myHome, reportOutsideLine, syncOutsideMail, sendFromBox, sendOutsideLine, setDoor, OutsideMailError, type OutsideMailContext } from '../outside-mail';
 
 const seedKey = () => { const seed = randomBytes(32); return { seed: bytesToHex(seed), key: bytesToHex(ed25519.getPublicKey(seed)) }; };
 const BEN = seedKey(), ANA = seedKey(), SOL = seedKey(), CY = seedKey();
@@ -160,7 +165,7 @@ let sql: DatabaseSync;
 let blocked: Set<string>;
 
 beforeEach(async () => {
-    server.held = []; server.outbox = []; server.calls = []; server.sent = []; server.confirmed = []; server.sendFails = false; server.sendState = 'sent';
+    server.reports = []; server.held = []; server.outbox = []; server.calls = []; server.sent = []; server.confirmed = []; server.sendFails = false; server.sendState = 'sent';
     server.batches = []; server.refuse = null; server.signals = []; server.stallGet = false; server.stallSend = false;
     server.stop = null; server.seen = { confirm: 0, receipt: 0 }; server.stopped = false; server.deadline = null; server.receiptTries = [];
     const s = sqlStore();
@@ -696,5 +701,28 @@ describe('13  typed words are never lost on a failed send (PR #3168 review note)
         expect(card).toMatch(/sendFromBox\(/);
         expect(card).not.toMatch(/\bsetFirst\(\s*(''|""|\()/);
         expect(card).toMatch(/if \(kept\) router\.replace\(/);
+    });
+});
+
+describe('X5  report a line from another community', () => {
+    it('hands my server the line exactly as it came, its words and the reason, and nothing else', async () => {
+        await ctx.store.openChat(BEN.key, relayConversationId(BEN.key, ANA.key), { key: ANA.key, home: ANA_HOME, name: 'Ana' });
+        const item = await heldLine(ANA, 'Buy my miracle seeds');
+        await syncOutsideMail(ctx);
+        await reportOutsideLine(ctx, item.envelope.itemId, 'Spam or scam');
+        expect(server.reports).toHaveLength(1);
+        const sent = server.reports[0];
+        expect(Object.keys(sent).sort()).toEqual(['item', 'reason', 'words']);
+        expect(sent.item).toEqual({ envelope: item.envelope, payload: item.payload });
+        expect(sent).toMatchObject({ reason: 'Spam or scam', words: 'Buy my miracle seeds' });
+    });
+
+    it('a line of mine, or one not on this phone, is never sent as a report', async () => {
+        await ctx.store.openChat(BEN.key, relayConversationId(BEN.key, ANA.key), { key: ANA.key, home: ANA_HOME, name: 'Ana' });
+        await sendOutsideLine(ctx, relayConversationId(BEN.key, ANA.key), 'Mine');
+        const mine = lineRows().find((r) => r.text === 'Mine');
+        await expect(reportOutsideLine(ctx, mine.id, 'Other')).rejects.toBeInstanceOf(OutsideMailError);
+        await expect(reportOutsideLine(ctx, uuid(), 'Other')).rejects.toBeInstanceOf(OutsideMailError);
+        expect(server.reports).toHaveLength(0);
     });
 });

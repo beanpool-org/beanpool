@@ -110,6 +110,20 @@ export function __useRelayTransportForTests(fetch: Transport | null): void {
     transport = fetch ?? postOverTls;
 }
 
+/**
+ * One request this server signs to another community's server (a complaint: engine/relay-complaint.ts), through the same
+ * transport as the forwards (and the suites' hook): its status, 0 when it could not be reached.
+ */
+export async function forwardSigned(url: string, body: string): Promise<number> {
+    try {
+        const headers = await ownNodeRequestHeaders({ method: 'POST', url, body });
+        return (await transport(url, { headers, body })).status;
+    } catch (e) {
+        logger.warn('SYS', `A request to another community's server could not be made (${e instanceof Error ? e.message.slice(0, 120) : String(e)}).`);
+        return 0;
+    }
+}
+
 interface OutboxRow {
     sender_key: string;
     item_id: string;

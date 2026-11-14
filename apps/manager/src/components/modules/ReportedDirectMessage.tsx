@@ -85,7 +85,16 @@ export function ReportedDirectMessage({ nodeUrl, reportId, credential }: {
                         two people can read it.
                     </p>
                     {message.photo && <p className="text-xs text-nature-400 m-0">It had a photo, which stays sealed.</p>}
-                    {lineNow && <p className="text-xs text-nature-400 m-0">{lineNow}</p>}
+                    {message.from ? (
+                        // A line from another community (server: engine/relay-complaint.ts): no server keeps it, and only its own
+                        // community can act on its sender.
+                        <p className="text-xs text-nature-400 m-0" data-testid="report-outside-line">
+                            {`It came from another community, ${message.from}. Its sender is blocked for the member who reported it. `}
+                            {message.told === 'sent' ? 'Their community has been told, without who reported it.'
+                                : message.told === 'failed' ? "Their community's server didn't take the complaint."
+                                : 'Their community is being told, without who reported it.'}
+                        </p>
+                    ) : lineNow && <p className="text-xs text-nature-400 m-0">{lineNow}</p>}
                 </div>
             )}
             <p className="text-xs text-nature-400 m-0">

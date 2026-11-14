@@ -127,6 +127,12 @@ L'écran 1 de l'inscription dans un navigateur indique la même chose dans l'aut
 - Le téléphone affiche alors **quatre chiffres**. Saisissez-les sur l'ordinateur et appuyez sur **Confirmer**. Votre compte n'est transféré sur l'ordinateur qu'après cela. Après trois tentatives incorrectes, rien n'est envoyé : générez un nouveau code. Ne lisez jamais ces chiffres à voix haute et ne les envoyez à personne.
 - Si le téléphone indique que son application est trop ancienne, mettez à jour l'application BeanPool sur celui-ci, puis scannez un nouveau code.
 
+## Notifications
+
+L'application web peut vous dire ce qui s'est passé, comme le téléphone : les mêmes alertes, avec les mêmes interrupteurs. Activez-les dans les **Paramètres**, puis **Notifications**, sur la première ligne, **Sur cet appareil**. Votre navigateur vous demande d'abord, à ce toucher. Le navigateur d'un ordinateur est prévenu tant qu'il est ouvert, Safari sur un Mac et le navigateur d'un téléphone même fermé, et un iPhone seulement depuis l'écran d'accueil. Quand un navigateur ne peut pas être prévenu, la cloche en haut liste toujours ce qui s'est passé, et sur le navigateur d'un téléphone **Obtenir l'application** vient en premier. Voir « Notifications ».
+
+Vous avez demandé à une autre communauté de vous accueillir, depuis la carte **Trouver votre communauté** de l'**Accueil** ? Sa carte d'attente propose **M'avertir quand ils répondent**, et cette communauté prévient elle-même ce navigateur de sa réponse. Toucher la notification, ou **🎉 {name} a dit oui.** dans la cloche, ouvre l'**Accueil** sur cette communauté, avec **Rejoindre**. Voir « Trouver une communauté près de chez vous ».
+
 ## Installer l'application web
 
 L'application web peut proposer **Installer BeanPool** pour s'ouvrir depuis votre écran d'accueil comme une application. Si votre navigateur ne peut pas le faire, touchez **Comment ?** pour les étapes.

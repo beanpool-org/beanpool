@@ -33,6 +33,8 @@ import { onConversationRead } from '../lib/conversation-read';
 import { onSyncActivity } from '../lib/sync';
 import { useDialogFocus } from './dialog-focus';
 import * as api from '../lib/api';
+import { markYesSeen, yesMark } from '../lib/knock';
+import { YES_BELL_EVENT, landOnKnockRow, unseenYeses, type YesRow } from '../lib/yes-bell';
 
 const NODE_MIN_GAP_MS = 15_000;
 const SAFETY_POLL_MS = 120_000;
@@ -226,6 +228,8 @@ export function NeedsYouIcons({
 }) {
     const [entries, setEntries] = useState<NeedsItem[]>([]);
     const [notices, setNotices] = useState<BellNotice[]>([]);
+    // A yes from a community this member asked from here (global yes Y3, lib/yes-bell.ts): made by this app, never the node's.
+    const [yeses, setYeses] = useState<YesRow[]>([]);
     const [sheet, setSheet] = useState(false);
     // The header's slot: the element (a callback ref, so the effects below measure whichever is mounted), its width as laid
     // out (null until measured: with no ResizeObserver, as in jsdom, everything is drawn), and on the map how far it may
@@ -504,6 +508,13 @@ export function NeedsYouIcons({
         };
     }, [slot, besideLogo]);
 
+    // The yeses this app made rows for (global yes Y3): read again whenever one is kept or seen.
+    useEffect(() => {
+        const read = () => setYeses(identityPubkey ? unseenYeses(identityPubkey) : []);
+        read();
+        window.addEventListener(YES_BELL_EVENT, read);
+        return () => window.removeEventListener(YES_BELL_EVENT, read);
+    }, [identityPubkey]);
     if (!identityPubkey) return null;
 
     const isSidebar = variant === 'sidebar';
@@ -527,10 +538,15 @@ export function NeedsYouIcons({
     };
     // "Clear all": every notice (never "Needs you": those are the `entries`, which leave when they are done), in one request.
     const clearAll = () => {
+        yeses.forEach(seeYes);
+        // Only the app's own yes rows: nothing for the node to clear.
+        if (notices.length === 0) return;
         setNotices([]);
         api.clearAllBellNotices().catch(() => { refreshBell(); });
     };
-    const unseen = notices.length;
+    // A yes's row tapped (Home, on its row) or cleared: seen, as the banner's Join marks it.
+    const seeYes = (y: YesRow) => { if (identityPubkey) markYesSeen(identityPubkey, yesMark(y.url, y.invite)); };
+    const unseen = notices.length + yeses.length;
     // The payee's line of a short standing deal is listed, not counted (core needsYouCounts).
     const counted = entries.filter((e) => e.kind === 'learn' || needsYouCounts(e as { kind: NeedsYouKind; accent: boolean })).length;
     const label = bellLabel(unseen, counted);
@@ -568,6 +584,9 @@ export function NeedsYouIcons({
     );
     const sheetEl = sheet && (
         <NeedsSheet
+            yeses={yeses}
+            onPickYes={(y) => { seeYes(y); landOnKnockRow(y.url); }}
+            onClearYes={seeYes}
             entries={entries}
             notices={notices}
             onClose={() => setSheet(false)}
@@ -633,7 +652,14 @@ function NeedsSheet({
     onOpenNotice,
     onClearNotice,
     onClearAll,
+    yeses = [],
+    onPickYes,
+    onClearYes,
 }: {
+    /** The yeses this app made rows for (global yes Y3): a tap lands on Home's row; ✕ marks it seen. */
+    yeses?: YesRow[];
+    onPickYes?: (yes: YesRow) => void;
+    onClearYes?: (yes: YesRow) => void;
     entries: NeedsItem[];
     notices: BellNotice[];
     onClose: () => void;
@@ -800,10 +826,10 @@ function NeedsSheet({
                             ))}
                         </div>
                     )}
-                    {notices.length === 0 && entries.length === 0 && (
+                    {notices.length === 0 && entries.length === 0 && yeses.length === 0 && (
                         <p data-testid="needs-sheet-empty" className="px-2 py-4 text-sm text-text-secondary text-center">{t('Nothing new.')}</p>
                     )}
-                    {notices.length > 0 && (
+                    {(notices.length > 0 || yeses.length > 0) && (
                         <div className="flex justify-end">
                             <button
                                 type="button"
@@ -818,6 +844,41 @@ function NeedsSheet({
                             </button>
                         </div>
                     )}
+                    {yeses.map((y) => (
+                        <div key={`${y.url} ${y.invite}`} data-testid="bell-yes-row" className="flex items-start gap-1">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    onClose();
+                                    onPickYes?.(y);
+                                }}
+                                data-testid="bell-yes"
+                                data-url={y.url}
+                                className="flex-1 min-w-0 flex items-start gap-3 py-2.5 px-2 rounded-lg hover:bg-bg-hover text-left transition-colors cursor-pointer min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
+                            >
+                                <span className="mt-1.5 w-2 h-2 rounded-full shrink-0 bg-bp-danger-fill" aria-hidden="true" />
+                                <span className="flex-1 min-w-0">
+                                    <span dir="auto" className="block text-sm font-bold text-text-primary line-clamp-2 break-words">{t('🎉 {name} said yes.', { name: y.name })}</span>
+                                    <span className="block text-xs text-text-secondary">{timeAgo(Math.max(0, now - y.at))}</span>
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    onClearYes?.(y);
+                                    focusSheetTitle();
+                                }}
+                                aria-label={clearWords.one}
+                                title={clearWords.one}
+                                data-testid="bell-yes-clear"
+                                className="shrink-0 w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full text-text-muted hover:text-text-primary hover:bg-bg-hover cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
+                            >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    ))}
                     {notices.map((n) => (
                         <div key={n.id} data-testid="bell-notice-row" className="flex items-start gap-1">
                             <button

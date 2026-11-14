@@ -52,6 +52,16 @@ La scheda dice **Un membro ti ha invitato**. Tocca **Partecipa** con il nome del
 
 Rimani membro della comunità globale e puoi passare dall'una all'altra: vedi "Più di una comunità".
 
+## Nell'app web
+
+Puoi chiedere anche dalla scheda **Trova la tua comunità** nella **Home** dell'app web, e aspettare lì.
+
+- Mentre aspetti, la scheda di attesa ha **Avvisami quando rispondono**. Tocca **Avvisami**, e il tuo browser te lo chiede prima; poi **Ti avviseremo qui quando {name} risponderà.** La comunità a cui hai chiesto avvisa da sola questo browser, anche con la pagina chiusa, e nient'altro. La comunità in cui sei non conserva nulla della tua richiesta.
+- Su un iPhone funziona solo dalla schermata Home, e la scheda spiega come. Dove un browser non può essere avvisato, la scheda lo dice, con **Scarica l'app** per prima su un telefono; la Home controlla comunque la risposta ogni pochi minuti finché è aperta.
+- Toccare la notifica apre la **Home** su quella comunità nella scheda, con **Partecipa** e il suo nome. Una notifica che non viene da quella comunità non apre nulla e lo dice.
+- La campanella in alto mostra anche **🎉 {name} ha accettato.**, finché non la tocchi o non tocchi **Partecipa**. Toccarla apre lo stesso posto.
+- **Partecipa** apre la pagina della comunità in questo browser e porta con sé il tuo account: le stesse 12 parole. Quando la tua richiesta ha avuto risposta ed è stata usata, è annullata o non è più aperta, questo browser non viene più avvisato.
+
 ## Nulla vicino a te
 
 - **Avvisami quando ne nasce una qui:** ricevi una notifica quando nasce una comunità vicino a dove ti trovi. Viene conservata solo la zona, con un raggio di circa 10 km, mai la tua posizione esatta. Puoi monitorare fino a 3 luoghi e smettere di monitorarne uno con **Ferma**.

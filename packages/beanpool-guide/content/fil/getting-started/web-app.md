@@ -127,6 +127,12 @@ Sinasabi ng Screen 1 ng pagsali sa browser ang parehong bagay sa kabilang paraan
 - Pagkatapos ay nagpapakita ang telepono ng **apat na digit**. Itipa ang mga ito sa computer at pindutin ang **Kumpirmahin**. Pupunta lamang ang iyong account sa computer pagkatapos niyon. Tatlong maling pagsubok at walang maipapadala: gumawa ng bagong code. Huwag kailanman basahin nang malakas ang mga digit o ipadala ang mga ito kaninuman.
 - Kung sinasabi ng telepono na masyadong luma ang app nito, i-update ang BeanPool app dito, pagkatapos ay mag-scan ng bagong code.
 
+## Mga Notification
+
+Masasabi sa iyo ng web app kung ano ang nangyari, tulad ng telepono: ang parehong mga alerto, sa ilalim ng parehong mga switch. I-on ang mga ito sa **Mga Setting**, pagkatapos ay **Mga Notification**, sa unang hilera, **Sa device na ito**. Tatanungin ka muna ng browser mo, sa pag-tap na iyon. Nasasabihan ang browser ng computer habang tumatakbo ito, ang Safari sa Mac at ang browser ng telepono kahit nakasara, at ang iPhone ay mula lang sa Home Screen. Kung hindi masasabihan ang isang browser, inililista pa rin ng kampana sa itaas ang nangyari, at sa browser ng telepono ay nauuna ang **Kunin ang app**. Tingnan ang "Mga Notipikasyon".
+
+Humiling sa ibang komunidad na papasukin ka, mula sa card na **Hanapin ang komunidad mo** sa **Home**? May **Sabihin sa akin kapag sumagot sila** ang card ng paghihintay nito, at mismong ang komunidad na iyon ang nagsasabi sa browser na ito ng sagot nito. Ang pag-tap sa notification, o sa **🎉 Pumayag ang {name}.** sa kampana, ay nagbubukas ng **Home** sa komunidad na iyon, na may **Sumali**. Tingnan ang "Paghahanap ng kalapit na komunidad".
+
 ## Pag-install nito
 
 Maaaring mag-alok ang web app ng **I-install ang BeanPool** upang magbukas ito mula sa iyong home screen tulad ng isang app. Kung hindi magawa iyon ng iyong browser, i-tap ang **Paano?** para sa mga hakbang.

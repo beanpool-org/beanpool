@@ -127,6 +127,12 @@ La pantalla 1 para unirse en un navegador dice lo mismo a la inversa: si ya est�
 - El teléfono muestra entonces **cuatro dígitos**. Escríbelos en la computadora y presiona **Confirmar**. Tu cuenta pasa a la computadora solo después de eso. Tres intentos erróneos y no se envía nada: genera un nuevo código. Nunca leas los dígitos en voz alta ni se los envíes a nadie.
 - Si el teléfono dice que su app es demasiado antigua, actualiza la app BeanPool en él y luego escanea un código nuevo.
 
+## Notificaciones
+
+La app web puede avisarte de lo que pasó, como el teléfono: las mismas alertas, con los mismos interruptores. Actívalas en **Configuración**, luego **Notificaciones**, en la primera fila, **En este dispositivo**. Tu navegador te pregunta primero, al tocar. El navegador de una computadora recibe avisos mientras está abierto, Safari en un Mac y el navegador de un teléfono incluso cerrado, y un iPhone solo desde la pantalla de inicio. Cuando no se puede avisar a un navegador, la campana de arriba sigue listando lo que pasó, y en el navegador de un teléfono **Obtén la app** va primero. Consulta "Notificaciones".
+
+¿Pediste a otra comunidad que te deje entrar, desde la tarjeta **Encuentra tu comunidad** en **Inicio**? Su tarjeta de espera tiene **Avísame cuando respondan**, y esa comunidad avisa a este navegador de su respuesta por sí misma. Al tocar la notificación, o **🎉 {name} dijo que sí.** en la campana, se abre **Inicio** en esa comunidad, con **Unirse**. Consulta "Buscar una comunidad cerca".
+
 ## Instalar la app
 
 La app web puede ofrecer **Instalar BeanPool** para abrirse desde tu pantalla de inicio como una app. Si tu navegador no puede hacer eso, toca **¿Cómo?** para ver los pasos.

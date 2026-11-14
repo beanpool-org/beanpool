@@ -519,8 +519,9 @@ export const HOME_READ_EXACT: ReadonlySet<string> = new Set<string>([
 const ALLOWED_REQUEST_HEADERS = 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for, x-language';
 
 /**
- * The three calls an applicant's web app makes to a community it asks to join: the knock itself (front doors S2), how the
- * request fares, and "Cancel my request" (Lounge L1). The web app runs on its own node, never the community's, so each is
+ * The calls an applicant's web app makes to a community it asks to join: the knock itself (front doors S2), how the
+ * request fares, "Cancel my request" (Lounge L1), and being told of the answer (global yes Y2: the web push key and
+ * subscription). The web app runs on its own node, never the community's, so each is
  * cross-origin; none carries a cookie or a credential (the signature is in the headers, bound to this host, and the node
  * answers only for the signer), so any origin may make them, as any app with a key already can. Each is open for its own
  * method and the signature's headers alone: nothing else under /api/join is (the members' list and its answers stay closed).
@@ -529,6 +530,12 @@ const SIGNED_KNOCK_CORS: ReadonlyMap<string, string> = new Map([
     ['/api/join/knock', 'POST, OPTIONS'],
     ['/api/join/knock/status', 'GET, OPTIONS'],
     ['/api/join/knock/cancel', 'POST, OPTIONS'],
+    // "Tell me when they answer" from the web app the asker holds their account on (DESIGN-global-yes-join-fable.md §2.4,
+    // slice Y2): that page's worker subscribes with this node's web push key, read here, and gives this node the browser's
+    // subscription, signed by the asking key (routes/web-push.ts: a member or a key with an open request; anyone else 403),
+    // and takes it back. The same rule as the three above: the signature, no cookie, the node answers only for the signer.
+    ['/api/web-push', 'POST, DELETE, OPTIONS'],
+    ['/api/web-push/key', 'GET, OPTIONS'],
 ]);
 const SIGNED_KNOCK_HEADERS = 'Content-Type, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for, x-language';
 

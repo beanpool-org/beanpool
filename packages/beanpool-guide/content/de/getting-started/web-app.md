@@ -127,6 +127,12 @@ Bildschirm 1 des Beitritts in einem Browser besagt dasselbe umgekehrt: Wenn du B
 - Das Smartphone zeigt daraufhin **vier Ziffern** an. Gib diese auf dem Computer ein und drücke auf **Bestätigen**. Dein Konto gelangt erst danach auf den Computer. Drei falsche Versuche und es wird nichts gesendet: Erstelle einen neuen Code. Lies die Ziffern niemals laut vor und sende sie niemandem.
 - Wenn das Smartphone meldet, dass seine App zu alt ist, aktualisiere die BeanPool-App darauf und scanne dann einen neuen Code.
 
+## Benachrichtigungen
+
+Die Web-App kann dir sagen, was passiert ist, wie das Smartphone: dieselben Hinweise, mit denselben Schaltern. Schalte sie in den **Einstellungen** ein, dann **Benachrichtigungen**, in der ersten Zeile, **Auf diesem Gerät**. Dein Browser fragt dich zuerst, bei diesem Tippen. Der Browser eines Computers wird benachrichtigt, solange er läuft, Safari auf einem Mac und der Browser eines Smartphones auch geschlossen, und ein iPhone nur vom Home-Bildschirm aus. Wo ein Browser nicht benachrichtigt werden kann, listet die Glocke oben trotzdem, was passiert ist, und im Browser eines Smartphones steht **App herunterladen** an erster Stelle. Siehe „Benachrichtigungen“.
+
+Hast du eine andere Community gebeten, dich aufzunehmen, über die Karte **Finde deine Community** auf der **Startseite**? Deren Wartekarte hat **Benachrichtige mich, wenn sie antworten**, und diese Community teilt diesem Browser ihre Antwort selbst mit. Tippst du auf die Benachrichtigung oder auf **🎉 {name} hat zugestimmt.** in der Glocke, öffnet sich die **Startseite** bei dieser Community, mit **Teilnehmen**. Siehe „Community in deiner Nähe finden“.
+
 ## Installieren
 
 Die Web-App bietet möglicherweise **BeanPool installieren** an, sodass sie sich wie eine App von deinem Startbildschirm aus öffnet. Wenn dein Browser dies nicht unterstützt, tippe auf **Wie?** für die Schritte.

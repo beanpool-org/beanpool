@@ -12,7 +12,7 @@ source-hash: 5a1feb7390e4c3fb
 - **Có lời mời**, bạn tham gia một cộng đồng: những người ở gần bạn, với Đậu, giao dịch và Commons riêng của cộng đồng đó. Một thành viên của cộng đồng đó sẽ mời bạn.
 - **Không có lời mời**, bạn có thể tham gia **cộng đồng toàn cầu** khi mở: mọi người từ khắp nơi, nơi bạn có thể đăng bài, nhắn tin cho mọi người và tìm một cộng đồng gần bạn. Ở đó không có Đậu và không có các cuộc bỏ phiếu cộng đồng. Đậu, tín dụng, Commons và các Quyết định của nó thuộc về các cộng đồng địa phương. Cộng đồng toàn cầu sẽ chỉ cho bạn cách chúng hoạt động, trong một cộng đồng mẫu. Xem "Đậu và cộng đồng toàn cầu".
 
-Không có lời mời, nhưng có một cộng đồng ở gần bạn? Hãy tham gia cộng đồng toàn cầu, sau đó xin cộng đồng đó cho bạn vào: bất kỳ thành viên nào của cộng đồng đó cũng có thể duyệt, hoặc trong cộng đồng mà chỉ quản trị viên mới được mời thì do các quản trị viên duyệt. Xem "Tìm một cộng đồng gần bạn".
+Không có lời mời, nhưng có một cộng đồng ở gần bạn? Hãy tham gia cộng đồng toàn cầu, sau đó xin cộng đồng đó cho bạn vào: bất kỳ thành viên nào của cộng đồng đó cũng có thể duyệt, hoặc trong cộng đồng mà chỉ quản trị viên mới được mời thì do các quản trị viên duyệt. Đã là thành viên ở nơi khác, và xin từ **Trang chủ** của ứng dụng web? Thẻ chờ của nó cũng có **Cho tôi biết khi họ trả lời**, và một câu đồng ý sẽ hiện trong chuông. Xem "Tìm một cộng đồng gần bạn".
 
 Dù bằng cách nào, tài khoản của bạn là một chiếc khóa được lưu trên điện thoại, với 12 từ tiếng Anh giúp lấy lại tài khoản. Không có mật khẩu.
 

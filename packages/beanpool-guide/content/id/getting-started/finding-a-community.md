@@ -52,6 +52,16 @@ Kartu bertuliskan **A member invited you**. Ketuk **Gabung** bersama nama komuni
 
 Kamu tetap menjadi anggota komunitas global, dan dapat berpindah di antara keduanya: lihat "More than one community".
 
+## Di web app
+
+Kamu juga bisa meminta dari kartu **Temukan komunitasmu** di **Beranda** web app, lalu menunggu di sana.
+
+- Selama menunggu, kartu menunggu punya **Beri tahu saya saat mereka menjawab**. Ketuk **Beri tahu saya**, dan browser-mu bertanya dulu; lalu **Kami akan memberitahumu di sini saat {name} menjawab.** Komunitas yang kamu tanya memberi tahu browser ini sendiri, bahkan saat halaman ditutup, dan tidak ada yang lain. Komunitas yang kamu ikuti tidak menyimpan apa pun dari permintaanmu.
+- Di iPhone, ini hanya berfungsi dari Layar Utama, dan kartunya menjelaskan caranya. Jika sebuah browser tidak bisa diberi tahu, kartunya mengatakannya, dengan **Dapatkan aplikasinya** lebih dulu di ponsel; Beranda tetap memeriksa jawabannya setiap beberapa menit selama terbuka.
+- Mengetuk notifikasi membuka **Beranda** di komunitas itu pada kartunya, dengan **Gabung** dan namanya. Notifikasi yang bukan berasal dari komunitas itu tidak membuka apa pun dan mengatakannya.
+- Lonceng di atas juga menampilkan **🎉 {name} menjawab ya.** sampai kamu mengetuknya atau **Gabung**. Mengetuknya membuka tempat yang sama.
+- **Gabung** membuka halaman komunitas di browser ini dan membawa akunmu: 12 kata yang sama. Saat permintaanmu dijawab dan dipakai, dibatalkan, atau tidak lagi terbuka, browser ini berhenti diberi tahu.
+
 ## Belum ada yang dekat denganmu
 
 - **Beri tahu saya jika ada yang dimulai di sini:** kamu mendapatkan notifikasi saat sebuah komunitas dimulai di dekat tempatmu berada. Hanya perkiraan wilayah yang disimpan, dengan lebar sekitar 10 km, tidak pernah lokasi persismu. Kamu dapat memantau hingga 3 tempat, dan berhenti memantau salah satunya dengan **Hentikan**.

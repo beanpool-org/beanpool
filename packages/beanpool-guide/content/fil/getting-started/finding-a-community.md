@@ -52,6 +52,16 @@ Sinasabi ng card ang **Inimbita ka ng isang miyembro**. I-tap ang **Sumali** kas
 
 Mananatili kang miyembro ng pandaigdigang komunidad, at maaari kang lumipat sa pagitan ng mga ito: tingnan ang "Mahigit sa isang komunidad".
 
+## Sa web app
+
+Maaari ka ring humiling mula sa card na **Hanapin ang komunidad mo** sa **Home** ng web app, at maghintay doon.
+
+- Habang naghihintay ka, may **Sabihin sa akin kapag sumagot sila** ang card ng paghihintay. I-tap ang **Sabihin sa akin**, at tatanungin ka muna ng browser mo; pagkatapos ay **Sasabihan ka namin dito kapag may sagot mula sa {name}.** Ang komunidad na tinanong mo mismo ang nagsasabi sa browser na ito, kahit nakasara ang pahina, at wala nang iba. Ang komunidad na kinaroroonan mo ay walang itinatabi sa iyong kahilingan.
+- Sa iPhone, gumagana lang ito mula sa Home Screen, at sinasabi ng card kung paano. Kung hindi masasabihan ang isang browser, sinasabi iyon ng card, na nauuna ang **Kunin ang app** sa telepono; sinusuri pa rin ng Home ang sagot kada ilang minuto habang bukas ito.
+- Ang pag-tap sa notification ay nagbubukas ng **Home** sa komunidad na iyon sa card, na may **Sumali** at ang pangalan nito. Ang notification na hindi galing sa komunidad na iyon ay walang binubuksan at sinasabi iyon.
+- Ipinapakita rin ng kampana sa itaas ang **🎉 Pumayag ang {name}.** hanggang i-tap mo ito o ang **Sumali**. Ang pag-tap dito ay nagbubukas ng parehong lugar.
+- Binubuksan ng **Sumali** ang pahina ng komunidad sa browser na ito at dinadala ang iyong account: ang parehong 12 salita. Kapag nasagot at nagamit na ang kahilingan mo, nakansela, o hindi na bukas, hihinto na ang pagsasabi sa browser na ito.
+
 ## Walang malapit sa iyo
 
 - **Sabihan ako kapag may nagsimula rito:** makakatanggap ka ng notipikasyon kapag may nagsimulang komunidad malapit sa kinaroroonan mo. Ang lugar lamang ang itinatago, mga 10 km ang lapad, hindi kailanman kung nasaan ka nang eksakto. Maaari kang magbantay ng hanggang 3 lokasyon, at ihinto ang pagbabantay sa isa gamit ang **Ihinto**.

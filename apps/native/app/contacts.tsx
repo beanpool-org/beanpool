@@ -341,7 +341,8 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onR
     const action = (c: Contact) => {
         const link = c.links.find((l) => here(l.community)) ?? c.links[0];
         if (!link) {
-            if (!onInvite) return null;
+            // While the row asks "Is this Dee?", that question is the one thing to answer: no Invite again beside it.
+            if (!onInvite || ask(c)) return null;
             return (
                 <Pressable accessibilityRole="button" style={styles.btn} disabled={busy} onPress={() => onInvite(c)}>
                     <Text style={styles.btnText}>{c.invite ? contactInviteWords.again() : contactInviteWords.invite()}</Text>

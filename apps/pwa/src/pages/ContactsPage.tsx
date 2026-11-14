@@ -288,7 +288,7 @@ function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport
                         return row(c, memberAction(c), [link.callsign && `@${link.callsign}`, hostOf(link.community)].filter(Boolean).join(' · '));
                     })}
                     {notYet.length > 0 && <h3 style={{ fontSize: '0.95rem', margin: '0.75rem 0 0.5rem' }}>{t('Not on BeanPool yet')}</h3>}
-                    {notYet.map((c) => row(c, inviteAction(c), contactInvitedLine(c) ?? subLine(c)))}
+                    {notYet.map((c) => row(c, ask(c) ? null : inviteAction(c), contactInvitedLine(c) ?? subLine(c)))}
                     {shown.length === 0 && <p style={muted}>{t('Nobody in your contacts matches that.')}</p>}
                 </>
             )}

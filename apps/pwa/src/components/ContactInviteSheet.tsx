@@ -101,7 +101,7 @@ export function ContactInviteSheet({ contact, identity, community, onClose }: {
     let body;
     if (!invitesOn(info)) {
         body = <>
-            <p className="m-0 text-[15px] leading-relaxed text-nature-800 dark:text-nature-200">{t(INVITE_WORDS.offFallback)}</p>
+            <p className="m-0 text-base leading-relaxed text-nature-800 dark:text-nature-200">{t(INVITE_WORDS.offFallback)}</p>
             <div className="flex flex-wrap gap-2">
                 <button type="button" className={GO} onClick={async () => {
                     const text = communityLinkText(window.location.origin);
@@ -112,7 +112,7 @@ export function ContactInviteSheet({ contact, identity, community, onClose }: {
         </>;
     } else if (!mayInviteHere(info, role)) {
         body = <>
-            <p className="m-0 text-[15px] leading-relaxed text-nature-800 dark:text-nature-200">{t(INVITE_WORDS.adminsOnlyFallback)}</p>
+            <p className="m-0 text-base leading-relaxed text-nature-800 dark:text-nature-200">{t(INVITE_WORDS.adminsOnlyFallback)}</p>
             <div className="flex flex-wrap gap-2">
                 <button type="button" className={GO} onClick={() => setAsking(true)} data-testid="contact-invite-ask">{contactInviteWords.askAdmin(contact.name)}</button>
             </div>
@@ -121,8 +121,8 @@ export function ContactInviteSheet({ contact, identity, community, onClose }: {
         const [once, kept] = contactInviteLines(contact);
         body = <>
             <h2 id="contact-invite-title" className="m-0 text-lg font-extrabold text-nature-950 dark:text-white break-words">{contactInviteTitle(contact.name, community)}</h2>
-            <p className="m-0 text-[15px] leading-relaxed text-nature-800 dark:text-nature-200">{once}</p>
-            <p className="m-0 text-[15px] leading-relaxed text-nature-800 dark:text-nature-200">{kept}</p>
+            <p className="m-0 text-base leading-relaxed text-nature-800 dark:text-nature-200">{once}</p>
+            <p className="m-0 text-base leading-relaxed text-nature-800 dark:text-nature-200">{kept}</p>
             <div className="flex flex-wrap gap-2">
                 {canShare && <button type="button" className={GO} disabled={busy} onClick={() => void go('share')}>{contactInviteWords.share()}</button>}
                 {!!email && !!contactMailtoLink(email, '', '') && <button type="button" className={canShare ? BTN : GO} disabled={busy} onClick={() => void go('email')}>{contactInviteWords.email()}</button>}
@@ -135,7 +135,7 @@ export function ContactInviteSheet({ contact, identity, community, onClose }: {
             <div className="absolute inset-0 bg-black/50" />
             <div className="relative w-full sm:max-w-[420px] max-h-[90vh] overflow-y-auto p-4 rounded-t-2xl sm:rounded-2xl bg-oat-50 dark:bg-nature-950 flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
                 {body}
-                {note && <p role="status" className="m-0 text-[14px] leading-snug text-nature-800 dark:text-nature-200 break-words">{note}</p>}
+                {note && <p role="status" className="m-0 text-base leading-snug text-nature-800 dark:text-nature-200 break-words">{note}</p>}
                 <button type="button" className={BTN} onClick={onClose}>{t('Close')}</button>
             </div>
         </div>

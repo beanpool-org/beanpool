@@ -55,14 +55,10 @@ Tu línea de crédito crece con tu **confianza**:
 
 ## Tus Ofertas habilitan tu crédito
 
-La confianza establece qué tan negativo **podrías** llegar a estar. Tus Ofertas activas establecen qué tan negativo **puedes** llegar a estar en este momento. Obtienes el menor de los dos.
+Solo puedes usar de tu línea de crédito lo que abren tus Ofertas activas. Sin ninguna Oferta activa, nada de ella está abierto.
 
-- Sin Ofertas activas: no puedes tener un saldo negativo.
-- 1 Oferta: hasta 200 por debajo de cero.
-- 2 Ofertas: hasta 500.
-- 3 Ofertas: hasta 1,000.
-- 4 Ofertas: hasta 1,500.
-- 5 Ofertas: hasta 2,000.
+- Una Oferta activa abre todo lo que otras personas avalan por ti (un aval, un regalo de línea de crédito, el límite mínimo conocido) y los primeros 200 que ganaste.
+- Lo que ganaste intercambiando se abre por pasos: 2 Ofertas abren 500 de ello, 3 abren 1,000, 4 abren 1,500 y 5 abren 2,000.
 
 Si retiras Ofertas mientras estás por debajo de cero, es posible que debas más de lo que tus Ofertas cubren ahora. En ese caso, no podrás gastar más hasta que vuelvas a estar dentro de tu límite. Aún puedes ganar frijoles y no se te quita nada.
 

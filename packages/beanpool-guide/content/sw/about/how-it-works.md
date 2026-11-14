@@ -55,14 +55,10 @@ Kikomo chako cha mkopo hukua kulingana na **uaminifu** wako:
 
 ## Ofa zako hufungua mkopo wako
 
-Uaminifu huweka kiwango cha kina ambacho **ungeweza** kwenda. Ofa zako zilizo mtandaoni huweka kiwango cha kina ambacho **unaruhusiwa** kwenda hivi sasa. Unapata kiwango kidogo kati ya viwili hivyo.
+Unaweza kutumia tu kiasi cha kikomo chako cha mkopo ambacho Ofa zako zinazotumika zinafungua. Bila Ofa inayotumika, hakuna kinachofunguka.
 
-- Bila Ofa zozote mtandaoni: huwezi kwenda chini ya sifuri.
-- Ofa 1: hadi 200 chini ya sifuri.
-- Ofa 2: hadi 500.
-- Ofa 3: hadi 1,000.
-- Ofa 4: hadi 1,500.
-- Ofa 5: hadi 2,000.
+- Ofa moja inayotumika hufungua kila kitu ambacho watu wanakudhamini (dhamana, zawadi ya kikomo cha mkopo, kima cha chini kinachojulikana) na 200 za kwanza ulizojipatia.
+- Ulichojipatia kwa biashara hufunguka kwa hatua: Ofa 2 hufungua 500 yake, 3 hufungua 1,000, 4 hufungua 1,500 na 5 hufungua 2,000.
 
 Ukiondoa Ofa wakati uko chini ya sifuri, unaweza kuwa unadaiwa zaidi ya kile ambacho Ofa zako sasa zinashughulikia. Basi huwezi kutumia zaidi hadi utakapokuwa tena ndani ya kikomo chako. Bado unaweza kupata maharagwe, na hakuna kinachochukuliwa kutoka kwako.
 

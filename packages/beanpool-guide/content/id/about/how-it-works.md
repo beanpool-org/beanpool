@@ -55,14 +55,10 @@ Batas kreditmu bertumbuh seiring **kepercayaanmu**:
 
 ## Penawaranmu membuka kreditmu
 
-Kepercayaan menentukan seberapa dalam kamu **bisa** mencapai saldo negatif. Penawaran aktifmu menentukan seberapa dalam kamu **boleh** menggunakannya saat ini. Kamu mendapatkan nilai yang lebih kecil di antara keduanya.
+Kamu hanya dapat menggunakan batas kreditmu sebanyak yang dibuka oleh Penawaran aktifmu. Tanpa Penawaran aktif, tidak ada yang terbuka.
 
-- Tanpa Penawaran aktif: kamu tidak dapat berada di bawah nol.
-- 1 Penawaran: hingga 200 di bawah nol.
-- 2 Penawaran: hingga 500.
-- 3 Penawaran: hingga 1.000.
-- 4 Penawaran: hingga 1.500.
-- 5 Penawaran: hingga 2.000.
+- Satu Penawaran aktif membuka semua yang dijamin orang lain untukmu (jaminan, hadiah batas kredit, batas dasar yang diketahui) dan 200 pertama yang kamu peroleh.
+- Yang kamu peroleh lewat transaksi terbuka bertahap: 2 Penawaran membuka 500 darinya, 3 membuka 1.000, 4 membuka 1.500 dan 5 membuka 2.000.
 
 Jika kamu menurunkan Penawaran saat kamu berada di bawah nol, kamu mungkin berutang lebih banyak daripada yang sekarang ditanggung oleh Penawaranmu. Maka kamu tidak dapat berbelanja lebih banyak sampai kamu kembali berada dalam batasmu. Kamu tetap bisa memperoleh kacang, dan tidak ada yang diambil darimu.
 

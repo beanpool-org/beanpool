@@ -55,14 +55,10 @@ Sua linha de crédito cresce com a sua **confiança**:
 
 ## Suas Ofertas liberam seu crédito
 
-A confiança define até onde você **poderia** ir. Suas Ofertas ativas definem até onde você **pode** ir agora. Você recebe o menor dos dois valores.
+Você só pode usar da sua linha de crédito o equivalente ao que suas Ofertas ativas abrem. Sem nenhuma Oferta ativa, nada dela está aberto.
 
-- Nenhuma Oferta ativa: você não pode ficar abaixo de zero.
-- 1 Oferta: até 200 abaixo de zero.
-- 2 Ofertas: até 500.
-- 3 Ofertas: até 1.000.
-- 4 Ofertas: até 1.500.
-- 5 Ofertas: até 2.000.
+- Uma Oferta ativa abre tudo o que as pessoas garantem por você (um aval, um presente de linha de crédito, o piso conhecido) e os primeiros 200 que você conquistou.
+- O que você conquistou negociando abre aos poucos: 2 Ofertas abrem 500 dele, 3 abrem 1.000, 4 abrem 1.500 e 5 abrem 2.000.
 
 Se você retirar Ofertas enquanto estiver abaixo de zero, poderá dever mais do que suas Ofertas agora cobrem. Nesse caso, você não poderá gastar mais até que volte para dentro do seu limite. Você ainda pode ganhar feijões, e nada é retirado de você.
 

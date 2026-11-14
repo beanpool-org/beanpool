@@ -55,14 +55,10 @@ Hạn mức tín dụng của bạn sẽ tăng lên cùng với mức **uy tín*
 
 ## Lời đề nghị của bạn mở ra hạn mức tín dụng
 
-Uy tín quyết định mức sâu nhất bạn **có thể** chạm tới. Các Lời đề nghị đang hoạt động quyết định mức sâu nhất bạn **được phép** chạm tới lúc này. Bạn sẽ nhận mức nhỏ hơn trong hai mức đó.
+Bạn chỉ có thể sử dụng phần hạn mức tín dụng mà các Lời đề nghị đang đăng của bạn mở ra. Không có Lời đề nghị nào đang đăng thì không phần nào được mở.
 
-- Không có Lời đề nghị đang hoạt động: bạn không thể xuống dưới mức 0.
-- 1 Lời đề nghị: xuống đến −200.
-- 2 Lời đề nghị: xuống đến −500.
-- 3 Lời đề nghị: xuống đến −1.000.
-- 4 Lời đề nghị: xuống đến −1.500.
-- 5 Lời đề nghị: xuống đến −2.000.
+- Một Lời đề nghị đang đăng mở toàn bộ phần có người đứng ra bảo lãnh cho bạn (lời bảo lãnh, quà tặng hạn mức tín dụng, mức sàn quy định) và 200 đầu tiên bạn kiếm được.
+- Phần bạn kiếm được qua giao dịch mở theo từng bước: 2 Lời đề nghị mở 500 trong đó, 3 mở 1.000, 4 mở 1.500 và 5 mở 2.000.
 
 Nếu bạn gỡ bớt Lời đề nghị trong khi đang ở dưới mức 0, bạn có thể đang nợ nhiều hơn mức mà các Lời đề nghị hiện tại bao quát. Khi đó bạn không thể chi tiêu thêm cho đến khi quay lại trong giới hạn của mình. Bạn vẫn có thể nhận thêm Đậu, và không có gì bị thu hồi từ bạn.
 

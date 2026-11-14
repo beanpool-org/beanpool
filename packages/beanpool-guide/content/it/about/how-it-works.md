@@ -55,14 +55,10 @@ La tua linea di credito cresce con la tua **fiducia**:
 
 ## Le tue Offerte aprono il tuo credito
 
-La fiducia stabilisce quanto potresti scendere al massimo. Le tue Offerte attive stabiliscono quanto puoi scendere in questo momento. Ottieni il valore minore tra i due.
+Puoi usare della tua linea di credito solo quanto aprono le tue Offerte attive. Senza Offerte attive, non se ne apre nulla.
 
-- Nessuna Offerta attiva: non puoi andare sotto zero.
-- 1 Offerta: fino a 200 sotto zero.
-- 2 Offerte: fino a 500.
-- 3 Offerte: fino a 1.000.
-- 4 Offerte: fino a 1.500.
-- 5 Offerte: fino a 2.000.
+- Un'Offerta attiva apre tutto ciò per cui gli altri garantiscono per te (una garanzia, un dono di linea di credito, la soglia nota) e i primi 200 che hai guadagnato.
+- Ciò che hai guadagnato scambiando si apre a gradini: 2 Offerte ne aprono 500, 3 ne aprono 1.000, 4 ne aprono 1.500 e 5 ne aprono 2.000.
 
 Se rimuovi delle Offerte mentre sei sotto zero, potresti trovarti a dovere più di quanto le tue Offerte attuali coprano. In tal caso non puoi spendere di più finché non rientri nel tuo limite. Puoi comunque guadagnare fagioli, e nulla ti viene tolto.
 

@@ -55,14 +55,10 @@ Kredi limitiniz **güveninizle** büyür:
 
 ## Teklifleriniz kredinizi açar
 
-Güven ne kadar derine **inebileceğinizi** belirler. Yayındaki Teklifleriniz ise şu anda ne kadar derine **inmenize izin verildiğini** belirler. İkisinden küçük olanını alırsınız.
+Kredi limitinizin yalnızca yayındaki Tekliflerinizin açtığı kadarını kullanabilirsiniz. Yayında Teklifiniz yoksa hiçbiri açık değildir.
 
-- Yayında Teklif yok: sıfırın altına inemezsiniz.
-- 1 Teklif: sıfırın altında 200'e kadar.
-- 2 Teklif: 500'e kadar.
-- 3 Teklif: 1.000'e kadar.
-- 4 Teklif: 1.500'e kadar.
-- 5 Teklif: 2.000'e kadar.
+- Yayındaki bir Teklif, insanların sizin için arkanızda durduğu her şeyi (bir kefalet, bir kredi limiti hediyesi, bilinen taban) ve kazandığınızın ilk 200 kısmını açar.
+- Takasla kazandığınız kısım adım adım açılır: 2 Teklif bunun 500 kısmını açar, 3 Teklif 1.000, 4 Teklif 1.500 ve 5 Teklif 2.000 kısmını.
 
 Sıfırın altındayken Teklifleri kaldırırsanız, Tekliflerinizin şu anda karşıladığından daha fazlasını borçlu olabilirsiniz. Bu durumda tekrar limitinizin içine girene kadar daha fazla harcama yapamazsınız. Yine de fasulye kazanabilirsiniz ve sizden hiçbir şey alınmaz.
 

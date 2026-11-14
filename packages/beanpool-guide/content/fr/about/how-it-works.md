@@ -55,14 +55,10 @@ Votre ligne de crédit grandit avec votre **confiance** :
 
 ## Vos Offres ouvrent votre crédit
 
-La confiance fixe jusqu'où vous **pourriez** descendre. Vos Offres actives fixent jusqu'où vous **pouvez** descendre pour le moment. Vous obtenez la plus petite des deux valeurs.
+Vous ne pouvez utiliser de votre ligne de crédit que ce que vos Offres actives ouvrent. Sans Offre active, rien n'est ouvert.
 
-- Aucune Offre active : vous ne pouvez pas passer sous zéro.
-- 1 Offre : jusqu'à 200 sous zéro.
-- 2 Offres : jusqu'à 500.
-- 3 Offres : jusqu'à 1 000.
-- 4 Offres : jusqu'à 1 500.
-- 5 Offres : jusqu'à 2 000.
+- Une Offre active ouvre tout ce dont des personnes se portent garantes pour vous (un parrainage, un don de ligne de crédit, le plancher connu) et les 200 premiers haricots que vous avez gagnés.
+- Ce que vous avez gagné par vos échanges s'ouvre par paliers : 2 Offres en ouvrent 500, 3 en ouvrent 1 000, 4 en ouvrent 1 500 et 5 en ouvrent 2 000.
 
 Si vous retirez des Offres pendant que vous êtes sous zéro, vous pourriez devoir plus que ce que couvrent vos Offres désormais. Vous ne pouvez alors plus dépenser jusqu'à ce que vous soyez revenu dans votre limite. Vous pouvez toujours gagner des haricots, et rien ne vous est retiré.
 

@@ -55,14 +55,10 @@ Dein Kreditrahmen wächst mit deinem **Vertrauen**:
 
 ## Deine Angebote eröffnen deinen Kredit
 
-Das Vertrauen legt fest, wie weit du ins Minus gehen **könntest**. Deine aktiven Angebote legen fest, wie weit du im Moment ins Minus gehen **darfst**. Du erhältst den kleineren der beiden Werte.
+Du kannst nur so viel von deinem Kreditrahmen nutzen, wie deine aktiven Angebote öffnen. Ohne aktives Angebot ist nichts davon offen.
 
-- Keine aktiven Angebote: Du kannst nicht unter null gehen.
-- 1 Angebot: Bis zu 200 unter null.
-- 2 Angebote: Bis zu 500.
-- 3 Angebote: Bis zu 1.000.
-- 4 Angebote: Bis zu 1.500.
-- 5 Angebote: Bis zu 2.000.
+- Ein aktives Angebot öffnet alles, wofür Leute für dich bürgen (eine Bürgschaft, ein Geschenk an Kreditrahmen, den bekannten Kreditrahmen) und die ersten 200, die du erarbeitet hast.
+- Was du durch Handeln erarbeitet hast, öffnet sich in Stufen: 2 Angebote öffnen 500 davon, 3 öffnen 1.000, 4 öffnen 1.500 und 5 öffnen 2.000.
 
 Wenn du Angebote herausnimmst, während du unter null bist, schuldest du möglicherweise mehr, als deine Angebote jetzt abdecken. Dann kannst du nicht mehr ausgeben, bis du wieder innerhalb deines Limits bist. Du kannst weiterhin Bohnen verdienen, und dir wird nichts weggenommen.
 

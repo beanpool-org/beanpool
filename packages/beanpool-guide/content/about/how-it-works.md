@@ -56,14 +56,10 @@ Your credit line grows with your **trust**:
 
 ## Your Offers unlock your credit
 
-Trust sets how deep you **could** go. Your live Offers set how deep you **may** go right now. You get the smaller of the two.
+You can only use as much of your credit line as your live Offers open. With no live Offer, none of it is open.
 
-- No live Offers: you cannot go below zero.
-- 1 Offer: down to 200 below zero.
-- 2 Offers: down to 500.
-- 3 Offers: down to 1,000.
-- 4 Offers: down to 1,500.
-- 5 Offers: down to 2,000.
+- One live Offer opens everything people stand behind for you (a vouch, a credit-line gift, the known floor) and the first 200 you earned.
+- What you earned by trading opens in steps: 2 Offers open 500 of it, 3 open 1,000, 4 open 1,500 and 5 open 2,000.
 
 If you take Offers down while you are below zero, you may owe more than your Offers now cover. Then you cannot spend more until you are back within your limit. You can still earn beans, and nothing is taken from you.
 

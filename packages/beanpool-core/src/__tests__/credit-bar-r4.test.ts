@@ -11,6 +11,8 @@
  *   quotes the card's fee note. F23: no English page of the guide (every page under content/, not only credit-line)
  *   still says a 1- or 2-Bean trade is too small to count.
  * - The 24 copies of those pages name the sheet and the marks with their own catalog's words.
+ * - No guide page, English or copy, keeps the old Offer list ("1 Offer: down to 200 … the smaller of the two") or, in any
+ *   language, F23's sentence; how-it-works carries credit-line's Offer rule, in English and in each copy.
  *
  * The pages are read from content/ (what a test pins is what the page says, not the published copy).
  */
@@ -22,6 +24,7 @@ import { CREDIT_SHEET_WORDS } from '../credit-sheet.js';
 import { beans } from '../hundredths.js';
 import { earnedCreditFromValue } from '../protocol.js';
 import { CREDIT_STANDING_WORDS, creditBarPicture, creditLineParts, creditStandingCard, type CreditStandingAnswer } from '../credit-standing.js';
+import { VOUCH_PRESET_WORDS } from '../vouch-presets.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const GUIDE = join(ROOT, 'packages/beanpool-guide/content');
@@ -221,5 +224,93 @@ describe("the phone's Trust & Tiers lines name every way a line opens before a t
             expect(typeof words[s], `${lang}: ${s}`).toBe('string');
             if (s.includes('{line}')) expect(words[s] as string).toContain('{line}');
         }
+    });
+});
+
+// Fix round 2: the old Offer list ("1 Offer: down to 200 below zero … You get the smaller of the two") is gone from every
+// guide page in every language, and so is F23's sentence. The node's rule is usableAllowance (protocol.ts): one live Offer
+// opens a vouch, a credit-line gift and the known floor whole, and what you earned opens in the Offer steps.
+describe('no guide page, in any language, keeps the old Offer list or the F23 sentence', () => {
+    // ASCII, Arabic-Indic, Persian, Devanagari, Bengali, Tamil and Malayalam digits all read as ASCII; "1,000", "1.000",
+    // "1 000" and "۱٬۰۰۰" read as 1000.
+    const ZEROS = [0x30, 0x660, 0x6f0, 0x966, 0x9e6, 0xbe6, 0xd66];
+    const figures = (s: string) => s.normalize('NFC')
+        .replace(/\p{Nd}/gu, (ch) => {
+            const cp = ch.codePointAt(0)!;
+            const zero = ZEROS.find((z) => cp >= z && cp <= z + 9);
+            return zero === undefined ? ch : String(cp - zero);
+        })
+        .replace(/(\d)[,.\u00a0\u202f\u066c' ](?=\d{3}(?!\d))/g, '$1');
+    const LADDER = [200, 500, 1000, 1500, 2000];
+    const ladderFigures = (line: string) => (figures(line).match(/\d+/g) ?? []).map(Number).filter((n) => LADDER.includes(n));
+    const isBullet = (line: string) => /^\s*[-*] /.test(line);
+    const rel = (p: string) => p.slice(GUIDE.length + 1);
+    const inLang = (lang: string) => (p: string) => p.startsWith(join(GUIDE, lang) + '/');
+    const allPages = walk(GUIDE).filter((p) => p.endsWith('.md'));
+    const englishPages = allPages.filter((p) => !LANGS.some((lang) => inLang(lang)(p)));
+    /** The old list's shape in any language: bullets one after another with one ladder figure each, 200, 500, 1,000, 1,500. */
+    const oldLists = (p: string) => {
+        const lines = readFileSync(p, 'utf8').split('\n');
+        return lines.flatMap((_, k) => (LADDER.slice(0, 4).every((n, j) => isBullet(lines[k + j] ?? '') && ladderFigures(lines[k + j]!).join() === String(n))
+            ? [`${rel(p)}:${k + 1}`] : []));
+    };
+    /** The bullet naming the earned steps: 500, 1,000, 1,500 and 2,000 in one line. */
+    const stepsLine = (text: string) => text.split('\n').find((line) => isBullet(line) && LADDER.slice(1).every((n) => ladderFigures(line).includes(n)));
+
+    it('reads every page: the English ones and the 24 copies', () => {
+        expect(LANGS).toHaveLength(24);
+        expect(englishPages.length, 'English pages').toBeGreaterThan(50);
+        expect(allPages.length, 'all pages').toBeGreaterThan(englishPages.length * 20);
+    });
+
+    it('no page, English or copy, has the old list; no English page says its words', () => {
+        expect(allPages.flatMap(oldLists)).toEqual([]);
+        const said = englishPages.flatMap((p) => readFileSync(p, 'utf8').split('\n')
+            .filter((line) => /\b1 Offer: down to|smaller of the two|how deep you \*\*may\*\*/i.test(line))
+            .map((line) => `${rel(p)}: ${line}`));
+        expect(said).toEqual([]);
+    });
+
+    it('how-it-works says what credit-line says: one Offer opens what people stand behind, then the earned steps', () => {
+        const offers = section(readFileSync(join(GUIDE, 'about/how-it-works.md'), 'utf8'), 'Your Offers unlock your credit');
+        const rule = section(english('credit-line'), 'Your Offers set how much you can use');
+        const bullets = rule.split('\n').filter(isBullet);
+        expect(bullets).toHaveLength(2);
+        expect(bullets[0]).toContain('One live Offer opens everything people stand behind for you (a vouch, a credit-line gift, the known floor)');
+        for (const b of bullets) expect(offers).toContain(b);
+        expect(offers).toContain('With no live Offer, none of it is open.');
+    });
+
+    it("what-the-admins-can-see names a voucher's budget as the Ledger's row does (R3: Vouching budget)", () => {
+        const page = readFileSync(join(GUIDE, 'settings/what-the-admins-can-see.md'), 'utf8');
+        expect(page).not.toMatch(/budget to vouch from/i);
+        const row = String(VOUCH_PRESET_WORDS.ledgerBudget).split(':')[0]!;
+        expect(row).toBe('Vouching budget');
+        expect(section(page, 'Who can see your balance and your credit line')).toContain(`**${row}**`);
+    });
+
+    it.each(LANGS)("%s: how-it-works carries its own credit-line copy's steps line", (lang) => {
+        const steps = stepsLine(copy(lang, 'credit-line'));
+        expect(steps, `${lang}: credit-line's steps line`).toBeTruthy();
+        expect(readFileSync(join(GUIDE, lang, 'about/how-it-works.md'), 'utf8').split('\n')).toContain(steps);
+    });
+
+    // F23 in the copies: no "1 or 2" beside the language's own word for beans (the phone's "Beans"), on any of its pages.
+    // Against main's pages it finds the sentence 5 times in each copy (4 in Arabic). It reads figures, not number words:
+    // main's Arabic faq said "one or two beans" in words, which this round's copies no longer say (the English check
+    // above reads "one or two" too).
+    it.each(LANGS)('%s: no page says a 1- or 2-Bean trade is too small to count', (lang) => {
+        const bean = catalog('apps/native/words', lang)['Beans'];
+        expect(typeof bean, `${lang}: the phone's "Beans"`).toBe('string');
+        const letters = Array.from((bean as string).normalize('NFC').toLowerCase());
+        const stem = letters.slice(0, letters.length > 3 ? 3 : letters.length === 3 ? 2 : letters.length).join('');
+        const oneOrTwo = /(?<![\d.,])1(?![\d.,%])[^\d\n]{1,14}(?<![\d.,])2(?![\d.,%])/g;
+        const said = allPages.filter(inLang(lang)).flatMap((p) => readFileSync(p, 'utf8').split('\n')
+            .filter((line) => {
+                const text = figures(line).toLowerCase();
+                return [...text.matchAll(oneOrTwo)].some((m) => text.slice(Math.max(0, m.index! - 12), m.index! + m[0].length + 6).includes(stem));
+            })
+            .map((line) => `${rel(p)}: ${line}`));
+        expect(said).toEqual([]);
     });
 });

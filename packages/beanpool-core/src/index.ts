@@ -57,6 +57,7 @@ export * from './need-answer-words.js';
 export * from './listing-price.js';
 export * from './post-type-lines.js';
 export * from './knowledge.js';
+export * from './knowledge-write-words.js';
 export * from './forum.js';
 export * from './name-line.js';
 export * from './invite-ask.js';

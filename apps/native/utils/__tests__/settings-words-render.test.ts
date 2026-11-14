@@ -757,6 +757,46 @@ describe('Notification Preferences: "When a neighbour asks for something I\'m in
     });
 });
 
+describe('Notification Preferences: the Forum switch only where the community sends the forum\'s notices (slice F5)', () => {
+    const SWITCH = 'Forum';
+    const forumSwitch = () => host.querySelector('[data-testid="settings-notify-forum-toggle"]') as HTMLElement | null;
+    const sayForumNotices = (on: boolean) => store.map.set('beanpool_node_profiles', JSON.stringify({
+        [NODE]: { profile: 'local', features: { beans: true, escrow: true, ...(on ? { forumNotices: true } : {}) }, checkedAt: new Date().toISOString() },
+    }));
+    const openPreferences = async () => {
+        await renderIn('en');
+        await click(row('Notification Preferences', 'en'), 'Notification Preferences');
+        expect(host.textContent).toContain('1 day before');
+    };
+
+    it('a community that says forumNotices: the switch and its line, on until turned off; a tap saves notify_forum off, a second on', async () => {
+        sayForumNotices(true);
+        await openPreferences();
+        expect(forumSwitch()).not.toBeNull();
+        expect(forumSwitch()?.getAttribute('aria-label')).toBe(SWITCH);
+        expect(host.textContent).toContain('Replies in topics you follow, mentions, and first topics');
+        await click(forumSwitch(), SWITCH);
+        await click(forumSwitch(), SWITCH);
+        expect(node.prefsSaved).toEqual([{ notify_forum: false }, { notify_forum: true }]);
+    });
+
+    it('a member who turned it off reads it off: the first tap turns it back on', async () => {
+        sayForumNotices(true);
+        node.prefsServed = { notify_forum: 'false' };
+        await openPreferences();
+        await click(forumSwitch(), SWITCH);
+        expect(node.prefsSaved).toEqual([{ notify_forum: true }]);
+    });
+
+    it('a community that says nothing of it (no forum, or a node from before F5): no switch, nothing saved', async () => {
+        sayForumNotices(false);
+        await openPreferences();
+        expect(forumSwitch()).toBeNull();
+        expect(host.textContent).not.toContain('Replies in topics you follow');
+        expect(node.prefsSaved).toEqual([]);
+    });
+});
+
 describe('Settings → "Use BeanPool on a computer: open <address>": every member, with this community\'s address (computer-line)', () => {
     // What Share sends and a screen reader reads: the whole line, https:// and all. What is drawn leaves the https:// off the address.
     const LINE = `Use BeanPool on a computer: open ${NODE}`;

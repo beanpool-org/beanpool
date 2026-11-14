@@ -18,7 +18,7 @@ import { keepNotice, keptNoticeDetails, type KeptNoticePushOptions } from './kep
 const { t: tr } = wordsFor('en');
 
 type BroadcastFn = (event: any, recipients?: string[], opts?: { othersGetDoorbell?: boolean }) => void;
-type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind,
+type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery' | 'forum', kind: PushNoticeKind,
     rehearsal?: boolean, options?: KeptNoticePushOptions) => void;
 
 export interface ModerationNoticeCallbacks {
@@ -82,11 +82,16 @@ export function reportedPostsRemovedBody(count: number): string {
     return count > 1 ? `${count} posts you reported were removed. Thank you for letting the moderators know.` : reportedPostRemovedBody();
 }
 
+/** A push's category and kind other than a moderation notice's (`marketplace`, `community.notice`): the forum's first looks. */
+export interface TellPush { category: 'marketplace' | 'forum'; kind: PushNoticeKind }
+
 /**
  * One notice to each of these members: kept, live with its kept copy's id, and pushed. Also how every member hears that
- * how this community works changed (state-engine.ts noticeToEveryMember).
+ * how this community works changed (state-engine.ts noticeToEveryMember). `push`: its category and kind, when not a
+ * moderation notice's (engine/forum-first-look.ts: the Forum switch and the forum's own kinds).
  */
-export function tell(cb: ModerationNoticeCallbacks, recipients: string[], title: string, body: string, data: Record<string, any>): void {
+export function tell(cb: ModerationNoticeCallbacks, recipients: string[], title: string, body: string, data: Record<string, any>,
+    push: TellPush = { category: 'marketplace', kind: 'community.notice' }): void {
     const to = Array.from(new Set(recipients.filter(pk => typeof pk === 'string' && pk && pk !== 'SYSTEM')));
     if (to.length === 0) return;
     // Each recipient's copy is kept first (engine/kept-notices.ts), so a web app that is closed now shows it when it
@@ -105,7 +110,7 @@ export function tell(cb: ModerationNoticeCallbacks, recipients: string[], title:
         }
     }
     try {
-        cb.dispatchPushNotification(to, 'SYSTEM', title, body, data, 'marketplace', 'community.notice', false, keptNoticeDetails(kept));
+        cb.dispatchPushNotification(to, 'SYSTEM', title, body, data, push.category, push.kind, false, keptNoticeDetails(kept));
     } catch (e: any) {
         console.warn('[Moderation] Push failed:', e?.message || e);
     }

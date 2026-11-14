@@ -12,8 +12,9 @@
  * reads as the node's own front does; only a search asks the node too (`GET /api/knowledge/front?q=`, the full text search), and
  * falls back to the copy's plain match when it can't be reached. Where the community doesn't have Learn but shows previews (the
  * worldwide one), the same screen draws Example Valley's three sample pages and every action opens the sheet that leads to a local
- * community. Not here (later slices): "＋ Suggest knowledge" and the form (K4), "N to check ›" and "1 of yours is waiting ›"
- * (K3/K4), and the doors from Home (K7) and the Pulse (KP).
+ * community. Slice K4: "＋ Suggest knowledge" fixed at the bottom ("＋ Add local knowledge" for an owner or admin, whose page
+ * publishes at once), opening the form (app/learn/new.tsx), also from the empty search; and a member's line "1 of yours is waiting
+ * for an admin ›" to My suggestions (app/learn/mine.tsx). Not here yet: an owner's or admin's "N to check ›" (K4, part 2).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, DeviceEventEmitter, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -27,6 +28,8 @@ import { ExampleHeader } from '../components/showcase/LocalCommunityMark';
 import { KnowledgeRowCard } from '../components/learn/KnowledgeRowCard';
 import { LearnPreviewSheet } from '../components/learn/LearnPreviewSheet';
 import { LEARN_LINES, topicOf } from '../components/learn/learn-lines';
+import { LEARN_WRITE, waitingLine } from '../components/learn/learn-write';
+import { useLearnWriter } from '../components/learn/useLearnWriter';
 import { getKnowledgePosts, signedGet } from '../utils/db';
 import { learnFront, learnRows, learnSearch, type KnowledgePage } from '../utils/learn-copy';
 import { samplePages } from '../components/showcase/sample-screens';
@@ -56,6 +59,7 @@ export default function LearnScreen() {
     const [cannotReach, setCannotReach] = useState(false);
     const [sheet, setSheet] = useState(false);
     const preview = mode === 'preview';
+    const writer = useLearnWriter(mode === 'live');
 
     const styles = useStyles(({ colors: c }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: c.surface.page },
@@ -93,6 +97,13 @@ export default function LearnScreen() {
         emptyActionText: { fontSize: 15, fontWeight: '800', color: c.chip.learn.fg },
         offline: { fontSize: 13, color: c.text.secondary },
         standing: { fontSize: 12.5, color: c.text.secondary, marginTop: 8 },
+        waiting: { minHeight: 44, justifyContent: 'center' },
+        waitingText: { fontSize: 14, fontWeight: '800', color: c.chip.learn.fg },
+        foot: {
+            paddingHorizontal: 16, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border.default, backgroundColor: c.surface.chrome,
+        },
+        suggest: { minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, backgroundColor: c.brand.fill },
+        suggestText: { fontSize: 16, fontWeight: '800', color: c.text.inverse, textAlign: 'center' },
     }));
 
     // The phone's copy of the pages: read now, and again whenever a sync brings something.
@@ -140,6 +151,11 @@ export default function LearnScreen() {
         router.push({ pathname: '/post/[id]', params: { id, kind: 'knowledge' } });
     };
     const card = (row: KnowledgeRow) => <KnowledgeRowCard key={row.id} row={row} onPress={() => open(row.id)} />;
+    // The form; in the preview, the sheet that leads to a local community, as every action there.
+    const suggest = () => {
+        if (preview) { setSheet(true); return; }
+        router.push({ pathname: '/learn/new', params: { from: 'learn' } });
+    };
 
     const header = (
         <View style={styles.header}>
@@ -227,6 +243,12 @@ export default function LearnScreen() {
                     </ScrollView>
                 ) : null}
 
+                {!preview && !writer.checks && writer.waiting > 0 ? (
+                    <Pressable accessibilityRole="button" onPress={() => router.push('/learn/mine')} style={styles.waiting} testID="learn-waiting">
+                        <Text style={styles.waitingText}>{waitingLine(writer.waiting)}</Text>
+                    </Pressable>
+                ) : null}
+
                 {words ? (
                     // SEARCH: one flat list, best match first; each row carries its topic chip.
                     <View style={styles.block} testID="learn-results">
@@ -234,6 +256,9 @@ export default function LearnScreen() {
                         {searchRows.length > 0 ? searchRows.map(card) : (
                             <View>
                                 <Text style={styles.empty}>{t(LEARN_LINES.emptySearch, { words })}</Text>
+                                <Pressable accessibilityRole="button" style={styles.emptyAction} testID="learn-search-suggest" onPress={suggest}>
+                                    <Text style={styles.emptyActionText}>{t(LEARN_WRITE.suggestPlain)}</Text>
+                                </Pressable>
                                 {!preview ? (
                                     <Pressable accessibilityRole="button" style={styles.emptyAction} testID="learn-search-market"
                                         onPress={() => router.navigate({ pathname: '/(tabs)/market', params: { q: words } } as any)}>
@@ -281,6 +306,12 @@ export default function LearnScreen() {
                 )}
                 <Text style={styles.standing}>{t(LEARN_LINES.standing)}</Text>
             </ScrollView>
+            {/* Fixed at the bottom, under the list (never over its last row). */}
+            <View style={[styles.foot, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+                <Pressable accessibilityRole="button" onPress={suggest} style={styles.suggest} testID="learn-suggest">
+                    <Text style={styles.suggestText}>{writer.checks ? t(LEARN_WRITE.add) : t(LEARN_WRITE.suggest)}</Text>
+                </Pressable>
+            </View>
             <LearnPreviewSheet visible={sheet} onClose={() => setSheet(false)} />
         </View>
     );

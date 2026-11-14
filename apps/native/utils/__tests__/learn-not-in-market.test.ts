@@ -36,13 +36,14 @@ describe('the Market’s pills, the chooser and the map stay as they were', () =
     it('the Market has no Learn or knowledge pill', () => {
         const ids = MARKET_TYPE_PILLS.map((f) => f.id);
         expect(ids).toEqual(['all', 'for-you', 'offers', 'needs', 'events', 'polls']);
-        for (const rel of ['utils/market-filters.ts', 'utils/compose-options.ts']) {
-            expect(source(rel).toLowerCase(), rel).not.toMatch(/knowledge|learn/);
-        }
+        expect(source('utils/market-filters.ts').toLowerCase()).not.toMatch(/knowledge|learn/);
     });
 
-    it('Add post has its four kinds (the fifth, Local knowledge, is slice K4’s)', () => {
+    it('Add post keeps its four kinds; the fifth, Local knowledge (slice K4), is added only where Learn is live', () => {
         expect(NEW_POST_TYPES).toHaveLength(4);
+        expect(NEW_POST_TYPES.map((o) => o.id)).not.toContain('knowledge');
+        // The only way the row reaches the chooser: composeOptions({ learn }) (compose-options.test.ts holds its rows).
+        expect(source('utils/compose-options.ts')).toContain('return opts.learn ? [...NEW_POST_TYPES, KNOWLEDGE_COMPOSE_OPTION] : NEW_POST_TYPES;');
     });
 
     it('the three protected map files are not touched by Learn', () => {

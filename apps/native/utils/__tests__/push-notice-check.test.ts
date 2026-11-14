@@ -620,6 +620,14 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         expect(noticeRoute('community.knock-shared', null)).toBe('/(tabs)/settings');
     });
 
+    it('an answer to a suggestion of Local knowledge lands on My suggestions, added or not, with somewhere to Open (slice K4)', () => {
+        expect(noticeRoute('community.knowledge-answer', { screen: 'learn-mine', draftId: 'd1', postId: POST_ID })).toBe('/learn/mine');
+        expect(noticeRoute('community.knowledge-answer', { screen: 'learn-mine', draftId: 'd1' })).toBe('/learn/mine');
+        expect(noticeHasDestination('community.knowledge-answer', { screen: 'learn-mine' })).toBe(true);
+        // Without its details (they couldn't be had), Home, as every notice that names nowhere: read in the bell.
+        expect(noticeRoute('community.knowledge-answer', null)).toBe('/(tabs)');
+    });
+
     it('noticeHasDestination: the bell offers "Open" only where the notice lands somewhere of its own', () => {
         // A kind's tab (Chats, Market, People, Settings) or a place the details name is somewhere.
         expect(noticeHasDestination('chat.message', {})).toBe(true);

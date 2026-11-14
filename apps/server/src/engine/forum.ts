@@ -35,7 +35,7 @@
 import crypto from 'node:crypto';
 import {
     FORUM_DAY_LIMITS, FORUM_LIMITS, FORUM_STARTER_SECTIONS, FORUM_TIMES, forumLinksFit, forumMentionsFit, isLang, word, wordsFor,
-    type ForumSectionStarts,
+    type ForumFollow, type ForumSectionStarts,
 } from '@beanpool/core';
 import { getMember, validatePostPhotos } from '@beanpool/engine';
 import { db, deletePlainRows } from '../db/db.js';
@@ -54,6 +54,7 @@ import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes }
 import { assertMayEditForumToday } from './writer-bounds.js';
 import { WRITER_LIMITS } from '../config/writer-limits.js';
 import { forumNewness, inNewAccountDays, isForumModerator, knownWriters, type ForumNewness } from './forum-moderation.js';
+import { dropForumFollowsOf, followForumTopic, forumFollowOf, markForumTopicRead, setForumFollow, type ForumNoticeCallbacks } from './forum-notices.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -151,6 +152,10 @@ export interface ForumTopic {
     lastActivityAt: string; createdAt: string; pinned: boolean; closed: string | null; removed: boolean;
     /** Its opening post is hidden while the moderators look: only its writer and the moderators get such a topic at all. */
     hidden: boolean;
+    /** The reader's follow of it (slice F5, engine/forum-notices.ts): each reply tells them, nothing does, or neither. */
+    follow: ForumFollow | null;
+    /** They follow it and it has a post they are shown (none by someone they blocked) past the last one they opened: the list's unread dot. */
+    unread: boolean;
 }
 export interface ForumPost {
     id: string; topicId: string; number: number; writer: ForumWriter; words: string; quotes: number | null; lang: string | null;
@@ -165,11 +170,27 @@ export interface ForumPost {
 const sectionOut = (r: SectionRow): ForumSection => ({
     id: r.id, starter: r.starter, name: r.name, about: r.about, position: r.position, starts: r.starts, listed: r.listed === 1, archived: r.archived_at !== null,
 });
-const topicOut = (r: TopicRow & { opening_removed?: number; opening_hidden?: number }): ForumTopic => ({
+/** A topic row as the reader reads it; `follow_state`, `last_read` and `last_number` are theirs (READER_FOLLOW). */
+type TopicRowRead = TopicRow & { opening_removed?: number; opening_hidden?: number; follow_state?: ForumFollow | null; last_read?: number | null; last_number?: number | null };
+const topicOut = (r: TopicRowRead): ForumTopic => ({
     id: r.id, sectionId: r.section_id, title: r.title, writer: { publicKey: r.writer_pubkey, name: nameOf(r.writer_pubkey) }, place: r.place, lang: r.lang,
     replyCount: r.reply_count, lastActivityAt: r.last_activity_at, createdAt: r.created_at, pinned: r.pinned_at !== null, closed: r.closed_by,
     removed: !!r.opening_removed, hidden: !!r.opening_hidden,
+    follow: r.follow_state ?? null, unread: r.follow_state === 'following' && (r.last_number ?? 0) > (r.last_read ?? 0),
 });
+/** Leaves out what `reader` blocked: `col` names the writer's key column. */
+const NOT_BLOCKED = (col: string) => `${col} NOT IN (SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = @reader)`;
+/**
+ * The number of the last post in topic `topic` (a column or @id) that the reader (@reader) is shown: a post by someone
+ * they blocked is never shown to them, so it never keeps their unread dot on. Newest first down the topic's index, so it
+ * stops at the first post they may see.
+ */
+const LAST_SHOWN = (topic: string) => `(SELECT p.number FROM forum_posts p WHERE p.topic_id = ${topic} AND ${NOT_BLOCKED('p.writer_pubkey')}
+    ORDER BY p.number DESC LIMIT 1)`;
+/** The reader's follow of topic `t` (@reader), the last post they opened, and the last post they are shown there. */
+const READER_FOLLOW = `(SELECT f.state FROM forum_follows f WHERE f.topic_id = t.id AND f.member_pubkey = @reader) AS follow_state,
+    (SELECT f.last_read FROM forum_follows f WHERE f.topic_id = t.id AND f.member_pubkey = @reader) AS last_read,
+    ${LAST_SHOWN('t.id')} AS last_number`;
 const photoCount = (postId: string) => (db.prepare('SELECT COUNT(*) AS n FROM forum_post_photos WHERE post_id = ?').get(postId) as { n: number }).n;
 /**
  * A post as `reader` may read it: a removed one's words and photos are gone; a hidden one's are for its writer and the
@@ -190,8 +211,6 @@ const postsOut = (rows: PostRow[], reader: string): ForumPost[] => {
 };
 const onePostOut = (id: string, reader: string): ForumPost => postsOut([postRow(id)!], reader)[0];
 
-/** Leaves out what `reader` blocked: `col` names the writer's key column. */
-const NOT_BLOCKED = (col: string) => `${col} NOT IN (SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = @reader)`;
 const OPENING_REMOVED = `(SELECT p.removed_by IS NOT NULL FROM forum_posts p WHERE p.topic_id = t.id AND p.number = 1) AS opening_removed`;
 const OPENING_HIDDEN = `(SELECT p.hidden_by_reports_at IS NOT NULL FROM forum_posts p WHERE p.topic_id = t.id AND p.number = 1) AS opening_hidden`;
 /** A topic whose opening post is hidden is for its writer and the moderators only (@reader, @mod). */
@@ -239,6 +258,8 @@ export function forumListTag(reader: string): string {
         stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM forum_topics'),
         stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM forum_sections'),
         stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM member_blocks WHERE owner_pubkey = ?', reader),
+        // The reader's follows and how far they read (slice F5): each row's follow and unread dot.
+        stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM forum_follows WHERE member_pubkey = ?', reader),
         getMembersVersion(),
         // What the reader's role shows: archived sections (owners, admins) and hidden topics (moderators).
         nodeRoleOf(reader) ?? 'member',
@@ -296,10 +317,10 @@ export function forumTopics(reader: string, opts: { sectionId?: string; offset: 
         opts.sectionId !== undefined ? 't.section_id = @section' : 't.section_id IN (SELECT id FROM forum_sections WHERE archived_at IS NULL)',
     ];
     const rows = db.prepare(`
-        SELECT t.*, ${OPENING_REMOVED}, ${OPENING_HIDDEN} FROM forum_topics t WHERE ${where.join(' AND ')}
+        SELECT t.*, ${OPENING_REMOVED}, ${OPENING_HIDDEN}, ${READER_FOLLOW} FROM forum_topics t WHERE ${where.join(' AND ')}
          ORDER BY (t.pinned_at IS NOT NULL) DESC, t.last_activity_at DESC, t.id ASC LIMIT @limit OFFSET @offset`)
         .all({ reader, mod: isForumModerator(reader) ? 1 : 0, section: opts.sectionId ?? null, limit: FORUM_LIMITS.topicsPerPage + 1, offset: opts.offset }) as
-        (TopicRow & { opening_removed: number; opening_hidden: number })[];
+        TopicRowRead[];
     const more = rows.length > FORUM_LIMITS.topicsPerPage;
     return { topics: rows.slice(0, FORUM_LIMITS.topicsPerPage).map(topicOut), next: more ? opts.offset + FORUM_LIMITS.topicsPerPage : null };
 }
@@ -315,8 +336,11 @@ function visibleTopic(reader: string, id: string, opts: { hiddenOk?: boolean } =
     return row;
 }
 
-/** One topic and its posts in order, 30 at a time after post number `after`; posts by someone the reader blocked left out. */
-export function forumTopic(reader: string, id: string, after: number): { topic: ForumTopic; posts: ForumPost[]; next: number | null } {
+/**
+ * One topic and its posts in order, 30 at a time after post number `after`; posts by someone the reader blocked left out.
+ * `lastRead`: the last post number the reader opened (slice F5), so an app opens a followed topic at its first unread reply.
+ */
+export function forumTopic(reader: string, id: string, after: number): { topic: ForumTopic; posts: ForumPost[]; next: number | null; lastRead: number } {
     const t = visibleTopic(reader, id);
     const opening = db.prepare('SELECT removed_by, hidden_by_reports_at FROM forum_posts WHERE topic_id = ? AND number = 1').get(id) as
         { removed_by: string | null; hidden_by_reports_at: string | null } | undefined;
@@ -324,11 +348,31 @@ export function forumTopic(reader: string, id: string, after: number): { topic: 
         .all({ id, after, reader, limit: FORUM_LIMITS.postsPerPage + 1 }) as PostRow[];
     const more = rows.length > FORUM_LIMITS.postsPerPage;
     const posts = rows.slice(0, FORUM_LIMITS.postsPerPage);
+    const { follow, lastRead } = forumFollowOf(reader, id);
+    const lastNumber = (db.prepare(`SELECT ${LAST_SHOWN('@id')}`).pluck().get({ id, reader }) as number | null) ?? 0;
     return {
-        topic: topicOut({ ...t, opening_removed: opening?.removed_by ? 1 : 0, opening_hidden: opening?.hidden_by_reports_at ? 1 : 0 }),
+        topic: topicOut({ ...t, opening_removed: opening?.removed_by ? 1 : 0, opening_hidden: opening?.hidden_by_reports_at ? 1 : 0, follow_state: follow, last_read: lastRead, last_number: lastNumber }),
         posts: postsOut(posts, reader),
         next: more ? posts[posts.length - 1].number : null,
+        lastRead,
     };
+}
+
+/**
+ * The reader follows a topic they may read, mutes it, or neither (`follow` null): slice F5, engine/forum-notices.ts. A
+ * paused member reads no forum, so follows none (the route's writer test); a muted one may still choose what tells them.
+ */
+export function followTopic(member: string, topicId: string, follow: unknown, now = Date.now()): { follow: ForumFollow | null } {
+    if (follow !== 'following' && follow !== 'muted' && follow !== null) throw new ForumRefusal(400, 'bad_request', "follow is 'following', 'muted' or null.");
+    visibleTopic(member, topicId);
+    return { follow: setForumFollow(member, topicId, follow, now) };
+}
+
+/** The reader opened a topic up to post number `upTo` (engine/forum-notices.ts markForumTopicRead). */
+export function readTopic(cb: Pick<ForumNoticeCallbacks, 'bellSeenWhere'>, member: string, topicId: string, upTo: unknown, now = Date.now()): { lastRead: number } {
+    if (!Number.isSafeInteger(upTo) || (upTo as number) < 0) throw new ForumRefusal(400, 'bad_request', 'upTo is a whole number.');
+    visibleTopic(member, topicId);
+    return markForumTopicRead(cb, member, topicId, upTo as number, now);
 }
 
 /** One of a post's photos as its data URL, for a reader who may see the post; null when there is none. */
@@ -437,6 +481,7 @@ export function startForumTopic(member: string, raw: TopicInput, now = Date.now(
         db.prepare(`INSERT INTO forum_posts (id, topic_id, number, writer_pubkey, words, lang, created_at) VALUES (?, ?, 1, ?, ?, ?, ?)`)
             .run(postId, topicId, member, words, lang, at);
         storePhotos(member, postId, photos, now);
+        followForumTopic(member, topicId, now, 1);
     })();
     return { topic: forumTopic(member, topicId, 0).topic, post: onePostOut(postId, member) };
 }
@@ -494,6 +539,8 @@ export function replyInForum(member: string, topicId: string, raw: ReplyInput, n
             .run(id, topicId, n, member, words, quotes, langOf(raw.lang), at);
         db.prepare('UPDATE forum_topics SET reply_count = reply_count + 1, last_activity_at = ? WHERE id = ?').run(at, topicId);
         storePhotos(member, id, photos, now);
+        // Who replies follows the topic (unless they muted it), read up to their own reply.
+        followForumTopic(member, topicId, now, n);
     })();
     return onePostOut(id, member);
 }
@@ -514,7 +561,11 @@ function ownPost(member: string, postId: string): { post: PostRow; topic: TopicR
  */
 export function editForumPost(member: string, postId: string, raw: { words?: unknown; title?: unknown }, now = Date.now()): { topic: ForumTopic; post: ForumPost } {
     writable(member, now);
-    const { post, topic } = ownPost(member, postId);
+    const { post } = ownPost(member, postId);
+    // Editing is writing in the topic, so it takes a topic the writer may read: a reply's writer in a topic whose opening post
+    // is hidden reads nothing of it, and is refused here, before anything is saved or an edit spent (F2's follow-up: the
+    // answer's own read used to 404 after the save). Removing their reply (removeForumPost) is still theirs.
+    const topic = visibleTopic(member, post.topic_id);
     if (topic.closed_at) throw new ForumRefusal(409, 'closed', FORUM_WORDS.closed);
     // While an account is new, only in the hour after writing it, so an approved first topic can't be swapped (design §3).
     // By the new-account days, not by "known": OK makes its writer known, and the rule is there for exactly that topic.
@@ -737,6 +788,8 @@ export function dropForumOf(member: string, now = Date.now()): void {
         db.prepare('UPDATE forum_topics SET reply_count = (SELECT COUNT(*) FROM forum_posts WHERE topic_id = ? AND number > 1 AND removed_by IS NULL) WHERE id = ?').run(topicId, topicId);
     }
     deletePlainRows('forum_members', 'member_pubkey = ?', member);
+    // The topics they followed or muted (slice F5).
+    dropForumFollowsOf(member);
     // A first topic of theirs, waiting or answered, and its photos (engine/forum-first-look.ts): gone with tombstones.
     deletePlainRows('forum_waiting_photos', 'waiting_id IN (SELECT id FROM forum_waiting WHERE writer_pubkey = ?)', member);
     deletePlainRows('forum_waiting', 'writer_pubkey = ?', member);

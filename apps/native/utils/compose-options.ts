@@ -7,17 +7,20 @@
  * here, free of React Native imports, so vitest can hold both screens to the same four options.
  */
 
-import { POST_TYPE_LINES, t, word, type WordKey } from '@beanpool/core';
+import { KNOWLEDGE_EMOJI, KNOWLEDGE_NAMES, POST_TYPE_LINES, t, word, type WordKey } from '@beanpool/core';
 
-export type ComposePostType = 'offer' | 'need' | 'poll' | 'event';
+/** `knowledge`: Local knowledge (slice K4), offered only where Learn is on ({@link composeOptions}). */
+export type ComposePostType = 'offer' | 'need' | 'poll' | 'event' | 'knowledge';
 
 /**
  * Which form a choice opens:
  * - `offer-need-form` — the New Post sheet (app/new-listing.tsx), with the type preselected
  * - `poll-modal` — NewPollModal
  * - `event-modal` — NewEventModal
+ * - `knowledge-screen` — Learn's form, a stack screen (app/learn/new.tsx), so each host pushes it in one line and the map's +
+ *   needs no edit (DESIGN-local-knowledge-amend-fable.md §3.3, row 39)
  */
-export type ComposeTarget = 'offer-need-form' | 'poll-modal' | 'event-modal';
+export type ComposeTarget = 'offer-need-form' | 'poll-modal' | 'event-modal' | 'knowledge-screen';
 
 /** The words are word() keys: the chooser shows them through t(), in the member's language. */
 export interface ComposeOption {
@@ -59,6 +62,22 @@ export const NEW_POST_TYPES: readonly ComposeOption[] = [
     },
 ] as const;
 
+/**
+ * The chooser's fifth row, 📖 Local knowledge (DESIGN-local-knowledge-fable.md §3.3, unchanged words): only where Learn is on
+ * for this reader, never on a community without it, so a choice never opens a form the node refuses.
+ */
+export const KNOWLEDGE_COMPOSE_OPTION: ComposeOption = {
+    id: 'knowledge',
+    emoji: KNOWLEDGE_EMOJI,
+    title: KNOWLEDGE_NAMES.kind,
+    description: POST_TYPE_LINES.knowledge,
+};
+
+/** What the chooser offers: the four kinds, and Local knowledge after them where Learn is live here. */
+export function composeOptions(opts: { learn: boolean }): readonly ComposeOption[] {
+    return opts.learn ? [...NEW_POST_TYPES, KNOWLEDGE_COMPOSE_OPTION] : NEW_POST_TYPES;
+}
+
 /** "Offer: Something you'll give or do for others" — the row's screen-reader label. */
 export function composeOptionA11yLabel(option: ComposeOption): string {
     return t('{title}: {description}', { title: t(option.title), description: t(option.description) });
@@ -67,6 +86,7 @@ export function composeOptionA11yLabel(option: ComposeOption): string {
 export function composeTargetFor(type: ComposePostType): ComposeTarget {
     if (type === 'poll') return 'poll-modal';
     if (type === 'event') return 'event-modal';
+    if (type === 'knowledge') return 'knowledge-screen';
     return 'offer-need-form';
 }
 
@@ -76,7 +96,8 @@ export function composeTargetFor(type: ComposePostType): ComposeTarget {
  * decision, 2026-09-18), so it is offered on the map too but never inherits one.
  */
 export function composeCarriesPin(type: ComposePostType): boolean {
-    return type !== 'poll';
+    // Local knowledge has no place on the map, ever: a place is written in words (§2.6).
+    return type !== 'poll' && type !== 'knowledge';
 }
 
 /**

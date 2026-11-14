@@ -172,6 +172,16 @@ export const PUSH_NOTICE_KINDS = {
     // is getting the SAME key back on a new phone from the copy the member keeps with their community (vault rethink VR3).
     // Generic: no community, no admin, no code. Its release is told as `account.restored`.
     'account.bring-back-started': { body: word("An admin is bringing your account back on a new phone. If you still have this phone and didn't ask for this, tell an owner now."), tab: 'settings' },
+    // The forum (server engine/forum-notices.ts, slice F5; DESIGN-forums-fable.md §9), under the member's Forum switch
+    // (`notify_forum`). Chats: the Forum is a switch at the top of the Chat tab. No title, name, section or count here; the
+    // bell holds them. A reply in a topic they follow: one push for a topic until they open it, later replies fold into
+    // that one bell row. Mentioned or quoted: at most one push an hour from the same person.
+    'forum.reply': { body: word('There is a new reply in a topic you follow.'), tab: 'chats' },
+    'forum.mention': { body: word('You were mentioned in the forum.'), tab: 'chats' },
+    // To the community's moderators when a new member's first topic waits (engine/forum-first-look.ts), and to its writer
+    // when a moderator answers it or 30 days pass without a look. Never who answered or why: that is in the bell.
+    'forum.first-look': { body: word('A first topic is waiting for a look.'), tab: 'chats' },
+    'forum.first-look-answer': { body: word('Your first topic has an answer.'), tab: 'chats' },
     'owner.standby': { body: word("Your community's standby server needs you."), tab: 'settings' },
     'owner.alert': { body: word("Your community's server needs you."), tab: 'settings' },
 } as const satisfies Record<string, { body: string; tab: PushNoticeTab }>;

@@ -574,6 +574,9 @@ export const TABLES: Record<string, TableEntry> = {
     // one; every delete (answered 30 days ago, the member gone) goes with a tombstone.
     forum_waiting: plain('id section_id writer_pubkey title words place lang state reason topic_id created_at answered_at updated_at'),
     forum_waiting_photos: plain('waiting_id order_num photo_data bytes updated_at'),
+    // Who follows or muted a topic, and the last post they opened (engine/forum-notices.ts, slice F5): a promoted standby
+    // tells the same followers, and keeps each unread dot. What each was last told is the bell's (push_notices, local).
+    forum_follows: plain('topic_id member_pubkey state last_read created_at updated_at'),
     // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
     thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),
     // A group chat's keys (engine/group-keys.ts): each epoch's signed record and one wrap per member, none of which the

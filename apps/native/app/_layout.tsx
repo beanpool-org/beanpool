@@ -1060,6 +1060,9 @@ function RootLayoutNav() {
                 <Stack.Screen name="calendar" options={{ animation: 'slide_from_right' }} />
                 {/* Learn, the reference shelf of Local knowledge: a stack screen with its own Back row, no tab (DESIGN-local-knowledge-fable.md amended §2.11). */}
                 <Stack.Screen name="learn" options={{ animation: 'slide_from_right' }} />
+                {/* Its form and My suggestions (slice K4), stack screens with their own Back row too. */}
+                <Stack.Screen name="learn/new" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="learn/mine" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="beanpool" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="find-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="community-card" options={{ animation: 'slide_from_right' }} />

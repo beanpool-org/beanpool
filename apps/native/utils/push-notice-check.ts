@@ -516,7 +516,7 @@ export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Pro
 export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | '/(tabs)/people?view=invites&from=notice' | '/find-community' | '/shared-outside'
     | '/(tabs)/chats?filter=requests' | '/(tabs)/projects?section=decide'
     | '/(tabs)/people?view=community&credit=vouchers' | `/(tabs)/people?view=community&credit=vouchers&voucher=${string}`
-    | `/post/${string}` | `/chat/${string}`
+    | `/post/${string}` | `/chat/${string}` | '/learn/mine'
     | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1`;
 
 /** An enterprise's key as the node writes it: 32 bytes, lower-case hex. */
@@ -571,6 +571,9 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     // Someone asked to join after a listing this member shared (community.knock-shared, shared-listing door A3): their
     // Shared outside, where that link's row counts who asked.
     if (d.screen === 'shared-outside') return '/shared-outside';
+    // An owner or admin answered the member's suggestion of Local knowledge (community.knowledge-answer): My suggestions, where
+    // it shows as added (a tap opens the page) or not, with the reason (slice K4).
+    if (d.screen === 'learn-mine') return '/learn/mine';
     const tab = kind && isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
     return TAB_ROUTES[tab] ?? TAB_ROUTES.home;
 }

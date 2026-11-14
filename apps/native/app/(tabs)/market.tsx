@@ -2319,6 +2319,7 @@ export default function MarketScreen() {
                     const target = composeTargetFor(type);
                     if (target === 'poll-modal') { setShowNewPollModal(true); return; }
                     if (target === 'event-modal') { setShowNewEventModal(true); return; }
+                    if (target === 'knowledge-screen') { router.push('/learn/new'); return; }
                     // The offer/need form is its own screen (app/new-listing.tsx), so this hands the chosen type
                     // over in the link. It used to push a bare `newPost=true`, which dropped the choice and
                     // opened the form on Offer even when the member had picked Need.

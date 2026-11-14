@@ -557,6 +557,8 @@ export default function NewListingScreen() {
      */
     const startCompose = async (type: ComposePostType) => {
         const target = composeTargetFor(type);
+        // Learn's form is a stack screen: it takes this see-through screen's place, so Back returns to where the + was.
+        if (target === 'knowledge-screen') { router.replace('/learn/new'); return; }
         if (target === 'poll-modal') {
             setShowNewPollModal(true);
             return;

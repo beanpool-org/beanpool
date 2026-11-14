@@ -29,7 +29,8 @@ export const TOPIC_WORDS = {
     closed: word('This topic is closed, so it takes no new replies.'),
     writeReply: word('Write a reply…'),
     send: word('Send'),
-    replyingTo: word('Replying to {name}'),
+    replyingTo: word('Replying to {name}: {words}'),
+    quoteLine: word('{name}: {words}'),
     cancelQuote: word('Don’t quote'),
     moreReplies: word('Show more replies'),
     follow: word('Follow this topic'),
@@ -128,7 +129,7 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
     const name = (p: { writer: { name: string } }) => p.writer.name || t('A member');
 
     function PostBody({ post }: { post: ForumPost }) {
-        if (post.removed) return <p className="m-0 italic text-sm" style={{ color: 'var(--text-muted)' }}>{t(post.removed === 'moderator' ? TOPIC_WORDS.removedByModerator : TOPIC_WORDS.removedByWriter)}</p>;
+        if (post.removed) return <p className="m-0 italic text-sm" style={{ color: 'var(--text-muted)' }}>{post.removed === 'moderator' ? t(TOPIC_WORDS.removedByModerator) : t(TOPIC_WORDS.removedByWriter)}</p>;
         if (post.hidden && !post.words) return <p className="m-0 italic text-sm" style={{ color: 'var(--text-muted)' }}>{t(TOPIC_WORDS.hidden)}</p>;
         return (
             <>
@@ -143,7 +144,9 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
         return (
             <div className="flex items-center gap-2 min-w-0 text-xs" style={{ color: 'var(--text-muted)' }}>
                 <button type="button" onClick={() => onOpenProfile?.(post.writer.publicKey)} className="font-bold truncate min-h-[32px] text-left" style={{ color: 'var(--text-primary)' }}>{name(post)}</button>
-                <span className="shrink-0">· {timeAgo(Math.max(0, Date.now() - Date.parse(post.createdAt)))}{post.editedAt ? ` · ${t(TOPIC_WORDS.edited)}` : ''}</span>
+                <span className="shrink-0">· {timeAgo(Math.max(0, Date.now() - Date.parse(post.createdAt)))}</span>
+                {post.editedAt && <span className="shrink-0" aria-hidden="true">·</span>}
+                {post.editedAt && <span className="shrink-0">{t(TOPIC_WORDS.edited)}</span>}
                 <button type="button" onClick={() => setMenu({ kind: 'post', post })} aria-label={t(TOPIC_WORDS.postMenu)} data-testid={`forum-post-menu-${post.number}`}
                     className="ml-auto min-w-[44px] min-h-[44px] text-lg shrink-0" style={{ color: 'var(--text-muted)' }}>⋯</button>
             </div>
@@ -157,7 +160,7 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
                 <span className="text-sm font-semibold truncate min-w-0 flex-1" style={{ color: 'var(--text-secondary)' }}>{section ? forumSectionName(section) : ''}</span>
                 {topic && (
                     <button type="button" data-testid="forum-follow" aria-pressed={topic.follow === 'following'}
-                        aria-label={t(topic.follow === 'following' ? TOPIC_WORDS.following : TOPIC_WORDS.follow)} title={t(topic.follow === 'following' ? TOPIC_WORDS.following : TOPIC_WORDS.follow)}
+                        aria-label={topic.follow === 'following' ? t(TOPIC_WORDS.following) : t(TOPIC_WORDS.follow)} title={topic.follow === 'following' ? t(TOPIC_WORDS.following) : t(TOPIC_WORDS.follow)}
                         onClick={() => void act(() => followForumTopic(topic.id, topic.follow === 'following' ? null : 'following'))}
                         className="min-w-[44px] min-h-[44px] text-lg" style={{ opacity: topic.follow === 'following' ? 1 : 0.55 }}>
                         <span aria-hidden="true">{topic.follow === 'muted' ? '🔕' : '🔔'}</span>
@@ -192,7 +195,7 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
                         <Byline post={post} />
                         {q && (
                             <p className="m-0 pl-2 text-xs truncate" style={{ borderLeft: '3px solid var(--bp-accent-fill)', color: 'var(--text-secondary)' }}>
-                                {name(q)}: {q.words || t(q.removed ? TOPIC_WORDS.removedByWriter : TOPIC_WORDS.hidden)}
+                                {t(TOPIC_WORDS.quoteLine, { name: name(q), words: q.words || (q.removed ? t(TOPIC_WORDS.removedByWriter) : t(TOPIC_WORDS.hidden)) })}
                             </p>
                         )}
                         <PostBody post={post} />
@@ -210,7 +213,7 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
                 <div className="sticky bottom-0 flex flex-col gap-2 pt-2" style={{ background: 'var(--bg-primary)', borderTop: '1px solid var(--border-primary)', bottom: 'var(--bottom-nav-offset, 0px)' }}>
                     {quote && (
                         <div className="flex items-center gap-2 pl-2 text-xs" style={{ borderLeft: '3px solid var(--bp-accent-fill)', color: 'var(--text-secondary)' }} data-testid="forum-quote">
-                            <span className="truncate flex-1 min-w-0">{t(TOPIC_WORDS.replyingTo, { name: name(quote) })}: {quote.words}</span>
+                            <span className="truncate flex-1 min-w-0">{t(TOPIC_WORDS.replyingTo, { name: name(quote), words: quote.words })}</span>
                             <button type="button" onClick={() => setQuote(null)} aria-label={t(TOPIC_WORDS.cancelQuote)} className="min-w-[44px] min-h-[44px]">✕</button>
                         </div>
                     )}
@@ -228,7 +231,7 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
             )}
 
             {menu && createPortal(
-                <div role="dialog" aria-modal="true" aria-label={t(menu.kind === 'post' ? TOPIC_WORDS.postMenu : TOPIC_WORDS.topicMenu)} data-testid="forum-menu"
+                <div role="dialog" aria-modal="true" aria-label={menu.kind === 'post' ? t(TOPIC_WORDS.postMenu) : t(TOPIC_WORDS.topicMenu)} data-testid="forum-menu"
                     className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-4 bg-black/60" onClick={() => setMenu(null)}>
                     <div className="w-full max-w-sm rounded-2xl p-2 flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-primary)' }} onClick={(e) => e.stopPropagation()}>
                         {menuItems(menu).map(([label, fn, danger]) => (fn
@@ -261,7 +264,7 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
         if (m.kind === 'topic') {
             if (!topic) return [];
             const items: MenuItem[] = [[
-                t(topic.follow === 'muted' ? TOPIC_WORDS.unmute : TOPIC_WORDS.mute),
+                topic.follow === 'muted' ? t(TOPIC_WORDS.unmute) : t(TOPIC_WORDS.mute),
                 () => void act(() => followForumTopic(topic.id, topic.follow === 'muted' ? null : 'muted')),
             ]];
             if (open && (topic.writer.publicKey === me || front?.moderator)) items.push([t(TOPIC_WORDS.close), () => void act(() => closeForumTopic(topic.id))]);

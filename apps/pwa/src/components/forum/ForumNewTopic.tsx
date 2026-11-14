@@ -5,7 +5,7 @@
  * go only there. On a public forum the sheet that anyone on the web can read it comes first, once.
  */
 import { useState } from 'react';
-import { FORUM_LIMITS, currentLanguage, forumSectionName, t, tn, word } from '@beanpool/core';
+import { FORUM_LIMITS, currentLanguage, forumSectionName, t, tn, word, wordn } from '@beanpool/core';
 import { markForumTold, startForumTopic, type ForumFront, type ForumWaiting } from '../../lib/forum';
 import { ForumPhotoAttach, ForumToldSheet } from './ForumBits';
 
@@ -19,8 +19,8 @@ export const NEW_TOPIC_WORDS = {
     post: word('Post topic'),
     cancel: word('Cancel'),
     firstLook: word('Your first topic is looked at by a moderator before it shows.'),
-    firstLookHours: word('Your first topic is looked at by a moderator before it shows. Usually within {n} hour.'),
-    firstLookHoursOther: word('Your first topic is looked at by a moderator before it shows. Usually within {n} hours.'),
+    firstLookHours: wordn('Your first topic is looked at by a moderator before it shows. Usually within {n} hour.',
+        'Your first topic is looked at by a moderator before it shows. Usually within {n} hours.'),
     count: word('{n} of {max}'),
 };
 
@@ -89,7 +89,7 @@ export function ForumNewTopic({ front, sectionId, usuallyWithinHours, staff, onP
             </div>
             {front.firstTopicWaits && (
                 <p data-testid="forum-first-look-note" className="m-0 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                    {usuallyWithinHours ? tn(usuallyWithinHours, NEW_TOPIC_WORDS.firstLookHours, NEW_TOPIC_WORDS.firstLookHoursOther, { n: usuallyWithinHours }) : t(NEW_TOPIC_WORDS.firstLook)}
+                    {usuallyWithinHours ? tn(usuallyWithinHours, NEW_TOPIC_WORDS.firstLookHours.one, NEW_TOPIC_WORDS.firstLookHours.other, { n: usuallyWithinHours }) : t(NEW_TOPIC_WORDS.firstLook)}
                 </p>
             )}
             {telling && (

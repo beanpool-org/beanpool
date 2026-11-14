@@ -14,7 +14,7 @@
  *   node's words, with Try again.
  */
 import { useEffect, useState } from 'react';
-import { forumSectionName, t, timeAgo, tn, word } from '@beanpool/core';
+import { forumSectionName, t, timeAgo, tn, word, wordn } from '@beanpool/core';
 import { myNodeRoleOnce } from '../lib/api';
 import {
     getForumFront, getForumTopics, keptFront, keptList, myFirstLook, withdrawFirstLook, type ForumFront, type ForumTopic, type ForumWaiting,
@@ -30,10 +30,10 @@ export const FORUM_WORDS = {
     firstLooks: word('Waiting for a first look ({n}) ›'),
     none: word('No topics here yet. Start the first one.'),
     more: word('Show more topics'),
-    replies: { one: word('{n} reply'), other: word('{n} replies') },
+    replies: wordn('{n} reply', '{n} replies'),
     unread: word('New replies'),
     waitingMine: word('Your first topic “{title}” is waiting for a first look.'),
-    usually: { one: word('Usually within {n} hour.'), other: word('Usually within {n} hours.') },
+    usually: wordn('Usually within {n} hour.', 'Usually within {n} hours.'),
     withdraw: word('Withdraw it'),
     sentForLook: word('Thank you. A moderator looks at your first topic before it shows. You’ll hear by the bell.'),
     failed: word('Couldn’t load the forum. Check your connection and try again.'),

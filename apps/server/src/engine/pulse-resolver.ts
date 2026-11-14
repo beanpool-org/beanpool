@@ -25,7 +25,7 @@ import { db } from '../db/db.js';
 import { ChannelCategory, ChannelPlatform } from './creator-channels.js';
 import { scrubEndedEvents } from './posts.js';
 import { sweepTakedowns } from './agent-takedowns.js';
-import { avatarUrlOf } from '@beanpool/core';
+import { avatarUrlOf, type PulseKnowledgeCard } from '@beanpool/core';
 import { pulseHarvestAllowance } from './writer-bounds.js';
 
 // ============================================================================
@@ -2249,6 +2249,19 @@ export interface PulseFeedOptions {
 }
 
 /**
+ * Cards worked out when the feed is read, merged into its own order (slice KP: Local knowledge's, engine/knowledge.ts
+ * knowledgePulseCards). The caller decides who gets them; a read without any is the feed as it always was.
+ */
+export interface PulseFeedExtras {
+    extra?: readonly PulseKnowledgeCard[];
+}
+
+export interface PulseFeedPage<T> {
+    items: T[];
+    nextCursor: string | null;
+}
+
+/**
  * The feed's sort key. NULL published_at sorts as '' — last under DESC — so an
  * item the source gave no date for still has a stable, reachable position.
  * The two feed indexes in schema.sql index this exact expression; change one and
@@ -2272,7 +2285,31 @@ export function decodePulseCursor(cursor: string): { sortKey: string; id: string
     return { sortKey: cursor.slice(0, sep), id: cursor.slice(sep + 1) || null };
 }
 
-export function getPulseFeed(options: PulseFeedOptions = {}): { items: PulseFeedCard[]; nextCursor: string | null } {
+/**
+ * Whether the feed's order puts (key, id) after the cursor: the SQL's own keyset clause below, in JS, for a card that is
+ * not a row. ISO times and ids are ASCII, which JS compares as SQLite's BINARY collation does.
+ */
+function afterCursor(key: string, id: string, cursor: { sortKey: string; id: string | null }): boolean {
+    if (cursor.id === null) return key < cursor.sortKey;
+    return key < cursor.sortKey || (key === cursor.sortKey && id < cursor.id);
+}
+
+/** The feed's order, newest first: `COALESCE(published_at, '') DESC, id DESC`. */
+function feedOrder(a: { publishedAt: string | null; id: string }, b: { publishedAt: string | null; id: string }): number {
+    const ka = a.publishedAt ?? '', kb = b.publishedAt ?? '';
+    if (ka !== kb) return ka < kb ? 1 : -1;
+    return a.id === b.id ? 0 : a.id < b.id ? 1 : -1;
+}
+
+/**
+ * The Pulse's feed, a page at a time in keyset order (time, then id, newest first). `extra`: cards worked out at read time
+ * (Local knowledge's, slice KP) merged into that same order, so the cursor keeps its shape (`<time>|<id>`, a card's id
+ * `know_<day>` as any item's) and a page still holds `limit` items: one past a card resumes after it, never repeating or
+ * skipping an item on either side of a tie. Home's Pulse card and an app that doesn't ask pass none.
+ */
+export function getPulseFeed(options?: PulseFeedOptions): PulseFeedPage<PulseFeedCard>;
+export function getPulseFeed(options: PulseFeedOptions & PulseFeedExtras): PulseFeedPage<PulseFeedCard | PulseKnowledgeCard>;
+export function getPulseFeed(options: PulseFeedOptions & PulseFeedExtras = {}): PulseFeedPage<PulseFeedCard | PulseKnowledgeCard> {
     const limit = Math.min(50, Math.max(1, typeof options.limit === 'number' ? options.limit : 20));
     const conditions: string[] = [
         'c.deleted_at IS NULL',
@@ -2293,8 +2330,9 @@ export function getPulseFeed(options: PulseFeedOptions = {}): { items: PulseFeed
     // `published_at < cursor` drops every one of them that did not fit on the
     // page. COALESCE keeps NULL-dated items reachable too: `NULL < cursor` is
     // NULL, so under the old clause they could never appear past page 1.
-    if (options.cursor && typeof options.cursor === 'string') {
-        const { sortKey, id } = decodePulseCursor(options.cursor);
+    const cursor = options.cursor && typeof options.cursor === 'string' ? decodePulseCursor(options.cursor) : null;
+    if (cursor) {
+        const { sortKey, id } = cursor;
         if (id === null) {
             conditions.push(`${FEED_SORT_KEY} < ?`);
             params.push(sortKey);
@@ -2316,12 +2354,28 @@ export function getPulseFeed(options: PulseFeedOptions = {}): { items: PulseFeed
           LIMIT ?`
     ).all(...params, limit + 1) as any[];
 
+    const extra = (options.extra ?? []).filter(c => !cursor || afterCursor(c.publishedAt, c.id, cursor));
+    if (extra.length > 0) {
+        // Both lists in the feed's order, then the first limit + 1 of the two: the rows read are the limit + 1 after the
+        // cursor, so whatever the merge keeps of them is in order and nothing between two of them is missing.
+        const merged = [...rows.map(rowToFeedCard), ...extra].sort(feedOrder).slice(0, limit + 1);
+        const more = merged.length > limit;
+        const page = more ? merged.slice(0, limit) : merged;
+        const end = more ? page[page.length - 1] : null;
+        return { items: page, nextCursor: end ? encodePulseCursor(end.publishedAt, end.id) : null };
+    }
+
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
     const last = hasMore && pageRows.length > 0 ? pageRows[pageRows.length - 1] : null;
     const nextCursor = last ? encodePulseCursor(last.published_at, last.id) : null;
 
-    const items: PulseFeedCard[] = pageRows.map(r => ({
+    return { items: pageRows.map(rowToFeedCard), nextCursor };
+}
+
+/** A feed row as an app reads it. */
+function rowToFeedCard(r: any): PulseFeedCard {
+    return {
         id: r.id,
         ownerPubkey: r.owner_pubkey,
         callsign: r.callsign || 'Neighbour',
@@ -2334,9 +2388,7 @@ export function getPulseFeed(options: PulseFeedOptions = {}): { items: PulseFeed
         publishedAt: r.published_at || null,
         source: r.source,
         isVerified: Boolean(r.oauth_verified_at),
-    }));
-
-    return { items, nextCursor };
+    };
 }
 
 export function setPulseItemMute(actorPubkey: string, itemId: string, muted: boolean): { success: boolean; item: PulseFeedCard } {

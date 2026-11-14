@@ -12,6 +12,12 @@ import {
     LEGACY_CATEGORY_ALIASES,
     POST_TYPE_LINES,
     PRICING_CATEGORIES,
+    PULSE_KNOWLEDGE_DAYS,
+    PULSE_KNOWLEDGE_ID_PREFIX,
+    PULSE_KNOWLEDGE_MAX_PAGES,
+    PULSE_KNOWLEDGE_ROWS,
+    PULSE_KNOWLEDGE_SOURCE,
+    PULSE_KNOWLEDGE_WITH,
     SAMPLE_COMMUNITY,
     brandContrastPairs,
     compareKnowledge,
@@ -170,5 +176,16 @@ describe('the Pulse card', () => {
         expect(isPulseKnowledgeCard({ source: 'knowledge', id: 'know_2026-11-11' })).toBe(true);
         expect(isPulseKnowledgeCard({ source: 'oauth' })).toBe(false);
         expect(isPulseKnowledgeCard(null)).toBe(false);
+    });
+
+    it('is asked for with one word, and bounded as the design says: 30 days, the newest 20 pages, three rows (amended §2.12, §3.8)', () => {
+        expect(PULSE_KNOWLEDGE_WITH).toBe('knowledge');
+        expect(PULSE_KNOWLEDGE_SOURCE).toBe('knowledge');
+        expect(PULSE_KNOWLEDGE_DAYS).toBe(30);
+        expect(PULSE_KNOWLEDGE_MAX_PAGES).toBe(20);
+        expect(PULSE_KNOWLEDGE_ROWS).toBe(3);
+        // A Pulse item's id is 'item_' and hex (the Daily Pulse's 'item_pulse_<date>'): none starts as the card's does.
+        expect(`${PULSE_KNOWLEDGE_ID_PREFIX}2026-11-15`).toBe('know_2026-11-15');
+        expect('item_pulse_2026-11-15'.startsWith(PULSE_KNOWLEDGE_ID_PREFIX)).toBe(false);
     });
 });

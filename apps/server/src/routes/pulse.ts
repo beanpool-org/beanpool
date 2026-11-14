@@ -10,8 +10,12 @@
 import Router from '@koa/router';
 import { getPulseFeed, setPulseItemMute, PulseError } from '../engine/pulse-resolver.js';
 import { getPulseThumbnailService, PulseThumbnailService } from '../engine/pulse-thumbnail.js';
+import { knowledgePulseCards, showingTo } from '../engine/knowledge.js';
+import { featuresFor } from '../config/features-for.js';
+import { getProfileSwitches } from '../config/node-profile.js';
+import { readsAsMember } from '../state-engine.js';
 import type { RouteDeps } from './types.js';
-import { word } from '@beanpool/core';
+import { PULSE_KNOWLEDGE_WITH, word, type PulseKnowledgeCard } from '@beanpool/core';
 
 export interface PulseRouteDeps extends RouteDeps {
     thumbnailService?: PulseThumbnailService;
@@ -22,6 +26,32 @@ function asBool(value: unknown, field: string): boolean {
         throw new PulseError('BAD_FIELD', `${field} must be true or false.`);
     }
     return value;
+}
+
+/** Whether a read's `with=` names this word: one word, several comma separated, or the key given more than once. */
+function asksWith(raw: unknown, wanted: string): boolean {
+    const given = Array.isArray(raw) ? raw : [raw];
+    return given.some((v) => typeof v === 'string' && v.split(',').some((w) => w.trim() === wanted));
+}
+
+/**
+ * Local knowledge's cards for this read of the feed (DESIGN-local-knowledge-amend-fable.md §2.12, slice KP): only to an app
+ * that asks (`with=knowledge`: an app from before it never meets one), only under "All" (a read the feed itself filters by
+ * `category` gets none), and only as Home's Learn card is given (routes/home-answer.ts learnPagesFor): to a reader who
+ * reads as a member here (not a suspended member, a visitor or an unsigned read), where Learn is on, never on a node
+ * with the visitors' view (the global community). Worked out from the pages Learn shows this reader, nothing stored.
+ * A read that fails leaves the cards out, never the feed: the creators' items are what the Pulse is for.
+ */
+function knowledgeCardsFor(actor: unknown, withWords: unknown, feedCategory: string | undefined): PulseKnowledgeCard[] {
+    if (!asksWith(withWords, PULSE_KNOWLEDGE_WITH) || feedCategory) return [];
+    if (typeof actor !== 'string' || !readsAsMember(actor)) return [];
+    if (featuresFor(actor).knowledge !== true || getProfileSwitches().guestListingsOnly) return [];
+    try {
+        return knowledgePulseCards(showingTo(actor));
+    } catch (e) {
+        console.warn('[Pulse] the Local knowledge cards could not be read:', (e as Error)?.message || e);
+        return [];
+    }
 }
 
 function pulseErrorStatus(code: string): number {
@@ -47,15 +77,20 @@ export function createPulseRoutes(deps: RouteDeps | PulseRouteDeps): Router {
      * - Channel not deleted & syndicate_to_node = 1
      * - Item not deleted & muted = 0
      * - Member status = 'active'
+     *
+     * `with=knowledge` (slice KP): also Local knowledge's cards, one a day at most, merged into the same order with the same
+     * cursor (knowledgeCardsFor says who gets them). Without it the answer is what it always was.
      */
     router.get('/api/pulse/feed', async (ctx) => {
         const { cursor, category, limit } = ctx.query;
         const parsedLimit = limit !== undefined ? parseInt(String(limit), 10) : undefined;
+        const feedCategory = typeof category === 'string' ? category : undefined;
 
         const result = getPulseFeed({
             cursor: typeof cursor === 'string' ? cursor : undefined,
-            category: typeof category === 'string' ? category : undefined,
+            category: feedCategory,
             limit: parsedLimit !== undefined && !isNaN(parsedLimit) ? parsedLimit : undefined,
+            extra: knowledgeCardsFor(ctx.state?.actor, ctx.query.with, feedCategory),
         });
 
         ctx.body = result;

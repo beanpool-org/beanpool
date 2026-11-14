@@ -16,14 +16,15 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { pushCommunityTag, pushNoticeBytes } from '@beanpool/core';
 import {
-    checkClickedNotice, keepWebPushAtOpen, tellMeWhenTheyAnswer, turnOffWebPush, webPushOrigin, webPushState, readWebPushPin, type PushEnv,
+    checkClickedNotice, keepWebPushAtOpen, tellMeWhenTheyAnswer, turnOffWebPush, webPushOrigin, webPushState, readWebPushPin, letGoOfWebPushAt,
+    LET_GO_WAIT_MS, type PushEnv,
 } from './web-push';
 import { openClickedNotice, useWebPushMember } from './use-web-push-member';
-import { getNodeApiUrl, getPushNoticeDetails, signedFetchAt } from './api';
+import { getNodeApiUrl, getPushNoticeDetails, sendSignedAt, signedFetchAt } from './api';
 import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
 import { WebPushRow } from '../components/WebPushRow';
 
-vi.mock('./api', () => ({ signedFetchAt: vi.fn(), getNodeApiUrl: vi.fn(() => ''), getPushNoticeDetails: vi.fn() }));
+vi.mock('./api', () => ({ signedFetchAt: vi.fn(), sendSignedAt: vi.fn(), getNodeApiUrl: vi.fn(() => ''), getPushNoticeDetails: vi.fn() }));
 
 const SW_SOURCE = fs.readFileSync(path.resolve(__dirname, '../../public/sw.js'), 'utf8');
 
@@ -200,6 +201,55 @@ describe('at each open (keepWebPushAtOpen), Turn off and sign-out (turnOffWebPus
         expect(vi.mocked(signedFetchAt).mock.calls[0].slice(0, 3)).toEqual(['DELETE', ORIGIN, '/api/web-push']);
         expect(unsubscribe).toHaveBeenCalledTimes(1);
         expect(readWebPushPin(ORIGIN, MEMBER)).toBeNull();
+    });
+});
+
+describe('the web app moves to another address (letGoOfWebPushAt, review of 7b3f900e)', () => {
+    let unsubscribe: ReturnType<typeof vi.fn>;
+    beforeEach(() => {
+        localStorage.clear();
+        vi.mocked(signedFetchAt).mockReset();
+        vi.mocked(sendSignedAt).mockReset();
+        vi.mocked(sendSignedAt).mockResolvedValue(undefined);
+        unsubscribe = vi.fn(async () => true);
+        const registration = { pushManager: { getSubscription: async () => ({ unsubscribe }) } };
+        Object.defineProperty(navigator, 'serviceWorker', { value: { getRegistration: vi.fn(async () => registration) }, configurable: true });
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it("the old community's DELETE goes to the origin it was given, signed, sent and not waited for; the subscription ends, the pin goes", async () => {
+        pin('member', 'https://old.example');
+        await letGoOfWebPushAt('https://old.example', identity);
+        expect(vi.mocked(sendSignedAt).mock.calls).toEqual([['DELETE', 'https://old.example', '/api/web-push', JSON.stringify({ subId: 'e'.repeat(64) }), identity]]);
+        expect(signedFetchAt).not.toHaveBeenCalled();
+        expect(unsubscribe).toHaveBeenCalledTimes(1);
+        expect(readWebPushPin('https://old.example', MEMBER)).toBeNull();
+    });
+    it(`a sending that hangs (a version never heard) holds the tap at most ${LET_GO_WAIT_MS} ms`, async () => {
+        vi.useFakeTimers();
+        vi.mocked(sendSignedAt).mockImplementation(() => new Promise<void>(() => { /* never on its way */ }));
+        pin('member', 'https://old.example');
+        let done = false;
+        const going = letGoOfWebPushAt('https://old.example', identity).then(() => { done = true; });
+        await vi.advanceTimersByTimeAsync(LET_GO_WAIT_MS - 1);
+        expect(done).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        await going;
+        expect(done).toBe(true);
+        expect(readWebPushPin('https://old.example', MEMBER)).toBeNull();
+    });
+    it('a refusal before sending (a key that cannot sign, a server too old) is never thrown', async () => {
+        vi.mocked(sendSignedAt).mockRejectedValue(new Error('refused'));
+        pin('member', 'https://old.example');
+        await expect(letGoOfWebPushAt('https://old.example', identity)).resolves.toBeUndefined();
+        expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+    it('nothing kept for this key at the old community: nothing is sent and the subscription stays', async () => {
+        pin('member', 'https://another.example');
+        await letGoOfWebPushAt('https://old.example', identity);
+        expect(sendSignedAt).not.toHaveBeenCalled();
+        expect(unsubscribe).not.toHaveBeenCalled();
+        expect(readWebPushPin('https://another.example', MEMBER)).not.toBeNull();
     });
 });
 

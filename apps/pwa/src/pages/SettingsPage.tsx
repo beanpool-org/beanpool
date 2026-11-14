@@ -10,7 +10,7 @@ import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
 import { Fragment, useState, useEffect, useRef } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
-import { turnOffWebPush, webPushOrigin } from '../lib/web-push';
+import { letGoOfWebPushAt, turnOffWebPush, webPushOrigin } from '../lib/web-push';
 import { WebPushRow } from '../components/WebPushRow';
 import { clearAccountStorage } from '../lib/device-prefs';
 import { clearHomeCache } from '../lib/home-cache';
@@ -744,20 +744,26 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         setTestingNode(false);
     };
 
-    // Pointed at another community: the one the app talked to lets go of this browser first, while the key can sign for it
-    // (web push W2: the pin follows the node the app talks to, so the old one's notices would only be refused here).
-    const handleSaveNodeUrl = async () => {
-        const next = customNodeUrl.trim().replace(/\/+$/, '') || null;
-        if (next !== getStoredNodeApiUrl()) await stopWebPushHere();
+    // The address changes on the tap. Pointed at another community, the one the app talked to lets go of this browser (web
+    // push W2: the pin follows the node the app talks to, so the old one's notices would only be refused here): its origin is
+    // read first, the signed DELETE goes there with keepalive and is never waited for (web-push.ts letGoOfWebPushAt), so an
+    // old community out of reach holds nothing up. The same community however typed (case, :443, a trailing /) keeps it.
+    const [movingNode, setMovingNode] = useState(false);
+    const moveNodeAddress = async (next: string | null) => {
+        if (movingNode) return;
+        const before = webPushOrigin(getNodeApiUrl());
         setNodeApiUrl(next);
+        const after = webPushOrigin(getNodeApiUrl());
+        if (before && before !== after) {
+            setMovingNode(true);
+            await letGoOfWebPushAt(before, identity);
+        }
         window.location.reload();
     };
-
-    const handleResetNodeUrl = async () => {
-        if (getStoredNodeApiUrl() !== null) await stopWebPushHere();
-        setNodeApiUrl(null);
+    const handleSaveNodeUrl = () => moveNodeAddress(customNodeUrl.trim().replace(/\/+$/, '') || null);
+    const handleResetNodeUrl = () => {
         setCustomNodeUrl('');
-        window.location.reload();
+        return moveNodeAddress(null);
     };
 
     useEffect(() => {
@@ -2015,7 +2021,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <button
                                         type="button"
                                         onClick={handleResetNodeUrl}
-                                        className="w-full py-2.5 rounded-xl text-xs font-bold bg-oat-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 border-none cursor-pointer"
+                                        disabled={movingNode}
+                                        className="w-full py-2.5 rounded-xl text-xs font-bold bg-oat-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         {t('Reset to this page’s community')}
                                     </button>
@@ -2045,7 +2052,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 </button>
                                 <button
                                     onClick={handleSaveNodeUrl}
-                                    className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-nature-900 dark:bg-white text-white dark:text-nature-900 border-none cursor-pointer"
+                                    disabled={movingNode}
+                                    className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-nature-900 dark:bg-white text-white dark:text-nature-900 border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {t('💾 Save & Connect')}
                                 </button>

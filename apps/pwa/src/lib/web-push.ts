@@ -13,7 +13,7 @@
  * over http, notifications blocked. The waiting page's own 5-minute check and the 30-day invite carry the yes either way.
  */
 import { t, verifyPushNotice, word } from '@beanpool/core';
-import { signedFetchAt } from './api';
+import { sendSignedAt, signedFetchAt } from './api';
 import { refuseIfNodeTooOld } from './node-version-gate';
 import type { BeanPoolIdentity } from './identity';
 import { APP_STORE_URL, PLAY_URL } from './peek';
@@ -276,6 +276,29 @@ export async function turnOffWebPush(origin: string, identity: BeanPoolIdentity)
     await Promise.race([work, new Promise(resolve => { timer = setTimeout(resolve, STOP_WAIT_MS); })]).catch(() => {});
     clearTimeout(timer);
     forgetWebPushPin(origin, identity.publicKey);
+}
+
+/**
+ * Settings points the web app at another community's address (Save & Connect, Reset; web push W2 r3): the community it
+ * talked to lets go of this browser, and the tap waits on nothing from that community. `origin` is the OLD one, read before
+ * the address changed, so the DELETE is signed for that host and sent there. The pin goes at once. The DELETE leaves with
+ * keepalive (lib/api.ts sendSignedAt), so the reload that follows doesn't cut it, and its answer is never awaited. The
+ * browser's subscription ends too, so the old community can tell this browser nothing more even if the DELETE never gets
+ * there. Resolves once both are on their way, or after LET_GO_WAIT_MS (a server version not heard yet, a slow browser);
+ * with no pin there, at once and with nothing sent. Never throws.
+ */
+export const LET_GO_WAIT_MS = 1_000;
+export async function letGoOfWebPushAt(origin: string, identity: BeanPoolIdentity): Promise<void> {
+    const pin = readWebPushPin(origin, identity.publicKey);
+    if (!pin) return;
+    forgetWebPushPin(origin, identity.publicKey);
+    const work = Promise.allSettled([
+        sendSignedAt('DELETE', origin, WEB_PUSH_PATH, JSON.stringify({ subId: pin.subId }), identity),
+        currentSubscription().then(subscription => subscription?.unsubscribe()),
+    ]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([work, new Promise(resolve => { timer = setTimeout(resolve, LET_GO_WAIT_MS); })]);
+    clearTimeout(timer);
 }
 
 /** What Settings → Notifications says for this browser (design §2.3): on, off, or blocked by the browser; or no push here. */

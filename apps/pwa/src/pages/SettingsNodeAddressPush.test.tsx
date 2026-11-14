@@ -1,8 +1,9 @@
 /**
- * Settings → Advanced → the community address (web push W2, review of 67cdc710): a browser's pushes and their pin are the
- * node the web app talks to (lib/web-push.ts webPushOrigin). Pointing the app at another community, or back to the page's
- * own, first lets the one it talked to go of this browser (Turn off: DELETE signed while the key is here, the browser's
- * subscription ends), so the old one's notices don't keep arriving to be refused here as forgeries.
+ * Settings → Advanced → the community address (web push W2, reviews of 67cdc710 and 7b3f900e): a browser's pushes and their
+ * pin are the node the web app talks to (lib/web-push.ts webPushOrigin). Pointing the app at another community, or back to the
+ * page's own, changes the address on the tap, and the one it talked to lets go of this browser (its origin read first, the
+ * signed DELETE sent there and never waited for: letGoOfWebPushAt), so the old one's notices don't keep arriving to be refused
+ * here as forgeries, and an old community out of reach holds nothing up. The same community, however typed, keeps it.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -34,7 +35,7 @@ vi.mock('../lib/member-area', async () => {
 });
 vi.mock('../lib/web-push', async () => {
     const actual = await vi.importActual('../lib/web-push');
-    return { ...actual, turnOffWebPush: vi.fn(async () => {}) };
+    return { ...actual, turnOffWebPush: vi.fn(async () => {}), letGoOfWebPushAt: vi.fn(async () => {}) };
 });
 
 const identity: any = { publicKey: 'me-pk', privateKey: 'priv-key-hex', callsign: 'Kim', mnemonic: [] };
@@ -43,7 +44,12 @@ beforeEach(() => {
     localStorage.clear();
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })));
     vi.mocked(webPush.turnOffWebPush).mockClear();
+    vi.mocked(webPush.letGoOfWebPushAt).mockReset();
+    vi.mocked(webPush.letGoOfWebPushAt).mockResolvedValue(undefined);
 });
+/** The old community out of reach: the letting go never settles (its LET_GO_WAIT_MS bound is web-push.members.test's). */
+const oldCommunityOutOfReach = () => vi.mocked(webPush.letGoOfWebPushAt).mockImplementation(() => new Promise<void>(() => {}));
+const urlField = () => screen.findByPlaceholderText('Node API URL (e.g. https://riverside.example.org)');
 afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
@@ -60,28 +66,45 @@ const openAdvanced = async () => {
     fireEvent.click(await screen.findByText('Advanced / Subsystem'));
 };
 
-describe('Settings → the community address: the community the app talked to lets go of this browser first', () => {
-    it('Reset to this page’s community: Turn off at the address it talked to, before the address goes', async () => {
+describe('Settings → the community address: changed on the tap; the community the app talked to lets go of this browser', () => {
+    it('Reset to this page’s community: the address goes at once, and the one it talked to lets go, from the origin read first', async () => {
         localStorage.setItem('bp_node_url', 'https://other.example');
+        oldCommunityOutOfReach();
         await openAdvanced();
-        fireEvent.click(await screen.findByText('Reset to this page’s community'));
-        await waitFor(() => expect(localStorage.getItem('bp_node_url')).toBeNull());
-        expect(webPush.turnOffWebPush).toHaveBeenCalledTimes(1);
-        expect(vi.mocked(webPush.turnOffWebPush).mock.calls[0]).toEqual(['https://other.example', identity]);
+        const reset = await screen.findByText('Reset to this page’s community');
+        fireEvent.click(reset);
+        expect(localStorage.getItem('bp_node_url')).toBeNull();
+        expect(vi.mocked(webPush.letGoOfWebPushAt).mock.calls).toEqual([['https://other.example', identity]]);
+        expect(webPush.turnOffWebPush).not.toHaveBeenCalled();
+        // While the letting go is on its way (at most a second, web-push.ts LET_GO_WAIT_MS), neither button is tapped twice.
+        await waitFor(() => expect(reset).toBeDisabled());
+        expect(screen.getByText('💾 Save & Connect')).toBeDisabled();
     });
-    it("Save & Connect to another community: Turn off at the page's own, the one it talked to", async () => {
+    it("Save & Connect to another community: the address is saved at once; the page's own, the one it talked to, lets go", async () => {
+        oldCommunityOutOfReach();
         await openAdvanced();
-        fireEvent.change(await screen.findByPlaceholderText('Node API URL (e.g. https://riverside.example.org)'), { target: { value: 'https://riverside.example/' } });
+        fireEvent.change(await urlField(), { target: { value: 'https://riverside.example/' } });
         fireEvent.click(screen.getByText('💾 Save & Connect'));
-        await waitFor(() => expect(localStorage.getItem('bp_node_url')).toBe('https://riverside.example'));
-        expect(vi.mocked(webPush.turnOffWebPush).mock.calls).toEqual([[window.location.origin, identity]]);
+        expect(localStorage.getItem('bp_node_url')).toBe('https://riverside.example');
+        expect(vi.mocked(webPush.letGoOfWebPushAt).mock.calls).toEqual([[window.location.origin, identity]]);
+        expect(webPush.turnOffWebPush).not.toHaveBeenCalled();
     });
     it('Save & Connect to the address it already talks to: this browser is kept', async () => {
         localStorage.setItem('bp_node_url', 'https://riverside.example');
         await openAdvanced();
-        fireEvent.change(await screen.findByPlaceholderText('Node API URL (e.g. https://riverside.example.org)'), { target: { value: 'https://riverside.example' } });
+        fireEvent.change(await urlField(), { target: { value: 'https://riverside.example' } });
         fireEvent.click(screen.getByText('💾 Save & Connect'));
-        await waitFor(() => expect(localStorage.getItem('bp_node_url')).toBe('https://riverside.example'));
+        expect(localStorage.getItem('bp_node_url')).toBe('https://riverside.example');
+        expect(webPush.letGoOfWebPushAt).not.toHaveBeenCalled();
+        expect(webPush.turnOffWebPush).not.toHaveBeenCalled();
+    });
+    it('Save & Connect to the same community typed differently (capitals, :443, a trailing /): this browser is kept', async () => {
+        localStorage.setItem('bp_node_url', 'https://riverside.example');
+        await openAdvanced();
+        fireEvent.change(await urlField(), { target: { value: 'HTTPS://Riverside.Example:443/' } });
+        fireEvent.click(screen.getByText('💾 Save & Connect'));
+        expect(localStorage.getItem('bp_node_url')).toBe('HTTPS://Riverside.Example:443');
+        expect(webPush.letGoOfWebPushAt).not.toHaveBeenCalled();
         expect(webPush.turnOffWebPush).not.toHaveBeenCalled();
     });
 });

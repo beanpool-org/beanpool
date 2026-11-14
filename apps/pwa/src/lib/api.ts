@@ -758,6 +758,18 @@ export async function signedFetchAt(
 }
 
 /**
+ * signedFetchAt's POST or DELETE, sent and never waited for: resolves once it is on its way (the version known, the signature
+ * made, both here), with keepalive, so a reload or a closed tab right after doesn't cut it. Its answer is read by nobody: for
+ * a request whose outcome changes nothing in this browser (web push W2: the community the web app moves away from lets go
+ * of this browser). Throws only before sending (a server not known to be new enough, a key that can't sign).
+ */
+export async function sendSignedAt(method: 'POST' | 'DELETE', community: string, path: string, bodyString: string, identity: BeanPoolIdentity): Promise<void> {
+    await refuseIfNodeTooOld(community);
+    const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
+    void fetch(`${community}${path}`, { method, headers: { 'Content-Type': 'application/json', ...signed }, body: bodyString, keepalive: true }).catch(() => null);
+}
+
+/**
  * A request for the member's own copy on the global community (lib/show-on-global.ts), to global or to their community. What
  * the phone sends and nothing more: the signature's headers and a JSON type. No cookie, no `Referer`, no shared cache, and not
  * the browser's own language: left alone it adds `Accept-Language` by itself. A browser's `Origin` can't be left off a cross-origin

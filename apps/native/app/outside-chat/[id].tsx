@@ -17,7 +17,7 @@ import { Alert } from '../../utils/keyboard-alert';
 import { useTheme, useStyles } from '../ThemeContext';
 import { blockUser } from '../../utils/blocklist';
 import { sendOutsideLine } from '../../utils/outside-mail';
-import { OUTSIDE_CHATS_UPDATED, outsideContext, outsideErrorWords, syncOutsideMailNow } from '../../utils/outside-chat-live';
+import { OUTSIDE_CHATS_UPDATED, OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, syncOutsideMailNow } from '../../utils/outside-chat-live';
 import type { OutsideChat, OutsideLine, OutsideLineState } from '../../utils/outside-chat-store';
 
 /** How often an open chat asks for what waits, while it is on screen. */
@@ -74,7 +74,13 @@ export default function OutsideChatScreen() {
             const ctx = await outsideContext();
             if (!ctx) return;
             setText('');
-            await sendOutsideLine(ctx, chat.id, words).catch((e) => { Alert.alert(outsideErrorWords(e)); });
+            // Its own deadline: a send my server never answers leaves the line `sending` (it goes at the next round) and the
+            // composer free, never held until the app restarts.
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), OUTSIDE_SEND_MS);
+            await sendOutsideLine({ ...ctx, signal: controller.signal }, chat.id, words)
+                .catch((e) => { Alert.alert(outsideErrorWords(e)); })
+                .finally(() => clearTimeout(timer));
             await load();
         } finally {
             setBusy(false);
@@ -181,12 +187,22 @@ export default function OutsideChatScreen() {
                             </View>
                         )}
                         renderItem={({ item }) => {
-                            const mine = item.author === me;
-                            const tick = mine ? outsideLineStateWords(item.state) : null;
+                            if (item.author !== me) {
+                                return (
+                                    <View style={[styles.bubble, styles.theirs]} accessibilityLabel={item.text}>
+                                        <Text style={styles.theirsText} selectable>{item.text}</Text>
+                                    </View>
+                                );
+                            }
+                            // Mine: its tick, and for a line my server refused, its words why.
+                            const tick = outsideLineStateWords(item.state);
+                            const why = item.state === 'failed' ? item.note : null;
+                            const said = [item.text, tick, why].filter(Boolean).join('. ');
                             return (
-                                <View style={[styles.bubble, mine ? styles.mine : styles.theirs]} accessibilityLabel={tick ? `${item.text}. ${tick}` : item.text}>
-                                    <Text style={mine ? styles.mineText : styles.theirsText} selectable>{item.text}</Text>
+                                <View style={[styles.bubble, styles.mine]} accessibilityLabel={said}>
+                                    <Text style={styles.mineText} selectable>{item.text}</Text>
                                     {tick && <Text style={styles.tick} testID="outside-line-state">{tick}</Text>}
+                                    {why && <Text style={styles.tick} testID="outside-line-why">{why}</Text>}
                                 </View>
                             );
                         }}

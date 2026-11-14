@@ -21,6 +21,7 @@ const TASK_NAME = 'BEANPOOL_PILLAR_SYNC';
  */
 TaskManager.defineTask(TASK_NAME, async () => {
     console.log('[Pillar] Background task woke up');
+    const wokeAt = Date.now();
 
     try {
         const result = await performSync();
@@ -43,10 +44,13 @@ TaskManager.defineTask(TASK_NAME, async () => {
             console.warn('[Pillar] The sync\'s notices were not posted:', e);
         }
 
-        // Mail from other communities (slice X3): fetched, written on this phone, then confirmed, so it is deleted there.
+        // Mail from other communities (slice X3): fetched, written on this phone, then confirmed, so it is deleted there. Under
+        // its own budget, inside what is left of iOS's ~30 seconds (utils/outside-chat-live.ts backgroundMailBudget); skipped
+        // when too little is left, so the mail waits for the next wake or the app.
         try {
-            const { syncOutsideMailNow } = await import('../utils/outside-chat-live');
-            await syncOutsideMailNow();
+            const { backgroundMailBudget, syncOutsideMailNow } = await import('../utils/outside-chat-live');
+            const budget = backgroundMailBudget(Date.now() - wokeAt);
+            if (budget > 0) await syncOutsideMailNow(budget);
         } catch (e) {
             console.warn('[Pillar] Mail from other communities waits for the next round:', e);
         }

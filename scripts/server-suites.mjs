@@ -309,6 +309,7 @@ export const SUITES = [
     'test-standby-listings-verbatim',
     'test-standby-standing',
     'test-standby-health',
+    'test-standby-schema-drift',
     'test-address-retention',
     'test-standby-in-flight',
     'test-standby-devices',

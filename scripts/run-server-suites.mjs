@@ -27,6 +27,10 @@
 // scripts/server-suite-shards.mjs splits the runs by the committed snapshot alone, so every shard computes the same split
 // and the K parts together are every run exactly once. Each part runs its pooled runs, then its serial ones, as above.
 //
+// MEASURED. A line a suite starts with `📏 ` is a measurement (test-members-on-demand's ratios): the runner prints it under
+// the run's ✓ or ✘ and adds it to the summary test-all.sh prints, so a PASSING run leaves its numbers in a CI log too (its
+// own log is deleted, and test-all shows the pool's output only when it fails). At most MEASURED_MAX lines a run.
+//
 // NO RETRIES. A failure is red. The report lists every failing run with its log, then one roll-up line that
 // scripts/test-all-lib.sh reads (`❌ Server suites failed: test-x test-y(on) test-z(TIMEOUT)`).
 //
@@ -59,6 +63,17 @@ const limitOf = (run) => (TIMEOUT_FROM_ENV ? TIMEOUT_S : (run.timeoutS ?? TIMEOU
 const KILL_GRACE_MS = 10_000;
 const FAILED_LOG_LINES = 300; // a failing run's whole log up to this; past it, its ✗ lines and the last 200
 const SUMMARY_TOP = 15;
+const MEASURED = /^📏 /;
+const MEASURED_MAX = 4;
+
+/** A run's measurement lines (MEASURED above), read before a passing run's folder goes. */
+function measuredLines(log) {
+    try {
+        return fs.readFileSync(log, 'utf8').split('\n').filter((l) => MEASURED.test(l)).slice(0, MEASURED_MAX);
+    } catch {
+        return [];
+    }
+}
 
 /**
  * Never handed to a suite: a shell that sourced a node's .env would otherwise run the suites as that node, with its
@@ -278,6 +293,8 @@ async function runAll(runs, jobs, root, results) {
             const why = r.status === 'timeout' ? ` TIMEOUT after ${limitS}s` : r.status === 'fail' ? ` exit ${r.code ?? r.signal}`
                 : r.status === 'nocount' ? ' exit 0 with no closing count (NO-COUNT)' : '';
             console.log(`${mark} ${r.id}${why}  ${fmt(r.seconds)}  [${results.length}/${total}]`);
+            r.measured = measuredLines(r.log);
+            for (const m of r.measured) console.log(`    ${m}`);
             if (process.env.SERVER_SUITES_KEEP_LOGS) {
                 fs.mkdirSync(process.env.SERVER_SUITES_KEEP_LOGS, { recursive: true });
                 fs.copyFileSync(r.log, path.join(process.env.SERVER_SUITES_KEEP_LOGS, `${r.id}.log`));
@@ -344,7 +361,9 @@ async function main() {
 
     if (process.env.SERVER_SUITES_SUMMARY) {
         const top = byTime.slice(0, SUMMARY_TOP).map((r) => `    ${fmt(r.seconds).padStart(7)}  ${r.id}`).join('\n');
-        fs.writeFileSync(process.env.SERVER_SUITES_SUMMARY, `${line}\n  Slowest ${Math.min(SUMMARY_TOP, byTime.length)}:\n${top}\n`);
+        const measured = results.flatMap((r) => r.measured ?? []).map((m) => `    ${m}`).join('\n');
+        fs.writeFileSync(process.env.SERVER_SUITES_SUMMARY, `${line}\n  Slowest ${Math.min(SUMMARY_TOP, byTime.length)}:\n${top}\n`
+            + (measured ? `  Measured:\n${measured}\n` : ''));
     }
 
     if (failed.length === 0) {

@@ -153,8 +153,9 @@ export function copyUpdates(updates: Record<string, any>): void {
 /**
  * A post as `reader` reads it. Every other post comes back as it is. A copy loses its stored columns for `shownCopy` and,
  * while the directory shows the community and it lets its name be drawn, `shownFrom`; its `shownPrice` stays, for a reader to
- * word; for anyone but its author it is a visitor's read. Its author's read says when the community keeps its name off. One that takes questions adds its author's name and key, and nothing else of them, for a
- * member while it is up: a read that is a removal, or a copy off the board, has nothing to ask about.
+ * word; for anyone but its author it is a visitor's read. Its author's read says when the community keeps its name off
+ * (`shownNameOff`). One that takes questions adds its author's name and key, and nothing else of them, for a member while it
+ * is up: a read that is a removal, or a copy off the board, has nothing to ask about.
  */
 export function readOfCopy(post: MarketplacePost, reader: string | null | undefined): MarketplacePost {
     if (post.shownFromHost === undefined) return post;

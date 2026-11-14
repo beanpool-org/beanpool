@@ -165,6 +165,7 @@ import { isNodeSignedPath, pruneNodeRequestNonces, requireNodeSignature } from '
 import { createInviteAskRoutes } from './routes/invite-asks.js';
 import { createKnowledgeRoutes } from './routes/knowledge.js';
 import { createForumRoutes } from './routes/forum.js';
+import { createFreeTagRoutes } from './routes/free-tags.js';
 import { createNoticeRoutes } from './routes/notices.js';
 import { createBlockRoutes } from './routes/blocks.js';
 import { createToolRoutes } from './routes/tools.js';
@@ -2086,6 +2087,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createInviteAskRoutes(deps),
         createKnowledgeRoutes(deps),
         createForumRoutes(deps),
+        createFreeTagRoutes(deps),
         createNoticeRoutes(deps),
         createBlockRoutes(deps),
         createToolRoutes(deps),

@@ -499,6 +499,9 @@ export const TABLES: Record<string, TableEntry> = {
     // An empty duplicate an owner retired (engine/retire-duplicate.ts): a take-over keeps it retired, and Bring back's
     // delete reaches a standby as a tombstone. The account's 'disabled' travels in its members row, as every status does.
     retired_accounts: plain('member_pubkey retired_by retired_at updated_at'),
+    // An owner's or admin's hide or merge of a tag members typed (engine/free-tags.ts): a take-over offers members the same
+    // tags, and a rule cleared reaches a standby as a tombstone.
+    free_tag_rules: plain('tag action into_tag set_by set_at updated_at'),
     // Vouchers and their budgets (engine/vouchers.ts): who vouches, every line of each budget, and the credit line each vouch
     // or member's gift gave. Plain rows, no name; a promoted standby carries on every budget and every member's line.
     vouchers: plain('member_pubkey source entry_id made_by made_at stopped_at stopped_by stop_reason updated_at'),

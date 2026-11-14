@@ -2270,6 +2270,19 @@ CREATE TABLE IF NOT EXISTS member_badges (
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- An owner's or admin's rule on a tag members typed (engine/free-tags.ts, DESIGN-tags-free-entry-fable.md §5, slice F3), by
+-- the tag's stored form: 'hide' = never offered to members as they type; 'merge' = offered as the library tag `into_tag`,
+-- and the Tags field stores that id when the word is committed. Listings keep their text either way. No row: no rule.
+CREATE TABLE IF NOT EXISTS free_tag_rules (
+    tag            TEXT PRIMARY KEY CHECK (length(tag) BETWEEN 2 AND 200),
+    action         TEXT NOT NULL CHECK (action IN ('hide', 'merge')),
+    into_tag       TEXT CHECK ((action = 'merge') = (into_tag IS NOT NULL)),
+    set_by         TEXT NOT NULL,
+    set_at         DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- Every change to the known floor, the cap, the dial or a member's exception (design §4.2, §7.3), and to a member's badge
 -- (action 'badge'): every owner and admin reads it. `member_pubkey` is null for a community-wide setting.
 CREATE TABLE IF NOT EXISTS known_floor_log (

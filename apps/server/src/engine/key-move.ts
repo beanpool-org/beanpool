@@ -369,6 +369,8 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // A member's badge (engine/badges.ts) and the badges an owner or admin gave: recognition follows the person.
     move('member_badges', 'member_pubkey');
     move('member_badges', 'set_by');
+    // A hide or merge of a typed tag an owner or admin set (engine/free-tags.ts): the rule stays theirs.
+    move('free_tag_rules', 'set_by');
     // A retired empty duplicate stays retired under its new key, and the owner who retired one is named by theirs.
     move('retired_accounts', 'member_pubkey');
     move('retired_accounts', 'retired_by');

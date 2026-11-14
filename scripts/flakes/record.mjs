@@ -27,7 +27,8 @@ import {
 } from './lib.mjs';
 import fs from 'node:fs';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+// FLAKE_ROOT: the tree whose imports judgeTouch reads (the tests point it at a made-up one).
+const ROOT = process.env.FLAKE_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const WORKFLOW = process.env.FLAKE_WORKFLOW || 'ci.yml';
 
 /** The gh subcommands this script may run. Anything else, or an api call that writes, throws before gh starts. */
@@ -125,15 +126,17 @@ export function record({ prNumber, runId, ledgerPath, now = new Date(), log = co
 }
 
 /** stress.sh's cross-check. Names from the log when it names any in that file, else the file itself. */
-export function seen({ file, logText, ledgerPath, now = new Date(), log = console.log, root = ROOT }) {
+// The log holds only this file's runs, so every name in it is this file's. A vitest name starts with the file's path
+// relative to where it ran, so a name with a ` > ` is also compared without that first part.
+export function seen({ file, logText, ledgerPath, now = new Date(), log = console.log }) {
     const ledger = readLedger(ledgerPath).filter((e) => Math.abs(now - Date.parse(e.time)) <= SECOND_HIT_DAYS * 86400e3);
-    const names = logText ? resolveFiles(root, parseFailures(logText)).filter((e) => !e.file || e.file === file).map((e) => normTest(e.test)) : [];
+    const names = logText ? parseFailures(logText).map((e) => normTest(e.test)) : [];
     const short = (t) => t.replace(/^[^>]*? > /, '');
     const inFile = ledger.filter((e) => e.file === file);
     const hits = [];
     for (const e of inFile) {
         const name = normTest(e.test);
-        const same = names.some((n) => n === name || short(n) === short(name));
+        const same = names.some((n) => n === name || (n.includes(' > ') && short(n) === short(name)));
         if (same) hits.push(e);
         log(`${same ? 'SEEN-ON-CI' : 'same file on CI'} PR #${e.pr} ${String(e.time).slice(0, 10)} run ${e.run}: ${name} (touched=${e.touched})`);
     }
@@ -157,7 +160,9 @@ function main(argv) {
     record({ prNumber: Number(prArg), runId: runArg ? Number(runArg) : null, ledgerPath });
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// realpath on both sides: called through a symlinked path (macOS's /var is /private/var) it must still run.
+const isMain = () => { try { return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url)); } catch { return false; } };
+if (process.argv[1] && isMain()) {
     try { main(process.argv.slice(2)); } catch (err) {
         console.error(`record.mjs: ${err.message.split('\n')[0]}`);
         process.exit(1);

@@ -1,0 +1,86 @@
+Test-All shard checks	Run test-all checks (checks)	﻿2026-11-14T19:59:42.3398625Z ##[group]Run timeout -s INT 50m bash scripts/test-all.sh --all
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T19:59:42.3399010Z ^[[36;1mtimeout -s INT 50m bash scripts/test-all.sh --all^[[0m
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9550058Z 
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9551065Z ╔══════════════════════════════════════════╗
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9551506Z ║          BEANPOOL TEST-ALL REPORT        ║
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9551892Z ╠══════════════════════════════════════════╣
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9562225Z ║  build            ✅ PASS  2m25s  (started +0s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9573130Z ║  native_dark_contrast ✅ PASS  30s  (started +0s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9583954Z ║  lint             ✅ PASS  3m32s  (started +0s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9594940Z ║  typecheck        ✅ PASS  2m28s  (started +0s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9605798Z ║  suite_registration ✅ PASS  6s  (started +30s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9617616Z ║  tool_budgets     ✅ PASS  53s  (started +37s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9628346Z ║  deploy_preserve  ✅ PASS  43s  (started +1m30s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9640152Z ║  deploy_no_fleet_secrets ✅ PASS  1s  (started +2m13s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9650801Z ║  deploy_health    ✅ PASS  7s  (started +2m14s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9661199Z ║  deploy_package   ✅ PASS  1s  (started +2m21s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9671749Z ║  fail_summary     ✅ PASS  0s  (started +2m22s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9682311Z ║  merge_gate       ✅ PASS  59s  (started +2m22s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9692583Z ║  undeclared_imports ✅ PASS  5s  (started +2m25s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9703043Z ║  balance_writes   ✅ PASS  0s  (started +2m28s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9713586Z ║  no_node_names    ✅ PASS  4s  (started +2m28s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9723964Z ║  migration_steps  ✅ PASS  0s  (started +2m30s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9734855Z ║  directory_register ✅ PASS  0s  (started +2m30s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9744961Z ║  workflows        ✅ PASS  40s  (started +2m31s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9755369Z ║  no_google_fonts  ❌ FAIL  3s  (started +2m32s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9765704Z ║  no_float_money   ✅ PASS  0s  (started +2m35s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9775963Z ║  dark_doodle      ✅ PASS  7s  (started +2m35s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9786438Z ║  website_global_link ✅ PASS  0s  (started +2m42s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9797062Z ║  website_links    ✅ PASS  4s  (started +2m42s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9807992Z ║  setup_backup     ✅ PASS  3s  (started +2m46s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9818769Z ║  token_scripts    ✅ PASS  2s  (started +2m49s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9829515Z ║  reddit_inbox     ✅ PASS  0s  (started +2m52s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9840118Z ║  words            ✅ PASS  1m16s  (started +2m52s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9852435Z ║  secrets_guard    ✅ PASS  7s  (started +3m11s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9888125Z ╠══════════════════════════════════════════╣
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9888695Z ║  Total: 27 passed, 1 failed, 0 skipped
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9893522Z ║  Wall clock: 4m08s (max 4 parallel jobs)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9894168Z ╚══════════════════════════════════════════╝
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9895300Z 
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9895490Z ──── Failure Details ────
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9895781Z 
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9896011Z ━━━ no_google_fonts ━━━
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9980208Z   code: 'ERR_ASSERTION'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9980542Z   name: 'AssertionError'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9980835Z   expected:
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9981087Z   actual:
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9981384Z     0: 'apps/pwa/e2e/forum-320.mjs:268'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9981727Z   operator: 'deepStrictEqual'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9982052Z   stack: |-
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9982704Z     TestContext.<anonymous> (file:///home/runner/work/beanpool/beanpool/scripts/no-google-fonts.test.mjs:57:12)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9983434Z     Test.runInAsyncScope (node:async_hooks:214:14)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9983914Z     Test.run (node:internal/test_runner/test:1047:25)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9984555Z     Test.start (node:internal/test_runner/test:944:17)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9985133Z     startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9985541Z   ...
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9985857Z # Subtest: the web app's Inter is the node's own files, with the licence
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9986288Z ok 2 - the web app's Inter is the node's own files, with the licence
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9986605Z   ---
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9986793Z   duration_ms: 1.532139
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9986992Z   type: 'test'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9987179Z   ...
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9987513Z # Subtest: the website's Inter and Outfit are its own files, with their licences
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9987981Z ok 3 - the website's Inter and Outfit are its own files, with their licences
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9988275Z   ---
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9988455Z   duration_ms: 1.687038
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9988650Z   type: 'test'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9988817Z   ...
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9989119Z # Subtest: the node's document policies let fonts come from the node only
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9989534Z ok 4 - the node's document policies let fonts come from the node only
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9989839Z   ---
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9990229Z   duration_ms: 0.267236
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9990449Z   type: 'test'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9990626Z   ...
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9990799Z 1..4
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9990963Z # tests 4
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9991136Z # suites 0
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9991316Z # pass 3
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9991489Z # fail 1
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9991650Z # cancelled 0
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9991834Z # skipped 0
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9992006Z # todo 0
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9992186Z # duration_ms 2095.218202
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.9996046Z 
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:51.0049092Z Full logs of every check copied to /home/runner/work/_temp/test-all-logs
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:51.0202215Z ##[error]Process completed with exit code 1.
+

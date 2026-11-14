@@ -49,7 +49,7 @@
  *
  * ## Auto-mute
  *
- * A member whose posts a moderator removed 3 times within 30 days gets `members.moderation_muted_until` set to
+ * A member whose posts a moderator removed 3 times within 30 days (listings and forum posts together) gets `members.moderation_muted_until` set to
  * MUTED_UNTIL_LIFTED (far future: until a moderator lifts it). While muted they can't post, edit a post, or send
  * or start a message (403 `moderation_muted`); they can still read, edit their profile and leave. Lifting writes
  * the time of the lift over it, so the value is: NULL never muted, in the future muted, in the past lifted then;
@@ -183,7 +183,10 @@ export function standingParts(pubkey: string, now: number = Date.now(), opts: { 
     return { weeks, keptPosts, dealPartners, total: weeks + keptPosts + dealPartners };
 }
 
-/** Whether a moderator kept enough of what this member reported lately that their reports no longer count. */
+/**
+ * Whether a moderator kept enough of what this member reported lately that their reports no longer count: listings and forum
+ * posts alike (a forum post kept is one still up, nobody having removed it), each counted once.
+ */
 function keptReportsTooMany(pubkey: string, now: number): boolean {
     const since = iso(now - AUTO_HIDE.keptReportsWindowDays * DAY_MS);
     const row = db.prepare(
@@ -191,8 +194,12 @@ function keptReportsTooMany(pubkey: string, now: number): boolean {
            JOIN posts p ON p.id = ar.target_post_id
           WHERE ar.reporter_pubkey = ? AND ar.status = 'reviewed' AND ar.updated_at > ? AND ar.target_pulse_item_id IS NULL
             AND p.active = 1 AND p.status != 'cancelled' AND p.removed_by_moderator_at IS NULL
+          UNION
+          SELECT DISTINCT 'forum:' || ar.target_forum_post_id FROM abuse_reports ar
+           JOIN forum_posts fp ON fp.id = ar.target_forum_post_id
+          WHERE ar.reporter_pubkey = ? AND ar.status = 'reviewed' AND ar.updated_at > ? AND fp.removed_by IS NULL
           LIMIT ?)`
-    ).get(pubkey, since, AUTO_HIDE.keptReportsToStopCounting) as { c: number };
+    ).get(pubkey, since, pubkey, since, AUTO_HIDE.keptReportsToStopCounting) as { c: number };
     return row.c >= AUTO_HIDE.keptReportsToStopCounting;
 }
 
@@ -291,7 +298,14 @@ export function hideTally(postId: string, now: number = Date.now()): HideTally {
                                AND d.reporter_pubkey = ar.reporter_pubkey AND d.status = 'reviewed')
           GROUP BY ar.reporter_pubkey
           ORDER BY MIN(ar.created_at)`
-    ).all(postId, post.author_pubkey) as { reporter: string; created_at: string | null; joined_at: string | null }[];
+    ).all(postId, post.author_pubkey) as ReporterRow[];
+    return { authorStanding, needed, circles: independentCircles(countingReporters(rows, needed, now)), circlesNeeded };
+}
+
+interface ReporterRow { reporter: string; created_at: string | null; joined_at: string | null }
+
+/** Of the reporters on one thing, the ones who count towards hiding it (the file header has the rule), in report order. */
+function countingReporters(rows: ReporterRow[], needed: number, now: number): string[] {
     const minAge = AUTO_HIDE.reporterMinAgeDays * DAY_MS;
     const counting: string[] = [];
     for (const r of rows) {
@@ -308,7 +322,34 @@ export function hideTally(postId: string, now: number = Date.now()): HideTally {
         if (probationState(r.reporter, now).onProbation) continue;
         counting.push(r.reporter);
     }
-    return { authorStanding, needed, circles: independentCircles(counting), circlesNeeded };
+    return counting;
+}
+
+/**
+ * Who counts towards hiding a forum post, an opening post or a reply (engine/forum-moderation.ts; DESIGN-forums-fable.md §6:
+ * "the same rules as posts, on one more target"): the same reporters, circles and standing as a listing, the writer's
+ * standing read as it is (a forum post is no listing, so nothing of it counts in standing). One circle for a post by a
+ * 12-words newcomer still on probation, three for anyone else's.
+ */
+export function forumHideTally(forumPostId: string, now: number = Date.now()): HideTally {
+    const post = db.prepare('SELECT writer_pubkey FROM forum_posts WHERE id = ?').get(forumPostId) as { writer_pubkey: string } | undefined;
+    if (!post) return { authorStanding: 0, needed: 0, circles: [], circlesNeeded: AUTO_HIDE.circles };
+    const circlesNeeded = isWordsNewcomer(post.writer_pubkey, now) ? AUTO_HIDE.wordsNewcomerCircles : AUTO_HIDE.circles;
+    const authorStanding = standingOf(post.writer_pubkey, now);
+    const needed = Math.max(1, Math.ceil(authorStanding * AUTO_HIDE.reporterShareOfAuthor));
+    const rows = db.prepare(
+        `SELECT ar.reporter_pubkey AS reporter, MIN(ar.created_at) AS created_at, m.joined_at
+           FROM abuse_reports ar
+           JOIN members m ON m.public_key = ar.reporter_pubkey
+          WHERE ar.target_forum_post_id = ? AND (ar.status = 'pending' OR ar.status IS NULL)
+            AND ar.reporter_pubkey != ? AND m.status = 'active'
+            AND NOT EXISTS (SELECT 1 FROM abuse_reports d
+                             WHERE d.target_forum_post_id = ar.target_forum_post_id
+                               AND d.reporter_pubkey = ar.reporter_pubkey AND d.status = 'reviewed')
+          GROUP BY ar.reporter_pubkey
+          ORDER BY MIN(ar.created_at)`
+    ).all(forumPostId, post.writer_pubkey) as ReporterRow[];
+    return { authorStanding, needed, circles: independentCircles(countingReporters(rows, needed, now)), circlesNeeded };
 }
 
 /** Hidden or visible again: every copy anyone holds has to change, and the feed's post_created lines follow it. */
@@ -452,10 +493,20 @@ export function assertNotMuted(pubkey: string | null | undefined, now: number = 
  */
 export const REMOVALS_SINCE_SQL = 'SELECT COUNT(*) AS c FROM posts WHERE author_pubkey = ? AND removed_by_moderator_at > ?';
 
+/**
+ * A writer's forum posts a moderator removed since a time (engine/forum-moderation.ts; design §6): they count towards the mute
+ * as a listing's removal does. Through the partial index idx_forum_posts_moderator_removed (schema.sql). One removal is
+ * one topic and moment: an opening post removed with nobody else's reply takes its writer's own replies under it at the
+ * same moment (engine/forum.ts removeForumPostAsModerator), which is one removal, not several.
+ */
+export const FORUM_REMOVALS_SINCE_SQL = `SELECT COUNT(DISTINCT topic_id || '|' || removed_at) AS c FROM forum_posts
+    WHERE writer_pubkey = ? AND removed_by = 'moderator' AND removed_at > ?`;
+
 /** What the mute's rule counts at `now`: this member's removals in the window, and since `liftMs`, a lift of their mute, if that is later. */
 function removalsCounted(pubkey: string, now: number, liftMs: number): number {
-    const since = Math.max(now - AUTO_MUTE.windowDays * DAY_MS, Number.isFinite(liftMs) ? liftMs : -Infinity);
-    return (db.prepare(REMOVALS_SINCE_SQL).get(pubkey, iso(since)) as { c: number }).c;
+    const since = iso(Math.max(now - AUTO_MUTE.windowDays * DAY_MS, Number.isFinite(liftMs) ? liftMs : -Infinity));
+    return (db.prepare(REMOVALS_SINCE_SQL).get(pubkey, since) as { c: number }).c
+        + (db.prepare(FORUM_REMOVALS_SINCE_SQL).get(pubkey, since) as { c: number }).c;
 }
 
 /**

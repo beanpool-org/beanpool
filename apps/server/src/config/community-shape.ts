@@ -235,6 +235,8 @@ export const KIND_ONLY_SWITCHES = [
     'knowledge',
     // Anyone on the web can read the forum (the global community): a local community's forum is for its members.
     'forumPublic',
+    // A new member's first topic waits for a moderator's look (the global community); the owners' setting comes later.
+    'forumFirstLook',
 ] as const satisfies readonly ProfileSwitch[];
 
 /** Every profile switch, and the setting of the shape that reads it: a switch added later fails the suite until it has one. */

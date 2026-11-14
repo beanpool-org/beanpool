@@ -75,6 +75,7 @@ export function keepForumFor(me: string): void {
 export function forgetForumTopic(id: string): void {
     kept.topics.delete(id);
     for (const [key, list] of kept.lists) kept.lists.set(key, { ...list, topics: list.topics.filter((t) => t.id !== id) });
+    if (kept.search) kept.search = { ...kept.search, hits: kept.search.hits.filter((h) => h.topicId !== id) };
 }
 /** For tests, and for a new account in this tab: nothing kept. */
 export function forgetForum(): void {

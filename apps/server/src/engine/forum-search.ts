@@ -129,6 +129,42 @@ export function forumExcerpt(text: string, asked: ForumSearchWord[]): string {
     return `${start > 0 ? '…' : ''}${chars.slice(start, end).join('').trim()}${end < chars.length ? '…' : ''}`;
 }
 
+/**
+ * The statement a search runs and its parameters: the words asked, then SEARCHABLE, newest first, a page from `offset`.
+ * Exported for the test that reads its plan (no search walks forum_posts whole).
+ */
+export function forumSearchQuery(asked: ForumSearchWord[], at: { reader: string; offset: number }): { sql: string; params: Record<string, unknown> } {
+    const params: Record<string, unknown> = { reader: at.reader, limit: FORUM_SEARCH_PAGE + 1, offset: at.offset };
+    const where: string[] = [];
+    // Words of spaced scripts: one look in the index, every word in the same post.
+    const spaced = asked.filter((w) => w.inside === null);
+    if (spaced.length > 0) {
+        where.push('p.rowid IN (SELECT rowid FROM forum_search WHERE forum_search MATCH @match)');
+        params.match = spaced.map(matchOf).join(' AND ');
+    }
+    // Words of scripts without spaces: the index, or anywhere in the text among the newest posts.
+    const unspaced = asked.filter((w) => w.inside !== null);
+    if (unspaced.length > 0) {
+        params.since = (db.prepare('SELECT created_at FROM forum_posts ORDER BY created_at DESC LIMIT 1 OFFSET ?').pluck()
+            .get(FORUM_SEARCH_SCAN_MAX - 1) as string | undefined) ?? '';
+        unspaced.forEach((w, i) => {
+            params[`m${i}`] = matchOf(w);
+            params[`l${i}`] = likeOf(w.inside!);
+            // Two sets of posts by rowid, so no search walks the table: the index's, and the newest posts' own scan (a range of
+            // idx_forum_posts_created, FORUM_SEARCH_SCAN_MAX rows at most).
+            where.push(`(p.rowid IN (SELECT rowid FROM forum_search WHERE forum_search MATCH @m${i})
+                OR p.rowid IN (SELECT n.rowid FROM forum_posts n JOIN forum_topics nt ON nt.id = n.topic_id WHERE n.created_at >= @since
+                    AND (n.words LIKE @l${i} ESCAPE '\\' OR (n.number = 1 AND (nt.title LIKE @l${i} ESCAPE '\\' OR COALESCE(nt.place, '') LIKE @l${i} ESCAPE '\\')))))`);
+        });
+    }
+    const sql = `
+        SELECT p.id, p.number, p.writer_pubkey, p.words, p.created_at, t.id AS topic_id, t.section_id, t.title
+          FROM forum_posts p JOIN forum_topics t ON t.id = p.topic_id
+         WHERE ${where.join(' AND ')} AND ${SEARCHABLE}
+         ORDER BY p.created_at DESC, p.id DESC LIMIT @limit OFFSET @offset`;
+    return { sql, params };
+}
+
 const searches = dayBudget(() => FORUM_SEARCHES_PER_DAY, (limit) => ({
     error: tr('You can search the forum {n} times in any 24 hours. Try again later.', { n: limit }),
     code: 'searches_per_day',
@@ -159,32 +195,8 @@ export function searchForum(reader: string, query: unknown, offset: number, now 
     if (spent) throw new ForumSearchRefusal(spent.body.error, spent.retryAfterSec);
     ensureForumStarters(now);
 
-    const params: Record<string, unknown> = { reader, limit: FORUM_SEARCH_PAGE + 1, offset };
-    const where: string[] = [];
-    // Words of spaced scripts: one look in the index, every word in the same post.
-    const spaced = asked.filter((w) => w.inside === null);
-    if (spaced.length > 0) {
-        where.push('p.rowid IN (SELECT rowid FROM forum_search WHERE forum_search MATCH @match)');
-        params.match = spaced.map(matchOf).join(' AND ');
-    }
-    // Words of scripts without spaces: the index, or anywhere in the text among the newest posts.
-    const unspaced = asked.filter((w) => w.inside !== null);
-    if (unspaced.length > 0) {
-        params.since = (db.prepare('SELECT created_at FROM forum_posts ORDER BY created_at DESC LIMIT 1 OFFSET ?').pluck()
-            .get(FORUM_SEARCH_SCAN_MAX - 1) as string | undefined) ?? '';
-        unspaced.forEach((w, i) => {
-            params[`m${i}`] = matchOf(w);
-            params[`l${i}`] = likeOf(w.inside!);
-            where.push(`(p.rowid IN (SELECT rowid FROM forum_search WHERE forum_search MATCH @m${i})
-                OR (p.created_at >= @since AND (p.words LIKE @l${i} ESCAPE '\\'
-                    OR (p.number = 1 AND (t.title LIKE @l${i} ESCAPE '\\' OR COALESCE(t.place, '') LIKE @l${i} ESCAPE '\\')))))`);
-        });
-    }
-    const rows = db.prepare(`
-        SELECT p.id, p.number, p.writer_pubkey, p.words, p.created_at, t.id AS topic_id, t.section_id, t.title
-          FROM forum_posts p JOIN forum_topics t ON t.id = p.topic_id
-         WHERE ${where.join(' AND ')} AND ${SEARCHABLE}
-         ORDER BY p.created_at DESC, p.id DESC LIMIT @limit OFFSET @offset`).all(params) as
+    const { sql, params } = forumSearchQuery(asked, { reader, offset });
+    const rows = db.prepare(sql).all(params) as
         { id: string; number: number; writer_pubkey: string; words: string; created_at: string; topic_id: string; section_id: string; title: string }[];
     const more = rows.length > FORUM_SEARCH_PAGE;
     const names = new Map<string, string>();

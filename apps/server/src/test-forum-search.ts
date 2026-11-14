@@ -16,8 +16,8 @@
  *  5. The day limit holds: 100 searches in any 24 hours a member, the 101st 429 with Retry-After; a search refused for its
  *     words is not counted; another member's count is their own. Who may search: members who read as members; unsigned 401,
  *     a stranger and a paused member 403, as the forum's reads.
- *  6. A standby answers the same: the index is this server's own (manifest 'local', in no copy, the replica hashes and
- *     TABLE_HASHES_VERSION untouched); a standby's import of the whole copy rebuilds it by the triggers, FTS5's own check
+ *  6. A standby answers the same: the index is this server's own (manifest 'local', in no copy, not hashed, so
+ *     TABLE_HASHES_VERSION stays as it is); a standby's import of the whole copy rebuilds it by the triggers, FTS5's own check
  *     passes, and every search answers the same posts in the same order.
  *
  * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-forum-search" node ../../scripts/run-server-suites.mjs
@@ -37,10 +37,10 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { markForumTold, removeForumPostAsModerator, resetForumStartersCheckForTests } from './engine/forum.js';
 import { restoreHiddenForumPost } from './engine/forum-moderation.js';
-import { FORUM_SEARCH_PAGE, resetForumSearchBudget } from './engine/forum-search.js';
+import { FORUM_SEARCH_PAGE, forumSearchQuery, forumSearchWords, resetForumSearchBudget } from './engine/forum-search.js';
 import { importPlainTables } from './engine/plain-tables.js';
 import { TABLES } from './engine/replication-manifest.js';
-import { TABLE_HASHES_VERSION, tableContentHashes } from './engine/replica-hashes.js';
+import { TABLE_HASHES_VERSION, hashedTables, tableContentHashes } from './engine/replica-hashes.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 import { FORUM_SEARCHES_PER_DAY } from '@beanpool/core';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -179,6 +179,17 @@ async function main(): Promise<void> {
     assert(hitIds(await search(mel, 'ผักสด')).join() === thai.body.post.id, '2. a Thai phrase inside a run of Thai ("fresh vegetables" in "we sell fresh vegetables every Saturday at the market")');
     assert(hitIds(await search(mel, '种子交换')).join() === zh.body.post.id, '2. a Chinese phrase inside the title and the words ("seed swap")');
     assert(hitIds(await search(mel, '交换 周六')).join() === zh.body.post.id && hitIds(await search(mel, '交换 tomato')).length === 0, '2. each phrase must be found, Chinese and Latin alike');
+    // No search walks forum_posts whole: each words' set of posts is the index's or a range of the newest (the plan, read).
+    const plans = ['ผักสด', 'tomato', '交换 tomato'].map((typed) => {
+        const { sql, params } = forumSearchQuery(forumSearchWords(typed), { reader: mel.pk, offset: 0 });
+        return (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(params) as { detail: string }[]).map((r) => r.detail);
+    });
+    console.log(plans.map((p) => p.join(' | ')).join('\n'));
+    // The posts asked about (`p`) are reached only by rowid, the sets' own, and the newest posts' scan (`n`) only by its range:
+    // never by walking a topic's or a section's posts, which with no word to hold it reads every post there is.
+    const postsRead = plans.map((p) => p.filter((d) => /^(SCAN|SEARCH) (p|n|forum_posts)\b/.test(d)));
+    assert(postsRead.every((p) => p.length > 0 && p.every((d) => d === 'SEARCH p USING INTEGER PRIMARY KEY (rowid=?)' || d.startsWith('SEARCH n USING INDEX idx_forum_posts_created (created_at>'))),
+        `2. no search reads forum_posts whole: by rowid from the index, or a range of the newest posts (${postsRead.map((p) => p.join('; ')).join(' / ')})`);
 
     // ── 3. Every way a post stops being readable, x search ───────────────────────────────────────
     console.log('── 3. every way a post stops being readable ──');
@@ -297,8 +308,9 @@ async function main(): Promise<void> {
     assert(!('forum_search' in (copy.plainTables ?? {})) && FORUM_TABLES.every((t) => Array.isArray(copy.plainTables?.[t])),
         `6. a whole copy carries every forum table and not the index (${FORUM_TABLES.join(', ')})`);
     const hashesBefore = tableContentHashes({ only: FORUM_TABLES });
-    assert(!Object.keys(tableContentHashes().tables).includes('forum_search') && TABLE_HASHES_VERSION === 43,
-        '6. the replica hashes leave the index out; TABLE_HASHES_VERSION stays 43 (no hashed table or column changed)');
+    // TABLE_HASHES_VERSION is not raised for it: no hashed table or column changed (test-replica-hashes.ts holds the columns to it).
+    assert(!hashedTables(db).some((t) => t.table.startsWith('forum_search')) && !Object.keys(tableContentHashes().tables).some((t) => t.startsWith('forum_search')),
+        `6. the replica hashes leave the index out (hashes version ${TABLE_HASHES_VERSION})`);
     const count = (t: string) => (db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n;
     require_(count('forum_search') === count('forum_posts'), `one index row a post on the main server (${count('forum_search')} / ${count('forum_posts')})`);
     // The standby: its own copy of the forum, from nothing, by the import a puller runs.

@@ -20,6 +20,8 @@
  *
  * The HTTP parts drive the real servers on the tunnel-origin port: the test client connects from loopback (a trusted
  * local proxy), so CF-Connecting-IP names the client, as cloudflared does.
+ * They run on the brake's own clock, stopped (setPasswordBrakeClockForTests) and moved only by the test: on the real
+ * clock a source's 2 s wait could run out between two requests on a slow runner (CI run 43516030134).
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-password-brake-no-lockout.ts
  */
@@ -39,8 +41,8 @@ import { setTrustConfigForTests } from './client-ip.js';
 import { generateBreakGlassCode, hashBreakGlassCode } from './admin-key-auth.js';
 import { resetAdminAuthTarpit, BREAK_GLASS_WHILE_BRAKED_MS } from './admin-auth.js';
 import {
-    SOURCE_FREE_FAILURES, MAX_DELAY_MS, FORGET_MS, NODE_CHECKS_PER_MIN, NODE_BACKOFF_CHECKS_PER_MIN, PREFIX_CLEAN_FAILURES,
-    tryAdmit, settlePasswordAttempt, notePasswordFailure, prefixOf, resetPasswordBrake,
+    SOURCE_FREE_FAILURES, BASE_DELAY_MS, MAX_DELAY_MS, FORGET_MS, NODE_CHECKS_PER_MIN, NODE_BACKOFF_CHECKS_PER_MIN, PREFIX_CLEAN_FAILURES,
+    tryAdmit, settlePasswordAttempt, notePasswordFailure, prefixOf, resetPasswordBrake, setPasswordBrakeClockForTests,
 } from './password-brake.js';
 import { adminSigninFields } from './signed-request-test-helper.js';
 
@@ -260,6 +262,16 @@ async function part3Http() {
         req(route, { method: 'POST', body: { memberPubkey, role: 'admin' }, headers: { 'x-break-glass-code': value, ...viaTunnel(ip) } });
     /** A wrong value that is no code at all: checked against nothing, but counted, as any guess is. */
     const junk = (i: number | string) => `wrong-${i}`;
+    /**
+     * The brake's clock stands still through these parts and moves only here, to `ms` after the start. On the real clock
+     * a source's first wait is BASE_DELAY_MS (2 s), the tarpit alone holds the sixth wrong value's answer for 1.5 s of it,
+     * and the requests after it had the rest: a slow runner could outlast it, and then the brake rightly checked the
+     * source again before the test looked. The tarpit itself still sleeps on the real clock.
+     */
+    const brakeStart = Date.now();
+    let brakeAt = brakeStart;
+    const moveBrakeClock = (ms: number) => { brakeAt = brakeStart + ms; };
+    setPasswordBrakeClockForTests(() => brakeAt);
 
     console.log('\n— HTTP: a flood from A does not stop the right code from B —');
     // The brake, the tarpit and the held sources' code checks, all at once (resetAdminAuthTarpit resets the brake too).
@@ -275,13 +287,26 @@ async function part3Http() {
         // a guesser on the same network): a wrong one takes that check, and A then waits for the next, the right code too.
         const wrongCode = await enrol(generateBreakGlassCode(), A);
         const aRight = await enrol(CODE, A);
-        assert(wrongCode.status === 429 && aRight.status === 429 && aRight.json?.passwordBackoff === true && Number(aRight.headers.get('retry-after')) >= 1,
+        assert(wrongCode.status === 429 && aRight.status === 429 && aRight.json?.passwordBackoff === true
+            && Number(aRight.headers.get('retry-after')) === BREAK_GLASS_WHILE_BRAKED_MS / 1000,
             `A itself waits: a code from it is checked at most once in ${BREAK_GLASS_WHILE_BRAKED_MS / 1000} s, the right one too (got ${wrongCode.status}, ${aRight.status}, Retry-After ${aRight.headers.get('retry-after')})`);
         assert(/another network/.test(aRight.json?.error || ''), `and is told another network, or a key, still works ("${aRight.json?.error}")`);
         const b = await enrol(CODE, '198.51.100.7');
         assert(b.status === 200, `the right code from B gets in (got ${b.status}; #937 answered 429)`);
         const bOther = await enrol(CODE, '198.51.100.8', newHelper(), '/api/local/admin/auth/break-glass/enrol');
         assert(bOther.status === 200, `and on the other enrol route from another address (got ${bOther.status})`);
+
+        // The held check only covers a source the brake holds. A's own wait after its sixth failure is BASE_DELAY_MS; until
+        // then its next code still waits for the held check, and from then on the brake checks A itself, once. On the
+        // real clock that wait ran out between the two codes above on a slow runner (CI run 43516030134: 429, then 200):
+        // the brake's schedule, not a second held check.
+        moveBrakeClock(BASE_DELAY_MS - 1);
+        const stillHeld = await enrol(CODE, A);
+        assert(stillHeld.status === 429 && Number(stillHeld.headers.get('retry-after')) === Math.ceil((BREAK_GLASS_WHILE_BRAKED_MS - BASE_DELAY_MS + 1) / 1000),
+            `${(BASE_DELAY_MS - 1) / 1000} s on, inside A's own wait, its right code still waits for the held check (got ${stillHeld.status}, Retry-After ${stillHeld.headers.get('retry-after')})`);
+        moveBrakeClock(BASE_DELAY_MS);
+        const ownWaitOver = await enrol(CODE, A);
+        assert(ownWaitOver.status === 200, `once A's own ${BASE_DELAY_MS / 1000} s wait is over the brake checks it, and the right code gets in (got ${ownWaitOver.status})`);
     }
 
     console.log('\n— HTTP: parallel guesses from one source —');
@@ -359,6 +384,7 @@ async function part3Http() {
     }
     resetPasswordBrake();
     resetAdminAuthTarpit();
+    setPasswordBrakeClockForTests(null);
     updateGatewayConfig(DEFAULT_GATEWAY_CONFIG);
 }
 

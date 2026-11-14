@@ -9,6 +9,8 @@
  *   style-src    'unsafe-inline' for React's and Leaflet's style attributes
  *   font-src     the node only: Inter is served from the node's own /fonts/ (apps/pwa/public/fonts), never Google's
  *   img-src      data: and blob: (avatars, photo previews); OpenStreetMap's tiles (the map and the location pickers)
+ *   media-src    blob: (a voice message is opened in the page and played from a blob URL the page made; voice messages
+ *                V4). Without it the media element falls back to default-src 'self', and Chrome and Firefox refuse to play
  *   connect-src  Nominatim (place search), wss: (the live feed), https: (peer nodes' public routes)
  * and nothing may frame it, change its base URL, embed a plugin, or send a form off the node.
  *
@@ -38,6 +40,7 @@ export const APP_DOCUMENT_CSP = [
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     "img-src 'self' data: blob: https://*.tile.openstreetmap.org",
+    "media-src 'self' blob:",
     "connect-src 'self' https://nominatim.openstreetmap.org wss: https:",
     "frame-ancestors 'none'",
     "base-uri 'none'",

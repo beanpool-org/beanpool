@@ -230,6 +230,137 @@ export function withdrawKnowledgeDraft(member: string, id: unknown, now = Date.n
     })();
 }
 
+// ── An owner's or admin's assistant (slice K6; agent/knowledge.ts) ─────────────────────────────────────────────────
+
+/**
+ * What an assistant may have waiting (§2.4): 10 waiting and 20 sent in any 24 hours per connection, and 30 waiting from all
+ * assistants together, so members' suggestions (their own limits, `via` 'app') are never buried. Read from the rows, so a
+ * restart keeps them; a draft taken back still counts for the day, as a member's does.
+ */
+export const ASSISTANT_KNOWLEDGE_LIMITS = Object.freeze({ waiting: 10, perDay: 20, allWaiting: 30 });
+
+/** What an assistant says a draft is about (§6): a place, a service or how to do something. Never a person. */
+export const KNOWLEDGE_ABOUT = ['place', 'service', 'how_to'] as const;
+export type KnowledgeAbout = (typeof KNOWLEDGE_ABOUT)[number];
+
+/** The words an assistant reads when a draft is refused: MCP tool text, outside the members' word index. */
+export const ASSISTANT_DRAFT_WORDS = {
+    noSource: 'Local knowledge from the web needs at least one source link.',
+    notAbout: 'Local knowledge is about places, services and how to do things, never about a private person.',
+    waiting: `This assistant has ${ASSISTANT_KNOWLEDGE_LIMITS.waiting} drafts of Local knowledge waiting, the most it may: wait until an owner or admin answers them, or take one back with knowledge_draft_withdraw.`,
+    perDay: `This assistant has filed ${ASSISTANT_KNOWLEDGE_LIMITS.perDay} drafts of Local knowledge in the last 24 hours, the most it may: try again later.`,
+    allWaiting: `Assistants have ${ASSISTANT_KNOWLEDGE_LIMITS.allWaiting} drafts of Local knowledge waiting here, the most there may be: wait until an owner or admin answers some.`,
+} as const;
+
+const viaOf = (grantId: string) => `assistant:${grantId}`;
+
+/** This connection's drafts waiting now, and sent in the last 24 hours (taken back or answered, still counted). */
+export function assistantKnowledgeCounts(grantId: string, now = Date.now()): { waiting: number; today: number } {
+    const via = viaOf(grantId);
+    const waiting = (db.prepare(`SELECT COUNT(*) AS n FROM knowledge_drafts WHERE via = ? AND state = 'waiting'`).get(via) as { n: number }).n;
+    const today = (db.prepare(`SELECT COUNT(*) AS n FROM knowledge_drafts WHERE via = ? AND created_at > ?`).get(via, iso(now - DAY_MS)) as { n: number }).n;
+    return { waiting, today };
+}
+
+/**
+ * An assistant files a draft (§6 knowledge_draft): it waits in To check for an owner or admin, for the member it acts for, and
+ * nothing shows to anyone until a person approves it (approveKnowledgeDraft: the tick, then the approver's page marked
+ * `assistant-draft:<grant>`). Its words are cleaned as a member's are (cleanKnowledgeInput: hidden characters out, markers
+ * defused, plain text). At least one source; `about` one of KNOWLEDGE_ABOUT; no photo (the caller refuses the field). No push
+ * goes to the owners and admins: the one it acts for asked for it. The limits are checked in the same transaction as the write.
+ */
+export function fileAssistantKnowledgeDraft(
+    grant: { id: string; member: string; name: string },
+    raw: KnowledgeInput & { about?: unknown },
+    now = Date.now(),
+): { id: string; waiting: number; today: number } {
+    assertPlainTablesWritable();
+    assertFeatureOn('knowledge');
+    if (typeof raw.about !== 'string' || !(KNOWLEDGE_ABOUT as readonly string[]).includes(raw.about)) {
+        throw new KnowledgeRefusal(400, 'not_about', ASSISTANT_DRAFT_WORDS.notAbout);
+    }
+    if (!Array.isArray(raw.sources) || raw.sources.length === 0) throw new KnowledgeRefusal(400, 'no_source', ASSISTANT_DRAFT_WORDS.noSource);
+    const k = cleanKnowledgeInput(raw);
+    const id = crypto.randomUUID();
+    const via = viaOf(grant.id);
+    db.transaction(() => {
+        const counts = assistantKnowledgeCounts(grant.id, now);
+        if (counts.waiting >= ASSISTANT_KNOWLEDGE_LIMITS.waiting) throw new KnowledgeRefusal(429, 'too_many_waiting', ASSISTANT_DRAFT_WORDS.waiting);
+        if (counts.today >= ASSISTANT_KNOWLEDGE_LIMITS.perDay) throw new KnowledgeRefusal(429, 'sent_enough_today', ASSISTANT_DRAFT_WORDS.perDay);
+        const all = (db.prepare(`SELECT COUNT(*) AS n FROM knowledge_drafts WHERE via LIKE 'assistant:%' AND state = 'waiting'`).get() as { n: number }).n;
+        if (all >= ASSISTANT_KNOWLEDGE_LIMITS.allWaiting) throw new KnowledgeRefusal(429, 'assistants_waiting', ASSISTANT_DRAFT_WORDS.allWaiting);
+        db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, assistant_name, title, body, topic, place, sources, lang, about, state, created_at)
+                    VALUES (?, 'new', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`)
+            .run(id, grant.member, via, cleanMemberText(grant.name, 60) || null, k.title, k.body, k.topic, k.place,
+                JSON.stringify(k.sources), k.lang, raw.about, iso(now));
+    })();
+    return { id, ...assistantKnowledgeCounts(grant.id, now) };
+}
+
+/** One of an assistant's own drafts as it reads it back (§6 my_knowledge_drafts): never who answered, never their words. */
+export interface AssistantDraftView {
+    id: string;
+    kind: KnowledgeDraftKind;
+    topic: string;
+    title: string;
+    state: 'waiting' | 'added' | 'not_added';
+    createdAt: string;
+    answeredAt: string | null;
+    postId: string | null;
+    reason: KnowledgeDeclineReason | null;
+}
+
+/** This connection's drafts, newest first: waiting, added (the page's id) or not added (the reason's id). Taken back: none. */
+export function assistantKnowledgeDrafts(grantId: string, limit: number): { drafts: AssistantDraftView[]; total: number } {
+    const where = `via = ? AND state IN ('waiting', 'approved', 'declined')`;
+    const rows = db.prepare(`SELECT * FROM knowledge_drafts WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT ?`).all(viaOf(grantId), limit) as DraftRow[];
+    const total = (db.prepare(`SELECT COUNT(*) AS n FROM knowledge_drafts WHERE ${where}`).get(viaOf(grantId)) as { n: number }).n;
+    return {
+        total,
+        drafts: rows.map((r) => ({
+            id: r.id,
+            kind: r.kind,
+            topic: r.topic,
+            title: r.title,
+            state: r.state === 'approved' ? 'added' : r.state === 'declined' ? 'not_added' : 'waiting',
+            createdAt: r.created_at,
+            answeredAt: r.answered_at,
+            postId: r.state === 'approved' ? r.result_post_id : null,
+            reason: r.state === 'declined' && KNOWLEDGE_DECLINE_REASONS.some((x) => x.id === r.reason) ? r.reason as KnowledgeDeclineReason : null,
+        })),
+    };
+}
+
+/**
+ * An assistant takes back one of its own waiting drafts (§6 knowledge_draft_withdraw): as a member's "Take it back", the words
+ * are blanked and the row stays 30 days only so it counts for the day. Another connection's, or one answered: false.
+ */
+export function withdrawAssistantKnowledgeDraft(grantId: string, id: unknown, now = Date.now()): boolean {
+    assertPlainTablesWritable();
+    if (typeof id !== 'string' || id.length > 64) return false;
+    return db.transaction(() => {
+        const changed = db.prepare(`UPDATE knowledge_drafts SET state = 'withdrawn', answered_at = ?, title = '', body = '', place = NULL,
+                                        sources = NULL, note = NULL, about = NULL
+                                    WHERE id = ? AND via = ? AND state = 'waiting'`).run(iso(now), id, viaOf(grantId)).changes;
+        if (changed === 1) deletePlainRows('knowledge_draft_photos', 'draft_id = ?', id);
+        return changed === 1;
+    })();
+}
+
+/**
+ * Disconnecting an assistant drops its waiting drafts (§6), each with its tombstone; what a person approved stays, and so do
+ * the answered rows (the tidy-up takes them at 30 days). Called beside agent/suggestions.ts dropSuggestionsOf wherever a grant
+ * goes: Settings' Disconnect, a token's Revoke, and an OAuth grant revoked by its reuse, its replacement or itself.
+ */
+export function dropAssistantKnowledgeDrafts(grantId: string): number {
+    if (getNodeRole() !== 'primary') return 0;
+    return db.transaction(() => {
+        const where = `via = ? AND state = 'waiting'`;
+        deletePlainRows('knowledge_draft_photos', `draft_id IN (SELECT id FROM knowledge_drafts WHERE ${where})`, viaOf(grantId));
+        return deletePlainRows('knowledge_drafts', where, viaOf(grantId));
+    })();
+}
+
 // ── The owners and admins ──────────────────────────────────────────────────────────────────────────────────────────
 
 /** How many suggestions wait for an owner or admin: 0 where Learn is off. For the admin queue and Needs you. */

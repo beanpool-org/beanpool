@@ -28,7 +28,7 @@ import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
 import { AreaPicker } from '../components/AreaPicker';
 import { profileSteps, rememberAreaPlace, type ProfileStep } from '../utils/member-area';
-import { t } from '@beanpool/core';
+import { NAME_BOX_WORDS, notANameIn, t } from '@beanpool/core';
 
 type Step = ProfileStep;
 
@@ -190,7 +190,10 @@ export default function ProfileSetupScreen() {
 
     // Block "Next" on a taken/too-short/checking name; allow 'available' and also
     // 'unknown' (offline) so an unreachable node never traps the user.
-    const canProceedName = nameOk && (nameStatus === 'available' || nameStatus === 'unknown');
+    // An invite or a web address is no name (core name-box.ts; card callsign-link-guard): said on the step, and Next waits.
+    // The name the wizard started with is left as it is, whatever it is (no conversion code).
+    const notAName = callsign.trim() !== (nameStartedWith.current ?? joinedAs ?? '') ? notANameIn(callsign) : null;
+    const canProceedName = nameOk && !notAName && (nameStatus === 'available' || nameStatus === 'unknown');
 
     const goBackStep = () => {
         if (stepIndex <= 0) { router.back(); return; }
@@ -247,14 +250,19 @@ export default function ProfileSetupScreen() {
                     });
                     const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
                     const res = await fetch(`${url}/api/profile/update`, { method: 'POST', headers, body: bodyString });
-                    if (res.status === 409) {
-                        const answer = await res.json().catch(() => null);
+                    // A 409, or a 400 that refuses the name for good (too short, or an invite or a web address, such as a
+                    // link name copied here from another community), sends the member back to the name step in the
+                    // community's words. Any other answer is no refusal of the name: kept, as offline, for the retry.
+                    const answer = res.ok ? null : await res.json().catch(() => null);
+                    if (res.status === 409 || (res.status === 400 && nameRefusedForGood(res.status, answer?.error))) {
                         const serverMsg = answer?.message;
                         if (pending && sentName !== undefined && sentName === pending.callsign && nameRefusedForGood(res.status, answer?.error)) {
                             await pendingNameRefused(url, pending, sentName);
                         }
                         setStep('name');
-                        setError(serverMsg || t('That name was just taken — please pick another.'));
+                        setError(serverMsg || (res.status === 409
+                            ? t('That name was just taken — please pick another.')
+                            : t('The community node rejected this profile update. Please try again.')));
                         return; // finally clears loading; name-step effect refreshes suggestions
                     }
                     published = res.ok;
@@ -338,7 +346,10 @@ export default function ProfileSetupScreen() {
                             {nameOk && nameStatus === 'checking' && (
                                 <Text style={styles.hintMuted}>{t('Checking availability…')}</Text>
                             )}
-                            {nameOk && nameStatus === 'available' && (
+                            {notAName && (
+                                <Text style={styles.hintTaken} accessibilityLiveRegion="polite">{t(NAME_BOX_WORDS[notAName])}</Text>
+                            )}
+                            {nameOk && !notAName && nameStatus === 'available' && (
                                 <Text style={styles.hintOk}>{t('✓ Available on this community')}</Text>
                             )}
                             {nameOk && nameStatus === 'unknown' && (

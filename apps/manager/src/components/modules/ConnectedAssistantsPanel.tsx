@@ -58,6 +58,8 @@ interface AgentGrantRow {
     takedownsHeld?: number;
     /** Its posts still up (slice S2), which "Remove its posts" takes down (a server older than it sends none). */
     madePosts?: number;
+    /** Its drafts of Local knowledge waiting for an owner or admin in the app (Local knowledge K6), which Disconnect drops. */
+    knowledgeDraftsWaiting?: number;
 }
 
 /** An assistant disconnected or expired whose posts are still up (slice S2): an owner removes them by its id. */
@@ -791,6 +793,11 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'token' 
                                             {(g.role === 'owner' || g.role === 'admin') && g.canModerate === true && (
                                                 <p className="text-[11px] text-nature-400 m-0 break-words" data-testid="agent-grant-moderates">
                                                     May take down{g.role === 'admin' ? ', one post a call' : ''} · {g.takedownsToday ?? 0} today{(g.takedownsHeld ?? 0) > 0 ? ` · ${g.takedownsHeld} waiting` : ''}
+                                                </p>
+                                            )}
+                                            {typeof g.knowledgeDraftsWaiting === 'number' && g.knowledgeDraftsWaiting > 0 && (
+                                                <p className="text-[11px] text-nature-400 m-0 break-words" data-testid="agent-grant-knowledge-drafts">
+                                                    Drafts waiting: {g.knowledgeDraftsWaiting} (Local knowledge, checked in the app under Learn)
                                                 </p>
                                             )}
                                             {typeof g.madePosts === 'number' && g.madePosts > 0 && (

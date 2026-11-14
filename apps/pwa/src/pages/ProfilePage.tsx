@@ -12,7 +12,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { AvatarPresetPicker } from '../components/AvatarPresetPicker';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { usePictureCrop } from '../components/PictureCropDialog';
-import { parseArchetype, ARCHETYPES, AVATAR_PICTURE, CONTACT_VALUE_LIMIT, t, word, type QuizResult } from '@beanpool/core';
+import { parseArchetype, ARCHETYPES, AVATAR_PICTURE, CONTACT_VALUE_LIMIT, notANameLine, t, word, type QuizResult } from '@beanpool/core';
 import { adoptWorkingStyle, keepQuizResult, publishQuizResult, shownWorkingStyle, workingStyleToCarry } from '../lib/working-style';
 import { RemoveWorkingStyleButton } from '../components/RemoveWorkingStyleButton';
 
@@ -33,6 +33,8 @@ interface Props {
 export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
     const [avatar, setAvatar] = useState<string | null>(null);
     const [callsign, setCallsign] = useState(identity.callsign);
+    /** The one line when the name box holds an invite or a web address (handleSave), shown under the box. */
+    const [nameRefusal, setNameRefusal] = useState<string | null>(null);
     const [bio, setBio] = useState('');
     const [contactValue, setContactValue] = useState('');
     const [contactVisibility, setContactVisibility] = useState<'hidden' | 'trade_partners' | 'community' | 'friends'>('hidden');
@@ -80,6 +82,11 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
             alert(t('You must be online to update your profile.'));
             return;
         }
+        // An invite or a web address is no name (core name-box.ts): said under the box, nothing sent. The name already held
+        // is sent back as it is, whatever it is (no conversion code).
+        const notAName = callsign.trim() !== identity.callsign ? notANameLine(callsign) : null;
+        setNameRefusal(notAName);
+        if (notAName) return;
         setSaving(true);
         setSaved(false);
         try {
@@ -229,10 +236,14 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                     id="profile-callsign"
                     type="text"
                     value={callsign}
-                    onChange={(e) => setCallsign(e.target.value)}
+                    onChange={(e) => { setCallsign(e.target.value); setNameRefusal(null); }}
                     maxLength={20}
+                    aria-describedby={nameRefusal ? 'profile-callsign-refused' : undefined}
                     className="w-full py-3 px-4 rounded-xl border border-terra-400 dark:border-terra-600 bg-terra-50/40 dark:bg-terra-950/30 text-nature-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-terra-300 font-semibold transition-all"
                 />
+                {nameRefusal && (
+                    <p id="profile-callsign-refused" role="alert" className="text-red-600 dark:text-red-300 text-sm mt-2 font-semibold break-words">{nameRefusal}</p>
+                )}
                 <p className="text-nature-500 dark:text-nature-400 text-xs mt-2 font-medium">
                     {t('Changing your callsign updates your display name everywhere')}
                 </p>

@@ -1802,13 +1802,14 @@ function PostDetailModal() {
                     </View>
                 )}
                 {/* #108: the detail view is where the terms get discussed, so say what the flag means
-                    rather than just badging it. No amount — that's agreed in chat. */}
+                    rather than just badging it. No amount — that's agreed in chat. On a Need the poster
+                    is the one who pays, so it says the cash is offered (Marty, 14 Nov 2026). */}
                 {post.cash_also_needed === 1 && (
                     <View style={{ backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10 }}>
                         <Text style={{ color: colors.feedback.warning.fg, fontSize: 12, lineHeight: 17 }}>
                             <Sentence
                                 text={t('💸 {cash} for fuel or materials, at cost. Time and tools are beans. Agree the details in chat — the app never handles the money.')}
-                                parts={{ cash: <Text style={{ fontWeight: '700' }}>{t('Cash also needed')}</Text> }}
+                                parts={{ cash: <Text style={{ fontWeight: '700' }}>{post.type === 'need' ? t('Cash offered too') : t('Cash also needed')}</Text> }}
                             />
                         </Text>
                     </View>

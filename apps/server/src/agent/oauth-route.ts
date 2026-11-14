@@ -46,6 +46,8 @@ import {
     markRegistrationOpened, OAUTH_SCOPE, redirectHost, refreshGrant, registerClient, revokeByToken, setConsentTicks, type OAuthGrantView, type TokenResult,
 } from './oauth.js';
 import { dropSuggestionsOf } from './suggestions.js';
+import { dropAssistantKnowledgeDrafts } from '../engine/knowledge-drafts.js';
+import { knowledgeOn } from './knowledge.js';
 import { TAKEDOWN } from '../engine/agent-takedowns.js';
 import { dropUploadedPhotosOf } from './owner-photos.js';
 import { offersSuggestions } from './tools.js';
@@ -142,6 +144,8 @@ function tellOwners(kind: 'connected' | 'reuse' | 'revoked', grant: OAuthGrantVi
 function forgetGrant(id: string): void {
     forgetAgentGrant(id);
     dropSuggestionsOf(id);
+    // Local knowledge K6: its drafts still waiting go with it (engine/knowledge-drafts.ts); what a person approved stays.
+    dropAssistantKnowledgeDrafts(id);
     dropUploadedPhotosOf(id);
 }
 
@@ -168,7 +172,7 @@ function tokenAnswer(ctx: any, res: TokenResult, from: string): void {
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
 /** The consent page's words (design §2): the name never alone, the redirect host beside it and where everything goes. */
-export function consentWords(clientName: string, sendsTo: string, community: string): { heading: string; lines: string[] } {
+export function consentWords(clientName: string, sendsTo: string, community: string, knowledge = false): { heading: string; lines: string[] } {
     const who = clientName ? `An AI assistant calling itself “${clientName}”, at ${sendsTo},` : `An AI assistant at ${sendsTo}`;
     return {
         heading: `${who} asks to connect to ${community} for you`,
@@ -182,7 +186,9 @@ export function consentWords(clientName: string, sendsTo: string, community: str
                 + '(as you, or as an enterprise you keep) and polls (as you), at once, with no approval. '
                 + `Only if you tick “May take down posts for me” below, it takes posts down for you at once, with no approval: an owner's assistant one post or many, an admin's one post a call. `
                 + `A post it takes down is hidden from everyone else at once, and a person can put it back in Settings for ${TAKEDOWN.holdDays} days. `
-                + 'Anything else it can only SUGGEST, and a suggestion changes nothing until you approve it on your phone.',
+                + 'Anything else it can only SUGGEST, and a suggestion changes nothing until you approve it on your phone.'
+                // Local knowledge K6 (agent/knowledge.ts), where Learn is on: drafts, which publish nothing.
+                + (knowledge ? ' It can also draft Local knowledge, which shows to nobody until an owner or admin approves it in the app.' : ''),
             'It can never read messages, balances, keys, addresses, photos or logs, or change settings, roles, keys or money.',
             `To connect it, scan it inside the BeanPool app, not with the phone's camera: Settings tab → COMMUNITY ADMIN → the last row, “Manage this community from a computer”. Check that the phone names ${sendsTo}, and type the two digits it shows.`,
         ],
@@ -329,7 +335,7 @@ export function createOAuthRoutes(deps: RouteDeps): Router {
             httpOnly: true, sameSite: 'strict', maxAge: 4 * 60_000, path: OAUTH_COOKIE_PATH,
         });
         const community = cleanMemberText(directoryName(), 120) || 'this BeanPool community';
-        const words = consentWords(client.clientName, sendsTo, community);
+        const words = consentWords(client.clientName, sendsTo, community, knowledgeOn());
         const qr = buildSettingsSigninQr({ nodeUrl: issuerFor(ctx), pairingId: created.pairingId, shortCode: created.shortCode });
         const svg = await QRCode.toString(qr, { type: 'svg', margin: 1, width: 240 });
         const nonce = crypto.randomBytes(16).toString('base64');

@@ -53,6 +53,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import { forgetRelayMailInCopy } from '../engine/relay-mail-tables.js';
 import { db } from '../db/db.js';
 import { logger } from '../logger.js';
 import { redactAddresses, redactCodes } from '../sanitize-message.js';
@@ -219,6 +220,8 @@ export function forgetAddressesInCopy(file: string): boolean {
             forgetAddressesInLogsOf(copy);
             // The open door's key, in a copy of a database from before it was a file (services/open-join-key.ts).
             copy.prepare('DELETE FROM node_config WHERE key = ?').run(LEGACY_OPEN_JOIN_KEY_ROW);
+            // And the mailbox between communities, which is this server's own: no copy holds mail (engine/relay-mail-tables.ts).
+            forgetRelayMailInCopy(copy);
         })();
         return true;
     } catch (e) {

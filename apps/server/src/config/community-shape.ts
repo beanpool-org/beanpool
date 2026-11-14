@@ -152,6 +152,9 @@ export interface ShapeSettings {
     /** Message requests (#2392): only on a build that has the switch. */
     dmRequests?: ShapeSetting<boolean>;
     decisions: ShapeSetting<boolean>;
+    /** Messages from other communities (engine/relay-mail.ts, X2): on by default; off, nothing from outside is taken and no
+     *  member here sends out. No lock. */
+    outsideMessages: ShapeSetting<boolean>;
     /** Members may share one post outside the community (front doors S6, engine/peek-tickets.ts): off while the private
      *  preview is on, which shows visitors nothing. */
     shareOutside: ShapeSetting<boolean>;
@@ -246,6 +249,7 @@ export const SHAPE_SWITCH_PLACES: Readonly<Record<ProfileSwitch | 'dmRequests', 
     bills: 'beans',
     dmRequests: 'dmRequests',
     decisions: 'decisions',
+    outsideMessages: 'outsideMessages',
     shareOutside: 'shareOutside',
     publishToDirectory: 'listed',
     guestListingsOnly: 'visitors',
@@ -565,6 +569,7 @@ export function readShape(): Shape {
         memberGift,
         ...(dmRequests ? { dmRequests } : {}),
         decisions: plain('decisions'),
+        outsideMessages: plain('outsideMessages'),
         shareOutside: {
             ...plain('shareOutside'),
             value: s.shareOutside && !preview,

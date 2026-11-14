@@ -32,7 +32,8 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, submitReport } from './state-engine.js';
+import { broadcast, initStateEngine, seedGenesisMember, submitReport } from './state-engine.js';
+import { publishKnowledge } from './engine/knowledge.js';
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
 import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { resetAdminAuthTarpit, TOKEN_REFUSED_CODE } from './admin-auth.js';
@@ -325,9 +326,10 @@ async function main(): Promise<void> {
         assert(modList.status === 403, `a moderator sees none (${show(modList)})`);
         const row = (ownerList.body?.grants ?? []).find((g: any) => g.name === "Adam's Claude");
         assert(!!row && row.member === 'Adam' && row.role === 'admin' && row.via === 'token' && row.lastUsedAt === null && row.callsToday === 0 && row.mine === false
-            && Object.keys(row).sort().join() === 'callsToday,canModerate,canPost,createdAt,expired,expiresAt,id,lastUsedAt,madePosts,member,mine,name,postsToday,role,takedownsHeld,takedownsToday,via'
-            && row.canPost === false && row.postsToday === 0 && row.madePosts === 0 && row.canModerate === false && row.takedownsToday === 0 && row.takedownsHeld === 0,
-        `each row: member, name, role, via, last used, calls today, "May post for me", posts today, its posts still up (slice S2), "May take down posts for me", its takedowns today and those still waiting, and nothing else (${JSON.stringify(row)})`);
+            && Object.keys(row).sort().join() === 'callsToday,canModerate,canPost,createdAt,expired,expiresAt,id,knowledgeDraftsWaiting,lastUsedAt,madePosts,member,mine,name,postsToday,role,takedownsHeld,takedownsToday,via'
+            && row.canPost === false && row.postsToday === 0 && row.madePosts === 0 && row.canModerate === false && row.takedownsToday === 0 && row.takedownsHeld === 0
+            && row.knowledgeDraftsWaiting === 0,
+        `each row: member, name, role, via, last used, calls today, "May post for me", posts today, its posts still up (slice S2), "May take down posts for me", its takedowns today and those still waiting, its drafts of Local knowledge waiting (K6), and nothing else (${JSON.stringify(row)})`);
         assert(ownerList.body?.mcpUrl === `https://localhost:${port}/mcp` && ownerList.body?.defaultDays === 30 && ownerList.body?.maxDays === 90,
             `the list gives the address to paste and the days (${ownerList.body?.mcpUrl})`);
 
@@ -354,8 +356,14 @@ async function main(): Promise<void> {
         const pollMade = await ownerClient.callTool({ name: 'create_poll', arguments: { question: 'Does the preview read this?', options: ['Yes', 'No'], days: 3 } });
         const pollId = (pollMade.structuredContent as any)?.postId as string;
         assert(!pollMade.isError && !!pollId, `an owner's assistant makes a poll for the preview to read (${JSON.stringify(pollMade).slice(0, 120)})`);
+        // Local knowledge K6: a page for knowledge_get to read (agent/knowledge.ts), its words, place and source fenced as /mcp fences them.
+        const pageId = publishKnowledge(broadcast, owner.pub, {
+            title: 'How recycling works at the tip', body: 'Glass, cans and paper, sorted.', topic: 'local-services', place: 'Manse Road',
+            sources: [{ url: 'https://council.example/waste', label: 'Council waste page' }],
+        }).id;
         const argsFor = (name: string): Record<string, unknown> => name === 'report_get' ? { report_id: r1!.id }
             : name === 'poll_results' ? { post_id: pollId }
+            : name === 'knowledge_get' ? { post_id: pageId }
             : name === 'tags_search' ? { q: 'lemon' }
             : name === 'reports_list' ? { include_text: true, status: 'all' } : name === 'knocks_list' ? { include_text: true } : {};
         // Answers that move between two calls on their own: the clock, the process's memory, the disk (a CI runner's moved

@@ -78,7 +78,7 @@ Tags help people find your post. They are optional, and they are public with you
 ## Extra choices
 
 - **Repeatable:** the post stays up after each deal, and several people can take it at once. Good for a weekly lift or bread every Saturday. An Offer priced **Each** does not have it: its count of how many are left takes its place.
-- **Cash also needed:** tick this if you also need some cash, for fuel or materials. The app never handles cash; you sort that out between you.
+- **Cash also needed:** on an Offer, tick this if you also need some cash, for fuel or materials. On a Need the same box reads **I'll pay cash too**: tick it if you will pay for the fuel or materials the helper buys, at cost. The app never handles cash; you sort that out between you.
 - **Where does this travel?** Only if your community trades with other communities: keep the post here, or share it further.
 
 On the phone, the app keeps a draft as you type. If you leave and come back, it asks whether to **Continue** or **Start fresh**.

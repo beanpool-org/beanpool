@@ -420,6 +420,9 @@ async function main(): Promise<void> {
         && stagedVerdictInWords(closingHashVerdict(oldShape, null, new Set(), new Set())) === 'not compared (the main server runs another release, whose table hashes this one does not read)'
         && stagedVerdictInWords(closingHashVerdict(undefined, null, new Set(), new Set())) === 'not compared (no table hashes: the main server was written to while making it)',
         'the puller\'s log of a staged copy: values refused, an older release\'s hashes and no hashes each in their own words');
+    const mixed = closingHashVerdict(mine0, { compared: [], differing: [], drift: [], otherRelease: [T], exact: false }, new Set(['members']), new Set());
+    assert(stagedVerdictInWords(mixed) === `not exact (members: values this server's tables refuse; not compared: the main server runs another release, which hashes ${T} another way)`,
+        `the puller's log of a staged copy: values refused and another release's table, each in its own words ("${stagedVerdictInWords(mixed)}")`);
     Date.now = realNow;
 
     console.log('\n— 6. A standby\'s copy of the directory cache hashes as the main server\'s —');

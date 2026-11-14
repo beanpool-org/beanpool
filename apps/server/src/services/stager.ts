@@ -112,7 +112,7 @@ export interface ClosingHashVerdict {
     verdict: 'exact' | 'inexact' | 'uncompared';
     /** Every table that makes the copy not exact: `refused`, `mendable` and `drift` together. */
     differs: string[];
-    /** The tables whose values or rows this database's rules refused (reported, never refused). */
+    /** The tables whose values or rows this database's rules refused: reported, and the copy kept. */
     refused: string[];
     /** The tables whose count or content differs, which the held force-resync mends (accounts as the ledger's). */
     mendable: string[];
@@ -178,7 +178,7 @@ export function stagedVerdictInWords(c: ClosingHashVerdict): string {
         c.drift.length > 0 ? `schema drift: ${c.drift.join(', ')} hashed another way here, with the same release's definitions` : null,
         c.mendable.length > 0 ? `${c.mendable.join(', ')} differing` : null,
         c.refused.length > 0 ? `${c.refused.join(', ')}: values this server's tables refuse` : null,
-        c.otherRelease.length > 0 ? `${c.otherRelease.join(', ')} not compared: ${release}` : null,
+        c.otherRelease.length > 0 ? `not compared: ${release}` : null,
     ].filter((p): p is string => p !== null);
     return `not exact (${parts.join('; ')})`;
 }

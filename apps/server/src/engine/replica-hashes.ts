@@ -37,14 +37,15 @@ export interface TableHash {
 /**
  * How the hashes are made, as a payload names it. A table, a column, a row rule or a boot stamp changes no `v`: each table
  * carries its own recipe's fingerprint (`d`), and the payload the fingerprint of the definitions it was made from (`def`).
- * Raise it ('d2', …) on any change to the bytes a table hashes to or to how its `d` is made, apart from the manifest inputs
- * `def` covers: the payload's shape; rowLine's bytes; selectOf's boot-stamp CASE and its placeholder; the order rule; how
- * the row rule and the columns left out are applied; what `d` takes; tableHasher's handling of the photos and members
- * values left out. Each of those also moves hasherFingerprint, and with it every table's `d` and the payload's `def`, by
- * construction: two releases that differ there read each other as another release (not compared), never as drift or as
- * a table that differs. test-replica-hashes pins, for each `v`, hasherFingerprint, golden rows and a made-up table's `d`
- * and hash, so such a change turns the suite red until `v` is raised and its line added. A release that reads another `v`
- * (a number, before this one) reads none of the hashes, and gives no content verdict; no conversion code reads the old shape.
+ * Raise it ('d2', …) on any change to the bytes a table hashes to or to how its `d` or `def` is made, apart from the
+ * manifest inputs `def` covers: the payload's shape; rowLine's bytes; selectOf's boot-stamp CASE and its placeholder; the
+ * order rule; how the row rule and the columns left out are applied; what `d` or `def` takes; tableHasher's handling of
+ * the photos and members values left out. Each of those but what `def` takes also moves hasherFingerprint, and with it
+ * every table's `d` and the payload's `def`, by construction: two releases that differ there read each other as another
+ * release (not compared), never as drift or as a table that differs. test-replica-hashes pins, for each `v`,
+ * hasherFingerprint, golden rows, and a made-up manifest's `d`, hash and `def`, so any of those changes turns the suite red
+ * until `v` is raised and its line added. A release that reads another `v` (a number, before this one) reads none of the
+ * hashes, and gives no content verdict; no conversion code reads the old shape.
  */
 export const TABLE_HASHES_VERSION = 'd1';
 

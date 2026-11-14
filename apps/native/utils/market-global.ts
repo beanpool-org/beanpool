@@ -17,7 +17,7 @@ import { beansOn, type NodeFeatures, type NodeProfile } from './node-profile';
 import type { MarketExtraFilter } from './market-filters';
 import { sectionsOfOrdered, type FeedSection } from './feed-sections';
 import { formatDistance } from './events';
-import { LOCAL_COMMUNITY_LINES, isNodePulsePost, marketOrder, parseHundredths, postRulesFor, t, word } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, marketOrder, parseHundredths, postRulesFor, t, word } from '@beanpool/core';
 
 /** Whether the Market shows Beans: a price on each card and the "Beans only" filter. */
 export function marketShowsBeans(features: NodeFeatures | null | undefined): boolean {
@@ -268,18 +268,16 @@ function eventStartMs(p: Record<string, any>): number {
 }
 
 /**
- * The Market's stream for the screen (one order on both apps, core market-order): newest listed first, the two-a-day bound,
- * the node's own Daily Pulse first. Under Events, soonest first; under a search, the node's order stands. On the worldwide
- * community the circle is cut first.
+ * The Market's stream for the screen (one order on both apps, core market-order): newest listed first, the two-a-day bound.
+ * Under Events, soonest first; under a search, the node's order stands. On the worldwide community the circle is cut first.
  */
 export function marketStream<T extends Record<string, any>>(posts: readonly T[], nowMs: number, o: MarketStreamOptions = {}): T[] {
-    const pulseFirst = (list: T[]): T[] => [...list.filter(isNodePulsePost), ...list.filter(p => !isNodePulsePost(p))];
     if (o.eventsOnly) {
-        return pulseFirst([...posts].sort((a, b) => eventStartMs(a) - eventStartMs(b)));
+        return [...posts].sort((a, b) => eventStartMs(a) - eventStartMs(b));
     }
-    if (o.narrowedBySearch) return pulseFirst([...posts]);
+    if (o.narrowedBySearch) return [...posts];
     const cut = o.circle ? cutToCircle(posts, o.circle, o.ownKey, o.keptIds) : [...posts];
-    return pulseFirst(marketOrder(cut, nowMs));
+    return marketOrder(cut, nowMs);
 }
 
 /**

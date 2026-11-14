@@ -100,7 +100,6 @@ const poll = {
 const OTHERS = [
     'Bicycle Repair', 'Fix gears and brakes', 'David', 'Lift to town', 'Tuesday morning', 'Ada', 'Market day?', 'Mia', 'Bob',
     'Gardeners', 'Byron Link', 'Byron', 'Bean Bakery', 'Sourdough loaf', 'Fresh every Friday', 'Loves bikes', 'david@example.test',
-    'Daily Pulse', 'Kindness compounds', 'Share what you have',
 ];
 
 const said: string[] = [];
@@ -505,15 +504,6 @@ describe('the Market in the pseudo-locale', () => {
         expect(screen.getByTestId('listing-in-return')).toBeInTheDocument();
         expect(screen.getByTestId('local-action-stub')).toBeInTheDocument();
         allThroughT(10);
-    });
-
-    it('a Daily Pulse listing: the way to post one\'s own', async () => {
-        stubNode([{ ...offer, id: 'pulse-1', title: 'Kindness compounds', description: 'Share what you have', authorCallsign: 'Daily Pulse', authorPublicKey: 'pulse-pk', audienceScope: 'public', targetGroupId: undefined, targetGroupName: undefined }]);
-        await showIn('xx');
-        render(<MarketplacePage identity={identity} isMember={true} openPostId="pulse-1" onPostOpened={() => {}} />);
-        expect(await screen.findByText(xx('Feeling Inspired?'))).toBeInTheDocument();
-        await settle();
-        allThroughT(6);
     });
 
     it('a visitor\'s list, its one line, and an empty Market', async () => {

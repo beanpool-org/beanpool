@@ -183,7 +183,7 @@ const TABLE_WORDS: Record<string, string> = {
     messages: 'chat messages',
     abuse_reports: 'reports',
     creator_channels: 'creator channels',
-    pulse_items: 'Daily Pulse items',
+    pulse_items: 'Pulse items',
     recovery_shares: 'sign-in recovery copies',
     settlements: 'settlements with other communities',
     poll_votes: 'poll votes',

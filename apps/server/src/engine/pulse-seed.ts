@@ -5,8 +5,7 @@
  * touches the communities already running, which are exactly the ones with an empty Pulse.
  * Re-running is a no-op.
  *
- * Follows the Daily Pulse system-identity pattern (see daily-pulse.ts `ensurePulseTreasury`)
- * rather than inventing one:
+ * The system identity:
  *
  *   - the owner is a TREASURY, created by `createTreasury(..., { systemCreated: true })`. That
  *     gives it a real keypair, and `is_treasury = 1` keeps it out of the People directory,
@@ -65,8 +64,7 @@ export function ensureBeanPoolIdentity(): string {
 
     if (existing?.public_key) {
         if (existing.is_treasury === 1) return existing.public_key;
-        // A person holds the reserved name. Rename them — same remedy Daily Pulse uses — and
-        // leave their status entirely alone.
+        // A person holds the reserved name. Rename them, and leave their status entirely alone.
         db.prepare(`UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?`)
             .run(`${BEANPOOL_CALLSIGN} ${existing.public_key.substring(0, 6)}`, new Date().toISOString(), existing.public_key);
     }

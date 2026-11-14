@@ -100,7 +100,7 @@ import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { startIdentityEpochWatch } from './services/identity-epoch.js';
 import { startRegistrarNameWatch } from './services/registrar-name-watch.js';
 import { startAddressCheck } from './services/address-check.js';
-import { scheduleDailyPulse } from './daily-pulse.js';
+import { removeDailyPulse } from './engine/daily-pulse-cleanup.js';
 import { initHarvester } from './services/harvester.js';
 import { startImageEvacuation } from './services/image-evacuation.js';
 import { startVoiceExpiry } from './engine/voice-lines.js';
@@ -226,6 +226,11 @@ async function main() {
     // And GitHub's rows for that role (engine/github-sign-in-removal.ts): a standby that became the main server at this
     // boot removes the GitHub copies it inherited before anything serves. Does nothing when the role did not change.
     removeGithubSignInsAtBoot({ standby: getNodeRole() === 'backup' });
+    // CONVERSION CODE CC-daily-pulse-cleanup (expires: remove in the first node release after 1.4.3). The Daily Pulse is gone;
+    // what it left (its Pulse items, its channel, its live 0-Bean offer) goes here, before anything serves, so no one sees or
+    // asks for that offer at this start. On the main server only, once the role is settled: a standby takes it by the normal
+    // path (engine/daily-pulse-cleanup.ts). A start that finds nothing writes nothing.
+    if (getNodeRole() === 'primary') removeDailyPulse();
 
     // Step 2.7: The image store (storage design §7). IMAGE_STORE=s3 with a setting missing, a bucket these
     // credentials cannot reach or cannot write to (proved with a test object, written, read back and deleted),
@@ -383,9 +388,6 @@ async function main() {
     // Step 8.67: Delete voice messages' sealed parts past 30 days on the main server (engine/voice-lines.ts): the line stays,
     // and a standby follows the tombstones. Every six hours, the first ten minutes after boot.
     startVoiceExpiry();
-
-    // Step 8.7: Daily Pulse scheduler (auto-rotates daily 0-Bean inspirational offer at 5 AM)
-    scheduleDailyPulse();
 
     // Step 8.8: App-store version lookup. The node checks the stores twice a day and
     // serves the answer in /api/community/health, so phones stop downloading the Play

@@ -50,7 +50,7 @@ const REGEX_AFTER_WORD = /(?:^|[^\w$.])(return|typeof|case|do|else|in|of|new|del
  * The source with every comment, string and template text replaced by spaces (newlines kept), so a rule reads only code and a
  * match's offset is its place in the file. A template's `${...}` stays code. A regex literal is blanked too.
  */
-export function blank(src) {
+export function blank(src, onComment = null) {
     const out = src.split('');
     const n = src.length;
     const stack = []; // template nesting: the brace depth at which each `${` opened
@@ -74,7 +74,7 @@ export function blank(src) {
     while (i < n) {
         const c = src[i];
         const d = src[i + 1];
-        if (c === '/' && d === '/') { const e = src.indexOf('\n', i); const end = e < 0 ? n : e; wipe(i, end); i = end; continue; }
+        if (c === '/' && d === '/') { const e = src.indexOf('\n', i); const end = e < 0 ? n : e; onComment?.(i, src.slice(i, end)); wipe(i, end); i = end; continue; }
         if (c === '/' && d === '*') { const e = src.indexOf('*/', i + 2); const end = e < 0 ? n : e + 2; wipe(i, end); i = end; continue; }
         if (c === '"' || c === "'") {
             const s = i; i++;
@@ -495,9 +495,13 @@ const REASON_WORDS = 4;
 /** The allow comments of a file: { line, rule, reason, ok, why }. */
 export function allowsOf(raw) {
     const out = [];
-    raw.split('\n').forEach((text, i) => {
+    // Only real line comments: a sample inside a string (this check's own tests) is not one.
+    const comments = [];
+    blank(raw, (at, text) => comments.push({ at, text }));
+    comments.forEach(({ at, text }) => {
         const m = ALLOW.exec(text);
         if (!m) return;
+        const i = lineOf(raw, at) - 1;
         const rule = m[1];
         const reason = m[2].trim();
         let why = '';

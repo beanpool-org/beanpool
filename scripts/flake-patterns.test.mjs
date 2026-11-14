@@ -203,6 +203,10 @@ it('x', async () => {
         assert.equal(r.hits.length, 1);
         assert.match(r.badAllows[0].why, /names no rule/);
     });
+    it('an allow written inside a string (a sample, as in this file) is not an allow', () => {
+        const r = scanSource("const sample = '// flake-ok(focus-after-await): fine';\nconst t = `\n// flake-ok(nope): x\n`;\n");
+        assert.deepEqual(r.badAllows, []);
+    });
     it('an allow that excuses nothing is named', () => {
         const r = scanSource("const a = 1;\n// flake-ok(fixed-ms-bound): a generous bound on a hang, never close\nconst b = 2;\n");
         assert.match(r.badAllows[0].why, /excuses nothing/);

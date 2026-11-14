@@ -33,6 +33,7 @@
 # file as its argument), STRESS_HOG_CMD, STRESS_NOW_HHMMSS (the clock the window check reads).
 # bash 3.2: no associative arrays, no `timeout`.
 set -u
+START=$(date +%s)   # the budget counts from here: picking the files is inside it too
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="${STRESS_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 RUNS="${STRESS_RUNS:-20}"
@@ -126,7 +127,7 @@ if [ $LIST_ONLY -eq 1 ]; then printf '%s\n' "$ORDER" | grep .; exit 0; fi
 
 # The command for one file, in CMD (an array) and CMD_DIR. Returns 1 when no runner is known for it.
 runner_for() {
-  local f="$1" d pj
+  local f="$1" d
   CMD_DIR="$ROOT"
   if [ -n "${STRESS_CMD:-}" ]; then CMD=($STRESS_CMD "$f"); return 0; fi
   case "$f" in
@@ -175,7 +176,6 @@ cleanup() {
 trap cleanup EXIT
 trap 'echo "stress.sh: stopped by a signal"; exit 130' INT TERM
 
-START=$(date +%s)
 DEADLINE=$(( START + WINDOW - GRACE ))
 i=0
 while [ $i -lt "$HOGS" ]; do
@@ -207,20 +207,18 @@ run_once() {
 SUSPECTS=0; DONE_FILES=0
 REPORT=""
 NOT_REACHED=""
-n=0
 while IFS= read -r f; do
   [ -n "$f" ] || continue
-  n=$((n + 1))
   now=$(date +%s)
   if [ "$now" -ge "$DEADLINE" ]; then NOT_REACHED="$NOT_REACHED $f"; continue; fi
   if ! runner_for "$f"; then REPORT="$REPORT"$'\n'"skipped $f (no runner known for it)"; continue; fi
   file_until=$(( now + FILE_SECS )); [ $file_until -gt $DEADLINE ] && file_until=$DEADLINE
   slug=$(printf '%s' "$f" | tr '/' '_')
-  runs=0; reds=0; cut=0; red_logs=""
+  runs=0; reds=0; red_logs=""
   while [ $runs -lt "$RUNS" ] && [ "$(date +%s)" -lt $file_until ]; do
     log="$OUT/$slug.$((runs + 1)).log"
     run_once "$file_until" "$log"; rc=$?
-    if [ $rc -eq 124 ]; then cut=1; rm -f "$log"; break; fi
+    if [ $rc -eq 124 ]; then rm -f "$log"; break; fi
     runs=$((runs + 1))
     if [ $rc -ne 0 ]; then reds=$((reds + 1)); red_logs="$red_logs $log"; else rm -f "$log"; fi
   done
@@ -228,12 +226,13 @@ while IFS= read -r f; do
   short=""; [ $runs -lt "$RUNS" ] && short=" (stopped by the clock after $runs)"
   if [ $reds -gt 0 ]; then
     SUSPECTS=$((SUSPECTS + 1))
-    REPORT="$REPORT"$'\n'"SUSPECT $f red $reds/$runs$short  logs:$red_logs"
+    every=""; [ $reds -eq $runs ] && every=" (every run: broken here, not flaky)"
+    REPORT="$REPORT"$'\n'"SUSPECT $f red $reds/$runs$short$every  logs:$red_logs"
     cat $red_logs > "$OUT/$slug.reds.log"
     SEEN=$(node "$SCRIPT_DIR/record.mjs" --seen "$f" --log "$OUT/$slug.reds.log" 2>&1 | sed 's/^/  /')
     [ -n "$SEEN" ] && REPORT="$REPORT"$'\n'"$SEEN"
   elif [ $runs -eq 0 ]; then
-    REPORT="$REPORT"$'\n'"cut     $f: its first run did not finish in its share of the clock"
+    REPORT="$REPORT"$'\n'"cut     $f: its first run was stopped by the clock (its share or the budget) before it finished"
   else
     REPORT="$REPORT"$'\n'"clean   $f $runs/$runs$short"
   fi

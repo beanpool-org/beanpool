@@ -13,16 +13,16 @@ source-hash: a2fcc28eabc05c1d
 
 Telefon ve web uygulaması birkaç fark dışında aynı kartları gösterir. Bu sayfada farklı oldukları yerlerde "telefonda" veya "web uygulamasında" ifadesi yer alır.
 
-## Başlarken
+## Hoş geldin kartı ve tur
 
-Yeni bir üyenin Ana Sayfası neredeyse boş başlar: **Sana ihtiyacı var** ile **Topluluğun** arasında tek bir kart, **Başlarken** (küresel toplulukta, **Topluluğunu bul** bunun üstünde durur). Şöyle yazar: "Burası Ana Sayfanız. Buraya nelerin geleceğini siz seçersiniz. Başlamadan önce diğer sekmelere bir dakika göz atın."
+Yeni bir üyenin Ana Sayfası ilk saniyeden kartlarıyla gelir (aşağıya bakın). İlki **Hoş geldin** kartıdır; **Sana ihtiyaç var** ile diğerlerinin arasında durur (küresel toplulukta **Topluluğunu bul** onun üstünde kalır). Hangi toplulukta olduğunuzu ve sizi kimin davet ettiğini söyler; **Merhaba de ›** o kişiyle bir sohbet açar. Yeni bir toplulukta tek başına olan ve kimsenin davet etmediği bir sahip bunun yerine "Buradaki ilk kişi sensin." görür, davet edebildiği yerde **Birini davet et ›** ile birlikte. **Hoş geldin**, tur bitince ya da atlanınca, **Şimdi değil** seçeneğine dokununca ya da katılmanızdan yedi gün sonra, hangisi önce olursa, kaybolur.
 
-- **Göz at** kısa bir tur başlatır. Ekranın altındaki bir çubuk, uygulamayı sırayla her sekmeye taşır ve üstte **Adım 2 / 8** gibi bir başlıkla her adımda bir veya iki cümleyle sekmenin ne işe yaradığını anlatır (sayı, uygulamaya ve topluluğunuzun sekmelerine bağlıdır). Devam etmek için **İleri**'ye, durdurmak için **Atla**'ya dokunun. Çubuğun arkasındaki sekme normal şekilde çalışır: herhangi bir şeye dokunun veya başka bir sekmeye dokunduğunuzda tur sizi oraya kadar takip eder.
-- Son adım Ana Sayfa'ya geri döner: **İlk kartlarını ekle**. Ana Sayfa'ya koymak için bir karta veya tüm liste için **Daha fazla kart**'a dokunun. **Bitti**'ye dokunun. Hiçbir şey seçmediyseniz, Ana Sayfa her zamanki beş kartla başlar (aşağıda).
-- Karttaki veya çubuktaki **Atla**, turu sonlandırır. Ana Sayfa'ya kendiniz bir kart koymadıysanız, size her zamanki beş kartı verir. Koyduysanız (**Kart ekle**'den veya turun son adımındaki bir seçimden), Ana Sayfa seçtiğiniz kartları korur.
+- **Tura başla ›** kısa bir tur başlatır. Ekranın altındaki bir çubuk, uygulamayı sırayla her sekmeye taşır ve üstte **Adım 2 / 8** gibi bir başlıkla her adımda bir veya iki cümleyle sekmenin ne işe yaradığını anlatır (sayı, uygulamaya ve topluluğunuzun sekmelerine bağlıdır). Devam etmek için **İleri**'ye, durdurmak için **Atla**'ya dokunun. Çubuğun arkasındaki sekme normal şekilde çalışır: herhangi bir şeye dokunun veya başka bir sekmeye dokunduğunuzda tur sizi oraya kadar takip eder.
+- Son adım Ana Sayfaya döner ve şunu söyler: "Tur bu kadar. Ana Sayfa birkaç kartla başlar. Kart ekle ve Sırala en alttadır." **Bitti** seçeneğine dokunun.
+- Çubuktaki **Atla** ya da **Hoş geldin** kartındaki **Şimdi değil** turu bitirir. Her iki durumda da **Hoş geldin** Ana Sayfadan kalkar ve hiçbir şey eklenmez: kartlarınız zaten orada.
 - Tur asla kendiliğinden başlamaz. Uygulamayı turun ortasında kapatırsanız, kart "Tura 3. adımdan devam et" der.
 - Bitti veya Atla hesabınızda tutulur, bu nedenle kart diğer telefonlarınızda veya tarayıcılarınızda tekrar görünmez. Turu tekrar görmek için üstteki **?** işaretine ve **Turu tekrar yap**'a dokunun.
-- Ana Sayfanızı tur çıkmadan önce ayarladıysanız, sizin için hiçbir şey değişmez. İsterseniz **Başlarken**, **Kart ekle** içinde, **Başlarken** altındadır.
+- Ana Sayfanızı tur çıkmadan önce ayarladıysanız, sizin için hiçbir şey değişmez.
 
 Turda **Atla**'ya dokunduktan sonra ilk kartın altında tek satırlık bir ipucu belirir. Kapatmak için **✕** işaretine dokunun. **Bitti**'den sonra görünmez.
 
@@ -31,7 +31,7 @@ Turda **Atla**'ya dokunduktan sonra ilk kartın altında tek satırlık bir ipuc
 
 ## Kartlarınız
 
-Telefonda ve web uygulamasında Ana Sayfanız, seçtiğiniz kartların bir listesidir. Turdan sonra her zamanki beş kart şunlardır: **İlk adımlar**, **İpuçları**, **Pazar'da Yeni** (küresel toplulukta **Yakınında**), **Yaklaşanlar** ve **Topluluğundan**. **Nelerle ilgileniyorsun?** ve **Geri dönüş yolun** da eklenir ve yalnızca söyleyecek bir şeyleri olduğunda gösterilir. **Sana ihtiyacı var** her zaman en üstte, **Topluluğun** ise her zaman en alttadır.
+Telefonda ve web uygulamasında Ana Sayfanız, seçtiğiniz kartların bir listesidir. Yeni bir üyenin Ana Sayfası bu listeyle, bu sırayla başlar: **Hoş geldin**, **Hesabına geri dönüş yolu**, **Pazarda yeni** (küresel toplulukta **Yakınında**), **İlk adımlar**, **Nelere ilgi duyuyorsun?**, **Yaklaşanlar**, **Nabız**, **Fasulyelerin**, **Yakınında istenenler**, **Anlaşmaların**, **Grupların**, **Karar ver**, **Topluluğundan**, **Kimler katıldı**, **İpuçları** ve **Güneş ve ay**. Her kart yalnızca söyleyecek bir şeyi olduğunda görünür; bu yüzden ilk gün bunların birkaçını görürsünüz, diğerleri de bir şeyleri olduğunda kendi yerlerinde belirir. Küresel toplulukta **Fasulyelerin**, **Anlaşmaların** ve **Karar ver** yoktur. **Sana ihtiyaç var** her zaman en üstte, **Topluluğun** her zaman en alttadır. Web uygulaması aynı sırayı sütunlarına yerleştirir.
 
 - Ana Sayfa'nın altındaki topluluğunuzun kartında yer alan **Kart ekle**, topluluğunuzun gösterebileceği her kartın listesini üç grup halinde açar: **Sana özel**, **Çevrende** ve **Başlarken**. Ana Sayfa'ya koymak için bir kartın yanındaki **Ekle**'ye dokunun. Kart, **Sana ihtiyacı var**'ın hemen altına, en üste gider ve Ana Sayfa onu göstermek için yukarı kayar.
 - Zaten Ana Sayfa'da olan bir kart, **Ekle** yerine **Ana Sayfa'da** der. **Kayıtlı bir arama** gibi bazı kartlar birden fazla kez eklenebilir: kaç tanesine sahip olduğunuzu belirtirler, örneğin "2 / 5 Ana Sayfa'da".
@@ -39,7 +39,7 @@ Telefonda ve web uygulamasında Ana Sayfanız, seçtiğiniz kartların bir liste
 - **Güneş ve ay**, eklenmeden önce kimin konumunun kullanılacağını sorar: **Topluluğun** (olağan seçim) veya **Bölgen**.
 - Bir Ana Sayfa en fazla 24 kart tutabilir. Dolduğunda liste bunu belirtir ve başka bir kart eklemek için bir kartı kaldırırsınız.
 - Kartlarınız hesabınızda tutulur, bu nedenle sizi diğer telefonlarınıza ve tarayıcılarınıza kadar takip eder. Topluluğunuzun sunucusu henüz güncellenmediyse, bu telefonda veya bu tarayıcıda kalırlar ve **Ana Sayfayı düzenle** "Kartlarınızın diğer cihazlara aktarılabilmesi için topluluğunuzun sunucusunun güncellenmesi gerekiyor." der. Ana Sayfa'yı her açtığınızda tekrar gönderilirler.
-- Bu değişiklikten önce kartları zaten taşıdıysanız veya gizlediyseniz, Ana Sayfanız gizlediğiniz kartlar olmadan sıranızı korur. Taşımadıysanız, **Başlarken**'i tek başına görürsünüz ve turun **Atla** veya **Bitti** seçeneği size beş kartı veya seçtiğiniz kartları verir (yukarıda). Bir haftadan daha uzun bir süre önce katıldıysanız, Ana Sayfa ilk açıldığında **Başlarken** altında size bir kez şunu da söyler: "Ana Sayfa artık daha az kartla başlıyor. Kart ekle geri kalanları geri getirir."
+- Bu değişiklikten önce kartları zaten taşıdıysanız veya gizlediyseniz, Ana Sayfanız gizlediğiniz kartlar olmadan sıranızı korur. Taşımadıysanız, yukarıdaki listeyi görürsünüz.
 
 ## Pazar'dan bir aramayı kaydetme
 
@@ -66,7 +66,7 @@ Ana Sayfa yalnızca size söyleyecek bir şeyi olan kartları, kendi sıranızda
 - **Kimler katıldı:** bu hafta katılan kişiler. Yerel bir toplulukta isimleri ve yüzleri gösterir. Küresel toplulukta ise isimleri değil, yalnızca bölgeye göre sayıyı gösterir.
 - **Nabız:** komşuların YouTube ve bloglar gibi harici kanallardan paylaştığı gönderiler, yıldızlı kategoriler başta olmak üzere. Son bir haftadan en fazla üç gönderi gösterir, hiçbir şey paylaşılmadıysa hiç göstermez. Web uygulamasında her birinin küçük resmi, başlığı, kimin ve ne zaman paylaştığı görünür; geniş kartlarda (480 px ve üzeri) iki şer iki şer kutucuklar halindedir. Nabız'ı açmak için **Tümünü gör** seçeneğine dokunun. Yeni bir üyenin Ana Sayfası'nda **Yaklaşanlar**'dan sonra yer alır.
 - **Güneş ve ay:** bu gecenin ayı ile bugünün gün doğumu ve gün batımı tek bir satırda, örneğin "🌔 Şişkin ay, %72 · Gün doğumu 6:12 · Gün batımı 17:48". Telefonunuz veya tarayıcınız bunu kendisi hesaplar: kart, topluluğunuzun sunucusundan hiçbir şey istemez. Topluluğunuzun yaklaşık bir kilometreye yuvarlanmış yerini veya topluluğunuzun bir yeri olmadığında bölgenizi kullanır (küresel toplulukta bu her zaman bölgenizdir). Küresel toplulukta telefon en son bulunduğu yeri de kullanabilir, ancak yalnızca uygulamanın konumunuzu kullanmasına zaten izin verdiyseniz: asla sormaz. **Topluluğunu bul** bölümünde kasabanızı yazdıysanız, telefon bunun yerine onu kullanır. Topluluğunuzun bir yeri olduğu durumlarda bile bölgenizi kullanmak için **…** simgesine, ardından **Ayarlar…** seçeneğine dokunun ve **Bölgen**'i seçin. Saatler kendi telefonunuzun veya bilgisayarınızın saatine göredir, bu nedenle seyahat ettiğinizde onları kendi saatinizde görürsünüz. Ay, ekvatorun o tarafından göründüğü şekilde çizilir. Güneşin bugün doğmadığı veya batmadığı yerlerde "Güneş bütün gün tepede" veya "Bugün gün batımı yok" gibi bunu belirtir. Bilinen bir yer yoksa kart gösterilmez ve **Ana Sayfayı düzenle** "Şimdi gösterilecek bir şey yok: bilinen bir yer yok." der. Ekran okuyucu bunu kelimelerle okur, örneğin "Ay şişkin ay, yüzde 72 aydınlık. Gün doğumu 06:12. Gün batımı 17:48."
-- **Fasulyelerin:** bakiyeniz ve kredi limitiniz (harcama alanı). Küresel toplulukta yoktur. Orada telefon bunun yerine örnek bir kart gösterir: Fasulyelerin yerel bir toplulukta ne işe yaradığı ve **Örnek bir defter gör**. Tur bittiğinde veya atlandığında gelir (**Başlarken** açıkken, turun Defter adımı örneği gösterir) ve **İlk adımlar** gitmiş olsa bile siz **Bu kartı gizle**'ye dokunana kadar kalır.
+- **Fasulyelerin:** bakiyeniz ve kredi limitiniz (harcama alanı). Küresel toplulukta yoktur. Orada telefon bunun yerine örnek bir kart gösterir: Fasulyelerin yerel bir toplulukta ne işe yaradığı ve **Örnek bir defter gör**. Tur bittiğinde veya atlandığında gelir (**Hoş geldin** açıkken, turun Defter adımı örneği gösterir) ve **İlk adımlar** gitmiş olsa bile siz **Bu kartı gizle**'ye dokunana kadar kalır.
 - **Topluluğundan:** topluluğunuzun yöneticilerinden duyurular ve bildirimler.
 - **Topluluğunu büyüt:** davetlerin açık olduğu yerlerde ilk Teklifinizden sonra yeni üyeler davet etmenizi sağlar. Küresel toplulukta yoktur. Telefonda, yalnızca yöneticilerin davet ettiği yerlerde, yalnızca bir sahip veya yönetici için gösterilir. Web uygulamasında orada hiç gösterilmez.
 - **Topluluğun:** topluluğunuzun adıyla başlıklandırılmış son kart (küresel toplulukta **Dünya çapındaki topluluk**). Bu ayki üye sayısını ve takasları gösterir; küresel toplulukta ise üyeleri ve kaç topluluğun listelendiğini gösterir. **Kart ekle** ve **Ana Sayfayı düzenle** seçeneklerine sahiptir. Bu kart en altta kalır ve taşınamaz veya kaldırılamaz.
@@ -77,7 +77,7 @@ Telefonda, topluluğunuz yeni bir adrese taşındığında, tüm bunların üzer
 
 Çoğu kartın sağ üst köşesinde bir **…** düğmesi bulunur. Bunlarda bulunmaz:
 
-- **Sana ihtiyacı var**, **Başlarken** ve **Topluluğun**. **Başlarken** kartında bunun yerine **Atla** vardır.
+- **Sana ihtiyacı var**, **Hoş geldin** ve **Topluluğun**. **Hoş geldin** kartında bunun yerine **Şimdi değil** vardır.
 - Telefonda **Geri dönüş yolun**. Kendi **✕** simgesine sahiptir.
 - Küresel topluluktaki ilk 30 gününüz boyunca **Topluluğunu bul**.
 
@@ -99,7 +99,7 @@ Ana Sayfa'nın en altında, topluluğunuzun kartında **Ana Sayfayı düzenle**'
 - İlk olarak **＋ Bir kart ekle** gelir. Ana Sayfa'daki **Kart ekle** ile aynı listeyi açar.
 - Ardından kendi sıranızla Ana Sayfanızdaki kartlar gelir. Her birinin yukarı ve aşağı okları ve kendi **…** menüsü vardır (Ayarlar…, Yukarı taşı, Aşağı taşı, Kaldır). Kayıtlı bir arama, kelimelerine göre ve yalnızca birini aradığında **Teklifler** veya **İhtiyaçlar**'a göre listelenir, örneğin "yumurta" veya "İhtiyaçlar · yumurta", böylece iki arama iki farklı satır olur.
 - Şu anda gösterecek bir şeyi olmayan kart **Şu anda gösterilecek bir şey yok** der. Her ipucunu gördüğünüzde **İpuçları** kartı **Tüm ipuçları görüldü** der ve üzerinde çalışılacak bir yer yokken **Güneş ve ay** kartı **Şimdi gösterilecek bir şey yok: bilinen bir yer yok.** der.
-- Her zamanki beş karta geri dönmek için **Varsayılanlara sıfırla**'ya dokunun.
+- Son kartın altındaki **Varsayılanlara sıfırla**, yeni bir üyenin başladığı listeyi (**Hoş geldin** hariç), ardından kayıtlı bir arama, bir sohbet ya da **Araçların** gibi kendi oluşturduğunuz kartları sizin sıranızla geri getirir. Ana Sayfa **Geri al** ile birlikte "Ana Sayfa başladığı hâline döndü." der; **Geri al** önceki Ana Sayfanızı geri getirir.
 - Anahtar ve gizli liste yoktur: kaldırdığınız bir kart **Kart ekle** içindedir.
 - Telefonda ve web uygulamasında yalnızca topluluğunuzun gösterebileceği kartlar listelenir. Örneğin küresel topluluğun listesinde **Fasulyelerin** veya **Anlaşmaların** yoktur: orada Defter ve **Takaslarım** bunun yerine yerel bir topluluktan örnekler gösterir.
 - **Sana ihtiyacı var** her zaman en üstte kalır ve **Topluluğun** her zaman en altta kalır.

@@ -13,16 +13,16 @@ source-hash: a2fcc28eabc05c1d
 
 Simu na programu ya wavuti huonyesha kadi zilezile, kukiwa na tofauti chache. Ukurasa huu unasema "kwenye simu" au "kwenye programu ya wavuti" mahali zinapotofautiana.
 
-## Kuanza
+## Karibu na ziara
 
-Nyumbani ya mwanachama mpya huanza ikiwa karibu tupu: kadi moja, **Kuanza**, kati ya **Inakuhitaji** na **Jumuiya yako** (kwenye jumuiya ya kimataifa, **Tafuta jumuiya yako** inabaki juu yake). Inasema "Hapa ni Nyumbani yako. Unachagua kile kinachowekwa hapa. Kabla hujaanza, tazama vichupo vingine kwa dakika moja."
+Nyumbani ya mwanachama mpya ina kadi zake tangu sekunde ya kwanza (tazama hapa chini). Ya kwanza ni **Karibu**, kati ya **Inakuhitaji** na zingine (katika jumuiya ya dunia nzima, **Tafuta jumuiya yako** inabaki juu yake). Inasema uko katika jumuiya gani na nani alikualika, pamoja na **Salimia ›** kufungua gumzo naye. Mmiliki aliye peke yake katika jumuiya mpya, ambaye hakualikwa na mtu, huona "Wewe ndiye wa kwanza hapa." badala yake, pamoja na **Mwalike mtu ›** pale anapoweza kualika. **Karibu** huondoka ziara ikikamilika au ikirukwa, unapogusa **Si sasa**, au siku saba baada ya kujiunga, chochote kitakachotangulia.
 
-- **Look around** huanzisha ziara fupi. Upau ulio chini ya skrini hupeleka programu kwenye kila kichupo kwa zamu na kueleza kusudi lake, sentensi moja au mbili kwa kila hatua, ukiwa na maelezo mafupi kama vile **Hatua ya 2 kati ya 8** juu (nambari inategemea programu na vichupo vya jumuiya yako). Gusa **Endelea** ili kuendelea, au **Ruka** ili kusimama. Kichupo kilicho nyuma ya upau hufanya kazi kama kawaida: gusa chochote, au gusa kichupo kingine na ziara itakufuata huko.
-- Hatua ya mwisho inarudi kwenye Nyumbani: **Add your first cards**. Gusa kadi ili kuiweka kwenye Nyumbani, au **Kadi zaidi** kwa orodha nzima. Gusa **Imekamilika**. Kama hukuchagua chochote, Nyumbani huanza na zile tano za kawaida (hapa chini).
-- **Ruka**, kwenye kadi au upau, humaliza ziara. Ikiwa hujaweka kadi kwenye Nyumbani wewe mwenyewe, inakupa zile tano za kawaida. Ikiwa umeweka (kutoka **Ongeza kadi**, au chaguo kwenye hatua ya mwisho ya ziara), Nyumbani huweka kadi ulizochagua.
+- **Fanya ziara ›** huanzisha ziara fupi. Upau ulio chini ya skrini hupeleka programu kwenye kila kichupo kwa zamu na kueleza kusudi lake, sentensi moja au mbili kwa kila hatua, ukiwa na maelezo mafupi kama vile **Hatua ya 2 kati ya 8** juu (nambari inategemea programu na vichupo vya jumuiya yako). Gusa **Endelea** ili kuendelea, au **Ruka** ili kusimama. Kichupo kilicho nyuma ya upau hufanya kazi kama kawaida: gusa chochote, au gusa kichupo kingine na ziara itakufuata huko.
+- Hatua ya mwisho inarudi Nyumbani na kusema "Hiyo ndiyo ziara. Nyumbani huanza na kadi chache. Ongeza kadi na Panga viko chini kabisa." Gusa **Imekamilika**.
+- **Ruka** kwenye upau, au **Si sasa** kwenye **Karibu**, humaliza ziara. Kwa njia yoyote, **Karibu** huondoka Nyumbani na hakuna kinachoongezwa: kadi zako tayari zipo.
 - Ziara haianzi yenyewe kamwe. Ukifunga programu katikati, kadi inasema "Endelea na ziara katika hatua ya 3".
 - Imekamilika au Ruka huhifadhiwa kwenye akaunti yako, kwa hivyo kadi hairudi kwenye simu au vivinjari vyako vingine. Ili kuona ziara tena, gusa **?** juu na **Fanya ziara tena**.
-- Ikiwa ulikuwa umeweka Nyumbani yako kabla ziara haijakuwepo, hakuna kinachobadilika kwako. **Kuanza** iko kwenye **Ongeza kadi**, chini ya **Kuanza**, ukiitaka.
+- Ikiwa ulikuwa umeweka Nyumbani yako kabla ziara haijakuwepo, hakuna kinachobadilika kwako.
 
 Baada ya kugusa **Ruka** kwenye ziara, kidokezo cha mstari mmoja huonekana chini ya kadi ya kwanza. Gusa **✕** ili kukiondoa. Baada ya **Imekamilika** hakionekani.
 
@@ -31,7 +31,7 @@ Baada ya kugusa **Ruka** kwenye ziara, kidokezo cha mstari mmoja huonekana chini
 
 ## Kadi zako
 
-Kwenye simu na kwenye programu ya wavuti, Nyumbani yako ni orodha ya kadi unazochagua. Baada ya ziara, zile tano za kawaida ni: **Hatua za kwanza**, **Vidokezo**, **Vipya Sokoni** (**Karibu nawe** kwenye jumuiya ya kimataifa), **Zinazokuja** na **Kutoka kwa jumuiya yako**. **Unapenda nini?** na **Njia yako ya kurudi** huja pia, na huonekana tu wakati zina kitu cha kusema. **Inakuhitaji** huwa juu kila wakati na **Jumuiya yako** huwa chini kila wakati.
+Kwenye simu na kwenye programu ya wavuti, Nyumbani yako ni orodha ya kadi unazochagua. Nyumbani ya mwanachama mpya huanza na orodha hii, kwa mpangilio huu: **Karibu**, **Njia yako ya kurudi**, **Vipya Sokoni** (**Karibu nawe** katika jumuiya ya dunia nzima), **Hatua za kwanza**, **Unapenda nini?**, **Zinazokuja**, **Mwenendo**, **Maharagwe yako**, **Yaliyoombwa karibu nawe**, **Makubaliano yako**, **Vikundi vyako**, **Amua**, **Kutoka kwa jumuiya yako**, **Waliojiunga**, **Vidokezo** na **Jua na mwezi**. Kila kadi huonekana tu inapokuwa na jambo la kusema, kwa hiyo siku ya kwanza utaona baadhi yake, na zingine zitatokea mahali pake zikiwa na kitu. Katika jumuiya ya dunia nzima hakuna **Maharagwe yako**, **Makubaliano yako** wala **Amua**. **Inakuhitaji** iko juu kila wakati na **Jumuiya yako** chini kila wakati. Programu ya wavuti hupanga mpangilio huohuo katika safu zake.
 
 - **Ongeza kadi**, kwenye kadi ya jumuiya yako iliyo chini ya Nyumbani, hufungua orodha ya kila kadi ambayo jumuiya yako inaweza kuonyesha, katika makundi matatu: **Kwa ajili yako**, **Karibu nawe** na **Kuanza**. Gusa **Ongeza** kando ya kadi ili kuiweka kwenye Nyumbani. Inaenda juu kabisa, chini kidogo ya **Inakuhitaji**, na Nyumbani inasogea juu ili kuionyesha.
 - Kadi ambayo tayari ipo kwenye Nyumbani inasema **Kwenye Nyumbani** badala ya **Ongeza**. Kadi fulani zinaweza kuongezwa zaidi ya mara moja, kama vile **Utafutaji uliohifadhiwa**: zinasema unazo ngapi, kama vile "2 kati ya 5 kwenye Nyumbani".
@@ -39,7 +39,7 @@ Kwenye simu na kwenye programu ya wavuti, Nyumbani yako ni orodha ya kadi unazoc
 - **Jua na mwezi** huuliza eneo la nani litumike kabla ya kuongezwa: **Jumuiya yako** (chaguo la kawaida) au **Eneo lako**.
 - Nyumbani hubeba kadi 24 zaidi. Inapojaa, orodha inasema hivyo, na unaondoa kadi ili kuongeza nyingine.
 - Kadi zako huhifadhiwa kwenye akaunti yako, kwa hivyo zinakufuata kwenye simu na vivinjari vyako vingine. Ikiwa seva ya jumuiya yako bado haijasasishwa, zinabaki kwenye simu hii au kwenye kivinjari hiki, na **Hariri nyumbani** inasema "Seva ya jumuiya yako inahitaji sasisho kabla kadi zako hazijakufuata kwenye vifaa vingine." Zinatumiwa tena kila wakati unapofungua Nyumbani.
-- Ikiwa ulikuwa tayari umehamisha au kuficha kadi kabla ya mabadiliko haya, Nyumbani yako inabaki na mpangilio wako, bila kadi ulizokuwa umezificha. Ikiwa hukuwa umefanya hivyo, unaona **Kuanza** peke yake, na **Ruka** au **Imekamilika** ya ziara inakupa zile tano, au kadi ulizochagua (hapo juu). Ikiwa ulijiunga zaidi ya wiki moja iliyopita, Nyumbani pia inakuambia mara moja, chini ya **Kuanza** mara ya kwanza inapofunguka: "Nyumbani sasa inaanza na kadi chache. Ongeza kadi inarudisha zilizobaki."
+- Ikiwa ulikuwa tayari umehamisha au kuficha kadi kabla ya mabadiliko haya, Nyumbani yako inabaki na mpangilio wako, bila kadi ulizokuwa umezificha. Kama sivyo, utaona orodha iliyo juu.
 
 ## Hifadhi utafutaji kutoka Sokoni
 
@@ -66,7 +66,7 @@ Nyumbani huonyesha tu kadi zenye kitu cha kukuambia, kwa mpangilio wako mwenyewe
 - **Waliojiunga:** watu waliojiunga wiki hii. Kwenye jumuiya ya eneo huonyesha majina na picha za nyuso. Kwenye jumuiya ya kimataifa huonyesha idadi tu, kulingana na eneo, na bila majina.
 - **Mwenendo:** machapisho yaliyoshirikiwa na majirani kutoka njia za nje kama YouTube na blogu, kategoria zenye nyota zikiwa za kwanza. Unaonyesha hadi machapisho matatu ya wiki iliyopita, na hakuna kitu kikiwa hakuna kilichoshirikiwa. Kwenye programu ya wavuti kila moja ina picha ndogo, kichwa, aliyeshiriki na lini; kwenye kadi pana (480 px na zaidi), kama vigae viwili kwa safu. Gusa **Ona yote** ili kufungua Mwenendo. Nyumbani ya mwanachama mpya ina kadi hii baada ya **Zinazokuja**.
 - **Jua na mwezi:** mwezi wa usiku wa leo na mawio na machweo ya leo, katika mstari mmoja, kama vile "🌔 Waxing gibbous, 72% · Mawio 6:12 · Machweo 17:48". Simu au kivinjari chako hujihesabia chenyewe: kadi haiombi chochote kutoka kwa seva ya jumuiya yako. Inatumia eneo la jumuiya yako, lililokadiriwa hadi takriban kilomita moja, au eneo lako mahali ambapo jumuiya yako haina eneo (kwenye jumuiya ya kimataifa daima ni eneo lako). Kwenye jumuiya ya kimataifa, simu inaweza pia kutumia mahali ilipokuwa mara ya mwisho, lakini pale tu ambapo tayari umeruhusu programu kutumia eneo lako: haiombi kamwe. Ikiwa uliandika mji wako katika **Tafuta jumuiya yako**, simu hutumia huo badala yake. Ili kutumia eneo lako hata pale ambapo jumuiya yako ina eneo, gusa **…** kisha **Mipangilio…** na uchague **Eneo lako**. Saa ziko kwenye saa ya simu au ya kompyuta yako mwenyewe, kwa hivyo unaposafiri unaziona kwa saa za eneo lako. Mwezi unachorwa kama unavyoonekana kutoka upande huo wa ikweta. Mahali ambapo jua halichomozi au halitui leo, inasema hivyo, kama vile "Jua linawaka siku nzima" au "Hakuna machweo leo". Ikiwa hakuna eneo linalojulikana, kadi haionekani, na **Hariri nyumbani** inasema "Hakuna cha kuonyesha sasa: hakuna eneo linalojulikana." Kisomaji skrini hukisoma kwa maneno, kama vile "Mwezi unaongezeka, asilimia 72 ya mwanga. Mawio saa 12:12 asubuhi. Machweo saa 11:48 jioni."
-- **Maharagwe yako:** salio lako na kikomo cha mkopo (nafasi ya kutumia). Si kwenye jumuiya ya kimataifa. Huko simu huonyesha kadi ya mfano badala yake: kile Maharagwe hufanya katika jumuiya ya eneo, na **Ona mfano wa leja**. Inakuja mara tu ziara inapokamilika au kurukwa (wakati **Kuanza** bado ipo, hatua ya Leja ya ziara huonyesha mfano huo), na inabaki hadi uguse **Ficha kadi hii**, hata baada ya **Hatua za kwanza** kuondoka.
+- **Maharagwe yako:** salio lako na kikomo cha mkopo (nafasi ya kutumia). Si kwenye jumuiya ya kimataifa. Huko simu huonyesha kadi ya mfano badala yake: kile Maharagwe hufanya katika jumuiya ya eneo, na **Ona mfano wa leja**. Inakuja mara tu ziara inapokamilika au kurukwa (wakati **Karibu** bado ipo, hatua ya Leja ya ziara huonyesha mfano huo), na inabaki hadi uguse **Ficha kadi hii**, hata baada ya **Hatua za kwanza** kuondoka.
 - **Kutoka kwa jumuiya yako:** matangazo na taarifa kutoka kwa wasimamizi wa jumuiya yako.
 - **Kuza jumuiya yako:** inakuruhusu kualika wanachama wapya baada ya Ofa yako ya kwanza, mahali ambapo mialiko imewashwa. Si kwenye jumuiya ya kimataifa. Kwenye simu, mahali ambapo wasimamizi pekee ndio wanaoalika, huonekana tu kwa mmiliki au msimamizi. Kwenye programu ya wavuti haionekani huko kabisa.
 - **Jumuiya yako:** kadi ya mwisho, ikiwa na jina la jumuiya yako kama kichwa (**Jumuiya ya kimataifa** kwenye jumuiya ya kimataifa). Inaonyesha idadi ya wanachama na biashara mwezi huu; kwenye jumuiya ya kimataifa, wanachama na idadi ya jumuiya zilizoorodheshwa. Ina **Ongeza kadi** na **Hariri nyumbani**. Kadi hii inabaki chini kabisa na haiwezi kuhamishwa au kuondolewa.
@@ -77,7 +77,7 @@ Kwenye simu, wakati jumuiya yako imehamia anwani mpya, kadi iliyo juu ya hizi zo
 
 Kadi nyingi zina kitufe cha **…** upande wa juu kulia. Hizi hazina:
 
-- **Inakuhitaji**, **Kuanza** na **Jumuiya yako**. **Kuanza** ina **Ruka** badala yake.
+- **Inakuhitaji**, **Karibu** na **Jumuiya yako**. **Karibu** ina **Si sasa** badala yake.
 - **Njia yako ya kurudi**, kwenye simu. Ina **✕** yake yenyewe.
 - **Tafuta jumuiya yako**, wakati wa siku zako 30 za kwanza kwenye jumuiya ya kimataifa.
 
@@ -99,7 +99,7 @@ Chini ya Nyumbani, kwenye kadi ya jumuiya yako, gusa **Hariri nyumbani**.
 - **＋ Ongeza kadi** huja kwanza. Hufungua orodha ileile kama **Ongeza kadi** kwenye Nyumbani.
 - Kisha hufuata kadi zilizo kwenye Nyumbani yako, kwa mpangilio wako. Kila moja ina mishale ya juu na chini na **…** yake yenyewe (Mipangilio…, Sogeza juu, Sogeza chini, Ondoa). Utafutaji uliohifadhiwa huorodheshwa kwa maneno yake, na kwa **Ofa** au **Mahitaji** unapotafuta moja tu, kama vile "mayai" au "Mahitaji · mayai", kwa hivyo utafutaji miwili ni safu mbili tofauti.
 - Kadi isiyo na chochote cha kuonyesha hivi sasa inasema **Hakuna cha kuonyesha sasa**. **Vidokezo** inasema **Vidokezo vyote vimeonekana** mara tu unapoona kila kidokezo, na **Jua na mwezi** inasema **Hakuna cha kuonyesha sasa: hakuna eneo linalojulikana.** wakati hakuna eneo la kuanzia kufanya kazi.
-- Gusa **Rudisha ya kawaida** ili kurudi kwenye kadi tano za kawaida.
+- **Rudisha ya kawaida**, chini ya kadi ya mwisho, hurudisha orodha ambayo mwanachama mpya huanza nayo (bila **Karibu**), kisha kadi ulizotengeneza mwenyewe, kama utafutaji uliohifadhiwa, gumzo au **Zana zako**, kwa mpangilio wako. Nyumbani husema "Nyumbani imerudi kama ilivyoanza." pamoja na **Tendua**, inayorudisha Nyumbani uliyokuwa nayo awali.
 - Hakuna swichi na hakuna orodha iliyofichwa: kadi uliyoiondoa iko kwenye **Ongeza kadi**.
 - Kadi ambazo jumuiya yako inaweza kuonyesha pekee ndizo zilizoorodheshwa, kwenye simu na kwenye programu ya wavuti. Kwa mfano, orodha ya jumuiya ya kimataifa haina **Maharagwe yako** au **Makubaliano yako**: huko, Leja na **Biashara Zangu** huonyesha mifano kutoka jumuiya ya eneo badala yake.
 - **Inakuhitaji** daima inabaki juu, na **Jumuiya yako** daima inabaki chini.

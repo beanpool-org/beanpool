@@ -23,7 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
     DEFAULT_LEDGER, SECOND_HIT_DAYS, parseFailures, resolveFiles, workspace, judgeTouch,
-    readLedger, appendLedger, recordKey, earlierHits, normTest,
+    readLedger, appendLedger, recordKey, earlierHits, normTest, namesATest, NO_TEST,
 } from './lib.mjs';
 import fs from 'node:fs';
 
@@ -36,7 +36,9 @@ export function assertReadOnly(args) {
     const [a, b] = args;
     const reads = { pr: ['view', 'diff'], run: ['list', 'view'] };
     if (a === 'api') {
-        const writes = args.find((x) => /^(-X|--method|-f|-F|--field|--raw-field|--input)(=|$)/.test(x));
+        // A short flag can carry its value glued on (-XPOST, -fk=v) or sit in a cluster (-iXPOST), so any single-dash
+        // argument holding X, f or F is refused (a read flag with such a glued value is refused too: none is used here).
+        const writes = args.find((x) => /^-[^-]/.test(x) && /[XfF]/.test(x) || /^--(method|field|raw-field|input)(=|$)/.test(x));
         if (writes) throw new Error(`record.mjs refuses a gh api call that can write (${writes})`);
         return;
     }
@@ -104,7 +106,9 @@ export function record({ prNumber, runId, ledgerPath, now = new Date(), log = co
             if (have.has(recordKey(entry))) { again.push(entry); continue; }
             have.add(recordKey(entry));
             fresh.push(entry);
-            log(`  recorded  ${entry.test}  [${entry.file ?? 'no file'}; touched=${entry.touched}${entry.via && entry.via !== entry.file ? ` via ${entry.via}` : ''}]`);
+            const label = namesATest(entry) || entry.test.startsWith(NO_TEST) ? entry.test : `${NO_TEST}${entry.test}`;
+            log(`  recorded  ${label}  [${entry.file ?? 'no file'}; touched=${entry.touched}${entry.via && entry.via !== entry.file ? ` via ${entry.via}` : ''}]`
+                + (namesATest(entry) ? '' : '; never counted toward a second hit'));
         }
     }
     if (again.length) log(`  ${again.length} already on the ledger for this run`);
@@ -136,7 +140,7 @@ export function seen({ file, logText, ledgerPath, now = new Date(), log = consol
     const hits = [];
     for (const e of inFile) {
         const name = normTest(e.test);
-        const same = names.some((n) => n === name || (n.includes(' > ') && short(n) === short(name)));
+        const same = namesATest(e) && names.some((n) => n === name || (n.includes(' > ') && short(n) === short(name)));
         if (same) hits.push(e);
         log(`${same ? 'SEEN-ON-CI' : 'same file on CI'} PR #${e.pr} ${String(e.time).slice(0, 10)} run ${e.run}: ${name} (touched=${e.touched})`);
     }

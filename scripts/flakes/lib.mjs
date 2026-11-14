@@ -36,10 +36,11 @@ const serverFile = (id) => `apps/server/src/${id}.ts`;
  * What it reads, in order of trust:
  *   1. test-all's `── Failing tests (N) ──` block (scripts/test-all-lib.sh failing_tests_summary), which already names
  *      each vitest `file > suite > test` and each server suite `test-x: ✗ <assertion>`.
- *   2. With no block for a failed check: vitest ` FAIL  file > test` lines, node --test `not ok N - name` lines, and
+ *   2. With no block for a failed check: vitest ` FAIL  file > test` lines, node --test `not ok N - name` lines (TAP,
+ *      as on CI, with the file from its `location:`) and `✖ name` lines (spec, as node v26 logs it on this Mac), and
  *      `✗` lines under a `━━━ test-x ━━━` header.
- *   3. A failed check (`║  name  ❌ FAIL`) that names no test at all: one entry for the check, with the first repo
- *      file its stack points at, so a red check is still on the ledger.
+ *   3. A failed check (`║  name  ❌ FAIL`) that names no test at all: one entry for the check (kind 'check', NO_TEST),
+ *      with the first repo file its stack points at, so a red check is still on the ledger. It never pairs.
  */
 export function parseFailures(text) {
     const lines = text.split('\n').map(cleanLine);
@@ -84,10 +85,21 @@ export function parseFailures(text) {
     for (const check of failedChecks) {
         if (named.has(check)) continue;
         const s = sections.find((x) => x.check === check);
-        add({ test: `${check} (check failed; no test named in the log)`, kind: 'check', check, file: stackFile(s?.lines ?? []), pkg: null });
+        add({ test: `${NO_TEST}${check}`, kind: 'check', check, file: stackFile(s?.lines ?? []), pkg: null });
     }
     return out;
 }
+
+/** How a failed check whose log names no test is written on the ledger and said in a report. */
+export const NO_TEST = 'check red, no test named: ';
+
+/**
+ * Whether a record names a test (or a suite's assertion), so it can pair as a SECOND-HIT. A failed check whose log names
+ * none (kind 'check') is on the ledger but pairs with nothing, not even on the same file:line: such reds are usually
+ * each PR's own. On 14 Nov #3148 and #3153 each failed pwa_dark_classes on their own new component, and
+ * scripts/no-google-fonts.test.mjs:57 fails at that one line for every PR that adds a Google font.
+ */
+export const namesATest = (e) => e.kind !== 'check';
 
 function classify(entry, check, pkg) {
     const suite = SUITE_ENTRY.exec(entry);
@@ -125,16 +137,36 @@ function readSummaryBlocks(section, add) {
     }
 }
 
+// node --test's spec reporter (what node v26 prints to a file as well as a terminal) ends with this list of the failed
+// tests themselves: `test at <file>:L:C`, then `✖ name (1.2ms)`. A describe that failed only through a child prints its
+// own `✖` above the list, not in it.
+const SPEC_LIST = '✖ failing tests:';
+
+/** The YAML block under a TAP `not ok` line at i (`---` … `...`), trimmed. */
+function tapBlock(lines, i) {
+    if (lines[i + 1] !== '---') return [];
+    const end = lines.indexOf('...', i + 2);
+    return lines.slice(i + 2, end < 0 ? lines.length : end);
+}
+
 function readRawLines(section, add) {
     let suite = null;
-    for (const l of section.lines) {
-        const t = l.trim();
+    const L = section.lines.map((l) => l.trim());
+    const specList = L.indexOf(SPEC_LIST);
+    for (let i = 0; i < L.length; i++) {
+        const t = L[i];
         const h = /^━━━\s*(.+?)\s*━━━$/.exec(t);
         if (h) { suite = h[1]; continue; }
         let m;
         if ((m = /^FAIL\s+(.+ > .+)$/.exec(t))) add(classify(m[1].trim(), section.check, null));
-        else if ((m = /^not ok \d+ - (.+?)(?:\s+#.*)?$/.exec(t))) add({ test: m[1], kind: 'node-test', check: section.check, file: null, pkg: null });
-        else if (/^✗/.test(t)) {
+        else if ((m = /^not ok \d+ - (.+?)(?:\s+#.*)?$/.exec(t))) {
+            const yaml = tapBlock(L, i);
+            if (yaml.includes("failureType: 'subtestsFailed'")) continue;
+            const loc = yaml.map((y) => /^location: '\S*?\/beanpool\/beanpool\/([^':]+):\d+:\d+'$/.exec(y)?.[1]).find(Boolean) ?? null;
+            add({ test: m[1], kind: 'node-test', check: section.check, file: loc, pkg: null });
+        } else if (t !== SPEC_LIST && (specList < 0 || i > specList) && (m = /^✖ (.+?)(?: \(\d+(?:\.\d+)?m?s\))?$/.exec(t))) {
+            add({ test: m[1], kind: 'node-test', check: section.check, file: null, pkg: null });
+        } else if (/^✗/.test(t)) {
             const name = suite && !t.includes(suite) ? `${suite}: ${t}` : t;
             add(classify(name, section.check, null));
         } else if (ROLLUP.test(t)) [classify(t, section.check, null)].flat().forEach(add);
@@ -303,12 +335,14 @@ export const recordKey = (e) => `${e.run}|${e.job}|${identity(e)}`;
 
 /**
  * Earlier hits of the same test on OTHER PRs within `days` of this one (either side, so a late record still pairs).
- * `sameFile` is the weaker sibling: a different test in the same file, also on another PR.
+ * `sameFile` is the weaker sibling: a different test in the same file, also on another PR. Only records that name a
+ * test pair, on either side (namesATest).
  */
 export function earlierHits(ledger, entry, days = SECOND_HIT_DAYS) {
+    if (!namesATest(entry)) return { same: [], sameFile: [] };
     const t = Date.parse(entry.time);
     const near = (e) => Number.isFinite(t) && Math.abs(Date.parse(e.time) - t) <= days * 86400e3;
-    const others = ledger.filter((e) => String(e.pr) !== String(entry.pr) && near(e));
+    const others = ledger.filter((e) => namesATest(e) && String(e.pr) !== String(entry.pr) && near(e));
     const id = identity(entry);
     const same = others.filter((e) => identity(e) === id);
     const sameFile = entry.file ? others.filter((e) => e.file === entry.file && identity(e) !== id) : [];

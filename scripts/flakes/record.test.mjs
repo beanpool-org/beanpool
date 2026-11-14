@@ -154,9 +154,92 @@ const RULES = {
             ['workflow', 'run', 'ci.yml'], ['api', '-X', 'POST', 'x'], ['api', 'x', '-f', 'a=b'], ['api', '--method=PATCH', 'x']]) {
             assert.throws(() => rec.assertReadOnly(bad), /refus/, bad.join(' '));
         }
-        for (const ok of [['pr', 'view', '1'], ['pr', 'diff', '1'], ['run', 'list'], ['run', 'view', '1'], ['api', 'repos/{owner}/{repo}/compare/main...x']]) {
+        for (const ok of [['pr', 'view', '1'], ['pr', 'diff', '1'], ['run', 'list'], ['run', 'view', '1'], ['api', 'repos/{owner}/{repo}/compare/main...x'],
+            ['api', 'x', '--jq', '.files[].filename'], ['api', 'x', '--paginate', '-q', '.x'], ['api', 'x', '--include']]) {
             rec.assertReadOnly(ok);
         }
+    },
+    // gh's flag parser takes a value glued to its flag (`gh api -XGET x` works) and short flags in a cluster.
+    'gh api: a write flag with its value attached is refused too': async ({ rec }) => {
+        for (const flag of ['-XPOST', '-fk=v', '-Fk=v', '--raw-field=k=v', '--method=POST', '--field=k=v', '--input=body.json', '-iXPOST', '-iF', '--raw-field', '--input']) {
+            assert.throws(() => rec.assertReadOnly(['api', 'x', flag]), /refuses a gh api call that can write/, flag);
+        }
+    },
+    // The pairing table: every record shape against every other, so no shape can pair by accident (14 Nov: #3148 and
+    // #3153 each failed pwa_dark_classes on their own new component, and the first cut paired them as SECOND-HIT).
+    'only the same named test pairs; a failed check that names no test pairs with nothing': async ({ lib }) => {
+        const F = 'scripts/demo.test.mjs';
+        const S = {
+            named: { test: 'test-alerts: ✗ 11. resolved, told once', file: F, kind: 'server-suite', check: 'server_suites' },
+            namedSibling: { test: 'test-alerts: ✗ 12. told twice', file: F, kind: 'server-suite', check: 'server_suites' },
+            nodeTest: { test: 'a member sees the bell once', file: F, kind: 'node-test', check: 'demo_check' },
+            nameOnly: { test: 'a quote keeps its author', file: null, kind: 'node-test', check: 'demo_check' },
+            fileOnly: { test: `${lib.NO_TEST}no_google_fonts`, file: F, kind: 'check', check: 'no_google_fonts' },
+            fileOnlySibling: { test: `${lib.NO_TEST}merge_gate`, file: F, kind: 'check', check: 'merge_gate' },
+            checkOnly: { test: `${lib.NO_TEST}pwa_dark_classes`, file: null, kind: 'check', check: 'pwa_dark_classes' },
+            checkOnlyOutput: { test: 'secrets_guard: ❌ Error: found a key', file: null, kind: 'check', check: 'secrets_guard' },
+        };
+        const named = (k) => S[k].kind !== 'check';
+        const day = 86400e3;
+        const t0 = Date.parse('2026-11-10T10:00:00Z');
+        const at = (ms) => new Date(t0 + ms).toISOString();
+        for (const a of Object.keys(S)) {
+            for (const b of Object.keys(S)) {
+                const before = { ...S[a], pr: 1, run: 1, job: 1, time: at(0) };
+                const now = { ...S[b], pr: 2, run: 2, job: 2, time: at(day) };
+                const h = lib.earlierHits([before], now);
+                const wantSame = a === b && named(a) ? 1 : 0;
+                const wantFile = a !== b && named(a) && named(b) && S[a].file && S[a].file === S[b].file ? 1 : 0;
+                assert.equal(h.same.length, wantSame, `${a} then ${b}: SECOND-HIT ${h.same.length}, want ${wantSame}`);
+                assert.equal(h.sameFile.length, wantFile, `${a} then ${b}: same file ${h.sameFile.length}, want ${wantFile}`);
+                assert.equal(lib.earlierHits([{ ...before, pr: 2 }], now).same.length, 0, `${a} then ${b} on the same PR`);
+                assert.equal(lib.earlierHits([{ ...before, time: at(-28 * day) }], now).same.length, 0, `${a} then ${b} 29 days apart`);
+            }
+        }
+        // The real logs: each PR's own contrast red, a different component each, parse to one check-only record each.
+        const [p1, p2] = ['ci-check-no-test-1.txt', 'ci-check-no-test-2.txt'].map((n) => lib.parseFailures(fixture(n)));
+        assert.deepEqual(p1.map((e) => [e.kind, e.check, e.test]), [['check', 'pwa_dark_classes', `${lib.NO_TEST}pwa_dark_classes`]]);
+        assert.deepEqual(p2.map((e) => [e.kind, e.check]), [['check', 'pwa_dark_classes']]);
+        assert.equal(lib.earlierHits([{ ...p1[0], pr: 3148, time: at(0) }], { ...p2[0], pr: 3153, time: at(day / 24) }).same.length, 0);
+    },
+    // The same two real logs through the CLI: recorded, said as a check red, never a SECOND-HIT.
+    'two PRs\' own check reds are recorded as "check red, no test named", never SECOND-HIT': async (_m, dir) => {
+        const WORK = tmp('work');
+        const env = { WORK, CALLS: path.join(WORK, 'calls'), LEDGER: path.join(WORK, 'flakes.jsonl'), ROOT: makeTree() };
+        let r = runRecord(dir, ['3148'], scenario({ pr: 3148, run: 9300, job: 7300, completedAt: '2026-11-14T13:10:00Z', log: 'ci-check-no-test-1.txt' }), env);
+        assert.equal(r.code, 0, r.out);
+        assert.match(r.out, /^ {2}recorded {2}check red, no test named: pwa_dark_classes {2}\[no file; touched=unknown\]; never counted toward a second hit$/m, r.out);
+        r = runRecord(dir, ['3153'], scenario({ pr: 3153, run: 9400, job: 7400, completedAt: '2026-11-14T14:15:00Z', log: 'ci-check-no-test-2.txt' }), env);
+        assert.equal(r.code, 0, r.out);
+        assert.match(r.out, /^ {2}recorded {2}check red, no test named: pwa_dark_classes /m, r.out);
+        assert.doesNotMatch(r.out, /SECOND-HIT/, r.out);
+        const lines = fs.readFileSync(env.LEDGER, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+        assert.deepEqual(lines.map((e) => [e.pr, e.kind, e.check]), [[3148, 'check', 'pwa_dark_classes'], [3153, 'check', 'pwa_dark_classes']]);
+    },
+    // On CI node --test prints TAP: `not ok N - name`, then a YAML block whose `location:` names the file. A describe
+    // that failed only through a child prints its own `not ok` with failureType 'subtestsFailed': not a failure of its own.
+    'node --test on CI: each failed test with its file, never the describe around it': async ({ lib }) => {
+        const e = lib.parseFailures(fixture('ci-node-test-named.txt'));
+        assert.deepEqual(e.map((x) => [x.test, x.kind, x.file, x.check]), [
+            ['a member sees the bell once', 'node-test', 'scripts/demo.test.mjs', 'demo_check'],
+            ['a quote keeps its author', 'node-test', 'scripts/demo.test.mjs', 'demo_check'],
+        ]);
+    },
+    // On this Mac (node v26) a node --test run logged to a file prints the spec reporter: `✖ name (1.2ms)`, and at the
+    // end a `✖ failing tests:` list of the failed tests themselves (a describe's own `✖` is above it).
+    'node v26 spec output is read, so SEEN-ON-CI fires for a node --test file': async ({ lib, rec }) => {
+        const local = fixture('local-node26-spec.txt');
+        assert.deepEqual(lib.parseFailures(local).map((x) => [x.test, x.kind]), [
+            ['a member sees the bell once', 'node-test'], ['a quote keeps its author', 'node-test'],
+        ]);
+        const WORK = tmp('seen26');
+        const ledger = path.join(WORK, 'l.jsonl');
+        const ci = lib.parseFailures(fixture('ci-node-test-named.txt')).map((x, i) => ({ ...x, pr: 50 + i, run: 5, time: '2026-11-14T20:03:50Z', touched: 'not-seen' }));
+        fs.writeFileSync(ledger, ci.map((x) => JSON.stringify(x)).join('\n') + '\n');
+        const said = [];
+        rec.seen({ file: 'scripts/demo.test.mjs', logText: local, ledgerPath: ledger, now: new Date('2026-11-15T00:00:00Z'), log: (s) => said.push(s) });
+        assert.match(said.join('\n'), /^SEEN-ON-CI PR #50 2026-11-14 run 5: a member sees the bell once/m, said.join('\n'));
+        assert.match(said.join('\n'), /^SEEN-ON-CI PR #51 2026-11-14 run 5: a quote keeps its author/m);
     },
     // The ledger end to end, through the CLI and the fake gh.
     'the ledger: once per job, SECOND-HIT only on another PR within 14 days': async (_m, dir) => {
@@ -207,6 +290,12 @@ const RULES = {
         rec.seen({ file: 'apps/web/src/x.test.ts', logText: ' FAIL  src/x.test.ts > Group > another test\n', ledgerPath: ledger, now, log: (s) => said.push(s) });
         assert.doesNotMatch(said.join('\n'), /SEEN-ON-CI/);
         assert.match(said.join('\n'), /^same file on CI PR #7/m);
+        // A check red that named no test is never SEEN-ON-CI, even when the local log's own check red reads the same.
+        fs.writeFileSync(ledger, JSON.stringify({ test: 'check red, no test named: unit', kind: 'check', check: 'unit', file: 'apps/web/src/x.test.ts', pr: 8, run: 3, time: '2026-11-14T00:00:00Z', touched: 'unknown' }) + '\n');
+        said.length = 0;
+        rec.seen({ file: 'apps/web/src/x.test.ts', logText: '║  unit             ❌ FAIL  3s\n', ledgerPath: ledger, now, log: (s) => said.push(s) });
+        assert.doesNotMatch(said.join('\n'), /SEEN-ON-CI/, said.join('\n'));
+        assert.match(said.join('\n'), /^same file on CI PR #8 2026-11-14 run 3: check red, no test named: unit/m);
     },
 };
 
@@ -224,7 +313,21 @@ const MUTANTS = [
     ['the ledger: once per job, SECOND-HIT only on another PR within 14 days', 'record.mjs', 'if (have.has(recordKey(entry))) {', 'if (false) {'],
     ['the ledger: once per job, SECOND-HIT only on another PR within 14 days', 'lib.mjs', 'String(e.pr) !== String(entry.pr) && near(e)', 'near(e)'],
     ['the ledger: once per job, SECOND-HIT only on another PR within 14 days', 'lib.mjs', 'Math.abs(Date.parse(e.time) - t) <= days * 86400e3', 'true'],
-    ['stress cross-check: SEEN-ON-CI only for the same test', 'record.mjs', 'const same = names.some(', 'const same = true || names.some('],
+    ['stress cross-check: SEEN-ON-CI only for the same test', 'record.mjs', 'const same = namesATest(e) && names.some(', 'const same = true || names.some('],
+    ['stress cross-check: SEEN-ON-CI only for the same test', 'record.mjs', 'const same = namesATest(e) && names.some(', 'const same = names.some('],
+    ['gh api: a write flag with its value attached is refused too', 'record.mjs', "/^-[^-]/.test(x) && /[XfF]/.test(x) || /^--(method|field|raw-field|input)(=|$)/.test(x)",
+        '/^(-X|--method|-f|-F|--field|--raw-field|--input)(=|$)/.test(x)'],
+    ['gh api: a write flag with its value attached is refused too', 'record.mjs', "/^-[^-]/.test(x) && /[XfF]/.test(x) || ", '/^-[XfF]$/.test(x) || '],
+    ['only the same named test pairs; a failed check that names no test pairs with nothing', 'lib.mjs', "export const namesATest = (e) => e.kind !== 'check';", 'export const namesATest = () => true;'],
+    ['only the same named test pairs; a failed check that names no test pairs with nothing', 'lib.mjs', 'const others = ledger.filter((e) => namesATest(e) && ', 'const others = ledger.filter((e) => '],
+    ['only the same named test pairs; a failed check that names no test pairs with nothing', 'lib.mjs', 'if (!namesATest(entry)) return { same: [], sameFile: [] };', ''],
+    ['two PRs\' own check reds are recorded as "check red, no test named", never SECOND-HIT', 'lib.mjs', "export const namesATest = (e) => e.kind !== 'check';", 'export const namesATest = () => true;'],
+    ['two PRs\' own check reds are recorded as "check red, no test named", never SECOND-HIT', 'record.mjs', "(namesATest(entry) ? '' : '; never counted toward a second hit')", "''"],
+    ['node --test on CI: each failed test with its file, never the describe around it', 'lib.mjs', `if (yaml.includes("failureType: 'subtestsFailed'")) continue;`, ''],
+    ['node --test on CI: each failed test with its file, never the describe around it', 'lib.mjs', "add({ test: m[1], kind: 'node-test', check: section.check, file: loc, pkg: null });", "add({ test: m[1], kind: 'node-test', check: section.check, file: null, pkg: null });"],
+    ['node v26 spec output is read, so SEEN-ON-CI fires for a node --test file', 'lib.mjs', "(m = /^✖ (.+?)(?: \\(\\d+(?:\\.\\d+)?m?s\\))?$/.exec(t))", 'false'],
+    ['node v26 spec output is read, so SEEN-ON-CI fires for a node --test file', 'lib.mjs', '/^✖ (.+?)(?: \\(\\d+(?:\\.\\d+)?m?s\\))?$/', '/^✖ (.+?)$/'],
+    ['node v26 spec output is read, so SEEN-ON-CI fires for a node --test file', 'lib.mjs', '(specList < 0 || i > specList) && ', ''],
 ];
 
 for (const [name, check] of Object.entries(RULES)) {

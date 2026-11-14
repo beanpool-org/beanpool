@@ -135,6 +135,21 @@ const pending = new Map<string, number>();
 let nodeChecks: number[] = [];
 let lastNodeCapLog = 0;
 let lastSharedLog = 0;
+let clock: () => number = () => Date.now();
+
+/**
+ * Tests only: the clock the brake reads (every `now` below defaults to it, and so does admin-auth.ts's held-source
+ * check). An HTTP test stops it, so a source's 2 s wait cannot run out between two requests on a slow runner and let
+ * the brake check that source again, rightly, before the test looks. Null restores the real clock.
+ */
+export function setPasswordBrakeClockForTests(now: (() => number) | null): void {
+    clock = now ?? (() => Date.now());
+}
+
+/** Now, by the brake's clock: Date.now() unless a test set it. */
+export function passwordBrakeNow(): number {
+    return clock();
+}
 
 function delayFor(failures: number, shared: boolean): number {
     const over = failures - SOURCE_FREE_FAILURES;
@@ -256,7 +271,7 @@ export type Admission =
  * Decide one attempt from `key` without waiting. 'wait' means another attempt from the same source is in flight.
  * Exported for tests (with an injected clock); callers use acquirePasswordAttempt.
  */
-export function tryAdmit(key: string, now = Date.now()): Admission | 'wait' {
+export function tryAdmit(key: string, now = passwordBrakeNow()): Admission | 'wait' {
     const s = sourceFor(key, now);
     if (now < s.closedUntil) {
         return { admitted: false, retryAfter: Math.max(1, Math.ceil((s.closedUntil - now) / 1000)), reason: 'source' };
@@ -324,7 +339,7 @@ export async function acquirePasswordAttempt(key: string): Promise<Admission> {
 }
 
 /** Count one failure from `key` (also used for a wrong 2FA code after a right password). */
-export function notePasswordFailure(key: string, now = Date.now()): void {
+export function notePasswordFailure(key: string, now = passwordBrakeNow()): void {
     const s = sourceFor(key, now);
     s.failures++;
     s.lastFailureAt = now;
@@ -368,7 +383,7 @@ export function notePasswordSuccess(key: string): void {
  * The outcome of an admitted attempt. `ok` with `reset: false` (a right password still waiting on its 2FA code)
  * counts nothing either way; the caller reports the 2FA outcome with notePasswordSuccess/notePasswordFailure.
  */
-export function settlePasswordAttempt(key: string, ok: boolean, reset = true, now = Date.now()): void {
+export function settlePasswordAttempt(key: string, ok: boolean, reset = true, now = passwordBrakeNow()): void {
     const s = sources.get(key);
     if (!ok) notePasswordFailure(key, now);
     else if (reset) notePasswordSuccess(key);

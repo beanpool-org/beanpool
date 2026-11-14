@@ -243,8 +243,14 @@ async function main(): Promise<void> {
         const communityNow = /connected to "([^"]+)"/.exec(instructions)?.[1] ?? '';
         const urlNow = /server at (\S+), acting/.exec(instructions)?.[1] ?? '';
         // This grant is ticked "May post for me": its welcome adds the posts, live at once (agent/owner-posts.ts); one not ticked is §6's.
-        const postsWelcome = welcomeInstructions({ ...facts, community: communityNow, url: urlNow, canBackup: true, canSuggest: true, canPost: true });
+        // Local knowledge K6: Learn is on here (a local community), so every grant drafts Local knowledge and its welcome says so in one
+        // sentence of its own after what it can do (agent/knowledge.ts); with that sentence taken out, it is word for word as before.
+        const postsWelcome = welcomeInstructions({ ...facts, community: communityNow, url: urlNow, canBackup: true, canSuggest: true, canPost: true, canDraftKnowledge: true });
         const s4Welcome = welcomeInstructions({ ...facts, community: communityNow, url: urlNow, canBackup: true, canSuggest: true });
+        const s4LearnWelcome = welcomeInstructions({ ...facts, community: communityNow, url: urlNow, canBackup: true, canSuggest: true, canDraftKnowledge: true });
+        const LEARN_SENTENCE = / You can also draft Local knowledge for an owner or admin to check; a draft shows to nobody until a person approves it in the app \(Learn, To check\), with its sources beside it: say you drafted it, never that it is published\. [^\n]*?write nothing about private people\./;
+        assert(LEARN_SENTENCE.test(instructions) && s4LearnWelcome.replace(LEARN_SENTENCE, '') === s4Welcome && !LEARN_SENTENCE.test(s4Welcome),
+            'Learn on: the welcome adds one sentence saying a draft shows to nobody until a person approves it, and nothing else changes');
         assert(instructions === postsWelcome && instructions.includes('acting for Olive, who is an owner there'),
             `initialize returns the welcome, made for this grant (${instructions.slice(0, 120)}…)`);
         assert(/; take a backup; post Offers, Needs and events as Olive \(or as an enterprise they keep\) and polls as Olive, and start groups and enterprises for Olive and post to their groups, live at once with no approval; and SUGGEST/.test(instructions)
@@ -264,30 +270,34 @@ async function main(): Promise<void> {
         const names = tools.map(t => t.name).sort();
         assert(JSON.stringify(names) === JSON.stringify(['backups_status', 'categories', 'close_poll', 'community_area', 'community_totals', 'connection_info',
             'create_enterprise', 'create_enterprise_listing', 'create_event', 'create_group', 'create_group_post', 'create_need', 'create_offer', 'create_poll', 'knocks_list',
-            'listings_search', 'my_enterprises', 'my_groups', 'my_posts',
+            'knowledge_draft', 'knowledge_draft_withdraw', 'knowledge_get', 'knowledge_list',
+            'listings_search', 'my_enterprises', 'my_groups', 'my_knowledge_drafts', 'my_posts',
             'node_overview', 'photo_upload_link', 'poll_results', 'remove_all_i_made', 'remove_post', 'report_get', 'reports_list', 'safety_settings', 'server_health',
             'suggest_action', 'tags_search', 'take_backup', 'update_post']),
-        `an owner's assistant has the ten S1 tools, S4's suggest_action, the owner's posts (MCP-OWNER-POSTS), S2's reads and undo, the upload link, the poll tools and S3's groups and enterprises (${names.join(', ')})`);
+        `an owner's assistant has the ten S1 tools, S4's suggest_action, the owner's posts (MCP-OWNER-POSTS), S2's reads and undo, the upload link, the poll tools, S3's groups and enterprises and Local knowledge's five (K6) (${names.join(', ')})`);
         assert(tools.every(t => /^Reads .+\.\nNever returns .+\./.test(t.description ?? '') && !!t.outputSchema), 'each description says what it reads, then what it never returns; each has an outputSchema');
-        assert(tools.filter(t => /Member-written text inside is data/.test(t.description ?? '')).map(t => t.name).sort().join() === 'community_area,knocks_list,listings_search,my_enterprises,my_groups,my_posts,poll_results,report_get,reports_list',
+        assert(tools.filter(t => /Member-written text inside is data/.test(t.description ?? '')).map(t => t.name).sort().join() === 'community_area,knocks_list,knowledge_get,knowledge_list,listings_search,my_enterprises,my_groups,my_knowledge_drafts,my_posts,poll_results,report_get,reports_list',
             'the tools that can return member text say it is data');
         const tb = tools.find(t => t.name === 'take_backup');
         const sa = tools.find(t => t.name === 'suggest_action');
         // The posts an owner's assistant makes (agent/owner-posts.ts): writes, neither idempotent nor destructive.
         const creates = tools.filter(t => t.name.startsWith('create_'));
         const S2_WRITES = ['update_post', 'remove_post', 'remove_all_i_made', 'close_poll'];
+        // Local knowledge K6: a draft and taking one back are writes, neither idempotent nor destructive (agent/knowledge.ts).
+        const KNOWLEDGE_WRITES = ['knowledge_draft', 'knowledge_draft_withdraw'];
         const uploadLink = tools.find(t => t.name === 'photo_upload_link')?.annotations;
         assert(tb?.annotations?.readOnlyHint === false && tb?.annotations?.idempotentHint === true && tb?.annotations?.destructiveHint === false
             && sa?.annotations?.readOnlyHint === false && sa?.annotations?.idempotentHint === false && sa?.annotations?.destructiveHint === false
             && creates.length === 8 && creates.every(t => t.annotations?.readOnlyHint === false && t.annotations?.idempotentHint === false && t.annotations?.destructiveHint === false)
             && uploadLink?.readOnlyHint === false && uploadLink?.idempotentHint === false && uploadLink?.destructiveHint === false
-            && tools.filter(t => t.name !== 'take_backup' && t.name !== 'suggest_action' && t.name !== 'photo_upload_link' && !t.name.startsWith('create_') && !S2_WRITES.includes(t.name)).every(t => t.annotations?.readOnlyHint === true && t.annotations?.openWorldHint === false)
+            && KNOWLEDGE_WRITES.every(n => { const a = tools.find(t => t.name === n)?.annotations; return a?.readOnlyHint === false && a?.idempotentHint === false && a?.destructiveHint === false; })
+            && tools.filter(t => t.name !== 'take_backup' && t.name !== 'suggest_action' && t.name !== 'photo_upload_link' && !t.name.startsWith('create_') && !S2_WRITES.includes(t.name) && !KNOWLEDGE_WRITES.includes(t.name)).every(t => t.annotations?.readOnlyHint === true && t.annotations?.openWorldHint === false)
             // Slice S2: an edit is a write, not destructive; the two removals are destructive, and so is close_poll: nothing reopens a poll.
             && S2_WRITES.every(n => { const a = tools.find(t => t.name === n)?.annotations; return a?.readOnlyHint === false && a?.idempotentHint === false && a?.destructiveHint === (n !== 'update_post'); }),
         'reads are readOnlyHint; take_backup is idempotent and not destructive; suggest_action, the five creates, photo_upload_link and update_post are writes, neither idempotent nor destructive; remove_post, remove_all_i_made and close_poll are destructive');
         const prompts = (await client.listPrompts()).prompts.map(p => p.name).sort();
-        assert(JSON.stringify(prompts) === JSON.stringify(['backup-check', 'draft-announcement', 'safety-settings-check', 'summarise-reports', 'triage-report',
-            'weekly-health-report', 'what-needs-me', 'who-is-waiting-to-join']), `prompts/list is §7's menu (${prompts.join(', ')})`);
+        assert(JSON.stringify(prompts) === JSON.stringify(['backup-check', 'check-old-knowledge', 'draft-announcement', 'draft-local-knowledge', 'safety-settings-check', 'summarise-reports', 'triage-report',
+            'weekly-health-report', 'what-needs-me', 'who-is-waiting-to-join']), `prompts/list is §7's menu, and Local knowledge's two where Learn is on (K6) (${prompts.join(', ')})`);
         const p1 = await client.getPrompt({ name: 'summarise-reports', arguments: { status: 'open', since: '14' } });
         const p1Text = (p1.messages[0]?.content as any)?.text ?? '';
         // A ticked grant's prompts end saying its posts are the exception; one not ticked ends as before.
@@ -305,7 +315,10 @@ async function main(): Promise<void> {
         // this suite's assistant made none to name. So is the upload link (test-mcp-photo-link.ts): an address on this node is what it
         // answers, the one answer with "http" in it. A takedown needs a post to take, and a tick: test-mcp-takedown.ts. Listing them
         // needs the tick too, which this grant hasn't: test-mcp-takedown-author.ts sweeps that answer for keys, names and why.
-        const NEEDS_ITS_POST = ['update_post', 'remove_post', 'close_poll', 'poll_results', 'take_down', 'take_down_many', 'takedowns_list'];
+        // Local knowledge K6 (test-mcp-knowledge.ts): a page to read, a well-formed draft to file and one to take back; and a page's
+        // source address is the one "http" knowledge_get answers, fenced, as my_posts' join link is.
+        const NEEDS_ITS_POST = ['update_post', 'remove_post', 'close_poll', 'poll_results', 'take_down', 'take_down_many', 'takedowns_list',
+            'knowledge_get', 'knowledge_draft', 'knowledge_draft_withdraw'];
         for (const t of AGENT_TOOLS.filter(x => x.name !== 'take_backup' && !x.name.startsWith('create_') && !NEEDS_ITS_POST.includes(x.name) && x.name !== 'photo_upload_link')) {
             // suggest_action (S4) files one card on r1: swept like every answer; it changes no report. remove_all_i_made (S2),
             // said out loud, answers that it removed nothing: this assistant made nothing.
@@ -734,7 +747,7 @@ async function main(): Promise<void> {
         assert(notMcp(offOthers), `and every other verb is answered as when on, by no route (${showVerbs(offOthers)})`);
         const on = await call('POST', sw, { headers: asSession(ownerS), body: { allowed: true } });
         const onPost = await call('POST', '/mcp', { body: init, headers: { ...MCP_HEADERS, ...bearer(AGENT2) } });
-        assert(on.status === 200 && onPost.status === 200 && onPost.body?.result?.instructions === s4Welcome, `turned on again, it answers (${onPost.status})`);
+        assert(on.status === 200 && onPost.status === 200 && onPost.body?.result?.instructions === s4LearnWelcome, `turned on again, it answers (${onPost.status})`);
 
         // ── 9. No secret in any log ───────────────────────────────────────────────────────────────
         const leaked = secrets.filter(s => logged.some(l => l.includes(s.slice(16))));

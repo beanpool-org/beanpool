@@ -589,6 +589,7 @@ export const TABLES: Record<string, TableEntry> = {
     sync_audit_log: { kind: 'local', reason: "this server's own record of what it imported" },
     system_logs: { kind: 'local', reason: "this server's logs" },
     system_metrics: { kind: 'local', reason: "this server's metrics" },
+    cohort_allowance_members: { kind: 'local', reason: "this server's metrics: who its last cohort check found" },
     signature_audiences: { kind: 'local', reason: 'counts of which addresses signatures named, shown and never deciding' },
     onboarding_funnel: { kind: 'local', reason: "this server's funnel counters" },
     web_visit_days: { kind: 'local', reason: 'the page loads this server served, a day at a time: a standby counts its own' },
@@ -626,6 +627,13 @@ export const TABLES: Record<string, TableEntry> = {
     // The note on Beans sent to someone who had blocked its sender, kept for the sender alone; the ledger row, which is
     // copied, stores none (engine/withheld-notes.ts).
     withheld_notes: { kind: 'local', reason: 'the note on Beans sent to someone who had blocked its sender, kept for the sender alone: never in a copy, so no standby can show it to them (engine/withheld-notes.ts)' },
+    // The mailbox between communities (engine/relay-mail.ts, engine/relay-outbox.ts; DESIGN-cross-chat-voice-fable.md §7): mail
+    // waiting for a member here, the ids already seen, and what members here sent out. This server's own, never copied, and
+    // emptied in every snapshot and backup file (services/address-retention.ts): a promoted standby starts with none, and
+    // the sender sees "Not delivered" and sends again.
+    relay_mail: { kind: 'local', reason: "sealed items another community's server brought for a member here, held only until their device has them (engine/relay-mail.ts): never in a copy, so no standby or backup holds mail" },
+    relay_mail_seen: { kind: 'local', reason: "the ids of the items other servers brought here, 7 days, against replays and for the caps (engine/relay-mail.ts): this server's own" },
+    relay_outbox: { kind: 'local', reason: "what members here sent to other communities and what became of it, with the sealed item only while it waits to be taken (engine/relay-outbox.ts): never in a copy" },
 };
 
 /**

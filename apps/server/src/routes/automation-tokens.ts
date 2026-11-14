@@ -20,6 +20,7 @@ import { logger } from '../logger.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
 import { forgetAgentGrant } from '../agent/limits.js';
 import { dropSuggestionsOf } from '../agent/suggestions.js';
+import { dropAssistantKnowledgeDrafts } from '../engine/knowledge-drafts.js';
 import { dropUploadedPhotosOf } from '../agent/owner-photos.js';
 import { agentDisconnectedWords } from '../agent/welcome.js';
 import { cleanMemberText } from '../agent/fence.js';
@@ -105,6 +106,8 @@ export function createAutomationTokenRoutes(deps: RouteDeps): Router {
         if (revoked?.scope === 'agent') {
             forgetAgentGrant(id);
             dropSuggestionsOf(id);
+            // Local knowledge K6: its drafts still waiting go with it (engine/knowledge-drafts.ts); what a person approved stays.
+            dropAssistantKnowledgeDrafts(id);
             dropUploadedPhotosOf(id);
             noteSecurityEvent({ key: 'sec.agent', actor: String(by), actorRole: 'owner', detail: agentDisconnectedWords(cleanMemberText(revoked.name, 60), 'owner') });
         }

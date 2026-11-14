@@ -1,9 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    FREE_TAGS_MAX, FREE_TAG_TOO_SHORT, POST_TAGS_MAX, TAG_COMMA, TOO_MANY_TAGS, TYPED_TAG_WORDS,
-    enterTypedTags, exactLibraryTag, lastTagOff, suggestTags, tagChildren, tagIndex, t, typedTag, type RefusedTag,
+    FREE_TAGS_MAX, FREE_TAG_TOO_SHORT, POST_TAGS_MAX, TAG_COMMA, TOO_MANY_TAGS, TYPED_TAG_WORDS, communityTagsFor,
+    enterTypedTags, exactLibraryTag, lastTagOff, mergedInto, suggestTags, tagChildren, tagIndex, t, tn, typedTag, type CommunityTag,
+    type RefusedTag,
 } from '@beanpool/core';
+import { getCommunityTags } from '../lib/api';
 
 export interface TagPickerProps {
     value?: string[];
@@ -16,6 +18,8 @@ export interface TagPickerProps {
     title?: string;
     description?: string;
     testID?: string;
+    /** Where this community's typed tags come from (GET /api/free-tags); read once each time the sheet opens. */
+    communityTags?: () => Promise<CommunityTag[]>;
 }
 
 export function TagPicker({
@@ -28,6 +32,7 @@ export function TagPicker({
     title = '',
     description = '',
     testID = 'tag-picker',
+    communityTags = getCommunityTags,
 }: TagPickerProps) {
     const selectedTags = value ?? tags ?? [];
     const [isOpen, setIsOpen] = useState(false);
@@ -52,6 +57,18 @@ export function TagPicker({
 
     const index = useMemo(() => tagIndex(), [isOpen]);
 
+    // This community's typed tags (slice F3): read when the sheet opens, none until they come or when they can't.
+    const canType = !!onFreeTagsChange;
+    const [community, setCommunity] = useState<CommunityTag[]>([]);
+    useEffect(() => {
+        if (!isOpen || !canType) return;
+        let live = true;
+        communityTags().then((tags) => { if (live) setCommunity(tags); }, () => {});
+        return () => { live = false; };
+    }, [isOpen, canType, communityTags]);
+    // A word an owner merged into a library tag commits as that tag (core community-tags.ts).
+    const merged = useMemo(() => mergedInto(community, index), [community, index]);
+
     const toggleTag = (id: string) => {
         if (selectedTags.includes(id)) {
             setRefused(null);
@@ -72,7 +89,6 @@ export function TagPicker({
         onFreeTagsChange?.(freeTags.filter((other) => other !== tag));
     };
 
-    const canType = !!onFreeTagsChange;
     const held = { tags: selectedTags, freeTags };
 
     // The typed word has found its tag. Left in the field, Done would put back one just taken off.
@@ -83,7 +99,7 @@ export function TagPicker({
 
     /** Commits what is typed (core typed-tags.ts); false when a piece was refused and stays in the field with its words. */
     const enter = (text: string, done: boolean): boolean => {
-        const entry = enterTypedTags(text, held, done, index);
+        const entry = enterTypedTags(text, held, done, index, merged);
         if (entry.tags.length !== selectedTags.length) onChange(entry.tags);
         if (entry.freeTags.length !== freeTags.length) onFreeTagsChange?.(entry.freeTags);
         setSearchQuery(entry.rest);
@@ -135,7 +151,9 @@ export function TagPicker({
     }, [searchQuery, index, canType]);
 
     // What Enter would do with the field now. A word still being typed is not yet too short.
-    const typed = canType ? typedTag(searchQuery, held, index) : null;
+    const typed = canType ? typedTag(searchQuery, held, index, merged) : null;
+    // Under the library's matches: this community's tags the typing reaches, never one with a library label's letters.
+    const usedHere = canType ? communityTagsFor(searchQuery, community, held, { shadowed: (tag) => exactLibraryTag(tag, index) !== null }) : [];
     const addable = typed?.kind === 'free' && !freeTags.includes(typed.tag) ? typed.tag : null;
     const shownRefusal = refused ?? (typed?.kind === 'refused' && typed.why !== FREE_TAG_TOO_SHORT ? typed : null);
 
@@ -312,6 +330,32 @@ export function TagPicker({
                                                     </button>
                                                 );
                                             })}
+                                        </div>
+                                    )}
+                                    {usedHere.length > 0 && (
+                                        <div className="mt-4" data-testid="tag-picker-used-here">
+                                            <div className="text-xs font-bold text-nature-600 dark:text-nature-400 uppercase tracking-wider mb-2">
+                                                {t('Tags used here')}
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {usedHere.map((c) => {
+                                                    const label = c.mergeInto ? index.label(c.mergeInto) : `#${c.tag}`;
+                                                    return (
+                                                        <button
+                                                            key={`#${c.tag}`}
+                                                            type="button"
+                                                            onClick={() => (c.mergeInto ? pickFound(c.mergeInto) : enter(c.tag, true))}
+                                                            className="min-h-[44px] max-w-full break-words px-3.5 py-1.5 rounded-2xl text-sm font-semibold flex flex-col items-start text-left transition-colors bg-nature-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700"
+                                                        >
+                                                            <span className="min-w-0">{label}</span>
+                                                            <span className="text-xs font-normal text-nature-600 dark:text-nature-200">
+                                                                {[c.mergeInto ? `#${c.tag}` : '', c.listings > 0 ? tn(c.listings, 'Used on {n} listing', 'Used on {n} listings') : '']
+                                                                    .filter(Boolean).join(' · ')}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
                                     )}
                                 </div>

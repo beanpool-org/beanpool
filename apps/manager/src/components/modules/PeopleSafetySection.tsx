@@ -12,6 +12,7 @@ import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { PostModerationPanel, type PostModerationItem } from './PostModerationPanel';
 import { BurstDigestCard, BurstPanel } from './BurstCleanup';
 import { AssistantTakedownsPanel } from './AssistantTakedownsPanel';
+import { FreeTagsPanel } from './FreeTagsPanel';
 import { RequestLimitsCard } from './RequestLimitsCard';
 import { AncestryTreePanel } from './AncestryTreePanel';
 import { NodeRolesPanel, type RolesViewer } from './NodeRolesPanel';
@@ -474,6 +475,11 @@ export function PeopleSafetySection({
                     {/* What an owner's assistant took down (MCP-MODERATION S1): Put back and Remove now, a person's. */}
                     <SectionErrorBoundary sectionName="Taken down by assistants" resetKey={activeNode.id}>
                         <AssistantTakedownsPanel activeNode={activeNode} viewer={rolesViewer} onChanged={refreshReports} />
+                    </SectionErrorBoundary>
+
+                    {/* The tags members typed (tags F3): what members are offered as they type, hide and merge. */}
+                    <SectionErrorBoundary sectionName="Tags members typed" resetKey={activeNode.id}>
+                        <FreeTagsPanel activeNode={activeNode} viewer={rolesViewer} />
                     </SectionErrorBoundary>
 
                     {/* Pending Reports List */}

@@ -52,6 +52,7 @@ import { noteRemovedNewcomer } from './engine/door-signal.js';
 import { admitByAddress } from './db/writes-by-address.js';
 import { pruneAgedOut } from './engine/plain-tables.js';
 import { pruneOldLooks } from './engine/credit-looks.js';
+import { noteFreeTagsSeen } from './engine/free-tags.js';
 import { avatarValueRefusal, photoValueRefusal, photoRefusalError, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './engine/photo-upload-budget.js';
 import { stripImageValue } from './storage/image-metadata.js';
@@ -1051,6 +1052,16 @@ export function initStateEngine(): void {
     // Every role: the sessions are each server's own.
     startSweepingRecoveryCollections();
 
+    // Each typed tag's day on each listing (engine/free-tags.ts), kept to the listings when nobody has read the count for a
+    // while: a listing back from a pause starts its week again. Every role, hourly: the stamps are each server's own, and a
+    // standby's follow its copy, so a take-over does not start from stamps last made at a read long ago.
+    if (!freeTagsTickArmed) {
+        freeTagsTickArmed = true;
+        setInterval(() => {
+            try { noteFreeTagsSeen(); } catch (e) { console.warn('[Tags] Could not keep the typed tags\' days:', e); }
+        }, 60 * 60 * 1000);
+    }
+
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
     const postCount = db.prepare("SELECT COUNT(*) as c FROM posts").get() as any;
     console.log(`📒 SQLite DB initialized: ${memberCount.c} members, ${postCount.c} posts`);
@@ -1090,6 +1101,8 @@ function runMainServerMigrations(): void {
 
 /** Whether this process armed the main server's timers (armMainServerTimers): once, whatever promotes it. */
 let mainServerTimersArmed = false;
+/** The hourly pass over the typed tags' days (initStateEngine), armed once on every role. */
+let freeTagsTickArmed = false;
 
 // Marketplace hygiene: expire stale requests, nudge lingering escrows (hourly + once at
 // boot). Primary only — it dispatches real push notifications to members, which a

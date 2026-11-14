@@ -81,6 +81,8 @@ export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
     // row, a line in the log every owner and admin reads, and a notice to the member, all the main server's alone.
     /^\/api\/local\/admin\/users\/[^/]+\/tier\/?$/,
     /^\/api\/local\/admin\/known-floor\/exception\/?$/,
+    // A hide or merge of a typed tag, or its clearing (engine/free-tags.ts): a row the main server's alone.
+    /^\/api\/local\/admin\/free-tags\/[^/]+\/(hide|merge|clear)\/?$/,
     // A vote on removing a member: its case hidden as false, the member's reply taken down, or an owner deciding it when too
     // few can vote (decisions-engine.ts). No Beans move, so not with the halt above. Refused here, before its fresh proof
     // is asked: a code must not be spent on a server that can't write the decision.

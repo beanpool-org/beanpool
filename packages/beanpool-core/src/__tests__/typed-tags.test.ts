@@ -4,8 +4,9 @@
  */
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
-import { setLanguage } from '../words.js';
-import { buildTagIndex, tagIndex } from '../tags/index.js';
+import { LANGS, setLanguage, wordsFor } from '../words.js';
+import { TAG_LIBRARY, buildTagIndex, searchTagsFor, tagIndex } from '../tags/index.js';
+import { suggestTags } from '../tags/suggest.js';
 import {
     FREE_TAGS_MAX, FREE_TAGS_TOO_LONG_TOGETHER, FREE_TAGS_TOO_MANY, FREE_TAG_HOLDS_A_COMMA, FREE_TAG_NOT_A_CONTACT, FREE_TAG_TOO_LONG,
     FREE_TAG_TOO_MANY_WORDS, FREE_TAG_TOO_SHORT, freeTagsOf, listingFreeTags,
@@ -170,5 +171,54 @@ describe("a listing's typed tags, however it reached the app", () => {
         expect(listingFreeTags({ free_tags: '' })).toEqual([]);
         expect(listingFreeTags(null)).toEqual([]);
         expect(listingFreeTags(undefined)).toEqual([]);
+    });
+});
+
+describe('no two library tags show one label in a language, past the ones held back (slice T5)', () => {
+    // Two tags with the same label are two rows the member cannot tell apart in the picker, two chips that read alike on
+    // listings, and a typed label that can pick only one of them. Compared as shown, in any case: accents are kept, so
+    // Vietnamese Bơ (avocado) and Bò (cows) are two labels, though the index folds them.
+    //
+    // HELD BACK: the index matches whole labels, so renaming one tag of a pair takes it out of title suggestions and the
+    // Market's search for the word they share ("Canne à pêche" would suggest peach alone). These pairs keep their shared
+    // label until the index can match a label's head word; then rename them and empty this list. A new clash fails here,
+    // and so does a held one that is fixed without this list.
+    const HELD_BACK: Record<string, string[]> = {
+        fr: ['pêche: food.fruit.peach, goods.outdoor.fishing', 'atelier: housing.space.studio-space, education.courses.workshop'],
+        it: ['pesca: food.fruit.peach, goods.outdoor.fishing', 'tende: goods.home.curtains, goods.outdoor.tents'],
+        uk: ['столярні роботи: services.trades.carpentry, arts.crafts.woodwork'],
+        'zh-Hans': ['拖车: transport.delivery.towing, transport.vehicles.trailers'],
+    };
+    const indexFor = (lang: string) =>
+        buildTagIndex(wordsFor(lang as typeof LANGS[number], [JSON.parse(readFileSync(new URL(`../../words/${lang}.json`, import.meta.url), 'utf8'))]));
+    const langs = LANGS.filter((lang) => lang !== 'en');
+    it.each(langs)('%s', (lang) => {
+        const index = indexFor(lang);
+        const shown = new Map<string, string[]>();
+        for (const tag of TAG_LIBRARY) {
+            if (!tag.id.includes('.')) continue;
+            const label = index.label(tag.id).normalize('NFC').trim().toLowerCase();
+            shown.set(label, [...(shown.get(label) ?? []), tag.id]);
+        }
+        expect([...shown].filter(([, ids]) => ids.length > 1).map(([label, ids]) => `${label}: ${ids.join(', ')}`)).toEqual(HELD_BACK[lang] ?? []);
+        for (const [label, [id]] of shown) {
+            if (index.byLabel(label).filter((named) => named.includes('.')).length === 1) expect(exactLibraryTag(label, index), label).toBe(id);
+        }
+    });
+
+    // Chinese tutoring and coaching shared 辅导 (輔導). The bare everyday word stays on tutoring, as a parent writes it
+    // (数学辅导, maths tutoring), and coaching gets its own label holding it, so the picker's search still lists both.
+    it.each([['zh-Hans', '辅导', '数学辅导', '教练辅导'], ['zh-Hant', '輔導', '數學輔導', '教練輔導']])('%s: %s stays tutoring', (lang, bare, maths, coaching) => {
+        const index = indexFor(lang);
+        const TUTORING = 'education.lessons.tutoring';
+        const COACHING = 'education.mentoring.coaching';
+        expect(index.label(TUTORING)).toBe(bare);
+        expect(index.label(COACHING)).toBe(coaching);
+        expect(exactLibraryTag(bare, index)).toBe(TUTORING);
+        expect(exactLibraryTag(coaching, index)).toBe(COACHING);
+        expect(suggestTags(maths, '', { index, category: 'education' })[0]).toBe(TUTORING);
+        expect(searchTagsFor(bare, { index })).toContain(TUTORING);
+        expect(searchTagsFor(maths, { index })).toContain(TUTORING);
+        expect(index.search(bare, 8).slice(0, 2)).toEqual([TUTORING, COACHING]);
     });
 });

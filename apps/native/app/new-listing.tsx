@@ -1073,16 +1073,20 @@ export default function NewListingScreen() {
 
                             {/* #108 Cash-also-needed toggle. The nudge appears on tick, where the
                                 decision is being made. No amount field: the app can escrow beans, not
-                                cash, so a figure would imply it settles money it never touches. */}
+                                cash, so a figure would imply it settles money it never touches.
+                                On a Need the poster is the one who pays, so the same flag reads the
+                                other way round there (Marty, 14 Nov 2026). */}
                             <Pressable accessibilityRole="button" accessibilityState={{ selected: postCashAlsoNeeded }} style={styles.repeatableRow} onPress={() => setPostCashAlsoNeeded(!postCashAlsoNeeded)}>
                                 <View style={[styles.checkbox, postCashAlsoNeeded && styles.checkboxCash]}>
                                     {postCashAlsoNeeded && <Text style={[styles.checkboxTick, { color: colors.text.onGold }]}>✓</Text>}
                                 </View>
-                                <Text style={styles.repeatableText}>{t('💸 Cash also needed — for fuel or materials')}</Text>
+                                <Text style={styles.repeatableText}>{postType === 'need' ? t("💸 I'll pay cash too — for fuel or materials") : t('💸 Cash also needed — for fuel or materials')}</Text>
                             </Pressable>
                             {postCashAlsoNeeded && (
                                 <Text style={styles.cashNudge}>
-                                    {t('Cash is for fuel and consumables you paid for — not your time, not your tools. At cost, no markup. Agree the details in chat; the app never handles the money.')}
+                                    {postType === 'need'
+                                        ? t('Cash covers fuel or materials the helper buys — at cost, not their time or tools.')
+                                        : t('Cash is for fuel and consumables you paid for — not your time, not your tools. At cost, no markup. Agree the details in chat; the app never handles the money.')}
                                 </Text>
                             )}
 

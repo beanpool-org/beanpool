@@ -712,6 +712,24 @@ describe('posting to a group in the pseudo-locale (words S3h)', () => {
         expect(bypassing()).toEqual([]);
     });
 
+    // Marty, 14 Nov 2026: one flag draws the cash box on Offers and Needs; on a Need the poster is the one who would pay, so the
+    // box and its line read the other way round there, in the main New Post form's words. An Offer's are as they were.
+    it("the cash box: an Offer's words as they were; on a Need, \"I'll pay cash too\" and the helper's note (English, then xx)", async () => {
+        params.now = { groupId: 'g1', groupName: 'Garden club' };
+        await renderIn('en', createElement(GroupPostScreen));
+        expect(host.textContent).toContain('💸 Cash Also Needed');
+        expect(host.textContent).toContain('At cost for fuel or materials (agreed in chat)');
+        await click(buttonWith('🟠 Need'), 'Need');
+        expect(host.textContent).toContain("💸 I'll pay cash too — for fuel or materials");
+        expect(host.textContent).toContain('Cash covers fuel or materials the helper buys — at cost, not their time or tools.');
+        expect(host.textContent).not.toContain('Cash Also Needed');
+        await again('xx', createElement(GroupPostScreen));
+        await click(buttonWith(xx('🟠 Need')), 'Need');
+        expect(host.textContent).toContain(xx("💸 I'll pay cash too — for fuel or materials"));
+        expect(host.textContent).toContain(xx('Cash covers fuel or materials the helper buys — at cost, not their time or tools.'));
+        expect(bypassing()).toEqual([]);
+    });
+
     it('with Beans off: the note in the price\'s place', async () => {
         rememberProfile('global', { beans: false, escrow: false, enterprises: false, invites: false, showcase: false });
         params.now = { groupId: 'g1', groupName: 'Garden club' };

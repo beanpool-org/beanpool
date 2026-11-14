@@ -58,7 +58,7 @@ import {
     FREE_TAG_COUNT_MS, FREE_TAG_OFFER_DAYS, forgetFreeTagCounts, freeTagCounts, labelMapOf, libraryLabelCount, libraryTagNamed, offeredFreeTags,
     setFreeTagRule,
 } from './engine/free-tags.js';
-import { LANGS, TAG_LIBRARY, caseBornTagForms, exactTagForms, tagEnglish, wordsFor } from '@beanpool/core';
+import { LANGS, TAG_LIBRARY, caseBornTagForms, exactTagForms, freeTagRefusal, tagEnglish, wordsFor } from '@beanpool/core';
 import { coreCatalogOnce } from './member-words.js';
 
 delete process.env.CF_RECORD_NAME;
@@ -673,6 +673,10 @@ async function main(): Promise<void> {
             if (want?.lang === lang) asWritten++;
         }
         const misses = Object.values(missed).flat();
+        // The two languages the new lines are for: every German label with ß and every Greek label, as written, is its own tag.
+        const notOwn = everyLabel.filter((row) => (row.lang === 'el' || (row.lang === 'de' && row.label.includes('ß'))) && freeTagRefusal(row.label) === null)
+            .filter((row) => libraryTagNamed(row.label)?.id !== row.id).map((row) => `${row.lang} ${row.label}`);
+        assert(notOwn.length === 0, `every Greek label, and every German label with ß, answers its own tag (${notOwn.length}${notOwn.length ? `: ${notOwn.slice(0, 6).join('; ')}` : ''})`);
         assert(new Set(everyLabel.map((row) => row.lang)).size === 25 && everyLabel.filter((row) => row.lang === 'el').length > 400 && answered > everyLabel.length * 0.9,
             `the table holds every label in all 25 languages (${everyLabel.length}; ${answered} answer a tag, ${asWritten} in their own language)`);
         assert(misses.length === 0, `each typed every way answers as the label as written: no miss in any language (${misses.length}${misses.length ? `: ${JSON.stringify(Object.fromEntries(Object.entries(missed).map(([lang, list]) => [lang, list.slice(0, 3)])))}` : ''})`);
@@ -682,10 +686,19 @@ async function main(): Promise<void> {
     // the same tag), and the label as written holds it.
     {
         const writtenBy = new Map<string, Array<{ id: string; lang: string }>>();
+        const bornBy = new Map<string, Array<{ id: string; lang: string; label: string }>>();
         for (const { lang, id, label } of everyLabel) {
             const born = caseBornTagForms(label);
-            for (const key of exactTagForms(label)) if (!born.includes(key)) (writtenBy.get(key) ?? writtenBy.set(key, []).get(key)!).push({ id, lang });
+            for (const key of exactTagForms(label)) {
+                if (born.includes(key)) (bornBy.get(key) ?? bornBy.set(key, []).get(key)!).push({ id, lang, label });
+                else (writtenBy.get(key) ?? writtenBy.set(key, []).get(key)!).push({ id, lang });
+            }
         }
+        // No two labels of different tags meet only by case (Fable measured none: ß and Greek merge no labels): such a pair has
+        // no label as written to win, so one would be lost.
+        const merged = [...bornBy].filter(([key, owners]) => !writtenBy.has(key) && new Set(owners.map((o) => o.id)).size > 1)
+            .map(([key, owners]) => `"${key}": ${owners.map((o) => `${o.lang} ${o.label} (${o.id})`).join(', ')}`);
+        assert(bornBy.size > 500 && merged.length === 0, `no two labels of different tags meet only by case (${bornBy.size} keys born from case; ${merged.length}${merged.length ? `: ${merged.slice(0, 6).join('; ')}` : ''})`);
         const map = labelMapOf(everyLabel);
         assert(map.size === libraryLabelCount(), `the table's labels build the node's map (${map.size} keys, the node's ${libraryLabelCount()})`);
         const meetings: string[] = [];

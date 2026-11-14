@@ -120,8 +120,8 @@ const GREEK_LETTER = /[\u0370-\u03ff]/;
 const GREEK_LETTER_MARKED = /([\u0370-\u03ff])(?:\u0301|\u0308)+/g;
 
 /**
- * Lower case that holds in every language at once: what a label typed in its own language's capitals comes back as from the
- * default lower case (plainWords, and freeTagStored, the form the apps send), the label as written comes to here as well.
+ * Lower case that holds in every language at once: a label typed in its own language's capitals, read by the default lower
+ * case (plainWords, and freeTagStored, the form the apps send), comes to the same letters here as the label as written.
  * - Turkish writes I as the capital of ı and İ as the capital of i; every other language writes I as the capital of i. The
  *   default lower case makes "BALIK" (Turkish balık) "balik" and "İncir" an i with a combining dot above, which nobody
  *   types. So i, ı and that dotted i are one letter here: "incir", "İNCİR", "ıspanak", "ISPANAK", "BALIK".

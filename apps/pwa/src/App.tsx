@@ -49,7 +49,7 @@ import type { ComposerDraft } from './tools/builder';
 import { PeoplePage } from './pages/PeoplePage';
 import type { CreditStart } from './components/CreditPeoplePanel';
 import type { CreditFilter } from './lib/credit-sight';
-import { MessagesPage } from './pages/MessagesPage';
+import { ChatTabPage } from './pages/ChatTabPage';
 import { onConversationRead } from './lib/conversation-read';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
@@ -1472,7 +1472,7 @@ export function App() {
                                 />
                             )}
                             {activeTab === 'messages' && (
-                                <MessagesPage
+                                <ChatTabPage
                                     identity={identity}
                                     openConversationId={openConversationId}
                                     onConversationOpened={() => setOpenConversationId(null)}

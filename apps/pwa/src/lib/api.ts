@@ -384,6 +384,9 @@ export interface CommunityInfo {
         /** Present, and true, only once this node takes up an Offer priced for each one (DESIGN-per-item-price-fable.md §6; core
          *  perItemOffered): the create and edit forms offer the unit Each only then. Absent (until every slice is merged, or an older node): not offered. */
         perItem?: true;
+        /** Present, and true, only where this community has a forum (core forumOn): the Chat tab's top is then Chats · Forum
+         *  (pages/ChatTabPage.tsx, slice T0). Absent (its owners switched it off, or an older node): the tab as before. */
+        forum?: true;
     };
     /** Where Start a community's "how to run a node" leads (lib/features.ts startCommunityUrl). Absent: beanpool.org's. */
     startCommunityUrl?: string;

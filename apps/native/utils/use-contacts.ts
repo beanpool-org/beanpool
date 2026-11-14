@@ -119,19 +119,37 @@ export interface ContactsFileModules {
     Sharing: { shareAsync(uri: string, options?: { mimeType?: string; UTI?: string; dialogTitle?: string }): Promise<unknown> };
 }
 
+/** Where Save a copy as a file writes the list for the share sheet: one name, in the app's cache. */
+const contactsFileIn = (cache: string) => `${cache.replace(/\/?$/, '/')}contacts.vcf`;
+
 /**
  * "Save a copy as a file (.vcf)" (design §3.9): the list written as a contacts file and handed to the phone's own share
  * sheet, where the member saves it or sends it to themselves. The file isn't locked, so it never stays in the app's cache:
- * it is removed once the sheet closes, and if writing it fails.
+ * it is removed once the sheet closes, if writing it fails, and, when the phone ended the app while the sheet was open (a
+ * 2 GB phone opening Gmail or Drive does), at the next start (sweepContactsFile).
  */
 export async function shareContactsFile(list: ContactsList, modules?: ContactsFileModules): Promise<void> {
     const m = modules ?? { FileSystem: require('expo-file-system/legacy'), Sharing: require('expo-sharing') } as ContactsFileModules;
     if (!m.FileSystem.cacheDirectory) throw new Error('This phone has no cache folder.');
-    const uri = `${m.FileSystem.cacheDirectory.replace(/\/?$/, '/')}contacts.vcf`;
+    const uri = contactsFileIn(m.FileSystem.cacheDirectory);
     try {
         await m.FileSystem.writeAsStringAsync(uri, writeContactsVcard(list.contacts));
         await m.Sharing.shareAsync(uri, { mimeType: 'text/vcard', UTI: 'public.vcard', dialogTitle: t('Save a copy as a file (.vcf)') });
     } finally {
         await m.FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+    }
+}
+
+/**
+ * Removes a contacts file a Save a copy left in the app's cache: the app was ended while the share sheet was open, so the
+ * removal after it never ran (as utils/recovery-kit.ts sweepPrintedPdfs does for the kit's PDF). Once at app start
+ * (app/_layout.tsx). Never throws: a phone with no such file, or no cache folder, has nothing to remove.
+ */
+export async function sweepContactsFile(fileSystem?: Pick<ContactsFileModules['FileSystem'], 'cacheDirectory' | 'deleteAsync'>): Promise<void> {
+    try {
+        const fs = fileSystem ?? (require('expo-file-system/legacy') as ContactsFileModules['FileSystem']);
+        if (fs.cacheDirectory) await fs.deleteAsync(contactsFileIn(fs.cacheDirectory), { idempotent: true });
+    } catch {
+        // The next start tries again.
     }
 }

@@ -118,7 +118,10 @@ import { newContactId, putContact, emptyContactsList, type ContactsList } from '
 import ContactsScreen from '../../app/contacts';
 import { changeContacts, emptySyncState, loadContacts, phoneContactsDeps } from '../contacts-store';
 import { syncContacts } from '../contacts-sync';
-import { contactsWhereWords, useContactsRecord, type ContactsView } from '../use-contacts';
+import { switchCommunity } from '../use-communities';
+import { contactsWhereWords, sweepContactsFile, useContactsRecord, type ContactsView } from '../use-contacts';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const seed = ed25519.utils.randomSecretKey();
 ME.publicKey = bytesToHex(ed25519.getPublicKey(seed));
@@ -217,6 +220,17 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         expect(mem.alerts.at(-1)?.[1]).toBe('Ana Li is in Riverbend. Switch to Riverbend to message them?');
     });
 
+    it('a switch that fails says so, in the Communities list\'s words, and never does nothing', async () => {
+        await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
+        await render();
+        vi.mocked(switchCommunity).mockRejectedValueOnce(new Error(''));
+        await press('Open Riverbend ›');
+        await answer('Switch');
+        expect(switchCommunity).toHaveBeenCalledWith(RIVERBEND);
+        expect(mem.alerts.at(-1)?.slice(0, 2)).toEqual(["Couldn't switch community", 'Please try again.']);
+        // Mutation: switchCommunity(...).catch(() => {}) → the tap does nothing, and the last alert is still the question.
+    });
+
     it('Add by hand: nothing typed says what is needed; a name and a number are kept, locked, on the phone', async () => {
         await render();
         expect(text()).toContain('No contacts yet. Add someone by hand.');
@@ -301,6 +315,20 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         expect(mem.shared[0].text).toMatch(/BEGIN:VCARD[\s\S]*Dee Walker[\s\S]*0412 345 678[\s\S]*END:VCARD/);
         expect(mem.files.has(mem.shared[0].uri)).toBe(false);
         // Mutation: drop the delete in shareContactsFile's finally → the unlocked file stays in the cache.
+    });
+
+    it('a contacts file left in the cache (the app ended while the share sheet was open) is removed at the next start', async () => {
+        mem.files.set('file:///cache/contacts.vcf', 'BEGIN:VCARD\nFN:Dee Walker\nEND:VCARD');
+        mem.files.set('file:///cache/other.txt', 'kept');
+        await sweepContactsFile();
+        expect(mem.files.has('file:///cache/contacts.vcf')).toBe(false);
+        expect(mem.files.get('file:///cache/other.txt')).toBe('kept');
+        // Nothing there: nothing to remove, and it never throws.
+        await expect(sweepContactsFile()).resolves.toBeUndefined();
+        await expect(sweepContactsFile({ cacheDirectory: null, deleteAsync: async () => { throw new Error('no'); } })).resolves.toBeUndefined();
+        // The app's start runs it, beside the recovery kit's sweep.
+        expect(readFileSync(join(__dirname, '../../app/_layout.tsx'), 'utf8')).toMatch(/sweepPrintedPdfs\(\);\s*void import\('\.\.\/utils\/use-contacts'\)\.then\(\(m\) => m\.sweepContactsFile\(\)\)/);
+        // Mutation: drop the call in _layout.tsx → the file a killed share left stays in the cache, unlocked, until the next Save.
     });
 
     it('a list on this phone that can\'t be opened says so; Set it aside moves it aside, as it is, and asks the communities', async () => {

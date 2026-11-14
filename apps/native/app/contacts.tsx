@@ -246,7 +246,10 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onInfo, onRemoveAll }
                 <Pressable accessibilityRole="button" style={styles.btn} onPress={() => Alert.alert(
                     t('Open {community} ›', { community }),
                     t('{name} is in {community}. Switch to {community} to message them?', { name: c.name, community }),
-                    [{ text: t('Cancel'), style: 'cancel' }, { text: t('Switch'), onPress: () => { switchCommunity(link.community).catch(() => {}); } }],
+                    // A switch that fails says so, in the words the Communities list uses (useCommunities.switchTo).
+                    [{ text: t('Cancel'), style: 'cancel' }, { text: t('Switch'), onPress: () => {
+                        switchCommunity(link.community).catch((e) => Alert.alert(t("Couldn't switch community"), e?.message || t('Please try again.')));
+                    } }],
                 )}>
                     <Text style={styles.btnText}>{t('Open {community} ›', { community })}</Text>
                 </Pressable>

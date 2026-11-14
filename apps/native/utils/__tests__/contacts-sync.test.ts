@@ -432,7 +432,15 @@ describe('a list on this phone that can\'t be opened', () => {
         await expect(setAsideDamaged(me, p.deps)).resolves.toBe(false);
         expect(await names(me, p.deps)).toEqual(['Dee Walker']);
         expect(p.asides.size).toBe(0);
+        // A list a newer app wrote (a list version this app doesn't know): updating the app opens it, so it stays as it is.
+        const newer = JSON.stringify(contactsCopyWire(makeContactsCopy({ json: JSON.stringify({ v: 2, contacts: [], removed: [] }), me, seq: 4 })));
+        p.files.set(me.publicKey, newer);
+        expect((await loadContacts(me, p.deps)).onPhone).toEqual({ kind: 'unreadable', reason: 'newer' });
+        await expect(setAsideDamaged(me, p.deps)).resolves.toBe(false);
+        expect(p.files.get(me.publicKey)).toBe(newer);
+        expect(p.asides.size).toBe(0);
         // Mutation: set aside whatever is there → a good list disappears from the phone.
+        // Mutation: set aside every unreadable list (drop `reason !== 'damaged'`) → the newer app's list is moved off the phone.
     });
 });
 

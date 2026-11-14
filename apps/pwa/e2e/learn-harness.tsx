@@ -1,7 +1,7 @@
 /**
  * The real LearnPage, and the real Market with the word "tip" typed, one at a time by the address's hash, for
  * e2e/learn-320.mjs: the real rows, the real page, the real stylesheet, every /api call answered by Playwright.
- *   #front  #topic  #search  #page-flood  #page-old  #page-gathered  #market
+ *   #front  #topic  #search  #page-flood  #page-old  #page-gathered  #market, and (K4) #suggest  #mine  #check
  * What the app is asked (onBack, onNavigate, onOpenProfile) is written into window.__navs. The mobile header sits above
  * the page here as App.tsx draws it, so the title row and the page are seen together. Layout here is inline style: this
  * folder is outside Tailwind's content globs.
@@ -23,6 +23,10 @@ const target: LearnTarget | null =
     : state === 'search' ? { kind: 'search', q: 'zeppelin' }
     : state === 'search-hit' ? { kind: 'search', q: 'tip' }
     : state.startsWith('page-') ? { kind: 'page', id: state.slice(5) }
+    // Writing (slice K4): e2e/learn-write-320.mjs.
+    : state === 'suggest' ? { kind: 'suggest' }
+    : state === 'mine' ? { kind: 'mine' }
+    : state === 'check' ? { kind: 'check' }
     : null;
 
 function Harness() {

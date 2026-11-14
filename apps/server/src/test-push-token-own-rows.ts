@@ -12,6 +12,9 @@
  * It also pins that the key is the signer's: naming another key in the body neither registers nor deletes for it,
  * and an unsigned request changes nothing.
  *
+ * A key with no row here keeps a new phone only while its request to join is open (web push W4: the phone waiting for the
+ * yes; test-push-waiting-asker.ts has the rest), so each such key here asks first ({@link waitingToJoin}).
+ *
  * And what a key with no row here can store (state-engine.ts STRANGER_PUSH_RULES, #1295 review 4126286269): so many new
  * tokens an address a day, and so many the node, over which it is answered 429 while a member, a visitor's row and the
  * same token again are not; the address kept only as a keyed hash, for a day; its tokens not registered again for a
@@ -66,6 +69,12 @@ function member(name: string): Identity {
     return id;
 }
 
+/** A key with no row here that asked to join and waits for the answer: the only stranger that keeps a phone (web push W4). */
+function waitingToJoin<T extends Identity>(id: T): T {
+    db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message) VALUES (?, ?, ?, 'May I join?')`).run(crypto.randomUUID(), id.pub, id.name);
+    return id;
+}
+
 async function send(method: 'POST' | 'DELETE', path: string, body: unknown, signer: Identity | null): Promise<number> {
     return (await answer(method, path, body, signer)).status;
 }
@@ -111,8 +120,9 @@ async function main(): Promise<void> {
     initStateEngine();
     const ava = member('ava');
     const ben = member('ben');
-    // A key minted a second ago, with no member row on this node: an operator of another community that holds Ava's token.
-    const stranger = keyPair('stranger');
+    // A key minted a second ago, with no member row on this node: an operator of another community that holds Ava's token,
+    // and asked to join here (a key with no row and no request keeps no phone: web push W4).
+    const stranger = waitingToJoin(keyPair('stranger'));
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
 
@@ -194,7 +204,7 @@ async function main(): Promise<void> {
     const before = addresses();
     assert(before.length === 1 && /^[A-Za-z0-9_-]{43}$/.test(before[0].ip_hash ?? '') && !/127\.0\.0\.1|::1/.test(before[0].ip_hash ?? ''),
         `the stranger's token above is this address's first today, kept as a keyed hash, never the address (${JSON.stringify(before)})`);
-    const fresh = Array.from({ length: perAddressPerDay }, (_, i) => keyPair(`fresh-${i}`));
+    const fresh = Array.from({ length: perAddressPerDay }, (_, i) => waitingToJoin(keyPair(`fresh-${i}`)));
     const firstDay: number[] = [];
     for (const f of fresh.slice(1)) firstDay.push((await register(f, tokenOf(f))).status);
     assert(firstDay.every((st) => st === 200) && addresses().length === perAddressPerDay,
@@ -219,7 +229,7 @@ async function main(): Promise<void> {
         const r = registerPushToken(keyPair(`far-${i}`).pub, `ExponentPushToken[far-${i}]`, 'android', null, `address-${i}`);
         if (r !== 'registered') throw new Error(`the node's day filled early, at ${i}: ${r}`);
     }
-    const late = keyPair('late');
+    const late = waitingToJoin(keyPair('late'));
     const overNode = await register(late, tokenOf(late));
     assert(overNode.status === 429 && overNode.code === 'busy' && holders(tokenOf(late)).length === 0,
         `past ${perNodePerDay} new tokens of keys with no row on this node today, from any address, one more is refused, 429 busy (${JSON.stringify(overNode)})`);
@@ -234,7 +244,7 @@ async function main(): Promise<void> {
     for (const pub of [fresh[2].pub, fresh[3].pub, ben.pub, vis.pub]) age(pub);
     assert((await register(fresh[3], tokenOf(fresh[3]))).status === 200, 'a fresh key registers its token again (the app starting)');
     const tombstonesBefore = (db.prepare(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'push_tokens'`).get() as { n: number }).n;
-    const another = keyPair('another');
+    const another = waitingToJoin(keyPair('another'));
     assert((await register(another, tokenOf(another))).status === 200, 'a new key with no row registers a token');
     const tombstonesAfter = (db.prepare(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'push_tokens'`).get() as { n: number }).n;
     assert(holders(tokenOf(fresh[2])).length === 0 && holders(tokenOf(fresh[3])).length === 1,

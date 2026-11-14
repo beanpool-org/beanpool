@@ -49,6 +49,13 @@ export class Communities {
     rows = new Map<string, Map<string, number | null>>();
     leaves = new Map<string, Map<string, number>>();
     members = new Map<string, Set<string>>();
+    /** Keys with a request to join open at each community: `ask` makes one. */
+    asked = new Map<string, Set<string>>();
+    /**
+     * The server's rule since web push W4 (routes/community.ts POST /api/push-tokens): a key neither a member nor waiting on
+     * a request there is refused a phone, 403 no_open_request. Off unless a suite turns it on: the older ones predate it.
+     */
+    onlyMembersOrAsked = false;
     sent: Sent[] = [];
     log: string[] = [];
     answer: (s: Sent) => 'up' | 'down' | 'hold' | 'portal' | 'silent' | number = () => 'up';
@@ -89,6 +96,14 @@ export class Communities {
         }
     }
 
+    /** `key` asked to join each of `communities` and waits on the answer. */
+    ask(key: string, ...communities: string[]): void {
+        for (const community of communities) {
+            if (!this.asked.has(community)) this.asked.set(community, new Set());
+            this.asked.get(community)!.add(key);
+        }
+    }
+
     rowsAt(community: string): Map<string, number | null> {
         if (!this.rows.has(community)) this.rows.set(community, new Map());
         return this.rows.get(community)!;
@@ -115,6 +130,9 @@ export class Communities {
         if (s.path === '/api/push-tokens' && s.method === 'POST') {
             const { publicKey, token, registeredAt } = s.body;
             if (!signed(publicKey)) return json(403, { error: 'Invalid cryptographic signature' });
+            if (this.onlyMembersOrAsked && !this.members.get(s.community)?.has(publicKey) && !this.asked.get(s.community)?.has(publicKey)) {
+                return json(403, { code: 'no_open_request' });
+            }
             const id = `${publicKey}|${token}`;
             if ((this.leaves.get(s.community)?.get(id) ?? 0) >= registeredAt) return json(409, { code: 'push_token_left' });
             const rows = this.rowsAt(s.community);

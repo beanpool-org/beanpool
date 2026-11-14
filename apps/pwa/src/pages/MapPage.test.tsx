@@ -4041,6 +4041,31 @@ describe("the New Post form's choices each say what they are (core post-type-lin
         expect(line('event')).toBe('A gathering with a time and a place');
     });
 
+    it("where Learn is on, a fifth button, Local knowledge, with its line; it hands over to Learn's form and holds no form of its own (K4)", async () => {
+        resetCommunityInfoOnce();
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { knowledge: true } } as any);
+        const onNavigate = vi.fn();
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} onDraftOpened={() => {}} onNavigate={onNavigate} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        const button = await within(panel).findByRole('button', { name: '📖 Local knowledge' });
+        expect(button).toHaveAccessibleDescription('Something worth knowing about this place');
+        fireEvent.click(button);
+        expect(onNavigate).toHaveBeenCalledWith('learn-suggest');
+        resetCommunityInfoOnce();
+    });
+
+    it('no fifth button where the node says nothing of Learn (off)', async () => {
+        resetCommunityInfoOnce();
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false } } as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} onDraftOpened={() => {}} onNavigate={vi.fn()} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+        expect(within(panel).queryByTestId('new-post-type-knowledge')).toBeNull();
+        resetCommunityInfoOnce();
+    });
+
     it("a button's name stays its title and its line is its description, so a screen reader says both", async () => {
         let view: ReturnType<typeof render> | undefined;
         await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} onDraftOpened={() => {}} />); });

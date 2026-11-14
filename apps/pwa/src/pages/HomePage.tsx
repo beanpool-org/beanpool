@@ -47,7 +47,7 @@ import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
 import { groupIdKey, lockedGroupsOrNull } from '../lib/group-hold';
 import { isKnownDmConversation } from '../lib/dm-guard';
 import { readChatSettings, homeChatPicked, createHomeBellSettle, HOME_BELL_SETTLE_MS } from '@beanpool/core';
-import { LEARN_HOME_WORDS, learnFigureCount, learnHomeLines } from '@beanpool/core';
+import { LEARN_HOME_WORDS, knowledgeToCheckLine, learnFigureCount, learnHomeLines } from '@beanpool/core';
 import type { ChatPickRow } from '../components/AddCardDialog';
 import { useCommunityInfo } from '../lib/features';
 import { onConversationRead } from '../lib/conversation-read';
@@ -2555,7 +2555,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         : undefined;
 
     function needsLine(item: NeedsItem, i: number) {
-        const words = item.kind === 'ask' ? capitalFirst(inviteAskNeedsLine(item.count)) : item.kind === 'vote' && item.closesAt && item.count === 1
+        // "Local knowledge to check: 3" (slice K4) in the member's language, as the bell says it.
+        const words = item.kind === 'ask' ? capitalFirst(inviteAskNeedsLine(item.count)) : item.kind === 'learn' ? knowledgeToCheckLine(item.count) : item.kind === 'vote' && item.closesAt && item.count === 1
             ? item.label.replace(/closes (within the hour|in \d+ (hours?|days))/, closesWords(item.closesAt, now))
             : item.label;
         const go = () => {
@@ -2580,6 +2581,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 case 'people': return item.kind === 'knock' ? onNavigate('people-invites', 'asked') : onNavigate('people-invites');
                 case 'shop': return onNavigate('shop', (target as any).id);
                 case 'shop-mine': return onNavigate('shop-mine');
+                // Members' suggestions of Local knowledge: To check in Learn (sent only because this app asks with lands=learn).
+                case 'learn-check': return onNavigate('learn-check');
                 default: return undefined;
             }
         };
@@ -3192,6 +3195,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                             community={c.community?.name ?? ''}
                             onOpen={postId => onNavigate('learn-page', postId)}
                             onSeeAll={() => onNavigate('learn')}
+                            onToCheck={() => onNavigate('learn-check')}
+                            onAddFirst={() => onNavigate('learn-suggest')}
                             onKeep={arriving ? () => { changeLayout((l) => keepCard(l, card.id, Date.now())); } : undefined}
                         />
                     </HomeCard>

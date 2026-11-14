@@ -45,6 +45,7 @@ import { namesPinAddresses, saveNamesCopiesBeforeLeaving, type NamesCopyUnconfir
 import { confirmLeave, leaveStatementsSettled, leaveWrittenDown, pendingLeaveStatements, recordLeave } from './push-leave';
 import { markAlertsOff, markAlertsOn } from './push-alerts-off';
 import { dropCounts } from './notice-counts';
+import { forgetThisPhoneForMail } from './outside-mail';
 import { sameCommunity } from './push-pins';
 import {
     communitiesForAlerts, communityAddress, dropFromRecord, forgetPushRegistrations, leaveNoLongerOwed, leavesOwed, oweLeave,
@@ -438,6 +439,22 @@ export async function namesCopiesBeforeSignOut(
 }
 
 /**
+ * Mail from other communities (X2b): the open community's store, from the database module Sign Out already holds, and the
+ * leaving account's key, to outside-mail.ts forgetThisPhoneForMail. Nothing is loaded on the way, so the rest of the leave
+ * (the push unregisters' 4 s) starts at once. No community, no key here, or anything that fails: nothing to wait for.
+ */
+async function forgetThisPhoneForMailBeforeLeaving(account: LeavingAccount | null, db: Pick<typeof import('./db'), 'outsideStore'>): Promise<{ done: Promise<void> }> {
+    try {
+        const anchor = await AsyncStorage.getItem(ANCHOR_STORE_KEY);
+        if (!anchor || !account?.publicKey || !account.privateKey) return { done: Promise.resolve() };
+        return await forgetThisPhoneForMail({ nodeUrl: anchor.replace(/\/+$/, ''), identity: account, store: db.outsideStore(anchor) });
+    } catch (e) {
+        console.warn('[Account] This phone\'s mail from other communities was not forgotten; it lapses after 7 days', e instanceof Error ? e.message : e);
+        return { done: Promise.resolve() };
+    }
+}
+
+/**
  * "Sign Out (Device Only)", and the phone's half of the self-delete purge at the member's last community on the phone
  * once the node has answered (settings.tsx, delete-here.ts `planDelete`):
  * the open community's tables are dropped, the account is released ({@link releaseAccountFromPhone}), then its key and
@@ -458,6 +475,10 @@ export async function signOutOfThisPhone(account: LeavingAccount | null, opts: {
             console.warn('[Account] The open community\'s DM memory could not be kept', e);
         }
     }
+    // Mail from other communities (X2b): this phone's mail id is read before its tables go, and the open community is asked
+    // to forget it, signed with the key held in memory, while the rest of the leave runs: its 4 s at most overlap the push
+    // unregisters' 4 s. Never a reason Sign Out stops.
+    const forgetting = await forgetThisPhoneForMailBeforeLeaving(account, db);
     const { clearDB } = db;
     // The identity leaves this phone: what it knew of its groups' keys goes with it (utils/db.ts clearDB).
     await clearDB({ identityLeaves: true });
@@ -466,6 +487,8 @@ export async function signOutOfThisPhone(account: LeavingAccount | null, opts: {
     // No community and no account on the phone now: the update screen's block, if one was up, comes down
     // (utils/community-switch.ts).
     communitySwitched();
+    // Sign Out ends once the forget has settled too: begun before the tables went, it is done or given up by now, or soon.
+    await forgetting.done;
 }
 
 /**

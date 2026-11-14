@@ -34,6 +34,13 @@
  *  15  never copied: a standby's whole copy and a snapshot file hold no mail, no outbox, no ids; the blob is not in the images
  *  16  the door: unsigned, or a member's signature, at /api/relay/mail is refused
  *  17  the ticks page by (time, id) with `outboxMore`: rows settled at one moment across a page's edge are each read once
+ *  18  each device confirms for itself (X2b, scratch/fable-design/decisions/DECISION-outside-door.md): one table over two
+ *      devices A and B x kinds (line, blob, delete) x what A does (confirms after writing, confirms a drop, never confirms,
+ *      confirms twice) x B's standing (listed, signed out, lapsed). While B is listed and has not confirmed, its fetch serves
+ *      the item and the row and its file exist; with B gone, A's confirm is the last and the item goes. One device: at once
+ *  19  the device rules: no fetch, confirm or forget without a device (400); at most 5 devices, the one unseen longest
+ *      forgotten; the caps count only items no device has, and those a device has keep the allowance again, the oldest going
+ *      (an idle browser never stops new mail); the sweep forgets a lapsed device and a former member's; never copied
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) BEANPOOL_SSRF_TEST_HOOK=1 pnpm exec tsx src/test-relay-mail.ts
  */
@@ -66,6 +73,9 @@ const DAY = 24 * 60 * 60_000;
 
 interface Keys { seed: Uint8Array; key: string }
 const keys = (): Keys => { const seed = crypto.randomBytes(32); return { seed, key: Buffer.from(ed25519.getPublicKey(seed)).toString('hex') }; };
+/** A device's mail id, as the apps make one (@beanpool/core newOutsideDeviceId). */
+const device = () => crypto.randomBytes(16).toString('hex');
+const BEN_PHONE = device(), BEA_PHONE = device(), PAT_PHONE = device();
 const signerOf = (seed: Uint8Array) => (b: Uint8Array) => ed25519.sign(b, seed);
 
 interface Answer { status: number; body: any; headers: Headers }
@@ -201,14 +211,14 @@ async function main(): Promise<void> {
 
     // ── 2. Fetch ──────────────────────────────────────────────────────────────────────────
     console.log('\n2. Ben fetches what waits');
-    const f1 = await asMember(ben, 'GET', '/api/mail');
+    const f1 = await asMember(ben, 'GET', `/api/mail?device=${BEN_PHONE}`);
     assert(f1.status === 200 && f1.body?.items?.length === 1 && f1.body.items[0].envelope.itemId === line1.envelope.itemId
         && f1.body.items[0].payload === line1.payload && f1.body.items[0].envelope.sig === line1.envelope.sig && f1.body.more === false,
         `2a. GET /api/mail gives Ben the line and its signed envelope as they came (got ${f1.status} ${JSON.stringify(f1.body)?.slice(0, 160)})`);
-    const fBea = await asMember(bea, 'GET', '/api/mail');
+    const fBea = await asMember(bea, 'GET', `/api/mail?device=${BEA_PHONE}`);
     assert(fBea.status === 200 && fBea.body?.items?.length === 0, '2b. Bea, another member here, gets nothing of Ben\'s');
     const stranger = keys();
-    const fStranger = await asMember(stranger, 'GET', '/api/mail');
+    const fStranger = await asMember(stranger, 'GET', `/api/mail?device=${device()}`);
     assert(fStranger.status === 403 || fStranger.status === 401, `2c. a key that is no member here is refused (got ${fStranger.status})`);
 
     // ── 3. A blob ─────────────────────────────────────────────────────────────────────────
@@ -221,7 +231,7 @@ async function main(): Promise<void> {
         `3a. a blob of ${blobPayload.length} characters is held; its row keeps no bytes (got ${r3.status})`);
     assert(fs.existsSync(inFile(ana.key, blob1.envelope.itemId)) && fs.readFileSync(inFile(ana.key, blob1.envelope.itemId), 'utf8') === blobPayload,
         '3b. its bytes are a file of their own under relay-mail/in');
-    const f3 = await asMember(ben, 'GET', '/api/mail');
+    const f3 = await asMember(ben, 'GET', `/api/mail?device=${BEN_PHONE}`);
     const listed = (f3.body?.items ?? []).find((i: any) => i.envelope.itemId === blob1.envelope.itemId);
     assert(!!listed && listed.payload === null && listed.bytes === blobPayload.length, '3c. the fetch lists it with its size, its bytes fetched on their own');
     const b3 = await asMember(ben, 'GET', `/api/mail/blob/${blob1.envelope.itemId}`);
@@ -237,16 +247,16 @@ async function main(): Promise<void> {
 
     // ── 5. Confirm ────────────────────────────────────────────────────────────────────────
     console.log('\n5. Ben\'s device confirms');
-    const c5 = await asMember(ben, 'POST', '/api/mail/confirm', { ids: [line1.envelope.itemId, blob1.envelope.itemId, del1.envelope.itemId] });
+    const c5 = await asMember(ben, 'POST', '/api/mail/confirm', { ids: [line1.envelope.itemId, blob1.envelope.itemId, del1.envelope.itemId], device: BEN_PHONE });
     assert(c5.status === 200 && c5.body?.confirmed === 3, `5a. three confirmed (got ${c5.status} ${JSON.stringify(c5.body)})`);
-    assert(heldCount('recipient = ?', ben.key) === 0, '5b. their rows are deleted');
+    assert(heldCount('recipient = ?', ben.key) === 0, '5b. their rows are deleted: his phone is the one device that fetches his mail, so its confirm is the last');
     assert(!fs.existsSync(inFile(ana.key, blob1.envelope.itemId)), '5c. the blob\'s file is deleted');
-    const f5 = await asMember(ben, 'GET', '/api/mail');
+    const f5 = await asMember(ben, 'GET', `/api/mail?device=${BEN_PHONE}`);
     assert(f5.body?.items?.length === 0, '5d. nothing waits any more');
     const replay = await bring([line1, blob1]);
     assert(replay.status === 202 && replay.body?.items?.every((i: any) => i.received === true) && heldCount() === 0,
         `5e. the same two items again: answered alike, and nothing stored (a replay dies on its sender and id) (got ${replay.status})`);
-    const bConfirmsBea = await asMember(bea, 'POST', '/api/mail/confirm', { ids: [line1.envelope.itemId] });
+    const bConfirmsBea = await asMember(bea, 'POST', '/api/mail/confirm', { ids: [line1.envelope.itemId], device: BEA_PHONE });
     assert(bConfirmsBea.status === 200 && bConfirmsBea.body?.confirmed === 0, '5f. Bea confirming Ben\'s id deletes nothing of his');
 
     // ── 6. Ben's receipt ──────────────────────────────────────────────────────────────────
@@ -280,7 +290,7 @@ async function main(): Promise<void> {
     const r7 = await bring([anaReceipt]);
     assert(r7.status === 202 && outRow(ben.key, out1.envelope.itemId).state === 'delivered' && heldCount('item_id = ?', anaReceipt.envelope.itemId) === 0,
         `7f. Ana's signed receipt, from her home: delivered, and the receipt itself is not held (got ${outRow(ben.key, out1.envelope.itemId).state})`);
-    const f7 = await asMember(ben, 'GET', '/api/mail');
+    const f7 = await asMember(ben, 'GET', `/api/mail?device=${BEN_PHONE}`);
     const tick = (f7.body?.outbox ?? []).find((o: any) => o.itemId === out1.envelope.itemId);
     assert(tick?.state === 'delivered' && tick.recipient === ana.key && tick.recipientHome === 'a.example' && !(f7.body.outbox as any[]).some((o) => o.kind === 'receipt'),
         `7g. Ben's fetch carries the tick: delivered; his receipts are not listed (got ${JSON.stringify(tick)})`);
@@ -490,7 +500,7 @@ async function main(): Promise<void> {
     const moved = await item(ben, 'b.example', ana.key, 'a.example');
     const s13i = await asMember(ben, 'POST', '/api/mail/send', { items: [moved] });
     otherNames.add('a.example');
-    const movedTick = ((await asMember(ben, 'GET', '/api/mail')).body?.outbox ?? []).find((o: any) => o.itemId === moved.envelope.itemId);
+    const movedTick = ((await asMember(ben, 'GET', `/api/mail?device=${BEN_PHONE}`)).body?.outbox ?? []).find((o: any) => o.itemId === moved.envelope.itemId);
     assert(s13i.status === 200 && s13i.body?.items?.[0]?.state === 'failed' && outRow(ben.key, moved.envelope.itemId)?.state === 'failed'
         && outRow(ben.key, moved.envelope.itemId)?.item === null && movedTick?.state === 'failed' && forwards.at(-1)?.refused[0] === 'not-for-here',
         `13i. a.example answers 202 and refuses the item inside it (not for here): failed, so Ben sees Not delivered, never sent (got ${s13i.body?.items?.[0]?.state}; tick ${movedTick?.state})`);
@@ -537,7 +547,7 @@ async function main(): Promise<void> {
     await asMember(ben, 'POST', '/api/mail/send', { items: [keepOut] });
     aAnswers = 202;
     assert(heldCount() === 2 && outRow(ben.key, keepOut.envelope.itemId)?.state === 'queued', '15a. two items held, one queued');
-    for (const t of ['relay_mail', 'relay_mail_seen', 'relay_outbox']) {
+    for (const t of ['relay_mail', 'relay_mail_seen', 'relay_mail_devices', 'relay_mail_got', 'relay_outbox']) {
         assert((REPLICATION_TABLES as Record<string, { kind: string }>)[t]?.kind === 'local', `15b. ${t} is local in the replication manifest`);
     }
     const { startP2P } = await import('./p2p.js');
@@ -546,14 +556,24 @@ async function main(): Promise<void> {
     assert(copy.length > 1000 && !/relay_mail|relay_outbox/.test(copy) && !copy.includes(keep1.envelope.itemId) && !copy.includes(keep1.payload)
         && !copy.includes(keepBlob.envelope.itemId) && !copy.includes(keepOut.envelope.itemId),
         `15c. a standby's whole copy (${copy.length} characters) names no mailbox table, no item id, no payload`);
+    // Ben's phone and a second device of his ask (the sweeps of 14 ran days ahead, so his phone was forgotten); his phone has
+    // keep1, his other device not yet: a device listed, and one item one device has, live.
+    const BEN_TABLET = device();
+    await asMember(ben, 'GET', `/api/mail?device=${BEN_PHONE}`);
+    await asMember(ben, 'GET', `/api/mail?device=${BEN_TABLET}`);
+    await asMember(ben, 'POST', '/api/mail/confirm', { ids: [keep1.envelope.itemId], device: BEN_PHONE });
+    const gotLive = (db.prepare('SELECT COUNT(*) AS n FROM relay_mail_got').get() as { n: number }).n;
     const snap = path.join(dataDir, 'mail-check-snapshot.db');
     writeDbSnapshot(snap);
     const s15 = new Database(snap, { readonly: true });
-    const inSnap = ['relay_mail', 'relay_mail_seen', 'relay_outbox'].map((t) => (s15.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n);
+    const devicesLive = (db.prepare('SELECT COUNT(*) AS n FROM relay_mail_devices').get() as { n: number }).n;
+    const inSnap = ['relay_mail', 'relay_mail_seen', 'relay_mail_devices', 'relay_mail_got', 'relay_outbox'].map((t) => (s15.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n);
     s15.close();
     const raw = fs.readFileSync(snap);
     assert(inSnap.every((c) => c === 0) && !raw.includes(Buffer.from(keep1.payload)) && !raw.includes(Buffer.from(keep1.envelope.itemId)),
-        `15d. a snapshot file (what every backup is made from) holds no mail, no outbox, no ids, not even in its free space (rows: ${inSnap.join(', ')})`);
+        `15d. a snapshot file (what every backup is made from) holds no mail, no outbox, no ids, no devices, not even in its free space (rows: ${inSnap.join(', ')}; ${devicesLive} devices listed live)`);
+    assert(devicesLive > 0 && gotLive > 0 && !raw.includes(Buffer.from(BEN_PHONE)) && !raw.includes(Buffer.from(BEN_TABLET)),
+        `15d2. the devices listed live (${devicesLive}) and what each has (${gotLive}) are in no snapshot either`);
     assert(heldCount() === 2, '15e. the live mailbox is untouched by the copy');
     const imageFiles = fs.existsSync(imagesDir()) ? fs.readdirSync(imagesDir(), { recursive: true }).map(String) : [];
     assert(!imageFiles.some((f) => f.includes(keepBlob.envelope.itemId)), '15f. the blob is not in the image store, so no backup\'s objects carry it');
@@ -583,8 +603,8 @@ async function main(): Promise<void> {
     const pages17: string[] = [];
     let cursor: { at: number; itemId: string } | null = null;
     for (let page = 0; page < 10; page++) {
-        const q = cursor ? `?since=${cursor.at}&sinceId=${encodeURIComponent(cursor.itemId)}` : '';
-        const got = await asMember(pat, 'GET', `/api/mail${q}`);
+        const q = cursor ? `&since=${cursor.at}&sinceId=${encodeURIComponent(cursor.itemId)}` : '';
+        const got = await asMember(pat, 'GET', `/api/mail?device=${PAT_PHONE}${q}`);
         const list: Array<{ itemId: string; at: number }> = got.body?.outbox ?? [];
         for (const o of list) seen17.set(o.itemId, (seen17.get(o.itemId) ?? 0) + 1);
         pages17.push(`${list.length}${got.body?.outboxMore === true ? '+' : ''}`);
@@ -594,9 +614,156 @@ async function main(): Promise<void> {
     assert(seen17.size === ids17.length && [...seen17.values()].every((c) => c === 1),
         `17a. ${ids17.length} ticks, 120 of them at one moment across the page's edge, read by the last one's time and id: each exactly once (seen ${seen17.size}; pages ${pages17.join(', ')})`);
     assert(pages17.join(',') === '200+,75', `17b. the first page says there is more, the last says there is not (pages ${pages17.join(', ')})`);
-    const bareSince = await asMember(pat, 'GET', `/api/mail?since=${t17 + 1_000}`);
+    const bareSince = await asMember(pat, 'GET', `/api/mail?device=${PAT_PHONE}&since=${t17 + 1_000}`);
     assert((bareSince.body?.outbox ?? []).length === 125 && bareSince.body?.outboxMore === false,
         `17c. a time with no id reads from the start of that moment: the 120 at it again, and the 5 after (got ${(bareSince.body?.outbox ?? []).length})`);
+
+
+    // ── 18. Each device confirms for itself (X2b) ─────────────────────────────────────────
+    console.log('\n18. Two devices, A and B: whatever A does, B listed is still served the item');
+    // Items come from c.example, each from a sender of its own (a stranger's 5 a day to one member never bites here).
+    const viaC = { name: 'c.example', k: C };
+    const listedAs = async (who: Keys, d: string, id: string) =>
+        ((await asMember(who, 'GET', `/api/mail?device=${d}`)).body?.items ?? []).some((i: any) => i.envelope.itemId === id);
+    const kinds18: RelayItemKind[] = ['dm-line', 'dm-blob', 'dm-delete'];
+    const actions18 = ['confirms after writing', 'confirms a drop', 'never confirms', 'confirms twice'] as const;
+    const standings18 = ['listed', 'signed out', 'lapsed'] as const;
+    let row18 = 0;
+    for (const kind of kinds18) for (const action of actions18) for (const standing of standings18) {
+        const label = `18.${++row18} ${kind}, A ${action}, B ${standing}`;
+        const m = keys(), sender = keys(), A18 = device(), B18 = device();
+        addLocal(m, `Two ${row18}`);
+        await asMember(m, 'GET', `/api/mail?device=${A18}`);
+        await asMember(m, 'GET', `/api/mail?device=${B18}`);
+        const it18 = await item(sender, 'c.example', m.key, 'b.example', { kind, payload: kind === 'dm-blob' ? crypto.randomBytes(3_000).toString('base64') : undefined });
+        const id = it18.envelope.itemId;
+        await bring([it18], viaC);
+        const exists = () => heldCount('item_id = ? AND recipient = ?', id, m.key) === 1 && (kind !== 'dm-blob' || fs.existsSync(inFile(sender.key, id)));
+        const gone = () => heldCount('item_id = ?', id) === 0 && !fs.existsSync(inFile(sender.key, id))
+            && (db.prepare('SELECT COUNT(*) AS n FROM relay_mail_got WHERE item_id = ?').get(id) as { n: number }).n === 0;
+        const aServed = await listedAs(m, A18, id);
+        if (action === 'confirms after writing' && kind === 'dm-blob') await asMember(m, 'GET', `/api/mail/blob/${id}`);
+        const answers: number[] = [];
+        if (action !== 'never confirms') answers.push((await asMember(m, 'POST', '/api/mail/confirm', { ids: [id], device: A18 })).body?.confirmed);
+        if (action === 'confirms twice') answers.push((await asMember(m, 'POST', '/api/mail/confirm', { ids: [id], device: A18 })).body?.confirmed);
+        if (standing === 'signed out') await asMember(m, 'POST', '/api/mail/device/forget', { device: B18 });
+        if (standing === 'lapsed') {
+            db.prepare('UPDATE relay_mail_devices SET seen_at = ? WHERE member = ? AND device = ?').run(Date.now() - mail.MAIL_DEVICE_LAPSE_MS - 1, m.key, B18);
+            mail.sweepRelayMail();
+        }
+        const aConfirmed = action !== 'never confirms';
+        const confirmsOk = action === 'never confirms' ? answers.length === 0 : action === 'confirms twice' ? answers.join() === '1,0' : answers.join() === '1';
+        const aAfter = await listedAs(m, A18, id);
+        if (standing === 'listed') {
+            const bServed = await listedAs(m, B18, id);
+            assert(aServed && confirmsOk && bServed && exists() && aAfter === !aConfirmed,
+                `${label}: B's fetch serves the item, the row and its file exist (A served first ${aServed}; A's confirms ${answers.join() || 'none'}; B served ${bServed}; held ${exists()}; A served after ${aAfter})`);
+            const bConfirms = await asMember(m, 'POST', '/api/mail/confirm', { ids: [id], device: B18 });
+            assert(bConfirms.body?.confirmed === 1 && (aConfirmed ? gone() : exists() && aAfter),
+                `${label}, then B confirms: ${aConfirmed ? 'both have it, so the row and its file go' : 'A still has not, so it stays for A'} (gone ${gone()})`);
+        } else {
+            const listedB = !!db.prepare('SELECT 1 FROM relay_mail_devices WHERE member = ? AND device = ?').get(m.key, B18);
+            assert(aServed && confirmsOk && !listedB && (aConfirmed ? gone() : exists() && aAfter),
+                `${label}: B is listed no more, so ${aConfirmed ? "A's confirm is the last: the row and its file go" : 'the item waits for A, who has not confirmed it'} (B listed ${listedB}; A's confirms ${answers.join() || 'none'}; gone ${gone()}; A served after ${aAfter})`);
+        }
+    }
+    // One device: its confirm deletes at once (as section 5), a blob's file with it.
+    const solo = keys(), soloSender = keys(), SOLO = device();
+    addLocal(solo, 'Solo');
+    await asMember(solo, 'GET', `/api/mail?device=${SOLO}`);
+    const soloBlob = await item(soloSender, 'c.example', solo.key, 'b.example', { kind: 'dm-blob', payload: crypto.randomBytes(3_000).toString('base64') });
+    await bring([soloBlob], viaC);
+    const soloConfirm = await asMember(solo, 'POST', '/api/mail/confirm', { ids: [soloBlob.envelope.itemId], device: SOLO });
+    assert(soloConfirm.body?.confirmed === 1 && heldCount('item_id = ?', soloBlob.envelope.itemId) === 0 && !fs.existsSync(inFile(soloSender.key, soloBlob.envelope.itemId)),
+        '18b. a member with one device: its confirm deletes the row and its file at once');
+
+    // ── 19. The device rules ──────────────────────────────────────────────────────────────
+    console.log('\n19. The device rules');
+    const rules = keys();
+    addLocal(rules, 'Rules');
+    const noDevice = await asMember(rules, 'GET', '/api/mail');
+    const badDevice = await asMember(rules, 'GET', '/api/mail?device=not-a-device');
+    assert(noDevice.status === 400 && noDevice.body?.code === 'bad_device' && badDevice.status === 400 && badDevice.body?.code === 'bad_device',
+        `19a. a fetch without a device, or with something that is no device id: 400 bad_device (got ${noDevice.status} ${noDevice.body?.code}, ${badDevice.status})`);
+    const confirmNoDevice = await asMember(rules, 'POST', '/api/mail/confirm', { ids: ['itm-0000-abcdef'] });
+    assert(confirmNoDevice.status === 400 && confirmNoDevice.body?.code === 'bad_device', `19b. a confirm without a device: 400 bad_device (got ${confirmNoDevice.status})`);
+    const forgetNoDevice = await asMember(rules, 'POST', '/api/mail/device/forget', {});
+    const forgetUnknown = await asMember(rules, 'POST', '/api/mail/device/forget', { device: device() });
+    assert(forgetNoDevice.status === 400 && forgetUnknown.status === 200 && forgetUnknown.body?.forgotten === false,
+        `19c. a forget without a device: 400; of a device never listed: { forgotten: false } (got ${forgetNoDevice.status}, ${JSON.stringify(forgetUnknown.body)})`);
+    const forgetStranger = await asMember(keys(), 'POST', '/api/mail/device/forget', { device: device() });
+    assert(forgetStranger.status === 403 || forgetStranger.status === 401, `19c2. a key that is no member here can't forget anything (got ${forgetStranger.status})`);
+
+    // At most 5 devices: a sixth makes room by forgetting the one unseen longest, which then holds nothing.
+    const six = Array.from({ length: 6 }, () => device());
+    for (const d of six.slice(0, 5)) await asMember(rules, 'GET', `/api/mail?device=${d}`);
+    db.prepare('UPDATE relay_mail_devices SET seen_at = seen_at - 60000 WHERE member = ? AND device = ?').run(rules.key, six[0]);
+    await asMember(rules, 'GET', `/api/mail?device=${six[5]}`);
+    const listed19 = (db.prepare('SELECT device FROM relay_mail_devices WHERE member = ?').all(rules.key) as Array<{ device: string }>).map((r) => r.device);
+    assert(listed19.length === mail.MAIL_DEVICES_MAX && !listed19.includes(six[0]) && listed19.includes(six[5]),
+        `19d. a sixth device: ${mail.MAIL_DEVICES_MAX} listed, the one unseen longest forgotten (listed ${listed19.length}; the first ${listed19.includes(six[0]) ? 'kept' : 'gone'})`);
+    const rulesSender = keys();
+    const it19 = await item(rulesSender, 'c.example', rules.key, 'b.example');
+    await bring([it19], viaC);
+    for (const d of six.slice(1)) await asMember(rules, 'POST', '/api/mail/confirm', { ids: [it19.envelope.itemId], device: d });
+    assert(heldCount('item_id = ?', it19.envelope.itemId) === 0, '19e. the five listed confirm it: it goes; the forgotten one holds nothing');
+
+    // An idle browser never stops new mail: the phone has 200, the browser none; a new item is still held.
+    const idle = keys(), PHONE19 = device(), BROWSER19 = device();
+    addLocal(idle, 'Idle');
+    await asMember(idle, 'GET', `/api/mail?device=${PHONE19}`);
+    await asMember(idle, 'GET', `/api/mail?device=${BROWSER19}`);
+    const fillIdle = db.prepare(`INSERT INTO relay_mail (sender_key, item_id, kind, recipient, sender_home, envelope, payload, bytes, received_at)
+                                 VALUES (?, ?, 'dm-line', ?, 'c.example', '{}', 'x', 1, ?)`);
+    const idleFiller = keys().key;
+    const t19 = Date.now() - 60_000;
+    const fillIds = Array.from({ length: mail.MAIL_PER_MEMBER_ITEMS }, (_, i) => `idle-${String(i).padStart(6, '0')}`);
+    fillIds.forEach((id, i) => fillIdle.run(idleFiller, id, idle.key, t19 + i));
+    const beforeConfirm = await bring([await item(keys(), 'c.example', idle.key, 'b.example')], viaC);
+    assert(beforeConfirm.status === 202 && heldCount('recipient = ?', idle.key) === mail.MAIL_PER_MEMBER_ITEMS,
+        `19f. ${mail.MAIL_PER_MEMBER_ITEMS} waiting that no device has: a new one is dropped, as before (held ${heldCount('recipient = ?', idle.key)})`);
+    for (let i = 0; i < fillIds.length; i += 50) await asMember(idle, 'POST', '/api/mail/confirm', { ids: fillIds.slice(i, i + 50), device: PHONE19 });
+    const late = await item(keys(), 'c.example', idle.key, 'b.example');
+    await bring([late], viaC);
+    const browserPage = await asMember(idle, 'GET', `/api/mail?device=${BROWSER19}`);
+    assert(heldCount('item_id = ?', late.envelope.itemId) === 1 && heldCount('recipient = ?', idle.key) === mail.MAIL_PER_MEMBER_ITEMS + 1
+        && browserPage.body?.items?.[0]?.envelope !== undefined && browserPage.body?.more === true,
+        `19g. once the phone has all ${mail.MAIL_PER_MEMBER_ITEMS}, a new item is held though the browser has none of them, and the browser is still served from the oldest (held ${heldCount('recipient = ?', idle.key)})`);
+    await asMember(idle, 'POST', '/api/mail/confirm', { ids: [late.envelope.itemId], device: PHONE19 });
+    assert(heldCount('recipient = ?', idle.key) === mail.MAIL_PER_MEMBER_ITEMS && heldCount('item_id = ?', fillIds[0]) === 0
+        && heldCount('item_id = ?', late.envelope.itemId) === 1,
+        `19h. the phone has ${mail.MAIL_PER_MEMBER_ITEMS + 1} the browser hasn't: they keep the allowance again, the oldest going past it (held ${heldCount('recipient = ?', idle.key)}; the oldest ${heldCount('item_id = ?', fillIds[0]) ? 'kept' : 'gone'})`);
+    // Bytes, apart from the count: ten fewer items, and the oldest of them 20 MB.
+    const tenNewest = fillIds.slice(-10);
+    db.prepare(`DELETE FROM relay_mail WHERE item_id IN (${tenNewest.map(() => '?').join(', ')})`).run(...tenNewest);
+    db.prepare('UPDATE relay_mail SET bytes = ? WHERE item_id = ?').run(mail.MAIL_PER_MEMBER_BYTES - 10, fillIds[1]);
+    const lateBytes = await item(keys(), 'c.example', idle.key, 'b.example');
+    await bring([lateBytes], viaC);
+    assert(heldCount('item_id = ?', lateBytes.envelope.itemId) === 1, '19i. 20 MB the phone has: a new item is still held (only bytes no device has count)');
+    await asMember(idle, 'POST', '/api/mail/confirm', { ids: [lateBytes.envelope.itemId], device: PHONE19 });
+    assert(heldCount('item_id = ?', fillIds[1]) === 0 && heldCount('item_id = ?', fillIds[2]) === 1 && heldCount('item_id = ?', lateBytes.envelope.itemId) === 1
+        && heldCount('recipient = ?', idle.key) < mail.MAIL_PER_MEMBER_ITEMS,
+        `19j. past 20 MB that the phone has and the browser not (${heldCount('recipient = ?', idle.key)} items, under the count): the oldest goes, the newer ones stay`);
+
+    // The sweep: a device unseen 7 days is forgotten, and with it what it held up; a former member's devices go.
+    const before19 = heldCount('recipient = ?', idle.key);
+    db.prepare('UPDATE relay_mail_devices SET seen_at = ? WHERE member = ? AND device = ?').run(Date.now() - mail.MAIL_DEVICE_LAPSE_MS - 1, idle.key, BROWSER19);
+    const swept = mail.sweepRelayMail();
+    assert(swept.devices >= 1 && heldCount('recipient = ?', idle.key) === 0 && before19 > 0
+        && !db.prepare('SELECT 1 FROM relay_mail_devices WHERE device = ?').get(BROWSER19),
+        `19k. the browser unseen 7 days is forgotten: everything the phone had goes (${before19} → ${heldCount('recipient = ?', idle.key)})`);
+    const comesBack = await asMember(idle, 'GET', `/api/mail?device=${BROWSER19}`);
+    assert(comesBack.status === 200 && !!db.prepare('SELECT 1 FROM relay_mail_devices WHERE device = ?').get(BROWSER19), '19l. it comes back as new');
+    const leaver = keys(), LEAVER = device();
+    addLocal(leaver, 'Leaver');
+    await asMember(leaver, 'GET', `/api/mail?device=${LEAVER}`);
+    const leaverItem = await item(keys(), 'c.example', leaver.key, 'b.example');
+    await bring([leaverItem], viaC);
+    db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(leaver.key);
+    mail.sweepRelayMail();
+    assert(!db.prepare('SELECT 1 FROM relay_mail_devices WHERE member = ?').get(leaver.key) && heldCount('recipient = ?', leaver.key) === 0
+        && !db.prepare('SELECT 1 FROM relay_mail_got WHERE recipient = ?').get(leaver.key),
+        '19m. no member here any more: their devices go with their mail');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -101,6 +101,7 @@ export * from './request-signing.js';
 export * from './node-request-signing.js';
 export * from './relay-envelope.js';
 export * from './outside-chat.js';
+export * from './outside-devices.js';
 export * from './cleartext-address.js';
 export * from './public-ipv4.js';
 export * from './claim-proof.js';

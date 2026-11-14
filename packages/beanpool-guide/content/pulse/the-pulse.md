@@ -15,7 +15,7 @@ It is on **Home** too, as the **The Pulse** card, when a neighbour has shared so
 The Pulse gathers what members of your community post on other sites: videos, music, blogs, photos. It is a way to find out what your neighbours make and do.
 
 - **Neighbours:** posts from members' channels. The buttons along the top pick a subject, like Food & growing or Repair & reuse. **All** shows everything.
-- **Learn** (phone app): videos about how BeanPool works, and a short daily reflection. See "The Learn lane". In the web app they are in the feed, and **How it works** along the top shows only them.
+- **Learn** (phone app): videos about how BeanPool works. See "The Learn lane". In the web app they are in the feed, and **How it works** along the top shows only them.
 
 Pull down to refresh. In the web app, tap 🔄 at the top instead.
 

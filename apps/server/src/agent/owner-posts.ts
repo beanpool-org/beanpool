@@ -106,7 +106,6 @@ import { memberPhotoRoom, PhotoBudgetExceededError } from '../engine/photo-uploa
 import { photoRefusalText, routePhotosRefusal, sniffRasterImageType } from '../engine/avatar.js';
 import { imageSize } from '../storage/image-metadata.js';
 import { loadSharp, PHOTO_MAX_SIDE, resizeToStoredPhoto } from '../storage/photo-thumbnails.js';
-import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { getReplacedInfo } from '../services/identity-epoch.js';
 import { memberErrorText } from '../routes/member-error-text.js';
 import { cleanMemberText, fence, MEMBER_TEXT_NOTICE, type Fenced } from './fence.js';
@@ -148,10 +147,10 @@ export function enterpriseRef(enterpriseKey: string): string {
 export const AGENT_POST_CATEGORIES: readonly string[] = PRICING_CATEGORIES.map((c) => c.id);
 
 /**
- * A stored category that is the node's own word: the Market's, one it had before, what an event or a listing with none is
- * given, or the Daily Pulse's `skills`, the one word its entries use that the Market doesn't list (daily-pulse-entries.ts).
+ * A stored category that is the node's own word: the Market's, one it had before, or what an event or a listing with none
+ * is given.
  */
-const OWN_CATEGORIES: ReadonlySet<string> = new Set([...AGENT_POST_CATEGORIES, ...Object.keys(LEGACY_CATEGORY_ALIASES), 'community', 'other', 'skills']);
+const OWN_CATEGORIES: ReadonlySet<string> = new Set([...AGENT_POST_CATEGORIES, ...Object.keys(LEGACY_CATEGORY_ALIASES), 'community', 'other']);
 
 /**
  * A post's category as an assistant reads it. Stored, it is any text of up to 50 characters (engine/post-fields.ts), and it
@@ -753,7 +752,6 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
                 post = createPost(kind, category, title, description, credits, priceType, owner, lat, lng,
                     photos.photos, args.repeatable === true, undefined, args.cash_also_needed === true,
                     { beforeWrite: () => assertAssistantDay(grant), createdVia: createdViaOf(grant), ...tagged.fields });
-                if (post) syncPulseMarketplaceGate();
             }
             if (!post) {
                 returnAgentCreate(grant.id);
@@ -844,7 +842,6 @@ async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Pr
                 assertNotMuted(owner);
                 assertMayPost(owner, Math.min(photos.photos.length, 5));
                 post = createEventFromBody(body, owner, undefined, () => assertAssistantDay(grant), timeOut, createdViaOf(grant));
-                if (post) syncPulseMarketplaceGate();
             }
             if (!post) {
                 returnAgentCreate(grant.id);
@@ -925,7 +922,6 @@ function createPoll(grant: AgentGrant, args: Record<string, unknown>): ToolResul
             returnAgentCreate(grant.id);
             return { ok: false, error: 'The poll could not be made.' };
         }
-        syncPulseMarketplaceGate();
         const shownTo = pollShownTo(owner);
         return answer(grant, 'poll', post.id, false, { closesAt: post.pollClosesAt as string, openVote: post.pollOpenVote === true, ...(shownTo ? { shownTo } : {}) });
     } catch (e) {
@@ -1629,7 +1625,6 @@ function typedAnswersFor(postId: string, grant: AgentGrant, boundary: string): R
 function removeOne(postId: string, member: string): { ok: true } | { ok: false; error: string } {
     try {
         if (!removePost(postId, member)) return { ok: false, error: 'It could not be removed here: its author or keeper removes it in the app.' };
-        syncPulseMarketplaceGate();
         return { ok: true };
     } catch (e) {
         return { ok: false, error: memberErrorText(e, 'It could not be removed now: try again later.') };

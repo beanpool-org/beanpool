@@ -103,6 +103,7 @@ A report on a line in a circle's chat reaches you like a report on any group's c
 
 On the global community, automated safety rules are on by default. On a local community, an owner can choose to turn them on under **People & Safety → Triage & Moderation** (**Rules the server applies**):
 
+- **First message from someone new (message requests)**: A member's first message to someone who hasn't added them, written to them or traded with them waits under **Message requests** until that person accepts it. On by default on the global community, off on a local one. See Message requests in Address, identity and peers.
 - **Limits on new accounts (probation)**: New accounts have small daily posting and messaging limits during their first days, protecting the community from rapid spam.
 - **Reported posts hidden and message requests cleared automatically (auto-hide reports)**: Posts reported by members in 3 independent circles are hidden automatically until a moderator reviews them. Reports clear a sender's message requests by the same switch. Off by default on local communities (where reports wait for a moderator to review).
 - **Repeat offenders muted automatically (auto-mute)**: A member whose posts moderators have removed 3 times in 30 days is automatically muted from posting and messaging until a moderator lifts it.

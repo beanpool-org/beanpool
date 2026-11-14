@@ -1435,7 +1435,6 @@
   "On the map": "Auf der Karte",
   "On the map at {lat}, {lng}": "Auf der Karte bei {lat}, {lng}",
   "On your Home": "Auf deiner Startseite",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Sobald dein Server läuft, benennst du deine Community in den Einstellungen, lädst die ersten Mitglieder ein und diese laden weitere ein. Aktiviere dort „Standort veröffentlichen“, damit Interessierte in der Nähe benachrichtigt werden.",
   "One device at a time: the copy you changed last is the one kept.": "Immer nur ein Gerät: Die zuletzt geänderte Kopie wird behalten.",
   "One moment…": "Einen Moment…",
   "One more comes back {when}.": "Ein weiterer wird {when} wieder freigeschaltet.",
@@ -4681,5 +4680,8 @@
     "one": "Die Saisonpause hält deinen Kreditrahmen für bis zu 90 Tage bei {n} Bohne und pausiert aktive Angebote, sodass Mitglieder nicht kaufen können. Jeder Verwalter kann jederzeit fortsetzen.",
     "other": "Die Saisonpause hält deinen Kreditrahmen für bis zu 90 Tage bei {n} Bohnen und pausiert aktive Angebote, sodass Mitglieder nicht kaufen können. Jeder Verwalter kann jederzeit fortsetzen."
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Die Fortsetzung reaktiviert alle Angebote und stellt die normale tägliche Berechnung des Kreditrahmens wieder her."
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Die Fortsetzung reaktiviert alle Angebote und stellt die normale tägliche Berechnung des Kreditrahmens wieder her.",
+  "{name} has no owner yet": "{name} hat noch keinen Eigentümer",
+  "If you installed it, claim it with the one-time code on the server.": "Wenn du ihn eingerichtet hast, übernimm ihn mit dem Einmal-Code auf dem Server.",
+  "Claim {name}": "{name} beanspruchen"
 }

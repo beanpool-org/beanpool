@@ -612,7 +612,10 @@ export const SUITES = [
     'test-knowledge-publish',
     'test-knowledge-reads',
     'test-knowledge-drafts',
+    'test-knowledge-home',
     'test-forum',
+    // The forum's moderation (slice F2): reports, auto-hide, restore, removal, the mute, first looks, new accounts, bursts.
+    'test-forum-moderation',
     'test-mcp-knowledge',
     'test-names-copy',
     'test-contact-copies',

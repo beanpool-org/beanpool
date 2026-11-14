@@ -877,7 +877,13 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
     request_conversation_id TEXT,
     -- A SHA-256 of the wording its reporter handed over, folded, on such a report of a line long enough to compare (null
     -- otherwise): what "the same wording" is compared on, so counting never opens a disclosure again.
-    request_wording TEXT
+    request_wording TEXT,
+    -- A report of one forum post, an opening post or a reply (forum_posts.id; engine/forum-moderation.ts, slice F2): its writer
+    -- is target_pubkey. Null on every other report.
+    target_forum_post_id TEXT,
+    -- The home community of a reported person from another community, `host[:port]` (messages across communities X5 writes
+    -- it; the joint forum design §2.4). Empty until then, on every report.
+    target_home TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_ratings_created_at ON ratings(created_at);
 -- A member's ratings: every trust floor averages them (engine trust.ts, on each spend check and listing row), and so do
@@ -887,6 +893,8 @@ CREATE INDEX IF NOT EXISTS idx_abuse_reports_updated_at ON abuse_reports(updated
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_status_created ON abuse_reports(status, created_at DESC);
 -- The reports on one post: auto-hide counts them on every new report (engine/auto-moderation.ts).
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_target_post ON abuse_reports(target_post_id) WHERE target_post_id IS NOT NULL;
+-- Every open report on one forum post, for the auto-hide count and a moderator's answer (engine/forum-moderation.ts).
+CREATE INDEX IF NOT EXISTS idx_abuse_reports_target_forum_post ON abuse_reports(target_forum_post_id) WHERE target_forum_post_id IS NOT NULL;
 -- One reporter's reports: auto-hide reads how many of theirs a moderator kept lately, and the hourly report limit.
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_reporter ON abuse_reports(reporter_pubkey, status);
 -- The reports that count towards clearing one sender's message requests: read on each of them (engine/request-limits.ts).
@@ -1332,6 +1340,12 @@ CREATE TABLE IF NOT EXISTS burst_action_posts (
     PRIMARY KEY (action_id, post_id)
 );
 CREATE INDEX IF NOT EXISTS idx_burst_action_posts_post ON burst_action_posts(post_id);
+-- The forum posts each burst hide hid (slice F2), for its undo on this server, as burst_action_posts keeps the listings.
+CREATE TABLE IF NOT EXISTS burst_action_forum_posts (
+    action_id TEXT NOT NULL,
+    post_id TEXT NOT NULL,
+    PRIMARY KEY (action_id, post_id)
+);
 
 -- What an owner's AI assistant took down (engine/agent-takedowns.ts): one row per call, with the posts it hid, so a person can
 -- put them back for 7 days and the sweep can make them final. This server's own record (a standby never copies it; the posts
@@ -3213,10 +3227,16 @@ CREATE TABLE IF NOT EXISTS forum_posts (
     edited_at     TEXT,
     removed_at    TEXT,
     removed_by    TEXT CHECK (removed_by IS NULL OR removed_by IN ('writer', 'moderator', 'account')),
-    updated_at    TEXT
+    updated_at    TEXT,
+    -- Hidden while the moderators look (slice F2, engine/forum-moderation.ts): reporters in enough independent circles, or a
+    -- moderator's clean-up of a burst. Its writer and the moderators still read it; everyone else reads "Hidden while
+    -- moderators look" in a reply's place, and nothing of a topic whose opening post it is.
+    hidden_by_reports_at TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_forum_posts_number ON forum_posts (topic_id, number);
 CREATE INDEX IF NOT EXISTS idx_forum_posts_writer ON forum_posts (writer_pubkey, created_at);
+-- A writer's posts a moderator removed, for the auto-mute count (engine/auto-moderation.ts removalsCounted).
+CREATE INDEX IF NOT EXISTS idx_forum_posts_moderator_removed ON forum_posts (writer_pubkey, removed_at) WHERE removed_by = 'moderator';
 -- A post's photos, at most 3, the writer's own: kept in the row as a data URL with its metadata stripped (as Local
 -- knowledge's suggestions keep theirs), so a standby's copy carries them whole. Deleted with the post's removal.
 CREATE TABLE IF NOT EXISTS forum_post_photos (
@@ -3242,7 +3262,42 @@ CREATE TABLE IF NOT EXISTS forum_post_edits (
 CREATE TABLE IF NOT EXISTS forum_members (
     member_pubkey  TEXT PRIMARY KEY,
     told_public_at TEXT,
-    updated_at     TEXT
+    updated_at     TEXT,
+    -- When a moderator first OK'd a topic of theirs (slice F2, engine/forum-first-look.ts): known in this forum from then, so
+    -- their topics go up at once and their links are links, whatever their new-account days say.
+    known_at       TEXT
+);
+-- A first topic waiting for a moderator's look (slice F2, engine/forum-first-look.ts; design §5): a new member's topic where
+-- `forumFirstLook` is on. Not a topic: it lives here until a moderator says yes, so no list, read, search or copy of the
+-- topics can show it by a missed filter (Learn's rule). OK makes the topic (`topic_id`) in the writer's name. `state`:
+-- waiting, ok, no (with one of the five removal reasons), withdrawn by its writer, or expired (30 days without a look,
+-- handed back). Who answered is never kept. An answered one is deleted 30 days after, with its tombstone.
+CREATE TABLE IF NOT EXISTS forum_waiting (
+    id            TEXT PRIMARY KEY,
+    section_id    TEXT NOT NULL,
+    writer_pubkey TEXT NOT NULL,
+    title         TEXT NOT NULL,
+    words         TEXT NOT NULL,
+    place         TEXT,
+    lang          TEXT,
+    state         TEXT NOT NULL CHECK (state IN ('waiting', 'ok', 'no', 'withdrawn', 'expired')),
+    reason        TEXT,
+    topic_id      TEXT,
+    created_at    TEXT NOT NULL,
+    answered_at   TEXT,
+    updated_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_forum_waiting_state ON forum_waiting (state, created_at);
+CREATE INDEX IF NOT EXISTS idx_forum_waiting_writer ON forum_waiting (writer_pubkey, created_at);
+-- A waiting first topic's photos, at most 3, as forum_post_photos keeps a post's: a moderator sees them first. They move to
+-- the topic's opening post on OK and are deleted on any other answer.
+CREATE TABLE IF NOT EXISTS forum_waiting_photos (
+    waiting_id TEXT NOT NULL,
+    order_num  INTEGER NOT NULL,
+    photo_data TEXT NOT NULL,
+    bytes      INTEGER NOT NULL,
+    updated_at TEXT,
+    PRIMARY KEY (waiting_id, order_num)
 );
 
 -- 25b. A group's chat, mutes and convenor succession (groups redesign slice 1, 2026-09-19).

@@ -66,7 +66,7 @@ import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engi
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices, markKeptNoticesSeen } from './engine/kept-notices.js';
 import { dropKnowledgeOf } from './engine/knowledge-drafts.js';
-import { dropForumOf } from './engine/forum.js';
+import { dropForumOf, removeForumPostAsModerator } from './engine/forum.js';
 import { tidyEndedPins } from './engine/pins.js';
 import {
     newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, markPushNoticesSeen, markPushNoticesSeenWhere, markAllPushNoticesSeen,
@@ -112,6 +112,10 @@ import {
     evaluateAutoMute, liftMute as liftMuteEngine, onHold,
 } from './engine/auto-moderation.js';
 import { hideBurstPosts, undoBurstHide, forgetBurstActionsOf, type BurstActorRole, type BurstActionSummary, type UndoOutcome } from './engine/burst-cleanup.js';
+import {
+    closeOpenReportsOnForumPost, evaluateForumAutoHide, forumPostWriter, forumRemovalOf, recheckHiddenForumPost, reportedForumPost,
+    restoreHiddenForumPost as restoreHiddenForumPostEngine, tellForumRemoval, tellForumReportDismissed, type ForumRemoval, type ReportedForumPost,
+} from './engine/forum-moderation.js';
 import {
     forgetTakedownsOf, hasOpenChildSafetyReport, hasPendingDeal, markTakedownFinal, putBackTakedowns as putBackTakedownsEngine, setTakedownRemoval, takeDownPosts as takeDownPostsEngine,
     type PutBackResult, type PutBackScope, type TakeDownInput, type TakeDownResult,
@@ -662,6 +666,13 @@ export interface AbuseReport {
     groupMessage?: { groupId: string | null; groupName: string | null; photo: boolean; voice: boolean; removed: boolean } | null;
     /** The same for a direct message's line, which names no chat: the moderators' view opens it on its own too. */
     directMessage?: { photo: boolean; voice: boolean; removed: boolean } | null;
+    /** A report of one forum post (engine/forum-moderation.ts, slice F2): its id. */
+    targetForumPostId?: string;
+    /**
+     * The forum post it names, for Settings' list: its topic's title, its words (the first 500), its writer, whether it is
+     * hidden while the moderators look or already removed. Null when the report names no forum post.
+     */
+    forumPost?: ReportedForumPost | null;
 }
 
 export type { FriendEntry };
@@ -7649,17 +7660,17 @@ export const REPORTS_PER_REPORTER_PER_HOUR = 10;
  * or null. A second report on the same thing adds nothing an operator does not already have. A report of one group chat
  * message keeps its own rule (engine/group-chat-report.ts groupLineReportOnFile) and is never this one.
  */
-export function findPendingReport(reporterPubkey: string, targetPubkey: string, targetPostId?: string, targetPulseItemId?: string): AbuseReport | null {
+export function findPendingReport(reporterPubkey: string, targetPubkey: string, targetPostId?: string, targetPulseItemId?: string, targetForumPostId?: string): AbuseReport | null {
     const row = db.prepare(
         `SELECT id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at
            FROM abuse_reports
           WHERE reporter_pubkey = ? AND target_pubkey = ?
-            AND target_post_id IS ? AND target_pulse_item_id IS ?
+            AND target_post_id IS ? AND target_pulse_item_id IS ? AND target_forum_post_id IS ?
             -- A report of a member's group chat message is its own (engine/group-chat-report.ts), not one of the member.
             AND target_message_id IS NULL
             AND (status = 'pending' OR status IS NULL)
           ORDER BY created_at ASC LIMIT 1`
-    ).get(reporterPubkey, targetPubkey, targetPostId || null, targetPulseItemId || null) as any;
+    ).get(reporterPubkey, targetPubkey, targetPostId || null, targetPulseItemId || null, targetForumPostId || null) as any;
     if (!row) return null;
     return {
         id: row.id, reporterPubkey: row.reporter_pubkey, targetPubkey: row.target_pubkey,
@@ -7706,23 +7717,25 @@ export function liftRequestsLimit(pubkey: string): boolean {
     return liftRequestLimit(moderationNoticeCb, pubkey);
 }
 
-export function submitReport(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string, targetPulseItemId?: string): AbuseReport | null {
+export function submitReport(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string, targetPulseItemId?: string, targetForumPostId?: string): AbuseReport | null {
     // A member of this node, not just a row: a pruned account, or a re-keyed phone's old key, reports nobody.
     if (!isNodeMember(reporterPubkey) || reporterPubkey === targetPubkey) return null;
-    const existing = findPendingReport(reporterPubkey, targetPubkey, targetPostId, targetPulseItemId);
+    const existing = findPendingReport(reporterPubkey, targetPubkey, targetPostId, targetPulseItemId, targetForumPostId);
     if (existing) return existing;
     const safeReason = typeof reason === 'string' ? reason.slice(0, 500) : String(reason ?? '').slice(0, 500);
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     // A report of a person who wrote to them as a request counts towards clearing their requests (engine/request-limits.ts):
-    // it is how both apps report one whose line is gone. A report of a post or a Pulse item is about that, not a request.
-    const request = targetPostId || targetPulseItemId ? null : requestReceived(reporterPubkey, targetPubkey, false);
-    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at, request_conversation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, targetPulseItemId || null, safeReason, createdAt, request);
-    // On the global profile, enough established reporters hide the post until a moderator looks (G3). A report of
-    // a member or a Pulse item never hides anything.
+    // it is how both apps report one whose line is gone. A report of a post, a Pulse item or a forum post is about that.
+    const request = targetPostId || targetPulseItemId || targetForumPostId ? null : requestReceived(reporterPubkey, targetPubkey, false);
+    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at, request_conversation_id, target_forum_post_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, targetPulseItemId || null, safeReason, createdAt, request, targetForumPostId || null);
+    // On the global profile, enough established reporters hide the post until a moderator looks (G3), a forum post too
+    // (engine/forum-moderation.ts, slice F2). A report of a member or a Pulse item never hides anything.
     if (targetPostId && !targetPulseItemId) evaluateAutoHide(moderationNoticeCb, targetPostId);
+    if (targetForumPostId) evaluateForumAutoHide(moderationNoticeCb, targetForumPostId);
     if (request) evaluateRequestReports(moderationNoticeCb, targetPubkey);
-    return { id, reporterPubkey, targetPubkey, targetPostId, targetPulseItemId, reason: safeReason, createdAt, status: 'pending' };
+    return { id, reporterPubkey, targetPubkey, targetPostId, targetPulseItemId, ...(targetForumPostId ? { targetForumPostId } : {}), reason: safeReason, createdAt, status: 'pending' };
 }
 
 /**
@@ -7777,7 +7790,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
     // (submitDmLineReport), a group line's {"epoch":...} (group-chat-report.ts), a poll line's {"kind":"poll-answer",...}.
     let querySql = `
         SELECT ar.id, ar.reporter_pubkey, ar.target_pubkey, ar.target_post_id, ar.target_pulse_item_id, ar.reason, ar.status,
-               ar.created_at, ar.target_message_id,
+               ar.created_at, ar.target_message_id, ar.target_forum_post_id,
                mr.callsign as reporter_callsign, 
                mt.callsign as target_callsign,
                p.title as post_title, substr(p.description, 1, 500) as post_description,
@@ -7870,6 +7883,9 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         directMessage: r.disclosure_kind === DM_LINE_DISCLOSURE_KIND
             ? { photo: r.gm_type === 'image', voice: r.gm_type === 'voice', removed: !r.gm_type || r.gm_type === 'removed' }
             : null,
+        // A forum post's report (slice F2): the post with its topic's title, for Settings' list beside reported listings.
+        ...(r.target_forum_post_id ? { targetForumPostId: r.target_forum_post_id as string } : {}),
+        forumPost: r.target_forum_post_id ? reportedForumPost(r.target_forum_post_id) : null,
         groupMessage: r.target_message_id && r.disclosure_kind !== DM_LINE_DISCLOSURE_KIND
             ? {
                 groupId: r.gm_group_id ?? null,
@@ -7936,7 +7952,16 @@ export function getTradeTotals(): { deals: number; volume: number; cancelled: nu
 
 export function dismissReport(reportId: string): boolean {
     // A Pulse report is about its item, whatever post id it carries (reportSubjectOf): no post is rechecked or named.
-    const report = db.prepare("SELECT reporter_pubkey, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id, status FROM abuse_reports WHERE id = ?").get(reportId) as any;
+    const report = db.prepare("SELECT reporter_pubkey, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id, target_forum_post_id, status FROM abuse_reports WHERE id = ?").get(reportId) as any;
+    // A forum post's report (slice F2): the same, on the forum post. A hidden one whose remaining reports no longer add up
+    // is shown again, then the reporter hears it was kept (or only that it is gone).
+    if (report?.target_forum_post_id) {
+        const res = db.prepare("UPDATE abuse_reports SET status = 'reviewed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
+        if (res.changes === 0) return false;
+        recheckHiddenForumPost(moderationNoticeCb, report.target_forum_post_id);
+        if (report.status === 'pending' || report.status == null) tellForumReportDismissed(moderationNoticeCb, report.reporter_pubkey, report.target_forum_post_id);
+        return true;
+    }
     // updated_at moves with status: the sync export selects on it, and without the bump replicas keep
     // showing the report as pending.
     const res = db.prepare("UPDATE abuse_reports SET status = 'reviewed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
@@ -7959,6 +7984,19 @@ export function dismissReport(reportId: string): boolean {
  */
 export function restoreHiddenPost(postId: string): 'restored' | 'not_hidden' | 'not_found' {
     return restoreHiddenPostEngine(moderationNoticeCb, postId);
+}
+
+/**
+ * A moderator restores a forum post hidden while the moderators look (engine/forum-moderation.ts, slice F2): shown to
+ * everyone again, and every open report on it dismissed.
+ */
+export function restoreHiddenForumPost(postId: string): 'restored' | 'not_hidden' | 'not_found' {
+    return restoreHiddenForumPostEngine(moderationNoticeCb, postId);
+}
+
+/** The callbacks every moderation and forum notice goes out by: the live socket and the push, with its kept copy. */
+export function moderationNoticesCb(): typeof moderationNoticeCb {
+    return moderationNoticeCb;
 }
 
 /** A moderator lifts a member's mute (G3). False when they were not muted. */
@@ -7996,9 +8034,11 @@ export function putBackTakedowns(scope: PutBackScope): PutBackResult {
  * member, a Pulse item, whose owner the route sets, or an enterprise, whose key the phone sends in both fields) the key
  * the report names. Null when it names nobody.
  */
-function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id?: string | null; target_pulse_item_id?: string | null }): string | null {
+function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id?: string | null; target_pulse_item_id?: string | null; target_forum_post_id?: string | null }): string | null {
     // A report of a poll's typed answer is about nobody (engine/poll-other.ts): no action on it reaches a member.
     if (report.target_pubkey === POLL_ANSWER_REPORT_SUBJECT) return null;
+    // A forum post's report is about its writer, read from the post (slice F2), whatever key the row carries.
+    if (report.target_forum_post_id) return forumPostWriter(report.target_forum_post_id) || report.target_pubkey || null;
     if (report.target_pulse_item_id) {
         const item = db.prepare('SELECT owner_pubkey FROM pulse_items WHERE id = ?').get(report.target_pulse_item_id) as { owner_pubkey: string | null } | undefined;
         return item?.owner_pubkey || report.target_pubkey || null;
@@ -8032,8 +8072,8 @@ export function reportPauseNeedsOwner(reportId: string): boolean {
 
 /** Who actioning this report with suspendUser would pause (reportSubjectOf), or null: it names nobody, or a closed account. */
 function reportPauseSubject(reportId: string): string | null {
-    const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
-        { target_pubkey: string | null; target_post_id: string | null; target_pulse_item_id: string | null } | undefined;
+    const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id, target_forum_post_id FROM abuse_reports WHERE id = ?').get(reportId) as
+        { target_pubkey: string | null; target_post_id: string | null; target_pulse_item_id: string | null; target_forum_post_id: string | null } | undefined;
     const subject = report ? reportSubjectOf(report) : null;
     return subject && !isClosedAccountKey(subject) ? subject : null;
 }
@@ -8092,6 +8132,8 @@ export function actionReport(
 ): boolean {
     // Notices go out after the commit, never from inside it: a rollback must not leave a member told of a removal.
     let takedown: { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null = null;
+    // The same for a forum post's removal (slice F2, engine/forum-moderation.ts).
+    let forumTakedown: { removal: ForumRemoval; reporters: string[] } | null = null;
     // Refund shortfalls are held back for the same reason. This is the report flow — the path a moderator
     // actually uses — so a buyer refunded less than the trade row said has to reach the moderator here too,
     // not just the two direct removal routes; a shortfall only `console.warn` knows about is how the
@@ -8158,6 +8200,17 @@ export function actionReport(
             }
         }
 
+        // A forum post's report takes the forum post down (slice F2): its words and photos go, its open reports close, and
+        // its writer and the reporters are told after the commit.
+        if (deletePost && report.target_forum_post_id) {
+            const removal = forumRemovalOf(report.target_forum_post_id);
+            if (removal && removeForumPostAsModerator(report.target_forum_post_id)) {
+                const reporters = closeOpenReportsOnForumPost(report.target_forum_post_id);
+                if (wasOpen) reporters.push(report.reporter_pubkey);
+                forumTakedown = { removal, reporters };
+            }
+        }
+
         // Tombstoned exactly as the owner's own delete does. The member is not penalised unless
         // suspendUser is also set. The caller evicts the cached thumbnail, as the owner route does.
         if (removePulseItem && report.target_pulse_item_id) {
@@ -8186,6 +8239,12 @@ export function actionReport(
         notifyPostTakedown(moderationNoticeCb, done.post, done.reporters, normaliseRemovalReason(opts?.reasonCategory));
         // The third removal in 30 days mutes its author on the global profile (G3).
         if (done.post.wasLive) evaluateAutoMute(moderationNoticeCb, done.post.authorPubkey);
+    }
+    const forumDone = forumTakedown as { removal: ForumRemoval; reporters: string[] } | null;
+    if (ok && forumDone) {
+        tellForumRemoval(moderationNoticeCb, forumDone.removal, [...new Set(forumDone.reporters)], normaliseRemovalReason(opts?.reasonCategory));
+        // A forum post's removal counts towards the mute as a listing's does (design §6).
+        if (forumDone.removal.wasUp) evaluateAutoMute(moderationNoticeCb, forumDone.removal.row.writer_pubkey);
     }
     if (ok) for (const shortfall of shortfalls) opts?.onRefundShortfall?.(shortfall);
     return ok;

@@ -1416,7 +1416,6 @@
   "On the map": "在地图上",
   "On the map at {lat}, {lng}": "在地图上的位置：{lat}, {lng}",
   "On your Home": "在首页上",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "节点运行后，你在其设置应用中为社区命名，邀请首批成员，再由他们邀请更多人。在设置中开启“发布位置”，附近订阅了通知的人们就会收到消息。",
   "One device at a time: the copy you changed last is the one kept.": "一次仅限一台设备：将保留你最后修改的副本。",
   "One moment…": "请稍候…",
   "One more comes back {when}.": "还有一次额度将于 {when} 恢复。",
@@ -4511,5 +4510,8 @@
   "Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.|Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.": {
     "other": "因季节暂停会将你的信用额度保持在 {n} 豆子最多 90 天，并暂停有效刊登使成员无法购买。任何管理者均可随时恢复。"
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "恢复运营将重新激活所有刊登，并将信用额度恢复为常规每日计算。"
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "恢复运营将重新激活所有刊登，并将信用额度恢复为常规每日计算。",
+  "{name} has no owner yet": "{name} 尚无所有者",
+  "If you installed it, claim it with the one-time code on the server.": "如果是你安装的，请使用服务器上的一次性验证码认领它。",
+  "Claim {name}": "认领 {name}"
 }

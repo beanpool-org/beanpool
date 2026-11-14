@@ -9,12 +9,16 @@ related: the-settings-screens, members-and-invites, running-a-known-community, a
 
 Only an owner can confirm, lock and unlock. Admins can read every setting, its reasons and the log, and can advise the owners about a setting, but cannot change anything. Moderators and members don't see this page. Members keep their own "How this community works" facts on Home, and are told when a rule changes.
 
+On the phone, owners and admins have a **Core settings** row in the app's Settings, under **COMMUNITY ADMIN**. Its second line names them (who can join, Beans, votes, sharing outside, where copies go) and says **Not confirmed yet** or **Locked since ‹date›**. It opens the same facts members read, with a line about the lock at the top and, at the bottom, **Change them on a computer, or press Manage: Settings opens there.** The phone has no controls of its own: **Manage** opens this same page.
+
 ## What is a core setting
 
 - **Who can join**: **Invite: any member invites**, or **Known: only admins invite**. On a global server the door is open to anyone and the server holds it. Pausing new members is not here: that is an everyday switch under **People & Safety → Invites & QR**, and needs no unlocking.
 - **12 words at the open door** (global community only): whether a stranger can join with 12 secret words alone, or needs a sign-in.
 - **Beans**: the medium of trade, credit and the Commons. Once any member has traded and the ledger has moved, Beans are locked on and cannot be turned off.
 - **Known floor for confirmed members**: how far confirmed members on the names list may go into debt while keeping an offer listed. Needs Beans on.
+- **Budget per voucher**: the budget each new voucher starts with, to vouch for the people they invite: 100 to 2,000 Beans in steps of 100, 1,000 to start. Existing vouchers keep their current budget. Needs Beans on.
+- **Members giving part of their credit line**: the most one member may give another at once, from the credit line someone gave them: 0 to 100 Beans, 100 to start, and 0 turns giving off. Never the known floor or credit they earned. Turned off, what was given stays given. Needs Beans on.
 - **Community votes (Decisions)**: formal proposals and votes, on or off.
 - **Members may share listings outside the community**: on by default. A member can share one listing or event with someone outside BeanPool: the link shows that one post for 7 days, under the rules a visitor gets (what it is, its photos, its price and its area; never a name, a face or the exact place), and leads to your community's own card and Ask to join. Turned off, every link already shared stops at once and stays stopped if you turn it on again. Always off during a private preview. Your server keeps only a fingerprint of each link, never the link itself.
 - **Where members' copies go**: when a member links Google, Apple or Facebook, where the locked copy of their account is kept: BeanPool's key vault, this server, or nowhere.
@@ -27,7 +31,7 @@ Your community runs on its starting choices from its first second; nothing waits
 
 - Press **Walk through them**. Each step is one setting, with the choice your community already has chosen, what each choice means, and what changing it later would do. **Back**, **Next** and **Leave for now** are on every step; nothing is saved until the last step, and leaving saves nothing.
 - On a local community the first step after the introduction is **Where your community is**. It is required: a local community confirms its core settings only with its place set. Search for the town or street and pick it; place the pin and set the radius exactly later, under **Appliance & Data → Node Identity**. A global community needs no place.
-- At **Review**, check the list, then press **Confirm and lock**. Settings saves the place first, then the choices that changed, then the lock, as one step. A setting the server holds (the global community's open door, Beans off by kind, a ledger that has moved) is listed as **Set by this server**.
+- At **Review**, check the list, then press **Confirm and lock**. Settings saves the place first, then the choices that changed, then the lock, as one step. A setting the server holds (the global community's open door, Beans off by kind, a ledger that has moved) is listed as **Set by this server**. **Budget per voucher** and **Members giving part of their credit line** have no step of their own: while Beans are on, the review lists them as they are, and you change them on their own rows on the page.
 
 A community that already has members opens the walkthrough at the review, with today's values filled in, and **Confirm and lock** changes nothing: it only locks. **Walk through them** goes back to the first step.
 

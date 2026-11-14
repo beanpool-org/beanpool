@@ -9,13 +9,20 @@
  *   pages of the global community's forum are slice F7, through `public_from`, which nothing stamps yet.
  * - **Who writes.** An active, unmuted member: a topic in a section open to members, a reply in an open topic, an edit or a
  *   removal of their own post, closing their own topic. Owners and admins also start topics in "News from BeanPool" (a
- *   section for staff), close and move any topic, pin, and make, rename, order and archive sections. Moderators get reports
- *   and first looks with slice F2 (Marty, Q4, 14 Nov 2026): nothing here is theirs.
+ *   section for staff), close and move any topic, pin, and make, rename, order and archive sections. Moderators (owners,
+ *   admins and moderators: Marty, Q4, 14 Nov 2026) answer reports and first looks (engine/forum-moderation.ts,
+ *   engine/forum-first-look.ts, slice F2); nothing else here is a moderator's.
+ * - **Hidden while moderators look** (slice F2): a post reports or a burst's clean-up hid is read by its writer and the
+ *   moderators, marked `hidden`; anyone else reads a reply's place empty and marked, and nothing of a topic whose opening
+ *   post is hidden.
+ * - **New members** (engine/forum-moderation.ts forumNewness, slice F2): 2 topics and 10 replies a day (12 words: 1 and 5),
+ *   no photos but in a first topic that waits, an hour to edit, and their links are plain text (`linksOn` false on their
+ *   posts). Where `forumFirstLook` is on, their topic waits for a moderator's look, one at a time (holdFirstTopic).
  * - **Told first.** Where the forum is public (`forumPublic`, the global community), a member's first post is refused until
  *   they were told, once, that anyone on the web can read it with their name (`POST /api/forum/told`).
  * - **Limits.** 10 topics and 100 replies in any 24 hours (owners and admins: the "Owner and admin limit"); a removed topic
  *   or reply still counts, so remove-and-repost resets nothing. 100 edits in any 24 hours, and the 10 most recent earlier
- *   wordings kept a post (engine/writer-bounds.ts, config/writer-limits.ts). A new account's smaller numbers are slice F2's.
+ *   wordings kept a post (engine/writer-bounds.ts, config/writer-limits.ts). A new account's smaller numbers above.
  * - **Removing.** A reply or an opening post keeps its row as a marker, its words blanked and its photos deleted. A topic its
  *   writer removes with no one else's reply in it is gone from every list and read (`closed_by` 'removed'); with others'
  *   replies, its title and opening words are blanked, it closes, and the replies stay. Deleting an account does the same to
@@ -27,7 +34,7 @@
  */
 import crypto from 'node:crypto';
 import {
-    FORUM_DAY_LIMITS, FORUM_LIMITS, FORUM_STARTER_SECTIONS, forumLinksFit, forumMentionsFit, isLang, word, wordsFor,
+    FORUM_DAY_LIMITS, FORUM_LIMITS, FORUM_STARTER_SECTIONS, FORUM_TIMES, forumLinksFit, forumMentionsFit, isLang, word, wordsFor,
     type ForumSectionStarts,
 } from '@beanpool/core';
 import { getMember, validatePostPhotos } from '@beanpool/engine';
@@ -46,6 +53,7 @@ import { photoRefusalError, photosRefusal } from './avatar.js';
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import { assertMayEditForumToday } from './writer-bounds.js';
 import { WRITER_LIMITS } from '../config/writer-limits.js';
+import { forumNewness, inNewAccountDays, isForumModerator, knownWriters, type ForumNewness } from './forum-moderation.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -82,6 +90,9 @@ export const FORUM_WORDS = {
     sectionName: word('Give the section a name.'),
     tooManyPins: word('This section already has 2 pinned topics. Unpin one first.'),
     sameSection: word('This topic is already in that section.'),
+    newNoPhotos: word('While your account is new, photos go only in your first topic, which a moderator looks at first.'),
+    newEditWindow: word('While your account is new, you can edit a post only in the hour after you wrote it.'),
+    waitingAlready: word('Your first topic is still waiting for a moderator’s look. You can start another once it has an answer, or withdraw it.'),
 };
 
 /** A member's own text: control and hidden characters out, at most `max` characters, or a refusal over it. */
@@ -130,7 +141,7 @@ interface TopicRow {
 }
 interface PostRow {
     id: string; topic_id: string; number: number; writer_pubkey: string; words: string; quotes: number | null; lang: string | null;
-    created_at: string; edited_at: string | null; removed_at: string | null; removed_by: string | null;
+    created_at: string; edited_at: string | null; removed_at: string | null; removed_by: string | null; hidden_by_reports_at: string | null;
 }
 
 export interface ForumSection { id: string; starter: string | null; name: string | null; about: string | null; position: number; starts: ForumSectionStarts; listed: boolean; archived: boolean }
@@ -138,30 +149,54 @@ export interface ForumWriter { publicKey: string; name: string }
 export interface ForumTopic {
     id: string; sectionId: string; title: string; writer: ForumWriter; place: string | null; lang: string | null; replyCount: number;
     lastActivityAt: string; createdAt: string; pinned: boolean; closed: string | null; removed: boolean;
+    /** Its opening post is hidden while the moderators look: only its writer and the moderators get such a topic at all. */
+    hidden: boolean;
 }
 export interface ForumPost {
     id: string; topicId: string; number: number; writer: ForumWriter; words: string; quotes: number | null; lang: string | null;
     createdAt: string; editedAt: string | null; removed: string | null; photos: number;
+    /** Hidden while the moderators look: its words and photos only for its writer and the moderators (anyone else reads
+     *  "Hidden while moderators look" in its place). */
+    hidden: boolean;
+    /** Whether its links are links: a new writer's are plain text (design §5; @beanpool/core forumWordRuns). */
+    linksOn: boolean;
 }
 
 const sectionOut = (r: SectionRow): ForumSection => ({
     id: r.id, starter: r.starter, name: r.name, about: r.about, position: r.position, starts: r.starts, listed: r.listed === 1, archived: r.archived_at !== null,
 });
-const topicOut = (r: TopicRow & { opening_removed?: number }): ForumTopic => ({
+const topicOut = (r: TopicRow & { opening_removed?: number; opening_hidden?: number }): ForumTopic => ({
     id: r.id, sectionId: r.section_id, title: r.title, writer: { publicKey: r.writer_pubkey, name: nameOf(r.writer_pubkey) }, place: r.place, lang: r.lang,
     replyCount: r.reply_count, lastActivityAt: r.last_activity_at, createdAt: r.created_at, pinned: r.pinned_at !== null, closed: r.closed_by,
-    removed: !!r.opening_removed,
+    removed: !!r.opening_removed, hidden: !!r.opening_hidden,
 });
 const photoCount = (postId: string) => (db.prepare('SELECT COUNT(*) AS n FROM forum_post_photos WHERE post_id = ?').get(postId) as { n: number }).n;
-const postOut = (r: PostRow): ForumPost => ({
-    id: r.id, topicId: r.topic_id, number: r.number, writer: { publicKey: r.writer_pubkey, name: nameOf(r.writer_pubkey) },
-    words: r.removed_by ? '' : r.words, quotes: r.quotes, lang: r.lang, createdAt: r.created_at, editedAt: r.edited_at, removed: r.removed_by,
-    photos: r.removed_by ? 0 : photoCount(r.id),
-});
+/**
+ * A post as `reader` may read it: a removed one's words and photos are gone; a hidden one's are for its writer and the
+ * moderators only. `known` says whose links are links (knownWriters).
+ */
+const postOut = (r: PostRow, reader: string, known: Map<string, boolean>, moderator: boolean): ForumPost => {
+    const veiled = !!r.removed_by || (!!r.hidden_by_reports_at && r.writer_pubkey !== reader && !moderator);
+    return {
+        id: r.id, topicId: r.topic_id, number: r.number, writer: { publicKey: r.writer_pubkey, name: nameOf(r.writer_pubkey) },
+        words: veiled ? '' : r.words, quotes: r.quotes, lang: r.lang, createdAt: r.created_at, editedAt: r.edited_at, removed: r.removed_by,
+        photos: veiled ? 0 : photoCount(r.id), hidden: !!r.hidden_by_reports_at, linksOn: known.get(r.writer_pubkey) ?? false,
+    };
+};
+const postsOut = (rows: PostRow[], reader: string): ForumPost[] => {
+    const known = knownWriters(rows.map((r) => r.writer_pubkey));
+    const moderator = isForumModerator(reader);
+    return rows.map((r) => postOut(r, reader, known, moderator));
+};
+const onePostOut = (id: string, reader: string): ForumPost => postsOut([postRow(id)!], reader)[0];
 
 /** Leaves out what `reader` blocked: `col` names the writer's key column. */
 const NOT_BLOCKED = (col: string) => `${col} NOT IN (SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = @reader)`;
 const OPENING_REMOVED = `(SELECT p.removed_by IS NOT NULL FROM forum_posts p WHERE p.topic_id = t.id AND p.number = 1) AS opening_removed`;
+const OPENING_HIDDEN = `(SELECT p.hidden_by_reports_at IS NOT NULL FROM forum_posts p WHERE p.topic_id = t.id AND p.number = 1) AS opening_hidden`;
+/** A topic whose opening post is hidden is for its writer and the moderators only (@reader, @mod). */
+const NOT_HIDDEN_TO_READER = `(t.writer_pubkey = @reader OR @mod = 1 OR NOT EXISTS (SELECT 1 FROM forum_posts h
+    WHERE h.topic_id = t.id AND h.number = 1 AND h.hidden_by_reports_at IS NOT NULL))`;
 
 // ── Starter sections ────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -205,7 +240,8 @@ export function forumListTag(reader: string): string {
         stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM forum_sections'),
         stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM member_blocks WHERE owner_pubkey = ?', reader),
         getMembersVersion(),
-        isStaff(reader) ? 'staff' : 'member',
+        // What the reader's role shows: archived sections (owners, admins) and hidden topics (moderators).
+        nodeRoleOf(reader) ?? 'member',
     ].join('|');
     return crypto.createHash('sha256').update(parts).digest('hex').slice(0, 24);
 }
@@ -214,12 +250,35 @@ function sectionRow(id: string): SectionRow | undefined {
     return db.prepare('SELECT * FROM forum_sections WHERE id = ?').get(id) as SectionRow | undefined;
 }
 
-/** The forum's front: its sections in order (owners and admins also see the archived ones), and the reader's told stamp. */
-export function forumFront(reader: string): { sections: ForumSection[]; public: boolean; told: boolean } {
+export interface ForumFront {
+    sections: ForumSection[]; public: boolean; told: boolean;
+    /** The reader moderates this forum (owners, admins, moderators): reports and first looks. */
+    moderator: boolean;
+    /** For a moderator, how many first topics wait for a look ("Waiting for a first look (n)"); null for anyone else. */
+    firstLooksWaiting: number | null;
+    /** Whether a topic the reader starts now waits for a moderator's look first (engine/forum-first-look.ts). */
+    firstTopicWaits: boolean;
+    /** Whether the reader's links show as links (a new member's are plain text). */
+    linksOn: boolean;
+}
+
+/**
+ * The forum's front: its sections in order (owners and admins also see the archived ones), the reader's told stamp, and
+ * what slice F2 adds for them: whether they moderate (and how many first looks wait), whether their topic would wait, and
+ * whether their links are links.
+ */
+export function forumFront(reader: string): ForumFront {
     ensureForumStarters();
     const staff = isStaff(reader);
     const rows = db.prepare(`SELECT * FROM forum_sections ${staff ? '' : 'WHERE archived_at IS NULL'} ORDER BY position, created_at, id`).all() as SectionRow[];
-    return { sections: rows.map(sectionOut), public: getProfileSwitches().forumPublic, told: toldAt(reader) !== null };
+    const moderator = isForumModerator(reader);
+    const newness = forumNewness(reader);
+    return {
+        sections: rows.map(sectionOut), public: getProfileSwitches().forumPublic, told: toldAt(reader) !== null, moderator,
+        firstLooksWaiting: moderator ? (db.prepare("SELECT COUNT(*) FROM forum_waiting WHERE state = 'waiting'").pluck().get() as number) : null,
+        firstTopicWaits: newness !== 'known' && getProfileSwitches().forumFirstLook,
+        linksOn: newness === 'known',
+    };
 }
 
 /** Topics, pinned first and then the newest activity (@beanpool/core compareForumTopics), 30 a page. */
@@ -233,20 +292,25 @@ export function forumTopics(reader: string, opts: { sectionId?: string; offset: 
     const where = [
         "COALESCE(t.closed_by, '') != 'removed'",
         NOT_BLOCKED('t.writer_pubkey'),
+        NOT_HIDDEN_TO_READER,
         opts.sectionId !== undefined ? 't.section_id = @section' : 't.section_id IN (SELECT id FROM forum_sections WHERE archived_at IS NULL)',
     ];
     const rows = db.prepare(`
-        SELECT t.*, ${OPENING_REMOVED} FROM forum_topics t WHERE ${where.join(' AND ')}
+        SELECT t.*, ${OPENING_REMOVED}, ${OPENING_HIDDEN} FROM forum_topics t WHERE ${where.join(' AND ')}
          ORDER BY (t.pinned_at IS NOT NULL) DESC, t.last_activity_at DESC, t.id ASC LIMIT @limit OFFSET @offset`)
-        .all({ reader, section: opts.sectionId ?? null, limit: FORUM_LIMITS.topicsPerPage + 1, offset: opts.offset }) as (TopicRow & { opening_removed: number })[];
+        .all({ reader, mod: isForumModerator(reader) ? 1 : 0, section: opts.sectionId ?? null, limit: FORUM_LIMITS.topicsPerPage + 1, offset: opts.offset }) as
+        (TopicRow & { opening_removed: number; opening_hidden: number })[];
     const more = rows.length > FORUM_LIMITS.topicsPerPage;
     return { topics: rows.slice(0, FORUM_LIMITS.topicsPerPage).map(topicOut), next: more ? opts.offset + FORUM_LIMITS.topicsPerPage : null };
 }
 
-/** A topic the reader may see: not gone, not by someone they blocked. */
-function visibleTopic(reader: string | null, id: string): TopicRow {
+/**
+ * A topic the reader may see: not gone, not by someone they blocked, not hidden from them (its opening post hidden).
+ * `hiddenOk`: a writer's own post in it is still theirs to edit or remove while it is hidden (ownPost).
+ */
+function visibleTopic(reader: string, id: string, opts: { hiddenOk?: boolean } = {}): TopicRow {
     const row = db.prepare(`SELECT t.* FROM forum_topics t WHERE t.id = @id AND COALESCE(t.closed_by, '') != 'removed'
-        ${reader ? `AND ${NOT_BLOCKED('t.writer_pubkey')}` : ''}`).get({ id, reader }) as TopicRow | undefined;
+        AND ${NOT_BLOCKED('t.writer_pubkey')} AND ${NOT_HIDDEN_TO_READER}`).get({ id, reader, mod: opts.hiddenOk || isForumModerator(reader) ? 1 : 0 }) as TopicRow | undefined;
     if (!row) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.notFound);
     return row;
 }
@@ -254,22 +318,25 @@ function visibleTopic(reader: string | null, id: string): TopicRow {
 /** One topic and its posts in order, 30 at a time after post number `after`; posts by someone the reader blocked left out. */
 export function forumTopic(reader: string, id: string, after: number): { topic: ForumTopic; posts: ForumPost[]; next: number | null } {
     const t = visibleTopic(reader, id);
-    const opening = db.prepare('SELECT removed_by FROM forum_posts WHERE topic_id = ? AND number = 1').get(id) as { removed_by: string | null } | undefined;
+    const opening = db.prepare('SELECT removed_by, hidden_by_reports_at FROM forum_posts WHERE topic_id = ? AND number = 1').get(id) as
+        { removed_by: string | null; hidden_by_reports_at: string | null } | undefined;
     const rows = db.prepare(`SELECT * FROM forum_posts WHERE topic_id = @id AND number > @after AND ${NOT_BLOCKED('writer_pubkey')} ORDER BY number LIMIT @limit`)
         .all({ id, after, reader, limit: FORUM_LIMITS.postsPerPage + 1 }) as PostRow[];
     const more = rows.length > FORUM_LIMITS.postsPerPage;
     const posts = rows.slice(0, FORUM_LIMITS.postsPerPage);
     return {
-        topic: topicOut({ ...t, opening_removed: opening?.removed_by ? 1 : 0 }),
-        posts: posts.map(postOut),
+        topic: topicOut({ ...t, opening_removed: opening?.removed_by ? 1 : 0, opening_hidden: opening?.hidden_by_reports_at ? 1 : 0 }),
+        posts: postsOut(posts, reader),
         next: more ? posts[posts.length - 1].number : null,
     };
 }
 
 /** One of a post's photos as its data URL, for a reader who may see the post; null when there is none. */
 export function forumPhoto(reader: string, postId: string, n: number): string | null {
-    const post = db.prepare('SELECT topic_id, writer_pubkey, removed_by FROM forum_posts WHERE id = ?').get(postId) as { topic_id: string; writer_pubkey: string; removed_by: string | null } | undefined;
+    const post = db.prepare('SELECT topic_id, writer_pubkey, removed_by, hidden_by_reports_at FROM forum_posts WHERE id = ?').get(postId) as
+        { topic_id: string; writer_pubkey: string; removed_by: string | null; hidden_by_reports_at: string | null } | undefined;
     if (!post || post.removed_by) return null;
+    if (post.hidden_by_reports_at && post.writer_pubkey !== reader && !isForumModerator(reader)) return null;
     visibleTopic(reader, post.topic_id);
     if (db.prepare('SELECT 1 FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?').get(reader, post.writer_pubkey)) return null;
     return (db.prepare('SELECT photo_data FROM forum_post_photos WHERE post_id = ? AND order_num = ?').get(postId, n) as { photo_data: string } | undefined)?.photo_data ?? null;
@@ -296,12 +363,17 @@ function assertTold(member: string): void {
 
 // ── Writing ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** 10 topics or 100 replies in any 24 hours, removed ones counted; owners and admins the "Owner and admin limit". */
-function assertForumDay(member: string, kind: 'topics' | 'replies', now: number): void {
-    const limit = ownerAdminLimit(member) ?? FORUM_DAY_LIMITS.known[kind];
+/**
+ * 10 topics or 100 replies in any 24 hours, removed ones counted; a new member 2 and 10 (12 words: 1 and 5), a first topic
+ * that waited counted as a topic; owners and admins the "Owner and admin limit".
+ */
+function assertForumDay(member: string, kind: 'topics' | 'replies', newness: ForumNewness, now: number): void {
+    const limit = ownerAdminLimit(member) ?? FORUM_DAY_LIMITS[newness][kind];
     const since = iso(now - DAY_MS);
+    // A first topic that waited and became a topic is counted as that topic's row, once.
     const used = kind === 'topics'
         ? (db.prepare('SELECT COUNT(*) AS n FROM forum_topics WHERE writer_pubkey = ? AND created_at > ?').get(member, since) as { n: number }).n
+            + (db.prepare('SELECT COUNT(*) AS n FROM forum_waiting WHERE writer_pubkey = ? AND created_at > ? AND topic_id IS NULL').get(member, since) as { n: number }).n
         : (db.prepare('SELECT COUNT(*) AS n FROM forum_posts WHERE writer_pubkey = ? AND number > 1 AND created_at > ?').get(member, since) as { n: number }).n;
     if (used < limit) return;
     throw kind === 'topics'
@@ -324,8 +396,14 @@ function writable(member: string, now: number): void {
 
 export interface TopicInput { sectionId?: unknown; title?: unknown; words?: unknown; place?: unknown; lang?: unknown; photos?: unknown }
 
-/** A new topic: its row and its opening words as post number 1. */
-export function startForumTopic(member: string, raw: TopicInput, now = Date.now()): { topic: ForumTopic; post: ForumPost } {
+/** A first topic waiting for a moderator's look, as its writer and the moderators read it (engine/forum-first-look.ts). */
+export interface ForumWaitingTopic {
+    id: string; sectionId: string; title: string; words: string; place: string | null; lang: string | null; photos: number;
+    writer: ForumWriter; createdAt: string;
+}
+
+/** A new topic: its row and its opening words as post number 1; or, for a new member where first looks are on, a waiting one. */
+export function startForumTopic(member: string, raw: TopicInput, now = Date.now()): { topic: ForumTopic; post: ForumPost } | { waiting: ForumWaitingTopic } {
     writable(member, now);
     ensureForumStarters(now);
     const section = typeof raw.sectionId === 'string' ? sectionRow(raw.sectionId) : undefined;
@@ -339,12 +417,20 @@ export function startForumTopic(member: string, raw: TopicInput, now = Date.now(
     if (!words) throw new ForumRefusal(400, 'words_required', FORUM_WORDS.words);
     linksAndMentions(words);
     const photos = forumPhotos(raw.photos);
-    assertForumDay(member, 'topics', now);
+    const newness = forumNewness(member, now);
+    const waits = newness !== 'known' && getProfileSwitches().forumFirstLook;
+    // A new member's photos go only in a first topic that waits, where a moderator sees them first (design §5).
+    if (newness !== 'known' && !waits && photos.length > 0) throw new ForumRefusal(403, 'new_no_photos', FORUM_WORDS.newNoPhotos);
+    if (waits && db.prepare("SELECT 1 FROM forum_waiting WHERE writer_pubkey = ? AND state = 'waiting'").get(member)) {
+        throw new ForumRefusal(409, 'waiting_already', FORUM_WORDS.waitingAlready);
+    }
+    assertForumDay(member, 'topics', newness, now);
     if (photos.length > 0) assertMayStorePhotoBytes(member, incomingPhotosBytes(photos), now);
-    const topicId = newId('ft');
-    const postId = newId('fp');
     const at = iso(now);
     const lang = langOf(raw.lang);
+    if (waits) return { waiting: holdFirstTopic(member, { sectionId: section.id, title, words, place, lang }, photos, now) };
+    const topicId = newId('ft');
+    const postId = newId('fp');
     db.transaction(() => {
         db.prepare(`INSERT INTO forum_topics (id, section_id, title, writer_pubkey, place, lang, reply_count, last_activity_at, created_at)
             VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`).run(topicId, section.id, title, member, place, lang, at, at);
@@ -352,7 +438,27 @@ export function startForumTopic(member: string, raw: TopicInput, now = Date.now(
             .run(postId, topicId, member, words, lang, at);
         storePhotos(member, postId, photos, now);
     })();
-    return { topic: forumTopic(member, topicId, 0).topic, post: postOut(postRow(postId)!) };
+    return { topic: forumTopic(member, topicId, 0).topic, post: onePostOut(postId, member) };
+}
+
+/**
+ * A new member's first topic held for a moderator's look (design §5; engine/forum-first-look.ts answers it): a row in
+ * forum_waiting, never in the topics, so no list, read or copy of them can show it. Its photos wait with it.
+ */
+function holdFirstTopic(member: string, t: { sectionId: string; title: string; words: string; place: string | null; lang: string | null }, photos: string[], now: number): ForumWaitingTopic {
+    const id = newId('fw');
+    const at = iso(now);
+    db.transaction(() => {
+        db.prepare(`INSERT INTO forum_waiting (id, section_id, writer_pubkey, title, words, place, lang, state, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`).run(id, t.sectionId, member, t.title, t.words, t.place, t.lang, at);
+        const add = db.prepare('INSERT INTO forum_waiting_photos (waiting_id, order_num, photo_data, bytes) VALUES (?, ?, ?, ?)');
+        photos.forEach((p, i) => add.run(id, i, p, incomingPhotosBytes([p])));
+        if (photos.length > 0) recordStoredPhotoBytes(member, incomingPhotosBytes(photos), now);
+    })();
+    return {
+        id, sectionId: t.sectionId, title: t.title, words: t.words, place: t.place, lang: t.lang, photos: photos.length,
+        writer: { publicKey: member, name: nameOf(member) }, createdAt: at,
+    };
 }
 
 const postRow = (id: string) => db.prepare('SELECT * FROM forum_posts WHERE id = ?').get(id) as PostRow | undefined;
@@ -376,7 +482,9 @@ export function replyInForum(member: string, topicId: string, raw: ReplyInput, n
         quotes = q as number;
     }
     const photos = forumPhotos(raw.photos);
-    assertForumDay(member, 'replies', now);
+    const newness = forumNewness(member, now);
+    if (newness !== 'known' && photos.length > 0) throw new ForumRefusal(403, 'new_no_photos', FORUM_WORDS.newNoPhotos);
+    assertForumDay(member, 'replies', newness, now);
     if (photos.length > 0) assertMayStorePhotoBytes(member, incomingPhotosBytes(photos), now);
     const id = newId('fp');
     const at = iso(now);
@@ -387,14 +495,14 @@ export function replyInForum(member: string, topicId: string, raw: ReplyInput, n
         db.prepare('UPDATE forum_topics SET reply_count = reply_count + 1, last_activity_at = ? WHERE id = ?').run(at, topicId);
         storePhotos(member, id, photos, now);
     })();
-    return postOut(postRow(id)!);
+    return onePostOut(id, member);
 }
 
 /** The writer's own post, still there, in a topic they may see; or a refusal. */
 function ownPost(member: string, postId: string): { post: PostRow; topic: TopicRow } {
     const post = postRow(postId);
     if (!post || post.removed_by) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.postNotFound);
-    const topic = visibleTopic(member, post.topic_id);
+    const topic = visibleTopic(member, post.topic_id, { hiddenOk: post.writer_pubkey === member });
     if (post.writer_pubkey !== member) throw new ForumRefusal(403, 'not_yours', FORUM_WORDS.notYours);
     return { post, topic };
 }
@@ -408,6 +516,11 @@ export function editForumPost(member: string, postId: string, raw: { words?: unk
     writable(member, now);
     const { post, topic } = ownPost(member, postId);
     if (topic.closed_at) throw new ForumRefusal(409, 'closed', FORUM_WORDS.closed);
+    // While an account is new, only in the hour after writing it, so an approved first topic can't be swapped (design §3).
+    // By the new-account days, not by "known": OK makes its writer known, and the rule is there for exactly that topic.
+    if (inNewAccountDays(member, now) && now - Date.parse(post.created_at) > FORUM_TIMES.newEditMinutes * 60_000) {
+        throw new ForumRefusal(403, 'edit_window', FORUM_WORDS.newEditWindow);
+    }
     const words = text(raw.words, post.number === 1 ? FORUM_LIMITS.opening : FORUM_LIMITS.reply, 'words');
     if (!words) throw new ForumRefusal(400, 'words_required', FORUM_WORDS.words);
     linksAndMentions(words);
@@ -428,7 +541,7 @@ export function editForumPost(member: string, postId: string, raw: { words?: unk
         db.prepare('UPDATE forum_posts SET words = ?, edited_at = ? WHERE id = ?').run(words, at, postId);
         if (title !== null && title !== topic.title) db.prepare('UPDATE forum_topics SET title = ? WHERE id = ?').run(title, topic.id);
     })();
-    return { topic: forumTopic(member, topic.id, 0).topic, post: postOut(postRow(postId)!) };
+    return { topic: forumTopic(member, topic.id, 0).topic, post: onePostOut(postId, member) };
 }
 
 /** A post's words blanked, its photos and earlier wordings deleted with tombstones: the row stays as a marker. */
@@ -446,11 +559,36 @@ const othersReplied = (topic: TopicRow) =>
  * A topic with its writer's words gone: listed nowhere when nobody else replied ('removed'); otherwise its title blanked
  * ("A removed topic"), closed, the replies staying.
  */
-function blankTopic(topic: TopicRow, at: string): void {
+function blankTopic(topic: TopicRow, at: string, by: 'writer' | 'moderator' = 'writer'): void {
     const gone = !othersReplied(topic);
     db.prepare(`UPDATE forum_topics SET title = '', place = NULL, pinned_at = CASE WHEN ? THEN NULL ELSE pinned_at END,
-        closed_at = COALESCE(closed_at, ?), closed_by = CASE WHEN ? THEN 'removed' ELSE COALESCE(closed_by, 'writer') END WHERE id = ?`)
-        .run(gone ? 1 : 0, at, gone ? 1 : 0, topic.id);
+        closed_at = COALESCE(closed_at, ?), closed_by = CASE WHEN ? THEN 'removed' ELSE COALESCE(closed_by, ?) END WHERE id = ?`)
+        .run(gone ? 1 : 0, at, gone ? 1 : 0, by, topic.id);
+}
+
+/**
+ * A moderator removes a forum post through a report (state-engine actionReport; slice F2): its words and photos go at once,
+ * its row stays as a marker removed by 'moderator'. An opening post takes its topic's title with it and closes it; with
+ * nobody else's reply the topic is gone from every list, and its writer's own replies under it go with it, at the same
+ * moment, so the mute's count reads one removal (engine/auto-moderation.ts FORUM_REMOVALS_SINCE_SQL). True when it was
+ * there to remove. Inside the caller's transaction; a standby refuses it.
+ */
+export function removeForumPostAsModerator(postId: string, now = Date.now()): boolean {
+    assertPlainTablesWritable();
+    const post = postRow(postId);
+    if (!post || post.removed_by) return false;
+    const topic = db.prepare('SELECT * FROM forum_topics WHERE id = ?').get(post.topic_id) as TopicRow | undefined;
+    if (!topic) return false;
+    const at = iso(now);
+    blankPost(post.id, 'moderator', at);
+    if (post.number === 1) {
+        blankTopic(topic, at, 'moderator');
+        if (db.prepare('SELECT closed_by FROM forum_topics WHERE id = ?').pluck().get(topic.id) === 'removed') {
+            for (const p of db.prepare('SELECT id FROM forum_posts WHERE topic_id = ? AND removed_by IS NULL').pluck().all(topic.id) as string[]) blankPost(p, 'moderator', at);
+        }
+    }
+    db.prepare('UPDATE forum_topics SET reply_count = (SELECT COUNT(*) FROM forum_posts WHERE topic_id = ? AND number > 1 AND removed_by IS NULL) WHERE id = ?').run(topic.id, topic.id);
+    return true;
 }
 
 /** The writer removes their own post: a reply leaves a marker; an opening post takes its topic's title with it. */
@@ -599,6 +737,9 @@ export function dropForumOf(member: string, now = Date.now()): void {
         db.prepare('UPDATE forum_topics SET reply_count = (SELECT COUNT(*) FROM forum_posts WHERE topic_id = ? AND number > 1 AND removed_by IS NULL) WHERE id = ?').run(topicId, topicId);
     }
     deletePlainRows('forum_members', 'member_pubkey = ?', member);
+    // A first topic of theirs, waiting or answered, and its photos (engine/forum-first-look.ts): gone with tombstones.
+    deletePlainRows('forum_waiting_photos', 'waiting_id IN (SELECT id FROM forum_waiting WHERE writer_pubkey = ?)', member);
+    deletePlainRows('forum_waiting', 'writer_pubkey = ?', member);
 }
 
 /**

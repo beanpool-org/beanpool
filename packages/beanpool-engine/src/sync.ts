@@ -116,6 +116,10 @@ export interface SyncAbuseReport {
     requestConversationId?: string | null;
     /** A SHA-256 of the wording it handed over, folded, on a line long enough to compare. */
     requestWording?: string | null;
+    /** A report of one forum post (the server's engine/forum-moderation.ts). */
+    targetForumPostId?: string | null;
+    /** A reported person's home community, from another community (written by messages across communities X5). */
+    targetHome?: string | null;
 }
 
 export interface SyncCreatorChannel {
@@ -1330,6 +1334,8 @@ function abuseReportOfRow(row: any): SyncAbuseReport {
         disclosure: row.disclosure ?? null,
         requestConversationId: row.request_conversation_id ?? null,
         requestWording: row.request_wording ?? null,
+        targetForumPostId: row.target_forum_post_id ?? null,
+        targetHome: row.target_home ?? null,
     };
 }
 

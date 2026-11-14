@@ -1367,6 +1367,9 @@ async function main(): Promise<void> {
             'POST /api/forum/topics', 'POST /api/forum/topics/:id/replies', 'POST /api/forum/topics/:id/close', 'POST /api/forum/topics/:id/pin',
             'POST /api/forum/topics/:id/move', 'POST /api/forum/posts/:id/edit', 'POST /api/forum/posts/:id/remove', 'POST /api/forum/sections',
             'POST /api/forum/sections/:id/edit',
+            // First looks (slice F2): the moderators' list, the writer's own, a waiting topic's photo, OK, No, withdraw; all signed.
+            'GET /api/forum/first-looks', 'GET /api/forum/first-looks/mine', 'GET /api/forum/first-looks/:id/photos/:n',
+            'POST /api/forum/first-looks/:id/ok', 'POST /api/forum/first-looks/:id/no', 'POST /api/forum/first-looks/:id/withdraw',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',
@@ -1409,6 +1412,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/alerts/acknowledge', 'POST /api/local/admin/alerts/settings', 'POST /api/local/admin/alerts/status', 'POST /api/local/admin/alerts/test',
             'GET /api/local/admin/onboarding-funnel', 'POST /api/local/admin/onboarding-funnel',
             'POST /api/local/admin/posts/:id/delete', 'POST /api/local/admin/posts/:id/restore', 'POST /api/local/admin/posts/bulk-delete',
+            'POST /api/local/admin/forum/posts/:id/restore',
             'POST /api/local/admin/public-address/claim', 'GET /api/local/admin/public-address/extra-names', 'GET /api/local/admin/public-address/logs',
             'GET /api/local/admin/public-address/notices',
             'POST /api/local/admin/public-address/offline', 'POST /api/local/admin/public-address/own', 'POST /api/local/admin/public-address/release-name', 'POST /api/local/admin/public-address/restart-tunnel', 'POST /api/local/admin/public-address/rotate', 'GET /api/local/admin/public-address/status',

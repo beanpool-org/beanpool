@@ -51,6 +51,7 @@ export default function AddressCardScreen() {
         const ctx = await outsideContext();
         if (!ctx) return;
         try {
+            // No card: my server answered and knows none of its names. Not reached (offline) throws, with that reason.
             const card = await myAddressCard(ctx);
             if (!card) { Alert.alert(t("This community's server knows none of its own names yet, so it can't send to another community.")); return; }
             await setDoor(ctx.store, true);

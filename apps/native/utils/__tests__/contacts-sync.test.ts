@@ -11,7 +11,7 @@ import {
     CONTACTS_SEQ_MAX, contactsCopyWire, emptyContactsList, makeContactsCopy, newContactId, putContact, readContactsCopy, removeEveryContact,
     writeContactsList, type ContactsCopyWire,
 } from '@beanpool/core';
-import { contactsSyncStoreKey, loadContacts, readSyncState, type ContactsAccount } from '../contacts-store';
+import { contactsSyncStoreKey, loadContacts, readSyncState, setAsideDamaged, type ContactsAccount } from '../contacts-store';
 import {
     CONTACTS_COPY_PATH, checkContactsHere, contactsCommunities, contactsHeard, contactsKeptAt, decide, editContacts, phoneSyncDeps,
     resetContactsCheckForTests, syncContacts, type ContactsNet, type ContactsSyncDeps,
@@ -75,6 +75,7 @@ class FakeCommunity {
  */
 function phone(communities: Record<string, FakeCommunity>, anchor: string | null, at = 1_800_000_000_000) {
     const files = new Map<string, string>();
+    const asides = new Map<string, string>();
     const kv = new Map<string, string>();
     const clock = { now: at };
     const link = { up: true };
@@ -87,13 +88,17 @@ function phone(communities: Record<string, FakeCommunity>, anchor: string | null
         },
     };
     const deps: ContactsSyncDeps = {
-        disk: { read: async (pk) => files.get(pk) ?? null, write: async (pk, text) => { files.set(pk, text); } },
+        disk: {
+            read: async (pk) => files.get(pk) ?? null,
+            write: async (pk, text) => { files.set(pk, text); },
+            setAside: async (pk) => { const text = files.get(pk); if (text !== undefined) { asides.set(pk, text); files.delete(pk); } },
+        },
         kv: { getItem: async (k) => kv.get(k) ?? null, setItem: async (k, v) => { kv.set(k, v); } },
         now: () => clock.now,
         net,
         communities: async () => ({ anchor, kept: Object.keys(communities) }),
     };
-    return { deps, files, kv, clock, link, requests };
+    return { deps, files, asides, kv, clock, link, requests };
 }
 
 const person1 = (name: string, phones: string[] = [], emails: string[] = []) => ({ id: newContactId(), name, phones, emails, note: '', links: [], invite: null });
@@ -372,6 +377,62 @@ describe('a dishonest community', () => {
         expect(p.requests.filter((r) => r.method === 'GET' && r.path === CONTACTS_COPY_PATH)).toHaveLength(1);
         expect(await names(me, p.deps)).toEqual(['Dee Walker']);
         // Mutation: no rest after a copy that doesn't open → fetched again on every pass, up to 512 KiB each time.
+    });
+});
+
+describe('cost on an old phone', () => {
+    it('a round\'s answer opens the list on the phone once, not once to note it and again to decide', async () => {
+        const byron = new FakeCommunity();
+        const me = person();
+        const p = phone({ [BYRON]: byron }, BYRON);
+        await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
+        let opens = 0;
+        const counted: ContactsSyncDeps = { ...p.deps, disk: { ...p.deps.disk, read: async (pk) => { opens++; return p.deps.disk.read(pk); } } };
+        // Byron keeps none yet and the change is still in its wait: nothing to do, so no pass starts.
+        await contactsHeard(me, BYRON, { contacts: null }, true, counted);
+        expect(opens).toBe(1);
+        expect(p.requests).toEqual([]);
+        // Mutation: decide on a second loadContacts after noting → 2 opens per round answer.
+    });
+});
+
+describe('a list on this phone that can\'t be opened', () => {
+    it('set aside, the communities\' copies bring it back, and the damaged bytes are kept beside it, never written over', async () => {
+        const byron = new FakeCommunity();
+        const global = new FakeCommunity();
+        const me = person();
+        const p = phone({ [BYRON]: byron, [GLOBAL]: global }, BYRON);
+        await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
+        await editContacts(me, (l) => putContact(l, person1('Sam Jones')), p.deps);
+        p.clock.now += WAIT;
+        await syncContacts(me, p.deps);
+        expect(byron.copies.get(me.publicKey)?.seq).toBe(1);
+        const sent = readSyncState(p.kv.get(contactsSyncStoreKey(me.publicKey)) ?? null).sentSeq;
+        // The file goes bad on the phone (a disk fault): nothing opens it, and every community is skipped.
+        const bad = p.files.get(me.publicKey)!.replace(/"sealed":"./, '"sealed":"!');
+        p.files.set(me.publicKey, bad);
+        expect((await loadContacts(me, p.deps)).onPhone).toEqual({ kind: 'unreadable', reason: 'damaged' });
+        await expect(setAsideDamaged(me, p.deps)).resolves.toBe(true);
+        expect(p.asides.get(me.publicKey)).toBe(bad);
+        await syncContacts(me, p.deps);
+        expect(await names(me, p.deps)).toEqual(['Dee Walker', 'Sam Jones']);
+        expect((await loadContacts(me, p.deps)).state.back).toBe(2);
+        // A number that left the phone is never used again: the next change goes past it.
+        await editContacts(me, (l) => putContact(l, person1('Tom')), p.deps);
+        const { onPhone } = await loadContacts(me, p.deps);
+        expect(onPhone.kind === 'list' && onPhone.seq).toBeGreaterThan(sent);
+        // Mutation: keep `merged` after setting the file aside → the communities look level, nothing is fetched, the list stays empty.
+    });
+
+    it('a list that opens, or one a newer app wrote, is never set aside', async () => {
+        const me = person();
+        const p = phone({}, null);
+        await expect(setAsideDamaged(me, p.deps)).resolves.toBe(false);
+        await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
+        await expect(setAsideDamaged(me, p.deps)).resolves.toBe(false);
+        expect(await names(me, p.deps)).toEqual(['Dee Walker']);
+        expect(p.asides.size).toBe(0);
+        // Mutation: set aside whatever is there → a good list disappears from the phone.
     });
 });
 

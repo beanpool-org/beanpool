@@ -17,8 +17,12 @@ import { useScrollFieldIntoView } from './useScrollFieldIntoView';
 import { ScrollFieldContext } from './ScrollFieldContext';
 import { ReportReasonBox } from './ReportReasonBox';
 
-export function ReportMessageSheet({ isOpen, photo, blocks, onSubmit, onClose }: {
+export function ReportMessageSheet({ isOpen, photo, blocks, onSubmit, onClose, title, note }: {
     isOpen: boolean;
+    /** The sheet's title in place of "Report this message" (a forum post's, "Report this post"), already in the member's language. */
+    title?: string;
+    /** The one sentence under it in place of the chat's: what the moderators get with this report, already in the member's language. */
+    note?: string;
     /** The message is a photo line whose photo goes with it (a group chat's; a direct message's stays sealed). */
     photo: boolean;
     /** Report on a message request: it blocks its sender too. */
@@ -49,18 +53,18 @@ export function ReportMessageSheet({ isOpen, photo, blocks, onSubmit, onClose }:
             <View style={[styles.backdrop, { paddingTop: insets.top + 8 }]}>
                 <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12), maxHeight: lift.maxHeight, marginBottom: lift.lift }]}>
                     <View style={styles.header}>
-                        <Text style={styles.title} numberOfLines={2} accessibilityRole="header">{t('Report this message')}</Text>
+                        <Text style={styles.title} numberOfLines={2} accessibilityRole="header">{title ?? t('Report this message')}</Text>
                         <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} onPress={onClose} style={styles.closeBtn}>
                             <MaterialCommunityIcons name="close" size={24} color={colors.text.muted} />
                         </Pressable>
                     </View>
                     <ScrollView {...fieldScroll.scrollProps} style={{ flexShrink: 1 }} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
                         <Text style={styles.shared}>
-                            {blocks
+                            {note ?? (blocks
                                 ? t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them. Reporting a request blocks its sender too.")
                                 : photo
                                     ? t("This community's moderators will see this one message, its photo and who sent it. Nothing else in this chat is shared with them.")
-                                    : t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them.")}
+                                    : t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them."))}
                         </Text>
                         <ScrollFieldContext.Provider value={fieldScroll}>
                             <ReportReasonBox onSubmit={onSubmit} onCancel={onClose} />

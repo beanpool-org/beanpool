@@ -150,7 +150,9 @@ const cols = (names: string): string[] => names.trim().split(/\s+/);
  * server's stamp included, checked against its own columns and rules, and a whole copy deletes the rows it doesn't name
  * (engine/plain-tables.ts). A standby writes none of their rows itself (config/node-role.ts assertPlainTablesWritable). The
  * next table is one line here, its `updated_at` in schema.sql with its ALTER in db.ts (which stamps every write,
- * stampPlainTables), and a tombstone wherever a writer deletes one of its rows.
+ * stampPlainTables), and a tombstone wherever a writer deletes one of its rows. Its comment says what an older importer
+ * drops of it, a copy from a main server updated first: why REPLICA_FORMAT (engine/sync.ts) stays, or moves with it. Its
+ * table hash needs nothing (engine/replica-hashes.ts: each table carries its own recipe's fingerprint).
  */
 export const PLAIN_TABLES_PAYLOAD = 'plainTables';
 
@@ -418,13 +420,19 @@ export const TABLES: Record<string, TableEntry> = {
     // A keeper's wage owed and not yet paid: paid once after a take-over, since one the main server paid arrives paid.
     deferred_wage_claims: plain('id enterprise_pubkey keeper_pubkey post_id transaction_id amount_c status created_at paid_at updated_at'),
     // Standing deals (engine/standing-deals.ts): the arrangement and its signed authorisation. A promoted standby carries
-    // on from this row; a standby itself ticks nothing (the tick runs on a main server only).
+    // on from this row; a standby itself ticks nothing (the tick runs on a main server only). An older importer drops the
+    // arrangement: after a take-over from its copy each period still held is a plain held deal its two members settle, and
+    // nothing more is held, since no hold is made without the signed authorisation the dropped row keeps.
     standing_deals: plain('id post_id payer_pubkey payee_pubkey beans_per_period_c period_unit starts_at max_periods phase periods_done current_tx_id next_due_at short_since stopped_by stopped_at ended_at ended_reason auth_signer auth_signature auth_payload created_at updated_at'),
     // A short week (engine/standing-deals.ts, DESIGN-getting-paid-fable.md §5): a period lowered, an ask and its answer. A
-    // promoted standby pays each period what was agreed, never the full price of one lowered on the main server.
+    // promoted standby pays each period what was agreed, never the full price of one lowered on the main server. An older
+    // importer drops a lowering: after a take-over from its copy that period is paid at the price its payer signed, never
+    // more, and the two can lower it again.
     standing_period_changes: plain('id standing_id period_no beans_c side asked_by state answered_by answered_at created_at updated_at'),
     // Bills (engine/bills.ts): a request to pay. A paid one names its ledger row; copied with the ledger (engine/sync.ts
-    // LEDGER_SET), so a promoted standby never finds a bill waiting that its main server saw paid.
+    // LEDGER_SET), so a promoted standby never finds a bill waiting that its main server saw paid. An older importer drops
+    // the bills, which hold no Beans: after a take-over from its copy the bills out are gone and their senders send them
+    // again; a paid one's ledger row is copied with the ledger whatever the importer.
     bills: plain('id biller_pubkey sent_by payer_pubkey invite_code amount_c what_for post_id standing_id state created_at delivered_at expires_at answered_at ledger_tx_id report_id updated_at'),
     // Decisions and their ballots, open or in their grace period. The ballots go to a standby only, as the main server
     // holds them: this payload is served to a standby's replication token alone (routes/backup.ts).
@@ -433,7 +441,8 @@ export const TABLES: Record<string, TableEntry> = {
     // The frozen roll of a scoped Decision (decisions-engine.ts, DESIGN-group-decisions §2.2).
     decision_electors: plain('decision_id member_pubkey role_at_open status created_at updated_at answered_at reminded_at'),
     // The pool a removal jury was drawn from (engine/removal-jury.ts, DESIGN-removal-jury-fable.md §3): with the roll above
-    // and the decision's params, a restored node serves the same draw and never redraws.
+    // and the decision's params, a restored node serves the same draw and never redraws. An older importer drops the pool:
+    // no community has a jury until its owners choose one.
     decision_jury_pools: plain('decision_id pool created_at updated_at'),
     // A chat group closed by its members' Decision (decisions-engine.ts closeGroupByVote, DESIGN-group-decisions §2.3).
     group_closures: plain('group_id decision_id closed_at created_at updated_at'),
@@ -481,10 +490,14 @@ export const TABLES: Record<string, TableEntry> = {
     // Each admin's locked copy of their own record, sealed to their key: a take-over serves it to the phone that lost its own.
     names_copies: plain('owner_pubkey seq head_n head_id saved_at sealed_copy copy_iv copy_tag ephemeral_pubkey kdf_params box_digest header signature created_at updated_at'),
     // Each member's locked contacts list (engine/contact-copies.ts), text no server can open: a take-over serves it to the
-    // member's devices, and every delete (the member's own, leaving, the owners' switch) writes a tombstone.
+    // member's devices, and every delete (the member's own, leaving, the owners' switch) writes a tombstone. An older
+    // importer drops a copy no server can open: after a take-over from its copy the member's phone, which keeps the list
+    // itself, sees no copy there and brings it level again in its rounds.
     contact_copies: plain('owner_pubkey seq padded_size saved_at nonce sealed digest header signature created_at updated_at'),
     // A re-keyed member's old locked contacts list, kept a year for the old words (engine/contact-copies.ts, contacts C6): a
-    // take-over serves it to the member's phone; a re-key writes it, and every delete leaves a tombstone.
+    // take-over serves it to the member's phone; a re-key writes it, and every delete leaves a tombstone. An older importer
+    // drops it: after a take-over from its copy the old list isn't offered for the old words there; the member's other
+    // communities and any file they saved still have it, and no Bean is in it.
     contact_copies_former: plain('owner_pubkey former_pubkey seq padded_size saved_at nonce sealed digest header signature kept_until created_at updated_at'),
     // Who stopped holding a key by stopping being an admin: the write freeze travels with the copy.
     names_dropped_holders: plain('holder_pubkey key_id dropped_at updated_at'),
@@ -496,14 +509,20 @@ export const TABLES: Record<string, TableEntry> = {
     known_floor_log: plain('id actor_pubkey action member_pubkey old_value new_value at updated_at'),
     // Every look a giver took at a member's credit (engine/credit-looks.ts, DESIGN-credit-list-amend-fable.md §5.2): copied
     // as the other logs are, so a take-over keeps who looked at whom; a line 12 months old goes on each server, no tombstone.
+    // An older importer drops the log: after a take-over from its copy no look from before it reads; no Bean is in it.
     credit_look_log: plain('actor_pubkey subject_pubkey surface day sight at updated_at', { agedOut: { column: 'at', days: CREDIT_LOOK_KEPT_DAYS } }),
     // A member's tier badge (engine/badges.ts): recognition only, no credit. A take-over shows every member the same badge.
+    // An older importer drops the badges: after a take-over from its copy a member shows the tier their own record reads
+    // until an admin gives the badge again.
     member_badges: plain('member_pubkey tier set_by set_at updated_at'),
     // An empty duplicate an owner retired (engine/retire-duplicate.ts): a take-over keeps it retired, and Bring back's
     // delete reaches a standby as a tombstone. The account's 'disabled' travels in its members row, as every status does.
+    // An older importer drops the mark: after a take-over from its copy the account stays 'disabled', acting as nothing,
+    // and shows as suspended until an owner lifts it.
     retired_accounts: plain('member_pubkey retired_by retired_at updated_at'),
     // An owner's or admin's hide or merge of a tag members typed (engine/free-tags.ts): a take-over offers members the same
-    // tags, and a rule cleared reaches a standby as a tombstone.
+    // tags, and a rule cleared reaches a standby as a tombstone. An older importer drops the rules: after a take-over from
+    // its copy a hidden tag may be offered again and a merged one as typed, until an owner or admin sets the rule again.
     free_tag_rules: plain('tag action into_tag set_by set_at updated_at'),
     // Each typed tag's day on each listing (engine/free-tags.ts noteFreeTagsSeen): each server stamps the words it sees on the
     // listings it holds, at each read of the count and on an hourly pass on every role. A standby sees a listing's change
@@ -555,17 +574,21 @@ export const TABLES: Record<string, TableEntry> = {
     chat_mutes: plain('conversation_id member_pubkey muted_until created_at updated_at'),
     // A member's ask that an admin invite someone (engine/invite-asks.ts): a promoted standby still has it to answer, and
     // every delete (answered, taken back, 30 days old, the member gone) goes with a tombstone, so it leaves the standby too.
+    // An older importer drops an ask still waiting, which its member can see is unanswered and ask again.
     invite_asks: plain('id asker_pubkey first_name how_known asked_at updated_at'),
     // Local knowledge's waiting list (engine/knowledge-drafts.ts, DESIGN-local-knowledge-fable.md §4.1, slice K3): a member's
     // waiting suggestion, its photos (in the row, so the copy carries them) and "This helped" taps (K5) survive a take-over,
     // and every delete (answered, taken back, 30 days after, the member gone) goes with a tombstone, so it leaves the standby too.
+    // An older importer drops the suggestions waiting, their photos and taps: after a take-over from its copy their members
+    // see none waiting and send them again; a page already approved is a post, copied whatever the importer.
     knowledge_drafts: plain('id kind post_id member_pubkey via assistant_name title body topic place sources lang about note state answered_at answered_by reason reason_words result_post_id created_at updated_at'),
     knowledge_draft_photos: plain('draft_id order_num photo_data bytes updated_at'),
     knowledge_helped: plain('post_id member_pubkey counted at updated_at'),
     // The forum (engine/forum.ts, DESIGN-forums-fable.md §3, §16, slice F1): sections, topics, posts and their photos (in the
     // row, so the copy carries them), and who was told the forum is public. A promoted standby has the whole forum, and every
     // delete goes with a tombstone, so it leaves the standby too. The wording before an edit is aged out after 30 days on
-    // each server, with no tombstone.
+    // each server, with no tombstone. An older importer drops the forum: after a take-over from its copy the sections are
+    // made again as at the start and the topics are gone; no Bean is in it.
     forum_sections: plain('id starter name about position starts listed archived_at created_at updated_at'),
     forum_topics: plain('id section_id title writer_pubkey place lang reply_count last_activity_at pinned_at closed_at closed_by created_at updated_at'),
     forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at hidden_by_reports_at'),
@@ -574,11 +597,14 @@ export const TABLES: Record<string, TableEntry> = {
     forum_members: plain('member_pubkey told_public_at updated_at known_at'),
     // A new member's first topic waiting for a moderator's look, and its photos (engine/forum-first-look.ts, slice F2): a
     // promoted standby still has it to answer. It is not a topic, so the standby's topics hold no row for it until OK makes
-    // one; every delete (answered 30 days ago, the member gone) goes with a tombstone.
+    // one; every delete (answered 30 days ago, the member gone) goes with a tombstone. An older importer drops it: after a
+    // take-over from its copy a first topic waiting is gone, and its writer starts it again.
     forum_waiting: plain('id section_id writer_pubkey title words place lang state reason topic_id created_at answered_at updated_at'),
     forum_waiting_photos: plain('waiting_id order_num photo_data bytes updated_at'),
     // Who follows or muted a topic, and the last post they opened (engine/forum-notices.ts, slice F5): a promoted standby
-    // tells the same followers, and keeps each unread dot. What each was last told is the bell's (push_notices, local).
+    // tells the same followers, and keeps each unread dot. What each was last told is the bell's (push_notices, local). An
+    // older importer drops who follows: after a take-over from its copy nobody is told of replies until they reply or follow
+    // again, and every topic reads as read.
     forum_follows: plain('topic_id member_pubkey state last_read created_at updated_at'),
     // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
     thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),

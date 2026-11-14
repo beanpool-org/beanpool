@@ -169,6 +169,11 @@ export const CREDIT_STANDING_WORDS = {
     limitLine: word('The lowest your balance can go.'),
     balancedLine: word('You have given as much as you have received.'),
     noLineLine: word('This side opens with your first completed trade.'),
+    /**
+     * The card when the member's balance couldn't be read: said so, with a way to try again. Never a figure, a state or a
+     * note from an answer that isn't there (an empty answer reads as "no credit line yet", which is untrue for most).
+     */
+    unread: word('Your credit line couldn’t be read just now.'),
 };
 
 /** A note under the sentence: its tone (a library chip), its sign (never colour alone) and its words. */
@@ -292,8 +297,10 @@ function sentenceOf(s: CreditStanding): { sentence: string; note: CreditNote | n
                         { above: B(s.aboveFee_c), free: B(CIRCULATION_FREE_BEANS), fee: B(s.monthFee_c) }),
                 }
                 : null;
+            // Asleep above 200: the note that names the action wins (director, 14 Nov): one Offer opens the line. The label
+            // above the dot stays gold, and the +200 mark says where the fee starts.
             if (s.asleep) {
-                return { sentence: t('You can spend the {held} Beans you hold. You can’t spend below zero yet.', { held: B(s.held_c) }), note: fee ?? asleepNote(s) };
+                return { sentence: t('You can spend the {held} Beans you hold. You can’t spend below zero yet.', { held: B(s.held_c) }), note: asleepNote(s) };
             }
             return {
                 sentence: s.closed_c > 0
@@ -316,10 +323,8 @@ export function creditStandingCard(a: CreditStandingAnswer): CreditStandingCard 
         sentence,
         ...(note ? [note.text] : []),
         ...(s.line_c > 0 ? [t('Your limit is minus {line}.', { line: B(s.line_c) })] : []),
-        // The parts that count in the line now (the strip's blocks); "Earned by trading 0 so far" is for the eye only.
-        ...(parts.items.some((i) => i.inLine_c > 0)
-            ? [t('Your credit line: {parts}.', { parts: parts.items.filter((i) => i.inLine_c > 0).map((i) => i.text).join(', ') })]
-            : []),
+        // Every piece the parts line shows, in its order (F16): the passed-on part and the community's most too.
+        ...(parts.said.length > 0 ? [t('Your credit line: {parts}.', { parts: parts.said.join(', ') })] : []),
         t(CREDIT_STANDING_WORDS.opens),
     ];
     return { headline, sentence, note, parts: parts.line, spoken: spokenParts.join(' ') };
@@ -349,6 +354,8 @@ export interface CreditLineParts {
     capped: boolean;
     /** Credit line they passed on to another member out of what was vouched for them. */
     passedOn_c: Hundredths;
+    /** Each piece of the parts line in its order, without the ■ □ signs: what the spoken sentence reads. Empty with no line. */
+    said: string[];
     /** "Credit line 700: ■ Earned by trading 200 · □ @Jane vouched 200"; null with no line. */
     line: string | null;
 }
@@ -362,7 +369,7 @@ export interface CreditLineParts {
 export function creditLineParts(a: CreditStandingAnswer): CreditLineParts {
     const s = creditStanding(a);
     const line = s.line_c;
-    if (line <= 0 || s.state === 'frozen') return { items: [], line_c: 0, capped: false, passedOn_c: 0, line: null };
+    if (line <= 0 || s.state === 'frozen') return { items: [], line_c: 0, capped: false, passedOn_c: 0, said: [], line: null };
     const earned = atLeast0(a.earnedCredit_c);
     const known = atLeast0(a.knownGrant_c);
     const room = atLeast0(a.roomHeld_c);
@@ -406,7 +413,8 @@ export function creditLineParts(a: CreditStandingAnswer): CreditLineParts {
         ...(capped ? [t('this community’s most is {amount}', { amount: B(line) })] : []),
     ];
     const text = t('Credit line {amount}: {parts}', { amount: B(line), parts: [...shown, ...extras].join(' · ') });
-    return { items, line_c: line, capped, passedOn_c: passedOn, line: text };
+    // The ear gets the same pieces as the eye, in the same order: one list, so neither can leave a piece out.
+    return { items, line_c: line, capped, passedOn_c: passedOn, said: [...items.map((p) => p.text), ...extras], line: text };
 }
 
 // ── The picture ──────────────────────────────────────────────────────────────────────────────────────────────────

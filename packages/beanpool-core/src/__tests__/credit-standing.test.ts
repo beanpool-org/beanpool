@@ -201,7 +201,8 @@ describe('(6) the sentences of every state, and the spoken sentence', () => {
         expect(card(MARTY)).toEqual(['You owe 50 Beans', 'You can spend 450 more of your 500 credit line.', null]);
         expect(creditStanding(MARTY).state).toBe('owing');
         expect(creditStandingCard(MARTY).spoken).toBe(
-            'You owe 50 Beans. You can spend 450 more of your 500 credit line. Your limit is minus 500. Your credit line: @Damo vouched 500. Opens how this works.');
+            // Every piece the eye reads in the parts line, "Earned by trading 0 so far" too (round 2: the ear hears them all).
+            'You owe 50 Beans. You can spend 450 more of your 500 credit line. Your limit is minus 500. Your credit line: Earned by trading 0 so far, @Damo vouched 500. Opens how this works.');
     });
     it('nearly', () => {
         expect(card({ ...MARTY, balance_c: -b(480) })).toEqual(['You owe 480 Beans', 'Only 20 left of your 500 credit line.', '! Sell or receive Beans to make room. Owing costs nothing.']);
@@ -235,6 +236,14 @@ describe('(6) the sentences of every state, and the spoken sentence', () => {
         expect(card({ balance_c: 0, floor_c: 0 })).toEqual(['You are at zero', 'No credit line yet, so there is nothing to spend and nothing to repay.', seed]);
         expect(card({ balance_c: b(40), floor_c: 0 })).toEqual(['You hold 40 Beans', 'You can spend the 40 Beans you hold.', seed]);
     });
+    it('holding above 200 with a line and no live Offer: the asleep note, not the fee note (the note that names the action wins)', () => {
+        const a = { ...MARTY, balance_c: b(260), liveOffers: 0, usableFloor_c: 0 };
+        expect(card(a)).toEqual(['You hold 260 Beans', 'You can spend the 260 Beans you hold. You can’t spend below zero yet.',
+            '🔒 Your 500 credit line is asleep. Post one Offer and all of it opens.']);
+        // The gold label still marks the fee; the fee note comes back once an Offer is live.
+        expect(creditBarPicture(a).tone).toBe('fee');
+        expect(card({ ...MARTY, balance_c: b(260) })[2]).toBe('! 60 of your Beans are above 200. A small monthly fee on them goes to the Commons: about 0.60 this month.');
+    });
     it('a line, no live Offer (asleep)', () => {
         expect(card({ ...MARTY, balance_c: 0, liveOffers: 0, usableFloor_c: 0 })).toEqual(['You are at zero', 'You can’t spend below zero yet.',
             '🔒 Your 500 credit line is asleep. Post one Offer and all of it opens.']);
@@ -248,6 +257,49 @@ describe('(6) the sentences of every state, and the spoken sentence', () => {
     });
     it('frozen by an admin: no line, the frozen sentence', () => {
         expect(creditStanding({ ...MARTY, creditFrozen: true }).state).toBe('frozen');
+    });
+});
+
+describe('(9) the spoken sentence carries every piece of the parts line, in its order (F16, round 2)', () => {
+    /** The parts line's pieces as the eye reads them: the "Credit line N:" head and the ■ □ signs off. */
+    const eyePieces = (parts: string) => parts.replace(/^Credit line [^:]+: /, '').split(' · ').map((x) => x.replace(/^[■□] /, ''));
+    const fixtures: Record<string, CreditStandingAnswer> = {
+        allVouch: MARTY,
+        earnedAndVouch: EARNED_AND_VOUCH,
+        threeSources: { balance_c: 0, floor_c: -b(700), usableFloor_c: -b(700), earnedCredit_c: b(200), roomHeld_c: b(500), liveOffers: 1,
+            vouchedBy: [{ callsign: 'Damo', amount_c: b(300) }, { callsign: 'Jane', amount_c: b(200) }] },
+        confirmedAndVouch: { balance_c: 0, floor_c: -b(1100), usableFloor_c: -b(1100), knownGrant_c: b(1000), roomHeld_c: b(100), earnedCredit_c: 0, liveOffers: 1,
+            vouchedBy: [{ callsign: 'Olive', amount_c: b(100) }] },
+        passedOn: { balance_c: 0, floor_c: -b(400), usableFloor_c: -b(400), roomHeld_c: b(400), earnedCredit_c: 0, liveOffers: 1,
+            vouchedBy: [{ callsign: 'Damo', amount_c: b(500) }] },
+        capped: { balance_c: 0, floor_c: -b(2000), usableFloor_c: -b(2000), knownGrant_c: b(1000), earnedCredit_c: b(1500), liveOffers: 5 },
+        cappedAndPassedOn: { balance_c: -b(50), floor_c: -b(2000), usableFloor_c: -b(2000), knownGrant_c: b(1000), earnedCredit_c: b(1500), roomHeld_c: b(200), liveOffers: 5,
+            vouchedBy: [{ callsign: 'Damo', amount_c: b(300) }] },
+        fromBefore: { balance_c: 0, floor_c: -b(300), usableFloor_c: -b(300), earnedCredit_c: b(100), liveOffers: 2 },
+    };
+    for (const [name, a] of Object.entries(fixtures)) {
+        it(`${name}: each piece the eye reads is spoken, in the same order`, () => {
+            const c = creditStandingCard(a);
+            expect(c.parts).not.toBeNull();
+            let at = -1;
+            for (const piece of eyePieces(c.parts!)) {
+                const i = c.spoken.indexOf(piece, at + 1);
+                expect(i, `"${piece}" in "${c.spoken}"`).toBeGreaterThan(at);
+                at = i;
+            }
+        });
+    }
+    it('a vouch of 500 with 100 passed on: the ear hears the 100 given away, as the eye reads it', () => {
+        expect(creditStandingCard(fixtures.passedOn!).spoken).toContain(
+            'Your limit is minus 400. Your credit line: Earned by trading 0 so far, @Damo vouched 500, you gave 100 to another member.');
+    });
+    it('a capped line: the ear hears the community\'s most, so the parts never seem to add up to more than the limit', () => {
+        expect(creditStandingCard(fixtures.capped!).spoken).toContain(
+            'Your limit is minus 2,000. Your credit line: Earned by trading 1,500, Confirmed member 1,000, this community’s most is 2,000.');
+    });
+    it('no line, or a frozen one: no parts sentence', () => {
+        expect(creditStandingCard({ balance_c: 0, floor_c: 0 }).spoken).not.toContain('Your credit line:');
+        expect(creditStandingCard({ ...MARTY, creditFrozen: true }).spoken).not.toContain('Your credit line:');
     });
 });
 

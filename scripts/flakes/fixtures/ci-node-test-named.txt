@@ -1,0 +1,109 @@
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z [… built for the fixture: node's own TAP output of a real failing run (node --test --test-reporter=tap scripts/demo.test.mjs), in test-all's report the way a check prints it …]
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z ╔══════════════════════════════════════════╗
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z ║          BEANPOOL TEST-ALL REPORT        ║
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z ╠══════════════════════════════════════════╣
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z ║  lint             ✅ PASS  3m32s  (started +0s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z ║  demo_check       ❌ FAIL  3s  (started +2m32s)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z ╠══════════════════════════════════════════╣
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z ║  Total: 1 passed, 1 failed, 0 skipped
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z ╚══════════════════════════════════════════╝
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z 
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z ──── Failure Details ────
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z 
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z ━━━ demo_check ━━━
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z TAP version 13
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z # Subtest: the ledger keeps one line per job
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z ok 1 - the ledger keeps one line per job
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   ---
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   duration_ms: 0.320584
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   type: 'test'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   ...
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z # Subtest: a member sees the bell once
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z not ok 2 - a member sees the bell once
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   ---
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   duration_ms: 0.387458
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   type: 'test'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   location: '/home/runner/work/beanpool/beanpool/scripts/demo.test.mjs:4:1'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   failureType: 'testCodeFailure'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   error: |-
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     Expected values to be strictly equal:
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     2 !== 3
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   code: 'ERR_ASSERTION'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   name: 'AssertionError'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   expected: 3
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   actual: 2
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   operator: 'strictEqual'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   stack: |-
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     TestContext.<anonymous> (file:///home/runner/work/beanpool/beanpool/scripts/demo.test.mjs:4:52)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     Test.runInAsyncScope (node:async_hooks:226:14)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     Test.run (node:internal/test_runner/test:1382:25)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     Test.postRun (node:internal/test_runner/test:1522:19)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     Test.run (node:internal/test_runner/test:1447:12)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   ...
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z # Subtest: the forum
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     # Subtest: a reply lands under its topic
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     ok 1 - a reply lands under its topic
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       ---
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       duration_ms: 0.078542
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       type: 'test'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       ...
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     # Subtest: a quote keeps its author
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     not ok 2 - a quote keeps its author
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       ---
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       duration_ms: 0.556416
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       type: 'test'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       location: '/home/runner/work/beanpool/beanpool/scripts/demo.test.mjs:7:5'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       failureType: 'testCodeFailure'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       error: |-
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         Expected values to be strictly deep-equal:
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         + actual - expected
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z           {
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         +   a: 1
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         -   a: 2
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z           }
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       code: 'ERR_ASSERTION'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       name: 'AssertionError'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       expected:
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         a: 2
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       actual:
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         a: 1
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       operator: 'deepStrictEqual'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       stack: |-
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         TestContext.<anonymous> (file:///home/runner/work/beanpool/beanpool/scripts/demo.test.mjs:7:53)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         Test.runInAsyncScope (node:async_hooks:226:14)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         Test.run (node:internal/test_runner/test:1382:25)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         Suite.processPendingSubtests (node:internal/test_runner/test:960:18)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         Test.postRun (node:internal/test_runner/test:1522:19)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         Test.run (node:internal/test_runner/test:1447:12)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         async Promise.all (index 0)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         async Suite.run (node:internal/test_runner/test:1869:7)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z         async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z       ...
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z     1..2
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z not ok 3 - the forum
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   ---
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   duration_ms: 1.091875
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   type: 'suite'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   location: '/home/runner/work/beanpool/beanpool/scripts/demo.test.mjs:5:1'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   failureType: 'subtestsFailed'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   error: '1 subtest failed'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   code: 'ERR_TEST_FAILURE'
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z   ...
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z 1..3
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z # tests 4
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z # suites 1
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z # pass 2
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z # fail 2
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z # cancelled 0
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z # skipped 0
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z # todo 0
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z # duration_ms 47.513208
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z 
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z Full logs of every check copied to /home/runner/work/_temp/test-all-logs
+Test-All shard checks	Run test-all checks (checks)	2026-11-14T20:03:50.0000000Z ##[error]Process completed with exit code 1.

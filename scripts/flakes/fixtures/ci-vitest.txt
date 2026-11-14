@@ -1,0 +1,79 @@
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	﻿2026-11-14T18:54:18.9699080Z ##[group]Run timeout -s INT 50m bash scripts/test-all.sh --all
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T18:54:18.9699542Z ^[[36;1mtimeout -s INT 50m bash scripts/test-all.sh --all^[[0m
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.1640173Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.1643239Z ╔══════════════════════════════════════════╗
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.1644046Z ║          BEANPOOL TEST-ALL REPORT        ║
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.1644848Z ╠══════════════════════════════════════════╣
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.1652506Z ║  test             ❌ FAIL  7m14s  (started +0s)
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.1686852Z ╠══════════════════════════════════════════╣
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.1687448Z ║  Total: 0 passed, 1 failed, 0 skipped
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.1692301Z ║  Wall clock: 7m14s (max 4 parallel jobs)
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.1692737Z ╚══════════════════════════════════════════╝
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.1694354Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.1694658Z ──── Failure Details ────
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.1694829Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.1694950Z ━━━ test ━━━
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2340220Z ── @beanpool/pwa#test (last 150 of its 9170 lines) ──
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2647528Z ── Failing tests (1) ──
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2648792Z   src/pages/EnterpriseNotAProfile.test.tsx > every door on the web lands on the enterprise page > the components that open someone by key do it only through onOpenProfile, and only PublicProfilePage draws a Trust Profile
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2650176Z       AssertionError: expected [ …(21) ] to deeply equal [ …(18) ]
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2822045Z   /* fire events that update state */
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2822849Z });
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2823185Z /* assert on the output */
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2823862Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2824382Z This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2824870Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2825504Z  ✓ src/pages/WelcomePage.name-box.test.tsx (5 tests) 718ms
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2826214Z  ✓ src/lib/use-growing-composer.test.tsx (7 tests) 409ms
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2826681Z  ✓ src/components/YesJoin.listing.test.tsx (5 tests) 83ms
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2827147Z  ✓ src/lib/onboarding-event-once.test.ts (8 tests) 86ms
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2827617Z  ✓ src/components/MarketplaceCard.copy.test.tsx (14 tests) 157ms
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2829380Z stderr | src/pages/PeoplePage.test.tsx > PeoplePage tabs follow the WAI-ARIA tabs pattern (#674) > links every tab to a real tabpanel, and every panel back to its tab
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T00:00:00.0000000Z [… abridged for the fixture: the rest of the task tail …]
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2886372Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2886686Z ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2886889Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2887677Z  FAIL  src/pages/EnterpriseNotAProfile.test.tsx > every door on the web lands on the enterprise page > the components that open someone by key do it only through onOpenProfile, and only PublicProfilePage draws a Trust Profile
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2888971Z AssertionError: expected [ …(21) ] to deeply equal [ …(18) ]
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2889252Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2889410Z - Expected
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2889706Z + Received
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2889906Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2890103Z @@ -7,10 +7,13 @@
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2890457Z     "components/InvitedByCard.tsx",
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2890853Z     "components/MessageRequests.tsx",
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2891280Z     "components/PollCard.tsx",
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2891664Z     "components/PostAuthorTrust.tsx",
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2892076Z     "components/PulseFeedCard.tsx",
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2892518Z +   "components/forum/ForumTopicView.tsx",
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2892917Z +   "pages/ChatTabPage.tsx",
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2893350Z +   "pages/ForumPage.tsx",
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2893696Z     "pages/LearnPage.tsx",
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2894102Z     "pages/MarketplacePage.tsx",
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2894450Z     "pages/MessagesPage.tsx",
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2894800Z     "pages/PeoplePage.tsx",
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2895205Z     "pages/PublicProfilePage.tsx",
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2895404Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2895675Z  ❯ src/pages/EnterpriseNotAProfile.test.tsx:212:30
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2896247Z     210|         // takes onOpenProfile as a prop and calls it from that one bu…
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2896893Z     211|         // (checked above), so it is the same one overlay, and LearnPa…
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2897510Z     212|         expect(doors.sort()).toEqual([
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2898426Z        |                              ^
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2899062Z     213|             path.join('components', 'ActivityWaterfall.tsx'),
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2899563Z     214|             path.join('components', 'AppHeader.tsx'),
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2899844Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2900101Z ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2900290Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2900296Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2900483Z  Test Files  1 failed | 266 passed (267)
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2900887Z       Tests  1 failed | 4318 passed (4319)
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2901284Z    Start at  18:54:21
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2901860Z    Duration  431.78s (transform 15.54s, setup 32.63s, collect 137.86s, tests 465.84s, environment 161.72s, prepare 21.55s)
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2902274Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2902280Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2902616Z  ELIFECYCLE  Test failed. See above for more details.
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2903276Z [WARN] command finished with error, but continuing...
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2903586Z 
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2903840Z Full logs of every check copied to /home/runner/work/_temp/test-all-logs
+Test-All shard vitest-pwa-1	Run test-all checks (vitest-pwa-1)	2026-11-14T19:01:33.2928627Z ##[error]Process completed with exit code 1.
+

@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PulsePage } from './PulsePage';
-import { getPulseFeed, type PulseFeedItem } from '../lib/api';
+import { getPulseFeed, getPulseNudges, type PulseFeedItem } from '../lib/api';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 
 vi.mock('../lib/api', async (importOriginal) => ({
@@ -114,11 +114,13 @@ describe('the Pulse page: one add button, Your channels, a quiet week (P3)', () 
         expect(document.body.textContent).not.toContain('once syndicated');
         expect(adds()).toHaveLength(1);
         expect(adds()[0]).toHaveAttribute('data-testid', 'pulse-add-quiet');
-        fireEvent.click(screen.getByRole('button', { name: 'Nothing to add? The Learn lane has short videos on how BeanPool works.' }));
+        // The web has no Learn lane (its "Learn" is the Local knowledge page): the line names the chip it opens.
+        expect(document.body.textContent).not.toContain('Learn lane');
+        fireEvent.click(screen.getByRole('button', { name: 'Nothing to add? Tap How it works for short videos about BeanPool.' }));
         await waitFor(() => expect(vi.mocked(getPulseFeed)).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'learn' })));
     });
 
-    it('on the worldwide community: no Add to Pulse at all, and a quiet week leads to the Learn lane', async () => {
+    it('on the worldwide community: no Add to Pulse at all, and a quiet week leads to How it works', async () => {
         vi.mocked(getPulseFeed).mockResolvedValue({ items: ITEMS, nextCursor: null } as any);
         render(<PulsePage identity={identity} onOpenProfile={vi.fn()} profile="global" />);
         expect(await screen.findByText('Seed saving at the hall')).toBeInTheDocument();
@@ -129,7 +131,8 @@ describe('the Pulse page: one add button, Your channels, a quiet week (P3)', () 
         vi.mocked(getPulseFeed).mockResolvedValue({ items: [], nextCursor: null } as any);
         render(<PulsePage identity={identity} onOpenProfile={vi.fn()} profile="global" />);
         expect(await screen.findByText('Nothing new this week.')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'The Learn lane has short videos on how BeanPool works.' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Tap How it works for short videos about BeanPool.' })).toBeInTheDocument();
+        expect(document.body.textContent).not.toContain('Learn lane');
         expect(adds()).toHaveLength(0);
         expect(document.body.textContent).not.toContain('Add a link');
     });
@@ -144,6 +147,63 @@ describe('the Pulse page: one add button, Your channels, a quiet week (P3)', () 
         expect(adds()[0]).toHaveAttribute('data-testid', 'pulse-add');
     });
 
+    /** A class list's own z-index (Tailwind `z-N` or `z-[N]`, no variant), or 0 for none: how two fixed boxes stack. */
+    const zOf = (el: Element): number => {
+        for (const c of el.className.split(/\s+/)) {
+            const m = /^z-(?:\[(\d+)\]|(\d+))$/.exec(c);
+            if (m) return Number(m[1] ?? m[2]);
+        }
+        return 0;
+    };
+    /** Classes that give an element a stacking context of its own, which would keep a dialog's z-index inside it. */
+    const STACKS = /(^|:)(z-|isolate|transform|-?translate-|-?scale-|-?rotate-|opacity-|blur|filter|backdrop-|will-change)/;
+
+    it("Add to Pulse stays under the cards' own dialogs: an open Hide or Delete dims it and its backdrop takes the tap", async () => {
+        // Review of 24850a67: the button (fixed, later in the page) was z-50 like the cards' inline dialogs, so it drew
+        // bright over their backdrop and could take a tap meant for the dialog.
+        vi.mocked(getPulseFeed).mockResolvedValue({ items: [item({ ownerPubkey: 'me-pk' })], nextCursor: null } as any);
+        render(<PulsePage identity={identity} onOpenProfile={vi.fn()} profile="local" />);
+        expect(await screen.findByText('Seed saving at the hall')).toBeInTheDocument();
+        const add = screen.getByTestId('pulse-add');
+        const page = add.parentElement!;
+        for (const [opens, title] of [['Hide this item from feed', 'Hide this post from feed?'], ['Delete this post', 'Delete this post?']]) {
+            fireEvent.click(screen.getByRole('button', { name: opens }));
+            const backdrop = screen.getByRole('dialog', { name: title }).parentElement!;
+            expect(backdrop.className).toMatch(/\bfixed\b/);
+            expect(page.contains(backdrop)).toBe(true);
+            expect(zOf(add)).toBeLessThan(zOf(backdrop));
+            // The two compare in one stacking context: nothing between the dialog and the page makes one of its own.
+            for (let el = backdrop.parentElement; el && el !== page; el = el.parentElement) {
+                expect(el.className.split(/\s+/).filter(c => STACKS.test(c)), `<${el.tagName.toLowerCase()}> would hold the dialog under the button`).toEqual([]);
+            }
+            fireEvent.click(backdrop);
+            expect(screen.queryByRole('dialog', { name: title })).toBeNull();
+        }
+    });
+
+    it("on the worldwide community the page asks nothing: no nudges (a clipboard link's own Add to Pulse, a channel's Share)", async () => {
+        const nudge = { channelId: 'ch1', platform: 'youtube', handle: '@me', currentCount: 5, postCountSeen: 3, newPostsCount: 2 };
+        vi.mocked(getPulseNudges).mockClear();
+        vi.mocked(getPulseNudges).mockResolvedValue({ nudges: [nudge] } as any);
+        vi.mocked(getPulseFeed).mockResolvedValue({ items: ITEMS, nextCursor: null } as any);
+        render(<PulsePage identity={identity} onOpenProfile={vi.fn()} profile="local" />);
+        expect(await screen.findByText('Seed saving at the hall')).toBeInTheDocument();
+        // On a local community the nudge shows (after its short wait), as before.
+        expect(await screen.findByText("You've posted 2 new things on YouTube since your last visit.", undefined, { timeout: 3000 })).toBeInTheDocument();
+        cleanup();
+
+        vi.mocked(getPulseNudges).mockClear();
+        render(<PulsePage identity={identity} onOpenProfile={vi.fn()} profile="global" />);
+        expect(await screen.findByText('Seed saving at the hall')).toBeInTheDocument();
+        await new Promise(resolve => setTimeout(resolve, 1500)); // past the nudges' own 800 ms wait
+        expect(vi.mocked(getPulseNudges)).not.toHaveBeenCalled();
+        expect(screen.queryByText("You've posted 2 new things on YouTube since your last visit.")).toBeNull();
+        expect(screen.queryAllByRole('button', { name: 'Add to Pulse' })).toHaveLength(0);
+        // Your channels, the path that was there before, still opens on the worldwide community.
+        expect(screen.getByRole('button', { name: 'Manage your channels' })).toBeInTheDocument();
+        vi.mocked(getPulseNudges).mockResolvedValue({ nudges: [] } as any);
+    });
+
     it('in the pseudo-locale every new word came through t(), local and worldwide', async () => {
         vi.mocked(getPulseFeed).mockResolvedValue({ items: [], nextCursor: null } as any);
         await showIn('xx');
@@ -153,7 +213,7 @@ describe('the Pulse page: one add button, Your channels, a quiet week (P3)', () 
         expect(bypassing(document.body)).toEqual([]);
         cleanup();
         render(<PulsePage identity={identity} onOpenProfile={vi.fn()} profile="global" />);
-        expect(await screen.findByText(xx('The Learn lane has short videos on how BeanPool works.'))).toBeInTheDocument();
+        expect(await screen.findByText(xx('Tap {chip} for short videos about BeanPool.').replace('{chip}', xx('How it works')))).toBeInTheDocument();
         expect(bypassing(document.body)).toEqual([]);
     });
 });

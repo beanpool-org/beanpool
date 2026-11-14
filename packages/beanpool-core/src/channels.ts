@@ -164,6 +164,12 @@ export const PULSE_PAGE_WORDS = {
     learnLine: word('Nothing to add? The Learn lane has short videos on how BeanPool works.'),
     /** On the worldwide community, where nothing is asked to be added yet: the Learn lane leads. */
     learnGlobal: word('The Learn lane has short videos on how BeanPool works.'),
+    /**
+     * The web app's two lines: it has no Learn lane, and "Learn" there is the Local knowledge page. Its how-to videos are
+     * under the **How it works** chip (pulse/learn.md), named by {chip} as the chip itself reads.
+     */
+    learnLineWeb: word('Nothing to add? Tap {chip} for short videos about BeanPool.'),
+    learnGlobalWeb: word('Tap {chip} for short videos about BeanPool.'),
 } as const;
 
 /**

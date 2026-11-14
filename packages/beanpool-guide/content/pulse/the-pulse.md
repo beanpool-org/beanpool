@@ -42,6 +42,6 @@ You cannot hide someone else's post just for yourself.
 
 ## Adding your own
 
-Tap **Add to Pulse** at the bottom right. When nothing new has been shared this week, the button is in the middle of the page instead. To share a post, add the channel it is on first: tap **Your channels** at the top. See "Sharing your channels".
+Tap **Add to Pulse** at the bottom right. When the Pulse is empty, the button is in the middle of the page instead. To share a post, add the channel it is on first: tap **Your channels** at the top. See "Sharing your channels".
 
-On the global community there is no **Add to Pulse** yet: adding there waits until it has rules for new members.
+On the global community the Pulse asks nothing of you yet: there is no **Add to Pulse**, and the web app does not suggest posts to share. That waits until adding there has rules for new members. **Your channels** works there as on any community: add a channel and its posts still come in, and you can share a post from there.

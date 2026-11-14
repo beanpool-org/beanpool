@@ -23,7 +23,13 @@ describe('the Pulse page (P2/P3)', () => {
             learnLine: 'Nothing to add? The Learn lane has short videos on how BeanPool works.',
             // The worldwide community, where nothing is asked to be added yet (§3.8): the Learn lane leads.
             learnGlobal: 'The Learn lane has short videos on how BeanPool works.',
+            // The web app's pair: it has no Learn lane (and "Learn" there is the Local knowledge page), so the lines name the
+            // How it works chip that holds the same videos (review of 24850a67).
+            learnLineWeb: 'Nothing to add? Tap {chip} for short videos about BeanPool.',
+            learnGlobalWeb: 'Tap {chip} for short videos about BeanPool.',
         });
+        expect(PULSE_PAGE_WORDS.learnLineWeb).not.toMatch(/Learn/);
+        expect(PULSE_PAGE_WORDS.learnGlobalWeb).not.toMatch(/Learn/);
         // A quiet week asks nothing of the member: no Beans, no steps, nothing they must do.
         for (const w of Object.values(PULSE_PAGE_WORDS)) expect(w).not.toMatch(/Beans|must|step|Ʀ/);
     });

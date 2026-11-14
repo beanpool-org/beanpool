@@ -85,7 +85,7 @@ const all = (host: ParentNode, id: string) => Array.from(host.querySelectorAll(`
 const styleOf = (n: Element) => JSON.parse(n.getAttribute('data-style') ?? '{}');
 const words = (n: Element | null) => (n?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
-function expectReadable(host: HTMLElement, set: Set) {
+function expectReadable(host: HTMLElement) {
     let checked = 0;
     for (const span of Array.from(host.querySelectorAll('span'))) {
         if (!words(span) || span.querySelector('span')) continue;
@@ -140,7 +140,7 @@ describe.each(LOOKS)('the Home card "Forum" in %s (%s)', (_name, set) => {
         expect(words(open)).toBe('Open the forum ›');
         await act(async () => { open.click(); });
         expect(nav.pushed.at(-1)).toEqual({ pathname: '/(tabs)/chats', params: { view: 'forum' } });
-        expectReadable(host, set);
+        expectReadable(host);
         expectHoldsSmall(host);
     });
 
@@ -155,12 +155,12 @@ describe.each(LOOKS)('the Home card "Forum" in %s (%s)', (_name, set) => {
         expect(all(host, 'home-forum-topic')).toHaveLength(0);
         expect(words(host)).toContain('Couldn’t load the forum. Check your connection and try again.');
         expect(words(all(host, 'home-forum-open')[0])).toBe('Open the forum ›');
-        expectReadable(host, set);
+        expectReadable(host);
         document.body.innerHTML = '';
         node.offline = false;
         node.list = { topics: [], next: null };
         host = await render(set);
         expect(words(host)).toContain('No topics here yet. Start the first one.');
-        expectReadable(host, set);
+        expectReadable(host);
     });
 });

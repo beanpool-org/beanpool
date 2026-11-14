@@ -1,7 +1,7 @@
 /**
  * The "Worldwide forum ›" row in a community's Forum (slice F3 part 2; DESIGN-forums-messaging-joint-fable.md §2.2: "each
  * community's Forum gets one row, Worldwide forum ›: it opens that forum in the app if you have joined the worldwide community
- * (the switch that 'Castlemaine: new messages ›' already uses) ... Drawn by the app, never needed by a community").
+ * (the switch that '{community}: new messages ›' already uses) ... Drawn by the app, never needed by a community").
  *
  * - **Where it shows:** in the Forum of any community but the worldwide one itself, for a member this phone keeps as joined
  *   there (a saved community, not a guest's). The worldwide community is the app's one default (GLOBAL_NODE_URL); no other

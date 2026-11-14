@@ -612,6 +612,7 @@ export const SUITES = [
     'test-knowledge-publish',
     'test-knowledge-reads',
     'test-knowledge-drafts',
+    'test-knowledge-home',
     'test-forum',
     'test-mcp-knowledge',
     'test-names-copy',

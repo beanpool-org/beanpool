@@ -18,7 +18,7 @@
  */
 import type { SqliteLike } from './group-chat-store';
 
-/** The three tables, in every copy's schema (utils/db.ts). */
+/** The tables, in every copy's schema (utils/db.ts). `outside_receipts`: the receipts this phone still owes (outside-mail.ts). */
 export const OUTSIDE_CHAT_TABLES_SQL = `
         CREATE TABLE IF NOT EXISTS outside_chats (
             id TEXT PRIMARY KEY,
@@ -45,10 +45,18 @@ export const OUTSIDE_CHAT_TABLES_SQL = `
         );
         CREATE INDEX IF NOT EXISTS idx_outside_lines_chat ON outside_lines(chat_id, at);
         CREATE TABLE IF NOT EXISTS outside_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS outside_receipts (
+            id TEXT PRIMARY KEY,
+            me TEXT NOT NULL,
+            peer_key TEXT NOT NULL,
+            peer_home TEXT NOT NULL,
+            owed_at INTEGER NOT NULL,
+            tried_at INTEGER NOT NULL DEFAULT 0
+        );
 `;
 
 /** What clearDB drops when the account leaves the phone. */
-export const OUTSIDE_CHAT_DROP_SQL = ' DROP TABLE IF EXISTS outside_chats; DROP TABLE IF EXISTS outside_lines; DROP TABLE IF EXISTS outside_meta;';
+export const OUTSIDE_CHAT_DROP_SQL = ' DROP TABLE IF EXISTS outside_chats; DROP TABLE IF EXISTS outside_lines; DROP TABLE IF EXISTS outside_meta; DROP TABLE IF EXISTS outside_receipts;';
 
 /** A chat's standing: a request waiting for the member, open (either side may write), or declined. */
 export type OutsideChatState = 'request' | 'open' | 'declined';
@@ -208,6 +216,35 @@ export function outsideChatStore(getDb: () => Promise<SqliteLike>) {
                 `SELECT l.id, l.item, l.at FROM outside_lines l JOIN outside_chats c ON c.id = l.chat_id
                  WHERE c.me = ? AND l.author = ? AND l.state = 'sending' AND l.item IS NOT NULL ORDER BY l.at ASC LIMIT 16`, [me, me],
             )).map((r) => ({ id: r.id, item: r.item, at: r.at }));
+        },
+        /**
+         * A receipt this phone owes for a line of theirs it has written, kept before that line is confirmed (which deletes it
+         * at my server, so it is never fetched again): no stop between the confirm and the receipt's post (the round's
+         * deadline, the app killed, the network gone, a refusal) can lose it. Once per line.
+         */
+        async oweReceipt(me: string, r: { id: string; key: string; home: string }, now = Date.now()): Promise<void> {
+            await (await db()).runAsync(
+                'INSERT INTO outside_receipts (id, me, peer_key, peer_home, owed_at, tried_at) VALUES (?, ?, ?, ?, ?, 0) ON CONFLICT(id) DO NOTHING',
+                [r.id, me, r.key, r.home, now],
+            );
+        },
+        /** The receipts still owed, `limit` at most: never tried first, then those tried longest ago, so one refused never holds the rest. */
+        async owedReceipts(me: string, limit: number): Promise<Array<{ id: string; key: string; home: string }>> {
+            return (await (await db()).getAllAsync<any>(
+                'SELECT id, peer_key, peer_home FROM outside_receipts WHERE me = ? ORDER BY tried_at ASC, owed_at ASC, id ASC LIMIT ?', [me, limit],
+            )).map((r) => ({ id: r.id, key: r.peer_key, home: r.peer_home }));
+        },
+        /** Receipts my server took: owed no more. */
+        async receiptsSent(ids: string[]): Promise<void> {
+            if (ids.length) await (await db()).runAsync(`DELETE FROM outside_receipts WHERE id IN (${ids.map(() => '?').join(', ')})`, ids);
+        },
+        /** Receipts my server didn't take: still owed, behind the rest. */
+        async receiptsTried(ids: string[], now = Date.now()): Promise<void> {
+            if (ids.length) await (await db()).runAsync(`UPDATE outside_receipts SET tried_at = ? WHERE id IN (${ids.map(() => '?').join(', ')})`, [now, ...ids]);
+        },
+        /** Receipts owed since before `before`: given up, unsent. */
+        async forgetReceiptsOwedBefore(me: string, before: number): Promise<void> {
+            await (await db()).runAsync('DELETE FROM outside_receipts WHERE me = ? AND owed_at < ?', [me, before]);
         },
         async decide(me: string, id: string, state: 'open' | 'declined', now = Date.now()): Promise<void> {
             await (await db()).runAsync('UPDATE outside_chats SET state = ?, updated_at = ? WHERE me = ? AND id = ?', [state, now, me, id]);

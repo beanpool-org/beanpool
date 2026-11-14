@@ -13,7 +13,13 @@
  * gate (outside-chat-store.ts gateIncoming), and written. Only then is it confirmed (`POST /api/mail/confirm`), which deletes
  * it at the server: an item whose write failed is never confirmed, so it is fetched again, never lost. An item the gate
  * drops, or that doesn't check out, is confirmed too (it can never be shown, and an unconfirmed one would hold the page).
- * Each line written is then receipted to its sender's home (kind `receipt`): their phone shows Delivered.
+ *
+ * **Receipts.** Each line written is receipted to its sender's home (kind `receipt`): their phone shows Delivered. The
+ * receipt is owed on the phone (outside_receipts) before its line is confirmed, and owed until my server takes it: a round
+ * that stops between the confirm and the receipt (its deadline, the app killed, the network gone, my server saying no or
+ * busy) leaves it owed, and the next round posts it ({@link flushReceipts}), as many rounds as it takes within
+ * RECEIPT_KEPT_MS. Without that, a line my server had deleted would never be fetched again, and its sender would see "Not
+ * delivered" for a line that was. A receipt posted twice (taken, its answer lost) does no harm: a line delivered stays so.
  *
  * **Ticks.** The same fetch carries what became of my own items (the outbox's states, paged by time and id from the cursor
  * kept here). A tick for a line this phone doesn't have (a phone restored from 12 words) brings its chat back empty and
@@ -43,6 +49,15 @@ const HOME_FRESH_MS = 60 * 60_000;
 const PAGES_MAX = 10;
 /** A line the server never answered is sent again while this fresh (the server refuses one older than 7 days). */
 const RESEND_WITHIN_MS = 6 * 24 * 60 * 60_000;
+/**
+ * How long a receipt my server hasn't taken stays owed: the 30 days a sender's server keeps its line's row
+ * (relay-outbox.ts OUTBOX_KEPT_MS). After that no row is left for it to mark.
+ */
+const RECEIPT_KEPT_MS = 30 * 24 * 60 * 60_000;
+/** The ids one receipt names at most (relay-mail.ts: one fetch's worth). */
+const RECEIPT_IDS_MAX = 50;
+/** The owed ids one turn posts at most: a round with a long backlog still ends, and the rest go at the next. */
+const RECEIPTS_PER_TURN = 200;
 
 export interface OutsideMailContext {
     nodeUrl: string;
@@ -136,10 +151,11 @@ async function postItems(ctx: OutsideMailContext, items: RelayItem[]): Promise<A
 }
 
 /**
- * Send `text` to the peer of chat `chatId` (a chat this phone has, open). Written first as `sending`; then the state my
- * server answers. Throws OutsideMailError with the server's words when it refuses the line (the line is then `failed`).
+ * Send `text` to the peer of chat `chatId` (a chat this phone has, open). Written first as `sending` (then `onKept` is
+ * called); then the state my server answers. Throws OutsideMailError with the server's words when it refuses the line (the
+ * line is then `failed`). A throw before `onKept` means no line was kept: the words are only where the caller has them.
  */
-export async function sendOutsideLine(ctx: OutsideMailContext, chatId: string, text: string, replyTo: string | null = null): Promise<OutsideLineState> {
+export async function sendOutsideLine(ctx: OutsideMailContext, chatId: string, text: string, replyTo: string | null = null, onKept?: () => void): Promise<OutsideLineState> {
     const me = ctx.identity.publicKey;
     const chat = await ctx.store.chat(me, chatId);
     if (!chat || chat.state !== 'open') throw new OutsideMailError(400, t('Accept the request first.'), 'not_accepted');
@@ -149,6 +165,7 @@ export async function sendOutsideLine(ctx: OutsideMailContext, chatId: string, t
     const envelope = await envelopeFor(ctx, { kind: 'dm-line', itemId: messageId, recipient: chat.peerKey, recipientHome: chat.peerHome, at }, payload);
     const item: RelayItem = { envelope, payload };
     await ctx.store.addMine({ id: messageId, chatId, author: me, text, replyTo, at, item: JSON.stringify(item) });
+    onKept?.();
     let answered: Array<{ itemId: string; state: string }>;
     try {
         answered = await postItems(ctx, [item]);
@@ -160,6 +177,27 @@ export async function sendOutsideLine(ctx: OutsideMailContext, chatId: string, t
     const state = answered.find((a) => a.itemId === messageId)?.state as OutsideLineState | undefined;
     if (state && STATES.includes(state)) await ctx.store.setMineState(messageId, state);
     return state && STATES.includes(state) ? state : 'sending';
+}
+
+/**
+ * A line sent from a box on screen (the chat's box, the card's first line), with the typed words never lost: `onKept`
+ * empties the box once the line is kept on this phone (shown at once as Sending…, or Not delivered with my server's words
+ * why), and never before. A send that fails before that (my community knows none of its names here and can't be read now,
+ * the deadline cut that read, the request not accepted yet) leaves the words in the box, to send again. The send has its
+ * own deadline, `budgetMs`: a kept line my server hasn't answered by then stays `sending`, and goes at the next round.
+ */
+export async function sendFromBox(ctx: OutsideMailContext, chatId: string, words: string, budgetMs: number, onKept: () => void): Promise<{ kept: boolean; error: unknown }> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), budgetMs);
+    let kept = false;
+    try {
+        await sendOutsideLine({ ...ctx, signal: controller.signal }, chatId, words, null, () => { kept = true; onKept(); });
+        return { kept, error: null };
+    } catch (error) {
+        return { kept, error };
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 /**
@@ -236,6 +274,12 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
     const me = ctx.identity.publicKey;
     await resendUnsent(ctx, now).catch((e) => console.warn('[OutsideMail] Unsent lines wait for the next round:', e?.message ?? e));
     const open = await doorOpen(ctx.store);
+    /** Owed receipts this round tried and my server didn't take: tried again at the next round, not this one. */
+    const tried = new Set<string>();
+    /** A line of theirs written here: its receipt owed before the line is confirmed. */
+    const owe = async (env: RelayEnvelope) => {
+        if (env.kind === 'dm-line') await ctx.store.oweReceipt(me, { id: env.itemId, key: env.senderKey, home: env.senderHome }, now);
+    };
     for (let page = 0; page < PAGES_MAX; page++) {
         // A plain check: React Native's AbortSignal has no throwIfAborted.
         if (ctx.signal?.aborted) throw Object.assign(new Error('This round ran out of time.'), { name: 'AbortError' });
@@ -244,7 +288,6 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
         const answer = await answerOf(await signedGet(ctx.nodeUrl, `/api/mail?since=${encodeURIComponent(since)}&sinceId=${encodeURIComponent(sinceId)}`, ctx.identity as BeanPoolIdentity, ctx.signal));
         const held: any[] = Array.isArray(answer?.items) ? answer.items : [];
         const done: string[] = [];
-        const receipts = new Map<string, { home: string; key: string; ids: string[] }>();
         let writeFailed = false;
         for (const h of held) {
             const env = readRelayEnvelope(h?.envelope);
@@ -257,9 +300,9 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
             try {
                 const chatId = relayConversationId(me, env.senderKey);
                 if (env.kind === 'dm-line' && await ctx.store.hasLine(env.itemId)) {
-                    // Written before, confirmed or receipted not: both again.
+                    // Written before, not confirmed: its receipt owed (once), then confirmed.
+                    await owe(env);
                     done.push(env.itemId);
-                    addReceipt(receipts, env);
                     continue;
                 }
                 const chat = await ctx.store.chat(me, chatId);
@@ -280,11 +323,12 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                     id: env.itemId, chatId, author: env.senderKey, text: opened.text, replyTo: opened.replyToId, at: env.at,
                     sealed: JSON.stringify({ envelope: env, payload: h.payload }),
                 }, { home: env.senderHome, name: opened.name }, verdict, now);
+                // Past the gate, only a line is ever written (gateIncoming): it is owed its receipt before it is confirmed.
+                await owe(env);
                 done.push(env.itemId);
-                addReceipt(receipts, env);
                 if (verdict === 'request') out.requests++; else out.written++;
             } catch (e) {
-                // The write failed: this item is not confirmed, and is fetched again. The rest of the page waits with it.
+                // The write (or its receipt's) failed: this item is not confirmed, and is fetched again. The rest of the page waits with it.
                 console.warn('[OutsideMail] An item could not be written here; it waits at the server:', (e as Error)?.message ?? e);
                 writeFailed = true;
                 break;
@@ -294,28 +338,46 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
             const confirmed = await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/confirm', { ids: done }, ctx.identity as BeanPoolIdentity, ctx.signal));
             out.confirmed += Number(confirmed?.confirmed) || 0;
         }
-        for (const r of receipts.values()) {
-            await sendReceipt(ctx, r, now).catch((e) => console.warn('[OutsideMail] A receipt was not sent:', (e as Error)?.message ?? e));
-        }
+        // This page's receipts, and any an earlier round didn't get to post.
+        await flushReceipts(ctx, now, tried);
         out.ticks += await applyTicks(ctx, Array.isArray(answer?.outbox) ? answer.outbox : [], now);
         if (writeFailed || (!answer?.more && !answer?.outboxMore)) break;
     }
     return out;
 }
 
-function addReceipt(receipts: Map<string, { home: string; key: string; ids: string[] }>, env: RelayEnvelope): void {
-    if (env.kind !== 'dm-line') return;
-    const k = `${env.senderKey}@${env.senderHome}`;
-    const r = receipts.get(k) ?? { home: env.senderHome, key: env.senderKey, ids: [] };
-    r.ids.push(env.itemId);
-    receipts.set(k, r);
-}
-
-async function sendReceipt(ctx: OutsideMailContext, r: { home: string; key: string; ids: string[] }, now: number): Promise<void> {
-    for (let i = 0; i < r.ids.length; i += 50) {
-        const payload = outsideReceiptPayload(r.ids.slice(i, i + 50));
-        const envelope = await envelopeFor(ctx, { kind: 'receipt', itemId: newDmMessageId(), recipient: r.key, recipientHome: r.home, at: now }, payload);
-        await postItems(ctx, [{ envelope, payload }]);
+/**
+ * The receipts this phone owes, RECEIPTS_PER_TURN ids at most, each sender's to their home, RECEIPT_IDS_MAX ids to a receipt,
+ * signed now. One my server takes is owed no more. One it doesn't (no answer, a refusal, busy) stays owed and goes behind
+ * the rest at the next round; `tried` keeps it from being tried again in this one. At the round's deadline the rest stay
+ * owed as they are. One owed for RECEIPT_KEPT_MS goes unsent: its sender's server has no row left for it to mark.
+ */
+async function flushReceipts(ctx: OutsideMailContext, now: number, tried: Set<string>): Promise<void> {
+    const me = ctx.identity.publicKey;
+    await ctx.store.forgetReceiptsOwedBefore(me, now - RECEIPT_KEPT_MS);
+    const bySender = new Map<string, { home: string; key: string; ids: string[] }>();
+    for (const o of await ctx.store.owedReceipts(me, RECEIPTS_PER_TURN)) {
+        if (tried.has(o.id)) continue;
+        const k = `${o.key}@${o.home}`;
+        const r = bySender.get(k) ?? { home: o.home, key: o.key, ids: [] };
+        r.ids.push(o.id);
+        bySender.set(k, r);
+    }
+    for (const r of bySender.values()) {
+        for (let i = 0; i < r.ids.length; i += RECEIPT_IDS_MAX) {
+            if (ctx.signal?.aborted) return;
+            const ids = r.ids.slice(i, i + RECEIPT_IDS_MAX);
+            try {
+                const payload = outsideReceiptPayload(ids);
+                const envelope = await envelopeFor(ctx, { kind: 'receipt', itemId: newDmMessageId(), recipient: r.key, recipientHome: r.home, at: now }, payload);
+                await postItems(ctx, [{ envelope, payload }]);
+                await ctx.store.receiptsSent(ids);
+            } catch (e) {
+                console.warn('[OutsideMail] A receipt waits for the next round:', (e as Error)?.message ?? e);
+                for (const id of ids) tried.add(id);
+                await ctx.store.receiptsTried(ids, now).catch(() => {});
+            }
+        }
     }
 }
 

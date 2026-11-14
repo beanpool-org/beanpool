@@ -20,8 +20,8 @@ import QRCode from 'react-native-qrcode-svg';
 import { OUTSIDE_LINE_TEXT_MAX, addressCardFromText, addressCardLink, relayConversationId, t, type AddressCard } from '@beanpool/core';
 import { Alert } from '../utils/keyboard-alert';
 import { useTheme, useStyles } from './ThemeContext';
-import { doorOpen, myAddressCard, myHome, sendOutsideLine, setDoor } from '../utils/outside-mail';
-import { outsideContext, outsideErrorWords, outsideMessagesHere } from '../utils/outside-chat-live';
+import { doorOpen, myAddressCard, myHome, sendFromBox, setDoor } from '../utils/outside-mail';
+import { OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, outsideMessagesHere } from '../utils/outside-chat-live';
 
 export default function AddressCardScreen() {
     const params = useLocalSearchParams<{ mode?: string }>();
@@ -96,8 +96,11 @@ export default function AddressCardScreen() {
             if (!ctx) return;
             const chatId = relayConversationId(ctx.identity.publicKey, theirs.key);
             await ctx.store.openChat(ctx.identity.publicKey, chatId, { key: theirs.key, home: theirs.home, name: theirs.name });
-            await sendOutsideLine(ctx, chatId, words).catch((e) => { Alert.alert(outsideErrorWords(e)); });
-            router.replace(`/outside-chat/${chatId}`);
+            // The words leave this box only once the line is kept (the chat then shows it, Sending… or Not delivered). A send
+            // that fails before that stays here with its words, to send again.
+            const { kept, error } = await sendFromBox(ctx, chatId, words, OUTSIDE_SEND_MS, () => setFirst((now) => (now.trim() === words ? '' : now)));
+            if (error) Alert.alert(outsideErrorWords(error, kept));
+            if (kept) router.replace(`/outside-chat/${chatId}`);
         } finally {
             setBusy(false);
         }

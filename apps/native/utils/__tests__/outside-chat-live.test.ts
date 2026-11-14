@@ -8,6 +8,7 @@
  *      and starts no second one beside it
  *   3  the background step's budget fits what is left of iOS's ~30 s after the sync and its notices, or is skipped
  *   4  the community reads its switch off: no round asks, and my lines still `sending` fail with the words why
+ *   5  what a failed send says: tried again when its line was kept, still there to send when it wasn't
  *
  * The round itself (utils/outside-mail.ts) is played here; its own test (outside-mail.test.ts) shows every request it makes
  * carries the signal it is given.
@@ -42,8 +43,9 @@ vi.mock('../outside-mail', () => ({
 }));
 
 import {
-    OUTSIDE_BACKGROUND_MS, OUTSIDE_ROUND_MS, OUTSIDE_CHATS_UPDATED, backgroundMailBudget, syncOutsideMailNow,
+    OUTSIDE_BACKGROUND_MS, OUTSIDE_ROUND_MS, OUTSIDE_CHATS_UPDATED, backgroundMailBudget, outsideErrorWords, syncOutsideMailNow,
 } from '../outside-chat-live';
+import { OutsideMailError } from '../outside-mail';
 
 const DONE = { written: 1, requests: 0, dropped: 0, confirmed: 1, ticks: 0 };
 /** Lets the round's awaits (the context, the store's import, the profile) run: setImmediate is not faked. */
@@ -146,5 +148,15 @@ describe('4  the community reads its switch off', () => {
         expect(await syncOutsideMailNow()).toBeNull();
         expect(live.rounds).toEqual([]);
         expect(live.failed).toEqual([]);
+    });
+});
+
+describe('5  what a failed send says (PR #3168 review note: "the typed words are gone")', () => {
+    it('kept: it will be tried again; not kept: nothing will be, and the message is still there to send; my server\'s own words either way', () => {
+        const offline = new TypeError('Network request failed');
+        expect(outsideErrorWords(offline)).toBe("That didn't go through. It will be tried again when you're back online.");
+        expect(outsideErrorWords(offline, false)).toBe("That didn't go through. Your message is still there to send again.");
+        const refused = new (OutsideMailError as any)('Accept the request first.');
+        for (const kept of [true, false]) expect(outsideErrorWords(refused, kept)).toBe('Accept the request first.');
     });
 });

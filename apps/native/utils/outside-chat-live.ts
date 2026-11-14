@@ -117,8 +117,13 @@ function atMost<T>(p: Promise<T | null>, ms: number): Promise<T | null> {
     return Promise.race([p, new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), ms); })]).finally(() => clearTimeout(timer));
 }
 
-/** What to tell the member when a send or an answer didn't go: the server's own words, else ours. */
-export function outsideErrorWords(e: unknown): string {
+/**
+ * What to tell the member when a send or an answer didn't go: the server's own words, else ours. `kept` false: no line was
+ * kept (outside-mail.ts sendFromBox), so nothing will be tried again, and the words wait in the box.
+ */
+export function outsideErrorWords(e: unknown, kept = true): string {
     if (e instanceof OutsideMailError && e.message && !/^HTTP \d+$/.test(e.message)) return e.message;
-    return t("That didn't go through. It will be tried again when you're back online.");
+    return kept
+        ? t("That didn't go through. It will be tried again when you're back online.")
+        : t("That didn't go through. Your message is still there to send again.");
 }

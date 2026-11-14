@@ -16,7 +16,7 @@ import { OUTSIDE_LINE_TEXT_MAX, t } from '@beanpool/core';
 import { Alert } from '../../utils/keyboard-alert';
 import { useTheme, useStyles } from '../ThemeContext';
 import { blockUser } from '../../utils/blocklist';
-import { sendOutsideLine } from '../../utils/outside-mail';
+import { sendFromBox } from '../../utils/outside-mail';
 import { OUTSIDE_CHATS_UPDATED, OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, syncOutsideMailNow } from '../../utils/outside-chat-live';
 import type { OutsideChat, OutsideLine, OutsideLineState } from '../../utils/outside-chat-store';
 
@@ -73,14 +73,11 @@ export default function OutsideChatScreen() {
         try {
             const ctx = await outsideContext();
             if (!ctx) return;
-            setText('');
-            // Its own deadline: a send my server never answers leaves the line `sending` (it goes at the next round) and the
-            // composer free, never held until the app restarts.
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), OUTSIDE_SEND_MS);
-            await sendOutsideLine({ ...ctx, signal: controller.signal }, chat.id, words)
-                .catch((e) => { Alert.alert(outsideErrorWords(e)); })
-                .finally(() => clearTimeout(timer));
+            // The box empties once the line is kept here (shown as Sending… or Not delivered), never before: a send that fails
+            // before that leaves the words in the box. Its own deadline: a send my server never answers leaves the line
+            // `sending` (it goes at the next round) and the composer free. Words typed while it ran are left as they are.
+            const { kept, error } = await sendFromBox(ctx, chat.id, words, OUTSIDE_SEND_MS, () => setText((now) => (now.trim() === words ? '' : now)));
+            if (error) Alert.alert(outsideErrorWords(error, kept));
             await load();
         } finally {
             setBusy(false);

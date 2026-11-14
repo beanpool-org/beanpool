@@ -12,9 +12,15 @@
  *   7  ticks: Delivered on my line; a phone restored from 12 words gets the chat back empty and `restored`
  *   9  a resend my server refuses: the refused line fails with its words, the others still go; a 403 fails them all
  *  10  every request of a round carries the round's deadline, and an aborted round stops at its next request
+ *  11  a receipt outlives the round: one table over every point a round can stop x how it stops; afterwards every line is
+ *      written once, confirmed, and receipted to its sender's home, and nothing is left owed
+ *  12  owed receipts: one per line, a refused one tried again behind the rest, none kept past 30 days, 200 ids a round at most
+ *  13  typed words are never lost on a failed send: in the box, or kept as the line with its state
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { randomBytes } from 'node:crypto';
 import { bytesToHex } from '@noble/hashes/utils.js';
@@ -44,7 +50,31 @@ const server = vi.hoisted(() => ({
     signals: [] as Array<{ path: string; signal: AbortSignal | undefined }>,
     /** A GET that never answers until its signal aborts (React Native's fetch never gives up by itself). */
     stallGet: false,
+    /** A send that never answers until its signal aborts. */
+    stallSend: false,
+    /**
+     * Where a round stops (test 11): the nth confirm or the nth receipt, before my server takes it or after (its answer lost),
+     * and how: the round's deadline, the network dropped, the app killed (the request never settles, nothing after it runs),
+     * or my server answering no (403, 400) or busy (503).
+     */
+    stop: null as null | { at: 'confirm' | 'receipt'; nth: number; taken: boolean; how: string },
+    seen: { confirm: 0, receipt: 0 },
+    stopped: false,
+    /** The round's deadline, which a `deadline` stop fires. */
+    deadline: null as null | AbortController,
+    /** Every receipt posted, taken or not: to whom, at which home, naming which ids. */
+    receiptTries: [] as Array<{ to: string; ids: string[] }>,
 }));
+
+/** A stop the round meets (test 11): throws, never settles, or my server's answer. */
+function stopHere(how: string): Promise<Response> | Response {
+    server.stopped = true;
+    if (how === 'deadline') { server.deadline?.abort(); throw new DOMException('Aborted', 'AbortError'); }
+    if (how === 'network') throw new TypeError('Network request failed');
+    if (how === 'killed') return new Promise<Response>(() => {});
+    const status = Number(how.split('-')[1]);
+    return new Response(JSON.stringify({ error: `No (${status}).`, code: 'no' }), { status });
+}
 
 vi.mock('../node-post', () => ({
     signedGet: vi.fn(async (_url: string, path: string, _identity: unknown, signal?: AbortSignal) => {
@@ -60,23 +90,38 @@ vi.mock('../node-post', () => ({
         server.calls.push(`POST ${path}`);
         server.signals.push({ path, signal });
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        const isReceipt = path === '/api/mail/send' && body.items?.[0]?.envelope?.kind === 'receipt';
+        if (isReceipt) {
+            const r = body.items[0];
+            server.receiptTries.push({ to: `${r.envelope.recipient}@${r.envelope.recipientHome}`, ids: readReceiptPayloadForTests(r.payload) ?? [] });
+        }
+        const at = path === '/api/mail/confirm' ? 'confirm' : isReceipt ? 'receipt' : null;
+        const stop = at && server.stop?.at === at && ++server.seen[at] === server.stop.nth ? server.stop : null;
+        if (stop && !stop.taken) return stopHere(stop.how);
+        let answer: Response;
         if (path === '/api/mail/confirm') {
             server.confirmed.push(body.ids);
             const before = server.held.length;
             server.held = server.held.filter((h) => !body.ids.includes(h.envelope.itemId));
-            return new Response(JSON.stringify({ confirmed: before - server.held.length }), { status: 200 });
-        }
-        if (path === '/api/mail/send') {
+            answer = new Response(JSON.stringify({ confirmed: before - server.held.length }), { status: 200 });
+        } else if (path === '/api/mail/send') {
             if (server.sendFails) throw new TypeError('Network request failed');
+            if (server.stallSend) {
+                await new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
+            }
             server.batches.push(body.items.map((i: RelayItem) => i.envelope.itemId));
             for (const i of body.items) {
                 const problem = server.refuse?.(i);
                 if (problem) return new Response(JSON.stringify({ error: problem.error, code: problem.code }), { status: problem.status });
             }
             server.sent.push(...body.items);
-            return new Response(JSON.stringify({ items: body.items.map((i: RelayItem) => ({ itemId: i.envelope.itemId, state: server.sendState })) }), { status: 200 });
+            answer = new Response(JSON.stringify({ items: body.items.map((i: RelayItem) => ({ itemId: i.envelope.itemId, state: server.sendState })) }), { status: 200 });
+        } else {
+            return new Response('{}', { status: 404 });
         }
-        return new Response('{}', { status: 404 });
+        // Taken, then the answer lost.
+        if (stop) return stopHere(stop.how);
+        return answer;
     }),
 }));
 
@@ -91,7 +136,7 @@ vi.mock('../member-statements', async () => {
 });
 
 import { outsideChatStore, gateIncoming, OUTSIDE_CHAT_TABLES_SQL, type OutsideChatState } from '../outside-chat-store';
-import { failUnsent, myHome, syncOutsideMail, sendOutsideLine, setDoor, type OutsideMailContext } from '../outside-mail';
+import { failUnsent, myHome, syncOutsideMail, sendFromBox, sendOutsideLine, setDoor, type OutsideMailContext } from '../outside-mail';
 
 const seedKey = () => { const seed = randomBytes(32); return { seed: bytesToHex(seed), key: bytesToHex(ed25519.getPublicKey(seed)) }; };
 const BEN = seedKey(), ANA = seedKey(), SOL = seedKey(), CY = seedKey();
@@ -116,7 +161,8 @@ let blocked: Set<string>;
 
 beforeEach(async () => {
     server.held = []; server.outbox = []; server.calls = []; server.sent = []; server.confirmed = []; server.sendFails = false; server.sendState = 'sent';
-    server.batches = []; server.refuse = null; server.signals = []; server.stallGet = false;
+    server.batches = []; server.refuse = null; server.signals = []; server.stallGet = false; server.stallSend = false;
+    server.stop = null; server.seen = { confirm: 0, receipt: 0 }; server.stopped = false; server.deadline = null; server.receiptTries = [];
     const s = sqlStore();
     sql = s.sql;
     blocked = new Set();
@@ -125,12 +171,12 @@ beforeEach(async () => {
 });
 
 /** A line `from` writes Ben, as their phone seals it and their server brings it: held for Ben. */
-async function heldLine(from: { seed: string; key: string }, text: string, opts: { kind?: string; sealer?: { seed: string; key: string } } = {}) {
+async function heldLine(from: { seed: string; key: string }, text: string, opts: { kind?: string; sealer?: { seed: string; key: string }; home?: string } = {}) {
     const itemId = uuid();
     const sealer = opts.sealer ?? from;
     const payload = sealOutsideLine({ text, name: 'Ana Ríos', myEdPrivHex: sealer.seed, myKey: sealer.key, peerKey: BEN.key, messageId: itemId });
     const envelope = await signRelayEnvelope({
-        kind: (opts.kind ?? 'dm-line') as any, itemId, senderKey: from.key, senderHome: ANA_HOME, recipient: BEN.key, recipientHome: HOME,
+        kind: (opts.kind ?? 'dm-line') as any, itemId, senderKey: from.key, senderHome: opts.home ?? ANA_HOME, recipient: BEN.key, recipientHome: HOME,
         at: Date.now(), payloadHash: relayPayloadHash(payload),
     }, ed25519Signer(Buffer.from(from.seed, 'hex')));
     const item = { kind: envelope.kind, envelope, payload: opts.kind === 'dm-blob' ? null : payload, bytes: payload.length, receivedAt: Date.now() };
@@ -471,5 +517,182 @@ describe('10  a round\'s deadline', () => {
         expect(server.confirmed).toEqual([]);
         server.stallGet = false;
         expect(await syncOutsideMail(ctx)).toMatchObject({ written: 1, confirmed: 1 });
+    });
+});
+
+const DAY = 24 * 60 * 60_000;
+const CY_HOME = 'c.example';
+/** Each id a receipt my server TOOK named, and whom it went to: `<key>@<home>`. */
+function receiptedTo(): Record<string, string[]> {
+    const to: Record<string, string[]> = {};
+    for (const i of server.sent.filter((s) => s.envelope.kind === 'receipt')) {
+        for (const id of readReceiptPayloadForTests(i.payload) ?? []) to[id] = [...new Set([...(to[id] ?? []), `${i.envelope.recipient}@${i.envelope.recipientHome}`])];
+    }
+    return to;
+}
+/** The receipts this phone still owes. */
+const owed = () => (sql.prepare('SELECT COUNT(*) AS n FROM outside_receipts').get() as any).n as number;
+/** Lets a round that never settles (the app killed) reach its stop. */
+const until = async (ok: () => boolean) => { for (let i = 0; i < 2000 && !ok(); i++) await new Promise((r) => setImmediate(r)); };
+async function openWithAnaAndCy() {
+    await ctx.store.openChat(BEN.key, relayConversationId(BEN.key, ANA.key), { key: ANA.key, home: ANA_HOME, name: 'Ana' });
+    await ctx.store.openChat(BEN.key, relayConversationId(BEN.key, CY.key), { key: CY.key, home: CY_HOME, name: 'Cy' });
+}
+
+describe('11  a receipt outlives the round (PR #3168 review: "the receipts not yet sent are lost")', () => {
+    // A page holds a line from Ana (a.example) and one from Cy (c.example): two receipts, one to each home.
+    const POINTS = [
+        { at: 'confirm', nth: 1, taken: false, what: 'the confirm, before my server deleted the page' },
+        { at: 'confirm', nth: 1, taken: true, what: 'the confirm, after my server deleted the page (its answer lost)' },
+        { at: 'receipt', nth: 1, taken: false, what: 'the first receipt, before my server took it' },
+        { at: 'receipt', nth: 1, taken: true, what: 'the first receipt, after my server took it (its answer lost)' },
+        { at: 'receipt', nth: 2, taken: false, what: 'the second receipt, the first one taken' },
+        { at: 'receipt', nth: 2, taken: true, what: 'the second receipt, after my server took it (its answer lost)' },
+    ] as const;
+    /** How a round stops. Before my server takes a request it can also answer no, or be busy; after, only its answer is lost. */
+    const BEFORE = ['deadline', 'network', 'killed', 'refused-403', 'refused-400', 'busy-503'];
+    const AFTER = ['deadline', 'network', 'killed'];
+    for (const point of POINTS) for (const how of point.taken ? AFTER : BEFORE) {
+        it(`stopped at ${point.what}, by ${how}: both lines written once, confirmed, and receipted to their senders' homes`, async () => {
+            await openWithAnaAndCy();
+            const ana = await heldLine(ANA, 'From Ana');
+            const cy = await heldLine(CY, 'From Cy', { home: CY_HOME });
+            const controller = new AbortController();
+            server.deadline = controller;
+            server.stop = { ...point, how };
+            const first = syncOutsideMail({ ...ctx, signal: controller.signal }).catch(() => null);
+            // Killed: the round never goes on past its stop. Otherwise it ends, or throws.
+            if (how === 'killed') await until(() => server.stopped); else await first;
+            expect(server.stopped, 'the round reached its stop').toBe(true);
+            server.stop = null;
+            // The app back: the next rounds, each with its own deadline.
+            for (let i = 0; i < 2; i++) await syncOutsideMail({ ...ctx, signal: new AbortController().signal });
+            expect(lineRows().map((r) => r.text).sort()).toEqual(['From Ana', 'From Cy']);
+            expect(server.held).toEqual([]);
+            expect(receiptedTo()).toEqual({
+                [ana.envelope.itemId]: [`${ANA.key}@${ANA_HOME}`],
+                [cy.envelope.itemId]: [`${CY.key}@${CY_HOME}`],
+            });
+            expect(owed()).toBe(0);
+        });
+    }
+});
+
+describe('12  owed receipts: one per line, a refused one tried again behind the rest, none kept for ever', () => {
+    it('a line fetched again (its confirm never answered) is owed once, and receipted once it can be', async () => {
+        await ctx.store.openChat(BEN.key, relayConversationId(BEN.key, ANA.key), { key: ANA.key, home: ANA_HOME, name: 'Ana' });
+        const a = await heldLine(ANA, 'Twice');
+        for (const nth of [1, 2]) {
+            server.stop = { at: 'confirm', nth, taken: false, how: 'network' };
+            await syncOutsideMail(ctx).catch(() => null);
+        }
+        expect(server.confirmed).toEqual([]);
+        expect(lineRows()).toHaveLength(1);
+        expect(owed()).toBe(1);
+        server.stop = null;
+        await syncOutsideMail(ctx);
+        expect(owed()).toBe(0);
+        expect(receiptedTo()).toEqual({ [a.envelope.itemId]: [`${ANA.key}@${ANA_HOME}`] });
+    });
+
+    it('a receipt my server keeps refusing holds none of the others: they go first, and it is tried again at the next round', async () => {
+        await openWithAnaAndCy();
+        await heldLine(ANA, 'From Ana');
+        await heldLine(CY, 'From Cy', { home: CY_HOME });
+        server.refuse = (i) => (i.envelope.kind === 'receipt' && i.envelope.recipient === ANA.key ? { status: 400, error: 'No.', code: 'bad_item' } : null);
+        await syncOutsideMail(ctx);
+        expect(server.receiptTries.map((r) => r.to).sort()).toEqual([`${ANA.key}@${ANA_HOME}`, `${CY.key}@${CY_HOME}`].sort());
+        expect(owed()).toBe(1);
+        // A new line from Cy: its receipt goes before Ana's is tried again.
+        server.receiptTries = [];
+        await heldLine(CY, 'Again from Cy', { home: CY_HOME });
+        await syncOutsideMail(ctx);
+        expect(server.receiptTries.map((r) => r.to)).toEqual([`${CY.key}@${CY_HOME}`, `${ANA.key}@${ANA_HOME}`]);
+        expect(owed()).toBe(1);
+        server.refuse = null;
+        await syncOutsideMail(ctx);
+        expect(owed()).toBe(0);
+        expect(Object.values(receiptedTo()).flat().filter((to) => to.startsWith(ANA.key))).toHaveLength(1);
+    });
+
+    it('a receipt owed for more than 30 days goes unsent: its sender\'s server settled that line long ago', async () => {
+        const now = Date.now();
+        await ctx.store.oweReceipt(BEN.key, { id: uuid(), key: ANA.key, home: ANA_HOME }, now - 31 * DAY);
+        const fresh = uuid();
+        await ctx.store.oweReceipt(BEN.key, { id: fresh, key: ANA.key, home: ANA_HOME }, now - 29 * DAY);
+        await syncOutsideMail(ctx, now);
+        expect(server.receiptTries).toEqual([{ to: `${ANA.key}@${ANA_HOME}`, ids: [fresh] }]);
+        expect(owed()).toBe(0);
+    });
+
+    it('one round posts 200 owed ids at most, 50 to a receipt; the rest go at the next round', async () => {
+        const ids = Array.from({ length: 250 }, () => uuid());
+        for (const id of ids) await ctx.store.oweReceipt(BEN.key, { id, key: ANA.key, home: ANA_HOME }, Date.now());
+        await syncOutsideMail(ctx);
+        expect(server.receiptTries.map((r) => r.ids.length)).toEqual([50, 50, 50, 50]);
+        expect(owed()).toBe(50);
+        await syncOutsideMail(ctx);
+        expect(server.receiptTries.map((r) => r.ids.length)).toEqual([50, 50, 50, 50, 50]);
+        expect(owed()).toBe(0);
+        expect(new Set(server.receiptTries.flatMap((r) => r.ids))).toEqual(new Set(ids));
+    });
+});
+
+describe('13  typed words are never lost on a failed send (PR #3168 review note)', () => {
+    const WORDS = 'Are the bikes still there?';
+    const realFetch = globalThis.fetch;
+    /** My community's home not yet read on this phone (a restore from 12 words), and its read answering as `fetchHome` does. */
+    const homeUnknown = (fetchHome: (init?: RequestInit) => Promise<Response>) => {
+        sql.exec("DELETE FROM outside_meta WHERE k = 'home'");
+        globalThis.fetch = ((_url: string, init?: RequestInit) => fetchHome(init)) as any;
+    };
+    type Case = { what: string; setup: () => void; budgetMs?: number } & ({ kept: false } | { kept: true; state: string });
+    const CASES: Case[] = [
+        { what: 'my community knows none of its names here, and can\'t be read now', kept: false,
+            setup: () => homeUnknown(async () => { throw new TypeError('Network request failed'); }) },
+        { what: 'the send\'s deadline cuts the read of my community', kept: false, budgetMs: 40,
+            setup: () => homeUnknown((init) => new Promise((_, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))))) },
+        { what: 'the request is not accepted yet', kept: false, setup: () => { sql.exec("UPDATE outside_chats SET state = 'request'"); } },
+        { what: 'my server can\'t be reached', kept: true, state: 'sending', setup: () => { server.sendFails = true; } },
+        { what: 'my server answers no', kept: true, state: 'failed',
+            setup: () => { server.refuse = () => ({ status: 403, error: 'Off here.', code: 'outside_messages_off' }); } },
+        { what: 'my server never answers before the deadline', kept: true, state: 'sending', budgetMs: 40, setup: () => { server.stallSend = true; } },
+        { what: 'it goes', kept: true, state: 'sent', setup: () => {} },
+    ];
+    for (const c of CASES) {
+        it(`${c.what}: ${c.kept ? `the box empties, the line kept as ${c.state}` : 'the words stay in the box, no line'}`, async () => {
+            const chatId = relayConversationId(BEN.key, ANA.key);
+            await ctx.store.openChat(BEN.key, chatId, { key: ANA.key, home: ANA_HOME, name: 'Ana' });
+            c.setup();
+            let box = WORDS;
+            try {
+                const r = await sendFromBox(ctx, chatId, WORDS, c.budgetMs ?? 5_000, () => { box = ''; });
+                const line = lineRows().find((l) => l.text === WORDS);
+                expect(r.kept).toBe(c.kept);
+                if (c.kept) {
+                    expect(box).toBe('');
+                    expect(line?.state).toBe(c.state);
+                    expect(!!r.error).toBe(c.state !== 'sent');
+                } else {
+                    expect(box).toBe(WORDS);
+                    expect(line).toBeUndefined();
+                    expect(r.error).toBeTruthy();
+                }
+            } finally {
+                globalThis.fetch = realFetch;
+            }
+        });
+    }
+
+    it('the chat\'s box and the card\'s first line send only through sendFromBox, and empty only once the line is kept', () => {
+        const src = (f: string) => readFileSync(join(__dirname, '../../app', f), 'utf8');
+        for (const [file, setter] of [['outside-chat/[id].tsx', 'setText'], ['address-card.tsx', 'setFirst']] as const) {
+            const s = src(file);
+            expect(s, file).not.toMatch(/\bsendOutsideLine\(/);
+            expect(s, file).toMatch(new RegExp(`sendFromBox\\([^;]*\\(\\)\\s*=>\\s*${setter}\\(`));
+            expect(s.match(new RegExp(`\\b${setter}\\(\\s*(''|"")\\s*\\)`, 'g')) ?? [], `${file}: no other way to empty the box`).toEqual([]);
+        }
+        // The card moves on to the chat only when its line was kept: otherwise the words wait on the card, to send again.
+        expect(src('address-card.tsx')).toMatch(/if \(kept\) router\.replace\(/);
     });
 });

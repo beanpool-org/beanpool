@@ -128,7 +128,8 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
     const quoted = (n: number | null) => (n ? page?.posts.find((p) => p.number === n) ?? null : null);
     const name = (p: { writer: { name: string } }) => p.writer.name || t('A member');
 
-    function PostBody({ post }: { post: ForumPost }) {
+    // Plain calls, not components: defined in this render, a component would mount afresh at every keystroke in the reply box.
+    function postBody(post: ForumPost) {
         if (post.removed) return <p className="m-0 italic text-sm" style={{ color: 'var(--text-muted)' }}>{post.removed === 'moderator' ? t(TOPIC_WORDS.removedByModerator) : t(TOPIC_WORDS.removedByWriter)}</p>;
         if (post.hidden && !post.words) return <p className="m-0 italic text-sm" style={{ color: 'var(--text-muted)' }}>{t(TOPIC_WORDS.hidden)}</p>;
         return (
@@ -140,7 +141,7 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
         );
     }
 
-    function Byline({ post }: { post: ForumPost }) {
+    function byline(post: ForumPost) {
         return (
             <div className="flex items-center gap-2 min-w-0 text-xs" style={{ color: 'var(--text-muted)' }}>
                 <button type="button" onClick={() => onOpenProfile?.(post.writer.publicKey)} className="font-bold truncate min-h-[44px] text-left" style={{ color: 'var(--text-primary)' }}>{name(post)}</button>
@@ -182,8 +183,8 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
                         {topic.pinned && <span aria-hidden="true">📌 </span>}{topic.removed ? t(TOPIC_WORDS.removedTopic) : topic.title}
                     </h2>
                     {topic.place && <p className="m-0 text-xs" style={{ color: 'var(--text-muted)' }}>📍 {topic.place}</p>}
-                    {opening && <Byline post={opening} />}
-                    {opening && <PostBody post={opening} />}
+                    {opening && byline(opening)}
+                    {opening && postBody(opening)}
                 </article>
             )}
 
@@ -192,13 +193,13 @@ export function ForumTopicView({ topicId, front, me, onBack, onOpenProfile }: {
                 return (
                     <article key={post.id} data-testid={`forum-post-${post.number}`} className="flex flex-col gap-1 pt-2 px-2 rounded-lg"
                         style={{ borderTop: '1px solid var(--border-primary)', background: post.writer.publicKey === me ? 'var(--bg-secondary)' : undefined }}>
-                        <Byline post={post} />
+                        {byline(post)}
                         {q && (
                             <p className="m-0 pl-2 text-xs truncate" style={{ borderLeft: '3px solid var(--bp-accent-fill)', color: 'var(--text-secondary)' }}>
                                 {t(TOPIC_WORDS.quoteLine, { name: name(q), words: q.words || (q.removed ? t(TOPIC_WORDS.removedByWriter) : t(TOPIC_WORDS.hidden)) })}
                             </p>
                         )}
-                        <PostBody post={post} />
+                        {postBody(post)}
                     </article>
                 );
             })}

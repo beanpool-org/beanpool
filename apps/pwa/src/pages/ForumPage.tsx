@@ -17,7 +17,7 @@ import { useEffect, useState } from 'react';
 import { forumSectionName, t, timeAgo, tn, word, wordn } from '@beanpool/core';
 import { myNodeRoleOnce } from '../lib/api';
 import {
-    getForumFront, getForumTopics, keptFront, keptList, myFirstLook, withdrawFirstLook, type ForumFront, type ForumTopic, type ForumWaiting,
+    getForumFront, getForumTopics, keepForumFor, keptFront, keptList, myFirstLook, withdrawFirstLook, type ForumFront, type ForumTopic, type ForumWaiting,
 } from '../lib/forum';
 import { ForumTopicView } from '../components/forum/ForumTopicView';
 import { ForumNewTopic } from '../components/forum/ForumNewTopic';
@@ -44,6 +44,8 @@ export const FORUM_WORDS = {
 type View = { kind: 'list' } | { kind: 'topic'; id: string } | { kind: 'new' } | { kind: 'firstLooks' };
 
 export function ForumPage({ me, onOpenProfile }: { me: string; onOpenProfile?: (pubkey: string) => void }) {
+    // Before any kept copy is read: another account in this tab never sees the last one's forum, not even for a moment.
+    keepForumFor(me);
     const [view, setView] = useState<View>({ kind: 'list' });
     const [front, setFront] = useState<ForumFront | null>(() => keptFront());
     const [section, setSection] = useState<string | null>(null);

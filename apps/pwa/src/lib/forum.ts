@@ -51,8 +51,17 @@ const listKey = (sectionId: string | null) => sectionId ?? '';
 export const keptFront = (): ForumFront | null => kept.front;
 export const keptList = (sectionId: string | null) => kept.lists.get(listKey(sectionId)) ?? null;
 export const keptTopic = (id: string): ForumTopicPage | null => kept.topics.get(id) ?? null;
+/** Whose copies these are: another account in this tab starts with none (keepForumFor). */
+let keptFor: string | null = null;
+/** The copies are this member's: when the account in this tab changed, the last one's are dropped first. Idempotent. */
+export function keepForumFor(me: string): void {
+    if (keptFor === me) return;
+    forgetForum();
+    keptFor = me;
+}
 /** For tests, and for a new account in this tab: nothing kept. */
 export function forgetForum(): void {
+    keptFor = null;
     kept.front = null;
     kept.lists.clear();
     kept.topics.clear();

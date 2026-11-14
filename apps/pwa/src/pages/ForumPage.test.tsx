@@ -195,6 +195,20 @@ describe('a topic', () => {
     });
 });
 
+describe('kept copies', () => {
+    it('draw at once on a return, and are dropped when the account in this tab changes', async () => {
+        const first = render(<ForumPage me={ME} />);
+        await screen.findAllByTestId('forum-topic-row');
+        first.unmount();
+        node.answer = () => new Promise(() => {}); // the node says nothing now
+        const again = render(<ForumPage me={ME} />);
+        expect(screen.getAllByTestId('forum-topic-row')).toHaveLength(2);
+        again.unmount();
+        render(<ForumPage me="someone-else" />);
+        expect(screen.queryAllByTestId('forum-topic-row')).toHaveLength(0);
+    });
+});
+
 describe('a new topic', () => {
     it('lists only the sections the member may start in, and a new member\'s waits for a first look', async () => {
         state.front = front({ firstTopicWaits: true, linksOn: false });

@@ -1585,9 +1585,14 @@ function communityCard(c: Ctx): HomeCards['community'] {
     // reads as one on a local community (the global profile's figures are members, communities and listings), the rest.
     const card: NonNullable<HomeCards['community']> = { ...out, listings: counts.postCount, ...(c.member && !c.switches.guestListingsOnly ? memberFigures(c, counts.commonsBalance_c) : {}) };
     // "{n} things worth knowing" (slice K7): the pages Learn shows this member, from 1, only where Learn is on. A field an
-    // app from before it never reads, so its card is what it was.
-    const pages = learnPagesFor(c);
-    if (pages && pages.length > 0) card.knowledge = pages.length;
+    // app from before it never reads, so its card is what it was. A read that fails leaves the figure out, never the card:
+    // buildHome drops a card whose builder throws, and this one holds Add a card and Arrange.
+    try {
+        const pages = learnPagesFor(c);
+        if (pages && pages.length > 0) card.knowledge = pages.length;
+    } catch (e) {
+        console.warn('[Home] the community card\'s Learn figure could not be read:', (e as Error)?.message || e);
+    }
     // A figure that is zero is not written (DESIGN-home-default-fable.md §2.7): "0 joined this week", "Commons pot 0 Beans"
     // and "0 trades this month" go. `members` and `listings` stay: every app reads them, and a community of one has its
     // own words. Trades and communities of 0 are left out, as on a node that has no such figure at all. A member's three

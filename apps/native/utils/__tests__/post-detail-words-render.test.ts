@@ -523,6 +523,21 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         expect(host.textContent).toContain('ASKING PRICE');
         expect(host.querySelector('img[aria-label="Photo 2 of 2"]')).not.toBeNull();
     });
+
+    // Marty, 14 Nov 2026: on a Need the poster is the one who would pay, so the same flag's line says the cash is offered.
+    it("a Need with cash too says the cash is offered, in English and in the pseudo-locale; the chip is the Offer's", async () => {
+        const CASH_NEED = { ...NEED, id: 'p-need-cash', author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, cash_also_needed: 1 };
+        await open(CASH_NEED, 'en');
+        expect(chips()).toContain('💸 CASH TOO');
+        expect(host.textContent).toContain('💸 Cash offered too for fuel or materials, at cost.');
+        expect(host.textContent).not.toContain('Cash also needed');
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open(CASH_NEED);
+        expect(host.textContent).toContain(pseudoLocalise('Cash offered too'));
+        expect(host.textContent).not.toContain(pseudoLocalise('Cash also needed'));
+        expect(bypassing(), 'a Need with cash too').toEqual([]);
+    });
 });
 
 // The photo opens whole (DESIGN-detail-pages-fable.md §2.6, slice DP4; Marty, 7 Nov: "maybe we should? why not"): the page's 4:3

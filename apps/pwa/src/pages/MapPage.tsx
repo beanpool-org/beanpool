@@ -3537,7 +3537,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         {/* #108 Cash-also-needed toggle. The nudge sits directly under the box, because the
                             moment of ticking is where the rule actually lands. No amount field by design:
                             the app can escrow beans, not cash, and a figure would imply it settles money it
-                            never touches. */}
+                            never touches. On a Need the poster is the one who pays, so the same flag reads the
+                            other way round there, in the phone's words (Marty, 14 Nov 2026). */}
                         <label className="flex items-center gap-3 text-sm font-medium text-nature-700 dark:text-nature-400 cursor-pointer py-2 px-1">
                             <input
                                 type="checkbox"
@@ -3545,16 +3546,16 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                 onChange={e => setNewPostCashAlsoNeeded(e.target.checked)}
                                 className="w-5 h-5 rounded border-nature-300 text-amber-600 focus:ring-amber-500 shadow-sm accent-amber-600 cursor-pointer transition-all"
                             />
-                            {t('💸 Cash also needed — for fuel or materials')}
+                            {newPostType === 'need' ? t("💸 I'll pay cash too — for fuel or materials") : t('💸 Cash also needed — for fuel or materials')}
                         </label>
                         {newPostCashAlsoNeeded && (
                             <p className="text-[13px] leading-snug text-amber-700 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2 mb-1">
-                                <Sentence
+                                {newPostType === 'need' ? t('Cash covers fuel or materials the helper buys — at cost, not their time or tools.') : <Sentence
                                     text={t('Cash is for fuel and consumables you paid for — {notTools}. At cost, no markup. Agree the details in chat; the app never handles the money.')}
                                     parts={{
                                         notTools: <strong>{t('not your time, not your tools')}</strong>
                                     }}
-                                />
+                                />}
                             </p>
                         )}
 

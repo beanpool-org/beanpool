@@ -11,9 +11,10 @@
  * word per listing), not the listing's age and not the word's: an author who edits a new word onto an old listing, whose
  * listing comes back from a long pause, or who moves the word to another listing, waits the week like anyone. What holds
  * a word: an open report on any listing that carries it, or carried it and still has that report open; or a listing that
- * carried it in the last week and was taken down by a moderator or hidden by reports. So a report follows the word when
- * its author moves it to a new listing and takes it off (or deletes) the reported one, and a takedown holds the author's
- * copy elsewhere for a week after it (an owner or admin hides a word for good). A slur typed once stays on that one
+ * carried it and was taken down by a moderator or hidden by reports, for a week from the later of the word leaving it and
+ * the takedown. So a report follows the word when its author moves it to a new listing and takes it off (or deletes) the
+ * reported one, and a takedown, even one upheld after that move, holds the author's copy elsewhere for a week after it
+ * (an owner or admin hides a word for good). A slur typed once stays on that one
  * listing until it is reported or deleted, and never reaches the picker. A 'merge' rule offers the tag whatever its
  * counts: an owner or admin chose it, and the field stores the library id it names. Rebuilt at most once a minute (a
  * json_each over the live listings); a rule set here is seen at once.
@@ -77,6 +78,16 @@ const DAY_MS = 86_400_000;
 const openReportOn = (postId: string) => `EXISTS (SELECT 1 FROM abuse_reports r WHERE r.target_post_id = ${postId}
     AND r.target_pulse_item_id IS NULL AND (r.status = 'pending' OR r.status IS NULL))`;
 
+/**
+ * A takedown still holds the word a stamp `s` kept: its listing `hp` was taken down by a moderator or hidden by reports, and
+ * the later of when that listing stopped carrying the word (`s.gone_at`) and its takedown is under a week ago (`@weekAgo`).
+ * The later of the two, so a report upheld after the author moved the word away holds it a week from the takedown, as long
+ * as leaving the report open would. The hold and the prune read this one rule, so the stamp is still there when the hold
+ * looks. Every one of these is an ISO time (iso(now)), so the strings compare as times.
+ */
+const takedownHolds = (s: string, hp: string) => `(${hp}.removed_by_moderator_at IS NOT NULL OR ${hp}.hidden_by_reports_at IS NOT NULL)
+    AND (${s}.gone_at IS NULL OR MAX(${s}.gone_at, COALESCE(${hp}.removed_by_moderator_at, ''), COALESCE(${hp}.hidden_by_reports_at, '')) > @weekAgo)`;
+
 /** Each typed tag on each live listing here (posts p, its author m, the tag j): what is counted, and what free_tag_seen keeps. */
 const LIVE_TAGS_FROM = `
         FROM posts p
@@ -91,9 +102,9 @@ const LIVE_TAGS_WHERE = `
 /**
  * Keeps free_tag_seen to the words on each listing here: a listing that carries a word live and had no stamp for it, or
  * had stopped carrying it, is stamped `now` (its own week starts); a listing that stopped carrying one live is marked gone
- * `now`; a stamp gone for over a week with no report open on its listing is dropped. Run by every count, on each side of
- * an author's change to a listing's typed tags (engine/posts.ts: so a word taken off a listing since the last count, then
- * edited back onto it, starts again at that edit), and hourly on every server (state-engine.ts: so a quiet community's
+ * `now`; a stamp gone for over a week with no report open on its listing and no takedown still holding it (takedownHolds) is
+ * dropped. Run by every count, on each side of an author's change to a listing's typed tags (engine/posts.ts: so a word
+ * taken off a listing since the last count, then edited back onto it, starts again at that edit), and hourly on every server (state-engine.ts: so a quiet community's
  * listing back from a long pause is not held to the day before it, and a standby's stamps follow its copy). Each server
  * keeps its own (the manifest: local).
  */
@@ -105,7 +116,8 @@ export function noteFreeTagsSeen(now: number = Date.now()): void {
             SELECT 1 ${LIVE_TAGS_FROM} ${LIVE_TAGS_WHERE} AND p.id = free_tag_seen.post_id AND j.value = free_tag_seen.tag)`).run({ at });
         db.prepare(`INSERT INTO free_tag_seen (tag, post_id, first_seen) SELECT DISTINCT j.value, p.id, @at ${LIVE_TAGS_FROM} ${LIVE_TAGS_WHERE}
             ON CONFLICT (tag, post_id) DO UPDATE SET first_seen = excluded.first_seen, gone_at = NULL WHERE free_tag_seen.gone_at IS NOT NULL`).run({ at });
-        db.prepare(`DELETE FROM free_tag_seen WHERE gone_at IS NOT NULL AND gone_at <= @weekAgo AND NOT ${openReportOn('free_tag_seen.post_id')}`).run({ weekAgo });
+        db.prepare(`DELETE FROM free_tag_seen WHERE gone_at IS NOT NULL AND gone_at <= @weekAgo AND NOT ${openReportOn('free_tag_seen.post_id')}
+            AND NOT EXISTS (SELECT 1 FROM posts hp WHERE hp.id = free_tag_seen.post_id AND ${takedownHolds('free_tag_seen', 'hp')})`).run({ weekAgo });
     })();
 }
 
@@ -124,12 +136,12 @@ export function freeTagCounts(now: number = Date.now()): FreeTagCount[] {
         ${LIVE_TAGS_WHERE}
         GROUP BY j.value
     `).all() as { tag: string; listings: number; authors: number; first_seen: string | null }[];
-    // The words held: a listing that carries or carried one (its stamp kept) has a report open, or one that carried it in the
-    // last week was taken down or hidden by reports. A live listing is neither, so its own stamp only counts by a report.
+    // The words held: a listing that carries or carried one (its stamp kept) has a report open, or one that carried it was taken
+    // down or hidden by reports, and the later of the word leaving it and the takedown is under a week ago (takedownHolds). A live
+    // listing is neither, so its own stamp only counts by a report.
     const held = new Set((db.prepare(`
         SELECT DISTINCT s.tag FROM free_tag_seen s LEFT JOIN posts hp ON hp.id = s.post_id
-        WHERE ${openReportOn('s.post_id')}
-           OR ((s.gone_at IS NULL OR s.gone_at > @weekAgo) AND (hp.removed_by_moderator_at IS NOT NULL OR hp.hidden_by_reports_at IS NOT NULL))
+        WHERE ${openReportOn('s.post_id')} OR (${takedownHolds('s', 'hp')})
     `).all({ weekAgo }) as { tag: string }[]).map((r) => r.tag));
     const rules = new Map((db.prepare('SELECT tag, action, into_tag FROM free_tag_rules').all() as { tag: string; action: FreeTagRuleAction; into_tag: string | null }[])
         .map((r) => [r.tag, r]));

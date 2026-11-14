@@ -11,7 +11,8 @@
  *      Manager's first seen is that time
  *  1c. a report and a takedown follow the word (real routes): an author who moves a reported word to a new listing and
  *      takes it off, or deletes, the reported one waits while the report is open and the new listing's own week; a
- *      moderator's takedown holds the author's copy elsewhere for a week; a deleted account's listings keep no day
+ *      moderator's takedown holds the author's copy elsewhere for a week, counted from the takedown even when the report is
+ *      upheld 8 or 6 days after the author moved the word away; a deleted account's listings keep no day
  *   2. what is counted: a listing hidden by reports, taken down, inactive, cancelled, a group's or one person's, a peer's,
  *      or by a paused or suspended author lends nothing
  *   3. the count is made at most once a minute, and a rule set is seen at once
@@ -253,6 +254,31 @@ async function main(): Promise<void> {
     assert(!offeredAt(banner2At + (FREE_TAG_OFFER_DAYS - 1) * DAY).includes('takeword'), 'nor six days on');
     assert(offeredAt(tookDownAt + FREE_TAG_OFFER_DAYS * DAY + 60_000).includes('takeword'),
         'a week after the takedown, the other listing having carried it that week with no report: offered (an owner or admin hides a word for good)');
+    // A report upheld after its author moved the word away: the takedown's week counts from the takedown, not from the move.
+    const upheldAfterMove = async (author: Id, tag: string, daysSinceMove: number) => {
+        const sign = await offer(author, `A sign ${daysSinceMove}`, [tag]);
+        stampBack(tag, FREE_TAG_OFFER_DAYS + 1);
+        assert(offeredNow().includes(tag), `${tag}: one listing has carried it eight days with no report: offered`);
+        const upReport = await fileReport(dee, sign, author);
+        const other = await offer(author, `Another sign ${daysSinceMove}`, []);
+        const onOther = await editTags(author, other, [tag]);
+        const offSign = await editTags(author, sign, []);
+        // The move made `daysSinceMove` days ago, the suite's own way: the new listing's stamp and the reported one's gone time moved back.
+        const back = new Date(Date.now() - daysSinceMove * DAY).toISOString();
+        db.prepare('UPDATE free_tag_seen SET first_seen = ? WHERE tag = ? AND post_id = ?').run(back, tag, other);
+        db.prepare('UPDATE free_tag_seen SET gone_at = ? WHERE tag = ? AND post_id = ?').run(back, tag, sign);
+        assert(onOther.status === 200 && offSign.status === 200 && reportStatus(upReport) === 'pending' && !offeredNow().includes(tag),
+            `${tag}: the author moved it to a new listing and off the reported one ${daysSinceMove} days ago, the report still open: not offered (${show(offSign)})`);
+        const upheld = await call('POST', null, `/api/local/admin/reports/${upReport}/action`, { deletePost: true }, session(kit, 'moderator'));
+        const upheldAt = Date.now();
+        assert(upheld.status === 200 && reportStatus(upReport) === 'actioned', `${tag}: a moderator upholds the report and takes the listing down (${show(upheld)})`);
+        assert(!offeredNow().includes(tag), `${tag}: upheld ${daysSinceMove} days after the move, not offered right after the takedown (${JSON.stringify(countOf(tag))})`);
+        assert(!offeredAt(upheldAt + (FREE_TAG_OFFER_DAYS - 1) * DAY).includes(tag), `${tag}: nor six days after the takedown`);
+        assert(offeredAt(upheldAt + FREE_TAG_OFFER_DAYS * DAY + 60_000).includes(tag), `${tag}: a week after the takedown, with no report open: offered`);
+    };
+    await upheldAfterMove(member('Gus'), 'upword', FREE_TAG_OFFER_DAYS + 1);
+    await upheldAfterMove(member('Hal'), 'laterword', FREE_TAG_OFFER_DAYS - 1);
+
     const faysDays = () => (db.prepare('SELECT COUNT(*) AS n FROM free_tag_seen s JOIN posts p ON p.id = s.post_id WHERE p.author_pubkey = ?').get(fay.pk) as { n: number }).n;
     const faysBefore = faysDays();
     db.transaction(() => { scrubPostsOf(fay.pk, new Date().toISOString()); })();

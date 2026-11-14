@@ -32,11 +32,11 @@
  * The line is found by its sender and id (relay_outbox's own key), and it must have gone to the signing server: to its home
  * as signed, or to a name whose key document (engine/node-signature.ts, fetched as for the door) names the key that signed
  * the complaint, so a former name or an alias of the reporting server is one of its names here too, and no other server's.
- * Answered 202 `{received:true}` when filed or on file already from that community (asked first, before any drop: a retry
- * after a lost 202 is taken though the member was pruned or re-keyed since, or the switch went off). Every drop is answered alike, 422
- * `not_taken`, whatever the reason (no line by that id from that member, a key that is no member here now, a line that went
- * to another server's name, the owner's switch off), so the reporting server learns only whether its complaint is on file,
- * never which of these it was; and it can ask only of lines it was sent (it needs the line's random id). Refused: a request
+ * Answered 202 `{received:true}` when filed or on file already from that community: that member's line by that id, asked
+ * first, before any drop, so a retry after a lost 202 is taken though the member was pruned or re-keyed since, the switch
+ * went off or the day's cap was reached. Every drop is answered alike, 422 `not_taken`, whatever the reason (no line by
+ * that id from that member, a key that is no member here now, a line that went to another server's name, the owner's
+ * switch off), so the reporting server learns only whether its complaint is on file, never which of these it was; and it can ask only of lines it was sent (it needs the line's random id). Refused: a request
  * that is not one (400 bad_complaint), past COMPLAINTS_PER_ORIGIN_DAY from one server (429), and 503 while the name the
  * line went to can't be confirmed yet (its key document not had: try again later).
  *

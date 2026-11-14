@@ -142,13 +142,17 @@ export async function shareContactsFile(list: ContactsList, modules?: ContactsFi
 
 /**
  * Removes a contacts file a Save a copy left in the app's cache: the app was ended while the share sheet was open, so the
- * removal after it never ran (as utils/recovery-kit.ts sweepPrintedPdfs does for the kit's PDF). Once at app start
- * (app/_layout.tsx). Never throws: a phone with no such file, or no cache folder, has nothing to remove.
+ * removal after it never ran (as utils/recovery-kit.ts sweepPrintedPdfs does for the kit's PDF). And the copy the file picker
+ * makes for an import (expo-document-picker's `DocumentPicker` folder: only Import uses the picker), should the app be ended
+ * between the pick and its removal (utils/contacts-import.ts). Once at app start (app/_layout.tsx). Never throws: a phone
+ * with no such file, or no cache folder, has nothing to remove.
  */
 export async function sweepContactsFile(fileSystem?: Pick<ContactsFileModules['FileSystem'], 'cacheDirectory' | 'deleteAsync'>): Promise<void> {
     try {
         const fs = fileSystem ?? (require('expo-file-system/legacy') as ContactsFileModules['FileSystem']);
-        if (fs.cacheDirectory) await fs.deleteAsync(contactsFileIn(fs.cacheDirectory), { idempotent: true });
+        if (!fs.cacheDirectory) return;
+        await fs.deleteAsync(contactsFileIn(fs.cacheDirectory), { idempotent: true });
+        await fs.deleteAsync(`${fs.cacheDirectory.replace(/\/?$/, '/')}DocumentPicker/`, { idempotent: true });
     } catch {
         // The next start tries again.
     }

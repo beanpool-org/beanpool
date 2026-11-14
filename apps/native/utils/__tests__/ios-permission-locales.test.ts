@@ -31,12 +31,12 @@ function catalogsIn(files: Record<string, string>): string {
 }
 
 describe('the iOS permission texts, one entry per declared language', () => {
-    it('names the three Info.plist keys, and app.json holds each one in English', () => {
-        expect([...IOS_PERMISSION_KEYS].sort()).toEqual(['NSCameraUsageDescription', 'NSFaceIDUsageDescription', 'NSLocationWhenInUseUsageDescription']);
+    it('names the four Info.plist keys, and app.json holds each one in English', () => {
+        expect([...IOS_PERMISSION_KEYS].sort()).toEqual(['NSCameraUsageDescription', 'NSContactsUsageDescription', 'NSFaceIDUsageDescription', 'NSLocationWhenInUseUsageDescription']);
         for (const key of IOS_PERMISSION_KEYS) expect(typeof INFO_PLIST[key], key).toBe('string');
     });
 
-    it('has an entry for every language the build declares, with all three texts', () => {
+    it('has an entry for every language the build declares, with every text', () => {
         expect([...APP_LANGUAGES]).toEqual([...LANGS]);
         const locales = iosPermissionLocales(INFO_PLIST, WORDS_DIR);
         expect(Object.keys(locales)).toEqual([...APP_LANGUAGES]);
@@ -76,7 +76,34 @@ describe('the iOS permission texts, one entry per declared language', () => {
         expect(iosPermissionLocales(INFO_PLIST, dir).it.ios.NSCameraUsageDescription).toBe('Usa la «fotocamera» e \\"scansiona\\"');
     });
 
-    it('marks the same three English sentences app.json has, word for word, so the translation pass sees them', () => {
+    it('the contacts question (private contacts C3) is drafted in every language, never in English, never "encrypted"', () => {
+        const locales = iosPermissionLocales(INFO_PLIST, WORDS_DIR);
+        for (const lang of APP_LANGUAGES.filter((l: string) => l !== 'en')) {
+            const said: string = locales[lang].ios.NSContactsUsageDescription;
+            // Mutation: leave a language's catalog without it → the English shows there.
+            expect(said, lang).not.toBe(stringsValue(INFO_PLIST.NSContactsUsageDescription));
+            expect(said, lang).toContain('BeanPool');
+            expect(said.toLowerCase(), lang).not.toMatch(/encrypt|resilien|surviv/);
+        }
+    });
+
+    it('keeps app.json\'s own file for each language (the Local Network question) beside the catalog\'s texts', () => {
+        const built = appConfig({ config: APP_JSON });
+        const fileOf = (lang: string) => JSON.parse(fs.readFileSync(path.resolve(__dirname, '../..', APP_JSON.locales[lang]), 'utf8')).ios;
+        for (const lang of APP_LANGUAGES) {
+            // Mutation: spread only the catalog's texts over app.json's locales (as before C3) → the file's sentence is gone.
+            expect(built.locales[lang].ios.NSLocalNetworkUsageDescription, lang).toBe(stringsValue(fileOf(lang).NSLocalNetworkUsageDescription));
+            for (const key of IOS_PERMISSION_KEYS) expect(typeof built.locales[lang].ios[key], `${lang} ${key}`).toBe('string');
+        }
+        // A file's text is written as a .strings value, as the catalog's are.
+        const dir = catalogsIn({ 'x.json': JSON.stringify({ ios: { NSLocalNetworkUsageDescription: 'Say "hi"' } }) });
+        const own = iosPermissionLocales(INFO_PLIST, catalogsIn({}), { fr: 'x.json.json' }, dir);
+        expect(own.fr.ios.NSLocalNetworkUsageDescription).toBe('Say \\"hi\\"');
+        // A file that is missing or broken adds nothing, and never fails the build.
+        expect(Object.keys(iosPermissionLocales(INFO_PLIST, catalogsIn({}), { fr: './nowhere.json' }).fr.ios).sort()).toEqual([...IOS_PERMISSION_KEYS].sort());
+    });
+
+    it('marks the same English sentences app.json has, word for word, so the translation pass sees them', () => {
         expect(Object.keys(IOS_PERMISSION_WORDS).sort()).toEqual([...IOS_PERMISSION_KEYS].sort());
         for (const key of IOS_PERMISSION_KEYS) expect(IOS_PERMISSION_WORDS[key as keyof typeof IOS_PERMISSION_WORDS], key).toBe(INFO_PLIST[key]);
     });

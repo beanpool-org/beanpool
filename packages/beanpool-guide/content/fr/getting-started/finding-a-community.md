@@ -52,6 +52,16 @@ La carte indique **Un membre vous a invité**. Touchez **Rejoindre** avec le nom
 
 Vous restez membre de la communauté globale, et pouvez basculer de l'une à l'autre : voir « Plusieurs communautés ».
 
+## Sur l'application web
+
+Vous pouvez aussi demander depuis la carte **Trouver votre communauté** de l'**Accueil** de l'application web, et y attendre.
+
+- Pendant l'attente, la carte d'attente propose **M'avertir quand ils répondent**. Touchez **M'avertir**, et votre navigateur vous demande d'abord ; puis **Nous vous préviendrons ici quand {name} répondra.** La communauté sollicitée prévient elle-même ce navigateur, même page fermée, et rien d'autre. La communauté où vous êtes ne garde rien de votre demande.
+- Sur un iPhone, cela ne marche que depuis l'écran d'accueil, et la carte explique comment. Quand un navigateur ne peut pas être prévenu, la carte le dit, avec **Obtenir l'application** en premier sur un téléphone ; l'Accueil vérifie encore la réponse toutes les quelques minutes tant qu'il est ouvert.
+- Toucher la notification ouvre l'**Accueil** sur cette communauté, sur la carte, avec **Rejoindre** et son nom. Une notification qui ne vient pas de cette communauté n'ouvre rien et le dit.
+- La cloche en haut montre aussi **🎉 {name} a dit oui.**, jusqu'à ce que vous la touchiez ou touchiez **Rejoindre**. La toucher ouvre le même endroit.
+- **Rejoindre** ouvre la page de la communauté dans ce navigateur et y emmène votre compte : les mêmes 12 mots. Quand votre demande a reçu sa réponse et a servi, ou qu'elle est annulée ou n'est plus ouverte, ce navigateur n'est plus prévenu.
+
 ## Rien près de chez vous
 
 - **Me prévenir quand une communauté naît ici :** vous recevez une notification lorsqu'une communauté commence près de l'endroit où vous êtes. Seule la zone est conservée, d'environ 10 km de large, jamais votre position exacte. Vous pouvez surveiller jusqu'à 3 lieux, et arrêter d'en surveiller un avec **Arrêter**.

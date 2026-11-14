@@ -12,7 +12,7 @@ source-hash: 5a1feb7390e4c3fb
 - **Avec une invitation**, vous rejoignez une communauté : les personnes proches de chez vous, avec ses propres haricots, échanges et Communs. Un membre de cette communauté vous invite.
 - **Sans invitation**, vous pouvez rejoindre la **communauté globale** lorsqu'elle est ouverte : des personnes de partout, où vous pouvez publier, envoyer des messages et trouver une communauté près de chez vous. Il n'y a pas de haricots ni de votes communautaires là-bas. Les haricots, le crédit, les Communs et leurs Décisions vivent dans les communautés locales. La communauté globale vous montre comment ils fonctionnent, dans une communauté d'exemple. Voir « Haricots et communauté globale ».
 
-Pas d'invitation, mais une communauté près de chez vous ? Rejoignez la communauté globale, puis demandez à cette communauté de vous accueillir : n'importe lequel de ses membres le peut, ou, dans une communauté où seuls les administrateurs invitent, ses administrateurs. Voir « Trouver une communauté près de chez vous ».
+Pas d'invitation, mais une communauté près de chez vous ? Rejoignez la communauté globale, puis demandez à cette communauté de vous accueillir : n'importe lequel de ses membres le peut, ou, dans une communauté où seuls les administrateurs invitent, ses administrateurs. Déjà membre ailleurs et vous avez demandé depuis l'**Accueil** de l'application web ? Sa carte d'attente propose aussi **M'avertir quand ils répondent**, et un oui apparaît dans la cloche. Voir « Trouver une communauté près de chez vous ».
 
 Dans les deux cas, votre compte est une clé conservée sur votre téléphone, avec 12 mots qui permettent de la restaurer. Il n'y a pas de mot de passe.
 

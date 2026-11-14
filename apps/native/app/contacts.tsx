@@ -3,21 +3,24 @@
  * list, opened from Chat. The same words, order and behaviour as the web's ContactsPage (apps/pwa, slice C4): On BeanPool
  * and Not on BeanPool yet, a contact with Remove, Add by hand, the footer that says where it is kept, and ⋯: Save a copy as
  * a file, Remove everyone, How this is kept. Import (slice C3: the phone's contacts, asked at the tap, or a contacts file;
- * "Choose who to bring"; Done) is components/ContactsImport.tsx; opened as `/contacts?start=import` it starts there. Invites
- * from a row are C5.
+ * "Choose who to bring"; Done) is components/ContactsImport.tsx; opened as `/contacts?start=import` it starts there.
+ * Invite from a row (slice C5): Invite / Invite again opens components/ContactInviteSheet.tsx; the row then reads "invited
+ * 12 Nov"; once the community says the code was used, the row asks "Is this Dee?" (Yes links, No forgets the invite); Remove
+ * offers "Also cancel the invite I sent" while it is still out here. No name, number or email of a contact reaches any request.
  *
  * A list on this phone that can't be opened says so; a damaged one is set aside and brought back from the copies the
  * member's communities keep, when the member asks (contacts-store.ts `setAsideDamaged`).
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, DeviceEventEmitter, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, ErrorBoundary, useLocalSearchParams, useNavigation } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
-    CONTACTS_LIMITS, cleanContactName, emptyContactsList, formatCount, newContactId, putContact, removeContact, removeEveryContact, t, tn,
-    type Contact, type ContactsList,
+    CONTACTS_LIMITS, cleanContactName, contactInviteAsk, contactInviteAskWords, contactInviteCancelWords, contactInviteCodes, contactInviteNoWords, contactInviteOut,
+    contactInviteWords, contactInvitedLine, emptyContactsList, forgetContactInvite, formatCount, linkContactToInvite, newContactId, putContact,
+    removeContact, removeEveryContact, t, tn, type Contact, type ContactInviteUsed, type ContactsList, type MyInviteSeen,
 } from '@beanpool/core';
 import { Alert } from '../utils/keyboard-alert';
 import { useIdentity } from './IdentityContext';
@@ -33,6 +36,10 @@ import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser } from '../utils/
 import { createConversationApi } from '../utils/db';
 import { switchCommunity } from '../utils/use-communities';
 import { signedRequestWords } from '../components/signed-request-lines';
+import { cancelContactInvite, readMyInvites } from '../utils/contact-invites';
+
+// Loaded when a row's Invite is tapped: the sheet brings the clipboard and the ask, which the list itself never needs.
+const ContactInviteSheet = lazy(() => import('../components/ContactInviteSheet').then((m) => ({ default: m.ContactInviteSheet })));
 
 export { ErrorBoundary };
 
@@ -51,8 +58,23 @@ export default function ContactsScreen() {
     const [screen, setScreen] = useState<Screen>(startedOnImport ? { kind: 'import' } : { kind: 'list' });
     const [info, setInfo] = useState(false);
     const [busy, setBusy] = useState(false);
+    // Invite from a row (C5): the contact the sheet is open for, and the member's own invites here (to ask "Is this Dee?").
+    const [inviting, setInviting] = useState<Contact | null>(null);
+    const [mine, setMine] = useState<MyInviteSeen[] | null>(null);
+    const [cancelToo, setCancelToo] = useState(false);
     // The community in use is asked for its copy as the screen opens (design §4.5), at most once a minute.
     useEffect(() => { if (identity) void checkContactsHere(identity); }, [identity?.publicKey]);
+    const anchor = view?.anchor ?? null;
+    const isHere = (c: string) => !!anchor && sameCommunity(c, anchor);
+    // Read while some contact holds an invite made here, and again whenever those codes change: a second invite on this screen,
+    // or Invite again (a new code), is then in `mine`, so its Remove offers to cancel it. Only the latest read's answer is kept.
+    const codesHere = contactInviteCodes(contactsOf(view), isHere);
+    useEffect(() => {
+        if (!codesHere || !identity || !anchor) return undefined;
+        let alive = true;
+        void readMyInvites(anchor, identity).then((m) => { if (alive && m) setMine(m); });
+        return () => { alive = false; };
+    }, [codesHere, anchor, identity?.publicKey]);
     // "Add a contact" and a contact's page are this one route's own pages: Android's Back returns to the list from them, as
     // the arrow does, and iOS's swipe from the edge is off while one is open (it would close Contacts, and what was typed).
     const navigation = useNavigation();
@@ -173,6 +195,15 @@ export default function ContactsScreen() {
     if (screen.kind === 'contact') {
         const c = people.find((x) => x.id === screen.id);
         if (!c) return shell(t('Contacts'), null);
+        const out = anchor ? contactInviteOut(c, mine ?? [], isHere) : null;
+        const remove = async () => {
+            // Cancelled first: a cancel that fails keeps the contact, so the member can try again.
+            if (out && cancelToo && anchor) {
+                const r = await cancelContactInvite(anchor, identity, out);
+                if (!r.ok) { Alert.alert(t('Not revoked'), r.message); return; }
+            }
+            if (await change((l) => removeContact(l, c.id))) { setCancelToo(false); setScreen({ kind: 'list' }); }
+        };
         const lines = (label: string, values: string[]) => values.length > 0 && (
             <View style={{ marginBottom: 12 }}>
                 <Text style={styles.sub}>{label}</Text>
@@ -187,19 +218,43 @@ export default function ContactsScreen() {
                     {lines(t('Note'), c.note ? [c.note] : [])}
                     {lines(t('On BeanPool'), c.links.map((l) => [l.callsign && `@${l.callsign}`, communityLabel(view, l.community)].filter(Boolean).join(' · ')))}
                 </View>
+                {!!out && (
+                    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: cancelToo }} style={[styles.menuRow, { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }]}
+                        onPress={() => setCancelToo(!cancelToo)} testID="contact-cancel-invite">
+                        <MaterialCommunityIcons name={cancelToo ? 'checkbox-marked' : 'checkbox-blank-outline'} size={24} color={colors.text.body} />
+                        <Text style={[styles.btnText, { flexShrink: 1 }]}>{contactInviteCancelWords.tick()}</Text>
+                    </Pressable>
+                )}
                 <Pressable accessibilityRole="button" style={styles.btn} disabled={busy} onPress={() => Alert.alert(
                     t('Remove from contacts'),
                     t('Remove {name} from your contacts? Nobody is told. Your chats, and your friendship in {community} if you have one, stay as they are.', { name: c.name, community: view.anchor ? communityLabel(view, view.anchor) : t('your community') }),
-                    [{ text: t('Cancel'), style: 'cancel' }, { text: t('Remove'), style: 'destructive', onPress: async () => { if (await change((l) => removeContact(l, c.id))) setScreen({ kind: 'list' }); } }],
+                    [{ text: t('Cancel'), style: 'cancel' }, { text: t('Remove'), style: 'destructive', onPress: () => { void remove(); } }],
                 )}>
                     <Text style={styles.btnText}>{t('Remove from contacts')}</Text>
                 </Pressable>
             </View>
         ));
     }
-    return shell(t('Contacts'), <ListScreen view={view} list={list} busy={busy} me={identity.publicKey}
-        onOpen={(id) => setScreen({ kind: 'contact', id })} onAdd={() => setScreen({ kind: 'add' })} onImport={() => setScreen({ kind: 'import' })} onInfo={() => setInfo(true)}
-        onRemoveAll={() => change((l) => removeEveryContact(l))} />);
+    // "Is this Dee?": Yes links the contact to who joined, No forgets the invite (and says so). Either way it isn't asked again.
+    const answer = async (c: Contact, used: ContactInviteUsed, yes: boolean) => {
+        const done = await change((l) => {
+            const held = l.contacts.find((x) => x.id === c.id);
+            return held ? putContact(l, yes ? linkContactToInvite(held, used) : forgetContactInvite(held)) : l;
+        });
+        if (done && !yes) Alert.alert(contactInviteNoWords());
+    };
+    return shell(t('Contacts'), <>
+        <ListScreen view={view} list={list} busy={busy} me={identity.publicKey}
+            onOpen={(id) => { setCancelToo(false); setScreen({ kind: 'contact', id }); }} onAdd={() => setScreen({ kind: 'add' })} onImport={() => setScreen({ kind: 'import' })} onInfo={() => setInfo(true)}
+            onRemoveAll={() => change((l) => removeEveryContact(l))}
+            onInvite={anchor ? setInviting : null} ask={(c) => (anchor ? contactInviteAsk(c, mine ?? [], isHere) : null)} onAnswer={(c, used, yes) => void answer(c, used, yes)} />
+        {inviting && anchor && (
+            <Suspense fallback={null}>
+                <ContactInviteSheet contact={inviting} anchor={anchor} community={communityLabel(view, anchor)} identity={identity}
+                    onClose={() => setInviting(null)} />
+            </Suspense>
+        )}
+    </>);
 }
 
 /** The screen's styles, from the central colour tokens; each part of the screen reads them itself (useStyles), never as a prop. */
@@ -239,9 +294,13 @@ function saveFile(list: ContactsList | null) {
     ]);
 }
 
-function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onRemoveAll }: {
+function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onRemoveAll, onInvite, ask, onAnswer }: {
     view: ContactsView; list: ContactsList | null; busy: boolean; me: string;
     onOpen: (id: string) => void; onAdd: () => void; onImport: () => void; onInfo: () => void; onRemoveAll: () => Promise<boolean>;
+    /** Invite from a row (C5); null where the phone is on no community of the member's. */
+    onInvite: ((c: Contact) => void) | null;
+    ask: (c: Contact) => ContactInviteUsed | null;
+    onAnswer: (c: Contact, used: ContactInviteUsed, yes: boolean) => void;
 }) {
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
@@ -286,7 +345,15 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onR
     };
     const action = (c: Contact) => {
         const link = c.links.find((l) => here(l.community)) ?? c.links[0];
-        if (!link) return null;
+        if (!link) {
+            // While the row asks "Is this Dee?", that question is the one thing to answer: no Invite again beside it.
+            if (!onInvite || ask(c)) return null;
+            return (
+                <Pressable accessibilityRole="button" style={styles.btn} disabled={busy} onPress={() => onInvite(c)}>
+                    <Text style={styles.btnText}>{c.invite ? contactInviteWords.again() : contactInviteWords.invite()}</Text>
+                </Pressable>
+            );
+        }
         if (!here(link.community)) {
             const community = communityLabel(view, link.community);
             return (
@@ -321,7 +388,21 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onR
     const subLine = (c: Contact) => {
         const link = c.links.find((l) => here(l.community)) ?? c.links[0];
         if (link) return [link.callsign && `@${link.callsign}`, communityLabel(view, link.community)].filter(Boolean).join(' · ');
-        return c.phones[0] ?? c.emails[0] ?? '';
+        return contactInvitedLine(c) ?? c.phones[0] ?? c.emails[0] ?? '';
+    };
+    const askBlock = (c: Contact) => {
+        const used = ask(c);
+        if (!used) return null;
+        const words = contactInviteAskWords(c.name, view.anchor ? communityLabel(view, view.anchor) : '', used.callsign);
+        return (
+            <View style={{ flexBasis: '100%', gap: 8 }} testID="contact-invite-used">
+                <Text style={styles.text}>{words.question}</Text>
+                <View style={styles.btnRow}>
+                    <Pressable accessibilityRole="button" style={styles.go} disabled={busy} onPress={() => onAnswer(c, used, true)}><Text style={styles.goText}>{words.yes}</Text></Pressable>
+                    <Pressable accessibilityRole="button" style={styles.btn} disabled={busy} onPress={() => onAnswer(c, used, false)}><Text style={styles.btnText}>{words.no}</Text></Pressable>
+                </View>
+            </View>
+        );
     };
     const top = (
         <>
@@ -381,6 +462,7 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onR
                         {!!subLine(item.c) && <Text style={styles.sub} numberOfLines={1}>{subLine(item.c)}</Text>}
                     </Pressable>
                     {action(item.c)}
+                    {askBlock(item.c)}
                 </View>
             )}
         />

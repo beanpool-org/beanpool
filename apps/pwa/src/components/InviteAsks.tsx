@@ -74,7 +74,11 @@ function Answered({ answer, onCopy, onShare }: { answer: InviteAskAnswer; onCopy
  * `fallback` is where focus goes on close when what opened the form has gone with the same step (the Share menu's Ask item
  * closes with the menu): the Share button, never the page's <body>.
  */
-export function AskSheet({ onClose, onSent, fallback }: { onClose: () => void; onSent: () => void; fallback?: () => HTMLElement | null | undefined }) {
+export function AskSheet({ onClose, onSent, fallback, line }: {
+    onClose: () => void; onSent: () => void; fallback?: () => HTMLElement | null | undefined;
+    /** One more line under the help, from where it was opened (a contact's Invite: who sees the name typed). Nothing is filled in. */
+    line?: string;
+}) {
     const dialog = useRef<HTMLDivElement | null>(null);
     const first = useRef<HTMLInputElement | null>(null);
     useDialogFocus(dialog, onClose, { initialFocus: () => first.current, fallback });
@@ -100,6 +104,7 @@ export function AskSheet({ onClose, onSent, fallback }: { onClose: () => void; o
             <form className="relative w-full sm:max-w-[420px] max-h-[90vh] overflow-y-auto p-4 rounded-t-2xl sm:rounded-2xl bg-oat-50 dark:bg-nature-950" onClick={e => e.stopPropagation()} onSubmit={e => void send(e)}>
                 <h2 id="invite-ask-title" tabIndex={-1} className="m-0 mb-1.5 text-lg font-extrabold text-nature-950 dark:text-white outline-none">{t(INVITE_ASK_WORDS.button)}</h2>
                 <p className="m-0 mb-3 text-[13px] leading-relaxed text-nature-600 dark:text-nature-300">{t(INVITE_ASK_WORDS.help)}</p>
+                {line && <p className="m-0 mb-3 text-[13px] leading-relaxed text-nature-600 dark:text-nature-300">{line}</p>}
                 <label className={LABEL}>
                     {t(INVITE_ASK_WORDS.firstName)}
                     <input ref={first} className={FIELD} value={firstName} onChange={e => setFirstName(e.target.value)} maxLength={INVITE_ASK_LIMITS.firstName} autoComplete="off" required data-testid="invite-ask-first-name" />

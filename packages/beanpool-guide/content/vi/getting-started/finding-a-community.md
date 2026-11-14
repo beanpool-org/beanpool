@@ -52,6 +52,16 @@ Thẻ sẽ ghi **A member invited you**. Nhấn **Tham gia** cùng tên của c�
 
 Bạn vẫn là thành viên của cộng đồng toàn cầu, và có thể chuyển đổi qua lại giữa các cộng đồng: xem "Nhiều hơn một cộng đồng".
 
+## Trong ứng dụng web
+
+Bạn cũng có thể xin từ thẻ **Tìm cộng đồng của bạn** trên **Trang chủ** của ứng dụng web, và chờ ngay tại đó.
+
+- Trong lúc chờ, thẻ chờ có **Cho tôi biết khi họ trả lời**. Nhấn **Cho tôi biết**, và trình duyệt sẽ hỏi bạn trước; rồi **Chúng tôi sẽ báo cho bạn tại đây khi {name} trả lời.** Cộng đồng bạn đã hỏi tự báo cho trình duyệt này, kể cả khi đã đóng trang, và không gì khác. Cộng đồng bạn đang ở không giữ gì về yêu cầu của bạn.
+- Trên iPhone, tính năng này chỉ chạy từ Màn hình chính, và thẻ cho biết cách làm. Nếu một trình duyệt không thể được báo, thẻ sẽ nói vậy, với **Tải ứng dụng** đứng đầu trên điện thoại; Trang chủ vẫn kiểm tra câu trả lời vài phút một lần khi đang mở.
+- Nhấn vào thông báo sẽ mở **Trang chủ** tại cộng đồng đó trên thẻ, với **Tham gia** và tên của nó. Một thông báo không đến từ cộng đồng đó sẽ không mở gì và nói rõ điều ấy.
+- Chuông ở trên cùng cũng hiện **🎉 {name} đã đồng ý.** cho đến khi bạn nhấn vào nó hoặc **Tham gia**. Nhấn vào nó sẽ mở cùng một nơi.
+- **Tham gia** mở trang của cộng đồng trong trình duyệt này và mang theo tài khoản của bạn: cùng 12 từ. Khi yêu cầu của bạn đã được trả lời và dùng xong, bị hủy hoặc không còn mở, trình duyệt này không còn được báo nữa.
+
 ## Chưa có gì ở gần bạn
 
 - **Báo cho tôi khi có cộng đồng ở đây:** bạn sẽ nhận được thông báo khi một cộng đồng được thành lập gần nơi bạn đang ở. Ứng dụng chỉ lưu giữ khu vực, có độ rộng khoảng 10 km, không bao giờ lưu vị trí chính xác của bạn. Bạn có thể theo dõi tối đa 3 địa điểm, và ngừng theo dõi một địa điểm bằng nút **Dừng**.

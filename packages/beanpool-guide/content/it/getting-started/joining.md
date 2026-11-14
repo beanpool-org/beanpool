@@ -12,7 +12,7 @@ source-hash: 5a1feb7390e4c3fb
 - **Con un invito**, ti unisci a una comunità: le persone vicino a te, con i propri fagioli, scambi e Beni comuni. Un membro di quella comunità ti invita.
 - **Senza invito**, puoi unirti alla **comunità globale** quando è aperta: persone da ogni luogo, dove puoi pubblicare, inviare messaggi alle persone e trovare una comunità vicina a te. Lì non ci sono fagioli né votazioni della comunità. I fagioli, il credito, i Beni comuni e le relative Decisioni risiedono nelle comunità locali. La comunità globale ti mostra come funzionano, in una comunità di esempio. Vedi "Fagioli e comunità globale".
 
-Nessun invito, ma una comunità vicino a te? Unisciti alla comunità globale, poi chiedi a quella comunità di farti entrare: qualunque dei suoi membri può farlo, oppure, in una comunità in cui invitano solo gli amministratori, i suoi amministratori. Vedi "Trovare una comunità vicina".
+Nessun invito, ma una comunità vicino a te? Unisciti alla comunità globale, poi chiedi a quella comunità di farti entrare: qualunque dei suoi membri può farlo, oppure, in una comunità in cui invitano solo gli amministratori, i suoi amministratori. Sei già membro altrove e hai chiesto dalla **Home** dell'app web? Anche la sua scheda di attesa ha **Avvisami quando rispondono**, e un sì compare nella campanella. Vedi "Trovare una comunità vicina".
 
 In entrambi i casi, il tuo account è una chiave conservata sul tuo telefono, con 12 parole inglesi che lo ripristinano. Non c'è password.
 

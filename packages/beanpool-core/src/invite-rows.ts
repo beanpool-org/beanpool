@@ -69,6 +69,11 @@ export interface InviteWhoOptions {
     name?: string | null;
     /** True where a name can't be opened at all (the web app holds no list key): a bound invite then says the name is on the phone. */
     nameOnPhone?: boolean;
+    /**
+     * The name of the contact this code was made for, from the member's private contacts list on this device (contacts-invite.ts
+     * contactInviteNames; private contacts C5). The server holds no note for such an invite: the name is never sent.
+     */
+    contactName?: string | null;
 }
 
 /** Who the invite is for, in one line. */
@@ -76,6 +81,8 @@ export function inviteWho(inv: InviteRowSource, o: InviteWhoOptions = {}): strin
     const name = o.name?.trim();
     if (inv.namesEntryId && name) return name;
     if (inv.namesEntryId && o.nameOnPhone) return t('Name on the phone');
+    const contact = o.contactName?.trim();
+    if (contact && !inv.forKnock) return contact;
     if (inv.forKnock) return t('For someone who asked to join');
     const note = inv.intendedFor?.trim();
     if (note) return t('For: {name}', { name: note });

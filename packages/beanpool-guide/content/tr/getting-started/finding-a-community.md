@@ -52,6 +52,16 @@ Kartta **Bir üye sizi davet etti** yazar. Topluluğun adıyla birlikte **Katıl
 
 Küresel topluluğun bir üyesi olarak kalırsınız ve aralarında geçiş yapabilirsiniz: "Birden fazla topluluk" bölümüne bakın.
 
+## Web uygulamasında
+
+Web uygulamasının **Ana Sayfa**'sındaki **Topluluğunu bul** kartından da isteyebilir ve orada bekleyebilirsiniz.
+
+- Beklerken bekleme kartında **Yanıtladıklarında bana söyle** vardır. **Bana söyle**'ye dokunun, önce tarayıcınız size sorar; sonra **{name} yanıtladığında sana burada haber veririz.** görünür. Sorduğunuz topluluk bu tarayıcıya kendisi haber verir, sayfa kapalıyken bile, ve başka hiçbir şey yapmaz. İçinde bulunduğunuz topluluk isteğinizden hiçbir şey saklamaz.
+- iPhone'da bu yalnızca Ana Ekran'dan çalışır ve kart nasıl yapılacağını söyler. Bir tarayıcıya haber verilemiyorsa kart bunu söyler, telefonda önce **Uygulamayı edin** gelir; Ana Sayfa açıkken yanıtı yine de birkaç dakikada bir kontrol eder.
+- Bildirime dokunmak, **Ana Sayfa**'yı o topluluğun kartında, **Katıl** ve adıyla birlikte açar. O topluluktan gelmeyen bir bildirim hiçbir şey açmaz ve bunu söyler.
+- Üstteki zil de siz ona veya **Katıl**'a dokunana kadar **🎉 {name}: üyeler evet dedi.** gösterir. Ona dokunmak aynı yeri açar.
+- **Katıl**, topluluğun sayfasını bu tarayıcıda açar ve hesabınızı da getirir: aynı 12 kelime. İsteğiniz yanıtlandığında ve kullanıldığında, iptal edildiğinde veya artık açık olmadığında bu tarayıcıya haber verilmez.
+
 ## Yakınınızda hiçbir şey yoksa
 
 - **Burada bir topluluk başladığında bana haber ver:** bulunduğunuz yere yakın bir topluluk başladığında bir bildirim alırsınız. Yalnızca yaklaşık 10 km genişliğindeki bölge tutulur, tam olarak nerede olduğunuz asla tutulmaz. En fazla 3 yeri izleyebilir ve birini izlemeyi **Durdur** ile durdurabilirsiniz.

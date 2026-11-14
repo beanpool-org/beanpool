@@ -12,7 +12,7 @@ source-hash: 5a1feb7390e4c3fb
 - **Bir davetle**, bir topluluğa katılırsınız: yakınınızdaki insanlar, kendi Fasulyeleri, takasları ve Ortak Alanı ile. O topluluğun bir üyesi sizi davet eder.
 - **Davet olmadan**, açık olduğunda **küresel topluluğa** katılabilirsiniz: her yerden insanlar, gönderi paylaşabileceğiniz, insanlara mesaj atabileceğiniz ve yakınınızda bir topluluk bulabileceğiniz yerdir. Orada Fasulye ve topluluk oylamaları yoktur. Fasulye, kredi, Ortak Alan ve Kararları yerel topluluklarda yaşar. Küresel topluluk, bunların nasıl çalıştığını örnek bir toplulukta gösterir. "Fasulye ve küresel topluluk" bölümüne bakın.
 
-Davetiniz yok ama yakınınızda bir topluluk mu var? Küresel topluluğa katılın, ardından o topluluktan sizi içeri almasını isteyin: üyelerinden herhangi biri veya yalnızca yöneticilerin davet ettiği bir toplulukta yöneticileri alabilir. "Yakınınızda bir topluluk bulma" bölümüne bakın.
+Davetiniz yok ama yakınınızda bir topluluk mu var? Küresel topluluğa katılın, ardından o topluluktan sizi içeri almasını isteyin: üyelerinden herhangi biri veya yalnızca yöneticilerin davet ettiği bir toplulukta yöneticileri alabilir. Zaten bir yerde üyesiniz ve web uygulamasının **Ana Sayfa**'sından mı sordunuz? Bekleme kartında **Yanıtladıklarında bana söyle** de vardır ve bir evet zilde görünür. "Yakınınızda bir topluluk bulma" bölümüne bakın.
 
 Her iki durumda da hesabınız, onu geri getiren 12 kelimeyle birlikte telefonunuzda tutulan bir anahtardır. Parola yoktur.
 

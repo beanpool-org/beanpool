@@ -12,7 +12,7 @@ source-hash: 5a1feb7390e4c3fb
 - **Com um convite**, você entra em uma comunidade: as pessoas perto de você, com seus próprios Feijões, trocas e Bens comuns. Um membro dessa comunidade convida você.
 - **Sem um convite**, você pode entrar na **comunidade global** quando ela estiver aberta: pessoas de todas as partes, onde você pode publicar, enviar mensagens e encontrar uma comunidade perto de você. Lá não há Feijões nem votações comunitárias. Feijões, crédito, os Bens comuns e suas Decisões vivem em comunidades locais. A comunidade global mostra como funcionam, em uma comunidade de exemplo. Consulte "Os Feijões e a comunidade global".
 
-Sem convite, mas há uma comunidade perto de você? Entre na comunidade global e peça para essa comunidade permitir sua entrada: qualquer um dos membros dela pode autorizar ou, em uma comunidade onde apenas os administradores convidam, os administradores dela. Consulte "Encontrar uma comunidade próxima".
+Sem convite, mas há uma comunidade perto de você? Entre na comunidade global e peça para essa comunidade permitir sua entrada: qualquer um dos membros dela pode autorizar ou, em uma comunidade onde apenas os administradores convidam, os administradores dela. Já é membro de outra e pediu pelo **Início** do app web? O cartão de espera dela também tem **Avise-me quando responderem**, e um sim aparece no sino. Consulte "Encontrar uma comunidade próxima".
 
 De qualquer forma, sua conta é uma chave guardada no seu celular, com 12 palavras que a trazem de volta. Não há senha.
 

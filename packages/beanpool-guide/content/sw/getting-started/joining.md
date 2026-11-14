@@ -12,7 +12,7 @@ source-hash: 5a1feb7390e4c3fb
 - **Kwa mwaliko**, unajiunga na jumuiya: watu walio karibu nawe, ikiwa na Maharagwe yake yenyewe, biashara na Mali za Pamoja. Mwanachama wa jumuiya hiyo anakualika.
 - **Bila mwaliko**, unaweza kujiunga na **jumuiya ya kimataifa** inapokuwa wazi: watu kutoka kila mahali, ambapo unaweza kuchapisha, kutumia watu ujumbe na kupata jumuiya iliyo karibu nawe. Hakuna Maharagwe wala kura za jumuiya huko. Maharagwe, mkopo, Mali za Pamoja na Maamuzi yake viko katika jumuiya za eneo husika. Jumuiya ya kimataifa inakuonyesha jinsi yanavyofanya kazi, katika mfano wa jumuiya. Tazama "Maharagwe na jumuiya ya kimataifa".
 
-Huna mwaliko, lakini kuna jumuiya karibu nawe? Jiunge na jumuiya ya kimataifa, kisha uiombe jumuiya hiyo ikuruhusu kuingia: mwanachama wake yeyote anaweza, au, katika jumuiya ambayo wasimamizi pekee ndio wanaoalika, wasimamizi wake. Tazama "Kupata jumuiya iliyo karibu nawe".
+Huna mwaliko, lakini kuna jumuiya karibu nawe? Jiunge na jumuiya ya kimataifa, kisha uiombe jumuiya hiyo ikuruhusu kuingia: mwanachama wake yeyote anaweza, au, katika jumuiya ambayo wasimamizi pekee ndio wanaoalika, wasimamizi wake. Tayari mwanachama mahali fulani, na uliomba kutoka **Nyumbani** ya programu ya wavuti? Kadi yake ya kusubiri ina **Niambie wakijibu** pia, na jibu la ndiyo linaonekana kwenye kengele. Tazama "Kupata jumuiya iliyo karibu nawe".
 
 Kwa njia yoyote ile, akaunti yako ni ufunguo unaowekwa kwenye simu yako, ukiwa na maneno 12 ya siri yanayoirejesha. Hakuna nenosiri.
 

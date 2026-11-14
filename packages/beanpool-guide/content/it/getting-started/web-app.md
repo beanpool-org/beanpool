@@ -127,6 +127,12 @@ La schermata 1 dell'iscrizione in un browser dice la stessa cosa al contrario: s
 - Il telefono mostra quindi **quattro cifre**. Digitali sul computer e premi **Conferma**. Il tuo account passa al computer solo dopo questo passaggio. Tre tentativi errati e non viene inviato nulla: crea un nuovo codice. Non leggere mai le cifre ad alta voce e non inviarle a nessuno.
 - Se il telefono segnala che l'app è obsoleta, aggiorna l'app BeanPool su di esso, poi scansiona un nuovo codice.
 
+## Notifiche
+
+L'app web può dirti cosa è successo, come il telefono: gli stessi avvisi, con gli stessi interruttori. Attivali in **Impostazioni**, poi **Notifiche**, nella prima riga, **Su questo dispositivo**. Il tuo browser te lo chiede prima, a quel tocco. Il browser di un computer viene avvisato finché è in esecuzione, Safari su un Mac e il browser di un telefono anche da chiuso, e un iPhone solo dalla schermata Home. Dove un browser non può essere avvisato, la campanella in alto elenca comunque cosa è successo, e nel browser di un telefono **Scarica l'app** viene per prima. Vedi "Notifiche".
+
+Hai chiesto a un'altra comunità di farti entrare, dalla scheda **Trova la tua comunità** nella **Home**? La sua scheda di attesa ha **Avvisami quando rispondono**, e quella comunità avvisa da sola questo browser della sua risposta. Toccare la notifica, o **🎉 {name} ha accettato.** nella campanella, apre la **Home** su quella comunità, con **Partecipa**. Vedi "Trovare una comunità vicina".
+
 ## Installazione
 
 L'app web potrebbe proporre **Installa BeanPool** affinché si apra dalla schermata iniziale come un'app. Se il tuo browser non supporta questa operazione, tocca **Come?** per visualizzare i passaggi.

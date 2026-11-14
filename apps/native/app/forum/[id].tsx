@@ -24,9 +24,9 @@ import { useStyles, useTheme } from '../ThemeContext';
 import { Alert } from '../../utils/keyboard-alert';
 import { blockUser } from '../../utils/blocklist';
 import { loadIdentity } from '../../utils/identity';
-import { REPORT_SENT_TEXT } from '../../utils/reportReasons';
+import { reportedAlertBody } from '../../utils/reportReasons';
 import {
-    closeForumTopic, followForumTopic, forgetForumTopic, getForumTopic, keptForumFront, keptForumTopic, markForumTold, noteForumBack,
+    closeForumTopic, followForumTopic, forgetForumTopic, getForumFront, getForumTopic, keptForumFront, keptForumTopic, markForumTold, noteForumBack,
     readForumTopic, removeForumPost, replyInForum, reportForumPost, type ForumFront, type ForumPost, type ForumTopicPage,
 } from '../../utils/forum';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
@@ -90,7 +90,10 @@ export default function ForumTopicScreen() {
     useEffect(() => {
         shown.current = true;
         void loadIdentity().then((i) => setMe(i?.publicKey ?? null));
-        void keptForumFront().then(setFront);
+        // The front says the section's name, whether the forum is public (the sheet before a first post) and whether this member
+        // moderates (Close): the kept copy at once, then the node's, also when the topic was opened from a notice with none kept.
+        void keptForumFront().then((f) => { if (f && shown.current) setFront((now) => now ?? f); });
+        void getForumFront().then((f) => { if (shown.current) setFront(f); }).catch(() => { /* the kept front stands */ });
         void keptForumTopic(topicId).then((kept) => {
             if (kept && shown.current) setPage((now) => now ?? kept);
             void readThrough(0, lastOf(kept));
@@ -221,6 +224,7 @@ export default function ForumTopicScreen() {
     }
 
     const following = topic?.follow === 'following';
+    const topicTitle = topic ? (topic.pinned ? '📌 ' : '') + (topic.removed ? t(TOPIC_WORDS.removedTopic) : topic.title) : '';
     return (
         <SafeAreaView style={styles.page} edges={['top']} testID="forum-topic">
             <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
@@ -251,7 +255,7 @@ export default function ForumTopicScreen() {
                     )}
                     {topic && (
                         <View style={{ gap: 2 }}>
-                            <Text style={styles.title} accessibilityRole="header" testID="forum-topic-title">{`${topic.pinned ? '📌 ' : ''}${topic.removed ? t(TOPIC_WORDS.removedTopic) : topic.title}`}</Text>
+                            <Text style={styles.title} accessibilityRole="header" testID="forum-topic-title">{topicTitle}</Text>
                             {topic.place ? <Text style={styles.muted}>📍 {topic.place}</Text> : null}
                             {opening && byline(opening)}
                             {opening && postBody(opening)}
@@ -303,7 +307,7 @@ export default function ForumTopicScreen() {
                         throw e;
                     }
                     setReporting(null);
-                    Alert.alert(t(REPORT_SENT_TEXT));
+                    Alert.alert(t('Reported'), reportedAlertBody(undefined, reason));
                 }} />
         </SafeAreaView>
     );

@@ -259,6 +259,7 @@ describe('home frame §5.2 (3): cardsToAsk', () => {
         // Once the member acted on the arriving card (its stamp), it is asked no more.
         expect(cardsToAsk({ ...l, dismissed: { 'new:learn': AT } })).toEqual(['needs', 'beans', 'community']);
         // A newcomer's Home is the default list (DESIGN-home-default-fable.md §2.2): the fixed two and every default card the node builds.
+        // With Learn something local arriving after the list (slice K7), asked in its catalogue place until the list holds it.
         expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'events', 'market', 'asked', 'learn', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
     });
 });
@@ -268,7 +269,7 @@ const wordDp = (word: string) => word.length * 15 * 1.3 * 0.6;
 
 describe('home frame §5.2 (4): the default and the words', () => {
     it("defaultCards is the default list on both profiles, Welcome first; the starter set is the same list less Welcome", () => {
-        expect(HOME_STARTER_SET).toEqual(['safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'learn', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky']);
+        expect(HOME_STARTER_SET).toEqual(['safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky']);
         expect(HOME_DEFAULT_LIST).toEqual(['start', ...HOME_STARTER_SET]);
         for (const p of ['local', 'global'] as const) expect(defaultCards(p)).toEqual(HOME_DEFAULT_LIST.map(id => ({ id, type: id })));
     });

@@ -393,7 +393,8 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
     // Learn something local (DESIGN-local-knowledge-amend-fable.md §3.6, slice K7): up to three pages of Local knowledge, the
     // newest of the last 14 days and the day's pick, built by the node where Learn is on (`features.knowledge`); where it is
     // off and the node shows previews (`showcase`, the global community) the apps draw Example Valley's samples (§2.9). It
-    // arrives once on a Home its member already arranged (`arrives`), since a saved list never gains a type by itself.
+    // arrives once on a Home its member already arranged (`arrives`), since a saved list never gains a type by itself. An app
+    // asks for it and draws it only once it has its body (each app's HOME_DRAWN), as for every type.
     { id: 'learn', hue: 'sage', name: LEARN_HOME_WORDS.name, line: KNOWLEDGE_PLACE_LINE, group: 'around', asks: 'node', onNode: (a) => knowledgeFeatureMode(a.features) !== 'hidden', arrives: true },
     {
         id: 'search', hue: 'orange', name: word('A saved search'), line: word('Listings that match words you choose, near you.'), group: 'around',
@@ -484,10 +485,11 @@ export const HOME_V1_CARD_IDS: readonly string[] = [
 /**
  * The default list (scratch/fable-design/DESIGN-home-default-fable.md §2.2, Marty's picks of 13 Nov 2026): a newcomer's
  * Home from the first second, the community first and the chores second, in the phone's order (the web packs the same
- * order into its columns). Seventeen of the 24, which leaves seven for the member's own: the Pulse came back after Coming
+ * order into its columns). Sixteen of the 24, which leaves eight for the member's own: the Pulse came back after Coming
  * up on Marty's pick of 14 Nov 2026 (scratch/fable-design/DESIGN-pulse-home-fable.md §3.5, slice P0), so a new member
- * finds it on the screen the app opens on, and Learn something local follows Asked near you (DESIGN-local-knowledge-amend-
- * fable.md §3.6 "Starter set", Marty and Damo's picks of 11 Nov 2026, slice K7). Each is drawn only while it has
+ * finds it on the screen the app opens on. Learn something local joins after Asked near you (DESIGN-local-knowledge-amend-
+ * fable.md §3.6 "Starter set") in the slice that draws it on both apps, not before: each app holds that it draws every card
+ * of this list (apps/native utils/__tests__/home-cards.test.ts, apps/pwa lib/home-layout.test.ts). Each is drawn only while it has
  * something to say, by the rule it already follows (§2.1 rule 3), so a newcomer sees about six to ten on day one and the
  * rest arrive in their places as they have something:
  *
@@ -502,7 +504,6 @@ export const HOME_V1_CARD_IDS: readonly string[] = [
  * | `pulse` (The Pulse) | A neighbour shared something in the last seven days (routes/home-answer.ts `PULSE_DAYS`) |
  * | `beans` (Your Beans) | Beans are on here |
  * | `asked` (Asked near you) | A neighbour has an open Need |
- * | `learn` (Learn something local) | Learn holds a page, or the reader is an owner or admin there (their first page, or members' suggestions to check) |
  * | `deals` (Your deals) | An open deal |
  * | `groups` (Your groups) | In a group |
  * | `decide` (Decide) | A Decision or poll is open |
@@ -515,8 +516,8 @@ export const HOME_V1_CARD_IDS: readonly string[] = [
  * pinned under Needs you, and the cards it has no feature for (Your Beans, Your deals, Decide) are never asked for.
  */
 export const HOME_DEFAULT_LIST: readonly string[] = [
-    'start', 'safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'learn', 'deals', 'groups', 'decide', 'notices',
-    'joined', 'tips', 'sky',
+    'start', 'safety', 'market', 'steps', 'interests', 'events', 'pulse', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined',
+    'tips', 'sky',
 ];
 
 /**
@@ -863,15 +864,18 @@ const stampedIfArrives = (dismissed: Record<string, string>, type: string, at: s
     TYPES.get(type)?.arrives ? { ...dismissed, [arrivedStamp(type)]: at } : dismissed;
 
 /**
- * The cards that arrive on this saved Home, in the catalogue's order: each one-of-a-kind type marked `arrives` that the
- * member's list neither holds nor carries the stamp of, while the list has room for it (Keep on Home must be able to keep
- * it). The apps draw them after the member's own cards, by the type's own rules (on this node, something to show), until
- * the member acts on one; nothing is written by itself. None for a Home never saved: the default list already holds them.
+ * The cards that arrive on this Home, in the catalogue's order: each one-of-a-kind type marked `arrives` that the member's
+ * list (the default list, for a Home never saved) neither holds nor carries the stamp of, while the list has room for it
+ * (Keep on Home must be able to keep it). The apps draw them after the member's own cards, by the type's own rules (on this
+ * node, something to show), until the member acts on one; nothing is written by itself. A type the default list holds
+ * never arrives on a Home never saved.
  */
 export function arrivingCards(layout: HomeLayoutV2 | null): HomeCardInstance[] {
-    if (!layout || layout.cards.length >= HOME_FRAME_LIMITS.cards) return [];
+    const cards = layout?.cards ?? defaultCards();
+    const dismissed = layout?.dismissed ?? {};
+    if (cards.length >= HOME_FRAME_LIMITS.cards) return [];
     return HOME_CARD_TYPES
-        .filter((t) => t.arrives && !t.fixed && !t.multiple && !layout.cards.some((c) => c.type === t.id) && !(arrivedStamp(t.id) in layout.dismissed))
+        .filter((t) => t.arrives && !t.fixed && !t.multiple && !cards.some((c) => c.type === t.id) && !(arrivedStamp(t.id) in dismissed))
         .map((t) => ({ id: t.id, type: t.id }));
 }
 
@@ -879,7 +883,7 @@ const isArriving = (layout: HomeLayoutV2 | null, id: string): boolean => arrivin
 
 /** The list the apps draw from: the member's cards, then the cards that arrive ({@link arrivingCards}). */
 export const homeCardsWithArrivals = (layout: HomeLayoutV2 | null): HomeCardInstance[] =>
-    layout ? [...layout.cards, ...arrivingCards(layout)] : defaultCards();
+    [...(layout?.cards ?? defaultCards()), ...arrivingCards(layout)];
 
 /**
  * "Keep on Home" on a card drawn as arriving: it joins the member's list where it was drawn (last) and its stamp is written,

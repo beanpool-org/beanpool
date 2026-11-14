@@ -94,16 +94,22 @@ function modRow(postId: string): ModRow | undefined {
 
 /**
  * The writer of a forum post `reporter` may report (POST /api/reports with `targetForumPostId`), or null when there is none
- * to report: the forum is off here, the post or its topic is gone or removed, or it is hidden and the reporter is neither
- * its writer nor a moderator (they cannot have seen it). A post by someone the reporter blocked may still be reported.
+ * to report: the forum is off here, the post or its topic is gone or removed, or the reporter cannot read it. That is
+ * engine/forum.ts's reading, rule for rule: a topic whose opening post is hidden is read by its writer and the moderators
+ * only, and a hidden post's words by its own writer and the moderators only. So the writer of a hidden topic may report a
+ * reply in it, and nobody else but a moderator may. A post by someone the reporter blocked may still be reported.
  */
 export function reportableForumPostWriter(reporter: string, postId: unknown): string | null {
     if (typeof postId !== 'string' || !postId || !getProfileSwitches().forum) return null;
     const row = modRow(postId);
     if (!row || row.removed_by || row.closed_by === 'removed') return null;
-    const opening = row.number === 1 ? row : (db.prepare('SELECT hidden_by_reports_at FROM forum_posts WHERE topic_id = ? AND number = 1').get(row.topic_id) as { hidden_by_reports_at: string | null } | undefined);
-    const hiddenToThem = (row.hidden_by_reports_at || opening?.hidden_by_reports_at) && reporter !== row.writer_pubkey && !isForumModerator(reporter);
-    return hiddenToThem ? null : row.writer_pubkey;
+    const topic = db.prepare(`SELECT t.writer_pubkey, (SELECT o.hidden_by_reports_at IS NOT NULL FROM forum_posts o WHERE o.topic_id = t.id AND o.number = 1) AS opening_hidden
+                                FROM forum_topics t WHERE t.id = ?`).get(row.topic_id) as { writer_pubkey: string; opening_hidden: number | null } | undefined;
+    if (!topic) return null;
+    const moderator = isForumModerator(reporter);
+    const topicHiddenToThem = !!topic.opening_hidden && reporter !== topic.writer_pubkey && !moderator;
+    const postHiddenToThem = !!row.hidden_by_reports_at && reporter !== row.writer_pubkey && !moderator;
+    return topicHiddenToThem || postHiddenToThem ? null : row.writer_pubkey;
 }
 
 /** The forum post a report names, for Settings' list (state-engine getReports): what a moderator judges it by. */

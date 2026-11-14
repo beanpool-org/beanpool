@@ -298,6 +298,16 @@ async function main(): Promise<void> {
         .run('fp-vic-earlier', beaTopic.body.topic.id, vic.pk, 'Vic replied before', new Date().toISOString());
     assert(vicEarlier.changes === 1 && (await call(vic, 'POST', '/api/forum/posts/fp-vic-earlier/remove')).status === 200,
         'a reply written before the hide is still its writer\'s to remove');
+    // A report reaches what its reporter reads: the topic's writer still reads the replies in it, so they may report one;
+    // another member, who reads nothing in the hidden topic, may not.
+    const dot = established('Dot');
+    db.prepare('INSERT INTO forum_posts (id, topic_id, number, writer_pubkey, words, created_at) VALUES (?, ?, 3, ?, ?, ?)')
+        .run('fp-dot-earlier', beaTopic.body.topic.id, dot.pk, 'Dot replied before', new Date().toISOString());
+    const dotSeenByBea = (await topic(bea, beaTopic.body.topic.id)).body?.posts?.find((p: any) => p.id === 'fp-dot-earlier');
+    assert(dotSeenByBea?.words === 'Dot replied before' && dotSeenByBea.hidden === false, `the topic's writer reads a reply in it (${JSON.stringify(dotSeenByBea)})`);
+    const beaReportsDot = await report(bea, 'fp-dot-earlier');
+    assert(beaReportsDot.status === 200 && beaReportsDot.body?.report?.targetPubkey === dot.pk, `and may report it (${show(beaReportsDot)})`);
+    assert((await report(vic, 'fp-dot-earlier')).status === 404, 'another member, who reads nothing in the hidden topic, can\'t report a reply in it (404)');
 
     // ── 6. Settings: the list, restore, dismiss ────────────────────────────────────────────────
     console.log('── 6. Settings ──');

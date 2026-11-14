@@ -32,7 +32,8 @@
  * The line is found by its sender and id (relay_outbox's own key), and it must have gone to the signing server: to its home
  * as signed, or to a name whose key document (engine/node-signature.ts, fetched as for the door) names the key that signed
  * the complaint, so a former name or an alias of the reporting server is one of its names here too, and no other server's.
- * Answered 202 `{received:true}` when filed or on file already from that community. Every drop is answered alike, 422
+ * Answered 202 `{received:true}` when filed or on file already from that community (asked first, before any drop: a retry
+ * after a lost 202 is taken though the member was pruned or re-keyed since, or the switch went off). Every drop is answered alike, 422
  * `not_taken`, whatever the reason (no line by that id from that member, a key that is no member here now, a line that went
  * to another server's name, the owner's switch off), so the reporting server learns only whether its complaint is on file,
  * never which of these it was; and it can ask only of lines it was sent (it needs the line's random id). Refused: a request
@@ -302,10 +303,18 @@ export async function receiveComplaint(from: NodeOrigin, body: unknown, now = Da
     const c = readComplaintBody(body);
     if (!c) return { status: 400, body: { error: 'A complaint is { complaint: { v: 1, id, member, itemId, at, reason, words } }.', code: 'bad_complaint' } };
     const notTaken = { status: COMPLAINT_NOT_TAKEN_STATUS, body: { ...COMPLAINT_NOT_TAKEN } } as const;
-    if (!outsideMessagesOn()) return notTaken;
     const origin = from.origin;
     // Counted by the community (its complaints' reporter, read on idx_abuse_reports_reporter), never from a disclosure.
     const reporter = `${COMPLAINT_REPORTER_PREFIX}${origin}`;
+    const received = { status: 202 as const, body: { received: true as const }, filed: false };
+    // One complaint a line from one community: this member's line by that id (the first went to the signer, checked then).
+    const onFile = () => !!db.prepare('SELECT 1 FROM abuse_reports WHERE reporter_pubkey = ? AND target_message_id = ? AND target_pubkey = ?')
+        .get(reporter, c.itemId, c.member);
+    // Asked first, before every drop: a complaint on file is taken, whatever has changed since (the member pruned or
+    // re-keyed, the switch off, the day's cap reached), so a retry after a lost 202 is answered as taken, never 422; and a
+    // repeat tells the other server nothing new (not whether that person is still a member here).
+    if (onFile()) return received;
+    if (!outsideMessagesOn()) return notTaken;
     const fromOrigin = (db.prepare(`SELECT COUNT(*) AS n FROM abuse_reports WHERE reporter_pubkey = ? AND created_at > ?`)
         .get(reporter, new Date(now - DAY_MS).toISOString()) as { n: number }).n;
     if (fromOrigin >= COMPLAINTS_PER_ORIGIN_DAY) {
@@ -315,10 +324,6 @@ export async function receiveComplaint(from: NodeOrigin, body: unknown, now = Da
     const sent = db.prepare("SELECT recipient_home FROM relay_outbox WHERE sender_key = ? AND item_id = ? AND kind = 'dm-line'")
         .get(c.member, c.itemId) as { recipient_home: string } | undefined;
     if (!sent || !isNodeMember(c.member)) return notTaken;
-    const received = { status: 202 as const, body: { received: true as const }, filed: false };
-    const onFile = () => !!db.prepare('SELECT 1 FROM abuse_reports WHERE reporter_pubkey = ? AND target_message_id = ?').get(reporter, c.itemId);
-    // One complaint a line from one community: one on file already is taken (the first went to the signer, checked then).
-    if (onFile()) return received;
     const toSigner = await wentToSigner(sent.recipient_home, from, now);
     if (toSigner === 'busy') {
         return { status: 503, body: { error: 'This server can\'t yet confirm that your server is the one this message went to. Please try again later.', code: 'busy' }, retryAfterSec: NODE_BUSY_RETRY_AFTER_SEC };

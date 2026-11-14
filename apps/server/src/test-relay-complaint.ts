@@ -18,8 +18,11 @@
  *   5  a complaint from a.example about Ben's line to Ana: filed, from another community, its reporter a server
  *   6  on file already (again, another complaint id): 202, nothing filed again; dropped and answered alike, 422 not_taken,
  *      never as one taken: from a community the line never went to, an id never sent, a key that is no member, a member
- *      gone since, the owner's switch off; a field naming a reporter is never kept
- *   7  refusals: not a complaint (400), unsigned or a member's signature (401), past 100 a day from one server (429)
+ *      gone since, the owner's switch off; a field naming a reporter is never kept; a retry after a lost 202 (round 3 of
+ *      #3185): one on file is taken whatever changed since (the switch off, the member re-keyed or pruned, the line gone
+ *      from the outbox), while a new complaint under each of those is dropped
+ *   7  refusals: not a complaint (400), unsigned or a member's signature (401), past 100 a day from one server (429; one on
+ *      file already is still taken)
  *   9  closing the class (round 2 of #3185): a line addressed to the home now, a former name or an alias x a complaint signed
  *      as the home now: matched and filed; to another community's name: dropped alike; to a name whose key document can't
  *      be had: 503, tried again. The reporting side signs as its home now for a line to any of its names; and every answer
@@ -317,6 +320,39 @@ async function main(): Promise<void> {
     const row6 = db.prepare('SELECT * FROM abuse_reports WHERE target_message_id = ?').get(benToAna2.envelope.itemId) as any;
     assert(withReporter.status === 202 && !!row6 && !JSON.stringify(row6).includes(ana.key) && !JSON.stringify(row6).includes(ANA_NAME),
         '6y. a complaint that carries a field naming its reporter is filed without it: the row keeps only the complaint\'s own fields');
+    // A retry after a lost 202 (round 3 of #3185): b.example filed a.example's complaint about Cy's line, but its answer was
+    // lost, so a.example tries again. Whatever changed here meanwhile, the complaint is on file: 202, never 422 (which
+    // a.example would record as `failed`; section 9c hands each of these answers back to the reporting side: told `sent`).
+    const cy = keys();
+    addLocal(cy, 'Cy');
+    const cyToAna = await line(cy, 'b.example', ana, 'a.example', 'Cheap watches');
+    const cyToAna2 = await line(cy, 'b.example', ana, 'a.example', 'Cheaper watches');
+    const cySent = await asMember(cy, '/api/mail/send', { items: [cyToAna, cyToAna2] });
+    const complaintCy = { v: 1, id: crypto.randomUUID(), member: cy.key, itemId: cyToAna.envelope.itemId, at: cyToAna.envelope.at, reason: 'spam or scam', words: 'Cheap watches' };
+    const nCy = reportsCount();
+    const firstCy = await complain(complaintCy);
+    assert(cySent.body?.items?.length === 2 && cySent.body.items.every((i: any) => i.state === 'sent') && firstCy.status === 202 && reportsCount() === nCy + 1,
+        `6x. a.example's complaint about Cy's line is filed (got ${cySent.status} ${firstCy.status} ${reportsCount() - nCy})`);
+    const aboutCy2 = () => ({ ...complaintCy, id: crypto.randomUUID(), itemId: cyToAna2.envelope.itemId, at: cyToAna2.envelope.at });
+    applyShapeChanges({ actor: olive.key, actorRole: 'owner' }, { changes: { outsideMessages: false } });
+    await onFile('the same complaint again, the owner\'s switch off since', complaintCy);
+    applyShapeChanges({ actor: olive.key, actorRole: 'owner' }, { changes: { outsideMessages: true } });
+    // Cy re-keys: the old key is invalidated, its row 'suspended' until the new phone binds a new one (engine members.ts).
+    db.prepare("INSERT INTO invalidated_keys (public_key, reason) VALUES (?, 'rekey')").run(cy.key);
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(cy.key);
+    await drop('a new complaint about a line of a key re-keyed since', aboutCy2());
+    await onFile('the same complaint again, Cy re-keyed since', complaintCy);
+    db.prepare('DELETE FROM invalidated_keys WHERE public_key = ?').run(cy.key);
+    // The owners prune Cy over the complaint.
+    db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(cy.key);
+    await drop('a new complaint about a line of a member pruned since', aboutCy2());
+    await onFile('the same complaint again, Cy pruned since', complaintCy);
+    await onFile('the same line, another complaint id, Cy pruned since', { ...complaintCy, id: crypto.randomUUID() });
+    // Cy's outbox row is gone (past its 30 days).
+    db.prepare('DELETE FROM relay_outbox WHERE sender_key = ? AND item_id = ?').run(cy.key, cyToAna.envelope.itemId);
+    await onFile('the same complaint again, its line gone from the outbox since', complaintCy);
+    // On file is this member's line by that id from that community, nothing wider: another key naming the same id is dropped.
+    await drop('another key naming a line on file', { ...complaintCy, id: crypto.randomUUID(), member: bea.key });
 
     // ── 7. Refusals ───────────────────────────────────────────────────────────────────────
     console.log('\n7. Refusals');
@@ -343,9 +379,14 @@ async function main(): Promise<void> {
     for (let i = already; i < complaints.COMPLAINTS_PER_ORIGIN_DAY; i++) {
         fill.run(crypto.randomUUID(), 'community:a.example', bea.key, crypto.randomUUID(), JSON.stringify({ kind: 'relay-complaint', v: 1, from: 'a.example', complaintId: crypto.randomUUID(), at: 1, words: '' }), new Date().toISOString());
     }
-    const over = await complain({ ...complaint5, id: crypto.randomUUID() });
+    const benToAna3 = await line(ben, 'b.example', ana, 'a.example', 'A third line to Ana');
+    await asMember(ben, '/api/mail/send', { items: [benToAna3] });
+    const nOver = reportsCount();
+    const over = await complain({ ...complaint5, id: crypto.randomUUID(), itemId: benToAna3.envelope.itemId, at: benToAna3.envelope.at });
     realAnswers.push({ what: 'past the day\'s cap', status: over.status, text: over.text });
-    assert(over.status === 429 && over.body?.code === 'rate_limited', `7d. past ${complaints.COMPLAINTS_PER_ORIGIN_DAY} a day from one server: 429 (got ${over.status})`);
+    assert(over.status === 429 && over.body?.code === 'rate_limited' && reportsCount() === nOver,
+        `7d. past ${complaints.COMPLAINTS_PER_ORIGIN_DAY} a day from one server: 429, nothing filed (got ${over.status})`);
+    await onFile('the same complaint again, past the day\'s cap', complaint5);
     const benToCara = await line(ben, 'b.example', cara, 'c.example', 'A line to Cara');
     await asMember(ben, '/api/mail/send', { items: [benToCara] });
     const fromC = await complain({ v: 1, id: crypto.randomUUID(), member: ben.key, itemId: benToCara.envelope.itemId, at: benToCara.envelope.at, reason: 'other', words: 'A line to Cara' },

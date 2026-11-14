@@ -21,6 +21,11 @@ import {
     type Signer,
     signReEnroll,
     signStandingAuthorisation,
+    signAddressCard,
+    signRelayEnvelope,
+    type AddressCard,
+    type RelayEnvelope,
+    type RelayEnvelopeFields,
     type StandingAuthorisationFields,
     type StandingPeriodUnit,
     type StandingPhase,
@@ -812,6 +817,33 @@ export async function signedCopyFetch(
         method, headers: { 'Content-Type': 'application/json', 'Accept-Language': 'en', ...signed }, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
         ...(body === undefined ? {} : { body: bodyString }), ...(signal ? { signal } : {}),
     });
+}
+
+/**
+ * A request for the member's own mail between communities at their community `community` (lib/outside-mail.ts: GET
+ * /api/mail, POST /api/mail/send and /api/mail/confirm), signed by `identity` for that host. Every one carries the round's
+ * `signal`, so its deadline ends a stalled request and the round with it.
+ */
+export async function signedMailFetch(
+    method: 'GET' | 'POST', community: string, path: string, body: unknown, identity: BeanPoolIdentity, signal?: AbortSignal,
+): Promise<Response> {
+    const bodyString = body === undefined ? '' : JSON.stringify(body);
+    await refuseIfNodeTooOld(community, signal);
+    const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
+    return fetch(`${community}${path}`, {
+        method, headers: { 'Content-Type': 'application/json', ...signed }, cache: 'no-store',
+        ...(body === undefined ? {} : { body: bodyString }), ...(signal ? { signal } : {}),
+    });
+}
+
+/** The member's address card, signed in this browser by core's builder under its own tag (core outside-chat.ts). */
+export function signAddressCardFor(fields: { key: string; home: string; name: string }, identity: BeanPoolIdentity): Promise<AddressCard> {
+    return signAddressCard(fields, memberSigner(identity.privateKey));
+}
+
+/** An item's relay envelope, signed in this browser by core's builder under its own tag (core relay-envelope.ts). */
+export function signRelayEnvelopeFor(fields: RelayEnvelopeFields, identity: BeanPoolIdentity): Promise<RelayEnvelope> {
+    return signRelayEnvelope(fields, memberSigner(identity.privateKey));
 }
 
 /** Core's id for this key's copy of a listing (request-signing.ts copyIdOf): a phone on the same account works out the same one. */

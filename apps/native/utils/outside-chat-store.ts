@@ -16,6 +16,7 @@
  * blob, a delete, any other kind from a request is dropped). Declined: dropped. A blocked key: dropped. The member's door
  * closed (they never showed their card here, or closed it in Settings): a stranger's line is dropped.
  */
+import { gateOutsideItem, type OutsideChatState as CoreOutsideChatState, type OutsideGateVerdict } from '@beanpool/core';
 import type { SqliteLike } from './group-chat-store';
 
 /** The tables, in every copy's schema (utils/db.ts). `outside_receipts`: the receipts this phone still owes (outside-mail.ts). */
@@ -59,7 +60,7 @@ export const OUTSIDE_CHAT_TABLES_SQL = `
 export const OUTSIDE_CHAT_DROP_SQL = ' DROP TABLE IF EXISTS outside_chats; DROP TABLE IF EXISTS outside_lines; DROP TABLE IF EXISTS outside_meta; DROP TABLE IF EXISTS outside_receipts;';
 
 /** A chat's standing: a request waiting for the member, open (either side may write), or declined. */
-export type OutsideChatState = 'request' | 'open' | 'declined';
+export type OutsideChatState = CoreOutsideChatState;
 /**
  * A line of mine: `sending` until my community's server has it (kept with its signed item, sent again at each sync),
  * then the outbox's own states (relay-outbox.ts): queued, sent, delivered, failed, expired. A line my server refused is
@@ -92,27 +93,12 @@ export interface OutsideLine {
 }
 
 /** What the gate makes of an item arriving from `peer`. */
-export type GateVerdict = 'line' | 'request' | 'drop';
+export type GateVerdict = OutsideGateVerdict;
 
 /**
- * The request gate, as one pure rule (design §3.5): what becomes of an item of `kind` from a sender, given the chat this
- * phone has with them (null: none), whether that chat already holds a line of theirs, the member's door, and their blocks.
+ * The request gate, as one pure rule (design §3.5), shared with the web: core outside-chat.ts gateOutsideItem.
  */
-export function gateIncoming(input: {
-    kind: string;
-    chat: { state: OutsideChatState; theirLines: number } | null;
-    doorOpen: boolean;
-    blocked: boolean;
-}): GateVerdict {
-    if (input.blocked) return 'drop';
-    const { chat } = input;
-    if (chat?.state === 'open') return input.kind === 'dm-line' ? 'line' : 'drop';
-    // From here, a stranger: words only, one line only, and only through an open door.
-    if (input.kind !== 'dm-line') return 'drop';
-    if (chat?.state === 'declined') return 'drop';
-    if (chat?.state === 'request') return chat.theirLines === 0 ? 'request' : 'drop';
-    return input.doorOpen ? 'request' : 'drop';
-}
+export const gateIncoming = gateOutsideItem;
 
 const rowToChat = (r: any): OutsideChat => ({
     id: r.id, peerKey: r.peer_key, peerHome: r.peer_home, peerName: r.peer_name ?? null, state: r.state, restored: !!r.restored,

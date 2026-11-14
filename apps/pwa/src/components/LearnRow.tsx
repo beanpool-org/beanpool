@@ -61,7 +61,8 @@ export function LearnRow({ row, onOpen, fresh, testId = 'learn-row' }: { row: Kn
                     {row.pinned && <span data-testid="learn-row-pinned" className={chip('pinned')}>{t('📌 PINNED')}</span>}
                     {row.outdated && <span data-testid="learn-row-outdated" className={chip('warn')}>{t('MAY BE OUT OF DATE')}</span>}
                 </span>
-                <span dir="auto" className="block m-0 text-sm font-extrabold leading-snug text-nature-950 dark:text-white line-clamp-2 break-words">{row.title}</span>
+                {/* Two lines at most (the row card, §3.1): line-clamp sets its own display, so no `block` beside it. */}
+                <span dir="auto" className="m-0 text-sm font-extrabold leading-snug text-nature-950 dark:text-white line-clamp-2 break-words">{row.title}</span>
                 {row.line && <span dir="auto" className="block min-w-0 truncate text-xs leading-snug text-nature-700 dark:text-nature-200">{row.line}</span>}
                 <span className="block text-[11px] leading-snug text-nature-600 dark:text-nature-300">
                     <span data-testid="learn-row-checked" className={checked.old ? 'font-bold text-bp-ink-warning' : undefined}>{checked.text}</span>

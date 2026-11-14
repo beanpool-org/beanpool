@@ -165,6 +165,11 @@ async function render() {
     await settle();
 }
 const text = () => host.textContent ?? '';
+/** The sheet is loaded when Invite is first tapped (app/contacts.tsx lazy): wait for it, up to two seconds. */
+async function sheetOpen() {
+    for (let i = 0; i < 100 && !host.querySelector('[data-testid="contact-invite-sheet"]'); i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    await settle();
+}
 const buttons = (label: string) => Array.from(host.querySelectorAll('button')).filter((b) => b.textContent === label || b.getAttribute('aria-label') === label);
 async function press(label: string, nth = 0) {
     const b = buttons(label)[nth];
@@ -214,6 +219,7 @@ describe('Invite from a contact on the phone', () => {
 
         // Dee: the sheet, in the design's words.
         await press('Invite', 0);
+        await sheetOpen();
         expect(text()).toContain('Invite Dee Walker to Riverside');
         expect(text()).toContain('One invite, for one person. It works once, for 30 days.');
         expect(text()).toContain("Dee Walker's name and number are not sent to the server.");
@@ -234,6 +240,7 @@ describe('Invite from a contact on the phone', () => {
 
         // Tom: Copy puts the whole message on the clipboard and says so.
         await press('Invite', 0);
+        await sheetOpen();
         await press('Copy');
         expect(mem.copied[0]).toContain('INV-TEST-0002');
         expect(text()).toContain('Copied. Paste it in your own message.');
@@ -279,6 +286,7 @@ describe('Invite from a contact on the phone', () => {
         await seedList((l) => putContact(l, DEE));
         await render();
         await press('Invite');
+        await sheetOpen();
         await press('Share…');
         expect(text()).toContain('You have made 20 invites today. Try again tomorrow.');
         expect(mem.shares).toEqual([]);
@@ -292,6 +300,7 @@ describe('Invite from a contact on the phone', () => {
         await seedList((l) => putContact(l, DEE));
         await render();
         await press('Invite');
+        await sheetOpen();
         expect(text()).toContain('In this community only its admins invite people. Ask an admin to bring them in.');
         await press('Ask an admin to invite Dee Walker');
         expect(host.querySelector('[data-testid="invite-ask-sheet"]')).not.toBeNull();
@@ -308,6 +317,7 @@ describe('Invite from a contact on the phone', () => {
         await seedList((l) => putContact(l, DEE));
         await render();
         await press('Invite');
+        await sheetOpen();
         expect(text()).toContain('This community doesn’t use invites');
         await press('📤 Share the link');
         expect(mem.shares).toEqual([{ message: `Join me on BeanPool: ${RIVERSIDE}` }]);

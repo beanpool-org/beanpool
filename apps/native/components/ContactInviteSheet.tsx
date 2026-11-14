@@ -24,7 +24,7 @@ import {
 } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { makeInviteForShare } from '../utils/invite-and-share';
-import { ADMINS_ONLY_FALLBACK, communityLinkMessage, invitesOffFallback, mayInviteHere, onlyAdminsInvite, type InviteRole } from '../utils/invite-entries';
+import { communityLinkMessage, invitesOffFallback, mayInviteHere, onlyAdminsInvite, type InviteRole } from '../utils/invite-entries';
 import { invitesOn } from '../utils/node-profile';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { editContacts } from '../utils/contacts-sync';
@@ -98,7 +98,7 @@ export function ContactInviteSheet({ contact, anchor, community, identity, onClo
         </>;
     } else if (!mayInviteHere(features, role)) {
         body = <>
-            <Text style={styles.text}>{t(ADMINS_ONLY_FALLBACK)}</Text>
+            <Text style={styles.text}>{t('In this community only its admins invite people. Ask an admin to bring them in.')}</Text>
             <View style={styles.row}>{button(contactInviteWords.askAdmin(contact.name), () => setAsking(true), true, 'contact-invite-ask')}</View>
         </>;
     } else {

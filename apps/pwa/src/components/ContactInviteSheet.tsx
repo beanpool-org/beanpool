@@ -24,7 +24,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { generateInvite, myNodeRoleOnce, nodeAddress } from '../lib/api';
 import { useCommunityInfo } from '../lib/features';
 import {
-    ADMINS_ONLY_FALLBACK, INVITES_OFF_FALLBACK, adminsOnlyRefusal, communityLinkText, invitesOffRefusal, invitesOn, mayInviteHere, onlyAdminsInvite,
+    INVITE_WORDS, adminsOnlyRefusal, communityLinkText, invitesOffRefusal, invitesOn, mayInviteHere, onlyAdminsInvite,
     pausedRefusal, readInviteRole, type InviteRole,
 } from '../lib/node-invites';
 import { changeContacts } from '../lib/contacts-store';
@@ -101,7 +101,7 @@ export function ContactInviteSheet({ contact, identity, community, onClose }: {
     let body;
     if (!invitesOn(info)) {
         body = <>
-            <p className="m-0 text-[15px] leading-relaxed text-nature-800 dark:text-nature-200">{t(INVITES_OFF_FALLBACK)}</p>
+            <p className="m-0 text-[15px] leading-relaxed text-nature-800 dark:text-nature-200">{t(INVITE_WORDS.offFallback)}</p>
             <div className="flex flex-wrap gap-2">
                 <button type="button" className={GO} onClick={async () => {
                     const text = communityLinkText(window.location.origin);
@@ -112,7 +112,7 @@ export function ContactInviteSheet({ contact, identity, community, onClose }: {
         </>;
     } else if (!mayInviteHere(info, role)) {
         body = <>
-            <p className="m-0 text-[15px] leading-relaxed text-nature-800 dark:text-nature-200">{t(ADMINS_ONLY_FALLBACK)}</p>
+            <p className="m-0 text-[15px] leading-relaxed text-nature-800 dark:text-nature-200">{t(INVITE_WORDS.adminsOnlyFallback)}</p>
             <div className="flex flex-wrap gap-2">
                 <button type="button" className={GO} onClick={() => setAsking(true)} data-testid="contact-invite-ask">{contactInviteWords.askAdmin(contact.name)}</button>
             </div>

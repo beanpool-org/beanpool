@@ -23,10 +23,12 @@
  *      shows it until then. Before that relock, a find tries the retired key's hash too
  *   6. collect with no hold, or a key not in the matches, or another device's hold, opens nothing
  *   7. the hold dies at 5 minutes, and leaves memory then with no find or collect after it
- *   8. a token from another provider is refused as /collect/sso refuses it
+ *   8. a token from another provider is refused by the verifier's own sentence, and holds nothing
  *   9. a standby refuses, and keeps the member's hold for its main server's answer
  *  10. no seal key: the 503 sentence, the nonce unspent and the hold kept
  *  11. a row whose find hash matches but whose lookup hash does not releases nothing: the index is never the proof
+ *  12. the name routes are gone (S3): an app from before S2 asking the lookup by name, /collect/sso-nonce or /collect/sso
+ *      gets 404 and one sentence in JSON, naming nobody; a collect by name opens nothing; and the find still restores
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-recovery-find.ts
  */
@@ -269,7 +271,7 @@ async function main(): Promise<void> {
     const first = await findBy(phone, 'google', DAMO_SUB);
     check(first.nonce.status === 200 && typeof first.nonce.body?.nonce === 'string' && first.nonce.body?.expiresInSeconds === 600
         && typeof first.nonce.body?.clientIds === 'object' && first.nonce.body?.clientIds?.google === AUD.google,
-        `find-nonce answers as /collect/sso-nonce does, with no session: a nonce, 600 s, the web client ids (${first.nonce.status} ${brief(first.nonce.body)})`);
+        `find-nonce answers with no session: a nonce, 600 s, the web client ids (${first.nonce.status} ${brief(first.nonce.body)})`);
     check(first.found.status === 200 && brief(names(first.found)) === brief([`${damoName}:${damo.pk}`]),
         `find with the same Google names the one account, by name and key, with nothing typed (${first.found.status} ${brief(first.found.body)})`);
     check(sessionsFor(damo.pk) === 0 && pushesTo(damo.pk).length === pushesBefore, 'a find opens no session and sends no push');
@@ -564,22 +566,16 @@ async function main(): Promise<void> {
         `with no find or collect after it, an expired hold and its verified sub are gone from memory at its 5 minutes (${heldIdle ? 'held' : 'never held'}, then ${stillHeld ? 'still held' : 'gone'})`);
 
     // ── 8. a token from another provider ────────────────────────────────────────────────────────────
-    console.log('\n── 8. another provider\'s token is refused as /collect/sso refuses it ──');
-    const oldFlow = newId();
-    const opened8 = await call(oldFlow, '/api/recovery/collect', { callsign: damoName });
-    const n8 = (await call(oldFlow, '/api/recovery/collect/sso-nonce', { collectionId: opened8.body?.collectionId })).body?.nonce;
-    const viaOld = await call(oldFlow, '/api/recovery/collect/sso', { collectionId: opened8.body?.collectionId, provider: 'apple', idToken: mint('google', DAMO_SUB, n8), nonce: n8 });
+    console.log('\n── 8. another provider\'s token is refused by the verifier ──');
     const crossed = newId();
     const viaFind = await findBy(crossed, 'google', DAMO_SUB, { as: 'apple' });
-    check(viaFind.found.status === 400 && viaFind.found.status === viaOld.status && viaFind.found.body?.error === viaOld.body?.error,
-        `a Google token sent as Apple: the same 400 and sentence as /collect/sso (${viaFind.found.status} ${brief(viaFind.found.body)} | ${viaOld.status} ${brief(viaOld.body)})`);
+    check(viaFind.found.status === 400 && viaFind.found.body?.error === `Apple token has wrong issuer (${ISS.google})`,
+        `a Google token sent as Apple: 400 with the verifier's own sentence, its issuer named (${viaFind.found.status} ${brief(viaFind.found.body)})`);
     const crossedCollect = await collect(crossed, damo.pk);
     check(crossedCollect.status === 400, `and it holds nothing to collect with (${crossedCollect.status})`);
     const notAProvider = await findBy(newId(), 'google', DAMO_SUB, { as: 'github' });
-    const oldNotAProvider = await call(oldFlow, '/api/recovery/collect/sso', { collectionId: opened8.body?.collectionId, provider: 'github', idToken: 'x', nonce: 'x' });
-    check(notAProvider.found.status === 400 && notAProvider.found.body?.error === "'github' is not a sign-in provider this node can verify."
-        && notAProvider.found.body?.error === oldNotAProvider.body?.error,
-        `a provider this node doesn't verify: the same refusal as /collect/sso (${brief(notAProvider.found.body)})`);
+    check(notAProvider.found.status === 400 && notAProvider.found.body?.error === "'github' is not a sign-in provider this node can verify.",
+        `a provider this node doesn't verify: refused by name (${brief(notAProvider.found.body)})`);
 
     // ── 9. a standby ────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 9. a standby refuses ──');
@@ -649,6 +645,53 @@ async function main(): Promise<void> {
     const malloryCollect = await collect(mallory, ivy.pk);
     check(malloryCollect.status === 400 && releasesFor(ivy.pk) === 0 && pushesTo(ivy.pk).length === 0 && sessionsFor(ivy.pk) === 0,
         `the collect runs the per-row scrypt proof, which Mallory's sub fails: nothing released, no push, no session left (${malloryCollect.status} ${brief(malloryCollect.body)})`);
+
+    // ── 12. the name routes are gone (S3) ───────────────────────────────────────────────────────────
+    console.log('\n── 12. the name routes are gone, and say so ──');
+    // Design §4: an app from before S2 (1.3.4) asks the lookup first and reads any answer but a list as "can't reach the
+    // community"; the server's own answer is 404 and the one sentence, in JSON, never a page or a 401.
+    const NO_NAME_ERROR = 'This community no longer finds an account by its name. Update the app to restore with your sign-in, or use your 12 words.';
+    const isNoName = (r: { status: number; body: any }) => r.status === 404 && r.body?.error === NO_NAME_ERROR && r.body?.code === 'no_restore_by_name';
+    const sessions12 = allSessions(), releases12 = releasesFor(damo.pk), pushes12 = allPushes();
+    pruneAuthAttempts(Date.now() + 120_000); resetGatewayRateLimit();
+    const lookupRes = await localFetch(`${BASE}/api/recovery/lookup/${encodeURIComponent(damoName)}`);
+    const lookupText = await lookupRes.text();
+    let lookupBody: any;
+    try { lookupBody = JSON.parse(lookupText); } catch { lookupBody = undefined; }
+    check(isNoName({ status: lookupRes.status, body: lookupBody }) && /application\/json/.test(lookupRes.headers.get('content-type') ?? '')
+        && !lookupText.includes(damo.pk) && !lookupText.includes(damoName),
+        `the lookup by name, unsigned as an old app asks it: 404 and the sentence, in JSON, naming nobody (${lookupRes.status} ${brief(lookupText)})`);
+    const oldApp = newId();
+    const oldNonce = await call(oldApp, '/api/recovery/collect/sso-nonce', { collectionId: restored.body?.collectionId });
+    const oldRelease = await call(oldApp, '/api/recovery/collect/sso', {
+        collectionId: restored.body?.collectionId, provider: 'google', idToken: mint('google', DAMO_SUB, 'any'), nonce: 'any',
+    });
+    check(isNoName(oldNonce) && isNoName(oldRelease),
+        `/collect/sso-nonce and /collect/sso answer 404 and the same sentence (${oldNonce.status} ${brief(oldNonce.body)} | ${oldRelease.status} ${brief(oldRelease.body)})`);
+    // The two shapes of a collect by name: 1.3.4 sends the key the lookup listed beside the name; older apps the name alone.
+    const byName = await call(oldApp, '/api/recovery/collect', { callsign: damoName });
+    const byNameAndKey = await call(oldApp, '/api/recovery/collect', { callsign: damoName, candidatePublicKey: damo.pk });
+    check(byName.status === 400 && byNameAndKey.status === 400 && byNameAndKey.body?.error === "Sign in with your account's sign-in first.",
+        `a collect by name is refused: it names no hold (${byName.status} ${brief(byName.body)} | ${byNameAndKey.status} ${brief(byNameAndKey.body)})`);
+    check(allSessions() === sessions12 && releasesFor(damo.pk) === releases12 && allPushes() === pushes12,
+        'none of them opened a session, released a copy or sent a push');
+    const afterS3 = newId();
+    const refound = await findBy(afterS3, 'google', DAMO_SUB);
+    const recollected = await collect(afterS3, damo.pk);
+    const reopened = await openReleased(afterS3, recollected.body?.collectionId, 'google', DAMO_SUB);
+    check(refound.found.status === 200 && brief(names(refound.found)) === brief([`${damoName}:${damo.pk}`]) && recollected.status === 200 && reopened.pk === damo.pk,
+        `and the find still restores ${damoName}, with nothing typed (${refound.found.status} ${recollected.status} ${reopened.pk === damo.pk ? 'equal' : reopened.error})`);
+    // What the lookup's own tests pinned (test-callsign-predicates), now on the find that replaced it: a member who left
+    // (pruned) or moved to a new key (migrated) is never offered, though the copy's row is still there.
+    for (const [status, sub, name] of [['pruned', '108888888888888888881', 'Fern'], ['migrated', '108888888888888888882', 'Moss']] as const) {
+        const gone = newId();
+        addMember(gone, GLOBAL ? `${name}4242` : name);
+        const deposited = await connect(gone, 'google', sub);
+        db.prepare('UPDATE members SET status = ? WHERE public_key = ?').run(status, gone.pk);
+        const lookedFor = await findBy(newId(), 'google', sub);
+        check(deposited.status === 200 && rowOf(gone.pk, 'google') !== null && lookedFor.found.status === 200 && names(lookedFor.found).length === 0,
+            `a ${status} member's sign-in finds nothing, though the copy's row is there (${deposited.status} ${brief(lookedFor.found.body)})`);
+    }
 
     const providerCalls = outsideCalls.filter((u) => /google|apple|facebook/i.test(u));
     check(providerCalls.length === 0, `no provider was contacted (${brief(providerCalls)})`);

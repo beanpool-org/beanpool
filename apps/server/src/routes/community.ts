@@ -14,7 +14,7 @@ import {
     generateInvite, redeemInvite, redeemOfflineTicket, checkInvite, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
     hasListedOffer, hasLiveOffer, nodeRoleOf, listNodeRoles,
-    updateProfile, getProfile, getAllProfiles, isCallsignAvailable, findRecoveryCandidates,
+    updateProfile, getProfile, getAllProfiles, isCallsignAvailable,
     getPublicCommunityHealth,
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
@@ -2491,34 +2491,13 @@ router.post('/api/friends/remove', async (ctx) => {
     ctx.body = { success: true };
 });
 
-// ======================== SSO RECOVERY LOOKUP ========================
-
-// 1. Lookup identities by callsign (Public, but we rate limit it in practice, handled loosely here)
-router.get('/api/recovery/lookup/:callsign', async (ctx) => {
-    if (!rateLimit(ctx, 'names')) return; // SRV-4: throttle callsign enumeration
-    const callsign = ctx.params.callsign.trim(); // folded by the one name rule (engine names.ts), not lower-cased first
-    if (!callsign) { ctx.status = 400; ctx.body = { error: 'Missing callsign' }; return; }
-
-    // The query lives in engine/members.ts, beside isCallsignAvailable, so the two callsign
-    // predicates cannot drift apart — see the note there for why that matters on a public
-    // endpoint.
-    ctx.status = 200;
-    // Whoever asks is a stranger until they are recovered, on every node (G9a-2 on the global node; a local community
-    // since 2026-10-01, where a prefix listed every member with a sign-in copy, their photo and join date, in 26
-    // requests): the name they typed, exactly (case forgiven), and no photo or join date to recognise anyone by. What
-    // the restore needs stays: the name, the key (the web app's restore saves only the account the lookup named, lib/
-    // web-restore.ts) and whether a sign-in can bring it back. On every node the key alone opens no face
-    // (engine/avatar-keys.ts, SEC-PUB-02).
-    ctx.body = findRecoveryCandidates(callsign, { exact: true }).map(c => ({ ...c, joinedAt: null, avatarUrl: null }));
-});
-
 // Callsign availability — powers the wizard's live "✓ available / ✗ taken" hint and
 // validates the fun-name suggestions before they're offered. Case-insensitive,
 // per-node. The caller's own current name is never taken for a rename: the key is the request's verified signer, never a
 // query parameter. `?exclude=<key>` answered "available" exactly when that key held that name, which told a stranger the
 // name behind any key (public-routes audit NEW-2); it is ignored, and an older app that still sends it signs the check.
 router.get('/api/members/callsign-available/:callsign', async (ctx) => {
-    // Throttle enumeration, in the bucket it shares with the recovery lookup (pairing never spends it). A key
+    // Throttle enumeration, in its own bucket, `names` (pairing never spends it). A key
     // joining through the open door, signing its own name check, counts against the door's limiter instead
     // (auth-rate-limit.ts doorRateLimit): a hall on one Wi-Fi would spend the auth limiter's 15 a minute per address on
     // names alone.

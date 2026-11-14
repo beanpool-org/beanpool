@@ -184,7 +184,7 @@ import { createContactsRoutes } from './routes/contacts.js';
 import { createCreditSightRoutes } from './routes/credit-sight.js';
 import { createSettingsSigninRoutes } from './routes/settings-signin.js';
 import { createNodeClaimRoutes } from './routes/node-claim.js';
-import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
+import { createRecoveryCollectRoutes, nameRoutesGone } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
 import { createPricingGuideRoutes } from './routes/pricing-guide.js';
 import { createActivityRouter } from './routes/activity.js';
@@ -429,7 +429,6 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
     /^\/api\/treasury\/[^/]+$/,                             // members only; here for its 404 when switched off
     /^\/api\/enterprise\/[^/]+$/,                           // members only; here for its 404 when switched off
     /^\/api\/commons\/decisions\/[^/]+$/,                   // members only (MEMBERS_ONLY_READS_PATTERNS)
-    /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: the exact callsign's SSO recovery candidate, no photo (rate-limited)
     /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers); keyed for every listing where the listings are members', and for a listing off the board where they are a public read (engine/photo-keys.ts)
     /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,              // <img> Pulse feed item thumbnail proxy binary
     /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
@@ -1972,6 +1971,9 @@ export async function startHttpsServer(port: number): Promise<number> {
         groupPicture: groupPictureKeyMatches,
         shopPhoto: shopPhotoKeyMatches,
     };
+    // The name routes S3 deleted (routes/recovery-collect.ts): an app from before S2 asking one hears 404 and the sentence,
+    // before the gates below could answer it as an unsigned read or a visitor.
+    app.use(nameRoutesGone());
     app.use(privatePreviewEarlyGate(isNodeMember, previewImages));
     // Another community's server, on the few paths only a server may call (engine/node-signature.ts NODE_SIGNED_PATHS): its
     // node signature over the exact body, its destination, its key and its nonce, before anything acts on it. The member

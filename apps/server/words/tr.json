@@ -562,7 +562,6 @@
   "That account has no recovery fragments to collect.": "O hesabın toplanacak kurtarma parçası yok.",
   "That account name is too long.": "O hesap adı çok uzun.",
   "That address is not reachable from the internet.": "O adrese internetten ulaşılamıyor.",
-  "That callsign is ambiguous on this node.": "O çağrı kodu bu sunucuda belirsiz.",
   "That check didn't pass. Try again, or sign in to join now.": "O kontrol geçmedi. Tekrar dene ya da hemen katılmak için oturum aç.",
   "That code isn’t valid. Ask the admin for a new one.": "O kod geçerli değil. Yöneticiden yenisini iste.",
   "That confirmation doesn’t need a second admin.": "O onay ikinci bir yönetici gerektirmiyor.",

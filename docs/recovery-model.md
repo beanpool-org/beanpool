@@ -65,7 +65,7 @@ option B, Marty 2026-09-26, card sso-copy-lock), in `apps/server/src/services/re
   on the app's bytes, and `rowToShare` unwraps. The release path reads through the same reader.
   A released copy is stored wrapped, and unwrapped only when `/api/recovery/collect/fragments`
   serves it. `sync.ts` and the snapshot export copy rows without opening them.
-- **No key, no copy:** without the key file, deposits, collect/sso, fragments, status and
+- **No key, no copy:** without the key file, deposits, the find, the collect, fragments, status and
   disconnect answer 503 with *"This server holds sign-in recovery copies it cannot open:
   data/recovery-seal.key is missing."* Nothing is ever stored unwrapped.
 - **Copies made before the seal** are wrapped in place at the first boot of the new server, and
@@ -104,10 +104,13 @@ accounts, because one sign-in can protect a copy made before the find hash and a
 findable, and the scan goes once live servers count 0. A copy deposited while a server ran on its own
 key, before a take-over brought the community's, is found the same way: its find hash is the replaced
 key's, which no take-over carries, so the start that locks the copy again with the community's key
-clears it, and so does a deposit or a disconnect that carries the copy forward. The apps move to these routes in S1 (web) and
-S2 (phone); the name routes (`/api/recovery/lookup/:callsign`, `callsign` in `/collect`,
-`/collect/sso-nonce`, `/collect/sso`) are deleted in S3, in the same release as the S2 phone build,
-nodes first and the app the same day (Marty, 2026-11-09).
+clears it, and so does a deposit or a disconnect that carries the copy forward. The apps moved to these routes in S1 (web) and
+S2 (phone), and S3 deleted the name routes (`/api/recovery/lookup/:callsign`, `callsign` in `/collect`,
+`/collect/sso-nonce`, `/collect/sso`): no account is found by a typed name. An app from before S2
+asking one of those addresses gets 404 and one sentence in JSON (code `no_restore_by_name`), never a 401
+or an empty page; a phone from 1.3.4 shows its own "Can't reach the community right now" for it, which
+is why S3 reaches nodes only in the same release as the S2 phone build, nodes first and the app the
+same day (Marty, 2026-11-09).
 
 **Before #750** the phone made two-part copies, `seed = A ⊕ B`: `A` (the hub) in the clear in the
 node's database, `B` sealed to the `sub`. #750 replaced them for correctness (an unauthenticated
@@ -207,12 +210,13 @@ sign-in is not connected.
 
 **Restoring with that sign-in in a browser (G11-d).** A cleared or new browser on the global
 community gets the account back with the sign-in it joined with, through the same recovery
-routes the phone uses (`routes/recovery-collect.ts`, unchanged): the public callsign lookup names
-the account and its public key, a throwaway key made for the restore opens the session and signs
-every call in it, Google/Apple/Facebook leave the page and return to the join's own return page
-(`/app/auth/<provider>`, Apple via the node's 303), and core's
-`openSeedFromSso` opens the released copy in the page (`apps/pwa/src/lib/web-restore.ts`). The
-restored key must equal the public key the lookup named, or nothing is saved. The phone's restore
+routes the phone uses (`routes/recovery-collect.ts`): a throwaway key made for the restore signs
+every call, Google/Apple/Facebook leave the page and return to the join's own return page
+(`/app/auth/<provider>`, Apple via the node's 303), the find names the accounts that sign-in protects
+by name and public key (nothing is typed), the collect of the one picked opens the session and
+releases its copy, and core's `openSeedFromSso` opens the released copy in the page
+(`apps/pwa/src/lib/web-restore.ts`). The restored key must equal the public key the find named, or
+nothing is saved. The phone's restore
 at a community makes the same check (`apps/native/utils/sso-recovery.ts` `recoverAccountWithSso`,
 #1951). The 12 words are kept only when the web app's own derivation of them makes
 that key. The account is then saved as a 12-words restore is: the node asked whether it is a
@@ -227,9 +231,10 @@ said plainly, with the words and the phone as the ways back.
 ### SSO (Native, and the global community's web app)
 
 ```
-1  enter callsign
+1  choose the community
 2  sign in (Google, Apple or Facebook)
-3  the node verifies it, unwraps the copy and releases it; the device opens it with the sub → in
+3  the node verifies it and finds the accounts it protects there (several: the member picks)
+4  the collect releases the copy; the device opens it with the sub → in
 ```
 
 No PIN. No delay. **The sign-in is the authentication.**
@@ -267,9 +272,9 @@ attempts and the real member finds a locked door on the day they need it. A capp
 
 The account owner is alerted via `RecoveryAlertBanner` on both Native and PWA clients if an active recovery session is opened on the community node (`/api/recovery/collect/mine`). The owner can cancel an unauthorized recovery session directly from the banner via `/api/recovery/collect/cancel`, after which the node hands nothing more to that session, not even a copy it already released.
 
-Strangers can open any number of sessions against a name: nothing evicts one in its 30-minute sign-in window, since until a sign-in checks out the member's own looks the same as a stranger's. So `/collect/mine` sends the count and the newest few, never every session; one `/collect/cancel` stops every live session against the account; the banners say "all cancelled" only when the node says none is left; and once its window has passed a pile is pruned to the idle cap (10) by a node-wide sweep every 10 minutes, in batches that never hold the node, whether or not the owner opens the app; the owner's own poll and each open against them prune a batch sooner (PR #1456 deciding review and re-review, 2026-10-02).
+Since S3 a session opens only for the account a verified sign-in found, with that sign-in's release in the same request, so a stranger opens none. Until then strangers could open any number of sessions against a name, and nothing evicts one in its 30-minute sign-in window, since until a sign-in checks out the member's own looks the same as a stranger's. For a pile left from then, as for any other, the bounds stand: `/collect/mine` sends the count and the newest few, never every session; one `/collect/cancel` stops every live session against the account; the banners say "all cancelled" only when the node says none is left; and once its window has passed a pile is pruned to the idle cap (10) by a node-wide sweep every 10 minutes, in batches that never hold the node, whether or not the owner opens the app; the owner's own poll and each open against them prune a batch sooner (PR #1456 deciding review and re-review, 2026-10-02).
 
-The owner gets a push when a sign-in releases their copy (`account.restored`). Opening a session sends none: anybody with a callsign can open one, so that push (`account.recovery-started`) was a way to ping a member at will (defence review FABLE-sec-sso finding 5, 2026-10-02). Phones still understand it from a community that hasn't updated.
+The owner gets a push when a sign-in releases their copy (`account.restored`). Opening a session sends none of its own: while anybody with a callsign could open one, that push (`account.recovery-started`) was a way to ping a member at will (defence review FABLE-sec-sso finding 5, 2026-10-02), and since S3 every open is a release, which pushes. Phones still understand it from a community that hasn't updated.
 
 Sessions are never evicted while a sign-in may be under way (their first 30 minutes) or once they have released a copy; the per-account cap of 10 applies to idle ones only.
 

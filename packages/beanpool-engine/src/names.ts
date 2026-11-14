@@ -3,8 +3,9 @@ import type Database from 'better-sqlite3';
 type Db = Database.Database;
 
 /**
- * The ONE rule by which two member names are "the same name" on a node: the lookup for a sign-in restore, the
- * recovery collect, the availability check and the rename gate all compare `foldName` of both sides.
+ * The ONE rule by which two member names are "the same name" on a node: the availability check and the rename gate
+ * both compare `foldName` of both sides. (A sign-in restore found its account by a typed name this way too, until
+ * recovery S3 deleted the lookup by name and the collect by name: a restore now finds it from the verified sign-in.)
  *
  * SQLite's `lower()` folds A–Z only, while the server folded the typed name with JS `toLowerCase()` (all of Unicode),
  * so "Олег" or "Émile", typed exactly as stored, matched nothing, and a taken non-ASCII name read as free.

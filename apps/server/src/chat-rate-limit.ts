@@ -8,7 +8,7 @@ import { WRITER_LIMITS } from './config/writer-limits.js';
  * edit, reaction and delete routes, which push a live update to the whole room too) and event chats.
  *
  * Its own bucket, keyed by the signed member, not the IP. The auth-attempt limiter is per IP and also guards
- * recovery lookup, verify-password and pairing, so members chatting behind one NAT (a hall's wifi, carrier NAT)
+ * a restore by sign-in, verify-password and pairing, so members chatting behind one NAT (a hall's wifi, carrier NAT)
  * would lock each other out of recovery. A request with no signed member falls back to its IP here, still
  * apart from the auth bucket.
  */

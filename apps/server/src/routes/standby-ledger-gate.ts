@@ -89,10 +89,10 @@ export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
     // A moderator's undo of a limit on sending message requests (engine/request-limits.ts).
     /^\/api\/local\/admin\/members\/[^/]+\/request-limit\/undo\/?$/,
     // A recovery fragment released: the log of which fragments left the community.
-    /^\/api\/recovery\/collect\/(hub|sso)\/?$/,
+    /^\/api\/recovery\/collect\/hub\/?$/,
     // A restore that finds the account from the sign-in (engine/recovery-find.ts): a find makes copies findable in the main
-    // server's rows and leads only to a release, so it is refused before the provider's sheet opens. A collect by its hold
-    // shares /api/recovery/collect with a collect by name, which a standby still opens; that one refuses in its handler.
+    // server's rows and leads only to a release, so it is refused before the provider's sheet opens. The collect by its
+    // hold, /api/recovery/collect, refuses in its handler (assertPlainTablesWritable), before the hold is touched.
     /^\/api\/recovery\/find(-nonce)?\/?$/,
     // A link's commissioning ceiling.
     /^\/api\/local\/federation\/links\/ceiling\/?$/,

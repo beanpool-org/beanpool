@@ -229,9 +229,9 @@ async function part2Http() {
         updateGatewayConfig(unlimited);
     }
 
-    console.log('\n— auth-attempt limiter (recovery lookup, 15/min) —');
+    console.log('\n— auth-attempt limiter (the name check, 15/min) —');
     updateGatewayConfig(unlimited);
-    const LOOKUP = (i: number) => `/api/recovery/lookup/nobody${i}`;
+    const LOOKUP = (i: number) => `/api/members/callsign-available/nobody${i}`;
     fresh(TRUST_NOBODY);
     {
         const s = await burst(16, i => [LOOKUP(i), { 'x-forwarded-for': `203.0.113.${i + 1}` }]);
@@ -240,7 +240,7 @@ async function part2Http() {
     fresh();
     {
         const s = await burst(32, i => [LOOKUP(i), viaTunnel(`203.0.113.${(i % 4) + 1}`)]);
-        assert(!s.includes(429), `4 people doing recovery lookups through the tunnel don't share a bucket (429s: ${s.filter(x => x === 429).length}/32)`);
+        assert(!s.includes(429), `4 people checking names through the tunnel don't share a bucket (429s: ${s.filter(x => x === 429).length}/32)`);
     }
 
     console.log('\n— invite-check limiter (30/min) —');

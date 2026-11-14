@@ -268,7 +268,6 @@ import {
     writeVisitorRow,
     updateProfile as updateProfileEngine,
     isCallsignAvailable,
-    findRecoveryCandidates,
     setMemberActivityHook,
     NOT_A_MEMBER_ERROR,
     NOT_A_MEMBER_CODE,
@@ -2482,8 +2481,7 @@ export function updateProfile(publicKey: string, update: any): MemberProfile | n
 
 // Per-node callsign availability (case-insensitive). Pure read — re-exported as-is
 // for the /api/members/callsign-available endpoint and any caller that needs it.
-// findRecoveryCandidates backs /api/recovery/lookup and shares that status predicate.
-export { isCallsignAvailable, findRecoveryCandidates };
+export { isCallsignAvailable };
 
 // ===================== TRUST STATS =====================
 

@@ -27,8 +27,8 @@
  *     its next start, before any pull, it applies it: a delta would not send it again, and a large database takes no
  *     routine whole copy.
  *  8. The main server dies and the standby takes over. A sign-in each of those members removed answers as for Zed, who never
- *     had a copy (the collect routes, /api/recovery/collect/sso among them); Hal's and Dee's sign-ins still bring theirs
- *     back. Ada connects hers again on the new main server: it numbers her copy after the one she deleted.
+ *     had a copy (the find, the collect by its hold and the fragments); Hal's and Dee's sign-ins still bring theirs back.
+ *     Ada connects hers again on the new main server: it numbers her copy after the one she deleted.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-recovery-tombstones.ts

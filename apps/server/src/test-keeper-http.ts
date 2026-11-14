@@ -5,8 +5,9 @@
  *   1. Are the routes mounted?
  *   2. Does a correctly signed request arrive with an actor the handler recognises?
  *   3. Is an unsigned write refused by the middleware, before the handler runs?
- *   4. Is the public recovery lookup reachable with NO credentials — including when
- *      ENFORCE_READ_AUTH is on?
+ *   4. Does the recovery lookup by name, deleted in S3, answer an app from before with NO credentials
+ *      404 and its sentence in JSON — including when ENFORCE_READ_AUTH is on, never a 401 for a
+ *      signature that app never sent?
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-keeper-http.ts
  *   ENFORCE_READ_AUTH=false BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-keeper-http.ts   # operator opt-out
@@ -103,19 +104,19 @@ async function main(): Promise<void> {
     assert(noConfirm.status === 400 && noConfirm.body?.currentShareCount === 1,
         'DELETE /api/recovery/shares is mounted and reads its confirmation body');
 
-    // ── 3. the public read, which is the whole point of the allowlist entry ───────────────────
+    // ── 3. the deleted lookup by name, as an app from before asks it: unsigned ─────────────────
     const publicRes = await fetch(`${BASE}/api/recovery/lookup/${CALLSIGN}`);
-    const publicBody = await publicRes.json().catch(() => undefined) as any;
-    assert(publicRes.status === 200,
-        `GET /api/recovery/lookup/:callsign is reachable with NO credentials (got ${publicRes.status})`);
-    assert(Array.isArray(publicBody) && publicBody.length === 1 && publicBody[0].callsign === CALLSIGN,
-        '...and answers with the recovery lookup candidates');
-    assert(publicBody[0].canRecoverByGuardians === false && publicBody[0].canRecoverBySso === true,
-        '...reporting guardian recovery false and SSO recovery true');
+    const publicText = await publicRes.text();
+    let publicBody: any;
+    try { publicBody = JSON.parse(publicText); } catch { publicBody = undefined; }
+    assert(publicRes.status === 404 && publicBody?.code === 'no_restore_by_name' && typeof publicBody?.error === 'string',
+        `GET /api/recovery/lookup/:callsign answers NO credentials with 404 and the sentence, in JSON (got ${publicRes.status} ${publicText.slice(0, 120)})`);
+    assert(!publicText.includes(CALLSIGN) && !publicText.includes(pubKeyHex),
+        '...naming nobody: not the member who has a sign-in copy here');
 
     if (ENFORCED) {
-        assert(publicRes.status === 200,
-            'ENFORCED: the recovery lookup is on the public-read allowlist');
+        assert(publicRes.status === 404,
+            'ENFORCED: the deleted lookup answers before the read gate, never 401 for a signature');
         const gated = await fetch(`${BASE}/api/members`);
         assert(gated.status === 401 || gated.status === 403,
             `...and enforcement really is on — a gated read is refused unauthenticated (got ${gated.status})`);

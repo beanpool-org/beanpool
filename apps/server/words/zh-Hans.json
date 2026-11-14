@@ -557,7 +557,6 @@
   "That account has no recovery fragments to collect.": "该账户没有可收集的恢复片段。",
   "That account name is too long.": "这个账号名太长了。",
   "That address is not reachable from the internet.": "这个地址无法从互联网访问。",
-  "That callsign is ambiguous on this node.": "这个呼号在本节点上有歧义。",
   "That check didn't pass. Try again, or sign in to join now.": "检查没有通过。请重试，或登录后立即加入。",
   "That code isn’t valid. Ask the admin for a new one.": "这个代码无效。请向管理员要一个新的。",
   "That confirmation doesn’t need a second admin.": "这项确认不需要第二位管理员。",

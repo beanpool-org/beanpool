@@ -340,8 +340,8 @@ async function run() {
         }
     }
     assert(sentOk === 20, `20 group lines from two members behind one IP all go through (got ${sentOk})`);
-    const lookup = await callRouter(community, 'GET', '/api/recovery/lookup/alice', { ip: NAT_IP });
-    assert(lookup.status === 200, `a recovery lookup from that IP is not locked out (got ${lookup.status} ${JSON.stringify(lookup.body)})`);
+    const nameCheck = await callRouter(community, 'GET', '/api/members/callsign-available/alice', { ip: NAT_IP });
+    assert(nameCheck.status === 200, `a name check from that IP, which the auth limiter counts, is not locked out (got ${nameCheck.status} ${JSON.stringify(nameCheck.body)})`);
     const viaSend = await callRouter(messaging, 'POST', '/api/messages/send', {
         actor: bob, ip: NAT_IP,
         // The sealed form of a group line (the readable one an old app sent is refused, and is the keeper-read-cursor suite's check).
@@ -357,8 +357,8 @@ async function run() {
     assert(aliceOver.status === 429, `line ${CHAT_LINES_PER_MINUTE + 1} from Alice is refused`);
     const bobStill = await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: bob, ip: NAT_IP, body: lockedGroupLine(db, hall.id) });
     assert(bobStill.status === 201, 'while Bob, on the same IP, keeps his own budget');
-    const lookupAfter = await callRouter(community, 'GET', '/api/recovery/lookup/bob', { ip: NAT_IP });
-    assert(lookupAfter.status === 200, 'and recovery lookup from that IP still works');
+    const nameCheckAfter = await callRouter(community, 'GET', '/api/members/callsign-available/bob', { ip: NAT_IP });
+    assert(nameCheckAfter.status === 200, 'and a name check from that IP still works');
 
     // ── 4. Branch prune that would leave no owner ────────────────────────────────────────
     // Last: it rearranges who the node's owners are.

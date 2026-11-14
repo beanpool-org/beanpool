@@ -7,7 +7,7 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import type { Notification, NotificationResponse } from 'expo-notifications';
 import { loadIdentity, KEY_ITEM_OPTIONS } from '../utils/identity';
 import { markAlertsOn } from '../utils/push-alerts-off';
-import { communityAddress, registerAccountForPush, registerWhereMissing, retryDueRegistrations } from '../utils/push-registrations';
+import { communityAddress, registerAccountForPush, registerAfterKnock as registerAfterKnockAt, registerWhereMissing, retryDueRegistrations } from '../utils/push-registrations';
 import { checkWhileOpen, followTap, verifiedNotice, type IncomingNotice } from '../utils/push-notice-check';
 import { openNoticeIn } from '../utils/push-notice-switch';
 import { countNotice, watchNoticeCounts } from '../utils/notice-counts';
@@ -162,6 +162,16 @@ export function registerPushInPickedLanguage(): void {
  */
 export function retryPushRegistrations(): Promise<void> {
     return registerWhereMissing(() => phonePushToken(false), Platform.OS);
+}
+
+/**
+ * The account on the phone just asked `community` to join (app/find-community.tsx, app/community-card.tsx, after Send):
+ * a phone waiting to be let in sends its token there again, even where it went for an earlier request that ended, so the
+ * yes buzzes it (web push W4; utils/push-registrations.ts `registerAfterKnock`), then the rest of
+ * {@link retryPushRegistrations}. Never asks for permission. Never throws.
+ */
+export function registerAfterKnock(community: string): Promise<void> {
+    return registerAfterKnockAt(community, () => phonePushToken(false), Platform.OS);
 }
 
 /**

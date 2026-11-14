@@ -94,7 +94,7 @@ function member(name: string, daysAgo = 60): Id {
     return id;
 }
 
-interface Res { status: number; body: any; text: string }
+interface Res { status: number; body: any; text: string; etag: string | null }
 async function call(id: Id | null, method: 'GET' | 'POST', urlPath: string, body?: unknown): Promise<Res> {
     pruneAuthAttempts(Date.now() + 120_000);
     resetGatewayRateLimit();
@@ -114,7 +114,7 @@ async function call(id: Id | null, method: 'GET' | 'POST', urlPath: string, body
     const text = await res.text();
     let parsed: any;
     try { parsed = JSON.parse(text); } catch { parsed = undefined; }
-    return { status: res.status, body: parsed, text };
+    return { status: res.status, body: parsed, text, etag: res.headers.get('etag') };
 }
 const show = (r: Res | null) => (r ? `${r.status} ${r.text.slice(0, 220)}` : '-');
 
@@ -197,12 +197,14 @@ async function main(): Promise<void> {
     const cleoList = await topics(cleo);
     assert(cleoList.body?.topics?.find((t: any) => t.id === T)?.unread === true, 'Cleo\'s list shows the topic unread');
     const last = (await topic(ben, T)).body?.posts?.slice(-1)[0]?.number as number;
+    const benTagBefore = (await topics(ben)).etag;
     const benRead = await readTo(ben, T, last);
     assert(benRead.status === 200 && benRead.body?.lastRead === last && rows(ben, 'forum.reply').length === 0, `Ben opens it: his row comes off the bell (${show(benRead)})`);
     assert((await readTo(ben, T, 1)).body?.lastRead === last, 'reading an earlier post moves nothing back');
     assert((await readTo(ben, T, 9999)).body?.lastRead === last, 'nor past the last post');
     assert((await topics(ben)).body?.topics?.find((t: any) => t.id === T)?.unread === false && (await topics(cleo)).body?.topics?.find((t: any) => t.id === T)?.unread === true,
         'his unread dot goes; Cleo\'s stays');
+    assert(!!benTagBefore && (await topics(ben)).etag !== benTagBefore, 'and his list\'s tag moved, so an app holding the old list never gets "not changed" with the old dot');
     mark = expo.length;
     require_((await reply(asha, T, { words: 'One more' })).status === 201, 'Asha replies again');
     await settle();

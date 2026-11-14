@@ -155,10 +155,12 @@ function mentionedIn(topic: TopicFacts, post: { writer: string; words: string; q
     }
     const names = forumMentions(post.words);
     if (names.length > 0) {
-        const inTopic = new Set([topic.writer, ...(db.prepare('SELECT DISTINCT writer_pubkey FROM forum_posts WHERE topic_id = ? AND removed_by IS NULL').pluck().all(topic.id) as string[])]);
+        // Everyone in the topic and their names, in one read.
+        const inTopic = db.prepare(`SELECT m.public_key AS pk, m.callsign FROM members m WHERE m.public_key = @writer
+                OR m.public_key IN (SELECT writer_pubkey FROM forum_posts WHERE topic_id = @topic AND removed_by IS NULL)`)
+            .all({ writer: topic.writer, topic: topic.id }) as { pk: string; callsign: string | null }[];
         const byName = new Map<string, string>();
-        for (const pk of inTopic) {
-            const callsign = (db.prepare('SELECT callsign FROM members WHERE public_key = ?').pluck().get(pk) as string | undefined) ?? '';
+        for (const { pk, callsign } of inTopic) {
             if (callsign) for (const f of nameForms(callsign)) if (!byName.has(f)) byName.set(f, pk);
         }
         for (const name of names) {

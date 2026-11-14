@@ -21,6 +21,10 @@
  *   6. hide: never offered; merge: offered as the library tag whatever its counts; clear: as before; every change an ADMIN
  *      line, a rule standing already changes nothing; garbage refused in words; a token cannot set one
  *   7. a standby: the rule table is a plain table its copy carries, a cleared rule a tombstone; a standby refuses a rule
+ *   8. the table (real routes): for each way the word leaves a reported listing (edit off, pause, delete, a moderator's
+ *      takedown, a report-hide) × the uphold before the move, 3 or 8 days after it, with or without taking it down, or the
+ *      report left open: the author's copy elsewhere is not offered until a week after the latest of the move and the
+ *      uphold, nor ever while the report is open; the unreported control is offered after its own week
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-free-tag-suggestions.ts
  */
@@ -443,6 +447,109 @@ async function main(): Promise<void> {
     } finally {
         setNodeRole('primary');
     }
+
+    // ── 8. the table: every way the word leaves a reported listing × when the report is upheld ──────────
+    console.log('\n── 8. a reported word waits a week after the latest of the move and the uphold, whatever the way ──');
+    type Way = 'edit off' | 'pause' | 'delete' | 'takedown' | 'report-hide';
+    type When = 'before the move' | '3 days after' | '8 days after' | 'never (pending)';
+    const WAYS: Way[] = ['edit off', 'pause', 'delete', 'takedown', 'report-hide'];
+    const WHENS: { when: When; days: number | null }[] = [
+        { when: 'before the move', days: -1 }, { when: '3 days after', days: 3 }, { when: '8 days after', days: 8 }, { when: 'never (pending)', days: null },
+    ];
+    const tableRows: string[] = [];
+    let caseNo = 0;
+    const tagFor = (n: number) => `tbl${String.fromCharCode(97 + Math.floor(n / 26))}${String.fromCharCode(97 + (n % 26))}`;
+    /** Every time this case wrote at or before `upTo` (real), moved back `ms`: the case's earlier events, as if they were that long ago. */
+    const shiftBack = (tag: string, a: string, c: string, upTo: string, ms: number) => {
+        const back = (col: string) => `${col} = CASE WHEN ${col} IS NOT NULL AND ${col} <= @upTo THEN strftime('%Y-%m-%dT%H:%M:%fZ', julianday(${col}) - @days) ELSE ${col} END`;
+        const p = { upTo, days: ms / DAY };
+        db.prepare(`UPDATE free_tag_seen SET ${back('first_seen')}, ${back('gone_at')} WHERE tag = @tag AND post_id IN (@a, @c)`).run({ ...p, tag, a, c });
+        db.prepare(`UPDATE posts SET ${back('removed_by_moderator_at')}, ${back('hidden_by_reports_at')} WHERE id = @a`).run({ ...p, a });
+        db.prepare(`UPDATE abuse_reports SET ${back('created_at')}, ${back('updated_at')} WHERE target_post_id = @a`).run({ ...p, a });
+    };
+    /** The way the word leaves the reported listing `a`, through its real route (a report-hide as auto-moderation stamps it). */
+    const leave = async (way: Way, author: Id, a: string): Promise<number> => {
+        if (way === 'edit off') return (await editTags(author, a, [])).status;
+        if (way === 'pause') return (await call('POST', author, '/api/marketplace/posts/pause', { postId: a, authorPublicKey: author.pk })).status;
+        if (way === 'delete') return (await call('POST', author, '/api/marketplace/posts/remove', { id: a, authorPublicKey: author.pk })).status;
+        if (way === 'takedown') return (await call('POST', null, `/api/local/admin/posts/${a}/delete`, {}, session(ada, 'admin'))).status;
+        // The global profile's auto-hide needs reporters in three circles of established members (engine/auto-moderation.ts):
+        // stamped here as evaluateAutoHide stamps it, on a live listing, as section 2 does.
+        return db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ? AND active = 1 AND hidden_by_reports_at IS NULL').run(new Date().toISOString(), a).changes ? 200 : 409;
+    };
+    const runCase = async (way: Way | null, when: When, days: number | null, deletePost: boolean | null) => {
+        const n = caseNo++;
+        const tag = tagFor(n);
+        const author = member(`Tab${n}`);
+        const reporter = member(`Rep${n}`);
+        const a = await offer(author, `Reported ${n}`, [tag]);
+        stampBack(tag, FREE_TAG_OFFER_DAYS + 1);
+        const carried = offeredNow().includes(tag);
+        const reportId = way ? await fileReport(reporter, a, author) : undefined;
+        const c = await offer(author, `New ${n}`, []);
+        const steps: string[] = [];
+        const uphold = async () => {
+            const r = await call('POST', null, `/api/local/admin/reports/${reportId}/action`, { deletePost }, session(ada, 'admin'));
+            steps.push(`uphold ${r.status}${r.status === 200 ? '' : ` ${r.text.slice(0, 80)}`}`);
+            offeredNow(); // a count at the real time, so a listing that left is marked gone now, not at a probe's later clock
+        };
+        const move = async () => {
+            const onC = await editTags(author, c, [tag]);
+            const off = way ? await leave(way, author, a) : (await editTags(author, a, [])).status;
+            steps.push(`move ${onC.status}/${off}`);
+            offeredNow();
+        };
+        let lastAt: number;
+        if (days !== null && days < 0) {
+            await uphold();
+            const upTo = new Date().toISOString();
+            lastAt = Date.now();
+            await move();
+            shiftBack(tag, a, c, upTo, -days * DAY);
+        } else {
+            await move();
+            if (days !== null) {
+                const upTo = new Date().toISOString();
+                lastAt = Date.now();
+                await uphold();
+                shiftBack(tag, a, c, upTo, days * DAY);
+            } else {
+                lastAt = Date.now();
+            }
+        }
+        const end = Date.now();
+        const status = reportStatus(reportId) ?? 'none';
+        const pending = status === 'pending';
+        const atOnce = offeredNow().includes(tag);
+        let ok: boolean;
+        let seen: string;
+        if (pending) {
+            const at8 = offeredAt(end + (FREE_TAG_OFFER_DAYS + 1) * DAY);
+            const at15 = offeredAt(end + (2 * FREE_TAG_OFFER_DAYS + 1) * DAY).includes(tag);
+            ok = carried && !atOnce && !at8.includes(tag) && !at15;
+            seen = `at once ${atOnce}, +8d ${at8.includes(tag)}, +15d ${at15}`;
+        } else {
+            const justBefore = offeredAt(lastAt + FREE_TAG_OFFER_DAYS * DAY - 3_600_000).includes(tag);
+            const after = offeredAt(end + FREE_TAG_OFFER_DAYS * DAY + 60_000).includes(tag);
+            ok = carried && !atOnce && !justBefore && after;
+            seen = `at once ${atOnce}, week-1h ${justBefore}, week+1m ${after}`;
+        }
+        // A takedown closes every open report on the listing (moderation-notices.ts closeOpenReportsOnPost): left open, it is actioned at the move.
+        const label = way === null ? 'unreported control (edit off)'
+            : `${way}, ${days === null ? `report left open${pending ? '' : ' (the takedown closes it)'}` : `upheld ${when} {deletePost:${deletePost}}`}`;
+        const expect = pending ? 'not offered while the report is open' : 'offered a week after the latest event, not before';
+        tableRows.push(`| ${label} | ${steps.join(', ')} | ${status} | ${expect} | ${seen} | ${ok ? 'pass' : 'FAIL'} |`);
+        assert(ok, `${label}: ${expect} (${steps.join(', ')}; report ${status}; ${seen})`);
+    };
+    await runCase(null, 'never (pending)', null, null);
+    for (const way of WAYS) {
+        for (const { when, days } of WHENS) {
+            if (days === null) await runCase(way, when, null, null);
+            else for (const deletePost of [true, false]) await runCase(way, when, days, deletePost);
+        }
+    }
+    console.log('\n| case | routes (status) | report after | expected | measured | result |\n|---|---|---|---|---|---|');
+    for (const row of tableRows) console.log(row);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

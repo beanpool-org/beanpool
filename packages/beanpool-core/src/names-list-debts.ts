@@ -111,8 +111,8 @@ export const DEBT_COPY = {
         + 'The Decision names no one.',
     forgiveButton: 'Start the Decision',
     shareCode: (d: NamesDebt) => `To pay back your debt to the Commons (${debtBeans(leftOf(d))}), pay it with this code: each payment comes off `
-        + `the debt as you pay it, and when nothing is left it is settled. Open beanpool://pay-commons?code=${d.id}&amount=${hundredthsAsDecimalText(leftOf(d))} on your phone, or open BeanPool, go to Ledger, tap Pay `
-        + `the Commons, enter this pay-back code: ${d.id} and pay ${debtBeans(leftOf(d))}.`,
+        + `the debt as you pay it, and when nothing is left it is settled. Open beanpool://pay-commons?code=${d.id}&amount=${hundredthsAsDecimalText(leftOf(d))} on your phone, or open BeanPool, go to Ledger, then `
+        + `Wallet, tap Pay the Commons, enter this pay-back code: ${d.id} and pay ${debtBeans(leftOf(d))}.`,
     /** The matching-name warning: an admin adding a name the list holds already, with an open debt on it. */
     sameNameTitle: 'This name has an open debt',
     sameName: (name: string, d: NamesDebt) => `${name} is on the list already, and left owing the Commons ${debtBeans(leftOf(d))}, still open. `
@@ -183,9 +183,11 @@ const notOffDebtAfter = (ref: string) => ` This did not come off your debt: it w
 
 export const REPAYMENT_COPY = {
     banner: (r: Repayment) => `You’re working off a debt to the Commons: ${debtBeans(r.left_c)} left of ${debtBeans(r.amount_c)}. Every Bean you receive `
-        + 'above 0 goes to the Commons until it is cleared. You can also pay some or all of it yourself under Pay the Commons, where your '
-        + 'pay-back code is filled in: it comes off at once. Then you keep '
-        + 'what you receive, as everyone does.',
+        + 'above 0 goes to the Commons until it is cleared. You can also pay some or all of it yourself: it comes off at once.',
+    /** The banner's button (credit bar amendment §7b, slice R3): the pay form with the member's own pay-back code filled in. */
+    payBackNow: 'Pay back now',
+    /** The Wallet's row for everyone else, and its line. */
+    payRowLine: 'Give Beans you hold to your community’s shared pot, or pay back a debt with a code from an admin.',
     payTitle: 'Pay the Commons',
     payIntro: 'Pay the Commons from the Beans you hold: never more than you hold. If you’re paying back a debt, enter the pay-back code an admin '
         + 'gave you (working one off, yours is filled in): what you pay comes off the debt at once, and when nothing is left it is settled. Your server refuses a payment above what is left.',

@@ -102,8 +102,8 @@ export function isMemberGiftSetting(n: unknown): n is Hundredths {
 export const VOUCH_PRESET_WORDS = {
     label: word('Vouch for them'),
     none: word('None'),
-    fromBudget: word('From your budget: {left} of {total} left'),
-    fromBudgetNoLimit: word('From your budget: No limit'),
+    fromBudget: word('From your vouching budget: {left} of {total} left'),
+    fromBudgetNoLimit: word('From your vouching budget: no limit'),
     noLimit: word('No limit'),
     notEnough: word('Not enough budget left'),
     noneLeft: word('No budget left. Ask an owner for more.'),
@@ -124,8 +124,14 @@ export const VOUCH_PRESET_WORDS = {
     ledgerCreditLineMany: word('Your credit line: {total} · vouched by {vouchers}'),
     ledgerCreditLineVoucher: word('@{name} {amount}'),
     ledgerCreditLineList: word('{list}, {item}'),
-    ledgerBudget: word('Your budget: {left} of {total} left'),
-    ledgerBudgetNoLimit: word('Your budget: No limit'),
+    // The Ledger's row for a live voucher (credit bar amendment §7a, slice R3): it is the budget to vouch from, never their
+    // own spending, and its line under it says so.
+    ledgerBudget: word('Vouching budget: {left} of {total} left'),
+    ledgerBudgetNoLimit: word('Vouching budget: no limit'),
+    ledgerBudgetLine: word('What you can give other members as credit line when you vouch for them. Not Beans, and not your own spending.'),
+    ledgerBudgetLineNoLimit: word('As an owner you can vouch for members without a limit. This is credit line you give to others: not Beans, and not your own spending.'),
+    /** The budget's dialog, opened from that row. */
+    budgetTitle: word('Your vouching budget'),
     budgetHistory: word('Budget history'),
     askForMore: word('Ask for more'),
     askForMoreHelp: word('To get a bigger budget to vouch from, ask an owner of this community.'),

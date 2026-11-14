@@ -56,6 +56,7 @@ vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => 
 import { closeDB, getDb, getPosts, getBalance } from '../db';
 import { TOOL_DOCS_TABLE } from '../../tools/schema';
 import { GROUP_KEY_TABLES_SQL } from '../group-chat-store';
+import { OUTSIDE_CHAT_TABLES_SQL } from '../outside-chat-store';
 
 // Nothing here reaches a network: getBalance's own read of the node finds the phone offline.
 (globalThis as any).fetch = vi.fn(async () => { throw new TypeError('offline'); });
@@ -80,6 +81,7 @@ function oldCopy(): void {
     `);
     sql.exec(TOOL_DOCS_TABLE);
     sql.exec(GROUP_KEY_TABLES_SQL);
+    sql.exec(OUTSIDE_CHAT_TABLES_SQL);
     sql.prepare('INSERT INTO members (public_key, callsign, earned_credit) VALUES (?, ?, ?)').run(ANA, 'Ana', 200);
     sql.prepare('INSERT INTO accounts (public_key, balance) VALUES (?, ?)').run(ME, 49.25);
     sql.prepare("INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES ('t1', ?, ?, 12.5, 0, 'jam', '2026-11-01T00:00:00.000Z')").run(ANA, ME);
@@ -91,10 +93,14 @@ function oldCopy(): void {
     sql.prepare("INSERT INTO group_chat_key_state (group_id, highest, after) VALUES ('g1', 1, 0)").run();
     sql.prepare("INSERT INTO group_line_verdicts (group_id, k) VALUES ('g1', 'v1')").run();
     sql.prepare("INSERT INTO group_line_signers (group_id, message_id, signer) VALUES ('g1', 'm1', ?)").run(ANA);
+    // A chat with someone in another community, kept on this phone only: no node holds it to read again.
+    sql.prepare("INSERT INTO outside_chats (id, me, peer_key, peer_home, state, created_at, updated_at) VALUES ('o1', ?, ?, 'a.example', 'open', 1, 1)").run(ME, ANA);
+    sql.prepare("INSERT INTO outside_lines (id, chat_id, author, text, at) VALUES ('ol1', 'o1', ?, 'kept here only', 1)").run(ANA);
+    sql.prepare("INSERT INTO outside_meta (k, v) VALUES ('door', 'open')").run();
 }
 
-/** The five tables that are not a copy of the node's: never cleared by a schema number, only by the account leaving. */
-const KEPT_TABLES = ['tool_docs', 'group_chat_epochs', 'group_chat_key_state', 'group_line_verdicts', 'group_line_signers'];
+/** The tables that are not a copy of the node's: never cleared by a schema number, only by the account leaving. */
+const KEPT_TABLES = ['tool_docs', 'group_chat_epochs', 'group_chat_key_state', 'group_line_verdicts', 'group_line_signers', 'outside_chats', 'outside_lines', 'outside_meta'];
 
 /**
  * Columns that older builds added to an open copy one ALTER TABLE at a time (audit C2), now in the schema itself: a copy

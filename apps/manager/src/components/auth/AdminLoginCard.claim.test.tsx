@@ -110,7 +110,8 @@ describe('AdminLoginCard: the unclaimed card', () => {
         expect(await screen.findByText('This community has no owner yet.')).toBeInTheDocument();
         expect(screen.getByTestId('claim-card')).toHaveTextContent('On the server, run:');
         expect(screen.getByTestId('claim-command')).toHaveTextContent('docker compose exec beanpool-node beanpool claim');
-        expect(screen.getByTestId('claim-card')).toHaveTextContent("Then on your phone, scan this, or open BeanPool → Find a community, type this server's address in the search box and tap Claim ‹name›.");
+        expect(screen.getByTestId('claim-card')).toHaveTextContent('Then claim it with the BeanPool app on your phone. Claiming is done from the phone app only.');
+        expect(screen.getByTestId('claim-card')).not.toHaveTextContent('Find a community');
         // No sign-in is offered, phone or any other: no one can sign in yet.
         expect(phoneSignIn()).toBeNull();
         expect(screen.queryByPlaceholderText('Password')).toBeNull();

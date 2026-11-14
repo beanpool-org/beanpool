@@ -42,6 +42,16 @@ describe('Start a community (web)', () => {
         expect(canCopyDetails({ name: 'R', place: '', contact: '' })).toBe(phone.canCopyDetails({ name: 'R', place: '', contact: '' }));
     });
 
+    // The one "what next" after the claim (DESIGN-new-operator-path-fable.md S4, decision 3), on both apps: the claim is the
+    // phone's, then Settings' four. No longer "you name your community in its settings app".
+    it('after the node runs: the claim is done from the phone app only, then the one what next', () => {
+        render(<StartCommunityScreen onClose={vi.fn()} />);
+        const screenText = screen.getByTestId('start-community-screen');
+        expect(screenText).toHaveTextContent('claim it with the BeanPool app on your phone: claiming is done from the phone app only.');
+        expect(screenText).toHaveTextContent('confirm your Core settings, make a recovery code, add a second owner and invite your first members');
+        expect(screenText).not.toHaveTextContent('you name your community in its settings app');
+    });
+
     it('the four things to know before the link, then the node\'s own start link and the setup chapter', async () => {
         const onClose = vi.fn();
         render(<StartCommunityScreen onClose={onClose} />);

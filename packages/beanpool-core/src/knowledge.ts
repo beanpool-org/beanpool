@@ -16,7 +16,7 @@
  * Pure and universal: no Node built-ins, no Intl, no regular expressions (the barrel is bundled for the phone).
  */
 import { featureMode, type FeatureMode } from './features.js';
-import { t, word, type Words } from './words.js';
+import { t, word, wordn, type Words } from './words.js';
 
 /** The post type, as `posts.type` stores it and `types=` names it. */
 export const KNOWLEDGE_TYPE = 'knowledge' as const;
@@ -222,6 +222,49 @@ export function compareKnowledge(
 /** A sorted copy (the list given is not changed). */
 export function sortKnowledge<T extends KnowledgeOrderFacts>(rows: readonly T[], compareTitles?: (x: string, y: string) => number): T[] {
     return [...rows].sort((a, b) => compareKnowledge(a, b, compareTitles));
+}
+
+// ── Home (slice K7) ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Home's doors to Learn (amended §3.6), one set of words for both apps, shown through t() (tn() for `figure`). `name` is the
+ * card's caption and its row in Add a card; `seeAllSpoken` what a screen reader says for the card's "See all ›" (each app
+ * draws its own "See all"); `fresh` the chip on a page that first showed in the last {@link LEARN_HOME_NEW_DAYS} days;
+ * `toCheck` an owner's or admin's first row, amber, to To check; `first` their row where Learn holds nothing yet, to the
+ * form; `keep` the button on the card while it arrives on an arranged Home (home-frame.ts keepArrivedCard); `figure` the
+ * "Your community" card's figure, from 1, which opens Learn.
+ */
+export const LEARN_HOME_WORDS = Object.freeze({
+    name: word('Learn something local'),
+    seeAllSpoken: word('See all of Learn'),
+    fresh: word('New', 'chip: a page of Local knowledge that first showed in the last 14 days'),
+    toCheck: wordn('{n} to check ›', '{n} to check ›'),
+    first: word('Add the first thing worth knowing about {community}'),
+    keep: word('Keep on Home'),
+    figure: wordn('{n} thing worth knowing', '{n} things worth knowing'),
+});
+
+/** The most rows the Home card shows. */
+export const LEARN_HOME_ROWS = 3;
+/** How long a page counts as new on the Home card: the newest page, if it first showed this many days ago or less. */
+export const LEARN_HOME_NEW_DAYS = 14;
+
+/** One row on the Home card: Learn's row card, its first line cut short; `isNew` on the newest page of the last 14 days. */
+export interface HomeLearnRow extends KnowledgeRow {
+    isNew?: true;
+}
+
+/**
+ * The Home card (`cards.learn` in GET /api/home, amended §4.2), built by the node only where Learn is on and only for a
+ * member: up to {@link LEARN_HOME_ROWS} rows, the newest page first when it is new, then the day's pick (the same for every
+ * member that day, so the card doesn't reshuffle at each open). `toCheck`: members' suggestions waiting, for an owner or
+ * admin whose app opens To check (`lands=learn`). `first`: an owner or admin, and Learn holds nothing yet. No card for a
+ * member with nothing to show.
+ */
+export interface HomeLearnCard {
+    rows: HomeLearnRow[];
+    toCheck?: number;
+    first?: true;
 }
 
 // ── The waiting list (slice K3) ──────────────────────────────────────────────────────────

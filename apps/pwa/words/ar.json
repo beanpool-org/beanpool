@@ -1511,7 +1511,6 @@
   "On the map": "على الخريطة",
   "On the map at {lat}, {lng}": "على الخريطة عند {lat}، {lng}",
   "On your Home": "في الرئيسية",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "بمجرد تشغيل خادمك، يمكنك تسمية مجتمعك في تطبيق إعداداته، ودعوة الأعضاء الأوائل، وهم يدعون الباقين. فعّل 'نشر الموقع' هناك، وسيعرف الأشخاص القريبون منك الذين طلبوا إشعارهم بذلك.",
   "One device at a time: the copy you changed last is the one kept.": "جهاز واحد في كل مرة: النسخة التي قمت بتغييرها أخيرًا هي التي يتم الاحتفاظ بها.",
   "One moment…": "لحظة…",
   "One more comes back {when}.": "يعود خيار إضافي {when}.",
@@ -5369,5 +5368,8 @@
     "many": "التعليق للموسم يحجز خطك الائتماني عند {n} فاصوليا لمدة تصل إلى 90 يومًا ويوقف العروض النشطة مؤقتًا فلا يمكن للأعضاء الشراء. يمكن لأي مسؤول الاستئناف في أي وقت.",
     "other": "التعليق للموسم يحجز خطك الائتماني عند {n} فاصوليا لمدة تصل إلى 90 يومًا ويوقف العروض النشطة مؤقتًا فلا يمكن للأعضاء الشراء. يمكن لأي مسؤول الاستئناف في أي وقت."
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "الاستئناف يعيد تنشيط جميع العروض ويعيد الخط الائتماني إلى الحساب اليومي العادي."
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "الاستئناف يعيد تنشيط جميع العروض ويعيد الخط الائتماني إلى الحساب اليومي العادي.",
+  "{name} has no owner yet": "{name} ليس له مالك بعد",
+  "If you installed it, claim it with the one-time code on the server.": "إذا قمت بتثبيته، فقم بالمطالبة به باستخدام الرمز الذي يُستخدم لمرة واحدة على الخادم.",
+  "Claim {name}": "المطالبة بـ {name}"
 }

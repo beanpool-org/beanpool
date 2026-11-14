@@ -45,7 +45,8 @@ describe('D0: the default list (§2.2)', () => {
     });
 
     it('a never-saved Home asks the node for every default card it builds, so the cards are there from the first second', () => {
-        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'events', 'market', 'asked', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
+        // With Learn something local arriving after the list (slice K7), asked in its catalogue place until the list holds it.
+        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'events', 'market', 'asked', 'learn', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
     });
 
     it('with no saved layout: the default list while the tour has not ended, the list less Welcome after', () => {

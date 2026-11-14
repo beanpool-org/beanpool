@@ -57,6 +57,7 @@ async function main() {
         bills: false,
         forum: false,
         forumPublic: false,
+        forumFirstLook: false,
     };
 
     assert(featureOffFor('/api/marketplace/posts/request', mockSwitchesOff) === 'escrow',

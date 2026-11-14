@@ -18,6 +18,16 @@
  *   POST /api/forum/topics/:id/close        → { topic }   (its writer, an owner or an admin) 409 `already_closed`
  *   POST /api/forum/posts/:id/edit          { words, title? } → { topic, post }   (its writer, the topic open)
  *   POST /api/forum/posts/:id/remove        → { ok: true }   (its writer)
+ * First looks (slice F2, engine/forum-first-look.ts): a new member's topic, where `forumFirstLook` is on, answers 202
+ * { waiting } (409 `waiting_already` while one waits; a new member's photos only there, else 403 `new_no_photos`):
+ *   GET  /api/forum/first-looks             → { waiting: [waiting] }   oldest first; owners, admins, moderators (else 403 `moderators_only`)
+ *   GET  /api/forum/first-looks/mine        → { waiting: waiting | null, usuallyWithinHours }   the signer's own
+ *   GET  /api/forum/first-looks/:id/photos/:n → the photo's bytes, to a moderator or its writer | 404
+ *   POST /api/forum/first-looks/:id/ok      → { topicId }   a moderator; 409 `section_gone`
+ *   POST /api/forum/first-looks/:id/no      { reason } → { ok: true }   a moderator; one of the five removal reasons
+ *   POST /api/forum/first-looks/:id/withdraw → { ok: true }   its writer
+ * A waiting one: { id, sectionId, title, words, place, lang, photos, writer, createdAt }. Reports of forum posts are POST
+ * /api/reports `targetForumPostId`, answered in Settings (routes/admin.ts).
  * An owner or admin; anyone else 403 `staff_only`:
  *   POST /api/forum/topics/:id/pin          { pinned } → { topic }   409 `too_many_pins`
  *   POST /api/forum/topics/:id/move         { sectionId } → { topic }
@@ -26,15 +36,17 @@
  *
  * A section: { id, starter, name, about, position, starts, listed, archived } (starter's name: @beanpool/core
  * forumSectionName). A topic: { id, sectionId, title, writer: { publicKey, name }, place, lang, replyCount, lastActivityAt,
- * createdAt, pinned, closed, removed }. A post: { id, topicId, number, writer, words, quotes, lang, createdAt, editedAt,
- * removed, photos } (a removed one's words are empty and its photos 0).
+ * createdAt, pinned, closed, removed, hidden }. A post: { id, topicId, number, writer, words, quotes, lang, createdAt, editedAt,
+ * removed, photos, hidden, linksOn } (a removed one's words are empty and its photos 0; so are a hidden one's, but to its
+ * writer and the moderators; `linksOn` false: a new writer's links are plain text). The front adds { moderator,
+ * firstLooksWaiting, firstTopicWaits, linksOn } for the signer.
  *
  * All 404 `feature_off` while the owners have the forum switched off (routes/profile-feature-gate.ts). No route here reads
  * `checkAdminAuth`, so neither an automation token nor a Settings session reaches one.
  */
 import crypto from 'node:crypto';
 import Router from '@koa/router';
-import { isNodeMember, readsAsMember, assertMemberActive, getNodeRole } from '../state-engine.js';
+import { isNodeMember, readsAsMember, assertMemberActive, getNodeRole, moderationNoticesCb } from '../state-engine.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { memberErrorText } from './member-error-text.js';
 import { parseDataUrl } from '../storage/image-columns.js';
@@ -43,6 +55,9 @@ import {
     forumTopics, markForumTold, moveForumTopic, pinForumTopic, removeForumPost, replyInForum, startForumTopic,
 } from '../engine/forum.js';
 import { FORUM_LIMITS, word } from '@beanpool/core';
+import {
+    firstLookPhoto, listFirstLooks, myFirstLook, noFirstLook, okFirstLook, tellFirstLookWaiting, withdrawFirstLook,
+} from '../engine/forum-first-look.js';
 import type { RouteDeps } from './types.js';
 
 const ONLY_MEMBERS = word('Only a member of this community can read its forum.');
@@ -180,7 +195,15 @@ export function createForumRoutes(_deps: RouteDeps): Router {
     });
 
     router.post('/api/forum/told', (ctx) => write(ctx, 200, (key) => { markForumTold(key); return { told: true }; }));
-    router.post('/api/forum/topics', (ctx) => write(ctx, 201, (key, body) => startForumTopic(key, body)));
+    router.post('/api/forum/topics', (ctx) => {
+        write(ctx, 201, (key, body) => startForumTopic(key, body));
+        // A new member's first topic waits for a look (slice F2): 202, and every moderator hears one is waiting.
+        const out = ctx.body as { waiting?: any } | undefined;
+        if (ctx.status === 201 && out?.waiting) {
+            ctx.status = 202;
+            tellFirstLookWaiting(moderationNoticesCb(), out.waiting);
+        }
+    });
     router.post('/api/forum/topics/:id/replies', (ctx) => write(ctx, 201, (key, body) => ({ post: replyInForum(key, ctx.params.id, body) })));
     router.post('/api/forum/topics/:id/close', (ctx) => write(ctx, 200, (key) => ({ topic: closeForumTopic(key, ctx.params.id) })));
     router.post('/api/forum/topics/:id/pin', (ctx) => write(ctx, 200, (key, body) => {
@@ -192,6 +215,25 @@ export function createForumRoutes(_deps: RouteDeps): Router {
     router.post('/api/forum/posts/:id/remove', (ctx) => write(ctx, 200, (key) => { removeForumPost(key, ctx.params.id); return { ok: true }; }));
     router.post('/api/forum/sections', (ctx) => write(ctx, 201, (key, body) => ({ section: createForumSection(key, body) })));
     router.post('/api/forum/sections/:id/edit', (ctx) => write(ctx, 200, (key, body) => ({ section: editForumSection(key, ctx.params.id, body) })));
+
+    // ── First looks (slice F2, engine/forum-first-look.ts) ──
+    router.get('/api/forum/first-looks', (ctx) => read(ctx, (key) => listFirstLooks(key)));
+    router.get('/api/forum/first-looks/mine', (ctx) => read(ctx, (key) => myFirstLook(key)));
+    router.get('/api/forum/first-looks/:id/photos/:n', (ctx) => {
+        const key = reader(ctx);
+        if (!key) return;
+        const n = whole(ctx.params.n, -1, FORUM_LIMITS.photos - 1);
+        const data = n === null || n < 0 ? null : firstLookPhoto(key, ctx.params.id, n);
+        const parsed = data ? parseDataUrl(data) : null;
+        if (!parsed) return answer(ctx, 404, word('This photo isn’t here any more.'), 'not_found');
+        // Seen by a moderator or its writer only, before it is anyone's to see: never kept by any cache.
+        ctx.set('Cache-Control', 'private, no-store');
+        ctx.type = parsed.mime;
+        ctx.body = Buffer.from(parsed.base64, 'base64');
+    });
+    router.post('/api/forum/first-looks/:id/ok', (ctx) => write(ctx, 200, (key) => okFirstLook(moderationNoticesCb(), key, ctx.params.id)));
+    router.post('/api/forum/first-looks/:id/no', (ctx) => write(ctx, 200, (key, body) => { noFirstLook(moderationNoticesCb(), key, ctx.params.id, body.reason); return { ok: true }; }));
+    router.post('/api/forum/first-looks/:id/withdraw', (ctx) => write(ctx, 200, (key) => { withdrawFirstLook(key, ctx.params.id); return { ok: true }; }));
 
     return router;
 }

@@ -13,6 +13,7 @@ import {
     dismissNodeReport,
     fetchReports,
     reportSubject,
+    restoreForumPost,
     type ListedReport,
     type ReportStatusFilter,
 } from '../../lib/node-client';
@@ -214,7 +215,10 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
     const isOpen = report.outcome === 'open';
     const hasPost = !!report.postId;
     const pulse = report.pulseItem ?? null;
-    const canRemovePost = isOpen && hasPost && !report.postRemoved;
+    // A forum post's report (the forum's slice F2): removed through the report as a listing is, restored on its own.
+    const forum = report.forumPost ?? null;
+    const canRemovePost = isOpen && ((hasPost && !report.postRemoved) || (!!forum && !forum.removed));
+    const canRestoreForum = !!forum && forum.hidden && !forum.removed;
     const canRemovePulse = isOpen && !!pulse && !pulse.removed;
 
     const run = async (label: string, fn: () => Promise<unknown>) => {
@@ -259,6 +263,14 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
             ) : report.targetMessageId ? (
                 // A locked group chat's message, reported with its key: opened here, verified, and nothing else of the chat.
                 <ReportedGroupMessage nodeUrl={nodeUrl} reportId={report.id} groupName={report.groupMessage?.groupName} />
+            ) : forum ? (
+                <div className="space-y-1" data-testid="reported-forum-post">
+                    <p className="text-xs font-bold uppercase tracking-wider text-nature-500 m-0">
+                        {forum.number === 1 ? 'Forum topic' : 'Forum reply'}{forum.writerName ? ` by ${forum.writerName}` : ''}{forum.hidden ? ' · hidden while moderators look' : ''}{forum.removed ? ' · already down' : ''}
+                    </p>
+                    <p className="text-base font-bold text-white m-0">{forum.topicTitle || 'A removed topic'}</p>
+                    {forum.words && <p className="text-sm text-nature-200 m-0 whitespace-pre-line">{forum.words}</p>}
+                </div>
             ) : hasPost ? (
                 <div className="space-y-1">
                     <p className="text-xs font-bold uppercase tracking-wider text-nature-500 m-0">
@@ -305,6 +317,13 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
                         <button type="button" disabled={!!busy} onClick={() => setChoosingReason(true)}
                             className={`${btn} bg-bp-danger-fill hover:bg-bp-danger-hover border border-bp-danger-fill text-bp-danger-on`}>
                             Remove the post
+                        </button>
+                    )}
+                    {canRestoreForum && forum && (
+                        <button type="button" disabled={!!busy}
+                            onClick={() => void run('restore', () => restoreForumPost(nodeUrl, forum.id))}
+                            className={`${btn} bg-nature-800 hover:bg-nature-700 border border-nature-600 text-white`}>
+                            {busy === 'restore' ? 'Restoring…' : 'Restore (show it again)'}
                         </button>
                     )}
                     {canRemovePulse && (

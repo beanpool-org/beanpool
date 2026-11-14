@@ -304,8 +304,15 @@ describe('the credit card before the balance is in (round 2 of #3134): never a c
     it('while the balance is being read: the card\'s shape and "Loading…", no figure, no sentence, no note', async () => {
         vi.mocked(getBalance).mockReturnValue(new Promise(() => {}) as any);
         render(<LedgerPage identity={identity} isMember={true} onNavigate={vi.fn()} />);
-        const reading = await screen.findByTestId('credit-card-reading');
-        expect(getBalance).toHaveBeenCalled();
+        // The card's shape comes first, in the render where the node says Beans are live; the read is asked in the effect
+        // after that render. Nothing may be claimed in between either.
+        await screen.findByTestId('credit-card-reading');
+        expect(screen.queryByTestId('credit-card')).toBeNull();
+        expect(document.body.textContent).not.toMatch(EMPTY_ANSWER_WORDS);
+        // Then wait for the read itself (never a sleep): a loaded runner can find the card before that effect has run (the
+        // red on #3136 and #3135, 14 Nov). The answer never comes, so from here on the card is waiting on a read in flight.
+        await waitFor(() => expect(getBalance).toHaveBeenCalled());
+        const reading = screen.getByTestId('credit-card-reading');
         expect(reading.getAttribute('aria-busy')).toBe('true');
         expect(reading.textContent).toBe('Loading…');
         expect(screen.queryByTestId('credit-card')).toBeNull();

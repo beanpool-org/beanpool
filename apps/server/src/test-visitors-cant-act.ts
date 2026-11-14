@@ -714,12 +714,24 @@ async function main(): Promise<void> {
         platform: 'youtube', url: `https://www.youtube.com/@swept${a.name.toLowerCase()}`, touches: 'member', effect: 'freeze_credit', subject: bob.pk,
         token: 'ExponentPushToken[swept]', preferences: { chat: true },
     });
+    /** A key with no row that has asked to join here (its request open), as the knock door makes one. */
+    const knockedFirst = async (id: Id): Promise<Id> => {
+        resetLimits();
+        // Every knock here comes from one address: the knocks' limit a day is not what this suite checks.
+        db.prepare('UPDATE join_requests SET ip_hash = NULL').run();
+        const r = await call('POST', id, '/api/join/knock', bodyFor(id));
+        if (r.status !== 201) throw new Error(`setup: ${id.name}'s knock was answered ${show(r)}`);
+        return id;
+    };
     {
         const differ: string[] = [];
         for (const route of swept) {
             const [method, path] = route.split(' ');
             if (MAY.has(route)) continue;
-            const n = await call(method, nobody, materialise(path), bodyFor(nobody));
+            // A key with no row keeps a phone's token only while its request to join is open (web push W4): for that route
+            // the key with no row has knocked first, so the two are compared like for like (as the cancel's, below).
+            const noRow = route === 'POST /api/push-tokens' ? await knockedFirst(keypair('WaitingVA')) : nobody;
+            const n = await call(method, noRow, materialise(path), bodyFor(noRow));
             const v = await call(method, vera, materialise(path), bodyFor(vera));
             if (!same(v, n)) differ.push(`${route}\n      visitor ${show(v)}\n      no row  ${show(n)}`);
         }
@@ -775,7 +787,8 @@ async function main(): Promise<void> {
             // A cancel takes back the signer's own open knock (front doors S1), and Zed's is the one this sweep's knock just
             // made: the key with no row knocks first too, so the two cancels are compared like for like.
             const cancel = route === 'POST /api/join/knock/cancel';
-            if (cancel) { resetLimits(); await call('POST', stranger, '/api/join/knock', bodyFor(stranger)); }
+            // Likewise a phone's token, which a key with no row keeps only while its request is open (web push W4).
+            if (cancel || route === 'POST /api/push-tokens') await knockedFirst(stranger);
             resetLimits();
             const n = await changes(() => call(method, stranger, materialise(path), bodyFor(stranger)));
             resetLimits();
@@ -1212,13 +1225,15 @@ async function main(): Promise<void> {
         };
 
         // 4111438869: the push token the gate lets a visitor set gets what is sent to it, and no member's push. Bob (a member),
-        // Vera and Nobody (a key with no row) each register a phone over HTTP, as the apps do.
+        // Vera and a key with no row each register a phone over HTTP, as the apps do. A key with no row keeps a phone only
+        // while its request to join is open (web push W4): this one has asked.
+        const waiter = await knockedFirst(keypair('WaiterVA'));
         const TOKEN = { bob: 'ExponentPushToken[bob-5c]', vera: 'ExponentPushToken[vera-5c]', nobody: 'ExponentPushToken[nobody-5c]' };
-        for (const [phone, token] of [[bob, TOKEN.bob], [vera, TOKEN.vera], [nobody, TOKEN.nobody]] as const) {
+        for (const [phone, token] of [[bob, TOKEN.bob], [vera, TOKEN.vera], [waiter, TOKEN.nobody]] as const) {
             const r = await call('POST', phone, '/api/push-tokens', { publicKey: phone.pk, token, platform: 'android' });
             assert(r.status === 200 && r.body?.success === true, `${phone.name} registers a phone's push token (${show(r)})`);
         }
-        assert(isVisitorRow(vera.pk) && !hasRow(nobody.pk), "Vera's row is a visitor's, and Nobody has no row");
+        assert(isVisitorRow(vera.pk) && !hasRow(waiter.pk), "Vera's row is a visitor's, and the waiting key has no row");
         /** Which of the three phones got a push with this title since `pushed` was last emptied. */
         const reached = (title: string) => {
             const got = (token: string) => pushed.some(p => p.to === token && p.title === title);

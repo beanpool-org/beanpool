@@ -5,8 +5,11 @@
  *   part's words and figures equal to core's creditSheet() for the member's own answer; Escape and ✕ close it.
  * - R3: a voucher's row reads "Vouching budget" with its line (an owner's with theirs); with no debt and no pay-back link
  *   nothing about the Commons is drawn above the tabs; the Wallet tab has the row Pay the Commons with its line.
+ * - One repayment for both (review of #3137): a payment from the Wallet's row changes the notice above the tabs (and settled,
+ *   it goes); a debt paid off at the top leaves no code of it in the Wallet's form.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { REPAYMENT_WORDS } from '../lib/debts';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { forgetRecentLookups } from '../lib/members-on-demand';
 import { resetReaderFeaturesOnce } from '../lib/features';
@@ -19,7 +22,7 @@ import { CREDIT_SHEET_PARTS, creditSheet } from '@beanpool/core';
 vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}) }));
 vi.mock('../lib/blocklist', () => ({ getBlockedUsers: vi.fn(() => []), onBlocklistUpdated: vi.fn(() => () => {}) }));
 vi.mock('../components/CommonsInfoModal', () => ({ CommonsInfoModal: () => null }));
-const debts = vi.hoisted(() => ({ getMyRepayment: vi.fn(async () => null) }));
+const debts = vi.hoisted(() => ({ getMyRepayment: vi.fn(async (): Promise<unknown> => null), payTheCommons: vi.fn() }));
 vi.mock('../lib/debts', async (orig) => ({ ...(await orig<typeof import('../lib/debts')>()), ...debts }));
 vi.mock('../lib/api', () => ({
     getBalance: vi.fn(),
@@ -157,5 +160,67 @@ describe('R3: the vouching budget, and Pay the Commons', () => {
         const notice = await screen.findByTestId('ledger-repayment');
         fireEvent.click(within(notice).getByRole('button', { name: 'Pay back now' }));
         expect(within(notice).getByLabelText(/PAY-BACK CODE/)).toHaveValue(CODE);
+    });
+});
+
+describe('one repayment for the notice and the Wallet\'s row (review of #3137)', () => {
+    const CODE = 'e'.repeat(32);
+    /** The node's debt, as getMyRepayment answers it; each payment with its code comes off it (null once settled). */
+    let debt: { debtId: string; amount_c: number; repaid_c: number; left_c: number } | null;
+    beforeEach(() => {
+        debt = { debtId: CODE, amount_c: 30000, repaid_c: 12000, left_c: 18000 };
+        debts.getMyRepayment.mockImplementation(async () => debt);
+        debts.payTheCommons.mockImplementation(async ({ body }: { body: { amount_c: number; debtId?: string } }) => {
+            if (!debt || body.debtId !== CODE) return { transactionId: `tx-${body.amount_c}`, amount_c: body.amount_c };
+            const left = debt.left_c;
+            const after = left - body.amount_c;
+            debt = after > 0 ? { ...debt, repaid_c: debt.repaid_c + body.amount_c, left_c: after } : null;
+            return { transactionId: `tx-${body.amount_c}`, amount_c: body.amount_c, left_c: left, leftAfter_c: Math.max(after, 0), settled: after <= 0 };
+        });
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+    });
+    afterEach(() => { vi.mocked(window.confirm).mockRestore(); });
+
+    const payInWallet = (beans: string) => {
+        const wallet = screen.getByTestId('ledger-wallet');
+        fireEvent.click(within(wallet).getByRole('button', { name: 'Pay the Commons' }));
+        expect(within(wallet).getByLabelText(/PAY-BACK CODE/)).toHaveValue(CODE);
+        fireEvent.change(within(wallet).getByLabelText(/BEANS/), { target: { value: beans } });
+        fireEvent.click(within(wallet).getByRole('button', { name: 'Pay the Commons' }));
+    };
+
+    it('paid from the Wallet\'s row, the notice above the tabs shows what is left now; settled, it goes; one read for both cards', async () => {
+        await open();
+        expect(within(await screen.findByTestId('ledger-repayment')).getByRole('status')).toHaveTextContent('180 Beans left of 300 Beans');
+        expect(debts.getMyRepayment).toHaveBeenCalledTimes(1);
+        fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
+        payInWallet('80');
+        expect(await within(screen.getByTestId('ledger-wallet')).findByText('Paid 80 Beans to the Commons. That came off your debt: 100 Beans left.')).toBeInTheDocument();
+        await waitFor(() => expect(within(screen.getByTestId('ledger-repayment')).getByRole('status')).toHaveTextContent('100 Beans left of 300 Beans'));
+        expect(within(screen.getByTestId('ledger-repayment')).getByRole('button', { name: 'Pay back now' })).toBeInTheDocument();
+        fireEvent.click(within(screen.getByTestId('ledger-wallet')).getByRole('button', { name: 'Done' }));
+        payInWallet('100');
+        expect(await within(screen.getByTestId('ledger-wallet')).findByText('Paid 100 Beans to the Commons. Your debt is paid off and settled.')).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByTestId('ledger-repayment')).toBeNull());
+        expect(screen.queryByRole('button', { name: 'Pay back now' })).toBeNull();
+        expect(debts.getMyRepayment).toHaveBeenCalledTimes(3);
+    });
+
+    it('paid off from the notice while the Wallet is open, the Wallet\'s form holds no code of the settled debt and gives no warning about it', async () => {
+        await open();
+        fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
+        const notice = await screen.findByTestId('ledger-repayment');
+        fireEvent.click(within(notice).getByRole('button', { name: 'Pay back now' }));
+        fireEvent.change(within(notice).getByLabelText(/BEANS/), { target: { value: '180' } });
+        fireEvent.click(within(notice).getByRole('button', { name: 'Pay the Commons' }));
+        expect(await within(notice).findByText('Paid 180 Beans to the Commons. Your debt is paid off and settled.')).toBeInTheDocument();
+        await waitFor(() => expect(debts.getMyRepayment).toHaveBeenCalledTimes(2));
+        const wallet = screen.getByTestId('ledger-wallet');
+        fireEvent.click(within(wallet).getByRole('button', { name: 'Pay the Commons' }));
+        await waitFor(() => expect(within(wallet).getByLabelText(/PAY-BACK CODE/)).toHaveValue(''));
+        fireEvent.change(within(wallet).getByLabelText(/BEANS/), { target: { value: '5' } });
+        fireEvent.click(within(wallet).getByRole('button', { name: 'Pay the Commons' }));
+        expect(window.confirm).toHaveBeenLastCalledWith(REPAYMENT_WORDS.payConfirm(500, false, null, false));
+        expect(vi.mocked(window.confirm).mock.lastCall![0]).not.toContain('won’t come off your debt');
     });
 });

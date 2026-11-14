@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, renderHook, act, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 
 /**
@@ -11,8 +11,14 @@ import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } fr
 const debts = vi.hoisted(() => ({ getMyRepayment: vi.fn(), payTheCommons: vi.fn() }));
 vi.mock('../lib/debts', async (orig) => ({ ...(await orig<typeof import('../lib/debts')>()), ...debts }));
 
-import { RepaymentCard } from './RepaymentCard';
+import { RepaymentCard, useMyRepayment } from './RepaymentCard';
 import { REPAYMENT_WORDS, PAY_UNANSWERED_RETRY, PAY_REFUSED_UNSAID } from '../lib/debts';
+
+/** One card as the Ledger draws it: the repayment read once by useMyRepayment, re-read after a payment (with `onPaid`). */
+function Card({ place, onPaid }: { place?: 'top' | 'wallet'; onPaid?: () => void }) {
+    const [repayment, reread] = useMyRepayment(true);
+    return <RepaymentCard place={place} repayment={repayment} onPaid={() => { reread(); onPaid?.(); }} />;
+}
 
 const CODE = 'c'.repeat(32);
 /** The confirmed payment the card sent on its `n`th send (from 0): its body, with the payment's id. */
@@ -29,11 +35,11 @@ afterEach(() => { confirmSpy.mockRestore(); });
 describe('RepaymentCard', () => {
     it('shows what is left while they work a debt off, nothing when they owe nothing', async () => {
         debts.getMyRepayment.mockResolvedValue({ amount_c: 30000, repaid_c: 12000, left_c: 18000 });
-        const { unmount } = render(<RepaymentCard />);
+        const { unmount } = render(<Card />);
         expect(await screen.findByRole('status')).toHaveTextContent('180 Beans left of 300 Beans');
         unmount();
         debts.getMyRepayment.mockResolvedValue(null);
-        render(<RepaymentCard />);
+        render(<Card />);
         await waitFor(() => expect(debts.getMyRepayment).toHaveBeenCalledTimes(2));
         expect(screen.queryByRole('status')).toBeNull();
     });
@@ -42,7 +48,7 @@ describe('RepaymentCard', () => {
         debts.getMyRepayment.mockResolvedValue(null);
         debts.payTheCommons.mockResolvedValue({ transactionId: 'tx-42', amount_c: 8000 });
         const onPaid = vi.fn();
-        render(<RepaymentCard place="wallet" onPaid={onPaid} />);
+        render(<Card place="wallet" onPaid={onPaid} />);
         fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
         fireEvent.change(screen.getByLabelText(/BEANS/), { target: { value: '80' } });
         fireEvent.change(screen.getByLabelText(/PAY-BACK CODE/), { target: { value: CODE } });
@@ -58,7 +64,7 @@ describe('RepaymentCard', () => {
 
     it('a bad amount or code is said and nothing is sent; cancelling the question sends nothing; a refusal is the node’s words', async () => {
         debts.getMyRepayment.mockResolvedValue(null);
-        render(<RepaymentCard place="wallet" />);
+        render(<Card place="wallet" />);
         fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
         fireEvent.change(screen.getByLabelText(/BEANS/), { target: { value: '1.234' } });
         fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
@@ -88,7 +94,7 @@ describe('RepaymentCard', () => {
         try {
             debts.getMyRepayment.mockResolvedValue(null);
             debts.payTheCommons.mockResolvedValue({ transactionId: 'tx-150', amount_c: 15000, left_c: 30000, leftAfter_c: 15000, settled: false });
-            render(<RepaymentCard />);
+            render(<Card />);
             expect(screen.getByLabelText(/BEANS/)).toHaveValue('300');
             expect(screen.getByLabelText(/PAY-BACK CODE/)).toHaveValue(CODE);
             expect(screen.getByText('What was left when the admin shared this: 300 Beans.')).toBeInTheDocument();
@@ -105,7 +111,7 @@ describe('RepaymentCard', () => {
         try {
             debts.getMyRepayment.mockResolvedValue(null);
             debts.payTheCommons.mockResolvedValue({ transactionId: 'tx-300', amount_c: 30000, left_c: 30000, leftAfter_c: 0, settled: true });
-            render(<RepaymentCard />);
+            render(<Card />);
             fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
             expect(confirmSpy.mock.calls[0][0]).toContain('300 Beans was what was left when the admin shared this.');
             expect(confirmSpy.mock.calls[0][0]).toContain('If less is left now, your server refuses it and says how much, and nothing is paid.');
@@ -121,7 +127,7 @@ describe('RepaymentCard', () => {
             debts.getMyRepayment.mockResolvedValue(null);
             debts.payTheCommons.mockRejectedValueOnce(Object.assign(new Error('Only 200 Beans are left on that debt. Pay 200 Beans to settle it.'), { status: 409 }));
             debts.payTheCommons.mockResolvedValueOnce({ transactionId: 'tx-200', amount_c: 20000, left_c: 20000, leftAfter_c: 0, settled: true });
-            render(<RepaymentCard />);
+            render(<Card />);
             fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
             expect(await screen.findByRole('alert')).toHaveTextContent('Only 200 Beans are left on that debt. Pay 200 Beans to settle it.');
             expect(screen.getByRole('button', { name: 'Pay the Commons' })).toBeInTheDocument();
@@ -137,7 +143,7 @@ describe('RepaymentCard', () => {
         debts.getMyRepayment.mockResolvedValue(null);
         let fail!: (e: unknown) => void;
         debts.payTheCommons.mockImplementation(() => new Promise((_, j) => { fail = j; }));
-        render(<RepaymentCard place="wallet" />);
+        render(<Card place="wallet" />);
         fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
         fireEvent.change(screen.getByLabelText(/BEANS/), { target: { value: '5' } });
         const payButton = screen.getByRole('button', { name: 'Pay the Commons' });
@@ -155,7 +161,7 @@ describe('RepaymentCard', () => {
         debts.payTheCommons.mockRejectedValueOnce(Object.assign(new Error('Bad Gateway'), { status: 502, unsaid: true }));
         debts.payTheCommons.mockRejectedValueOnce(new TypeError('Failed to fetch'));
         debts.payTheCommons.mockResolvedValueOnce({ transactionId: 'tx-8', amount_c: 800 });
-        render(<RepaymentCard place="wallet" />);
+        render(<Card place="wallet" />);
         fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
         fireEvent.change(screen.getByLabelText(/BEANS/), { target: { value: '7' } });
         fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
@@ -177,7 +183,7 @@ describe('RepaymentCard', () => {
     it('working a debt off, the notice\'s Pay back now opens the form with their own code, and the payment comes off the debt (confirmation 4)', async () => {
         debts.getMyRepayment.mockResolvedValue({ debtId: CODE, amount_c: 20000, repaid_c: 0, left_c: 20000 });
         debts.payTheCommons.mockResolvedValue({ transactionId: 'tx-8', amount_c: 20000, left_c: 20000, leftAfter_c: 0, settled: true });
-        render(<RepaymentCard />);
+        render(<Card />);
         expect(await screen.findByRole('status')).toHaveTextContent('You’re working off a debt to the Commons: 200 Beans left of 200 Beans. Every Bean you receive above 0 goes to the Commons until it is cleared. You can also pay some or all of it yourself: it comes off at once.');
         fireEvent.click(screen.getByRole('button', { name: 'Pay back now' }));
         expect(screen.getByLabelText(/PAY-BACK CODE/)).toHaveValue(CODE);
@@ -191,7 +197,7 @@ describe('RepaymentCard', () => {
     it('working a debt off, a payment without the code is said not to come off it, before and after, with the reference for an admin', async () => {
         debts.getMyRepayment.mockResolvedValue({ debtId: CODE, amount_c: 20000, repaid_c: 0, left_c: 20000 });
         debts.payTheCommons.mockResolvedValue({ transactionId: 'tx-9', amount_c: 5000 });
-        render(<RepaymentCard />);
+        render(<Card />);
         await screen.findByRole('status');
         fireEvent.click(screen.getByRole('button', { name: 'Pay back now' }));
         // Cleared by the member: it stays cleared.
@@ -208,7 +214,7 @@ describe('RepaymentCard', () => {
 describe('where Pay the Commons is drawn (credit bar R3, Marty\'s pick 2)', () => {
     it('at the top, with no debt and no pay-back link, nothing about the Commons is drawn', async () => {
         debts.getMyRepayment.mockResolvedValue(null);
-        const { container } = render(<RepaymentCard />);
+        const { container } = render(<Card />);
         await waitFor(() => expect(debts.getMyRepayment).toHaveBeenCalled());
         await Promise.resolve();
         expect(container.innerHTML).toBe('');
@@ -218,7 +224,7 @@ describe('where Pay the Commons is drawn (credit bar R3, Marty\'s pick 2)', () =
 
     it('at the top, working a debt off: the notice holds one real button, Pay back now, and no bare Pay the Commons words', async () => {
         debts.getMyRepayment.mockResolvedValue({ debtId: CODE, amount_c: 30000, repaid_c: 18000, left_c: 12000 });
-        render(<RepaymentCard />);
+        render(<Card />);
         expect(await screen.findByRole('status')).toHaveTextContent('120 Beans left of 300 Beans');
         const notice = screen.getByRole('status').parentElement!;
         const button = screen.getByRole('button', { name: 'Pay back now' });
@@ -233,7 +239,7 @@ describe('where Pay the Commons is drawn (credit bar R3, Marty\'s pick 2)', () =
 
     it('in the Wallet: the row Pay the Commons with its line, for a member with no debt; it opens the form there', async () => {
         debts.getMyRepayment.mockResolvedValue(null);
-        render(<RepaymentCard place="wallet" />);
+        render(<Card place="wallet" />);
         const row = screen.getByRole('button', { name: 'Pay the Commons' });
         expect(row).toHaveAccessibleDescription('Give Beans you hold to your community’s shared pot, or pay back a debt with a code from an admin.');
         expect(row).toHaveTextContent('Give Beans you hold to your community’s shared pot, or pay back a debt with a code from an admin.');
@@ -244,7 +250,7 @@ describe('where Pay the Commons is drawn (credit bar R3, Marty\'s pick 2)', () =
 
     it('in the Wallet, working a debt off: no second notice, and the row\'s form has their own code filled in', async () => {
         debts.getMyRepayment.mockResolvedValue({ debtId: CODE, amount_c: 30000, repaid_c: 0, left_c: 30000 });
-        render(<RepaymentCard place="wallet" />);
+        render(<Card place="wallet" />);
         await waitFor(() => expect(debts.getMyRepayment).toHaveBeenCalled());
         expect(screen.queryByRole('status')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
@@ -255,12 +261,40 @@ describe('where Pay the Commons is drawn (credit bar R3, Marty\'s pick 2)', () =
         debts.getMyRepayment.mockResolvedValue(null);
         window.history.replaceState(null, '', `/?payback=${CODE}&amount=300`);
         try {
-            const top = render(<RepaymentCard />);
+            const top = render(<Card />);
             expect(screen.getByLabelText(/PAY-BACK CODE/)).toHaveValue(CODE);
             top.unmount();
-            render(<RepaymentCard place="wallet" />);
+            render(<Card place="wallet" />);
             expect(screen.queryByLabelText(/PAY-BACK CODE/)).toBeNull();
             expect(screen.getByRole('button', { name: 'Pay the Commons' })).toBeInTheDocument();
         } finally { window.history.replaceState(null, '', '/'); }
+    });
+});
+
+describe('useMyRepayment: the page\'s one copy of the debt (review of #3137)', () => {
+    it('asks nothing for a guest or the preview', async () => {
+        renderHook(() => useMyRepayment(false));
+        await Promise.resolve();
+        expect(debts.getMyRepayment).not.toHaveBeenCalled();
+    });
+
+    it('a read asked for after a payment wins over the read at open, even when the read at open answers last', async () => {
+        let answerOpen!: (r: unknown) => void;
+        debts.getMyRepayment.mockImplementationOnce(() => new Promise((r) => { answerOpen = r; })).mockResolvedValueOnce(null);
+        const { result } = renderHook(() => useMyRepayment(true));
+        act(() => result.current[1]());
+        await waitFor(() => expect(debts.getMyRepayment).toHaveBeenCalledTimes(2));
+        await act(async () => { answerOpen({ debtId: CODE, amount_c: 30000, repaid_c: 0, left_c: 30000 }); });
+        expect(result.current[0]).toBeNull();
+    });
+
+    it('a failed re-read keeps what it had', async () => {
+        const debt = { debtId: CODE, amount_c: 30000, repaid_c: 0, left_c: 30000 };
+        debts.getMyRepayment.mockResolvedValueOnce(debt).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        const { result } = renderHook(() => useMyRepayment(true));
+        await waitFor(() => expect(result.current[0]).toEqual(debt));
+        await act(async () => { result.current[1](); });
+        await waitFor(() => expect(debts.getMyRepayment).toHaveBeenCalledTimes(2));
+        expect(result.current[0]).toEqual(debt);
     });
 });

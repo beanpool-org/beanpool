@@ -10,8 +10,10 @@
  * off the debt, with its reference for an admin to count. A settle is promised only when the node's answer says
  * the payment covers what is left. Asked first; one payment at a time; the node's refusals in its own words. Each confirmed
  * payment has one id (lib/payment-request.ts): a lost answer keeps it here for Try again with the same id, never paid twice. The banner says nothing when the node answers nothing (an older node, no signal). Wraps at 320px and 130% text: no fixed widths, every control at least 48px tall.
+ * One repayment for both places (review of #3137): the page reads it once with useMyRepayment and hands it to both cards,
+ * and a payment from either re-reads it there, so the notice at the top never shows a debt the Wallet's row has just paid.
  */
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { hundredthsAsDecimalText, t } from '@beanpool/core';
 import { getMyRepayment, payTheCommons, confirmCommonsPayment, unansweredPayment, parseBeans, debtCodeOk, payFailureWords, PAY_WORDS, REPAYMENT_WORDS, type Repayment, type CommonsPayment } from '../lib/debts';
 import type { ConfirmedPayment } from '../lib/payment-request';
@@ -26,8 +28,30 @@ function linkParams(): { code: string; left: number | null } {
     } catch { return { code: '', left: null }; }
 }
 
-export function RepaymentCard({ onPaid, place = 'top' }: { onPaid?: () => void; place?: 'top' | 'wallet' }) {
+/**
+ * The member's debt to the Commons, read from the node once for every card on the page, and again each time `reread` is
+ * called (after a payment from any of them). `enabled` false (a guest, the preview) asks nothing and holds null. An answer
+ * that comes after a newer read was asked for, or after the page has gone, is dropped; a failed read keeps what was there.
+ */
+export function useMyRepayment(enabled: boolean): [Repayment | null, () => void] {
     const [repayment, setRepayment] = useState<Repayment | null>(null);
+    const latest = useRef(0);
+    const live = useRef(true);
+    useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
+    const reread = useCallback(() => {
+        if (!enabled) return;
+        const n = ++latest.current;
+        getMyRepayment().then((r) => { if (live.current && n === latest.current) setRepayment(r); }).catch(() => {});
+    }, [enabled]);
+    useEffect(() => { reread(); }, [reread]);
+    return [repayment, reread];
+}
+
+/**
+ * `repayment` is the page's one copy (useMyRepayment); `onPaid` runs after each payment this card makes, and is where the
+ * page re-reads it (and the balance) for every card.
+ */
+export function RepaymentCard({ repayment, onPaid, place = 'top' }: { repayment: Repayment | null; onPaid: () => void; place?: 'top' | 'wallet' }) {
     // A link with ?payback=<code>&amount=<n> opens the form at the top with both in it (the Wallet's row never reads it).
     const [link] = useState(() => (place === 'top' ? linkParams() : { code: '', left: null }));
     const rowTitle = useId();
@@ -46,15 +70,17 @@ export function RepaymentCard({ onPaid, place = 'top' }: { onPaid?: () => void; 
     // Whether the member typed in the code field: their own code goes in only while they haven't.
     const codeTyped = useRef(false);
 
+    // Their own code goes into an empty field when the repayment says what it is; once the debt is gone (paid here or in
+    // the other card), the code put in for it comes out, so the form never offers a settled debt's code. A code they typed,
+    // or a pay-back link's, stays.
+    const ownCode = repayment?.debtId ?? '';
+    const filledCode = useRef('');
     useEffect(() => {
-        let live = true;
-        getMyRepayment().then((r) => {
-            if (!live) return;
-            setRepayment(r);
-            if (r?.debtId && !codeTyped.current) setCode((c) => (c.trim() ? c : r.debtId!));
-        }).catch(() => {});
-        return () => { live = false; };
-    }, [paid]);
+        if (codeTyped.current) return;
+        const was = filledCode.current;
+        filledCode.current = ownCode;
+        setCode((c) => (!c.trim() || (was !== '' && c === was) ? ownCode : c));
+    }, [ownCode]);
 
     const pay = async () => {
         if (inFlight.current) return;
@@ -76,7 +102,7 @@ export function RepaymentCard({ onPaid, place = 'top' }: { onPaid?: () => void; 
             setHeld(null);
             setPaid(REPAYMENT_WORDS.paid(r.amount_c, r.transactionId, !!payment.body.debtId, r, !payment.body.debtId && !!repayment));
             setAmount('');
-            onPaid?.();
+            onPaid();
         } catch (e) {
             const lost = unansweredPayment(e);
             setHeld(lost ? payment : null);

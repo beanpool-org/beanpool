@@ -26,7 +26,7 @@ import { MyBudgetModal } from '../components/MyBudgetModal';
 import { CreditBar } from '../components/CreditBar';
 import { CreditBarUnread } from '../components/CreditBarUnread';
 import { CreditSheet } from '../components/CreditSheet';
-import { RepaymentCard } from '../components/RepaymentCard';
+import { RepaymentCard, useMyRepayment } from '../components/RepaymentCard';
 import { CreditSeenByGivers } from '../components/CreditSeenByGivers';
 import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerBudget, VOUCH_PRESET_WORDS, type TierName } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
@@ -309,6 +309,12 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
         refreshPromiseRef.current = p;
         return p;
     }, [myKey, viewerIsMember, preview, readsBeans]);
+
+    // The debt to the Commons, read once for both repayment cards (the notice above the tabs and the Wallet's row) and
+    // again after a payment from either, with the balance: one copy, so the notice never shows a debt just paid in the
+    // Wallet (review of #3137).
+    const [repayment, rereadRepayment] = useMyRepayment(viewerIsMember && !preview);
+    const afterCommonsPayment = useCallback(() => { refresh().catch(() => {}); rereadRepayment(); }, [refresh, rereadRepayment]);
 
     // The node has just said it reads whole: the list the refresh at open couldn't read yet, read once.
     useEffect(() => {
@@ -649,7 +655,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
 
             {/* Working off a debt (#1597): what is left, and Pay back now with their own code. An admin's pay-back link opens
                 the form here. Nothing about the Commons otherwise: Pay the Commons is a row in the Wallet (slice R3). */}
-            {viewerIsMember && !preview && <RepaymentCard onPaid={refresh} />}
+            {viewerIsMember && !preview && <RepaymentCard repayment={repayment} onPaid={afterCommonsPayment} />}
 
             {/* Tab Bar */}
             <div className="flex bg-white dark:bg-nature-900 border-b border-nature-200 dark:border-nature-800 rounded-t-2xl shadow-sm overflow-hidden">
@@ -927,7 +933,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
 
                     {/* Pay the Commons, for everyone, beside the Commons Pool: a row with its line that opens the form here
                         (credit bar amendment §7b, slice R3). A member working a debt off finds their own code filled in. */}
-                    {viewerIsMember && !preview && <RepaymentCard place="wallet" onPaid={refresh} />}
+                    {viewerIsMember && !preview && <RepaymentCard place="wallet" repayment={repayment} onPaid={afterCommonsPayment} />}
 
                     {/* Send credits */}
                     {/* In preview the marker's action: it keeps its place, and opens the sheet. */}

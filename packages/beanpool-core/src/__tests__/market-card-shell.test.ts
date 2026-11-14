@@ -46,9 +46,9 @@ describe('the shell (§1.1)', () => {
         expect(MARKET_CARD_SHELL.compactPadding).toEqual({ vertical: 10, horizontal: 12 });
     });
 
-    it('has two variants and no band: an Elder border of 3 and a Pulse border of 2', () => {
+    it('has one variant and no band: an Elder border of 3 (the Daily Pulse\'s border went with it, 15 Nov 2026)', () => {
         expect(MARKET_CARD_SHELL.variant).toEqual({ elderBorderLeft: 3 });
-        expect(Object.keys(MARKET_CARD_SHELL.variant)).toHaveLength(2);
+        expect(Object.keys(MARKET_CARD_SHELL.variant)).toHaveLength(1);
     });
 });
 

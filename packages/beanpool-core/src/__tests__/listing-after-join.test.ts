@@ -17,13 +17,13 @@ afterEach(() => setLanguage('en'));
 
 describe('the community a listing is kept for', () => {
     it('is the host, from a host or an address', () => {
-        expect(listingAfterJoinHost('mullum.example.org')).toBe('mullum.example.org');
-        expect(listingAfterJoinHost('https://Mullum.example.org/')).toBe('mullum.example.org');
+        expect(listingAfterJoinHost('hillside.example.org')).toBe('hillside.example.org');
+        expect(listingAfterJoinHost('https://Hillside.example.org/')).toBe('hillside.example.org');
         expect(listingAfterJoinHost('https://test.example.org:8443')).toBe('test.example.org:8443');
     });
 
     it('is nothing for a path, a query, a scheme other than https, or no string', () => {
-        for (const bad of ['https://mullum.example.org/app', 'mullum.example.org?x=1', 'http://mullum.example.org', 'javascript:alert(1)', '', null, 42]) {
+        for (const bad of ['https://hillside.example.org/app', 'hillside.example.org?x=1', 'http://hillside.example.org', 'javascript:alert(1)', '', null, 42]) {
             expect(listingAfterJoinHost(bad), String(bad)).toBeNull();
         }
     });
@@ -31,25 +31,25 @@ describe('the community a listing is kept for', () => {
 
 describe('the slot', () => {
     it('keeps the id and the time for a community, and reads them back', () => {
-        const held = withListingAfterJoin({}, 'https://mullum.example.org', POST, T0)!;
-        expect(held).toEqual({ 'mullum.example.org': { id: POST, at: T0 } });
+        const held = withListingAfterJoin({}, 'https://hillside.example.org', POST, T0)!;
+        expect(held).toEqual({ 'hillside.example.org': { id: POST, at: T0 } });
         expect(listingsAfterJoinOf(JSON.stringify(held), T0 + 1)).toEqual(held);
     });
 
     it('a new tap for the same community starts again, unjoined', () => {
-        const joined = { 'mullum.example.org': { id: 'old', at: T0, joined: true as const } };
-        expect(withListingAfterJoin(joined, 'mullum.example.org', POST, T0 + 5)).toEqual({ 'mullum.example.org': { id: POST, at: T0 + 5 } });
+        const joined = { 'hillside.example.org': { id: 'old', at: T0, joined: true as const } };
+        expect(withListingAfterJoin(joined, 'hillside.example.org', POST, T0 + 5)).toEqual({ 'hillside.example.org': { id: POST, at: T0 + 5 } });
     });
 
     it('writes nothing for an id that is no id, or a host that is no host', () => {
-        expect(withListingAfterJoin({}, 'mullum.example.org', 'https://elsewhere.example/?x=1', T0)).toBeNull();
-        expect(withListingAfterJoin({}, 'mullum.example.org', '', T0)).toBeNull();
+        expect(withListingAfterJoin({}, 'hillside.example.org', 'https://elsewhere.example/?x=1', T0)).toBeNull();
+        expect(withListingAfterJoin({}, 'hillside.example.org', '', T0)).toBeNull();
         expect(withListingAfterJoin({}, 'not a host', POST, T0)).toBeNull();
     });
 
     it('lapses a month after it was kept, and never reads one kept "later" than now', () => {
-        const raw = JSON.stringify(withListingAfterJoin({}, 'mullum.example.org', POST, T0));
-        expect(listingsAfterJoinOf(raw, T0 + LISTING_AFTER_JOIN_MS)).toHaveProperty(['mullum.example.org', 'id'], POST);
+        const raw = JSON.stringify(withListingAfterJoin({}, 'hillside.example.org', POST, T0));
+        expect(listingsAfterJoinOf(raw, T0 + LISTING_AFTER_JOIN_MS)).toHaveProperty(['hillside.example.org', 'id'], POST);
         expect(listingsAfterJoinOf(raw, T0 + LISTING_AFTER_JOIN_MS + 1)).toEqual({});
         expect(listingsAfterJoinOf(raw, T0 - 1)).toEqual({});
     });
@@ -59,13 +59,13 @@ describe('the slot', () => {
         expect(listingsAfterJoinOf('not json', T0)).toEqual({});
         expect(listingsAfterJoinOf('[1,2]', T0)).toEqual({});
         const raw = JSON.stringify({
-            'mullum.example.org': { id: POST, at: T0, joined: true, extra: 'dropped' },
+            'hillside.example.org': { id: POST, at: T0, joined: true, extra: 'dropped' },
             'MIXED.example.org': { id: POST, at: T0 },
             'bad host': { id: POST, at: T0 },
-            'byron.example.org': { id: 'a b', at: T0 },
+            'riverside.example.org': { id: 'a b', at: T0 },
             'castle.example.org': { id: POST, at: 'soon' },
         });
-        expect(listingsAfterJoinOf(raw, T0)).toEqual({ 'mullum.example.org': { id: POST, at: T0, joined: true } });
+        expect(listingsAfterJoinOf(raw, T0)).toEqual({ 'hillside.example.org': { id: POST, at: T0, joined: true } });
     });
 
     it(`holds at most ${LISTING_AFTER_JOIN_MOST} communities, dropping the oldest`, () => {

@@ -2,15 +2,15 @@
 /**
  * Back to the listing after the join, the web's whole way (list on global G4, DESIGN-list-on-global-fable.md §6 steps 3-7),
  * in headless Chromium between TWO real origins, each served by its own Vite server: "global" (https://global.example.org,
- * e2e/list-on-global-g4-harness.tsx with the real components/EventCopyDoor.tsx and components/YesJoin.tsx) and "Byron"
- * (https://byron.example.org, the real web app, App.tsx). Playwright only maps the names to the ports and answers /api with
+ * e2e/list-on-global-g4-harness.tsx with the real components/EventCopyDoor.tsx and components/YesJoin.tsx) and "Riverside"
+ * (https://riverside.example.org, the real web app, App.tsx). Playwright only maps the names to the ports and answers /api with
  * stubs; each origin's storage is its own, as the browser keeps it.
  *
- *   1. A copy of Byron's listing on global: Ask to join keeps the listing at Byron (global's own storage, the id and the time
- *      only) and goes to the Find card's address (`/?ask=byron.example.org`).
- *   2. Byron said yes: Join opens Byron's page with the listing beside the handoff (`&listing=<id>`), and Byron's page takes it
- *      out of its address; Join there → the photo step → the tour → the member lands on that listing on Byron's Market.
- *      Global's tab forgets it once Byron's page said joined.
+ *   1. A copy of Riverside's listing on global: Ask to join keeps the listing at Riverside (global's own storage, the id and the time
+ *      only) and goes to the Find card's address (`/?ask=riverside.example.org`).
+ *   2. Riverside said yes: Join opens Riverside's page with the listing beside the handoff (`&listing=<id>`), and Riverside's page takes it
+ *      out of its address; Join there → the photo step → the tour → the member lands on that listing on Riverside's Market.
+ *      Global's tab forgets it once Riverside's page said joined.
  *   3. The listing has gone by then: the Market, with "The listing you came for is no longer up." (here in Spanish).
  *   4. The screens at 320 px with 1.3x text, light and dark, one in Spanish (--shots <dir>): fails on sideways scroll.
  *
@@ -31,14 +31,14 @@ const SHOTS = shotsAt > 0 ? path.resolve(process.argv[shotsAt + 1]) : path.join(
 fs.mkdirSync(SHOTS, { recursive: true });
 
 const GLOBAL = 'https://global.example.org';
-const BYRON = 'https://byron.example.org';
+const RIVERSIDE = 'https://riverside.example.org';
 const INVITE = 'INV-KN0C-K1NV';
-const NAME = 'Byron Shire BeanPool';
+const NAME = 'Riverside Shire BeanPool';
 const POST = '3f2b8c1e-5d4a-4e7b-9a10-0c6d2e8f1a34';
 const TITLE = 'Spare seedlings, ready to plant';
 const GONE = 'The listing you came for is no longer up.';
 
-/** Byron's words in Spanish, as the app's own catalogs give them (app first, then core), for the buttons the walk taps. */
+/** Riverside's words in Spanish, as the app's own catalogs give them (app first, then core), for the buttons the walk taps. */
 const catalogs = {
     es: {
         ...JSON.parse(fs.readFileSync(path.join(PWA_DIR, 'words/es.json'), 'utf8')),
@@ -81,7 +81,7 @@ const POST_ROW = {
     lat: -28.65, lng: 153.6, photos: [],
 };
 
-/** One context: a browser with nothing kept, both origins mapped, Byron's stubs; `gone`: Byron no longer holds the listing. */
+/** One context: a browser with nothing kept, both origins mapped, Riverside's stubs; `gone`: Riverside no longer holds the listing. */
 async function scenario({ dark = false, lang = 'en', gone = false } = {}) {
     const state = { yesKeys: new Set(), members: new Set(), redeems: [], byId: [], handoffs: [], otherHosts: new Set() };
     const context = await browser.newContext({ viewport: { width: 320, height: 720 }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce', deviceScaleFactor: 2 });
@@ -107,9 +107,9 @@ async function scenario({ dark = false, lang = 'en', gone = false } = {}) {
     await context.route('**/*', async (route) => {
         const req = route.request();
         const u = new URL(req.url());
-        const local = u.origin === GLOBAL ? ports.global : u.origin === BYRON ? ports.byron : null;
+        const local = u.origin === GLOBAL ? ports.global : u.origin === RIVERSIDE ? ports.riverside : null;
         if (!local) { state.otherHosts.add(u.host); return route.abort(); }
-        if (u.origin === BYRON && u.pathname === '/app' && u.searchParams.get('door') === 'handoff') state.handoffs.push(u.href);
+        if (u.origin === RIVERSIDE && u.pathname === '/app' && u.searchParams.get('door') === 'handoff') state.handoffs.push(u.href);
         // The copy's door goes to global's Find card (`/?ask=`): here, the harness's yes card, as the same origin.
         if (u.origin === GLOBAL && u.pathname === '/' && u.searchParams.has('ask')) {
             const res = await route.fetch({ url: `${local}/e2e/list-on-global-g4-harness.html${u.search}` });
@@ -120,7 +120,7 @@ async function scenario({ dark = false, lang = 'en', gone = false } = {}) {
             const signer = req.headers()['x-public-key'] ?? null;
             if (u.origin === GLOBAL) return json(route, u.pathname.startsWith('/api/profile/') ? { callsign: 'CJ Global' } : {});
             if (u.pathname === '/api/community/info') return json(route, { profile: 'local', memberCount: 40, postCount: 1, transactionCount: 0, commonsBalance_c: 0, features: { openJoin: false, knocks: true } });
-            if (u.pathname === '/api/community/card') return json(route, { name: NAME, host: 'byron.example.org', members: 40, joining: 'requests' });
+            if (u.pathname === '/api/community/card') return json(route, { name: NAME, host: 'riverside.example.org', members: 40, joining: 'requests' });
             if (u.pathname === '/api/join/knock/status') {
                 if (!signer || !state.yesKeys.has(signer)) return json(route, { status: 'none' });
                 return json(route, { status: 'approved', invite: INVITE, expiresAt: null, ...(state.members.has(signer) ? { member: true } : {}) });
@@ -163,7 +163,7 @@ async function shot(page, name, theme) {
 
 const keptAtGlobal = (page) => page.evaluate(() => localStorage.getItem('beanpool_listing_after_join'));
 
-/** Byron's page after the handoff's Join: the photo step, then the tour's last button, as a member taps them. */
+/** Riverside's page after the handoff's Join: the photo step, then the tour's last button, as a member taps them. */
 async function throughTheSteps(popup, lang) {
     await popup.getByText(say(lang, '📸 Choose your look')).waitFor({ timeout: 60_000 });
     await popup.getByRole('button', { name: say(lang, 'Next →'), exact: true }).first().click();
@@ -173,8 +173,8 @@ async function throughTheSteps(popup, lang) {
 }
 
 try {
-    ports = { global: await serve('global'), byron: await serve('byron') };
-    console.log(`global → ${ports.global}, Byron → ${ports.byron}`);
+    ports = { global: await serve('global'), riverside: await serve('riverside') };
+    console.log(`global → ${ports.global}, Riverside → ${ports.riverside}`);
     browser = await chromium.launch();
 
     const runs = [
@@ -192,11 +192,11 @@ try {
         await door.waitFor({ timeout: 90_000 });
         check(await keptAtGlobal(holder) === null, 'nothing is kept before the tap');
         await shot(holder, 'global-copy', tag);
-        await Promise.all([holder.waitForURL(/\?ask=byron\.example\.org/), door.click()]);
+        await Promise.all([holder.waitForURL(/\?ask=riverside\.example\.org/), door.click()]);
         const kept = JSON.parse(await keptAtGlobal(holder) ?? 'null');
-        check(kept && Object.keys(kept).length === 1 && kept['byron.example.org']?.id === POST && Object.keys(kept['byron.example.org']).sort().join() === 'at,id',
-            `Ask to join kept the listing at Byron in global's storage, the id and the time only (${JSON.stringify(kept)})`);
-        const join = holder.getByTestId(`g4-join-${BYRON}`);
+        check(kept && Object.keys(kept).length === 1 && kept['riverside.example.org']?.id === POST && Object.keys(kept['riverside.example.org']).sort().join() === 'at,id',
+            `Ask to join kept the listing at Riverside in global's storage, the id and the time only (${JSON.stringify(kept)})`);
+        const join = holder.getByTestId(`g4-join-${RIVERSIDE}`);
         await join.waitFor({ timeout: 90_000 });
         const id = await holder.evaluate(() => window.__identity);
         state.yesKeys.add(id.publicKey);
@@ -204,31 +204,31 @@ try {
         const [popup] = await Promise.all([context.waitForEvent('page'), join.click()]);
         await popup.getByTestId('handoff').waitFor({ timeout: 90_000 });
         const opened = new URL(state.handoffs[0] ?? popup.url());
-        check(opened.origin === BYRON && opened.searchParams.get('listing') === POST, `Byron's page opened with the listing beside the handoff (${opened.search.replace(/n=[0-9a-f]+/, 'n=…')})`);
+        check(opened.origin === RIVERSIDE && opened.searchParams.get('listing') === POST, `Riverside's page opened with the listing beside the handoff (${opened.search.replace(/n=[0-9a-f]+/, 'n=…')})`);
         check(!opened.href.includes(id.privateKey) && !opened.href.includes(id.mnemonic.join(' ')), 'and no key or words in its address');
         await popup.getByTestId('handoff-confirm').waitFor({ timeout: 90_000 });
-        check(!new URL(popup.url()).searchParams.has('listing'), 'Byron\'s page took the listing out of its address with the rest of the handoff');
-        check(await popup.evaluate(() => localStorage.getItem('beanpool_listing_after_join')) === null, 'nothing is kept at Byron before its Join');
+        check(!new URL(popup.url()).searchParams.has('listing'), 'Riverside\'s page took the listing out of its address with the rest of the handoff');
+        check(await popup.evaluate(() => localStorage.getItem('beanpool_listing_after_join')) === null, 'nothing is kept at Riverside before its Join');
         await popup.getByTestId('handoff-join').click();
-        await holder.getByTestId(`g4-joined-${BYRON}`).waitFor({ timeout: 60_000 });
-        check(await keptAtGlobal(holder) === null, 'global forgot the listing once Byron\'s page said joined');
-        check(state.redeems.length === 1 && state.redeems[0].publicKey === id.publicKey, 'Byron took the yes with the same key, through the invite path');
+        await holder.getByTestId(`g4-joined-${RIVERSIDE}`).waitFor({ timeout: 60_000 });
+        check(await keptAtGlobal(holder) === null, 'global forgot the listing once Riverside\'s page said joined');
+        check(state.redeems.length === 1 && state.redeems[0].publicKey === id.publicKey, 'Riverside took the yes with the same key, through the invite path');
         await throughTheSteps(popup, run.lang);
         if (run.gone) {
             const line = popup.getByText(say(run.lang, GONE));
             await line.waitFor({ timeout: 60_000 });
             check(true, `the Market says "${say(run.lang, GONE)}"`);
             check(say(run.lang, GONE) !== GONE || run.lang === 'en', 'in the member\'s language');
-            check(state.byId.includes(POST), 'after asking Byron for that listing by its id');
-            await shot(popup, 'byron-gone', tag);
+            check(state.byId.includes(POST), 'after asking Riverside for that listing by its id');
+            await shot(popup, 'riverside-gone', tag);
         } else {
             const detail = popup.getByTestId('listing-detail');
             await detail.waitFor({ timeout: 60_000 });
-            check((await detail.textContent()).includes(TITLE), `the member landed on the listing on Byron's Market ("${TITLE}")`);
+            check((await detail.textContent()).includes(TITLE), `the member landed on the listing on Riverside's Market ("${TITLE}")`);
             check(await popup.getByText(GONE).count() === 0, 'with no line about it being gone');
-            await shot(popup, 'byron-listing', tag);
+            await shot(popup, 'riverside-listing', tag);
         }
-        check(await popup.evaluate(() => localStorage.getItem('beanpool_listing_after_join')) === null, 'Byron used it once: nothing is left kept there');
+        check(await popup.evaluate(() => localStorage.getItem('beanpool_listing_after_join')) === null, 'Riverside used it once: nothing is left kept there');
         check([...state.otherHosts].length === 0, `nothing asked any other host (${[...state.otherHosts].join(', ')})`);
         await context.close();
     }

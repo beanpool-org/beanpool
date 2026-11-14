@@ -34,7 +34,7 @@ export interface ListingAfterJoin {
 /** The slot: community host → its listing. */
 export type ListingsAfterJoin = Record<string, ListingAfterJoin>;
 
-/** A community's host from its host or its address (`https://mullum.example.org/`), as the slot keys it; null for anything else. */
+/** A community's host from its host or its address (`https://hillside.example.org/`), as the slot keys it; null for anything else. */
 export function listingAfterJoinHost(raw: unknown): string | null {
     if (typeof raw !== 'string') return null;
     return askHost(raw.trim().replace(/^https:\/\//i, '').replace(/\/+$/, ''));

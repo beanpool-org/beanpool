@@ -1,11 +1,11 @@
 /**
  * The global community's side of "back to the listing after the join" (list on global G4) for e2e/list-on-global-g4-check.mjs,
- * served at the "global" origin while Byron's real web app is served at another. One account, made in the page and kept in
+ * served at the "global" origin while Riverside's real web app is served at another. One account, made in the page and kept in
  * this origin's storage, so the two steps below are the same member:
- *   - `/` with no `ask`: a copy of Byron's listing as global shows it, with its real door (components/EventCopyDoor.tsx);
- *     its Ask to join keeps the listing at Byron and goes to `/?ask=byron.example.org`;
- *   - `/?ask=…` (the runner serves this page there): Byron said yes, and the real Join (components/YesJoin.tsx).
- * `listing=<id>`: the copy's listing at Byron. `lang`: the language the page draws in.
+ *   - `/` with no `ask`: a copy of Riverside's listing as global shows it, with its real door (components/EventCopyDoor.tsx);
+ *     its Ask to join keeps the listing at Riverside and goes to `/?ask=riverside.example.org`;
+ *   - `/?ask=…` (the runner serves this page there): Riverside said yes, and the real Join (components/YesJoin.tsx).
+ * `listing=<id>`: the copy's listing at Riverside. `lang`: the language the page draws in.
  */
 import { createRoot } from 'react-dom/client';
 import { copyPriceLine, t, type EventCopy, type UiLang } from '@beanpool/core';
@@ -20,9 +20,9 @@ declare global {
 }
 
 const params = new URLSearchParams(window.location.search);
-const listing = params.get('listing') ?? 'p-byron-1';
-const BYRON = 'https://byron.example.org';
-const NAME = 'Byron Shire BeanPool';
+const listing = params.get('listing') ?? 'p-riverside-1';
+const RIVERSIDE = 'https://riverside.example.org';
+const NAME = 'Riverside Shire BeanPool';
 const KEPT = 'g4-harness-identity';
 
 if (params.get('dark') === '1' || localStorage.getItem('g4-dark') === '1') {
@@ -50,9 +50,9 @@ async function main() {
     window.__identity = { publicKey: identity.publicKey, privateKey: identity.privateKey, mnemonic: identity.mnemonic ?? [] };
     const root = createRoot(document.getElementById('root')!);
     const asked = params.has('ask');
-    const knock = { url: BYRON, name: NAME, key: null, sentAt: new Date().toISOString(), callsign: 'CJ Asked' };
+    const knock = { url: RIVERSIDE, name: NAME, key: null, sentAt: new Date().toISOString(), callsign: 'CJ Asked' };
     // An Offer's copy, as the Market's footer draws it (components/ListingCopyFooter.tsx): its price line, then the door.
-    const copy: EventCopy = { from: { host: 'byron.example.org', postId: listing, name: NAME, url: BYRON, door: 'ask' }, price: { price_c: 2000, per: 'fixed' } };
+    const copy: EventCopy = { from: { host: 'riverside.example.org', postId: listing, name: NAME, url: RIVERSIDE, door: 'ask' }, price: { price_c: 2000, per: 'fixed' } };
     root.render(
         <div className="max-w-md mx-auto p-4">
             <section className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 p-4">

@@ -227,10 +227,10 @@ vi.mock('../knock-key', () => ({
     // utils/knock-key.ts writes it (knock-without-account.test.ts runs the real one): the look ends, there is no community in
     // use, the key is marked as the knock's, and the phone holds it.
     knockKeyForThisPhone: async (held: unknown) => held ?? { identity: { ...ids.VISITOR }, createdHere: true },
-    commitKnockKey: async (key: { identity: Record<string, unknown> }, callsign: string) => {
+    commitKnockKey: async (key: { identity: { publicKey: string } }, callsign: string) => {
         const identity = { ...key.identity, callsign };
         store.map.delete('beanpool_anchor_url');
-        knocking.mark = identity.publicKey as string;
+        knocking.mark = identity.publicKey;
         phone.stored = identity;
         return identity;
     },

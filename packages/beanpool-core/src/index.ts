@@ -213,3 +213,4 @@ export * from './per-item-deal.js';
 export * from './contacts-crypto.js';
 export * from './contacts-list.js';
 export * from './contacts-vcard.js';
+export * from './contacts-invite.js';

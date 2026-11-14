@@ -21,6 +21,7 @@ const mem = vi.hoisted(() => ({
     shared: [] as Array<{ uri: string; options: any; text: string | undefined }>,
     blocked: [] as string[],
     pushed: [] as unknown[],
+    reads: 0,
 }));
 // The store loads Expo's file system, AsyncStorage and the share sheet with require() (utils/contacts-store.ts
 // phoneContactsDeps, use-contacts.ts shareContactsFile), which vi.mock doesn't reach: Node's loader hands these out instead.
@@ -28,7 +29,7 @@ const fakes = vi.hoisted(() => {
     const fsFake = {
         documentDirectory: 'file:///docs/',
         cacheDirectory: 'file:///cache/',
-        readAsStringAsync: async (u: string) => { if (!mem.files.has(u)) throw new Error('no file'); return mem.files.get(u)!; },
+        readAsStringAsync: async (u: string) => { mem.reads++; if (!mem.files.has(u)) throw new Error('no file'); return mem.files.get(u)!; },
         writeAsStringAsync: async (u: string, t: string) => { mem.files.set(u, t); },
         getInfoAsync: async (u: string) => ({ exists: mem.files.has(u) }),
         makeDirectoryAsync: async () => {},
@@ -103,7 +104,7 @@ import { newContactId, putContact, emptyContactsList, type ContactsList } from '
 import ContactsScreen from '../../app/contacts';
 import { changeContacts, emptySyncState, loadContacts, phoneContactsDeps } from '../contacts-store';
 import { syncContacts } from '../contacts-sync';
-import { contactsWhereWords, type ContactsView } from '../use-contacts';
+import { contactsWhereWords, useContactsRecord, type ContactsView } from '../use-contacts';
 
 const seed = ed25519.utils.randomSecretKey();
 ME.publicKey = bytesToHex(ed25519.getPublicKey(seed));
@@ -274,6 +275,23 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         expect(sheet).toContain('Your private contacts');
         expect(sheet).toContain("Chats between two people and group chats are end-to-end encrypted, always: there is nothing to turn on. Event chats and enterprise chats are not: the community's server can read those.");
         expect(sheet).not.toMatch(/all messages|everything is encrypted|by default/i);
+    });
+});
+
+describe('the Chat tab', () => {
+    it('reads only the record beside the list (a list kept, "Your contacts are back"), never the list itself', async () => {
+        await seedList((l) => putContact(l, person('Dee Walker')));
+        mem.reads = 0;
+        const seen: Array<ReturnType<typeof useContactsRecord>> = [];
+        function Probe() { seen.push(useContactsRecord(ME)); return null; }
+        host = document.createElement('div');
+        document.body.appendChild(host);
+        root = createRoot(host);
+        await act(async () => { root!.render(createElement(Probe) as unknown as Parameters<Root['render']>[0]); });
+        await settle();
+        expect(seen.at(-1)?.fileSeq).toBeGreaterThan(0);
+        expect(mem.reads).toBe(0);
+        // Mutation: read it through loadContacts → the list's file is read (and unlocked: most of a second at 2,000 on API 26).
     });
 });
 

@@ -36,7 +36,7 @@ import { OtherCommunityNotices } from '../../components/OtherCommunityNotices';
 import { formatHundredths, t, tn, word, type WordKey } from '@beanpool/core';
 import { ListPhoto } from '../../components/ListPhoto';
 import { ContactsInfoSheet } from '../../components/ContactsInfoSheet';
-import { contactsOf, useContacts } from '../../utils/use-contacts';
+import { useContactsRecord } from '../../utils/use-contacts';
 import { backLineSeen, contactsHintStoreKey } from '../../utils/contacts-store';
 
 /** Talk's three panes: word() keys, shown through t() where the switch is drawn. */
@@ -81,8 +81,9 @@ export default function ChatsScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     // The member's private contacts (DESIGN-private-contacts-fable.md §3.1): the button in the search row, its one-time line
     // (kept per account: gone once used or closed), the ⓘ, and "Your contacts are back" once a community's copy came in.
-    const contacts = useContacts(identity);
-    const hasContacts = contactsOf(contacts).length > 0;
+    // Only the record beside the list is read here, never the list itself (it is costly to open on an old phone).
+    const contactsRecord = useContactsRecord(identity);
+    const hasContacts = (contactsRecord?.fileSeq ?? 0) > 0;
     const [contactsHint, setContactsHint] = useState(false);
     const [contactsInfo, setContactsInfo] = useState(false);
     React.useEffect(() => {
@@ -978,9 +979,9 @@ export default function ChatsScreen() {
                 </View>
             )}
             {/* A list that came back from a community's copy to a phone that held none (design §4.5). */}
-            {!!contacts?.state.back && identity && messagesFilter !== 'requests' && (
+            {!!contactsRecord?.back && identity && messagesFilter !== 'requests' && (
                 <View style={[styles.contactsLine, styles.contactsLineRow, { marginTop: 0 }]} accessibilityRole="text" testID="contacts-back">
-                    <Text style={[styles.contactsLineText, { flex: 1 }]}>{tn(contacts.state.back, 'Your contacts are back: {n} person.', 'Your contacts are back: {n} people.')}</Text>
+                    <Text style={[styles.contactsLineText, { flex: 1 }]}>{tn(contactsRecord.back, 'Your contacts are back: {n} person.', 'Your contacts are back: {n} people.')}</Text>
                     <Pressable accessibilityRole="button" accessibilityLabel={t('Dismiss')} style={styles.contactsIconBtn} onPress={() => { void backLineSeen(identity); }}>
                         <MaterialCommunityIcons name="close" size={22} color={colors.text.muted} />
                     </Pressable>

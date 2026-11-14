@@ -7,7 +7,9 @@
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { t, timeAgo, writeContactsVcard, type ContactsList } from '@beanpool/core';
-import { loadContacts, onContactsChanged, type ContactsAccount, type ContactsOnPhone, type ContactsSyncState } from './contacts-store';
+import {
+    contactsSyncStoreKey, loadContacts, onContactsChanged, readSyncState, type ContactsAccount, type ContactsOnPhone, type ContactsSyncState,
+} from './contacts-store';
 import { contactsCommunities, contactsKeptAt } from './contacts-sync';
 import { communityName } from './community-name';
 
@@ -59,6 +61,29 @@ export function useContacts(account: ContactsAccount | null | undefined): Contac
         // The account's key is what matters: a new identity object for the same account reads nothing again.
     }, [key]);
     return view;
+}
+
+/**
+ * The record kept beside the list (contacts-store.ts), read without opening the list: whether a list was ever kept on this
+ * phone, and "Your contacts are back". What the Chat tab needs. Opening a list of 2,000 takes most of a second on an old
+ * phone, on the JS thread (measured on the API 26 emulator in the PR that made this), so a tab the member opens all day
+ * never opens it. Null until read, with no account, and before a first contact.
+ */
+export function useContactsRecord(account: Pick<ContactsAccount, 'publicKey'> | null | undefined): ContactsSyncState | null {
+    const [state, setState] = useState<ContactsSyncState | null>(null);
+    const key = account?.publicKey ? account.publicKey.toLowerCase() : null;
+    useEffect(() => {
+        setState(null);
+        if (!key) return;
+        let alive = true;
+        const read = () => AsyncStorage.getItem(contactsSyncStoreKey(key))
+            .then((raw) => { if (alive) setState(raw === null ? null : readSyncState(raw)); })
+            .catch(() => {});
+        void read();
+        const stop = onContactsChanged((pk) => { if (pk.toLowerCase() === key) void read(); });
+        return () => { alive = false; stop(); };
+    }, [key]);
+    return state;
 }
 
 const hostOf = (url: string) => url.replace(/^https?:\/\//, '').replace(/\/.*$/, '');

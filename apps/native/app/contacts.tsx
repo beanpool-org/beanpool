@@ -307,7 +307,7 @@ function ListScreen({ view, list, styles, busy, me, onOpen, onAdd, onInfo, onRem
             windowSize={7}
             ListHeaderComponent={top}
             ListEmptyComponent={people.length > 0 ? <Text style={styles.muted}>{t('Nobody in your contacts matches that.')}</Text> : null}
-            ListFooterComponent={people.length > 0 || view.state.savedAt !== null ? <Text style={[styles.muted, { marginTop: 12 }]} testID="contacts-where">{contactsWhereWords(view)}</Text> : null}
+            ListFooterComponent={people.length > 0 ? <Text style={[styles.muted, { marginTop: 12 }]} testID="contacts-where">{contactsWhereWords(view)}</Text> : null}
             renderItem={({ item }) => item.kind === 'head' ? <Text style={styles.head} accessibilityRole="header">{item.title}</Text> : (
                 <View style={styles.row} testID="contact-row">
                     <Pressable accessibilityRole="button" style={styles.rowMain} onPress={() => onOpen(item.c.id)}>

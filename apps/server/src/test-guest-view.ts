@@ -1373,6 +1373,8 @@ async function main(): Promise<void> {
             'POST /api/forum/first-looks/:id/ok', 'POST /api/forum/first-looks/:id/no', 'POST /api/forum/first-looks/:id/withdraw',
             // Notices (slice F5): a topic's bell (follow, mute, neither) and how far its reader read; both signed.
             'POST /api/forum/topics/:id/follow', 'POST /api/forum/topics/:id/read',
+            // Search (slice F6): a member's, signed, counted against their day's searches.
+            'GET /api/forum/search',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',

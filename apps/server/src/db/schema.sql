@@ -3342,6 +3342,58 @@ CREATE TABLE IF NOT EXISTS forum_waiting_photos (
     updated_at TEXT,
     PRIMARY KEY (waiting_id, order_num)
 );
+-- The forum's search (slice F6, engine/forum-search.ts; design §3 "a search index", §8, §16): one row per post, keyed by the
+-- post's rowid, holding its words and, on an opening post (number 1), its topic's title and place. This server's own, never
+-- copied (engine/replication-manifest.ts 'local'): each server keeps it from the posts and topics it holds, by the triggers
+-- below, so a standby's import writes it too. A waiting first topic is never a post, so never here. `secure-delete`: a
+-- post's old words leave the index's own bytes the moment its row changes or goes (a removal blanks them; FTS5 otherwise
+-- keeps them until a merge), so a removed or deleted account's words are in no search and no page of the file.
+CREATE VIRTUAL TABLE IF NOT EXISTS forum_search USING fts5(title, place, words);
+INSERT INTO forum_search(forum_search, rank) VALUES ('secure-delete', 1);
+-- Each trigger rewrites the whole row from the post and its topic as they stand, so the order two of them fire in, a
+-- standby's import order included (topics before posts, or a whole copy's deletes), never leaves a stale title. The UPDATE
+-- triggers fire only when an indexed value changed: a touch trigger's nested stamp (forum_posts_touch_updated_at) never
+-- rewrites the row, the same WHEN rule as posts_au (#878).
+CREATE TRIGGER IF NOT EXISTS forum_search_post_ai AFTER INSERT ON forum_posts BEGIN
+    INSERT INTO forum_search(rowid, title, place, words)
+    VALUES (new.rowid,
+        CASE WHEN new.number = 1 THEN (SELECT title FROM forum_topics WHERE id = new.topic_id) END,
+        CASE WHEN new.number = 1 THEN (SELECT place FROM forum_topics WHERE id = new.topic_id) END,
+        new.words);
+END;
+CREATE TRIGGER IF NOT EXISTS forum_search_post_au AFTER UPDATE ON forum_posts
+WHEN OLD.words IS NOT NEW.words OR OLD.number IS NOT NEW.number OR OLD.topic_id IS NOT NEW.topic_id
+BEGIN
+    DELETE FROM forum_search WHERE rowid = old.rowid;
+    INSERT INTO forum_search(rowid, title, place, words)
+    VALUES (new.rowid,
+        CASE WHEN new.number = 1 THEN (SELECT title FROM forum_topics WHERE id = new.topic_id) END,
+        CASE WHEN new.number = 1 THEN (SELECT place FROM forum_topics WHERE id = new.topic_id) END,
+        new.words);
+END;
+CREATE TRIGGER IF NOT EXISTS forum_search_post_ad AFTER DELETE ON forum_posts BEGIN
+    DELETE FROM forum_search WHERE rowid = old.rowid;
+END;
+-- A topic made, retitled, its place changed, or gone: its opening post's row again, with the title and place it now has.
+CREATE TRIGGER IF NOT EXISTS forum_search_topic_ai AFTER INSERT ON forum_topics BEGIN
+    DELETE FROM forum_search WHERE rowid IN (SELECT rowid FROM forum_posts WHERE topic_id = new.id AND number = 1);
+    INSERT INTO forum_search(rowid, title, place, words)
+    SELECT rowid, new.title, new.place, words FROM forum_posts WHERE topic_id = new.id AND number = 1;
+END;
+CREATE TRIGGER IF NOT EXISTS forum_search_topic_au AFTER UPDATE ON forum_topics
+WHEN OLD.title IS NOT NEW.title OR OLD.place IS NOT NEW.place
+BEGIN
+    DELETE FROM forum_search WHERE rowid IN (SELECT rowid FROM forum_posts WHERE topic_id = new.id AND number = 1);
+    INSERT INTO forum_search(rowid, title, place, words)
+    SELECT rowid, new.title, new.place, words FROM forum_posts WHERE topic_id = new.id AND number = 1;
+END;
+CREATE TRIGGER IF NOT EXISTS forum_search_topic_ad AFTER DELETE ON forum_topics BEGIN
+    DELETE FROM forum_search WHERE rowid IN (SELECT rowid FROM forum_posts WHERE topic_id = old.id AND number = 1);
+    INSERT INTO forum_search(rowid, title, place, words)
+    SELECT rowid, NULL, NULL, words FROM forum_posts WHERE topic_id = old.id AND number = 1;
+END;
+-- Newest first, for a search's answer and for the newest 20,000 posts the no-spaces fallback reads (engine/forum-search.ts).
+CREATE INDEX IF NOT EXISTS idx_forum_posts_created ON forum_posts (created_at);
 
 -- 25b. A group's chat, mutes and convenor succession (groups redesign slice 1, 2026-09-19).
 -- Every group owns one node-readable conversation: conversations.id = groups.id, type 'group_thread'. Its

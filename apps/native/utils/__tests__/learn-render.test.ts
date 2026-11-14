@@ -63,6 +63,8 @@ vi.mock('../../app/ThemeContext', async () => {
 });
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: h.identity }) }));
 vi.mock('../use-learn-mode', () => ({ useLearnMode: () => h.mode }));
+// Who is writing (slice K4): a member with nothing waiting, here; learn-write-render.test.ts covers the rest.
+vi.mock('../../components/learn/useLearnWriter', () => ({ useLearnWriter: () => ({ checks: false, waiting: 0 }), readMyDrafts: vi.fn(async () => null) }));
 vi.mock('../db', () => ({
     getKnowledgePosts: vi.fn(async () => { if (h.pagesFails) throw new Error('unreadable'); return h.pages; }),
     getKnowledgePost: vi.fn(async (id: string) => h.pages.find((p) => p.id === id) ?? null),

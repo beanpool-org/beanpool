@@ -68,11 +68,11 @@ export const HOME_DRAWN: ReadonlySet<HomeCardId> = new Set([
     ...toolHomeCardIds(),
 ]);
 /**
- * The doors the Learn card may open beyond a page and Learn (core learnHomeLines): To check and the form are slice K4's
- * screens, not on the phone yet, so "N to check ›" and "Add the first thing…" are not drawn, and Home doesn't send
- * `lands=learn` (the node sends `toCheck` only to an app that does). K4 turns each on with its screen.
+ * The doors the Learn card may open beyond a page and Learn (core learnHomeLines): the form (slice K4, app/learn/new.tsx), so an
+ * owner's or admin's "Add the first thing…" is drawn. To check is K4's second part, not on the phone yet, so "N to check ›" is
+ * not drawn and Home doesn't send `lands=learn` (the node sends `toCheck` only to an app that does).
  */
-export const LEARN_OPENS: LearnHomeOpens = {};
+export const LEARN_OPENS: LearnHomeOpens = { addFirst: true };
 
 /** A tool's card this build draws: worked out on the phone from the tool's document, so the node sends nothing for it. */
 export const isToolHomeCard = (type: HomeCardId): boolean => type.startsWith('tool-') && HOME_DRAWN.has(type);

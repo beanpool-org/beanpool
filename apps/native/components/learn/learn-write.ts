@@ -48,8 +48,13 @@ export const LEARN_WRITE = {
     badLink: word('A link must start with https:// or http://'),
     couldNotSend: word('Couldn’t send it. Check your connection and try again.'),
     mineTitle: word('My suggestions'),
+    unreachable: word('Couldn’t reach your community. Try again in a moment.'),
     kindNew: word('New', 'My suggestions: a suggested new page of Local knowledge, not a fix'),
     kindFix: word('Fix', 'My suggestions: a suggested fix to a page of Local knowledge'),
+    /** A row's second line: "New · Waiting since 3 Nov". */
+    kindStatus: word('{kind} · {status}'),
+    /** The count under "What to know": "120 / 3,000". */
+    counter: word('{n} / {max}'),
     waitingSince: word('Waiting since {date}'),
     takeBack: word('Take it back'),
     takeBackAsk: word('Take this back? The admins won’t see it.'),
@@ -84,12 +89,15 @@ const isWebLink = (url: string): boolean => {
     return (lower.startsWith('https://') && lower.length > 'https://'.length) || (lower.startsWith('http://') && lower.length > 'http://'.length);
 };
 
-/** The first thing the form must say before it sends (§3.3's refusals, in the form's order), or null when it can send. */
-export function knowledgeFormProblem(v: KnowledgeFormValues) {
-    if (!v.title.trim()) return LEARN_WRITE.noTitle;
-    if (!v.body.trim()) return LEARN_WRITE.noBody;
-    if (!isKnowledgeTopic(v.topic)) return LEARN_WRITE.noTopic;
-    if (linked(v.sources).some((s) => !isWebLink(s.url))) return LEARN_WRITE.badLink;
+/**
+ * The first thing the form must say before it sends (§3.3's refusals, in the form's order), in the member's language, or null
+ * when it can send.
+ */
+export function knowledgeFormProblem(v: KnowledgeFormValues): string | null {
+    if (!v.title.trim()) return t(LEARN_WRITE.noTitle);
+    if (!v.body.trim()) return t(LEARN_WRITE.noBody);
+    if (!isKnowledgeTopic(v.topic)) return t(LEARN_WRITE.noTopic);
+    if (linked(v.sources).some((s) => !isWebLink(s.url))) return t(LEARN_WRITE.badLink);
     return null;
 }
 

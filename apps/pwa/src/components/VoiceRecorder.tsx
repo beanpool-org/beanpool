@@ -13,7 +13,7 @@
  * page has said why above the box (VoiceNotSentError), or this bar says the error's words. Nothing plays while a recording
  * is going or waits (holdVoicePlayers). Leaving the chat throws the recording away and lets the microphone go.
  */
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { newDmMessageId, t, VOICE_MAX_MS, type VoiceInput } from '@beanpool/core';
 import {
     isVoiceNotSent, levelDb, voiceBarsFromLevels, voiceClock, voiceRecorderStep, voiceSendWithin,
@@ -213,9 +213,11 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null): Voic
         }
     }
 
-    // Another chat opened: start over, as a new screen would.
+    // Another chat opened: start over, as a new screen would. In the commit that draws the chat (a layout effect), never
+    // after it: React 19 runs a plain effect in a later task, and a click on the microphone in between was thrown away
+    // by this start-over a moment later, with no recording and no word (CI, 14 Nov; the "moment the chat shows" test).
     const firstChat = useRef(true);
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (firstChat.current) { firstChat.current = false; return; }
         gen.current += 1;
         letGoOfPreview();

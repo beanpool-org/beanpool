@@ -351,9 +351,15 @@ export function HomeScreen({
         : [];
     const takeoverLoading = takeoverRead === null && takeoverWhy === null;
     const unchecked = [...fromData, ...fromDiag, ...fromTakeover];
-    // Data that arrived without these fields (an older server) is no load to wait for: it is unchecked, and said so.
-    const uncheckedLoading = (fromData.length > 0 && dataState === 'loading') || (fromDiag.length > 0 && diagState === 'loading')
-        || (fromTakeover.length > 0 && takeoverLoading);
+    // Each read still on its way says "Checking …"; the rest say why they couldn't be checked, with the Retry. One read
+    // on its way never hides another's failure (a take-over status still coming over a failed diagnostics read). Data that
+    // arrived without these fields (an older server) is no load to wait for: it is unchecked, and said so.
+    const uncheckedPending = [
+        ...(dataState === 'loading' ? fromData : []),
+        ...(diagState === 'loading' ? fromDiag : []),
+        ...(takeoverLoading ? fromTakeover : []),
+    ];
+    const uncheckedFailed = unchecked.filter((what) => !uncheckedPending.includes(what));
     const retryChecks = () => {
         if (fromData.length > 0 && dataState !== 'loading') onRetryNodeData?.();
         if (fromDiag.length > 0 && diagState === 'failed') onRetryDiag?.();
@@ -628,17 +634,16 @@ export function HomeScreen({
                         ))}
                     </div>
                 )}
-                {unchecked.length > 0 && (
-                    uncheckedLoading ? (
-                        <p className="text-xs text-nature-400 m-0" role="status">Checking {listInWords(unchecked)}…</p>
-                    ) : (
-                        <div className="flex flex-wrap items-center gap-2" role="status">
-                            <p className="text-xs text-nature-300 m-0 min-w-0 break-words flex-1">
-                                Couldn't check {listInWords(unchecked)}{uncheckedWhy ? ` (${uncheckedWhy})` : ': this server doesn\'t send them yet, so update it'}.
-                            </p>
-                            {(onRetryNodeData || onRetryDiag || fromTakeover.length > 0) && <RetryButton onClick={retryChecks} label="Retry the checks" />}
-                        </div>
-                    )
+                {uncheckedPending.length > 0 && (
+                    <p className="text-xs text-nature-400 m-0" role="status">Checking {listInWords(uncheckedPending)}…</p>
+                )}
+                {uncheckedFailed.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2" role="status">
+                        <p className="text-xs text-nature-300 m-0 min-w-0 break-words flex-1">
+                            Couldn't check {listInWords(uncheckedFailed)}{uncheckedWhy ? ` (${uncheckedWhy})` : ': this server doesn\'t send them yet, so update it'}.
+                        </p>
+                        {(onRetryNodeData || onRetryDiag || (fromTakeover.length > 0 && !takeoverLoading)) && <RetryButton onClick={retryChecks} label="Retry the checks" />}
+                    </div>
                 )}
             </div>
 

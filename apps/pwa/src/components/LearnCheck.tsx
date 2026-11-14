@@ -31,6 +31,8 @@ function Failed({ onAgain }: { onAgain: () => void }) {
 }
 
 const kindWord = (kind: string) => (kind === 'fix' ? t('Fix') : t('New', undefined, 'a suggestion of a new page of Local knowledge, not a fix'));
+/** How long it has waited: "2 hours ago" (core timeAgo takes the time gone by, not a date). */
+const waited = (iso: string) => timeAgo(Math.max(0, Date.now() - (Date.parse(iso) || Date.now())));
 const fromWords = (d: KnowledgeDraftToCheck) => (d.assistant
     ? t('gathered with {assistant} for {name}', { assistant: d.assistant, name: d.from.name })
     : t('from {name}', { name: d.from.name }));
@@ -55,7 +57,7 @@ export function LearnCheckList({ onOpen }: { onOpen: (id: string) => void }) {
                     <button key={d.id} type="button" data-testid="learn-check-row" onClick={() => onOpen(d.id)}
                         className="text-start rounded-[14px] border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 p-3 flex flex-col gap-1 cursor-pointer hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-learn">
                         <span dir="auto" className="font-bold text-nature-900 dark:text-white break-words"><span aria-hidden="true">{topicEmoji(d.topic)} </span>{d.title}</span>
-                        <span className={`text-sm ${MUTED} break-words flex flex-wrap gap-x-2`}><span className="font-bold">{kindWord(d.kind)}</span><span>{fromWords(d)}</span><span>{timeAgo(Date.parse(d.createdAt))}</span></span>
+                        <span className={`text-sm ${MUTED} break-words flex flex-wrap gap-x-2`}><span className="font-bold">{kindWord(d.kind)}</span><span>{fromWords(d)}</span><span>{waited(d.createdAt)}</span></span>
                     </button>
                 ))}
             </div>
@@ -120,7 +122,7 @@ export function LearnCheckOne({ id, onAnswered, onEditing }: { id: string; onAns
                 {d.assistant && <span data-testid="learn-check-gathered" className={TOPIC_CHIP}>{upperCase(t('Gathered with the assistant'))}</span>}
             </div>
             <h2 dir="auto" className="m-0 text-xl font-extrabold leading-snug text-nature-950 dark:text-white break-words">{d.title}</h2>
-            <p className={`m-0 text-sm ${MUTED} break-words`}>{fromWords(d)} · {timeAgo(Date.parse(d.createdAt))}</p>
+            <p className={`m-0 text-sm ${MUTED} break-words flex flex-wrap gap-x-2`}><span>{fromWords(d)}</span><span>{waited(d.createdAt)}</span></p>
             {d.note && (
                 <section className={PAGE_BOX}>
                     <h3 className={BOX_LABEL.muted}>{t('What changed')}</h3>

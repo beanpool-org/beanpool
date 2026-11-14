@@ -261,7 +261,7 @@ describe('an owner or admin', () => {
     });
 
     it('"2 to check ›" (amber, a ▲ beside it) opens To check: the longest waiting first, who sent it, New or Fix', async () => {
-        node.toCheck = [waitingRow('d1'), waitingRow('d2', { assistant: 'Claude', from: { pubkey: 'me-pk', name: 'Damo' } })];
+        node.toCheck = [waitingRow('d1', { createdAt: new Date(Date.now() - 2 * 3600_000).toISOString() }), waitingRow('d2', { assistant: 'Claude', from: { pubkey: 'me-pk', name: 'Damo' } })];
         await openLearn();
         await wait();
         const line = screen.getByTestId('learn-check-line');
@@ -275,6 +275,8 @@ describe('an owner or admin', () => {
         expect(rows[0].textContent).toContain('To check d1');
         expect(within(rows[0]).getByText('New')).toBeInTheDocument();
         expect(within(rows[0]).getByText('from Ada')).toBeInTheDocument();
+        // How long it has waited, from when it was sent (never the date read as a length of time).
+        expect(within(rows[0]).getByText('2 hours ago')).toBeInTheDocument();
         expect(rows[1].textContent).toContain('gathered with Claude for Damo');
     });
 

@@ -55,7 +55,7 @@ export function LearnMine({ onOpenPage }: { onOpenPage: (id: string) => void }) 
             {mine.waiting.map((d) => (
                 <div key={d.id} data-testid="learn-mine-waiting" className={ROW}>
                     <p dir="auto" className="m-0 font-bold text-nature-900 dark:text-white break-words"><span aria-hidden="true">{topicEmoji(d.topic)} </span>{d.title}</p>
-                    <p className={`m-0 text-sm ${MUTED}`}>{kindChip(d)} · {t('Waiting since {date}', { date: formatDate(new Date(d.createdAt), 'day-month') })}</p>
+                    <p className={`m-0 text-sm ${MUTED} flex flex-wrap gap-x-2`}><span className="font-bold">{kindChip(d)}</span><span>{t('Waiting since {date}', { date: formatDate(new Date(d.createdAt), 'day-month') })}</span></p>
                     {asking === d.id ? (
                         <div className="flex flex-col gap-1">
                             <p className="m-0 text-sm font-bold text-nature-900 dark:text-white">{t("Take this back? The admins won't see it.")}</p>
@@ -76,8 +76,8 @@ export function LearnMine({ onOpenPage }: { onOpenPage: (id: string) => void }) 
                         {d.state === 'approved' && d.postId ? (
                             <button type="button" onClick={() => onOpenPage(d.postId!)} dir="auto" className={`${LINK} text-start break-words`}>{d.title}</button>
                         ) : <p dir="auto" className="m-0 font-bold text-nature-900 dark:text-white break-words">{d.title}</p>}
-                        <p className={`m-0 text-sm ${MUTED}`}>
-                            {kindChip(d)} · {d.state === 'approved' ? t('Added') : t('Not added: {reason}', { reason: t(reason.label) })}
+                        <p className={`m-0 text-sm ${MUTED} flex flex-wrap gap-x-2`}>
+                            <span className="font-bold">{kindChip(d)}</span><span>{d.state === 'approved' ? t('Added') : t('Not added: {reason}', { reason: t(reason.label) })}</span>
                         </p>
                         {d.state === 'declined' && d.reasonWords && <p dir="auto" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{d.reasonWords}</p>}
                     </div>

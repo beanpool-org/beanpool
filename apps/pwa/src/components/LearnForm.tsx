@@ -18,6 +18,8 @@ export type LearnFormUse = 'suggest' | 'publish' | 'approve';
 const LABEL = 'block mb-1 text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300';
 const FIELD = 'w-full min-h-[44px] py-2 px-3 rounded-xl border border-nature-200 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-bp-ink-learn';
 const MUTED = 'text-nature-600 dark:text-nature-300';
+/** A link's box shows how an address starts: the same in every language. */
+const URL_HINT = 'https://';
 
 export function LearnForm({ use, initial, onSend }: {
     use: LearnFormUse;
@@ -61,18 +63,18 @@ export function LearnForm({ use, initial, onSend }: {
                 </p>
             )}
             <div>
-                <label htmlFor="learn-form-title" className={LABEL}>{t('Title')} *</label>
+                <label htmlFor="learn-form-title" className={LABEL}>{t('Title *')}</label>
                 <input id="learn-form-title" data-testid="learn-form-title" value={title} maxLength={KNOWLEDGE_LIMITS.title} onChange={(e) => setTitle(e.target.value)}
                     placeholder={t('e.g. How recycling works at the tip')} dir="auto" className={FIELD} />
             </div>
             <div>
-                <label htmlFor="learn-form-body" className={LABEL}>{t('What to know')} *</label>
+                <label htmlFor="learn-form-body" className={LABEL}>{t('What to know *')}</label>
                 <textarea id="learn-form-body" data-testid="learn-form-body" value={body} maxLength={KNOWLEDGE_LIMITS.body} onChange={(e) => setBody(e.target.value)}
                     placeholder={t('Put the answer first. Then the details.')} rows={6} dir="auto" className={`${FIELD} resize-y`} />
                 <p className={`m-0 mt-1 text-end text-xs ${MUTED}`}>{formatCount(body.length)}/{formatCount(KNOWLEDGE_LIMITS.body)}</p>
             </div>
             <fieldset className="m-0 p-0 border-0 min-w-0">
-                <legend className={LABEL}>{t('Topic')} *</legend>
+                <legend className={LABEL}>{t('Topic *')}</legend>
                 <div data-testid="learn-form-topics" className="flex flex-wrap gap-2">
                     {KNOWLEDGE_TOPICS.map((tp) => (
                         <button key={tp.id} type="button" aria-pressed={topic === tp.id} onClick={() => setTopic(tp.id)}
@@ -97,7 +99,7 @@ export function LearnForm({ use, initial, onSend }: {
                     {sources.map((s, i) => (
                         <div key={i} data-testid="learn-form-source" className="flex flex-col gap-2 rounded-xl border border-nature-200 dark:border-nature-700 p-2">
                             <input type="url" inputMode="url" value={s.url} maxLength={KNOWLEDGE_LIMITS.sourceUrl} onChange={(e) => setSource(i, { url: e.target.value })}
-                                placeholder="https://" aria-label={t('Link {n}', { n: i + 1 })} className={FIELD} />
+                                placeholder={URL_HINT} aria-label={t('Link {n}', { n: i + 1 })} className={FIELD} />
                             <input value={s.label} maxLength={KNOWLEDGE_LIMITS.sourceLabel} onChange={(e) => setSource(i, { label: e.target.value })}
                                 placeholder={t('What is this page? (optional)')} aria-label={t('What is this page? (optional)')} dir="auto" className={FIELD} />
                             <button type="button" onClick={() => setSources((list) => list.filter((_, j) => j !== i))}

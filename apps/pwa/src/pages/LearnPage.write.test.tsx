@@ -202,7 +202,8 @@ describe('My suggestions', () => {
         await wait();
         const row = within(screen.getByTestId('learn-mine-waiting'));
         expect(row.getByText('Suggestion w1')).toBeInTheDocument();
-        expect(row.getByText(/New · Waiting since/)).toBeInTheDocument();
+        expect(row.getByText('New')).toBeInTheDocument();
+        expect(row.getByText(/^Waiting since /)).toBeInTheDocument();
         fireEvent.click(row.getByTestId('learn-mine-take-back'));
         expect(row.getByText("Take this back? The admins won't see it.")).toBeInTheDocument();
         expect(writes()).toEqual([]);
@@ -272,7 +273,8 @@ describe('an owner or admin', () => {
         expect(screen.getByText('Waiting (2)')).toBeInTheDocument();
         const rows = screen.getAllByTestId('learn-check-row');
         expect(rows[0].textContent).toContain('To check d1');
-        expect(rows[0].textContent).toContain('New · from Ada');
+        expect(within(rows[0]).getByText('New')).toBeInTheDocument();
+        expect(within(rows[0]).getByText('from Ada')).toBeInTheDocument();
         expect(rows[1].textContent).toContain('gathered with Claude for Damo');
     });
 

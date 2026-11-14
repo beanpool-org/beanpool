@@ -55,7 +55,7 @@ export function LearnCheckList({ onOpen }: { onOpen: (id: string) => void }) {
                     <button key={d.id} type="button" data-testid="learn-check-row" onClick={() => onOpen(d.id)}
                         className="text-start rounded-[14px] border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 p-3 flex flex-col gap-1 cursor-pointer hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-learn">
                         <span dir="auto" className="font-bold text-nature-900 dark:text-white break-words"><span aria-hidden="true">{topicEmoji(d.topic)} </span>{d.title}</span>
-                        <span className={`text-sm ${MUTED} break-words`}>{kindWord(d.kind)} · {fromWords(d)} · {timeAgo(Date.parse(d.createdAt))}</span>
+                        <span className={`text-sm ${MUTED} break-words flex flex-wrap gap-x-2`}><span className="font-bold">{kindWord(d.kind)}</span><span>{fromWords(d)}</span><span>{timeAgo(Date.parse(d.createdAt))}</span></span>
                     </button>
                 ))}
             </div>

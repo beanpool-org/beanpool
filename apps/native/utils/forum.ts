@@ -45,7 +45,29 @@ export interface ForumTopicPage { topic: ForumTopic; posts: ForumPost[]; next: n
 export const FIRST_LOOK_NO_REASONS = ['spam', 'offensive', 'misleading', 'unsafe', 'rules'] as const;
 export type FirstLookNoReason = typeof FIRST_LOOK_NO_REASONS[number];
 
-const call = <T>(method: string, path: string, body?: unknown): Promise<T> => signedRequestWithMethod(method, path, body, { withStatus: true });
+/**
+ * What a forum call throws when it fails: the node's sentence for the member, with its `status` and `code` (#3184 review). The
+ * forum's routes answer `{ error: <sentence>, code }`; a report (POST /api/reports) answers `{ error: <code>, message:
+ * <sentence> }`, so the sentence is `message` when there is one, and its code is then `error`. An answer with no words (a
+ * proxy's page) or no answer at all (no connection, no account here) says nothing of its own: the screen says its line.
+ */
+export function forumRefusal(e: unknown): Error {
+    const err = e as Error & { status?: number; code?: string; nodeMessage?: string; unsaid?: boolean };
+    if (typeof err?.nodeMessage === 'string' && err.nodeMessage) {
+        return Object.assign(new Error(err.nodeMessage), { status: err.status, code: err.code ?? err.message });
+    }
+    if (typeof err?.status !== 'number' || err.unsaid) {
+        return Object.assign(new Error(''), typeof err?.status === 'number' ? { status: err.status } : {}, { unsaid: true });
+    }
+    return err;
+}
+const call = async <T>(method: string, path: string, body?: unknown): Promise<T> => {
+    try {
+        return await signedRequestWithMethod(method, path, body, { withStatus: true });
+    } catch (e) {
+        throw forumRefusal(e);
+    }
+};
 const enc = encodeURIComponent;
 
 // ── Kept copies ──────────────────────────────────────────────────────────────────────────────────────────────────

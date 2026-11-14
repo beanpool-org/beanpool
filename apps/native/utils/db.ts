@@ -9539,6 +9539,9 @@ export async function signedRequestWithMethod(method: string, endpoint: string, 
         const error = new Error(words || `Request failed: ${res.status}`);
         // The node's code beside its sentence (a shop's `shop_deals_open`, say), so a screen can say what to do next.
         if (opts?.withStatus) Object.assign(error, { status: res.status }, words ? {} : { unsaid: true }, typeof errJson.code === 'string' ? { code: errJson.code } : {});
+        // The node's sentence when its body has one beside a code in `error` (`{ error: 'not_found', message: 'That forum post
+        // is not here any more.' }`), as _signedRequest carries it: a caller that says it reads it (utils/forum.ts forumRefusal).
+        if (opts?.withStatus && typeof errJson.message === 'string' && errJson.message.trim()) Object.assign(error, { nodeMessage: errJson.message.trim() });
         throw error;
     }
     return await res.json();

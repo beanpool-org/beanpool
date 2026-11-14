@@ -12,6 +12,7 @@ import { t, tn } from '@beanpool/core';
 import { decideMessageRequest, getConversationMessages, ignoreAllMessageRequests, type DmRequest, type DmRequestEntry } from '../lib/api';
 import { decisionFailureWords, requestPreviewLines, REQUEST_CARDS_SHOWN, IGNORE_ALL_FROM, type RequestPreviewLine } from '../lib/dm-requests';
 import type { BeanPoolIdentity } from '../lib/identity';
+import { VOICE_WORDS } from '../lib/voice';
 
 const button: CSSProperties = {
     minHeight: '44px', padding: '0.5rem 1rem', borderRadius: '10px', fontFamily: 'inherit', fontSize: '0.9rem',
@@ -156,6 +157,11 @@ function RequestCard({ entry, identity, preview, avatar, joinedWords, onOpen, on
                         {l.photo && (
                             <span style={{ display: 'block', fontStyle: 'italic', color: 'var(--text-secondary)' }}>
                                 <span aria-hidden="true">🖼️ </span>{closedPhotoWords()}
+                            </span>
+                        )}
+                        {l.voice && (
+                            <span style={{ display: 'block', fontStyle: 'italic', color: 'var(--text-secondary)' }}>
+                                <span aria-hidden="true">🎤 </span>{t(VOICE_WORDS.closed)}
                             </span>
                         )}
                         {l.text && (

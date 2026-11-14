@@ -51,7 +51,7 @@ import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { AVATAR_PICTURE, communityCardName, createPairingSession, currentLanguage, decryptPairingPayload, joinRuleLines, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word, type CommunityCard, type KnownRule } from '@beanpool/core';
+import { AVATAR_PICTURE, communityCardName, createPairingSession, currentLanguage, decryptPairingPayload, inviteForInviteBox, joinRuleLines, lowercaseRecoveryWords, nodeOrigin, notANameLine, photoStepNote, t, word, type CommunityCard, type KnownRule } from '@beanpool/core';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
@@ -941,7 +941,23 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
      * `knockInvite`: the invite a member's yes to this browser's request made (`knockYes`). It is redeemed with the key the
      * request was signed with, under the name that request gave, with nothing typed.
      */
+    /**
+     * The name box given an invite (Marty, 14 Nov 2026, card callsign-link-guard: a member's invite link pasted there became
+     * her name): the invite goes to the invite box, as if pasted there, the name box is left empty, and the one line says
+     * why. Read from a paste before the box's 20 characters cut it. False when `text` holds no invite.
+     */
+    function inviteFromNameBox(text: string): boolean {
+        const moved = inviteForInviteBox(text);
+        if (!moved) return false;
+        invitePasted.current = inviteNamesAnotherCommunity(moved, '') !== null ? moved : null;
+        setInviteCode(formatInviteCode(moved));
+        setCallsign('');
+        setError(notANameLine(moved));
+        return true;
+    }
+
     async function handleCreate(knockInvite?: string) {
+        if (knockInvite === undefined && inviteFromNameBox(callsign)) return;
         let trimmedCallsign = callsign.trim();
         const trimmedCode = normaliseInviteCode(knockInvite ?? inviteCode);
 
@@ -952,6 +968,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
 
         if (knockInvite === undefined && trimmedCallsign.length < 2) {
             setError(t('Callsign must be at least 2 characters.'));
+            return;
+        }
+        // A web address, or an invite in the name a yes joins under: no name, refused before anything is sent.
+        const notAName = notANameLine(trimmedCallsign);
+        if (notAName) {
+            setError(notAName);
             return;
         }
 
@@ -1179,6 +1201,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
         const name = callsign.trim();
         if (name.length < 2) {
             setError(t('Callsign must be at least 2 characters.'));
+            return;
+        }
+        const notAName = notANameLine(name);
+        if (notAName) {
+            setError(notAName);
             return;
         }
         if (name.length > MAX_JOIN_CALLSIGN) {
@@ -2999,7 +3026,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                 id="callsign"
                                 type="text"
                                 value={callsign}
-                                onChange={(e) => setCallsign(e.target.value)}
+                                onChange={(e) => { if (!inviteFromNameBox(e.target.value)) setCallsign(e.target.value); }}
+                                onPaste={(e) => { if (inviteFromNameBox(e.clipboardData.getData('text'))) e.preventDefault(); }}
                                 placeholder={t('e.g. Alice')}
                                 maxLength={MAX_JOIN_CALLSIGN}
                                 disabled={loading}

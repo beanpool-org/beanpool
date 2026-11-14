@@ -616,6 +616,9 @@ export const SUITES = [
     'test-knowledge-reads',
     'test-knowledge-drafts',
     'test-knowledge-home',
+    // Local knowledge in the Pulse (slice KP): with=knowledge only, one card a day, 30 days and 20 pages, the keyset merge, every
+    // way a page stops showing takes its card, a standby the same, mute and report not found, Home's Pulse card creators only.
+    'test-knowledge-pulse',
     'test-forum',
     // The forum's moderation (slice F2): reports, auto-hide, restore, removal, the mute, first looks, new accounts, bursts.
     'test-forum-moderation',

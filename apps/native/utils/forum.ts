@@ -7,9 +7,14 @@
  *   screen draws from the copy at once, then asks the node again. With no connection the copy is what shows.
  * - Every call is signed by the member's key (db.ts signedRequestWithMethod); the node decides who may do what, and its
  *   refusal comes back in the member's language, with its `status` and `code`.
+ * - **Blocks** (design §4): the phone hides what the member blocked itself, as it does listings. A block goes to the community
+ *   without waiting (utils/blocklist.ts), so until the node has it, and in every kept copy, the phone leaves out their topics
+ *   and posts here; a topic of theirs reads as gone, with the web's line.
  */
-import { FORUM_LIMITS, type ForumFollow, type ForumSectionStarts } from '@beanpool/core';
+import { FORUM_LIMITS, t, type ForumFollow, type ForumSectionStarts } from '@beanpool/core';
 import { forumKept, signedRequestWithMethod } from './db';
+import { getBlockedUsers } from './blocklist';
+import { TOPIC_WORDS } from '../components/forum/forum-words';
 import { loadIdentity } from './identity';
 import { anchorUrl, signedGet } from './node-post';
 import type { ForumKeptStore } from './forum-kept';
@@ -65,9 +70,38 @@ async function keep(fn: (k: { me: string; store: ForumKeptStore }) => Promise<vo
         if (k) await fn(k);
     } catch { /* a copy not written is read from the node next time */ }
 }
+// ── Blocks, on the phone ─────────────────────────────────────────────────────────────────────────────────────────
+
+async function blockedKeys(): Promise<Set<string>> {
+    try { return new Set(await getBlockedUsers()); } catch { return new Set(); }
+}
+/** A list without the topics of anyone the member blocked. */
+export function listWithoutBlocked(list: ForumList, blocked: Set<string>): ForumList {
+    return blocked.size ? { ...list, topics: list.topics.filter((x) => !blocked.has(x.writer.publicKey)) } : list;
+}
+/**
+ * A topic without the posts of anyone the member blocked; null when its writer is one of them (it isn't there for this member,
+ * as the node answers once it has the block).
+ */
+export function topicWithoutBlocked(page: ForumTopicPage, blocked: Set<string>): ForumTopicPage | null {
+    if (!blocked.size) return page;
+    if (blocked.has(page.topic.writer.publicKey)) return null;
+    return { ...page, posts: page.posts.filter((p) => !blocked.has(p.writer.publicKey)) };
+}
+/** The node's "not here for you", for a topic whose writer the member blocked: the topic screen goes back and says so. */
+function blockedTopicGone(page: ForumTopicPage): Error {
+    return Object.assign(new Error(t(TOPIC_WORDS.goneBlocked, { name: page.topic.writer.name || t(TOPIC_WORDS.member) })), { status: 404, code: 'not_found' });
+}
+
 export const keptForumFront = () => keptRead<ForumFront>('front');
-export const keptForumList = (sectionId: string | null) => keptRead<ForumList>('list', sectionId);
-export const keptForumTopic = (id: string) => keptRead<ForumTopicPage>('topic', id);
+export const keptForumList = async (sectionId: string | null) => {
+    const list = await keptRead<ForumList>('list', sectionId);
+    return list ? listWithoutBlocked(list, await blockedKeys()) : null;
+};
+export const keptForumTopic = async (id: string) => {
+    const page = await keptRead<ForumTopicPage>('topic', id);
+    return page ? topicWithoutBlocked(page, await blockedKeys()) : null;
+};
 export const forgetForumTopic = (id: string) => keep((k) => k.store.forgetTopic(k.me, id));
 
 // ── Reads ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -85,7 +119,7 @@ export async function getForumTopics(sectionId: string | null, offset = 0): Prom
     const before = offset ? (await keptForumList(sectionId))?.topics ?? [] : [];
     const merged = { topics: [...before.filter((t) => !page.topics.some((p) => p.id === t.id)), ...page.topics], next: page.next };
     await keep((k) => k.store.keepList(k.me, sectionId, merged));
-    return merged;
+    return listWithoutBlocked(merged, await blockedKeys());
 }
 
 /** A topic and its posts after number `after` (30 a read); `after` 0 replaces the kept read, a later one adds its posts. */
@@ -93,8 +127,13 @@ export async function getForumTopic(id: string, after = 0): Promise<ForumTopicPa
     const page = await call<ForumTopicPage>('GET', `/api/forum/topics/${enc(id)}${after ? `?after=${after}` : ''}`);
     const before = after ? (await keptForumTopic(id))?.posts ?? [] : [];
     const merged = { ...page, posts: [...before.filter((p) => p.number <= after), ...page.posts] };
+    const shown = topicWithoutBlocked(merged, await blockedKeys());
+    if (!shown) {
+        await forgetForumTopic(id);
+        throw blockedTopicGone(merged);
+    }
     await keep((k) => k.store.keepTopic(k.me, id, merged, merged.topic.follow === 'following'));
-    return merged;
+    return shown;
 }
 
 const photoUris = new Map<string, Promise<string | null>>();

@@ -47,7 +47,10 @@ import { recoverAccountWithSso, RELEASED_COPY_NOT_OPENED } from '../sso-recovery
 import { seedToKeypair } from '../crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { stubCommunityLookup } from './community-lookup';
+import { findAnswer, noNodeContacted, type Found } from './community-find';
+
+/** The accounts the community's find names for the sign-in (recovery S2): set by each test. */
+let found: Found[] = [];
 
 const SUB = '110169484474386276334';
 const COLLECTION = 'coll-sealed-1';
@@ -70,9 +73,9 @@ function community(stored: Stored[], opts: { seals: boolean; sealTo?: string; se
     (signedPost as any).mockImplementation(async (_url: string, path: string, body: any, signer: { publicKey: string }) => {
         seen.push({ path, body, signer: signer.publicKey });
         const ok = (b: unknown) => ({ ok: true, status: 200, json: async () => b });
+        const answered = findAnswer(path, found, 'n-1');
+        if (answered) return answered;
         if (path === '/api/recovery/collect') return ok({ collectionId: COLLECTION, threshold: stored.length === 1 ? 1 : 2 });
-        if (path === '/api/recovery/collect/sso-nonce') return ok({ nonce: 'n-1', expiresInSeconds: 600 });
-        if (path === '/api/recovery/collect/sso') return ok({ collected: 1 });
         if (path === '/api/recovery/collect/hub') return ok({ collected: 2 });
         if (path === '/api/recovery/collect/fragments') {
             const sealIt = opts.seals && body?.seal === KEEPER_ALG_RELEASE;
@@ -98,7 +101,7 @@ function community(stored: Stored[], opts: { seals: boolean; sealTo?: string; se
     return seen;
 }
 
-const restore = () => recoverAccountWithSso({ callsign: 'Monnunit', anchorUrl: 'https://test.beanpool.org', provider: 'google' });
+const restore = () => recoverAccountWithSso({ anchorUrl: 'https://test.beanpool.org', provider: 'google' });
 
 function nothingSaved(): void {
     expect(SecureStore.setItemAsync).not.toHaveBeenCalledWith('sovereign-identity', expect.anything(), expect.anything());
@@ -108,15 +111,16 @@ function nothingSaved(): void {
 describe('the copy comes back sealed to the restore, and only this phone opens it', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        // No node is contacted: the community's lookup lists only the account a test names (community-lookup.ts).
-        stubCommunityLookup('https://test.beanpool.org', []);
+        // No node is contacted: the recovery routes are a stubbed signedPost, and nothing else may fetch (community-find.ts).
+        noNodeContacted();
+        found = [];
     });
     afterEach(() => vi.unstubAllGlobals());
 
     it('asks for it sealed, with the key that opened the session, opens it, and restores the account', async () => {
         const seed = new Uint8Array(32).fill(42);
         const account = await seedToKeypair(seed);
-        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: account.publicKeyHex, callsign: 'Monnunit' }]);
+        found = [{ publicKey: account.publicKeyHex, callsign: 'Monnunit' }];
         const seen = community([{ holderType: 'sso', shareIndex: 1, copy: await sealSeedToSso(seed, 'google', SUB) }], { seals: true });
 
         const result = await restore();
@@ -124,13 +128,14 @@ describe('the copy comes back sealed to the restore, and only this phone opens i
         const asked = seen.find(s => s.path === '/api/recovery/collect/fragments');
         expect(asked?.body).toEqual({ collectionId: COLLECTION, seal: KEEPER_ALG_RELEASE });
         expect(asked?.signer).toBe(seen.find(s => s.path === '/api/recovery/collect')?.signer);
+        expect(seen.find(s => s.path === '/api/recovery/find')?.signer).toBe(asked?.signer);
         expect(asked?.signer).not.toBe(account.publicKeyHex);
     });
 
     it('opens both pieces of an old two-part copy, each sealed to the restore', async () => {
         const seed = new Uint8Array(32).fill(7);
         const account = await seedToKeypair(seed);
-        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: account.publicKeyHex, callsign: 'Monnunit' }]);
+        found = [{ publicKey: account.publicKeyHex, callsign: 'Monnunit' }];
         const { hubShare, otherHalf } = await splitHubAndWhole(seed);
         const seen = community([
             { holderType: 'sso', shareIndex: 2, copy: await sealShareToSso(otherHalf, 'google', SUB) },
@@ -145,7 +150,7 @@ describe('the copy comes back sealed to the restore, and only this phone opens i
     it('a community from before the seal sends the copy as stored, and the restore works as it always did', async () => {
         const seed = new Uint8Array(32).fill(42);
         const account = await seedToKeypair(seed);
-        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: account.publicKeyHex, callsign: 'Monnunit' }]);
+        found = [{ publicKey: account.publicKeyHex, callsign: 'Monnunit' }];
         community([{ holderType: 'sso', shareIndex: 1, copy: await sealSeedToSso(seed, 'google', SUB) }], { seals: false });
         expect((await restore()).identity.publicKey).toBe(account.publicKeyHex);
     });
@@ -153,7 +158,7 @@ describe('the copy comes back sealed to the restore, and only this phone opens i
     it('a copy sealed to another key, or for another session, saves nothing', async () => {
         const seed = new Uint8Array(32).fill(42);
         const copy = await sealSeedToSso(seed, 'google', SUB);
-        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: (await seedToKeypair(seed)).publicKeyHex, callsign: 'Monnunit' }]);
+        found = [{ publicKey: (await seedToKeypair(seed)).publicKeyHex, callsign: 'Monnunit' }];
         const someoneElse = (await seedToKeypair(new Uint8Array(32).fill(3))).publicKeyHex;
 
         community([{ holderType: 'sso', shareIndex: 1, copy }], { seals: true, sealTo: someoneElse });

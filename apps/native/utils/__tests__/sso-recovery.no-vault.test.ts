@@ -42,30 +42,25 @@ import { recoverAccountWithSso } from '../sso-recovery';
 import { seedToKeypair } from '../crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { stubCommunityLookup } from './community-lookup';
+import { noNodeContacted, type Found } from './community-find';
+
+/** The accounts the community's find names for the sign-in (recovery S2): set by each test. */
+let found: Found[] = [];
 
 describe('SSO Recovery Service', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        // No node is contacted: the community's lookup lists only the account a test names (community-lookup.ts).
-        stubCommunityLookup('https://test.beanpool.org', []);
+        // No node is contacted: the recovery routes are a stubbed signedPost, and nothing else may fetch (community-find.ts).
+        noNodeContacted();
+        found = [];
     });
 
     afterEach(() => {
         vi.unstubAllGlobals();
     });
 
-    it('rejects an empty callsign', async () => {
-        await expect(recoverAccountWithSso({
-            callsign: '',
-            anchorUrl: 'https://test.beanpool.org',
-            provider: 'google',
-        })).rejects.toThrow(/callsign/i);
-    });
-
     it('rejects an empty or invalid node address', async () => {
         await expect(recoverAccountWithSso({
-            callsign: 'Monnunit',
             anchorUrl: '',
             provider: 'google',
         })).rejects.toThrow(/node address/i);
@@ -74,7 +69,6 @@ describe('SSO Recovery Service', () => {
     it('refuses an address that isn\'t plain host[:port] before any sign-in (#1224 review 4113495290)', async () => {
         for (const anchorUrl of ['https://test.beanpool.org\\@evil.test', 'https://127.0.0.1\\@evil.test', 'https://kim@test.beanpool.org', 'https://test.beanpool.org:123456']) {
             await expect(recoverAccountWithSso({
-                callsign: 'Monnunit',
                 anchorUrl,
                 provider: 'google',
             }), anchorUrl).rejects.toThrow(/node address/i);
@@ -120,19 +114,15 @@ describe('SSO Recovery Service', () => {
                     json: async () => ({ collectionId: 'coll_test_123', generation: 1, threshold: 2 }),
                 };
             }
-            if (path === '/api/recovery/collect/sso-nonce') {
+            if (path === '/api/recovery/find-nonce') {
                 return {
                     ok: true,
                     status: 200,
                     json: async () => ({ nonce: 'node-issued-nonce-123', expiresInSeconds: 600 }),
                 };
             }
-            if (path === '/api/recovery/collect/sso') {
-                return {
-                    ok: true,
-                    status: 200,
-                    json: async () => ({ collected: 1, threshold: 2, enough: false }),
-                };
+            if (path === '/api/recovery/find') {
+                return { ok: true, status: 200, json: async () => ({ accounts: found }) };
             }
             if (path === '/api/recovery/collect/hub') {
                 return {
@@ -174,9 +164,8 @@ describe('SSO Recovery Service', () => {
         });
 
         const progressSteps: string[] = [];
-        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: originalKeypair.publicKeyHex, callsign: memberCallsign }]);
+        found = [{ publicKey: originalKeypair.publicKeyHex, callsign: memberCallsign }];
         const result = await recoverAccountWithSso({
-            callsign: memberCallsign,
             anchorUrl: 'https://test.beanpool.org',
             provider: 'google',
             onProgress: (p) => progressSteps.push(p.step),
@@ -193,16 +182,8 @@ describe('SSO Recovery Service', () => {
             { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY },
         );
 
-        expect(progressSteps).toEqual([
-            'opening',
-            'nonce',
-            'signing-in',
-            'releasing-sso',
-            'fetching-fragments',
-            'releasing-hub',
-            'reconstructing',
-            'done',
-        ]);
+        // The web's three steps (WebRestore.tsx): signing in, finding the account, getting it back; then done.
+        expect(progressSteps).toEqual(['signing-in', 'finding', 'restoring', 'done']);
     });
 
     it('completes the single-blob Google recovery round-trip without hub release', async () => {
@@ -236,19 +217,15 @@ describe('SSO Recovery Service', () => {
                     json: async () => ({ collectionId: 'coll_test_single', generation: 1, threshold: 1 }),
                 };
             }
-            if (path === '/api/recovery/collect/sso-nonce') {
+            if (path === '/api/recovery/find-nonce') {
                 return {
                     ok: true,
                     status: 200,
                     json: async () => ({ nonce: 'node-issued-nonce-single', expiresInSeconds: 600 }),
                 };
             }
-            if (path === '/api/recovery/collect/sso') {
-                return {
-                    ok: true,
-                    status: 200,
-                    json: async () => ({ collected: 1, threshold: 1, enough: true }),
-                };
+            if (path === '/api/recovery/find') {
+                return { ok: true, status: 200, json: async () => ({ accounts: found }) };
             }
             if (path === '/api/recovery/collect/hub') {
                 throw new Error('Hub should not be called for single-blob SSO');
@@ -278,9 +255,8 @@ describe('SSO Recovery Service', () => {
         });
 
         const progressSteps: string[] = [];
-        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: originalKeypair.publicKeyHex, callsign: memberCallsign }]);
+        found = [{ publicKey: originalKeypair.publicKeyHex, callsign: memberCallsign }];
         const result = await recoverAccountWithSso({
-            callsign: memberCallsign,
             anchorUrl: 'https://test.beanpool.org',
             provider: 'google',
             onProgress: (p) => progressSteps.push(p.step),
@@ -289,18 +265,10 @@ describe('SSO Recovery Service', () => {
         expect(result.identity.publicKey).toEqual(originalKeypair.publicKeyHex);
         expect(result.identity.privateKey).toEqual(originalKeypair.privateKeyHex);
         expect(result.identity.callsign).toEqual(memberCallsign);
-        expect(progressSteps).toEqual([
-            'opening',
-            'nonce',
-            'signing-in',
-            'releasing-sso',
-            'fetching-fragments',
-            'reconstructing',
-            'done',
-        ]);
+        expect(progressSteps).toEqual(['signing-in', 'finding', 'restoring', 'done']);
     });
 
-    it('recovers with Apple: the release carries Apple\'s token and the nonce, and the piece opens with the sub the token names', async () => {
+    it('recovers with Apple: the find carries Apple\'s token and the nonce, and the piece opens with the sub the token names', async () => {
         const originalSeed = new Uint8Array(32).fill(42);
         const originalKeypair = await seedToKeypair(originalSeed);
         const memberCallsign = 'test-apple-pilot';
@@ -321,12 +289,12 @@ describe('SSO Recovery Service', () => {
             if (path === '/api/recovery/collect') {
                 return { ok: true, status: 200, json: async () => ({ collectionId: 'coll-apple-1' }) };
             }
-            if (path === '/api/recovery/collect/sso-nonce') {
+            if (path === '/api/recovery/find-nonce') {
                 return { ok: true, status: 200, json: async () => ({ nonce: 'apple-eph-nonce-456' }) };
             }
-            if (path === '/api/recovery/collect/sso') {
+            if (path === '/api/recovery/find') {
                 released = body;
-                return { ok: true, status: 200, json: async () => ({ status: 'sso_verified' }) };
+                return { ok: true, status: 200, json: async () => ({ accounts: found }) };
             }
             if (path === '/api/recovery/collect/hub') {
                 return { ok: true, status: 200, json: async () => ({ status: 'hub_released' }) };
@@ -363,9 +331,8 @@ describe('SSO Recovery Service', () => {
             throw new Error(`Unexpected path: ${path}`);
         });
 
-        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: originalKeypair.publicKeyHex, callsign: memberCallsign }]);
+        found = [{ publicKey: originalKeypair.publicKeyHex, callsign: memberCallsign }];
         const result = await recoverAccountWithSso({
-            callsign: memberCallsign,
             anchorUrl: 'https://test.beanpool.org',
             provider: 'apple',
         });
@@ -377,10 +344,9 @@ describe('SSO Recovery Service', () => {
         // Apple's sheet was handed the node's nonce, bound to this recovering device's ephemeral key.
         expect(signInWithApple).toHaveBeenCalledWith('apple-eph-nonce-456');
         expect(signInWithGoogle).not.toHaveBeenCalled();
-        // The release proves the sign-in with the provider's token and the nonce inside it, and nothing else.
-        expect(released).toEqual({
-            collectionId: 'coll-apple-1', provider: 'apple', idToken: appleToken, nonce: 'apple-eph-nonce-456',
-        });
+        // The find proves the sign-in with the provider's token and the nonce inside it, and nothing else: no name, and no
+        // session yet (the collect by the find's hold opens it).
+        expect(released).toEqual({ provider: 'apple', idToken: appleToken, nonce: 'apple-eph-nonce-456' });
     });
 
     it('survives a malformed checksum (not 4 bytes) in kdfParams during legacy recovery', async () => {
@@ -417,11 +383,11 @@ describe('SSO Recovery Service', () => {
             if (path === '/api/recovery/collect') {
                 return { ok: true, status: 200, json: async () => ({ collectionId: 'coll-malformed' }) };
             }
-            if (path === '/api/recovery/collect/sso-nonce') {
+            if (path === '/api/recovery/find-nonce') {
                 return { ok: true, status: 200, json: async () => ({ nonce: 'nonce-malformed' }) };
             }
-            if (path === '/api/recovery/collect/sso') {
-                return { ok: true, status: 200, json: async () => ({ enough: false, collected: 1 }) };
+            if (path === '/api/recovery/find') {
+                return { ok: true, status: 200, json: async () => ({ accounts: found }) };
             }
             if (path === '/api/recovery/collect/hub') {
                 return { ok: true, status: 200, json: async () => ({ enough: true, collected: 2 }) };
@@ -454,9 +420,8 @@ describe('SSO Recovery Service', () => {
             throw new Error(`Unexpected path: ${path}`);
         });
 
-        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: originalKeypair.publicKeyHex, callsign: memberCallsign }]);
+        found = [{ publicKey: originalKeypair.publicKeyHex, callsign: memberCallsign }];
         const result = await recoverAccountWithSso({
-            callsign: memberCallsign,
             anchorUrl: 'https://test.beanpool.org',
             provider: 'google',
         });

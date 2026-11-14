@@ -59,7 +59,7 @@ import { mnemonicToKeypair } from '../crypto';
 import { boundSignatureValid } from './server-signature-check';
 import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
 import { removeCommunityCaches } from '../community-cache';
-import { stubCommunityLookup } from './community-lookup';
+import { findAnswer, noNodeContacted } from './community-find';
 
 // Test phrase only (a BIP-39 vector), never a real account's.
 const WORDS = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
@@ -115,9 +115,10 @@ function mockSignInAndNode(sealed: SealedShare) {
     vi.mocked(signInWithGoogle).mockResolvedValue({ idToken: token, nonce: 'n' });
     vi.mocked(signedPost).mockImplementation(async (_url: string, path: string) => {
         const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body }) as unknown as Response;
+        // The community's find names Marty with the restored key for this sign-in (community-find.ts).
+        const found = findAnswer(path, [{ publicKey: restoredPub, callsign: 'Marty' }], 'n');
+        if (found) return found;
         if (path === '/api/recovery/collect') return ok({ collectionId: 'c1', threshold: 1 });
-        if (path === '/api/recovery/collect/sso-nonce') return ok({ nonce: 'n' });
-        if (path === '/api/recovery/collect/sso') return ok({ collected: 1, threshold: 1, enough: true });
         if (path === '/api/recovery/collect/fragments') {
             return ok({
                 collected: 1, threshold: 1, enough: true,
@@ -134,14 +135,14 @@ function mockSignInAndNode(sealed: SealedShare) {
 
 function restore(confirmReplace?: (outgoing: BeanPoolIdentity) => Promise<boolean>) {
     return recoverAccountWithSso({
-        callsign: 'Marty', anchorUrl: NODE, provider: 'google',
+        anchorUrl: NODE, provider: 'google',
         ...(confirmReplace ? { confirmReplace } : {}),
     });
 }
 
 let phone: BeanPoolIdentity;
 let restoredPub: string;
-/** Every request but the community's lookup: in these tests, only the old account's push unregister. */
+/** Every request but the community's recovery routes (signedPost): in these tests, only the old account's push unregister. */
 let elsewhere: ReturnType<typeof vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>>;
 const quietError = console.error;
 
@@ -149,11 +150,11 @@ beforeEach(async () => {
     mem.async.clear();
     mem.secure.clear();
     vi.clearAllMocks();
-    // The node's recovery routes are signedPost (stubbed above). fetch is the community's lookup, which lists Marty with
-    // the restored key (community-lookup.ts), and otherwise only the old account's unregister (`elsewhere`).
+    // The node's recovery routes are signedPost (stubbed above), its find naming Marty with the restored key. fetch is only
+    // the old account's unregister (`elsewhere`).
     elsewhere = vi.fn(async () => { throw new Error('No node may be contacted from a test'); });
     restoredPub = (await mnemonicToKeypair(WORDS)).publicKeyHex;
-    stubCommunityLookup(NODE, [{ publicKey: restoredPub, callsign: 'Marty' }], (input, init) => elsewhere(input, init));
+    noNodeContacted((input, init) => elsewhere(input, init));
     // identity.ts's legacy migration reaches AsyncStorage through `require`, which no vi.mock reaches: quietened.
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
         if (typeof args[0] === 'string' && args[0].startsWith('Failed to migrate legacy identity')) return;
@@ -234,7 +235,7 @@ describe('a sign-in restore onto a phone that holds another account', () => {
         vi.mocked(SecureStore.setItemAsync).mockRejectedValueOnce(new Error('Keystore unavailable'));
 
         const failed = recoverAccountWithSso({
-            callsign: 'Marty', anchorUrl: NODE, provider: 'google', confirmReplace,
+            anchorUrl: NODE, provider: 'google', confirmReplace,
             onProgress: (p) => progress.push(p.step),
         });
 
@@ -380,9 +381,8 @@ describe('a sign-in Replace takes the old account\'s push alerts and communities
         await restore();
 
         expect(elsewhere).not.toHaveBeenCalled();
-        // The one request: the community's lookup, before the restore.
-        expect(fetch).toHaveBeenCalledTimes(1);
-        expect(String(vi.mocked(fetch).mock.calls[0][0])).toBe(`${NODE}/api/recovery/lookup/Marty`);
+        // No request but the community's recovery routes (signedPost): there is no lookup by name any more.
+        expect(fetch).not.toHaveBeenCalled();
         expect(mem.secure.get(PUSH_TOKEN_STORE_KEY)).toBe(PHONE_TOKEN);
         expect(mem.async.has(SAVED_NODES_STORE_KEY)).toBe(true);
         expect(removeCommunityCaches).not.toHaveBeenCalled();

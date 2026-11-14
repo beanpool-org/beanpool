@@ -79,8 +79,8 @@ import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
 import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
 import {
-    checkSsoRestore, finishSsoRestore, lookupRestorable, recoverAccountWithSso, startSsoRestore, stopSsoRestoreAfterWords,
-    vaultKeepsNoCopyFor, waitingSsoRestore, type PendingVaultRestore, type RestorableAccount, type RestoredFromVault,
+    checkSsoRestore, finishSsoRestore, recoverAccountWithSso, startSsoRestore, stopSsoRestoreAfterWords,
+    vaultKeepsNoCopyFor, waitingSsoRestore, type FoundAccount, type PendingVaultRestore, type RestoredFromVault,
 } from '../utils/sso-recovery';
 import { restoreRefusalText } from '../utils/community-restore-copy';
 import { hasVault, VAULT_MESSAGES, VaultError } from '../utils/vault';
@@ -90,7 +90,6 @@ import { loadPendingCommunityRestore } from '../utils/community-recovery';
 import { landNextOn } from '../utils/member-landing';
 import { visitGlobalAsGuest } from '../utils/global-guest-visit';
 import { LOOK_JOIN, LOOK_LANDING, lookingAroundHere } from '../utils/look-around';
-import { MemberAvatar } from '../components/MemberAvatar';
 import {
     declineNotifications, readNotificationPermissionRecord, readOsNotificationPermission,
     shouldShowNotificationCard, turnOnNotifications,
@@ -117,7 +116,7 @@ import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
 import { peekRoute } from '../utils/peek-link';
 import { RestoreCommunityChips } from '../components/RestoreCommunityChips';
-import { addressFieldShown, fieldTextFor, releaseFieldHints, restoreCommunityChoices, withCopyCommunities } from '../utils/restore-community-choices';
+import { addressFieldShown, fieldTextFor, releaseFieldHints, restoreCommunityChoices, restoreCommunityName, withCopyCommunities } from '../utils/restore-community-choices';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../utils/invite-entries';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName, UnsafeNodeAddressError } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
@@ -145,12 +144,17 @@ const openLink = (url: string) => Linking.openURL(url).catch((err) => console.wa
 /** utils/invite-entries.ts's sentence for a member's invite where only admins invite now: a word() key, shown with t(). */
 const INVITE_ENTRY_WORDS = { memberTicketRefused: MEMBER_TICKET_REFUSED_TEXT } as const;
 
+/** A name's first letter, for its round mark in "Which account is yours?" (as the web's WebRestore draws it). */
+function initialOf(name: string): string {
+    return Array.from(name.trim())[0]?.toLocaleUpperCase() ?? '?';
+}
+
 export default function WelcomeScreen() {
     // Onboarding follows light/dark like the rest of the app: the classic light tokens in light (exactly as before),
     // the app's dark tokens in dark. See utils/onboarding-colors.ts.
     const { colors, dark } = useOnboardingColors();
     // The member's language, live: the first screen's switch and Settings → Language re-render this screen in it.
-    const { t, formatDate } = useWords();
+    const { t } = useWords();
 
     // Friendly Step-1 rejection copy for a dud invite. Reasons come from
     // /api/invite/check; anything unrecognised falls back to the generic line.
@@ -176,19 +180,6 @@ export default function WelcomeScreen() {
         }
     }
 
-    /**
-     * "March 2026" from whatever the node stored, or '' if it is unusable.
-     *
-     * Month and year only: the day adds nothing to telling two namesakes apart, and a precise join
-     * date is more than a public lookup needs to hand out about somebody. Core's date tables (CLDR, never Intl) write
-     * it as the language does: its order, its month's form beside a year, its 年/월 (PR #2206 review).
-     */
-    function joinedLabel(joinedAt: string | null | undefined): string {
-        if (!joinedAt) return '';
-        const d = new Date(joinedAt);
-        if (isNaN(d.getTime())) return '';
-        return formatDate(d, 'month-year', { width: 'long' });
-    }
     const { styles, profileStyles, stepperStyles, guideStyles } = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     // Accent ink for text and spinners on the page; filled blue buttons keep blue600 under white text in both.
     const accentInk = dark ? palette.blue400 : palette.blue600;
@@ -258,9 +249,8 @@ export default function WelcomeScreen() {
     // A known community's rule, stated before joining in its own numbers. Nothing to tick, and no answer draws nothing.
     const [joinRule, setJoinRule] = useState<KnownRule | null>(null);
     const [ssoProgressMessage, setSsoProgressMessage] = useState<string | null>(null);
-    // A build without a key vault (utils/vault.ts `signInCopiesAt`) restores at the member's community, as before the
-    // vault: a callsign and the community's address, looked up as they type.
-    const [ssoCallsign, setSsoCallsign] = useState('');
+    // A build without a key vault (utils/vault.ts `signInCopiesAt`) restores at the member's community: the community
+    // they choose, then the sign-in, which finds the account (recovery S2; utils/sso-recovery.ts `recoverAccountWithSso`).
     /**
      * In a build with a key vault: the provider the vault said, signed, that it keeps no copy for (utils/sso-recovery.ts
      * `vaultKeepsNoCopyFor`, kept per provider, not per sign-in account), whose copy may still be at the member's
@@ -268,44 +258,15 @@ export default function WelcomeScreen() {
      * #1336 review finding 3). Null otherwise.
      */
     const [ssoAtCommunity, setSsoAtCommunity] = useState<SsoProvider | null>(null);
-    /** Accounts matching what has been typed so far, so a half-remembered callsign still finds you. */
-    const [ssoCandidates, setSsoCandidates] = useState<RestorableAccount[]>([]);
-    const [ssoLookupBusy, setSsoLookupBusy] = useState(false);
-    /** Set when a candidate is tapped, so the write to ssoCallsign does not re-open the picker. */
-    const skipNextSsoLookupRef = useRef(false);
-
-    // Look up as they type. A community answers only the whole name, case forgiven, with no photo or
-    // join date (every community since 2026-10-01, the global one before: a stranger must not list its
-    // members by typing a letter), so "Is this you?" appears once the name is complete.
-    // Debounced because this fires per keystroke against a node that may be a Raspberry Pi.
-    useEffect(() => {
-        // Tapping a candidate writes the full callsign here, which matches itself on the server and
-        // would put the list straight back up under the member's finger.
-        if (skipNextSsoLookupRef.current) {
-            skipNextSsoLookupRef.current = false;
-            return;
-        }
-        const typed = ssoCallsign.trim();
-        const anchor = normalizeNodeUrl(recoveryAnchorUrl.trim());
-        if (typed.length < 2 || !looksLikeNodeAddress(anchor)) {
-            setSsoCandidates([]);
-            return;
-        }
-        let cancelled = false;
-        const timer = setTimeout(async () => {
-            setSsoLookupBusy(true);
-            try {
-                // The same lookup the restore checks its key against (utils/sso-recovery.ts `lookupRestorable`).
-                // Offline or an old node without the field: no picker, and whatever they typed goes to the restore,
-                // which asks again and says plainly if it can't.
-                const all = await lookupRestorable(anchor, typed);
-                if (!cancelled) setSsoCandidates((all ?? []).filter(c => c.canRecoverBySso));
-            } finally {
-                if (!cancelled) setSsoLookupBusy(false);
-            }
-        }, 400);
-        return () => { cancelled = true; clearTimeout(timer); };
-    }, [ssoCallsign, recoveryAnchorUrl]);
+    /**
+     * The accounts the community's find named for this sign-in, when it named several (one sign-in can protect a parent's
+     * account and a child's): "Which account is yours?" until the member taps one, or goes back. Null otherwise.
+     */
+    const [ssoPick, setSsoPick] = useState<FoundAccount[] | null>(null);
+    /** Hands the member's pick (or null: back) to the restore waiting on it (utils/sso-recovery.ts `PickAccount`). */
+    const pickAnswerRef = useRef<((picked: FoundAccount | null) => void) | null>(null);
+    // A restore waiting on a pick when the screen goes away collects nothing.
+    useEffect(() => () => { pickAnswerRef.current?.(null); pickAnswerRef.current = null; }, []);
     /**
      * A sign-in restore waiting at BeanPool's key vault (utils/sso-recovery.ts), or null. No name and no address: the
      * sign-in finds the copy. Every restore waits (D2) until the vault releases it.
@@ -1763,15 +1724,31 @@ export default function WelcomeScreen() {
     }
 
     /**
-     * "Recover with …" in a build without a key vault: at the community the member names, with their callsign, exactly
-     * as before the vault (utils/sso-recovery.ts `recoverAccountWithSso`).
+     * "Which account is yours?" for a find that named several accounts: resolves with the one the member taps, or null
+     * when they go back (utils/sso-recovery.ts `PickAccount`). Until then the restore waits and nothing is released.
+     */
+    function askToPick(accounts: FoundAccount[]): Promise<FoundAccount | null> {
+        // A sign-in may still have its page in front of the app: this list must be seen.
+        return returnToApp().catch(() => {}).then(() => new Promise<FoundAccount | null>((resolve) => {
+            pickAnswerRef.current?.(null);
+            pickAnswerRef.current = resolve;
+            setSsoPick(accounts);
+        }));
+    }
+
+    /** The member's answer to "Which account is yours?": an account, or null for back. */
+    function answerPick(picked: FoundAccount | null) {
+        const answer = pickAnswerRef.current;
+        pickAnswerRef.current = null;
+        setSsoPick(null);
+        answer?.(picked);
+    }
+
+    /**
+     * "Recover with …" in a build without a key vault: at the community the member chose, which finds the account from
+     * the sign-in, with nothing typed (utils/sso-recovery.ts `recoverAccountWithSso`; recovery S2).
      */
     async function handleSsoRecoverAtCommunity(provider: SsoProvider) {
-        const trimmedCallsign = ssoCallsign.trim();
-        if (!trimmedCallsign) {
-            setError(t('Please enter your callsign.'));
-            return;
-        }
         const rawAnchor = recoveryAnchorUrl.trim();
         if (!rawAnchor) {
             setError(t('Please enter your community node address.'));
@@ -1787,9 +1764,11 @@ export default function WelcomeScreen() {
             return;
         }
 
+        // The community by the name the chips give it, for the sentences that name it ("No account at Riverside uses …").
+        const community = restoreCommunityName(rawAnchor, restoreCommunityChoices(savedNodes));
         setLoading(true);
         setError(null);
-        setSsoProgressMessage(t('Connecting to recovery session...'));
+        setSsoProgressMessage(t('Signing in with {provider}...', { provider: SSO_PROVIDER_NAMES[provider] }));
         recoveryAbortRef.current?.abort();
         const abort = new AbortController();
         recoveryAbortRef.current = abort;
@@ -1797,12 +1776,13 @@ export default function WelcomeScreen() {
         let signedIn = false;
         try {
             const result = await recoverAccountWithSso({
-                callsign: trimmedCallsign,
                 anchorUrl: finalAnchorUrl,
                 provider,
                 onProgress: (p) => setSsoProgressMessage(welcomeLineWords(p.message)),
                 signal: abort.signal,
                 onSignedIn: () => { signedIn = true; },
+                // Several accounts use this sign-in here: "Which account is yours?" (nothing is released until one is tapped).
+                pickAccount: askToPick,
                 // Onto a phone that holds another account: "Replace this phone's account?" first, as the
                 // 12-word restore does. Nothing is written until the member says yes; Keep changes nothing.
                 confirmReplace: askToReplace('ssoRecover'),
@@ -1842,12 +1822,14 @@ export default function WelcomeScreen() {
             if (e.reason === 'cancelled' || e.message === 'Sign-in was cancelled.') {
                 setError(null);
             } else {
-                const refusal = restoreRefusalText(e);
+                const refusal = restoreRefusalText(e, community);
                 setError(refusal ? welcomeLineWords(refusal) : t('Recovery failed: {reason}', { reason: String(e) }));
                 leaveReplace('ssoRecover');
             }
         } finally {
             if (recoveryAbortRef.current === abort) recoveryAbortRef.current = null;
+            // A pick left open by a restore that ended some other way goes with it.
+            if (pickAnswerRef.current) answerPick(null);
             setLoading(false);
             setSsoProgressMessage(null);
         }
@@ -3928,8 +3910,9 @@ export default function WelcomeScreen() {
         );
     }
 
-    // A build without a key vault: the restore at the member's community, as before the vault. In a build with one, the
-    // same restore for the one sign-in the vault said, signed, that it keeps no copy for (review finding 3).
+    // A build without a key vault: the restore at the member's community, which finds the account from the sign-in, with
+    // nothing typed (recovery S2). In a build with one, the same restore for the one sign-in the vault said, signed, that it
+    // keeps no copy for (review finding 3).
     if (mode === 'ssoRecover' && (!hasVault() || ssoAtCommunity)) {
         /** The providers this screen offers: every one without a vault; with one, only the provider the vault has no copy for. */
         const offeredHere = (p: SsoProvider) => !hasVault() || ssoAtCommunity === p;
@@ -3938,28 +3921,65 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} bottomOffset={24}>
+                {/* "handled", as the 12 words' screen: after typing an address, one tap on a sign-in starts it. Without it,
+                    Android before API 30 swallowed that first tap while the field kept focus (measured on API 26). */}
+                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">
                                 {t('🌐 Recover with Social Sign-In')}
                             </Text>
+                            {ssoPick ? (
+                                <>
+                                    {/* The find named several accounts for this sign-in (design §5): the member taps theirs. The
+                                        community sends a restoring phone no photo, so each row shows its name's first letter. */}
+                                    <Text style={styles.subtitle} accessibilityRole="header">{t('Which account is yours?')}</Text>
+                                    {ssoPick.map((c) => (
+                                        <Pressable
+                                            key={c.publicKey}
+                                            onPress={() => answerPick(c)}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={c.callsign}
+                                            style={{
+                                                flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48,
+                                                paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, marginBottom: 8,
+                                                borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.app,
+                                            }}
+                                        >
+                                            <View
+                                                importantForAccessibility="no-hide-descendants"
+                                                style={{
+                                                    width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
+                                                    borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.subtle,
+                                                }}
+                                            >
+                                                <Text style={{ color: colors.text.heading, fontWeight: '700', fontSize: 16 }}>{initialOf(c.callsign)}</Text>
+                                            </View>
+                                            <Text style={{ flex: 1, color: colors.text.heading, fontWeight: '600', fontSize: 16 }}>{c.callsign}</Text>
+                                        </Pressable>
+                                    ))}
+                                    <Pressable style={styles.backBtn} onPress={() => answerPick(null)} accessibilityRole="button" accessibilityLabel={t('Start again')}>
+                                        <Text style={styles.backBtnText}>{t('← Start again')}</Text>
+                                    </Pressable>
+                                </>
+                            ) : (
+                                <>
                             {ssoAtCommunity ? (
                                 <>
                                     <Text style={styles.subtitle}>
                                         {t("BeanPool's key vault keeps no copy for this {provider} account. Your community may still keep one.", { provider: SSO_PROVIDER_NAMES[ssoAtCommunity] })}
                                     </Text>
                                     <Text style={styles.fieldHint}>
-                                        {t('Enter your callsign and your community, then sign in with {provider} once more. Your 12 words work any time.', { provider: SSO_PROVIDER_NAMES[ssoAtCommunity] })}
+                                        {t('Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.', { provider: SSO_PROVIDER_NAMES[ssoAtCommunity] })}
                                     </Text>
                                 </>
                             ) : (
                                 <Text style={styles.subtitle}>
-                                    {t('Choose your community, then enter your callsign to restore your account with any linked sign-in.')}
+                                    {t('Choose your community, then sign in with the account you linked. It finds your account, so there is nothing else to type.')}
                                 </Text>
                             )}
 
                             {/* Which community? first, as taps (front doors S10; "another address" draws the field, so the keyboard comes a moment later, DESIGN-entry-points-fable.md §3.5 item 2): the global
-                                community, this phone's own, or another address. The name below is then all that is left to type. */}
+                                community, this phone's own, or another address. The sign-in then finds the account there: nothing is typed. */}
                             <RestoreCommunityChips
                                 saved={savedNodes}
                                 value={recoveryAnchorUrl}
@@ -3968,68 +3988,6 @@ export default function WelcomeScreen() {
                                 onAnother={(text) => { setAnchorAddressPick('another'); setRecoveryAnchorUrl(text); setError(null); setTimeout(() => recoveryAddressRef.current?.focus(), 50); }}
                                 disabled={loading}
                             />
-
-                            <TextInput
-                                accessibilityLabel={t('Callsign')}
-                                style={styles.input}
-                                placeholder={t('Your Callsign (e.g. Monnunit)')}
-                                placeholderTextColor={colors.text.muted}
-                                value={ssoCallsign}
-                                onChangeText={setSsoCallsign}
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                editable={!loading}
-                            />
-
-                            {/* The account the whole name found, to confirm. The node only lists
-                                accounts that actually have a sign-in fragment, so none of these is a
-                                dead end. A community sends no photo or join date to a stranger, so the
-                                row falls back to the name's initial. */}
-                            {!loading && ssoCandidates.length > 0 && (
-                                <View accessibilityLiveRegion="polite" style={{ marginTop: -6, marginBottom: 12 }}>
-                                    <Text style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 6, marginLeft: 4 }}>
-                                        {ssoCandidates.length === 1 ? t('Is this you?') : t('Which one is you?')}
-                                    </Text>
-                                    {ssoCandidates.map((c) => (
-                                        <Pressable
-                                            key={c.publicKey}
-                                            onPress={() => {
-                                                skipNextSsoLookupRef.current = true;
-                                                setSsoCallsign(c.callsign);
-                                                setSsoCandidates([]);
-                                            }}
-                                            accessible
-                                            accessibilityRole="button"
-                                            accessibilityLabel={joinedLabel(c.joinedAt)
-                                                ? t('Select the account {name}, joined {date}', { name: c.callsign, date: joinedLabel(c.joinedAt) })
-                                                : t('Select the account {name}', { name: c.callsign })}
-                                            accessibilityHint={t('Uses this account for recovery')}
-                                            style={{
-                                                flexDirection: 'row', alignItems: 'center', gap: 10,
-                                                paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10,
-                                                borderWidth: 1, borderColor: colors.border.default, marginBottom: 6,
-                                            }}
-                                        >
-                                            <MemberAvatar avatarUrl={c.avatarUrl} pubkey={c.publicKey} callsign={c.callsign || '?'} size={32} />
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={{ color: colors.text.heading, fontWeight: '600' }}>{c.callsign}</Text>
-                                                {/* Breaks the tie the avatar cannot: two namesakes who both
-                                                    kept the default identicon are otherwise identical rows. */}
-                                                {!!joinedLabel(c.joinedAt) && (
-                                                    <Text style={{ color: colors.text.secondary, fontSize: 12 }}>
-                                                        {t('joined {date}', { date: joinedLabel(c.joinedAt) })}
-                                                    </Text>
-                                                )}
-                                            </View>
-                                        </Pressable>
-                                    ))}
-                                </View>
-                            )}
-                            {!loading && ssoLookupBusy && ssoCandidates.length === 0 && (
-                                <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.muted, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
-                                    {t('Looking for your account…')}
-                                </Text>
-                            )}
 
                             {/* The address is typed only for "another address" (or before anything is chosen): a chip already is one. */}
                             {anotherAddress && (
@@ -4102,6 +4060,8 @@ export default function WelcomeScreen() {
                             >
                                 <Text style={styles.backBtnText}>{t('← Back to Restore Options')}</Text>
                             </Pressable>
+                                </>
+                            )}
                         </View>
                     </KeyboardAwareScrollView>
             </SafeAreaView>

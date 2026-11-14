@@ -54,7 +54,9 @@
  *               again, none of them opens anything.
  *   doorCheck   only where the open door is set (400 otherwise); no lock.
  *   dmRequests, decisions, forum, outsideMessages, probation, autoHide, autoMute, shareLocation, shareMemberCount, shareEmail,
- *   sharePhone, shareHealth: no lock.
+ *   sharePhone, shareHealth, shareListingsFromHere: no lock. shareListingsFromHere (our name on members' listings on the
+ *               global community, list-on-global G5) is pushed to the directory at once while the community is listed, so a
+ *               global node's next mirror run has it, not the next timed push.
  *   recoveryCopies  'vault' | 'server' | 'none' (config/recovery-copies.ts, vault rethink VR2): no lock. Only where new
  *               copies go; every copy a member already has stays theirs, and the members' sentence says so.
  *   contacts    true | false: whether members' locked contact lists are kept here (config/contact-copies.ts, contacts
@@ -86,7 +88,7 @@ import { isRemovalDecider, setRemovalDecider, type RemovalDecider } from './remo
 import { NOTICE_LIMITS } from '../engine/kept-notices.js';
 import { checkKnownFloorSettings, writeKnownFloorSettings, KnownFloorError, type KnownFloorPlan } from './known-floor.js';
 import { readShape, configuredJoinOf, LOCKS_AFTER_A_CHANGE, type JoinState, type Shape, type ShapeLock } from './community-shape.js';
-import { directoryUnlistedByEnv, initDirectoryPublisher, listedSwitchedOff } from '../services/directory-publisher.js';
+import { communityNameSaved, directoryUnlistedByEnv, initDirectoryPublisher, listedSwitchedOff } from '../services/directory-publisher.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { closeCopyDoors } from '../engine/event-copy.js';
 import { stopAllPeekTickets } from '../engine/peek-tickets.js';
@@ -127,14 +129,14 @@ type SwitchSetting = keyof typeof SWITCH_OF;
 /** Each a switch in the node_config object (what the directory is sent). */
 const SHARE_FIELD_OF = {
     shareLocation: 'publishLocation', shareMemberCount: 'publishMembers', shareEmail: 'publishContactEmail',
-    sharePhone: 'publishContactPhone', shareHealth: 'publishHealth',
+    sharePhone: 'publishContactPhone', shareHealth: 'publishHealth', shareListingsFromHere: 'publishListingsFromHere',
 } as const satisfies Record<string, keyof NodeConfig>;
 type ShareSetting = keyof typeof SHARE_FIELD_OF;
 
 /** Checked and written in this order, so a request with two refusals is always refused for the same one. */
 const SETTINGS_IN_ORDER = [
     'join', 'wordsDoor', 'doorCheck', 'knocks', 'beans', 'knownFloor', 'voucherBudget', 'memberGift', 'dmRequests', 'decisions', 'forum', 'outsideMessages', 'shareOutside', 'listed',
-    'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth', 'probation', 'autoHide', 'autoMute',
+    'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth', 'shareListingsFromHere', 'probation', 'autoHide', 'autoMute',
     'recoveryCopies', 'contacts', 'removalDecider',
 ] as const;
 export type ShapeSettingName = (typeof SETTINGS_IN_ORDER)[number];
@@ -157,7 +159,8 @@ export const SETTING_NAMES: Record<ShapeSettingName, string> = {
     shareOutside: 'Members may share listings outside the community',
     listed: 'Listed in the BeanPool directory',
     shareLocation: 'Share location & radius', shareMemberCount: 'Share member count', shareEmail: 'Share email',
-    sharePhone: 'Share phone', shareHealth: 'Share health', probation: 'Limits on new accounts',
+    sharePhone: 'Share phone', shareHealth: 'Share health',
+    shareListingsFromHere: "Our name on members' listings on the global community", probation: 'Limits on new accounts',
     autoHide: 'Reported posts hidden and message requests cleared automatically', autoMute: 'Repeat offenders muted automatically',
     recoveryCopies: "Where members' copies go",
     contacts: "Keep members' locked contact lists",
@@ -389,6 +392,9 @@ export function applyShapeChanges(by: ShapeActor, body: unknown, opts: { freshPr
     // Listed switched off: the community's row leaves the public directory now, not when it goes stale in 7 days (front
     // doors S13). One signed withdraw, only if this server has pushed; not awaited (services/directory-publisher.ts).
     if (switches.some(([name, on]) => name === 'publishToDirectory' && on === false)) listedSwitchedOff();
+    // Our name on members' listings on the global community: pushed now while the community is listed (nothing on a standby,
+    // with Listed off or while held back), so a global node's next mirror run has it rather than the next timed push.
+    if ('publishListingsFromHere' in share) communityNameSaved();
     const shape = readShape();
     if (planned.length > 0) console.log(`🧭 How this community works: ${planned.map((c) => `${c.setting} ${shownValue(c.setting, c.from)} → ${shownValue(c.setting, c.to)}`).join(', ')}, set by ${by.actor}.`);
     if (plan.lock) console.log(`🔒 Core settings confirmed and locked by ${by.actor}.`);

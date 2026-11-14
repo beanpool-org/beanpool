@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>コミュニティを始める — BeanPool</title>
-    <meta name="description" content="すべてのコミュニティは専用のノード（メンバー、投稿、台帳のデータを保持する小さなサーバー）上で動いています。地域の誰かがそれを運営しています。あなたの町や地域にまだないなら、あなたが立ち上げることもできます。">
+    <meta name="description" content="自宅の使っていないパソコンや小さなレンタルサーバーで BeanPool のコミュニティを始めましょう：必要なもの、アドレスの選び方、そしてインストールのために貼り付けるひとつのブロック。">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="style.css?v=2.9">
@@ -136,8 +136,8 @@ docker compose exec beanpool-node beanpool claim</code>
 
         <h3 class="run-node-sub">最後の行：beanpool claim</h3>
         <ol class="run-node-steps">
-            <li><strong>コードとQRコード。</strong> ワンタイム申請コードとQRコードが表示されます。スマートフォンのカメラでQRコードをスキャンするか、BeanPoolを開いて<strong>コミュニティを探す</strong>の下にサーバーのアドレスを入力し、<strong>申請</strong>をタップします。そのスマートフォンがオーナーになります。</li>
-            <li><strong>設定。</strong> あなたのアドレス（またはサーバーのアドレス）の末尾に<strong>/settings</strong>を付けてブラウザで開きます。セットアップウィザードに従ってコミュニティの名前を決め、2人目のオーナーを追加し、3つの設立メンバー用招待状を作成します。「ノードの識別情報」で地図上の位置を設定すると、近くの人があなたを見つけられるようになります。</li>
+            <li><strong>コードとQRコード。</strong> ワンタイム申請コード、QRコード、そして次にすることが番号付きで表示されます。まず、コミュニティのオーナーになるスマートフォンに、<a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a>または<a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a>からBeanPoolをインストールします。次に、スマートフォンのカメラでQRコードをスキャンするか、BeanPoolを開いて<strong>サーバーにBeanPoolをインストールしましたか？所有権を取得</strong>をタップします（そのスマートフォンにすでにアカウントがある場合：上部の豆のマークをタップし、次に<strong>新しいコミュニティサーバーを立ち上げる</strong>をタップします）。所有権の取得はスマートフォンのアプリからのみ行えます。招待なしで、BeanPoolプロジェクトから何も受け取ることなく、そのスマートフォンにあなたのBeanPoolアカウントが作られます：名前を入力し、<strong>所有権を取得してオーナーになる</strong>をタップして、表示される12個の単語を書き留めてください。すでにアカウントがあるスマートフォンは、そのアカウントで所有権を取得します。そのスマートフォンがオーナーになります。</li>
+            <li><strong>設定。</strong> あなたのアドレス（またはサーバーのアドレス）の末尾に<strong>/settings</strong>を付けてブラウザで開き、コア設定（Core settings）を確認し、リカバリーコードを作成し、2人目のオーナーを追加して、最初のメンバーを招待します。最初の3つは、完了するまで設定のホーム画面（Home）の<strong>Action Required</strong>（対応が必要）に表示されます。Homeの Cold-Start ウィザードは任意です：最後のステップで、印刷できる設立メンバー用の招待状を3つ作成します。Node Identity で地図上の位置を設定すると、近くの人があなたを見つけられるようになります。</li>
         </ol>
         <p class="run-node-note">ブロックに<strong>No claim code after 5 minutes</strong>と表示されたり、<code>beanpool claim</code>に<strong>This community has no claim code waiting</strong>と表示されたりした場合、サーバーの起動がまだ完了していません。<code>docker compose logs beanpool-node</code>で進捗状況を確認できます。ログにコミュニティにまだオーナーがおらず申請コードが発行された旨が表示されたら、最後の行を再度実行してください。詳しい手順は運営者マニュアルの<a href="guide/operators/first-time-setup.html">初回セットアップ</a>に記載されています。</p>
 

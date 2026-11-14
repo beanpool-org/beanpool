@@ -249,7 +249,8 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('at 320 d
         expect(button.height).toBeGreaterThanOrEqual(48);
         expect(byId('event-copy-door')!.textContent).toContain(`To go, ask to join ${LONG_NAME}`);
         await press('event-copy-ask');
-        expect(world.pushed).toEqual([`/community-card?node=${encodeURIComponent(FROM.url)}`]);
+        // With the listing at home the copy stands for, so a request sent from the card lands the member on it (slice G4).
+        expect(world.pushed).toEqual([`/community-card?node=${encodeURIComponent(FROM.url)}&listing=${encodeURIComponent(FROM.postId!)}`]);
     });
 });
 

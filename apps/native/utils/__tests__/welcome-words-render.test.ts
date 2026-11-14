@@ -314,7 +314,12 @@ vi.mock('../sso-recovery', async (importOriginal) => {
     const real = await importOriginal<typeof import('../sso-recovery')>();
     return {
         ...real,
-        lookupRestorable: async () => vaultState.candidates,
+        // The community's find (recovery S2): it names `candidates` for the sign-in, and with several the screen asks which.
+        // Nothing is restored here: the test reads the screens up to the pick.
+        recoverAccountWithSso: async (o: { pickAccount?: (accounts: unknown[]) => Promise<unknown> }) => {
+            if (vaultState.candidates.length > 1) await o.pickAccount?.(vaultState.candidates);
+            throw Object.assign(new Error('Sign-in was cancelled.'), { reason: 'cancelled' });
+        },
         waitingSsoRestore: async () => vaultState.waiting,
         checkSsoRestore: async () => vaultState.check,
         startSsoRestore: async () => vaultState.waiting,
@@ -947,20 +952,20 @@ describe('restoring an account in the pseudo-locale', () => {
         check('Replace, no words');
     });
 
-    it('a sign-in restore at the community (a build without a key vault): the form, and the account the whole name finds', async () => {
-        vaultState.candidates = [{ publicKey: 'e5'.repeat(32), callsign: 'Sally', canRecoverBySso: true, joinedAt: '2026-03-05T00:00:00Z' }];
+    it('a sign-in restore at the community (a build without a key vault): the form, with nothing to type but the community, and the accounts the sign-in finds', async () => {
+        vaultState.candidates = [{ publicKey: 'e5'.repeat(32), callsign: 'Sally' }, { publicKey: 'f6'.repeat(32), callsign: 'Kim' }];
         await mount('xx');
         await press('🔑 Already a Member? Restore Account →', 'xx');
         await press('🌐 Recover with Social', 'xx');
+        expect(host!.textContent).toContain(pseudoLocalise('Choose your community, then sign in with the account you linked. It finds your account, so there is nothing else to type.'));
+        // The community's address is the only field (recovery S2): no name is asked.
+        expect(all('input').map((i) => i.getAttribute('placeholder'))).toEqual([pseudoLocalise('Community name or address (e.g. riverside)')]);
         check('Recover with Social Sign-In, at the community');
-        await type('Your Callsign (e.g. Monnunit)', 'Sally', 'xx');
         await type('Community name or address (e.g. riverside)', 'mullum', 'xx');
-        await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
-        await settle();
-        expect(host!.textContent).toContain(pseudoLocalise('Is this you?'));
-        // "joined March 2026": core's month-year pattern writes the date whole, in the language's order and forms.
-        expect(host!.textContent).toContain(pseudoLocalise('joined {date}').replace('{date}', pseudoLocalise('March 2026')));
-        check('Recover with Social Sign-In, Is this you?');
+        await press('Recover with Google', 'xx');
+        expect(host!.textContent).toContain(pseudoLocalise('Which account is yours?'));
+        expect(all('button, [role="button"]').map((b) => b.getAttribute('aria-label'))).toEqual(expect.arrayContaining(['Sally', 'Kim']));
+        check('Recover with Social Sign-In, Which account is yours?');
     });
 
     it('a sign-in restore at the key vault: waiting for it, and choosing its community once it is back', async () => {

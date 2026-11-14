@@ -8,7 +8,8 @@
  * What is drawn: the first screen's two doors with Already a member? Restore as the third button under them
  * (components/WelcomeDoors.tsx, in the welcome screen's own style numbers), cut at the fold (320 x 497 dp: a 480x854 phone at
  * 240 dpi less its status and navigation bars) and checked to end above it; Join with an invite with Scan a QR code beside the
- * paste offer; Recover with Social's "Which community?" chips (components/RestoreCommunityChips.tsx) before the callsign.
+ * paste offer; Recover with Social's "Which community?" chips (components/RestoreCommunityChips.tsx), with no name to type
+ * (recovery S2: the sign-in finds the account).
  *
  * Text at 1.3x is Android's font scale: every Text and TextInput's fontSize and lineHeight times 1.3, layout in dp as
  * is. Each state fails on: the page scrolling sideways (the fold case scrolls down, by design); any text past the 320 edge
@@ -142,18 +143,17 @@ const Page = () => {
             </View>
         </ScrollView>
     );
-    // Recover with Social without a vault: Which community? first, then the callsign (the address field only for another address).
+    // Recover with Social without a vault: Which community?, then the sign-ins (the address field only for another address).
     if (c === 'social') return (
         <ScrollView style={{ flex: 1, backgroundColor: colors.surface.page }} contentContainerStyle={S.scroll}>
             <View style={S.card}>
                 <Text style={S.title}>🌐 Recover with Social Sign-In</Text>
-                <Text style={S.subtitle}>Choose your community, then enter your callsign to restore your account with any linked sign-in.</Text>
+                <Text style={S.subtitle}>Choose your community, then sign in with the account you linked. It finds your account, so there is nothing else to type.</Text>
                 <RestoreCommunityChips
                     saved={[{ url: 'https://mullum.beanpool.org', alias: 'Mullum' }, { url: 'https://castlemaine.example.org', alias: 'Castlemaine' }]}
                     value={q.get('another') === '1' ? '' : 'global.beanpool.org'}
                     onChoose={() => {}} onAnother={() => {}}
                 />
-                <TextInput style={S.input} placeholder="Your Callsign (e.g. Monnunit)" placeholderTextColor={colors.text.muted} accessibilityLabel="Callsign" />
                 {q.get('another') === '1' && <TextInput style={S.input} placeholder="Community name or address (e.g. riverside)" placeholderTextColor={colors.text.muted} accessibilityLabel="Community name or node address" />}
             </View>
         </ScrollView>

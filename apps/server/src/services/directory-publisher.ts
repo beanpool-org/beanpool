@@ -198,8 +198,12 @@ export function directoryPromiseSaved(): void {
     communityNameSaved();
 }
 
-/** The fields a registry from before the listing promise (mothership A2) doesn't know: the push without them is the old one. */
-const LISTING_FIELDS: (keyof ListingFields)[] = ['promise', 'acceptingKnocks', 'closingOn', 'answers'];
+/**
+ * The fields a registry from before the listing promise (mothership A2) doesn't know: the push without them is the old one. And
+ * `listingsFromHere` (list-on-global G5), newer still: our registry stores the fields it names and ignores the rest, but one
+ * that refuses a field it doesn't know must not cost the community its listing for it either.
+ */
+const LISTING_FIELDS: string[] = ['promise', 'acceptingKnocks', 'closingOn', 'answers', 'listingsFromHere'] satisfies (keyof ListingFields | 'listingsFromHere')[];
 
 /** Signs `payload` with the node key and POSTs it to the registry. Throws on a network failure; the answer is the caller's. */
 async function signedPush(payload: Record<string, unknown>, privateKey: NonNullable<ReturnType<typeof getPrivateKey>>): Promise<Response> {
@@ -359,7 +363,7 @@ export async function pushDirectoryNow() {
         let listingRefused = false;
         if (!res.ok && listing) {
             const refusal = `HTTP ${res.status}: ${(await res.text().catch(() => '')).slice(0, 300)}`;
-            const before = Object.fromEntries(Object.entries(payload).filter(([k]) => !LISTING_FIELDS.includes(k as keyof ListingFields)));
+            const before = Object.fromEntries(Object.entries(payload).filter(([k]) => !LISTING_FIELDS.includes(k)));
             res = await signedPush({ ...before, timestamp: Date.now() }, privateKey);
             if (res.ok) {
                 listingRefused = true;

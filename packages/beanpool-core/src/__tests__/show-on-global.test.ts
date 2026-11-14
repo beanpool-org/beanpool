@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { COPY_IDS_LOOKED_AT, copyIdOf, ed25519Signer, makeCopyKeeper, OFF_RETRY_FIRST_MS, OFF_RETRY_MOST_MS, owesOff, POST_ID_TAKEN_CODE, toEd25519Pkcs8, type CopyDeps, type CopyPair, type CopyStore, type HomeEvent } from '../index.js';
+import { COPY_IDS_LOOKED_AT, copyIdOf, copyResultLine, ed25519Signer, makeCopyKeeper, OFF_RETRY_FIRST_MS, OFF_RETRY_MOST_MS, owesOff, POST_ID_TAKEN_CODE, toEd25519Pkcs8, type CopyDeps, type CopyPair, type CopyStore, type HomeEvent } from '../index.js';
 
 const seed = new Uint8Array(32).fill(7);
 const pkcs8 = toEd25519Pkcs8(seed);
@@ -25,8 +25,12 @@ interface Row { id: string; type: string; status: string; hiddenByReportsAt?: st
 /** What a read by id shows of a row: `active = 1`, or a cancelled event. */
 const readable = (r: Row) => r.status === 'active' || (r.status === 'cancelled' && r.type === 'event');
 
-/** `noCode`: a global from before the id-taken refusal carried one. */
-function world({ noCode = false }: { noCode?: boolean } = {}) {
+/**
+ * `noCode`: a global from before the id-taken refusal carried one. `name`: what global says of the community's name on a new
+ * copy: its from-line (`shown`), none because the community isn't in its directory (`unlisted`), or none because the community
+ * keeps its name off its members' listings there (`kept-off`, list-on-global G5).
+ */
+function world({ noCode = false, name = 'shown' }: { noCode?: boolean; name?: 'shown' | 'unlisted' | 'kept-off' } = {}) {
     const rows = new Map<string, Row>();
     let creates = 0;
     let sends = 0;
@@ -88,7 +92,8 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
                 creates++;
                 const door = body.shownFrom?.takesQuestions === true;
                 rows.set(body.id, { id: body.id, type: body.type, status: 'active', title: body.title, ...(door ? { takesQuestions: true } : {}) });
-                return json({ success: true, post: { shownCopy: true, shownFrom: { host: 'home.test' }, ...(door ? { takesQuestions: true } : {}) } });
+                const from = name === 'shown' ? { shownFrom: { host: 'home.test' } } : name === 'kept-off' ? { shownNameOff: true } : {};
+                return json({ success: true, post: { shownCopy: true, ...from, ...(door ? { takesQuestions: true } : {}) } });
             }
             const row = rows.get(body.id);
             if (path.endsWith('/remove')) {
@@ -472,6 +477,33 @@ describe('a new tick after a Stop', () => {
         expect(await phone.showOnGlobal(w.home, HOME, identity)).toEqual({ refused: 'A new post needs an id nothing else has.' });
         expect(w.sends()).toBe(2);
         expect(phone.pairs()).toEqual([]);
+    });
+});
+
+describe('what the member is told of the community\'s name, once (list-on-global G5)', () => {
+    it('global drew the from-line: nothing to say', async () => {
+        const w = world();
+        const result = await w.device().showOnGlobal(w.home, HOME, identity);
+        expect(result).toBe('shown');
+        expect(copyResultLine(result)).toBeNull();
+    });
+
+    it('the community isn\'t in global\'s directory: the copy is up, without its name, and that is why', async () => {
+        const w = world({ name: 'unlisted' });
+        const result = await w.device().showOnGlobal(w.home, HOME, identity);
+        expect(result).toBe('shown-no-name');
+        expect(copyResultLine(result)).toBe("Your community isn't in the directory, so this shows there without its name.");
+        expect(w.up()).toHaveLength(1);
+    });
+
+    it('the community keeps its name off its members\' listings there: the copy is up, and the member is told so, not that it is unlisted', async () => {
+        const w = world({ name: 'kept-off' });
+        const phone = w.device();
+        const result = await phone.showOnGlobal(w.home, HOME, identity);
+        expect(result).toBe('shown-name-off');
+        expect(copyResultLine(result)).toBe("Your community keeps its name off members' listings on the global community, so this shows there without it.");
+        expect(w.up()).toHaveLength(1);
+        expect(phone.pairs()).toHaveLength(1);
     });
 });
 

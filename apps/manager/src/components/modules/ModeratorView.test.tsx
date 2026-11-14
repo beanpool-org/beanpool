@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { App } from '../../App';
 import { ModeratorView } from './ModeratorView';
 import { sectionTargetFor } from '../../lib/key-session';
-import { setKeySessionCsrfToken } from '../../lib/node-client';
+import { setKeySessionCsrfToken, type ListedReport } from '../../lib/node-client';
 
 /**
  * A moderator's Settings: Reports and nothing else (Marty's decision, 2026-09-19).
@@ -14,7 +14,7 @@ import { setKeySessionCsrfToken } from '../../lib/node-client';
 const MOD = 'cd'.repeat(32);
 const TOKEN = 'a'.repeat(64);
 
-const REPORTS = [
+const REPORTS: ListedReport[] = [
     {
         id: 'r-post', reason: 'Selling something dodgy', createdAt: '2026-09-19T10:00:00Z', outcome: 'open',
         reporterCallsign: 'Rita', postId: 'p1', postTitle: 'Cheap phones', postDescription: 'No questions asked',
@@ -242,16 +242,16 @@ describe('ModeratorView report actions', () => {
     });
 
     it('names a reported forum post by its topic, removes it with a reason, and restores it while hidden (the forum\'s slice F2)', async () => {
-        const forum = {
+        const forum: ListedReport = {
             id: 'r-forum', reason: 'Spam or a scam', createdAt: '2026-11-14T09:00:00Z', outcome: 'open', reporterCallsign: 'Rita',
             postId: null, pulseItem: null, targetForumPostId: 'fp-1',
             forumPost: { id: 'fp-1', topicId: 'ft-1', topicTitle: 'Seed swap ideas', number: 2, words: 'Buy my seeds at a link', writerName: 'Oscar', hidden: true, removed: false },
         };
-        REPORTS.push(forum as typeof REPORTS[number]);
+        REPORTS.push(forum);
         try {
             mockNode();
             await act(async () => {
-                render(<ModeratorView nodeUrl="https://mullum.example" communityName="Mullum" onLogout={() => {}} />);
+                render(<ModeratorView nodeUrl="https://riverside.example.org" communityName="Riverside" onLogout={() => {}} />);
             });
             await waitFor(() => expect(screen.getAllByTestId('moderator-report')).toHaveLength(4));
             const card = screen.getAllByTestId('moderator-report')[3];

@@ -64,7 +64,7 @@ describe("Settings → Notifications → When a neighbour asks for something I'm
         await openNotifications(false);
         expect(screen.queryByTestId('settings-notify-asked')).toBeNull();
         expect(screen.queryByText(SWITCH)).toBeNull();
-        fireEvent.click(screen.getByLabelText('Chat Messages Notifications'));
+        fireEvent.click(screen.getByLabelText('Direct messages notifications'));
         await waitFor(() => expect(api.updateNotificationPreferences).toHaveBeenCalled());
         expect(vi.mocked(api.updateNotificationPreferences).mock.calls[0][1]).not.toHaveProperty('notify_asked');
     });

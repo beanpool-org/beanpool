@@ -144,7 +144,7 @@ import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } 
 import { deliverPushNotices, dispatchPushNotification } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { pushTtl } from '../services/web-push.js';
-import { dropAskerSubscriptionsOf } from './web-push-subscriptions.js';
+import { dropAskerSubscriptionsOf, dropLapsedMemberBrowsers } from './web-push-subscriptions.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -902,6 +902,8 @@ export function tidyKnocks(now = Date.now()): { cleared: number; deleted: number
                             AND NOT EXISTS (SELECT 1 FROM join_requests j WHERE j.pubkey = web_push_subscriptions.public_key
                                 AND ((j.status = 'pending' AND j.created_at >= ?) OR (j.status = 'approved' AND j.decided_at >= ?)))))`)
             .run(openSince(now), iso(now - INVITE_LIFETIME_MS));
+        // A member's browsers (web push W2) go once the key is no member here (removed, replaced).
+        dropLapsedMemberBrowsers();
         return { cleared: unread.length + keepNewestPhotos(now), deleted: past.length };
     })();
 }

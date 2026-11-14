@@ -23,6 +23,7 @@
 
 import crypto from 'node:crypto';
 import { db, deletePlainRows, writeTombstone } from '../db/db.js';
+import { dropWebPushSubscriptionsOf } from './web-push-subscriptions.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import {
     conservingTransaction,
@@ -1081,6 +1082,12 @@ export function executeOffboard(
             deletePlainRows('push_tokens', 'public_key = ?', cleanPub);
         } catch {
             // Non-blocking
+        }
+        // And their browsers (engine/web-push-subscriptions.ts, this server's own: no tombstone).
+        try {
+            dropWebPushSubscriptionsOf(cleanPub);
+        } catch {
+            // Non-blocking: the tidy-up lets a removed member's browsers go too
         }
 
         // Full audit record in system_logs

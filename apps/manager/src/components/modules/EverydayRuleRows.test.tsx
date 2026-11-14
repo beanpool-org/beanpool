@@ -156,6 +156,29 @@ describe('EverydayRuleRows — the rules that moved to where they are used', () 
         expect(sent[0].changes).toEqual({ doorCheck: false });
     });
 
+    it('Being found: our name on members\' listings on the global community, with the honest sentence, and an owner switches it off', async () => {
+        const sent = mockApi(shapeOf({ shareListingsFromHere: on(true) }));
+        render(<EverydayRuleRows activeNode={NODE} viewer={OWNER} group="found" title="Being found" />);
+        const row = await screen.findByTestId('shape-row-shareListingsFromHere');
+        expect(row).toHaveTextContent("Our name on members' listings on the global community");
+        // The honest sentence (DESIGN-list-on-global-fable.md §2, §12): it never claims to stop a member posting there.
+        expect(row).toHaveTextContent('A member can show one of their listings on the global community. On, it appears there as from this community, with Ask to join beside it. Off, it appears with no name and no door. A member can post on the global community either way.');
+        expect(screen.getByTestId('shape-val-shareListingsFromHere')).toHaveTextContent('On');
+        fireEvent.click(screen.getByTestId('shape-expand-shareListingsFromHere'));
+        fireEvent.click(screen.getByRole('checkbox', { name: /Show our name on members' listings on the global community/i }));
+        expect(screen.getByTestId('shape-consequence')).toHaveTextContent("Within the hour, members' listings shown on the global community appear with no name and no Ask to join. A member can still show one there.");
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(sent).toHaveLength(1));
+        expect(sent[0].changes).toEqual({ shareListingsFromHere: false });
+    });
+
+    it('a server from before the switch sends no shareListingsFromHere: no such row, and the other share rows stand', async () => {
+        mockApi(shapeOf());
+        render(<EverydayRuleRows activeNode={NODE} viewer={ADMIN} group="found" title="Being found" />);
+        await screen.findByTestId('shape-row-shareHealth');
+        expect(screen.queryByTestId('shape-row-shareListingsFromHere')).toBeNull();
+    });
+
     it('a shape with no doorCheck (a local community) draws no such row', async () => {
         mockApi(shapeOf());
         render(<EverydayRuleRows activeNode={NODE} viewer={OWNER} group="found" title="Being found" />);

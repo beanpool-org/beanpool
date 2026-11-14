@@ -1297,6 +1297,22 @@ test("the claim path (operator path S5): every page names both phone routes, and
     }
 });
 
+test('the one "what next" after claiming (operator path S6): Then lists the four in order, Settings Home\'s Action Required, and no two-factor to switch on', () => {
+    const page = fs.readFileSync(path.join(OPERATORS_DIR, 'setup', 'first-time-setup.md'), 'utf8');
+    const then = page.slice(page.indexOf('## Then'));
+    const steps = then.split('\n').filter(l => l.startsWith('- '));
+    assert.deepEqual(steps.map(l => l.split(' (')[0].replace(/[.:].*$/, '')),
+        ['- Confirm the core settings', '- Make a recovery code', '- Make a second owner', '- Invite your first members'],
+        'the four steps, in the order every page gives them');
+    assert.ok(then.includes('Settings Home lists it under **Action Required**'), 'Settings Home lists them');
+    const home = fs.readFileSync(path.resolve(CONTENT_DIR, '..', '..', '..', 'apps', 'manager', 'src', 'components', 'modules', 'HomeScreen.tsx'), 'utf8');
+    assert.ok(home.includes('<span>Action Required</span>'), 'the label is the one Settings Home shows');
+    assert.ok(then.includes('There is no two-factor sign-in to switch on'), 'the 2FA line: none to switch on');
+    assert.ok(!/switch on 2FA|turn on two-factor/i.test(page), 'no page step asks for two-factor');
+    // The wizard stays, as the optional founding-invites tool, never as the next step.
+    assert.ok(page.includes('The setup wizard is optional: after the claim, the next step is the core settings'), 'the wizard is optional');
+});
+
 test('the claim path (operator path S5): First-time setup says, where the claim starts, that claiming is done from the phone app only', () => {
     const page = fs.readFileSync(path.join(OPERATORS_DIR, 'setup', 'first-time-setup.md'), 'utf8');
     const claim = page.slice(page.indexOf('## Claim your community'), page.indexOf('The last step of an install'));

@@ -84,7 +84,7 @@ The page checks every few seconds, and the moment the community has an owner it 
 
 ## The setup wizard
 
-Settings never opens the setup wizard by itself: every server already has members it made itself, such as the built-in BeanPool account. Open it from Home with **Launch Cold-Start Wizard →**. You can leave it at any step and open it again later. It records that you finished it in this browser only.
+The setup wizard is optional: after the claim, the next step is the core settings (see Then, below). Its last step makes three founding invites with QR codes you can print. Settings never opens the setup wizard by itself: every server already has members it made itself, such as the built-in BeanPool account. Open it from Home with **Launch Cold-Start Wizard →**. You can leave it at any step and open it again later. It records that you finished it in this browser only.
 
 ![The first-time setup wizard in Settings](images/cold-start.webp)
 
@@ -114,6 +114,11 @@ A server set up before the claim code may already have a member called **Admin**
 
 ## Then
 
-- Make a second owner (The first owner, above).
-- Set up backups (Backups and restore).
-- Invite your first members.
+The same four steps follow every claim, in this order:
+
+- Confirm the core settings (Confirm the core settings, above).
+- Make a recovery code (Make a recovery code, in Backups and replicas). Without one, a backup from Settings can't bring your community back on a new server.
+- Make a second owner (The first owner, above), so a lost phone never locks the community out.
+- Invite your first members (Members and invites): **Invite a Member** on Home.
+
+Until each of the first three is done, Settings Home lists it under **Action Required**, and the row opens the place it is done. There is no two-factor sign-in to switch on: an owner signs in with their phone's key, and the phone's own lock is the proof it is you.

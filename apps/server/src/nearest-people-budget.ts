@@ -33,9 +33,10 @@ function inAbout(atMs: number, now: number): string {
 
 /**
  * A day budget: count one read by `key`, or refuse it. null when it is let in (and counted), else the 429 to answer, with
- * the seconds until the oldest hour counted leaves the day. A refused read isn't counted.
+ * the seconds until the oldest hour counted leaves the day. A refused read isn't counted. The forum's searches keep theirs
+ * with it too (engine/forum-search.ts, FORUM_SEARCHES_PER_DAY).
  */
-function dayBudget(limitOf: () => number, refusal: (limit: number, when: string) => { error: string; code: string }) {
+export function dayBudget(limitOf: () => number, refusal: (limit: number, when: string) => { error: string; code: string }) {
     const dayCounts = new Map<string, DayCount>();
     /** Make room: keys with nothing left in the day first, then the least used, down to 90%. */
     const shrink = (hour: number): void => {

@@ -41,6 +41,7 @@ import { useKnockStatuses } from '../lib/use-knock-statuses';
 import { YesJoin } from '../components/YesJoin';
 import { TellMeCard } from '../components/TellMeCard';
 import { readWebPushPin, stopTellingMeAtHome, tellMeAtHome } from '../lib/web-push';
+import { noteYesAnswers } from '../lib/yes-bell';
 import { forgetHandedOver, handedOverHere } from '../lib/handoff';
 import { isPhoneBrowser } from '../lib/global-entry';
 import { getConversations, getHome, getNodeApiUrl, getYourGroups, groupKeysNet, markNoticesSeen, myNodeRoleOnce, saveHomePreferences, watchPlace } from '../lib/api';
@@ -1409,6 +1410,19 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
             if (done && readWebPushPin(k.url, identity.publicKey)) void stopTellingMeAtHome(k.url, identity);
         }
     }, [knocks, knockStatuses, cancelledKnocks, joinedKnocks, identity]);
+
+    // The bell's row for a yes (global yes Y3, lib/yes-bell.ts): what each read said, for the requests read. A yes used here
+    // (joined in this visit), or a request cancelled, is no yes waiting.
+    useEffect(() => {
+        if (!publicKey) return;
+        const answers = knocks.flatMap((k) => {
+            const st = knockStatuses[k.url];
+            if (!st?.ok) return [];
+            const waiting = st.value.status === 'approved' && !st.value.member && !cancelledKnocks.has(k.url) && !joinedKnocks.has(k.url);
+            return [{ url: k.url, name: k.name ?? k.url.replace(/^https:\/\//, ''), invite: waiting && st.value.status === 'approved' ? st.value.invite : null }];
+        });
+        if (answers.length) noteYesAnswers(publicKey, answers);
+    }, [knocks, knockStatuses, cancelledKnocks, joinedKnocks, publicKey]);
 
     // The row a click on a notice came for (global yes Y2): once the community's answer is read and the row is drawn, into
     // view, and its Join in focus when it is a yes. A row this browser doesn't hold never comes, and nothing happens.

@@ -21,6 +21,7 @@ import { useTheme } from './lib/useTheme';
 import { useLanguage } from './lib/useLanguage';
 import { useWebPushMember } from './lib/use-web-push-member';
 import { knockLandingFor, takeKnockLanding } from './lib/knock-landing';
+import { KNOCK_ROW_EVENT } from './lib/yes-bell';
 import { goToNoticeTarget } from './components/NeedsYouIcons';
 import { TELL_ME_WORDS } from './lib/web-push';
 import { setTitleUnread } from './lib/page-words';
@@ -717,6 +718,17 @@ export function App() {
         setKnockRow(knockLanding.origin);
     }, [identity, knockLanding]);
     const clearKnockRow = useCallback(() => setKnockRow(null), []);
+    // The bell's row for a yes (global yes Y3, lib/yes-bell.ts): the same landing, from a tap.
+    useEffect(() => {
+        const land = (e: Event) => {
+            const url = (e as CustomEvent<unknown>).detail;
+            if (typeof url !== 'string') return;
+            setActiveTab('home');
+            setKnockRow(url);
+        };
+        window.addEventListener(KNOCK_ROW_EVENT, land);
+        return () => window.removeEventListener(KNOCK_ROW_EVENT, land);
+    }, []);
 
     // `/?shop=<id>` — a shared shop link.
     const [linkedShop, setLinkedShop] = useState<string | null>(null);

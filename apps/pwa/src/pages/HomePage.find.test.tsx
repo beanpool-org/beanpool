@@ -50,6 +50,7 @@ import { rememberKnock } from '../lib/knock';
 import { circleIntents, setCircleIntent } from '../lib/circle-intent';
 import * as knockModule from '../lib/knock';
 import * as webPushModule from '../lib/web-push';
+import { unseenYeses } from '../lib/yes-bell';
 
 const { done: WATCH_DONE, joinFirst: WATCH_JOIN_FIRST, needsPlace: WATCH_NEEDS_PLACE } = WATCH_WORDS;
 import { resetHomeCacheForTest } from '../lib/home-cache';
@@ -1344,6 +1345,16 @@ describe('told from another origin on the waiting row (global yes Y2)', () => {
         await act(async () => { await new Promise(r => setTimeout(r, 30)); });
         expect(seen).not.toHaveBeenCalled();
         expect(document.activeElement).toBe(document.body);
+    });
+
+    it("a yes Home reads is the bell's row (global yes Y3); a yes used there, or nothing open, is none", async () => {
+        await askedOf(BYRON, LISMORE);
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === BYRON.url
+            ? { ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } }
+            : { ok: true, value: { status: 'approved', invite: 'USED-1234', expiresAt: null, member: true } }));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId(`home-find-invited-${BYRON.url}`);
+        await waitFor(() => expect(unseenYeses(ME.publicKey).map(r => [r.url, r.name, r.invite])).toEqual([[BYRON.url, BYRON.name, 'ABCD-EFGH']]));
     });
 
     it('a request that is done lets go of the browser it asked to be told on: its yes used, or nothing open there any more; a waiting one does not', async () => {

@@ -252,6 +252,8 @@ export async function rememberKnock(
 }
 
 const YES_SEEN_KEY = 'beanpool_yes_seen';
+/** A yes was kept or seen in this browser: the bell reads its rows again (lib/yes-bell.ts, global yes Y3). */
+export const YES_BELL_EVENT = 'beanpool-yes-bell';
 
 /** One yes, as the banner marks it: a new yes (another invite) from the same community is news again. */
 export function yesMark(url: string, invite: string): string {
@@ -279,6 +281,7 @@ export function markYesSeen(pubkey: string, mark: string): void {
         const seen = [...yesSeenMarks(pubkey), mark].slice(-50);
         localStorage.setItem(YES_SEEN_KEY, JSON.stringify({ pubkey, seen: [...new Set(seen)] }));
     } catch { /* storage off: the banner shows again next time, with the same Join */ }
+    try { window.dispatchEvent(new Event(YES_BELL_EVENT)); } catch { /* no window: nothing listens */ }
 }
 
 export async function forgetKnock(pubkey: string, url: string): Promise<void> {

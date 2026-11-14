@@ -147,6 +147,16 @@ describe('the Learn card on an arranged Home', () => {
         expect(within(card).queryByTestId('home-learn-first')).toBeNull();
     });
 
+    it('Needs you\'s line "Local knowledge to check: 2" (slice K4) is said in the member\'s words and opens To check', async () => {
+        nodeV2(answer({ needs: { items: [{ kind: 'learn', count: 2, accent: true, label: 'Local knowledge to check: 2', target: { to: 'learn-check' } }] } }), v2(['market', 'learn']));
+        const nav = vi.fn();
+        render(<HomePage identity={ME} onNavigate={nav} />);
+        const line = await screen.findByTestId('home-needs-learn');
+        expect(line).toHaveTextContent('Local knowledge to check: 2');
+        fireEvent.click(line);
+        expect(nav).toHaveBeenLastCalledWith('learn-check');
+    });
+
     it('an owner\'s or admin\'s rows (slice K4): "2 to check ›" opens To check; "Add the first thing…" opens the form', async () => {
         nodeV2(answer({ learn: { rows: THREE, toCheck: 2 } }), v2(['market', 'learn']));
         const nav = vi.fn();

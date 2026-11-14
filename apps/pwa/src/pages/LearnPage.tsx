@@ -195,7 +195,8 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
     // A page opened from a screen (My suggestions' "Added") returns there; from a list, to the list.
     const openPage = (id: string) => { setPageIsEntry(false); setView((v) => ({ ...v, pageId: id })); };
     const closePage = () => { if (pageIsEntry) onBack(); else setView((v) => ({ ...v, pageId: null })); };
-    const openScreen = (next: Screen) => { setPageIsEntry(false); setView((v) => ({ ...v, screen: next, pageId: null })); };
+    // A screen opened afresh starts afresh: no answer said on an earlier visit to To check, no suggestion left open.
+    const openScreen = (next: Screen) => { setPageIsEntry(false); setCheckSaid(null); setCheckId(null); setView((v) => ({ ...v, screen: next, pageId: null })); };
     const closeScreen = () => { if (pageIsEntry) onBack(); else setView((v) => ({ ...v, screen: 'list' })); };
 
     // The sample pages, made once per preview screen.

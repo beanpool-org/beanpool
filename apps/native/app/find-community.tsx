@@ -414,8 +414,10 @@ export default function FindCommunityScreen() {
             case 'invited': {
                 await rememberKnock(signer.publicKey, c);
                 // A phone that allows notifications and is waiting to be let in sends its token to the community it just asked, so
-                // the yes buzzes it (web push W4; utils/push-registrations.ts askedWhileWaiting). Never asks for permission.
-                void import('../services/push-notifications').then((m) => m.retryPushRegistrations()).catch(() => {});
+                // the yes buzzes it, again where an earlier request there ended (web push W4; utils/push-registrations.ts
+                // registerAfterKnock). Never asks for permission.
+                const asked = c.url;
+                void import('../services/push-notifications').then((m) => m.registerAfterKnock(asked)).catch(() => {});
                 setAsked(await rememberedKnocks(signer.publicKey));
                 setOpenForm(null);
                 setMessage('');

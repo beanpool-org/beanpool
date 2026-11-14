@@ -835,3 +835,42 @@ export async function registerWhereMissing(
     await retrying;
     await retryDueRegistrations(phoneToken, platform, storage, onPhone, timeoutMs);
 }
+
+/**
+ * The account on the phone just asked `community` to join (the screens' Send: app/find-community.tsx,
+ * app/community-card.tsx, once knock.ts remembers the request). On a phone waiting to be let in, the token goes there
+ * again now, whether or not the record already names it ({@link askedWhileWaiting}): an earlier request there that was
+ * cancelled, declined or lapsed took this phone's registration with it at the community (server routes/community.ts
+ * `dropAskerPhonesOf` and the minute tidy-up), while the community stayed on the record, so {@link registerWhereMissing}
+ * alone would never send it again and the new request's yes would not buzz the phone until its next cold start (#3160
+ * review). It goes on the due list with no wait, any earlier wait there dropped (this request is new, and the community
+ * holds it), and then {@link registerWhereMissing} runs as for any return. A second registration of the same phone adds
+ * no row at the community. Nothing more on a phone with a community in use or a wizard part-way: the community just
+ * asked is not one the token goes to there. Never throws.
+ */
+export async function registerAfterKnock(
+    community: string,
+    phoneToken: () => Promise<string | null>,
+    platform: string,
+    storage: Storage = AsyncStorage,
+    onPhone: () => Promise<RegisteringAccount | null> = loadIdentity,
+    timeoutMs: number = REGISTER_TIMEOUT_MS,
+): Promise<void> {
+    try {
+        const account = await onPhone();
+        const asked = communityAddress(community);
+        if (asked && account?.publicKey && leaveState(account.publicKey) === 'none') {
+            const key = account.publicKey.toLowerCase();
+            if ((await askedWhileWaiting(key, storage)).includes(asked)) {
+                await changeDue(storage, (due) => {
+                    if (leaving.has(key) || stopsUnderWay.has(heldAt(key, asked))) return due;
+                    const elsewhere = due.filter((d) => !(d.publicKey === key && d.community === asked));
+                    return [...elsewhere, { publicKey: key, community: asked, refusals: 0, retryAt: 0 }];
+                });
+            }
+        }
+    } catch (e) {
+        console.warn('[Push] Could not put the community just asked on this phone\'s registrations due', e);
+    }
+    await registerWhereMissing(phoneToken, platform, storage, onPhone, timeoutMs);
+}

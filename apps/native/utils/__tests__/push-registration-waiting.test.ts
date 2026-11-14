@@ -13,7 +13,10 @@
  *     community in use or a wizard part-way;
  *   - a community that refuses it (the server's 403 for a key with no open request there) leaves it due, and a refused
  *     or failed one lands at the next return once it is taken;
- *   - once the phone joins a community, the other communities it asked are no longer sent the token.
+ *   - once the phone joins a community, the other communities it asked are no longer sent the token;
+ *   - asking a community again after an earlier request there ended (cancelled, declined or lapsed: the community dropped
+ *     the phone's row, while it stays on the phone's record) sends the token there again at Send, so that yes buzzes it
+ *     too (#3160 review).
  *
  * Nothing contacts a node: fetch is a fake community per address (fake-communities.ts), here with the server's W4 rule
  * on. The phone's push token comes from a stub of Expo's.
@@ -47,7 +50,7 @@ vi.mock('../../services/pillar-sync', () => ({ resetSyncFingerprints: vi.fn() })
 
 import { draftIdentity, importIdentity, type BeanPoolIdentity } from '../identity';
 import { rememberKnock } from '../knock';
-import { askedWhileWaiting, pushRegisteredCommunities, registerAccountForPush, registerWhereMissing, retryDueRegistrations } from '../push-registrations';
+import { askedWhileWaiting, pushRegisteredCommunities, registerAccountForPush, registerAfterKnock, registerWhereMissing, retryDueRegistrations } from '../push-registrations';
 import { Communities, PHONE_TOKEN } from './fake-communities';
 import { KNOCKS_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY } from '../storage-keys';
 
@@ -69,6 +72,20 @@ let nodes: Communities;
 const pushPosts = () => nodes.sent.filter((s) => s.path === '/api/push-tokens' && s.method === 'POST');
 const probes = () => nodes.sent.filter((s) => s.path.startsWith('/api/community/membership/'));
 const due = () => JSON.parse(mem.async.get(PUSH_REGISTRATIONS_DUE_STORE_KEY) ?? '[]') as { community: string; refusals: number; retryAt: number }[];
+
+/**
+ * Kim's request at `community` ends as the server ends one: its open request goes, and with it the phone's row there
+ * (routes/community.ts `dropAskerPhonesOf` on a cancel or a decline; the minute tidy-up on a lapse). On the phone, a
+ * cancel marks the knock cancelled; a decline or a lapse never reaches it.
+ */
+function requestEnds(community: string, cancelledOnPhone: boolean): void {
+    nodes.asked.get(community)?.delete(kim.publicKey);
+    nodes.rowsAt(community).clear();
+    if (!cancelledOnPhone) return;
+    const stored = JSON.parse(mem.async.get(KNOCKS_STORE_KEY)!) as { pubkey: string; knocks: { url: string; cancelledAt?: string }[] };
+    stored.knocks = stored.knocks.map((k) => (k.url === community ? { ...k, cancelledAt: new Date().toISOString() } : k));
+    mem.async.set(KNOCKS_STORE_KEY, JSON.stringify(stored));
+}
 
 beforeEach(async () => {
     mem.async.clear();
@@ -178,5 +195,73 @@ describe('a phone waiting to be let in', () => {
         expect(pushPosts().slice(before).map((s) => s.community)).not.toContain(HILLTOP);
         expect(nodes.has(HILLTOP, kim.publicKey)).toBe(false);
         expect(due()).toEqual([]);
+    });
+});
+
+describe('a phone waiting to be let in that asks a community again', () => {
+    for (const ending of [
+        { how: 'cancelled', cancelledOnPhone: true },
+        { how: 'declined or lapsed', cancelledOnPhone: false },
+    ]) {
+        it(`after its earlier request there was ${ending.how}, sends the token there again at Send, so the yes buzzes it (fails before: no POST, no row)`, async () => {
+            await rememberKnock(kim.publicKey, { url: RIVERSIDE, name: 'Riverside' });
+            nodes.ask(kim.publicKey, RIVERSIDE);
+            await registerAfterKnock(RIVERSIDE, phoneToken, 'android');
+            expect(nodes.has(RIVERSIDE, kim.publicKey)).toBe(true);
+            expect(await pushRegisteredCommunities()).toEqual([RIVERSIDE]);
+
+            requestEnds(RIVERSIDE, ending.cancelledOnPhone);
+            expect(nodes.has(RIVERSIDE, kim.publicKey)).toBe(false);
+            // Riverside is still on the phone's record: only a leave takes it off.
+            expect(await pushRegisteredCommunities()).toEqual([RIVERSIDE]);
+
+            // Asked again (after the block), with the app resumed, not started: the screen's run after Send.
+            await rememberKnock(kim.publicKey, { url: RIVERSIDE, name: 'Riverside' });
+            nodes.ask(kim.publicKey, RIVERSIDE);
+            const before = pushPosts().length;
+            await registerAfterKnock(RIVERSIDE, phoneToken, 'android');
+
+            expect(pushPosts().slice(before).map((s) => s.community)).toEqual([RIVERSIDE]);
+            expect(pushPosts().slice(before).every((s) => s.body.publicKey === kim.publicKey && s.headers['X-Public-Key'] === kim.publicKey)).toBe(true);
+            expect(nodes.has(RIVERSIDE, kim.publicKey)).toBe(true);
+            expect(probes()).toEqual([]);
+            expect(await pushRegisteredCommunities()).toEqual([RIVERSIDE]);
+            expect(due()).toEqual([]);
+        });
+    }
+
+    it('a wait left by an earlier refusal there is dropped: the new request is held there now, and the token lands at once', async () => {
+        await rememberKnock(kim.publicKey, { url: RIVERSIDE, name: 'Riverside' });
+        // Riverside doesn't hold the request: refused, and left alone a while.
+        await registerAccountForPush(kim.publicKey, phoneToken, 'android');
+        expect(due()).toEqual([expect.objectContaining({ community: RIVERSIDE, refusals: 1 })]);
+        expect(due()[0].retryAt).toBeGreaterThan(Date.now());
+
+        await rememberKnock(kim.publicKey, { url: RIVERSIDE, name: 'Riverside' });
+        nodes.ask(kim.publicKey, RIVERSIDE);
+        await registerAfterKnock(RIVERSIDE, phoneToken, 'android');
+        expect(nodes.has(RIVERSIDE, kim.publicKey)).toBe(true);
+        expect(due()).toEqual([]);
+    });
+
+    it('a second Send while the first one\'s registration still stands adds no row there', async () => {
+        await rememberKnock(kim.publicKey, { url: RIVERSIDE, name: 'Riverside' });
+        nodes.ask(kim.publicKey, RIVERSIDE);
+        await registerAfterKnock(RIVERSIDE, phoneToken, 'android');
+        await registerAfterKnock(RIVERSIDE, phoneToken, 'android');
+        expect(pushPosts().map((s) => s.community)).toEqual([RIVERSIDE, RIVERSIDE]);
+        expect([...nodes.rowsAt(RIVERSIDE).keys()]).toEqual([`${kim.publicKey}|${PHONE_TOKEN}`]);
+        expect(due()).toEqual([]);
+    });
+
+    it('never on a phone with a community in use: a member\'s ask sends its token only where it belongs', async () => {
+        mem.async.set(ANCHOR, BAYSIDE);
+        nodes.join(kim.publicKey, BAYSIDE);
+        await rememberKnock(kim.publicKey, { url: RIVERSIDE, name: 'Riverside' });
+        nodes.ask(kim.publicKey, RIVERSIDE);
+        await registerAfterKnock(RIVERSIDE, phoneToken, 'android');
+        expect(pushPosts().map((s) => s.community)).not.toContain(RIVERSIDE);
+        expect(nodes.has(RIVERSIDE, kim.publicKey)).toBe(false);
+        expect(due().map((d) => d.community)).not.toContain(RIVERSIDE);
     });
 });

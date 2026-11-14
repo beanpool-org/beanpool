@@ -19,7 +19,8 @@ import { arrangeCards, cardLine, reorderAmong, reorderIds } from './home-layout'
 const NOW = Date.UTC(2026, 9, 2, 4, 0, 0);
 const H = 3_600_000;
 const iso = (at: number) => new Date(at).toISOString();
-const LOCAL = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true } };
+// Every switch on, Learn's too (slice K7).
+const LOCAL = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, knowledge: true } };
 const GLOBAL = { profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false } };
 const ids = (l: { cards: { id: string }[] } | null) => l?.cards.map(c => c.id);
 const NEWER = { id: 'sky-aaaa', type: 'skyline', settings: { place: { lat: -28.5, lng: 153.5 }, odd: [1, 'two'] } };
@@ -41,7 +42,13 @@ describe('the picker (§1.2)', () => {
         expect(rows.map(r => r.type)).not.toContain('needs');
         expect(rows.map(r => r.type)).not.toContain('community');
         expect(rows.map(r => r.type)).not.toContain('find');
-        for (const r of rows) expect(`${r.name} ${r.line}`).not.toMatch(/lock|earn|tier|Ʀ/i);
+        // No "earn" language on Home: `\bearn`, since "Learn something local" (slice K7, the design's name) holds those letters
+        // without saying earn (core home-frame.test.ts made the same narrowing in #3143). Earn, earned and earning still match.
+        const refused = /lock|\bearn|tier|Ʀ/i;
+        expect('You earn Beans').toMatch(refused);
+        expect('Earned it').toMatch(refused);
+        expect(rows.map(r => r.type)).toContain('learn');
+        for (const r of rows) expect(`${r.name} ${r.line}`).not.toMatch(refused);
     });
 
     it('the worldwide community lists no Beans, deals, enterprise, Decide or Grow your community; "Near you" for the Market; a plain member where only admins invite gets no invite row', () => {
@@ -272,7 +279,8 @@ describe('what is drawn and asked', () => {
         const searches = Array.from({ length: 7 }, (_, i) => ({ id: `search-${i}aaa`, type: 'search', settings: { q: `w${i}` } }));
         expect(cardOrder({ ...starterLayout(), cards: searches }).filter(c => c.type === 'search')).toHaveLength(5);
         const fixed = [{ id: 'community', type: 'community' }, { id: 'needs', type: 'needs' }, { id: 'market', type: 'market' }];
-        expect(cardOrder({ ...starterLayout(), cards: fixed }).map(c => c.id)).toEqual(['needs', 'market', 'community']);
+        // The fixed two never from the list; Learn something local arrives after the list's own cards (slice K7).
+        expect(cardOrder({ ...starterLayout(), cards: fixed }).map(c => c.id)).toEqual(['needs', 'market', 'learn', 'community']);
     });
 
     it('a pinned Find your community stands under Needs you, and under "Your way back in" while that one leads', () => {
@@ -322,7 +330,8 @@ describe('what is drawn and asked', () => {
     it('cards= is catalogue order then id, the same after a move; with an answer in hand the global node is asked no Beans, deals, enterprise or Decide (review of #1699, finding 5)', () => {
         const l: HomeLayoutV2 = { ...starterLayout(), cards: ['beans', 'deals', 'decide', 'enterprise', 'market', 'tips'].map(id => ({ id, type: id })) };
         const asked = cardsToAsk(l);
-        expect(asked).toEqual(['needs', 'deals', 'enterprise', 'market', 'decide', 'beans', 'community']);
+        // Learn something local arrives on this list saved before it (slice K7), so it is asked in its catalogue place.
+        expect(asked).toEqual(['needs', 'deals', 'enterprise', 'market', 'learn', 'decide', 'beans', 'community']);
         expect(cardsToAsk(moveCard(l, 'market', 'up', cardOrder(l), NOW))).toEqual(asked);
         expect(cardsToAsk(l, ['find'], GLOBAL)).toEqual(['needs', 'find', 'market', 'community']);
         expect(cardsToAsk(l, [], LOCAL)).toEqual(asked);

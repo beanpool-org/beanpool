@@ -563,7 +563,7 @@ describe('new fixed strings at 320dp x 1.3 (Home slice W5)', () => {
             '81 members · 4 joined this week',
             '23 trades this month · Commons pot 310 Beans',
             '37 listings · 3 events coming up',
-            'by Mullum Ceramics · 3h ago',
+            'by Riverside Ceramics · 3h ago',
         ];
         for (const str of strings) {
             expect(longestWord(str, num(s.rowLine.fontSize)), str).toBeLessThan(CARD_INNER);

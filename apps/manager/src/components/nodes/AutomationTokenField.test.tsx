@@ -64,7 +64,7 @@ describe('the token field', () => {
     it('a new node can be added with a token', async () => {
         const onAdd = vi.fn();
         render(<AddNodeModal onClose={vi.fn()} onAdd={onAdd} />);
-        fireEvent.change(screen.getByPlaceholderText('e.g. Byron Community Node'), { target: { value: 'Byron' } });
+        fireEvent.change(screen.getByPlaceholderText('e.g. Riverside Community Node'), { target: { value: 'Byron' } });
         fireEvent.change(screen.getByPlaceholderText(/https:\/\/node2/), { target: { value: 'https://byron.example' } });
         fireEvent.change(screen.getByLabelText('Automation token'), { target: { value: TOKEN } });
         fireEvent.submit(screen.getByLabelText('Automation token').closest('form')!);

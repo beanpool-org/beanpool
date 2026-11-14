@@ -4586,7 +4586,7 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         },
         enterprise: {
             id: 'ent-1',
-            name: 'Mullum Ceramics',
+            name: 'Riverside Ceramics',
             requests: 3,
             others: 1,
             lifecycle: 'ongoing',
@@ -4665,14 +4665,14 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
 
         // Enterprise
         const ent = screen.getByTestId('home-card-enterprise');
-        expect(ent).toHaveTextContent('Mullum Ceramics · enterprise');
+        expect(ent).toHaveTextContent('Riverside Ceramics · enterprise');
         expect(ent).toHaveTextContent('Balance 340 Beans · 3 keepers');
         expect(ent).toHaveTextContent('This month: 5 trades · +120 in · −60 out');
         expect(ent).toHaveTextContent('Latest: +12 Beans from Ana · 2h ago');
         expect(ent).toHaveTextContent('3 requests to approve');
         expect(ent).toHaveTextContent('and 1 more you keep');
         expect(within(ent).getByRole('button', {
-            name: 'Mullum Ceramics · enterprise. Balance 340 Beans · 3 keepers. This month: 5 trades · +120 in · −60 out. Latest: +12 Beans from Ana · 2h ago. 3 requests to approve. Opens the enterprise.',
+            name: 'Riverside Ceramics · enterprise. Balance 340 Beans · 3 keepers. This month: 5 trades · +120 in · −60 out. Latest: +12 Beans from Ana · 2h ago. 3 requests to approve. Opens the enterprise.',
         })).toBeInTheDocument();
 
         // Decide
@@ -4778,7 +4778,7 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
 
         // Enterprise card contains name, lifecycle, balance, month, latest, requests
         const ent = screen.getByTestId('home-card-enterprise');
-        expect(ent).toHaveTextContent('Mullum Ceramics · enterprise');
+        expect(ent).toHaveTextContent('Riverside Ceramics · enterprise');
         expect(ent).toHaveTextContent('Balance 340 Beans · 3 keepers');
         expect(ent).toHaveTextContent('This month: 5 trades · +120 in · −60 out');
         expect(ent).toHaveTextContent('Latest: +12 Beans from Ana · 2h ago');

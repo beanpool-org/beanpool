@@ -184,7 +184,7 @@ function parseFromNode(raw: unknown): Parsed<string | null> {
     const host = raw.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
     const label = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
     if (host.length > 253 || !new RegExp(`^${label}(?:\\.${label})*(?::\\d{1,5})?$`).test(host)) {
-        return { ok: false, error: "'fromNode' must be a node's address, like global.beanpool.org." };
+        return { ok: false, error: "'fromNode' must be a node's address, like riverside.example.org." };
     }
     return { ok: true, value: host };
 }

@@ -3,8 +3,8 @@ import { hasWebAddress, inviteForInviteBox, notANameIn, notANameLine, NAME_BOX_R
 import { inviteShareText } from '../invite-share-text';
 
 // What Dee Dee's name box held on 5 Sep (card callsign-link-guard), and the share message a member sends.
-const DEE_DEE = 'https://mullum.beanpool.org/?invite=INV-K7Q2-BSXA';
-const MESSAGE = inviteShareText({ name: 'Byron Shire BeanPool', link: 'https://byron.beanpool.org/?invite=INV-K7Q2-BSXA', code: 'INV-K7Q2-BSXA', address: 'byron.beanpool.org' });
+const DEE_DEE = 'https://riverside.example.org/?invite=INV-K7Q2-BSXA';
+const MESSAGE = inviteShareText({ name: 'Riverside Exchange', link: 'https://riverside.example.org/?invite=INV-K7Q2-BSXA', code: 'INV-K7Q2-BSXA', address: 'riverside.example.org' });
 
 describe('notANameIn', () => {
     it('reads an invite link, the whole message and the code alone as an invite', () => {
@@ -16,10 +16,10 @@ describe('notANameIn', () => {
     });
     it('reads a web address as one, the link the name box cut short included', () => {
         for (const s of [
-            DEE_DEE.slice(0, 20), // "https://mullum.beanp": what a 20-character box kept of her paste
+            DEE_DEE.slice(0, 20), // "https://riverside.ex": what a 20-character box kept of her paste
             'http://192.168.1.20',
-            'mullum.beanpool.org',
-            'byron.beanpool.org/',
+            'riverside.beanpool.org',
+            'riverside.example.org/',
             'www.example.net',
             'see example.com',
             'beanpool.org',

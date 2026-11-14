@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import type tls from 'node:tls';
 import {
+    DEFAULT_GLOBAL_COMMUNITY_URL,
     checkVaultTicket,
     checkVaultVoucher,
     isVaultChallenge,
@@ -86,7 +87,7 @@ import { OffsiteError, S3Store } from './s3-store.js';
 
 export const HOLD_MS = 24 * 60 * 60 * 1000;
 /** The only origin whose browser pages may call the vault (§1.2). CORS isn't the lock: sign-ins are. */
-export const GLOBAL_ORIGIN = 'https://global.beanpool.org';
+export const GLOBAL_ORIGIN = DEFAULT_GLOBAL_COMMUNITY_URL;
 export const BACKUP_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 64 * 1024;
 const RESTORE_BUILD = `${DB_FILE}.restore`;

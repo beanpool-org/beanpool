@@ -103,7 +103,7 @@ async function getSigned(path: string, id: Id): Promise<{ status: number; body: 
 // while the owners' switch is on, as it is by default (test-contact-copies). A price for each one (DESIGN-per-item-price-fable.md
 // §6): a capability of the build, on every profile from 1.4.1 (config/node-profile.ts PER_ITEM_BUILT; test-per-item-listings).
 // Voice lines (DESIGN-cross-chat-voice-fable.md §5.4, V2): a capability of the build, on every profile, said outright so a
-// phone offers its microphone only where the node stores a voice line as one (test-voice-line; Byron, 14 Nov).
+// phone offers its microphone only where the node stores a voice line as one (test-voice-line; a live community, 14 Nov).
 // Messages from other communities (DESIGN-cross-chat-voice-fable.md §3.5, X2): the owners' switch, on by default on every
 // kind, said while on (test-relay-mail).
 const BUILT_TODAY = {

@@ -305,7 +305,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                         <TextInput
                             {...fieldScroll.inputProps}
                             style={styles.input}
-                            placeholder={t('e.g. Bindarrabi Garden Crew, Solar Guild')}
+                            placeholder={t('e.g. Riverside Garden Crew, Solar Guild')}
                             placeholderTextColor={colors.text.muted}
                             value={name}
                             onChangeText={setName}

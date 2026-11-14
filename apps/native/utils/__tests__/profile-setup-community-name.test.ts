@@ -276,7 +276,7 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
     // rename here, and the node refuses it, 400 `callsign_link`. Re-run Setup took that for being offline, so the name
     // waited to be sent again and again; it is refused for good, as a 409 taken name is, and said on the name step.
     it('when the waiting name is a link the node refuses (400 callsign_link), it is refused for good, said on the name step, and nothing is kept as offline', async () => {
-        const LINK = 'https://mullum.beanpool.org/?inv';
+        const LINK = 'https://riverside.example.org/?i';
         community.row = { public_key: KEY, callsign: 'Rosa 2', avatar_url: null };
         await keepPendingProfileChange(NODE, KEY, { callsign: LINK });
         status = 400;

@@ -1,4 +1,4 @@
-import { t } from '@beanpool/core';
+import { DEFAULT_GLOBAL_COMMUNITY_URL, t } from '@beanpool/core';
 
 /**
  * A local community's listings are its members' (Marty, 2026-09-28). The node refuses them to anyone else with
@@ -7,7 +7,7 @@ import { t } from '@beanpool/core';
  */
 
 /** The worldwide community's one address, where anyone can look around and join with one sign-in. */
-export const GLOBAL_COMMUNITY_URL = 'https://global.beanpool.org';
+export const GLOBAL_COMMUNITY_URL = DEFAULT_GLOBAL_COMMUNITY_URL;
 
 /** Whether a failed request was the node refusing its listings to a non-member (lib/api.ts refusalError keeps `code`). */
 export function isMembersOnlyRefusal(e: unknown): boolean {

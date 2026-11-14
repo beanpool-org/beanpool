@@ -68,6 +68,7 @@ export * from './invite-text.js';
 export * from './name-box.js';
 export * from './event-copy.js';
 export * from './show-on-global.js';
+export * from './beanpool-defaults.js';
 export * from './peek-ticket.js';
 export * from './find-community.js';
 export * from './place-circle.js';

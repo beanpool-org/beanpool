@@ -213,7 +213,7 @@ describe('CreateGroupModal is chat-group form with bridge', () => {
         await mount(createElement(CreateGroupModal, { isOpen: true, onClose: vi.fn(), onCreated: vi.fn() }));
 
         // The group name input is visible immediately (no kind step)
-        expect(host!.querySelector('input[placeholder*="Bindarrabi"]')).not.toBeNull();
+        expect(host!.querySelector('input[placeholder*="Riverside"]')).not.toBeNull();
         // The one-line bridge to start a project or an enterprise is present
         const bridge = Array.from(host!.querySelectorAll('button')).find(b =>
             /Start a project or an enterprise/i.test(b.getAttribute('aria-label') || b.textContent || '')
@@ -241,7 +241,7 @@ describe('CreateGroupModal is chat-group form with bridge', () => {
         // Picture section/label is present as first row
         expect(host!.textContent).toContain('Picture');
 
-        await type(host!.querySelector('input[placeholder*="Bindarrabi"]'), 'Garden Crew');
+        await type(host!.querySelector('input[placeholder*="Riverside"]'), 'Garden Crew');
 
         const submitBtn = Array.from(host!.querySelectorAll('button')).find(b =>
             /^Create Group/i.test(b.getAttribute('aria-label') || '') || (b.textContent?.includes('Create Group') && !b.getAttribute('aria-label')?.includes('Close'))

@@ -11,7 +11,7 @@ describe('AddNodeModal', () => {
         render(<AddNodeModal onClose={handleClose} onAdd={handleAdd} />);
 
         expect(screen.getByText('Connect Sovereign Node')).toBeInTheDocument();
-        expect(screen.getByPlaceholderText('e.g. Byron Community Node')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('e.g. Riverside Community Node')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('https://node2.beanpool.org or https://localhost:8443')).toBeInTheDocument();
         expect(screen.getByLabelText('Automation token')).toBeInTheDocument();
     });
@@ -43,7 +43,7 @@ describe('AddNodeModal', () => {
         const handleAdd = vi.fn();
         render(<AddNodeModal onClose={vi.fn()} onAdd={handleAdd} />);
 
-        await userEvent.type(screen.getByPlaceholderText('e.g. Byron Community Node'), '  Test Node  ');
+        await userEvent.type(screen.getByPlaceholderText('e.g. Riverside Community Node'), '  Test Node  ');
         await userEvent.type(screen.getByPlaceholderText('https://node2.beanpool.org or https://localhost:8443'), 'localhost:8443');
         await userEvent.click(screen.getByText('Save Node Profile'));
 
@@ -54,7 +54,7 @@ describe('AddNodeModal', () => {
         const handleAdd = vi.fn();
         render(<AddNodeModal onClose={vi.fn()} onAdd={handleAdd} />);
 
-        await userEvent.type(screen.getByPlaceholderText('e.g. Byron Community Node'), 'Test Node');
+        await userEvent.type(screen.getByPlaceholderText('e.g. Riverside Community Node'), 'Test Node');
         await userEvent.type(screen.getByPlaceholderText('https://node2.beanpool.org or https://localhost:8443'), 'https://node1.beanpool.org');
         await userEvent.click(screen.getByText('Save Node Profile'));
 

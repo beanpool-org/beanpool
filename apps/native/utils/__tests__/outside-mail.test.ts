@@ -729,8 +729,9 @@ describe('X5  report a line from another community', () => {
         expect(server.reports).toHaveLength(0);
     });
 
-    // Every shape a refusal comes in, on every path that reads my server's answer (one reader, answerOf): the words a
-    // screen shows are the server's sentence or `HTTP <n>` (which each screen turns into its own sentence), never a code.
+    // Every shape a refusal comes in, on the report and send paths (every outside-mail path reads my server's answer through
+    // one reader, answerOf; the fetch and confirm paths too): the words a screen shows are the server's sentence or `HTTP <n>`
+    // (which each screen turns into its own sentence), never a code.
     const RATE = 'You have sent a lot of reports recently. Please try again in an hour.';
     const MEMBERS = 'Only members of this community can do this.';
     const shapes: Array<[string, number, unknown, string, string | undefined]> = [

@@ -268,7 +268,7 @@ export type ComplaintAnswer =
 
 /** The one answer every drop gets (the file header): the same words and code whatever the reason. */
 export const COMPLAINT_NOT_TAKEN = {
-    error: 'This community has no message by that id from that member to your server, so it has not taken this complaint.',
+    error: 'This community has not taken this complaint.',
     code: 'not_taken',
 } as const;
 

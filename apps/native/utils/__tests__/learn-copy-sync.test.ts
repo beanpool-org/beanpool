@@ -97,8 +97,8 @@ function pageRow(id: string, over: Record<string, unknown> = {}) {
 }
 
 describe('the copy has a table for the pages', () => {
-    it('makes knowledge_posts with the copy, and the schema number is 7 (5 with Learn, 6 and 7 with per-item prices)', async () => {
-        expect(COPY_SCHEMA).toBe(7);
+    it('makes knowledge_posts with the copy, and the schema number is 8 (5 with Learn, 6 and 7 with per-item prices, 8 with the forum on the phone)', async () => {
+        expect(COPY_SCHEMA).toBe(8);
         await initDB();
         const tables = (await rows("SELECT name FROM sqlite_master WHERE type = 'table'")).map((r) => r.name);
         expect(tables).toContain('knowledge_posts');
@@ -113,7 +113,7 @@ describe('the copy has a table for the pages', () => {
         old.close();
         h.store.set(`pillar_sync_${FILE}_last-sync`, '1762800000000');
         await initDB();
-        expect((await getDb().then((d) => d.getFirstAsync<{ user_version: number }>('PRAGMA user_version')))?.user_version).toBe(7);
+        expect((await getDb().then((d) => d.getFirstAsync<{ user_version: number }>('PRAGMA user_version')))?.user_version).toBe(8);
         expect(await rows('SELECT id FROM posts')).toEqual([]);
         expect([...h.store.keys()].filter((k) => k.startsWith(`pillar_sync_${FILE}_`))).toEqual([]);
         expect(await rows('SELECT id FROM knowledge_posts')).toEqual([]);

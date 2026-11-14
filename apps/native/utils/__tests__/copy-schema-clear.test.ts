@@ -120,14 +120,14 @@ const LATE_COLUMNS: Record<string, string[]> = {
 const MONEY_COLUMN = /^(\w*_c|balance|amount|tax_fee|fee|credits|post_credits|earned_credit|goal_amount|current_amount)$/;
 const CACHE_TABLES = ['members', 'accounts', 'transactions', 'posts', 'marketplace_transactions', 'conversations', 'projects'];
 
-// The number is 7 since per-item prices P3 (item_option on marketplace_transactions), 6 since P2 (three columns on posts, utils/db.ts
+// The number is 8 since the forum on the phone (F3: the new cache table forum_kept), 7 since per-item prices P3 (item_option on marketplace_transactions), 6 since P2 (three columns on posts, utils/db.ts
 // COPY_SCHEMA), 5 since Learn (slice K2: the new cache table knowledge_posts); 4 was the whole-hundredths cutover this file is about,
 // and a copy of 4, 5 or 6 is now cleared and read again like a 1.3 one (utils/__tests__/learn-copy-sync.test.ts).
-describe("the phone's copy and its schema number (whole hundredths since 4; COPY_SCHEMA 7)", () => {
+describe("the phone's copy and its schema number (whole hundredths since 4; COPY_SCHEMA 8)", () => {
     it('a 1.3 copy (user_version 3, Beans as REAL) loses its cache and every old figure, keeps the tools and group keys, and is read whole again', async () => {
         oldCopy();
         await getDb();
-        expect(userVersion()).toBe(7);
+        expect(userVersion()).toBe(8);
         // Dropped, not converted: no row of the old copy is carried, so no old figure can be read as hundredths.
         for (const table of ['members', 'accounts', 'transactions', 'posts', 'marketplace_transactions', 'conversations']) expect(count(table), table).toBe(0);
         expect(await getPosts()).toEqual([]);
@@ -169,7 +169,7 @@ describe("the phone's copy and its schema number (whole hundredths since 4; COPY
         sql.prepare("INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, price_type) VALUES ('P5', 'offer', 'tools', 'Solar panels', '', 30000, ?, 'fixed')").run(ANA);
         expect(columnsOf('posts').map((c) => c.name)).not.toContain('units_left');
         await getDb();
-        expect(userVersion()).toBe(7);
+        expect(userVersion()).toBe(8);
         // Cleared, not converted: the listing is read again from the node, with its count.
         expect(count('posts')).toBe(0);
         const have = columnsOf('posts');
@@ -187,10 +187,22 @@ describe("the phone's copy and its schema number (whole hundredths since 4; COPY
         sql.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours) VALUES ('T6', 'P6', ?, 'seller', 90000, 3)").run(ME);
         expect(columnsOf('marketplace_transactions').map((c) => c.name)).not.toContain('item_option');
         await getDb();
-        expect(userVersion()).toBe(7);
+        expect(userVersion()).toBe(8);
         // Cleared, not converted: the deal is read again from the node, with its way.
         expect(count('marketplace_transactions')).toBe(0);
         expect(columnsOf('marketplace_transactions').find((c) => c.name === 'item_option')?.type).toBe('TEXT');
+    });
+
+    it('a copy at 7, made before the forum on the phone, is cleared and made again with forum_kept (a cache table, nothing altered on open)', async () => {
+        await closeDB();
+        sql.exec('DROP TABLE IF EXISTS forum_kept; PRAGMA user_version = 7;');
+        sql.prepare("INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey) VALUES ('P7', 'offer', 'food', 'Jam', '', 500, ?)").run(ANA);
+        await getDb();
+        expect(userVersion()).toBe(8);
+        expect(count('posts')).toBe(0);
+        expect(columnsOf('forum_kept').map((c) => c.name)).toEqual(['me', 'k', 'kind', 'following', 'body', 'kept_at']);
+        // The account's own stores stay, as for every number.
+        for (const table of KEPT_TABLES) expect(count(table), table).toBe(1);
     });
 
     it('a copy already at the number keeps every row when it opens again, and nothing alters it on the way', async () => {
@@ -199,7 +211,7 @@ describe("the phone's copy and its schema number (whole hundredths since 4; COPY
         await closeDB();
         adapter.execAsync.mockClear();
         await getDb();
-        expect(userVersion()).toBe(7);
+        expect(userVersion()).toBe(8);
         expect(sql.prepare("SELECT price_c FROM posts WHERE id = 'L2'").get()).toEqual({ price_c: 4925 });
         expect(removed).toEqual([]);
         // The standing rule: the schema is the whole shape, so opening a copy at the number runs no ALTER TABLE and drops nothing.

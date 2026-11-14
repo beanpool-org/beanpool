@@ -6,23 +6,29 @@
  * Remove everyone, How this is kept.
  *
  * Nothing is read into the list, and nothing leaves this browser, before Import (§3.4); a file is read here, never
- * uploaded. The list is kept and saved by lib/contacts-store.ts. Invites from a row are slice C5; "Add people I've
- * chatted with and my friends" is C6; the guide page behind "More in the guide" is C7.
+ * uploaded. The list is kept and saved by lib/contacts-store.ts. "Add people I've chatted with and my friends" is C6; the
+ * guide page behind "More in the guide" is C7.
+ *
+ * Invite from a row (slice C5): Invite / Invite again opens components/ContactInviteSheet.tsx; the row then reads "invited
+ * 12 Nov"; once this community says the code was used, the row asks "Is this Dee?" (Yes links, No forgets the invite); Remove
+ * offers "Also cancel the invite I sent" while it is still out here. No name, number or email of a contact reaches any request.
  */
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
 import {
-    CONTACTS_FILE_MAX_BYTES, CONTACTS_FILE_WORDS, CONTACTS_LIMITS, cleanContactName, contactAlreadyInList, contactsFromCandidates,
-    emptyContactsList, formatCount, mergeContactsLists, newContactId, putContact, readContactsFile, removeContact, removeEveryContact,
-    t, timeAgo, tn, type Contact, type ContactCandidate, type ContactsList,
+    CONTACTS_FILE_MAX_BYTES, CONTACTS_FILE_WORDS, CONTACTS_LIMITS, cleanContactName, contactAlreadyInList, contactInviteAsk, contactInviteAskWords,
+    contactInviteCancelWords, contactInviteNoWords, contactInviteOut, contactInviteWords, contactInvitedLine, contactsFromCandidates, emptyContactsList,
+    forgetContactInvite, formatCount, inviteRevokeWords, linkContactToInvite, mergeContactsLists, newContactId, putContact, readContactsFile, removeContact, removeEveryContact,
+    t, timeAgo, tn, type Contact, type ContactCandidate, type ContactInviteUsed, type ContactsList, type MyInviteSeen,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { nodeAddress } from '../lib/api';
+import { getMyInvites, nodeAddress, revokeInvite } from '../lib/api';
 import { isUserBlocked, unblockUser } from '../lib/blocklist';
 import { isPhoneBrowser } from '../lib/global-entry';
 import { changeContacts, contactsHost as hostOf, ContactsNewerError, openContacts, saveContactsFile as saveFile, useContacts, type ContactsWhere } from '../lib/contacts-store';
 import { ContactsInfo } from '../components/ContactsInfo';
 import { BoldWords } from '../components/BoldWords';
 import { UsePhoneAppCard, isUsePhoneAppDismissed } from '../components/UsePhoneAppCard';
+import { ContactInviteSheet } from '../components/ContactInviteSheet';
 
 type View =
     | { kind: 'list' } | { kind: 'import' } | { kind: 'add' } | { kind: 'contact'; id: string } | { kind: 'done'; added: number; fromPhone: boolean }
@@ -69,10 +75,25 @@ export function ContactsPage({ identity, start = 'list', onBack, onMessage }: {
     const [view, setView] = useState<View>(start === 'import' ? { kind: 'import' } : { kind: 'list' });
     const [info, setInfo] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // A plain word after an answer (No to "Is this Dee?"), not an error.
+    const [said, setSaid] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
+    // Invite from a row (C5): the contact the sheet is open for, and the member's own invites here (to ask "Is this Dee?").
+    const [inviting, setInviting] = useState<Contact | null>(null);
+    const [mine, setMine] = useState<MyInviteSeen[]>([]);
     useEffect(() => { void openContacts(identity, true); }, [identity]);
 
     const list = snap.key === identity.publicKey.toLowerCase() ? snap.list : null;
+    const here = nodeAddress();
+    const isHere = (c: string) => c === here;
+    // Read only while some contact holds an invite made here (a first invite made sets it, and so reads).
+    const invitedHere = !!list?.contacts.some((c) => !!c.invite && isHere(c.invite.community));
+    useEffect(() => {
+        if (!invitedHere) return;
+        let alive = true;
+        getMyInvites(identity.publicKey).then((r) => { if (alive && Array.isArray(r?.invites)) setMine(r.invites); }).catch(() => {});
+        return () => { alive = false; };
+    }, [invitedHere, identity.publicKey]);
     const change = async (fn: (l: ContactsList) => ContactsList): Promise<boolean> => {
         setBusy(true);
         setError(null);
@@ -86,7 +107,7 @@ export function ContactsPage({ identity, start = 'list', onBack, onMessage }: {
             setBusy(false);
         }
     };
-    const back = (to: View = { kind: 'list' }) => { setError(null); setView(to); };
+    const back = (to: View = { kind: 'list' }) => { setError(null); setSaid(null); setView(to); };
 
     const header = (title: string, onTap: () => void) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
@@ -95,13 +116,22 @@ export function ContactsPage({ identity, start = 'list', onBack, onMessage }: {
             <button type="button" onClick={() => setInfo(true)} aria-label={t('About your private contacts')} style={{ ...btn, minWidth: '44px', borderRadius: '22px' }}>ⓘ</button>
         </div>
     );
-    const alert = error && <p role="alert" style={{ ...muted, color: 'var(--danger)' }}>{error}</p>;
+    const alert = error ? <p role="alert" style={{ ...muted, color: 'var(--danger)' }}>{error}</p> : said && <p role="status" style={muted}>{said}</p>;
     const shell = (body: ReactNode) => (
         <div className="p-4 max-w-xl mx-auto w-full" data-testid="contacts-page">
             {body}
             {info && <ContactsInfo onClose={() => setInfo(false)} />}
+            {inviting && <ContactInviteSheet contact={inviting} identity={identity} community={hostOf()} onClose={() => setInviting(null)} />}
         </div>
     );
+    // "Is this Dee?": Yes links the contact to who joined, No forgets the invite (and says so). Either way it isn't asked again.
+    const answer = async (c: Contact, used: ContactInviteUsed, yes: boolean) => {
+        const done = await change((l) => {
+            const held = l.contacts.find((x) => x.id === c.id);
+            return held ? putContact(l, yes ? linkContactToInvite(held, used) : forgetContactInvite(held)) : l;
+        });
+        if (done && !yes) setSaid(contactInviteNoWords());
+    };
 
     if (snap.newer) return shell(<>{header(t('Contacts'), onBack)}<p role="alert" style={muted}>{t('This contacts list was saved by a newer BeanPool. Reload the page to update it.')}</p></>);
     if (!list) return shell(<>{header(t('Contacts'), onBack)}<p style={muted}>{snap.phase === 'failed' ? t("Couldn't open your contacts in this browser. Reload the page.") : t('Loading...')}</p></>);
@@ -130,19 +160,30 @@ export function ContactsPage({ identity, start = 'list', onBack, onMessage }: {
     if (view.kind === 'contact') {
         const c = list.contacts.find((x) => x.id === view.id);
         if (!c) return shell(<>{header(t('Contacts'), () => back())}</>);
-        return shell(<ContactView contact={c} header={header} busy={busy} alert={alert} onBack={() => back()}
-            onRemove={async () => { if (await change((l) => removeContact(l, c.id))) back(); }} />);
+        return shell(<ContactView contact={c} header={header} busy={busy} alert={alert} onBack={() => back()} inviteOut={contactInviteOut(c, mine, isHere)}
+            onRemove={async (cancel) => {
+                // Cancelled first: a cancel that fails keeps the contact, so the member can try again.
+                if (cancel) {
+                    try { await revokeInvite(cancel); } catch (e) {
+                        const code = (e as { code?: unknown })?.code;
+                        if (code !== 'no_invite' && code !== 'invite_used') { setError((e as Error)?.message || inviteRevokeWords.failed()); return; }
+                    }
+                }
+                if (await change((l) => removeContact(l, c.id))) back();
+            }} />);
     }
     return shell(<ListView list={list} where={snap.where} keptAt={snap.keptAt} header={header} onBack={onBack} busy={busy} alert={alert}
         onOpen={(id) => back({ kind: 'contact', id })} onAdd={() => back({ kind: 'add' })} onImport={() => back({ kind: 'import' })} onInfo={() => setInfo(true)}
-        onMessage={onMessage} onRemoveAll={() => change((l) => removeEveryContact(l))} />);
+        onMessage={onMessage} onRemoveAll={() => change((l) => removeEveryContact(l))}
+        onInvite={setInviting} ask={(c) => contactInviteAsk(c, mine, isHere)} onAnswer={(c, used, yes) => void answer(c, used, yes)} />);
 }
 
 type Header = (title: string, onTap: () => void) => ReactNode;
 
-function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport, onInfo, onMessage, onRemoveAll, busy, alert }: {
+function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport, onInfo, onMessage, onRemoveAll, busy, alert, onInvite, ask, onAnswer }: {
     list: ContactsList; where: ContactsWhere; keptAt: string | null; header: Header; onBack: () => void; busy: boolean; alert: ReactNode;
     onOpen: (id: string) => void; onAdd: () => void; onImport: () => void; onInfo: () => void; onMessage: (pubkey: string) => void; onRemoveAll: () => Promise<boolean>;
+    onInvite: (c: Contact) => void; ask: (c: Contact) => ContactInviteUsed | null; onAnswer: (c: Contact, used: ContactInviteUsed, yes: boolean) => void;
 }) {
     const [q, setQ] = useState('');
     const [menu, setMenu] = useState<null | 'menu' | 'file' | 'removeAll'>(null);
@@ -154,6 +195,20 @@ function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport
         .sort((a, b) => a.name.localeCompare(b.name));
     const linked = shown.filter((c) => c.links.length > 0);
     const notYet = shown.filter((c) => c.links.length === 0);
+    const askBlock = (c: Contact) => {
+        const used = ask(c);
+        if (!used) return null;
+        const words = contactInviteAskWords(c.name, hostOf(), used.callsign);
+        return (
+            <div role="group" data-testid="contact-invite-used" style={{ flexBasis: '100%', display: 'grid', gap: '0.5rem' }}>
+                <p style={{ margin: 0, overflowWrap: 'anywhere' }}>{words.question}</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <button type="button" className={go} style={goStyle} disabled={busy} onClick={() => onAnswer(c, used, true)}>{words.yes}</button>
+                    <button type="button" style={btn} disabled={busy} onClick={() => onAnswer(c, used, false)}>{words.no}</button>
+                </div>
+            </div>
+        );
+    };
     const row = (c: Contact, action: ReactNode, sub: string) => (
         <div key={c.id} data-testid="contact-row" style={{ ...card, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
             <button type="button" onClick={() => onOpen(c.id)} style={{ flex: '1 1 10rem', minWidth: 0, minHeight: '44px', textAlign: 'left', background: 'none', border: 'none', padding: 0, color: 'var(--text-primary)', font: 'inherit', cursor: 'pointer' }}>
@@ -161,7 +216,11 @@ function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport
                 {sub && <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.85rem', overflowWrap: 'anywhere' }}>{sub}</span>}
             </button>
             {action}
+            {askBlock(c)}
         </div>
+    );
+    const inviteAction = (c: Contact) => (
+        <button type="button" style={btn} disabled={busy} onClick={() => onInvite(c)}>{c.invite ? contactInviteWords.again() : contactInviteWords.invite()}</button>
     );
     const memberAction = (c: Contact) => {
         const link = c.links.find((l) => l.community === here) ?? c.links[0];
@@ -228,7 +287,7 @@ function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport
                         return row(c, memberAction(c), [link.callsign && `@${link.callsign}`, hostOf(link.community)].filter(Boolean).join(' · '));
                     })}
                     {notYet.length > 0 && <h3 style={{ fontSize: '0.95rem', margin: '0.75rem 0 0.5rem' }}>{t('Not on BeanPool yet')}</h3>}
-                    {notYet.map((c) => row(c, null, subLine(c)))}
+                    {notYet.map((c) => row(c, inviteAction(c), contactInvitedLine(c) ?? subLine(c)))}
                     {shown.length === 0 && <p style={muted}>{t('Nobody in your contacts matches that.')}</p>}
                 </>
             )}
@@ -237,8 +296,13 @@ function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport
     );
 }
 
-function ContactView({ contact, header, onBack, onRemove, busy, alert }: { contact: Contact; header: Header; onBack: () => void; onRemove: () => void; busy: boolean; alert: ReactNode }) {
+function ContactView({ contact, header, onBack, onRemove, busy, alert, inviteOut }: {
+    contact: Contact; header: Header; onBack: () => void; onRemove: (cancelCode: string | null) => void; busy: boolean; alert: ReactNode;
+    /** The code of this contact's invite still out here, for "Also cancel the invite I sent"; null: nothing to cancel. */
+    inviteOut: string | null;
+}) {
     const [asking, setAsking] = useState(false);
+    const [cancelToo, setCancelToo] = useState(false);
     const lines = (label: string, values: string[]) => values.length > 0 && (
         <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{label}</div>
@@ -258,8 +322,14 @@ function ContactView({ contact, header, onBack, onRemove, busy, alert }: { conta
             {asking ? (
                 <div role="group" style={card}>
                     <p style={{ margin: '0 0 0.75rem' }}>{t('Remove {name} from your contacts? Nobody is told. Your chats, and your friendship in {community} if you have one, stay as they are.', { name: contact.name, community: hostOf() })}</p>
+                    {inviteOut && (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minHeight: '44px', marginBottom: '0.5rem', cursor: 'pointer' }}>
+                            <input type="checkbox" checked={cancelToo} onChange={(e) => setCancelToo(e.target.checked)} style={{ width: '20px', height: '20px', flexShrink: 0 }} />
+                            <span>{contactInviteCancelWords.tick()}</span>
+                        </label>
+                    )}
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <button type="button" className="bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on" style={goStyle} disabled={busy} onClick={onRemove}>{t('Remove')}</button>
+                        <button type="button" className="bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on" style={goStyle} disabled={busy} onClick={() => onRemove(inviteOut && cancelToo ? inviteOut : null)}>{t('Remove')}</button>
                         <button type="button" style={btn} onClick={() => setAsking(false)}>{t('Cancel')}</button>
                     </div>
                 </div>

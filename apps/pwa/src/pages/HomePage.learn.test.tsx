@@ -142,9 +142,27 @@ describe('the Learn card on an arranged Home', () => {
         // On the list already: no Keep on Home, and it stands where the member put it.
         expect(within(card).queryByTestId('home-learn-keep')).toBeNull();
         expect(cardIds()).toEqual(['market', 'learn', 'community']);
-        // Neither owner row: this app opens neither To check nor the form yet (K4).
+        // Neither owner row: the node sent neither (a member).
         expect(within(card).queryByTestId('home-learn-check')).toBeNull();
         expect(within(card).queryByTestId('home-learn-first')).toBeNull();
+    });
+
+    it('an owner\'s or admin\'s rows (slice K4): "2 to check ›" opens To check; "Add the first thing…" opens the form', async () => {
+        nodeV2(answer({ learn: { rows: THREE, toCheck: 2 } }), v2(['market', 'learn']));
+        const nav = vi.fn();
+        render(<HomePage identity={ME} onNavigate={nav} />);
+        const card = await screen.findByTestId('home-card-learn');
+        const check = within(card).getByTestId('home-learn-check');
+        expect(check).toHaveTextContent('2 to check ›');
+        fireEvent.click(check);
+        expect(nav).toHaveBeenLastCalledWith('learn-check');
+        cleanup();
+        nodeV2(answer({ learn: { rows: [], first: true } }), v2(['market', 'learn']));
+        render(<HomePage identity={ME} onNavigate={nav} />);
+        const first = within(await screen.findByTestId('home-card-learn')).getByTestId('home-learn-first');
+        expect(first).toHaveTextContent('Add the first thing worth knowing about Riverside');
+        fireEvent.click(first);
+        expect(nav).toHaveBeenLastCalledWith('learn-suggest');
     });
 
     it('Keep on Home saves it last on the list with its stamp, in one save', async () => {

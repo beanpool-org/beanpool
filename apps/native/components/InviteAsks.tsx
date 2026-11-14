@@ -119,8 +119,10 @@ function Answered({ answer, onShare }: { answer: InviteAskAnswer; onShare: (code
  * The short ask form (Their first name, How you know them, Send to the admins). ONE form: People → Invites and the Share
  * sheet's "Ask an admin to invite someone" both open this one. `onSent` runs after the node took the ask.
  */
-export function AskSheet({ anchorUrl, identity, open, onClose, onSent }: {
+export function AskSheet({ anchorUrl, identity, open, onClose, onSent, line }: {
     anchorUrl: string; identity: BeanPoolIdentity; open: boolean; onClose: () => void; onSent: () => void;
+    /** One more line under the help, from where it was opened (a contact's Invite: who sees the name typed). Nothing is filled in. */
+    line?: string;
 }) {
     const { colors } = useTheme();
     const styles = useAskStyles();
@@ -150,6 +152,7 @@ export function AskSheet({ anchorUrl, identity, open, onClose, onSent }: {
                     <ScrollView {...fieldScroll.scrollProps} keyboardShouldPersistTaps="handled">
                         <Text style={styles.sheetTitle} accessibilityRole="header">{t(INVITE_ASK_WORDS.button)}</Text>
                         <Text style={styles.help}>{t(INVITE_ASK_WORDS.help)}</Text>
+                        {!!line && <Text style={styles.help}>{line}</Text>}
                         <Text style={styles.label}>{t(INVITE_ASK_WORDS.firstName)}</Text>
                         <TextInput
                             {...fieldScroll.inputProps}

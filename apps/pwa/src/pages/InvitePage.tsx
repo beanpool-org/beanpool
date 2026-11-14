@@ -28,6 +28,7 @@ import { CREDIT_LIST_WORDS, creditOnNode } from '../lib/credit-sight';
 import { InviteAddsBoxes } from '../components/InviteAddsBoxes';
 import { VoucherCardModal } from '../components/VoucherCardModal';
 import { InviteMadeCard, PendingInvites } from '../components/PendingInvites';
+import { useContactInviteNames } from '../lib/contact-invite-names';
 import { WaitingNameNotice } from '../components/WaitingNameNotice';
 import { MakeVoucherSheet } from '../components/MakeVoucherSheet';
 import { LOCAL_COMMUNITY_LINES, formatDate, inviteRevokeWords, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, ownersHeading, waitingHeading, ownerRowWords, voucherRowWords, waitingRowWords, vouchersBlockSections, type InviteRowSource } from '@beanpool/core';
@@ -74,6 +75,9 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     };
 
     const [invites, setInvites] = useState<InviteCode[]>([]);
+    // Pending names an invite made from a contact by the name in the private contacts list in this browser (contacts C5).
+    const [pendingNeedsContacts, setNeedContacts] = useState(false);
+    const contactInviteNames = useContactInviteNames(identity, pendingNeedsContacts);
     const [cardName, setCardName] = useState<string | null>(null);
     useEffect(() => {
         let alive = true;
@@ -853,6 +857,8 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                     </div>
                                 )}
                                 onRevoke={revokeMine}
+                                contactNames={contactInviteNames}
+                                onNeedContacts={setNeedContacts}
                             />
                         </>
                     )}

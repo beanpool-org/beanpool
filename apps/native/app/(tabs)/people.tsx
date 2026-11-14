@@ -35,6 +35,7 @@ import { askMyVouching, rereadMyVouching, type MyVouching } from '../../utils/vo
 import { VouchPresetChoice } from '../../components/VouchPresetChoice';
 import { InviteNamesBoxes, useInviteNames, useRoleOnInvites } from '../../components/InviteNamesBoxes';
 import { InviteMadeCard, PendingInvites } from '../../components/InviteRows';
+import { useContactInviteNames } from '../../utils/use-contact-invite-names';
 import { offersNamesBoxes, inviteNotMadeWords } from '../../utils/invite-names';
 import {
     guestDoorButton, guestDoorText, guestDoorLabel, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
@@ -276,6 +277,9 @@ export default function PeopleScreen() {
     // search is the node's members to count (review of #1899, NB-A).
     const [listedFor, setListedFor] = useState<string | null>(null);
     const { identity } = useIdentity();
+    // Pending names an invite made from a contact by the name in the private contacts list on this phone (contacts C5).
+    const [pendingNeedsContacts, setNeedContacts] = useState(false);
+    const contactInviteNames = useContactInviteNames(identity, anchorUrl, pendingNeedsContacts);
 
     // Requests to join (design §3.3): members of a local community see "Wants to join (n)"; on the worldwide
     // community a member sees the communities they asked. The count also rides on the Invites pill.
@@ -1678,6 +1682,8 @@ export default function PeopleScreen() {
                                     now={Date.now()}
                                     names={inviteNames.entryNames}
                                     onNeedNames={setNeedList}
+                                    contactNames={contactInviteNames}
+                                    onNeedContacts={setNeedContacts}
                                     qrValue={(code) => `${anchorUrl}/?invite=${code}`}
                                     shareSlot={(code) => (
                                         <Pressable accessibilityRole="button" style={[styles.btnCopyQR, { alignItems: 'center', minHeight: 48 }]} onPress={() => shareInvite(code)}>

@@ -27,6 +27,12 @@ import { oldKeyFromWords } from './old-key-from-words';
 
 export const CONTACTS_FORMER_PATH = '/api/contacts/former';
 
+/**
+ * Said (DeviceEventEmitter) once the old-words screen has tried the old list: the Contacts screen's notice asks again, so a
+ * merge goes from it even when it added nobody new (no list changed to tell it).
+ */
+export const CONTACTS_FORMER_CHANGED_EVENT = 'beanpool_contacts_former_changed';
+
 /** An old copy one of the member's communities keeps for their key now. */
 export interface FormerCopyAt {
     community: string;

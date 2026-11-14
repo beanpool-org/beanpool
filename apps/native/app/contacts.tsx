@@ -37,7 +37,7 @@ import { setAsideDamaged } from '../utils/contacts-store';
 import { sameCommunity } from '../utils/push-pins';
 import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser } from '../utils/blocklist';
 import { createConversationApi, getChattedWithMembers, getFriendsLocal } from '../utils/db';
-import { addPeopleWords, deleteFormerCopies, formerContactsWords, formerNoticeHere, peopleToAdd, withPeopleAdded, type BeanPoolPerson } from '../utils/contacts-former';
+import { CONTACTS_FORMER_CHANGED_EVENT, addPeopleWords, deleteFormerCopies, formerContactsWords, formerNoticeHere, peopleToAdd, withPeopleAdded, type BeanPoolPerson } from '../utils/contacts-former';
 import { switchCommunity } from '../utils/use-communities';
 import { signedRequestWords } from '../components/signed-request-lines';
 import { cancelContactInvite, readMyInvites } from '../utils/contact-invites';
@@ -502,19 +502,27 @@ function ListScreen({ view, list, busy, me, onOpen, onAdd, onImport, onInfo, onR
 
 /**
  * After a re-key (C6, design §6.2): while the community in use keeps the list the member's old key locked, and this phone
- * hasn't merged it in, it says so, with the way in (the old-words screen) and Delete it. Asked as the screen opens, and again
- * when the list changes (a merge from the old-words screen hides it).
+ * hasn't merged it in, it says so, with the way in (the old-words screen) and Delete it. Asked as the screen opens, again
+ * when the list changes, and when the old-words screen has tried the old list (CONTACTS_FORMER_CHANGED_EVENT): a merge hides
+ * it, even one that added nobody new.
  */
 function FormerNotice({ me, seen }: { me: string; seen: number }) {
     const { identity } = useIdentity();
     const styles = useStyles(makeStyles);
     const [shown, setShown] = useState(false);
     const [busy, setBusy] = useState(false);
+    // Also asked when the old-words screen has tried the old list: a merge that added nobody new changes no list, and the
+    // notice still goes. Only the latest answer is kept.
     useEffect(() => {
         if (!identity || identity.publicKey !== me) return undefined;
-        let alive = true;
-        void formerNoticeHere(identity).then((f) => { if (alive) setShown(!!f); });
-        return () => { alive = false; };
+        let latest = 0;
+        const ask = () => {
+            const mine = ++latest;
+            void formerNoticeHere(identity).then((f) => { if (mine === latest) setShown(!!f); });
+        };
+        ask();
+        const sub = DeviceEventEmitter.addListener(CONTACTS_FORMER_CHANGED_EVENT, ask);
+        return () => { latest = -1; sub.remove(); };
     }, [me, seen, identity?.publicKey]);
     if (!shown || !identity) return null;
     const remove = async () => {

@@ -21,6 +21,8 @@ const mem = vi.hoisted(() => ({
     formerDeleted: 0,
     chats: [] as Array<{ publicKey: string; callsign: string }>,
     friends: [] as Array<{ publicKey: string; callsign: string }>,
+    // DeviceEventEmitter's listeners, by event (the old-words screen tells Contacts it tried the old list).
+    events: new Map<string, Set<() => void>>(),
     store: new Map<string, string>(),
     files: new Map<string, string>(),
     alerts: [] as Array<[string, string | undefined, Array<{ text: string; onPress?: () => void }> | undefined]>,
@@ -109,7 +111,15 @@ vi.mock('react-native', () => {
         ActivityIndicator: el('span'), Linking: { openSettings: async () => { mem.settings++; } },
         Modal: ({ visible, children }: { visible: boolean; children?: ReactNode }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
         StyleSheet: { create: (s: unknown) => s },
-        DeviceEventEmitter: { addListener: () => ({ remove() {} }), emit: () => {} },
+        DeviceEventEmitter: {
+            addListener: (name: string, fn: () => void) => {
+                const set = mem.events.get(name) ?? new Set<() => void>();
+                set.add(fn);
+                mem.events.set(name, set);
+                return { remove() { set.delete(fn); } };
+            },
+            emit: (name: string) => { for (const fn of [...(mem.events.get(name) ?? [])]) fn(); },
+        },
         BackHandler: {
             addEventListener: (_: string, fn: () => boolean) => {
                 mem.back.unshift(fn);
@@ -168,6 +178,8 @@ import { changeContacts, emptySyncState, loadContacts, phoneContactsDeps } from 
 import { syncContacts } from '../contacts-sync';
 import { switchCommunity } from '../use-communities';
 import { contactsWhereWords, sweepContactsFile, useContactsRecord, type ContactsView } from '../use-contacts';
+import { CONTACTS_FORMER_CHANGED_EVENT } from '../contacts-former';
+import { DeviceEventEmitter } from 'react-native';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -220,7 +232,7 @@ const seedList = (list: (l: ContactsList) => ContactsList) => changeContacts(ME,
 const onPhone = async () => (await loadContacts(ME, phoneContactsDeps())).onPhone;
 
 beforeEach(() => {
-    mem.former = false; mem.formerDeleted = 0; mem.chats = []; mem.friends = [];
+    mem.former = false; mem.formerDeleted = 0; mem.chats = []; mem.friends = []; mem.events.clear();
     mem.store.clear(); mem.files.clear(); mem.alerts.length = 0; mem.shared.length = 0; mem.blocked = []; mem.pushed.length = 0;
     mem.back.length = 0; mem.options.length = 0; mem.focused = true;
     mem.params = {}; mem.native = { ExpoContacts: true, ExpoDocumentPicker: true }; mem.asked = 0; mem.answer = { granted: true, canAskAgain: true };
@@ -582,6 +594,23 @@ describe('after a re-key (slice C6): the old list, and the people chatted with',
         expect(mem.formerDeleted).toBe(1);
         expect(host.querySelector('[data-testid="contacts-former"]')).toBeNull();
         // Mutation: drop the question → Delete it removes the copy on the first tap (formerDeleted 1 before the answer).
+    });
+
+    it('the old-words screen merged the old list and nobody in it was new: no list changed, and the notice still goes', async () => {
+        await seedList((l) => putContact(l, person('Ana Li')));
+        mem.former = true;
+        await render();
+        expect(host.querySelector('[data-testid="contacts-former"]')).toBeTruthy();
+        // The old-words screen (over Contacts) merged it in, so this phone has it now; the list itself is as it was.
+        mem.former = false;
+        await act(async () => { DeviceEventEmitter.emit(CONTACTS_FORMER_CHANGED_EVENT); });
+        await settle();
+        expect(host.querySelector('[data-testid="contacts-former"]')).toBeNull();
+        expect(text()).toContain('Ana Li');
+        // Mutation: drop FormerNotice's listener → the notice stays until Contacts is opened again.
+        // The old-words screen says so after each try of the old list: opened from Contacts, and from a group chat.
+        const words = readFileSync(join(__dirname, '../../app/old-words-unlock.tsx'), 'utf8');
+        expect(words.match(/DeviceEventEmitter\.emit\(CONTACTS_FORMER_CHANGED_EVENT\);/g)).toHaveLength(2);
     });
 
     it('"Add people I\'ve chatted with and my friends": counted, asked once, added linked by hand here, nobody twice', async () => {

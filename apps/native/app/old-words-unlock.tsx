@@ -10,7 +10,7 @@
  * unlocks the history, then merges an old list too when one opens, and says so in one more line.
  */
 import React, { useState } from 'react';
-import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, StyleSheet, DeviceEventEmitter } from 'react-native';
 import { router, ErrorBoundary, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from './ThemeContext';
@@ -20,7 +20,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { RecoveryWordsEntry } from '../components/RecoveryWordsEntry';
 import { LOCKED_HISTORY_WORDS } from '../utils/group-history-unlock';
 import { keyLineWords, oldWordsEndWords, oldWordsProgressWords } from '../components/key-lines';
-import { formerContactsEndWords, formerContactsWords, openFormerWithWords } from '../utils/contacts-former';
+import { CONTACTS_FORMER_CHANGED_EVENT, formerContactsEndWords, formerContactsWords, openFormerWithWords } from '../utils/contacts-former';
 import { phoneSyncDeps } from '../utils/contacts-sync';
 import { useIdentity } from './IdentityContext';
 import { t } from '@beanpool/core';
@@ -50,7 +50,10 @@ export default function OldWordsUnlockScreen() {
             if (forContacts) {
                 if (!identity) throw new Error(t('Something went wrong. Try again in a moment.'));
                 setProgress(formerContactsWords.busy());
-                setOutcome({ ...formerContactsEndWords(await openFormerWithWords(typed, identity, phoneSyncDeps())), lines: [] });
+                const r = await openFormerWithWords(typed, identity, phoneSyncDeps());
+                // Contacts, under this screen, asks again: a merge goes from its notice even when it added nobody new.
+                DeviceEventEmitter.emit(CONTACTS_FORMER_CHANGED_EVENT);
+                setOutcome({ ...formerContactsEndWords(r), lines: [] });
                 return;
             }
             // Each group with the lines its chat last showed locked, so one the node answers empty is named, never "Done".
@@ -63,6 +66,7 @@ export default function OldWordsUnlockScreen() {
             // and nothing it does can change what was said of the groups.
             if (identity) {
                 const contacts = await Promise.resolve().then(() => openFormerWithWords(typed, identity, phoneSyncDeps())).catch(() => null);
+                if (contacts) DeviceEventEmitter.emit(CONTACTS_FORMER_CHANGED_EVENT);
                 if (contacts?.kind === 'merged') {
                     const line = formerContactsEndWords(contacts).text;
                     setOutcome((o) => (o ? { ...o, lines: [...o.lines, line] } : o));

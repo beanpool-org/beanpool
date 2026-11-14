@@ -290,14 +290,6 @@ export default function MarketScreen() {
             shadowColor: colors.trust.star,
             shadowOpacity: 0.15,
         },
-        pulseCard: {
-            borderWidth: 2,
-            borderColor: palette.amber400,
-            backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fffbeb',
-            shadowColor: palette.amber500,
-            shadowOpacity: 0.25,
-            shadowRadius: 10,
-        },
         // The grid tile's photo, its type chip and its foot row of pills are the style box's (shell.gridImageWrapper and the
         // rest, components/market-card-shell.ts), shared with the event tile (EventCard, slice P3').
         price: { fontSize: 16, fontWeight: '800', color: colors.text.body },
@@ -1047,9 +1039,7 @@ export default function MarketScreen() {
             type: filter, category: categoryFilter, eventWindow, trust: trustFilter, beansOnly, radiusKm, center: locationCenter, groupId: groupFilter,
         };
         const ctx = { blockedUsers, favCategories, nowMs };
-        const isPulse = (p: any) => (p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode;
-
-        let passing = basePosts.filter(p => {
+        const passing = basePosts.filter(p => {
             // Type pills, the category chip, the date chips, Distance, Trust, Beans only, groups (utils/market-filters.ts)
             if (!feedPostVisible(p, state, ctx)) return false;
 
@@ -1069,10 +1059,6 @@ export default function MarketScreen() {
             return true;
         });
 
-        // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
-        const realMemberListingsCount = posts.filter(p => !isPulse(p) && p.type !== 'poll' && p.type !== 'event' && p.status === 'active').length;
-        if (realMemberListingsCount >= 2) passing = passing.filter(p => !isPulse(p));
-
         // Pins on the Market (DESIGN-pinning-fable.md §0.2, §2.2, §2.9):
         // Up to 3 live pins matching current filters, newest pin first.
         // Absent under search, tag, or distance narrowing.
@@ -1084,7 +1070,7 @@ export default function MarketScreen() {
         // The rule is utils/pins.ts marketPins, which a test holds: the screen only says what passes the member's filters.
         const pinsRead = marketPins<any>({
             basePosts, filtered: passing, narrowed, now: nowMs,
-            visible: p => feedPostVisible(p, state, ctx) && !isPulse(p),
+            visible: p => feedPostVisible(p, state, ctx),
         });
         // The worldwide community: the same order, cut to the circle round the member's area. Not under Events, a search or a
         // Distance, which have their own say.
@@ -1097,7 +1083,7 @@ export default function MarketScreen() {
         // nothing, and the fill may bring it back under Newest from elsewhere.
         const drawn = circle ? [...stream, ...pinsRead.pinned] : pinsRead.allMatching;
         return { pinned: pinsRead.pinned, stream, allMatching: drawn, realMatchingCount: drawn.length, circle, distances };
-    }, [basePosts, posts, filter, categoryFilter, eventWindow, trustFilter, beansOnly, radiusKm, locationCenter, groupFilter, blockedUsers, favCategories,
+    }, [basePosts, filter, categoryFilter, eventWindow, trustFilter, beansOnly, radiusKm, locationCenter, groupFilter, blockedUsers, favCategories,
         searchQuery, answerStands, selectedTag, selectedFree, isSearching, searchResults, nodeProfile, memberArea, identity?.publicKey, keptIds, nowTick, nowMinute]);
     const pinnedPosts = market.pinned;
     const filteredPosts = market.stream;
@@ -1138,9 +1124,8 @@ export default function MarketScreen() {
     }, [fillNeeded, fillKey, posts]);
     const elsewhereRead = fillNeeded && elsewhere?.key === fillKey ? elsewhere.posts : null;
     const fillPending = fillNeeded && elsewhere?.key !== fillKey;
-    const isOwnPulse = (p: any) => (p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode;
     const fillRows: any[] = elsewhereRead
-        ? elsewhereFill(allMatchingPosts, elsewhereRead.filter(p => feedPostVisible(p, filterState, filterCtx) && !isOwnPulse(p)))
+        ? elsewhereFill(allMatchingPosts, elsewhereRead.filter(p => feedPostVisible(p, filterState, filterCtx)))
         : [];
 
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
@@ -1747,11 +1732,10 @@ export default function MarketScreen() {
         const { cover: coverImage, picture } = marketCardPicture(item);
 
         const cardAuthor = item.author_callsign || item.author_pubkey?.slice(0, 6) || t('Unknown');
-        const isPulse = (item.author_callsign || item.authorCallsign) === 'Daily Pulse';
         // Elder is a tier, and a tier is Beans: no Elder look where the community shows none (as the tier chip below).
-        const elderCard = !isPulse && showsBeans && isElder(item.author_energy_cycled);
-        const isOwn = !isPulse && !!(identity?.publicKey && item.author_pubkey === identity.publicKey);
-        const dealChip = isPulse ? undefined : dealChips.get(item.id);
+        const elderCard = showsBeans && isElder(item.author_energy_cycled);
+        const isOwn = !!(identity?.publicKey && item.author_pubkey === identity.publicKey);
+        const dealChip = dealChips.get(item.id);
         const isGroupScope = item.audience_scope === 'group' || item.audienceScope === 'group' || !!item.target_group_id || !!item.targetGroupId;
         const groupName = item.target_group_name || item.targetGroupName || t('Group');
         const groupScopeBadgeText = isGroupScope ? t('🔒 Only {group} can see this', { group: groupName }) : null;
@@ -1761,15 +1745,15 @@ export default function MarketScreen() {
         const copy = eventCopyOf(item);
         // An Offer priced for each one (core per-item.ts, DESIGN-per-item-price-fable.md §2.1): "300 🫘 each" where the price stands and
         // how many are left (and the price for all of them while it is on offer) in its own phrases. Where the price is not shown (a
-        // copy, Beans off, the Pulse) there is no count either; any other listing is drawn as it always was.
-        const eachCard = !isPulse && showsBeans && !copy ? perItemCard(item) : null;
+        // copy, Beans off) there is no count either; any other listing is drawn as it always was.
+        const eachCard = showsBeans && !copy ? perItemCard(item) : null;
 
         const catEmoji = categoryEmoji(item.category);
         const catLabel = categoryLabel(item.category);
 
         // The whole card is one button that opens the listing (Marty, 4 Nov): the author's chip inside is display only, and
         // the card reads out as the listing (its title and that it is a listing), never as its owner.
-        const openLabel = isPulse ? undefined : t('Open listing: {title}', { title: item.title });
+        const openLabel = t('Open listing: {title}', { title: item.title });
 
         if (viewMode === 'grid') {
             const gridDistance = distanceWords(item);
@@ -1779,11 +1763,9 @@ export default function MarketScreen() {
                         shell.card,
                         shell.gridTile,
                         elderCard && styles.elderCard,
-                        isPulse && styles.pulseCard,
                     ]}
-                    disabled={isPulse}
-                    onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
-                    accessibilityRole={isPulse ? undefined : "button"}
+                    onPress={() => router.push(`/post/${item.id}`)}
+                    accessibilityRole="button"
                     accessibilityLabel={openLabel}
                     testID={`market-card-${item.id}`}
                 >
@@ -1793,7 +1775,7 @@ export default function MarketScreen() {
                             cover={coverImage}
                             picture={picture}
                             category={item.category}
-                            kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
+                            kind={item.type === 'event' ? 'event' : 'listing'}
                             size="grid"
                             contentPosition={MARKET_GRID_CROP}
                             accessibilityLabel={item.title}
@@ -1803,7 +1785,7 @@ export default function MarketScreen() {
                             growing upwards: RECURRING and YOU in a longer language (or at 320dp and 1.3x) stack instead
                             of overlapping each other or the price, as fixed offsets did. */}
                         <View style={shell.gridBadgeRow} testID="grid-badge-row">
-                        {!isPulse && (() => {
+                        {(() => {
                             if (item.status === 'pending') {
                                 return (
                                     <View style={[shell.gridBadge, { backgroundColor: colors.feedback.warning.solid, borderColor: colors.feedback.warning.solid }]}>
@@ -1832,59 +1814,43 @@ export default function MarketScreen() {
                                 <Text style={[shell.gridPriceText, { color: dealChip === 'in-trust' ? colors.text.onBrand : colors.text.onGold, fontWeight: '900' }]}>{listingChipWords(dealChip)}</Text>
                             </View>
                         )}
-                        {!isPulse && showsBeans && !copy && (
+                        {showsBeans && !copy && (
                             <View style={[shell.gridBadge, shell.gridPriceEnd]}>
                                 <ListingPrice price_c={item.price_c} type={item.type} unit={priceLabel || ''} style={shell.gridPriceText} listing={item} showAll />
                             </View>
                         )}
                         </View>
-                        {!isPulse && (
-                            <View style={shell.gridTypeSlot}>
-                                <CardChip shell={shell} role={item.type === 'offer' ? 'offer' : 'need'} label={typeBadge(item.type)} testID="grid-type-chip" />
-                            </View>
-                        )}
+                        <View style={shell.gridTypeSlot}>
+                            <CardChip shell={shell} role={item.type === 'offer' ? 'offer' : 'need'} label={typeBadge(item.type)} testID="grid-type-chip" />
+                        </View>
                     </View>
                     {/* The text block is always four rows, whatever the tile holds (DESIGN-market-grid-sizes-fable.md §2.2): the
                         title's two, the author (or a copy's line), and one last line that is cut, never wrapped: the distance,
                         then one chip at most, the group's lock before RECURRING (a deal is on the photo). What a tile has no
-                        room for is on the page it opens. The Daily Pulse (slice P3'): its title's two, its 🗞️ PULSE pill where an
-                        author would be (moved off the photo: the one place the tile says what it is), and one line of its news. */}
+                        room for is on the page it opens. */}
                     <View style={gridBlock.block} testID="grid-text-block">
                         <View style={gridBlock.titleBox}>
                             <Text style={shell.gridTitle} numberOfLines={2}>
                                 {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                             </Text>
                         </View>
-                        {isPulse ? (
-                            <>
-                                <View style={gridBlock.lastRow}>
-                                    <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="warn" label={t('🗞️ PULSE')} testID="pulse-chip" /></View>
-                                </View>
-                                <View style={gridBlock.row} testID="grid-last-row">
-                                    {item.description ? <Text style={shell.gridLine} numberOfLines={1} testID="pulse-line">{item.description}</Text> : null}
-                                </View>
-                            </>
-                        ) : (
-                            <>
-                                <View style={gridBlock.row}>
-                                    {copy
-                                        ? <Text style={shell.gridLine} numberOfLines={1} testID="listing-copy-line">{copyPriceLine(copy)}</Text>
-                                        : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} navigable={false} />}
-                                </View>
-                                <View style={gridBlock.lastRow} testID="grid-last-row">
-                                    {gridDistance ? (
-                                        <Text testID="card-distance" style={[shell.gridLine, gridBlock.lastRowPiece]} numberOfLines={1}>{t('📍 {distance}', { distance: gridDistance })}</Text>
-                                    ) : null}
-                                    {groupScopeBadgeText ? (
-                                        <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="quiet" label={groupScopeBadgeText} testID="card-group-chip" /></View>
-                                    ) : eachCard ? (
-                                        <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role={eachCard.stockOut ? 'warn' : 'quiet'} label={eachCard.chip} testID="card-stock-chip" /></View>
-                                    ) : !!item.repeatable && !isOwn && item.status !== 'pending' ? (
-                                        <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="quiet" label={t('↻ RECURRING')} /></View>
-                                    ) : null}
-                                </View>
-                            </>
-                        )}
+                        <View style={gridBlock.row}>
+                            {copy
+                                ? <Text style={shell.gridLine} numberOfLines={1} testID="listing-copy-line">{copyPriceLine(copy)}</Text>
+                                : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} navigable={false} />}
+                        </View>
+                        <View style={gridBlock.lastRow} testID="grid-last-row">
+                            {gridDistance ? (
+                                <Text testID="card-distance" style={[shell.gridLine, gridBlock.lastRowPiece]} numberOfLines={1}>{t('📍 {distance}', { distance: gridDistance })}</Text>
+                            ) : null}
+                            {groupScopeBadgeText ? (
+                                <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="quiet" label={groupScopeBadgeText} testID="card-group-chip" /></View>
+                            ) : eachCard ? (
+                                <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role={eachCard.stockOut ? 'warn' : 'quiet'} label={eachCard.chip} testID="card-stock-chip" /></View>
+                            ) : !!item.repeatable && !isOwn && item.status !== 'pending' ? (
+                                <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="quiet" label={t('↻ RECURRING')} /></View>
+                            ) : null}
+                        </View>
                     </View>
                 </Pressable>
             );
@@ -1894,21 +1860,20 @@ export default function MarketScreen() {
         if (viewMode === 'compact') {
             return (
                 <Pressable
-                    disabled={isPulse}
-                    accessibilityRole={isPulse ? undefined : "button"}
+                    accessibilityRole="button"
                     accessibilityLabel={openLabel}
                     testID={`market-card-${item.id}`}
-                    onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
+                    onPress={() => router.push(`/post/${item.id}`)}
                 >
                     {/* The box's compact row (shell.compactRow, slice C1), the one an event and a poll are drawn on too. */}
-                    <View style={[shell.compactRow, elderCard && styles.elderCompactRow, isPulse && styles.pulseCard]}>
+                    <View style={[shell.compactRow, elderCard && styles.elderCompactRow]}>
                         <View style={shell.compactPicture}>
                             <MarketCardPicture
                                 postId={item.id}
                                 cover={coverImage}
                                 picture={picture}
                                 category={item.category}
-                                kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
+                                kind={item.type === 'event' ? 'event' : 'listing'}
                                 size="thumb"
                                 imageStyle={shell.compactImage}
                             />
@@ -1931,14 +1896,14 @@ export default function MarketScreen() {
                             )}
                         </View>
                         <View style={shell.compactEnd}>
-                            {!isPulse && showsBeans && !copy && (
+                            {showsBeans && !copy && (
                                 <ListingPrice price_c={item.price_c} type={item.type} unit={priceLabel || ''} style={shell.compactPrice} listing={item} showAll />
                             )}
-                            {/* The one chip (10/800, 6 x 2, corners 6): OFFER / NEED in their pairs, PULSE the warning one. */}
+                            {/* The one chip (10/800, 6 x 2, corners 6): OFFER / NEED in their pairs. */}
                             <CardChip
                                 shell={shell}
-                                role={isPulse ? 'warn' : (item.type === 'offer' ? 'offer' : 'need')}
-                                label={isPulse ? t('PULSE') : typeBadge(item.type)}
+                                role={item.type === 'offer' ? 'offer' : 'need'}
+                                label={typeBadge(item.type)}
                                 testID="compact-type-chip"
                             />
                         </View>
@@ -1950,13 +1915,12 @@ export default function MarketScreen() {
         // List View
         return (
             <Pressable
-                disabled={isPulse}
-                accessibilityRole={isPulse ? undefined : "button"}
+                accessibilityRole="button"
                 accessibilityLabel={openLabel}
                 testID={`market-card-${item.id}`}
-                onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
+                onPress={() => router.push(`/post/${item.id}`)}
             >
-                <View style={[shell.card, shell.list, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
+                <View style={[shell.card, shell.list, elderCard && styles.elderCard]}>
                     {/* The slot is 80 dp wide and as tall as the text beside it (at least 80): stretched by the row. Never a
                         percentage height, which Yoga reads against the whole list and made a lone card fill the screen. The
                         shell, the slot and the chips are the style box's (components/market-card-shell.ts), as the event's are. */}
@@ -1965,7 +1929,7 @@ export default function MarketScreen() {
                         cover={coverImage}
                         picture={picture}
                         category={item.category}
-                        kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
+                        kind={item.type === 'event' ? 'event' : 'listing'}
                         size="thumb"
                         imageStyle={shell.listPhoto}
                         tileBox={shell.listPhotoBox}
@@ -1973,8 +1937,7 @@ export default function MarketScreen() {
                     <View style={shell.listText}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                             <View style={[shell.chipRow, { flex: 1 }]}>
-                                {!isPulse && <CardChip shell={shell} role={item.type === 'offer' ? 'offer' : 'need'} label={typeBadge(item.type)} />}
-                                {isPulse && <CardChip shell={shell} role="warn" label={t('🗞️ DAILY PULSE')} />}
+                                <CardChip shell={shell} role={item.type === 'offer' ? 'offer' : 'need'} label={typeBadge(item.type)} />
                                 {isOwn && <CardChip shell={shell} role="info" label={t('👤 YOU')} />}
                                 {isPostPinned(item, Date.now()) && <CardChip shell={shell} role="pinned" label={t('📌 PINNED')} testID="pinned-chip" />}
                                 {dealChip && <CardChip shell={shell} role={dealChip === 'in-trust' ? 'ok' : 'warn'} label={listingChipWords(dealChip)} testID="card-deal-chip" />}
@@ -1984,7 +1947,7 @@ export default function MarketScreen() {
                                 {item.cash_also_needed === 1 && <CardChip shell={shell} role="warn" label={t('💸 CASH TOO')} />}
                                 {groupScopeBadgeText && <CardChip shell={shell} role="quiet" label={groupScopeBadgeText} testID="card-group-chip" wrap />}
                             </View>
-                            {!isPulse && showsBeans && !copy && (
+                            {showsBeans && !copy && (
                                 <ListingPrice price_c={item.price_c} type={item.type} unit={priceLabel || ''} style={[styles.price, { fontSize: 16 }]} listing={item} />
                             )}
                         </View>

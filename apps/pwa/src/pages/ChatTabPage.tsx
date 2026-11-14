@@ -6,7 +6,7 @@
  *   start, members only), the Chats · Forum switch sits at the top of the tab, above today's list: its heading, its chips
  *   and "Message requests", where every outside thing will wait (X4, G2). People stays its own tab here.
  * - **Chats** is MessagesPage, unchanged: the switch is handed to it as `frame` and drawn at the top of its list only, so an
- *   open conversation keeps the whole height it has today. **Forum** is the forum's own page (ForumPage, empty until F4).
+ *   open conversation keeps the whole height it has today. **Forum** is the forum's own page (ForumPage, slice F4).
  * - **No forum** (switched off by its owners, a server from before it, or before the info arrives): MessagesPage exactly as
  *   before, with no switch. The wrapper is `display: contents`, so it adds no box and the page lays out as it always has.
  * - MessagesPage stays mounted on the Forum side (hidden), so going back to Chats keeps the list, its chip and its scroll.
@@ -88,7 +88,7 @@ export function ChatTabPage({ navNonce, openForum, onForumOpened, ...props }: Co
                 // MessagesPage's list padding and width, so the switch stays where it was.
                 <div className="p-4 md:p-6 max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full">
                     {frame}
-                    <ForumPage />
+                    <ForumPage me={props.identity.publicKey} onOpenProfile={props.onOpenProfile} />
                 </div>
             )}
         </>

@@ -1,8 +1,8 @@
 /**
  * The Chat tab's top on the web (slice T0; scratch/fable-design/DESIGN-forums-messaging-joint-fable.md §2.1), the phone's
  * words and rules: Chats · Forum where the community's forum is on, handed to MessagesPage for the top of its list; the
- * Forum's empty page under the same switch; no switch where the forum is off, unsaid, or not known yet. MessagesPage is stood
- * in for here (MessagesPage.test.tsx draws the real one with the switch).
+ * Forum's page under the same switch; no switch where the forum is off, unsaid, or not known yet. MessagesPage and ForumPage are
+ * stood in for here (MessagesPage.test.tsx and ForumPage.test.tsx draw the real ones).
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,6 +22,15 @@ vi.mock('./MessagesPage', () => ({
     MessagesPage: (props: { openConversationId?: string | null; frame?: ReactNode }) => {
         seen.props.push(props);
         return <div data-testid="messages-page">{props.frame}<span>the list</span></div>;
+    },
+}));
+
+// The Forum's own page is stood in for too (ForumPage.test.tsx draws the real one, slice F4): here, what it is handed.
+const forumSeen = vi.hoisted(() => ({ props: [] as Array<{ me?: string }> }));
+vi.mock('./ForumPage', () => ({
+    ForumPage: (props: { me?: string }) => {
+        forumSeen.props.push(props);
+        return <div data-testid="forum-page" />;
     },
 }));
 
@@ -53,13 +62,13 @@ describe('the Chat tab where the forum is on', () => {
         for (const tb of tabs()) expect(tb.style.minHeight).toBe('44px');
     });
 
-    it('Forum: the Forum\'s empty page under the same switch, the list kept but hidden; Chats brings it back', () => {
+    it('Forum: the Forum\'s page under the same switch, the list kept but hidden; Chats brings it back', () => {
         render(<ChatTabPage identity={ME} />);
         fireEvent.click(screen.getByRole('tab', { name: 'Forum' }));
         expect(selected()).toEqual(['false', 'true']);
         const forum = screen.getByTestId('forum-page');
-        // Empty: slice F4 fills it.
-        expect(forum.childNodes.length).toBe(0);
+        // Slice F4's page, handed the member's key (it signs the forum's reads and tints their own replies).
+        expect(forumSeen.props.at(-1)?.me).toBe('my-pubkey');
         expect(tablist()!.compareDocumentPosition(forum) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(screen.getByTestId('messages-page')).not.toContainElement(tablist());
         expect(chatsBox()).toBe('none');

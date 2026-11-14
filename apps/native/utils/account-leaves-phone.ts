@@ -476,8 +476,8 @@ export async function signOutOfThisPhone(account: LeavingAccount | null, opts: {
         }
     }
     // Mail from other communities (X2b): this phone's mail id is read before its tables go, and the open community is asked
-    // to forget it, signed now, while the rest of the leave runs: its 4 s at most overlap the push unregisters' 4 s. Never a
-    // reason Sign Out stops.
+    // to forget it, signed with the key held in memory, while the rest of the leave runs: its 4 s at most overlap the push
+    // unregisters' 4 s. Never a reason Sign Out stops.
     const forgetting = await forgetThisPhoneForMailBeforeLeaving(account, db);
     const { clearDB } = db;
     // The identity leaves this phone: what it knew of its groups' keys goes with it (utils/db.ts clearDB).

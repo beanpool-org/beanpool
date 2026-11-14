@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Avvia una comunità — BeanPool</title>
-    <meta name="description" content="Ogni comunità funziona sul proprio nodo: un piccolo server che conserva i membri, i post e il mastro di quella comunità. Lo gestisce qualcuno del posto. Se la tua città o vallata non ne ha ancora uno, potresti essere tu.">
+    <meta name="description" content="Avvia una comunità BeanPool su un computer inutilizzato a casa o su un piccolo server a noleggio: cosa serve, come scegliere il tuo indirizzo e l'unico blocco da incollare per installarla.">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="../style.css?v=2.9">
@@ -49,7 +49,7 @@
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="BeanPool">
     <meta property="og:title" content="Avvia una comunità — BeanPool">
-    <meta property="og:description" content="Ogni comunità funziona sul proprio nodo: un piccolo server che conserva i membri, i post e il mastro di quella comunità. Lo gestisce qualcuno del posto. Se la tua città o vallata non ne ha ancora uno, potresti essere tu.">
+    <meta property="og:description" content="Avvia una comunità BeanPool su un computer inutilizzato a casa o su un piccolo server a noleggio: cosa serve, come scegliere il tuo indirizzo e l'unico blocco da incollare per installarla.">
     <meta property="og:url" content="https://beanpool.org/it/start">
     <meta property="og:image" content="https://beanpool.org/og-image.jpg">
     <meta property="og:image:width" content="1200">
@@ -234,8 +234,8 @@ docker compose exec beanpool-node beanpool claim</code>
 
         <h3 class="run-node-sub">L'ultima riga: beanpool claim</h3>
         <ol class="run-node-steps">
-            <li><strong>Il codice e il QR.</strong> Mostra un codice di rivendicazione monouso e un codice QR. Scansiona il codice QR con la fotocamera del telefono, oppure apri BeanPool, digita l'indirizzo del server sotto <strong>Trova la tua comunità</strong> e tocca <strong>Rivendica</strong>. Quel telefono diventa il proprietario.</li>
-            <li><strong>Impostazioni.</strong> Apri il tuo indirizzo (o l'indirizzo del server stesso) seguito da <strong>/settings</strong>. La configurazione guidata assegna un nome alla tua comunità, ti chiede di aggiungere un secondo proprietario e crea tre inviti per i fondatori. Imposta la tua posizione sulla mappa sotto Identità nodo, così le persone nelle vicinanze potranno trovarti.</li>
+            <li><strong>Il codice e il QR.</strong> Mostra un codice di rivendicazione monouso, un codice QR e, numerati, i passi successivi. Per prima cosa, sul telefono che sarà proprietario della comunità, installa BeanPool da <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=it" target="_blank" rel="noopener">Google Play</a> o dall'<a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a>. Poi scansiona il codice QR con la fotocamera del telefono, oppure apri BeanPool e tocca <strong>Hai installato BeanPool su un server? Rivendicalo</strong> (se sul telefono c'è già un account: tocca il fagiolo in alto, poi <strong>Configura un nuovo server per la comunità</strong>). La rivendicazione si fa solo dall'app del telefono. Crea il tuo account BeanPool su quel telefono, senza invito e senza nulla dal progetto BeanPool: scrivi il tuo nome, tocca <strong>Rivendica e diventa proprietario</strong> e trascrivi le 12 parole che ti mostra. Un telefono che ha già un account rivendica con quello. Quel telefono diventa il proprietario.</li>
+            <li><strong>Impostazioni.</strong> Apri il tuo indirizzo (o l'indirizzo del server stesso) seguito da <strong>/settings</strong>: conferma le impostazioni principali (Core settings), crea un codice di ripristino, aggiungi un secondo proprietario e invita i tuoi primi membri. Finché uno dei primi tre non è fatto, la pagina iniziale delle Impostazioni (Home) lo elenca sotto <strong>Action Required</strong> (Azione richiesta). La procedura guidata Cold-Start su Home è facoltativa: il suo ultimo passo crea tre inviti per i fondatori da stampare. Imposta la tua posizione sulla mappa sotto Node Identity, così le persone nelle vicinanze potranno trovarti.</li>
         </ol>
         <p class="run-node-note">Se il blocco indica <strong>No claim code after 5 minutes</strong>, oppure <code>beanpool claim</code> dice <strong>This community has no claim code waiting</strong>, il server non ha ancora completato l'avvio: <code>docker compose logs beanpool-node</code> mostra a che punto si trova. Quando il registro indica che la comunità non ha ancora un proprietario e ha un codice di rivendicazione, esegui di nuovo l'ultima riga. I passaggi completi si trovano nella <a href="../guide/operators/first-time-setup.html">prima configurazione</a> del manuale per i gestori.</p>
 

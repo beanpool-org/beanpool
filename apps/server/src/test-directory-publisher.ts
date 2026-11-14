@@ -14,6 +14,8 @@
  *     interval 0 (section 5) or the profile's publishToDirectory, not the switches.
  *  3e. A node that holds the old single contacts switch, stored as true by every save whether anyone chose it or not:
  *     no contact is sent (a stored default is not a choice), and each is sent once the owner turns it on.
+ *  3f. Every push says `listingsFromHere` (list-on-global G5), true or false, never null: on until an owner turns it off, a
+ *     stored value that is no boolean reads as on, and the owners' switch in How this community works pushes at once.
  *  4. `pushDirectoryNow()` error handling when directory registry returns non-2xx status code.
  *  2b. Held back: a community with no name of its own (blank, or the default "BeanPool Community") or a server with
  *     DIRECTORY_UNLISTED=1 sends nothing, and the answer says which (the rest: test-directory-hold-back.ts).
@@ -291,6 +293,47 @@ async function main() {
     const phoneBody = await lastBody('with only the phone on');
     assert(phoneBody.contactEmail === null && phoneBody.contactPhone === '+61 2 6684 0000',
         'the email turned off again is not sent; the phone still is');
+
+    // ── 3f. The community's name on members' listings on the global community (list-on-global G5) ──
+    // Every push says it, true or false, never null and never left out: absent at the registry reads as on, so a community
+    // that turned it off must say so every time, or a registry that lost the row would put its name back.
+    updateNodeConfig({ publishContactEmail: false, publishContactPhone: false });
+    assert((getNodeConfig() as any).publishListingsFromHere === true, 'the switch reads on until an owner turns it off');
+    const onBody = await lastBody('with the name on members\' listings on');
+    assert(onBody.listingsFromHere === true, `the push says listingsFromHere: true (${JSON.stringify(onBody.listingsFromHere)})`);
+    updateNodeConfig({ publishListingsFromHere: false } as any);
+    const offBody = await lastBody('with the name on members\' listings off');
+    assert(offBody.listingsFromHere === false, `the push says listingsFromHere: false (${JSON.stringify(offBody.listingsFromHere)})`);
+    assert(typeof offBody.communityName === 'string' && offBody.communityName === onBody.communityName && typeof offBody.memberCount === 'number', 'and the rest of the row as before: being found is another switch');
+    // A stored value that is no boolean (a hand edit, a bad copy) reads as on, as an unset one does: the push still says a boolean.
+    const storedNow = JSON.parse((db.prepare("SELECT value FROM node_config WHERE key = 'node_config'").get() as { value: string }).value);
+    db.prepare("UPDATE node_config SET value = ? WHERE key = 'node_config'").run(JSON.stringify({ ...storedNow, publishListingsFromHere: 'no' }));
+    assert((getNodeConfig() as any).publishListingsFromHere === true, 'a stored value that is not false reads as on');
+    const oddBody = await lastBody('with a stored value that is no boolean');
+    assert(oddBody.listingsFromHere === true, `the push says true, never the stored text (${JSON.stringify(oddBody.listingsFromHere)})`);
+    updateNodeConfig({ publishLocation: false, publishMembers: false, publishHealth: false, publishListingsFromHere: false } as any);
+    const quietOff = await lastBody('with every switch off');
+    assert(quietOff.listingsFromHere === false && 'listingsFromHere' in quietOff, 'every switch off: the push still says false');
+    updateNodeConfig({ publishListingsFromHere: true } as any);
+
+    // Switched in How this community works (the owners' Being found row): pushed at once while the community is listed, so the
+    // name goes from the global community within the hour of its mirror, not at the next timed push.
+    assert(initDirectoryPublisher() === true, 'the publisher runs');
+    const { applyShapeChanges } = await import('./config/community-shape-write.js');
+    const sentBefore = receivedRequests.length;
+    const changed = applyShapeChanges({ actor: 'owner:password', actorRole: 'owner' }, { changes: { shareListingsFromHere: false } });
+    assert(changed.changed.includes('shareListingsFromHere') && changed.told === 'nobody', `the owners' switch is set, and no member is told (${JSON.stringify({ changed: changed.changed, told: changed.told })})`);
+    assert((changed.shape.settings as any).shareListingsFromHere?.value === false && (changed.shape.settings as any).shareListingsFromHere?.source === 'owner',
+        'the shape reads it off, set by an owner');
+    const until = Date.now() + 3000;
+    while (receivedRequests.length === sentBefore && Date.now() < until) await new Promise((r) => setTimeout(r, 25));
+    const sentNow = receivedRequests[receivedRequests.length - 1]?.body as Record<string, unknown> | undefined;
+    assert(receivedRequests.length > sentBefore && sentNow?.listingsFromHere === false, `a push went at once, saying false (${receivedRequests.length - sentBefore} sent)`);
+    const sentOn = receivedRequests.length;
+    applyShapeChanges({ actor: 'owner:password', actorRole: 'owner' }, { changes: { shareListingsFromHere: true } });
+    const untilOn = Date.now() + 3000;
+    while (receivedRequests.length === sentOn && Date.now() < untilOn) await new Promise((r) => setTimeout(r, 25));
+    assert((receivedRequests[receivedRequests.length - 1]?.body as Record<string, unknown> | undefined)?.listingsFromHere === true, 'and on again, at once, saying true');
 
     // Restore flags for non-2xx and subsequent tests
     updateNodeConfig({ publishLocation: true, publishMembers: true, publishHealth: true });

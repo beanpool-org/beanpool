@@ -19,6 +19,9 @@ import { GroupVotesSheet, landOnGroup, routeLanding } from './components/GroupVo
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { useLanguage } from './lib/useLanguage';
+import { useWebPushMember } from './lib/use-web-push-member';
+import { goToNoticeTarget } from './components/NeedsYouIcons';
+import { TELL_ME_WORDS } from './lib/web-push';
 import { setTitleUnread } from './lib/page-words';
 import { useOwnAvatar } from './lib/useOwnAvatar';
 import { WelcomePage } from './pages/WelcomePage';
@@ -30,7 +33,7 @@ import { handoffAtLoad, takeHandoffParams } from './lib/handoff';
 import { isKnockKey } from './lib/knock-key';
 import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
 import { forgetRecentLookups } from './lib/members-on-demand';
-import { visitorsSeeListings, takeKeptLinkedPost, takeAskParam, takeKeptAskedCommunity } from './lib/visitor-lobby';
+import { visitorsSeeListings, keepLinkedPost, takeKeptLinkedPost, takeAskParam, takeKeptAskedCommunity } from './lib/visitor-lobby';
 import { setAccountHint } from './lib/community-card';
 import { MarketplacePage } from './pages/MarketplacePage';
 import type { PostType } from './lib/marketplace';
@@ -301,7 +304,8 @@ export function App() {
     const [openMarketTxId, setOpenMarketTxId] = useState<string | null>(null);
     // Whether the Market says so when that post can't be opened: yes for a member's own tap (navigateToTab), no for a link
     // the app arrived on (a shared /?post=, the lobby's kept listing), which lands quietly on the Market as before.
-    const [openMarketPostSaysWhy, setOpenMarketPostSaysWhy] = useState(false);
+    // 'came-for': the listing a member came for from a copy on the global community (slice G4), whose line says so.
+    const [openMarketPostSaysWhy, setOpenMarketPostSaysWhy] = useState<boolean | 'came-for'>(false);
     const [openMarketReviewTxId, setOpenMarketReviewTxId] = useState<string | null>(null);
     // A saved search's See more on Home: the words the Market's search opens with.
     const [openMarketSearch, setOpenMarketSearch] = useState<string | null>(null);
@@ -481,6 +485,9 @@ export function App() {
             .then(h => { setCommunityHealth({ ...h, online: true }); setShowCommunityStatus(true); })
             .catch(() => { setCommunityHealth(prev => ({ ...prev, online: false })); setShowCommunityStatus(true); });
     };
+
+    // A member's web push (W2): kept at each open, and a click on a notification opened as the bell's tap, or refused once.
+    const webPush = useWebPushMember(identity, isGuest === false, lang, (kind, data) => goToNoticeTarget(kind, data, navigateToTab));
 
     function navigateToTab(tab: string, contextId?: string, txId?: string) {
         if (tab === 'profile-setup') {
@@ -700,12 +707,15 @@ export function App() {
     }, [linkedShop, identity]);
     // On the global lobby a visitor reads the shared listing first; the lobby keeps it in this tab (a join by sign-in
     // leaves the page), and it opens here once, when they have joined. Before the address's own, so that one wins.
+    // Or the listing a member came for from a copy on the global community (slice G4): the handoff's Join kept it for this
+    // community, and it opens once, with a line if it has gone. The lobby's own kept listing is only read when there is none.
     useEffect(() => {
         if (!identity) return;
-        const kept = takeKeptLinkedPost();
+        const cameFor = takeKeptLinkedPost(Date.now(), window.location.host);
+        const kept = cameFor ?? takeKeptLinkedPost();
         if (!kept) return;
         setActiveTab('marketplace');
-        setOpenMarketPostSaysWhy(false);
+        setOpenMarketPostSaysWhy(cameFor ? 'came-for' : false);
         setOpenMarketPostId(kept);
     }, [identity]);
     useEffect(() => {
@@ -1021,6 +1031,9 @@ export function App() {
                     handoff={handoff}
                     onOpen={() => setHandoff(null)}
                     onJoin={({ account, invite, name }) => {
+                        // The listing the member came for from a copy (slice G4), kept from this Join, never before it: it
+                        // opens once they are in (the identity effect above).
+                        if (handoff.listing) keepLinkedPost(handoff.listing, Date.now(), window.location.host);
                         // Kept as the waiting key (established); the welcome page redeems the yes with it (WelcomePage handleCreate).
                         setHandoff(null);
                         setWaitingDoor(null);
@@ -1028,6 +1041,7 @@ export function App() {
                         setWaitingKey(account);
                     }}
                     onMember={(member) => {
+                        if (handoff.listing) keepLinkedPost(handoff.listing, Date.now(), window.location.host);
                         setHandoff(null);
                         beginAccountEpoch();
                         setWaitingKey(null);
@@ -1277,6 +1291,14 @@ export function App() {
 
             {/* Main Content Viewport */}
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+                {/* A click on a notification this community did not sign for this account (web push W2): said once, nothing opened. */}
+                {webPush.forged && (
+                    <div role="alert" data-testid="forged-notice" className="w-full bg-bp-gold-fill text-bp-gold-on px-3 sm:px-4 py-2.5 flex items-start justify-between gap-2 text-sm font-medium shrink-0 z-[120]">
+                        <span className="leading-snug min-w-0">{t(TELL_ME_WORDS.forged)}</span>
+                        <button type="button" onClick={webPush.dismissForged} aria-label={t('Close')}
+                            className="min-w-[48px] min-h-[48px] -my-2 -mr-2 flex items-center justify-center bg-transparent border-none cursor-pointer text-bp-gold-on text-lg shrink-0">✕</button>
+                    </div>
+                )}
                 {/* This page is older than the server it came from: Refresh loads the server's own (non-dismissible) */}
                 {serverVersionAhead && (
                     <div

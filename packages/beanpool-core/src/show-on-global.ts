@@ -144,7 +144,12 @@ export interface CopyPair {
     questionsOwed?: boolean;
 }
 
-export type CopyResult = 'shown' | 'shown-no-name' | 'later' | { refused: string };
+/**
+ * What a show did. `shown-no-name`: up, with no from-line, because global's directory doesn't show the community.
+ * `shown-name-off`: up, with no from-line, because the community keeps its name off its members' listings there (its directory
+ * push says so; list-on-global G5). Each is told to the member once ({@link copyResultLine}).
+ */
+export type CopyResult = 'shown' | 'shown-no-name' | 'shown-name-off' | 'later' | { refused: string };
 
 /** The key a copy goes by. An app's own identity has more, and each signs in its own way. */
 export interface CopyIdentity {
@@ -338,6 +343,7 @@ export const questionsLaterLine = () => t('It will stop taking questions as soon
 export function copyResultLine(result: CopyResult): string | null {
     if (result === 'shown') return null;
     if (result === 'shown-no-name') return t("Your community isn't in the directory, so this shows there without its name.");
+    if (result === 'shown-name-off') return t("Your community keeps its name off members' listings on the global community, so this shows there without it.");
     if (result === 'later') return t('It will go up on the global community as soon as it can.');
     return result.refused;
 }
@@ -534,7 +540,7 @@ export function makeCopyKeeper<I extends CopyIdentity>(setup: CopyKeeperSetup<I>
                     return { refused: t("The global community can't show this yet.") };
                 }
                 await recordSend({ ...pair, sent: JSON.stringify(copyFields(home, identity.publicKey)), sentAt: Date.now(), photo: firstPhoto(home) }, identity, deps, answer.done.post?.takesQuestions === true);
-                return answer.done.post?.shownFrom ? 'shown' : 'shown-no-name';
+                return answer.done.post?.shownFrom ? 'shown' : answer.done.post?.shownNameOff === true ? 'shown-name-off' : 'shown-no-name';
             }
             // Up all the same: this was a second send of the id (an edit made during the upload, or the member's other device),
             // and the first one landed.

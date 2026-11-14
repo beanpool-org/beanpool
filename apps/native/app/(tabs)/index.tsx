@@ -1714,6 +1714,7 @@ export default function HomeScreen() {
                         const target = composeTargetFor(type);
                         if (target === 'poll-modal') { setPollModal(true); return; }
                         if (target === 'event-modal') { setEventModal(true); return; }
+                        if (target === 'knowledge-screen') { router.push('/learn/new'); return; }
                         // The Offer/Need form is its own screen, which takes the chosen type in the link (as the Market's).
                         router.push({ pathname: '/new-listing', params: { newPost: type } });
                     }}

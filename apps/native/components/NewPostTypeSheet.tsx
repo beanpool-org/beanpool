@@ -1,5 +1,6 @@
 /**
- * The chooser behind every + in the app: Offer / Need / Community Poll / Event.
+ * The chooser behind every + in the app: Offer / Need / Community Poll / Event, and 📖 Local knowledge where Learn is live
+ * (slice K4: its choice opens Learn's form, a screen of its own, app/learn/new.tsx).
  *
  * Extracted from the Market tab, where it was inline — which is how the map's + came to open an
  * Offer/Need-only sheet while the Market tab offered four types. One component, one list
@@ -13,10 +14,11 @@ import React from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { t } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
-import { NEW_POST_TYPES, composeOptionA11yLabel, composeTargetFor, type ComposePostType } from '../utils/compose-options';
+import { composeOptionA11yLabel, composeOptions, composeTargetFor, type ComposePostType } from '../utils/compose-options';
 import { useAfterDismiss } from '../utils/screen-presented';
 import { useIdentity } from '../app/IdentityContext';
 import { openLookDoor } from '../utils/look-door';
+import { useLearnMode } from '../utils/use-learn-mode';
 
 interface NewPostTypeSheetProps {
     visible: boolean;
@@ -71,21 +73,7 @@ export function NewPostTypeSheet({ visible, onClose, onSelect, onShow }: NewPost
                         </Pressable>
                     )}
 
-                    {identity && NEW_POST_TYPES.map((option, i) => (
-                        <Pressable
-                            key={option.id}
-                            style={[styles.actionSheetOption, i === NEW_POST_TYPES.length - 1 && { borderBottomWidth: 0 }]}
-                            accessibilityRole="button"
-                            accessibilityLabel={composeOptionA11yLabel(option)}
-                            onPress={() => pick(option.id)}
-                        >
-                            <Text style={styles.actionSheetEmoji}>{option.emoji}</Text>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.actionSheetOptionTitle}>{t(option.title)}</Text>
-                                <Text style={styles.actionSheetOptionDesc}>{t(option.description)}</Text>
-                            </View>
-                        </Pressable>
-                    ))}
+                    {identity && <ChoiceRows styles={styles} pick={pick} />}
 
                     <Pressable
                         style={styles.actionSheetCancel}
@@ -98,6 +86,33 @@ export function NewPostTypeSheet({ visible, onClose, onSelect, onShow }: NewPost
                 </Pressable>
             </Pressable>
         </Modal>
+    );
+}
+
+/**
+ * The choices, in their order: the four kinds, and 📖 Local knowledge after them where Learn is live here (slice K4). Drawn
+ * inside the sheet, so the community's switches are read only while it is open, never by a screen that merely holds it.
+ */
+function ChoiceRows({ styles, pick }: { styles: ReturnType<typeof makeStyles>; pick: (type: ComposePostType) => void }) {
+    const options = composeOptions({ learn: useLearnMode() === 'live' });
+    return (
+        <>
+            {options.map((option, i) => (
+                <Pressable
+                    key={option.id}
+                    style={[styles.actionSheetOption, i === options.length - 1 && { borderBottomWidth: 0 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={composeOptionA11yLabel(option)}
+                    onPress={() => pick(option.id)}
+                >
+                    <Text style={styles.actionSheetEmoji}>{option.emoji}</Text>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.actionSheetOptionTitle}>{t(option.title)}</Text>
+                        <Text style={styles.actionSheetOptionDesc}>{t(option.description)}</Text>
+                    </View>
+                </Pressable>
+            ))}
+        </>
     );
 }
 

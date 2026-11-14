@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
     HOME_CARD_TYPES, HOME_DEFAULT_LIST, HOME_FRAME_LIMITS, HOME_V1_CARD_IDS, KNOWLEDGE_PLACE_LINE, LEARN_HOME_WORDS, addCard, arrivedStamp,
     arrivingCards, cardsToAsk, checkHomeLayout, endTourLayout, homeCardHue, homeCardType, homeCardsWithArrivals, keepArrivedCard, moveCard,
-    readHomeLayout, removeCard, resetHomeLayout, type HomeLayoutV2, type HomeNodeFacts,
+    defaultHomeLayout, readHomeLayout, removeCard, resetHomeLayout, type HomeLayoutV2, type HomeNodeFacts,
 } from '../index.js';
 
 const AT = '2026-11-14T09:00:00.000Z';
@@ -48,14 +48,16 @@ describe('K7: the learn type', () => {
         expect(learn.onNode({ profile: 'global', features: { showcase: true } })).toBe(true);
     });
 
-    it('is not in the default list yet (it joins after Asked near you with the slice that draws it on both apps); a Reset Home still has it arriving', () => {
-        // Each app holds that it draws every card of the default list, so the card joins it when both apps draw it.
-        expect(HOME_DEFAULT_LIST).not.toContain('learn');
+    it('is in the default list after Asked near you (both apps draw it), so it never arrives on a Home never saved or Reset', () => {
+        expect(HOME_DEFAULT_LIST.indexOf('learn')).toBe(HOME_DEFAULT_LIST.indexOf('asked') + 1);
         const reset = resetHomeLayout(arranged(), NOW);
-        expect(ids(reset.cards)).not.toContain('learn');
-        expect(arrivingCards(reset)).toEqual([one('learn')]);
-        // Reset after the member put it away: the stamp is kept, so it stays away.
-        expect(arrivingCards(resetHomeLayout(arranged(undefined, { [STAMP]: AT }), NOW))).toEqual([]);
+        expect(ids(reset.cards)).toContain('learn');
+        expect(arrivingCards(reset)).toEqual([]);
+        // Reset puts the defaults back, Learn something local among them, and keeps the stamp.
+        const resetStamped = resetHomeLayout(arranged(undefined, { [STAMP]: AT }), NOW);
+        expect(ids(resetStamped.cards)).toContain('learn');
+        expect(resetStamped.dismissed).toEqual({ [STAMP]: AT });
+        expect(arrivingCards(resetStamped)).toEqual([]);
     });
 });
 
@@ -72,12 +74,10 @@ describe('K7: a card that arrives on an arranged Home', () => {
         expect(ids(homeCardsWithArrivals(holds))).toEqual(['learn', 'market']);
         // Never once its stamp is there, whatever the list says.
         expect(arrivingCards(arranged(undefined, { [STAMP]: AT }))).toEqual([]);
-        // A Home never saved is the default list: the card arrives after it too, until the list holds it (then never).
-        expect(arrivingCards(null)).toEqual([one('learn')]);
-        expect(ids(homeCardsWithArrivals(null))).toEqual([...HOME_DEFAULT_LIST, 'learn']);
-        const keptOnDefault = keepArrivedCard(null, 'learn', LATER);
-        expect(ids(keptOnDefault.cards)).toEqual([...HOME_DEFAULT_LIST, 'learn']);
-        expect(keptOnDefault.dismissed).toEqual({ [STAMP]: new Date(LATER).toISOString() });
+        // A Home never saved is the default list, which holds it: it never arrives there, and Keep on Home changes nothing.
+        expect(arrivingCards(null)).toEqual([]);
+        expect(ids(homeCardsWithArrivals(null))).toEqual([...HOME_DEFAULT_LIST]);
+        expect(keepArrivedCard(null, 'learn', LATER).cards).toEqual(defaultHomeLayout().cards);
         // A full Home has no room to keep it, so it does not arrive (Keep on Home must be able to keep it).
         const full = arranged(Array.from({ length: HOME_FRAME_LIMITS.cards }, (_, i) => ({ id: `search-a${String(i).padStart(3, '0')}`, type: 'search' })));
         expect(arrivingCards(full)).toEqual([]);

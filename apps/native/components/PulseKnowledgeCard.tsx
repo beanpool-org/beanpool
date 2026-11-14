@@ -87,7 +87,9 @@ export function PulseKnowledgeCard({ item }: { item: PulseFeedItem }) {
             <View style={styles.rowBody}>
                 <Text style={styles.rowTitle} numberOfLines={2}>{post.title}</Text>
                 {post.line ? <Text style={styles.rowLine} numberOfLines={1}>{post.line}</Text> : null}
-                {single && post.by ? <Text style={styles.rowBy} numberOfLines={1}>{t(W.by, { name: post.by })}</Text> : null}
+                {/* A name only on a single page a member wrote: never when grouped, never on a page gathered with the
+                    assistant (the node sends none then; the card holds to it too). */}
+                {single && post.by && !post.gathered ? <Text style={styles.rowBy} numberOfLines={1}>{t(W.by, { name: post.by })}</Text> : null}
             </View>
         </View>
     );

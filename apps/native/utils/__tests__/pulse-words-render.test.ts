@@ -761,6 +761,15 @@ describe("the Pulse: Local knowledge's card (KP)", () => {
         expect(nav.pushed.at(-1)).toBe('/learn');
     });
 
+    it('a single page gathered with the assistant names nobody, even with a name on the wire', async () => {
+        const gathered = knowCard('2026-11-15', now - 2 * 3600_000, 1, KNOW_ONE.knowledge.posts.map((p) => ({ ...p })));
+        gathered.knowledge.posts[0].gathered = true;
+        feed.items = [gathered];
+        await renderIn('en', createElement(PulseScreen));
+        expect(cardOf(gathered)!.textContent).toContain('How recycling works at the tip');
+        expect(cardOf(gathered)!.textContent).not.toContain('Mira');
+    });
+
     it('several the same day: "{n} new in Local knowledge", the first three titles each opening its page, "and {n} more ›" and the foot to Learn; nobody named', async () => {
         feed.items = [FEED[0], KNOW_MANY, FEED[1]];
         await renderIn('en', createElement(PulseScreen));

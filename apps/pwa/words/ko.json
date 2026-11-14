@@ -1416,7 +1416,6 @@
   "On the map": "지도에서 보기",
   "On the map at {lat}, {lng}": "지도 위치: {lat}, {lng}",
   "On your Home": "홈 화면에 표시",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "노드가 실행되면 설정 앱에서 커뮤니티 이름을 짓고 첫 멤버들을 초대하세요. 그 멤버들이 다른 사람들을 초대하게 돼요. 거기서 '위치 공개'를 켜면 소식을 받기로 한 근처 사람들에게 알림이 가요.",
   "One device at a time: the copy you changed last is the one kept.": "한 번에 기기 하나만: 마지막으로 변경한 사본이 유지돼요.",
   "One moment…": "잠시만요…",
   "One more comes back {when}.": "{when} 1건이 다시 가능해져요.",
@@ -4511,5 +4510,8 @@
   "Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.|Pausing for the season holds your credit line at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.": {
     "other": "시즌 일시 중단 시 최대 90일 동안 신용 한도가 {n} 콩으로 유지되며, 진행 중인 항목이 일시 중지되어 멤버들이 구매할 수 없게 돼요. 운영자 누구나 언제든 재개할 수 있어요."
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "재개하면 모든 등록 항목이 다시 활성화되고 신용 한도가 정상적인 일일 계산 방식으로 복원돼요."
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "재개하면 모든 등록 항목이 다시 활성화되고 신용 한도가 정상적인 일일 계산 방식으로 복원돼요.",
+  "{name} has no owner yet": "{name}에 아직 소유자가 없어요",
+  "If you installed it, claim it with the one-time code on the server.": "직접 설치했다면 서버의 일회용 코드로 소유권을 등록하세요.",
+  "Claim {name}": "{name} 소유권 등록"
 }

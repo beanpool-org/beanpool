@@ -1435,7 +1435,6 @@
   "On the map": "نقشے پر",
   "On the map at {lat}, {lng}": "نقشے پر {lat}، {lng} پر",
   "On your Home": "آپ کے ہوم پر",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "ایک بار جب آپ کا سرور چل پڑے، تو آپ اس کی سیٹنگز ایپ میں اپنی کمیونٹی کا نام رکھتے ہیں، پہلے اراکین کو مدعو کرتے ہیں، اور وہ باقی لوگوں کو مدعو کرتے ہیں۔ وہاں \"لوکیشن شائع کریں\" کو فعال کریں، اور آپ کے قریب وہ لوگ جنہوں نے مطلع کرنے کی درخواست کی تھی، اس کے بارے میں جان جائیں گے۔",
   "One device at a time: the copy you changed last is the one kept.": "ایک وقت میں ایک ڈیوائس: آپ نے آخری بار جس کاپی میں تبدیلی کی تھی، وہی محفوظ رکھی جاتی ہے۔",
   "One moment…": "ایک لمحہ…",
   "One more comes back {when}.": "ایک اور گنجائش {when} بحال ہو جائے گی۔",
@@ -4689,5 +4688,8 @@
     "one": "موسمی وقفہ آپ کی کریڈٹ لائن کو 90 دن تک {n} پھلیوں پر روک دیتا ہے اور فعال لسٹنگز کو موقوف کر دیتا ہے تاکہ اراکین خرید نہ سکیں۔ کوئی بھی نگران کسی بھی وقت بحال کر سکتا ہے۔",
     "other": "موسمی وقفہ آپ کی کریڈٹ لائن کو 90 دن تک {n} پھلیوں پر روک دیتا ہے اور فعال لسٹنگز کو موقوف کر دیتا ہے تاکہ اراکین خرید نہ سکیں۔ کوئی بھی نگران کسی بھی وقت بحال کر سکتا ہے۔"
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "بحال کرنے سے تمام لسٹنگز دوبارہ فعال ہو جاتی ہیں اور کریڈٹ لائن معمول کے روزانہ حساب پر لوٹ آتی ہے۔"
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "بحال کرنے سے تمام لسٹنگز دوبارہ فعال ہو جاتی ہیں اور کریڈٹ لائن معمول کے روزانہ حساب پر لوٹ آتی ہے۔",
+  "{name} has no owner yet": "{name} کا ابھی کوئی مالک نہیں ہے",
+  "If you installed it, claim it with the one-time code on the server.": "اگر آپ نے اسے انسٹال کیا ہے، تو سرور پر موجود یک وقتی کوڈ کے ذریعے اس پر دعویٰ کریں۔",
+  "Claim {name}": "{name} کا دعویٰ کریں"
 }

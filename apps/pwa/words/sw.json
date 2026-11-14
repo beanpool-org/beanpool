@@ -1435,7 +1435,6 @@
   "On the map": "Kwenye ramani",
   "On the map at {lat}, {lng}": "Kwenye ramani katika {lat}, {lng}",
   "On your Home": "Kwenye Nyumbani yako",
-  "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Pindi seva yako inapofanya kazi, unaipa jumuiya yako jina katika programu yake ya mipangilio, unawaalika wanachama wa kwanza, na wao wanawaalika wengine. Washa \"chapisha eneo\" hapo, na watu walio karibu nawe walioomba kujulishwa watasikia kulihusu.",
   "One device at a time: the copy you changed last is the one kept.": "Kifaa kimoja kwa wakati mmoja: nakala uliyobadilisha mwisho ndiyo inayowekwa.",
   "One moment…": "Subiri kidogo…",
   "One more comes back {when}.": "Nyingine moja itarudi {when}.",
@@ -4689,5 +4688,8 @@
     "one": "Kusitisha kwa msimu kunashikilia kikomo chako cha mkopo kwa maharagwe {n} kwa hadi siku 90 na kusitisha matangazo amilifu ili wanachama wasiweze kununua. Msimamizi yeyote anaweza kuendelea wakati wowote.",
     "other": "Kusitisha kwa msimu kunashikilia kikomo chako cha mkopo kwa maharagwe {n} kwa hadi siku 90 na kusitisha matangazo amilifu ili wanachama wasiweze kununua. Msimamizi yeyote anaweza kuendelea wakati wowote."
   },
-  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Kuendelea kunawasha upya matangazo yote na kurejesha kikomo cha mkopo kwenye mahesabu ya kawaida ya kila siku."
+  "Resuming reactivates all listings and restores the credit line to normal daily calculation.": "Kuendelea kunawasha upya matangazo yote na kurejesha kikomo cha mkopo kwenye mahesabu ya kawaida ya kila siku.",
+  "{name} has no owner yet": "{name} bado haina mmiliki",
+  "If you installed it, claim it with the one-time code on the server.": "Ikiwa uliisakinisha, idai kwa msimbo wa mara moja uliopo kwenye seva.",
+  "Claim {name}": "Dai {name}"
 }

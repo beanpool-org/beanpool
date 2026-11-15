@@ -115,12 +115,17 @@ export function __useRelayTransportForTests(fetch: Transport | null): void {
  * transport as the forwards (and the suites' hook): its status, 0 when it could not be reached.
  */
 export async function forwardSigned(url: string, body: string): Promise<number> {
+    return (await forwardSignedForAnswer(url, body)).status;
+}
+
+/** forwardSigned, with the other server's answer on a 2xx when it could be read (a member's group items: engine/group-guest-home.ts). */
+export async function forwardSignedForAnswer(url: string, body: string): Promise<{ status: number; body?: unknown }> {
     try {
         const headers = await ownNodeRequestHeaders({ method: 'POST', url, body });
-        return (await transport(url, { headers, body })).status;
+        return await transport(url, { headers, body });
     } catch (e) {
         logger.warn('SYS', `A request to another community's server could not be made (${e instanceof Error ? e.message.slice(0, 120) : String(e)}).`);
-        return 0;
+        return { status: 0 };
     }
 }
 

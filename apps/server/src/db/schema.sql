@@ -4070,3 +4070,71 @@ CREATE TABLE IF NOT EXISTS group_guest_outbox (
 );
 CREATE INDEX IF NOT EXISTS idx_group_guest_outbox_due ON group_guest_outbox(next_try_at);
 CREATE INDEX IF NOT EXISTS idx_group_guest_outbox_home ON group_guest_outbox(home, next_try_at);
+
+-- Group guests, the guest's own community (slice G1b; engine/group-guest-home.ts). A member here who is invited into, or a
+-- guest in, a group hosted by another community's server. Day zero: new tables, nothing converted; the mailbox's own tables
+-- (relay_mail, relay_outbox) are left as they are.
+--
+-- group_guest_links: each (member, host, group) and where it stands: `invited` (the host's invitation came), `in` (the
+-- member said yes, through this server), `declined` (no), `left` (their own leave), `removed` (the host's removal). Only a
+-- host a member said yes to brings them anything more than an invitation (the roster, lines, epochs). `roster` is the
+-- latest roster that host sent for the group, as this member's devices read it (their own wrap only), `roster_at` when it
+-- came. A plain table: a standby copies it, so a promoted standby still knows which hosts its members answered; a standby
+-- writes none of its own.
+CREATE TABLE IF NOT EXISTS group_guest_links (
+    member     TEXT NOT NULL CHECK (length(member) = 64),
+    host       TEXT NOT NULL CHECK (length(host) BETWEEN 1 AND 260),
+    group_id   TEXT NOT NULL CHECK (length(group_id) BETWEEN 1 AND 64),
+    state      TEXT NOT NULL CHECK (state IN ('invited', 'in', 'declined', 'left', 'removed')),
+    roster     TEXT CHECK (roster IS NULL OR length(roster) <= 200000),
+    roster_at  INTEGER,
+    state_at   INTEGER NOT NULL,
+    updated_at TEXT,
+    PRIMARY KEY (member, host, group_id)
+);
+
+-- group_guest_mail: what a host brought for a member here (an invitation, the roster, a line, an epoch, a removal), held
+-- for their devices as the mailbox holds a line (relay_mail_devices lists them): each device fetches what it has not
+-- confirmed, and a row goes once every device listed has it (group_guest_mail_got), or after 30 days. `body` is what the
+-- host sent, with only this member's own wrap. Like the mailbox's tables, this server's own (`local`): never in a copy.
+CREATE TABLE IF NOT EXISTS group_guest_mail (
+    id          TEXT PRIMARY KEY CHECK (length(id) BETWEEN 8 AND 64),
+    member      TEXT NOT NULL CHECK (length(member) = 64),
+    host        TEXT NOT NULL CHECK (length(host) BETWEEN 1 AND 260),
+    group_id    TEXT NOT NULL CHECK (length(group_id) BETWEEN 1 AND 64),
+    kind        TEXT NOT NULL CHECK (kind IN ('invite', 'roster', 'line', 'epoch', 'removed')),
+    body        TEXT NOT NULL CHECK (length(body) <= 1900000),
+    bytes       INTEGER NOT NULL CHECK (bytes >= 0),
+    received_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_group_guest_mail_member ON group_guest_mail(member, received_at);
+CREATE INDEX IF NOT EXISTS idx_group_guest_mail_received ON group_guest_mail(received_at);
+CREATE TABLE IF NOT EXISTS group_guest_mail_got (
+    member  TEXT NOT NULL CHECK (length(member) = 64),
+    mail_id TEXT NOT NULL,
+    device  TEXT NOT NULL CHECK (length(device) = 32),
+    PRIMARY KEY (member, mail_id, device)
+);
+
+-- group_guest_sent: an item a member here sent to a group at another community (their answer to an invitation, a leave, a
+-- line, an epoch), and what became of it: `queued` (the host has not taken it; tried again with backoff for 24 hours),
+-- `sent` (taken), `refused` (the host's answer refused it: `refused` says why, e.g. epoch-stale, and their phone waits for
+-- the roster that follows), `failed` (never taken). The item is kept only while it is queued. A row goes 30 days after its
+-- last change. This server's own (`local`), as relay_outbox is.
+CREATE TABLE IF NOT EXISTS group_guest_sent (
+    sender_key  TEXT NOT NULL CHECK (length(sender_key) = 64),
+    item_id     TEXT NOT NULL CHECK (length(item_id) BETWEEN 8 AND 64),
+    kind        TEXT NOT NULL CHECK (kind IN ('group-invite', 'group-leave', 'group-line', 'group-epoch')),
+    host        TEXT NOT NULL CHECK (length(host) BETWEEN 1 AND 260),
+    group_id    TEXT NOT NULL CHECK (length(group_id) BETWEEN 1 AND 64),
+    state       TEXT NOT NULL CHECK (state IN ('queued', 'sent', 'refused', 'failed')),
+    refused     TEXT CHECK (refused IS NULL OR length(refused) <= 40),
+    item        TEXT CHECK (item IS NULL OR length(item) <= 1400000),
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    next_try_at INTEGER,
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL,
+    PRIMARY KEY (sender_key, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_group_guest_sent_host ON group_guest_sent(state, host, created_at);
+CREATE INDEX IF NOT EXISTS idx_group_guest_sent_sender ON group_guest_sent(sender_key, updated_at, item_id);

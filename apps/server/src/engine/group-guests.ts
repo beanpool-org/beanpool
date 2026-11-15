@@ -90,6 +90,18 @@ export const GROUP_GUEST_PATH = '/api/relay/group';
 /** The waits between tries of a request to a guest's home, and how long it is tried before it goes. */
 export const GUEST_FANOUT_BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 2 * 60 * 60_000] as const;
 export const GUEST_FANOUT_QUEUE_MS = DAY_MS;
+
+/**
+ * After a failed try at `at` of a queue whose oldest row has used `attempts` steps and was due at `dueAt`: the steps and
+ * when the queue is tried next. The step moves on only when the wait it set has passed, so the backoff follows TIME, not
+ * tries: a new row is due at once and costs its home one early try (sendToHome), and that try leaves the wait as it was.
+ * A home down for an hour is tried at 1, 6, 21 and 81 minutes however many rows were queued meanwhile (#3197 round 3
+ * review: counting tries pushed six rows in a busy minute to the two-hour wait).
+ */
+export function nextFanoutTry(attempts: number, dueAt: number, at: number, steps: readonly number[] = GUEST_FANOUT_BACKOFF_MS): { attempts: number; nextTryAt: number } {
+    if (attempts > 0 && at < dueAt) return { attempts, nextTryAt: dueAt };
+    return { attempts: attempts + 1, nextTryAt: at + steps[Math.min(attempts, steps.length - 1)] };
+}
 /** The kinds a guest's home brings for a group here. */
 export const GUEST_ITEM_KINDS: ReadonlySet<string> = new Set(['group-invite', 'group-leave', 'group-line', 'group-epoch']);
 /** The most a guest's item of each kind may carry, in characters as it travels. A line carries its sealed photo or voice. */
@@ -458,7 +470,7 @@ function flushSoon(): void {
     });
 }
 
-interface OutboxRow { id: string; kind: NoticeKind; body: string; attempts: number; created_at: number }
+interface OutboxRow { id: string; kind: NoticeKind; body: string; attempts: number; next_try_at: number; created_at: number }
 
 /** Each home being sent to now, and that send: one at a time for a home, every home on its own. */
 const sendingTo = new Map<string, Promise<number>>();
@@ -477,7 +489,7 @@ export async function flushGuestOutbox(now = Date.now()): Promise<number> {
     const counts = await Promise.all(homes.map((home) => {
         const running = sendingTo.get(home);
         if (running) return running.then(() => 0);
-        const send = sendToHome(home).finally(() => sendingTo.delete(home));
+        const send = sendToHome(home, now).finally(() => sendingTo.delete(home));
         sendingTo.set(home, send);
         return send;
     }));
@@ -489,15 +501,18 @@ export async function flushGuestOutbox(now = Date.now()): Promise<number> {
  * they were queued, always. A row due starts the send, and the send takes the home's rows from the oldest, due or not: a
  * new row never leaves before an older one waiting, and once the home takes one, every row behind it goes in the same
  * send, so none waits out a backoff its home has ended. A 2xx, or an answer that says it will never be taken (400, 404,
- * 413), and the row goes; anything else and ALL the home's rows wait one backoff (set by the try that failed, the oldest
- * row's), until GUEST_FANOUT_QUEUE_MS, then a row goes. With guests switched off, only removals go.
+ * 413), and the row goes; anything else and ALL the home's rows wait one backoff, by time (nextFanoutTry: the step moves on
+ * only when the oldest row's wait has passed), until GUEST_FANOUT_QUEUE_MS, then a row goes. A 2xx starts the steps over.
+ * With guests switched off, only removals go. `now` is the clock the send starts at (the timer's, or a suite's).
  */
-async function sendToHome(home: string): Promise<number> {
+async function sendToHome(home: string, now: number): Promise<number> {
     let handled = 0;
+    const started = Date.now();
+    const clock = () => now + (Date.now() - started);
     const url = `https://${home}${GROUP_GUEST_PATH}`;
     const drop = db.prepare('DELETE FROM group_guest_outbox WHERE id = ?');
     for (;;) {
-        const queue = db.prepare('SELECT id, kind, body, attempts, created_at FROM group_guest_outbox WHERE home = ? ORDER BY created_at, rowid LIMIT 64')
+        const queue = db.prepare('SELECT id, kind, body, attempts, next_try_at, created_at FROM group_guest_outbox WHERE home = ? ORDER BY created_at, rowid LIMIT 64')
             .all(home) as OutboxRow[];
         if (!queue.length) return handled;
         const on = groupGuestsOn();
@@ -508,18 +523,20 @@ async function sendToHome(home: string): Promise<number> {
             handled++;
             if (!on && r.kind !== 'removed') { drop.run(r.id); continue; }
             const status = await forwardSigned(url, r.body);
-            const at = Date.now();
-            const final = (status >= 200 && status < 300) || status === 400 || status === 404 || status === 413;
+            const at = clock();
+            const taken = status >= 200 && status < 300;
+            const final = taken || status === 400 || status === 404 || status === 413;
             if (final || at - r.created_at >= GUEST_FANOUT_QUEUE_MS) {
                 drop.run(r.id);
-                if (status < 200 || status >= 300) logger.warn('SYS', `Group guests: ${home} did not take a notice (status ${status}); it is not tried again.`);
+                if (taken) db.prepare('UPDATE group_guest_outbox SET attempts = 0 WHERE home = ? AND attempts > 0').run(home);
+                else logger.warn('SYS', `Group guests: ${home} did not take a notice (status ${status}); it is not tried again.`);
                 continue;
             }
-            const wait = GUEST_FANOUT_BACKOFF_MS[Math.min(r.attempts, GUEST_FANOUT_BACKOFF_MS.length - 1)];
+            // One schedule for the home, held on every row of it: the oldest row's, moved on by time (nextFanoutTry).
+            const next = nextFanoutTry(r.attempts, r.next_try_at, at);
             db.transaction(() => {
-                db.prepare('UPDATE group_guest_outbox SET attempts = attempts + 1 WHERE id = ?').run(r.id);
                 db.prepare('DELETE FROM group_guest_outbox WHERE home = ? AND created_at <= ?').run(home, at - GUEST_FANOUT_QUEUE_MS);
-                db.prepare('UPDATE group_guest_outbox SET next_try_at = ? WHERE home = ?').run(at + wait, home);
+                db.prepare('UPDATE group_guest_outbox SET attempts = ?, next_try_at = ? WHERE home = ?').run(next.attempts, next.nextTryAt, home);
             })();
             return handled;
         }

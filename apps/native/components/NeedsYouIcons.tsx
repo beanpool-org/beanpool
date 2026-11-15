@@ -80,7 +80,10 @@ export function goToNeedsTarget(target: Exclude<NeedsYouTarget, { to: 'admin' }>
 type LocalParts = Pick<NeedsYouInputs, 'transactions' | 'conversations'>;
 type NodeParts = Pick<NeedsYouInputs, 'groupChats' | 'groupInvites' | 'admin'> & {
     communityName: string | null;
-    /** Home's vote line, from the header's own read (loadNode); drawn by Home's rule (mergeNeeds) with the switches beside it. */
+    /**
+     * Home's vote line and its bill lines (one per bill waiting on the member, DESIGN-getting-paid-fable §4.4), from the header's
+     * own read (loadNode); drawn by Home's rule (mergeNeeds) with the switches beside it.
+     */
     votes: HomeNeedsItem[] | null;
     features: HomeAnswer['features'] | null;
 };
@@ -128,14 +131,16 @@ async function switchesHere(): Promise<NodeFeatures | null> {
  */
 async function loadNode(identity: BeanPoolIdentity): Promise<NodeParts> {
     const features = await switchesHere();
+    // Home is asked where it can say something here: Decisions on (votes), or bills on (a bill waiting is a line of its own).
+    const asksHome = decisionsOn(features) || features?.bills === true;
     const [home, yourGroups, admin] = await Promise.all([
-        decisionsOn(features) ? settle(signedGet(homePath(['needs'])).then(r => (r.ok ? r.json() : null))) : null,
+        asksHome ? settle(signedGet(homePath(['needs'])).then(r => (r.ok ? r.json() : null))) : null,
         settle(signedGet('/api/your-groups').then(r => (r.ok ? r.json() : null))),
         settle(loadAdmin(identity)),
     ]);
     const needs = home?.cards?.needs?.items;
     return {
-        votes: Array.isArray(needs) ? needs.filter((i: HomeNeedsItem) => i?.kind === 'vote') : null,
+        votes: Array.isArray(needs) ? needs.filter((i: HomeNeedsItem) => i?.kind === 'vote' || i?.kind === 'bill') : null,
         features: features ? { ...features } : null,
         groupChats: Array.isArray(yourGroups?.items) ? yourGroups.items : null,
         // The member's open invitations to groups, beside their chats (a node from before them says none).

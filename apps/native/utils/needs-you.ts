@@ -51,7 +51,12 @@ export type NeedsYouTarget =
      * People → Invites, where requests to join are listed with Invite and Not now (front doors S1). The node sends it only
      * to an app that asks with `lands=people` (utils/home-store.ts homePath).
      */
-    | { to: 'people' };
+    | { to: 'people' }
+    /**
+     * One bill waiting on the member (DESIGN-getting-paid-fable §4.4): Your deals → Bills with its sheet (components/Bills.tsx).
+     * The node sends it only to an app that asks with `lands=bills` (utils/home-store.ts homePath).
+     */
+    | { to: 'bill'; id: string };
 
 /** A chat group's vote lands on the group: its chat screen, told it is a group, with its info sheet open (`info=1`). */
 export function groupVoteHref(groupId: string): { pathname: string; params: Record<string, string> } {
@@ -88,6 +93,7 @@ export function needsTargetHref(target: Exclude<NeedsYouTarget, { to: 'admin' }>
         case 'invite': return { pathname: '/group/[id]', params: { id: target.id, invited: '1' } };
         case 'invites': return { pathname: '/(tabs)/projects', params: { section: 'groups' } };
         case 'people': return { pathname: '/(tabs)/people', params: { view: 'invites' } };
+        case 'bill': return { pathname: '/(tabs)/market', params: { dealsTab: 'bills', bill: target.id } };
     }
 }
 

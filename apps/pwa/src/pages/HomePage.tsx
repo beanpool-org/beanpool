@@ -36,6 +36,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { createPortal } from 'react-dom';
 import { HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord, restartTips, tipNow, tipOnLanding, tipText, tipsCaption, tipsFor, tipsNextLabel, type TipsRecord, ARRANGE_WORDS, arrangeMovedLine, homeCardHue, homeCardType, readDecideSettings, readSearchSettings, readToolsSettings, type CardHue, SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings, capitalFirst, communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, inviteAskNeedsLine, inviteAskNoticeHere, knockStillAnswerable, t, tn, word, communityShapeSummary, type CommunityShapeFeatures, starterSheet, type PricingGuideItem, type StarterRow, formatHundredths } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
+import { billDoor } from '../lib/bill-door';
 import { KNOCK_MESSAGES, cancelKnock, communityOrigin, forgetKnock, markYesSeen, readKnockStatus, rememberedKnocks, yesMark, yesSeenMarks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
 import { useKnockStatuses } from '../lib/use-knock-statuses';
 import { YesJoin } from '../components/YesJoin';
@@ -2629,6 +2630,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 case 'shop-mine': return onNavigate('shop-mine');
                 // Members' suggestions of Local knowledge: To check in Learn (sent only because this app asks with lands=learn).
                 case 'learn-check': return onNavigate('learn-check');
+                // A bill waiting on the member (sent only because this app asks with lands=bills): its sheet in Your deals → Bills.
+                case 'bill': return onNavigate('marketplace', billDoor(target.id));
                 default: return undefined;
             }
         };

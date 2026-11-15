@@ -23,7 +23,8 @@ import { ShowOnGlobalHostRow } from '../components/ShowOnGlobalRow';
 import { YourEvents } from '../components/YourEvents';
 import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow, movedCopyContext } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
-import { MyDealsModal } from '../components/MyDealsModal';
+import { MyDealsModal, type DealsTab } from '../components/MyDealsModal';
+import { BILL_DOOR } from '../lib/bill-door';
 import { StandingPanel, StandingTakeUp, type StandingChoice, type StandingLowerStep } from '../components/StandingDeal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
 import { MarketCircleLine } from '../components/MarketCircleLine';
@@ -495,6 +496,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     const communityInfo = useCommunityInfo();
     const featuresPins = (communityInfo?.features as { pins?: boolean } | undefined)?.pins === true;
+    // Bills (DESIGN-getting-paid-fable §4): only where the node says they are on; a node that says nothing has none.
+    const billsOn = (communityInfo?.features as { bills?: boolean } | undefined)?.bills === true;
     const [myNodeRole, setMyNodeRole] = useState<string | null>(null);
     useEffect(() => {
         let alive = true;
@@ -634,7 +637,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         onNearYou: onNavigate ? () => { setSelectedPost(null); onNavigate('home'); } : undefined,
         onGuide: onNavigate ? (slug: string) => { setSelectedPost(null); onNavigate('guide', slug); } : undefined,
     };
-    const [dealsInitialTab, setDealsInitialTab] = useState<'active' | 'pending' | 'history'>('pending');
+    const [dealsInitialTab, setDealsInitialTab] = useState<DealsTab>('pending');
+    // The bill a door named, opened on Your deals → Bills once (components/Bills.tsx says so if it is no longer waiting).
+    const [openBillId, setOpenBillId] = useState<string | null>(null);
+    const clearOpenBill = useCallback(() => setOpenBillId(null), []);
+    // Your deals closed: a door's Bills tab is not where it opens next time (the Market's own button opens it as before).
+    const closeDeals = () => { setShowDealsModal(false); setDealsInitialTab((tab) => (tab === 'bills' ? 'pending' : tab)); };
 
     // Detail view
     const [selectedPost, setSelectedPost] = useState<MarketplacePost | null>(null);
@@ -786,6 +794,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
              setShowDealsModal(true);
              setDealsInitialTab('pending');
              onPostOpened?.();
+        } else if (openPostId?.startsWith(BILL_DOOR)) {
+            // A bill's bell row, push or notice (DESIGN-getting-paid-fable §4.3): Your deals → Bills, with that bill's sheet.
+            setOpenBillId(openPostId.slice(BILL_DOOR.length) || null);
+            setDealsInitialTab('bills');
+            setShowDealsModal(true);
+            onPostOpened?.();
         } else if (openPostId === 'new-poll' || openPostId === 'new-event') {
              onPostOpened?.();
              onNavigate?.(openPostId === 'new-poll' ? 'map-post-poll' : 'map-post-event');
@@ -836,6 +850,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // A Live Pulse chip names a listing that the browse list need not be holding — an older post, or one
     // the current filters hide. Same two steps as the deep-link above: open what we already have, else
     // ask the node once, which applies the same visibility rules it applies to every other card.
+    // A listing Your deals names by id (a deal's row, a bill's "About: … ›"), as the phone opens /post/<id>: the one in the
+    // feed, else the node's read of it by id (a filter, a search or a read by area need not hold it). One gone says so, and so
+    // does a read that failed, on the Market, never a bare page.
+    const openListingById = (postId: string, txId?: string) => {
+        const opened = (p: MarketplacePost) => { setPostLinkNotice(null); setSelectedPost(p); if (txId) setSelectedTxId(txId); };
+        const found = posts.find(p => p.id === postId);
+        if (found) { opened(found); return; }
+        const notOpened = (words: string) => { setSelectedPost(null); setPostLinkNotice(words); };
+        getMarketplacePosts({ id: postId, types: CLIENT_POST_TYPES })
+            .then(rows => { if (rows[0]) opened(rows[0]); else notOpened(t('That listing can no longer be opened. It may have been taken down.')); })
+            .catch(() => notOpened(t("That listing couldn't be loaded. Check your connection and try again.")));
+    };
+
     const openPostFromActivity = useCallback((postId: string) => {
         const found = posts.find(p => p.id === postId);
         if (found) {
@@ -1653,22 +1680,31 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             visible={showDealsModal}
             preview={dealsMode === 'preview'}
             identity={identity}
-            onClose={() => setShowDealsModal(false)}
+            onClose={closeDeals}
             posts={posts}
             transactions={myTransactions}
             initialTab={dealsInitialTab}
-            onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined}
-            onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined}
-            onNavigateToPost={async (postId, txId) => {
-                setShowDealsModal(false);
-                const found = posts.find(p => p.id === postId);
-                if (found) {
-                    setSelectedPost(found);
-                    if (txId) setSelectedTxId(txId);
+            bills={billsOn}
+            openBillId={openBillId}
+            onBillOpened={clearOpenBill}
+            onMessage={identity && onNavigate ? async (peer) => {
+                try {
+                    const result = await createConversationApi('dm', [identity.publicKey, peer], identity.publicKey);
+                    closeDeals();
+                    onNavigate('messages', result.conversation.id);
+                } catch (e: any) {
+                    window.alert(nodeRefusal(e)?.message ?? (e?.message || t('Failed to start conversation')));
                 }
+            } : undefined}
+            onPostOffer={onNavigate ? () => { closeDeals(); onNavigate('map-post-offer'); } : undefined}
+            onNearYou={onNavigate ? () => { closeDeals(); onNavigate('home'); } : undefined}
+            onGuide={onNavigate ? (slug) => { closeDeals(); onNavigate('guide', slug); } : undefined}
+            onNavigateToPost={(postId, txId) => {
+                closeDeals();
+                openListingById(postId, txId);
             }}
             onPromptReview={(review) => {
-                setShowDealsModal(false);
+                closeDeals();
                 setReviewStars(5);
                 setReviewComment('');
                 setPromptReviewForTx(review);

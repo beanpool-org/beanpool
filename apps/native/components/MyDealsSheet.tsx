@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { View, Text, Pressable, Modal, FlatList, Image, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, Pressable, Modal, FlatList, Image, StyleSheet, Dimensions, ScrollView } from 'react-native';
 import { ListPhoto } from './ListPhoto';
 import { router } from 'expo-router';
 import { getMarketplaceTransactions, getPosts, getMyPosts } from '../utils/db';
@@ -7,7 +7,7 @@ import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatHundredths, itemDealTitle, standingHistoryLine, standingLines, standingLoweredHistoryLine, standingPanel, t, word, type WordKey } from '@beanpool/core';
+import { billLines, dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatHundredths, itemDealTitle, standingHistoryLine, standingLines, standingLoweredHistoryLine, standingPanel, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showcase/LocalCommunityMark';
 import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
@@ -38,7 +38,12 @@ interface MyDealsSheetProps {
     identity: { publicKey: string } | null;
     onClose: () => void;
     /** Optional: which sub-tab to default open to */
-    initialTab?: 'active' | 'pending' | 'history';
+    initialTab?: DealsTab;
+    /**
+     * Your deals → Bills (DESIGN-getting-paid-fable §4), drawn by the screen (components/Bills.tsx BillsTab) where the node's
+     * `bills` switch is on or a door names a bill; handed the sheet's close, as every way forward closes it first. Absent: no tab.
+     */
+    bills?: ((leave: () => void) => React.ReactNode) | null;
     /** False on a community with Beans off (the Market's `showsBeans`): the cards draw no Beans amount. The sheet
      *  still opens there from a link (`dealsTab`), and My Posts lists the member's posts. */
     showsBeans?: boolean;
@@ -48,8 +53,12 @@ interface MyDealsSheetProps {
     preview?: boolean;
 }
 
-export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview = false, initialTab = 'pending', showsBeans = true }: MyDealsSheetProps) {
+export type DealsTab = 'active' | 'pending' | 'history' | 'bills';
+
+export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview = false, bills, initialTab = 'pending', showsBeans = true }: MyDealsSheetProps) {
     const identity = preview ? SAMPLE_DEALS_ME : ownIdentity;
+    // Bills where the screen draws them (never in preview: a node with bills has Beans).
+    const billsShown = !preview && !!bills;
     const [markOpen, setMarkOpen] = useState(false);
     const openMark = () => setMarkOpen(true);
     const { colors, theme } = useTheme();
@@ -359,7 +368,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         },
     }));
 
-    const [dealsTab, setDealsTab] = useState<'active' | 'pending' | 'history'>(initialTab);
+    const [dealsTab, setDealsTab] = useState<DealsTab>(initialTab);
     const [historyFilter, setHistoryFilter] = useState<'all' | 'buying' | 'selling'>('all');
     const [heldPosts, setPosts] = useState<any[]>(NONE);
     const [heldTransactions, setTransactions] = useState<any[]>(NONE);
@@ -734,7 +743,8 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             { id: 'pending' as const, label: t('In Progress'), badge: pendingCount },
                             { id: 'active' as const, label: t('My Posts') },
                             { id: 'history' as const, label: t('History') },
-                        ].map(tab => (
+                            ...(billsShown ? [{ id: 'bills' as const, label: billLines.tab() }] : []),
+                        ].map((tab: { id: DealsTab; label: string; badge?: number }) => (
                             <Pressable
                                 accessibilityRole="button"
                                 accessibilityState={{ selected: dealsTab === tab.id }}
@@ -773,7 +783,12 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         </View>
                     )}
 
-                    {/* List */}
+                    {/* List; Bills is the screen's (components/Bills.tsx BillsTab), read from the node as it opens. */}
+                    {dealsTab === 'bills' && bills && !preview ? (
+                        <ScrollView contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled" testID="deals-bills">
+                            {bills(onClose)}
+                        </ScrollView>
+                    ) : (
                     <FlatList
                         data={listData}
                         keyExtractor={item => item.id}
@@ -816,6 +831,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             </View>
                         }
                     />
+                    )}
                 </Pressable>
             </Pressable>
 

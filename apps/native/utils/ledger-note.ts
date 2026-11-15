@@ -7,7 +7,7 @@
  * and never one whose node has no block list; until then the community still sends their note, and this keeps it off the
  * ledger. One the community kept from the member already comes as BLOCKED_BEANS_NOTE.
  */
-import { BLOCKED_BEANS_NOTE, ledgerLineNote } from '@beanpool/core';
+import { BLOCKED_BEANS_NOTE, billLedgerNote, ledgerLineNote } from '@beanpool/core';
 
 /** A line as the Ledger tab lists it: `type` 'credit' for Beans that came to the member, `peerPubkey` the other account. */
 export interface LedgerItemForNote {
@@ -19,5 +19,8 @@ export interface LedgerItemForNote {
 /** The note to show, and whether it is the neutral line for Beans from someone blocked (shown muted). */
 export function ledgerItemNote(item: LedgerItemForNote, blocked: ReadonlySet<string>): { text: string; fromBlocked: boolean } {
     const text = ledgerLineNote({ incoming: item.type === 'credit', counterparty: item.peerPubkey, memo: item.memo }, blocked);
-    return { text, fromBlocked: text === BLOCKED_BEANS_NOTE };
+    if (text === BLOCKED_BEANS_NOTE) return { text, fromBlocked: true };
+    // A bill's payment (DESIGN-getting-paid-fable §4.4): "Bill · Power, October" in the member's words; the row names the
+    // other side above its note already, as the web's note does after it.
+    return { text: billLedgerNote(text, item.type !== 'credit', null) ?? text, fromBlocked: false };
 }

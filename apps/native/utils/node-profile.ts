@@ -162,7 +162,8 @@ export interface NodeFeatures {
     forumNotices?: boolean;
     /**
      * This community takes bills (apps/server engine/bills.ts; core billsOn): the invite panel offers "Add a bill for them"
-     * (slice B3). A node that doesn't say (the global community, or one from before bills) takes none.
+     * (slice B3), Your deals shows Bills and the bell a line for each bill waiting on the member (components/Bills.tsx, slice
+     * B2). A node that doesn't say (the global community, or one from before bills) takes none.
      */
     bills?: boolean;
 }

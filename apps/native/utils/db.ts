@@ -35,7 +35,7 @@ import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { readGroupInvitations, type GroupInvitations } from '@beanpool/core';
+import { readGroupInvitations, type BillView, type GroupInvitations } from '@beanpool/core';
 import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, mayChooseLongPolls, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
@@ -8683,6 +8683,45 @@ export async function answerStandingAsk(standingId: string, changeId: string, ye
 /** The payer takes their open ask back: nothing changes. */
 export async function withdrawStandingAsk(standingId: string, changeId: string) {
     return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/lower/${encodeURIComponent(changeId)}/withdraw`, {});
+}
+
+// ── Bills (DESIGN-getting-paid-fable §4; the node's routes/bills.ts), read and answered on the node, never kept here ──
+
+/** The signer's bills: those waiting on them (`toPay`) and those they sent (`sent`), newest first. Throws when unread. */
+export async function getBills(): Promise<{ toPay: BillView[]; sent: BillView[] }> {
+    const res = await signedGet('/api/bills');
+    if (!res.ok) throw Object.assign(new Error(`Server returned ${res.status}`), { status: res.status });
+    const body = await res.json();
+    return { toPay: Array.isArray(body?.toPay) ? body.toPay : [], sent: Array.isArray(body?.sent) ? body.sent : [] };
+}
+
+/** Pay one, at once and for good. `requestId` (core billPayRequestFor) is the same on a retry, so it is never paid twice. */
+export async function payBill(billId: string, requestId: string) {
+    return billRequest(`/api/bills/${encodeURIComponent(billId)}/pay`, { requestId });
+}
+
+/** Decline one, quietly: its sender is not told. */
+export async function declineBill(billId: string) {
+    return billRequest(`/api/bills/${encodeURIComponent(billId)}/decline`, {});
+}
+
+/** The sender takes back one not paid. */
+export async function withdrawBill(billId: string) {
+    return billRequest(`/api/bills/${encodeURIComponent(billId)}/withdraw`, {});
+}
+
+/** Report a bill to the community's owners, with the reason picked: the node declines it and names its sender. */
+export async function reportBill(billId: string, reason: string) {
+    return billRequest('/api/reports', { reason, targetBillId: billId });
+}
+
+/** A bill's write: the node's sentence when it refused in words (`message`), with its status kept, as the web's request(). */
+async function billRequest(endpoint: string, payload: object) {
+    try {
+        return await _signedRequest(endpoint, payload);
+    } catch (e: any) {
+        throw reportRefusal(e);
+    }
 }
 
 export async function rejectMarketplaceRequest(transactionId: string, authorPublicKey: string) {

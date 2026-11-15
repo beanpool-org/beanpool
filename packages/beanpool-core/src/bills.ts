@@ -19,6 +19,7 @@
 import { t, tn } from './words.js';
 import { feeOf, formatHundredths, isHundredths, parseHundredths, type Hundredths } from './hundredths.js';
 import { BUSY_CODE, busyWords } from './busy-answer.js';
+import { standingChangeId } from './standing-deal.js';
 
 /** Where a bill is (the node's `bills.state`). The sender reads a declined bill as `sent` until it expires. */
 export type BillState = 'sent' | 'paid' | 'declined' | 'withdrawn' | 'expired';
@@ -193,6 +194,26 @@ export const billLines = {
     heldForOwners: (name: string, reporters: number) =>
         tn(reporters, "{name}'s bills are on hold: {n} member reported them within 7 days. Look at the reports to clear the hold.",
             "{name}'s bills are on hold: {n} members reported them within 7 days. Look at the reports to clear the hold.", { name }),
+
+    // Your deals → Bills, both apps (slice B2).
+    tab: () => t('Bills'),
+    toPayTab: () => t('To pay'),
+    sentTab: () => t('Sent', undefined, 'bills sent'),
+    noneToPay: () => t('No bills are waiting for you.'),
+    noneSent: () => t("You haven't sent a bill."),
+    readFailed: () => t("Your bills couldn't be read just now. Check your connection and try again."),
+    paid: (name: string, amount_c: Hundredths) => t('Paid: {n} Beans to {name}.', { n: n2(amount_c), name }),
+    payConfirmCancel: () => t('Cancel'),
+    close: () => t('Close'),
+    // A lost answer (billAnswerLost) never says nothing happened: it may have gone through, and the same press finds out.
+    payLost: () => t("Your community's server didn't answer, so this bill may have been paid. Press Pay again to find out: it is never paid twice."),
+    declineLost: () => t("Your community's server didn't answer, so this bill may have been declined. Press Decline again to find out."),
+    withdrawLost: () => t("Your community's server didn't answer, so this bill may have been withdrawn. Press Withdraw again to find out."),
+    reportLost: () => t("Your community's server didn't answer, so your report may have gone. Send it again to find out."),
+    // The payer's balance on the sheet: Pay waits, saying so, until the node's own read lands; a failed read says so, with a retry.
+    balanceReading: () => t('Reading your balance from your community…'),
+    balanceFailed: () => t("Your balance couldn't be read just now, so Pay waits. Check your connection and try again."),
+    tryAgain: () => t('Try again'),
 };
 
 /** The payer's balance as the node reads it for them (GET /api/ledger/balance): every figure whole hundredths. */
@@ -204,6 +225,27 @@ export interface BillBalanceRead {
     floor_c: Hundredths;
     liveOffers: number;
 }
+
+/**
+ * The node's balance answer (GET /api/ledger/balance: the web's getBalance, the phone's refreshBalanceFromServer) as a bill's
+ * sheet reads it, or null when it is no read at all (no answer, or no balance in whole hundredths): never a figure guessed
+ * from a cache or a missing field. A missing usable floor or allowance reads as 0 (no credit), so Pay is never on where the
+ * node would refuse.
+ */
+export function billBalanceOf(answer: unknown): BillBalanceRead | null {
+    const a = answer && typeof answer === 'object' ? (answer as Record<string, unknown>) : null;
+    if (!a || !isHundredths(a.balance_c)) return null;
+    const offers = typeof a.liveOffers === 'number' && Number.isFinite(a.liveOffers) && a.liveOffers > 0 ? Math.floor(a.liveOffers) : 0;
+    return {
+        balance_c: a.balance_c,
+        usableFloor_c: isHundredths(a.usableFloor_c) ? a.usableFloor_c : 0,
+        floor_c: isHundredths(a.floor_c) ? a.floor_c : 0,
+        liveOffers: offers,
+    };
+}
+
+/** Where a sheet's balance read is: the node's figures, still being read (null too), or failed. */
+export type BillBalanceState = BillBalanceRead | 'reading' | 'failed' | null;
 
 /** Which of the five cases a payer is in (design §4.3). */
 export type BillPayCase = 'holds' | 'credit' | 'open_line' | 'first_bill' | 'nothing';
@@ -270,6 +312,184 @@ export function billSentLine(b: Pick<BillView, 'payerName' | 'whatFor' | 'amount
     if (b.state === 'expired') return billLines.sentExpired(name, b.whatFor, b.amount_c);
     if (b.state === 'withdrawn') return billLines.sentWithdrawn(name, b.whatFor, b.amount_c);
     return billLines.sentNotPaid(name, b.whatFor, b.amount_c, day(b.sentAt));
+}
+
+// ── The apps' bill screens (slice B2): one model for both, so the phone and the web say the same at every step ──────────
+
+/** A fresh id for a payment's retry or a bill's send: an app's UUID. `rand` is for tests. */
+export const billNewId: (rand?: (n: number) => Uint8Array) => string = standingChangeId;
+
+/** Whether `b` waits on `me` now: theirs to pay, not answered, and not past its 30 days (an expiry not yet flipped too). */
+export function billWaitsOn(b: Pick<BillView, 'role' | 'payerPublicKey' | 'state' | 'expiresAt'>, me: string, now: number): boolean {
+    return !!me && b.role === 'to-pay' && b.payerPublicKey === me && b.state === 'sent' && Date.parse(b.expiresAt) > now;
+}
+
+/** The payer's sheet for one bill (design §4.3): every line and button both apps draw, in order. */
+export interface BillPaySheet {
+    billId: string;
+    title: string;
+    whatFor: string;
+    amount: string;
+    /** "About: Room at Rob's ›" and the listing it opens, when the bill names one of the sender's listings. */
+    about: string | null;
+    aboutPostId: string | null;
+    sent: string;
+    /** A sender the payer hasn't dealt with (the message-request rule): the warning, with Block and Report beside Decline. */
+    stranger: string | null;
+    /** The one money line, from the node's own balance read; null until it lands, and Pay stays off until it does. */
+    money: BillMoneyLine | null;
+    /** In place of the money line until the node's read lands: the reading line, or, when it failed, why Pay waits. */
+    balanceWait: string | null;
+    /** "Try again" beside a failed balance read: it reads the node again. Null otherwise. */
+    balanceRetry: string | null;
+    pay: string;
+    canPay: boolean;
+    decline: string;
+    message: string;
+    block: string | null;
+    report: string | null;
+    postOffer: string | null;
+    confirmTitle: string;
+    confirmBody: string;
+    confirmYes: string;
+}
+
+/**
+ * The payer's sheet for `b`, or null when it is not waiting on `me` now (any other reader, or a bill paid, declined,
+ * withdrawn or past its 30 days). `read` is the payer's balance as the NODE reads it (billBalanceOf), 'reading' (or null)
+ * until it lands, 'failed' when it couldn't be read: Pay is on only from the node's figures, never a cached copy's; `day`
+ * writes a date as the app does.
+ */
+export function billPaySheet(b: BillView, me: string, read: BillBalanceState, now: number, day: (iso: string) => string): BillPaySheet | null {
+    if (!billWaitsOn(b, me, now)) return null;
+    const name = b.billerName || t('A member');
+    const until = day(b.expiresAt);
+    const figures = read && typeof read === 'object' ? read : null;
+    const money = figures ? billMoneyLine(b.amount_c, figures, b.creditOpen === true, until) : null;
+    const stranger = b.known !== true;
+    return {
+        billId: b.id,
+        title: billLines.billFrom(name),
+        whatFor: b.whatFor,
+        amount: billLines.amountBeans(b.amount_c),
+        about: b.postId && b.postTitle ? billLines.aboutListing(b.postTitle) : null,
+        aboutPostId: b.postId && b.postTitle ? b.postId : null,
+        sent: billLines.sentWaits(day(b.sentAt), until),
+        stranger: stranger ? billLines.strangerBanner(name) : null,
+        money,
+        balanceWait: figures ? null : read === 'failed' ? billLines.balanceFailed() : billLines.balanceReading(),
+        balanceRetry: !figures && read === 'failed' ? billLines.tryAgain() : null,
+        pay: billLines.pay(b.amount_c),
+        canPay: money?.canPay === true,
+        decline: billLines.decline(),
+        message: billLines.message(name),
+        block: stranger ? billLines.block() : null,
+        report: stranger ? billLines.report() : null,
+        postOffer: money?.postOffer ? billLines.postOffer() : null,
+        confirmTitle: billLines.payConfirmTitle(name, b.amount_c),
+        confirmBody: billLines.payConfirmBody(),
+        confirmYes: billLines.payConfirmYes(),
+    };
+}
+
+/** One row of Your deals → Bills → To pay: the bell's line for it (amber from someone the payer knows); a tap opens its sheet. */
+export function billToPayRow(b: BillView, me: string, now: number): BillNeedsLine | null {
+    return billWaitsOn(b, me, now) ? billNeedsLine(b) : null;
+}
+
+/** One row of Your deals → Bills → Sent (design §4.2): its line, and Withdraw while it is not paid and not past its 30 days. */
+export interface BillSentRow { billId: string; line: string; withdraw: string | null }
+
+/**
+ * The row for a bill `actingAs` sent (the member, or the enterprise whose list it is), or null for anyone else's. A declined
+ * bill reads as not paid (the node sends it as `sent`), so Withdraw is offered on it too and never tells a decline apart.
+ */
+export function billSentRow(b: BillView, actingAs: string, now: number, day: (iso: string) => string): BillSentRow | null {
+    if (b.role !== 'sent' || !actingAs || b.billerPublicKey !== actingAs) return null;
+    // A bill that went with an invite nobody has joined with yet (slice B3): it has no 30 days until someone joins, and it goes
+    // with its invite (revoked or lapsed, the invite takes it), so its row says so and offers no Withdraw of its own.
+    if (b.awaitingJoin && b.state === 'sent') return { billId: b.id, line: billSentLine(b, day), withdraw: null };
+    const lapsed = b.state === 'sent' && !(Date.parse(b.expiresAt) > now);
+    const line = lapsed ? billLines.sentExpired(b.payerName || t('A member'), b.whatFor, b.amount_c) : billSentLine(b, day);
+    return { billId: b.id, line, withdraw: b.state === 'sent' && !lapsed ? billLines.withdraw() : null };
+}
+
+/**
+ * Where a door to a bill lands (a bell row, a push or a notice names it by id; the node sends `{ screen: 'bill', billId }`
+ * to BOTH sides, engine/bills.ts tell()): the list that holds it, on that tab. Waiting on `me`: To pay, with its sheet. One
+ * `me` sent: Sent, with its row shown (`shown`), in any state (open, paid, declined as not paid, expired, withdrawn). In no
+ * list: the node lists a payer's bill only while it waits on them, so it is one that no longer does (paid, declined,
+ * withdrawn, expired), and the plain line says so. Never "not waiting" for a bill a list holds.
+ */
+export interface BillDoor { side: 'to-pay' | 'sent'; open: BillBinding | null; shown: string | null; said: string | null }
+
+export function billDoor(lists: { toPay: readonly BillView[]; sent: readonly BillView[] }, billId: string, me: string, now: number): BillDoor {
+    const toPay = lists.toPay.find((x) => x.id === billId);
+    if (toPay && billToPayRow(toPay, me, now)) return { side: 'to-pay', open: billBinding(toPay), shown: toPay.id, said: null };
+    const sent = lists.sent.find((x) => x.id === billId);
+    if (sent && billSentRow(sent, me, now, (iso) => iso)) return { side: 'sent', open: null, shown: sent.id, said: null };
+    return { side: 'to-pay', open: null, shown: null, said: billLines.notWaiting() };
+}
+
+/** What a payer's sheet was opened for: the exact bill (its id, and what it asks, of whom, from whom). */
+export interface BillBinding { id: string; amount_c: Hundredths; whatFor: string; billerPublicKey: string; payerPublicKey: string }
+
+export function billBinding(b: Pick<BillView, 'id' | 'amount_c' | 'whatFor' | 'billerPublicKey' | 'payerPublicKey'>): BillBinding {
+    return { id: b.id, amount_c: b.amount_c, whatFor: b.whatFor, billerPublicKey: b.billerPublicKey, payerPublicKey: b.payerPublicKey };
+}
+
+/**
+ * The bill an open sheet acts on, as the latest read lists it, or null once that bill is gone or changed: no longer listed
+ * (paid, declined, withdrawn, expired, its sender blocked or held), no longer waiting on `me`, or anything it asks changed.
+ * Both apps close the sheet on null and forget it, so it never opens again by itself and acts only on the exact bill.
+ */
+export function billBoundSheet(opened: BillBinding, latest: readonly BillView[], me: string, now: number): BillView | null {
+    const b = latest.find((x) => x.id === opened.id && x.role === 'to-pay');
+    if (!b || !billWaitsOn(b, me, now)) return null;
+    if (b.amount_c !== opened.amount_c || b.whatFor !== opened.whatFor || b.billerPublicKey !== opened.billerPublicKey
+        || b.payerPublicKey !== opened.payerPublicKey) return null;
+    return b;
+}
+
+/** A payment's retry id, for one bill: kept while the sheet is open on that bill, a new one for any other. */
+export interface BillPayRequest { billId: string; requestId: string }
+
+export function billPayRequestFor(prev: BillPayRequest | null, billId: string, make: () => string = () => billNewId()): BillPayRequest {
+    return prev && prev.billId === billId ? prev : { billId, requestId: make() };
+}
+
+/** Everything a send carries (POST /api/bills) but its id. */
+export interface BillDraft { to: string; amount_c: Hundredths; whatFor: string; postId: string | null; standingId: string | null }
+
+/**
+ * The id a send goes with: the same one again only for exactly the same bill (a retry, which the node answers with the
+ * first), a new one the moment anything in it changes, so an edited bill is never refused as the first one's retry.
+ */
+export function billSendIdFor(prev: { id: string; draft: BillDraft } | null, draft: BillDraft, make: () => string = () => billNewId()): { id: string; draft: BillDraft } {
+    if (prev && prev.draft.to === draft.to && prev.draft.amount_c === draft.amount_c && prev.draft.whatFor === draft.whatFor
+        && prev.draft.postId === draft.postId && prev.draft.standingId === draft.standingId) return prev;
+    return { id: make(), draft: { ...draft } };
+}
+
+/**
+ * Whether a request's answer was lost: none came (no status), a gateway's status, or a server error. It may have gone
+ * through, so the app says so (billLines.payLost and the rest) and the same press, with the same id, finds out.
+ */
+export function billAnswerLost(e: unknown): boolean {
+    const status = (e as { status?: unknown } | null)?.status;
+    return typeof status !== 'number' || status === 0 || status >= 500;
+}
+
+/**
+ * A Ledger row's note for a bill's payment (the node's memo `Bill · <what for>`, billLines.memo): in the member's words, with
+ * the other side's name when the app knows it ("Bill · Power, October · to Rob"). Null for any other row.
+ */
+export function billLedgerNote(memo: string | null | undefined, sent: boolean, name: string | null | undefined): string | null {
+    const m = typeof memo === 'string' ? /^Bill · ([\s\S]+)$/.exec(memo) : null;
+    if (!m) return null;
+    const whatFor = m[1];
+    if (!name) return billLines.memo(whatFor);
+    return sent ? t('Bill · {whatFor} · to {name}', { whatFor, name }) : t('Bill · {whatFor} · from {name}', { whatFor, name });
 }
 
 // ── A bill with an invite (design §4.5, slice B3) ───────────────────────────────────────────────────────────────────────

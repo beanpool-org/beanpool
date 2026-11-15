@@ -95,7 +95,9 @@ export function homePath(asked: readonly HomeCardId[], point?: HomePoint | null)
     // `first-need`: and First steps' line "Ask for one thing you'd pay a neighbour for", which opens the composer on a Need (cold-start N2):
     // the node keeps First steps up for that line alone only for an app that says it draws it (home-answer.ts HomeLanding).
     // `words`: and First steps' "Keep your 12 words safe" (DESIGN-home-default-fable.md §2.4, slice D2), the same way.
-    return `/api/home?cards=${asked.join(',')}&lands=enterprise,group,invite,people,asks,first-need,words${p ? pointParams(p) : ''}`;
+    // `bills`: and a line for each bill waiting on the member ({ to: 'bill', id }), which opens its sheet in Your deals → Bills
+    // (components/Bills.tsx; DESIGN-getting-paid-fable §4.4).
+    return `/api/home?cards=${asked.join(',')}&lands=enterprise,group,invite,people,asks,first-need,words,bills${p ? pointParams(p) : ''}`;
 }
 
 export async function readStoredHome(publicKey: string, url: string): Promise<StoredHome | null> {

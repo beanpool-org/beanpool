@@ -28,7 +28,7 @@ import { CreditBarUnread } from '../components/CreditBarUnread';
 import { CreditSheet } from '../components/CreditSheet';
 import { RepaymentCard, useMyRepayment } from '../components/RepaymentCard';
 import { CreditSeenByGivers } from '../components/CreditSeenByGivers';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerBudget, VOUCH_PRESET_WORDS, type TierName } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, billLedgerNote, ledgerLineNote, ledgerBudget, VOUCH_PRESET_WORDS, type TierName } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
@@ -518,10 +518,15 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
         const isSent = tx.from === myKey;
         const at = new Date(tx.timestamp);
         const account = [tx.to, tx.from].find(k => typeof k === 'string' && k.startsWith(ESCROW_ACCOUNT));
+        const note = ledgerLineNote({ incoming: !isSent, counterparty: tx.from, memo: tx.memo }, blockedSet);
+        // A bill's payment names the other side, as the phone's row does above its note (DESIGN-getting-paid-fable §4.4):
+        // "Bill · Power, October · to Rob". Never in place of the blocked line.
+        const peer = isSent ? tx.to : tx.from;
+        const billNote = note === tx.memo ? billLedgerNote(tx.memo, isSent, members.find(m => m.publicKey === peer)?.callsign) : null;
         return {
             id: tx.id,
             sent: isSent,
-            note: ledgerLineNote({ incoming: !isSent, counterparty: tx.from, memo: tx.memo }, blockedSet),
+            note: billNote ?? note,
             // "1 Oct 2026, 9:00": core's date and time in the member's language, never the browser's own locale.
             when: Number.isFinite(at.getTime()) ? t('{date}, {time}', { date: formatDate(at, 'day-month-year'), time: formatDate(at, 'time') }) : '',
             amount: tx.amount_c,

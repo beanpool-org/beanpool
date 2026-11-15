@@ -28,6 +28,7 @@ import {
     type RelayEnvelope,
     type RelayEnvelopeFields,
     type StandingAsk,
+    type BillView,
     type StandingAuthorisationFields,
     type StandingPeriodUnit,
     type StandingPhase,
@@ -2558,6 +2559,33 @@ export async function withdrawStandingAsk(standingId: string, changeId: string):
     return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/lower/${encodeURIComponent(changeId)}/withdraw`, {});
 }
 
+// ===================== BILLS (DESIGN-getting-paid-fable §4; server routes/bills.ts) =====================
+
+/** The signer's bills: those waiting on them (`toPay`) and those they sent (`sent`), newest first. */
+export async function getBills(): Promise<{ toPay: BillView[]; sent: BillView[] }> {
+    return request('GET', '/api/bills');
+}
+
+/** Pay one, at once and for good. `requestId` (core billPayRequestFor) is the same on a retry, so it is never paid twice. */
+export async function payBill(billId: string, requestId: string): Promise<{ success: boolean; bill: BillView; transactionId: string }> {
+    return request('POST', `/api/bills/${encodeURIComponent(billId)}/pay`, { requestId });
+}
+
+/** Decline one, quietly: its sender is not told. */
+export async function declineBill(billId: string): Promise<{ success: boolean; bill: BillView }> {
+    return request('POST', `/api/bills/${encodeURIComponent(billId)}/decline`, {});
+}
+
+/** The sender takes back one not paid. */
+export async function withdrawBill(billId: string): Promise<{ success: boolean; bill: BillView }> {
+    return request('POST', `/api/bills/${encodeURIComponent(billId)}/withdraw`, {});
+}
+
+/** Report a bill to the community's owners, with the reason picked: the node declines it and names its sender. */
+export async function reportBill(billId: string, reason: string): Promise<{ success: boolean }> {
+    return request('POST', '/api/reports', { reason, targetBillId: billId });
+}
+
 export async function requestMarketplacePost(
     postId: string, buyerPublicKey: string, hours?: number
 ): Promise<{ success: boolean; transaction: MarketplaceTransaction }> {
@@ -3839,7 +3867,9 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     // `words`: and First steps' line "Keep your 12 words safe" (DESIGN-home-default-fable.md §2.4, slice D3): the node keeps the
     // card up for that line only for an app that says it draws it.
     // `learn`: and Learn's To check (slice K4): "Local knowledge to check: 3" in Needs you, and the Learn card's "3 to check ›".
-    q.set('lands', 'enterprise,group,invite,people,asks,first-need,words,learn');
+    // `bills`: and a line for each bill waiting on the member ({ to: 'bill', id }), which opens its sheet in Your deals → Bills
+    // (components/Bills.tsx; DESIGN-getting-paid-fable §4.4).
+    q.set('lands', 'enterprise,group,invite,people,asks,first-need,words,learn,bills');
     if (typeof params.lat === 'number' && typeof params.lng === 'number' && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
         q.set('lat', String(params.lat));
         q.set('lng', String(params.lng));

@@ -72,8 +72,8 @@ import { photoRefusalError, photosRefusal } from './avatar.js';
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import { keepNotice } from './kept-notices.js';
 import {
-    KNOWLEDGE_WORDS, KnowledgeRefusal, checksKnowledge, cleanKnowledgeInput, pageShowingTo, publishKnowledge, rewriteKnowledge, showingKnowledgeRow,
-    type KnowledgeInput, type ShowingKnowledgeRow,
+    KNOWLEDGE_WORDS, KnowledgeRefusal, checksKnowledge, cleanKnowledgeInput, pageShowingTo, publishKnowledge, recountKnowledgeHelped, rewriteKnowledge,
+    showingKnowledgeRow, type KnowledgeInput, type ShowingKnowledgeRow,
 } from './knowledge.js';
 import { logger } from '../logger.js';
 
@@ -667,12 +667,17 @@ export function tidyKnowledgeDrafts(now = Date.now()): number {
     return deletePlainRows('knowledge_drafts', `state != 'waiting' AND answered_at < ?`, iso(now - KNOWLEDGE_DRAFT_LIMITS.answeredDays * DAY_MS));
 }
 
-/** A member removed or gone (a prune, a self-deletion): their suggestions, those photos and their "This helped" taps go. */
+/**
+ * A member removed or gone (a prune, a self-deletion): their suggestions, those photos and their "This helped" taps go, and
+ * each page they tapped counts its taps again (slice K5), so its count is the taps that are there.
+ */
 export function dropKnowledgeOf(pubkey: string): void {
     db.transaction(() => {
         deletePlainRows('knowledge_draft_photos', 'draft_id IN (SELECT id FROM knowledge_drafts WHERE member_pubkey = ?)', pubkey);
         deletePlainRows('knowledge_drafts', 'member_pubkey = ?', pubkey);
+        const tapped = (db.prepare('SELECT post_id FROM knowledge_helped WHERE member_pubkey = ?').all(pubkey) as { post_id: string }[]).map((r) => r.post_id);
         deletePlainRows('knowledge_helped', 'member_pubkey = ?', pubkey);
+        recountKnowledgeHelped(tapped);
     })();
 }
 

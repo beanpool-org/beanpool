@@ -323,14 +323,32 @@ export function markKnowledgeHelped(reader: string, postId: unknown, on: unknown
         } else if (!on && had) {
             deletePlainRows('knowledge_helped', 'post_id = ? AND member_pubkey = ?', page.id, reader);
         }
-        const helped = (db.prepare('SELECT COUNT(*) AS n FROM knowledge_helped WHERE post_id = ? AND counted = 1').get(page.id) as { n: number }).n;
-        const was = (db.prepare('SELECT knowledge_helped AS n FROM posts WHERE id = ?').get(page.id) as { n: number }).n;
-        if (helped !== was) {
-            db.prepare('UPDATE posts SET knowledge_helped = ?, updated_at = ? WHERE id = ?').run(helped, new Date(now).toISOString(), page.id);
-            bumpPostsVersion();
-        }
-        return { helped, helpedByMe: on };
+        return { helped: recountKnowledgeHelped([page.id], now).get(page.id) ?? 0, helpedByMe: on };
     })();
+}
+
+/**
+ * Sets each page's count of "This helped" (`posts.knowledge_helped`) to its counted taps, moving its watermark only where the
+ * count changed, so a sync and a standby carry it. After a tap, and after a member's taps go with their account
+ * (engine/knowledge-drafts.ts dropKnowledgeOf). Answers each page's count.
+ */
+export function recountKnowledgeHelped(postIds: readonly string[], now = Date.now()): Map<string, number> {
+    const counts = new Map<string, number>();
+    const count = db.prepare('SELECT COUNT(*) AS n FROM knowledge_helped WHERE post_id = ? AND counted = 1');
+    const stored = db.prepare('SELECT knowledge_helped AS n FROM posts WHERE id = ?');
+    const write = db.prepare('UPDATE posts SET knowledge_helped = ?, updated_at = ? WHERE id = ?');
+    let changed = false;
+    for (const id of new Set(postIds)) {
+        const n = (count.get(id) as { n: number }).n;
+        const was = stored.get(id) as { n: number } | undefined;
+        if (was && was.n !== n) {
+            write.run(n, new Date(now).toISOString(), id);
+            changed = true;
+        }
+        counts.set(id, n);
+    }
+    if (changed) bumpPostsVersion();
+    return counts;
 }
 
 /**

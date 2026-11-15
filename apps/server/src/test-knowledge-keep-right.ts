@@ -18,6 +18,7 @@
  *  6. Close the class: each action (helped, suggest a fix, mark out of date, still right) x each reader (member, writer,
  *     owner, admin, moderator, visitor, unsigned, standby, switch off) -> the expected answer, and its effect only on a yes.
  *  7. A standby: the copy holds the taps and the page's count; no token and no Settings session reaches the new route.
+ *  8. A member removed takes their tap, and the page's count falls with it.
  *
  * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-knowledge-keep-right" node ../../scripts/run-server-suites.mjs
  */
@@ -29,7 +30,7 @@ delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 import crypto from 'node:crypto';
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, broadcast, exportSyncState, adminDeletePost } from './state-engine.js';
+import { initStateEngine, broadcast, exportSyncState, adminDeletePost, adminPruneUser, COMMUNITY_DECISION_ACTOR } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { setNodeRole } from './config/node-role.js';
@@ -376,6 +377,16 @@ async function main(): Promise<void> {
     const byToken = await helped(null, T, true, { Authorization: `Bearer ${token}`, 'X-Admin-Token': token });
     const bySession = await helped(null, T, true, OWNER());
     assert(byToken.status === 401 && bySession.status === 401 && !tapOf(T, owen.pk), `7. a token 401, a Settings session 401 (${byToken.status}, ${bySession.status})`);
+
+    // ── 8. A member removed takes their tap, and the count with it ───────────────────────────────
+    console.log('── 8. a member removed ──');
+    require_((await helped(mod, T)).body?.helped === 2 && rowOf(T).knowledge_helped === 2, 'Mod taps the table page too');
+    db.prepare('UPDATE posts SET updated_at = ? WHERE id = ?').run(OLD, T);
+    adminPruneUser(mod.pk, COMMUNITY_DECISION_ACTOR);
+    assert(!tapOf(T, mod.pk) && tombstone('knowledge_helped', `${T}|${mod.pk}`) && rowOf(T).knowledge_helped === 1 && rowOf(T).updated_at !== OLD,
+        `8. removing a member takes their tap with its tombstone, and the page counts the taps that are there (${rowOf(T).knowledge_helped})`);
+    const front8 = await call(mel, 'GET', `/api/knowledge/front?topic=${PAGE.topic}`);
+    assert(front8.body?.rows?.find((r: any) => r.id === T)?.helped === 1, '8. Learn reads the count that is there');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

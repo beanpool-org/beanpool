@@ -232,9 +232,12 @@ export function createKnowledgeRoutes(deps: RouteDeps): Router {
         const to = knowledgeCheckers().filter((pk) => pk !== sender);
         if (to.length === 0) return;
         const name = getMember(sender)?.callsign || '';
-        const body = draft.kind === 'fix' ? KNOWLEDGE_DRAFT_WORDS.suggestedFixBody : KNOWLEDGE_DRAFT_WORDS.suggestedBody;
+        // A fix names the page it would change (slice K5).
+        const body = draft.kind === 'fix'
+            ? tr(KNOWLEDGE_DRAFT_WORDS.suggestedFixBody, { name, title: draft.title })
+            : tr(KNOWLEDGE_DRAFT_WORDS.suggestedBody, { name, title: draft.title });
         try {
-            dispatchPushNotification(to, sender, tr(KNOWLEDGE_DRAFT_WORDS.suggestedTitle), tr(body, { name, title: draft.title }),
+            dispatchPushNotification(to, sender, tr(KNOWLEDGE_DRAFT_WORDS.suggestedTitle), body,
                 { screen: 'learn-check', draftId: draft.id }, 'marketplace', 'community.knowledge');
         } catch { /* the bell's count says so all the same */ }
     };

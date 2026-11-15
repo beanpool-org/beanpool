@@ -16,8 +16,8 @@
  *
  * Nothing else is touched: /api, the PWA's files and its service worker, Settings and the manager, `/` (the community's
  * card, the invite page, a post's share page, or a redirect to /app with its query: routes/settings.ts), and robots.txt
- * (Cloudflare's, at the edge). A public page outside /app (the forum's public pages, when they come) is served by its own
- * route and stays as that route makes it.
+ * (on a public forum's server, routes/forum-public.ts: it keeps /app itself open and closes /app/; elsewhere none). A public
+ * page outside /app (the forum's public pages, routes/forum-public.ts) is served by its own route and stays as that route makes it.
  */
 import fs from 'node:fs';
 import type Koa from 'koa';

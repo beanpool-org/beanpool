@@ -1142,7 +1142,7 @@ function PostDetailModal() {
             else await withdrawStandingAsk(step.standingId, step.changeId);
         } catch (e: any) {
             hapticWarning();
-            throw new Error(signedRequestWords(e?.message || ''));
+            throw new Error(signedRequestWords(String(e?.message ?? '')));
         }
         hapticSuccess();
         // Wait a little for the fresh read, so the card doesn't offer the same step again meanwhile; never long.

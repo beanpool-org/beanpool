@@ -5,7 +5,9 @@
  * tokens, wrapping at 320 dp and 1.3× text.
  */
 import React, { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+// The Stop question opens over the sheet's amount box: the keyboard closes first (utils/keyboard-alert, the 3 Nov audit).
+import { Alert } from '../utils/keyboard-alert';
 import {
     STANDING_PICK_DAYS, STANDING_PICK_MAX, formatDate, standingChangeId, standingPanel, standingSheet, standingStartAt, standingStopConfirm,
     standingTakeUpLines, standingTypedAmount, t,

@@ -246,6 +246,101 @@ describe('the three sheets', () => {
     });
 });
 
+/*
+ * A sheet acts only on what it was opened for (the #3205 deciding review, components/StandingDeal.tsx:257): Rob's Answer sheet,
+ * opened on Kim's ask of 100 (chg-1), must never answer the ask of 0 (chg-2) she makes after taking the first back (the push
+ * for the new ask starts a sync that reloads the listing with the same deal row, so the panel is not remounted), and a sheet a
+ * sync closed never opens again by itself. One table over (sheet) x (what the syncs bring while it is open): the same panel
+ * drawn again with each row, then the sheet is still bound (and what it sends carries the ask and period it was opened on) or
+ * it is closed and stays closed, the row it opened on back or not. The same table on the web (StandingShortWeek.test.tsx) and
+ * in core.
+ */
+describe('an open sheet stays bound to what it was opened for, or closes and stays closed', () => {
+    const TAKEN_BACK = { standingAsk: null, standingAsksLeft: 2 };
+    const NEW_ASK = { standingAsk: { id: 'chg-2', beans_c: 0, periodNo: 2, askedAt: '2026-11-14T09:00:00.000Z' }, standingAsksLeft: 1 };
+    const PAID = { periodNo: 2, completedAt: '2026-11-18T08:00:00.000Z', standingNextDueAt: '2026-11-25T08:00:00.000Z', standingAsk: null, standingAsksLeft: 3 };
+    const STOPPED = { standingStopped: true };
+    const ENDED = { standingPhase: 'ended' as const, standingEndedReason: 'stopped', standingEndedAt: '2026-11-18T08:00:00.000Z', standingAsk: null };
+    type Kind = 'answer' | 'lower' | 'ask';
+    /** [sheet, the side, the row it opens on, what opens it] */
+    const SHEETS: Array<[Kind, string, Partial<StandingDealRow>, string]> = [
+        ['answer', PAYEE, ASK, 'standing-ask-answer'], ['lower', PAYEE, {}, 'standing-lower-link'], ['ask', PAYER, {}, 'standing-lower-link'],
+    ];
+    /** [what the syncs bring while it is open, the rows read one after another (each over the row it opened on), per sheet: bound?] */
+    const EVENTS: Array<[string, Partial<StandingDealRow>[], Record<Kind, boolean>]> = [
+        ['nothing', [], { answer: true, lower: true, ask: true }],
+        ['a sync with no change', [{}], { answer: true, lower: true, ask: true }],
+        // The answer: Kim takes chg-1 back. The others: an ask comes (the sheet hides) and is taken back (it must stay closed).
+        ['ask taken back', [ASK, TAKEN_BACK], { answer: false, lower: false, ask: false }],
+        ['taken back, then a new ask', [ASK, TAKEN_BACK, NEW_ASK], { answer: false, lower: false, ask: false }],
+        ['the ask swapped for a new one in one sync', [NEW_ASK], { answer: false, lower: false, ask: false }],
+        ['the period paid', [PAID], { answer: false, lower: false, ask: false }],
+        ["the period's cost lowered meanwhile", [{ standingDueBeans_c: 15000 }], { answer: false, lower: false, ask: false }],
+        ['Stop tapped', [STOPPED], { answer: false, lower: false, ask: false }],
+        ['the deal ended', [ENDED], { answer: false, lower: false, ask: false }],
+    ];
+    /** One panel kept mounted and drawn again with each row, as a sync reloads the listing with the same deal row. */
+    async function mounted(side: string, onLower: (s: StandingLowerStep) => Promise<void>, first: StandingDealRow) {
+        host?.remove();
+        host = document.createElement('div');
+        document.body.appendChild(host);
+        const root = createRoot(host);
+        const draw = (tx: StandingDealRow) => act(async () => {
+            root.render(createElement(StandingPanel, { tx, actingAs: side, busy: false, onStop: vi.fn(), onMessage: vi.fn(), messageLabel: 'Message Kim', onLower }));
+        });
+        await draw(first);
+        return draw;
+    }
+    const sheets = () => host.querySelectorAll('[data-testid="standing-sheet-answer"], [data-testid="standing-sheet-lower"], [data-testid="standing-sheet-ask"]').length;
+    for (const [kind, side, at, opener] of SHEETS) {
+        for (const [what, reads, bound] of EVENTS) {
+            it(`${kind} · ${what} -> ${bound[kind] ? 'stays bound' : 'closes'}`, async () => {
+                // The first send is lost (a refusal stays on the sheet), so the table also sees what a retry carries.
+                const onLower = vi.fn(async (_s: StandingLowerStep) => {}).mockRejectedValueOnce(new Error('No connection'));
+                const draw = await mounted(side, onLower, row(at));
+                await tap(byId(opener));
+                const go = byId('standing-sheet-go')!.textContent;
+                await tap(byId('standing-sheet-go'));
+                expect(byId('standing-sheet-refusal')!.textContent).toBe('No connection');
+                const first = onLower.mock.calls[0][0] as { changeId: string };
+                for (const over of reads) await draw(row({ ...at, ...over }));
+                if (!bound[kind]) {
+                    expect(sheets()).toBe(0);
+                    // Nothing of the gone sheet is left: its refusal was about an ask or a period no longer there.
+                    expect(byId('standing-sheet-refusal')).toBeNull();
+                    expect(byId('standing-step-refusal')).toBeNull();
+                    // It never opens again by itself, even when the row it was opened on comes back.
+                    await draw(row(at));
+                    expect(sheets()).toBe(0);
+                    expect(onLower).toHaveBeenCalledTimes(1);
+                    return;
+                }
+                expect(byId(`standing-sheet-${kind}`)).not.toBeNull();
+                expect(byId('standing-sheet-go')!.textContent).toBe(go);
+                await tap(byId('standing-sheet-go'));
+                const again = onLower.mock.calls[1][0];
+                expect(again).toEqual(first);
+                if (kind === 'answer') expect(again).toEqual({ move: 'answer', standingId: 'sd-1', changeId: 'chg-1', yes: true });
+                else expect(again).toMatchObject({ move: 'lower', standingId: 'sd-1', periodNo: 2, beans_c: 10000 });
+            });
+        }
+    }
+    it("the review's case: Rob's open Answer on chg-1 (100); Kim takes it back and asks 0 (chg-2): the sheet closes, nothing is sent; Rob opens chg-2 afresh", async () => {
+        const onLower = vi.fn(async (_s: StandingLowerStep) => {});
+        const draw = await mounted(PAYEE, onLower, row(ASK));
+        await tap(byId('standing-ask-answer'));
+        expect(byId('standing-sheet-go')!.textContent).toBe('Yes, 100 Beans');
+        await draw(row(TAKEN_BACK));
+        await draw(row(NEW_ASK));
+        expect(sheets()).toBe(0);
+        expect(byId('standing-ask-line')!.textContent).toBe('⚠️ Kim asks to pay 0 Beans for the week from 18 Nov');
+        await tap(byId('standing-ask-answer'));
+        expect(byId('standing-sheet-go')!.textContent).toBe('Yes, 0 Beans');
+        await tap(byId('standing-sheet-go'));
+        expect(onLower.mock.calls).toEqual([[{ move: 'answer', standingId: 'sd-1', changeId: 'chg-2', yes: true }]]);
+    });
+});
+
 describe('at 320 dp with the text at 1.3x, light and dark from the tokens', () => {
     for (const dark of [false, true]) {
         it(`${dark ? 'dark' : 'light'}: each sheet, every colour a token, nothing fixed-width or cut to a line count, 44 dp targets`, async () => {

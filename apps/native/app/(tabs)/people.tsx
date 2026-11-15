@@ -743,9 +743,9 @@ export default function PeopleScreen() {
                     }
                     // A refused vouch shows the node's sentence and makes no ticket:
                     const serverMsg = typeof body?.error === 'string' && body.error ? body.error : typeof body?.message === 'string' && body.message ? body.message : null;
-                    // So does a refused bill (its code says so: bill_…, bills_…), and a ticket would carry none.
-                    if (bill && serverMsg && typeof body?.code === 'string' && /^bills?_|^feature_off$/.test(body.code)) {
-                        Alert.alert(t('Could not add the bill'), serverMsg);
+                    // With a bill, any refusal the node words is shown as it said it, and makes no ticket, which would carry none.
+                    if (bill && serverMsg) {
+                        Alert.alert(/^bills?_/.test(String(body?.code ?? '')) ? t('Could not add the bill') : t('Invite not made'), serverMsg);
                         return;
                     }
                     if (chosenVouch !== null && serverMsg) {

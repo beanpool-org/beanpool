@@ -41,6 +41,9 @@ describe('People › Invites (app/(tabs)/people.tsx) draws the fold and shares f
         expect(src).toMatch(/\.\.\.\(bill \? \{ bill \} : \{\}\)/);
         expect(src).toMatch(/if \(bill\) \{\s*Alert\.alert\(t\('Offline'\), inviteBillLines\.noOffline\(\)\);\s*return;/);
     });
+    it('with a bill, a refusal the node words is shown as it said it, and no offline ticket is made', () => {
+        expect(src).toMatch(/if \(bill && serverMsg\) \{\s*Alert\.alert\([^;]*serverMsg\);\s*return;/);
+    });
     it('Share names the inviter when the invite carries a bill, through core\'s one message', () => {
         expect(src).toMatch(/inviteShareText\(\{ name, link: magicLink, code: codeToShare, address, billFrom: carriesBill \? identity\?\.callsign : null \}\)/);
     });

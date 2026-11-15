@@ -6,7 +6,8 @@
  * - **Who reads.** Members of this community, whatever its kind, who read as members (readsAsMember, as the Market's
  *   members-only reads): anyone else nothing (the routes answer 403 `not_member`), and a paused member nothing while the
  *   pause lasts (403 `not_active`). A topic or post by someone the reader blocked is left out of every answer, as listings are. The public
- *   pages of the global community's forum are slice F7, through `public_from`, which nothing stamps yet.
+ *   pages of the global community's forum (slice F7, engine/forum-public.ts) read only posts with `public_from`, stamped here when a
+ *   known writer posts.
  * - **Who writes.** An active, unmuted member: a topic in a section open to members, a reply in an open topic, an edit or a
  *   removal of their own post, closing their own topic. Owners and admins also start topics in "News from BeanPool" (a
  *   section for staff), close and move any topic, pin, and make, rename, order and archive sections. Moderators (owners,
@@ -67,6 +68,7 @@ import { dropForumFollowsOf, followForumTopic, forumFollowOf, markForumTopicRead
 import { dropForumLabelOf, forumLabelsOf, forumLabelsTag } from './membership-note.js';
 import { forumSectionOpenPolls, sectionAccess, sectionReadSql, type SectionAccess } from './forum-sections.js';
 import { postOutOfSight } from './post-sight.js';
+import { stampForumPublicFrom } from './forum-public.js';
 import { getDecision, titleForMembers } from '../decisions-engine.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -611,6 +613,8 @@ export function startForumTopic(member: string, raw: TopicInput, now = Date.now(
         storePhotos(member, postId, photos, now);
         followForumTopic(member, topicId, now, 1);
     })();
+    // On a public forum a known writer's words are public from now (slice F7, engine/forum-public.ts); a new one's wait.
+    stampForumPublicFrom(member, now);
     return { topic: forumTopic(member, topicId, 0).topic, post: onePostOut(postId, member) };
 }
 
@@ -671,6 +675,7 @@ export function replyInForum(member: string, topicId: string, raw: ReplyInput, n
         // Who replies follows the topic (unless they muted it), read up to their own reply.
         followForumTopic(member, topicId, now, n);
     })();
+    stampForumPublicFrom(member, now);
     return onePostOut(id, member);
 }
 

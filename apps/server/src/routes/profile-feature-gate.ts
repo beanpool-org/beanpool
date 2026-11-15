@@ -95,6 +95,12 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
         needs: ['forum'],
         paths: [/^\/api\/forum(\/|$)/],
     },
+    // The forum for anyone on the web (slice F7, routes/forum-public.ts): only where it is public too, the global community.
+    // A local community's forum is for its members.
+    {
+        needs: ['forum', 'forumPublic'],
+        paths: [/^\/api\/forum\/(public|photos)(\/|$)/],
+    },
     // "Ask to join" (G6, routes/knocks.ts): the applicant's knock and status, and the members' list and answers. Off on
     // the global node, and wherever the operator opted out. Not the operator's count (/api/local/admin/knocks), which
     // Settings shows beside the switch that turns them back on. A knock is answered with an invite, so where invites

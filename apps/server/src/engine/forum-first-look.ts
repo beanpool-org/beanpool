@@ -27,6 +27,7 @@ import { ForumRefusal, forumWriters, type ForumWaitingTopic } from './forum.js';
 import { forumModerators, isForumModerator } from './forum-moderation.js';
 import { normaliseRemovalReason, REMOVAL_REASON_LABELS, tell, type ModerationNoticeCallbacks, type TellPush } from './moderation-notices.js';
 import { followForumTopic } from './forum-notices.js';
+import { stampForumPublicFrom } from './forum-public.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -160,6 +161,8 @@ export function okFirstLook(cb: ModerationNoticeCallbacks, moderator: string, id
         // Its writer follows it, as anyone who starts a topic does (engine/forum-notices.ts).
         followForumTopic(row.writer_pubkey, topicId, now);
     })();
+    // Known from now: on a public forum their posts, this topic among them, are public from now (slice F7, engine/forum-public.ts).
+    stampForumPublicFrom(row.writer_pubkey, now);
     tell(cb, [row.writer_pubkey], FIRST_LOOK_WORDS.answeredTitle,
         tr('Your first topic “{title}” is up in the forum. From now on your topics go up at once.', { title: quoted(row.title) }),
         { kind: 'forum_first_look_answered', outcome: 'ok', topicId, screen: 'forum_topic' }, ANSWERED_PUSH);

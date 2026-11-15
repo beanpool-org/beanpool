@@ -28,6 +28,25 @@ if (typeof window !== 'undefined' && window.HTMLElement) {
 }
 
 vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}) }));
+/**
+ * The web app's own encoder (lib/voice-encode.ts, the WASM AAC encoder), in a browser whose recorder can't write .m4a. Its
+ * module is fetched by import() at the first click: `encoder.loads` counts each time this stand-in is loaded, so a load
+ * before the click shows. `encoder.fail` makes it fail as an encoder that didn't load does (a CSP, a network, a WASM error).
+ */
+const encoder = vi.hoisted(() => ({ loads: 0, fail: false, captures: [] as { context: unknown; input: unknown }[], cancelled: 0 }));
+vi.mock('../lib/voice-encode', () => {
+    encoder.loads += 1;
+    return {
+        startVoiceCapture: async (context: unknown, input: unknown) => {
+            if (encoder.fail) throw new Error('CompileError: WebAssembly.instantiate(): refused by the page\'s policy');
+            encoder.captures.push({ context, input });
+            return {
+                stop: async () => new Uint8Array([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20, 0, 0, 0, 0, 0, 0, 0, 8, 0x6d, 0x6f, 0x6f, 0x76, 9, 9, 9, 9]),
+                cancel: () => { encoder.cancelled += 1; },
+            };
+        },
+    };
+});
 vi.mock('../lib/blocklist', () => ({
     isUserBlocked: vi.fn(() => false),
     blockUser: vi.fn(),
@@ -339,14 +358,77 @@ describe('voice messages on the web (V4)', () => {
         expect(getUserMedia).not.toHaveBeenCalled();
     });
 
-    it('Firefox (no AAC recorder): one line instead of a microphone, in a DM and a locked group', async () => {
+    it('a browser that can neither (no AAC recorder, no AudioWorklet or worker for the encoder): one line instead of a microphone, naming no browser, in a DM and a locked group', async () => {
         recorderWrites = false;
+        vi.stubGlobal('AudioWorkletNode', undefined);
+        vi.stubGlobal('Worker', undefined);
         render(<MessagesPage identity={identity} openConversationId={DM_CONV} />);
-        expect(await screen.findByText("This browser can't record voice messages. Chrome, Edge, Safari and the phone app can.")).toBeTruthy();
+        expect(await screen.findByText("This browser can't record voice messages. The phone app can.")).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Record a voice message' })).toBeNull();
         cleanup();
         render(<MessagesPage identity={identity} openConversationId={G} />);
-        expect(await screen.findByText("This browser can't record voice messages. Chrome, Edge, Safari and the phone app can.")).toBeTruthy();
+        expect(await screen.findByText("This browser can't record voice messages. The phone app can.")).toBeTruthy();
+        expect(encoder.loads).toBe(0);
+    });
+
+    // The encoder's two tests run in this order: the first proves nothing loaded it before its click (encoder.loads is 0).
+    it('Firefox and Brave on Android (no AAC recorder) record through the web app\'s own encoder: fetched at the first click, never before; the same voice line goes', async () => {
+        recorderWrites = false;
+        vi.stubGlobal('AudioWorkletNode', function AudioWorkletNode() {});
+        vi.stubGlobal('Worker', function Worker() {});
+        vi.stubGlobal('AudioContext', FakeAudioContext);
+        const sends: any[] = [];
+        vi.mocked(sendMessageApi).mockImplementation(async (...args: any[]) => { sends.push(args); return { success: true, message: { id: args[7] } } as any; });
+        render(<MessagesPage identity={identity} openConversationId={DM_CONV} />);
+        const mic = await screen.findByRole('button', { name: 'Record a voice message' });
+        expect(screen.queryByText(/can't record voice messages/)).toBeNull();
+        await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+        expect(encoder.loads).toBe(0); // nothing of the encoder before the click
+        fireEvent.click(mic);
+        // The sound it records through is made in the click itself, so no browser holds it suspended.
+        expect(FakeAudioContext.made).toHaveLength(1);
+        await screen.findByRole('button', { name: 'Stop recording' });
+        expect(encoder.loads).toBe(1);
+        expect(getUserMedia).toHaveBeenCalledTimes(1);
+        expect(encoder.captures).toHaveLength(1);
+        expect(encoder.captures[0].context).toBe(FakeAudioContext.made[0]);
+        expect(recorderOptions).toEqual([]); // the browser's recorder is never made
+        clock += 2300;
+        fireEvent.click(screen.getByRole('button', { name: 'Send voice message' }));
+        await waitFor(() => expect(sends).toHaveLength(1));
+        const [conv, author, , , type, attachment, , id] = sends[0];
+        expect([conv, author, type, attachment.mime]).toEqual([DM_CONV, ana.publicKey, 'voice', 'audio/mp4']);
+        const opened = openDmVoice({ ciphertext: attachment.data, nonce: attachment.nonce }, { myEdPrivHex: ben.privateKey, peerEdPubHex: ana.publicKey },
+            { conversationId: DM_CONV, senderPubHex: ana.publicKey, messageId: id });
+        expect(opened.durationMs).toBe(2300);
+        expect(opened.sound.slice(-4)).toEqual(new Uint8Array([9, 9, 9, 9])); // the encoder's file, as it made it
+        await waitFor(() => expect(track.stop).toHaveBeenCalled());
+        await waitFor(() => expect(FakeAudioContext.made[0].close).toHaveBeenCalled());
+        expect(await screen.findByRole('button', { name: 'Record a voice message' })).toBeTruthy();
+    });
+
+    it('an encoder that doesn\'t load says so, records nothing, lets the microphone go, and leaves the box to type in: the line takes the microphone\'s place', async () => {
+        recorderWrites = false;
+        encoder.fail = true;
+        vi.stubGlobal('AudioWorkletNode', function AudioWorkletNode() {});
+        vi.stubGlobal('Worker', function Worker() {});
+        vi.stubGlobal('AudioContext', FakeAudioContext);
+        try {
+            render(<MessagesPage identity={identity} openConversationId={DM_CONV} />);
+            fireEvent.click(await screen.findByRole('button', { name: 'Record a voice message' }));
+            expect(await screen.findByText("The voice recorder didn't load in this browser. Nothing was recorded. You can still type a message.")).toBeTruthy();
+            expect(screen.queryByRole('button', { name: 'Stop recording' })).toBeNull();
+            await waitFor(() => expect(track.stop).toHaveBeenCalled());
+            await waitFor(() => expect(FakeAudioContext.made[0].close).toHaveBeenCalled());
+            expect(await screen.findByText("This browser can't record voice messages. The phone app can.")).toBeTruthy();
+            expect(screen.queryByRole('button', { name: 'Record a voice message' })).toBeNull();
+            const box = screen.getByPlaceholderText('Message...') as HTMLTextAreaElement;
+            fireEvent.change(box, { target: { value: 'hi' } });
+            expect(box.value).toBe('hi');
+            expect(sendMessageApi).not.toHaveBeenCalled();
+        } finally {
+            encoder.fail = false;
+        }
     });
 
     it('no microphone in a message request, either way', async () => {

@@ -76,9 +76,10 @@ export function formOfPage(page: KnowledgePage): KnowledgeFormValues {
 const sourcesKey = (sources: ReadonlyArray<{ url: string; label?: string }>) => JSON.stringify(sources.map((s) => [s.url.trim(), (s.label ?? '').trim()]));
 
 /**
- * What "Suggest a fix" sends (§3.5): the page it names, "What changed?", and only the parts the member changed from the page as
- * the phone holds it. The phone's copy may be older than the node's page: a part sent unchanged from it would read as a change
- * (PR #3203, "For K5 B"), so an untouched part is never sent. Never photos (the node refuses them on a fix), never a language.
+ * What "Suggest a fix" sends (§3.5): the page it names, "What changed?", and only the parts the member changed from `page`, the
+ * page the form opened on (app/learn/new.tsx keeps it; never the copy as a later sync left it: review of #3218). The phone's copy
+ * may be older than the node's page: a part sent unchanged from it would read as a change (PR #3203, "For K5 B"), so an untouched
+ * part is never sent. Never photos (the node refuses them on a fix), never a language.
  */
 export function fixBody(page: KnowledgePage, form: KnowledgeFormValues, note: string): Record<string, unknown> {
     const now = knowledgeFormBody({ ...form, photos: [] }, '');

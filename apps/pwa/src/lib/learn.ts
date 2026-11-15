@@ -403,9 +403,10 @@ const sameSources = (a: readonly KnowledgeSource[], b: readonly KnowledgeSource[
     JSON.stringify(a.map((s) => [s.url, s.label])) === JSON.stringify(b.map((s) => [s.url.trim(), (s.label ?? '').trim()]));
 
 /**
- * What "Suggest a fix" sends (§3.5): the page it names, "What changed?", and only the parts the member changed from the page as
- * it shows here. The node treats a part sent as it shows as no change, but this page may be older than the node's: a part sent
- * unchanged from an older copy would read as a change (PR #3203, "For K5 B"), so an untouched part is never sent. Never photos.
+ * What "Suggest a fix" sends (§3.5): the page it names, "What changed?", and only the parts the member changed from `page`, the
+ * page the form opened on (LearnPage keeps it: an answer landing meanwhile adds nothing, review of #3218). The node treats a part
+ * sent as it shows as no change, but this page may be older than the node's: a part sent unchanged from an older copy would read
+ * as a change (PR #3203, "For K5 B"), so an untouched part is never sent. Never photos.
  */
 export function learnFixToSend(page: LearnPost, input: LearnInput): Record<string, unknown> {
     const now = learnInputToSend(input);

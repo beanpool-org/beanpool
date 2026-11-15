@@ -452,6 +452,13 @@ describe('in the member\'s language: every new word goes through t() (the xx pse
         for (const w of ['WHAT CHANGED? *', 'Suggest a fix', 'An owner or admin checks it first. The page stays as it is until then.']) expect(host.textContent).toContain(pseudoLocalise(w));
         await click('learn-new-send');
         expect(q('learn-new-problem')!.textContent).toBe(pseudoLocalise('Say what changed.'));
+        // An edit with the node not reached (a pushed route: a screen of its own, hence the key).
+        h.checks = true;
+        h.byId = null;
+        h.params = { edit: 'tip' };
+        await show(createElement(NewKnowledgeScreen, { key: 'edit' }));
+        expect(q('learn-new-unreached')!.textContent).toBe(pseudoLocalise('Couldn\'t reach your community. Check your connection and try again.'));
+        expect(q('learn-new-again')!.textContent).toBe(pseudoLocalise('Try again'));
     });
 });
 

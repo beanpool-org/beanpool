@@ -50,7 +50,7 @@ In the web app, use **Message** on their profile, 💬 on their row under **Peop
 
 - Type in **Message...** and tap the send button.
 - To send a photo, tap **+**, then **Camera**, **Gallery** (opens on **Albums**), or **Browse files**. In the web app, use the **📎** button, or paste or drag a picture straight into the chat — it shows you the picture first, and anything you have already typed goes with it as a caption. In a locked group chat you can send one photo per message, with or without a caption, on the phone and the web; photos there are made at most 800 px on their longest side. Tap a photo to open it full screen, on the phone and the web. In a chat between two people on the phone, a photo goes on its own, without words. Photos cannot be sent in event chats or enterprise chats: the community's server can read those chats, so they have no photo button.
-- To send a voice message, hold the microphone that takes the send button's place while the box is empty, and let go to send. It is locked like a photo, up to 3 minutes long, and your community's server keeps it for 30 days. See "Voice messages".
+- To send a voice message, use the microphone that takes the send button's place while the box is empty: on the phone, hold it and let go to send; in the web app, click it to start. It is locked like a photo, up to 3 minutes long, and your community's server keeps it for 30 days. See "Voice messages".
 
 The ticks under your message:
 

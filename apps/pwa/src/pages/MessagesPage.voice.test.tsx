@@ -33,11 +33,12 @@ vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}) }));
  * module is fetched by import() at the first click: `encoder.loads` counts each time this stand-in is loaded, so a load
  * before the click shows. `encoder.fail` makes it fail as an encoder that didn't load does (a CSP, a network, a WASM error).
  */
-const encoder = vi.hoisted(() => ({ loads: 0, fail: false, captures: [] as { context: unknown; input: unknown }[], cancelled: 0 }));
+const encoder = vi.hoisted(() => ({ loads: 0, fail: false, hold: null as Promise<void> | null, captures: [] as { context: unknown; input: unknown }[], cancelled: 0 }));
 vi.mock('../lib/voice-encode', () => {
     encoder.loads += 1;
     return {
         startVoiceCapture: async (context: unknown, input: unknown) => {
+            if (encoder.hold) await encoder.hold;
             if (encoder.fail) throw new Error('CompileError: WebAssembly.instantiate(): refused by the page\'s policy');
             encoder.captures.push({ context, input });
             return {
@@ -405,6 +406,35 @@ describe('voice messages on the web (V4)', () => {
         await waitFor(() => expect(track.stop).toHaveBeenCalled());
         await waitFor(() => expect(FakeAudioContext.made[0].close).toHaveBeenCalled());
         expect(await screen.findByRole('button', { name: 'Record a voice message' })).toBeTruthy();
+    });
+
+    it('the bin while the encoder is still loading lets the microphone go at once, and the late encoder is thrown away unheard', async () => {
+        recorderWrites = false;
+        let release: () => void = () => {};
+        encoder.hold = new Promise<void>((r) => { release = r; });
+        vi.stubGlobal('AudioWorkletNode', function AudioWorkletNode() {});
+        vi.stubGlobal('Worker', function Worker() {});
+        vi.stubGlobal('AudioContext', FakeAudioContext);
+        const cancelledBefore = encoder.cancelled;
+        try {
+            render(<MessagesPage identity={identity} openConversationId={DM_CONV} />);
+            fireEvent.click(await screen.findByRole('button', { name: 'Record a voice message' }));
+            await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(1));
+            await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+            expect(screen.queryByRole('button', { name: 'Stop recording' })).toBeNull(); // still loading
+            fireEvent.click(screen.getByRole('button', { name: 'Delete recording' }));
+            // Let go now, with the encoder still loading.
+            await waitFor(() => expect(track.stop).toHaveBeenCalled());
+            await waitFor(() => expect(FakeAudioContext.made[0].close).toHaveBeenCalled());
+            release();
+            await waitFor(() => expect(encoder.cancelled).toBe(cancelledBefore + 1));
+            expect(screen.queryByRole('button', { name: 'Stop recording' })).toBeNull();
+            expect(screen.queryByText(/didn't load/)).toBeNull();
+            expect(await screen.findByRole('button', { name: 'Record a voice message' })).toBeTruthy();
+            expect(sendMessageApi).not.toHaveBeenCalled();
+        } finally {
+            encoder.hold = null;
+        }
     });
 
     it('an encoder that doesn\'t load says so, records nothing, lets the microphone go, and leaves the box to type in: the line takes the microphone\'s place', async () => {

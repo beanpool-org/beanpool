@@ -29,6 +29,8 @@ import { holdVoicePlayers } from '../lib/voice-player';
 import type { VoiceCapture } from '../lib/voice-encode';
 
 const TICK_MS = 100;
+/** How long the encoder's path waits for a suspended AudioContext to start before it says the recorder didn't start. */
+const RESUME_WAIT_MS = 3000;
 
 interface Live {
     stream: MediaStream;
@@ -89,6 +91,11 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null, useEn
     const mounted = useRef(true);
     const gen = useRef(0);
     const keeping = useRef<Promise<void> | null>(null);
+    /**
+     * The encoder's path between the microphone's yes and the recording starting (the chunk still loading): the microphone
+     * and the sound, so the bin, another chat or leaving lets the microphone go at once, not when the load settles.
+     */
+    const pending = useRef<{ stream: MediaStream; ctx: AudioContext } | null>(null);
     const sendRef = useRef(onSend);
     sendRef.current = onSend;
 
@@ -101,6 +108,12 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null, useEn
 
     /** Stop the microphone and collect what it wrote: the .m4a's bytes, its length, its waveform. */
     const stopLive = useCallback(async (keepIt: boolean): Promise<VoiceInput | null> => {
+        const p = pending.current;
+        pending.current = null;
+        if (p) {
+            for (const tr of p.stream.getTracks()) { try { tr.stop(); } catch { /* gone */ } }
+            void p.ctx.close().catch(() => {});
+        }
         const l = live.current;
         live.current = null;
         if (!l) return null;
@@ -216,13 +229,21 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null, useEn
             return;
         }
         const ctx = context;
-        const letGo = () => { for (const tr of stream.getTracks()) { try { tr.stop(); } catch { /* gone */ } } void ctx.close().catch(() => {}); };
+        const letGo = () => {
+            if (pending.current?.stream === stream) pending.current = null;
+            for (const tr of stream.getTracks()) { try { tr.stop(); } catch { /* gone */ } }
+            void ctx.close().catch(() => {});
+        };
         const stillAsking = () => current(g) && stateRef.current.phase === 'asking';
         if (!stillAsking()) { letGo(); return; }
+        pending.current = { stream, ctx };
         let capture: VoiceCapture;
         let analyser: AnalyserNode | null = null;
         try {
-            if (ctx.state === 'suspended') await ctx.resume();
+            // Made in the click it runs; a browser that holds it anyway gets a bounded wait, never a recording of nothing.
+            if (ctx.state === 'suspended') await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, RESUME_WAIT_MS))]);
+            if (!stillAsking()) { letGo(); return; }
+            if (ctx.state !== 'running') throw new Error('the sound did not start');
             const source = ctx.createMediaStreamSource(stream);
             try { analyser = ctx.createAnalyser(); analyser.fftSize = 1024; source.connect(analyser); } catch { analyser = null; }
             const mod = await loading;
@@ -233,11 +254,13 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null, useEn
                 if (stateRef.current.phase === 'recording') dispatch({ type: 'failed', encoder: true });
             });
         } catch {
-            for (const tr of stream.getTracks()) { try { tr.stop(); } catch { /* gone */ } }
-            broken();
+            const mine = pending.current?.stream === stream;
+            letGo();
+            if (mine) broken(); // else the bin, another chat or leaving already let it go: nothing to say
             return;
         }
         if (!stillAsking()) { capture.cancel(); letGo(); return; }
+        pending.current = null;
         // The microphone taken away (unplugged, another app): what was heard is not sent.
         for (const tr of stream.getTracks()) tr.onended = () => { if (mounted.current && stateRef.current.phase === 'recording') dispatch({ type: 'failed' }); };
         const l: Live = { stream, recorder: null, capture, chunks: [], startedAt: 0, levels: [], timer: null, context: ctx, stopped: Promise.resolve(), settle: () => {} };

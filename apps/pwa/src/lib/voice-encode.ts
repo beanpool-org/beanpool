@@ -121,12 +121,18 @@ export interface VoiceCapture {
 export async function startVoiceCapture(context: AudioContext, input: AudioNode, onError: (e: unknown) => void): Promise<VoiceCapture> {
     await context.audioWorklet.addModule(workletUrl);
     const encoder = await openVoiceEncoder();
-    const node = new AudioWorkletNode(context, 'beanpool-voice-capture', {
-        numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers',
-    });
-    const mute = context.createGain();
-    mute.gain.value = 0;
-    const resampler = new VoiceResampler(context.sampleRate, VOICE_ENCODE_RATE);
+    let node: AudioWorkletNode, mute: GainNode, resampler: VoiceResampler;
+    try {
+        node = new AudioWorkletNode(context, 'beanpool-voice-capture', {
+            numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers',
+        });
+        mute = context.createGain();
+        mute.gain.value = 0;
+        resampler = new VoiceResampler(context.sampleRate, VOICE_ENCODE_RATE);
+    } catch (e) {
+        encoder.cancel();
+        throw e;
+    }
     let finished: () => void = () => {};
     const drained = new Promise<void>((resolve) => { finished = resolve; });
     let over = false;

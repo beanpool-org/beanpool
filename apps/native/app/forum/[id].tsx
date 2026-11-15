@@ -190,6 +190,10 @@ export default function ForumTopicScreen() {
             return;
         }
         void keepForumDraft(topic.id, null);
+        // Emptied the way it was filled. A box filled by setText (a draft put back, a refused send's words) and sent untouched
+        // kept its words on Android 8 with Send greyed (F3 part 2 walk): the composer's own clear was dropped as stale and no
+        // echo came for its sweep. setText('') writes the native box itself, as the draft's setText did.
+        composer.current?.setText('');
         setPhotos([]);
         setQuote(null);
         // On from the last post drawn, through their own reply: it shows where it went, and nothing read is lost.
@@ -340,11 +344,15 @@ export default function ForumTopicScreen() {
                     {page?.next != null && (
                         <Pressable accessibilityRole="button" onPress={() => void readThrough(page.next!, 0)} style={styles.quiet}><Text style={styles.quietText}>{t(TOPIC_WORDS.moreReplies)}</Text></Pressable>
                     )}
-                    {error && <Text style={styles.danger} accessibilityRole="alert">{error}</Text>}
+                    {/* With no reply box (a closed topic), the line ends the posts; with one, it sits just above the box (below). */}
+                    {error && !(topic && open) && <Text style={styles.danger} accessibilityRole="alert">{error}</Text>}
                     {topic && !open && <Text style={styles.italic} testID="forum-closed">{t(TOPIC_WORDS.closed)}</Text>}
                 </ScrollView>
                 {topic && open && (
                     <View testID="forum-reply">
+                        {/* Why a send didn't go (no connection: the words wait in the box, kept as the draft), where the eye is: the
+                            box is pinned at the foot, so a line at the end of a long topic's posts was never seen (F3 part 2 walk). */}
+                        {error && <Text style={[styles.danger, { marginHorizontal: 12, marginTop: 6 }]} accessibilityRole="alert" testID="forum-reply-error">{error}</Text>}
                         {quote && (
                             <View style={[styles.quote, { flexDirection: 'row', alignItems: 'center', marginHorizontal: 12, marginTop: 6 }]} testID="forum-quote">
                                 <Text style={[styles.small, { flex: 1 }]} numberOfLines={2}>{t(TOPIC_WORDS.replyingTo, { name: name(quote), words: quote.words })}</Text>
@@ -358,7 +366,7 @@ export default function ForumTopicScreen() {
                             // A reply has words, as on the web: photos alone don't send (the box keeps them).
                             canSend={() => !!composer.current?.currentText()}
                             onAttach={front?.linksOn ? () => void attach() : undefined}
-                            attachment={photos.length ? <ForumAttached photos={photos} onChange={setPhotos} disabled={busy} /> : null} />
+                            attachment={photos.length ? <ForumAttached photos={photos} onChange={setPhotos} disabled={busy} band /> : null} />
                     </View>
                 )}
             </KeyboardAvoidingView>

@@ -89,13 +89,16 @@ export function pickForumPhoto(): Promise<string | null> {
     });
 }
 
-/** The photos waiting to go with a topic or a reply (up to 3), each with ✕ to take it off, as the web's row. */
-export function ForumAttached({ photos, onChange, disabled }: { photos: string[]; onChange: (photos: string[]) => void; disabled?: boolean }) {
+/**
+ * The photos waiting to go with a topic or a reply (up to 3), each with ✕ to take it off, as the web's row. `band`: in the reply
+ * box, on the composer's own band.
+ */
+export function ForumAttached({ photos, onChange, disabled, band }: { photos: string[]; onChange: (photos: string[]) => void; disabled?: boolean; band?: boolean }) {
     const styles = useForumStyles();
     const { colors } = useTheme();
     if (!photos.length) return null;
     return (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 12, paddingTop: 8 }} testID="forum-attached">
+        <View style={[{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 12, paddingTop: 8 }, band && styles.attachedBand]} testID="forum-attached">
             {photos.map((p, i) => (
                 <View key={i} style={styles.photo}>
                     <Image source={{ uri: p }} style={{ width: '100%', height: '100%' }} resizeMode="cover" accessibilityLabel={t(TOPIC_WORDS.photo, { n: i + 1 })} />

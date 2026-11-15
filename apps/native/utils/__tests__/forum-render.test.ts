@@ -80,7 +80,7 @@ vi.mock('../../components/chat/ChatComposer', async () => {
     return {
         ChatComposer: forwardRef((props: P, ref) => {
             const [text, setText] = useState('');
-            useImperativeHandle(ref, () => ({ setText, reset: () => setText(''), focus: () => {}, currentText: () => text.trim() }), [text]);
+            useImperativeHandle(ref, () => ({ setText: (w: string) => { composerCalls.push(`setText:${w}`); setText(w); }, reset: () => setText(''), focus: () => {}, currentText: () => text.trim() }), [text]);
             return createElement('div', { 'data-testid': 'forum-composer' },
                 props.attachment as any,
                 props.onAttach ? createElement('button', { 'data-testid': 'forum-composer-attach', onClick: props.onAttach }) : null,
@@ -89,6 +89,7 @@ vi.mock('../../components/chat/ChatComposer', async () => {
         }),
     };
 });
+const composerCalls = vi.hoisted(() => [] as string[]);
 const picker = vi.hoisted(() => ({ next: null as string | null, asked: 0 }));
 vi.mock('expo-image-picker', () => ({}));
 vi.mock('../chat-photo', () => ({ chatPhotoDataUri: vi.fn(), withinMs: (p: Promise<unknown>) => p }));
@@ -232,6 +233,7 @@ beforeEach(() => {
     Object.assign(node, { offline: false, refused: null, front: FRONT, list: LIST, topic: TOPIC, kept: { front: null, list: null, topic: null }, mine: null, search: null, draft: null, replyFails: false });
     picker.next = null;
     picker.asked = 0;
+    composerCalls.length = 0;
     Object.assign(worldwide, { joined: false, opened: [], answer: 'switched' });
     vi.clearAllMocks();
 });
@@ -388,6 +390,8 @@ describe.each(LOOKS)('a topic\'s photos and draft in %s (%s)', (_name, set) => {
         expect(picker.asked).toBe(1);
         expect(byId(host, 'forum-attached').querySelector('img')!.getAttribute('data-src')).toBe(PHOTO);
         expect(byId(host, 'forum-attached-remove').getAttribute('aria-label')).toBe('Remove photo 1');
+        // On the box's own band (the chat's staged-photo row), never on the page under the post above.
+        expect(styleOf(byId(host, 'forum-attached')).backgroundColor).toBe(COLOUR_SETS[set].surface.card);
         expectHoldsSmall(host);
         // Photos alone don't send (a reply has words, as on the web); with words they go together.
         const { replyInForum, keepForumDraft } = await import('../forum');
@@ -398,6 +402,8 @@ describe.each(LOOKS)('a topic\'s photos and draft in %s (%s)', (_name, set) => {
         expect(vi.mocked(replyInForum).mock.calls[0][1]).toMatchObject({ words: 'Here is our seed table.', photos: [PHOTO] });
         expect(byId(host, 'forum-attached')).toBeNull();
         expect(keepForumDraft).toHaveBeenLastCalledWith('t1', null);
+        // Posted: the box is emptied through setText, which writes the native box (the composer's own clear can be dropped).
+        expect(composerCalls.at(-1)).toBe('setText:');
     });
 
     it('a new writer (links and photos off) gets no photo button, as on the web', async () => {
@@ -418,7 +424,9 @@ describe.each(LOOKS)('a topic\'s photos and draft in %s (%s)', (_name, set) => {
         expect(keepForumDraft).toHaveBeenLastCalledWith('t1', { words: 'Typed on the bus', quotes: 2, photos: [PHOTO] });
         // The words are back in the box, with the forum's own line (no answer has no words of its own).
         expect((byId(host, 'forum-reply-box') as HTMLTextAreaElement).value).toBe('Typed on the bus');
-        expect(words(host)).toContain('Couldn’t save this in the forum.');
+        // Just above the box, where the eye is (the box is pinned at the foot of a long topic).
+        expect(words(byId(host, 'forum-reply-error'))).toBe('Couldn’t save this in the forum.');
+        expect(byId(host, 'forum-reply').contains(byId(host, 'forum-reply-error'))).toBe(true);
         expectReadable(host, set);
     });
 

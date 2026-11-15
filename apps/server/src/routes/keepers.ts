@@ -27,13 +27,11 @@
  * inside `shares[]`, so a body-supplied owner would sail past it. Taking it from the actor means
  * the question never arises.
  *
- * ## What the public read gives away
+ * ## Nothing here is public
  *
- * `GET /api/recovery/keepers/:callsign` is a membership oracle: it answers, to anyone, whether a
- * callsign exists on this node and roughly how it is protected. ONBOARDING accepts this — a
- * frightened user on a new phone has no identity to sign with, and the restore screen cannot be
- * drawn without it — and it is rate-limited and returns types and counts only, never identities.
- * Answering with keeper pubkeys would turn a callsign into a map of who trusts whom.
+ * Every route here answers its signed member alone (activeSigner), and none answers for a name: the public keeper
+ * summary by callsign went with keeper recovery, and a restore finds its account from a verified sign-in
+ * (routes/recovery-collect.ts), never from a typed name.
  */
 
 import Router from '@koa/router';

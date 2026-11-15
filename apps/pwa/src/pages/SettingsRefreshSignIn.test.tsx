@@ -84,6 +84,41 @@ describe('Settings: the Refresh row', () => {
         expect(screen.queryByTestId('refresh-sign-in-facebook-start')).toBeNull();
     });
 
+    // Round 2 of #3202: two sign-ins to refresh drew two blocks that looked the same ("Refresh" twice, under a sentence
+    // that names no sign-in); only aria-label and the testid named the provider. The phone draws each Refresh inside that
+    // sign-in's own "Google Connected" / "Apple Connected" row (KeeperProtectionPanel), so its member sees which is which.
+    it('two sign-ins to refresh: two blocks, and what each one shows names its own sign-in', async () => {
+        const status = { enrolledSso: ['google', 'apple'], findableSso: [] };
+        vi.mocked(api.getSignInRecovery).mockResolvedValue(status.enrolledSso);
+        vi.mocked(api.getSignInsToRefresh).mockResolvedValue(signInsToRefresh(status));
+        renderSettings();
+        const google = await screen.findByTestId('refresh-sign-in-google');
+        const apple = screen.getByTestId('refresh-sign-in-apple');
+        // textContent is what is drawn: aria-label and the testid are not in it.
+        expect(google.textContent).not.toBe(apple.textContent);
+        expect(google.textContent).toContain('Google');
+        expect(google.textContent).not.toContain('Apple');
+        expect(apple.textContent).toContain('Apple');
+        expect(apple.textContent).not.toContain('Google');
+        // The button's own words name it, so its accessible name is what a sighted member reads.
+        expect(screen.getByTestId('refresh-sign-in-google-start').textContent).toBe('Refresh your Google copy');
+        expect(screen.getByTestId('refresh-sign-in-apple-start').textContent).toBe('Refresh your Apple copy');
+        expect(screen.getAllByRole('button', { name: 'Refresh your Google copy' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: 'Refresh your Apple copy' })).toHaveLength(1);
+        // Each block still carries the reason, once.
+        expect(screen.getAllByText(LINE)).toHaveLength(2);
+    });
+
+    it('one sign-in to refresh beside one that is findable: one block, the reason and a button naming that sign-in', async () => {
+        vi.mocked(api.getSignInRecovery).mockResolvedValue(['google', 'facebook']);
+        vi.mocked(api.getSignInsToRefresh).mockResolvedValue(signInsToRefresh({ enrolledSso: ['google', 'facebook'], findableSso: ['facebook'] }));
+        renderSettings();
+        const block = await screen.findByTestId('refresh-sign-in-google');
+        expect(block.textContent).toBe(`${LINE}Refresh your Google copy`);
+        expect(screen.queryByTestId('refresh-sign-in-facebook')).toBeNull();
+        expect(screen.getAllByText(LINE)).toHaveLength(1);
+    });
+
     it('is not asked for when the node names no sign-in', async () => {
         vi.mocked(api.getSignInRecovery).mockResolvedValue([]);
         renderSettings();

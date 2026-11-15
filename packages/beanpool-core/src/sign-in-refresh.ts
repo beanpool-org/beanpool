@@ -18,9 +18,10 @@ import { word } from './words.js';
 export const SIGN_IN_REFRESH_WORDS = {
     /** Under the sign-in, while its copy can't be found from the sign-in alone. */
     line: word("This sign-in's copy was made before your community's server could find your account from a sign-in alone. Refresh it once, so it keeps bringing your account back."),
-    /** The button: it runs the ordinary Connect for that sign-in. */
+    /** The phone's button, inside that sign-in's own row: it runs the ordinary Connect for that sign-in. */
     button: word('Refresh', "a sign-in's copy of your account, so the server can find it"),
-    /** Its accessible name, with the sign-in's name. */
+    /** The button with the sign-in's name: the web's button text (its blocks sit one under another in one card, with no
+     * row to name them), and the phone's accessible name. */
     label: word('Refresh your {provider} copy'),
     /** The web, once the sign-in came back and the copy was made again (the phone's Connect sheet says its own). */
     done: word('{provider} is refreshed. Signing in with it brings this account back, with nothing to type.'),

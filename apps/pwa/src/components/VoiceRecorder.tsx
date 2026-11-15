@@ -5,7 +5,12 @@
  * sends nothing and says so. At 3:00 it stops by itself and waits for Send. The rules are lib/voice.ts voiceRecorderStep.
  *
  * The sound is AAC in .m4a, asked of the browser at 32 kbps (lib/voice.ts VOICE_RECORD_TYPE): the format every phone plays.
- * The waveform is drawn from what the microphone hears, 48 bars, as the phone draws it.
+ * A browser whose recorder can't write it (`useEncoder`: Firefox, Brave on Android) records through the web app's own
+ * encoder (lib/voice-encode.ts), which writes the same file: it is fetched from the node at the first click on the
+ * microphone and never before, and the AudioContext it records through is made in that click, so no browser holds it
+ * suspended. If it doesn't load, the click says so, nothing is recorded, and `encoderFailed` turns the microphone into the
+ * "can't record" line; the box is there to type in. The waveform is drawn from what the microphone hears, 48 bars, as the
+ * phone draws it.
  *
  * Sending: one line id per recording, made at the first Send and kept with it, so every try of one recording is the same line
  * and a Send after a try that timed out but landed is the node's duplicate, never a second voice message. The page's `onSend`
@@ -21,12 +26,16 @@ import {
     type VoiceRecorderEvent, type VoiceRecorderState,
 } from '../lib/voice';
 import { holdVoicePlayers } from '../lib/voice-player';
+import type { VoiceCapture } from '../lib/voice-encode';
 
 const TICK_MS = 100;
 
 interface Live {
     stream: MediaStream;
-    recorder: MediaRecorder;
+    /** The browser's recorder; null on the encoder's path. */
+    recorder: MediaRecorder | null;
+    /** The web app's own encoder's recording; null on the browser recorder's path. */
+    capture: VoiceCapture | null;
     chunks: Blob[];
     startedAt: number;
     levels: number[];
@@ -52,6 +61,8 @@ export interface VoiceRecorderApi {
     /** The error's words from a send that didn't go and wasn't said above the box; null otherwise. */
     error: string | null;
     previewPlaying: boolean;
+    /** The web app's own encoder didn't load or start in this browser: the chat shows the "can't record" line instead. */
+    encoderFailed: boolean;
     start(): void;
     stop(): void;
     cancel(): void;
@@ -64,8 +75,11 @@ export interface VoiceRecorderApi {
  * The recorder for the open chat. `chatId` changing (another chat opened) starts it over: the recording is thrown away,
  * the microphone let go, and an answer for the last chat's send or ask is ignored (`gen`), as a phone screen's unmount does.
  */
-export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null): VoiceRecorderApi {
+export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null, useEncoder = false): VoiceRecorderApi {
     const [state, setState] = useState<VoiceRecorderState>(VOICE_IDLE);
+    const [encoderFailed, setEncoderFailed] = useState(false);
+    const encoderRef = useRef(useEncoder);
+    encoderRef.current = useEncoder;
     const [error, setError] = useState<string | null>(null);
     const [previewPlaying, setPreviewPlaying] = useState(false);
     const stateRef = useRef<VoiceRecorderState>(VOICE_IDLE);
@@ -92,12 +106,18 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null): Voic
         if (!l) return null;
         if (l.timer) clearInterval(l.timer);
         const durationMs = Math.min(VOICE_MAX_MS, Math.max(1, Math.round(performance.now() - l.startedAt)));
-        try { if (l.recorder.state !== 'inactive') l.recorder.stop(); } catch { /* already stopped */ }
+        let encoded: Uint8Array | null = null;
+        if (l.capture) {
+            // The encoder's path: its last samples need the context still running, so it stops before the microphone does.
+            if (keepIt) { try { encoded = await l.capture.stop(); } catch { encoded = null; } } else l.capture.cancel();
+        }
+        try { if (l.recorder && l.recorder.state !== 'inactive') l.recorder.stop(); } catch { /* already stopped */ }
         await l.stopped;
         for (const track of l.stream.getTracks()) { try { track.stop(); } catch { /* gone */ } }
         try { await l.context?.close(); } catch { /* gone */ }
         if (!keepIt) return null;
-        const sound = new Uint8Array(await new Blob(l.chunks, { type: VOICE_RECORD_TYPE }).arrayBuffer());
+        if (l.capture && !encoded) throw new Error('encoder');
+        const sound = encoded ?? new Uint8Array(await new Blob(l.chunks, { type: VOICE_RECORD_TYPE }).arrayBuffer());
         return { durationMs, bars: voiceBarsFromLevels(l.levels), sound };
     }, []);
 
@@ -120,6 +140,7 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null): Voic
     const current = (g: number) => mounted.current && gen.current === g;
 
     async function ask() {
+        if (encoderRef.current) { await askEncoder(); return; }
         setError(null);
         const g = gen.current;
         let stream: MediaStream;
@@ -150,7 +171,7 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null): Voic
                 analyser.fftSize = 1024;
                 context.createMediaStreamSource(stream).connect(analyser);
             } catch { context = null; analyser = null; }
-            const l: Live = { stream, recorder, chunks, startedAt: 0, levels: [], timer: null, context, stopped, settle };
+            const l: Live = { stream, recorder, capture: null, chunks, startedAt: 0, levels: [], timer: null, context, stopped, settle };
             live.current = l;
             dispatch({ type: 'permission', granted: true });
             // A start that threw has already failed and let the microphone go (begin, then discard): no clock for it.
@@ -167,9 +188,73 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null): Voic
         }
     }
 
+    /**
+     * The encoder's path (`useEncoder`): the AudioContext is made here, in the click, so no browser holds it suspended; the
+     * encoder's chunk is fetched now, beside the microphone's question. The microphone refused is 'denied'; the encoder not
+     * loading, or the context not starting, is the encoder's own failure, said as such, and the microphone is let go.
+     */
+    async function askEncoder() {
+        setError(null);
+        const g = gen.current;
+        let context: AudioContext | null = null;
+        try { context = new AudioContext(); } catch { context = null; }
+        const loading = import('../lib/voice-encode');
+        loading.catch(() => {}); // answered below, after the microphone's question
+        const broken = () => {
+            void context?.close().catch(() => {});
+            if (!current(g)) return;
+            setEncoderFailed(true);
+            dispatch({ type: 'failed', encoder: true });
+        };
+        if (!context) { broken(); return; }
+        let stream: MediaStream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+        } catch {
+            void context.close().catch(() => {});
+            if (current(g)) dispatch({ type: 'permission', granted: false });
+            return;
+        }
+        const ctx = context;
+        const letGo = () => { for (const tr of stream.getTracks()) { try { tr.stop(); } catch { /* gone */ } } void ctx.close().catch(() => {}); };
+        const stillAsking = () => current(g) && stateRef.current.phase === 'asking';
+        if (!stillAsking()) { letGo(); return; }
+        let capture: VoiceCapture;
+        let analyser: AnalyserNode | null = null;
+        try {
+            if (ctx.state === 'suspended') await ctx.resume();
+            const source = ctx.createMediaStreamSource(stream);
+            try { analyser = ctx.createAnalyser(); analyser.fftSize = 1024; source.connect(analyser); } catch { analyser = null; }
+            const mod = await loading;
+            if (!stillAsking()) { letGo(); return; }
+            capture = await mod.startVoiceCapture(ctx, source, () => {
+                if (!mounted.current) return;
+                setEncoderFailed(true);
+                if (stateRef.current.phase === 'recording') dispatch({ type: 'failed', encoder: true });
+            });
+        } catch {
+            for (const tr of stream.getTracks()) { try { tr.stop(); } catch { /* gone */ } }
+            broken();
+            return;
+        }
+        if (!stillAsking()) { capture.cancel(); letGo(); return; }
+        // The microphone taken away (unplugged, another app): what was heard is not sent.
+        for (const tr of stream.getTracks()) tr.onended = () => { if (mounted.current && stateRef.current.phase === 'recording') dispatch({ type: 'failed' }); };
+        const l: Live = { stream, recorder: null, capture, chunks: [], startedAt: 0, levels: [], timer: null, context: ctx, stopped: Promise.resolve(), settle: () => {} };
+        live.current = l;
+        dispatch({ type: 'permission', granted: true });
+        if (live.current !== l) return;
+        const frame = analyser ? new Float32Array(analyser.fftSize) : null;
+        l.startedAt = performance.now();
+        l.timer = setInterval(() => {
+            if (analyser && frame) { analyser.getFloatTimeDomainData(frame); l.levels.push(levelDb(frame)); }
+            dispatch({ type: 'tick', ms: performance.now() - l.startedAt });
+        }, TICK_MS);
+    }
+
     function begin() {
         const l = live.current;
-        if (!l) return;
+        if (!l || !l.recorder) return; // the encoder's path is recording already
         try { l.recorder.start(); } catch {
             // It never started, so no stop or error will come: settle here, or stopLive waits for ever with the microphone on.
             l.settle();
@@ -182,6 +267,12 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null): Voic
         const g = gen.current;
         keeping.current = stopLive(true).then((voice) => {
             if (voice && current(g)) kept.current = { voice, lineId: null };
+        }, () => {
+            // The encoder's file didn't finish: nothing to play or send, and it says why.
+            if (!current(g)) return;
+            kept.current = null;
+            setEncoderFailed(true);
+            dispatch({ type: 'failed', encoder: true });
         });
     }
 
@@ -256,7 +347,7 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null): Voic
 
     const phase = state.phase;
     return {
-        state, error, previewPlaying,
+        state, error, previewPlaying, encoderFailed,
         active: phase === 'recording' || phase === 'review' || phase === 'sending' || phase === 'asking',
         start: () => { setError(null); dispatch({ type: 'start' }); },
         stop: () => { const l = live.current; if (l) dispatch({ type: 'tick', ms: performance.now() - l.startedAt }); dispatch({ type: 'stop' }); },
@@ -324,7 +415,8 @@ export function VoiceRecorderBar({ rec }: { rec: VoiceRecorderApi }) {
 /** The recorder's line above the box: why nothing was sent, or why a send didn't go. */
 export function VoiceRecorderNote({ rec }: { rec: VoiceRecorderApi }) {
     const hint = rec.state.phase === 'idle' ? rec.state.hint : null;
-    const hintWords = hint === 'short' ? t(VOICE_WORDS.short) : hint === 'denied' ? t(VOICE_WORDS.denied) : hint === 'failed' ? t(VOICE_WORDS.failed) : null;
+    const hintWords = hint === 'short' ? t(VOICE_WORDS.short) : hint === 'denied' ? t(VOICE_WORDS.denied) : hint === 'failed' ? t(VOICE_WORDS.failed)
+        : hint === 'encoder' ? t(VOICE_WORDS.encoderFailed) : null;
     const words = rec.error ?? hintWords;
     if (!words) return null;
     return (

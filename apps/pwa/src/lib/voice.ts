@@ -4,9 +4,12 @@
  * format, the part and its checks are core's (voice.ts, V1), the node's side is V2 (#3111).
  *
  * Where the microphone shows: only where the chat's community says it takes voice lines (`features.voiceLines`, read through
- * core's voiceLinesOn, as the phone reads it), and only where this browser can write the one format every phone
- * plays (AAC in .m4a, VOICE_RECORD_TYPE): Chrome, Edge and Safari. Firefox can't, and gets one line instead of a microphone;
- * so does a page on a plain http address, where no browser gives the microphone (lights-out mode on the hall Wi-Fi).
+ * core's voiceLinesOn, as the phone reads it), and only where this browser can make the one format every phone plays (AAC
+ * in .m4a, VOICE_RECORD_TYPE). A browser whose own recorder writes it (Chrome, Edge, Safari) records with that recorder.
+ * One that can't (Firefox, Brave on Android) records through the web app's own encoder instead (lib/voice-encode.ts,
+ * fetched from the node at the first click on the microphone, never before), which writes the same file. A page on a plain
+ * http address gets one line instead of a microphone, as no browser gives the microphone there (lights-out mode on the hall
+ * Wi-Fi); so does a browser with neither, or one where the encoder didn't load.
  *
  * Recording on the web is the phone's tap mode (its screen reader and largest-text mode): a click starts, Stop keeps it for
  * play, bin and Send, Send sends. A mouse has no slide to cancel or lock, so the web has the bin and Stop instead. Under one
@@ -23,13 +26,18 @@ import {
  * (apps/native components/chat/VoiceBubble.tsx, VoiceRecorder.tsx, utils/db.ts), so both read the same in every language.
  */
 export const VOICE_WORDS = {
-    /** In the microphone's place, where the browser can't write AAC in .m4a (Firefox). */
-    cantRecordBrowser: word("This browser can't record voice messages. Chrome, Edge, Safari and the phone app can."),
+    /**
+     * In the microphone's place, where this browser can't record at all: no microphone on a secure page, nothing to encode
+     * with, or the encoder didn't load. It names no browser that can (Marty, 15 Nov: Brave and Firefox record now).
+     */
+    cantRecordBrowser: word("This browser can't record voice messages. The phone app can."),
     /** In the microphone's place, on a plain http address: no browser gives the microphone there. */
     cantRecordAddress: word("Voice messages can't be recorded on this address. The phone app can."),
     short: word('Too short to send. Record for at least a second.'),
     denied: word("The microphone is off for this site. Allow it in the browser's site settings, then try again."),
     failed: word('The recording stopped. Nothing was sent.'),
+    /** The encoder (lib/voice-encode.ts) didn't load or start: nothing is recorded, and the box is there to type in. */
+    encoderFailed: word("The voice recorder didn't load in this browser. Nothing was recorded. You can still type a message."),
     /** The bubble's states, the phone's words. */
     gone: word('This voice message is no longer on the server.'),
     refused: word("This voice message can't be played."),
@@ -67,25 +75,39 @@ export function nodeTakesVoice(info: { features?: unknown } | null | undefined):
     return !!features && typeof features === 'object' && voiceLinesOn(features as { voiceLines?: unknown });
 }
 
-/** Whether this browser can record a voice message here: 'yes', 'no-format' (Firefox: no AAC recorder), 'no-microphone' (http). */
-export type VoiceRecordable = 'yes' | 'no-format' | 'no-microphone';
+/**
+ * Whether this browser can record a voice message here: 'yes' (its own recorder writes AAC in .m4a), 'encoder' (it can't,
+ * but it has a microphone and what the web app's own encoder needs: Firefox, Brave on Android), 'no-microphone' (a plain
+ * http page), 'no-format' (a secure page where it can't record at all).
+ */
+export type VoiceRecordable = 'yes' | 'encoder' | 'no-format' | 'no-microphone';
 
 interface RecordEnv {
     MediaRecorder?: { isTypeSupported?: (type: string) => boolean };
     isSecureContext?: boolean;
     navigator?: { mediaDevices?: { getUserMedia?: unknown } };
+    AudioContext?: unknown;
+    AudioWorkletNode?: unknown;
+    WebAssembly?: unknown;
+    Worker?: unknown;
 }
 
 /**
- * What this browser can do, read when the chat draws its composer. The format first: Firefox has a recorder but no AAC
- * encoder, so it says "this browser" wherever it is opened; then the microphone, which no browser gives a plain http page.
+ * What this browser can do, read when the chat draws its composer. A browser whose recorder writes AAC in .m4a keeps it,
+ * as before, and says the address where it has no microphone. One whose recorder can't: a plain http page first (no browser
+ * gives the microphone there, so the address is why, wherever it is opened), then the microphone and what the encoder
+ * needs (the microphone's sound through an AudioWorklet, the encoder's WebAssembly in a worker); with all of them it
+ * records through the encoder, without any of them it can't record at all.
  */
 export function browserRecordsVoice(env: RecordEnv = globalThis as unknown as RecordEnv): VoiceRecordable {
     let writes: boolean;
     try { writes = typeof env.MediaRecorder?.isTypeSupported === 'function' && env.MediaRecorder.isTypeSupported(VOICE_RECORD_TYPE) === true; } catch { writes = false; }
-    if (!writes) return 'no-format';
-    if (env.isSecureContext === false || typeof env.navigator?.mediaDevices?.getUserMedia !== 'function') return 'no-microphone';
-    return 'yes';
+    const microphone = typeof env.navigator?.mediaDevices?.getUserMedia === 'function';
+    if (writes) return env.isSecureContext === false || !microphone ? 'no-microphone' : 'yes';
+    if (env.isSecureContext === false) return 'no-microphone';
+    const encodes = typeof env.AudioContext === 'function' && typeof env.AudioWorkletNode === 'function'
+        && typeof env.WebAssembly === 'object' && env.WebAssembly !== null && typeof env.Worker === 'function';
+    return microphone && encodes ? 'encoder' : 'no-format';
 }
 
 /** Whether this browser can play an .m4a at all (Firefox on Linux with no AAC decoder can't): '' from canPlayType is no. */
@@ -100,8 +122,11 @@ export function browserPlaysVoice(doc: Pick<Document, 'createElement'> | null = 
 
 // ─── The recorder's steps ──────────────────────────────────────────────────────────────────────────────────────────
 
-/** Why the recorder is idle with a line to show: too short, the microphone refused, or it stopped on its own. */
-export type VoiceHint = 'short' | 'denied' | 'failed' | null;
+/**
+ * Why the recorder is idle with a line to show: too short, the microphone refused, it stopped on its own, or the web app's
+ * own encoder didn't load or start ('encoder': nothing was recorded).
+ */
+export type VoiceHint = 'short' | 'denied' | 'failed' | 'encoder' | null;
 
 export type VoiceRecorderState =
     | { phase: 'idle'; hint: VoiceHint }
@@ -124,8 +149,11 @@ export type VoiceRecorderEvent =
     | { type: 'sent' }
     /** The send didn't go (refused, given up, offline): the recording is kept, back for play, bin and Send. */
     | { type: 'unsent' }
-    /** The recorder failed to start, the browser took the microphone away, or nothing was written to send. */
-    | { type: 'failed' }
+    /**
+     * The recorder failed to start, the browser took the microphone away, or nothing was written to send. `encoder`: it was
+     * the web app's own encoder that didn't load or start.
+     */
+    | { type: 'failed'; encoder?: boolean }
     | { type: 'dismiss' };
 
 /**
@@ -171,8 +199,9 @@ export function voiceRecorderStep(state: VoiceRecorderState, event: VoiceRecorde
         case 'unsent':
             return state.phase === 'sending' ? { state: { phase: 'review', ms: state.ms, limit: state.ms >= VOICE_MAX_MS }, effect: null } : same;
         case 'failed':
-            return state.phase === 'recording' || state.phase === 'asking' || state.phase === 'sending'
-                ? { state: { phase: 'idle', hint: 'failed' }, effect: 'discard' } : same;
+            // The encoder's file can also fail as it is finished, after Stop: then nothing is kept to play or send.
+            return state.phase === 'recording' || state.phase === 'asking' || state.phase === 'sending' || (event.encoder && state.phase === 'review')
+                ? { state: { phase: 'idle', hint: event.encoder ? 'encoder' : 'failed' }, effect: 'discard' } : same;
         case 'dismiss':
             return state.phase === 'idle' && state.hint ? { state: VOICE_IDLE, effect: null } : same;
     }

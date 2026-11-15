@@ -64,8 +64,13 @@ const TODAYS_DOCUMENT_CSP = "default-src 'self'; script-src 'self' 'unsafe-inlin
 /** Hosts only the old Settings page loaded from: no header this node sends names them. */
 const OLD_SETTINGS_PAGE_HOSTS = ['unpkg.com', 'static.cloudflareinsights.com', 'api.qrserver.com'];
 
-/** The app document's policy, as design G11 §3.6 change 3 states it, with the tile host the web app uses today, and blob: media for a voice message opened in the page (voice messages V4). */
-const APP_DOCUMENT_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; media-src 'self' blob:; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
+/**
+ * The app document's policy, as design G11 §3.6 change 3 states it, with the tile host the web app uses today, blob: media for
+ * a voice message opened in the page (voice messages V4), and the web app's own AAC encoder for a browser whose recorder can't
+ * write .m4a (Firefox, Brave on Android): WebAssembly compiled by the node's own script ('wasm-unsafe-eval', never
+ * 'unsafe-eval') in a worker made from a blob: of the node's own chunk (worker-src 'self' blob:).
+ */
+const APP_DOCUMENT_CSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; media-src 'self' blob:; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
 
 /** A GET with the path sent exactly as written. fetch() would normalise dot segments and backslashes first. */
 function rawGet(rawPath: string): Promise<{ status: number; type: string; csp: string | null; referrer: string | null; body: string }> {
@@ -257,8 +262,13 @@ async function main(): Promise<void> {
         const csp = res.headers.get('content-security-policy');
         assert(res.status === 200 && body.includes('the web app'), `GET ${docPath} serves the web app (got ${res.status})`);
         assert(csp === APP_DOCUMENT_CSP, `GET ${docPath} carries the app document's policy (got ${csp})`);
-        assert(JSON.stringify(directive(csp, 'script-src')) === JSON.stringify(["'self'"]),
-            `GET ${docPath}: script-src is 'self' alone: no 'unsafe-inline', no third-party host (got ${JSON.stringify(directive(csp, 'script-src'))})`);
+        // 'wasm-unsafe-eval' is the web app's own AAC encoder (voice messages in Firefox and Brave on Android): it compiles
+        // WebAssembly and nothing else. 'unsafe-eval' and 'unsafe-inline' stay out, and no host but the node's own.
+        assert(JSON.stringify(directive(csp, 'script-src')) === JSON.stringify(["'self'", "'wasm-unsafe-eval'"]),
+            `GET ${docPath}: script-src is 'self' 'wasm-unsafe-eval' alone: no 'unsafe-inline', no 'unsafe-eval', no third-party host (got ${JSON.stringify(directive(csp, 'script-src'))})`);
+        assert(!/'unsafe-eval'/.test(csp ?? ''), `GET ${docPath}: no 'unsafe-eval' anywhere in the policy`);
+        assert(JSON.stringify(directive(csp, 'worker-src')) === JSON.stringify(["'self'", 'blob:']),
+            `GET ${docPath}: worker-src is 'self' blob: alone, for the encoder's worker (got ${JSON.stringify(directive(csp, 'worker-src'))})`);
         assert(res.headers.get('referrer-policy') === 'strict-origin-when-cross-origin',
             `GET ${docPath}: Referrer-Policy strict-origin-when-cross-origin (got ${res.headers.get('referrer-policy')})`);
         assert(res.headers.get('x-frame-options') === 'DENY', `GET ${docPath}: still X-Frame-Options DENY`);

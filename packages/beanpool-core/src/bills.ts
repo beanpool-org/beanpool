@@ -18,6 +18,7 @@
 
 import { t, tn } from './words.js';
 import { feeOf, formatHundredths, isHundredths, parseHundredths, type Hundredths } from './hundredths.js';
+import { BUSY_CODE, busyWords } from './busy-answer.js';
 
 /** Where a bill is (the node's `bills.state`). The sender reads a declined bill as `sent` until it expires. */
 export type BillState = 'sent' | 'paid' | 'declined' | 'withdrawn' | 'expired';
@@ -343,32 +344,37 @@ export function inviteBillToSend(
     return { bill: { ...read.bill, id }, error: null, held: { key, id } };
 }
 
-/** How the node answered a tap that sent a bill, when no invite came back (inviteBillAnswerOf). */
-export type InviteBillAnswer = { kind: 'refused'; words: string; code: string | null } | { kind: 'lost' };
+/**
+ * How the node answered a tap on Make invite when no invite came back (inviteBillAnswerOf), with a bill or without one.
+ * `feature`: the switch a 404 `feature_off` names (`bills` for a bill's, `invites` for the invites' own).
+ */
+export type InviteBillAnswer = { kind: 'refused'; words: string; code: string | null; feature?: string } | { kind: 'lost' };
 
 /**
- * `refused`: a 4xx in the node's own words, which it answers before writing anything (a bill's or an invite's refusal).
- * `lost`: anything else (no answer, a cut answer, a page that is not the node's (`unsaid`), a 5xx), after which nobody here
- * knows whether the invite was made.
+ * `refused`: a 4xx in the node's own words, which it answers before writing anything (a bill's or an invite's refusal), or a
+ * busy network's answer (`busy`, which never reached the node), in the busy sentence. `lost`: anything else (no answer, a cut
+ * answer, a page that is not the node's (`unsaid`), a 5xx), after which nobody here knows whether the invite was made.
  */
-export function inviteBillAnswerOf(status: number | null | undefined, words: string | null | undefined, code: unknown, unsaid = false): InviteBillAnswer {
+export function inviteBillAnswerOf(status: number | null | undefined, words: string | null | undefined, code: unknown, unsaid = false, feature?: unknown): InviteBillAnswer {
+    if (code === BUSY_CODE) return { kind: 'refused', words: busyWords(), code: BUSY_CODE };
     if (typeof status === 'number' && status >= 400 && status < 500 && !unsaid && typeof words === 'string' && words) {
-        return { kind: 'refused', words, code: typeof code === 'string' ? code : null };
+        return { kind: 'refused', words, code: typeof code === 'string' ? code : null, ...(typeof feature === 'string' ? { feature } : {}) };
     }
     return { kind: 'lost' };
 }
 
 /**
  * After a tap that sent a bill and got no invite back: what the member reads, and the id the panel keeps. Refused: the node's
- * words, under "Could not add the bill" for a bill's own code; the id kept, or dropped when the node says it is spent. Lost:
- * never "nothing was made"; the same bill keeps its id, so trying it again finds out; no offline ticket, which would carry
- * no bill.
+ * words, under "Could not add the bill" for a bill's own code or the bills switch being off; the id kept, or dropped when the
+ * node says it is spent. Lost: never "nothing was made"; the same bill keeps its id, so trying it again finds out; no offline
+ * ticket, which would carry no bill.
  */
 export function inviteBillAfter(held: InviteBillHeld | null, answer: InviteBillAnswer): { held: InviteBillHeld | null; title: string; words: string } {
     if (answer.kind === 'refused') {
+        const billsOwn = (answer.code !== null && /^bills?_/.test(answer.code)) || (answer.code === 'feature_off' && answer.feature === 'bills');
         return {
             held: answer.code === 'bill_id_reused' ? null : held,
-            title: answer.code !== null && /^bills?_/.test(answer.code) ? t('Could not add the bill') : t('Invite not made'),
+            title: billsOwn ? t('Could not add the bill') : t('Invite not made'),
             words: answer.words,
         };
     }

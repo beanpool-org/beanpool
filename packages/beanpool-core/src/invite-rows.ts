@@ -180,3 +180,26 @@ export const inviteFolds = {
     /** For tests: back to first render. */
     clear: (): void => { open.clear(); },
 };
+
+/**
+ * A member's list of invites with `invite` in it exactly once, keyed by its code (PR #3206 round 3). A code already listed (a
+ * retry of the same bill answered with the invite the node made the first time, which /api/invite/mine or an earlier answer
+ * had already put here) has its row replaced where it stands, keeping what only the list knew (its `expiresAt`, say), and any
+ * other copy goes; a new code goes first, as the newest. Codes match without case, as the lists match them everywhere else.
+ */
+export function listWithInvite<T extends { code: string }>(list: readonly T[], invite: T): T[] {
+    const key = String(invite.code).toLowerCase();
+    const at = list.findIndex((row) => String(row.code).toLowerCase() === key);
+    if (at === -1) return [invite, ...list];
+    return list.flatMap((row, i) => (i === at ? [{ ...row, ...invite }] : String(row.code).toLowerCase() === key ? [] : [row]));
+}
+
+/**
+ * Whether a refused Make invite is the node saying it takes no invites (404 `feature_off` for the `invites` switch), the one
+ * answer that says so on both apps. The same 404 `feature_off` naming another switch (`bills`, for a bill sent with the
+ * invite when bills went off after the panel read the node's profile) is that switch's refusal, never "no invites here". An
+ * answer naming no switch is the invites' code as it always was.
+ */
+export function isInvitesOffAnswer(status: unknown, code: unknown, feature: unknown): boolean {
+    return status === 404 && code === 'feature_off' && (feature === undefined || feature === 'invites');
+}

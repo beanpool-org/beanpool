@@ -28,6 +28,7 @@ import { sendRouteOf, GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../l
 import { blankedWithAccount } from '../lib/chat-tombstone';
 import { eventChatWaitingText, eventChatSystemText, isWaitingForHost } from '../lib/events';
 import { useGrowingComposer } from '../lib/use-growing-composer';
+import { draftKey, useKeptDraft } from '../lib/chat-drafts';
 
 /**
  * Messages are stored base64 `plaintext-v1`: node-readable by design, not end-to-end encrypted. A removed one is the
@@ -82,6 +83,8 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
     // The box grows with the draft up to five lines, then scrolls (lib/use-growing-composer.ts).
     const draftRef = useRef<HTMLTextAreaElement | null>(null);
     useGrowingComposer(draftRef);
+    // Words left unsent here wait in the box while the page is open (lib/chat-drafts.ts): Back, or Chat in the menu, keeps them.
+    useKeptDraft(draftKey(identity?.publicKey, 'event', postId), draft, setDraft);
 
     const load = useCallback(async () => {
         try {
@@ -386,13 +389,16 @@ function ChatHeader({ title, onBack, onOpenEvent }: { title: string; onBack?: ()
     return (
         <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 border-b border-nature-200 dark:border-nature-800 min-w-0">
             {onBack && (
+                // Its own 44 x 48 target, the arrow centred in it (it was the arrow's width and 16 px: Marty, 16 Nov, "the tiny
+                // back arrow"). An event chat opens only inside Chat, so Back always lands on the chat list.
                 <button
                     type="button"
+                    data-testid="chat-back"
                     onClick={onBack}
-                    aria-label={t('Back')}
-                    className="flex-shrink-0 min-h-[48px] px-2 bg-transparent border-0 text-violet-700 dark:text-violet-300 text-base cursor-pointer"
+                    aria-label={t('Back to chats')}
+                    className="flex-shrink-0 inline-flex items-center justify-center min-w-[44px] min-h-[48px] p-0 rounded-lg bg-transparent border-0 text-violet-700 dark:text-violet-300 text-base cursor-pointer"
                 >
-                    ←
+                    <span aria-hidden="true">←</span>
                 </button>
             )}
             <div className="min-w-0 flex-1">

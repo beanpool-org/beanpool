@@ -88,6 +88,7 @@ import { bundledGroupEmblem, dealMoves, dealStep, dealsNeedingMe, formatDate, it
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn, useCommunityInfo } from '../lib/features';
 import { useGrowingComposer } from '../lib/use-growing-composer';
+import { draftKey, useKeptDraft } from '../lib/chat-drafts';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -185,6 +186,12 @@ interface Props {
     onOpenProfile?: (pubkey: string) => void;
     /** The Chat tab's Chats · Forum switch (pages/ChatTabPage.tsx, slice T0), drawn at the top of the list only. */
     frame?: ReactNode;
+    /**
+     * Changes each time the member chooses Chat in the menu while Chat already shows (App's chatHomeNonce): the list again,
+     * whatever was open over it (a chat, an outside chat, the address cards, Message requests, New DM, Contacts), with the
+     * filter chip the member picked. A chat's unsent words wait in its box for the next time it opens (lib/chat-drafts.ts).
+     */
+    homeNonce?: number;
 }
 
 // ⚡ Bolt: O(1) Map lookup helper for transaction seller resolution in system messages
@@ -273,7 +280,7 @@ function GroupChatImageBubble({ photoKey, open, onOpen }: { photoKey: string; op
 /** A tab flicked back and forth asks global at most this often (the phone's ASK_EVERY_MS, apps/native utils/global-requests.ts). */
 const ASK_GLOBAL_EVERY_MS = 5 * 60 * 1000;
 
-export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate, onOpenProfile, frame }: Props) {
+export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate, onOpenProfile, frame, homeNonce }: Props) {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     // The message requests waiting for this member (lib/dm-requests.ts), as the node lists them apart from their chats;
     // null where the community has requests off (its list has no `requests`).
@@ -338,6 +345,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const outsideRequests = outsideChats.filter((c) => c.state === 'request');
     // A way in that names a conversation (a notice, a profile's Message) is never held behind an outside chat or the cards.
     useEffect(() => { if (openConversationId) { setOpenOutside(null); setShowCard(false); } }, [openConversationId]);
+    // Chat chosen in the menu while Chat shows (homeNonce): back to the list. Counted, so a chat a way in was still finding
+    // when the member chose Chat (the effect below, after its reads) does not open over the list they asked for.
+    const homeSeenRef = useRef(homeNonce);
+    const homeCountRef = useRef(0);
     const [activeTab, setActiveTab] = useState<ConversationTab>('all');
     // Requests turned off while the member is on them: the pill goes, so the list goes back to All, never to no chip.
     useEffect(() => { if (!requests && !onGlobal && !outsideRequests.length && activeTab === 'requests') setActiveTab('all'); }, [requests, onGlobal, outsideRequests.length, activeTab]);
@@ -766,13 +777,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         };
     }, []);
 
-    // A chat opened: its box starts empty, in the commit that draws it (a layout effect). Emptied from the effect below, which
-    // React 19 runs in a later task, it threw away words already typed into the new chat's box (CI, 14 Nov; the voice test
-    // "words typed the moment the chat shows"). A prefill (below) still lands after it.
+    // A chat opened: its box starts with the words left unsent in it while this page is open, or empty, in the commit that
+    // draws it (a layout effect, lib/chat-drafts.ts). Emptied from the effect below, which React 19 runs in a later task, it
+    // threw away words already typed into the new chat's box (CI, 14 Nov; the voice test "words typed the moment the chat
+    // shows"). A prefill (below) still lands after it. Leaving the chat (its back arrow, Chat in the menu, another chat
+    // opened) keeps what the box holds for it, unless it holds an edit of a line already sent. An event chat has its own box.
     const openChatId = activeConv?.id ?? null;
-    useLayoutEffect(() => {
-        if (openChatId) setDraft('');
-    }, [openChatId]);
+    useKeptDraft(
+        activeConv?.type === 'event_thread' ? null : draftKey(identity.publicKey, 'chat', openChatId),
+        editingMessage ? '' : draft,
+        setDraft,
+    );
 
     useEffect(() => {
         activeConvIdRef.current = activeConv?.id ?? null;
@@ -781,12 +796,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         setMuteDialogOpen(false);
         setConfirmDeleteMsg(null);
         setConfirmRemoveMsg(null);
+        // After the box's draft was kept (a layout effect), so an edit under way is never kept as a draft.
+        setReplyToMessage(null);
+        setEditingMessage(null);
         if (activeConv) {
             messageRequestIdRef.current++;
             setGroupChat(null);
             setChatSearch(null);
-            setReplyToMessage(null);
-            setEditingMessage(null);
             setActiveEmojiPickerId(null);
             // The box was emptied in the layout effect above, before anyone could type in it.
             // The initial load happens in startPolling() below; calling it here as well fired two
@@ -964,9 +980,23 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         } catch { /* offline */ }
     }
 
+    useEffect(() => {
+        if (homeNonce === homeSeenRef.current) return;
+        homeSeenRef.current = homeNonce;
+        homeCountRef.current += 1;
+        setActiveConv(null);
+        setOpenOutside(null);
+        setShowCard(false);
+        setShowNewDm(false);
+        setShowContacts(null);
+        setActiveTab((tab) => (tab === 'requests' ? 'all' : tab));
+        void loadConversations();
+    }, [homeNonce]);
+
     // Auto-open conversation when navigating from Market "Message" button or profile chat
     useEffect(() => {
         if (!openConversationId) return;
+        const homeAtStart = homeCountRef.current;
         loadConversations().then(() => {
             // Find the conversation and open it
             getConversations(identity.publicKey).then(async result => {
@@ -1024,7 +1054,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         };
                     } catch { /* not an event chat this member may open */ }
                 }
-                if (conv) {
+                if (conv && homeCountRef.current === homeAtStart) {
                     setActiveConv(conv);
                     const prefill = consumeChatPrefill(conv.id, conv.participants);
                     if (prefill) {
@@ -2396,18 +2426,23 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-primary)',
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 'min(100%, 10rem)', flex: '1 1 auto' }}>
+                        {/* Its own 44 x 44 target (a click anywhere in the square goes back), the arrow centred in it; the chat's
+                            unsent words wait in its box (useKeptDraft above), an edit and a reply under way are let go. */}
                         <button
+                            type="button"
+                            data-testid="chat-back"
                             onClick={() => {
                                 setActiveConv(null);
-                                setEditingMessage(null);
-                                setReplyToMessage(null);
-                                setDraft('');
                                 loadConversations();
                             }}
-                            aria-label={t('Back to messages')}
-                            style={{ background: 'none', border: 'none', color: 'var(--bp-accent-fill)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, minWidth: '44px', minHeight: '44px' }}
+                            aria-label={t('Back to chats')}
+                            style={{
+                                background: 'none', border: 'none', color: 'var(--bp-accent-fill)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit',
+                                flexShrink: 0, width: '44px', height: '44px', minWidth: '44px', minHeight: '44px', padding: 0,
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px',
+                            }}
                         >
-                            ←
+                            <span aria-hidden="true">←</span>
                         </button>
                         {(() => {
                             // The phone's header (GroupChatView openOwner): a group's chat opens its group info, an

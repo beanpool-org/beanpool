@@ -24,6 +24,7 @@ import {
 import { blockUser } from '../../lib/blocklist';
 import { useCoversScreen } from '../../lib/screen-cover';
 import { useGrowingComposer } from '../../lib/use-growing-composer';
+import { draftKey, useKeptDraft } from '../../lib/chat-drafts';
 import { ReportModal } from '../ReportModal';
 import { ForumPhotoAttach, ForumPhotos, ForumToldSheet, ForumWords } from './ForumBits';
 
@@ -84,6 +85,8 @@ export function ForumTopicView({ topicId, at, front, me, onBack, onTold, onGone,
     const [menu, setMenu] = useState<Menu>(null);
     const [reporting, setReporting] = useState<ForumPost | null>(null);
     const [words, setWords] = useState('');
+    // A reply left unsent waits in the box while the page is open (lib/chat-drafts.ts): ‹, or Chat in the menu, keeps it.
+    useKeptDraft(draftKey(me, 'forum', topicId), words, setWords);
     const [photos, setPhotos] = useState<string[]>([]);
     const [quote, setQuote] = useState<ForumPost | null>(null);
     const [busy, setBusy] = useState(false);

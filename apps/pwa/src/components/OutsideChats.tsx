@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { OUTSIDE_LINE_TEXT_MAX, OUTSIDE_WRITES_STAY_THERE, t } from '@beanpool/core';
 import { blockUser } from '../lib/blocklist';
+import { draftKey, useKeptDraft } from '../lib/chat-drafts';
 import {
     OUTSIDE_CHATS_EVENT, OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, ring, sendFromBox, syncOutsideMailNow,
 } from '../lib/outside-mail';
@@ -111,6 +112,8 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
     const [chat, setChat] = useState<OutsideChat | null | undefined>(undefined);
     const [lines, setLines] = useState<OutsideLine[]>([]);
     const [text, setText] = useState('');
+    // Words left unsent here wait in the box while the page is open (lib/chat-drafts.ts): Back, or Chat in the menu, keeps them.
+    useKeptDraft(draftKey(me, 'outside', chatId), text, setText);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
     const alive = useRef(true);

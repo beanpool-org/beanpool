@@ -290,7 +290,8 @@ async function main() {
 
         console.log('Dark: the card, the chats, the chat');
         await openChat(page, node, 'dark');
-        await page.getByTestId('outside-chats').waitFor({ timeout: 30_000 });
+        // Among the community's own chats now, by its newest line (lib/chat-list-order.ts): no box of its own.
+        await page.getByTestId('outside-chat-row').first().waitFor({ timeout: 30_000 });
         await fits(page, 'Chat with outside chats (dark)');
         await shot(page, '09-chats-dark');
         await page.getByTestId('outside-chat-row').first().click();

@@ -169,6 +169,8 @@ import { createInviteAskRoutes } from './routes/invite-asks.js';
 import { createKnowledgeRoutes } from './routes/knowledge.js';
 import { createForumRoutes } from './routes/forum.js';
 import { createMembershipNoteRoutes } from './routes/membership-note.js';
+import { createForumPublicRoutes } from './routes/forum-public.js';
+import { startStampingForumPublicFrom } from './engine/forum-public.js';
 import { createFreeTagRoutes } from './routes/free-tags.js';
 import { createNoticeRoutes } from './routes/notices.js';
 import { createBlockRoutes } from './routes/blocks.js';
@@ -402,6 +404,9 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/web-push/key',             // web push (W1): the node's public web push key, which a browser subscribes with (routes/web-push.ts)
     '/api/node/key',                 // the server's key document, which another community's server checks this one's requests with (routes/node-key.ts)
     '/api/home',                     // Home in one read: public only with the visitors' view on, and then the visitors' subset (HOME_READ_EXACT)
+    // The worldwide community's forum for anyone on the web (slice F7, routes/forum-public.ts): sections and the newest topics,
+    // only posts whose writer is known, a name and words. Anywhere the forum is not public, 404 feature_off (profile-feature-gate.ts).
+    '/api/forum/public',
 ]);
 /**
  * The peer protocol's own paths, which the gateway's usual buckets leave alone: the public reads another community's
@@ -441,6 +446,9 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
     /^\/api\/groups\/[^/]+\/picture$/,                      // <img> a group's own picture binary; served only to a URL carrying its key, which only a group read hands out (engine/avatar-keys.ts)
     /^\/api\/shops\/(?!mine$)[^/]+$/,                      // one shop: public only with the visitors' view on, category and counts (PUBLIC_ONLY_ON_GUEST_LISTINGS_PATTERNS)
     /^\/api\/shops\/[^/]+\/photo$/,                         // <img> a shop's banner binary; served only to a URL carrying its key, which only a member's shop read hands out (engine/avatar-keys.ts)
+    /^\/api\/forum\/public\/sections\/[^/]+$/,              // the public forum (slice F7): one section's public topics, where the forum is public
+    /^\/api\/forum\/public\/topics\/[^/]+$/,                // the public forum: one topic's public posts, where the forum is public
+    /^\/api\/forum\/photos\/[^/]+\/[^/]+$/,                 // <img> a public forum post's photo binary, only a public post's (engine/forum-public.ts)
 ];
 
 // Reads on the allowlist that name members, and so are members' reads on every node: off the allowlist, the ordinary
@@ -1643,6 +1651,9 @@ export async function startHttpsServer(port: number): Promise<number> {
     startTidyingForumEdits();
     // First topics nobody looked at in 30 days go back to their writers; answered ones go 30 days after (engine/forum-first-look.ts).
     startTidyingFirstLooks(moderationNoticesCb());
+    // On a public forum, posts whose writers became known since they wrote (new-account days over, a role given) go public
+    // (engine/forum-public.ts; a known writer's own posts are stamped as they post).
+    startStampingForumPublicFrom();
     // A re-keyed member's old locked contacts list, a year after the re-key, on the main server (engine/contact-copies.ts).
     startForgettingFormerCopies();
 
@@ -2119,6 +2130,8 @@ export async function startHttpsServer(port: number): Promise<number> {
         createInviteAskRoutes(deps),
         createKnowledgeRoutes(deps),
         createForumRoutes(deps),
+        // The worldwide community's forum for anyone on the web (slice F7): its public JSON, pages, sitemap and robots.txt.
+        createForumPublicRoutes(deps),
         // The note a member carries to the worldwide forum, and what it shows there (slice F10, routes/membership-note.ts).
         createMembershipNoteRoutes(),
         createFreeTagRoutes(deps),

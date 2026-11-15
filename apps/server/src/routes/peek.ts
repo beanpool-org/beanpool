@@ -33,8 +33,8 @@ import { LISTINGS_MEMBERS_ONLY } from '../listings-members-only.js';
 import type { RouteDeps } from './types.js';
 
 const ANDROID_PACKAGE = 'org.beanpool.pillar';
-const APP_STORE_URL = 'https://apps.apple.com/app/id6761870086';
-const PLAY_BASE_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`;
+export const APP_STORE_URL = 'https://apps.apple.com/app/id6761870086';
+export const PLAY_BASE_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`;
 
 /** The most of a post's own words the share page shows, and its preview's description. */
 const PAGE_WORDS_MAX = 600;
@@ -138,8 +138,8 @@ export function peekDevice(ctx: Pick<Koa.Context, 'get'>): PeekDevice {
     return 'computer';
 }
 
-/** The page's colours: the web app's grounds and the brand roles, in each theme (as the community's card). */
-function pageStyle(): string {
+/** The page's colours: the web app's grounds and the brand roles, in each theme (as the community's card; the forum's public pages too). */
+export function pageStyle(): string {
     const GROUNDS = {
         light: { page: WEB_INK_GROUNDS.light[1], card: WEB_INK_GROUNDS.light[0] },
         dark: { page: WEB_INK_GROUNDS.dark[0], card: WEB_INK_GROUNDS.dark[1] },

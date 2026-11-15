@@ -142,6 +142,8 @@ export * from './group-words.js';
 export * from './place-privacy.js';
 export * from './removed-line-runs.js';
 export * from './chat-fold.js';
+// A chat list's order, both apps (16 Nov 2026): newest line first, the sender's own included; unread is the badge, not the order.
+export * from './chat-list-order.js';
 export * from './chat-links.js';
 export * from './tour.js';
 export * from './first-steps.js';

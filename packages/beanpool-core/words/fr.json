@@ -2715,5 +2715,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "Actualiser",
   "Refresh your {provider} copy": "Actualiser votre copie pour {provider}",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} est actualisé. Vous connecter avec lui restaure ce compte, sans rien saisir.",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Impossible d'actualiser {provider}, rien n'a donc changé. Réessayez dans une minute."
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Impossible d'actualiser {provider}, rien n'a donc changé. Réessayez dans une minute.",
+  "From the forum": "Du forum",
+  "Join to reply": "Rejoindre pour répondre",
+  "No topics here yet. Join to start the first one.": "Pas encore de sujet ici. Rejoignez-nous pour lancer le premier."
 }

@@ -2597,5 +2597,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "Segarkan",
   "Refresh your {provider} copy": "Segarkan salinan {provider}-mu",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} sudah disegarkan. Masuk dengannya mengembalikan akun ini, tanpa perlu mengetik apa pun.",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Tidak bisa menyegarkan {provider}, jadi tidak ada yang berubah. Coba lagi dalam satu menit."
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Tidak bisa menyegarkan {provider}, jadi tidak ada yang berubah. Coba lagi dalam satu menit.",
+  "From the forum": "Dari forum",
+  "Join to reply": "Gabung untuk membalas",
+  "No topics here yet. Join to start the first one.": "Belum ada topik di sini. Gabung untuk memulai yang pertama."
 }

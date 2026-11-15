@@ -82,13 +82,14 @@ export function ForumVisitorPane() {
                 <View testID="forum-visitor-topics">
                     {list.topics.map((topic) => {
                         const replies = tn(topic.replyCount, FORUM_WORDS.replies.one, FORUM_WORDS.replies.other, { n: topic.replyCount });
+                        const title = `${topic.pinned ? '📌 ' : ''}${topic.title}`;
                         return (
                             <Pressable key={topic.id} testID="forum-visitor-topic-row" accessibilityRole="button" style={styles.row}
                                 onPress={() => router.push({ pathname: '/forum-public/[id]', params: { id: topic.id } })}>
                                 <View style={styles.rowWords}>
-                                    <Text style={styles.rowTitle}>{`${topic.pinned ? '📌 ' : ''}${topic.title}`}</Text>
+                                    <Text style={styles.rowTitle}>{title}</Text>
                                     <Text style={styles.muted}>{[publicWriterLine(topic.writer, t(TOPIC_WORDS.member)), section ? '' : nameOf(topic.sectionId)].filter(Boolean).join(' · ')}</Text>
-                                    <Text style={styles.muted}>{replies} · {timeAgo(Math.max(0, Date.now() - Date.parse(topic.lastActivityAt)))}</Text>
+                                    <Text style={styles.muted}>{[replies, timeAgo(Math.max(0, Date.now() - Date.parse(topic.lastActivityAt)))].join(' · ')}</Text>
                                 </View>
                             </Pressable>
                         );

@@ -2597,5 +2597,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "새로 고침",
   "Refresh your {provider} copy": "{provider} 사본 새로 고침",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider}을(를) 새로 고쳤어요. 이걸로 로그인하면 아무것도 입력하지 않고 이 계정이 돌아와요.",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider}을(를) 새로 고치지 못해서 아무것도 바뀌지 않았어요. 잠시 후 다시 시도해 주세요."
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider}을(를) 새로 고치지 못해서 아무것도 바뀌지 않았어요. 잠시 후 다시 시도해 주세요.",
+  "From the forum": "포럼에서",
+  "Join to reply": "참여하고 답장하기",
+  "No topics here yet. Join to start the first one.": "아직 주제가 없어요. 참여해서 첫 주제를 시작해 보세요."
 }

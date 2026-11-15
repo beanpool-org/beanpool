@@ -2715,5 +2715,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "रीफ़्रेश करें",
   "Refresh your {provider} copy": "अपनी {provider} प्रति रीफ़्रेश करें",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} रीफ़्रेश हो गया। इससे साइन इन करने पर, बिना कुछ टाइप किए, यह खाता वापस आ जाता है।",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider} रीफ़्रेश नहीं हो सका, इसलिए कुछ नहीं बदला। एक मिनट में फिर से कोशिश करें।"
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider} रीफ़्रेश नहीं हो सका, इसलिए कुछ नहीं बदला। एक मिनट में फिर से कोशिश करें।",
+  "From the forum": "फ़ोरम से",
+  "Join to reply": "उत्तर देने के लिए शामिल हों",
+  "No topics here yet. Join to start the first one.": "यहाँ अभी कोई विषय नहीं है। पहला शुरू करने के लिए शामिल हों।"
 }

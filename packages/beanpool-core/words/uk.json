@@ -2951,5 +2951,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "Оновити",
   "Refresh your {provider} copy": "Оновити вашу копію для {provider}",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} оновлено. Вхід через нього відновлює цей акаунт — нічого вводити не потрібно.",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Не вдалося оновити {provider}, тому нічого не змінилося. Спробуйте ще раз за хвилину."
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Не вдалося оновити {provider}, тому нічого не змінилося. Спробуйте ще раз за хвилину.",
+  "From the forum": "З форуму",
+  "Join to reply": "Приєднайтеся, щоб відповісти",
+  "No topics here yet. Join to start the first one.": "Тут ще немає тем. Приєднайтеся, щоб почати першу."
 }

@@ -34,6 +34,8 @@ export default function ForumPublicTopicScreen() {
     useEffect(() => { setPage(null); void read(0); }, [read]);
 
     const topic = page?.topic;
+    const titleLine = topic ? `${topic.pinned ? '📌 ' : ''}${topic.title}` : '';
+    const placeLine = topic?.place ? `📍 ${topic.place}` : '';
     const member = t(TOPIC_WORDS.member);
     const quoted = (n: number | null) => (n ? page?.posts.find((p) => p.number === n) ?? null : null);
     return (
@@ -54,8 +56,8 @@ export default function ForumPublicTopicScreen() {
                         </Pressable>
                     </View>
                 )}
-                {topic && <Text style={styles.title} testID="forum-visitor-title">{`${topic.pinned ? '📌 ' : ''}${topic.title}`}</Text>}
-                {topic?.place ? <Text style={styles.muted}>📍 {topic.place}</Text> : null}
+                {topic && <Text style={styles.title} testID="forum-visitor-title">{titleLine}</Text>}
+                {placeLine ? <Text style={styles.muted}>{placeLine}</Text> : null}
                 {page?.posts.map((post) => {
                     const q = quoted(post.quotes);
                     return (

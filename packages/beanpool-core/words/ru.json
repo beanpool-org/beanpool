@@ -2951,5 +2951,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "Обновить",
   "Refresh your {provider} copy": "Обновить вашу копию для {provider}",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} обновлён. Вход через него восстанавливает этот аккаунт — ничего вводить не нужно.",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Не удалось обновить {provider}, поэтому ничего не изменилось. Попробуйте ещё раз через минуту."
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Не удалось обновить {provider}, поэтому ничего не изменилось. Попробуйте ещё раз через минуту.",
+  "From the forum": "С форума",
+  "Join to reply": "Присоединитесь, чтобы ответить",
+  "No topics here yet. Join to start the first one.": "Здесь пока нет тем. Присоединитесь, чтобы начать первую."
 }

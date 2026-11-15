@@ -2715,5 +2715,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "রিফ্রেশ",
   "Refresh your {provider} copy": "আপনার {provider} কপি রিফ্রেশ করুন",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} রিফ্রেশ হয়েছে। এটি দিয়ে সাইন ইন করলে কিছু টাইপ না করেই এই অ্যাকাউন্ট ফিরে আসে।",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider} রিফ্রেশ করা যায়নি, তাই কিছুই পরিবর্তন হয়নি। এক মিনিট পরে আবার চেষ্টা করুন।"
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider} রিফ্রেশ করা যায়নি, তাই কিছুই পরিবর্তন হয়নি। এক মিনিট পরে আবার চেষ্টা করুন।",
+  "From the forum": "ফোরাম থেকে",
+  "Join to reply": "উত্তর দিতে যোগ দিন",
+  "No topics here yet. Join to start the first one.": "এখানে এখনও কোনো বিষয় নেই। প্রথমটি শুরু করতে যোগ দিন।"
 }

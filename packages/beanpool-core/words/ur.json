@@ -2715,5 +2715,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "ریفریش کریں",
   "Refresh your {provider} copy": "اپنی {provider} کاپی ریفریش کریں",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} ریفریش ہو گیا۔ اس سے سائن ان کرنے پر، کچھ ٹائپ کیے بغیر، یہ اکاؤنٹ واپس آ جاتا ہے۔",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider} ریفریش نہیں ہو سکا، اس لیے کچھ تبدیل نہیں ہوا۔ ایک منٹ بعد دوبارہ کوشش کریں۔"
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider} ریفریش نہیں ہو سکا، اس لیے کچھ تبدیل نہیں ہوا۔ ایک منٹ بعد دوبارہ کوشش کریں۔",
+  "From the forum": "فورم سے",
+  "Join to reply": "جواب دینے کے لیے شامل ہوں",
+  "No topics here yet. Join to start the first one.": "یہاں ابھی کوئی موضوع نہیں۔ پہلا شروع کرنے کے لیے شامل ہوں۔"
 }

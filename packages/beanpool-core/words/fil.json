@@ -2715,5 +2715,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "I-refresh",
   "Refresh your {provider} copy": "I-refresh ang kopya mo para sa {provider}",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "Na-refresh na ang {provider}. Ang pag-sign in gamit ito ay nagbabalik ng account na ito, nang walang kailangang i-type.",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Hindi na-refresh ang {provider}, kaya walang nabago. Subukang muli pagkalipas ng isang minuto."
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Hindi na-refresh ang {provider}, kaya walang nabago. Subukang muli pagkalipas ng isang minuto.",
+  "From the forum": "Mula sa forum",
+  "Join to reply": "Sumali para sumagot",
+  "No topics here yet. Join to start the first one.": "Wala pang paksa rito. Sumali para simulan ang una."
 }

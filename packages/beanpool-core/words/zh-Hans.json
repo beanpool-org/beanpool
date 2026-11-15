@@ -2597,5 +2597,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "刷新",
   "Refresh your {provider} copy": "刷新你的 {provider} 副本",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} 已刷新。用它登录即可找回这个账户，无需输入任何内容。",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "无法刷新 {provider}，因此没有任何更改。请一分钟后再试。"
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "无法刷新 {provider}，因此没有任何更改。请一分钟后再试。",
+  "From the forum": "来自论坛",
+  "Join to reply": "加入后回复",
+  "No topics here yet. Join to start the first one.": "这里还没有话题。加入后发起第一个吧。"
 }

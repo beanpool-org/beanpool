@@ -2597,5 +2597,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "重新整理",
   "Refresh your {provider} copy": "重新整理你的 {provider} 副本",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} 已重新整理。用它登入即可找回這個帳號，無需輸入任何內容。",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "無法重新整理 {provider}，因此沒有任何變更。請一分鐘後再試。"
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "無法重新整理 {provider}，因此沒有任何變更。請一分鐘後再試。",
+  "From the forum": "來自論壇",
+  "Join to reply": "加入後回覆",
+  "No topics here yet. Join to start the first one.": "這裡還沒有主題。加入後發起第一個吧。"
 }

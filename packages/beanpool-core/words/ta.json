@@ -2715,5 +2715,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "புதுப்பி",
   "Refresh your {provider} copy": "உங்கள் {provider} நகலைப் புதுப்பி",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} புதுப்பிக்கப்பட்டது. இதைக் கொண்டு உள்நுழைந்தால், எதையும் தட்டச்சு செய்யாமல் இந்தக் கணக்கு திரும்ப வரும்.",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider}-ஐப் புதுப்பிக்க முடியவில்லை, எனவே எதுவும் மாறவில்லை. ஒரு நிமிடம் கழித்து மீண்டும் முயலவும்."
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider}-ஐப் புதுப்பிக்க முடியவில்லை, எனவே எதுவும் மாறவில்லை. ஒரு நிமிடம் கழித்து மீண்டும் முயலவும்.",
+  "From the forum": "மன்றத்திலிருந்து",
+  "Join to reply": "பதிலளிக்க இணையவும்",
+  "No topics here yet. Join to start the first one.": "இங்கு இன்னும் தலைப்புகள் இல்லை. முதல் தலைப்பைத் தொடங்க இணையவும்."
 }

@@ -2715,5 +2715,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "Yenile",
   "Refresh your {provider} copy": "{provider} kopyanızı yenileyin",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} yenilendi. Onunla oturum açmak, hiçbir şey yazmadan bu hesabı geri getirir.",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider} yenilenemedi, bu yüzden hiçbir şey değişmedi. Bir dakika sonra tekrar deneyin."
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider} yenilenemedi, bu yüzden hiçbir şey değişmedi. Bir dakika sonra tekrar deneyin.",
+  "From the forum": "Forumdan",
+  "Join to reply": "Yanıtlamak için katıl",
+  "No topics here yet. Join to start the first one.": "Burada henüz konu yok. İlkini başlatmak için katıl."
 }

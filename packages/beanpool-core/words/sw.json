@@ -2715,5 +2715,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "Sasisha",
   "Refresh your {provider} copy": "Sasisha nakala yako ya {provider}",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} imesasishwa. Kuingia nayo kunarudisha akaunti hii, bila kuandika chochote.",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Imeshindikana kusasisha {provider}, kwa hivyo hakuna kilichobadilika. Jaribu tena baada ya dakika moja."
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Imeshindikana kusasisha {provider}, kwa hivyo hakuna kilichobadilika. Jaribu tena baada ya dakika moja.",
+  "From the forum": "Kutoka jukwaani",
+  "Join to reply": "Jiunge ili ujibu",
+  "No topics here yet. Join to start the first one.": "Bado hakuna mada hapa. Jiunge ili uanzishe ya kwanza."
 }

@@ -2715,5 +2715,8 @@
   "Refresh\u0004a sign-in's copy of your account, so the server can find it": "تازه‌سازی",
   "Refresh your {provider} copy": "تازه‌سازی نسخهٔ {provider} شما",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} تازه شد. ورود با آن این حساب را برمی‌گرداند، بدون نیاز به تایپ چیزی.",
-  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "تازه‌سازی {provider} ممکن نشد، پس چیزی تغییر نکرد. یک دقیقهٔ دیگر دوباره امتحان کنید."
+  "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "تازه‌سازی {provider} ممکن نشد، پس چیزی تغییر نکرد. یک دقیقهٔ دیگر دوباره امتحان کنید.",
+  "From the forum": "از انجمن",
+  "Join to reply": "برای پاسخ دادن بپیوندید",
+  "No topics here yet. Join to start the first one.": "هنوز موضوعی اینجا نیست. بپیوندید و اولین را شروع کنید."
 }

@@ -255,6 +255,9 @@ async function main(): Promise<void> {
             ['photo_urls', { ...DRAFT, photo_urls: ['https://pics.example/a.jpg'] }, /^A draft carries no picture from the web: the admin adds their own when they check it\.$/],
             ['a topic not on the list', { ...DRAFT, topic: 'gossip' }, /Pick a topic/],
             ['a fix', { ...DRAFT, fix_of: 'some-page', note: 'The bus moved' }, /later version of this server/],
+            // Learn's tags (16 Nov): members can't add them in the apps yet, so neither can an assistant: refused, never dropped.
+            ['tags', { ...DRAFT, tags: ['recycling'] }, /Tags on Local knowledge come with a later version/],
+            ['free_tags', { ...DRAFT, free_tags: ['recycling'] }, /never write a Tags line/],
         ];
         for (const [what, args, words] of refusals) {
             const r = await c.callTool({ name: 'knowledge_draft', arguments: args });

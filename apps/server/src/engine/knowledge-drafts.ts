@@ -276,6 +276,7 @@ function suggestKnowledgeFix(member: string, raw: KnowledgeInput & { photos?: un
         sources: pick(raw.sources, own.sources),
         lang: pick(raw.lang, own.lang),
         freeTags: pick(raw.freeTags, own.freeTags),
+        tags: raw.tags,
     }, shows.freeTags);
     // What the member changed: each part that differs from the page as it shows, with the page's own words then. A part sent
     // as the page has it (the app may send the form whole) is no change.
@@ -626,6 +627,7 @@ function approvedFields(r: DraftRow, raw: KnowledgeInput): KnowledgeInput {
         sources: pick(raw.sources, sourcesOf(r.sources)),
         lang: pick(raw.lang, r.lang),
         freeTags: pick(raw.freeTags, freeTagsOf(r.free_tags)),
+        tags: raw.tags,
     };
 }
 
@@ -722,7 +724,7 @@ function approveFix(broadcast: BroadcastFn, checker: string, r: DraftRow, raw: K
     const edited: KnowledgeInput = {};
     for (const part of FIX_PARTS) if (raw[part] !== undefined) edited[part] = raw[part];
     // The page's own tags pass as stored, as on an owner's or admin's edit (engine/knowledge.ts cleanFreeTags).
-    const post = rewriteKnowledge(broadcast, checker, page.id, cleanKnowledgeInput({ ...fix.suggested, ...edited }, partsOf(page).freeTags), now);
+    const post = rewriteKnowledge(broadcast, checker, page.id, cleanKnowledgeInput({ ...fix.suggested, ...edited, tags: raw.tags }, partsOf(page).freeTags), now);
     const answered = db.prepare(`UPDATE knowledge_drafts SET state = 'approved', answered_at = ?, answered_by = ?, result_post_id = ?
                                  WHERE id = ? AND state = 'waiting'`).run(iso(now), checker, page.id, r.id).changes;
     if (answered !== 1) throw new Error('a suggestion was answered twice');

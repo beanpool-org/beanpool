@@ -45,6 +45,7 @@ import {
 } from '../community-index';
 import { COMMUNITY_RECORDS_STORE_KEY, SAVED_NODES_STORE_KEY, homeAnswerStoreKey, homeLayoutStoreKey } from '../storage-keys';
 import { communityCachesRenamed, CACHE_NAMES_DONE_KEY, resetCommunityCachesRenamedForTests } from '../cache-file-migration';
+import { communityKey as toolCommunityKey } from '../../tools/community';
 
 const RIVERSIDE = 'https://riverside.example';
 const HILLSIDE = 'https://hillside.example:8443';
@@ -144,7 +145,10 @@ describe('storage goes through the record, the network through `using`', () => {
         expect(communityKeyOf(HILLSIDE)).toBe(RIVERSIDE);
         expect(getDatabaseFilenameForNode(HILLSIDE)).toBe(getDatabaseFilenameForNode(RIVERSIDE));
         expect(homeAnswerStoreKey(PK, HILLSIDE)).toBe(homeAnswerStoreKey(PK, RIVERSIDE));
+        expect(toolCommunityKey(HILLSIDE)).toBe(toolCommunityKey(RIVERSIDE));
         expect(usingOf(RIVERSIDE)).toBe(HILLSIDE);
+        resetCommunityIndexForTests();
+        expect(toolCommunityKey(HILLSIDE)).not.toBe(toolCommunityKey(RIVERSIDE));
     });
 });
 

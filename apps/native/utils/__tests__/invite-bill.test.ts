@@ -44,7 +44,9 @@ describe('People › Invites (app/(tabs)/people.tsx) draws the fold and shares f
         expect(src).toMatch(/if \(bill\) \{\s*billNotMade\(\{ kind: 'lost' \}\);\s*return;/);
     });
     it('with a bill, a refusal the node words is shown as it said it, anything else is "not known", and no offline ticket is made', () => {
-        expect(src).toMatch(/if \(bill\) \{\s*billNotMade\(inviteBillAnswerOf\(res\.status, serverMsg, body\?\.code, body === null\)\);\s*return;/);
+        // Round 3: the answer is read once, for a bill or not, with a busy network's 429 and the switch a feature_off names.
+        expect(src).toMatch(/const answer = inviteBillAnswerOf\(res\.status, serverMsg, isBusyAnswer\(res\.status, body\) \? BUSY_CODE : body\?\.code, body === null, body\?\.feature\);/);
+        expect(src).toMatch(/if \(bill\) \{\s*billNotMade\(answer\);\s*return;/);
     });
     it('Share names the inviter when the invite carries a bill, through core\'s one message', () => {
         expect(src).toMatch(/inviteShareText\(\{ name, link: magicLink, code: codeToShare, address, billFrom: carriesBill \? identity\?\.callsign : null \}\)/);

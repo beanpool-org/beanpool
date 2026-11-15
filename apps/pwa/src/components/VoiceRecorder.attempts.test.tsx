@@ -11,8 +11,10 @@
  * error and hears nothing, so the person saw the clock, spoke, and Stop said the recorder didn't load, with voice turned off
  * for the session. The stand-in encoder below does what Firefox does: a capture made on a closed sound hears nothing.
  *
- * Every row runs through the real useVoiceRecorder. Each one ends with exactly one attempt live, recording through the last
- * microphone and sound asked for; every earlier microphone stopped and every earlier sound closed; Stop keeps a recording.
+ * Every row runs through the real useVoiceRecorder. A row that ends on a click ends with exactly one attempt live, recording
+ * through the last microphone and sound asked for; every earlier microphone stopped and every earlier sound closed; Stop keeps
+ * a recording. A row that ends on the bin ends with nothing live and nothing said: a binned attempt that fails late (Chrome
+ * throws on a closed sound) is not the recorder failing.
  */
 import { renderHook, act, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -96,7 +98,7 @@ class FakeMediaRecorder {
 }
 
 let clock = 1000;
-/** Lets every answer that is ready come back: promises, then a turn of the event loop, twice. */
+/** Lets every answer that is ready come back: three turns of the event loop, each after the promises queued before it. */
 async function settle() {
     for (let i = 0; i < 3; i++) await new Promise((r) => setTimeout(r, 0));
 }

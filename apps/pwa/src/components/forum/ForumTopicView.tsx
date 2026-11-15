@@ -4,8 +4,8 @@
  * own faintly tinted and still on the left. Each post's ⋯ holds Reply (a quote of it) · Copy · Report · Block · Remove, each
  * only where it applies. The topic's bell follows or leaves it; its ⋯ mutes it or closes it. The reply box: the words on the
  * row's whole width (so its hint reads whole at 320 px with 1.3x text), 📎 and Send under them, and a quoted reply above
- * it. Opening the topic marks it read up to the last post drawn, which takes
- * the forum's own bell rows for it off (POST /read, slice F5).
+ * it. Opening the topic marks it read up to the last post drawn, which takes the forum's own bell rows for it off (POST
+ * /read, slice F5).
  *
  * - **The reader's range.** A topic is read 30 posts at a time. Every read again (opening it, a reply sent, a ⋯ action) reads
  *   through the last post the member had drawn, never only the first 30, and after Send on through their own reply.

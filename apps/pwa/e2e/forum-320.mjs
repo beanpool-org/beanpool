@@ -15,7 +15,7 @@
  * Run (from apps/pwa): node e2e/forum-320.mjs   FORUM_TMP sets where the build and the node's data go (os.tmpdir());
  * FORUM_SHOTS a folder for screenshots. Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global URL, console, process, setTimeout, document, indexedDB, localStorage -- Node, and the page's side of evaluate() */
+/* global URL, console, process, setTimeout, document, indexedDB, localStorage, getComputedStyle -- Node, and the page's side of evaluate() */
 import { build } from 'vite';
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';

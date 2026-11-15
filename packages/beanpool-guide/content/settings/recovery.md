@@ -209,6 +209,7 @@ Without your 12 words and without a linked sign-in account, an admin of your com
 - Your phone shows a two-digit number, and under it the address of the community it asked. Show both to the admin: they type the number on their screen. The number makes sure it's your phone they bind, and not someone who saw the code. **Not now** leaves the number: your phone keeps its place, and the same code shows the same number again.
 - If the new phone had no BeanPool account, it then shows the 12 words of your **new** key. Write them down: your old words no longer work, and your old phone stops working for good. A phone that already had an account (for another community) keeps that account's 12 words, and they now bring this account back too.
 - If you had linked a sign-in account, your phone asks you to link it again in Account Protection: the one you had protected your old key, so it was removed.
+- Your private contacts list was locked with your old key, so your new key can't open it. Your community keeps that old locked list for a year: if you find your old 12 words, open it from **Contacts** on the phone. See "Your private contacts".
 - People you chat with will see that your key changed. Tell them it was you, and read them your **My key code**, in **Settings** under **Account Protection** on the phone. See "If a chat says the key behind a name changed".
 
 The code lasts 24 hours. If your admin says your phone isn't the one they saw, or the code runs out, ask them for a new one.

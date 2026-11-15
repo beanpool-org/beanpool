@@ -642,6 +642,9 @@ export const SUITES = [
     // The community label on the worldwide forum (slice F10): the note on a member's own community, the check on a public forum,
     // the three-way switch x every kind of note in one table, lapses and unlisting at each read, a standby, a re-key, no server asked.
     'test-membership-note',
+    // The worldwide forum for anyone on the web (slice F7): every public route x visitor, member, removed member x every post
+    // state in one table, only the allowed fields, caching signed and unsigned, the index rules, a local community not found.
+    'test-forum-public',
     'test-mcp-knowledge',
     'test-names-copy',
     'test-contact-copies',

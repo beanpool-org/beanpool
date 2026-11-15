@@ -47,7 +47,7 @@ Under **On BeanPool**, **Message** opens a chat. If the person is in another of 
 
 ## Inviting someone
 
-On someone under **Not on BeanPool yet**, tap **Invite**. It is one invite for one person, and it works once, for 30 days. Send it from your own apps: **Share…**, **Text message** (on the phone, when they have a number), **Email** (in the web app, when they have an email) or **Copy**. BeanPool sends nothing itself. The invite carries no note: their name, number and email are not sent to your community's server. The row then says when you invited them.
+On someone under **Not on BeanPool yet**, tap **Invite**. It is one invite for one person, and it works once, for 30 days. Send it from your own apps: **Share…**, **Text message** (when they have a number: it opens your texting app with the invite filled in), **Email** (in the web app, when they have an email) or **Copy**. BeanPool sends nothing itself. The invite carries no note: their name, number and email are not sent to your community's server. The row then says when you invited them.
 
 There is no button to invite everyone: each invite is one person, sent by you.
 

@@ -53,17 +53,29 @@ export interface WholeCopyCheck {
 }
 
 /**
+ * What a whole copy's check could not compare: `content`, each table's content (the main server sent no hashes with the
+ * copy: it was written to while the copy was being made); `release`, tables the main server's release hashes another way
+ * (engine/replica-hashes.ts compareTableHashes), or every table, when its hashes are made in a way this one doesn't read;
+ * `ledger`, every account (the copy names accounts this server can't hold, names one twice, or names none while this
+ * server holds some).
+ */
+export type NotCompared = 'content' | 'release' | 'ledger';
+const NOT_COMPARED: readonly NotCompared[] = ['content', 'release', 'ledger'];
+/** At most this many tables of another release's named in the record. */
+const MAX_OTHER_RELEASE = 40;
+
+/**
  * A whole copy's check that found nothing different but could not compare everything, so it says neither "exact" nor
  * "differs" (review 4118340714: one read as exact was an all-clear for a copy still wrong).
  */
 export interface UncomparedCheck {
     at: number;
+    notCompared: NotCompared[];
     /**
-     * What it could not compare: `content`, each table's content (the main server sent no hashes with the copy: it was
-     * written to while the copy was being made); `ledger`, every account (the copy names accounts this server can't hold,
-     * names one twice, or names none while this server holds some).
+     * With `release`: the tables the main server's release hashes another way, or hashes and this one doesn't, or the other
+     * way round, which were not compared (the rest were, and are equal). Empty when none of its hashes could be read.
      */
-    notCompared: ('content' | 'ledger')[];
+    otherRelease?: string[];
     photosLeftOut: number;
     snapshotGeneratedAt: string | null;
 }
@@ -194,7 +206,8 @@ export function readCopyRecord(): CopyRecord {
             } : null,
             lastUncompared: u && typeof u === 'object' && num(u.at) !== null ? {
                 at: u.at,
-                notCompared: Array.isArray(u.notCompared) ? u.notCompared.filter((n: unknown) => n === 'content' || n === 'ledger') : [],
+                notCompared: Array.isArray(u.notCompared) ? u.notCompared.filter((n: unknown) => NOT_COMPARED.includes(n as NotCompared)) : [],
+                otherRelease: Array.isArray(u.otherRelease) ? u.otherRelease.filter((t: unknown) => typeof t === 'string').slice(0, MAX_OTHER_RELEASE) : [],
                 photosLeftOut: count(u.photosLeftOut),
                 snapshotGeneratedAt: typeof u.snapshotGeneratedAt === 'string' ? u.snapshotGeneratedAt : null,
             } : null,
@@ -327,7 +340,7 @@ function mending(w: WholeCopyCheck | null, now: number): boolean {
  */
 export function noteUncomparedCheck(check: UncomparedCheck): void {
     const r = readCopyRecord();
-    write({ ...r, lastUncompared: check });
+    write({ ...r, lastUncompared: { ...check, otherRelease: (check.otherRelease ?? []).slice(0, MAX_OTHER_RELEASE) } });
 }
 
 /** Why a pull failed, as a code: what the report may carry (never the error's own text). */
@@ -370,10 +383,15 @@ export function standbyReport(now = Date.now()): StandbyReport {
     };
 }
 
-function notComparedInWords(notCompared: UncomparedCheck['notCompared']): string {
-    const words = notCompared.map((n) => (n === 'content'
+function notComparedInWords(u: UncomparedCheck): string {
+    const other = u.otherRelease ?? [];
+    const words = u.notCompared.map((n) => (n === 'content'
         ? 'the main server was changing while it made that copy, so it sent nothing to compare each table\'s content with'
-        : 'the copy did not carry every account in a form this server can hold, so its ledger could not be compared account by account'));
+        : n === 'release'
+            ? (other.length > 0
+                ? `the main server runs another release, which keeps ${differsInWords(other)} another way, so ${pronounOf(other) === 'it' ? 'it was' : 'they were'} not compared`
+                : 'the main server runs another release, whose table hashes this server cannot read, so no table\'s content was compared')
+            : 'the copy did not carry every account in a form this server can hold, so its ledger could not be compared account by account'));
     return words.length > 0 ? words.join('; ') : 'not everything in it could be compared';
 }
 
@@ -413,7 +431,7 @@ export function copyCheckForPreview(lastCopyAtInMemory: number | null, now = Dat
             : 'This server has not checked a whole copy of the main server yet, so it cannot say its copy is exact.');
     }
     // A later whole copy that could not be compared in full: said as such, and the last exact copy's time stays the older one.
-    if (u) lines.push(`Its last whole copy of the main server, at ${timeInWords(u.at)}, could not be compared with it in full: ${notComparedInWords(u.notCompared)}.`);
+    if (u) lines.push(`Its last whole copy of the main server, at ${timeInWords(u.at)}, could not be compared with it in full: ${notComparedInWords(u)}.`);
     // Photos the main server can't read itself: said as such, never as a difference, and no warning (a take-over from here
     // loses nothing the main server could still show).
     const photos = (u ?? w)?.photosLeftOut ?? 0;

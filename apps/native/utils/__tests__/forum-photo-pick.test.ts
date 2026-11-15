@@ -6,9 +6,13 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+/** pickForumPhoto puts the keyboard away first, then opens the source sheet: waits for the sheet. */
+const sheet = async () => { for (let k = 0; k < 50 && !calls.sources; k++) await new Promise((r) => setTimeout(r, 2)); expect(calls.sources).not.toBeNull(); };
 const calls = vi.hoisted(() => ({ manip: [] as unknown[][], cameraAsked: 0, sources: null as null | { camera?: () => void; gallery: () => void; files: () => void }, cancel: null as null | (() => void), picked: { width: 4000, height: 3000 } }));
 vi.mock('react-native', () => ({ Image: 'img', Linking: {}, Modal: 'div', Pressable: 'button', Text: 'span', View: 'div', StyleSheet: { create: (s: unknown) => s } }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: 'i' }));
+const keyboard = vi.hoisted(() => ({ dismissed: 0 }));
+vi.mock('react-native-keyboard-controller', () => ({ KeyboardController: { dismiss: vi.fn(async () => { keyboard.dismissed += 1; }) } }));
 vi.mock('../../app/ThemeContext', () => ({ useTheme: () => ({}), useStyles: () => ({}) }));
 vi.mock('../keyboard-alert', () => ({ Alert: { alert: vi.fn() } }));
 vi.mock('../forum', () => ({ forumPhotoUri: vi.fn() }));
@@ -33,11 +37,14 @@ beforeEach(() => {
     calls.sources = null;
     calls.cancel = null;
     calls.picked = { width: 4000, height: 3000 };
+    keyboard.dismissed = 0;
 });
 
 describe('a forum photo leaving the phone', () => {
     it('a 4000 × 3000 picture from the gallery goes fitted to 800 px wide, JPEG, as a data address; the camera is never asked', async () => {
         const photo = pickForumPhoto();
+        await sheet();
+        expect(keyboard.dismissed).toBe(1);
         expect(calls.cameraAsked).toBe(0);
         calls.sources!.gallery();
         expect(await photo).toBe('data:image/jpeg;base64,AAAA');
@@ -52,11 +59,14 @@ describe('a forum photo leaving the phone', () => {
     it('a tall picture is fitted to 800 px high; one already within 800 px is never enlarged', async () => {
         calls.picked = { width: 1200, height: 3000 };
         let photo = pickForumPhoto();
+        await sheet();
         calls.sources!.files();
         await photo;
         expect(calls.manip[0][1]).toEqual([{ resize: { height: 800 } }]);
         calls.picked = { width: 640, height: 480 };
+        calls.sources = null;
         photo = pickForumPhoto();
+        await sheet();
         calls.sources!.gallery();
         await photo;
         expect(calls.manip[1][1]).toEqual([]);
@@ -64,12 +74,15 @@ describe('a forum photo leaving the phone', () => {
 
     it('the camera\'s permission is asked only at Camera; leaving the sheet with no choice gives nothing', async () => {
         let photo = pickForumPhoto();
+        await sheet();
         expect(calls.cameraAsked).toBe(0);
         calls.sources!.camera!();
         expect(await photo).toBe('data:image/jpeg;base64,AAAA');
         expect(calls.cameraAsked).toBe(1);
         expect((calls.manip[0] as [string])[0]).toBe('file:///camera.jpg');
+        calls.sources = null;
         photo = pickForumPhoto();
+        await sheet();
         calls.cancel!();
         expect(await photo).toBeNull();
     });

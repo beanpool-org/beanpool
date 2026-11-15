@@ -7,6 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { Image, Linking, Modal, Pressable, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { KeyboardController } from 'react-native-keyboard-controller';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { FORUM_LIMITS, forumWordRuns, t } from '@beanpool/core';
 import { Alert } from '../../utils/keyboard-alert';
@@ -64,7 +65,10 @@ export function ForumPhotos({ id, count, waiting }: { id: string; count: number;
  * for nothing until a source is tapped, and the camera's permission only at Camera (permissions only when asked). Null: nothing
  * picked, or it couldn't be read (the member is told).
  */
-export function pickForumPhoto(): Promise<string | null> {
+export async function pickForumPhoto(): Promise<string | null> {
+    // The source sheet and the picker are their own windows: the keyboard goes first (the group chat's pickPhoto, after the DM
+    // screen's phantom-keyboard note), never waited on past 400 ms.
+    await Promise.race([KeyboardController.dismiss().catch(() => {}), new Promise((r) => setTimeout(r, 400))]);
     return new Promise((resolve) => {
         const take = async (pick: () => Promise<ImagePicker.ImagePickerResult>) => {
             try {

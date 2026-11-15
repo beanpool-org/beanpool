@@ -139,14 +139,16 @@ export default function ForumTopicScreen() {
     const open = !!topic && !topic.closed;
     const name = (p: { writer: { name: string } }) => p.writer.name || t(TOPIC_WORDS.member);
 
-    // The kept draft goes into the box once the box is drawn (an open topic), with its quote once that post is read.
+    // The kept draft goes into the box once, when the box is drawn (an open topic), with its quote if that post is drawn then (a
+    // quote of a post gone or blocked since is dropped; the words stay). Once only: never again over what the member types next.
     useEffect(() => {
         if (!draft || !open || !composer.current) return;
         composer.current.setText(draft.words);
         setPhotos(draft.photos);
-        const q = draft.quotes ? page?.posts.find((p) => p.number === draft.quotes) ?? null : null;
+        const q = draft.quotes ? page?.posts.find((p) => p.number === draft.quotes && !p.removed) ?? null : null;
         if (q) setQuote(q);
-        if (!draft.quotes || q) { setDraft(null); draftRead.current = true; }
+        setDraft(null);
+        draftRead.current = true;
     }, [draft, open, page]);
 
     /** Up to 3 photos with the reply, each fitted within 800 px; past 3 the web's line. */

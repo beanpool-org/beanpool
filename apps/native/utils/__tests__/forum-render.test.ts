@@ -430,6 +430,25 @@ describe.each(LOOKS)('a topic\'s photos and draft in %s (%s)', (_name, set) => {
         expectReadable(host, set);
     });
 
+    it('a draft quoting a post that isn\'t drawn (gone since) is put back once, without the quote, and never again over new typing', async () => {
+        node.draft = { words: 'About that post', quotes: 99, photos: [] };
+        const host = await render(set, ForumTopicScreen);
+        expect((byId(host, 'forum-reply-box') as HTMLTextAreaElement).value).toBe('About that post');
+        expect(byId(host, 'forum-quote')).toBeNull();
+        expect(composerCalls.filter((c) => c === 'setText:About that post')).toHaveLength(1);
+        await typeIn(byId(host, 'forum-reply-box'), 'Something new');
+        // A later read (here, a post's ⋯ action reads the topic again) never puts the draft back over it.
+        const { followForumTopic } = await import('../forum');
+        vi.mocked(followForumTopic).mockResolvedValueOnce('following');
+        await press(byId(host, 'forum-follow'));
+        expect((byId(host, 'forum-reply-box') as HTMLTextAreaElement).value).toBe('Something new');
+        expect(composerCalls.filter((c) => c === 'setText:About that post')).toHaveLength(1);
+        // And leaving keeps what is there now.
+        const { keepForumDraft } = await import('../forum');
+        await act(async () => { lastRoot!.unmount(); });
+        expect(keepForumDraft).toHaveBeenLastCalledWith('t1', { words: 'Something new', quotes: null, photos: [] });
+    });
+
     it('leaving the topic with words in the box keeps them as its draft', async () => {
         const host = await render(set, ForumTopicScreen);
         await typeIn(byId(host, 'forum-reply-box'), 'Half a thought');

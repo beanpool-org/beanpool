@@ -7496,5 +7496,7 @@
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "Сервер {community} старіший за цей застосунок і поки не вміє знаходити акаунт за входом. Попросіть його адміністратора оновити сервер або увійдіть за допомогою своїх 12 слів.",
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "Виберіть свою спільноту, потім увійдіть через {provider} ще раз. Вхід сам знайде ваш акаунт, тож більше нічого вводити не потрібно. Ваші 12 слів діють у будь-який час.",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "BeanPool читає ваші контакти лише тоді, коли ви торкаєтеся «Імпортувати контакти», щоб показати список для вибору. Те, що ви імпортуєте, замкнено так, що прочитати це можете лише ви.",
-  "People in other communities can send me a message request on this phone": "Люди з інших спільнот можуть надіслати мені запит на повідомлення на цьому телефоні"
+  "People in other communities can send me a message request on this phone": "Люди з інших спільнот можуть надіслати мені запит на повідомлення на цьому телефоні",
+  "I'm Already a Member →": "Я вже в спільноті →",
+  "I'm New Here": "Я тут уперше"
 }

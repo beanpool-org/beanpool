@@ -151,17 +151,17 @@ describe('every way back is reachable from "I\'m Already a Member", best first',
     it('the restore menu: sign-in first, then the 12 words, then the community, an admin\'s code and a browser, each working', async () => {
         const taps: string[] = [];
         await draw(createElement(RestoreMenu, {
-            colors: onboardingColors(false), dark: false, logos: null,
+            ...onboardingColors('light'), logos: null,
             onSocial: () => taps.push('social'), onWords: () => taps.push('words'), onCommunity: () => taps.push('community'),
             onRekey: () => taps.push('rekey'), onBrowser: () => taps.push('browser'),
         }));
         const rows = buttons();
-        expect(rows.map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual([
-            'Recover with Social Sign-In',
+        expect(rows.map((b) => b.querySelector('span')?.textContent)).toEqual([
+            '🌐 Recover with Social',
             '🔑 Recover with 12 Words',
-            '🤝 My community can bring me back' + 'For members of a local community.',
+            '🤝 My community can bring me back',
             '🪪 An admin gave me a re-key code',
-            '💻 Scan from a browserFor an account you use in a web browser.',
+            '💻 Scan from a browser',
         ]);
         await act(async () => { for (const r of rows) r.click(); });
         expect(taps).toEqual(['social', 'words', 'community', 'rekey', 'browser']);

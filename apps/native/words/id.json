@@ -6743,5 +6743,7 @@
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "Server {community} memakai versi yang lebih lama daripada aplikasi ini dan belum bisa menemukan akunmu dari proses masuk. Minta admin-nya memperbaruinya, atau pakai 12 katamu.",
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "Pilih komunitasmu, lalu masuk dengan {provider} sekali lagi. Masuk ini akan menemukan akunmu, jadi tidak ada lagi yang perlu diketik. 12 katamu berfungsi kapan saja.",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "BeanPool membaca kontakmu hanya saat kamu mengetuk Impor kontak, untuk menampilkan daftar yang bisa kamu pilih. Yang kamu impor dikunci sehingga hanya kamu yang bisa membacanya.",
-  "People in other communities can send me a message request on this phone": "Orang dari komunitas lain bisa mengirimiku permintaan pesan di ponsel ini"
+  "People in other communities can send me a message request on this phone": "Orang dari komunitas lain bisa mengirimiku permintaan pesan di ponsel ini",
+  "I'm Already a Member →": "Saya Sudah Jadi Anggota →",
+  "I'm New Here": "Saya Baru di Sini"
 }

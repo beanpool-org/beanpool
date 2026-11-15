@@ -6994,5 +6994,7 @@
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "Le serveur de {community} est plus ancien que cette application et ne peut pas encore retrouver votre compte à partir d'une connexion. Demandez à son administrateur de le mettre à jour, ou utilisez vos 12 mots.",
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "Choisissez votre communauté, puis connectez-vous avec {provider} une nouvelle fois. La connexion retrouve votre compte : il n'y a rien d'autre à saisir. Vos 12 mots fonctionnent à tout moment.",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "BeanPool lit vos contacts uniquement quand vous touchez Importer des contacts, pour vous montrer une liste où choisir. Ce que vous importez est verrouillé et ne peut être lu que par vous.",
-  "People in other communities can send me a message request on this phone": "Les personnes d'autres communautés peuvent m'envoyer une demande de message sur ce téléphone"
+  "People in other communities can send me a message request on this phone": "Les personnes d'autres communautés peuvent m'envoyer une demande de message sur ce téléphone",
+  "I'm Already a Member →": "Je suis déjà membre →",
+  "I'm New Here": "C'est ma première fois"
 }

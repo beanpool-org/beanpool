@@ -6743,5 +6743,7 @@
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community} のサーバーはこのアプリより古いため、まだサインインからアカウントを見つけられません。管理者にアップデートを依頼するか、12個の単語を使ってください。",
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "コミュニティを選び、もう一度{provider}でサインインしてください。サインインによってアカウントが見つかるため、ほかに入力するものはありません。12個の単語はいつでも使えます。",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "BeanPoolが連絡先を読み取るのは、「連絡先をインポート」をタップしたときだけです。選べる一覧を表示するためです。インポートしたものはロックされ、あなただけが読めます。",
-  "People in other communities can send me a message request on this phone": "他のコミュニティの人がこのスマートフォンでメッセージリクエストを送れる"
+  "People in other communities can send me a message request on this phone": "他のコミュニティの人がこのスマートフォンでメッセージリクエストを送れる",
+  "I'm Already a Member →": "すでにメンバーです →",
+  "I'm New Here": "はじめての方"
 }

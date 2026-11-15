@@ -6994,5 +6994,7 @@
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "Ο διακομιστής της κοινότητας {community} είναι παλαιότερος από αυτή την εφαρμογή και δεν μπορεί ακόμη να βρει τον λογαριασμό σας από μια σύνδεση. Ζητήστε από τον διαχειριστή να τον ενημερώσει ή χρησιμοποιήστε τις 12 λέξεις σας.",
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "Επιλέξτε την κοινότητά σας και μετά συνδεθείτε ξανά με {provider}. Η σύνδεση βρίσκει τον λογαριασμό σας, οπότε δεν χρειάζεται να πληκτρολογήσετε τίποτα άλλο. Οι 12 λέξεις σας λειτουργούν πάντα.",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "Το BeanPool διαβάζει τις επαφές σου μόνο όταν πατάς Εισαγωγή επαφών, για να σου δείξει μια λίστα να διαλέξεις. Ό,τι εισάγεις κλειδώνεται, ώστε να μπορείς να το διαβάσεις μόνο εσύ.",
-  "People in other communities can send me a message request on this phone": "Άτομα από άλλες κοινότητες μπορούν να μου στείλουν αίτημα μηνύματος σε αυτό το τηλέφωνο"
+  "People in other communities can send me a message request on this phone": "Άτομα από άλλες κοινότητες μπορούν να μου στείλουν αίτημα μηνύματος σε αυτό το τηλέφωνο",
+  "I'm Already a Member →": "Είμαι ήδη μέλος →",
+  "I'm New Here": "Είμαι νέο μέλος"
 }

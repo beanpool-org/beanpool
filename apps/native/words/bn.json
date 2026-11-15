@@ -6998,5 +6998,7 @@
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community}-এর সার্ভার এই অ্যাপের চেয়ে পুরোনো, তাই এখনও সাইন-ইন থেকে আপনার অ্যাকাউন্ট খুঁজে পায় না। এর অ্যাডমিনকে আপডেট করতে বলুন, অথবা আপনার 12টি শব্দ ব্যবহার করুন।",
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "আপনার কমিউনিটি বেছে নিন, তারপর {provider} দিয়ে আবার সাইন ইন করুন। এটি আপনার অ্যাকাউন্ট খুঁজে নেয়, তাই আর কিছু লিখতে হবে না। আপনার 12টি শব্দ যেকোনো সময় কার্যকর।",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "আপনি যখন কন্টাক্ট ইমপোর্ট করুন-এ ট্যাপ করেন, শুধু তখনই BeanPool আপনার কন্টাক্টগুলো পড়ে, যাতে বেছে নেওয়ার জন্য আপনাকে একটি তালিকা দেখাতে পারে। আপনি যা ইমপোর্ট করেন তা লক করা থাকে, তাই শুধু আপনিই তা পড়তে পারেন।",
-  "People in other communities can send me a message request on this phone": "অন্য সম্প্রদায়ের মানুষ এই ফোনে আমাকে একটি বার্তার অনুরোধ পাঠাতে পারেন"
+  "People in other communities can send me a message request on this phone": "অন্য সম্প্রদায়ের মানুষ এই ফোনে আমাকে একটি বার্তার অনুরোধ পাঠাতে পারেন",
+  "I'm Already a Member →": "আমি আগেই সদস্য →",
+  "I'm New Here": "এখানে নতুন"
 }

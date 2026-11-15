@@ -6743,5 +6743,7 @@
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community} 的服务器比这个应用旧，暂时还无法通过登录找到你的账户。请联系其管理员更新，或使用你的 12 个助记词。",
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "请选择你的社区，然后再次通过 {provider} 登录。登录会找到你的账户，所以无需再输入其他内容。你的 12 个助记词随时有效。",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "只有在你点按“导入联系人”时，BeanPool 才会读取你的联系人，以便给你显示一个可供选择的列表。你导入的内容会被锁定，只有你能读取。",
-  "People in other communities can send me a message request on this phone": "其他社区的人可以在这部手机上向我发送消息请求"
+  "People in other communities can send me a message request on this phone": "其他社区的人可以在这部手机上向我发送消息请求",
+  "I'm Already a Member →": "我已是成员 →",
+  "I'm New Here": "我是新来的"
 }

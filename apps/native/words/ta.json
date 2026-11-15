@@ -6994,5 +6994,7 @@
   "{community}'s server is older than this app and can't find your account from a sign-in yet. Ask its admin to update, or use your 12 words.": "{community} இன் சர்வர் இந்த ஆப்பை விடப் பழையது, எனவே உள்நுழைவிலிருந்து உங்கள் கணக்கை இன்னும் கண்டறிய முடியாது. அதைப் புதுப்பிக்குமாறு அதன் நிர்வாகியிடம் கேட்கவும், அல்லது உங்கள் 12 வார்த்தைகளைப் பயன்படுத்தவும்.",
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "உங்கள் சமூகத்தைத் தேர்ந்தெடுங்கள், பிறகு {provider} மூலம் மீண்டும் உள்நுழையுங்கள். உள்நுழைவு உங்கள் கணக்கைக் கண்டறியும், எனவே வேறு எதையும் தட்டச்சு செய்ய வேண்டியதில்லை. உங்கள் 12 வார்த்தைகள் எந்த நேரத்திலும் செயல்படும்.",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "நீங்கள் தொடர்புகளை இறக்குமதி செய் என்பதைத் தட்டும்போது மட்டுமே BeanPool உங்கள் தொடர்புகளைப் படிக்கிறது, நீங்கள் தேர்ந்தெடுக்க ஒரு பட்டியலைக் காட்டுவதற்காக. நீங்கள் இறக்குமதி செய்வது பூட்டப்படும், அதனால் நீங்கள் மட்டுமே அதைப் படிக்க முடியும்.",
-  "People in other communities can send me a message request on this phone": "பிற சமூகங்களைச் சேர்ந்தவர்கள் இந்தத் தொலைபேசியில் எனக்குச் செய்தி கோரிக்கையை அனுப்பலாம்"
+  "People in other communities can send me a message request on this phone": "பிற சமூகங்களைச் சேர்ந்தவர்கள் இந்தத் தொலைபேசியில் எனக்குச் செய்தி கோரிக்கையை அனுப்பலாம்",
+  "I'm Already a Member →": "நான் ஏற்கெனவே உறுப்பினர் →",
+  "I'm New Here": "இங்கே புதியவர்"
 }

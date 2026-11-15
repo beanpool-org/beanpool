@@ -14,7 +14,7 @@ afterEach(() => setLanguage('en'));
 describe('billsOn: only where the node says bills are on', () => {
     it('true only for `bills: true`', () => {
         expect(billsOn({ bills: true })).toBe(true);
-        for (const f of [undefined, null, {}, { bills: false }, { bills: 'true' }, { bills: 1 }]) expect(billsOn(f as any)).toBe(false);
+        for (const f of [undefined, null, {}, { bills: false }, { bills: 'true' }, { bills: 1 }]) expect(billsOn(f as { bills?: unknown } | null | undefined)).toBe(false);
     });
 });
 

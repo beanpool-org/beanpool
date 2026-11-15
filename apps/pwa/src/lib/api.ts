@@ -394,6 +394,9 @@ export interface CommunityInfo {
         /** Present, and true, only where this community has a forum (core forumOn): the Chat tab's top is then Chats · Forum
          *  (pages/ChatTabPage.tsx, slice T0). Absent (its owners switched it off, or an older node): the tab as before. */
         forum?: true;
+        /** Present, and true, only where this community takes bills (core billsOn): the invite page offers "Add a bill for
+         *  them" (slice B3). Absent (the global community, or an older node): no bills. */
+        bills?: true;
     };
     /** Where Start a community's "how to run a node" leads (lib/features.ts startCommunityUrl). Absent: beanpool.org's. */
     startCommunityUrl?: string;
@@ -672,17 +675,25 @@ export interface InviteCode {
     expiresAt?: string | null;
     forKnock?: boolean;
     usedByCallsign?: string | null;
+    /** The bill that went with it (slice B3): what for and how many Beans. */
+    bill?: { whatFor: string; amount_c: number } | null;
 }
 
+/**
+ * `bill`: a bill the invite carries (DESIGN-getting-paid-fable.md §4.5, slice B3), its own id made by this page so a second
+ * tap after a lost answer is the same bill. A refused bill throws with the node's words and code (bill_…, bills_…).
+ */
 export async function generateInvite(
     publicKey: string,
     intendedFor?: string,
     vouchAmount?: number,
+    bill?: { id: string; whatFor: string; amount_c: number } | null,
 ): Promise<{ success: boolean; invite: InviteCode }> {
     return request('POST', '/api/invite/generate', {
         publicKey,
         intendedFor: intendedFor || undefined,
         ...(vouchAmount !== undefined ? { vouchAmount } : {}),
+        ...(bill ? { bill } : {}),
     });
 }
 

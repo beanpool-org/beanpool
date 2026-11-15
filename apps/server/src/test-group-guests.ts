@@ -18,7 +18,7 @@
  *   6  remove: the removed guest's home is told; the epoch goes stale; an epoch still wrapping them is refused; after the
  *      next epoch they are named in nothing that goes out, and a line of theirs is dropped
  *   7  leave: a guest's signed leave takes them out
- *   8  caps: 30 guests invited or in; 20 MB of photos and voice a day per guest
+ *   8  caps: 30 guests invited or in; 20 MB of photos and voice a day per guest; the free-disk floor every photo keeps
  *   9  the owners' switch: off, no invitation, every guest removed and their home told, nothing from a guest goes in
  *  10  a home that can't be reached: the request waits and is tried again, then goes once taken
  *  11  a standby copies group_guests (a plain table) and never the outbox; the routes are in the guest-view list
@@ -78,6 +78,7 @@ async function main(): Promise<void> {
     const { __useRelayTransportForTests } = await import('./engine/relay-outbox.js');
     const { applyShapeChanges } = await import('./config/community-shape-write.js');
     const { TABLES } = await import('./engine/replication-manifest.js');
+    const { setSimulatedFreeDiskBytesForTests } = await import('./engine/photo-upload-budget.js');
     // Loaded at run time, so on a server without it (origin/main, the fail-first run) the suite reports a count, not a crash.
     const guests: any = await import('./engine/group-guests.js').catch(() => null);
 
@@ -419,6 +420,21 @@ async function main(): Promise<void> {
     const count8 = msgCount(G);
     const photo = await bring([await item(gus, 'a.example', groupTo, 'group-line', JSON.stringify({ ...words, metadata: { epoch: 3 }, clientId: photoId, type: 'image', attachment: { data: sealedPhoto.ciphertext, nonce: sealedPhoto.nonce, mime: 'image/jpeg' } }))]);
     assert(photo.body?.items?.[0]?.refused === 'group-refused' && msgCount(G) === count8, `8b. past 20 MB of photos and voice today, Gus's photo is refused (got ${JSON.stringify(photo.body)})`);
+    // Within his day, but the disk past the floor every photo keeps: refused too, nothing stored.
+    db.prepare('DELETE FROM message_attachments WHERE message_id = ?').run(fakeId);
+    setSimulatedFreeDiskBytesForTests(1024);
+    const floorId = crypto.randomUUID();
+    const floorPhoto = sealGroupLine(`data:image/jpeg;base64,${crypto.randomBytes(30_000).toString('base64')}`, { myEdPrivHex: gus.seedHex, groupKey: e3.groupKey, groupId: G, epoch: 3, messageId: floorId, part: 'attachment' });
+    const floorWords = sealGroupLine('', { myEdPrivHex: gus.seedHex, groupKey: e3.groupKey, groupId: G, epoch: 3, messageId: floorId });
+    const floor = await bring([await item(gus, 'a.example', groupTo, 'group-line', JSON.stringify({ ...floorWords, metadata: { epoch: 3 }, clientId: floorId, type: 'image', attachment: { data: floorPhoto.ciphertext, nonce: floorPhoto.nonce, mime: 'image/jpeg' } }))]);
+    setSimulatedFreeDiskBytesForTests(null);
+    assert(floor.body?.items?.[0]?.refused === 'group-refused' && msgCount(G) === count8, `8c. the disk past its floor: Gus's photo is refused, nothing stored (got ${JSON.stringify(floor.body)})`);
+    const okId = crypto.randomUUID();
+    const okPhoto = sealGroupLine(`data:image/jpeg;base64,${crypto.randomBytes(30_000).toString('base64')}`, { myEdPrivHex: gus.seedHex, groupKey: e3.groupKey, groupId: G, epoch: 3, messageId: okId, part: 'attachment' });
+    const okWords = sealGroupLine('', { myEdPrivHex: gus.seedHex, groupKey: e3.groupKey, groupId: G, epoch: 3, messageId: okId });
+    const okSent = await bring([await item(gus, 'a.example', groupTo, 'group-line', JSON.stringify({ ...okWords, metadata: { epoch: 3 }, clientId: okId, type: 'image', attachment: { data: okPhoto.ciphertext, nonce: okPhoto.nonce, mime: 'image/jpeg' } }))]);
+    assert(okSent.body?.items?.[0]?.received === true && msgCount(G) === count8 + 1 && !!db.prepare('SELECT 1 FROM message_attachments WHERE message_id = ?').get(okId),
+        `8d. within his day and the floor, the same kind of photo goes in with its sealed bytes (got ${JSON.stringify(okSent.body)})`);
 
     // ── 9. The owners' switch ───────────────────────────────────────────────────────────────
     console.log('\n9. The owners switch guests off');

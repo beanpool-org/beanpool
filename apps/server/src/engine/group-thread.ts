@@ -31,7 +31,7 @@ import type { MessagingCallbacks } from './messaging.js';
 import {
     assertLineEpochIsCurrent, filterDeclaredMentions, fromEpochOf, fromEpochsOf, groupChatEncryption, GroupKeyError, GROUP_CHAT_UPDATE_APP,
 } from './group-keys.js';
-import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
+import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes, assertDiskFloorSpace } from './photo-upload-budget.js';
 import { VOICE_LINE_TYPE, voiceLineRefusal } from './voice-lines.js';
 import { withheldLine } from './withheld-lines.js';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
@@ -533,6 +533,8 @@ export function postGroupThreadMessage(
     // above, before anything is written (as a DM photo, engine/messaging.ts sendMessage).
     const photoBytes = photo && !opts.guest ? incomingPhotoBytes(photo.data) : 0;
     if (photo && !opts.guest) assertMayStorePhotoBytes(authorPubkey, photoBytes);
+    // A guest's photo or voice keeps the free-disk floor every photo keeps; their day's bytes are the guests' cap.
+    if (photo && opts.guest) assertDiskFloorSpace();
 
     ensureGroupThread(groupId);
     if (!opts.guest) addParticipant(groupId, authorPubkey, new Date().toISOString());

@@ -13,7 +13,7 @@ import { AppState } from 'react-native';
 import { usePathname } from 'expo-router';
 
 /** The paths of the tabs, as `usePathname()` gives them (`index` is `/`). Pinned to app/(tabs) by people-visit.test.ts. */
-export const TAB_PATHS: readonly string[] = ['/', '/market', '/map', '/chats', '/people', '/pulse', '/projects', '/ledger', '/settings'];
+export const TAB_PATHS: readonly string[] = ['/', '/market', '/map', '/chats', '/forum', '/people', '/pulse', '/projects', '/ledger', '/settings'];
 
 /** The tab a path is, or null for anything pushed on top of one (a profile, the names list, a chat). */
 export function tabOf(pathname: string): string | null {

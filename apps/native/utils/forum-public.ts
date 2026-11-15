@@ -12,11 +12,11 @@ import { useEffect, useState } from 'react';
 import {
     FORUM_PUBLIC_PATHS, forumPublicOn, type ForumPublicFront, type ForumPublicSectionPage, type ForumPublicTopicPage,
 } from '@beanpool/core';
-import { anchorUrl } from './node-post';
-import { isGuestNode } from './nodes';
-import { getCachedNodeProfile } from './node-profile';
 
 const READ_TIMEOUT_MS = 15_000;
+
+/** The community in use (node-post.ts anchorUrl), loaded when asked: the tab bar imports this file, and the data layer is heavy. */
+const anchorUrl = async (): Promise<string | null> => (await import('./node-post')).anchorUrl();
 
 async function publicRead<T>(path: string, fetchImpl: typeof fetch = fetch): Promise<T> {
     const base = (await anchorUrl())?.replace(/\/+$/, '');
@@ -43,7 +43,7 @@ export const getPublicTopic = (id: string, after = 0) => publicRead<ForumPublicT
 /** Whether this phone reads the community in use as a visitor whose forum anyone may read. False on any fault. */
 export async function visitorForumHere(): Promise<boolean> {
     try {
-        const anchor = await anchorUrl();
+        const [anchor, { isGuestNode }, { getCachedNodeProfile }] = await Promise.all([anchorUrl(), import('./nodes'), import('./node-profile')]);
         if (!anchor || !(await isGuestNode(anchor))) return false;
         return forumPublicOn((await getCachedNodeProfile(anchor))?.features);
     } catch {

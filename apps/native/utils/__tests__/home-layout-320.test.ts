@@ -501,7 +501,17 @@ describe("the Decide card's settings sheet at 320dp × 1.3 (My votes)", () => {
 describe('the tab strip: Home · Market · Map · Chat · Commons · Ledger', () => {
     const layout = read('app/(tabs)/_layout.tsx');
     const screens = [...layout.matchAll(/<Tabs\.Screen\s+name="([^"]+)"([\s\S]*?)\/>\s*(?=<Tabs\.Screen|\{\/\*|<\/Tabs>)/g)].map(m => ({ name: m[1], body: m[2] }));
-    const onStrip = screens.filter(x => !/href: null/.test(x.body) || /hiddenTabs\.includes/.test(x.body));
+    /**
+     * The strip for a reader: a tab with no `href: null` is on it; one hidden by the node's features (`hiddenTabs`) counts as on
+     * it (the strip is measured at its fullest); one switched by `visitorForum` (slice F7: the visitors' Forum in Chat's place
+     * on the global community) by that switch. Anything else with `href: null` is off it.
+     */
+    const stripFor = (visitorForum: boolean) => screens.filter(x => {
+        const switched = /\.\.\.\(visitorForum \? (\{ href: null \}|\{\}) : (\{\}|\{ href: null \})\)/.exec(x.body);
+        if (switched) return (visitorForum ? switched[1] : switched[2]) === '{}';
+        return !/href: null/.test(x.body) || /hiddenTabs\.includes/.test(x.body);
+    });
+    const onStrip = stripFor(false);
     // Each tab's name is a word() in the layout's TAB table, drawn through t() (in English, the name itself).
     const tabTable = layout.slice(layout.indexOf('const TAB = {'), layout.indexOf('};', layout.indexOf('const TAB = {')));
     const TAB_NAMES = Object.fromEntries([...tabTable.matchAll(/(\w+): word\('([^']+)', 'tab'\),/g)].map(m => [m[1], m[2]]));
@@ -510,6 +520,8 @@ describe('the tab strip: Home · Market · Map · Chat · Commons · Ledger', ()
 
     it('six labelled tabs in the design\'s order; Pulse, People and Settings are routes off the strip', () => {
         expect(onStrip.map(x => x.name)).toEqual(['index', 'market', 'map', 'chats', 'projects', 'ledger']);
+        // A visitor on the global community: still six at most, the Forum (read only) where Chat was (slice F7).
+        expect(stripFor(true).map(x => x.name)).toEqual(['index', 'market', 'map', 'forum', 'projects', 'ledger']);
         expect(screens.find(x => x.name === 'pulse')!.body).toMatch(/href: null/);
         expect(screens.find(x => x.name === 'people')!.body).toMatch(/href: null/);
         expect(screens.find(x => x.name === 'settings')!.body).toMatch(/href: null/);
@@ -532,7 +544,9 @@ describe('the tab strip: Home · Market · Map · Chat · Commons · Ledger', ()
         expect(layout).toMatch(/const LABEL_MAX_SCALE = 1\.1;/);
         const labels = onStrip.map(x => labelOf(x.body));
         expect(labels).toEqual(['Home', 'Market', 'Map', 'Chat', 'Commons', 'Ledger']);
-        for (const l of labels) expect(textWidth(l!, 10, { scale: 1.1 })).toBeLessThanOrEqual(textWidth('Commons', 10, { scale: 1.1 }));
+        // The visitors' Forum tab draws the forum's own word (core FORUM_HOME_WORDS.name, "Forum").
+        expect(screens.find(x => x.name === 'forum')!.body).toMatch(/<TabItem label=\{t\(FORUM_HOME_WORDS\.name\)\}/);
+        for (const l of [...labels, 'Forum']) expect(textWidth(l!, 10, { scale: 1.1 })).toBeLessThanOrEqual(textWidth('Commons', 10, { scale: 1.1 }));
     });
 });
 

@@ -103,7 +103,8 @@ const catalog = (lang: string): Record<string, unknown> => JSON.parse(fs.readFil
 
 /** The strip's tabs, in order, with their English names; and those off the strip (routes only). */
 const STRIP = [['index', 'Home'], ['market', 'Market'], ['map', 'Map'], ['chats', 'Chat'], ['projects', 'Commons'], ['ledger', 'Ledger']] as const;
-const OFF_STRIP = [['people', 'People'], ['pulse', 'Pulse'], ['settings', 'Settings']] as const;
+// The visitors' Forum (slice F7) is a route off a member's strip; on the global community it takes Chat's place for a visitor.
+const OFF_STRIP = [['forum', 'Forum'], ['people', 'People'], ['pulse', 'Pulse'], ['settings', 'Settings']] as const;
 const TAB_KEY = (english: string) => `${english}\u0004tab`;
 
 // ── The width model (language-switch-render.test.ts's): a generous 0.62 em a letter, 1.25 em an emoji, an em for CJK ──

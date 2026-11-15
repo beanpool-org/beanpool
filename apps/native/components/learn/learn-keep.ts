@@ -4,7 +4,7 @@
  * apps/pwa/src/lib/learn.ts (learnPageActions, learnFixToSend) with the same sentences. Pure: the screens are
  * components/learn/KnowledgeDetail.tsx and app/learn/new.tsx.
  */
-import { KNOWLEDGE_LIMITS, word } from '@beanpool/core';
+import { KNOWLEDGE_LIMITS, knowledgeTagsDiffer, word } from '@beanpool/core';
 import type { KnowledgePage } from '../../utils/learn-copy';
 import { knowledgeFormBody, type KnowledgeFormValues } from './learn-write';
 
@@ -70,6 +70,7 @@ export function formOfPage(page: KnowledgePage): KnowledgeFormValues {
         place: page.knowledge?.place ?? '',
         sources: (page.knowledge?.sources ?? []).map((s) => ({ url: s.url, label: s.label ?? '' })),
         photos: [],
+        freeTags: [...(page.freeTags ?? [])],
     };
 }
 
@@ -90,13 +91,18 @@ export function fixBody(page: KnowledgePage, form: KnowledgeFormValues, note: st
     if (now.topic !== was.topic) out.topic = now.topic;
     if ((now.place ?? '') !== was.place.trim()) out.place = now.place ?? '';
     if (sourcesKey(now.sources) !== sourcesKey(was.sources)) out.sources = now.sources;
+    // Its tags are a part as its words are (the node's FIX_PARTS): sent only when changed, [] when all were taken off.
+    if (knowledgeTagsDiffer(form.freeTags, was.freeTags)) out.freeTags = [...(form.freeTags ?? [])];
     return out;
 }
 
-/** What an owner's or admin's "Edit" sends: the whole form, in the page's own language (the writer's, §2.8), never photos. */
+/**
+ * What an owner's or admin's "Edit" sends: the whole form, its tags included ([] takes them off), in the page's own language
+ * (the writer's, §2.8), never photos.
+ */
 export function editBody(page: KnowledgePage, form: KnowledgeFormValues): Record<string, unknown> {
     const words: Record<string, unknown> = { ...knowledgeFormBody({ ...form, photos: [] }, '') };
     delete words.photos;
     delete words.lang;
-    return { ...words, place: words.place ?? '', ...(page.knowledge?.lang ? { lang: page.knowledge.lang } : {}) };
+    return { ...words, place: words.place ?? '', freeTags: [...(form.freeTags ?? [])], ...(page.knowledge?.lang ? { lang: page.knowledge.lang } : {}) };
 }

@@ -17,6 +17,9 @@
  * sent (a page taken down meanwhile is refused in its words). A fix opens on the page as it shows (the copy, or the node when the
  * copy hasn't it). An edit opens on the page as the node has it, read when the form opens, as the web does: /edit rewrites the
  * whole page, so starting from a copy that's behind would put older words back. Not reached, the edit doesn't open.
+ *
+ * Tags (Learn's tags, 16 Nov 2026): the Market's own Tags field, the member's own tags alone (TagPicker `freeOnly`), after Where,
+ * as on the web. A fix and an edit open on the page's tags; a fix sends them only when changed, an edit always ([] takes them off).
  */
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -24,7 +27,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TOPICS, currentLanguage, formatCount, t } from '@beanpool/core';
+import { KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TAG_WORDS, KNOWLEDGE_TOPICS, currentLanguage, formatCount, t } from '@beanpool/core';
 import { useStyles, useTheme } from '../ThemeContext';
 import { LEARN_LINES } from '../../components/learn/learn-lines';
 import {
@@ -38,6 +41,12 @@ import type { KnowledgePage } from '../../utils/learn-copy';
 import { useIdentity } from '../IdentityContext';
 import { useLearnMode } from '../../utils/use-learn-mode';
 import { askForPostPhoto } from '../../utils/post-photo';
+import { TagPicker } from '../../components/TagPicker';
+
+/** The Market's picker reads library tags it is never given here (freeOnly). */
+const NO_LIBRARY = () => {};
+/** Learn's line under the Tags field, in place of the Market's two. */
+const TAG_HINTS = [KNOWLEDGE_TAG_WORDS.hint];
 import { signedRequestWithMethod } from '../../utils/db';
 
 export default function NewKnowledgeScreen() {
@@ -282,6 +291,8 @@ export default function NewKnowledgeScreen() {
                 <Text style={s.label}>{t(LEARN_WRITE.placeLabel)}</Text>
                 <TextInput testID="learn-new-place" style={s.input} value={form.place} onChangeText={(place) => set({ place })} maxLength={KNOWLEDGE_LIMITS.place}
                     placeholder={t(LEARN_WRITE.placeHint)} placeholderTextColor={colors.text.muted} accessibilityLabel={t(LEARN_WRITE.placeLabel)} />
+
+                <TagPicker freeOnly testID="learn-new-tags" onChange={NO_LIBRARY} freeTags={form.freeTags} onFreeTagsChange={(freeTags) => set({ freeTags })} hints={TAG_HINTS} />
 
                 <Text style={s.label}>{t(LEARN_WRITE.sourcesLabel)}</Text>
                 {form.sources.map((link, i) => (

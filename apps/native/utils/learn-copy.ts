@@ -29,6 +29,8 @@ export interface KnowledgePage {
     hiddenByReportsAt?: string | null;
     authorPublicKey?: string;
     authorCallsign?: string;
+    /** Its own tags (free tags only), each in its stored form; a node before Learn's tags sends none. */
+    freeTags?: string[];
     knowledge?: {
         sources?: Array<{ url: string; label: string }>;
         place?: string | null;
@@ -102,9 +104,9 @@ export function searchTerms(words: string): string[] {
 }
 
 /**
- * A plain match over the phone's own copy, for when the node can't be asked (amended §2.7): the title, the place, the body and
- * the topic's words. As the node's search reads the words, a page matches when ANY word is found (its full text search ORs the
- * words), and the more of them it holds the higher it ranks: a word in the title counts most (3), then in the place (2), then in
+ * A plain match over the phone's own copy, for when the node can't be asked (amended §2.7): the title, the place, its tags, the
+ * body and the topic's words. As the node's search reads the words, a page matches when ANY word is found (its full text search ORs
+ * the words), and the more of them it holds the higher it ranks: a word in the title counts most (3), then in the place or a tag (2), then in
  * the body or the topic's words (1); ties in Learn's order; at most KNOWLEDGE_SEARCH_MAX rows. Plain substring matching, so a
  * script written without spaces matches as well.
  */
@@ -118,9 +120,11 @@ export function learnSearch(pages: readonly KnowledgePage[], words: string, now:
         const body = (page.description ?? '').toLowerCase();
         const topic = knowledgeTopic(page.category);
         const topicWords = topic ? `${topic.keywords} ${topic.label}`.toLowerCase() : '';
+        // Its tags count as the place does (the node scores a tag match 2, between the title and the body).
+        const tags = (Array.isArray(page.freeTags) ? page.freeTags : []).join(' ').toLowerCase();
         let score = 0;
         for (const w of terms) {
-            score += (title.includes(w) ? 3 : 0) + (place.includes(w) ? 2 : 0) + (body.includes(w) || topicWords.includes(w) ? 1 : 0);
+            score += (title.includes(w) ? 3 : 0) + (place.includes(w) || tags.includes(w) ? 2 : 0) + (body.includes(w) || topicWords.includes(w) ? 1 : 0);
         }
         if (score > 0) scored.push({ score, row: rowOfPage(page, now) });
     }

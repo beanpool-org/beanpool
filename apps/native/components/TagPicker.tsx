@@ -7,7 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
     FREE_TAGS_MAX, FREE_TAG_TOO_SHORT, LIBRARY_ASK_MS, POST_TAGS_MAX, TAG_COMMA, TOO_MANY_TAGS, TYPED_TAG_WORDS, communityTagsFor,
     didYouMeanTag, enterTypedTags, exactLibraryTag, lastTagOff, mergedInto, suggestTags, tagChildren, tagIndex, t, tn, typedTag,
-    isLang, type CommunityTag, type LibraryElsewhere, type LibraryLabel, type RefusedTag,
+    isLang, type CommunityTag, type LibraryElsewhere, type LibraryLabel, type RefusedTag, type WordKey,
 } from '@beanpool/core';
 import { loadCommunityTags, loadLibraryTagFor } from '../utils/community-tags';
 import { useTheme, useStyles } from '../app/ThemeContext';
@@ -44,7 +44,18 @@ export interface TagPickerProps {
     /** The library tag a word is the label of in another language, and that language (GET /api/free-tags?q=, slice F5), or
      *  null; rejects when it can't be had, and the picker then asks again later. */
     libraryTagFor?: (text: string) => Promise<LibraryLabel | null>;
+    /**
+     * The member's own tags alone, never the library's (a page of Local knowledge carries no library ids): no suggestions,
+     * categories, library matches or "Did you mean", and a library label typed is the member's own word (core typed-tags.ts
+     * `freeOnly`). Takes `onFreeTagsChange`; `value` and `onChange` are not read. The web's picker does the same.
+     */
+    freeOnly?: boolean;
+    /** The lines under the field in place of the Market's two (words keys, shown through t()). */
+    hints?: readonly WordKey[];
 }
+
+/** No library tags: a free-only picker's (one list, so a render never makes a new one). */
+const NO_LIBRARY_TAGS: string[] = [];
 
 export function TagPicker({
     value,
@@ -58,8 +69,10 @@ export function TagPicker({
     testID = 'tag-picker',
     communityTags = loadCommunityTags,
     libraryTagFor = loadLibraryTagFor,
+    freeOnly = false,
+    hints = [TYPED_TAG_WORDS.arePublic, TYPED_TAG_WORDS.yourWords],
 }: TagPickerProps) {
-    const selectedTags = value ?? tags ?? [];
+    const selectedTags = freeOnly ? NO_LIBRARY_TAGS : value ?? tags ?? [];
     const { colors } = useTheme();
     const [sheetVisible, setSheetVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -324,11 +337,12 @@ export function TagPicker({
     const canType = !!onFreeTagsChange;
     const [community, setCommunity] = useState<CommunityTag[]>([]);
     useEffect(() => {
-        if (!sheetVisible || !canType) return;
+        // Where only the member's own are taken, this community's listing tags are not offered (Learn's are not among them).
+        if (!sheetVisible || !canType || freeOnly) return;
         let live = true;
         communityTags().then((list) => { if (live) setCommunity(list); }, () => {});
         return () => { live = false; };
-    }, [sheetVisible, canType, communityTags]);
+    }, [sheetVisible, canType, freeOnly, communityTags]);
     // A word an owner merged into a library tag commits as that tag (core community-tags.ts).
     const merged = useMemo(() => mergedInto(community, index), [community, index]);
 
@@ -366,7 +380,7 @@ export function TagPicker({
 
     /** Commits what is typed (core typed-tags.ts); false when a piece was refused and stays in the field with its words. */
     const enter = (text: string, done: boolean): boolean => {
-        const entry = enterTypedTags(text, held, done, index, merged);
+        const entry = enterTypedTags(text, held, done, index, merged, freeOnly);
         const added = entry.tags.length !== selectedTags.length || entry.freeTags.length !== freeTags.length;
         if (entry.tags.length !== selectedTags.length) onChange(entry.tags);
         if (entry.freeTags.length !== freeTags.length) onFreeTagsChange?.(entry.freeTags);
@@ -423,21 +437,21 @@ export function TagPicker({
 
     // Up to 8 suggestions from title, description and category
     const suggestions = useMemo(() => {
-        return suggestTags(title, description, { category, limit: 8, index });
-    }, [title, description, category, index]);
+        return freeOnly ? [] : suggestTags(title, description, { category, limit: 8, index });
+    }, [title, description, category, index, freeOnly]);
 
     // Search results (from 2 chars)
     const searchResults = useMemo(() => {
         const q = searchQuery.trim();
-        if (q.length < 2) return [];
+        if (q.length < 2 || freeOnly) return [];
         const found = index.search(q, 12);
         // A plural ("lemons") is no prefix of its label, and Enter picks that label: it has a row like any other.
         const exact = canType ? exactLibraryTag(q, index) : null;
         return exact && !found.includes(exact) ? [exact, ...found] : found;
-    }, [searchQuery, index, canType]);
+    }, [searchQuery, index, canType, freeOnly]);
 
     // What Enter would do with the field now. A word still being typed is not yet too short.
-    const typed = canType ? typedTag(searchQuery, held, index, merged) : null;
+    const typed = canType ? typedTag(searchQuery, held, index, merged, freeOnly) : null;
     // Under the library's matches: this community's tags the typing reaches, never one with a library label's letters.
     const usedHere = canType ? communityTagsFor(searchQuery, community, held, { shadowed: (tag) => exactLibraryTag(tag, index) !== null }) : [];
     const addable = typed?.kind === 'free' && !freeTags.includes(typed.tag) ? typed.tag : null;
@@ -449,7 +463,7 @@ export function TagPicker({
     const askedNode = useRef(new Map<string, LibraryLabel | null>());
     const listed = searchResults.length > 0;
     useEffect(() => {
-        if (!sheetVisible || !addable || listed) return;
+        if (!sheetVisible || !addable || listed || freeOnly) return;
         const known = askedNode.current.get(addable);
         if (known !== undefined) { setElsewhere({ tag: addable, found: known }); return; }
         let live = true;
@@ -460,15 +474,15 @@ export function TagPicker({
             }, () => {});
         }, LIBRARY_ASK_MS);
         return () => { live = false; clearTimeout(timer); };
-    }, [sheetVisible, addable, listed, libraryTagFor]);
-    const meant = didYouMeanTag(addable, elsewhere, held, searchResults, index);
+    }, [sheetVisible, addable, listed, freeOnly, libraryTagFor]);
+    const meant = freeOnly ? null : didYouMeanTag(addable, elsewhere, held, searchResults, index);
     const shownRefusal = refused ?? (typed?.kind === 'refused' && typed.why !== FREE_TAG_TOO_SHORT ? typed : null);
 
     // Groups for the selected category
     const groups = useMemo(() => {
-        if (!category) return [];
+        if (!category || freeOnly) return [];
         return tagChildren(category);
-    }, [category]);
+    }, [category, freeOnly]);
 
     const chosenChips = (
         <>
@@ -512,7 +526,7 @@ export function TagPicker({
             <View style={styles.chipsRow}>
                 {chosenChips}
 
-                {(selectedTags.length < POST_TAGS_MAX || (canType && freeTags.length < FREE_TAGS_MAX)) && (
+                {((!freeOnly && selectedTags.length < POST_TAGS_MAX) || (canType && freeTags.length < FREE_TAGS_MAX)) && (
                     <Pressable
                         style={styles.addBtn}
                         onPress={openSheet}
@@ -551,7 +565,7 @@ export function TagPicker({
                             <MaterialCommunityIcons name="magnify" size={20} color={colors.text.muted} style={{ marginRight: 8 }} />
                             <TextInput
                                 style={styles.searchInput}
-                                placeholder={t('Search tags...')}
+                                placeholder={freeOnly ? t(TYPED_TAG_WORDS.typeOne) : t('Search tags...')}
                                 placeholderTextColor={colors.text.muted}
                                 value={searchQuery}
                                 onChangeText={typeInField}
@@ -560,7 +574,7 @@ export function TagPicker({
                                 {...(canType ? { onSubmitEditing: () => { enter(searchQuery, true); }, submitBehavior: 'submit' as const, returnKeyType: 'done' as const } : {})}
                                 autoCapitalize="none"
                                 autoCorrect={false}
-                                accessibilityLabel={t('Search tags')}
+                                accessibilityLabel={freeOnly ? t(TYPED_TAG_WORDS.typeOne) : t('Search tags')}
                             />
                             {searchQuery.length > 0 && (
                                 <Pressable
@@ -639,8 +653,7 @@ export function TagPicker({
                                 <>
                                     {canType && (
                                         <View style={styles.sectionWrap}>
-                                            <Text style={styles.hint}>{t(TYPED_TAG_WORDS.arePublic)}</Text>
-                                            <Text style={styles.hint}>{t(TYPED_TAG_WORDS.yourWords)}</Text>
+                                            {hints.map((line) => <Text key={line} style={styles.hint}>{t(line)}</Text>)}
                                         </View>
                                     )}
                                     {suggestions.length > 0 && (

@@ -4,7 +4,8 @@
  * it: Back · LOCAL KNOWLEDGE, the topic chip and 📌, the title, "Written in {language}" when it isn't the reader's, the amber
  * "This may be out of date." box, the body, "Where:", the photos (tap to see the same photo whole), SOURCES (each opens the
  * phone's browser, never inside the app), "Checked {month year}", then the writer's card or "Gathered with the assistant…",
- * the standing line, and Report. A shared link, a bell line and a Learn row all land here through post/[id].
+ * the standing line, and Report. A shared link, a bell line and a Learn row all land here through post/[id]. Learn's tags (16 Nov
+ * 2026): under "Where:", the page's own tags, each opening Learn on a search for it.
  *
  * Keeping it right (slice K5 B, §3.2 items 9-11): under the standing line "👍 This helped" and "Helped {n}", "Something changed?
  * Suggest a fix" (app/learn/new.tsx?fix=…: it waits for an owner or admin), and the writer's, owner's and admin's tools: "Edit",
@@ -16,12 +17,13 @@ import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, Te
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, currentLanguage, formatCount, formatDate, inCapitalsOf, pinLive, t,
+    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TAG_WORDS, currentLanguage, formatCount, formatDate, inCapitalsOf, pinLive, t,
 } from '@beanpool/core';
 import { useStyles, useTheme } from '../../app/ThemeContext';
 import { useIdentity } from '../../app/IdentityContext';
 import { AuthorCard, useMemberRating } from '../AuthorCard';
 import { PhotoCarousel } from '../PhotoCarousel';
+import { PostTagChips } from '../PostTagChips';
 import { ReportReasonBox } from '../ReportReasonBox';
 import { ChatPhotoViewer } from '../chat/ChatPhoto';
 import { reportAbuse, signedGet, signedRequestWithMethod } from '../../utils/db';
@@ -231,6 +233,9 @@ export function KnowledgeDetail({ page: held }: { page: KnowledgePage }) {
                 {/* Plain text, selectable so the phone's own Translate works; never markup, never links made out of the words. */}
                 <Text style={styles.body} selectable>{page.description}</Text>
                 {k.place ? <Text style={styles.where}>{t(LEARN_LINES.where, { place: k.place })}</Text> : null}
+                {/* Its own tags (Learn's tags): each opens Learn on a search for it, never the Market. */}
+                <PostTagChips tags={[]} freeTags={page.freeTags} freeTagLabel={KNOWLEDGE_TAG_WORDS.searchFor}
+                    onFreeTag={(tag) => router.push({ pathname: '/learn', params: { q: tag } } as any)} />
                 {photos.length > 0 ? <PhotoCarousel photos={photos} height={220} borderRadius={14} onOpen={(_i, uri) => setViewerUri(uri)} /> : null}
                 {sources.length > 0 ? (
                     <View style={{ gap: 8 }}>

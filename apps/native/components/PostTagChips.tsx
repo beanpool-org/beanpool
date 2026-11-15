@@ -8,10 +8,16 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
-import { freeTagsOf, postTagsOf, t, tagIndex } from '@beanpool/core';
+import { freeTagsOf, postTagsOf, t, tagIndex, type WordKey } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
 
-export function PostTagChips({ tags, freeTags, inset = 0 }: { tags: unknown; freeTags?: unknown; inset?: number }) {
+/**
+ * `onFreeTag` and `freeTagLabel`: where a typed tag goes instead of the Market, and what a screen reader says for it (a words key
+ * with `{tag}`); a page of Local knowledge searches Learn (Learn's tags).
+ */
+export function PostTagChips({ tags, freeTags, inset = 0, onFreeTag, freeTagLabel }: {
+    tags: unknown; freeTags?: unknown; inset?: number; onFreeTag?: (tag: string) => void; freeTagLabel?: WordKey;
+}) {
     const { colors } = useTheme();
     const index = tagIndex();
     const chips = postTagsOf(tags).flatMap(id => {
@@ -40,9 +46,9 @@ export function PostTagChips({ tags, freeTags, inset = 0 }: { tags: unknown; fre
                     style={[styles.chip, { backgroundColor: colors.surface.app, borderColor: colors.border.default }]}
                     // dismissTo for the same reason as above. Encoded once more than the router does: useLocalSearchParams
                     // decodes what the router already has, and a tag can spell an escape ("a%20b" would arrive as "a b").
-                    onPress={() => router.dismissTo({ pathname: '/(tabs)/market', params: { free: encodeURIComponent(tag) } })}
+                    onPress={() => (onFreeTag ? onFreeTag(tag) : router.dismissTo({ pathname: '/(tabs)/market', params: { free: encodeURIComponent(tag) } }))}
                     accessibilityRole="button"
-                    accessibilityLabel={t('Filter marketplace by tag {tag}', { tag: `#${tag}` })}
+                    accessibilityLabel={freeTagLabel ? t(freeTagLabel, { tag: `#${tag}` }) : t('Filter marketplace by tag {tag}', { tag: `#${tag}` })}
                 >
                     <Text style={[styles.chipText, { color: colors.text.body }]}>#{tag}</Text>
                 </Pressable>

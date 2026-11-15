@@ -86,6 +86,8 @@ Under your own message: a clock while it is sending, a tick once the group's ser
 
 In a locked group chat, you can send one photo per message, with or without a caption, on the phone and the web. Photos are made at most 800 px on their longest side. Tap a photo to open it full screen, on the phone and the web. Photos in a group chat are encrypted like the words: only the group's members can open them, and only for the time they were in the group (a newcomer doesn't see photos from before they joined; a removed member sees none from after). A photo that can't be opened, such as one someone else swapped on the server, reads **🔒 Image unavailable**. A photo message cannot be edited. It can be deleted like any message (the author; a convenor can remove it), on the phone and the web.
 
+In a locked group chat you can also send a voice message, on the phone and in the web app: on the phone, hold the microphone and let go to send; in the web app, click it to start. See "Voice messages".
+
 A deal cannot be started in a group's chat: deals belong in a chat between two people. See "Messages".
 
 An **observer** can read the chat but not write in it, react or reply. They can report a message.

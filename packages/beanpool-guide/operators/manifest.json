@@ -15,8 +15,8 @@
     {
       "id": "safety",
       "title": "Safety and moderation",
-      "summary": "Reports, taking posts down, announcements and the Pulse.",
-      "pages": ["reports-and-takedowns", "pulse-and-announcements"]
+      "summary": "Reports, taking posts down, the forum, announcements and the Pulse.",
+      "pages": ["reports-and-takedowns", "forum-moderation", "pulse-and-announcements"]
     },
     {
       "id": "commons",

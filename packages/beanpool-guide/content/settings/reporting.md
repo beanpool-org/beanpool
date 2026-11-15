@@ -1,7 +1,7 @@
 ---
 slug: reporting
 title: Reporting a problem
-summary: Tell your community's moderators about a post, an event, a Pulse post, a project, an enterprise or a message in a chat.
+summary: Tell your community's moderators about a post, an event, a Pulse post, a project, an enterprise, a message in a chat or a post in the forum.
 related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse, how-your-community-works
 ---
 
@@ -12,6 +12,7 @@ related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse, how-your-com
 - **A Pulse post:** tap the flag on it.
 - **A project or an enterprise:** open it and tap **Report Project** or **Report Enterprise** at the bottom.
 - **A message in a chat:** in a group's chat or a chat with one person, on the phone, tap the message, then the flag (**Report message**). In the web app, tap **Report** under it. You can report anybody's message but your own.
+- **A post in the forum:** tap **⋯** on it, then **Report**. See "The forum".
 - **A message request:** tap **Report** on the request. This also blocks the person who sent it. If they have deleted the message, or your community doesn't take it, your report of them goes without its words. They are still blocked.
 
 Then:
@@ -25,6 +26,8 @@ Choose a reason (**Spam or scam**, **Offensive content**, **Misleading post**, *
 A group's chat is end-to-end encrypted, so your community's moderators can't read it. When you report a message there, your app sends that one message's own key with the report. With it the moderators can open that message, its photo if it has one, and see who sent it, and check that it really is theirs: a message someone changed, or one made up, shows them **Could not be verified**. The key opens nothing else in the chat. The report box tells you what goes. You can report each message once. The one exception is **Child safety**: if a moderator has already dealt with your report and you then choose **Child safety**, it goes to them as a new report.
 
 A chat with one person is end-to-end encrypted too, but it has no key for one message: the only key opens the whole chat, so your app never sends it. When you report a message there, your app sends that message still sealed, its sender's signature, and the words as you read them. The moderators can check who sent that sealed message to you, even if it is deleted afterwards. They can't check the words, so they read them as your account of it. A photo stays sealed. Nothing else in the chat goes with the report.
+
+A voice message is reported like any other message. Your community's moderators can't play a reported voice message in Settings yet: they see that it was reported, who sent it and your reason. See "Voice messages".
 
 To report a person in the phone app, rather than a message, block them: blocking also sends a report to your community's moderators. See "Blocking someone".
 

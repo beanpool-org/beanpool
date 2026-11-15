@@ -67,7 +67,7 @@
     </nav>
     <section class="legal-content glass-panel">
         <h1>Privacy Policy</h1>
-        <p><strong style="color: var(--text-dim);">Last Updated: October 15, 2026</strong></p>
+        <p><strong style="color: var(--text-dim);">Last Updated: November 15, 2026</strong></p>
         
         <h2>1. Your Keys, and What Recovery Costs You</h2>
         <p>BeanPool is a peer-to-peer (P2P) localized protocol natively bypassing centralized tracking silos. Our systems are mathematically verifiable, functioning without a central corporate authority tracking your personal data. Your Ed25519 keypair is generated on your own device. It leaves the device only as a locked copy, if you use a sign-in for recovery (below), or when you copy your account to another device of yours. Where it is kept differs by app, and we would rather say so than round it up: on the <strong>phone apps</strong> it is held in the operating system's secure storage (Android Keystore / iOS Keychain, via SecureStore), and you can put an optional biometric lock on the app itself; in the <strong>browser app</strong> it is held in that browser's own local database on your device, which is not hardware-protected. Your 12-word recovery phrase is the only recovery path that depends on nobody.</p>
@@ -131,6 +131,23 @@
             <li><strong>Every look is recorded:</strong> who looked, at whose credit, in which place (the list, or an opened card), as what (owner, admin or voucher) and on which day. A line is written before the answer, so a look that cannot be recorded is not answered, and it holds no balance. Every owner and admin can read the record from your community's server. A voucher cannot read it, and you are not shown the names, but you are told that looks are recorded and that owners and admins can say who. A line is deleted after 12 months, on the node and on its standby.</li>
             <li><strong>You can ask what they see about you:</strong> your community's server will tell any member, on request, the answer a voucher gets about them. Asking is not recorded as a look. It leaves out what only owners and admins see, because a ring flag shown to the people in the ring would only warn them.</li>
             <li><strong>The server's operator:</strong> whoever runs your community's server holds its whole database, balances and trades included, and the record of looks, with its backups, snapshots and standby copies, as the operator of any server does.</li>
+        </ul>
+
+        <h2>10. The Forum</h2>
+        <p>Each community has a forum, in the Chat tab: topics with a title and replies under them, in sections. Its owners can switch it off.</p>
+        <ul>
+            <li><strong>Not end-to-end encrypted:</strong> unlike a direct message or a locked group chat, the forum is stored on the community node in a form it can read, as Market posts are, so it can be moderated. The people who run the node, and the community's owners, admins and moderators, can read every topic, reply and photo in it. The earlier wording of an edited post is kept for moderators for 30 days.</li>
+            <li><strong>Who can read it:</strong> a local community's forum is for its members only. The global community's forum is read today by the global community's members. Before your first post there, the app tells you that anyone on the web can read that forum, with your name, but not your picture, your area or your profile, and the node records when you saw it. Public web pages for it are not built yet; we say this now so that nothing written there becomes public by surprise when they are.</li>
+            <li><strong>A new member's first topic</strong> on the global community is read by a moderator before it shows, and the member is told the outcome but never who looked.</li>
+            <li><strong>Removing and deleting:</strong> removing a post takes its words and photos off the node at once. Deleting your account does the same to every post you wrote. A standby copy of the community copies the forum and takes these deletions at its next copy; backups made before then keep the old copy until they expire.</li>
+        </ul>
+
+        <h2>11. Voice Messages</h2>
+        <p>Members can send a voice message of up to three minutes in a direct message or a locked group chat.</p>
+        <ul>
+            <li><strong>Encrypted like a photo:</strong> the recording is locked on the sender's device with the same keys as a photo in that chat, and signed. The community node cannot listen to it. It sees who sent it to whom, when, and how large it is, which tells roughly how long it is.</li>
+            <li><strong>Kept for 30 days:</strong> the node deletes the locked recording 30 days after it was sent, and keeps only the line in the chat. A phone that sent or played it keeps its own copy, up to 200&nbsp;MB, oldest first out; the web app keeps none. A recording that has been reported from a group chat is kept while the report waits.</li>
+            <li><strong>The microphone is asked for only when you first record</strong>, never before, and is used only while you record. There are no transcripts: nothing turns a voice message into text, on the node or anywhere else.</li>
         </ul>
 
         <h2>Contact Administrator</h2>

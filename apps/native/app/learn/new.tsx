@@ -221,7 +221,7 @@ export default function NewKnowledgeScreen() {
     if (use !== 'new' && !opened) {
         // The page is being read, isn't in Learn any more (taken down meanwhile), or the node wasn't reached for an edit (which
         // never starts from the copy): nothing to fix or edit yet.
-        const gone = use === 'fix' ? settled : nodeRead === 'none';
+        const gone = use === 'fix' ? settled && !page : nodeRead === 'none';
         const unreached = use === 'edit' && nodeRead === 'unreached';
         return (
             <View style={[s.container, { paddingTop: insets.top }]} testID="learn-new-page-missing">

@@ -593,6 +593,8 @@ export const TABLES: Record<string, TableEntry> = {
     // has the same guests in the same states. A row is never deleted, only its state moved. An older importer drops it: after
     // a take-over from its copy, the group has no guests until a convenor invites them again.
     group_guests: plain('group_id guest_key home name state invited_by invited_at state_at updated_at'),
+    // The guest's own community (engine/group-guest-home.ts, G1b): which hosts its members answered, and each one's latest roster.
+    group_guest_links: plain('member host group_id state roster roster_at state_at updated_at'),
     // A section's group and a topic's poll (slice F8, engine/forum-sections.ts) go in the copy with them, so a standby reads
     // the same section as the group's only. An importer older than F8 would drop both columns, and a group's section would
     // read as every member's there: REPLICA_FORMAT moves to 16 with them, and a main server sends no copy to an older standby
@@ -716,6 +718,9 @@ export const TABLES: Record<string, TableEntry> = {
     relay_mail_devices: { kind: 'local', reason: "each device that fetches a member's mail and when it last asked, so an item waits until every one has it (engine/relay-mail.ts, X2b): this server's own, never in a copy" },
     relay_mail_got: { kind: 'local', reason: "which of a member's devices has confirmed which item waiting here (engine/relay-mail.ts, X2b): goes with the item, never in a copy" },
     group_guest_outbox: { kind: 'local', reason: "what this server, hosting a group, has still to send its guests' homes, one signed request a home (engine/group-guests.ts): this server's own; the lines stay in the group's chat" },
+    group_guest_mail: { kind: 'local', reason: "what a group's host at another community brought for a member here, held only until their devices have it (engine/group-guest-home.ts, G1b): never in a copy, as the mailbox's mail" },
+    group_guest_mail_got: { kind: 'local', reason: "which of a member's devices has confirmed which group notice waiting here (engine/group-guest-home.ts, G1b): goes with the notice, never in a copy" },
+    group_guest_sent: { kind: 'local', reason: "what members here sent to groups at other communities and what became of it, the item only while it waits (engine/group-guest-home.ts, G1b): never in a copy, as relay_outbox" },
     relay_outbox: { kind: 'local', reason: "what members here sent to other communities and what became of it, with the sealed item only while it waits to be taken (engine/relay-outbox.ts): never in a copy" },
 };
 

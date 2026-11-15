@@ -106,6 +106,9 @@ export const EMPTY_RULES: ReadonlyArray<{ rule: EmptyRule; checks: ReadonlyArray
         // while the outbox keeps the row: 30 days after its last change, and never on a standby (`local`). A receipt is its
         // device saying mail came to it: reading, not sending. Mail waiting for it (relay_mail.recipient) is done to it.
         { table: 'relay_outbox', columns: ['sender_key'], where: "kind != 'receipt'" },
+        // A line it wrote in a group's chat at another community, as a guest there (engine/group-guest-home.ts, G1b), while the
+        // row is kept (30 days after its last change; `local`). Its answer to an invitation, a leave or a key epoch is no line.
+        { table: 'group_guest_sent', columns: ['sender_key'], where: "kind = 'group-line'" },
     ] },
     { rule: 'credit', checks: [
         { table: 'members', columns: ['public_key'], where: 'COALESCE(earned_credit_c, 0) != 0' },

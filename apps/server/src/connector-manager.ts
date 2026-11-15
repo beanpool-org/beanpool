@@ -878,6 +878,28 @@ export function getConnectorsByLevel(level: TrustLevel): ConnectorStatus[] {
     return result;
 }
 
+/** A connector's host name, from its public URL or its address (a multiaddr's dns or ip part, or `host:port`), lower case. */
+function connectorHostNames(c: ConnectorConfig): string[] {
+    const names: string[] = [];
+    try { if (c.publicUrl) names.push(new URL(c.publicUrl).hostname); } catch { /* not a URL */ }
+    const a = (c.address ?? '').trim();
+    const m = /^\/(?:dns4|dns6|dns|ip4|ip6)\/([^/]+)/.exec(a);
+    if (m) names.push(m[1]);
+    else if (a && !a.startsWith('/')) names.push(a.replace(/:\d+$/, ''));
+    return names.map((n) => n.toLowerCase().replace(/^\[|\]$/g, ''));
+}
+
+/**
+ * Whether the owners blocked the server at `home` (a relay home: its host, and its port when not 443): a connector at the
+ * `blocked` level names that host, on any port. Read today by a guest's home (engine/group-guest-home.ts): a blocked host's
+ * group notices are taken from nobody. The host's own side, sending no fan-out to a blocked server, is G1b's next part.
+ */
+export function isServerBlocked(home: string): boolean {
+    const host = home.trim().toLowerCase().replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
+    if (!host) return false;
+    return connectors.some((c) => c.trustLevel === 'blocked' && connectorHostNames(c).includes(host));
+}
+
 /** Get CORS-allowed origins from peer connectors (for federation CORS middleware) */
 export function getPeerOrigins(): string[] {
     // When experimental peer connectors are disabled, expose no origins

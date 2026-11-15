@@ -145,6 +145,10 @@ const NOT_ACTIVITY: Record<string, string> = {
     'relay_mail_devices.member': 'its own devices fetching mail from other communities: its own reading, no act (X2b)',
     'relay_mail_got.recipient': 'which of its devices has which item waiting for it: its own reading, no act (X2b)',
     'relay_outbox.recipient': 'the person in another community its mail went to (or a receipt went back to): the sending is relay_outbox.sender_key',
+    // A guest in a group at another community (G1b, engine/group-guest-home.ts). A line it wrote there is group_guest_sent.sender_key (`messages`).
+    'group_guest_links.member': "where it stands with a group at another community (invited, in, left ...) and that group's latest roster: its own answer, no act here",
+    'group_guest_mail.member': "a group at another community's notices waiting for it: done to it, not its act",
+    'group_guest_mail_got.member': 'which of its devices has which group notice waiting for it: its own reading, no act',
     'invalidated_keys.public_key': "a key closed or replaced: the key's state, no act",
     // The forum (engine/forum.ts). A topic it started or a post or reply it wrote is forum_topics/forum_posts.writer_pubkey (`posts`).
     'forum_members.member_pubkey': 'told once that the forum is public: its own reading, no act (what it wrote is `posts`)',
@@ -329,9 +333,16 @@ async function main(): Promise<void> {
     const far = keypair('Far').pk;
     relayMailFor(mailed.pk, far);
     relayOutboxFrom(mailed.pk, far, 'receipt');
+    // ...and as a guest in a group at another community: its yes (an answer, no line), the roster kept, a notice waiting.
+    const at = Date.now();
+    db.prepare(`INSERT INTO group_guest_links (member, host, group_id, state, roster, roster_at, state_at) VALUES (?, 'riverside.example', 'g-far', 'in', '{}', ?, ?)`).run(mailed.pk, at, at);
+    db.prepare(`INSERT INTO group_guest_mail (id, member, host, group_id, kind, body, bytes, answered, received_at) VALUES (?, ?, 'riverside.example', 'g-far', 'roster', '{}', 2, 1, ?)`)
+        .run(crypto.randomUUID(), mailed.pk, at);
+    db.prepare(`INSERT INTO group_guest_sent (sender_key, item_id, kind, host, group_id, state, attempts, created_at, updated_at)
+                VALUES (?, ?, 'group-invite', 'riverside.example', 'g-far', 'sent', 1, ?, ?)`).run(mailed.pk, crypto.randomBytes(8).toString('hex'), at, at);
     const mailedOk = await call('GET', null, `/api/local/admin/users/${mailed.pk}/retire`, undefined, owner);
     assert(mailedOk.status === 200 && mailedOk.body?.allowed === true,
-        `mail from another community waiting for it, and its receipt for mail it got, leave it empty (${show(mailedOk)})`);
+        `mail from another community waiting for it, its receipt for mail it got, and its yes to a group elsewhere leave it empty (${show(mailedOk)})`);
     // Told once that the forum is public (forum_members, its own reading), in a forum where another member's topic was closed by
     // a moderator and a reply removed (closed_by and removed_by hold a word, no key): nothing it wrote.
     const told = makeMember('Told');
@@ -419,6 +430,14 @@ async function main(): Promise<void> {
         { rule: 'messages', label: 'a line it sent to someone in another community', make: () => {
             const m = makeMember('Writing far');
             relayOutboxFrom(m.pk, keypair('Far').pk, 'dm-line');
+            return m;
+        } },
+        // A guest in a group at another community (G1b): a line it wrote there, kept in its sent items.
+        { rule: 'messages', label: 'a line it wrote as a guest in a group at another community', make: () => {
+            const m = makeMember('Guest far');
+            const now = Date.now();
+            db.prepare(`INSERT INTO group_guest_sent (sender_key, item_id, kind, host, group_id, state, attempts, created_at, updated_at)
+                        VALUES (?, ?, 'group-line', 'riverside.example', 'g-far', 'sent', 1, ?, ?)`).run(m.pk, crypto.randomBytes(8).toString('hex'), now, now);
             return m;
         } },
         { rule: 'credit', make: () => { const m = makeMember('Granted'); db.prepare('UPDATE members SET earned_credit_c = 10000 WHERE public_key = ?').run(m.pk); return m; } },

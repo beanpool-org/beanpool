@@ -105,6 +105,8 @@ export * from './request-signing.js';
 export * from './node-request-signing.js';
 export * from './relay-envelope.js';
 export * from './outside-chat.js';
+// A guest in a group hosted by another community: the step their phone takes from the host's roster (G1b).
+export * from './group-guest-steps.js';
 export * from './outside-devices.js';
 export * from './cleartext-address.js';
 export * from './public-ipv4.js';

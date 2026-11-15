@@ -17,7 +17,7 @@
  */
 
 import { t, tn } from './words.js';
-import { feeOf, formatHundredths, isHundredths, type Hundredths } from './hundredths.js';
+import { feeOf, formatHundredths, isHundredths, parseHundredths, type Hundredths } from './hundredths.js';
 
 /** Where a bill is (the node's `bills.state`). The sender reads a declined bill as `sent` until it expires. */
 export type BillState = 'sent' | 'paid' | 'declined' | 'withdrawn' | 'expired';
@@ -71,6 +71,8 @@ export interface BillView extends BillAbout {
     known?: boolean;
     /** The payer's credit line may pay it: they have finished a deal with the sender, or have a standing deal running. */
     creditOpen?: boolean;
+    /** On the sender's read only: it went with an invite nobody has joined with yet, so it has no payer (slice B3). */
+    awaitingJoin?: true;
 }
 
 /** A figure in the words: whole hundredths (formatHundredths). */
@@ -118,6 +120,9 @@ export const billLines = {
         t('{name} · {whatFor} · {n} Beans · expired, not paid', { name, whatFor, n: n2(amount_c) }),
     sentWithdrawn: (name: string, whatFor: string, amount_c: Hundredths) =>
         t('{name} · {whatFor} · {n} Beans · withdrawn', { name, whatFor, n: n2(amount_c) }),
+    // A bill that went with an invite nobody has joined with yet (slice B3): no payer to name.
+    sentAwaitingJoin: (whatFor: string, amount_c: Hundredths) =>
+        t('With an invite · {whatFor} · {n} Beans · waiting for them to join', { whatFor, n: n2(amount_c) }),
     withdraw: () => t('Withdraw'),
 
     // Receiving and paying (§4.3)
@@ -257,10 +262,51 @@ export function billNeedsLine(b: Pick<BillView, 'id' | 'role' | 'state' | 'bille
 }
 
 /** The sender's line for one of their bills (§4.2), by where it is; `day` writes a date as the app does. */
-export function billSentLine(b: Pick<BillView, 'payerName' | 'whatFor' | 'amount_c' | 'state' | 'sentAt' | 'paidAt'>, day: (iso: string) => string): string {
+export function billSentLine(b: Pick<BillView, 'payerName' | 'whatFor' | 'amount_c' | 'state' | 'sentAt' | 'paidAt' | 'awaitingJoin'>, day: (iso: string) => string): string {
+    if (b.awaitingJoin && b.state === 'sent') return billLines.sentAwaitingJoin(b.whatFor, b.amount_c);
     const name = b.payerName || t('A member');
     if (b.state === 'paid') return billLines.sentPaid(name, b.whatFor, b.amount_c, day(b.paidAt || b.sentAt));
     if (b.state === 'expired') return billLines.sentExpired(name, b.whatFor, b.amount_c);
     if (b.state === 'withdrawn') return billLines.sentWithdrawn(name, b.whatFor, b.amount_c);
     return billLines.sentNotPaid(name, b.whatFor, b.amount_c, day(b.sentAt));
+}
+
+// ── A bill with an invite (design §4.5, slice B3) ───────────────────────────────────────────────────────────────────────
+
+/** Whether a node's `features` says it takes bills: present, and true, only where they are on (never the global node). */
+export function billsOn(features: { bills?: unknown } | null | undefined): boolean {
+    return features?.bills === true;
+}
+
+/**
+ * A bill that goes with an invite: what for and how many Beans, nothing else. It waits with the invite and gets its payer,
+ * and its 30 days, when someone joins with it; a revoked or lapsed invite takes it with it. One bill per invite; never on an
+ * offline ticket. `id` is the app's own (a retry of the same invite is the same bill).
+ */
+export interface InviteBill { id?: string; whatFor: string; amount_c: Hundredths }
+
+/** The words of the invite panel's bill fold (§4.5). The boxes reuse the send sheet's labels (billLines). */
+export const inviteBillLines = {
+    fold: () => t('Add a bill for them (optional)'),
+    /** The send sheet's "Kim chooses whether to pay", for someone who has no name here yet. */
+    theyChoose: () => t('They choose whether to pay, once they have joined. Nothing is taken by itself.'),
+    noOffline: () => t("A bill can't go with an offline ticket. Nothing was made: try again when you're online."),
+    /** What the invite carries (core inviteCarries): "bill 60 Beans". */
+    carries: (amount_c: Hundredths) => t('bill {n} Beans', { n: n2(amount_c) }),
+};
+
+/**
+ * The fold's two boxes read as the bill they ask for: both empty is no bill (and no refusal); anything else is a bill when
+ * the amount is one a bill may ask for and "what for" is 3 to 80 characters, else the send sheet's own refusal. The amount
+ * is read as typed in the device's language (parseHundredths).
+ */
+export function inviteBillFromForm(whatFor: string, beansText: string): { bill: InviteBill | null; error: string | null } {
+    const words = typeof whatFor === 'string' ? whatFor.trim() : '';
+    const figure = typeof beansText === 'string' ? beansText.trim() : '';
+    if (!words && !figure) return { bill: null, error: null };
+    const parsed = parseHundredths(figure);
+    if (!parsed.ok || !isBillAmount(parsed.value)) return { bill: null, error: billLines.badAmount() };
+    const clean = billWhatForOf(words);
+    if (!clean) return { bill: null, error: billLines.badWhatFor() };
+    return { bill: { whatFor: clean, amount_c: parsed.value }, error: null };
 }

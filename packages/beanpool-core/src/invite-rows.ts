@@ -15,6 +15,7 @@
  */
 import { t, tn, formatCount } from './words.js';
 import { formatHundredths } from './hundredths.js';
+import { inviteBillLines } from './bills.js';
 
 /** How long an invite works. `checkInvite` (engine) refuses an older one, the hourly prune deletes it, and `expiresAt` is made from this. */
 export const INVITE_LIFE_DAYS = 30;
@@ -40,6 +41,8 @@ export interface InviteRowSource {
     forKnock?: boolean;
     /** The callsign of whoever joined with it, once used. */
     usedByCallsign?: string | null;
+    /** The bill that went with it (DESIGN-getting-paid-fable.md §4.5, slice B3): what for and how many Beans. */
+    bill?: { whatFor: string; amount_c: number } | null;
 }
 
 /** When the invite stops working: the node's `expiresAt`, else 30 days after it was made (an offline ticket). NaN when neither is a date. */
@@ -96,6 +99,7 @@ export function inviteCarries(inv: InviteRowSource): string {
     if (inv.vouchAmount) parts.push(t('{amount} vouch', { amount: formatHundredths(inv.vouchAmount) }));
     if (inv.voucherLevel) parts.push(t('voucher budget {amount}', { amount: formatHundredths(inv.voucherLevel) }));
     if (inv.namesEntryId) parts.push(t('confirms them as known'));
+    if (inv.bill) parts.push(inviteBillLines.carries(inv.bill.amount_c));
     return parts.length ? parts.join(' · ') : t('Plain invite');
 }
 
@@ -121,9 +125,12 @@ export function inviteMadeTitle(who: string | null | undefined): string {
  * name stays on the names list, not confirmed." The names-list sentence only for an invite bound to an entry; its name where
  * this device opened it, else "The name" (the web, which holds no list key).
  */
-export function inviteRevokeAsk(inv: Pick<InviteRowSource, 'namesEntryId'>, name?: string | null): { title: string; body: string } {
+export function inviteRevokeAsk(inv: Pick<InviteRowSource, 'namesEntryId' | 'bill'>, name?: string | null): { title: string; body: string } {
     const who = name?.trim();
-    const body = !inv.namesEntryId
+    // A bill that went with it is withdrawn with it (slice B3). A member's invite carries a bill; a names-list one never does.
+    const body = inv.bill && !inv.namesEntryId
+        ? t('Whoever has the link can’t use it, and the bill that went with it is withdrawn.')
+        : !inv.namesEntryId
         ? t('Whoever has the link can’t use it.')
         : who
             ? t('Whoever has the link can’t use it. {name}’s name stays on the names list, not confirmed.', { name: who })

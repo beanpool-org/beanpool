@@ -182,10 +182,10 @@ async function main(): Promise<void> {
     }
     let n = 0;
     const newItemId = () => `gst-${String(++n).padStart(4, '0')}-${crypto.randomBytes(6).toString('hex')}`;
-    async function item(from: Id, fromHome: string, to: string, kind: RelayItemKind, payload: string, opts: { signer?: Id } = {}): Promise<RelayItem> {
+    async function item(from: Id, fromHome: string, to: string, kind: RelayItemKind, payload: string, opts: { signer?: Id; at?: number } = {}): Promise<RelayItem> {
         const envelope = await signRelayEnvelope({
             kind, itemId: newItemId(), senderKey: from.pk, senderHome: fromHome, recipient: to, recipientHome: 'b.example',
-            at: Date.now(), payloadHash: relayPayloadHash(payload),
+            at: opts.at ?? Date.now(), payloadHash: relayPayloadHash(payload),
         }, signerOf((opts.signer ?? from).seed));
         return { envelope, payload };
     }
@@ -613,11 +613,11 @@ async function main(): Promise<void> {
     const again13 = lineIn(gwen, S, opened13 ?? s4.groupKey, s4.record.epoch);
     const r13d = await bring([await item(gwen, 'a.example', shedTo, 'group-line', JSON.stringify(again13))]);
     assert(r13d.body?.items?.[0]?.received === true && !!db.prepare('SELECT 1 FROM messages WHERE id = ?').get(again13.clientId), '13d. sent again under it, her line goes in');
+    // Two items in one request, each with its own time from one reading of the clock.
     const t13e = Date.now();
-    const r13e = await bring([
-        await item(gwen, 'a.example', shedTo, 'group-line', JSON.stringify(lineIn(gwen, S, right13.groupKey, right13.record.epoch))),
-        await item(gwen, 'a.example', shedTo, 'group-line', JSON.stringify(lineIn(gwen, S, right13.groupKey, right13.record.epoch))),
-    ]);
+    const first13e = await item(gwen, 'a.example', shedTo, 'group-line', JSON.stringify(lineIn(gwen, S, right13.groupKey, right13.record.epoch)), { at: t13e - 1000 });
+    const second13e = await item(gwen, 'a.example', shedTo, 'group-line', JSON.stringify(lineIn(gwen, S, right13.groupKey, right13.record.epoch)), { at: t13e });
+    const r13e = await bring([first13e, second13e]);
     assert(r13e.body?.items?.every((i: any) => i.refused === 'epoch-stale') && outsOf('roster', t13e).filter((o) => o.body.group === S).length === 1,
         `13e. two refused in one request: one roster follows, not two (got ${outsOf('roster', t13e).filter((o) => o.body.group === S).length})`);
 

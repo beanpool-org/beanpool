@@ -290,7 +290,11 @@ export const inviteBillLines = {
     fold: () => t('Add a bill for them (optional)'),
     /** The send sheet's "Kim chooses whether to pay", for someone who has no name here yet. */
     theyChoose: () => t('They choose whether to pay, once they have joined. Nothing is taken by itself.'),
-    noOffline: () => t("A bill can't go with an offline ticket. Nothing was made: try again when you're online."),
+    /**
+     * No answer came to an invite sent with a bill (inviteBillAfter): the node may have made it, so never "nothing was made".
+     * The same bill again keeps its id, and the node answers that with the invite it already made, so trying again finds out.
+     */
+    answerLost: () => t("No answer came back, so it isn't known whether the invite was made. Try the same bill again when you're online: if it was made, you'll get that invite, not a second one. A bill can't go with an offline ticket."),
     /** What the invite carries (core inviteCarries): "bill 60 Beans". */
     carries: (amount_c: Hundredths) => t('bill {n} Beans', { n: n2(amount_c) }),
 };
@@ -309,4 +313,64 @@ export function inviteBillFromForm(whatFor: string, beansText: string): { bill: 
     const clean = billWhatForOf(words);
     if (!clean) return { bill: null, error: billLines.badWhatFor() };
     return { bill: { whatFor: clean, amount_c: parsed.value }, error: null };
+}
+
+/**
+ * The id a bill with an invite goes with, which the invite panel keeps between taps (§4.5). It belongs to one exact bill: its
+ * "what for" as the node stores it, and its amount. A tap that sends that same bill again sends the same id, so after a lost
+ * answer the node answers with the invite it already made and writes nothing (apps/server engine/bills.ts checkInviteBill).
+ * A bill changed in either box gets a new id: a new bill, on a new invite. Dropped once an invite is made, and when the node
+ * says the id is spent (409 `bill_id_reused`: the invite it went with was used, revoked or lapsed).
+ */
+export interface InviteBillHeld { readonly key: string; readonly id: string }
+
+/**
+ * What one tap on Make invite sends as a bill (§4.5). `open` is whether the member can see the fold's boxes now: closed,
+ * hidden or not offered, no bill goes and no bill refusal is shown, whatever the boxes still hold. Open, the boxes are read
+ * as inviteBillFromForm reads them, and a bill goes with the id `held` has for that exact bill, or a new one from `newId`.
+ * The panel keeps the `held` it returns for its next tap.
+ */
+export function inviteBillToSend(
+    fold: { open: boolean; whatFor: string; beans: string },
+    held: InviteBillHeld | null,
+    newId: () => string,
+): { bill: (InviteBill & { id: string }) | null; error: string | null; held: InviteBillHeld | null } {
+    if (!fold.open) return { bill: null, error: null, held };
+    const read = inviteBillFromForm(fold.whatFor, fold.beans);
+    if (!read.bill) return { bill: null, error: read.error, held };
+    const key = `${read.bill.amount_c} ${read.bill.whatFor}`;
+    const id = held !== null && held.key === key ? held.id : newId();
+    return { bill: { ...read.bill, id }, error: null, held: { key, id } };
+}
+
+/** How the node answered a tap that sent a bill, when no invite came back (inviteBillAnswerOf). */
+export type InviteBillAnswer = { kind: 'refused'; words: string; code: string | null } | { kind: 'lost' };
+
+/**
+ * `refused`: a 4xx in the node's own words, which it answers before writing anything (a bill's or an invite's refusal).
+ * `lost`: anything else (no answer, a cut answer, a page that is not the node's (`unsaid`), a 5xx), after which nobody here
+ * knows whether the invite was made.
+ */
+export function inviteBillAnswerOf(status: number | null | undefined, words: string | null | undefined, code: unknown, unsaid = false): InviteBillAnswer {
+    if (typeof status === 'number' && status >= 400 && status < 500 && !unsaid && typeof words === 'string' && words) {
+        return { kind: 'refused', words, code: typeof code === 'string' ? code : null };
+    }
+    return { kind: 'lost' };
+}
+
+/**
+ * After a tap that sent a bill and got no invite back: what the member reads, and the id the panel keeps. Refused: the node's
+ * words, under "Could not add the bill" for a bill's own code; the id kept, or dropped when the node says it is spent. Lost:
+ * never "nothing was made"; the same bill keeps its id, so trying it again finds out; no offline ticket, which would carry
+ * no bill.
+ */
+export function inviteBillAfter(held: InviteBillHeld | null, answer: InviteBillAnswer): { held: InviteBillHeld | null; title: string; words: string } {
+    if (answer.kind === 'refused') {
+        return {
+            held: answer.code === 'bill_id_reused' ? null : held,
+            title: answer.code !== null && /^bills?_/.test(answer.code) ? t('Could not add the bill') : t('Invite not made'),
+            words: answer.words,
+        };
+    }
+    return { held, title: t('No answer'), words: inviteBillLines.answerLost() };
 }

@@ -34,15 +34,17 @@ describe('People › Invites (app/(tabs)/people.tsx) draws the fold and shares f
     const fold = read('../../components/InviteBillFold.tsx');
     it('the fold shows only where bills are on, never in the sample community, never with the names box ticked', () => {
         expect(src).toMatch(/const billsShown = !invitesPreview && billsOn\(nodeProfile\?\.features\)/);
-        expect(src).toMatch(/billsShown && !\(inviteNames\.offered && inviteNames\.namesTicked\) && \(\s*<InviteBillFold/);
+        expect(src).toMatch(/const billFoldShown = billsShown && !\(inviteNames\.offered && inviteNames\.namesTicked\);/);
+        expect(src).toMatch(/\{billFoldShown && \(\s*<InviteBillFold/);
     });
-    it('the bill is read by core before anything is sent, goes in the generate body with its own id, and never on an offline ticket', () => {
-        expect(src).toMatch(/inviteBillFromForm\(billWhatFor, billBeans\)/);
+    // What each tap sends, the id and the words, over the whole table: invite-bill-send-render.test.ts.
+    it('the bill is read by core only from the fold as drawn and open, goes in the generate body with that bill\'s id, and never on an offline ticket', () => {
+        expect(src).toMatch(/inviteBillToSend\(\{ open: billFoldShown && billOpen, whatFor: billWhatFor, beans: billBeans \}, billHeld\.current, newBillId\)/);
         expect(src).toMatch(/\.\.\.\(bill \? \{ bill \} : \{\}\)/);
-        expect(src).toMatch(/if \(bill\) \{\s*Alert\.alert\(t\('Offline'\), inviteBillLines\.noOffline\(\)\);\s*return;/);
+        expect(src).toMatch(/if \(bill\) \{\s*billNotMade\(\{ kind: 'lost' \}\);\s*return;/);
     });
-    it('with a bill, a refusal the node words is shown as it said it, and no offline ticket is made', () => {
-        expect(src).toMatch(/if \(bill && serverMsg\) \{\s*Alert\.alert\([^;]*serverMsg\);\s*return;/);
+    it('with a bill, a refusal the node words is shown as it said it, anything else is "not known", and no offline ticket is made', () => {
+        expect(src).toMatch(/if \(bill\) \{\s*billNotMade\(inviteBillAnswerOf\(res\.status, serverMsg, body\?\.code, body === null\)\);\s*return;/);
     });
     it('Share names the inviter when the invite carries a bill, through core\'s one message', () => {
         expect(src).toMatch(/inviteShareText\(\{ name, link: magicLink, code: codeToShare, address, billFrom: carriesBill \? identity\?\.callsign : null \}\)/);

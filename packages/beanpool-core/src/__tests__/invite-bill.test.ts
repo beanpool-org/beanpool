@@ -4,10 +4,10 @@
  * while nobody has joined with it. Both apps draw these from here.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { billLines, billSentLine, billsOn, inviteBillFromForm, inviteBillLines } from '../bills.js';
+import { billLines, billSentLine, billsOn, inviteBillAfter, inviteBillAnswerOf, inviteBillFromForm, inviteBillLines, inviteBillToSend, type InviteBillHeld } from '../bills.js';
 import { inviteShareText } from '../invite-share-text.js';
 import { inviteCarries, inviteRevokeAsk } from '../invite-rows.js';
-import { setLanguage } from '../words.js';
+import { setLanguage, t } from '../words.js';
 
 afterEach(() => setLanguage('en'));
 
@@ -39,6 +39,58 @@ describe('inviteBillFromForm: the fold read as the bill it asks for', () => {
         expect(inviteBillFromForm('abc', '5').bill?.whatFor).toBe('abc');
         expect(inviteBillFromForm('x'.repeat(80), '5').bill?.whatFor).toBe('x'.repeat(80));
         expect(inviteBillFromForm('', '5')).toEqual({ bill: null, error: billLines.badWhatFor() });
+    });
+});
+
+describe('inviteBillToSend: a bill goes only from an open fold, and its id belongs to one exact bill', () => {
+    const ids = () => { let n = 0; return () => `id-${++n}`; };
+    const open = (whatFor: string, beans: string) => ({ open: true, whatFor, beans });
+    it('a closed (or hidden) fold sends no bill and shows no refusal, whatever its boxes hold; the id held stays as it was', () => {
+        const held: InviteBillHeld = { key: 'k', id: 'kept' };
+        for (const [whatFor, beans] of [['Bread', '12'], ['', '5'], ['ab', ''], ['', '']]) {
+            expect(inviteBillToSend({ open: false, whatFor, beans }, held, ids())).toEqual({ bill: null, error: null, held });
+            expect(inviteBillToSend({ open: false, whatFor, beans }, null, ids())).toEqual({ bill: null, error: null, held: null });
+        }
+    });
+    it('open: empty is no bill; half-typed is the fold\'s own refusal and nothing to send', () => {
+        expect(inviteBillToSend(open('', ''), null, ids())).toEqual({ bill: null, error: null, held: null });
+        expect(inviteBillToSend(open('', '5'), null, ids())).toEqual({ bill: null, error: billLines.badWhatFor(), held: null });
+        expect(inviteBillToSend(open('Bread', ''), null, ids())).toEqual({ bill: null, error: billLines.badAmount(), held: null });
+    });
+    it('the same bill again keeps its id (a retry); a change to either box is a new id, and so is a change back after another bill went', () => {
+        const next = ids();
+        const first = inviteBillToSend(open('Bread', '12'), null, next);
+        expect(first.bill).toEqual({ whatFor: 'Bread', amount_c: 1200, id: 'id-1' });
+        // As the node stores it: spaces and a written-out .00 are the same bill.
+        expect(inviteBillToSend(open('  Bread ', '12.00'), first.held, next).bill?.id).toBe('id-1');
+        const priced = inviteBillToSend(open('Bread', '15'), first.held, next);
+        expect(priced.bill).toEqual({ whatFor: 'Bread', amount_c: 1500, id: 'id-2' });
+        expect(inviteBillToSend(open('Rye bread', '15'), priced.held, next).bill?.id).toBe('id-3');
+        expect(inviteBillToSend(open('Bread', '12'), priced.held, next).bill?.id).toBe('id-4');
+    });
+});
+
+describe('inviteBillAnswerOf and inviteBillAfter: what the member reads when no invite came back with a bill', () => {
+    const held: InviteBillHeld = { key: '1200 Bread', id: 'id-1' };
+    it('a 4xx in the node\'s words is a refusal (nothing written); anything else is lost: nobody knows', () => {
+        expect(inviteBillAnswerOf(429, 'Too many today.', 'bills_new_people_day')).toEqual({ kind: 'refused', words: 'Too many today.', code: 'bills_new_people_day' });
+        expect(inviteBillAnswerOf(403, 'Paused.', undefined)).toEqual({ kind: 'refused', words: 'Paused.', code: null });
+        for (const [status, words, unsaid] of [[null, null, false], [500, 'Internal error', false], [502, 'Bad Gateway', true], [429, 'Too Many Requests', true], [400, '', false], [200, null, false]] as const) {
+            expect(inviteBillAnswerOf(status, words, undefined, unsaid)).toEqual({ kind: 'lost' });
+        }
+    });
+    it('lost: never "nothing was made"; the same id is kept so the same bill again finds out; no offline ticket', () => {
+        const after = inviteBillAfter(held, { kind: 'lost' });
+        expect(after).toEqual({ held, title: t('No answer'), words: inviteBillLines.answerLost() });
+        expect(after.words).not.toMatch(/nothing was (made|sent)/i);
+        expect(after.words).toContain("it isn't known whether the invite was made");
+        expect(after.words).toContain("A bill can't go with an offline ticket.");
+    });
+    it('refused: the node\'s words; a bill\'s code under "Could not add the bill"; the id dropped only when the node says it is spent', () => {
+        expect(inviteBillAfter(held, { kind: 'refused', words: 'Limit.', code: 'bills_new_people_day' })).toEqual({ held, title: t('Could not add the bill'), words: 'Limit.' });
+        expect(inviteBillAfter(held, { kind: 'refused', words: 'Bad amount.', code: 'bill_amount' })).toEqual({ held, title: t('Could not add the bill'), words: 'Bad amount.' });
+        expect(inviteBillAfter(held, { kind: 'refused', words: 'Used.', code: 'bill_id_reused' })).toEqual({ held: null, title: t('Could not add the bill'), words: 'Used.' });
+        expect(inviteBillAfter(held, { kind: 'refused', words: 'Paused.', code: null })).toEqual({ held, title: t('Invite not made'), words: 'Paused.' });
     });
 });
 

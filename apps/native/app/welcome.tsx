@@ -34,6 +34,8 @@ import type { GlobalDoorState } from '../utils/global-entry';
 import { WelcomeDoors } from '../components/WelcomeDoors';
 import { coreSettingsNextWords } from '../components/settings/settings-lines';
 import { RestoreMenu } from '../components/welcome/RestoreMenu';
+import { UsedBefore, StartNewInstead } from '../components/welcome/UsedBefore';
+import { homeView, offersStartNew, type FirstAnswer } from '../utils/first-question';
 import {
     MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
     keepJoinedIdentity, nextStepFor, releaseJoinKey, signInAtDoor, submitJoin, submitWordsJoin,
@@ -199,6 +201,9 @@ export default function WelcomeScreen() {
         ? (params.mode as any)
         : 'home';
     const [mode, setMode] = useState<'home' | 'member' | 'create' | 'globalJoin' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'ownerCard' | 'confirmReplace'>(initialMode);
+    // The first question's answer on a phone with no account (utils/first-question.ts): null asks "Used BeanPool before?",
+    // 'new' shows the doors. In memory only: a new start of the app asks again.
+    const [firstAnswer, setFirstAnswer] = useState<FirstAnswer>(null);
     useEffect(() => {
         if (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'].includes(params.mode as string)) {
             setMode(params.mode as any);
@@ -3713,6 +3718,12 @@ export default function WelcomeScreen() {
                             onBrowser={() => { setError(null); router.push('/pair-in'); }}
                         />
 
+                        {/* Never a dead end (utils/first-question.ts): a person with no account here who can't get back in may
+                            start new, told plainly that it makes a new account. The tap only opens the doors; a join there makes it. */}
+                        {offersStartNew(!!accountOnPhone) && (
+                            <StartNewInstead onStartNew={() => { setError(null); setFirstAnswer('new'); setMode('home'); }} styles={styles} />
+                        )}
+
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel={t('Back to Home')}>
                             <Text style={styles.backBtnText}>{t('← Back to Home')}</Text>
                         </Pressable>
@@ -4284,6 +4295,29 @@ export default function WelcomeScreen() {
         );
     }
 
+    // --- THE FIRST QUESTION (Marty, 12 Nov idea 2) ---
+    // A phone with no account asks "Used BeanPool before?" before the doors (components/welcome/UsedBefore.tsx), so someone
+    // who lost a phone brings their account back instead of making a second one. New here: the doors below. Already a
+    // member: the ways back, with "Start a new account instead" under them. The language switch stays first, as on the doors.
+    if (mode === 'home' && homeView({ hasAccount: !!accountOnPhone, waiting: waitingToJoin, answer: firstAnswer }) === 'question') {
+        return (
+            <SafeAreaView style={styles.container}>
+                <StatusBar style={dark ? 'light' : 'dark'} />
+                <ScrollView contentContainerStyle={styles.homeContent}>
+                    <View style={styles.homeMain}>
+                        <LanguageSwitch />
+                        <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
+                        <UsedBefore
+                            onNew={() => { setError(null); setFirstAnswer('new'); }}
+                            onReturning={() => { setError(null); setMode('member'); }}
+                            styles={styles}
+                        />
+                    </View>
+                </ScrollView>
+            </SafeAreaView>
+        );
+    }
+
     // --- MAIN WELCOME SCREEN ---
     // Drawn from the top, not centred: the line under Explore arrives after drawing (and comes and goes as the app returns
     // to the front), and in a centred column it moved the doors up by half its height; from the top it moves only what is
@@ -4352,6 +4386,12 @@ export default function WelcomeScreen() {
                     >
                         <Text style={styles.claimServerLinkText}>{t('Installed BeanPool on a server? Claim it →')}</Text>
                     </Pressable>
+                    {/* Back to "Used BeanPool before?" on a phone with no account (utils/first-question.ts). */}
+                    {!accountOnPhone && (
+                        <Pressable style={styles.backBtn} onPress={() => { setError(null); setFirstAnswer(null); }} accessibilityRole="button" accessibilityLabel={t('Back')} testID="welcome-doors-back">
+                            <Text style={styles.backBtnText}>{t('← Back')}</Text>
+                        </Pressable>
+                    )}
                 </View>
             </ScrollView>
         </SafeAreaView>
@@ -4365,6 +4405,8 @@ const styles = StyleSheet.create({
     homeMain: { width: '100%', alignItems: 'center' },
     // The two doors (components/WelcomeDoors.tsx), right under the title; the line under Explore when its door can't be used.
     homeDoors: { width: '100%', alignItems: 'center', marginTop: 16 },
+    // "Used BeanPool before?" above its two answers (components/welcome/UsedBefore.tsx).
+    usedBeforeQuestion: { fontSize: 20, fontWeight: '700', color: colors.text.heading, textAlign: 'center', marginBottom: 16 },
     doorLine: { fontSize: 15, color: colors.text.secondary, textAlign: 'center', lineHeight: 21, marginBottom: 8 },
     // The sentence about BeanPool, under the doors (it was the subtitle above them).
     homeAbout: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 24, marginTop: 20 },

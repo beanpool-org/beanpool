@@ -3208,9 +3208,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                         /* ===== MAIN WELCOME — two simple choices ===== */
                         <>
                             {!showMemberOptions ? (
-                                /* DEFAULT: Two clear choices */
+                                /* DEFAULT: Two clear choices, under the question the phone asks first too (Marty, 12 Nov idea 2:
+                                   someone who lost a phone brings their account back instead of making a second one). */
                                 <>
+                                    <h2 data-testid="used-before" className="m-0 mb-4 text-xl font-bold text-text-primary break-words">
+                                        {t('Used BeanPool before?')}
+                                    </h2>
                                     <button
+                                        data-testid="used-before-returning"
                                         onClick={() => setShowMemberOptions(true)}
                                         style={{
                                             width: '100%', padding: '1.1rem 1rem', borderRadius: '14px',
@@ -3231,6 +3236,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                     </button>
 
                                     <button
+                                        data-testid="used-before-new"
                                         onClick={() => setShowNewUser(true)}
                                         style={{
                                             width: '100%', padding: '0.9rem 1rem', borderRadius: '14px',
@@ -3286,14 +3292,6 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                         </span>
                                     </button>
 
-                                    <button
-                                        onClick={() => { setShowRecovery(true); setError(null); }}
-                                        disabled={loading}
-                                        className="w-full rounded-2xl border border-amber-500/40 bg-amber-50/90 hover:bg-amber-100/90 active:scale-[0.98] dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
-                                    >
-                                        <span aria-hidden="true">🔑</span> {t('Recover with 12 Words')}
-                                    </button>
-
                                     {/* The sign-in restore at a community with an invite door too (recovery S1): the community finds the
                                         account from the sign-in, so it needs no open door, as the phone's "Recover with Social Sign-In".
                                         Not where the community keeps no copies of accounts: a sign-in there could bring nothing back. */}
@@ -3310,12 +3308,38 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                                     )}
 
                                     <button
+                                        onClick={() => { setShowRecovery(true); setError(null); }}
+                                        disabled={loading}
+                                        className="w-full rounded-2xl border border-amber-500/40 bg-amber-50/90 hover:bg-amber-100/90 active:scale-[0.98] dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
+                                    >
+                                        <span aria-hidden="true">🔑</span> {t('Recover with 12 Words')}
+                                    </button>
+
+                                    <button
                                         onClick={() => { setRekeyCode(''); setError(null); }}
                                         disabled={loading}
                                         className="w-full rounded-2xl border border-sky-500/40 bg-sky-50/90 hover:bg-sky-100/90 active:scale-[0.98] dark:bg-sky-950/40 dark:hover:bg-sky-900/50 text-sky-900 dark:text-sky-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
                                     >
                                         <span aria-hidden="true">🪪</span> {t('An admin gave me a re-key code')}
                                     </button>
+
+                                    {/* Never a dead end: a person who can't get back in may start new, told plainly that it makes a new
+                                        account. The tap only opens the new-member page; a join there makes it (as the phone's). */}
+                                    <div data-testid="start-new-instead" className="mt-4 p-3.5 rounded-2xl text-center" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
+                                        <p className="m-0 mb-2 text-sm text-text-primary break-words" style={{ lineHeight: 1.5 }}>
+                                            {t("Can't bring your account back? You can start again, but that makes a new account. Your old account stays as it is, and the two can never be joined into one.")}
+                                        </p>
+                                        <button
+                                            type="button"
+                                            data-testid="start-new-instead-button"
+                                            onClick={() => { setShowMemberOptions(false); setShowNewUser(true); setError(null); }}
+                                            disabled={loading}
+                                            aria-label={t('Start a new account instead')}
+                                            className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border border-bp-ink-info bg-transparent text-bp-ink-info font-bold text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {t('Start a new account instead →')}
+                                        </button>
+                                    </div>
 
                                     <button
                                         onClick={() => setShowMemberOptions(false)}

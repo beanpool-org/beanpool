@@ -1,7 +1,20 @@
 /**
- * AsyncStorage keys shared by modules that must agree on them, kept free of imports so any module (and its tests) can
- * use them without loading React Native.
+ * AsyncStorage keys shared by modules that must agree on them, kept free of React Native so any module (and its tests)
+ * can use them without loading it.
+ *
+ * Every store kept per community goes through the community's record (DESIGN-several-addresses-fable.md §3.1): a key
+ * built from an address asks utils/community-index.ts `communityKeyOf` for the name the community is kept under, and a
+ * store that holds addresses inside its value keys them the same way where it is read and written.
+ * utils/__tests__/community-record-stores.test.ts walks every export here and fails for one that doesn't say how.
  */
+import { communityKeyOf } from './community-index';
+
+/**
+ * This phone's community records, one per community (utils/community-record.ts): `{ v: 1, records }`. The saved things
+ * of each community are kept under its record's `id`, and requests go to its `using`. It goes with the saved list as an
+ * account leaves the phone (utils/account-leaves-phone.ts forgetCommunities).
+ */
+export const COMMUNITY_RECORDS_STORE_KEY = 'beanpool_community_records';
 
 /** The member's choice on notification permissions (utils/notification-permission.ts). Sign Out and Replace wipe it. */
 export const NOTIFICATION_PERMISSION_STORE_KEY = 'beanpool_notification_permission';
@@ -375,7 +388,8 @@ export function oneWayBackAskedStoreKey(publicKey: string): string {
  */
 export const HOME_STORE_PREFIX = 'beanpool_home:';
 
-const homeCommunity = (url: string) => url.trim().replace(/\/+$/, '').toLowerCase();
+/** The community a Home key is kept under: its record's name (community-index.ts), in one spelling. */
+const homeCommunity = (url: string) => communityKeyOf(url).trim().replace(/\/+$/, '').toLowerCase();
 
 export function homeAnswerStoreKey(publicKey: string, url: string): string {
     return `${HOME_STORE_PREFIX}answer:${publicKey.toLowerCase()}:${homeCommunity(url)}`;

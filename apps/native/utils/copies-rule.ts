@@ -21,14 +21,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchNodeProfile, getCachedNodeProfile, nodeProfileIsFresh } from './node-profile';
 import { copiesRuleSeenStoreKey } from './storage-keys';
+import { communityKeyOf } from './community-index';
 import { signInCopiesAt, type RecoveryCopiesRule, type SignInCopies } from './vault-config';
 
 /** How long a connect waits for the community's answer before it goes by the kept one. */
 export const COPIES_RULE_TIMEOUT_MS = 8_000;
 
-/** One spelling of a community's address, whichever this phone was given. */
+/** One spelling of a community's name, whichever address this phone was given: its record's (community-index.ts). */
 function communityKey(url: string): string {
-    return url.trim().replace(/\/+$/, '').toLowerCase();
+    return communityKeyOf(url).trim().replace(/\/+$/, '').toLowerCase();
 }
 
 /** The rule `url` said, as this phone kept it; null when it never heard one there. No network. Never throws. */

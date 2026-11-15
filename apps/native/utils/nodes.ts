@@ -4,6 +4,8 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
 import { assertPlainNodeAddress, isPlainNodeAddress, plainOriginOf } from './node-url';
 import { clearPendingProfileChange } from './pending-profile-sync';
+import { communityKeyOf } from './community-index';
+import { forgetCommunityRecord, keepCommunityRecord } from './community-record';
 
 export interface SavedNode {
     url: string;
@@ -49,6 +51,8 @@ export async function addSavedNode(url: string, alias?: string, currencyType?: '
         if (currencyValue) existing.currencyValue = currencyValue;
     }
     await AsyncStorage.setItem(SAVED_NODES_STORE_KEY, JSON.stringify(nodes));
+    // The first contact makes the community's record (community-record.ts), as an app start does for a saved one.
+    await keepCommunityRecord(url);
 }
 
 /**
@@ -62,6 +66,7 @@ export async function removeSavedNode(url: string) {
     nodes = nodes.filter(n => n.url !== url);
     await AsyncStorage.setItem(SAVED_NODES_STORE_KEY, JSON.stringify(nodes));
     await clearPendingProfileChange(url);
+    await forgetCommunityRecord(url);
 }
 
 /** The file a phone with no community open uses (no anchor yet). The same before and after the rename below. */
@@ -80,10 +85,14 @@ const NO_COMMUNITY_DATABASE = 'beanpool.db';
  * is which. An address that isn't plain (it is never a community's) is hashed as written, apart from every origin.
  *
  * A phone's files under the old names move to these once, before any is opened (utils/cache-file-migration.ts).
- * e.g. "https://mullum.beanpool.org" -> "community_mullum.beanpool.org_<32 hex>.db"
+ * e.g. "https://riverside.example" -> "community_riverside.example_<32 hex>.db"
+ *
+ * The file goes through the community's record (utils/community-index.ts `communityKeyOf`): it is named from the address
+ * the record was made at, so an address the record proved as another of its own (slice S4) opens the same file.
  */
-export function getDatabaseFilenameForNode(url: string | null): string {
-    if (!url) return NO_COMMUNITY_DATABASE;
+export function getDatabaseFilenameForNode(address: string | null): string {
+    if (!address) return NO_COMMUNITY_DATABASE;
+    const url = communityKeyOf(address);
     const origin = plainOriginOf(url);
     const host = origin ? origin.replace(/^[a-z]+:\/\//, '').replace(/:\d+$/, '') : 'unplain';
     const readable = host.replace(/[^a-z0-9.-]/g, '_').slice(0, 40);

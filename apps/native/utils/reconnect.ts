@@ -53,6 +53,8 @@ export interface ReconnectDeps {
  */
 export async function switchPhoneTo(url: string, carryFrom?: string): Promise<CopyCarry | null> {
     assertPlainNodeAddress(url);
+    // The community gets its record before the phone is set to it (community-record.ts), as at an app start.
+    await (await import('./community-record')).keepCommunityRecord(url);
     const { closeDB, initDB, whileCopyMoves } = await import('./db');
     let carried: CopyCarry | null = null;
     if (carryFrom) {

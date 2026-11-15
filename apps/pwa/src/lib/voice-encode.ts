@@ -25,6 +25,12 @@ import { VOICE_ENCODE_RATE, VoiceResampler } from './voice-resample';
 const BITS_PER_SECOND = 32_000;
 /** How long Stop waits for the worklet's last samples before it finishes without them. */
 const DONE_WAIT_MS = 1000;
+/**
+ * How long Stop waits for the file once the last samples are in: the encoder works while recording, so this is its backlog
+ * and the index (7 ms for 3 minutes measured on a fast laptop). An encoder that hangs is refused, said as the encoder's own
+ * failure, instead of holding the recorder at "sending" with its bin off.
+ */
+const FINISH_WAIT_MS = 30_000;
 
 let registered = false;
 
@@ -42,7 +48,7 @@ function useWasmAac(): void {
 export interface VoiceEncoder {
     /** Queue samples (24 kHz mono, -1 to 1). Past VOICE_MAX_MS of sound the rest is dropped. */
     add(samples: Float32Array): void;
-    /** Every queued sample encoded and the file closed: its bytes. Throws if the encoder failed. */
+    /** Every queued sample encoded and the file closed: its bytes. Throws if the encoder failed or heard nothing. */
     finish(): Promise<Uint8Array>;
     /** Throw it away. */
     cancel(): void;
@@ -83,6 +89,9 @@ export async function openVoiceEncoder(): Promise<VoiceEncoder> {
             done = true;
             await chain;
             if (failure) throw failure;
+            // Nothing heard (a sound that never started): the muxer would still write an .m4a with no sound in it, which
+            // passes core's ftyp check and would go as an empty voice message. Refused instead: nothing is sent.
+            if (written === 0) { void output.cancel().catch(() => {}); throw new Error('nothing heard'); }
             source.close();
             await output.finalize();
             if (!target.buffer) throw new Error('empty');
@@ -140,7 +149,9 @@ export async function startVoiceCapture(context: AudioContext, input: AudioNode,
             over = true;
             unhook();
             encoder.add(resampler.flush());
-            return encoder.finish();
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const late = new Promise<never>((_, reject) => { timer = setTimeout(() => { encoder.cancel(); reject(new Error('encoder took too long')); }, FINISH_WAIT_MS); });
+            try { return await Promise.race([encoder.finish(), late]); } finally { clearTimeout(timer); }
         },
         cancel() {
             over = true;

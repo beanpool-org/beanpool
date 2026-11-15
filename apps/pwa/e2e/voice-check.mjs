@@ -290,13 +290,23 @@ async function main() {
             const encoderFetches = [];
             const cspRefusals = [];
             f.page.on('request', (r) => { if (/voice-(encode|capture)/.test(r.url())) encoderFetches.push(r.url()); });
-            f.page.on('console', (m) => { if (/content security policy|wasm|webassembly/i.test(m.text())) cspRefusals.push(m.text()); });
+            const pageErrors = [];
+            f.page.on('console', (m) => {
+                if (/content security policy|wasm|webassembly/i.test(m.text())) cspRefusals.push(m.text());
+                if (m.type() === 'error') pageErrors.push(m.text());
+            });
+            f.page.on('pageerror', (e) => pageErrors.push(String(e?.message ?? e)));
             await openChat(f.page, node, 'Ben');
             await f.page.getByRole('button', { name: /^Play voice message, / }).first().waitFor({ timeout: 30_000 });
             check(await f.page.getByRole('button', { name: 'Record a voice message' }).count() === 1, `${ffName} (${theme}): the microphone, not the "can't record" line`);
             check(encoderFetches.length === 0, `${ffName} (${theme}): nothing of the encoder fetched before the click (${encoderFetches.length})`);
             if (theme === 'light') {
-                await recordAndSend(f.page, 'dm-encoder', theme);
+                const went = await recordAndSend(f.page, 'dm-encoder', theme).then(() => true, async (e) => {
+                    const note = await f.page.getByTestId('voice-note').textContent({ timeout: 2000 }).catch(() => '(no note)');
+                    console.log(`  (the encoder's send didn't finish: ${String(e?.message).split('\n')[0]}; the note says "${note}"; page errors: ${pageErrors.join(' | ') || 'none'})`);
+                    return false;
+                });
+                check(went, `${ffName}: recorded through the encoder and sent`);
                 check(encoderFetches.length > 0 && encoderFetches.every((u) => new URL(u).hostname === 'localhost'),
                     `${ffName}: the encoder fetched at the click, from the node only (${encoderFetches.map((u) => new URL(u).pathname).join(', ')})`);
                 check(cspRefusals.length === 0, `${ffName}: no policy refusal under the node's own CSP (${cspRefusals.join(' | ') || 'none'})`);

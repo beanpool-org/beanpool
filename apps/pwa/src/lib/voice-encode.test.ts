@@ -83,6 +83,15 @@ describe('the web app\'s own encoder writes the phone\'s voice file', () => {
         expect(sound.length).toBeLessThan(14_000);
     }, 60_000);
 
+    it('a recording that heard nothing (a sound that never started) is refused at finish, never hangs and never makes a file', async () => {
+        const encoder = await openVoiceEncoder();
+        const answer = await Promise.race([
+            encoder.finish().then((b) => `file of ${b.length} bytes`, (e: unknown) => `refused: ${(e as Error)?.message}`),
+            new Promise<string>((r) => setTimeout(() => r('hung'), 10_000)),
+        ]);
+        expect(answer).toMatch(/^refused: /);
+    }, 30_000);
+
     it('three minutes fit under the cap with room, and sound past 3:00 is not written', async () => {
         const encoder = await openVoiceEncoder();
         const pcm = voiceLike(VOICE_ENCODE_RATE, VOICE_MAX_MS / 1000 + 5);

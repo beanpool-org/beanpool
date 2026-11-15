@@ -4075,10 +4075,12 @@ CREATE INDEX IF NOT EXISTS idx_group_guest_outbox_home ON group_guest_outbox(hom
 -- guest in, a group hosted by another community's server. Day zero: new tables, nothing converted; the mailbox's own tables
 -- (relay_mail, relay_outbox) are left as they are.
 --
--- group_guest_links: each (member, host, group) and where it stands: `invited` (the host's invitation came), `joining`
--- (the member said yes, through this server, and the host has not taken it yet), `in` (the host took their yes),
--- `declined` (the host took their no), `left` (the host took their leave), `removed` (the host's removal). A link moves
--- on the host's answer only: a yes the host never took puts the invitation back. A withdrawn invitation leaves no row.
+-- group_guest_links: each (member, host, group) and where it stands: `invited` (the host's invitation came), `in` (the
+-- host took their yes), `declined` (the host took their no), `left` (the host took their leave), `removed` (the host's
+-- removal). A link moves on the host's answer only: a yes the host never took leaves the invitation waiting. A withdrawn
+-- invitation leaves no row. Only what the host's answers and notices set is stored, so a promoted standby can settle every
+-- state from its copy alone: `joining` (a yes still queued here, group_guest_sent) is read from this server's own queue,
+-- never stored.
 -- Only a host a member said yes to brings them anything more than an invitation (the roster, lines, epochs). `roster` is the
 -- latest roster that host sent for the group, as this member's devices read it (their own wrap only), `roster_at` when it
 -- came. A plain table: a standby copies it, so a promoted standby still knows which hosts its members answered; a standby
@@ -4087,7 +4089,7 @@ CREATE TABLE IF NOT EXISTS group_guest_links (
     member     TEXT NOT NULL CHECK (length(member) = 64),
     host       TEXT NOT NULL CHECK (length(host) BETWEEN 1 AND 260),
     group_id   TEXT NOT NULL CHECK (length(group_id) BETWEEN 1 AND 64),
-    state      TEXT NOT NULL CHECK (state IN ('invited', 'joining', 'in', 'declined', 'left', 'removed')),
+    state      TEXT NOT NULL CHECK (state IN ('invited', 'in', 'declined', 'left', 'removed')),
     roster     TEXT CHECK (roster IS NULL OR length(roster) <= 1900000),
     roster_at  INTEGER,
     state_at   INTEGER NOT NULL,
@@ -4124,8 +4126,9 @@ CREATE TABLE IF NOT EXISTS group_guest_mail_got (
 -- group_guest_sent: an item a member here sent to a group at another community (their answer to an invitation, a leave, a
 -- line, an epoch), and what became of it: `queued` (the host has not taken it; tried again with backoff for 24 hours),
 -- `sent` (taken), `refused` (the host's answer refused it: `refused` says why, e.g. epoch-stale, and their phone waits for
--- the roster that follows), `failed` (never taken). The item is kept only while it is queued. A row goes 30 days after its
--- last change. This server's own (`local`), as relay_outbox is.
+-- the roster that follows), `failed` (never taken). The item is kept only while it is queued. `answer` is a group-invite's
+-- yes or no (null for every other kind): a yes still queued is the member `joining` (engine/group-guest-home.ts standingOf).
+-- A row goes 30 days after its last change. This server's own (`local`), as relay_outbox is.
 CREATE TABLE IF NOT EXISTS group_guest_sent (
     sender_key  TEXT NOT NULL CHECK (length(sender_key) = 64),
     item_id     TEXT NOT NULL CHECK (length(item_id) BETWEEN 8 AND 64),
@@ -4133,6 +4136,7 @@ CREATE TABLE IF NOT EXISTS group_guest_sent (
     host        TEXT NOT NULL CHECK (length(host) BETWEEN 1 AND 260),
     group_id    TEXT NOT NULL CHECK (length(group_id) BETWEEN 1 AND 64),
     state       TEXT NOT NULL CHECK (state IN ('queued', 'sent', 'refused', 'failed')),
+    answer      TEXT CHECK (answer IS NULL OR (kind = 'group-invite' AND answer IN ('yes', 'no'))),
     refused     TEXT CHECK (refused IS NULL OR length(refused) <= 40),
     -- JSON: the envelope and a payload of up to 1,300,000 characters (a line's sealed photo or voice), with room to escape.
     item        TEXT CHECK (item IS NULL OR length(item) <= 2000000),

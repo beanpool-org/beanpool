@@ -13,9 +13,10 @@
  *           - an invitation: it is not waiting already (counted once per host and group: a repeat holds nothing), they are
  *             not joining or in that group, have not blocked who invited them, it carries at most GROUP_INVITE_MAX_CHARS,
  *             and they have at most GROUP_INVITES_WAITING invitations waiting (GROUP_INVITES_WAITING_PER_HOST from one host);
- *           - anything else: they ANSWERED that host for that group (group_guest_links): `joining` or `in` for a roster, a
- *             line or an epoch; for a removal also `invited` (the invitation withdrawn: the link goes, so a host nobody
- *             answered keeps no row here). A host nobody here answered brings nothing but invitations.
+ *           - anything else: they ANSWERED that host for that group: `in` (group_guest_links), or `joining` (their yes
+ *             still queued here, group_guest_sent) for a roster, a line or an epoch; for a removal also `invited` (the
+ *             invitation withdrawn: the link goes, so a host nobody answered keeps no row here). A host nobody here
+ *             answered brings nothing but invitations.
  *         Two allowances per member, neither reachable by another host's notices (mayHold): what came unanswered (each
  *         invitation and its withdrawal) is held at most GROUP_INVITES_WAITING_PER_HOST from a host and
  *         GROUP_INVITES_WAITING in all, counting every one held; what came under a link they answered, at most
@@ -39,23 +40,28 @@
  *         `POST /api/mail/send` (sendGroupItems) and go to the host's POST /api/relay/mail in a request this server signs.
  *         Checked as the mailbox checks a line (their envelope, signed, naming this server as their home), and against
  *         where they stand with that group: an answer only to an invitation waiting, a line or an epoch only once in, and
- *         nothing more after a leave or an answer still waiting for that group. Their yes makes the link `joining`, so the
- *         roster that follows it is taken; the link moves ONLY on the host's answer (moveLinkOn): a yes, no or leave the
- *         host took (a 2xx that doesn't refuse it) moves it to `in`, `declined` or `left`; one it refused, a 400/413, or
- *         a day of no answer leaves it where it was, and a yes not taken puts the invitation back, to answer again. Kept in group_guest_sent while
+ *         nothing more after a leave or an answer still waiting for that group. While their yes is queued they are `joining`,
+ *         so the roster that follows it is taken; the link moves ONLY on the host's answer (moveLinkOn): a yes, no or leave
+ *         the host took (a 2xx that doesn't refuse it) moves it to `in`, `declined` or `left`; one it refused, a 400/413,
+ *         or a day of no answer leaves it where it was (a yes not taken: the invitation still waiting, to answer again, and
+ *         a roster taken meanwhile gone). Kept in group_guest_sent while
  *         the host hasn't taken it, for each host strictly oldest first (an epoch before the line under it), tried again
  *         with backoff by time (group-guests.ts nextFanoutTry) for a day. The host's answer for each item is kept, so the
  *         phone hears `epoch-stale` (and waits for the roster) or `group-refused`.
  *
  * **A standby** copies group_guest_links (a plain table), so a promoted standby still knows which hosts its members
  * answered; the held notices and the sent items are this server's own (`local`), never in a copy, as the mailbox's are.
- * A standby takes no notice (it answers as the main server does and writes nothing), sends no member's item, and its
- * timer does nothing here.
+ * So the copy holds only states a promoted standby can settle from the copy alone (#3217 round 2, invariant D): `joining`
+ * is never stored, it is read from this server's own queue (a yes still queued: standingOf). A link copied while a yes
+ * waited reads `invited` after a take-over, and the member answers again (a host that took the first yes takes a second
+ * as received). A standby takes no notice (it answers as the main server does and writes nothing), sends no member's item,
+ * and its timer sweeps only this server's own tables: nothing it runs writes a copied row (setLink throws there,
+ * moveLinkOn writes nothing).
  */
 import crypto from 'node:crypto';
 import { readRelayEnvelope, relayEnvelopeVerifies, relayPayloadHash, word, type RelayEnvelope } from '@beanpool/core';
 import { db } from '../db/db.js';
-import { getNodeRole, STANDBY_WRITE_MESSAGE } from '../config/node-role.js';
+import { assertPlainTablesWritable, getNodeRole, STANDBY_WRITE_MESSAGE, standbyWritesNothing } from '../config/node-role.js';
 import { isServerBlocked } from '../connector-manager.js';
 import { isNodeMember, readsAsMember } from '../state-engine.js';
 import { hasBlocked } from './member-blocks.js';
@@ -93,7 +99,10 @@ const GROUP_SENT_REQUEST_CHARS = 64 * 1024;
 
 export const NOT_IN_GROUP_ERROR = word("You're not in that group, or its invitation is no longer waiting.");
 
-type LinkState = 'invited' | 'joining' | 'in' | 'declined' | 'left' | 'removed';
+/** What group_guest_links stores: only what the host's answers and notices set, so a copy alone can settle each. */
+type LinkState = 'invited' | 'in' | 'declined' | 'left' | 'removed';
+/** Where a member stands, as their device reads it: `joining` is an invitation with their yes still queued here. */
+type Standing = LinkState | 'joining';
 interface LinkRow { member: string; host: string; group_id: string; state: LinkState; roster: string | null; roster_at: number | null }
 
 const KEY_HEX = /^[0-9a-f]{64}$/;
@@ -105,7 +114,21 @@ function linkOf(member: string, host: string, groupId: string): LinkRow | undefi
     return db.prepare('SELECT * FROM group_guest_links WHERE member = ? AND host = ? AND group_id = ?').get(member, host, groupId) as LinkRow | undefined;
 }
 
+/** A yes of the member's to that link's invitation, still queued here (`l` names the link's row). */
+const YES_QUEUED = (l: string) => `EXISTS (SELECT 1 FROM group_guest_sent s WHERE s.sender_key = ${l}.member AND s.host = ${l}.host
+    AND s.group_id = ${l}.group_id AND s.state = 'queued' AND s.answer = 'yes')`;
+
+/** Where `member` stands with that group (the file's header): the stored state, or `joining` while their yes is queued. */
+function standingOf(member: string, host: string, groupId: string): Standing | null {
+    const row = db.prepare(`SELECT l.state, ${YES_QUEUED('l')} AS yes FROM group_guest_links l WHERE l.member = ? AND l.host = ? AND l.group_id = ?`)
+        .get(member, host, groupId) as { state: LinkState; yes: number } | undefined;
+    if (!row) return null;
+    return row.state === 'invited' && row.yes ? 'joining' : row.state;
+}
+
+/** Writes a link (a copied row): never on a standby (node-role.ts assertPlainTablesWritable). */
 function setLink(member: string, host: string, groupId: string, state: LinkState, now: number, roster?: { body: string | null }): void {
+    assertPlainTablesWritable();
     db.prepare(`INSERT INTO group_guest_links (member, host, group_id, state, roster, roster_at, state_at) VALUES (?, ?, ?, ?, NULL, NULL, ?)
                 ON CONFLICT (member, host, group_id) DO UPDATE SET state = excluded.state, state_at = excluded.state_at`)
         .run(member, host, groupId, state, now);
@@ -177,8 +200,9 @@ export function receiveGroupNotice(origin: string, raw: unknown, now = Date.now(
 /** One named guest: the notice held for them, or dropped (the file's header says when). True when held. */
 function takeNoticeFor(member: string, n: Notice, now: number): boolean {
     if (!isNodeMember(member) || !readsAsMember(member)) return false;
+    const standing = standingOf(member, n.host, n.group);
+    const answered = standing === 'joining' || standing === 'in';
     const state = linkOf(member, n.host, n.group)?.state ?? null;
-    const answered = state === 'joining' || state === 'in';
     const body = JSON.stringify(dataFor(member, n));
     switch (n.kind) {
         case 'invite': {
@@ -186,15 +210,18 @@ function takeNoticeFor(member: string, n: Notice, now: number): boolean {
             if (state === 'invited' || answered || body.length > GROUP_INVITE_MAX_CHARS) return false;
             const inviter = isObject(n.data.invitedBy) ? n.data.invitedBy.key : null;
             if (typeof inviter === 'string' && KEY_HEX.test(inviter) && hasBlocked(member, inviter)) return false;
-            const waiting = (host?: string) => sum(`SELECT COUNT(*) AS n FROM group_guest_links WHERE member = ? AND state = 'invited'${host ? ' AND host = ?' : ''}`, member, ...(host ? [host] : []));
+            // Waiting: an invitation not yet answered (a yes queued is `joining`, not waiting, as it always was).
+            const waiting = (host?: string) => sum(`SELECT COUNT(*) AS n FROM group_guest_links l WHERE l.member = ? AND l.state = 'invited' AND NOT ${YES_QUEUED('l')}${host ? ' AND l.host = ?' : ''}`,
+                member, ...(host ? [host] : []));
             if (waiting() >= GROUP_INVITES_WAITING || waiting(n.host) >= GROUP_INVITES_WAITING_PER_HOST) return false;
             if (!mayHold(member, n.host, false, body.length)) return false;
             setLink(member, n.host, n.group, 'invited', now, { body: null });
             break;
         }
         case 'removed':
-            if (state === 'invited') {
+            if (standing === 'invited') {
                 // The invitation withdrawn: no row is kept for a host they never answered; the notice counts as an invitation.
+                assertPlainTablesWritable();
                 db.prepare('DELETE FROM group_guest_links WHERE member = ? AND host = ? AND group_id = ?').run(member, n.host, n.group);
                 if (body.length > GROUP_INVITE_MAX_CHARS || !mayHold(member, n.host, false, body.length)) return true;
                 break;
@@ -206,7 +233,7 @@ function takeNoticeFor(member: string, n: Notice, now: number): boolean {
         case 'roster':
             if (!answered) return false;
             // Kept whatever the caps say (one per group they answered): a phone that missed a held one still has the latest (step 1).
-            setLink(member, n.host, n.group, state as LinkState, now, { body });
+            setLink(member, n.host, n.group, state!, now, { body });
             if (!mayHold(member, n.host, true, body.length)) return true;
             break;
         case 'line':
@@ -237,7 +264,7 @@ function mayHold(member: string, host: string, answered: boolean, bytes: number)
 // ── The member's devices: fetch and confirm ─────────────────────────────────────────────────
 
 export interface HeldGroupNotice { id: string; host: string; group: string; kind: GroupNoticeKind; data: unknown; receivedAt: number }
-export interface GroupLinkView { host: string; group: string; state: LinkState; roster: unknown; rosterAt: number | null }
+export interface GroupLinkView { host: string; group: string; state: Standing; roster: unknown; rosterAt: number | null }
 export interface GroupSentTick { itemId: string; kind: string; host: string; group: string; state: string; refused: string | null; at: number }
 
 /**
@@ -253,14 +280,17 @@ export function heldGroupMailFor(member: string, device: string, since = 0, sinc
                              ORDER BY received_at, rowid LIMIT ?`).all(member, device, MAIL_FETCH_PAGE + 1) as Array<{
         id: string; host: string; group_id: string; kind: GroupNoticeKind; body: string; received_at: number;
     }>;
-    const links = db.prepare(`SELECT * FROM group_guest_links WHERE member = ? AND state IN ('invited', 'joining', 'in', 'removed') ORDER BY state_at, host, group_id`).all(member) as LinkRow[];
+    const links = db.prepare(`SELECT l.*, ${YES_QUEUED('l')} AS yes FROM group_guest_links l WHERE l.member = ? AND l.state IN ('invited', 'in', 'removed')
+                              ORDER BY l.state_at, l.host, l.group_id`).all(member) as Array<LinkRow & { yes: number }>;
     const sent = db.prepare(`SELECT item_id, kind, host, group_id, state, refused, updated_at FROM group_guest_sent
                              WHERE sender_key = ? AND (updated_at > ? OR (updated_at = ? AND item_id > ?)) ORDER BY updated_at, item_id LIMIT ?`)
         .all(member, since, since, sinceId, MAIL_FETCH_PAGE + 1) as Array<{ item_id: string; kind: string; host: string; group_id: string; state: string; refused: string | null; updated_at: number }>;
     return {
         items: rows.slice(0, MAIL_FETCH_PAGE).map((r) => ({ id: r.id, host: r.host, group: r.group_id, kind: r.kind, data: JSON.parse(r.body), receivedAt: r.received_at })),
         more: rows.length > MAIL_FETCH_PAGE,
-        groups: links.map((l) => ({ host: l.host, group: l.group_id, state: l.state, roster: l.roster ? JSON.parse(l.roster) : null, rosterAt: l.roster_at })),
+        groups: links.map((l) => ({
+            host: l.host, group: l.group_id, state: l.state === 'invited' && l.yes ? 'joining' : l.state, roster: l.roster ? JSON.parse(l.roster) : null, rosterAt: l.roster_at,
+        })),
         sent: sent.slice(0, MAIL_FETCH_PAGE).map((r) => ({ itemId: r.item_id, kind: r.kind, host: r.host, group: r.group_id, state: r.state, refused: r.refused, at: r.updated_at })),
         sentMore: sent.length > MAIL_FETCH_PAGE,
     };
@@ -360,32 +390,38 @@ function waitingFor(member: string, host: string, groupId: string, kinds: string
 /**
  * Whether `member` may send `c` (the file's header, "out"): an answer only to an invitation waiting, a leave when invited,
  * joining or in, a line or an epoch only once in; nothing more after a leave still queued for that group, and no second
- * answer while one is.
+ * answer while one is (a yes queued is `joining`, its stored link still `invited`).
  */
 function maySend(member: string, c: Checked): boolean {
     const host = c.envelope.recipientHome;
     const state = linkOf(member, host, c.groupId)?.state ?? null;
     if (waitingFor(member, host, c.groupId, ['group-leave'])) return false;
     if (c.envelope.kind === 'group-invite') return state === 'invited' && answerOf(c.payload) !== null && !waitingFor(member, host, c.groupId, ['group-invite']);
-    if (c.envelope.kind === 'group-leave') return state === 'in' || state === 'joining' || state === 'invited';
+    if (c.envelope.kind === 'group-leave') return state === 'in' || state === 'invited';
     return state === 'in';
 }
 
 /**
  * Where the host's answer for one item moves `member`'s link: only a yes, a no or a leave move it, only when the host took
  * it (`taken`: a 2xx that doesn't refuse it), and only from where that item left it. A yes the host did not take (refused
- * in its answer, a 400/413, or a day of no answer) puts the invitation back, so they can answer again.
+ * in its answer, a 400/413, or a day of no answer) leaves the invitation waiting, so they can answer again, and drops the
+ * roster taken while it was queued. Settling an item is this server's own business: on a standby (a demoted main server
+ * with items still queued) it writes no link, which is its main server's copy (node-role.ts standbyWritesNothing).
  */
 function moveLinkOn(member: string, kind: string, host: string, groupId: string, item: string | null, taken: boolean, now: number): void {
+    if (standbyWritesNothing()) return;
     let payload = '';
     try { payload = item ? String((JSON.parse(item) as { payload?: unknown }).payload ?? '') : ''; } catch { /* no payload */ }
     const answer = kind === 'group-invite' ? answerOf(payload) : null;
     const move = (from: LinkState[], to: LinkState) => db.prepare(`UPDATE group_guest_links SET state = ?, state_at = ?,
             roster = CASE WHEN ? = 'in' THEN roster END, roster_at = CASE WHEN ? = 'in' THEN roster_at END
         WHERE member = ? AND host = ? AND group_id = ? AND state IN (${from.map(() => '?').join(', ')})`).run(to, now, to, to, member, host, groupId, ...from);
-    if (answer === 'yes') move(['joining'], taken ? 'in' : 'invited');
-    else if (answer === 'no' && taken) move(['invited'], 'declined');
-    else if (kind === 'group-leave' && taken) move(['invited', 'joining', 'in'], 'left');
+    if (answer === 'yes' && taken) move(['invited'], 'in');
+    else if (answer === 'yes') {
+        db.prepare(`UPDATE group_guest_links SET roster = NULL, roster_at = NULL WHERE member = ? AND host = ? AND group_id = ? AND state = 'invited'
+                    AND roster IS NOT NULL`).run(member, host, groupId);
+    } else if (answer === 'no' && taken) move(['invited'], 'declined');
+    else if (kind === 'group-leave' && taken) move(['invited', 'in'], 'left');
 }
 
 /**
@@ -412,17 +448,17 @@ export async function sendGroupItems(member: string, items: unknown[], now = Dat
         + sum('SELECT COUNT(*) AS n FROM group_guest_sent WHERE sender_key = ? AND created_at > ?', member, now - DAY_MS);
     if (today + fresh.length > OUTBOX_PER_MEMBER_DAY) throw new OutboxError(429, 'rate_limited', OUTBOX_RATE_ERROR);
     db.transaction(() => {
-        const insert = db.prepare(`INSERT INTO group_guest_sent (sender_key, item_id, kind, host, group_id, state, item, attempts, next_try_at, created_at, updated_at)
-                                   VALUES (?, ?, ?, ?, ?, 'queued', ?, 0, ?, ?, ?) ON CONFLICT (sender_key, item_id) DO NOTHING`);
+        const insert = db.prepare(`INSERT INTO group_guest_sent (sender_key, item_id, kind, host, group_id, state, answer, item, attempts, next_try_at, created_at, updated_at)
+                                   VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, 0, ?, ?, ?) ON CONFLICT (sender_key, item_id) DO NOTHING`);
         for (const c of fresh) {
             if (!maySend(member, c)) throw new OutboxError(403, 'not_in_group', NOT_IN_GROUP_ERROR);
-            // Their yes: `joining` until the host's answer (moveLinkOn), so the roster that follows it is taken meanwhile.
-            if (c.envelope.kind === 'group-invite' && answerOf(c.payload) === 'yes') setLink(member, c.envelope.recipientHome, c.groupId, 'joining', now);
-            // Behind every row already waiting for that host, whatever the clock did: each host's items go oldest first.
+            // Behind every row already waiting for that host, whatever the clock did: each host's items go oldest first. A
+            // yes queued makes them `joining` (standingOf), so the roster that follows it is taken meanwhile; their link
+            // moves only on the host's answer (moveLinkOn), and no copy holds `joining`.
             const last = db.prepare("SELECT MAX(created_at) FROM group_guest_sent WHERE host = ? AND state = 'queued'").pluck().get(c.envelope.recipientHome) as number | null;
             const at = last !== null && last >= now ? last + 1 : now;
             insert.run(member, c.envelope.itemId, c.envelope.kind, c.envelope.recipientHome, c.groupId,
-                JSON.stringify({ envelope: c.envelope, payload: c.payload }), now, at, now);
+                c.envelope.kind === 'group-invite' ? answerOf(c.payload) : null, JSON.stringify({ envelope: c.envelope, payload: c.payload }), now, at, now);
         }
     })();
     await Promise.all([...new Set(fresh.map((c) => c.envelope.recipientHome))].map((host) => sendToHost(host)));
@@ -532,7 +568,8 @@ export async function retryGroupSent(now = Date.now()): Promise<number> {
 /**
  * The sweep (the minute timer): notices held past MAIL_HELD_DAYS or for a key that is no longer a member here go, and what a
  * device confirmed of a notice gone or by a device no longer listed; items queued past GROUP_SENT_QUEUE_MS fail, and settled
- * rows go GROUP_SENT_KEPT_MS after their last change. All of it this server's own tables: a standby's too.
+ * rows go GROUP_SENT_KEPT_MS after their last change. All of it this server's own tables, a standby's too: there an item
+ * failing moves no link (moveLinkOn), so nothing here writes a copied row.
  */
 export function sweepGroupGuestMail(now = Date.now()): { gone: number; failed: number } {
     let gone = 0;

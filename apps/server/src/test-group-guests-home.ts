@@ -172,6 +172,8 @@ async function main(): Promise<void> {
         const headers: Record<string, string> = {
             'X-Public-Key': signer.pk, 'X-Signature': signRequest(signer.priv, { method, path: p.split('?')[0], timestamp: ts, nonce, body: raw }),
             [SIGNED_FOR_HEADER]: signedForHost(), 'X-Timestamp': String(ts), 'X-Nonce': nonce,
+            // No socket left waiting in a pool: section 9 holds the loop past the server's keep-alive (section 0 says why).
+            connection: 'close',
         };
         if (method !== 'GET') headers['Content-Type'] = 'application/json';
         const res = await fetch(`${BASE}${p}`, { method, headers, body: method === 'GET' ? undefined : raw });
@@ -186,7 +188,7 @@ async function main(): Promise<void> {
         const k = hostKey[origin];
         const body = JSON.stringify(n);
         const headers = await buildNodeRequestHeaders({ method: 'POST', url: 'https://a.example/api/relay/group', body, origin, keyHex: k.pk, sign: signerOf(k.seed) });
-        const res = await fetch(`${BASE}/api/relay/group`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body });
+        const res = await fetch(`${BASE}/api/relay/group`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers, connection: 'close' }, body });
         let parsed: any = null;
         try { parsed = await res.json(); } catch { /* none */ }
         return { status: res.status, body: parsed };
@@ -565,7 +567,7 @@ async function main(): Promise<void> {
     setNodeRole('primary');
     assert(sbRetry === 0 && db.prepare('SELECT COUNT(*) FROM group_guest_links').pluck().get() === linksBefore && sentCount() === sentBefore8,
         '8c. a standby\'s timer sends nothing and writes no link');
-    const unsigned = await fetch(`${BASE}/api/relay/group`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(noticeOf('line', 'b.example', 'g8', [gus.pk])) });
+    const unsigned = await fetch(`${BASE}/api/relay/group`, { method: 'POST', headers: { 'Content-Type': 'application/json', connection: 'close' }, body: JSON.stringify(noticeOf('line', 'b.example', 'g8', [gus.pk])) });
     const asMember = await call('POST', gus, '/api/relay/group', noticeOf('line', 'b.example', 'g8', [gus.pk]));
     assert(unsigned.status >= 400 && unsigned.status < 500 && asMember.status >= 400 && asMember.status < 500 && heldCount(gus, 'b.example', 'g8') === 0,
         `8d. the door: unsigned, or a member's signature, at /api/relay/group is refused (got ${unsigned.status}, ${asMember.status})`);
@@ -695,7 +697,9 @@ async function main(): Promise<void> {
             if (a === 'a day of no answer') home.sweepGroupGuestMail(Date.now() + 25 * 60 * MIN);
             const rowState = () => db.prepare('SELECT state FROM group_guest_sent WHERE sender_key = ? AND item_id = ?').pluck().get(gus.pk, it.envelope.itemId);
             const [wantLink, wantState] = MOVE[k][a];
-            const linkThen = linkOf(gus, K, g)?.state ?? null, itemThen = rowState();
+            // Where Gus stands as his device reads it (a yes queued reads `joining`); the copied row never says `joining` (12).
+            const view10 = (home.heldGroupMailFor(gus.pk, 'f'.repeat(32)).groups as any[]).find((x) => x.host === K && x.group === g);
+            const linkThen = view10?.state ?? linkOf(gus, K, g)?.state ?? null, itemThen = rowState();
             const first = linkThen === wantLink && itemThen === wantState && r.status === 200;
             // What goes again: a queued item is tried again by the timer and the link moves when the host takes it (a second
             // answer, or a line after a leave, is refused while it waits; a roster meanwhile is kept for a yes); an item not

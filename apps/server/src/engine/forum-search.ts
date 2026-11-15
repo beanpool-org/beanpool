@@ -22,11 +22,10 @@
  * No log line holds what was searched.
  */
 import { FORUM_SEARCHES_PER_DAY, elidedWord, foldApostrophes, word, wordsFor } from '@beanpool/core';
-import { getMember } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { sectionReadSql } from './forum-sections.js';
 import { dayBudget } from '../nearest-people-budget.js';
-import { ForumRefusal, ensureForumStarters, type ForumWriter } from './forum.js';
+import { ForumRefusal, ensureForumStarters, forumWriters, type ForumWriter } from './forum.js';
 
 const { t: tr } = wordsFor('en');
 
@@ -206,15 +205,13 @@ export function searchForum(reader: string, query: unknown, offset: number, now 
     const rows = db.prepare(sql).all(params) as
         { id: string; number: number; writer_pubkey: string; words: string; created_at: string; topic_id: string; section_id: string; title: string }[];
     const more = rows.length > FORUM_SEARCH_PAGE;
-    const names = new Map<string, string>();
-    const nameOf = (pk: string) => {
-        if (!names.has(pk)) names.set(pk, getMember(db, pk)?.callsign ?? '');
-        return names.get(pk)!;
-    };
+    const page = rows.slice(0, FORUM_SEARCH_PAGE);
+    // Each writer once: their name, and what they show beside it on a public forum (slice F10).
+    const writer = forumWriters(page.map((r) => r.writer_pubkey));
     return {
-        hits: rows.slice(0, FORUM_SEARCH_PAGE).map((r) => ({
+        hits: page.map((r) => ({
             topicId: r.topic_id, sectionId: r.section_id, title: r.title,
-            postId: r.id, number: r.number, writer: { publicKey: r.writer_pubkey, name: nameOf(r.writer_pubkey) }, createdAt: r.created_at,
+            postId: r.id, number: r.number, writer: writer(r.writer_pubkey), createdAt: r.created_at,
             excerpt: forumExcerpt(r.words, asked),
         })),
         next: more ? offset + FORUM_SEARCH_PAGE : null,

@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Mga mensahe, mga grupo at kanilang mga chat, mga tao at kaibigan, ang iyong mga pribadong contact, mga chat sa event, pag-mute, mga pagbanggit, at susing nabago.",
-        "sourceHash": "b8443e689c10d3a0"
+        "text": "Mga mensahe, mga mensaheng boses, ang forum, mga grupo at kanilang mga chat, mga tao at kaibigan, ang iyong mga pribadong contact, mga chat sa event, pag-mute, mga pagbanggit, at susing nabago.",
+        "sourceHash": "79e2bb34ba50acd7"
       }
     },
     "pulse": {
@@ -674,8 +674,8 @@
         "sourceHash": "59274c49ac87bb2f"
       },
       "summary": {
-        "text": "Sabihin sa mga moderator ng komunidad ang tungkol sa post, event, post sa Balita, proyekto o negosyo.",
-        "sourceHash": "4b773ef8eef237fa"
+        "text": "Sabihin sa mga moderator ng komunidad mo ang tungkol sa post, event, post sa Balita, proyekto, negosyo, mensahe sa chat o post sa forum.",
+        "sourceHash": "776b105137480ade"
       }
     },
     "notifications": {
@@ -762,6 +762,34 @@
       "help": {
         "text": "Ang mga Alok mo sa ilalim ng isang pangalan. Pangalanan ito, sabihin kung anong uri ito, isara muna ito, o isara na.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "forum": {
+      "title": {
+        "text": "Ang forum",
+        "sourceHash": "b82e3eeaaa246390"
+      },
+      "summary": {
+        "text": "Mga paksang may pamagat at mga sagot sa ilalim nito, nakahati sa mga seksyon, para sa mga miyembro ng komunidad mo. Saan ito makikita, pag-post, ang unang paksa ng bagong tao sa pandaigdigang komunidad, pagsunod sa paksa, at sino ang makakabasa.",
+        "sourceHash": "584d9e9d8e32ba45"
+      },
+      "help": {
+        "text": "Mga paksa at sagot para sa komunidad mo. I-tap ang Forum sa itaas ng Usapan. Hawak ng server ang mga salita: hindi ito naka-lock tulad ng pribadong usapan.",
+        "sourceHash": "4c2967ddbdd326d2"
+      }
+    },
+    "voice-messages": {
+      "title": {
+        "text": "Mensaheng boses",
+        "sourceHash": "45a7e7b9cb445ce8"
+      },
+      "summary": {
+        "text": "Mag-record ng mensahe sa halip na i-type ito, sa usapan ng dalawang tao o sa naka-lock na usapan ng grupo. Kung saan ka makakapadala, pakikinig, gaano katagal itong itinatago ng server, at ano ang nananatiling pribado.",
+        "sourceHash": "1d56fd61c4d9e5e8"
+      },
+      "help": {
+        "text": "Pindutin ang mikropono para mag-record, bitawan para ipadala. Pakaliwa para kanselahin, pataas para i-lock. Hanggang 3 minuto. Itinatago ng server nang 30 araw.",
+        "sourceHash": "a4c99f83c66ae115"
       }
     },
     "contacts": {

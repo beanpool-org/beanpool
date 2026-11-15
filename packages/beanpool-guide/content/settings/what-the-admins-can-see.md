@@ -100,6 +100,12 @@ Every member, admins included, sees each member's **trust profile**: how many of
 
 Nothing else of your trades.
 
+## The forum and voice messages
+
+Your community's owners, admins and moderators can read every topic and reply in its forum, and its photos: the forum is not locked like a chat. They also see the reports on forum posts and, on the global community, the first topics waiting for a look. See "The forum".
+
+A voice message in a chat with one person or a locked group's chat is locked like a photo: they can't listen to it. See "Voice messages".
+
 ## An admin's AI assistant
 
 An owner or an admin may connect their own AI assistant to the server to help them. It sees less than they do: never your messages, balance, trades, keys, photos or the names list, and never who reported anyone. See "When an admin uses an AI assistant".

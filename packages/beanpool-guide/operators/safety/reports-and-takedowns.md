@@ -7,7 +7,7 @@ related: pulse-and-announcements, members-and-invites, decisions-and-emergencies
 
 ## How members report
 
-In the app, members report a post, an event, a Pulse item, a project, an enterprise, a message in a group's chat (and, in the web app, a person) and choose a reason: spam or scam, offensive content, misleading post, child safety, or other. Every report screen offers the same list. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report.
+In the app, members report a post, an event, a Pulse item, a project, an enterprise, a message in a group's chat, a post in the forum (see Running the forum) (and, in the web app, a person) and choose a reason: spam or scam, offensive content, misleading post, child safety, or other. Every report screen offers the same list. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report.
 
 - A member can file at most **10 reports an hour**.
 - Reporting the same thing again, while the first report is still open, does nothing new, unless the member now chooses **Child safety**: the open report changes to it, and you are told as for a new child-safety report.
@@ -78,6 +78,7 @@ A group's chat is end-to-end encrypted: your server stores it but cannot read it
 - **Photo could not be verified**: the words check out, but the photo stored with them is not the one their author sent.
 - **Image unavailable**: the words check out, but this server holds no copy of the photo. A standby copies photos in chats, so this happens only when it took over before it had copied that photo, or the photo was lost from the server's storage.
 - That its author deleted it, or a convenor removed it, after it was reported: then there is nothing left to open.
+- **No words** for a voice message: Settings can't play a reported voice message yet. Your server opens it, and keeps its sound past the usual 30 days while the report waits, but the moderation list shows only that it carries no words. Judge it on the reporter's words. A voice message reported from a chat with one person reaches you without its sound: neither app hands it over yet.
 
 The key opens that message and nothing else: no other message in the chat, and no other photo. Nobody in the group is told who reported it. Settings has no button to take a group chat message down: a convenor removes it in the chat, and the owners and admins can suspend its author.
 

@@ -21,6 +21,7 @@ These are the global community's limits. A local community runs on its own serve
 - **Up to 5 photos a listing.**
 - **Your phone keeps the nearest 500 listings**, within 250 km of your area. It also keeps your own, and any you have a deal or a conversation about. The Market lists the ones within 250 km of your area newest first, each card saying how far away it is. The Market's search still finds listings from everywhere. See "Your area".
 - **You can watch up to 3 places** with **Tell me when one starts here**. To watch another, stop watching one. See "Finding a community near you".
+- **The forum:** a new account's first topic waits for a moderator to look at it before it shows, and one topic can wait at a time. A new account can start 2 topics and write 10 replies in any 24 hours (1 and 5 if it joined with 12 words), and its photos go only in that first topic. After that, every member can start 10 topics and write 100 replies in any 24 hours. See "The forum".
 
 A new account also has a few daily limits for its first days. See "Reporting a problem".
 
@@ -32,4 +33,8 @@ The other limits keep what each phone and the server have to carry small, wherev
 
 ## What is not archived
 
-Only Offers, Needs, events and polls are archived, as above. Your chats are not. Your account is not either: it goes only if you delete it. See "Leaving or deleting your account".
+Only Offers, Needs, events and polls are archived, as above. Your chats are not, and neither are topics and replies in the forum. Your account is not either: it goes only if you delete it. See "Leaving or deleting your account".
+
+## One server, no standby
+
+A local community can keep a standby: a second server that takes over if its main one stops. The global community runs on one server, with no standby. If that server fails, it is set up again from its copy of the night before, so posts, replies and messages from up to a day before can be lost, the forum's included. A local community is not affected: it runs on its own server.

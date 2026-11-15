@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Mensagens, grupos e chats, pessoas e amigos, seus contatos privados, conversas de eventos, silenciar, menções e chave alterada.",
-        "sourceHash": "b8443e689c10d3a0"
+        "text": "Mensagens, mensagens de voz, o fórum, grupos e chats, pessoas e amigos, seus contatos privados, conversas de eventos, silenciar, menções e chave alterada.",
+        "sourceHash": "79e2bb34ba50acd7"
       }
     },
     "pulse": {
@@ -674,8 +674,8 @@
         "sourceHash": "59274c49ac87bb2f"
       },
       "summary": {
-        "text": "Avise os moderadores da sua comunidade sobre uma publicação, evento, post no Pulso, projeto ou empreendimento.",
-        "sourceHash": "4b773ef8eef237fa"
+        "text": "Avise os moderadores da sua comunidade sobre uma publicação, evento, post no Pulso, projeto, empreendimento, mensagem de uma conversa ou publicação do fórum.",
+        "sourceHash": "776b105137480ade"
       }
     },
     "notifications": {
@@ -762,6 +762,34 @@
       "help": {
         "text": "Suas Ofertas sob um só nome. Dê um nome a ela, diga que tipo de loja é, feche por enquanto ou feche de vez.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "forum": {
+      "title": {
+        "text": "O fórum",
+        "sourceHash": "b82e3eeaaa246390"
+      },
+      "summary": {
+        "text": "Tópicos com título e respostas embaixo, em seções, para os membros da sua comunidade. Onde fica, como publicar, o primeiro tópico de quem é novo na comunidade global, seguir um tópico e quem pode lê-lo.",
+        "sourceHash": "584d9e9d8e32ba45"
+      },
+      "help": {
+        "text": "Tópicos e respostas da sua comunidade. Toque em Fórum no topo do Bate-papo. O servidor guarda as palavras: não é protegido como uma conversa com uma pessoa.",
+        "sourceHash": "4c2967ddbdd326d2"
+      }
+    },
+    "voice-messages": {
+      "title": {
+        "text": "Mensagens de voz",
+        "sourceHash": "45a7e7b9cb445ce8"
+      },
+      "summary": {
+        "text": "Grave uma mensagem em vez de digitar, em uma conversa com uma pessoa ou na conversa protegida de um grupo. Onde enviar, como ouvir, por quanto tempo o servidor guarda e o que continua privado.",
+        "sourceHash": "1d56fd61c4d9e5e8"
+      },
+      "help": {
+        "text": "Segure o microfone para gravar e solte para enviar. Deslize para a esquerda para cancelar, para cima para travar. Até 3 minutos. O servidor guarda por 30 dias.",
+        "sourceHash": "a4c99f83c66ae115"
       }
     },
     "contacts": {

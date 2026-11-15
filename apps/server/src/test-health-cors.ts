@@ -14,7 +14,8 @@
  *   3. A write to it from another origin gets no allowance.
  *   4. Nothing else is opened: every route the node serves, preflighted from an unlisted origin with its own method, gets an
  *      allowance only where it is listed by route and method below: the three signed knock routes, the web push key and
- *      subscription an applicant's web app reads and gives (global yes Y2), and the health read; and real unsigned GETs of
+ *      subscription an applicant's web app reads and gives (global yes Y2), a member's note from their own community (forums
+ *      F10), and the health read; and real unsigned GETs of
  *      the health read's neighbours (info, card, version, config, known rule, Home, the node's status) carry none.
  *   5. An origin the operator lists keeps its own rule on the health read: its origin back, with credentials.
  *
@@ -126,6 +127,9 @@ async function main(): Promise<void> {
         // An applicant's web app is told of the answer (DESIGN-global-yes-join-fable.md §2.4, slice Y2): the community's web
         // push key, read, and the browser's subscription, given and taken back, signed by the asking key.
         'GET /api/web-push/key', 'POST /api/web-push', 'DELETE /api/web-push',
+        // "Show my community on global" (forums F10, routes/membership-note.ts): the worldwide community's web app asks the
+        // member's own community for its note, signed by the member's key, no cookie, the answer only for the signer.
+        'GET /api/membership/note',
     ];
     const opened: string[] = [];
     const unexpected: string[] = [];
@@ -143,7 +147,7 @@ async function main(): Promise<void> {
     assert(opened.includes(`GET ${HEALTH}`), `the health read is the one new opening (${opened.join(', ')})`);
     assert(unexpected.length === 0, `no other route answers an unlisted origin's preflight with an allowance${unexpected.length ? `: ${unexpected.join(', ')}` : ''}`);
     assert(JSON.stringify([...opened].sort()) === JSON.stringify([...OPEN].sort()),
-        `exactly the seven openings, by route and method: the health read, the three signed knock routes, the web push key and subscription (${opened.join(', ')})`);
+        `exactly the eight openings, by route and method: the health read, the three signed knock routes, the web push key and subscription, a member's note (${opened.join(', ')})`);
 
     const neighbours = ['/api/community/info', '/api/community/card', '/api/community/known-rule', '/api/version', '/api/node/config', '/api/home', '/api/local/status', '/api/community/health/extra', '/api/community/healthz'];
     for (const p of neighbours) {

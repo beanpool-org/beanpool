@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { newContactId, putContact, toEd25519Pkcs8, type ContactsList } from '@beanpool/core';
+import { inviteAndShareLink, inviteShareText, newContactId, putContact, shareAddress, toEd25519Pkcs8, type ContactsList } from '@beanpool/core';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { importIdentity, type BeanPoolIdentity } from '../lib/identity';
-import { changeContacts, contactsSnapshot, openContacts, resetContactsStoreForTest, saveContactsNow } from '../lib/contacts-store';
+import { nodeAddress } from '../lib/api';
+import { changeContacts, contactsHost, contactsSnapshot, openContacts, resetContactsStoreForTest, saveContactsNow } from '../lib/contacts-store';
 import { ContactsPage } from './ContactsPage';
 import { PendingInvites } from '../components/PendingInvites';
 
@@ -25,6 +26,7 @@ const DEE_KEY = 'd1'.repeat(32);
 const NEEDLES = [
     'Dee Walker', 'Walker', '0412 345 678', '0412345678', '412345678', '0412%20345', '0412+345', 'dee@example.org', 'dee%40example.org',
     'Tom Riley', 'Riley', '0499 000 111', '0499000111', 'tom@example.org', 'tom%40example.org',
+    '+61 412 345 678', '61412345678', '61%20412', '%2B61',
 ];
 const DEE = { id: newContactId(), name: 'Dee Walker', phones: ['0412 345 678'], emails: ['dee@example.org'], note: 'from the market', links: [], invite: null };
 const TOM = { id: newContactId(), name: 'Tom Riley', phones: ['0499 000 111'], emails: ['tom@example.org'], note: '', links: [], invite: null };
@@ -257,7 +259,8 @@ describe('Invite from a contact on the web', () => {
         render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Invite' }));
         const sheet = await screen.findByTestId('contact-invite-sheet');
-        expect(within(sheet).getAllByRole('button').map((b) => b.textContent)).toEqual(['Copy', 'Close']);
+        // Dee has a number: Text message is there with no share sheet (Damo, 15 Nov: Copy alone was all the web offered).
+        expect(within(sheet).getAllByRole('button').map((b) => b.textContent)).toEqual(['Text message', 'Copy', 'Close']);
         await act(async () => { fireEvent.click(within(sheet).getByRole('button', { name: 'Copy' })); });
         expect(await within(sheet).findByText('Copied. Paste it in your own message.')).toBeInTheDocument();
         expect(execCommand).toHaveBeenCalledTimes(1);
@@ -318,6 +321,101 @@ describe('Invite from a contact on the web', () => {
         expect(dee?.links).toEqual([]);
         expect(dee?.invite).toBeNull();
         expect(screen.queryByTestId('contact-invite-used')).toBeNull();
+    });
+});
+
+// The sheet's ways to send (Damo via Marty, 15 Nov: on his Android phone's Brave the sheet offered only Copy, "definitely
+// counter intuitive"; "make the invite button actually invite people"). Text message whenever there is a number, first, as the
+// main action; Share… where the browser has it; Email with an address; Copy always. The sms: link opens on this device.
+describe('The web invite sheet: Text message, Share…, Email, Copy', () => {
+    const BRAVE_ANDROID = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
+    const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1';
+    let opened: Array<[string, string | undefined]> = [];
+    let openSpy: { mockRestore: () => void } | null = null;
+    const asBrowser = (ua: string) => Object.defineProperty(navigator, 'userAgent', { configurable: true, get: () => ua });
+    beforeEach(() => {
+        opened = [];
+        openSpy = vi.spyOn(window, 'open').mockImplementation((url?: string | URL, target?: string) => { opened.push([String(url), target]); return null; });
+        asBrowser(BRAVE_ANDROID);
+    });
+    afterEach(() => {
+        openSpy?.mockRestore();
+        delete (navigator as unknown as Record<string, unknown>).userAgent;
+    });
+    const contactWith = (phones: string[], emails: string[]) => ({ id: newContactId(), name: 'Dee Walker', phones, emails, note: '', links: [], invite: null });
+    const openSheet = async () => {
+        fireEvent.click(await screen.findByRole('button', { name: 'Invite' }));
+        return screen.findByTestId('contact-invite-sheet');
+    };
+    const ways = (sheet: HTMLElement) => within(sheet).getAllByRole('button').map((b) => b.textContent).filter((s) => s !== 'Close');
+
+    const NUMBER = ['+61 412 345 678'];
+    const EMAIL = ['dee@example.org'];
+    it.each([
+        ['a number only', NUMBER, [], true, ['Text message', 'Share…', 'Copy']],
+        ['a number only', NUMBER, [], false, ['Text message', 'Copy']],
+        ['an email only', [], EMAIL, true, ['Share…', 'Email', 'Copy']],
+        ['an email only', [], EMAIL, false, ['Email', 'Copy']],
+        ['a number and an email', NUMBER, EMAIL, true, ['Text message', 'Share…', 'Email', 'Copy']],
+        ['a number and an email', NUMBER, EMAIL, false, ['Text message', 'Email', 'Copy']],
+        ['neither', [], [], true, ['Share…', 'Copy']],
+        ['neither', [], [], false, ['Copy']],
+    ] as const)('%s (%j, %j), share sheet %s: %j, the first one the main action', async (_what, phones, emails, share, expected) => {
+        if (!share) delete (navigator as unknown as Record<string, unknown>).share;
+        await seedList((l) => putContact(l, contactWith([...phones], [...emails])));
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
+        const sheet = await openSheet();
+        expect(ways(sheet)).toEqual(expected);
+        const buttons = within(sheet).getAllByRole('button').filter((b) => b.textContent !== 'Close');
+        expect(buttons.map((b) => b.className.includes('bg-bp-commit-fill'))).toEqual(expected.map((_, i) => i === 0));
+        // Nothing is made, and nothing of Dee is sent, before a tap.
+        expect(seen.filter((s) => s.includes('/api/invite/generate'))).toEqual([]);
+        assertNothingNamed();
+    });
+
+    it('a number with no digits is no number: no Text message', async () => {
+        delete (navigator as unknown as Record<string, unknown>).share;
+        await seedList((l) => putContact(l, contactWith(['ask at the market'], [])));
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
+        expect(ways(await openSheet())).toEqual(['Copy']);
+    });
+
+    // The message the sheet hands over, as core makes it for this community and this code.
+    const messageFor = (code: string) => {
+        const here = nodeAddress();
+        return inviteShareText({ name: contactsHost(), link: inviteAndShareLink(here, code), code, address: shareAddress(here) });
+    };
+
+    it('Android (Brave): one invite, then the text app opened on this device with the first number and the whole message after ?body=; nothing of Dee sent', async () => {
+        await seedList((l) => putContact(l, contactWith(['ask at the market', '+61 412 345 678', '0499 000 111'], [])));
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
+        const sheet = await openSheet();
+        await act(async () => { fireEvent.click(within(sheet).getByRole('button', { name: 'Text message' })); });
+        await waitFor(() => expect(opened).toHaveLength(1));
+        const [href, target] = opened[0];
+        expect(target).toBe('_self');
+        expect(href).toBe(`sms:+61412345678?body=${encodeURIComponent(messageFor('INV-TEST-0001'))}`);
+        // The whole invite, encoded: no raw line break, space, ? or & to cut the body short.
+        expect(href.slice('sms:+61412345678?body='.length)).toMatch(/^[A-Za-z0-9\-_.!~*'()%]+$/);
+        expect(decodeURIComponent(href.slice('sms:+61412345678?body='.length))).toContain('/?invite=INV-TEST-0001');
+        expect(made).toBe(1);
+        expect(shared).toEqual([]);
+        await waitFor(() => expect(screen.queryByTestId('contact-invite-sheet')).toBeNull());
+        await waitFor(() => expect(contactsSnapshot().list?.contacts[0].invite?.code).toBe('INV-TEST-0001'));
+        await act(async () => { await saveContactsNow(me); });
+        assertNothingNamed();
+        // Mutation: the sheet sends the number in the invite (generateInvite(key, phone)) → "+61 412 345 678" in a body, red.
+    });
+
+    it('iPhone: the same invite with the whole message after &body=', async () => {
+        asBrowser(IPHONE);
+        await seedList((l) => putContact(l, contactWith(NUMBER, EMAIL)));
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} />);
+        const sheet = await openSheet();
+        await act(async () => { fireEvent.click(within(sheet).getByRole('button', { name: 'Text message' })); });
+        await waitFor(() => expect(opened).toHaveLength(1));
+        expect(opened[0]).toEqual([`sms:+61412345678&body=${encodeURIComponent(messageFor('INV-TEST-0001'))}`, '_self']);
+        assertNothingNamed();
     });
 });
 

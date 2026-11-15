@@ -204,9 +204,9 @@ export function makeCardShell(colors: Colors) {
         /** An event tile's row 3: its title, one line. */
         gridSecond: { fontSize: GRID.second.size, fontWeight: weightOf(GRID.second), lineHeight: GRID.second.line, color: colors.text.body },
         /**
-         * The tile's photo and what sits on it, the same for every kind (slice P3': an event and the Daily Pulse are listing
-         * tiles too). The picture is 4:3 at the tile's width, flush under its top corners (the card's own overflow rounds
-         * them); the photo fills that frame (no percentage height: it is laid over the frame, edge to edge).
+         * The tile's photo and what sits on it, the same for every kind (slice P3': an event is a listing tile too). The
+         * picture is 4:3 at the tile's width, flush under its top corners (the card's own overflow rounds them); the photo
+         * fills that frame (no percentage height: it is laid over the frame, edge to edge).
          */
         gridImageWrapper: { position: 'relative', width: '100%', aspectRatio: GRID_PHOTO.aspectWidth / GRID_PHOTO.aspectHeight },
         gridImage: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },

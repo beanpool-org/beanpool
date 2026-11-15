@@ -8,7 +8,7 @@
  * 4. Local fixture fallback for development, testing, and offline preview.
  */
 
-import { type ChannelPlatform, type ChannelCategory } from '@beanpool/core';
+import { PULSE_KNOWLEDGE_WITH, type ChannelPlatform, type ChannelCategory, type PulseKnowledgeCard } from '@beanpool/core';
 import { anchorUrl, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 import { REPORT_REASONS } from './reportReasons';
@@ -26,8 +26,38 @@ export interface PulseFeedItem {
     publishedAt: string | null;
     source: string;
     isVerified: boolean;
-    external_id?: string | null;
-    channel_id?: string | null;
+    /**
+     * Only on Local knowledge's card (`source: 'knowledge'`, slice KP; core PulseKnowledgeCard): the day's pages. The list
+     * draws components/PulseKnowledgeCard for it, never the creator's card.
+     */
+    knowledge?: PulseKnowledgeCard['knowledge'];
+}
+
+/**
+ * The accumulated feed after one more page: what the page adds goes on the end in its order, and an id the list already
+ * holds is not added twice.
+ *
+ * For an id it already holds, the page's copy replaces the old one where it stands. That is for Local knowledge's card (the
+ * KP node review's note): a day's card sits at that day's newest page, so between two page reads it can move. A page taken
+ * down mid-scroll moves it older and a later page carries the same `know_<day>` id again, with the right rows; a page
+ * published today moves it newer, out of a scroll already past it, and the list keeps the copy it has until a refresh.
+ * The newest copy read wins, so a taken-down page's title leaves the card, and it keeps the place the member already
+ * scrolled past, so nothing above them jumps. One id is one day, so there is never a second card for a day. A creator's
+ * item that comes again is the same item.
+ */
+export function mergePulsePage(held: readonly PulseFeedItem[], page: readonly PulseFeedItem[]): PulseFeedItem[] {
+    const merged = [...held];
+    const at = new Map(merged.map((item, i) => [item.id, i]));
+    for (const item of page) {
+        const i = at.get(item.id);
+        if (i === undefined) {
+            at.set(item.id, merged.length);
+            merged.push(item);
+        } else {
+            merged[i] = item;
+        }
+    }
+    return merged;
 }
 
 /**
@@ -255,6 +285,9 @@ export async function fetchPulseFeed(options: FetchPulseFeedOptions = {}): Promi
         if (options.cursor) queryParams.set('cursor', options.cursor);
         if (options.category && options.category !== 'all') queryParams.set('category', options.category);
         if (options.limit) queryParams.set('limit', String(options.limit));
+        // Local knowledge's card (slice KP, amended §2.3): only a read that asks is given it, so an app from before it never
+        // draws a card it doesn't know. Asked on every read: the node adds it under All only, and an older node ignores it.
+        queryParams.set('with', PULSE_KNOWLEDGE_WITH);
 
         const queryString = queryParams.toString();
         const endpoint = `${url.replace(/\/+$/, '')}/api/pulse/feed${queryString ? `?${queryString}` : ''}`;
@@ -340,43 +373,6 @@ export const PULSE_REPORT_REASONS = REPORT_REASONS;
 /** A signed-in member can report an item that is not theirs. Fixture items are not on any node. */
 export function canReportPulseItem(item: PulseFeedItem, currentPubkey?: string | null): boolean {
     return Boolean(currentPubkey && item.ownerPubkey && item.ownerPubkey !== currentPubkey && !item.id.startsWith('item_fix_'));
-}
-
-export interface DailyPulseReflection {
-    date: string;
-    headline: string;
-    body: string;
-}
-
-/**
- * Fetches the day's reflection from GET /api/pulse/daily.
- */
-export async function fetchDailyPulse(date?: string): Promise<DailyPulseReflection> {
-    const query = date ? `?date=${encodeURIComponent(date)}` : '';
-    const path = `/api/pulse/daily${query}`;
-    try {
-        const { signedGet } = await import('./db');
-        const res = await signedGet(path);
-        if (!res.ok) {
-            throw new Error(`Failed to load Daily Pulse (${res.status})`);
-        }
-        return await res.json();
-    } catch (e: any) {
-        // If signedGet succeeded in reaching the server and returned an HTTP error, do not retry unauthenticated
-        if (e?.message?.includes('Failed to load Daily Pulse')) {
-            throw e;
-        }
-        // Fallback for environments without AsyncStorage / db (like standalone tests)
-        const url = await anchorUrl().catch(() => null);
-        if (!url) throw e;
-        const res = await fetch(`${url.replace(/\/+$/, '')}${path}`, {
-            headers: { 'Accept': 'application/json' },
-        });
-        if (!res.ok) {
-            throw new Error(`Failed to load Daily Pulse (${res.status})`);
-        }
-        return await res.json();
-    }
 }
 
 /**

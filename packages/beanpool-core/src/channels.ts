@@ -161,12 +161,11 @@ export const PULSE_PAGE_WORDS = {
     yourChannels: word('Your channels'),
     quietTitle: word('Nothing new this week.'),
     quietBody: word('Have a video, a song, a blog or photos of your own? Add a link and your neighbours see it here.'),
-    learnLine: word('Nothing to add? The Learn lane has short videos on how BeanPool works.'),
-    /** On the worldwide community, where nothing is asked to be added yet: the Learn lane leads. */
-    learnGlobal: word('The Learn lane has short videos on how BeanPool works.'),
     /**
-     * The web app's two lines: it has no Learn lane, and "Learn" there is the Local knowledge page. Its how-to videos are
-     * under the **How it works** chip (pulse/learn.md), named by {chip} as the chip itself reads.
+     * A quiet week's way to BeanPool's how-to videos, both apps ("Learn" is the Local knowledge place now). {chip} names
+     * where they are as it reads there: the web's **How it works** chip (pulse/learn.md), the phone's How it works lane
+     * (it was the Learn lane until slice KP; DESIGN-local-knowledge-amend-fable.md §2.1). `learnGlobalWeb`: on the
+     * worldwide community, where nothing is asked to be added yet, the videos lead.
      */
     learnLineWeb: word('Nothing to add? Tap {chip} for short videos about BeanPool.'),
     learnGlobalWeb: word('Tap {chip} for short videos about BeanPool.'),

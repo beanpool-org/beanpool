@@ -4,7 +4,7 @@
  * the real LanguageProvider, with its photo viewer and review sheet drawn for real, in every state a member meets: another
  * member's Offer to accept (the confirmation, by the job and by the hour), the report form and the block question; the
  * member's own Need with requests to approve or deny (and the decline note), its edit form, a paused offer; a deal held in
- * trust, as the one who pays and as the one paid; a finished deal to rate; the Daily Pulse; a community with Beans off.
+ * trust, as the one who pays and as the one paid; a finished deal to rate; a community with Beans off.
  *
  * In the pseudo-locale (`xx`) any text, screen-reader label, hint, placeholder, picker item, alert title, body or button
  * with letters outside a bracket bypassed t(), except what members wrote (titles, descriptions, names, a group's name) and
@@ -163,12 +163,10 @@ const MINE_HELD = { ...HOURLY, id: 'p-mine-held', status: 'pending', author_pubk
 const MINE_HELD_TX = { id: 'tx-mine', post_id: 'p-mine-held', status: 'pending', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign, seller_pubkey: ME.publicKey, amount_c: 2400, hours: 2 };
 const DONE = { ...OFFER, id: 'p-done', status: 'completed', target_group_id: null, audience_scope: 'public', pending_transaction_id: 'tx-done', accepted_by: ME.publicKey };
 const PAUSED = { ...HOURLY, id: 'p-paused', status: 'paused', author_pubkey: ME.publicKey, author_callsign: ME.callsign };
-const PULSE = { id: 'p-pulse', type: 'offer', status: 'active', title: 'Gift economies grow trust', description: 'Today’s thought.', category: 'general', author_pubkey: 'pulse-key', author_callsign: 'Daily Pulse', price_c: 0, price_type: 'fixed', photos: '[]', created_at: iso(now - 60_000) };
-
 /** What members and the node wrote: shown as written. */
 const OTHERS = [
-    ...[OFFER, NEED, PULSE].flatMap((p) => [p.title, p.description]),
-    KOFI.callsign, 'Mia', ME.callsign, 'Garden club', 'Daily Pulse',
+    ...[OFFER, NEED].flatMap((p) => [p.title, p.description]),
+    KOFI.callsign, 'Mia', ME.callsign, 'Garden club',
 ].sort((a, b) => b.length - a.length);
 
 function answers(post: Record<string, unknown>, db: { first?: (sql: string, params?: unknown[]) => unknown; all?: (sql: string) => unknown[] } = {}) {
@@ -496,15 +494,10 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         expect(bypassing()).toEqual([]);
     });
 
-    it('a paused offer of the member\'s own; the Daily Pulse; a community with Beans off', async () => {
+    it('a paused offer of the member\'s own; a community with Beans off', async () => {
         await open(PAUSED);
         expect(host.textContent).toContain(pseudoLocalise('⏸️ Offer paused'));
         expect(bypassing(), 'paused').toEqual([]);
-        root.unmount();
-        root = createRoot(host);
-        await open(PULSE);
-        expect(host.textContent).toContain(pseudoLocalise('Feeling Inspired?'));
-        expect(bypassing(), 'the Pulse').toEqual([]);
         root.unmount();
         root = createRoot(host);
         rememberProfile({ ...LOCAL, beans: false, escrow: false });

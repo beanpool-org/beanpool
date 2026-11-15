@@ -20,17 +20,6 @@ export const FILL_MAX = 50;
  */
 export const READ_TIMEOUT_MS = 20_000;
 
-/** Whether a post is the node's own Daily Pulse post (pinned/reflection), not a listing from elsewhere. */
-export function isNodePulsePost(p: any): boolean {
-    return Boolean(
-        p &&
-        ((p.author_callsign || p.authorCallsign) === 'Daily Pulse') &&
-        !p.origin_node &&
-        !p.originNode &&
-        !p._remoteNode
-    );
-}
-
 /** Whether the list shown near the member is short enough to be filled. */
 export function wantsFill(shownNear: number): boolean {
     return shownNear < FILL_BELOW;

@@ -560,6 +560,12 @@ describe('Every door lands on the enterprise page', () => {
             // The shopfront's keeper rows and a shop's owner line (S5): a member, opened by their key.
             [path.join('components', 'shopfront', 'Shopfront.tsx')]: 1,
             [path.join('app', 'shop', '[id].tsx')]: 1,
+            // The forum (slice F3): a writer's name on a post in a topic opens them by key, as the web's ForumTopicView does (F4,
+            // #3169). A topic's row in the Forum list opens the topic, never its writer (the small-cards rule), so it is no door.
+            [path.join('app', 'forum', '[id].tsx')]: 1,
         });
+        // The forum's one door opens the post's writer: their key, and the name the post carries for the screen to show at once.
+        const forumDoor = fs.readFileSync(path.join(appRoot, 'app', 'forum', '[id].tsx'), 'utf8').match(/pathname:\s*'\/public-profile',\s*params:\s*\{([^}]*)\}/);
+        expect(forumDoor?.[1].trim(), "the forum's door").toBe('publicKey: post.writer.publicKey, callsign: post.writer.name');
     });
 });

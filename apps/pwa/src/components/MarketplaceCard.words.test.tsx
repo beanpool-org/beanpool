@@ -1,6 +1,6 @@
 /**
  * A Market card in the member's language (words S3, web sweep W1): in the grid (with and without a photo), list and
- * compact layouts, an Offer and a Need, a Daily Pulse card, and the paused / pending / recurring / founding / cash-too /
+ * compact layouts, an Offer and a Need, and the paused / pending / recurring / founding / cash-too /
  * group-only / own-card marks, every word on it came through t() (the phone's market.tsx keys where the English is the
  * same), its price with the Beans sign. The title, description, names, group and community names are theirs.
  *
@@ -31,15 +31,14 @@ const marked = {
 const withPhoto = { ...marked, photos: ['/api/marketplace/posts/p1/photos/0?v=1'] } as MarketplacePost;
 const need = { ...base, id: 'p2', type: 'need', category: 'tools', title: 'Borrow a ladder', description: '', status: 'pending', priceType: 'daily' } as MarketplacePost;
 const paused = { ...base, id: 'p3', status: 'paused', priceType: 'monthly', price_c: 250 } as MarketplacePost;
-const pulse = { ...base, id: 'p4', authorCallsign: 'Daily Pulse', title: 'On sharing', description: 'A thought for today' } as MarketplacePost;
-const others = ['Sourdough loaf', 'Baked this morning', 'Kofi', 'Garden club', 'Borrow a ladder', 'On sharing', 'A thought for today', 'Daily Pulse', 'mullum'];
+const others = ['Sourdough loaf', 'Baked this morning', 'Kofi', 'Garden club', 'Borrow a ladder', 'mullum'];
 
 const LAYOUTS = ['grid', 'list', 'compact'] as const;
 
 afterEach(() => { cleanup(); backToEnglish(); });
 
 describe('a Market card in the pseudo-locale', () => {
-    it.each(LAYOUTS)('%s: an Offer with every mark, a Need, a paused card and a Pulse card', async (viewMode) => {
+    it.each(LAYOUTS)('%s: an Offer with every mark, a Need and a paused card', async (viewMode) => {
         await showIn('xx');
         render(
             <div>
@@ -47,7 +46,6 @@ describe('a Market card in the pseudo-locale', () => {
                 <MarketplaceCard post={withPhoto} viewMode={viewMode} distanceKm={0.42} />
                 <MarketplaceCard post={need} viewMode={viewMode} distanceKm={12} />
                 <MarketplaceCard post={paused} viewMode={viewMode} />
-                <MarketplaceCard post={pulse} viewMode={viewMode} />
             </div>,
         );
         expect(screen.getAllByText('Sourdough loaf').length).toBeGreaterThan(0);
@@ -91,7 +89,6 @@ describe('a Market card in the pseudo-locale', () => {
                 <MarketplaceCard post={marked} viewMode="list" isOwnPost distanceKm={2.4} />
                 <MarketplaceCard post={paused} viewMode="list" />
                 <MarketplaceCard post={marked} viewMode="compact" isOwnPost authorEnergy={10000000} />
-                <MarketplaceCard post={pulse} viewMode="grid" />
             </div>,
         );
         expect(bracketed()).toBe(0);
@@ -104,10 +101,6 @@ describe('a Market card in the pseudo-locale', () => {
         // core's upperCase(), never from a CSS rule that cannot capitalise Turkish or Greek.
         expect(screen.getByText('⏸ PAUSED')).toBeInTheDocument();
         expect(screen.getByText('👤 YOU')).toBeInTheDocument();
-        // The grid's Pulse pill is the one chip now (G2), its capitals from core's upperCase(), as the list card's (W2).
-        expect(screen.getByText('🗞️ DAILY PULSE')).toBeInTheDocument();
-        // The grid's DAILY PULSE foot label left the tile in G2 (DESIGN-market-grid-sizes-fable.md §2.2): the pill says it.
-        expect(screen.queryByText('DAILY PULSE')).toBeNull();
         expect(screen.queryByText('VIEW')).toBeNull();
         expect(screen.queryByText('No description provided.')).toBeNull();
         expect(screen.getByText('420 m')).toBeInTheDocument();

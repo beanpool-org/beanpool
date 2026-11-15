@@ -5,7 +5,7 @@
  *
  * - Where the community's forum is on (`features.forum`), the Chats · Forum switch takes the big "Chat" title's place, and
  *   under Chats nothing moves: Messages · Groups · People, the search row, the conversations.
- * - The Forum side is the forum's empty pane (slice F3 fills it): no chat list, no search, no Messages · Groups · People.
+ * - The Forum side is the forum's own pane (slice F3 filled it): no chat list, no search, no Messages · Groups · People.
  * - Where the owners switched it off, or the server is from before the forum, there is no switch: the title "Chat", as before.
  * - **No height added** (the design's own claim, "T0's render test at 320 x 569 x 1.3 is the proof"): the switch's row is no
  *   taller than the title's row it replaces, read from the styles the screen really draws with.
@@ -223,12 +223,17 @@ import { LanguageProvider } from '../../components/LanguageProvider';
 import { yourGroupsStore } from '../../components/useYourGroups';
 // People asks where the member is to end a Show credit visit (utils/people-visit.ts; its own test and people-show-credit-visit-render.test.ts): nothing here leaves the tab.
 vi.mock('../people-visit', () => ({ usePeopleVisitEnds: () => 0 }));
-/** Chats with people in other communities, kept on this phone (utils/outside-chat-store.ts): none unless a test puts some. */
-const outside = vi.hoisted(() => ({ chats: [] as any[] }));
+/**
+ * Chats with people in other communities, kept on this phone (utils/outside-chat-store.ts): none unless a test puts some. The
+ * tab lists them through the real outside-mail.ts chatsShown; `blocked`, the keys this account blocked.
+ */
+const outside = vi.hoisted(() => ({ chats: [] as any[], blocked: [] as string[] }));
 vi.mock('../outside-chat-live', () => ({
     OUTSIDE_CHATS_UPDATED: 'outside_chats_updated',
     syncOutsideMailNow: async () => null,
-    outsideContext: async () => ({ identity: { publicKey: 'me-key' }, store: { chats: async () => outside.chats } }),
+    outsideContext: async () => ({
+        identity: { publicKey: 'me-key' }, store: { chats: async () => outside.chats }, isBlocked: async (key: string) => outside.blocked.includes(key),
+    }),
 }));
 import ChatsScreen from '../../app/(tabs)/chats';
 
@@ -280,6 +285,7 @@ beforeEach(() => {
     store.map.set('beanpool_anchor_url', NODE);
     yourGroupsStore.reset();
     outside.chats = [];
+    outside.blocked = [];
     globalThis.fetch = vi.fn(async () => new Response('{}', { status: 404 })) as typeof fetch;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
@@ -349,14 +355,15 @@ describe('the Chat tab where the forum is on: Chats · Forum in the title\'s pla
         expect(host.querySelector('[data-testid="page-title-talk"]')).toBe(tablist());
     });
 
-    it('Forum: the forum\'s empty pane under the switch, with no chat list, search or Messages · Groups · People; Chats brings them back', async () => {
+    it('Forum: the forum\'s pane under the switch, with no chat list, search or Messages · Groups · People; Chats brings them back', async () => {
         rememberProfile(WITH_FORUM);
         await renderIn('en');
         await click(side('Forum'), 'Forum');
         expect(selected(tabs())).toEqual(['false', 'true']);
         expect(forumPane()).not.toBeNull();
-        // Empty: slice F3 fills it.
-        expect(forumPane()!.childNodes.length).toBe(0);
+        // Slice F3 filled it: the forum's own list (its sections and its topics), none of the chat's parts.
+        expect(forumPane()!.querySelector('[data-testid="forum-section-pick"]')).not.toBeNull();
+        expect(forumPane()!.querySelector('[data-testid="forum-topics"]')).not.toBeNull();
         expect(radios()).toEqual([]);
         expect(search()).toBeNull();
         expect(host.textContent).not.toContain('Kofi');
@@ -719,5 +726,24 @@ describe('a chat with someone in another community, in the Chats list at 320 dp 
         await renderIn('en');
         expect(row()!.textContent).toContain('Someone in another community');
         expect(communityLine()!.textContent).toBe('coast.example');
+    });
+
+    it('someone the account blocked: neither their open chat nor their request is listed (PR #3188 review)', async () => {
+        const request = { ...outsideChat('Quill Varga', 'hilltop.example'), id: 'oc-2', peerKey: 'e'.repeat(64), state: 'request' };
+        const requestsRow = () => host.querySelector('[data-testid="message-requests-row"]');
+        outside.chats = [outsideChat('Ana Ríos', 'coast.example'), request];
+        rememberProfile(LOCAL);
+        await renderIn('en');
+        expect(row(), 'their chat, while not blocked').not.toBeNull();
+        expect(requestsRow(), 'the requests row, while not blocked').not.toBeNull();
+        outside.blocked = ['f'.repeat(64), 'e'.repeat(64)];
+        try {
+            await reopenIn('en');
+            expect(row()).toBeNull();
+            expect(requestsRow()).toBeNull();
+            expect(host.textContent).not.toContain('Ana Ríos');
+        } finally {
+            outside.blocked = [];
+        }
     });
 });

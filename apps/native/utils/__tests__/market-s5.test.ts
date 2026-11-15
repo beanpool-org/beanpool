@@ -21,7 +21,7 @@ describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
         expect(marketSrc).toMatch(/item\.status === 'pending'/);
         expect(marketSrc).toMatch(/PENDING/);
         // The gridBadgeRow should render at most one status chip by precedence
-        expect(marketSrc).not.toMatch(/!!item\.repeatable && !isPulse[\s\S]*?styles\.gridBadge[\s\S]*?isOwn &&[\s\S]*?styles\.gridBadge/);
+        expect(marketSrc).not.toMatch(/!!item\.repeatable &&[\s\S]*?styles\.gridBadge[\s\S]*?isOwn &&[\s\S]*?styles\.gridBadge/);
     });
 
     it('list row thumbnail is 80 dp (not 96 dp)', () => {

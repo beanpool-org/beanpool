@@ -38,6 +38,7 @@ import { chatSides, chatSideShown, formatHundredths, homeTail, t, tn, word, type
 import { ListPhoto } from '../../components/ListPhoto';
 import { ChatFrameSwitch } from '../../components/ChatFrameSwitch';
 import { OUTSIDE_CHATS_UPDATED, outsideContext, syncOutsideMailNow } from '../../utils/outside-chat-live';
+import { chatsShown } from '../../utils/outside-mail';
 import type { OutsideChat } from '../../utils/outside-chat-store';
 import { ForumPane } from '../../components/forum/ForumPane';
 import { ContactsInfoSheet } from '../../components/ContactsInfoSheet';
@@ -514,9 +515,10 @@ export default function ChatsScreen() {
                             });
                         })
                         .catch(console.error);
-                    // Chats with people in other communities, kept on this phone (utils/outside-chat-store.ts).
+                    // Chats with people in other communities, kept on this phone (utils/outside-chat-store.ts): none with
+                    // someone the account blocked (utils/outside-mail.ts chatsShown).
                     outsideContext()
-                        .then((ctx) => (ctx ? ctx.store.chats(ctx.identity.publicKey) : []))
+                        .then((ctx) => (ctx ? chatsShown(ctx) : []))
                         .then((list) => { if (active) setOutsideChats(prev => keepIfSame(prev, list)); })
                         .catch(() => {});
                 }

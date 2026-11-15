@@ -47,10 +47,12 @@ export const FORUM_WORDS = {
 /** `at`: a search's hit opens the topic at that post. */
 type View = { kind: 'list' } | { kind: 'topic'; id: string; at?: number } | { kind: 'new' } | { kind: 'firstLooks' };
 
-export function ForumPage({ me, onOpenProfile }: { me: string; onOpenProfile?: (pubkey: string) => void }) {
+export function ForumPage({ me, onOpenProfile, topicId = null }: { me: string; onOpenProfile?: (pubkey: string) => void; topicId?: string | null }) {
     // Before any kept copy is read: another account in this tab never sees the last one's forum, not even for a moment.
     keepForumFor(me);
-    const [view, setView] = useState<View>({ kind: 'list' });
+    const [view, setView] = useState<View>(() => (topicId ? { kind: 'topic', id: topicId } : { kind: 'list' }));
+    // A door to one topic (slice F7) while the Forum is already open: that topic.
+    useEffect(() => { if (topicId) setView({ kind: 'topic', id: topicId }); }, [topicId]);
     const [front, setFront] = useState<ForumFront | null>(() => keptFront());
     const [section, setSection] = useState<string | null>(null);
     const [list, setList] = useState(() => keptList(null));

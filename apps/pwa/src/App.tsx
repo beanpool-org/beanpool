@@ -61,7 +61,8 @@ import { PulsePage } from './pages/PulsePage';
 import { LearnPage, type LearnTarget } from './pages/LearnPage';
 import { HomePage } from './pages/HomePage';
 import { MobileHeader, SidebarStatus } from './components/AppHeader';
-import { KNOWLEDGE_NAMES, dealsNeedingMe, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type Guide, type HomeSearchSettings, type WordKey } from '@beanpool/core';
+import { KNOWLEDGE_NAMES, dealsNeedingMe, forumTopicOfSearch, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type Guide, type HomeSearchSettings, type WordKey } from '@beanpool/core';
+import { takeKeptLinkedTopic } from './lib/forum-public';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
@@ -309,7 +310,9 @@ export function App() {
     useEffect(() => { if (tourTab === 'messages') setChatNavNonce((n) => n + 1); }, [tourTab, tourIndex]);
     // The one arrival that shows the Forum side instead: a forum notice, from the bell or a web push (slice F5).
     const [openChatForum, setOpenChatForum] = useState(false);
-    useEffect(() => { if (activeTab !== 'messages') setOpenChatForum(false); }, [activeTab]);
+    // And the topic it opens on: a door to one topic (`/?topic=<id>`, or the one a visitor kept at Join to reply; slice F7).
+    const [openForumTopic, setOpenForumTopic] = useState<string | null>(null);
+    useEffect(() => { if (activeTab !== 'messages') { setOpenChatForum(false); setOpenForumTopic(null); } }, [activeTab]);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     // The deal a door named with its listing (Home, the header's needs-you icons): the listing opens at that deal (deals S4).
     const [openMarketTxId, setOpenMarketTxId] = useState<string | null>(null);
@@ -698,6 +701,29 @@ export function App() {
     }, []); // once, at load: what the address carried then
     useEffect(() => { if (identity) forgetKeptPeek(); }, [identity]);
     const clearLinkedPost = useCallback(() => setLinkedPost(null), []);
+
+    // `/?topic=<id>`, a door to one forum topic (slice F7; core forumTopicDoor): a visitor reads it in the lobby's Forum tab, a
+    // member in the Chat tab's Forum, as does a visitor who joined from its Join to reply (kept in this tab).
+    const [linkedTopic, setLinkedTopic] = useState<string | null>(() => (typeof window !== 'undefined' ? forumTopicOfSearch(window.location.search) : null));
+    useEffect(() => {
+        if (!linkedTopic) return;
+        try {
+            const params = new URLSearchParams(window.location.search);
+            params.delete('topic');
+            const qs = params.toString();
+            window.history.replaceState(window.history.state, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`);
+        } catch { /* the topic still opens; the parameter stays in the address bar */ }
+    }, []); // once, at load
+    const clearLinkedTopic = useCallback(() => setLinkedTopic(null), []);
+    useEffect(() => {
+        if (!identity) return;
+        const id = linkedTopic ?? takeKeptLinkedTopic();
+        if (!id) return;
+        setLinkedTopic(null);
+        setActiveTab('messages');
+        setOpenChatForum(true);
+        setOpenForumTopic(id);
+    }, [identity, linkedTopic]);
 
     // `/?ask=<host>`, from a local community's card (front doors S15): the lobby keeps it in this tab for after the
     // join, as it keeps a shared listing; a member lands on Home with the Find card on that community (above the cards
@@ -1179,7 +1205,7 @@ export function App() {
             );
         }
         if (visitorView.kind === 'lobby') {
-            return <GuestLobby info={visitorView.info} health={communityHealth} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} askedCommunity={askParam} />;
+            return <GuestLobby info={visitorView.info} health={communityHealth} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} askedCommunity={askParam} linkedTopicId={linkedTopic} onLinkedTopicTaken={clearLinkedTopic} />;
         }
         // A stranger with a link a member shared outside: that one post first, then this community's doors. Its invite
         // form and its ways back are the welcome page's, which reads where to start from `?door=` (lib/community-card.ts).
@@ -1558,6 +1584,7 @@ export function App() {
                                     openConversationId={openConversationId}
                                     navNonce={chatNavNonce}
                                     openForum={openChatForum}
+                                    openForumTopic={openForumTopic}
                                     onForumOpened={() => setOpenChatForum(false)}
                                     onConversationOpened={() => setOpenConversationId(null)}
                                     onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}

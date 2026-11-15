@@ -40,14 +40,15 @@ import { askedElsewhereLine, joinHeading, useAskedCommunityName, useOwnCommunity
 
 const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage })));
 
-import { helpSheetFor, t, webHelpKey, word, type WordKey } from '@beanpool/core';
+import { FORUM_HOME_WORDS, forumPublicOn, helpSheetFor, t, webHelpKey, word, type WordKey } from '@beanpool/core';
+import { ForumVisitorPage } from './ForumVisitorPage';
 import { HelpDialog } from '../components/HelpDialog';
 import { LobbyHeader, LobbyHelpButton, LobbyJoin } from '../components/LobbyHeader';
 import { MemberGuide } from '../components/MemberGuide';
 import { loadBundledGuide, getBundledGuide, inShownLanguage } from '../lib/guide';
 import type { Guide } from '@beanpool/core';
 
-type LobbyTab = 'home' | 'marketplace' | 'map' | 'ledger';
+type LobbyTab = 'home' | 'marketplace' | 'map' | 'forum' | 'ledger';
 
 /** The tabs' names are the phone's tab words (word(…, 'tab')), so one translation serves both. */
 const TABS: { id: LobbyTab; label: WordKey; emoji: string }[] = [
@@ -57,6 +58,8 @@ const TABS: { id: LobbyTab; label: WordKey; emoji: string }[] = [
 ];
 /** The Ledger, when the node previews Beans: a visitor sees mutual exchange before any door (design §5, pick 4). */
 const LEDGER_TAB: { id: LobbyTab; label: WordKey; emoji: string } = { id: 'ledger', label: word('Ledger', 'tab'), emoji: '📊' };
+/** The forum, read only, where anyone may read it (the global community; slice F7): Join to reply is its door. */
+const FORUM_TAB: { id: LobbyTab; label: WordKey; emoji: string } = { id: 'forum', label: FORUM_HOME_WORDS.name, emoji: '💬' };
 
 interface Props {
     /** `/api/community/info`, as App read it to choose the lobby. */
@@ -70,11 +73,17 @@ interface Props {
     onLinkedPostTaken?: () => void;
     /** `/?ask=<host>`, from a local community's card (front doors S15): kept for after the join, when Home's Find card opens on it. */
     askedCommunity?: string | null;
+    /** `/?topic=<id>`, a door to one forum topic (slice F7): opened read only in the Forum tab. */
+    linkedTopicId?: string | null;
+    onLinkedTopicTaken?: () => void;
 }
 
-export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLinkedPostTaken, askedCommunity = null }: Props) {
+export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLinkedPostTaken, askedCommunity = null, linkedTopicId = null, onLinkedTopicTaken }: Props) {
     const [tab, setTab] = useState<LobbyTab>('home');
-    const tabs = modeFor('beans', info) === 'preview' ? [...TABS, LEDGER_TAB] : TABS;
+    const forumTab = forumPublicOn(info.features);
+    const tabs = [...TABS, ...(forumTab ? [FORUM_TAB] : []), ...(modeFor('beans', info) === 'preview' ? [LEDGER_TAB] : [])];
+    // The forum topic open in the Forum tab (null: its list).
+    const [topic, setTopic] = useState<string | null>(null);
     // The "?" (DESIGN-getting-started-fable.md §4–§5): help for the lobby's tab; its guide opens over the lobby.
     const [helpOpen, setHelpOpen] = useState(false);
     const [helpGuide, setHelpGuide] = useState<Guide | null>(() => {
@@ -119,6 +128,13 @@ export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLi
         keepLinkedPost(linkedPostId);
         onLinkedPostTaken?.();
     }, [linkedPostId, onLinkedPostTaken]);
+
+    // A door to one forum topic: opened read only in the Forum tab (where the forum is public; elsewhere Home, as before).
+    useEffect(() => {
+        if (!linkedTopicId) return;
+        if (forumTab) { setTab('forum'); setTopic(linkedTopicId); }
+        onLinkedTopicTaken?.();
+    }, [linkedTopicId, onLinkedTopicTaken, forumTab]);
 
     // A community the visitor came to ask to join: kept in this tab, as the shared listing is, so a join by a sign-in
     // that leaves the page still lands on the Find card on that community (App takes it when the identity is set).
@@ -168,6 +184,10 @@ export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLi
             setTab('ledger');
         } else if (to === 'home') {
             setTab('home');
+        } else if (to === 'forum' && forumTab) {
+            // From Home's "From the forum": a topic, or the list.
+            setTab('forum');
+            setTopic(contextId ?? null);
         } else if (to === 'guide' && contextId) {
             // How it works, from a 🏘️ sheet: the guide page, over the lobby until Back (the "?"'s own overlay).
             setGuideAt(contextId);
@@ -241,7 +261,7 @@ export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLi
     const headerJoin = (className: string) => <LobbyJoin onClick={() => openJoin('guard')} disabled={canHoldKey === null} className={className} />;
 
     // The tab's own name: at 320 px with 1.3x text "Marketplace" runs under the Join button.
-    const title = tab === 'home' ? t('Home', undefined, 'tab') : tab === 'marketplace' ? t('Market', undefined, 'tab') : tab === 'ledger' ? t('Ledger', undefined, 'tab') : t('Map', undefined, 'tab');
+    const title = tab === 'home' ? t('Home', undefined, 'tab') : tab === 'marketplace' ? t('Market', undefined, 'tab') : tab === 'ledger' ? t('Ledger', undefined, 'tab') : tab === 'forum' ? t(FORUM_HOME_WORDS.name) : t('Map', undefined, 'tab');
 
     return (
         <div className="flex h-screen overflow-hidden text-text-primary" data-testid="guest-lobby">
@@ -318,6 +338,9 @@ export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLi
                             onPostOpened={() => setOpenPostId(null)}
                             onNavigate={navigate}
                         />
+                    )}
+                    {tab === 'forum' && (
+                        <ForumVisitorPage topicId={topic} onTopic={setTopic} onJoin={() => openJoin('guard')} />
                     )}
                     {tab === 'ledger' && (
                         <LedgerPage identity={null} isMember={false} preview onNavigate={navigate} onNearYou={() => selectTab('home')} onGuide={(slug) => navigate('guide', slug)} />

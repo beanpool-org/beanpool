@@ -57,11 +57,13 @@ export function ChatFrameSwitch({ sides, side, onChange }: {
     );
 }
 
-export function ChatTabPage({ navNonce, openForum, onForumOpened, ...props }: ComponentProps<typeof MessagesPage> & {
+export function ChatTabPage({ navNonce, openForum, openForumTopic = null, onForumOpened, ...props }: ComponentProps<typeof MessagesPage> & {
     /** Changes at every arrival at the tab from elsewhere (App's navigateToTab), with a conversation or without one. */
     navNonce?: number;
     /** The arrival was for the Forum (a forum notice, slice F5): the Forum side, once; {@link onForumOpened} then clears it. */
     openForum?: boolean;
+    /** With it, the topic the Forum opens on (a door to one topic, slice F7). */
+    openForumTopic?: string | null;
     onForumOpened?: () => void;
 }) {
     const features = useCommunityInfo()?.features;
@@ -88,7 +90,7 @@ export function ChatTabPage({ navNonce, openForum, onForumOpened, ...props }: Co
                 // MessagesPage's list padding and width, so the switch stays where it was.
                 <div className="p-4 md:p-6 max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full">
                     {frame}
-                    <ForumPage me={props.identity.publicKey} onOpenProfile={props.onOpenProfile} />
+                    <ForumPage me={props.identity.publicKey} onOpenProfile={props.onOpenProfile} topicId={openForumTopic} />
                 </div>
             )}
         </>

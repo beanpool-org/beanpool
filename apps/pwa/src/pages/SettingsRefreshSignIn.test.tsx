@@ -138,4 +138,10 @@ describe('the Refresh button leaves for the ordinary Connect', () => {
         render(<SignInRecoveryLine enrolled={['facebook']} hasWords refresh={['google', 'github']} identity={member} />);
         expect(screen.queryByText(LINE)).toBeNull();
     });
+
+    it('offers nothing where the community keeps no copies now: its Connect would refuse before any sign-in', () => {
+        render(<SignInRecoveryLine enrolled={['google']} hasWords refresh={['google']} identity={member} keepsNoCopies />);
+        expect(screen.queryByTestId('refresh-sign-in-google-start')).toBeNull();
+        expect(screen.queryByText(LINE)).toBeNull();
+    });
 });

@@ -82,7 +82,7 @@ interface Props {
     /**
      * Recovery S4: the sign-ins whose copy the server can't find from the sign-in alone yet (api.ts getSignInsToRefresh),
      * each offered one Refresh under the line, with `identity`, whose ordinary Connect it runs. Only sign-ins on the node's
-     * list that a browser can use.
+     * list that a browser can use, and never where the community keeps no copies (`keepsNoCopies`).
      */
     refresh?: readonly string[];
     identity?: BeanPoolIdentity;
@@ -93,7 +93,8 @@ interface Props {
 
 export function SignInRecoveryLine({ enrolled, hasWords, phoneLater = [], keepsNoCopies = false, refresh = [], identity, navigate, origin }: Props) {
     if (!enrolled) return null;
-    const toRefresh = identity ? [...new Set(refresh)].filter(isJoinProvider).filter((p) => enrolled.includes(p)) : [];
+    // Not where the community keeps no copies now: its Connect refuses before any sign-in (the phone offers none there either).
+    const toRefresh = identity && !keepsNoCopies ? [...new Set(refresh)].filter(isJoinProvider).filter((p) => enrolled.includes(p)) : [];
     const english = signInNames(enrolled);
     const names = english ? signInNamesWords(english) : null;
     return (

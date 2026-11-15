@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
     FREE_TAGS_MAX, FREE_TAG_TOO_SHORT, LIBRARY_ASK_MS, POST_TAGS_MAX, TAG_COMMA, TOO_MANY_TAGS, TYPED_TAG_WORDS, communityTagsFor,
     didYouMeanTag, enterTypedTags, exactLibraryTag, lastTagOff, mergedInto, suggestTags, tagChildren, tagIndex, t, tn, typedTag,
-    isLang, type CommunityTag, type LibraryElsewhere, type LibraryLabel, type RefusedTag, type WordKey,
+    isLang, type CommunityTag, type LibraryElsewhere, type LibraryLabel, type RefusedTag,
 } from '@beanpool/core';
 import { getCommunityTags, getLibraryTagFor } from '../lib/api';
 import { LANGUAGE_NAMES } from '../lib/language';
@@ -35,8 +35,8 @@ export interface TagPickerProps {
      * `freeOnly`). Takes `onFreeTagsChange`; `value` and `onChange` are not read.
      */
     freeOnly?: boolean;
-    /** The lines under the field in place of the Market's two (words keys, shown through t()). */
-    hints?: readonly WordKey[];
+    /** The lines under the field in place of the Market's two, in the member's language (the caller's t()). */
+    hints?: readonly string[];
 }
 
 /** No library tags: a free-only picker's (one list, so a render never makes a new one). */
@@ -55,7 +55,7 @@ export function TagPicker({
     communityTags = getCommunityTags,
     libraryTagFor = getLibraryTagFor,
     freeOnly = false,
-    hints = [TYPED_TAG_WORDS.arePublic, TYPED_TAG_WORDS.yourWords],
+    hints,
 }: TagPickerProps) {
     const selectedTags = freeOnly ? NO_LIBRARY_TAGS : value ?? tags ?? [];
     const [isOpen, setIsOpen] = useState(false);
@@ -408,7 +408,7 @@ export function TagPicker({
                                 <>
                                     {canType && (
                                         <div className="text-xs text-nature-600 dark:text-nature-300 space-y-1">
-                                            {hints.map((line) => <p key={line} className="m-0">{t(line)}</p>)}
+                                            {(hints ?? [t(TYPED_TAG_WORDS.arePublic), t(TYPED_TAG_WORDS.yourWords)]).map((line) => <p key={line} className="m-0">{line}</p>)}
                                         </div>
                                     )}
                                     {/* Suggestions */}

@@ -663,7 +663,7 @@ describe("freeOnly: the member's own tags alone (Learn's pages, which carry no l
         held.freeTags = now;
         return createElement(TagPicker, {
             freeOnly: true, onChange: () => { throw new Error('no library tag in a free-only field'); }, freeTags: now, onFreeTagsChange: setNow,
-            hints: ['Tags help people find this page in Learn. Everyone can see them.'] as never,
+            hints: ['Tags help people find this page in Learn. Everyone can see them.'],
             communityTags: async () => { held.communityAsked++; return []; },
             libraryTagFor: async () => { held.libraryAsked++; return null; },
         });

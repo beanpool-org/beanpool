@@ -7,7 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
     FREE_TAGS_MAX, FREE_TAG_TOO_SHORT, LIBRARY_ASK_MS, POST_TAGS_MAX, TAG_COMMA, TOO_MANY_TAGS, TYPED_TAG_WORDS, communityTagsFor,
     didYouMeanTag, enterTypedTags, exactLibraryTag, lastTagOff, mergedInto, suggestTags, tagChildren, tagIndex, t, tn, typedTag,
-    isLang, type CommunityTag, type LibraryElsewhere, type LibraryLabel, type RefusedTag, type WordKey,
+    isLang, type CommunityTag, type LibraryElsewhere, type LibraryLabel, type RefusedTag,
 } from '@beanpool/core';
 import { loadCommunityTags, loadLibraryTagFor } from '../utils/community-tags';
 import { useTheme, useStyles } from '../app/ThemeContext';
@@ -50,8 +50,8 @@ export interface TagPickerProps {
      * `freeOnly`). Takes `onFreeTagsChange`; `value` and `onChange` are not read. The web's picker does the same.
      */
     freeOnly?: boolean;
-    /** The lines under the field in place of the Market's two (words keys, shown through t()). */
-    hints?: readonly WordKey[];
+    /** The lines under the field in place of the Market's two, in the member's language (the caller's t()). */
+    hints?: readonly string[];
 }
 
 /** No library tags: a free-only picker's (one list, so a render never makes a new one). */
@@ -70,7 +70,7 @@ export function TagPicker({
     communityTags = loadCommunityTags,
     libraryTagFor = loadLibraryTagFor,
     freeOnly = false,
-    hints = [TYPED_TAG_WORDS.arePublic, TYPED_TAG_WORDS.yourWords],
+    hints,
 }: TagPickerProps) {
     const selectedTags = freeOnly ? NO_LIBRARY_TAGS : value ?? tags ?? [];
     const { colors } = useTheme();
@@ -653,7 +653,7 @@ export function TagPicker({
                                 <>
                                     {canType && (
                                         <View style={styles.sectionWrap}>
-                                            {hints.map((line) => <Text key={line} style={styles.hint}>{t(line)}</Text>)}
+                                            {(hints ?? [t(TYPED_TAG_WORDS.arePublic), t(TYPED_TAG_WORDS.yourWords)]).map((line) => <Text key={line} style={styles.hint}>{line}</Text>)}
                                         </View>
                                     )}
                                     {suggestions.length > 0 && (

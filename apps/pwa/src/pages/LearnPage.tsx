@@ -654,7 +654,7 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
                 {/* Plain text with paragraphs: no markup and no links made of it (§2.2). */}
                 <div dir="auto" lang={k.lang ?? undefined} data-testid="learn-post-body" className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-nature-900 dark:text-nature-50">{post.description}</div>
                 {k.place && <p dir="auto" data-testid="learn-post-place" className="m-0 text-sm font-bold text-nature-800 dark:text-nature-100 break-words">{t('Where: {place}', { place: k.place })}</p>}
-                <PostTagChips tags={[]} freeTags={post.freeTags} onPick={NO_LIBRARY_TAG} onPickFree={onTag} freeTagLabel={KNOWLEDGE_TAG_WORDS.searchFor} />
+                <PostTagChips tags={[]} freeTags={post.freeTags} onPick={NO_LIBRARY_TAG} onPickFree={onTag} freeTagLabel={(tag) => t(KNOWLEDGE_TAG_WORDS.searchFor, { tag })} />
 
                 {photos.length > 0 && (
                     <div data-testid="learn-post-photos" className="flex flex-col gap-2">

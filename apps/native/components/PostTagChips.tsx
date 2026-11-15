@@ -8,15 +8,15 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
-import { freeTagsOf, postTagsOf, t, tagIndex, type WordKey } from '@beanpool/core';
+import { freeTagsOf, postTagsOf, t, tagIndex } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
 
 /**
- * `onFreeTag` and `freeTagLabel`: where a typed tag goes instead of the Market, and what a screen reader says for it (a words key
- * with `{tag}`); a page of Local knowledge searches Learn (Learn's tags).
+ * `onFreeTag` and `freeTagLabel`: where a typed tag goes instead of the Market, and what a screen reader says for it (`#word`), in
+ * the member's language; a page of Local knowledge searches Learn (Learn's tags).
  */
 export function PostTagChips({ tags, freeTags, inset = 0, onFreeTag, freeTagLabel }: {
-    tags: unknown; freeTags?: unknown; inset?: number; onFreeTag?: (tag: string) => void; freeTagLabel?: WordKey;
+    tags: unknown; freeTags?: unknown; inset?: number; onFreeTag?: (tag: string) => void; freeTagLabel?: (tag: string) => string;
 }) {
     const { colors } = useTheme();
     const index = tagIndex();
@@ -48,7 +48,7 @@ export function PostTagChips({ tags, freeTags, inset = 0, onFreeTag, freeTagLabe
                     // decodes what the router already has, and a tag can spell an escape ("a%20b" would arrive as "a b").
                     onPress={() => (onFreeTag ? onFreeTag(tag) : router.dismissTo({ pathname: '/(tabs)/market', params: { free: encodeURIComponent(tag) } }))}
                     accessibilityRole="button"
-                    accessibilityLabel={freeTagLabel ? t(freeTagLabel, { tag: `#${tag}` }) : t('Filter marketplace by tag {tag}', { tag: `#${tag}` })}
+                    accessibilityLabel={freeTagLabel ? freeTagLabel(`#${tag}`) : t('Filter marketplace by tag {tag}', { tag: `#${tag}` })}
                 >
                     <Text style={[styles.chipText, { color: colors.text.body }]}>#{tag}</Text>
                 </Pressable>

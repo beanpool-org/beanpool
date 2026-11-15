@@ -45,8 +45,6 @@ import { TagPicker } from '../../components/TagPicker';
 
 /** The Market's picker reads library tags it is never given here (freeOnly). */
 const NO_LIBRARY = () => {};
-/** Learn's line under the Tags field, in place of the Market's two. */
-const TAG_HINTS = [KNOWLEDGE_TAG_WORDS.hint];
 import { signedRequestWithMethod } from '../../utils/db';
 
 export default function NewKnowledgeScreen() {
@@ -292,7 +290,7 @@ export default function NewKnowledgeScreen() {
                 <TextInput testID="learn-new-place" style={s.input} value={form.place} onChangeText={(place) => set({ place })} maxLength={KNOWLEDGE_LIMITS.place}
                     placeholder={t(LEARN_WRITE.placeHint)} placeholderTextColor={colors.text.muted} accessibilityLabel={t(LEARN_WRITE.placeLabel)} />
 
-                <TagPicker freeOnly testID="learn-new-tags" onChange={NO_LIBRARY} freeTags={form.freeTags} onFreeTagsChange={(freeTags) => set({ freeTags })} hints={TAG_HINTS} />
+                <TagPicker freeOnly testID="learn-new-tags" onChange={NO_LIBRARY} freeTags={form.freeTags} onFreeTagsChange={(freeTags) => set({ freeTags })} hints={[t(KNOWLEDGE_TAG_WORDS.hint)]} />
 
                 <Text style={s.label}>{t(LEARN_WRITE.sourcesLabel)}</Text>
                 {form.sources.map((link, i) => (

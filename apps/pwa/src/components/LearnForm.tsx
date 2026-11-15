@@ -20,8 +20,6 @@ import { TagPicker } from './TagPicker';
 
 /** The Market's picker reads library tags it is never given here (freeOnly). */
 const NO_LIBRARY = () => {};
-/** Learn's line under the Tags field, in place of the Market's two. */
-const TAG_HINTS = [KNOWLEDGE_TAG_WORDS.hint];
 
 export type LearnFormUse = 'suggest' | 'publish' | 'approve' | 'fix' | 'edit';
 
@@ -127,7 +125,7 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdit
                 <input id="learn-form-place" data-testid="learn-form-place" value={place} maxLength={KNOWLEDGE_LIMITS.place} onChange={(e) => setPlace(e.target.value)}
                     placeholder={t('e.g. The tip on Manse Road')} dir="auto" className={FIELD} />
             </div>
-            <TagPicker freeOnly testID="learn-form-tags" onChange={NO_LIBRARY} freeTags={freeTags} onFreeTagsChange={setFreeTags} hints={TAG_HINTS} />
+            <TagPicker freeOnly testID="learn-form-tags" onChange={NO_LIBRARY} freeTags={freeTags} onFreeTagsChange={setFreeTags} hints={[t(KNOWLEDGE_TAG_WORDS.hint)]} />
             <fieldset className="m-0 p-0 border-0 min-w-0">
                 <legend className={LABEL}>{t('Where can people check this? (optional)')}</legend>
                 <div className="flex flex-col gap-3">

@@ -172,7 +172,7 @@ export function ReportModal({
                                     type="button"
                                     aria-pressed={isSelected}
                                     onClick={() => setSelectedReason(reason)}
-                                    className={`min-h-[44px] px-3.5 py-2 rounded-full text-xs font-bold cursor-pointer transition-all border flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
+                                    className={`min-h-[44px] px-3.5 py-2 rounded-full text-xs font-bold cursor-pointer transition-all motion-reduce:transition-none border flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
                                         isSelected
                                             ? 'bg-bp-danger-fill text-bp-danger-on border-bp-danger-fill shadow-sm'
                                             : 'bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-200 dark:border-nature-700 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200'
@@ -205,7 +205,9 @@ export function ReportModal({
 
                 {/*
                   * Cancel and Submit stay at the card's foot while it scrolls (the review of #1895, finding 6: at 320 px
-                  * with 130% text the card ended at the hint, with no sign that Submit was below it).
+                  * with 130% text the card ended at the hint, with no sign that Submit was below it). The chips and Submit
+                  * fade to their picked colours, at once where the member asks for less motion (walk 2, 15 Nov: caught
+                  * mid-fade, a picked reason's Submit read as still off).
                   */}
                 <div data-testid="report-actions" className="sticky -bottom-5 sm:-bottom-6 -mx-5 sm:-mx-6 -mb-5 sm:-mb-6 px-5 sm:px-6 pb-5 sm:pb-6 pt-3 flex gap-2 bg-white dark:bg-nature-900 border-t border-nature-100 dark:border-nature-800 rounded-b-2xl">
                     <button
@@ -220,13 +222,13 @@ export function ReportModal({
                         type="button"
                         onClick={handleSubmit}
                         disabled={submitting || !selectedReason}
-                        className={`flex-1 min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs border-none transition-all flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
+                        className={`flex-1 min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs border-none transition-all motion-reduce:transition-none flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
                             selectedReason
                                 ? 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on disabled:opacity-60 cursor-pointer shadow-sm'
                                 : 'bg-bg-hover text-text-muted cursor-not-allowed'
                         }`}
                     >
-                        {submitting ? t('Sending…') : t('Submit Report')}
+                        {submitting ? t('Sending…') : t('Submit report')}
                     </button>
                 </div>
                 </>)}

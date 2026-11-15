@@ -26,6 +26,7 @@ import {
     pushCommunityTag, pushNoticeBytes, PUSH_NOTICE_LIFETIME_SECONDS, PUSH_NOTICE_VERSION, type PushNoticeFields, type PushNoticeKind,
 } from '@beanpool/core';
 import { db } from '../db/db.js';
+import { forumTopicsOutOfReach } from './forum-sections.js';
 import { readNodeIdentity } from '../services/takeover-envelope.js';
 import { makeMemberScrubber } from '../logger.js';
 
@@ -169,13 +170,25 @@ function parseData(raw: string): Record<string, unknown> {
     }
 }
 
+/**
+ * The forum topics these rows' details name that `recipient` may not read for their section (a group's they are not in, slice
+ * F8, engine/forum-sections.ts): such a row is not there for them, in the list or by its id. Their membership is read now, so a
+ * member who leaves the group loses its rows at once, and gets them back on rejoining while they are still kept.
+ */
+function topicsOutOfReach(recipient: string, datas: readonly Record<string, unknown>[]): Set<string> {
+    const ids = datas.map((d) => d.topicId).filter((t): t is string => typeof t === 'string' && t.length > 0);
+    return ids.length === 0 ? new Set() : forumTopicsOutOfReach(recipient, ids);
+}
+
 /** A notice's details, for its recipient only, within its lifetime; null for anyone else and for an id this server forgot. */
 export function readPushNotice(id: string, recipient: string, now: number = nowSeconds()): PushNoticeDetails | null {
     const row = db.prepare('SELECT * FROM push_notices WHERE id = ? AND recipient = ? AND sent_at >= ?')
         .get(id, recipient, now - PUSH_NOTICE_LIFETIME_SECONDS) as
         { id: string; kind: string; title: string; body: string; data: string; sent_at: number } | undefined;
     if (!row) return null;
-    return { id: row.id, kind: row.kind, title: row.title, body: row.body, data: parseData(row.data), sentAt: row.sent_at };
+    const data = parseData(row.data);
+    if (topicsOutOfReach(recipient, [data]).size > 0) return null;
+    return { id: row.id, kind: row.kind, title: row.title, body: row.body, data, sentAt: row.sent_at };
 }
 
 // ── The bell: the list both apps read (DESIGN-web-notifications-fable.md §2.1) ─────────────────────────────────────────
@@ -201,7 +214,9 @@ export function listPushNotices(recipient: string, opts: { unseenOnly?: boolean 
                               ${opts.unseenOnly ? 'WHERE seen_at IS NULL' : ''} ORDER BY sent_at DESC, r DESC`)
         .all(recipient, now - PUSH_NOTICE_LIFETIME_SECONDS, PUSH_NOTICES.perMember) as
         { id: string; kind: string; title: string; body: string; data: string; sent_at: number; seen_at: number | null }[];
-    return rows.map(r => ({ id: r.id, kind: r.kind, title: r.title, body: r.body, data: parseData(r.data), sentAt: r.sent_at, seenAt: r.seen_at ?? null }));
+    const notices = rows.map(r => ({ id: r.id, kind: r.kind, title: r.title, body: r.body, data: parseData(r.data), sentAt: r.sent_at, seenAt: r.seen_at ?? null }));
+    const away = topicsOutOfReach(recipient, notices.map(n => n.data));
+    return away.size === 0 ? notices : notices.filter(n => !(typeof n.data.topicId === 'string' && away.has(n.data.topicId)));
 }
 
 /** Marks these of the member's own notices seen; anyone else's id marks nothing. Returns the ids it marked, each once. */

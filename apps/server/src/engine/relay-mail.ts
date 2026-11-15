@@ -11,7 +11,9 @@
  *   dm-delete  a sealed "delete for everyone" held the same way: each of the recipient's devices applies it
  *   receipt    "my device has these"          never held: the outbox row of each item it names goes `delivered`
  *
- * Every other kind (group items, a call signal, a complaint) is answered 202 and dropped until the slice that owns it.
+ * A guest's items for a group hosted here (`group-invite`, `group-leave`, `group-line`, `group-epoch` to `group:<id>`) go to
+ * engine/group-guests.ts once their envelopes pass the same checks (slice G1). Every other kind (another group item, a call
+ * signal, a complaint) is answered 202 and dropped until the slice that owns it.
  *
  * **202 and drop.** Whether an item is held or dropped is never in the answer: an item for a key that is no member here,
  * for a member who blocked its sender, past a member's caps, past a stranger's (a sender the member has never written to:
@@ -50,6 +52,7 @@ import { WRITER_LIMITS } from '../config/writer-limits.js';
 import { isNodeMember, readsAsMember } from '../state-engine.js';
 import { hasBlocked } from './member-blocks.js';
 import { isOwnNodeHome } from './node-key.js';
+import { GUEST_ITEM_KINDS, guestItemMaxChars, takeGuestItem, type GuestItemRefusal } from './group-guests.js';
 import { assertFolderFloorSpace, StorageNearlyFullError } from './photo-upload-budget.js';
 import { logger } from '../logger.js';
 
@@ -76,13 +79,19 @@ export const RELAY_BLOB_MAX_CHARS = 1_200_000;
 export const RELAY_RECEIPT_IDS_MAX = 50;
 export const RELAY_RECEIPT_MAX_CHARS = 4 * 1024;
 
-/** The most a payload of `kind` may be, in characters; a kind this slice doesn't handle has only core's limit. */
+/**
+ * The most a payload of `kind` may be, in characters; a kind no slice handles has only core's limit. A guest's group items
+ * (engine/group-guests.ts, G1) have theirs.
+ */
 export function relayPayloadMaxChars(kind: string): number | null {
     if (kind === 'dm-blob') return RELAY_BLOB_MAX_CHARS;
     if (kind === 'dm-line' || kind === 'dm-delete') return RELAY_LINE_MAX_CHARS;
     if (kind === 'receipt') return RELAY_RECEIPT_MAX_CHARS;
-    return null;
+    return guestItemMaxChars(kind);
 }
+
+/** An item for a group hosted here (`group:<id>`), from one of its guests: engine/group-guests.ts takes it. */
+const forGroupHere = (env: RelayEnvelope): boolean => GUEST_ITEM_KINDS.has(env.kind) && env.recipient.startsWith('group:');
 
 // ── How long, how many ──────────────────────────────────────────────────────────────────────
 
@@ -154,7 +163,7 @@ export function removeRelayBlob(file: string): void {
 
 // ── Receiving ───────────────────────────────────────────────────────────────────────────────
 
-export type ReceivedItem = { itemId: string | null; received: true } | { itemId: string | null; refused: RelayItemDrop | 'stale' };
+export type ReceivedItem = { itemId: string | null; received: true } | { itemId: string | null; refused: RelayItemDrop | 'stale' | GuestItemRefusal };
 
 export type ReceiveAnswer =
     | { status: 202; body: { items: ReceivedItem[] } }
@@ -203,6 +212,8 @@ export function receiveRelayItems(origin: string, items: unknown, now = Date.now
 
     const answers: ReceivedItem[] = [];
     const fresh: RelayItem[] = [];
+    /** Where each fresh item's answer stands, by its sender and id: a guest's refusal replaces that one answer only. */
+    const answerAt = new Map<string, number>();
     for (const raw of items) {
         const verdict = checkRelayItem(raw, { signedBy: origin, isHere: isOwnNodeHome });
         if (!verdict.ok) { answers.push({ itemId: idOf(raw), refused: verdict.reason }); continue; }
@@ -212,7 +223,10 @@ export function receiveRelayItems(origin: string, items: unknown, now = Date.now
             continue;
         }
         answers.push({ itemId: env.itemId, received: true });
-        if (!fresh.some((f) => f.envelope.senderKey === env.senderKey && f.envelope.itemId === env.itemId)) fresh.push(verdict.item);
+        if (!fresh.some((f) => f.envelope.senderKey === env.senderKey && f.envelope.itemId === env.itemId)) {
+            fresh.push(verdict.item);
+            answerAt.set(`${env.senderKey}\n${env.itemId}`, answers.length - 1);
+        }
     }
     const isNew = (i: RelayItem) => !db.prepare('SELECT 1 FROM relay_mail_seen WHERE sender_key = ? AND item_id = ?').get(i.envelope.senderKey, i.envelope.itemId);
     const newItems = fresh.filter(isNew);
@@ -238,21 +252,45 @@ export function receiveRelayItems(origin: string, items: unknown, now = Date.now
         }
     }
 
-    // Each new item, then nothing more said: how many were held is no one's to read in the answer, nor in the log.
-    for (const item of newItems) takeItem(origin, item, now);
+    // Each new item, then nothing more said: how many were held is no one's to read in the answer, nor in the log. A guest
+    // who is in a group here hears why their own line was refused (engine/group-guests.ts); nobody else hears anything.
+    for (const item of newItems) {
+        const refused = takeItem(origin, item, now);
+        if (!refused) continue;
+        const at = answerAt.get(`${item.envelope.senderKey}\n${item.envelope.itemId}`);
+        if (at !== undefined) answers[at] = { itemId: item.envelope.itemId, refused };
+    }
     return { status: 202, body: { items: answers } };
 }
 
-/** One new item: its id spent, then held, applied (a receipt) or dropped. True when it was held. */
-function takeItem(origin: string, item: RelayItem, now: number): boolean {
+/**
+ * One new item: its id spent, then held, applied (a receipt, a guest's group item) or dropped. Null, said of all of them,
+ * or the refusal a guest in a group here hears of their own item (engine/group-guests.ts takeGuestItem).
+ */
+function takeItem(origin: string, item: RelayItem, now: number): GuestItemRefusal | null {
     const env = item.envelope;
     const spent = db.prepare('INSERT INTO relay_mail_seen (sender_key, item_id, sender_home, seen_at) VALUES (?, ?, ?, ?) ON CONFLICT (sender_key, item_id) DO NOTHING')
         .run(env.senderKey, env.itemId, origin, now).changes === 1;
-    if (!spent) return false;
+    if (!spent) return null;
     if (env.kind === 'receipt') {
         applyReceipt(env, item.payload, now);
-        return false;
+        return null;
     }
+    if (forGroupHere(env)) {
+        try {
+            return takeGuestItem(item, now);
+        } catch (e) {
+            logger.warn('SYS', `Mail from another community: a guest's group item could not be taken (${e instanceof Error ? e.message.slice(0, 120) : String(e)}).`);
+            return null;
+        }
+    }
+    holdItem(item, now);
+    return null;
+}
+
+/** One new item to hold for a member here, or drop. True when it was held. */
+function holdItem(item: RelayItem, now: number): boolean {
+    const env = item.envelope;
     const hold = HELD_KINDS.has(env.kind) ? mayHoldFor(env, item.payload.length, now) : null;
     if (!hold) return false;
     const blob = env.kind === 'dm-blob';

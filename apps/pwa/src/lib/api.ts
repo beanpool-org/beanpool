@@ -7,7 +7,7 @@ import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury, WaitingVoucherRow } from '@beanpool/core';
-import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type KnockVia } from '@beanpool/core';
+import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, signInsToRefresh, t, type DmLineDisclosure, type KnockVia } from '@beanpool/core';
 import { readGroupInvitations, type GroupInvitations } from '@beanpool/core';
 import { PULSE_KNOWLEDGE_WITH, type PulseKnowledgeCard } from '@beanpool/core';
 import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
@@ -27,6 +27,7 @@ import {
     type AddressCard,
     type RelayEnvelope,
     type RelayEnvelopeFields,
+    type StandingAsk,
     type StandingAuthorisationFields,
     type StandingPeriodUnit,
     type StandingPhase,
@@ -269,6 +270,8 @@ async function refusalError(res: Response): Promise<Error> {
     // So does the node's own code (a new account's limit, a moderation pause): a form shows those in place,
     // in the node's words (lib/node-refusal.ts).
     if (typeof err.code === 'string') (error as Error & { code?: string }).code = err.code;
+    // And the switch a 404 `feature_off` names: a bill's (`bills`) is never read as invites being off (lib/node-invites.ts).
+    if (typeof err.feature === 'string') (error as Error & { feature?: string }).feature = err.feature;
     // And the number a limit refusal names (a place watch's `watch_limit`), for the screen's own sentence.
     if (typeof err.limit === 'number' && Number.isInteger(err.limit) && err.limit > 0) (error as Error & { limit?: number }).limit = err.limit;
     // And an existing vouch total for a member (`already_vouched`, `raise_not_above`), so a screen that took a raise for a first vouch shows the raise card.
@@ -394,6 +397,9 @@ export interface CommunityInfo {
         /** Present, and true, only where this community has a forum (core forumOn): the Chat tab's top is then Chats · Forum
          *  (pages/ChatTabPage.tsx, slice T0). Absent (its owners switched it off, or an older node): the tab as before. */
         forum?: true;
+        /** Present, and true, only where this community takes bills (core billsOn): the invite page offers "Add a bill for
+         *  them" (slice B3). Absent (the global community, or an older node): no bills. */
+        bills?: true;
     };
     /** Where Start a community's "how to run a node" leads (lib/features.ts startCommunityUrl). Absent: beanpool.org's. */
     startCommunityUrl?: string;
@@ -672,17 +678,25 @@ export interface InviteCode {
     expiresAt?: string | null;
     forKnock?: boolean;
     usedByCallsign?: string | null;
+    /** The bill that went with it (slice B3): what for and how many Beans. */
+    bill?: { whatFor: string; amount_c: number } | null;
 }
 
+/**
+ * `bill`: a bill the invite carries (DESIGN-getting-paid-fable.md §4.5, slice B3), its own id made by this page so a second
+ * tap after a lost answer is the same bill. A refused bill throws with the node's words and code (bill_…, bills_…).
+ */
 export async function generateInvite(
     publicKey: string,
     intendedFor?: string,
     vouchAmount?: number,
+    bill?: { id: string; whatFor: string; amount_c: number } | null,
 ): Promise<{ success: boolean; invite: InviteCode }> {
     return request('POST', '/api/invite/generate', {
         publicKey,
         intendedFor: intendedFor || undefined,
         ...(vouchAmount !== undefined ? { vouchAmount } : {}),
+        ...(bill ? { bill } : {}),
     });
 }
 
@@ -1900,6 +1914,14 @@ export interface MarketplaceTransaction {
     standingStoppedBy?: string | null;
     standingEndedAt?: string | null;
     standingStopped?: boolean;
+    /**
+     * A short week (DESIGN-getting-paid-fable §5), on a running standing deal's current row: what the period due costs when
+     * lowered by agreement (absent at the full price), the payer's open ask, and how many asks are left (a node that takes a
+     * lowering always sends it: core standingLowerable shows no lowering without it).
+     */
+    standingDueBeans_c?: number;
+    standingAsk?: StandingAsk | null;
+    standingAsksLeft?: number;
 }
 
 export async function getMarketplacePosts(filter?: {
@@ -2516,6 +2538,24 @@ export async function signStandingStart(fields: StandingAuthorisationFields): Pr
 /** Stop a standing deal (either side, §1.3): the period under way is still paid, and nothing more is held. */
 export async function stopStandingDeal(standingId: string): Promise<{ success: boolean }> {
     return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/stop`, {});
+}
+
+/**
+ * A short week (DESIGN-getting-paid-fable §3.1): the payee lowers one period alone, or the payer asks to pay less for it
+ * (the node reads the side from the signer). `changeId` is the app's UUID (core standingChangeId), the same on a retry.
+ */
+export async function lowerStandingPeriod(standingId: string, changeId: string, periodNo: number, beans_c: number): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/lower`, { id: changeId, periodNo, beans_c });
+}
+
+/** The payee answers the payer's open ask: yes, that period costs what was asked; no, it stays as it was. */
+export async function answerStandingAsk(standingId: string, changeId: string, yes: boolean): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/lower/${encodeURIComponent(changeId)}/answer`, { yes });
+}
+
+/** The payer takes their open ask back: nothing changes. */
+export async function withdrawStandingAsk(standingId: string, changeId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/lower/${encodeURIComponent(changeId)}/withdraw`, {});
 }
 
 export async function requestMarketplacePost(
@@ -3720,6 +3760,20 @@ export async function getSignInRecovery(): Promise<string[] | null> {
         return Array.isArray(res?.enrolledSso) ? res.enrolledSso.filter((p): p is string => typeof p === 'string') : null;
     } catch {
         return null;
+    }
+}
+
+/**
+ * The sign-ins whose copy this community's server can't find from the sign-in alone yet (recovery S4): Account Protection
+ * offers each a Refresh. From the same signed `POST /api/recovery/shares/status`, by core's rule for both apps
+ * (signInsToRefresh): empty for a server from before S4, no answer, or anything else, so nothing is offered on a guess.
+ * Asked only once the node has named a sign-in (getSignInRecovery). Never throws.
+ */
+export async function getSignInsToRefresh(): Promise<string[]> {
+    try {
+        return signInsToRefresh(await request<unknown>('POST', '/api/recovery/shares/status', {}));
+    } catch {
+        return [];
     }
 }
 

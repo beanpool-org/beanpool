@@ -128,6 +128,15 @@ function isNamesAdmin(pubkey: string): boolean {
     return namesAdmins().some((a) => a.pubkey === pubkey);
 }
 
+/**
+ * Whether `pubkey` may read the names list now: an owner or admin here whose role acts, the rule every /api/names read
+ * checks (assertNamesAdmin). Anything that says which entry something is for (an invite's `namesEntryId`) tells it only to
+ * them: with the entry's id, a phone that holds the list's key shows that person's name (core inviteWho).
+ */
+export function mayReadNamesList(pubkey: string): boolean {
+    return isNamesAdmin(pubkey);
+}
+
 /** Throws unless `actor` is an owner or admin here whose role acts. */
 export function assertNamesAdmin(actor: string): void {
     if (!isNamesAdmin(actor)) throw new NamesListError(403, 'admins_only', NAMES_MESSAGES.adminsOnly);

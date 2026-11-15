@@ -7,8 +7,19 @@
  */
 import { t } from './words.js';
 
-/** `name` is the community's name, or its address where it has none; `address` the community's address (host, no scheme). */
-export function inviteShareText(p: { name: string; link: string; code: string; address: string }): string {
+/**
+ * `name` is the community's name, or its address where it has none; `address` the community's address (host, no scheme).
+ * `billFrom`: the inviter's name when the invite carries a bill (DESIGN-getting-paid-fable.md §4.5, slice B3): the message
+ * then says plainly, right after the link, that a bill comes with it. Never its amount.
+ */
+export function inviteShareText(p: { name: string; link: string; code: string; address: string; billFrom?: string | null }): string {
+    const billFrom = p.billFrom?.trim();
+    if (billFrom) {
+        return t(
+            "Join my BeanPool community, {name}:\n{link}\n\n{inviter} has also sent you a bill to pay in Beans once you're in.\n\nIf the link doesn't open, install BeanPool from beanpool.org and paste this code:\n{code}\n\nCommunity address: {address}",
+            { name: p.name, link: p.link, code: p.code, address: p.address, inviter: billFrom },
+        );
+    }
     return t(
         "Join my BeanPool community, {name}:\n{link}\n\nIf the link doesn't open, install BeanPool from beanpool.org and paste this code:\n{code}\n\nCommunity address: {address}",
         { name: p.name, link: p.link, code: p.code, address: p.address },

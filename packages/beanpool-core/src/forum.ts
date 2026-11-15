@@ -85,6 +85,11 @@ export const FORUM_LIMITS = Object.freeze({
     topicsPerPage: 30,
     /** Things one topic may link (slice F9): a listing, an event, a poll, a group, a Decision or a Learn page. */
     topicLinks: 3,
+    /**
+     * Open polls the topics of one section may hold (slice F8, design §10.1): their own pool, never counted in the community's
+     * five open polls; a member still has one open poll at a time, a topic's included.
+     */
+    pollsPerSection: 3,
 });
 
 /**
@@ -132,7 +137,8 @@ export interface ForumStarterSection {
 
 /**
  * The sections a forum starts with, made once when its server first finds none (design §2; local per Marty, Q3). Global's
- * "Builders" is not here: it is a section tied to an invite-only group, made with slice F8.
+ * "Builders" is not here: it is a section tied to an invite-only group (slice F8), which an owner makes once that group exists
+ * (POST /api/forum/sections with its groupId), so no starter needs a group or a person in code.
  */
 export const FORUM_STARTER_SECTIONS: Readonly<Record<'global' | 'local', readonly ForumStarterSection[]>> = Object.freeze({
     global: Object.freeze([

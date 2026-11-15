@@ -36,7 +36,8 @@ import {
     isLiveVisitor, getActingMember, mayBringSomeoneIn, alreadyJoined,
     inviterShownOf, setInviterShown, inviterVisibilityFor, INVITER_SHOWN_MEMBERS_ONLY_MESSAGE, isNodeMember, noteBillReported,
 } from '../state-engine.js';
-import { reportableBill, type BillRow } from '../engine/bills.js';
+import { BillRefusal, reportableBill, type BillRow } from '../engine/bills.js';
+import { respondBillRefusal } from './bills.js';
 import { reportableForumPostWriter } from '../engine/forum-moderation.js';
 import { CallsignNotANameError, NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { VoucherError, vouchFromProfile, myVouching, tellVoucherNotice } from '../engine/vouchers.js';
@@ -1098,10 +1099,18 @@ router.post('/api/community/register', async (ctx) => {
 router.post('/api/invite/generate', async (ctx) => {
     // `vouchAmount`: a vouch the invite carries, a voucher's preset from their budget (engine/vouchers.ts); refused with
     // its sentence from anyone else, for any other amount, or for more than is left, before anything is written.
-    const { publicKey, intendedFor, vouchAmount } = (ctx as any).requestBody || {};
+    // `bill`: a bill the invite carries, `{ id?, whatFor, amount_c }` (engine/bills.ts WITH AN INVITE, slice B3): refused in
+    // the bills' own status, code and words (a limit's with resetsAt), before anything is written. Whoever joins with the code
+    // is its payer. Only on a request the maker signed: it asks someone for Beans in their name.
+    const { publicKey, intendedFor, vouchAmount, bill } = (ctx as any).requestBody || {};
     if (!publicKey) {
         ctx.status = 400;
         ctx.body = { error: 'publicKey is required' };
+        return;
+    }
+    if (bill !== undefined && bill !== null && (ctx.state as any).authSig?.signer !== publicKey) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
         return;
     }
     // 20 made a day and 50 unused at once, per member, an owner's or admin's the owners' setting (W-main,
@@ -1109,7 +1118,8 @@ router.post('/api/invite/generate', async (ctx) => {
     // comes first), before anything is written. Where only admins
     // invite (config/door.ts), a member who is no owner or admin is answered 403 `admins_only` before the limit.
     let invite: ReturnType<typeof generateInvite>;
-    try { invite = generateInvite(publicKey, intendedFor, () => assertMayMakeInvite(publicKey), undefined, vouchAmount); } catch (e) {
+    try { invite = generateInvite(publicKey, intendedFor, () => assertMayMakeInvite(publicKey), undefined, vouchAmount, undefined, undefined, bill); } catch (e) {
+        if (e instanceof BillRefusal) return respondBillRefusal(ctx, e);
         if (respondVoucherRefusal(ctx, e) || respondProfileRefusal(ctx, e)) return;
         throw e;
     }
@@ -1445,7 +1455,8 @@ router.put('/api/profile/privacy', async (ctx) => {
 // a key to join the node, and a used one says who joined through whom and when. With read auth opted out this list went to
 // anyone, unsigned too, unused codes and all. Every reader but the maker gets the same refusal, before any lookup, so it
 // says nothing about the key asked about. An invite bound to a names-list entry is among them, so it too reaches its maker
-// alone (engine/names-list.ts readBoundInvites).
+// alone (engine/names-list.ts readBoundInvites), and says which entry only while the maker may read the names list
+// (state-engine.ts getInvitesByMember).
 router.get('/api/invite/mine/:publicKey', async (ctx) => {
     const { publicKey } = ctx.params;
     const actor = ctx.state.actor as string | undefined;

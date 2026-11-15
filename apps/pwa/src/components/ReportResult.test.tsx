@@ -30,10 +30,10 @@ describe('the report modal says what became of the report, in the card', () => {
         const onReported = vi.fn();
         render(<ReportModal {...props} onClose={onClose} onReported={onReported} />);
         fireEvent.click(screen.getByRole('button', { name: /^Spam or scam$/ }));
-        fireEvent.click(screen.getByRole('button', { name: /Submit Report/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Submit report/i }));
         expect(await screen.findByTestId('report-sent')).toHaveTextContent(REPORT_SENT);
         expect(within(screen.getByRole('dialog')).getByRole('status')).toHaveTextContent(REPORT_SENT);
-        expect(screen.queryByRole('button', { name: /Submit Report/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Submit report/i })).toBeNull();
         expect(onClose).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: 'Done' }));
         expect(onReported).toHaveBeenCalledTimes(1);
@@ -47,7 +47,7 @@ describe('the report modal says what became of the report, in the card', () => {
         const onReported = vi.fn();
         render(<ReportModal {...props} onClose={vi.fn()} onReported={onReported} />);
         fireEvent.click(screen.getByRole('button', { name: /^Other$/ }));
-        fireEvent.click(screen.getByRole('button', { name: /Submit Report/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Submit report/i }));
         expect(await screen.findByText('Could not reach the node.')).toBeInTheDocument();
         expect(screen.queryByTestId('report-sent')).toBeNull();
         expect(document.body.textContent).not.toContain(REPORT_SENT);
@@ -64,7 +64,7 @@ describe('the report modal says what became of the report, in the card', () => {
         unmount();
         render(<ReportModal {...props} onClose={vi.fn()} onReported={onReported} />);
         fireEvent.click(screen.getByRole('button', { name: /^Other$/ }));
-        fireEvent.click(screen.getByRole('button', { name: /Submit Report/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Submit report/i }));
         await screen.findByTestId('report-sent');
         fireEvent.click(screen.getByRole('button', { name: /Close report dialog/i }));
         expect(onReported).toHaveBeenCalledTimes(1);
@@ -76,7 +76,7 @@ describe("the Market's inline report form", () => {
         const src = readFileSync(resolve(__dirname, '../pages/MarketplacePage.tsx'), 'utf8');
         // The form's words come through t() (words S3, web sweep W1): from its Report button to its Submit.
         const from = src.indexOf("{t('🚩 Report')}");
-        const to = src.indexOf("{submittingReport ? t('Sending...') : t('Submit Report')}");
+        const to = src.indexOf("{submittingReport ? t('Sending...') : t('Submit report')}");
         expect(from).toBeGreaterThan(-1);
         expect(to).toBeGreaterThan(from);
         const block = src.slice(from, to);

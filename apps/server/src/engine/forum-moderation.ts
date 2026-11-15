@@ -26,6 +26,7 @@ import { getProfileSwitches } from '../config/node-profile.js';
 import { nodeRoleOf } from './node-roles.js';
 import { probationRuleSet, probationState } from './probation.js';
 import { forumHideTally } from './auto-moderation.js';
+import { sectionAccess, sectionGroupOf } from './forum-sections.js';
 import {
     REMOVAL_REASON_LABELS, REPORT_OUTCOME_TITLE, reportedPostGoneBody, reportedPostKeptBody, reportedPostRemovedBody, tell,
     type ModerationNoticeCallbacks,
@@ -103,9 +104,11 @@ export function reportableForumPostWriter(reporter: string, postId: unknown): st
     if (typeof postId !== 'string' || !postId || !getProfileSwitches().forum) return null;
     const row = modRow(postId);
     if (!row || row.removed_by || row.closed_by === 'removed') return null;
-    const topic = db.prepare(`SELECT t.writer_pubkey, (SELECT o.hidden_by_reports_at IS NOT NULL FROM forum_posts o WHERE o.topic_id = t.id AND o.number = 1) AS opening_hidden
-                                FROM forum_topics t WHERE t.id = ?`).get(row.topic_id) as { writer_pubkey: string; opening_hidden: number | null } | undefined;
+    const topic = db.prepare(`SELECT t.writer_pubkey, t.section_id, (SELECT o.hidden_by_reports_at IS NOT NULL FROM forum_posts o WHERE o.topic_id = t.id AND o.number = 1) AS opening_hidden
+                                FROM forum_topics t WHERE t.id = ?`).get(row.topic_id) as { writer_pubkey: string; section_id: string; opening_hidden: number | null } | undefined;
     if (!topic) return null;
+    // A group's section the reporter does not read (slice F8, engine/forum-sections.ts): no post there for them to report.
+    if (sectionAccess(reporter, sectionGroupOf(topic.section_id)) === 'none') return null;
     const moderator = isForumModerator(reporter);
     const topicHiddenToThem = !!topic.opening_hidden && reporter !== topic.writer_pubkey && !moderator;
     const postHiddenToThem = !!row.hidden_by_reports_at && reporter !== row.writer_pubkey && !moderator;

@@ -20,6 +20,7 @@ import {
 } from '../state-engine.js';
 import { STANDING_AUTH_CODE, type StandingStart } from '../engine/standing-deals.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
+import { withHelpedByMe } from '../engine/knowledge.js';
 import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { faceUrlsChangedAfter } from '../engine/avatar-keys.js';
@@ -783,6 +784,9 @@ router.get('/api/marketplace/posts', async (ctx) => {
             return p;
         });
     }
+    // "This helped" (slice K5): a member's signed read of pages by id says whether they tapped each; a list, a sync and a
+    // copy never carry one member's taps. A signed read by id is never answered 304 (notesTheRead above), so it is fresh.
+    if (withKnowledge && reader && (id || ids) && !sync && !updatedAfter) shown = withHelpedByMe(shown, reader);
     // A member's set answers its rows and the set's ids (DESIGN-global-sync-by-area §2.3): the phone drops what it holds
     // outside them and fetches what it lacks by `ids=`. `tied`, the ids of the set that are theirs or tied to them, which
     // the phone keeps past its cap whatever it holds of the deal or the chat. Every other read keeps the bare list. The

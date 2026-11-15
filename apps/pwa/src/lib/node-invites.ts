@@ -9,7 +9,7 @@
  * from, translated where they are shown (INVITE_WORDS). Nothing here handles a key or a signature.
  */
 
-import { isBusyStatus, t, word } from '@beanpool/core';
+import { isBusyStatus, isInvitesOffAnswer, t, word } from '@beanpool/core';
 import type { CommunityInfo } from './api';
 
 export function invitesOn(info: CommunityInfo | null | undefined): boolean {
@@ -34,13 +34,13 @@ export const INVITE_WORDS = {
 export const INVITES_OFF_FALLBACK = INVITE_WORDS.offFallback;
 
 /**
- * The node's words when it refused a generate because it takes no invites (404 `feature_off`, as `request` throws it in
- * lib/api.ts), or null for any other failure. Read so the page says so instead of making an offline ticket, which the
- * node would refuse just the same.
+ * The node's words when it refused a generate because it takes no invites (404 `feature_off` for the `invites` switch, as
+ * `request` throws it in lib/api.ts), or null for any other failure: a bill's own `feature_off` (`bills`) included (core
+ * isInvitesOffAnswer). Read so the page says so instead of making an offline ticket, which the node would refuse just the same.
  */
 export function invitesOffRefusal(e: unknown): string | null {
-    const err = e as { status?: unknown; code?: unknown; message?: unknown } | null | undefined;
-    if (!err || typeof err !== 'object' || err.status !== 404 || err.code !== 'feature_off') return null;
+    const err = e as { status?: unknown; code?: unknown; feature?: unknown; message?: unknown } | null | undefined;
+    if (!err || typeof err !== 'object' || !isInvitesOffAnswer(err.status, err.code, err.feature)) return null;
     return typeof err.message === 'string' && err.message.trim() ? err.message : INVITES_OFF_FALLBACK;
 }
 

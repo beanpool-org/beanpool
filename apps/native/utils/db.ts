@@ -40,7 +40,7 @@ import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, mayChooseLongPolls
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
 import { hundredthsAsDecimalText, isHundredths, perItemOf } from '@beanpool/core';
-import type { StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
+import type { StandingAsk, StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
 import { chatAboutOfLine, metadataWithAbout, sealChatAbout, type AboutPostLike, type ChatAboutChip } from '@beanpool/core';
 // Old chat's photos and cards: conversion code, log row OLDCHAT, remove after 12 Dec 2026 (core, as the web opens them).
 import { chatAboutOfOldLine, openDmOldLineWords, openDmOldPhoto } from '@beanpool/core';
@@ -8667,6 +8667,24 @@ export async function stopStandingDeal(standingId: string) {
     return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/stop`, {});
 }
 
+/**
+ * A short week (DESIGN-getting-paid-fable §3.1): the payee lowers one period alone, or the payer asks to pay less for it
+ * (the node reads the side from the signer). `changeId` is the app's UUID (core standingChangeId), the same on a retry.
+ */
+export async function lowerStandingPeriod(standingId: string, changeId: string, periodNo: number, beans_c: number) {
+    return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/lower`, { id: changeId, periodNo, beans_c });
+}
+
+/** The payee answers the payer's open ask: yes, that period costs what was asked; no, it stays as it was. */
+export async function answerStandingAsk(standingId: string, changeId: string, yes: boolean) {
+    return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/lower/${encodeURIComponent(changeId)}/answer`, { yes });
+}
+
+/** The payer takes their open ask back: nothing changes. */
+export async function withdrawStandingAsk(standingId: string, changeId: string) {
+    return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/lower/${encodeURIComponent(changeId)}/withdraw`, {});
+}
+
 export async function rejectMarketplaceRequest(transactionId: string, authorPublicKey: string) {
     const res = await _signedRequest('/api/marketplace/transactions/reject', { transactionId, authorPublicKey });
     try {
@@ -9066,6 +9084,10 @@ export interface MarketplaceTransaction {
     standingStoppedBy?: string | null;
     standingEndedAt?: string | null;
     standingStopped?: boolean;
+    /** A short week (core StandingDealRow): the period due's lowered amount, the payer's open ask, how many asks are left. */
+    standingDueBeans_c?: number | null;
+    standingAsk?: StandingAsk | null;
+    standingAsksLeft?: number | null;
 }
 
 export async function getMarketplaceTransactions(publicKey: string, filter?: { status?: string }, limit = 50, offset = 0): Promise<MarketplaceTransaction[]> {

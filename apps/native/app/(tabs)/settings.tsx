@@ -64,13 +64,13 @@ import {
 import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
 import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
 import { protectionFrom } from '../../utils/protection-state';
-import { enrolmentFromVault, vaultProtection, type KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
+import { enrolmentFromVault, findableFrom, vaultProtection, type KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
 import { hasVault, signInCopiesAt, VAULT_MESSAGES, VaultError, type SignInCopies } from '../../utils/vault';
 import { copiesRuleForScreen } from '../../utils/copies-rule';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, FORUM_PUSH_WORDS, askedPushOn, forumNoticesOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, NAME_BOX_WORDS, notANameIn, PEEK_WORDS, t, word, formatNumber, type QuizResult, showInviterSwitchWords } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, FORUM_PUSH_WORDS, askedPushOn, forumNoticesOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, NAME_BOX_WORDS, notANameIn, PEEK_WORDS, signInsToRefresh, t, word, formatNumber, type QuizResult, showInviterSwitchWords } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -483,6 +483,7 @@ export default function SettingsScreen() {
             const body = await res.json() as {
                 keepers: { holderType: string; count: number }[];
                 enrolledSso?: string[];
+                findableSso?: unknown;
                 threshold: number;
                 recoverable: boolean;
                 total: number;
@@ -502,6 +503,8 @@ export default function SettingsScreen() {
                 skipped: [],
                 available: body.total,
                 enrolledSso: body.enrolledSso ?? [],
+                // Which of them a restore here finds with nothing typed (recovery S4): the panel offers Refresh for the rest.
+                ...findableFrom(body.findableSso),
                 threshold: body.threshold,
                 isSingleBlob: body.threshold === 1,
             });
@@ -1872,6 +1875,9 @@ export default function SettingsScreen() {
                 setShowSsoSheet(true);
             } : undefined}
             onDisconnectSso={Platform.OS !== 'web' ? handleDisconnectSso : undefined}
+            // The community's copies its server can't find from the sign-in alone yet (recovery S4): Refresh, which is the
+            // ordinary Connect (onProtectSso). Only from the community's own answer, so never at the vault.
+            refreshSso={signInsToRefresh(protectionResult)}
             listCommunitiesFor={identity?.publicKey}
             listShown={listTickShown}
             onListShown={setListTickShown}

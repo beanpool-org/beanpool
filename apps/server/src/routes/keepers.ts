@@ -49,6 +49,7 @@ import {
     RecoveryShareError,
     type KeeperShareInput,
     type KeeperType,
+    type StoredKeeperShare,
 } from '../engine/recovery-shares.js';
 import { depositSsoKeeperGeneration, KeeperDepositError, type SsoKeeperResult } from '../engine/keeper-deposit.js';
 import { RecoverySealKeyMissing, RecoverySealUnopenable } from '../services/recovery-seal-key.js';
@@ -197,6 +198,8 @@ export function ssoDepositBody(owner: string, result: SsoKeeperResult) {
         threshold: isSingle ? 1 : TWO_LAYER_THRESHOLD,
         keepers: listKeeperTypes(owner),
         enrolledSso: currentShares.filter(s => s.holderType === 'sso').map(s => s.holderRef),
+        // As `/api/recovery/shares/status` says it: so a Refresh (the same Connect) shows the sign-in findable at once.
+        findableSso: findableSignIns(currentShares),
     };
 }
 
@@ -277,6 +280,18 @@ export function recoverySealFailure(ctx: any, e: unknown): boolean {
     ctx.status = 503;
     ctx.body = { error: e.message, code: e.code };
     return true;
+}
+
+/**
+ * The member's sign-ins whose current copy a restore here finds from the sign-in alone (recovery S4; scratch design
+ * DESIGN-recovery-no-callsign-fable.md §8): those whose copy holds its find hash (engine/recovery-find.ts). A copy made
+ * before the find hash has none until its member's first restore heals it, or until the member connects that sign-in again
+ * (Account Protection's Refresh); so does one only a key a take-over replaced opens (engine/recovery-shares.ts rowToShare
+ * reads it without, as the start's relock will leave it). Provider names only, of the member's own copies: never a hash,
+ * and nothing a stranger could test a sign-in against. Read from the replicated column, so a standby answers the same.
+ */
+export function findableSignIns(currentShares: readonly StoredKeeperShare[]): string[] {
+    return currentShares.filter(s => s.holderType === 'sso' && !!s.ssoFindHash).map(s => s.holderRef);
 }
 
 /**
@@ -665,6 +680,9 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             throw e;
         }
         const enrolledSso = currentShares.filter(s => s.holderType === 'sso').map(s => s.holderRef);
+        // Which of those a restore here finds from the sign-in alone (S4): Account Protection offers Refresh for the rest
+        // (@beanpool/core signInsToRefresh). A new field, so an app from before it reads every other field as it did.
+        const findableSso = findableSignIns(currentShares);
         const countOf = (t: KeeperType) => keepers.find(k => k.holderType === t)?.count ?? 0;
 
         // How many pieces the member can get WITHOUT another person choosing to help.
@@ -699,6 +717,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             generation: getCurrentGeneration(owner),
             keepers,
             enrolledSso,
+            findableSso,
             communityCopy: copy.kept ? { since: copy.since, placement: copy.placement, copy: copy.copy } : null,
             communityCopyUnopenable: copy.unopenable,
             // Which of the vault's community copies is this community's (the member's phone derives its own label from it).

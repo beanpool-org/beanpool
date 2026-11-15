@@ -3234,10 +3234,12 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_helped_member ON knowledge_helped (memb
 -- nothing here is read from or written to an older row. All plain tables (engine/replication-manifest.ts), so the forum
 -- survives a take-over; every delete goes with a tombstone. Writers are named by key, never by a link to this server's
 -- members (joint design §2.2: a topic keeps its id and its writers if a forum is ever shared across communities).
--- A section. `starter`: the starter's id (@beanpool/core FORUM_STARTER_SECTIONS) while its name is the starter's own, so each
--- language reads its word; cleared when an owner or admin renames it, and `name` then holds what they typed. `starts`: who
--- may start a topic, any member or only owners and admins. `listed`: whether search engines may list its topics (slice F7,
--- the global community only). Archived: out of every list, its topics still readable by their address.
+-- A section. `starter`: the starter it was made as (@beanpool/core FORUM_STARTER_SECTIONS), kept for good: while `name` is
+-- empty each language reads the starter's word; once an owner or admin renames it, `name` holds what they typed and the
+-- answers say no starter, but the row keeps it, so "Introduce yourself" stays never listed whatever it is called (slice F7,
+-- Q2; engine/forum-public.ts). `starts`: who may start a topic, any member or only owners and admins. `listed`: whether search
+-- engines may list its topics (slice F7, the global community only). Archived: out of every list, its topics still readable by
+-- their address.
 CREATE TABLE IF NOT EXISTS forum_sections (
     id          TEXT PRIMARY KEY,
     starter     TEXT,
@@ -3273,7 +3275,10 @@ CREATE TABLE IF NOT EXISTS forum_topics (
     updated_at       TEXT,
     -- Its poll (slice F8, design §10.1): the posts row of the ordinary poll its writer added, at most one. Counted in its
     -- section's own pool, never in the community's five (engine/forum-sections.ts, engine/posts.ts assertActivePollRoom).
-    poll_post_id     TEXT
+    poll_post_id     TEXT,
+    -- 1 once an owner or admin moved it out of "Introduce yourself" (slice F7, Q2; engine/forum.ts moveForumTopic): search
+    -- engines never list it, wherever it is now. Never set back.
+    never_listed     INTEGER NOT NULL DEFAULT 0 CHECK (never_listed IN (0, 1))
 );
 CREATE INDEX IF NOT EXISTS idx_forum_topics_section ON forum_topics (section_id, last_activity_at);
 CREATE INDEX IF NOT EXISTS idx_forum_topics_activity ON forum_topics (last_activity_at);

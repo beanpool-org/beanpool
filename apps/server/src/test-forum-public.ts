@@ -17,6 +17,13 @@
  *     never public.
  *  7. Search engines: noindex until two days, always in "Introduce yourself"; the sitemap and robots.txt; canonical at the
  *     plain address, ?hl= for another language; every link in a post `nofollow ugc`.
+ *  8. The invariant, as one table: every public surface (the front, a section, a topic, a quote, a photo, as JSON and as a
+ *     page; the sitemap; robots.txt's sitemap line) x every way the forum can stand (public; in a private preview; the forum
+ *     off; forumPublic off; a local community) x a visitor and a member -> shown only while public; otherwise closed: never
+ *     200, none of its words, never kept by a shared cache. A preview stamps nothing and tells the apps nothing is public.
+ *  9. Q2's exclusions hold through every edit an owner can make: "Introduce yourself" and Builders (a group's section) x
+ *     (a rename, `listed: true`, `listed` set by hand, a topic moved out) and a new person's topic moved -> never indexed,
+ *     never in the sitemap.
  *
  * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-forum-public" node ../../scripts/run-server-suites.mjs
  */
@@ -24,6 +31,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
+delete process.env.PRIVATE_PREVIEW;
 
 import crypto from 'node:crypto';
 import { FORUM_PUBLIC_FIELDS, FORUM_STARTER_SECTIONS, forumPublicShapeProblems } from '@beanpool/core';
@@ -37,7 +45,7 @@ import { markForumTold, resetForumStartersCheckForTests } from './engine/forum.j
 import { forumPublicOn, stampForumPublicFrom } from './engine/forum-public.js';
 import { forgetOwnAddresses } from './engine/own-addresses.js';
 import { GUEST_CACHE_CONTROL, READER_CACHE_CONTROL } from './guest-cache.js';
-import { NODE_PROFILE_KEY } from './config/node-profile.js';
+import { NODE_PROFILE_KEY, getNodeFeatures } from './config/node-profile.js';
 import { TEST_PHOTO } from './post-test-helper.js';
 import { resetPhotoBudgetForTests } from './engine/photo-upload-budget.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost, setSignedForHost } from './signed-request-test-helper.js';
@@ -361,6 +369,143 @@ async function main(): Promise<void> {
     const fr = await get(null, `/forum/t/${old.topicId}?hl=fr`);
     assert(fr.status === 200 && fr.text.includes('<html lang="fr"') && fr.text.includes(`<link rel="canonical" href="https://${ADDRESS}/forum/t/${old.topicId}">`),
         'another language at ?hl=, its canonical the plain address');
+
+    // ── 8. The invariant: every public surface x every way the forum can stand ──────────────────────────────
+    console.log('\n── 8. every public surface x public / private preview / forum off / forumPublic off / local ──');
+    const OLD_WORDS = 'Fixing a bike chain';
+    const imageOf = (x: Res) => (x.headers.get('content-type') ?? '').startsWith('image/');
+    const listsOld = (x: Res) => ((x.body?.topics ?? []) as any[]).some((t) => t.id === old.topicId);
+    const SURFACES: { name: string; path: string; shown: (x: Res) => boolean }[] = [
+        { name: 'JSON front', path: '/api/forum/public', shown: listsOld },
+        { name: 'JSON section', path: `/api/forum/public/sections/${skills}`, shown: listsOld },
+        { name: 'JSON topic', path: `/api/forum/public/topics/${old.topicId}`, shown: (x) => x.body?.topic?.id === old.topicId && x.text.includes(OLD_WORDS) },
+        { name: 'JSON quote', path: `/api/forum/public/topics/${old.topicId}`, shown: (x) => ((x.body?.posts ?? []) as any[]).find((p) => p.id === kimQuotesKim.id)?.quotes === kimReply.number },
+        { name: 'photo', path: `/api/forum/photos/${old.postId}/0`, shown: imageOf },
+        { name: 'page front', path: '/forum', shown: (x) => x.text.includes(`data-topic="${old.topicId}"`) },
+        { name: 'page section', path: `/forum/s/${skills}`, shown: (x) => x.text.includes(`data-topic="${old.topicId}"`) },
+        { name: 'page topic', path: `/forum/t/${old.topicId}`, shown: (x) => x.text.includes(OLD_WORDS) },
+        { name: 'sitemap', path: '/forum/sitemap.xml', shown: (x) => x.text.includes(`/forum/t/${old.topicId}<`) },
+        { name: 'robots.txt sitemap line', path: '/robots.txt', shown: (x) => x.text.includes(`Sitemap: https://${ADDRESS}/forum/sitemap.xml`) && /Allow: \/forum/.test(x.text) },
+    ];
+    const MODES: { name: string; public: boolean; on: () => void; off: () => void }[] = [
+        { name: 'public', public: true, on: () => {}, off: () => {} },
+        { name: 'a private preview', public: false, on: () => { process.env.PRIVATE_PREVIEW = '1'; }, off: () => { delete process.env.PRIVATE_PREVIEW; } },
+        { name: 'the forum off', public: false, on: () => setOverride('forum', 'false'), off: () => dropOverride('forum') },
+        { name: 'forumPublic off', public: false, on: () => setOverride('forumPublic', 'false'), off: () => dropOverride('forumPublic') },
+        { name: 'a local community', public: false, on: () => { delete process.env.NODE_PROFILE; }, off: () => { process.env.NODE_PROFILE = 'global'; } },
+    ];
+    /** Closed: not a 200, none of the topic's words or address, nothing for robots to follow, and never kept by a shared cache. */
+    const closed = (s: typeof SURFACES[number], x: Res) => {
+        const cc = x.headers.get('cache-control') ?? '';
+        return x.status !== 200 && !x.text.includes(OLD_WORDS) && !x.text.includes(old.topicId) && !imageOf(x)
+            && !/Sitemap:|\/forum/.test(s.name.startsWith('robots') ? x.text : '') && !/public|s-maxage/.test(cc) && /private|no-store/.test(cc);
+    };
+    let surfaceCells = 0;
+    for (const mode of MODES) {
+        mode.on();
+        try {
+            assert(forumPublicOn() === mode.public, `${mode.name}: the forum ${mode.public ? 'is' : 'is not'} public (forumPublicOn ${forumPublicOn()})`);
+            const wrong: string[] = [];
+            for (const s of SURFACES) {
+                for (const who of [null, vic] as const) {
+                    surfaceCells++;
+                    const x = await get(who, s.path);
+                    const cc = x.headers.get('cache-control') ?? '';
+                    const ok = mode.public
+                        ? x.status === 200 && s.shown(x) && (who ? cc.startsWith('private') : s.name === 'photo' ? cc.startsWith('public, max-age=31536000') : cc === GUEST_CACHE_CONTROL)
+                        : closed(s, x);
+                    if (!ok) wrong.push(`${s.name}, ${who ? 'a member' : 'a visitor'}: ${show(x)} [${cc}]`);
+                }
+            }
+            assert(wrong.length === 0, `${mode.name}: all ${SURFACES.length} public surfaces ${mode.public ? 'shown, cached for all only unsigned' : 'closed to a visitor and a member alike, never cacheable'}${wrong.length ? ` — ${wrong.slice(0, 6).join(' | ')}` : ''}`);
+        } finally {
+            mode.off();
+        }
+    }
+    assert(surfaceCells === MODES.length * SURFACES.length * 2, `the invariant table read ${surfaceCells} cells (${SURFACES.length} surfaces x ${MODES.length} modes x 2 readers)`);
+    // A preview stamps nothing (what is written in it goes public once it ends, by the sweep) and tells the apps nothing is public.
+    const featuresPublic = getNodeFeatures();
+    process.env.PRIVATE_PREVIEW = '1';
+    try {
+        const featuresPreview = getNodeFeatures() as any;
+        assert(featuresPublic.forumPublic === true && featuresPreview.forumPublic === undefined && featuresPreview.privatePreview === true && featuresPreview.forum === true,
+            `a private preview: features keep the forum for members but say nothing is public (${JSON.stringify({ forumPublic: featuresPreview.forumPublic, privatePreview: featuresPreview.privatePreview })})`);
+        const inPreview = await reply(owner, old.topicId, { words: 'Written in the preview' });
+        require_(inPreview.status === 201, `a member replies in a private preview (${show(inPreview)})`);
+        assert(publicFrom(inPreview.body.post.id) === null && stampForumPublicFrom() === 0, 'a private preview stamps nothing public, at the write or by the sweep');
+        delete process.env.PRIVATE_PREVIEW;
+        assert(stampForumPublicFrom() >= 1 && publicFrom(inPreview.body.post.id) !== null, 'once the preview ends, the sweep makes a known writer\'s words public');
+    } finally {
+        delete process.env.PRIVATE_PREVIEW;
+    }
+
+    // ── 9. Q2's exclusions hold through every edit an owner can make ────────────────────────────────────
+    console.log('\n── 9. "Introduce yourself", Builders and a new person\'s words x rename / listed / move ──');
+    const intro2 = await topicBy(owner, introduce, 'Bees and honey hello', 'We keep two hives.');
+    db.prepare('UPDATE forum_posts SET public_from = ?, created_at = ? WHERE id = ?').run(ago(3 * DAY), ago(3 * DAY), intro2.postId);
+    const startCommunity = sections.find((s: any) => s.starter === 'start-community')?.id as string;
+    require_(startCommunity, 'the worldwide forum has Start a community near you');
+    /** Where a topic (and its section, when given) could still reach a search engine: an empty list means never. */
+    const indexedAt = async (topicId: string, sectionId: string | null): Promise<string[]> => {
+        const out: string[] = [];
+        const j = await get(null, `/api/forum/public/topics/${topicId}`);
+        if (!(j.status === 404 || (j.status === 200 && j.body?.topic?.indexable === false))) out.push(`JSON ${j.status} indexable=${j.body?.topic?.indexable}`);
+        const p = await get(null, `/forum/t/${topicId}`);
+        if (!(p.status === 404 || (p.text.includes(NOINDEX_META) && p.headers.get('x-robots-tag') === 'noindex'))) out.push(`page ${p.status} listed`);
+        const map = (await get(null, '/forum/sitemap.xml')).text;
+        if (map.includes(`/forum/t/${topicId}<`)) out.push('in the sitemap');
+        if (sectionId) {
+            if (map.includes(`/forum/s/${sectionId}<`)) out.push('its section in the sitemap');
+            const sp = await get(null, `/forum/s/${sectionId}`);
+            if (!(sp.status === 404 || (sp.text.includes(NOINDEX_META) && sp.headers.get('x-robots-tag') === 'noindex'))) out.push(`section page ${sp.status} listed`);
+        }
+        return out;
+    };
+    const control = await indexedAt(old.topicId, skills);
+    assert(control.length >= 4, `the check can fail: a Skills topic 2 days public is indexed everywhere (${control.join(', ')})`);
+    const edit = (id: string, body: Record<string, unknown>) => call(owner, 'POST', `/api/forum/sections/${id}/edit`, body);
+    const listedNow = (id: string) => db.prepare('SELECT listed FROM forum_sections WHERE id = ?').pluck().get(id);
+    const introTopics = [{ id: intro.topicId, section: introduce }, { id: intro2.topicId, section: introduce }];
+    const rows: { name: string; act: () => Promise<boolean>; topics: { id: string; section: string | null }[] }[] = [
+        {
+            name: 'Introduce yourself, renamed', topics: introTopics,
+            act: async () => { const x = await edit(introduce, { name: 'Say hello' }); return x.status === 200 && x.body?.section?.starter === null && x.body?.section?.name === 'Say hello'; },
+        },
+        {
+            name: 'Introduce yourself, renamed, then listed: true', topics: introTopics,
+            act: async () => { const x = await edit(introduce, { listed: true }); return x.status === 400 && x.body?.code === 'starter_unlisted' && listedNow(introduce) === 0; },
+        },
+        {
+            name: 'Introduce yourself, listed set by hand', topics: introTopics,
+            act: async () => { db.prepare('UPDATE forum_sections SET listed = 1 WHERE id = ?').run(introduce); return true; },
+        },
+        {
+            name: 'a topic moved out of Introduce yourself into Skills', topics: [{ id: intro2.topicId, section: null }],
+            act: async () => { const x = await call(owner, 'POST', `/api/forum/topics/${intro2.topicId}/move`, { sectionId: skills }); return x.status === 200 && x.body?.topic?.sectionId === skills; },
+        },
+        { name: 'Builders, renamed', topics: [{ id: group.topicId, section: buildersId }], act: async () => (await edit(buildersId, { name: 'Builders crew' })).status === 200 },
+        {
+            name: 'Builders, listed: true', topics: [{ id: group.topicId, section: buildersId }],
+            act: async () => { const x = await edit(buildersId, { listed: true }); return x.status === 400 && x.body?.code === 'group_unlisted'; },
+        },
+        {
+            name: 'a topic moved out of Builders', topics: [{ id: group.topicId, section: buildersId }],
+            act: async () => (await call(owner, 'POST', `/api/forum/topics/${group.topicId}/move`, { sectionId: skills })).body?.code === 'group_section',
+        },
+        {
+            name: 'a new person\'s topic moved to another listed section', topics: [{ id: niaTopic.topicId, section: null }],
+            act: async () => (await call(owner, 'POST', `/api/forum/topics/${niaTopic.topicId}/move`, { sectionId: startCommunity })).status === 200,
+        },
+    ];
+    for (const row of rows) {
+        const acted = await row.act();
+        const leaks: string[] = [];
+        for (const t of row.topics) for (const l of await indexedAt(t.id, t.section)) leaks.push(`${t.id === intro2.topicId ? 'Bees' : t.id === intro.topicId ? 'Hello' : 'its topic'}: ${l}`);
+        assert(acted && leaks.length === 0, `${row.name}: the edit ${acted ? 'did as it should' : 'did NOT do as it should'}; never indexed, never in the sitemap${leaks.length ? ` — ${leaks.join(' | ')}` : ''}`);
+    }
+    db.prepare('UPDATE forum_sections SET listed = 0 WHERE id = ?').run(introduce);
+    const membersIntro = ((await get(owner, '/api/forum')).body?.sections ?? []).find((s: any) => s.id === introduce);
+    assert(membersIntro?.starter === null && membersIntro?.name === 'Say hello', `the members' front reads a renamed starter as before: starter null, the name as typed (${JSON.stringify(membersIntro)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

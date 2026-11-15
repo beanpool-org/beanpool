@@ -600,7 +600,7 @@ export const TABLES: Record<string, TableEntry> = {
     // read as every member's there: REPLICA_FORMAT moves to 16 with them, and a main server sends no copy to an older standby
     // (engine/sync.ts OLDEST_STANDBY_FORMAT, the 426 the operators' manual names).
     forum_sections: plain('id starter name about position starts listed archived_at created_at updated_at group_id'),
-    forum_topics: plain('id section_id title writer_pubkey place lang reply_count last_activity_at pinned_at closed_at closed_by created_at updated_at poll_post_id'),
+    forum_topics: plain('id section_id title writer_pubkey place lang reply_count last_activity_at pinned_at closed_at closed_by created_at updated_at poll_post_id never_listed'),
     forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at hidden_by_reports_at'),
     forum_post_photos: plain('post_id order_num photo_data bytes updated_at'),
     forum_post_edits: plain('post_id edited_at words title updated_at', { agedOut: { column: 'edited_at', days: 30 } }),

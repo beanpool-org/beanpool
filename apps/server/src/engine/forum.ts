@@ -68,7 +68,7 @@ import { dropForumFollowsOf, followForumTopic, forumFollowOf, markForumTopicRead
 import { dropForumLabelOf, forumLabelsOf, forumLabelsTag } from './membership-note.js';
 import { forumSectionOpenPolls, sectionAccess, sectionReadSql, type SectionAccess } from './forum-sections.js';
 import { postOutOfSight } from './post-sight.js';
-import { stampForumPublicFrom } from './forum-public.js';
+import { forumStarterNeverListed, stampForumPublicFrom } from './forum-public.js';
 import { getDecision, titleForMembers } from '../decisions-engine.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -113,6 +113,7 @@ export const FORUM_WORDS = {
     groupNotFound: word('That group isn’t here.'),
     groupFixed: word('A section’s group is set when it is made and can’t change. Make a new section instead.'),
     groupUnlisted: word('A group’s section is for its members, so search engines never list it.'),
+    starterUnlisted: word('People introduce themselves here, so search engines never list it.'),
     groupSection: word('A topic can’t move into or out of a group’s section.'),
     pollNotYours: word('Only the topic’s writer can add a poll to it.'),
     pollAlready: word('This topic already has a poll.'),
@@ -222,8 +223,9 @@ const groupOf = (id: string | null) => {
     const name = db.prepare('SELECT name FROM groups WHERE id = ?').pluck().get(id) as string | undefined;
     return { id, name: name ?? '' };
 };
+// A renamed starter keeps its starter in the row (editForumSection) but reads as typed: `starter` null once it has a name.
 const sectionOut = (r: SectionRow): ForumSection => ({
-    id: r.id, starter: r.starter, name: r.name, about: r.about, position: r.position, starts: r.starts, listed: r.listed === 1, archived: r.archived_at !== null,
+    id: r.id, starter: r.name === null ? r.starter : null, name: r.name, about: r.about, position: r.position, starts: r.starts, listed: r.listed === 1, archived: r.archived_at !== null,
     group: groupOf(r.group_id),
 });
 /** The poll a topic holds, when `reader` may see it (engine/post-sight.ts: a group's poll, its active members and its author). */
@@ -829,17 +831,24 @@ export function pinForumTopic(member: string, topicId: string, pinned: boolean, 
     return forumTopic(member, topicId, 0).topic;
 }
 
-/** An owner or admin moves a topic to another section; it stays pinned only where that section has room. */
+/**
+ * An owner or admin moves a topic to another section; it stays pinned only where that section has room. A topic moved out of
+ * "Introduce yourself" carries `never_listed` with it, so what people wrote about themselves there never reaches a search
+ * engine from its new section either (Q2; engine/forum-public.ts forumTopicIndexable).
+ */
 export function moveForumTopic(member: string, topicId: string, sectionId: unknown, now = Date.now()): ForumTopic {
     staffOnly(member, now);
     const topic = visibleTopic(member, topicId);
     const to = typeof sectionId === 'string' ? sectionRow(sectionId) : undefined;
     if (!to || to.archived_at) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.sectionNotFound);
     if (to.id === topic.section_id) throw new ForumRefusal(409, 'same_section', FORUM_WORDS.sameSection);
+    const from = sectionRow(topic.section_id);
     // A group's talk never moves where others read it, nor others' talk into a group's (slice F8).
-    if ((sectionRow(topic.section_id)?.group_id ?? null) !== (to.group_id ?? null)) throw new ForumRefusal(409, 'group_section', FORUM_WORDS.groupSection);
+    if ((from?.group_id ?? null) !== (to.group_id ?? null)) throw new ForumRefusal(409, 'group_section', FORUM_WORDS.groupSection);
     const keepPin = topic.pinned_at !== null && pinsIn(to.id, topic.id) < FORUM_LIMITS.pinsPerSection;
-    db.prepare('UPDATE forum_topics SET section_id = ?, pinned_at = ? WHERE id = ?').run(to.id, keepPin ? topic.pinned_at : null, topicId);
+    const neverListed = forumStarterNeverListed(from?.starter) ? 1 : 0;
+    db.prepare('UPDATE forum_topics SET section_id = ?, pinned_at = ?, never_listed = MAX(never_listed, ?) WHERE id = ?')
+        .run(to.id, keepPin ? topic.pinned_at : null, neverListed, topicId);
     return forumTopic(member, topicId, 0).topic;
 }
 
@@ -942,7 +951,11 @@ export function createForumSection(member: string, raw: SectionInput, now = Date
     return sectionOut(sectionRow(id)!);
 }
 
-/** An owner or admin renames, describes, orders, opens or closes to members, or archives a section. A rename clears its starter. */
+/**
+ * An owner or admin renames, describes, orders, opens or closes to members, or archives a section. A renamed starter reads as
+ * typed (its `starter` answers null), but its row keeps the starter it was made as: that is Q2's mark, so "Introduce yourself"
+ * stays never listed whatever it is called (engine/forum-public.ts forumStarterNeverListed), and listing it is refused.
+ */
 export function editForumSection(member: string, id: string, raw: SectionInput, now = Date.now()): ForumSection {
     staffOnly(member, now);
     const row = sectionRow(id);
@@ -950,12 +963,14 @@ export function editForumSection(member: string, id: string, raw: SectionInput, 
     // Its group is set when it is made, and a group's section is never listed (slice F8).
     if (raw.groupId !== undefined) throw new ForumRefusal(400, 'group_fixed', FORUM_WORDS.groupFixed);
     if (row.group_id && raw.listed === true) throw new ForumRefusal(400, 'group_unlisted', FORUM_WORDS.groupUnlisted);
+    // Nor "Introduce yourself" (Marty's Q2, 14 Nov 2026), by the starter it was made as.
+    if (forumStarterNeverListed(row.starter) && raw.listed === true) throw new ForumRefusal(400, 'starter_unlisted', FORUM_WORDS.starterUnlisted);
     const set: string[] = [];
     const args: unknown[] = [];
     if (raw.name !== undefined) {
         const name = text(raw.name, FORUM_LIMITS.sectionName, 'name').replace(/\s+/g, ' ');
         if (!name) throw new ForumRefusal(400, 'name_required', FORUM_WORDS.sectionName);
-        set.push('starter = NULL', 'name = ?');
+        set.push('name = ?');
         args.push(name);
     }
     if (raw.about !== undefined) { set.push('about = ?'); args.push(text(raw.about, FORUM_LIMITS.sectionAbout, 'about') || null); }

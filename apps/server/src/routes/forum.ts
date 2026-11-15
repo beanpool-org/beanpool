@@ -44,7 +44,8 @@
  *   POST /api/forum/sections                { name, about?, starts?, listed?, groupId? } → 201 { section }   409 `too_many_sections`;
  *        404 `group_not_found`; 400 `group_unlisted` (a group's section is never listed)
  *   POST /api/forum/sections/:id/edit       { name?, about?, starts?, listed?, position?, archived? } → { section }   400 `group_fixed`
- *        (its group is set when it is made), `group_unlisted`
+ *        (its group is set when it is made), `group_unlisted`, `starter_unlisted` (`listed: true` on "Introduce yourself",
+ *        whatever it was renamed to: search engines never list it)
  * A group's section (slice F8, engine/forum-sections.ts): its group's active members and the moderators read it, and nobody
  * else learns it exists (every read and write above answers them as an id nobody has: 404 `not_found`, no row, no hit); its
  * convenors and members write, its other readers are refused 403 `group_only`. A poll in a topic and the Decision chip (F8):

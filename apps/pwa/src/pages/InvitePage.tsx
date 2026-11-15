@@ -32,7 +32,7 @@ import { InviteMadeCard, PendingInvites } from '../components/PendingInvites';
 import { useContactInviteNames } from '../lib/contact-invite-names';
 import { WaitingNameNotice } from '../components/WaitingNameNotice';
 import { MakeVoucherSheet } from '../components/MakeVoucherSheet';
-import { LOCAL_COMMUNITY_LINES, billsOn, formatDate, inviteBillAfter, inviteBillAnswerOf, inviteBillToSend, inviteRevokeWords, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, ownersHeading, waitingHeading, ownerRowWords, voucherRowWords, waitingRowWords, vouchersBlockSections, type InviteBillAnswer, type InviteBillHeld, type InviteRowSource } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, billsOn, formatDate, inviteBillAfter, inviteBillAnswerOf, inviteBillToSend, inviteRevokeWords, listWithInvite, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, ownersHeading, waitingHeading, ownerRowWords, voucherRowWords, waitingRowWords, vouchersBlockSections, type InviteBillAnswer, type InviteBillHeld, type InviteRowSource } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, roleReadRefused, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
@@ -354,7 +354,8 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                     setShowQR(true);
                     setVouchPreset(null);
                     clearBill();
-                    setInvites(prev => [res.invite, ...prev]);
+                    // Once, by its code: a retry answered with an invite already listed replaces its row (core listWithInvite).
+                    setInvites(prev => listWithInvite(prev, res.invite));
                     void loadMyVouching();
                     void loadVouchersBlock();
                     return;
@@ -366,7 +367,8 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                 }
             } catch (e: any) {
                 // The node takes no invites (it said so before this page heard): its words, and no offline ticket, which
-                // it would refuse just the same.
+                // it would refuse just the same. Only the invites' own `feature_off`: a bill's (`bills`, switched off after
+                // this page read the node) is the bill's refusal below, and the page stays.
                 const refusal = invitesOffRefusal(e);
                 if (refusal) {
                     setRefused(refusal);
@@ -389,10 +391,12 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                 }
                 // A refused vouch shows the node's sentence and makes no ticket:
                 const serverMsg = typeof e?.message === 'string' && e.message ? e.message : typeof e?.error === 'string' && e.error ? e.error : null;
-                // With a bill, a refusal the node words is shown as it said it; a lost answer, a 5xx or a page that isn't
-                // the node's may have made it. An offline ticket never carries a bill (§4.5); the fold keeps what was typed.
+                // A refusal the node words (or a busy network's) is shown as it said it; a lost answer, a 5xx or a page that
+                // isn't the node's may have made it (core inviteBillAnswerOf).
+                const answer = inviteBillAnswerOf(typeof e?.status === 'number' ? e.status : null, serverMsg, e?.code, e?.unsaid === true, e?.feature);
+                // With a bill, either way no offline ticket: it never carries a bill (§4.5); the fold keeps what was typed.
                 if (bill) {
-                    billNotMade(inviteBillAnswerOf(typeof e?.status === 'number' ? e.status : null, serverMsg, e?.code, e?.unsaid === true));
+                    billNotMade(answer);
                     return;
                 }
                 if (chosenVouch !== null && serverMsg && typeof e?.status === 'number') {
@@ -402,6 +406,12 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                 // An offline ticket never carries a vouch:
                 if (chosenVouch !== null) {
                     setNotice(t(vouchPresets.noOfflineVouch));
+                    return;
+                }
+                // Refused (a limit, a door, a switch): its own words, and no offline ticket, which the node would refuse at
+                // the join or which would get round the limit it just named.
+                if (answer.kind === 'refused') {
+                    setNotice(answer.words);
                     return;
                 }
                 /* node unreachable on None — offline fallback below */
@@ -436,7 +446,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
             await saveOfflineInviteLocally(inviteObj);
 
             // Optimistically stick it in the UI since the server doesn't know about it yet!
-            setInvites(prev => [inviteObj, ...prev]);
+            setInvites(prev => listWithInvite(prev, inviteObj));
             setMadeCard({ who: forWhom ?? null, invite: inviteObj });
             setMakeAnother(false);
             

@@ -48,11 +48,12 @@
  * A group's section (slice F8, engine/forum-sections.ts): its group's active members and the moderators read it, and nobody
  * else learns it exists (every read and write above answers them as an id nobody has: 404 `not_found`, no row, no hit); its
  * convenors and members write, its other readers are refused 403 `group_only`. A poll in a topic and the Decision chip (F8):
- *   POST /api/forum/topics/:id/poll         { question?, options, durationDays?, openVote?, other? } → 201 { topic, pollId }
+ *   POST /api/forum/topics/:id/poll         { title?, description?, pollOptions, durationDays?, pollOpenVote?, pollOther? } → 201
+ *        { topic, pollId }: the Market's own poll body (title: its question, else the topic's title)
  *        the topic's writer (403 `not_yours`), an open topic (409 `closed`), one a topic (409 `poll_already`), three open a
  *        section (409 `section_polls`); the ordinary poll (2 to 4 answers, its lengths, one open a member), voted and read by
  *        the polls' own routes; a group's section's is the group's poll
- *   POST /api/forum/topics/:id/decision     { decisionId | null } → { topic }   its writer or an owner or admin (403
+ *   POST /api/forum/topics/:id/decision     { decisionId: id | null } → { topic }   its writer or an owner or admin (403
  *        `not_yours`); 404 `decision_not_found`; 404 `decisions_off` where Decisions are off
  *
  * A section: { id, starter, name, about, position, starts, listed, archived, group: { id, name } | null } (starter's name:
@@ -140,13 +141,14 @@ function refused(ctx: any, e: unknown): void {
 
 /**
  * A topic's poll as the ordinary poll's own door makes it (state-engine createPost: its answers, lengths, ballot and Other, the
- * one open a member, the section's pool), from what the app sent: `options` as the Market's poll form sends them.
+ * one open a member, the section's pool), from the body the Market's poll form sends (routes/marketplace.ts), so both apps'
+ * poll forms serve here as they are.
  */
 function makeForumPoll(author: string, body: any): MakeForumPoll {
     return ({ audienceScope, targetGroupId, forumSectionId, question }) => {
         const post = createPost('poll', 'community', question, typeof body.description === 'string' ? body.description : '', 0, 'fixed', author,
             undefined, undefined, [], false, undefined, false, {
-                pollOptions: body.options, durationDays: body.durationDays, pollOpenVote: body.openVote, pollOther: body.other,
+                pollOptions: body.pollOptions, durationDays: body.durationDays, pollOpenVote: body.pollOpenVote, pollOther: body.pollOther,
                 audienceScope, targetGroupId, forumSectionId,
             });
         if (!post) throw new ForumRefusal(403, 'not_member', ONLY_MEMBERS);
@@ -278,8 +280,8 @@ export function createForumRoutes(_deps: RouteDeps): Router {
     }));
     router.post('/api/forum/topics/:id/move', (ctx) => write(ctx, 200, (key, body) => ({ topic: moveForumTopic(key, ctx.params.id, body.sectionId) })));
     // A poll in a topic and the Decision chip (slice F8).
-    router.post('/api/forum/topics/:id/poll', (ctx) => write(ctx, 201, (key, body) => addForumPoll(key, ctx.params.id, body.question, makeForumPoll(key, body))));
-    router.post('/api/forum/topics/:id/decision', (ctx) => write(ctx, 200, (key, body) => ({ topic: linkForumDecision(key, ctx.params.id, body.decisionId === undefined ? null : body.decisionId) })));
+    router.post('/api/forum/topics/:id/poll', (ctx) => write(ctx, 201, (key, body) => addForumPoll(key, ctx.params.id, body.title, makeForumPoll(key, body))));
+    router.post('/api/forum/topics/:id/decision', (ctx) => write(ctx, 200, (key, body) => ({ topic: linkForumDecision(key, ctx.params.id, body.decisionId) })));
     router.post('/api/forum/posts/:id/edit', (ctx) => write(ctx, 200, (key, body) => editForumPost(key, ctx.params.id, body)));
     router.post('/api/forum/posts/:id/remove', (ctx) => write(ctx, 200, (key) => { removeForumPost(key, ctx.params.id); return { ok: true }; }));
     router.post('/api/forum/sections', (ctx) => write(ctx, 201, (key, body) => ({ section: createForumSection(key, body) })));

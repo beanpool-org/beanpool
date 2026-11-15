@@ -590,8 +590,9 @@ export const TABLES: Record<string, TableEntry> = {
     // each server, with no tombstone. An older importer drops the forum: after a take-over from its copy the sections are
     // made again as at the start and the topics are gone; no Bean is in it.
     // A section's group and a topic's poll (slice F8, engine/forum-sections.ts) go in the copy with them, so a standby reads
-    // the same section as the group's only. An importer older than F8 drops both columns: a group's section would read as
-    // every member's there, so a standby is updated with its main server, or before it (said in the operators' manual).
+    // the same section as the group's only. An importer older than F8 would drop both columns, and a group's section would
+    // read as every member's there: REPLICA_FORMAT moves to 16 with them, and a main server sends no copy to an older standby
+    // (engine/sync.ts OLDEST_STANDBY_FORMAT, the 426 the operators' manual names).
     forum_sections: plain('id starter name about position starts listed archived_at created_at updated_at group_id'),
     forum_topics: plain('id section_id title writer_pubkey place lang reply_count last_activity_at pinned_at closed_at closed_by created_at updated_at poll_post_id'),
     forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at hidden_by_reports_at'),
@@ -610,7 +611,7 @@ export const TABLES: Record<string, TableEntry> = {
     // again, and every topic reads as read.
     forum_follows: plain('topic_id member_pubkey state last_read created_at updated_at'),
     // What a topic links (slice F8: a community Decision; F9 the other kinds): a promoted standby shows the same chips; a removal
-    // goes with its tombstone. An older importer drops it: after a take-over from its copy no topic links anything until linked again.
+    // goes with its tombstone. Format 16 with the section's group above, so no older importer is sent it.
     forum_links: plain('topic_id kind target_id created_at updated_at'),
     // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
     thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),

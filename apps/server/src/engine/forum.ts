@@ -365,8 +365,8 @@ export function forumFront(reader: string): ForumFront {
     ensureForumStarters();
     const staff = isStaff(reader);
     // A group's section only to who reads it (engine/forum-sections.ts): nobody else's list holds it or counts it.
-    const rows = db.prepare(`SELECT * FROM forum_sections WHERE ${staff ? '1' : 'archived_at IS NULL'} AND ${sectionReadSql('forum_sections.id', '@reader')}
-        ORDER BY position, created_at, id`).all({ reader }) as SectionRow[];
+    const rows = db.prepare(`SELECT s.* FROM forum_sections s WHERE ${staff ? '1' : 's.archived_at IS NULL'} AND ${sectionReadSql('s.id', '@reader')}
+        ORDER BY s.position, s.created_at, s.id`).all({ reader }) as SectionRow[];
     const moderator = isForumModerator(reader);
     const newness = forumNewness(reader);
     return {
@@ -792,7 +792,7 @@ export function moveForumTopic(member: string, topicId: string, sectionId: unkno
 
 // ── A poll in a topic, and the Decision chip (slice F8) ─────────────────────────────────────────────────────────
 
-/** How a topic's poll is made: the ordinary poll's own door (state-engine createPost), for this audience and section's pool. */
+/** How a topic's poll is made: the ordinary poll's own door (state-engine createPost), for this audience and section's pool, with its question. */
 export type MakeForumPoll = (where: { audienceScope: 'public' | 'group'; targetGroupId?: string; forumSectionId: string; question: string }) => string;
 
 /**
@@ -802,6 +802,7 @@ export type MakeForumPoll = (where: { audienceScope: 'public' | 'group'; targetG
  * see it. One a topic; an open topic; a writer who may still write there. `question` defaults to the topic's title.
  */
 export function addForumPoll(member: string, topicId: string, question: unknown, make: MakeForumPoll, now = Date.now()): { topic: ForumTopic; pollId: string } {
+    // `question`: the poll's own title, as the Market's poll form sends it; none, the topic's title.
     writable(member, now);
     const topic = visibleTopic(member, topicId);
     if (topic.writer_pubkey !== member) throw new ForumRefusal(403, 'not_yours', FORUM_WORDS.pollNotYours);
@@ -809,7 +810,7 @@ export function addForumPoll(member: string, topicId: string, question: unknown,
     if (topic.closed_at || sectionRow(topic.section_id)?.archived_at) throw new ForumRefusal(409, 'closed', FORUM_WORDS.closed);
     if (topic.poll_post_id) throw new ForumRefusal(409, 'poll_already', FORUM_WORDS.pollAlready);
     // The pool first in the forum's own words; engine/posts.ts holds it again for every way a poll goes up (a resume too).
-    if (forumSectionOpenPolls(topic.section_id) >= FORUM_LIMITS.pollsPerSection) {
+    if (forumSectionOpenPolls(topic.section_id, now) >= FORUM_LIMITS.pollsPerSection) {
         throw new ForumRefusal(409, 'section_polls', tr('A section can have {n} open polls at a time. Try again when one closes.', { n: FORUM_LIMITS.pollsPerSection }));
     }
     const asked = text(question, FORUM_LIMITS.title, 'question').replace(/\s+/g, ' ') || topic.title;
@@ -831,6 +832,7 @@ export function addForumPoll(member: string, topicId: string, question: unknown,
  */
 export function linkForumDecision(member: string, topicId: string, decisionId: unknown, now = Date.now()): ForumTopic {
     writable(member, now);
+    if (decisionId === undefined) throw new ForumRefusal(400, 'bad_request', 'decisionId is a Decision\'s id, or null to take it off.');
     if (!getProfileSwitches().decisions) throw new ForumRefusal(404, 'decisions_off', FORUM_WORDS.decisionsOff);
     const topic = visibleTopic(member, topicId);
     if (topic.writer_pubkey !== member && !isStaff(member)) throw new ForumRefusal(403, 'not_yours', FORUM_WORDS.decisionNotYours);

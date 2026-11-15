@@ -113,7 +113,7 @@ const stranger = (code: unknown) => (code === 'not_member' || code === 'not_a_me
 const start = (id: Id, body: Record<string, unknown>) => call(id, 'POST', '/api/forum/topics', body);
 const reply = (id: Id, t: string, body: Record<string, unknown>) => call(id, 'POST', `/api/forum/topics/${t}/replies`, body);
 const addPoll = (id: Id, t: string, body: Record<string, unknown> = {}) =>
-    call(id, 'POST', `/api/forum/topics/${t}/poll`, { question: 'Which day suits?', options: ['Monday', 'Tuesday'], durationDays: 7, ...body });
+    call(id, 'POST', `/api/forum/topics/${t}/poll`, { title: 'Which day suits?', pollOptions: ['Monday', 'Tuesday'], durationDays: 7, ...body });
 async function search(id: Id, q: string): Promise<Res> {
     resetForumSearchBudget();
     return call(id, 'GET', `/api/forum/search?q=${encodeURIComponent(q)}`);
@@ -220,7 +220,7 @@ async function main(): Promise<void> {
     assert(notWriter.status === 403 && notWriter.body?.code === 'not_yours', `4. only the topic's writer adds a poll (${show(notWriter)})`);
     const outsider = await addPoll(nel, T);
     assert(outsider.status === 404 && outsider.body?.code === 'not_found', `4. someone outside the group: the topic is not found (${show(outsider)})`);
-    const badPoll = await addPoll(gil, T, { options: ['Only one'] });
+    const badPoll = await addPoll(gil, T, { pollOptions: ['Only one'] });
     assert(badPoll.status === 400, `4. the ordinary poll's checks hold (two to four answers) (${show(badPoll)})`);
     const poll0 = await addPoll(gil, T);
     require_(poll0.status === 201 && typeof poll0.body?.pollId === 'string' && poll0.body?.topic?.pollId === poll0.body.pollId,
@@ -429,8 +429,10 @@ async function main(): Promise<void> {
     assert(gp.slice(0, 3).every((r) => r.status === 201) && gp[3].status === 409 && gp[3].body?.code === 'section_polls',
         `5. three open polls a section, the fourth refused (${gp.map((r) => `${r.status} ${r.body?.code ?? ''}`).join(' | ')})`);
     const inIdeas = await start(pool[8], { sectionId: ideas, title: 'Poll topic in Ideas', words: 'Words.' });
-    const ideasPoll = await addPoll(pool[8], inIdeas.body?.topic?.id);
+    const ideasPoll = await addPoll(pool[8], inIdeas.body?.topic?.id, { title: '' });
     assert(ideasPoll.status === 201, `5. another section's pool is its own (${show(ideasPoll)})`);
+    const asked = db.prepare('SELECT title, audience_scope FROM posts WHERE id = ?').get(ideasPoll.body?.pollId) as any;
+    assert(asked?.title === 'Poll topic in Ideas' && asked.audience_scope === 'public', `4. with no question of its own, the poll asks the topic's title, for everyone here in an open section (${JSON.stringify(asked)})`);
     // Still one open a member: Ada has a community poll open.
     const adaTopic = await start(pool[0], { sectionId: ideas, title: 'Ada asks', words: 'Words.' });
     const adaPoll = await addPoll(pool[0], adaTopic.body?.topic?.id);
@@ -471,6 +473,8 @@ async function main(): Promise<void> {
     assert(seenByObserver === DECISION && seenInList === DECISION, '6. anyone who may read the topic sees the chip, in the topic and the list');
     const byOwnerOnP = await linkBy(owner, P, DECISION);
     assert(byOwnerOnP.status === 200 && byOwnerOnP.body?.topic?.decision?.id === DECISION, `6. an owner links one on someone else's topic (${show(byOwnerOnP)})`);
+    const noField = await call(gil, 'POST', `/api/forum/topics/${T}/decision`, {});
+    assert(noField.status === 400 && noField.body?.code === 'bad_request', `6. a body with no decisionId takes nothing off by mistake (${show(noField)})`);
     const cleared = await linkBy(gil, T, null);
     assert(cleared.status === 200 && cleared.body?.topic?.decision === null, `6. null takes it off (${show(cleared)})`);
     const linkRows = db.prepare("SELECT COUNT(*) FROM forum_links WHERE topic_id = ? AND kind = 'decision'").pluck().get(T) as number;

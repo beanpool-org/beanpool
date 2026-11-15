@@ -71,10 +71,14 @@ export function forumTopicsOutOfReach(reader: string, topicIds: readonly string[
 
 // ── A topic's poll and the polls' pool (design §10.1) ───────────────────────────────────────────────────────────
 
-/** The open polls topics hold in a section: their own pool, at most FORUM_LIMITS.pollsPerSection. */
-export function forumSectionOpenPolls(sectionId: string): number {
+/**
+ * The open polls topics hold in a section: their own pool, at most FORUM_LIMITS.pollsPerSection. One past its closing time is
+ * not counted, whether or not a sweep has marked it closed yet (engine/posts.ts sweepExpiredPolls).
+ */
+export function forumSectionOpenPolls(sectionId: string, now = Date.now()): number {
     return db.prepare(`SELECT COUNT(*) FROM posts p JOIN forum_topics t ON t.poll_post_id = p.id
-        WHERE t.section_id = ? AND p.type = 'poll' AND p.status = 'active'`).pluck().get(sectionId) as number;
+        WHERE t.section_id = ? AND p.type = 'poll' AND p.status = 'active' AND (p.poll_closes_at IS NULL OR p.poll_closes_at > ?)`)
+        .pluck().get(sectionId, new Date(now).toISOString()) as number;
 }
 
 /** The section whose topic holds poll `postId`, or null for a poll no topic holds (one of the community's). */

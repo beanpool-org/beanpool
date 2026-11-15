@@ -3,7 +3,8 @@
  * node's public answer, unsigned (utils/forum-public.ts), read only. Each post's writer (their name, and their community where
  * they switched the label on) and words; no pictures, no profile. Where the reply box would be, the door: Join to reply.
  *
- * Opened from the visitors' Forum tab, the Home card "From the forum", and a public page's link to the app (app/forum/index.tsx).
+ * Opened from the visitors' Forum tab and the Home card "From the forum" (a public page's link to the app, beanpool://forum, is
+ * the next slice's).
  * A screen a phone with no account may stay on while it looks around (utils/look-around.ts).
  */
 import React, { useCallback, useEffect, useState } from 'react';

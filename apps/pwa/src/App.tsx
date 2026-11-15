@@ -310,7 +310,7 @@ export function App() {
     useEffect(() => { if (tourTab === 'messages') setChatNavNonce((n) => n + 1); }, [tourTab, tourIndex]);
     // The one arrival that shows the Forum side instead: a forum notice, from the bell or a web push (slice F5).
     const [openChatForum, setOpenChatForum] = useState(false);
-    // And the topic it opens on: a door to one topic (`/?topic=<id>`, or the one a visitor kept at Join to reply; slice F7).
+    // And the topic it opens on: a door to one topic (`/app?forumTopic=<id>`, or the one a visitor kept at Join to reply; slice F7).
     const [openForumTopic, setOpenForumTopic] = useState<string | null>(null);
     useEffect(() => { if (activeTab !== 'messages') { setOpenChatForum(false); setOpenForumTopic(null); } }, [activeTab]);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);

@@ -7,7 +7,9 @@
  *      and in the Garden group's locked chat; the node stores each as a `voice` line whose part is sealed (mime audio/mp4,
  *      no .m4a bytes readable), and the part opens under Ben's key as an .m4a of the length the bubble says;
  *   2. a second browser plays it: Ben in WebKit (Safari's engine) plays both, and the speed steps to 1.5×;
- *   3. Firefox: no microphone, the design's one line instead, and it plays the same voice message;
+ *   3. Firefox (or Chrome with Firefox's recorder answer, no AAC in .m4a): the web app's own encoder records, fetched only at
+ *      the click (no request for it before), under the node's real CSP; the node stores a sealed voice line whose part opens
+ *      under Ben's key as an .m4a of AAC-LC at 24 kHz mono, and the same browser plays the voice messages;
  *   4. the gate: a node that says nothing of voice lines (features.voiceLines absent, as from before V2) gets no microphone.
  *
  * The node says features.voiceLines: true itself (#3120); step 4's browser has it taken out of GET /api/community/info's
@@ -268,30 +270,56 @@ async function main() {
             await b.context.close();
         }
 
-        console.log('3. Firefox: no microphone, one line instead; it plays');
+        console.log("3. Firefox: the web app's own encoder records, fetched at the click; it plays");
         // Playwright's Firefox where it starts; else Chrome answering as Firefox's recorder does (no AAC in .m4a), said in the log.
-        let ff = await firefox.launch().catch((e) => { console.log(`  (Playwright's Firefox didn't start here: ${String(e?.message).split('\n').find((l) => l.includes('[err]') && !l.includes('headless')) ?? 'no reason given'}; Chrome stands in with Firefox's MediaRecorder answer)`); return null; });
+        // Firefox's own fake microphone, asked without a prompt; muted.
+        let ff = await firefox.launch({ firefoxUserPrefs: { 'media.navigator.streams.fake': true, 'media.navigator.permission.disabled': true, 'media.volume_scale': '0.0' } }).catch((e) => { console.log(`  (Playwright's Firefox didn't start here: ${String(e?.message).split('\n').find((l) => l.includes('[err]') && !l.includes('headless')) ?? 'no reason given'}; Chrome stands in with Firefox's MediaRecorder answer)`); return null; });
         const firefoxStandIn = !ff;
         const ffName = firefoxStandIn ? 'Firefox stand-in (Chrome, no AAC recorder)' : 'Firefox';
         if (!ff) ff = chrome;
         else browsers.push(ff);
         for (const theme of ['light', 'dark']) {
-            const f = await openAs(ff, node.origin, ben, { theme });
+            const f = await openAs(ff, node.origin, ana, { theme, mic: firefoxStandIn });
             if (firefoxStandIn) {
                 await f.context.addInitScript(() => {
                     const was = MediaRecorder.isTypeSupported.bind(MediaRecorder);
                     MediaRecorder.isTypeSupported = (type) => (String(type).startsWith('audio/mp4') ? false : was(type));
                 });
             }
-            await openChat(f.page, node, 'Ana');
+            // The encoder's chunk (its WebAssembly is inside it) and the capture worklet: counted, so a fetch before the click shows.
+            const encoderFetches = [];
+            const cspRefusals = [];
+            f.page.on('request', (r) => { if (/voice-(encode|capture)/.test(r.url())) encoderFetches.push(r.url()); });
+            f.page.on('console', (m) => { if (/content security policy|wasm|webassembly/i.test(m.text())) cspRefusals.push(m.text()); });
+            await openChat(f.page, node, 'Ben');
             await f.page.getByRole('button', { name: /^Play voice message, / }).first().waitFor({ timeout: 30_000 });
-            check(await f.page.getByRole('button', { name: 'Record a voice message' }).count() === 0, `${ffName} (${theme}): no microphone`);
-            const line = await f.page.getByTestId('voice-cant-record').textContent().catch(() => '');
-            check(line.includes("This browser can't record voice messages."), `${ffName} (${theme}): the line in its place ("${line.trim()}")`);
-            if (theme === 'light') await plays(f.page, `Ben's DM in ${ffName}`);
-            await noSidewaysScroll(f.page, `Ben's DM in ${ffName} (${theme})`);
+            check(await f.page.getByRole('button', { name: 'Record a voice message' }).count() === 1, `${ffName} (${theme}): the microphone, not the "can't record" line`);
+            check(encoderFetches.length === 0, `${ffName} (${theme}): nothing of the encoder fetched before the click (${encoderFetches.length})`);
+            if (theme === 'light') {
+                await recordAndSend(f.page, 'dm-encoder', theme);
+                check(encoderFetches.length > 0 && encoderFetches.every((u) => new URL(u).hostname === 'localhost'),
+                    `${ffName}: the encoder fetched at the click, from the node only (${encoderFetches.map((u) => new URL(u).pathname).join(', ')})`);
+                check(cspRefusals.length === 0, `${ffName}: no policy refusal under the node's own CSP (${cspRefusals.join(' | ') || 'none'})`);
+                await plays(f.page, `Ana's DM in ${ffName}`);
+            }
+            await noSidewaysScroll(f.page, `Ana's DM in ${ffName} (${theme})`);
             await shot(f.page, `voice-dm-firefox-320-${theme}`);
             await f.context.close();
+        }
+        const encoded = await node.ask({ op: 'sql', sql: "SELECT m.id FROM messages m WHERE m.author_pubkey = ? AND m.type = 'voice' AND m.conversation_id = ? ORDER BY m.timestamp", params: [ana.publicKey, DM], all: true });
+        check(encoded.length === 3, `the node holds the encoder's voice line beside Chrome's two (${encoded.length} in the DM)`);
+        const last = encoded[encoded.length - 1];
+        if (last) {
+            const part = await signedFetch(core, node.origin, ben, 'GET', `/api/messages/${encodeURIComponent(last.id)}/attachment`);
+            const opened = core.openDmVoice({ ciphertext: part.body.data, nonce: part.body.nonce }, { myEdPrivHex: ben.privateKey, peerEdPubHex: ana.publicKey },
+                { conversationId: DM, senderPubHex: ana.publicKey, messageId: last.id, metadata: null });
+            const { Input, BufferSource, ALL_FORMATS } = await import('mediabunny');
+            const track = await new Input({ source: new BufferSource(opened.sound), formats: ALL_FORMATS }).getPrimaryAudioTrack();
+            const seconds = await track.computeDuration();
+            if (process.env.VOICE_SAVE_ENCODER) fs.writeFileSync(process.env.VOICE_SAVE_ENCODER, opened.sound);
+            check(core.looksLikeM4a(opened.sound) && track.codec === 'aac' && track.sampleRate === 24000 && track.numberOfChannels === 1
+                && (await track.getCodecParameterString()) === 'mp4a.40.2' && seconds * 1000 >= RECORD_MS - 300,
+                `the encoder's line opens under Ben's key as the phone's .m4a: ${track.codec} ${await track.getCodecParameterString()}, ${track.sampleRate} Hz, ${track.numberOfChannels} ch, ${seconds.toFixed(2)} s, ${opened.sound.length} bytes`);
         }
 
         console.log("4. The gate: a node that says nothing of voice lines gets no microphone");

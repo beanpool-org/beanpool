@@ -10,7 +10,7 @@ related: messages, groups, reporting, notifications, privacy, forum
 
 - **In a chat with one person**, once it is an ordinary chat: not while your first message is still a message request.
 - **In a group's chat**, where it is locked end to end.
-- On the phone, and in the web app in Chrome, Edge and Safari.
+- On the phone, and in the web app in any browser that lets the site use a microphone (Chrome, Edge, Safari, Firefox, Brave).
 
 Voice messages can't be sent in event chats or enterprise chats (the community's server can read those), in a message request, in the forum, or in a chat with someone from another community. The microphone shows only where your community's server takes voice messages: an older server doesn't, and then there is no microphone. If that changes while you are recording, the recording is kept and the box says "This community doesn't take voice messages yet. Nothing was sent."
 
@@ -35,7 +35,8 @@ Switching to another app stops a recording and keeps it for you to send or delet
 
 Click the microphone to start, and stop when you are done. Then play it back, delete it, or send it. The first click asks your browser to let the site use the microphone. If the browser refuses, the web app says "The microphone is off for this site. Allow it in the browser's site settings, then try again." Shorter than a second sends nothing: "Too short to send. Record for at least a second."
 
-- **Firefox** can play voice messages but can't record them. In its place the web app says "This browser can't record voice messages. Chrome, Edge, Safari and the phone app can."
+- **Firefox, and Brave on Android,** record through the web app's own recorder, which makes the same kind of file as the phone. It is fetched from your community's server the first time you click the microphone there, and never before. If it doesn't load, the web app says "The voice recorder didn't load in this browser. Nothing was recorded. You can still type a message."
+- **A browser that can't record at all** shows "This browser can't record voice messages. The phone app can." in the microphone's place.
 - **A community's page opened over plain http**, as on a home network, can't record either: "Voice messages can't be recorded on this address. The phone app can."
 
 ## Listening

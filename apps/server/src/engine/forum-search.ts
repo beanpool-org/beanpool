@@ -23,6 +23,7 @@
  */
 import { FORUM_SEARCHES_PER_DAY, elidedWord, foldApostrophes, word, wordsFor } from '@beanpool/core';
 import { db } from '../db/db.js';
+import { sectionReadSql } from './forum-sections.js';
 import { dayBudget } from '../nearest-people-budget.js';
 import { ForumRefusal, ensureForumStarters, forumWriters, type ForumWriter } from './forum.js';
 
@@ -81,10 +82,11 @@ const matchOf = (w: ForumSearchWord) => `(${w.asks.map((a) => `"${a}"*`).join(' 
 const likeOf = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 /**
- * The sections a member's search reads: those out of no list. The one place a section's own rule goes (a group's section,
- * slice F8: its members and the moderators only), so no search can miss it.
+ * The sections a member's search reads (@reader): those out of no list, and not a group's they are not in (slice F8,
+ * engine/forum-sections.ts: its members and the moderators only). The one place a section's own rule goes, so no search can
+ * miss it.
  */
-export const SEARCHABLE_SECTION = 't.section_id IN (SELECT id FROM forum_sections WHERE archived_at IS NULL)';
+export const SEARCHABLE_SECTION = `t.section_id IN (SELECT id FROM forum_sections WHERE archived_at IS NULL) AND ${sectionReadSql('t.section_id', '@reader')}`;
 
 /**
  * The one rule every hit passes, on post `p` in topic `t`, for the reader (@reader). Stricter than a topic's read: a hidden

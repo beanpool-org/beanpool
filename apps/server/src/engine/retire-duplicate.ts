@@ -66,6 +66,9 @@ export const EMPTY_RULES: ReadonlyArray<{ rule: EmptyRule; checks: ReadonlyArray
         // accepted or declined, each its own act, wherever the group came from.
         { table: 'group_members', columns: ['invited_by'] },
         { table: 'group_invite_declines', columns: ['invited_by'] },
+        // Someone from another community it invited into a group's chat as a convenor (engine/group-guests.ts): waiting, in,
+        // left or removed since, its own act each time.
+        { table: 'group_guests', columns: ['invited_by'] },
         { table: 'creator_channels', columns: ['owner_pubkey'] },
         { table: 'pulse_items', columns: ['owner_pubkey'] },
         // A guide page it sent, waiting or answered (engine/knowledge-drafts.ts).

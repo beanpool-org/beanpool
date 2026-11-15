@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Pesan, grup dan obrolannya, orang dan teman, obrolan acara, membisukan, sebutan, dan kunci yang berubah.",
-        "sourceHash": "e680a96492c72e47"
+        "text": "Pesan, grup dan obrolannya, orang dan teman, kontak pribadimu, obrolan acara, membisukan, sebutan, dan kunci yang berubah.",
+        "sourceHash": "b8443e689c10d3a0"
       }
     },
     "pulse": {
@@ -762,6 +762,20 @@
       "help": {
         "text": "Penawaranmu dalam satu nama. Beri nama, tentukan jenisnya, tutup untuk sementara, atau tutup sepenuhnya.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "Kontak pribadimu",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Daftar kontak yang hanya bisa kamu buka, di ponsel atau browser mana pun dan di setiap komunitas yang kamu ikuti. Cara memasukkan orang, mengundang mereka, dan apa yang bisa serta tidak bisa dilihat server komunitasmu.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "Kontak pribadimu. Hanya kamu yang bisa membuka daftarnya. Bawa orang dari ponsel atau file kontak, tambahkan seseorang secara manual, atau undang mereka.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

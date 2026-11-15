@@ -518,6 +518,11 @@ export function initSchema() {
         try { db.prepare(`ALTER TABLE posts ADD COLUMN ${column}`).run(); } catch { }
     }
 
+    // Born with Local knowledge's fixes (slice K5): one empty column on the waiting list, NULL on every row that is there. An
+    // addition, as K1's above (Marty's pick 6, 11 Nov 2026): nothing is read, filled in or rewritten. A fix waiting from before
+    // it (the test node only) has no recorded change, so it reads as the note alone. On a fresh install it finds its column.
+    try { db.prepare('ALTER TABLE knowledge_drafts ADD COLUMN fix_base TEXT').run(); } catch { }
+
     // Born with per-item prices (DESIGN-per-item-price-fable.md §3, §6; Marty's Q5, 12 Nov 2026): four empty columns, each with
     // schema.sql's own CHECK, NULL on every row that is there. Nothing is read, filled in or rewritten: a listing becomes
     // per-item only by its seller's own edit. On a fresh install each finds its column and does nothing.
@@ -536,6 +541,14 @@ export function initSchema() {
     // table and do nothing, and schema.sql below makes the tables whole. On a fresh install each finds its column.
     for (const [table, column] of [['abuse_reports', 'target_forum_post_id TEXT'], ['abuse_reports', 'target_home TEXT'],
         ['forum_posts', 'hidden_by_reports_at TEXT'], ['forum_members', 'known_at TEXT']]) {
+        try { db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column}`).run(); } catch { }
+    }
+
+    // Born with the groups' forum sections and the polls in topics (slice F8; DESIGN-forums-fable.md §3, §10.1, §11, §20): two
+    // empty columns, NULL on every row that is there, so every section stays every member's and no topic holds a poll. Additions,
+    // not conversion code, as F2's above: nothing is read, filled in or rewritten. A file from before the forum finds no table
+    // and does nothing; schema.sql below makes the tables whole. On a fresh install each finds its column.
+    for (const [table, column] of [['forum_sections', 'group_id TEXT'], ['forum_topics', 'poll_post_id TEXT']]) {
         try { db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column}`).run(); } catch { }
     }
 

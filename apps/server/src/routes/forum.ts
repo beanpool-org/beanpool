@@ -40,13 +40,26 @@
  * /api/reports `targetForumPostId`, answered in Settings (routes/admin.ts).
  * An owner or admin; anyone else 403 `staff_only`:
  *   POST /api/forum/topics/:id/pin          { pinned } → { topic }   409 `too_many_pins`
- *   POST /api/forum/topics/:id/move         { sectionId } → { topic }
- *   POST /api/forum/sections                { name, about?, starts?, listed? } → 201 { section }   409 `too_many_sections`
- *   POST /api/forum/sections/:id/edit       { name?, about?, starts?, listed?, position?, archived? } → { section }
+ *   POST /api/forum/topics/:id/move         { sectionId } → { topic }   409 `group_section` (into, out of or across a group's)
+ *   POST /api/forum/sections                { name, about?, starts?, listed?, groupId? } → 201 { section }   409 `too_many_sections`;
+ *        404 `group_not_found`; 400 `group_unlisted` (a group's section is never listed)
+ *   POST /api/forum/sections/:id/edit       { name?, about?, starts?, listed?, position?, archived? } → { section }   400 `group_fixed`
+ *        (its group is set when it is made), `group_unlisted`
+ * A group's section (slice F8, engine/forum-sections.ts): its group's active members and the moderators read it, and nobody
+ * else learns it exists (every read and write above answers them as an id nobody has: 404 `not_found`, no row, no hit); its
+ * convenors and members write, its other readers are refused 403 `group_only`. A poll in a topic and the Decision chip (F8):
+ *   POST /api/forum/topics/:id/poll         { title?, description?, pollOptions, durationDays?, pollOpenVote?, pollOther? } → 201
+ *        { topic, pollId }: the Market's own poll body (title: its question, else the topic's title)
+ *        the topic's writer (403 `not_yours`), an open topic (409 `closed`), one a topic (409 `poll_already`), three open a
+ *        section (409 `section_polls`); the ordinary poll (2 to 4 answers, its lengths, one open a member), voted and read by
+ *        the polls' own routes; a group's section's is the group's poll
+ *   POST /api/forum/topics/:id/decision     { decisionId: id | null } → { topic }   its writer or an owner or admin (403
+ *        `not_yours`); 404 `decision_not_found`; 404 `decisions_off` where Decisions are off
  *
- * A section: { id, starter, name, about, position, starts, listed, archived } (starter's name: @beanpool/core
- * forumSectionName). A topic: { id, sectionId, title, writer: { publicKey, name }, place, lang, replyCount, lastActivityAt,
- * createdAt, pinned, closed, removed, hidden }. A post: { id, topicId, number, writer, words, quotes, lang, createdAt, editedAt,
+ * A section: { id, starter, name, about, position, starts, listed, archived, group: { id, name } | null } (starter's name:
+ * @beanpool/core forumSectionName). A topic: { id, sectionId, title, writer: { publicKey, name }, place, lang, replyCount,
+ * lastActivityAt, createdAt, pinned, closed, removed, hidden, follow, unread, pollId, decision: { id, title, status } | null }
+ * (`pollId` only to a reader who may see that poll). A post: { id, topicId, number, writer, words, quotes, lang, createdAt, editedAt,
  * removed, photos, hidden, linksOn } (a removed one's words are empty and its photos 0; so are a hidden one's, but to its
  * writer and the moderators; `linksOn` false: a new writer's links are plain text). The front adds { moderator,
  * firstLooksWaiting, firstTopicWaits, linksOn } for the signer.
@@ -56,13 +69,16 @@
  */
 import crypto from 'node:crypto';
 import Router from '@koa/router';
-import { isNodeMember, readsAsMember, assertMemberActive, getNodeRole, moderationNoticesCb, forumNoticeCb } from '../state-engine.js';
+import { isNodeMember, readsAsMember, assertMemberActive, getNodeRole, moderationNoticesCb, forumNoticeCb, createPost } from '../state-engine.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
+import { assertMayPost } from '../engine/probation.js';
+import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { memberErrorText } from './member-error-text.js';
 import { parseDataUrl } from '../storage/image-columns.js';
 import {
-    ForumRefusal, closeForumTopic, createForumSection, editForumPost, editForumSection, followTopic, forumFront, forumListTag, forumPhoto, forumTopic,
-    forumTopics, markForumTold, moveForumTopic, pinForumTopic, readTopic, removeForumPost, replyInForum, startForumTopic,
+    ForumRefusal, addForumPoll, closeForumTopic, createForumSection, editForumPost, editForumSection, followTopic, forumFront, forumListTag, forumPhoto, forumTopic,
+    forumTopicSection, forumTopics, linkForumDecision, markForumTold, moveForumTopic, pinForumTopic, readTopic, removeForumPost, replyInForum, startForumTopic,
+    type MakeForumPoll,
 } from '../engine/forum.js';
 import { noteForumReader, tellForumReply, tellForumTopic } from '../engine/forum-notices.js';
 import { ForumSearchRefusal, FORUM_SEARCH_OFFSET_MAX, searchForum } from '../engine/forum-search.js';
@@ -123,6 +139,26 @@ function refused(ctx: any, e: unknown): void {
     if (respondProfileRefusal(ctx, e)) return;
     ctx.status = 400;
     ctx.body = { error: memberErrorText(e, word('Couldn’t save this in the forum.')) };
+}
+
+/**
+ * A topic's poll as the ordinary poll's own door makes it (state-engine createPost: its answers, lengths, ballot and Other, the
+ * one open a member, the section's pool), from the body the Market's poll form sends (routes/marketplace.ts), so both apps'
+ * poll forms serve here as they are. It is a new post, so it takes the two limits the Market's route puts around createPost
+ * (routes/marketplace.ts), in the same order and words: a new account's probation (assertMayPost, a poll keeps no photos),
+ * then the day's posts (assertMayPostToday, once every refusal of the poll itself has passed).
+ */
+function makeForumPoll(author: string, body: any): MakeForumPoll {
+    return ({ audienceScope, targetGroupId, forumSectionId, question }) => {
+        assertMayPost(author, 0);
+        const post = createPost('poll', 'community', question, typeof body.description === 'string' ? body.description : '', 0, 'fixed', author,
+            undefined, undefined, [], false, undefined, false, {
+                pollOptions: body.pollOptions, durationDays: body.durationDays, pollOpenVote: body.pollOpenVote, pollOther: body.pollOther,
+                audienceScope, targetGroupId, forumSectionId, beforeWrite: () => assertMayPostToday(author),
+            });
+        if (!post) throw new ForumRefusal(403, 'not_member', ONLY_MEMBERS);
+        return post.id;
+    };
 }
 
 function whole(raw: unknown, fallback: number, max: number): number | null {
@@ -224,12 +260,12 @@ export function createForumRoutes(_deps: RouteDeps): Router {
     router.post('/api/forum/topics', (ctx) => {
         write(ctx, 201, (key, body) => startForumTopic(key, body));
         // A new member's first topic waits for a look (slice F2): 202, and every moderator hears one is waiting.
-        const out = ctx.body as { waiting?: any } | undefined;
+        const out = ctx.body as { waiting?: any; topic?: { sectionId?: string } } | undefined;
         if (ctx.status === 201 && out?.waiting) {
             ctx.status = 202;
             tellFirstLookWaiting(moderationNoticesCb(), out.waiting);
         } else if (ctx.status === 201) {
-            tellForumTopic(forumNoticeCb());
+            tellForumTopic(forumNoticeCb(), Date.now(), out?.topic?.sectionId ?? null);
         }
     });
     router.post('/api/forum/topics/:id/replies', (ctx) => {
@@ -248,6 +284,9 @@ export function createForumRoutes(_deps: RouteDeps): Router {
         return { topic: pinForumTopic(key, ctx.params.id, body.pinned) };
     }));
     router.post('/api/forum/topics/:id/move', (ctx) => write(ctx, 200, (key, body) => ({ topic: moveForumTopic(key, ctx.params.id, body.sectionId) })));
+    // A poll in a topic and the Decision chip (slice F8).
+    router.post('/api/forum/topics/:id/poll', (ctx) => write(ctx, 201, (key, body) => addForumPoll(key, ctx.params.id, body.title, makeForumPoll(key, body))));
+    router.post('/api/forum/topics/:id/decision', (ctx) => write(ctx, 200, (key, body) => ({ topic: linkForumDecision(key, ctx.params.id, body.decisionId) })));
     router.post('/api/forum/posts/:id/edit', (ctx) => write(ctx, 200, (key, body) => editForumPost(key, ctx.params.id, body)));
     router.post('/api/forum/posts/:id/remove', (ctx) => write(ctx, 200, (key) => { removeForumPost(key, ctx.params.id); return { ok: true }; }));
     router.post('/api/forum/sections', (ctx) => write(ctx, 201, (key, body) => ({ section: createForumSection(key, body) })));
@@ -270,7 +309,8 @@ export function createForumRoutes(_deps: RouteDeps): Router {
     });
     router.post('/api/forum/first-looks/:id/ok', (ctx) => {
         write(ctx, 200, (key) => okFirstLook(moderationNoticesCb(), key, ctx.params.id));
-        if (ctx.status === 200) tellForumTopic(forumNoticeCb());
+        const made = (ctx.body as { topicId?: string } | undefined)?.topicId;
+        if (ctx.status === 200 && made) tellForumTopic(forumNoticeCb(), Date.now(), forumTopicSection(made));
     });
     router.post('/api/forum/first-looks/:id/no', (ctx) => write(ctx, 200, (key, body) => { noFirstLook(moderationNoticesCb(), key, ctx.params.id, body.reason); return { ok: true }; }));
     router.post('/api/forum/first-looks/:id/withdraw', (ctx) => write(ctx, 200, (key) => { withdrawFirstLook(key, ctx.params.id); return { ok: true }; }));

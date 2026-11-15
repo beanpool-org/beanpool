@@ -100,9 +100,9 @@ describe("a member's copy, opened by a member of the global community", () => {
     it('Report opens the report on this post', async () => {
         stubNode([copy]);
         await open('copy-1');
-        expect(screen.queryByRole('button', { name: /Submit Report/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Submit report/i })).toBeNull();
         fireEvent.click(screen.getByTestId('listing-copy-report'));
-        expect(await screen.findByRole('button', { name: /Submit Report/i })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /Submit report/i })).toBeInTheDocument();
     });
 
     it("its author is told it is theirs, and offered neither the door nor a report on themselves", async () => {

@@ -3186,6 +3186,10 @@ CREATE TABLE IF NOT EXISTS knowledge_drafts (
     lang           TEXT,
     about          TEXT,
     note           TEXT,
+    -- A fix's parts its member changed, each with what the page said when it was sent (K5): JSON { part: value }, {} for the
+    -- note alone; NULL for a new page and once taken back. Approval writes only those parts, and refuses one the page itself
+    -- changed under since (engine/knowledge-drafts.ts approveFix).
+    fix_base       TEXT,
     state          TEXT NOT NULL CHECK (state IN ('waiting', 'approved', 'declined', 'withdrawn')),
     answered_at    TEXT,
     -- Who answered: never sent to the member.
@@ -3241,7 +3245,11 @@ CREATE TABLE IF NOT EXISTS forum_sections (
     listed      INTEGER NOT NULL DEFAULT 0 CHECK (listed IN (0, 1)),
     archived_at TEXT,
     created_at  TEXT NOT NULL,
-    updated_at  TEXT
+    updated_at  TEXT,
+    -- The group this section belongs to (slice F8, engine/forum-sections.ts; design §4, §11), or empty: every member's. Set
+    -- when an owner or admin makes it and never changed after, so nothing written for a group ever becomes readable by
+    -- others. Only the group's active members and the moderators read it; its convenors and members write; never listed.
+    group_id    TEXT
 );
 -- A topic: its title and the facts its list row shows. The opening words are its post number 1 in forum_posts. `closed_by`:
 -- 'writer' or 'moderator' (closed by hand), 'quiet' (180 days with no reply on the global community, slice F2), 'removed'
@@ -3259,11 +3267,15 @@ CREATE TABLE IF NOT EXISTS forum_topics (
     closed_at        TEXT,
     closed_by        TEXT CHECK (closed_by IS NULL OR closed_by IN ('writer', 'moderator', 'quiet', 'removed')),
     created_at       TEXT NOT NULL,
-    updated_at       TEXT
+    updated_at       TEXT,
+    -- Its poll (slice F8, design §10.1): the posts row of the ordinary poll its writer added, at most one. Counted in its
+    -- section's own pool, never in the community's five (engine/forum-sections.ts, engine/posts.ts assertActivePollRoom).
+    poll_post_id     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_forum_topics_section ON forum_topics (section_id, last_activity_at);
 CREATE INDEX IF NOT EXISTS idx_forum_topics_activity ON forum_topics (last_activity_at);
 CREATE INDEX IF NOT EXISTS idx_forum_topics_writer ON forum_topics (writer_pubkey, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_forum_topics_poll ON forum_topics (poll_post_id) WHERE poll_post_id IS NOT NULL;
 -- A topic's opening words (number 1) and each reply (2 on), one table so reporting, hiding, removing, editing and photos are
 -- written once. `quotes`: the number of the one earlier post it quotes. `lang`: the writer's app language. `public_from`: when
 -- it may show on the public pages (slices F2 and F7 stamp and read it); empty in this slice, so nothing is public. A removed
@@ -3384,6 +3396,17 @@ CREATE TABLE IF NOT EXISTS forum_waiting_photos (
     bytes      INTEGER NOT NULL,
     updated_at TEXT,
     PRIMARY KEY (waiting_id, order_num)
+);
+-- What a topic links (design §3 forum_links, §10): slice F8 writes a community Decision (the Decision chip, one a topic, by the
+-- topic's writer or an owner or admin); slice F9 the rest of the kinds, up to 3 a topic. Only what its reader could already
+-- see shows. A plain table: a standby has the same chips; a removal goes with its tombstone.
+CREATE TABLE IF NOT EXISTS forum_links (
+    topic_id   TEXT NOT NULL,
+    kind       TEXT NOT NULL CHECK (kind IN ('listing', 'event', 'poll', 'group', 'decision', 'learn')),
+    target_id  TEXT NOT NULL CHECK (length(target_id) BETWEEN 1 AND 128),
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    PRIMARY KEY (topic_id, kind, target_id)
 );
 -- The forum's search (slice F6, engine/forum-search.ts; design §3 "a search index", §8, §16): one row per post, keyed by the
 -- post's rowid, holding its words and, on an opening post (number 1), its topic's title and place. This server's own, never
@@ -4002,3 +4025,48 @@ CREATE INDEX IF NOT EXISTS idx_relay_outbox_due ON relay_outbox(state, next_try_
 CREATE INDEX IF NOT EXISTS idx_relay_outbox_sender ON relay_outbox(sender_key, updated_at, item_id);
 CREATE INDEX IF NOT EXISTS idx_relay_outbox_pair ON relay_outbox(sender_key, recipient);
 CREATE INDEX IF NOT EXISTS idx_relay_outbox_updated ON relay_outbox(updated_at);
+
+-- Group guests (slice G1: scratch/fable-design/DESIGN-forums-messaging-joint-fable.md §2.3; DESIGN-cross-chat-voice-fable.md
+-- §4.2; engine/group-guests.ts). Someone from another community a convenor invited into ONE group's chat, by their address
+-- card: their key, their home (the server of their community, as relay envelopes spell it), the name their card gave, and
+-- where the invitation stands: `invited` (sent, not yet answered), `in` (they said yes: in the chat's roster and its key
+-- epochs), `left` (their own signed leave), `removed` (a convenor's Remove, or the owners switching guests off). Their own
+-- table, never a group_members role: nothing that reads group_members (posts, polls, Decisions, a group's forum section,
+-- succession votes, the members list) can count a guest, and no table is rebuilt. A row is never deleted (a state moves),
+-- so a removal sticks until a convenor invites them again. A plain table: a standby copies every row (engine/
+-- replication-manifest.ts), so a promoted standby has the same guests; an older importer drops it, and after a take-over
+-- from its copy the group has no guests until a convenor invites them again. Day zero: a new table, nothing converted.
+CREATE TABLE IF NOT EXISTS group_guests (
+    group_id   TEXT NOT NULL CHECK (length(group_id) BETWEEN 1 AND 64),
+    guest_key  TEXT NOT NULL CHECK (length(guest_key) = 64),
+    home       TEXT NOT NULL CHECK (length(home) BETWEEN 1 AND 260),
+    name       TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 60),
+    state      TEXT NOT NULL CHECK (state IN ('invited', 'in', 'left', 'removed')),
+    invited_by TEXT NOT NULL CHECK (length(invited_by) = 64),
+    invited_at TEXT NOT NULL,
+    -- When the row took the state it has now.
+    state_at   TEXT NOT NULL,
+    updated_at TEXT,
+    PRIMARY KEY (group_id, guest_key)
+);
+CREATE INDEX IF NOT EXISTS idx_group_guests_state ON group_guests(group_id, state);
+
+-- group_guest_outbox: what this server, hosting a group, still has to tell another community's server about its guests there
+-- (engine/group-guests.ts): one row is one signed request to one home (a line, an epoch, the roster, an invitation, a
+-- removal), naming that home's guests in the group: never one per guest. Tried at once, then again with backoff for 24
+-- hours; gone at the first 2xx. Each home is sent to on its own, so one that doesn't answer holds up no other. A roster
+-- still waiting is replaced by the newer one (only the latest names count). This server's own (`local`): never copied to a
+-- standby, and a promoted standby starts with none: what was waiting is still in the group's chat, which the next line's
+-- fan-out does not resend (said in the manual).
+CREATE TABLE IF NOT EXISTS group_guest_outbox (
+    id          TEXT PRIMARY KEY,
+    group_id    TEXT NOT NULL,
+    home        TEXT NOT NULL CHECK (length(home) BETWEEN 1 AND 260),
+    kind        TEXT NOT NULL CHECK (kind IN ('invite', 'roster', 'line', 'epoch', 'removed')),
+    body        TEXT NOT NULL CHECK (length(body) <= 1900000),
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    next_try_at INTEGER NOT NULL,
+    created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_group_guest_outbox_due ON group_guest_outbox(next_try_at);
+CREATE INDEX IF NOT EXISTS idx_group_guest_outbox_home ON group_guest_outbox(home, next_try_at);

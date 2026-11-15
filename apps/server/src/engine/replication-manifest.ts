@@ -581,7 +581,7 @@ export const TABLES: Record<string, TableEntry> = {
     // and every delete (answered, taken back, 30 days after, the member gone) goes with a tombstone, so it leaves the standby too.
     // An older importer drops the suggestions waiting, their photos and taps: after a take-over from its copy their members
     // see none waiting and send them again; a page already approved is a post, copied whatever the importer.
-    knowledge_drafts: plain('id kind post_id member_pubkey via assistant_name title body topic place sources lang about note state answered_at answered_by reason reason_words result_post_id created_at updated_at'),
+    knowledge_drafts: plain('id kind post_id member_pubkey via assistant_name title body topic place sources lang about note fix_base state answered_at answered_by reason reason_words result_post_id created_at updated_at'),
     knowledge_draft_photos: plain('draft_id order_num photo_data bytes updated_at'),
     knowledge_helped: plain('post_id member_pubkey counted at updated_at'),
     // The forum (engine/forum.ts, DESIGN-forums-fable.md §3, §16, slice F1): sections, topics, posts and their photos (in the
@@ -589,8 +589,16 @@ export const TABLES: Record<string, TableEntry> = {
     // delete goes with a tombstone, so it leaves the standby too. The wording before an edit is aged out after 30 days on
     // each server, with no tombstone. An older importer drops the forum: after a take-over from its copy the sections are
     // made again as at the start and the topics are gone; no Bean is in it.
-    forum_sections: plain('id starter name about position starts listed archived_at created_at updated_at'),
-    forum_topics: plain('id section_id title writer_pubkey place lang reply_count last_activity_at pinned_at closed_at closed_by created_at updated_at'),
+    // Guests in a group's chat from other communities (engine/group-guests.ts, slice G1): every row, so a promoted standby
+    // has the same guests in the same states. A row is never deleted, only its state moved. An older importer drops it: after
+    // a take-over from its copy, the group has no guests until a convenor invites them again.
+    group_guests: plain('group_id guest_key home name state invited_by invited_at state_at updated_at'),
+    // A section's group and a topic's poll (slice F8, engine/forum-sections.ts) go in the copy with them, so a standby reads
+    // the same section as the group's only. An importer older than F8 would drop both columns, and a group's section would
+    // read as every member's there: REPLICA_FORMAT moves to 16 with them, and a main server sends no copy to an older standby
+    // (engine/sync.ts OLDEST_STANDBY_FORMAT, the 426 the operators' manual names).
+    forum_sections: plain('id starter name about position starts listed archived_at created_at updated_at group_id'),
+    forum_topics: plain('id section_id title writer_pubkey place lang reply_count last_activity_at pinned_at closed_at closed_by created_at updated_at poll_post_id'),
     forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at hidden_by_reports_at'),
     forum_post_photos: plain('post_id order_num photo_data bytes updated_at'),
     forum_post_edits: plain('post_id edited_at words title updated_at', { agedOut: { column: 'edited_at', days: 30 } }),
@@ -610,6 +618,9 @@ export const TABLES: Record<string, TableEntry> = {
     // older importer drops who follows: after a take-over from its copy nobody is told of replies until they reply or follow
     // again, and every topic reads as read.
     forum_follows: plain('topic_id member_pubkey state last_read created_at updated_at'),
+    // What a topic links (slice F8: a community Decision; F9 the other kinds): a promoted standby shows the same chips; a removal
+    // goes with its tombstone. Format 16 with the section's group above, so no older importer is sent it.
+    forum_links: plain('topic_id kind target_id created_at updated_at'),
     // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
     thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),
     // A group chat's keys (engine/group-keys.ts): each epoch's signed record and one wrap per member, none of which the
@@ -704,6 +715,7 @@ export const TABLES: Record<string, TableEntry> = {
     relay_mail_seen: { kind: 'local', reason: "the ids of the items other servers brought here, 7 days, against replays and for the caps (engine/relay-mail.ts): this server's own" },
     relay_mail_devices: { kind: 'local', reason: "each device that fetches a member's mail and when it last asked, so an item waits until every one has it (engine/relay-mail.ts, X2b): this server's own, never in a copy" },
     relay_mail_got: { kind: 'local', reason: "which of a member's devices has confirmed which item waiting here (engine/relay-mail.ts, X2b): goes with the item, never in a copy" },
+    group_guest_outbox: { kind: 'local', reason: "what this server, hosting a group, has still to send its guests' homes, one signed request a home (engine/group-guests.ts): this server's own; the lines stay in the group's chat" },
     relay_outbox: { kind: 'local', reason: "what members here sent to other communities and what became of it, with the sealed item only while it waits to be taken (engine/relay-outbox.ts): never in a copy" },
 };
 

@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { POLL_DAYS_DEFAULT, isLongPollDays, pollDaysAllowed, formatHundredths, isSyntheticAccount, cleanPollOtherWords, pollIsSealed, pollOtherOption, POLL_BALLOT_SEALED, POLL_OTHER_WORDS_MAX, isBeanAmount, isLendablePriceType, POST_ID_TAKEN_CODE, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
+import { POLL_DAYS_DEFAULT, isLongPollDays, pollDaysAllowed, formatHundredths, isSyntheticAccount, cleanPollOtherWords, pollIsSealed, pollOtherOption, POLL_BALLOT_SEALED, POLL_OTHER_WORDS_MAX, isBeanAmount, isLendablePriceType, POST_ID_TAKEN_CODE, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor, FORUM_LIMITS } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
 import { pollLineReportWaitsSql, takeBackPollLine } from './poll-other.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
@@ -31,6 +31,7 @@ import { itemColumnsOnCreate, itemColumnsOnEdit, writeItemCount } from './per-it
 import { ownerAdminLimit } from './owner-admin-limit.js';
 import { isNodeAdmin } from './node-roles.js';
 import { assertPollStartRoom } from './poll-week.js';
+import { forumHeldPollSql, forumPollSection, forumSectionOpenPolls } from './forum-sections.js';
 import { copyRsvpRefusal, type CopyColumns } from './event-copy.js';
 import { postSearchKeywords } from './search-keywords.js';
 import { assertShopForPost, assertShopOpenForResume, forgetPausedPost, shopOnEdit } from './shops.js';
@@ -472,8 +473,12 @@ function sweepExpiredPolls(): void {
  * Whether `authorPublicKey` may have one more active poll, for each way a poll goes active: createPost and resumePost
  * (no other path makes a poll active). `ownersLimit` is ownerAdminLimit's answer for the member acting: their number in
  * place of a member's 1, or null. The node-wide 5 is every author's, owners' and admins' too.
+ *
+ * A poll a forum topic holds (`forumSectionId`, slice F8, DESIGN-forums-fable.md §10.1) is counted in its section's own pool,
+ * FORUM_LIMITS.pollsPerSection open, and never in the node-wide 5, which counts only the polls no topic holds; the author's
+ * one open poll counts every poll of theirs, a topic's included.
  */
-function assertActivePollRoom(authorPublicKey: string, ownersLimit: number | null): void {
+function assertActivePollRoom(authorPublicKey: string, ownersLimit: number | null, forumSectionId: string | null = null): void {
     const authorOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE author_pubkey = ? AND type = 'poll' AND status = 'active'").get(authorPublicKey) as any;
     if (ownersLimit !== null) {
         if (authorOpen && authorOpen.c >= ownersLimit) {
@@ -483,7 +488,13 @@ function assertActivePollRoom(authorPublicKey: string, ownersLimit: number | nul
         throw new Error(word('Rate limit: You can only have 1 active poll at a time'));
     }
 
-    const nodeOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE type = 'poll' AND status = 'active'").get() as any;
+    if (forumSectionId !== null) {
+        if (forumSectionOpenPolls(forumSectionId) >= FORUM_LIMITS.pollsPerSection) {
+            throw new Error(tr('A section can have {n} open polls at a time. Try again when one closes.', { n: FORUM_LIMITS.pollsPerSection }));
+        }
+        return;
+    }
+    const nodeOpen = db.prepare(`SELECT COUNT(*) as c FROM posts WHERE type = 'poll' AND status = 'active' AND NOT ${forumHeldPollSql('posts.id')}`).get() as any;
     if (nodeOpen && nodeOpen.c >= 5) {
         throw new Error(word('Rate limit: Node limit of 5 active polls reached'));
     }
@@ -567,6 +578,12 @@ export function createPost(
         freeTags?: unknown;
         /** No photo needed: for the server's own callers only (tests); no route passes it. */
         allowNoPhoto?: boolean;
+        /**
+         * A poll a forum topic will hold, in this section (engine/forum.ts addForumPoll, slice F8): counted in the section's own
+         * pool instead of the community's five, and not as the author's community poll of the week. The forum's door alone
+         * passes it, linking the poll to its topic in the same transaction; no route takes it from a body.
+         */
+        forumSectionId?: string;
         /** A member's copy from their own community (engine/event-copy.ts copyOfRequest): no chat, no activity line. */
         shownCopy?: CopyColumns | null;
         /**
@@ -860,7 +877,12 @@ export function createPost(
         // (assertPollStartRoom, engine/poll-week.ts; a poll for a group or for one person is not held to it): a member who closes
         // or removes theirs has not made room for another community poll until the week is up. This is the one door every new
         // poll comes through, the apps' route and an owner's assistant alike; resumePost puts back the same poll, not a new one.
-        if (type === 'poll') { assertActivePollRoom(authorPublicKey, ownersLimit); assertPollStartRoom(authorPublicKey, ownersLimit, audienceScope, now); }
+        // A topic's poll (slice F8) is in its section's own pool and is nobody's community poll of the week.
+        const forumSectionId = type === 'poll' && typeof options?.forumSectionId === 'string' ? options.forumSectionId : null;
+        if (type === 'poll') {
+            assertActivePollRoom(authorPublicKey, ownersLimit, forumSectionId);
+            if (forumSectionId === null) assertPollStartRoom(authorPublicKey, ownersLimit, audienceScope, now);
+        }
 
         if (type === 'event') {
             // Upcoming cap (§2.2). Three separate pools: a group's events count against the group, and
@@ -2365,7 +2387,8 @@ export function resumePost(broadcast: BroadcastFn, postId: string, authorPublicK
     // A poll back up is one more active poll: the limits createPost holds it to, for the member acting.
     if (postRow.type === 'poll' && postRow.status === 'paused') {
         sweepExpiredPolls();
-        assertActivePollRoom(effectiveAuthor, ownerAdminLimit(actorPubkey ?? effectiveAuthor));
+        // A topic's poll back up counts in its section's pool, as when it was made (slice F8).
+        assertActivePollRoom(effectiveAuthor, ownerAdminLimit(actorPubkey ?? effectiveAuthor), forumPollSection(postId));
     }
     const res = db.prepare(`UPDATE posts SET status = 'active', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ? AND status = 'paused'`).run(postId, effectiveAuthor);
     if (res.changes > 0) {

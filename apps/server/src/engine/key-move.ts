@@ -219,6 +219,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // whose "Declined" line it is.
     move('group_invite_declines', 'invitee_pubkey');
     move('group_invite_declines', 'invited_by');
+    // A guest from another community (engine/group-guests.ts): the convenor who invited them. A guest's own key is no member
+    // here, so a re-key never moves it.
+    move('group_guests', 'invited_by');
     // A group chat's wraps for the old key stay (DESIGN-group-history-after-rekey-fable.md §3, Marty's pick 3 of 13 Oct):
     // only the old key's seed opens them, so the member's phone can bring the history back with their old 12 words
     // (GET …/keys/former). The old key has no group_members row now, so it is never listed or topped up; the member

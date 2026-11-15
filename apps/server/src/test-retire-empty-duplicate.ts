@@ -12,8 +12,9 @@
  *   2. "Empty", a rule at a time: a fresh account may be retired, and so may a convenor in a group another member made
  *      who sent nobody an invitation; then one account per rule, each holding only that one thing, is refused with that
  *      rule's code and words (yourself, an enterprise, the node's own SYSTEM row and a row under another spelling of a
- *      key, a suspended account, a role, a balance, a post, a group invitation sent as a convenor, waiting or accepted, a
- *      payment, a message sent, mail sent to another community, credit, an enterprise kept, someone brought in, a report,
+ *      key, a suspended account, a role, a balance, a post, a group invitation sent as a convenor, waiting or accepted,
+ *      someone from another community invited into a group as a guest, a payment, a message sent, mail sent to another
+ *      community, credit, an enterprise kept, someone brought in, a report,
  *      a forum topic started, a forum reply written and removed since). Each refusal for what the account did or holds also
  *      says Suspend stays the way. Mail from another community waiting for it, the receipt its device sent back for mail it
  *      got, and being told once that the forum is public leave it empty.
@@ -392,6 +393,14 @@ async function main(): Promise<void> {
             joinGroup(g, invitee.pk);
             const row = db.prepare('SELECT status, invited_by FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(g, invitee.pk) as any;
             if (row?.status !== 'active' || row?.invited_by !== m.pk) throw new Error(`the invitation was not accepted: ${JSON.stringify(row)}`);
+            return m;
+        } },
+        // Group guests (engine/group-guests.ts, G1): someone from another community it invited into a group's chat, removed since.
+        { rule: 'posts', label: 'someone from another community it invited into a group as a convenor', make: () => {
+            const m = makeMember('Inviting far');
+            const at = new Date().toISOString();
+            db.prepare(`INSERT INTO group_guests (group_id, guest_key, home, name, state, invited_by, invited_at, state_at) VALUES (?, ?, 'riverside.example', 'Far', 'removed', ?, ?, ?)`)
+                .run(groupWithConvenor(reader.pk, m.pk), keypair('Far guest').pk, m.pk, at, at);
             return m;
         } },
         { rule: 'trades', make: () => {

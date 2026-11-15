@@ -8,12 +8,14 @@
  *   Mo, a moderator: sees "Waiting for a first look (1) ›", says OK; the topic is up; he replies twice (the sheet once only).
  *   Ana: reads his reply, quotes it in hers, and reports it (a report naming the forum post, in abuse_reports).
  * Light for the walk; then Dark for the list, the topic and the new-topic form. Fails on any sideways scroll at 320 px, a
- * button under 44 px in the forum, or a request to any host but this machine.
+ * button under 44 px in the forum, a request to any host but this machine, the reply box's hint not whole on its line in any
+ * catalog's language, a faded 🔍 beside the empty search box, or "Submit report" not at its danger fill once a reason is
+ * chosen (walk 2, 15 Nov).
  *
  * Run (from apps/pwa): node e2e/forum-320.mjs   FORUM_TMP sets where the build and the node's data go (os.tmpdir());
  * FORUM_SHOTS a folder for screenshots. Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global URL, console, process, setTimeout, document, indexedDB, localStorage -- Node, and the page's side of evaluate() */
+/* global URL, console, process, setTimeout, document, indexedDB, localStorage, getComputedStyle -- Node, and the page's side of evaluate() */
 import { build } from 'vite';
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -160,6 +162,41 @@ async function fits(page, where) {
     check(r.small.length === 0, `${where}: every control is a 44 px target${r.small.length ? ` (${r.small.map((b) => `${b.label} ${Math.round(b.h)}px`).join(', ')})` : ''}`);
 }
 
+/**
+ * The reply box's hint, whole on its one line (walk 2, 15 Nov: between 📎 and Send it showed only "Write a"): in English and in
+ * every language the web app has a catalog for, its translation or, where it has none yet, the English it shows. Each is
+ * measured in the box's own font against the room inside its padding.
+ */
+const REPLY_HINT = 'Write a reply…';
+const WORDS_DIR = path.join(PWA_DIR, 'words');
+const replyHints = () => [{ lang: 'en', text: REPLY_HINT }, ...fs.readdirSync(WORDS_DIR).filter((f) => /^[A-Za-z-]+\.json$/.test(f)).map((f) => {
+    const catalog = JSON.parse(fs.readFileSync(path.join(WORDS_DIR, f), 'utf8'));
+    return { lang: f.replace(/\.json$/, ''), text: catalog[REPLY_HINT] || REPLY_HINT };
+})];
+async function replyHintFits(page, where) {
+    const r = await page.evaluate((hints) => {
+        const box = document.querySelector('[data-testid="forum-reply-box"]');
+        if (!box) return null;
+        const cs = getComputedStyle(box);
+        const room = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        const span = document.createElement('span');
+        for (const k of ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'fontStretch', 'letterSpacing', 'wordSpacing']) span.style[k] = cs[k];
+        Object.assign(span.style, { position: 'absolute', visibility: 'hidden', whiteSpace: 'nowrap', left: '0', top: '0' });
+        document.body.append(span);
+        const wide = hints.map((h) => { span.textContent = h.text; return { ...h, w: Math.ceil(span.getBoundingClientRect().width) }; }).filter((h) => h.w > room);
+        span.remove();
+        return { room: Math.floor(room), placeholder: box.getAttribute('placeholder'), wide };
+    }, replyHints());
+    check(r && r.placeholder === REPLY_HINT, `${where}: the reply box's hint is "${REPLY_HINT}" (${r?.placeholder})`);
+    check(r && r.wide.length === 0, `${where}: the reply box's hint fits its one line in every language (${r ? `${r.room}px of room${r.wide.length ? `; too wide: ${r.wide.map((h) => `${h.lang} ${h.w}px`).join(', ')}` : ''}` : 'no box'})`);
+}
+
+/** 🔍 beside an empty box looks like the live button it is (walk 2: faded at half opacity, it read as off). */
+async function searchLooksLive(page, where) {
+    const r = await page.getByTestId('forum-search-go').evaluate((b) => ({ disabled: b.disabled, opacity: getComputedStyle(b).opacity, box: document.querySelector('[data-testid="forum-search-box"]')?.value ?? null }));
+    check(r.box === '' && !r.disabled && r.opacity === '1', `${where}: 🔍 beside the empty box is live, at full strength (disabled ${r.disabled}, opacity ${r.opacity})`);
+}
+
 async function main() {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
@@ -179,6 +216,7 @@ async function main() {
         const A = await openAs(browser, node.origin, ana, 'light');
         await openForum(A.page, node);
         await fits(A.page, 'the list (Ana)');
+        await searchLooksLive(A.page, 'the list (Ana)');
         await A.page.getByTestId('forum-new').click();
         await A.page.getByTestId('forum-new-section').selectOption({ label: 'Introduce yourself' });
         await A.page.getByTestId('forum-new-title').fill('Hello from Ana');
@@ -227,6 +265,9 @@ async function main() {
         await M.page.getByTestId('forum-post-3').waitFor({ timeout: 15_000 });
         check(await M.page.getByTestId('forum-told').count() === 0, 'his second reply in the topic goes with no sheet');
         await fits(M.page, 'the topic (Mo)');
+        await replyHintFits(M.page, 'the topic (Mo)');
+        // The reply box in the picture, clear of the tab bar (it sat half under it in walk 2's).
+        await M.page.getByTestId('forum-reply').evaluate((el) => el.scrollIntoView({ block: 'center' }));
         await shot(M.page, '05-topic-reply-light');
 
         console.log('Ana: reads, quotes and reports');
@@ -243,9 +284,22 @@ async function main() {
         check((await node.sql('SELECT quotes FROM forum_posts WHERE number = 4'))[0]?.quotes === 2, 'the node stored the quote');
         await A.page.getByTestId('forum-post-menu-2').click();
         await A.page.getByTestId('forum-menu').getByRole('button', { name: 'Report' }).click();
+        // "Submit report", in sentence case: off until a reason is chosen, then the danger fill at once (the context asks for
+        // less motion, so nothing fades: walk 2 caught it mid-fade, still grey, with "Spam or scam" picked).
+        const submit = A.page.getByRole('button', { name: 'Submit report', exact: true });
+        check(await submit.isDisabled(), 'with no reason chosen, "Submit report" is off');
         await A.page.getByText('Spam or scam').click();
+        const look = await submit.evaluate((b) => {
+            const probe = document.createElement('i');
+            probe.style.backgroundColor = getComputedStyle(document.documentElement).getPropertyValue('--bp-danger-fill').trim();
+            document.body.append(probe);
+            const want = getComputedStyle(probe).backgroundColor;
+            probe.remove();
+            return { disabled: b.disabled, have: getComputedStyle(b).backgroundColor, want, opacity: getComputedStyle(b).opacity };
+        });
+        check(!look.disabled && look.have === look.want && look.opacity === '1', `with a reason chosen, "Submit report" has the danger fill at once (${look.have}, the token ${look.want})`);
         await shot(A.page, '06-report-light');
-        await A.page.getByRole('button', { name: /submit/i }).click();
+        await submit.click();
         await A.page.waitForTimeout(800);
         const reports = await node.sql('SELECT target_forum_post_id AS post, target_pubkey AS who FROM abuse_reports');
         const moPost = (await node.sql('SELECT id FROM forum_posts WHERE number = 2'))[0]?.id;
@@ -256,10 +310,12 @@ async function main() {
         await openForum(D.page, node);
         await D.page.getByText('Hello from Ana').waitFor({ timeout: 15_000 });
         await fits(D.page, 'the list (dark)');
+        await searchLooksLive(D.page, 'the list (dark)');
         await shot(D.page, '07-list-dark');
         await D.page.getByText('Hello from Ana').click();
         await D.page.getByTestId('forum-post-4').waitFor({ timeout: 15_000 });
         await fits(D.page, 'the topic (dark)');
+        await replyHintFits(D.page, 'the topic (dark)');
         await shot(D.page, '08-topic-dark');
         await D.page.getByTestId('forum-back').click();
         await D.page.getByTestId('forum-new').click();

@@ -22,6 +22,9 @@
  * - **Doorbells**, only to apps that say they read them (state-engine.ts tellForumSockets, `forum=1`): `forum_reply`
  *   { topicId, number } to the followers who may read it and to whoever read that topic in the last 15 minutes (held in
  *   memory, bounded), and `forum_list` to every member's socket at most once every 15 seconds. Visitors hear nothing.
+ * - **A group's section** (slice F8, engine/forum-sections.ts): only who reads it is ever told or rung, a follower or someone
+ *   mentioned who has left the group included; its activity rings `forum_list` for its readers alone, so no one else's list
+ *   hears that anything happened there.
  *
  * What a row says is generic or the member's own community's words: the topic's title, a count, and for a mention the
  * sender's name; never a reply's words. Every push sentence is core's (PUSH_NOTICE_KINDS). A standby writes nothing here.
@@ -34,6 +37,7 @@ import { db, deletePlainRows } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { getNodeRole } from './sync.js';
 import { forumNewness, isForumModerator } from './forum-moderation.js';
+import { sectionGroupOf, sectionReadSql, sectionReaders } from './forum-sections.js';
 
 const { tn: trn } = wordsFor('en');
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -121,20 +125,21 @@ export function markForumTopicRead(cb: Pick<ForumNoticeCallbacks, 'bellSeenWhere
 
 // ── Who may be told ─────────────────────────────────────────────────────────────────────────────────────────────
 
-interface TopicFacts { id: string; title: string; writer: string; openingHidden: boolean }
+interface TopicFacts { id: string; title: string; writer: string; openingHidden: boolean; sectionId: string; groupId: string | null }
 
 function topicFacts(topicId: string): TopicFacts | null {
-    const row = db.prepare(`SELECT t.id, t.title, t.writer_pubkey,
+    const row = db.prepare(`SELECT t.id, t.title, t.writer_pubkey, t.section_id, (SELECT s.group_id FROM forum_sections s WHERE s.id = t.section_id) AS group_id,
             (SELECT p.hidden_by_reports_at IS NOT NULL FROM forum_posts p WHERE p.topic_id = t.id AND p.number = 1) AS opening_hidden
         FROM forum_topics t WHERE t.id = ? AND COALESCE(t.closed_by, '') != 'removed'`).get(topicId) as
-        { id: string; title: string; writer_pubkey: string; opening_hidden: number | null } | undefined;
-    return row ? { id: row.id, title: row.title, writer: row.writer_pubkey, openingHidden: !!row.opening_hidden } : null;
+        { id: string; title: string; writer_pubkey: string; section_id: string; group_id: string | null; opening_hidden: number | null } | undefined;
+    return row ? { id: row.id, title: row.title, writer: row.writer_pubkey, openingHidden: !!row.opening_hidden, sectionId: row.section_id, groupId: row.group_id } : null;
 }
 
 /**
  * Of these keys, those who may read what `writer` just wrote in the topic: active members (no visitor), not the writer, who
- * blocked neither the writer nor the topic's writer; while the opening post is hidden, only the topic's writer and the
- * moderators. `notices`: also not muted on this topic and with their Forum switch on (a doorbell needs neither).
+ * blocked neither the writer nor the topic's writer, who read its section (a group's: its members and the moderators, slice
+ * F8); while the opening post is hidden, only the topic's writer and the moderators. `notices`: also not muted on this topic
+ * and with their Forum switch on (a doorbell needs neither).
  */
 function mayBeTold(keys: readonly string[], topic: TopicFacts, writer: string, notices: boolean): string[] {
     if (keys.length === 0) return [];
@@ -142,10 +147,11 @@ function mayBeTold(keys: readonly string[], topic: TopicFacts, writer: string, n
          WHERE m.public_key IN (SELECT value FROM json_each(@keys)) AND m.public_key != @writer
            AND m.status = 'active' AND COALESCE(m.is_visitor, 0) = 0
            AND m.public_key NOT IN (SELECT owner_pubkey FROM member_blocks WHERE blocked_pubkey IN (@writer, @topicWriter))
+           AND ${sectionReadSql('@section', 'm.public_key')}
            AND (@notices = 0 OR (
                 NOT EXISTS (SELECT 1 FROM forum_follows f WHERE f.topic_id = @topic AND f.member_pubkey = m.public_key AND f.state = 'muted')
             AND NOT EXISTS (SELECT 1 FROM member_preferences p WHERE p.public_key = m.public_key AND p.pref_key = @pref AND p.pref_value = 'false')))`)
-        .pluck().all({ keys: JSON.stringify([...new Set(keys)]), writer, topicWriter: topic.writer, topic: topic.id, notices: notices ? 1 : 0, pref: FORUM_PUSH_PREF }) as string[];
+        .pluck().all({ keys: JSON.stringify([...new Set(keys)]), writer, topicWriter: topic.writer, topic: topic.id, section: topic.sectionId, notices: notices ? 1 : 0, pref: FORUM_PUSH_PREF }) as string[];
     const allowed = new Set(rows);
     // In the order given (the followers' most recently active first).
     return [...new Set(keys)].filter((k) => allowed.has(k) && (!topic.openingHidden || k === topic.writer || isForumModerator(k)));
@@ -271,18 +277,32 @@ export function tellForumReply(cb: ForumNoticeCallbacks, post: ForumReplyFacts, 
         }
         if (out.pushed.length > 0) cb.deliverPushNotices(out.pushed, post.writer, title, replyBody(1), { ...where, count: 1 }, 'forum', 'forum.reply');
 
-        // The doorbells: followers and anyone reading it now get this reply; every member's list a nudge.
+        // The doorbells: followers and anyone reading it now get this reply; every member's list a nudge (a group's section:
+        // its readers' lists alone).
         cb.tellForum(mayBeTold([...following, ...readersOf(topic.id, now)], topic, post.writer, false), { type: 'forum_reply', topicId: topic.id, number: post.number });
-        nudgeForumList(cb, now);
+        nudgeListsOf(cb, topic.groupId, now);
     } catch (e: any) {
         console.warn('[Forum] A reply\'s notices could not all go:', e?.message || e);
     }
     return out;
 }
 
-/** A topic went up (a member's own, or a first look a moderator OK'd): every member's open list hears it, within 15 seconds. */
-export function tellForumTopic(cb: Pick<ForumNoticeCallbacks, 'tellForum'>, now = Date.now()): void {
-    if (getNodeRole() === 'primary') nudgeForumList(cb, now);
+/**
+ * A topic went up in section `sectionId` (a member's own, or a first look a moderator OK'd): every member's open list hears it,
+ * within 15 seconds; in a group's section only its readers' lists (slice F8).
+ */
+export function tellForumTopic(cb: Pick<ForumNoticeCallbacks, 'tellForum'>, now = Date.now(), sectionId: string | null = null): void {
+    if (getNodeRole() === 'primary') nudgeListsOf(cb, sectionId ? sectionGroupOf(sectionId) : null, now);
+}
+
+/**
+ * The list doorbell for activity in a section of group `groupId` (null: every member's section): every member's lists through
+ * the 15-second nudge; a group's section's readers at once and nobody else, so no other list hears that anything happened
+ * there. Their number is the group's members and the moderators, and their activity is held by the forum's daily limits.
+ */
+function nudgeListsOf(cb: Pick<ForumNoticeCallbacks, 'tellForum'>, groupId: string | null, now: number): void {
+    if (groupId === null) return nudgeForumList(cb, now);
+    cb.tellForum(sectionReaders(groupId), { type: 'forum_list' });
 }
 
 // ── Doorbells ───────────────────────────────────────────────────────────────────────────────────────────────────

@@ -260,10 +260,10 @@ async function main() {
         await noSidewaysScroll(a.page, "Ana's report card");
         // The chips and Submit fade to their picked colours (transition-all): the picture is taken once they have.
         await a.page.waitForTimeout(400);
-        const submitFill = await card.getByRole('button', { name: 'Submit Report' }).evaluate((b) => getComputedStyle(b).backgroundColor);
+        const submitFill = await card.getByRole('button', { name: 'Submit report' }).evaluate((b) => getComputedStyle(b).backgroundColor);
         check(submitFill === 'rgb(185, 28, 28)', `with a reason picked, Submit is the danger fill (${submitFill})`);
         await shot(a.page, '1b-ana-report-card');
-        await card.getByRole('button', { name: 'Submit Report' }).click();
+        await card.getByRole('button', { name: 'Submit report' }).click();
         await card.getByTestId('report-sent').waitFor({ timeout: 10_000 });
         await shot(a.page, '1b-ana-report-sent');
         const bens = stored.find((r) => r.author === ben.publicKey);

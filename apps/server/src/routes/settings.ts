@@ -34,6 +34,7 @@ import { adviseTheOwners, ADVICE_ROLE_ONLY, ADVICE_TOKEN_REFUSED } from '../conf
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
 import { countWebAppPageLoad } from '../engine/web-visits.js';
+import { serveWebAppPage } from '../web-app-robots.js';
 import type { RouteDeps } from './types.js';
 import { PROTOCOL_CONSTANTS, word, VOUCH_PRESETS, VOUCH_MAX, VOUCHER_BUDGET_MAX } from '@beanpool/core';
 import { myVouching, readVoucherCard, VoucherError, tellVoucherNotice } from '../engine/vouchers.js';
@@ -667,7 +668,8 @@ router.post('/api/admin/check-update', async (ctx) => {
 
 // ===================== MIDDLEWARE =====================
 
-// Serve PWA at /app
+// Serve PWA at /app: the web app's front door, which names this community's address as its canonical for search engines
+// (web-app-robots.ts); /app/… is served by https-server.ts's SPA fallback, noindex.
 router.get('/app', async (ctx) => {
     const indexPath = path.join(PUBLIC_DIR, 'index.html');
     if (fs.existsSync(indexPath)) {
@@ -675,8 +677,7 @@ router.get('/app', async (ctx) => {
         // https-server.ts's SPA fallback.
         countWebAppPageLoad(ctx);
         useAppDocumentPolicy(ctx);
-        ctx.type = 'html';
-        ctx.body = fs.createReadStream(indexPath);
+        await serveWebAppPage(ctx, indexPath);
     }
 });
 

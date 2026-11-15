@@ -102,8 +102,11 @@ export function OutsideRequestCard({ chat, onOpen }: { chat: OutsideChat; onOpen
     );
 }
 
-/** The chat itself: kept in this browser only; a request's Accept, Decline and Block; the box once it is open. */
-export function OutsideChatThread({ chatId, onBack }: { chatId: string; onBack: () => void }) {
+/**
+ * The chat itself: kept in this browser only; a request's Accept, Decline and Block; the box once it is open. `onAccepted`: Accept
+ * took, so the page's Back lands on the chats, where it now is, and not on the requests it came from (as a community request's).
+ */
+export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: string; onBack: () => void; onAccepted?: () => void }) {
     const [me, setMe] = useState<string | null>(null);
     const [chat, setChat] = useState<OutsideChat | null | undefined>(undefined);
     const [lines, setLines] = useState<OutsideLine[]>([]);
@@ -161,6 +164,7 @@ export function OutsideChatThread({ chatId, onBack }: { chatId: string; onBack: 
         await ctx.store.decide(ctx.identity.publicKey, chat.id, state);
         ring();
         if (state === 'declined') { onBack(); return; }
+        onAccepted?.();
         await load();
     };
 

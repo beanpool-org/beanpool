@@ -24,7 +24,7 @@ import { YourEvents } from '../components/YourEvents';
 import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow, movedCopyContext } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
-import { StandingPanel, StandingTakeUp, type StandingChoice } from '../components/StandingDeal';
+import { StandingPanel, StandingTakeUp, type StandingChoice, type StandingLowerStep } from '../components/StandingDeal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
 import { MarketCircleLine } from '../components/MarketCircleLine';
 import {
@@ -90,7 +90,7 @@ import {
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest, openDealIn,
     treasuryApprove, treasuryReject, treasuryComplete,
-    signStandingStart, stopStandingDeal,
+    signStandingStart, stopStandingDeal, lowerStandingPeriod, answerStandingAsk, withdrawStandingAsk,
     getMembers, getTreasury, getEnterpriseStatuses,
     getCommissionCapacity, commissionListing, getCommunityMe,
     getGroups, deleteGroupPost, type Group,
@@ -1919,6 +1919,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 setAccepting(false);
             }
         };
+        // A short week (DESIGN-getting-paid-fable §3.1): the panel's lowering, ask, answer or take-back, as on the phone. A
+        // refusal goes back to the panel in words, which shows it on its sheet and changes nothing; a yes reads the deal again.
+        const lowerStep = async (step: StandingLowerStep) => {
+            try {
+                if (step.move === 'lower') await lowerStandingPeriod(step.standingId, step.changeId, step.periodNo, step.beans_c);
+                else if (step.move === 'answer') await answerStandingAsk(step.standingId, step.changeId, step.yes);
+                else await withdrawStandingAsk(step.standingId, step.changeId);
+            } catch (e: any) {
+                throw new Error(nodeRefusal(e)?.message ?? (e?.message || t('Try again')));
+            }
+            afterDealStep();
+        };
         // Agree (§2.2, §6): the payer's app signs the authorisation (core builds the text and its bytes) and sends it with the
         // accept (an Offer) or the approval (a Need's author, paying the helper the request names).
         const takeUpStanding = async (choice: StandingChoice, payee: string, approveTxId?: string) => {
@@ -2274,6 +2286,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                      return (
                          <StandingPanel key={m.tx.id} tx={m.tx} actingAs={m.actingAs} busy={accepting}
                              onStop={() => standingStep(() => stopStandingDeal(m.tx.standingId!))}
+                             onLower={lowerStep}
                              onMessage={m.asKeeper ? undefined : () => messageRow(other)}
                              messageLabel={t('Message {name}', { name: otherName })} />
                      );
@@ -3821,7 +3834,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 reportReason ? 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on shadow-sm' : 'bg-nature-300 text-white cursor-not-allowed'
                                             }`}
                                         >
-                                            {submittingReport ? t('Sending...') : t('Submit Report')}
+                                            {submittingReport ? t('Sending...') : t('Submit report')}
                                         </button>
                                     </div>
                                 )}

@@ -64,9 +64,9 @@ const LINK_PEER = '12D3KooWInFlightLinkedPeer00000000000000000000000';
 /**
  * The importer format a copy records (engine/sync.ts REPLICA_FORMAT): 5 was this suite's (G3), 6 members' devices' (G4), 7 a
  * whole copy built from nothing in a staging database (P2), 8 listing photos by reference (P4), 9 members' phones locked, 10 event times, 11 events' let-ins, 12 repeating events,
- * 13 a poll's typed Other, 14 chat photos, 15 money in whole hundredths. The one before G3's, a standby to re-seed.
+ * 13 a poll's typed Other, 14 chat photos, 15 money in whole hundredths, 16 a forum section's group. The one before G3's, a standby to re-seed.
  */
-const FORMAT = '15';
+const FORMAT = '16';
 const FORMAT_BEFORE = '4';
 
 /** The plain tables and their keys, as the manifest names them (engine/replication-manifest.ts). */

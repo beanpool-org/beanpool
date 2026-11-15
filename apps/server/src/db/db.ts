@@ -523,6 +523,11 @@ export function initSchema() {
     // it (the test node only) has no recorded change, so it reads as the note alone. On a fresh install it finds its column.
     try { db.prepare('ALTER TABLE knowledge_drafts ADD COLUMN fix_base TEXT').run(); } catch { }
 
+    // Born with Learn's tags (16 Nov 2026): one column on the waiting list, '' (no tags) on every row that is there, as a page's
+    // posts.free_tags. An addition, as fix_base's above: nothing is read, filled in or rewritten. A schema step a node with the
+    // table needs to boot its inserts, named in the PR (no-conversion-code: "name them, don't assume either way").
+    try { db.prepare(`ALTER TABLE knowledge_drafts ADD COLUMN free_tags TEXT NOT NULL DEFAULT ''`).run(); } catch { }
+
     // Born with per-item prices (DESIGN-per-item-price-fable.md §3, §6; Marty's Q5, 12 Nov 2026): four empty columns, each with
     // schema.sql's own CHECK, NULL on every row that is there. Nothing is read, filled in or rewritten: a listing becomes
     // per-item only by its seller's own edit. On a fresh install each finds its column and does nothing.

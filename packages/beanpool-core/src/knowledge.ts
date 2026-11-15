@@ -351,8 +351,8 @@ export interface KnowledgeDraftMine {
     answeredAt: string | null;
     /** The page it made or changed, once added. */
     postId: string | null;
-    /** A fix's page (slice K5), waiting or answered; null for a new page. */
-    fixOf: string | null;
+    /** A fix's page (slice K5), waiting or answered; null for a new page. The node always sends it; a server before K5 doesn't. */
+    fixOf?: string | null;
     /** Why it wasn't added (a KNOWLEDGE_DECLINE_REASONS id), and the owner's or admin's own few words. */
     reason: KnowledgeDeclineReason | null;
     reasonWords: string | null;
@@ -387,9 +387,10 @@ export interface KnowledgeDraftWhole extends KnowledgeDraftToCheck {
     needsSourcesTicked: boolean;
     /**
      * A fix's page as it shows now (§5.3: each changed part as "Now" beside "Suggested"); null for a new page, or when the
-     * page no longer shows (approving it is then refused: say "Not this one").
+     * page no longer shows (approving it is then refused: say "Not this one"). The node always sends it; a server before K5
+     * doesn't.
      */
-    post: KnowledgePageWords | null;
+    post?: KnowledgePageWords | null;
 }
 
 /** A page's words as it shows (its photos stay where they are: a fix never changes them). */

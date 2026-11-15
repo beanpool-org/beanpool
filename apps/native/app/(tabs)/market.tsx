@@ -2276,7 +2276,7 @@ export default function MarketScreen() {
             <MyDealsSheet
                 visible={showDealsSheet && escrowMode !== undefined}
                 identity={identity}
-                onClose={() => setShowDealsSheet(false)}
+                onClose={() => { setShowDealsSheet(false); setDealsInitialTab((tab) => (tab === 'bills' ? 'pending' : tab)); }}
                 initialTab={dealsInitialTab}
                 showsBeans={showsBeans || dealsPreview}
                 preview={dealsPreview}

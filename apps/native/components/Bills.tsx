@@ -24,6 +24,7 @@ import { createConversationApi, declineBill, getBalance, getBills, payBill, repo
 import { Alert } from '../utils/keyboard-alert';
 import { blockUser, getBlockedUsers } from '../utils/blocklist';
 import { ReportReasonBox } from './ReportReasonBox';
+import { REPORT_SENT_TEXT } from '../utils/reportReasons';
 
 const day = (iso: string) => formatDate(new Date(iso), 'day-month');
 
@@ -309,7 +310,8 @@ export function BillSheet({ bill, me, onDone, onRefused, onClose, onMessage, onO
                 <ReportReasonBox onCancel={() => setReporting(false)} onSubmit={async (reason) => {
                     try {
                         await reportBill(bill.id, reason);
-                        onDone('');
+                        // The node declined it with the report; the panel says the report went, in the phone's report words.
+                        onDone(t(REPORT_SENT_TEXT));
                     } catch (e) {
                         setError(failureWords(e, billLines.reportLost()));
                         throw e;

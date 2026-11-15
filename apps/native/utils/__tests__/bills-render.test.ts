@@ -246,6 +246,12 @@ describe('the sheet', () => {
         await tap(byId('report-send'));
         expect(db.reportBill).toHaveBeenCalledWith('bill-0001', 'Spam or scam');
         expect(byId('bill-refusal')!.textContent).toBe("Your community's server didn't answer, so your report may have gone. Send it again to find out.");
+        // Sent: the node declined the bill with the report; the sheet closes and the panel says the report went.
+        db.reportBill.mockResolvedValueOnce({ success: true });
+        db.getBills.mockResolvedValue({ toPay: [], sent: [] });
+        await tap(byId('report-send'));
+        expect(byId('bill-sheet-bill-0001')).toBeNull();
+        expect(byId('bills-said')!.textContent).toBe("Thanks. This community's moderators will take a look.");
     });
 
     it("the sender's Withdraw sends that bill's id; a lost answer says it may have been withdrawn", async () => {

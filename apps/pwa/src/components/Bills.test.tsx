@@ -214,6 +214,18 @@ describe('the sheet', () => {
         expect(screen.getByTestId('bills-said').textContent).toBe("Declined. Rob isn't told.");
     });
 
+    it("Block: a block the node didn't take says so on the sheet; one it took closes the sheet and reads again", async () => {
+        const { blockUser } = await import('../lib/blocklist');
+        await open(bill('to-pay', { known: false }));
+        vi.mocked(blockUser).mockRejectedValueOnce(new Error("Couldn't block them just now. Nothing changed. Try again."));
+        await click(screen.getByTestId('bill-block'));
+        expect(screen.getByTestId('bill-refusal').textContent).toBe("Couldn't block them just now. Nothing changed. Try again.");
+        api.getBills.mockResolvedValue({ toPay: [], sent: [] });
+        await click(screen.getByTestId('bill-block'));
+        expect(blockUser).toHaveBeenLastCalledWith(ROB, KIM);
+        expect(screen.queryByTestId('bill-sheet-bill-0001')).toBeNull();
+    });
+
     it('a door to a bill no longer waiting says so, in place of a sheet', async () => {
         api.getBills.mockResolvedValue({ toPay: [], sent: [] });
         const opened = vi.fn();

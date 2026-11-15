@@ -641,6 +641,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // The bill a door named, opened on Your deals → Bills once (components/Bills.tsx says so if it is no longer waiting).
     const [openBillId, setOpenBillId] = useState<string | null>(null);
     const clearOpenBill = useCallback(() => setOpenBillId(null), []);
+    // Your deals closed: a door's Bills tab is not where it opens next time (the Market's own button opens it as before).
+    const closeDeals = () => { setShowDealsModal(false); setDealsInitialTab((tab) => (tab === 'bills' ? 'pending' : tab)); };
 
     // Detail view
     const [selectedPost, setSelectedPost] = useState<MarketplacePost | null>(null);
@@ -1665,7 +1667,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             visible={showDealsModal}
             preview={dealsMode === 'preview'}
             identity={identity}
-            onClose={() => setShowDealsModal(false)}
+            onClose={closeDeals}
             posts={posts}
             transactions={myTransactions}
             initialTab={dealsInitialTab}
@@ -1675,13 +1677,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             onMessage={identity && onNavigate ? async (peer) => {
                 try {
                     const result = await createConversationApi('dm', [identity.publicKey, peer], identity.publicKey);
-                    setShowDealsModal(false);
+                    closeDeals();
                     onNavigate('messages', result.conversation.id);
                 } catch (e: any) {
                     window.alert(nodeRefusal(e)?.message ?? (e?.message || t('Failed to start conversation')));
                 }
             } : undefined}
-            onPostOffer={onNavigate ? () => { setShowDealsModal(false); onNavigate('map-post'); } : undefined}
+            onPostOffer={onNavigate ? () => { closeDeals(); onNavigate('map-post-offer'); } : undefined}
             onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined}
             onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined}
             onNavigateToPost={async (postId, txId) => {

@@ -349,7 +349,7 @@ export function App() {
     const [openNewPostGroupId, setOpenNewPostGroupId] = useState<string | undefined>(undefined);
     // Commons' Start something → Poll / Event, and First steps' "Ask for one thing you'd pay a neighbour for": the composer opens on
     // that kind ('map-post-poll' / 'map-post-event' / 'map-post-need').
-    const [openNewPostType, setOpenNewPostType] = useState<'poll' | 'event' | 'need' | undefined>(undefined);
+    const [openNewPostType, setOpenNewPostType] = useState<'poll' | 'event' | 'need' | 'offer' | undefined>(undefined);
     // An event's "Show on map" (docs/events-on-the-map.md §3): the map centres on it.
     const [focusMapPostId, setFocusMapPostId] = useState<string | null>(null);
     const clearFocusMapPost = useCallback(() => setFocusMapPostId(null), []);
@@ -511,11 +511,12 @@ export function App() {
             setOpenNewPostGroupId(contextId);
             return;
         }
-        if (tab === 'map-post-poll' || tab === 'map-post-event' || tab === 'map-post-need') {
+        // `map-post-offer`: a bill's "Post an Offer" (components/Bills.tsx), the composer on an Offer as the phone opens it.
+        if (tab === 'map-post-poll' || tab === 'map-post-event' || tab === 'map-post-need' || tab === 'map-post-offer') {
             setActiveTab('map');
             setOpenNewPost(true);
             setOpenNewPostGroupId(undefined);
-            setOpenNewPostType(tab === 'map-post-poll' ? 'poll' : tab === 'map-post-need' ? 'need' : 'event');
+            setOpenNewPostType(tab === 'map-post-poll' ? 'poll' : tab === 'map-post-need' ? 'need' : tab === 'map-post-offer' ? 'offer' : 'event');
             return;
         }
         if (tab === 'map-event') {

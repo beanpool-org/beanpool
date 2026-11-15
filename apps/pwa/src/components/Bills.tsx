@@ -13,7 +13,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import {
-    billAnswerLost, billBinding, billBoundSheet, billLines, billPayRequestFor, billPaySheet, billSentRow, billToPayRow, formatDate,
+    billAnswerLost, billBinding, billBoundSheet, billLines, billPayRequestFor, billPaySheet, billSentRow, billToPayRow, formatDate, t,
     type BillBalanceRead, type BillBinding, type BillPayRequest, type BillView,
 } from '@beanpool/core';
 import { declineBill, getBalance, getBills, payBill, reportBill, withdrawBill } from '../lib/api';
@@ -183,7 +183,21 @@ export function BillSheet({ bill, me, onDone, onRefused, onClose, onMessage, onO
     };
     const pay = () => act(() => payBill(bill.id, payRequest.requestId), billLines.paid(bill.billerName, bill.amount_c), billLines.payLost());
     const decline = () => act(() => declineBill(bill.id), billLines.declined(bill.billerName), billLines.declineLost());
-    const block = () => act(() => blockUser(bill.billerPublicKey, me), '', '');
+    // A block the node didn't take says so in the block list's own words (lib/blocklist.ts BlocklistError); nothing changed.
+    const block = async () => {
+        if (busy) return;
+        setBusy(true);
+        setError(null);
+        try {
+            await blockUser(bill.billerPublicKey, me);
+            onDone('');
+        } catch (e) {
+            const m = (e as { message?: unknown } | null)?.message;
+            setError(typeof m === 'string' && m.trim() ? m : t('Try again'));
+        } finally {
+            setBusy(false);
+        }
+    };
 
     return (
         <div data-testid={`bill-sheet-${bill.id}`} className="rounded-2xl p-4 border bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-700 flex flex-col gap-2">

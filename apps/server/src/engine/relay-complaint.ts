@@ -32,13 +32,16 @@
  * The line is found by its sender and id (relay_outbox's own key), and it must have gone to the signing server: to its home
  * as signed, or to a name whose key document (engine/node-signature.ts, fetched as for the door) names the key that signed
  * the complaint, so a former name or an alias of the reporting server is one of its names here too, and no other server's.
- * Answered 202 `{received:true}` when filed or on file already from that community: that member's line by that id, asked
- * first, before any drop, so a retry after a lost 202 is taken though the member was pruned or re-keyed since, the switch
- * went off or the day's cap was reached. Every drop is answered alike, 422 `not_taken`, whatever the reason (no line by
- * that id from that member, a key that is no member here now, a line that went to another server's name, the owner's
- * switch off), so the reporting server learns only whether its complaint is on file, never which of these it was; and it can ask only of lines it was sent (it needs the line's random id). Refused: a request
- * that is not one (400 bad_complaint), past COMPLAINTS_PER_ORIGIN_DAY from one server (429), and 503 while the name the
- * line went to can't be confirmed yet (its key document not had: try again later).
+ * Answered 202 `{received:true}` when filed or on file already from that community: that member's line by that id, filed
+ * while the key the complaint names was theirs (the row under that key, or under a key a re-key here gave them since; never
+ * a line an older or newer key of theirs signed, so the answer never ties one of their keys to another), asked first,
+ * before any drop, so a retry after a lost 202 is taken though the member was pruned or re-keyed since, the switch went
+ * off or the day's cap was reached.
+ * Every drop is answered alike, 422 `not_taken`, whatever the reason (no line by that id from that member, a key that is
+ * no member here now, a line that went to another server's name, the owner's switch off), so the reporting server learns
+ * only whether its complaint is on file, never which of these it was; and it can ask only of lines it was sent (it needs
+ * the line's random id). Refused: a request that is not one (400 bad_complaint), past COMPLAINTS_PER_ORIGIN_DAY from one
+ * server (429), and 503 while the name the line went to can't be confirmed yet (its key document not had: try again later).
  *
  * **Counts, never names.** No log line here names a member or a reporter; the owners' notice is the reports' own
  * (services/alerts.ts noteNewReport: a kind and a count).
@@ -308,8 +311,25 @@ export async function receiveComplaint(from: NodeOrigin, body: unknown, now = Da
     const reporter = `${COMPLAINT_REPORTER_PREFIX}${origin}`;
     const received = { status: 202 as const, body: { received: true as const }, filed: false };
     // One complaint a line from one community: this member's line by that id (the first went to the signer, checked then).
-    const onFile = () => !!db.prepare('SELECT 1 FROM abuse_reports WHERE reporter_pubkey = ? AND target_message_id = ? AND target_pubkey = ?')
-        .get(reporter, c.itemId, c.member);
+    // The complaint names the key the line was signed with, which the reporting server keeps; a re-key here since moved
+    // this server's row to the new key (engine/member-wizards.ts completeRekey, engine/key-move.ts) and left the old key's
+    // `invalidated_keys.rekeyed_to` naming it. So the row is looked for under that key and each key that replaced it in
+    // turn, by that link: only the member's own keys (a re-key's new key is one no member or invalidated key held, and
+    // only a re-key writes the link), never another member's.
+    // And only a row filed in the named key's own time: after the re-key that gave the member that key, if one did, up to
+    // and with the re-key that replaced it, if one has (each re-key's `invalidated_at`, stamped before it moves a row). A
+    // line can be filed only while its signer is a member, so an honest retry's row is always inside its key's time; and
+    // the times of a member's keys never overlap, so naming another of their keys, older or newer, for that line finds
+    // nothing and is answered as a stranger's key is: the check never tells which old key became which new one. A row
+    // filed in the very millisecond of a re-key counts as the key it replaced (up to and with, after and not with), which
+    // is the only key whose line it can be: the new key's line is filed a round trip after the re-key at the soonest.
+    // Both tables, with these times, are in a standby's copy, so it answers the same.
+    const onFile = () => !!db.prepare(`WITH RECURSIVE replaced_by(k) AS (
+            SELECT @member UNION SELECT i.rekeyed_to FROM invalidated_keys i JOIN replaced_by r ON i.public_key = r.k WHERE i.rekeyed_to IS NOT NULL
+        ) SELECT 1 FROM abuse_reports WHERE reporter_pubkey = @reporter AND target_message_id = @itemId AND target_pubkey IN (SELECT k FROM replaced_by)
+            AND created_at > COALESCE((SELECT MAX(invalidated_at) FROM invalidated_keys WHERE rekeyed_to = @member), '')
+            AND created_at <= COALESCE((SELECT invalidated_at FROM invalidated_keys WHERE public_key = @member AND rekeyed_to IS NOT NULL), created_at)`)
+        .get({ member: c.member, reporter, itemId: c.itemId });
     // Asked first, before every drop: a complaint on file is taken, whatever has changed since (the member pruned or
     // re-keyed, the switch off, the day's cap reached), so a retry after a lost 202 is answered as taken, never 422; and a
     // repeat tells the other server nothing new (not whether that person is still a member here).

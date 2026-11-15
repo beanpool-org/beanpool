@@ -187,7 +187,7 @@ import { createContactsRoutes } from './routes/contacts.js';
 import { createCreditSightRoutes } from './routes/credit-sight.js';
 import { createSettingsSigninRoutes } from './routes/settings-signin.js';
 import { createNodeClaimRoutes } from './routes/node-claim.js';
-import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
+import { createRecoveryCollectRoutes, nameRoutesGone } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
 import { createPricingGuideRoutes } from './routes/pricing-guide.js';
 import { createActivityRouter } from './routes/activity.js';
@@ -203,6 +203,7 @@ import { pruneChatLines } from './chat-rate-limit.js';
 import { clientIp, clientLimiterKey, limiterKeyForIp, resolveClientIp } from './client-ip.js';
 import { adminIpAllowed } from './config/gateway.js';
 import { countWebAppPageLoad } from './engine/web-visits.js';
+import { isWebAppPageFile, serveWebAppPage, WEB_APP_NOINDEX } from './web-app-robots.js';
 import {
     gatewayAdmit, gatewayAdmitMember, gatewayAdmitDayBudget, gatewaySettle, pruneGatewayBuckets, gatewayClaimVerified,
     gatewayAdmitPeerRead, gatewayAdmitUpgrade, gatewaySettleUpgrade, gatewayNoRoomUpgrade, gatewayChargeLargeClaim, CLAIM_SMALL_BODY_BYTES,
@@ -431,7 +432,6 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
     /^\/api\/treasury\/[^/]+$/,                             // members only; here for its 404 when switched off
     /^\/api\/enterprise\/[^/]+$/,                           // members only; here for its 404 when switched off
     /^\/api\/commons\/decisions\/[^/]+$/,                   // members only (MEMBERS_ONLY_READS_PATTERNS)
-    /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: the exact callsign's SSO recovery candidate, no photo (rate-limited)
     /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers); keyed for every listing where the listings are members', and for a listing off the board where they are a public read (engine/photo-keys.ts)
     /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,              // <img> Pulse feed item thumbnail proxy binary
     /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
@@ -1985,6 +1985,9 @@ export async function startHttpsServer(port: number): Promise<number> {
         groupPicture: groupPictureKeyMatches,
         shopPhoto: shopPhotoKeyMatches,
     };
+    // The name routes S3 deleted (routes/recovery-collect.ts): an app from before S2 asking one hears 404 and the sentence,
+    // before the gates below could answer it as an unsigned read or a visitor.
+    app.use(nameRoutesGone());
     app.use(privatePreviewEarlyGate(isNodeMember, previewImages));
     // Another community's server, on the few paths only a server may call (engine/node-signature.ts NODE_SIGNED_PATHS): its
     // node signature over the exact body, its destination, its key and its nonce, before anything acts on it. The member
@@ -2169,8 +2172,11 @@ export async function startHttpsServer(port: number): Promise<number> {
         gzip: true,
         setHeaders: (res, filePath) => {
             const headers = { set: (f: string, v: string) => res.setHeader(f, v), remove: (f: string) => res.removeHeader(f) };
-            if (isDocumentPolicyFile(path.relative(PUBLIC_DIR, filePath))) useDocumentPolicy(headers);
+            const file = path.relative(PUBLIC_DIR, filePath);
+            if (isDocumentPolicyFile(file)) useDocumentPolicy(headers);
             else useAppDocumentPolicy(headers);
+            // The web app's page asked for by name (/index.html): noindex, as every path of it but /app (web-app-robots.ts).
+            if (isWebAppPageFile(file)) headers.set('X-Robots-Tag', WEB_APP_NOINDEX);
         },
     });
     app.use(async (ctx, next) => (isApiOrWsPath(ctx.path) ? next() : servePublic(ctx, next)));
@@ -2212,9 +2218,9 @@ export async function startHttpsServer(port: number): Promise<number> {
                     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
                     ctx.set('Pragma', 'no-cache');
                     ctx.set('Expires', '0');
-                    ctx.type = 'html';
-                    ctx.body = fs.createReadStream(indexPath);
-                    return;
+                    // A member's page (/app/…): noindex, by header and in the page; /app itself, should it ever reach this
+                    // line, names its canonical as the route does (web-app-robots.ts).
+                    if (await serveWebAppPage(ctx, indexPath)) return;
                 }
             }
         }

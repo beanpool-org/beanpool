@@ -307,7 +307,7 @@ async function main(): Promise<void> {
         ['POST', '/api/join/sso-nonce', {}],
         ['POST', '/api/join', { callsign: 'Joiner', provider: 'google', idToken: 'x', nonce: 'x' }],
         ['POST', '/api/member/re-enroll', { code: 'ABCD-EFGH', newPublicKey: spelt, signature: 'x' }],
-        ['POST', '/api/recovery/collect', { callsign: 'bob' }],
+        ['POST', '/api/recovery/collect', { candidatePublicKey: bob.pk }],
         ['POST', '/api/recovery/shares/status', {}],
         ['POST', '/api/community/register', { publicKey: spelt, callsign: 'Official Admin' }],
         ['POST', '/api/invite/generate', { publicKey: spelt }],

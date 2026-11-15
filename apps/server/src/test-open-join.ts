@@ -400,14 +400,11 @@ async function main(): Promise<void> {
         provider: 'apple', idToken: eveToken, nonce: eveNonce, shares: [{ holderType: 'sso', holderRef: 'apple', shareIndex: 1, ...sealedEve }],
     });
     assert(twice.status === 400, `the one nonce is spent: it cannot enrol again on the recovery route (got ${twice.status})`);
-    // A device collecting that keeper (a cleared browser, later) is told the same ids with its nonce.
+    // A device restoring that account (a cleared browser, later) is told the same ids with its find's nonce.
     const evesNewDevice = newId();
-    const collection = await call(evesNewDevice, '/api/recovery/collect', { callsign: 'Eve' });
-    assert(collection.status === 200 && typeof collection.body?.collectionId === 'string',
-        `setup: a new device opens a collection for Eve's keeper (got ${collection.status} ${JSON.stringify(collection.body)})`);
-    const collectNonce = await call(evesNewDevice, '/api/recovery/collect/sso-nonce', { collectionId: collection.body?.collectionId });
-    assert(collectNonce.status === 200 && sameIds(collectNonce.body?.clientIds, WEB_CLIENT_IDS),
-        `the collect nonce answers the same clientIds (got ${collectNonce.status} ${JSON.stringify(collectNonce.body?.clientIds)})`);
+    const findNonce = await call(evesNewDevice, '/api/recovery/find-nonce', {});
+    assert(findNonce.status === 200 && sameIds(findNonce.body?.clientIds, WEB_CLIENT_IDS),
+        `the find nonce answers the same clientIds (got ${findNonce.status} ${JSON.stringify(findNonce.body?.clientIds)})`);
 
     // ── 7. sign-ups per address ──────────────────────────────────────────────────────────────────
     console.log('\n── 7. sign-ups per address ──');

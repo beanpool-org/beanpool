@@ -16,7 +16,9 @@
 import { AudioSample, AudioSampleSource, BufferTarget, Mp4OutputFormat, Output } from 'mediabunny';
 import { registerAacEncoder } from '@mediabunny/aac-encoder';
 import { VOICE_MAX_MS } from '@beanpool/core';
-import workletUrl from './voice-capture-worklet.js?url';
+// ?no-inline: a file of the node's own, never a data: URL (Vite inlines a small asset by default), which script-src 'self'
+// would refuse to load as a worklet (found on the first build of this slice; e2e/voice-encoder-chunk-check.mjs keeps it so).
+import workletUrl from './voice-capture-worklet.js?url&no-inline';
 import { VOICE_ENCODE_RATE, VoiceResampler } from './voice-resample';
 
 /** The bit rate both phones record at (§5.2); lib/voice.ts VOICE_BITS_PER_SECOND asks the browser recorder the same. */

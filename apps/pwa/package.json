@@ -30,7 +30,8 @@
     "words-screens-all": "node e2e/words-screens-all.mjs",
     "words-w3-screens-check": "node e2e/words-w3-screens-check.mjs",
     "words-w4-screens-check": "node e2e/words-w4-screens-check.mjs",
-    "words-w1-check": "node e2e/words-w1-check.mjs"
+    "words-w1-check": "node e2e/words-w1-check.mjs",
+    "voice-encoder-chunk-check": "node e2e/voice-encoder-chunk-check.mjs"
   },
   "dependencies": {
     "@beanpool/core": "workspace:*",

@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Mesajlar, gruplar ve sohbetleri, kişiler ve arkadaşlar, etkinlik sohbetleri, sessize alma, bahsetmeler ve değişen anahtarlar.",
-        "sourceHash": "e680a96492c72e47"
+        "text": "Mesajlar, gruplar ve sohbetleri, kişiler ve arkadaşlar, özel kişi listeniz, etkinlik sohbetleri, sessize alma, bahsetmeler ve değişen anahtarlar.",
+        "sourceHash": "b8443e689c10d3a0"
       }
     },
     "pulse": {
@@ -762,6 +762,20 @@
       "help": {
         "text": "Tüm Tekliflerin tek bir ad altında. Ona bir ad verin, ne tür olduğunu söyleyin, şimdilik kapatın ya da tamamen kapatın.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "Özel kişi listeniz",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Yalnızca sizin açabildiğiniz bir kişi listesi; herhangi bir telefonda veya tarayıcıda ve üyesi olduğunuz her toplulukta. İnsanları listeye getirme, onları davet etme ve topluluğunuzun sunucusunun neleri görüp neleri göremediği.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "Özel kişi listeniz. Listeyi yalnızca siz açabilirsiniz. İnsanları telefonunuzdan veya bir kişi dosyasından getirin, birini elle ekleyin ya da davet edin.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

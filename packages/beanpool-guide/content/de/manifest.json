@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Nachrichten, Gruppen und deren Chats, Leute und Freunde, Event-Chats, Stummschalten, Erwähnungen und geänderte Schlüssel.",
-        "sourceHash": "e680a96492c72e47"
+        "text": "Nachrichten, Gruppen und deren Chats, Leute und Freunde, deine privaten Kontakte, Event-Chats, Stummschalten, Erwähnungen und geänderte Schlüssel.",
+        "sourceHash": "b8443e689c10d3a0"
       }
     },
     "pulse": {
@@ -762,6 +762,20 @@
       "help": {
         "text": "Deine Angebote unter einem Namen. Gib ihm einen Namen, sag, was für ein Shop er ist, schließe ihn vorübergehend oder ganz.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "Deine privaten Kontakte",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Eine Kontaktliste, die nur du öffnen kannst, auf jedem Telefon oder Browser und in jeder Community, der du angehörst. Leute herholen, sie einladen und was der Server deiner Community sehen kann und was nicht.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "Deine privaten Kontakte. Nur du kannst die Liste öffnen. Hole Leute vom Telefon oder aus einer Kontaktdatei, füge jemanden von Hand hinzu oder lade ihn ein.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

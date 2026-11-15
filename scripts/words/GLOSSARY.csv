@@ -24,6 +24,8 @@ key vault,"BeanPool's vault that can bring a key back through a sign-in",safety,
 sign-in,"a Google, Apple or Facebook account linked for recovery; never a password",safety,,,,
 recovery code,"a one-time code typed exactly as shown (bring-back or sealed backup)",safety,,,,
 invite,"a link, QR or code that lets one person join once, for 30 days",,Invitar | Invitación,Convidar | Convite,Inviter | Invitation,Пригласить | пригла~
+contacts list,"a member's private contacts list, locked with their account's key so only they can open it; not Friends; say locked, never encrypted, for it",terminology,lista de contactos,lista de contatos,liste de contacts | liste des contacts,список контактов | списка контактов | списке контактов | списком контактов
+contacts file,"a vCard file (.vcf) of contacts, exported from a phone or Google Contacts; it is not locked",,archivo de contactos,arquivo de contatos,fichier de contacts,файл контактов | файла контактов | файл с контактами
 vouch,"a member standing for another's join request or ticket",,,,,
 enterprise,"a project or business that lives inside the Commons",terminology,Emprendimiento,Empreendimento,Entreprise,Предприятие | предприяти~
 steward,"the member who runs an enterprise",terminology,,,,

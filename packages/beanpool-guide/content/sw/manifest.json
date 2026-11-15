@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Ujumbe, vikundi na soga zao, watu na marafiki, soga za matukio, kunyamazisha, kutaja, na ufunguo uliobadilika.",
-        "sourceHash": "e680a96492c72e47"
+        "text": "Ujumbe, vikundi na soga zao, watu na marafiki, anwani zako za faragha, soga za matukio, kunyamazisha, kutaja, na ufunguo uliobadilika.",
+        "sourceHash": "b8443e689c10d3a0"
       }
     },
     "pulse": {
@@ -762,6 +762,20 @@
       "help": {
         "text": "Ofa zako chini ya jina moja. Lipe jina, sema ni aina gani, lifunge kwa sasa, au lifunge kabisa.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "Anwani zako za faragha",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Orodha ya anwani ambayo wewe tu unaweza kuifungua, kwenye simu au kivinjari chochote na katika kila jumuiya uliyomo. Kuleta watu, kuwaalika, na kile ambacho seva ya jumuiya yako inaweza kuona na isichoweza.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "Anwani zako za faragha. Wewe tu unaweza kufungua orodha. Leta watu kutoka simuni au faili ya anwani, ongeza mtu kwa mkono, au waalike.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

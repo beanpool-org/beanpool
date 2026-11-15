@@ -25,6 +25,17 @@
  *      15, 60, 120 minutes of elapsed time, a new row costs one early try that moves nothing, and once the other side
  *      answers every row goes once, in order
  *   8  a standby copies group_guest_links and never the held notices or sent items; the door; the route lists
+ *   9  close the class, invariant A (#3217 round 2): (answered host, unanswered host, blocked host, removed guest) x floods
+ *      (one invitation repeated, invitations to many groups, invite-and-withdraw cycles, invitations past the size limit,
+ *      lines, rosters and epochs, 1.85 MB lines past 50 MB, lines one device confirms as they come) -> what that host
+ *      stores for the member stays inside its standing's allowance by count, bytes and link rows, and another host's held
+ *      line is kept, its next line and a third host's invitation held
+ *  10  close the class, invariant B: (yes, no, leave) x (2xx taken, 2xx refused in the answer, 400, 413, 503, timeout, a
+ *      day of no answer) -> the link moves only when the host took the item; a queued item goes again and moves it then;
+ *      an item not taken can be sent again
+ *  11  close the class, invariant C: (the host's fan-out, a member's sends) x (success then failure, failure alone, mixed
+ *      batches with and without a 2xx, a 2xx refusing in its answer, failure then success) -> the next due time; any 2xx
+ *      starts the steps over, and another host's step is untouched
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests-home node scripts/run-server-suites.mjs
  */
@@ -78,6 +89,7 @@ async function main(): Promise<void> {
     const { __useNodeKeyFetchForTests, NODE_SIGNED_PATHS } = await import('./engine/node-signature.js');
     const { __useRelayTransportForTests } = await import('./engine/relay-outbox.js');
     const { addConnector } = await import('./connector-manager.js');
+    const { noteMailDevice } = await import('./engine/relay-mail.js');
     const { TABLES } = await import('./engine/replication-manifest.js');
     const { RELAY_MAIL_TABLES } = await import('./engine/relay-mail-tables.js');
     // Loaded at run time, so on a server without them (origin/main, the fail-first run) the suite reports a count, not a crash.
@@ -125,18 +137,22 @@ async function main(): Promise<void> {
     const triesTo = new Map<string, number>();
     const failing = new Set<string>();
     const refuseIds = new Map<string, string>();       // item id -> the refusal b.example answers for it
+    /** Each server's next answers, one a try, in order: '2xx', 'refused' (a 2xx refusing every item), a status, or 'timeout'. */
+    const script = new Map<string, string[]>();
     __useRelayTransportForTests(async (url, init) => {
         const u = new URL(url);
         triesTo.set(u.host, (triesTo.get(u.host) ?? 0) + 1);
-        if (failing.has(u.host)) throw new Error('connect ETIMEDOUT');
+        const scripted = script.get(u.host)?.shift();
+        if (failing.has(u.host) || scripted === 'timeout') throw new Error('connect ETIMEDOUT');
         const header = parseNodeRequestHeader(init.headers[NODE_REQUEST_HEADER] ?? '');
         const signed = !!header && header.key === aDoc.key && header.destination === u.host && header.origin === 'a.example'
             && nodeRequestSignatureVerifies(header, { method: 'POST', path: u.pathname, body: init.body });
         const body = JSON.parse(init.body);
         outs.push({ host: u.host, path: u.pathname, signed, body });
+        if (scripted && scripted !== '2xx' && scripted !== 'refused') return { status: Number(scripted), body: { error: 'no' } };
         if (u.pathname === '/api/relay/mail') {
-            return { status: 202, body: { items: body.items.map((i: any) => (refuseIds.has(i.envelope.itemId)
-                ? { itemId: i.envelope.itemId, refused: refuseIds.get(i.envelope.itemId) } : { itemId: i.envelope.itemId, received: true })) } };
+            return { status: 202, body: { items: body.items.map((i: any) => (scripted === 'refused' || refuseIds.has(i.envelope.itemId)
+                ? { itemId: i.envelope.itemId, refused: refuseIds.get(i.envelope.itemId) ?? 'group-refused' } : { itemId: i.envelope.itemId, received: true })) } };
         }
         return { status: 202, body: { received: true } };
     });
@@ -533,6 +549,228 @@ async function main(): Promise<void> {
     const guestView = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'test-guest-view.ts'), 'utf8');
     assert(NODE_SIGNED_PATHS.has('/api/relay/group') && ['POST /api/relay/group', 'GET /api/mail/group', 'POST /api/mail/group/confirm'].every((r) => guestView.includes(`'${r}'`)),
         '8e. the host\'s path takes only a server\'s signature, and the three routes are in the guest-view list');
+
+    // ── 9. A host's standing bounds what it stores here ─────────────────────────────────────
+    console.log('\n9. Close the class (invariant A): a host\'s standing bounds what it stores here, by count and bytes, whatever the repetition; nothing from one host drops or pushes out another\'s');
+    const take = (host: string, n: unknown) => home.receiveGroupNotice(host, n);
+    const n9 = (kind: string, host: string, g: string, who: Id, data: unknown) => ({ v: 1, kind, group: g, host, guests: [who.pk], data });
+    const heldFrom = (who: Id, host: string) => db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(bytes), 0) AS b FROM group_guest_mail WHERE member = ? AND host = ?').get(who.pk, host) as { n: number; b: number };
+    const linksFrom = (who: Id, host: string) => db.prepare('SELECT COUNT(*) FROM group_guest_links WHERE member = ? AND host = ?').pluck().get(who.pk, host) as number;
+    const lineOf = (i: number, pad = 1) => ({ id: `m-${i}`, author: ana.pk, ciphertext: 'c'.repeat(pad), nonce: 'group-xc20p-v1:n', type: 'text', metadata: null, timestamp: new Date().toISOString() });
+    const inviteOf = (pad = 0) => ({ name: 'Seed Library' + 'x'.repeat(pad), invitedBy: { key: ana.pk, name: 'Ana' } });
+    type Standing9 = 'answered host' | 'unanswered host' | 'blocked host' | 'removed guest';
+    const STANDINGS9: Standing9[] = ['answered host', 'unanswered host', 'blocked host', 'removed guest'];
+    const HOST9: Record<Standing9, string> = { 'answered host': 'b.example', 'unanswered host': 'd.example', 'blocked host': 'c.example', 'removed guest': 'b.example' };
+    const R = 520;                                       // past every count allowance (5, 20, 500)
+    // The engine's numbers (as on e8c99714 where it had none yet, so the fail-first run measures what is held, not a missing name).
+    const PER_HOST = (home.GROUP_INVITES_WAITING_PER_HOST ?? 5) as number, INVITE_MAX = (home.GROUP_INVITE_MAX_CHARS ?? 2048) as number;
+    const HOST_ITEMS = (home.GROUP_MAIL_PER_HOST_ITEMS ?? 500) as number, HOST_BYTES = (home.GROUP_MAIL_PER_HOST_BYTES ?? 50 * 1024 * 1024) as number;
+    /** What a host of each standing may store for one member, whatever it sends: notices (count, bytes) and link rows. */
+    const BOUND: Record<Standing9, { n: number; b: number; links: number }> = {
+        // Under the group they answered: the allowance no device has and as much again one device has; invitations to others as a stranger's.
+        'answered host': { n: 2 * HOST_ITEMS + PER_HOST, b: 2 * HOST_BYTES + PER_HOST * INVITE_MAX, links: 1 + PER_HOST },
+        'unanswered host': { n: PER_HOST, b: PER_HOST * INVITE_MAX, links: PER_HOST },
+        'blocked host': { n: 0, b: 0, links: 1 },
+        'removed guest': { n: PER_HOST, b: PER_HOST * INVITE_MAX, links: 1 + PER_HOST },
+    };
+    const FLOODS: Record<string, (who: Id, host: string) => void> = {
+        'the same invitation x520': (who, host) => { for (let i = 0; i < R; i++) take(host, n9('invite', host, 'g9', who, inviteOf())); },
+        'invitations to 520 groups': (who, host) => { for (let i = 0; i < R; i++) take(host, n9('invite', host, `g9-${i}`, who, inviteOf())); },
+        'invite then withdraw x520': (who, host) => {
+            for (let i = 0; i < R; i++) { take(host, n9('invite', host, 'g9', who, inviteOf())); take(host, n9('removed', host, 'g9', who, { why: 'removed' })); }
+        },
+        'invite then withdraw, 520 groups': (who, host) => {
+            for (let i = 0; i < R; i++) { take(host, n9('invite', host, `g9-${i}`, who, inviteOf())); take(host, n9('removed', host, `g9-${i}`, who, { why: 'removed' })); }
+        },
+        'invitations past the size limit': (who, host) => { for (let i = 0; i < 10; i++) take(host, n9('invite', host, `g9-big-${i}`, who, inviteOf(INVITE_MAX))); },
+        'lines x520': (who, host) => { for (let i = 0; i < R; i++) take(host, n9('line', host, 'g9', who, lineOf(i))); },
+        'rosters and epochs x520': (who, host) => {
+            for (let i = 0; i < R / 2; i++) { take(host, n9('roster', host, 'g9', who, DATA.roster)); take(host, n9('epoch', host, 'g9', who, DATA.epoch)); }
+        },
+        'lines of 1.85 MB past 50 MB': (who, host) => { for (let i = 0; i < 29; i++) take(host, n9('line', host, 'g9', who, lineOf(i, 1_850_000))); },
+        'invite then withdraw, 520 groups, one device of two confirming': (who, host) => {
+            const phone = device();
+            noteMailDevice(who.pk, phone);
+            noteMailDevice(who.pk, device());                // listed, never confirms: what the phone has stays held
+            for (let i = 0; i < R; i++) {
+                take(host, n9('invite', host, `g9-${i}`, who, inviteOf()));
+                take(host, n9('removed', host, `g9-${i}`, who, { why: 'removed' }));
+                if (i % 10 === 9) home.confirmGroupMail(who.pk, phone, db.prepare('SELECT id FROM group_guest_mail WHERE member = ? AND host = ?').pluck().all(who.pk, host));
+            }
+        },
+        'invite then withdraw, 520 groups, their only device confirming': (who, host) => {
+            const phone = device();
+            noteMailDevice(who.pk, phone);                   // every notice it confirms goes
+            for (let i = 0; i < R; i++) {
+                take(host, n9('invite', host, `g9-${i}`, who, inviteOf()));
+                take(host, n9('removed', host, `g9-${i}`, who, { why: 'removed' }));
+                if (i % 10 === 9) home.confirmGroupMail(who.pk, phone, db.prepare('SELECT id FROM group_guest_mail WHERE member = ? AND host = ?').pluck().all(who.pk, host));
+            }
+        },
+        'lines x1100, one device confirming as they come': (who, host) => {
+            const phone = device(), laptop = device();
+            noteMailDevice(who.pk, phone);
+            noteMailDevice(who.pk, laptop);                  // listed, never confirms
+            for (let i = 0; i < 1100; i++) {
+                take(host, n9('line', host, 'g9', who, lineOf(i)));
+                if (i % 100 === 99) home.confirmGroupMail(who.pk, phone, db.prepare('SELECT id FROM group_guest_mail WHERE member = ?').pluck().all(who.pk));
+            }
+        },
+    };
+    let row9 = 0;
+    for (const s of STANDINGS9) {
+        for (const [flood, run9] of Object.entries(FLOODS)) {
+            const who = addLocal(`Mo${++row9}`);
+            const host = HOST9[s];
+            if (s === 'answered host' || s === 'blocked host') setLink(who, host, 'g9', 'in');
+            if (s === 'removed guest') setLink(who, host, 'g9', 'removed');
+            // The witnesses: e.example, a host they answered, whose line is held before the flood; f.example, a host nobody answered.
+            setLink(who, 'e.example', 'w9', 'in');
+            take('e.example', n9('line', 'e.example', 'w9', who, lineOf(0)));
+            const before = db.prepare("SELECT id FROM group_guest_mail WHERE member = ? AND host = 'e.example'").pluck().get(who.pk) as string | undefined;
+            run9(who, host);
+            const held = heldFrom(who, host);
+            const links = linksFrom(who, host);
+            const b = BOUND[s];
+            const witnessKept = !!before && !!db.prepare('SELECT 1 FROM group_guest_mail WHERE id = ?').get(before);
+            const eBefore = heldFrom(who, 'e.example').n, fBefore = heldFrom(who, 'f.example').n;
+            take('e.example', n9('line', 'e.example', 'w9', who, lineOf(1, 1_000_000)));   // a megabyte: room another host's notices must not take
+            take('f.example', n9('invite', 'f.example', 'w9-f', who, inviteOf()));
+            const witnessesHeld = heldFrom(who, 'e.example').n === eBefore + 1 && heldFrom(who, 'f.example').n === fBefore + 1;
+            // One invitation repeated is held once, wherever they stand with that host.
+            const once = flood !== 'the same invitation x520' || held.n === (s === 'unanswered host' || s === 'removed guest' ? 1 : 0);
+            assert(held.n <= b.n && held.b <= b.b && links <= b.links && witnessKept && witnessesHeld && once,
+                `9. ${s} x ${flood}: at most ${b.n} notices, ${b.b} bytes, ${b.links} links; another host's held line kept, its next line and another's invitation held (got ${held.n} notices, ${held.b} bytes, ${links} links; kept ${witnessKept}, next held ${witnessesHeld})`);
+            db.prepare('DELETE FROM group_guest_mail_got WHERE member = ?').run(who.pk);
+            db.prepare('DELETE FROM group_guest_mail WHERE member = ?').run(who.pk);
+        }
+    }
+    assert(row9 === STANDINGS9.length * Object.keys(FLOODS).length, `9z. the table has a row for every standing and every flood (${row9} rows)`);
+
+    // ── 10. A link moves only on the host's answer ──────────────────────────────────────────
+    console.log('\n10. Close the class (invariant B): a link moves only on the host\'s answer: (yes, no, leave) x the answer -> where they stand, and what goes again');
+    const K = 'k.example';
+    type Answer10 = '2xx taken' | '2xx refused' | '400' | '413' | '503' | 'timeout' | 'a day of no answer';
+    const ANSWERS10: Answer10[] = ['2xx taken', '2xx refused', '400', '413', '503', 'timeout', 'a day of no answer'];
+    const SCRIPT10: Record<Answer10, string> = { '2xx taken': '2xx', '2xx refused': 'refused', 400: '400', 413: '413', 503: '503', timeout: 'timeout', 'a day of no answer': 'timeout' };
+    /** [item][answer]: the link after the answer, and the item's state. */
+    const MOVE: Record<'yes' | 'no' | 'leave', Record<Answer10, [string, string]>> = {
+        yes: { '2xx taken': ['in', 'sent'], '2xx refused': ['invited', 'refused'], 400: ['invited', 'failed'], 413: ['invited', 'failed'], 503: ['joining', 'queued'], timeout: ['joining', 'queued'], 'a day of no answer': ['invited', 'failed'] },
+        no: { '2xx taken': ['declined', 'sent'], '2xx refused': ['invited', 'refused'], 400: ['invited', 'failed'], 413: ['invited', 'failed'], 503: ['invited', 'queued'], timeout: ['invited', 'queued'], 'a day of no answer': ['invited', 'failed'] },
+        leave: { '2xx taken': ['left', 'sent'], '2xx refused': ['in', 'refused'], 400: ['in', 'failed'], 413: ['in', 'failed'], 503: ['in', 'queued'], timeout: ['in', 'queued'], 'a day of no answer': ['in', 'failed'] },
+    };
+    const TAKEN: Record<'yes' | 'no' | 'leave', string> = { yes: 'in', no: 'declined', leave: 'left' };
+    const itemOf10 = (k: 'yes' | 'no' | 'leave', g: string) => (k === 'leave' ? item(gus, 'group-leave', g, JSON.stringify({ v: 1 }), K) : item(gus, 'group-invite', g, JSON.stringify({ v: 1, answer: k }), K));
+    let row10 = 0;
+    for (const k of ['yes', 'no', 'leave'] as const) {
+        for (const a of ANSWERS10) {
+            const g = `g10-${++row10}`;
+            setLink(gus, K, g, k === 'leave' ? 'in' : 'invited');
+            const it = await itemOf10(k, g);
+            script.set(K, [SCRIPT10[a]]);
+            const r = await send(gus, [it]);
+            if (a === 'a day of no answer') home.sweepGroupGuestMail(Date.now() + 25 * 60 * MIN);
+            const rowState = () => db.prepare('SELECT state FROM group_guest_sent WHERE sender_key = ? AND item_id = ?').pluck().get(gus.pk, it.envelope.itemId);
+            const [wantLink, wantState] = MOVE[k][a];
+            const linkThen = linkOf(gus, K, g)?.state ?? null, itemThen = rowState();
+            const first = linkThen === wantLink && itemThen === wantState && r.status === 200;
+            // What goes again: a queued item is tried again by the timer and the link moves when the host takes it (a second
+            // answer, or a line after a leave, is refused while it waits; a roster meanwhile is kept for a yes); an item not
+            // taken leaves the member free to send it again; after one taken, a line goes only once in.
+            let again = false, detail = '';
+            if (wantState === 'queued') {
+                const second = await send(gus, [k === 'leave' ? await item(gus, 'group-line', g, payloadOf('line')[1], K) : await itemOf10(k, g)]);
+                if (k === 'yes') home.receiveGroupNotice(K, { v: 1, kind: 'roster', group: g, host: K, guests: [gus.pk], data: DATA.roster });
+                const before = outs.length;
+                script.set(K, ['2xx']);
+                await home.retryGroupSent(Date.now() + 2 * MIN);
+                const wentAgain = outs.slice(before).some((o) => o.host === K && o.body.items.some((x: any) => x.envelope.itemId === it.envelope.itemId));
+                const link = linkOf(gus, K, g);
+                again = second.status === 403 && wentAgain && link?.state === TAKEN[k] && rowState() === 'sent' && (k !== 'yes' || typeof link.roster === 'string');
+                detail = `second ${second.status}, went again ${wentAgain}, then ${link?.state}${k === 'yes' ? `, roster kept ${typeof link?.roster === 'string'}` : ''}`;
+            } else if (wantState === 'sent') {
+                const line = await send(gus, [await item(gus, 'group-line', g, payloadOf('line')[1], K)]);
+                again = line.status === (k === 'yes' ? 200 : 403);
+                detail = `a line then ${line.status}`;
+            } else {
+                const before = outs.length;
+                const resend = await send(gus, [await itemOf10(k, g)]);
+                const went = outs.slice(before).filter((o) => o.host === K).length;
+                again = resend.status === 200 && resend.body?.items?.[0]?.state === 'sent' && went === 1 && linkOf(gus, K, g)?.state === TAKEN[k];
+                detail = `sent again ${resend.status} ${resend.body?.items?.[0]?.state}, ${went} request(s), then ${linkOf(gus, K, g)?.state}`;
+            }
+            assert(first && again, `10. ${k} x ${a}: link ${wantLink}, item ${wantState}; then ${wantState === 'queued' ? 'tried again and taken' : wantState === 'sent' ? 'a line only once in' : 'free to send it again'} (got ${r.status}, link ${linkThen}, item ${itemThen}; ${detail})`);
+            script.delete(K);
+        }
+    }
+    assert(row10 === 3 * ANSWERS10.length, `10z. the table has a row for every item and every answer (${row10} rows)`);
+
+    // ── 11. The backoff step is each host's own, and any 2xx starts it over ─────────────────
+    console.log('\n11. Close the class (invariant C): the backoff step is per host and starts over on any 2xx: (host fan-out, member sends) x answers in one send -> next due');
+    const SEQS: Array<{ name: string; a0: number; answers: string[]; attempts: number; waitMin: number; left: number }> = [
+        { name: 'success then failure', a0: 4, answers: ['2xx', 'timeout'], attempts: 1, waitMin: 1, left: 2 },
+        { name: 'failure alone', a0: 4, answers: ['timeout'], attempts: 5, waitMin: 120, left: 3 },
+        { name: 'mixed: 2xx, 400, failure', a0: 4, answers: ['2xx', '400', 'timeout'], attempts: 1, waitMin: 1, left: 1 },
+        { name: 'mixed: 400, failure (no 2xx)', a0: 4, answers: ['400', 'timeout'], attempts: 5, waitMin: 120, left: 2 },
+        { name: 'refused in the answer, then failure', a0: 4, answers: ['refused', 'timeout'], attempts: 1, waitMin: 1, left: 2 },
+        { name: 'failure then success, then a new row fails', a0: 2, answers: ['timeout'], attempts: 3, waitMin: 15, left: 3 },
+    ];
+    let row11 = 0;
+    simNow = Date.now() + 2000 * 24 * 60 * MIN;
+    hostSide.__useFanoutClockForTests(() => simNow);
+    for (const side of SIDES) {
+        for (const sq of SEQS) {
+            const X = `x${++row11}.example`, Y = `y${row11}.example`;
+            const t = simNow;
+            const queue11 = (h: string, i: number, attempts: number, nextTry: number, created: number) => {
+                if (side === 'host fan-out') {
+                    db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                        .run(crypto.randomUUID(), 'g11', h, 'line', JSON.stringify({ v: 1, kind: 'line', group: 'g11', host: 'a.example', guests: [gus.pk], data: { i } }), attempts, nextTry, created);
+                } else {
+                    const id = `c11-${row11}-${h[0]}-${String(i).padStart(3, '0')}`;
+                    // Each row larger than half a request, so each goes in a request of its own.
+                    db.prepare(`INSERT INTO group_guest_sent (sender_key, item_id, kind, host, group_id, state, item, attempts, next_try_at, created_at, updated_at)
+                                VALUES (?, ?, 'group-line', ?, 'g11', 'queued', ?, ?, ?, ?, ?)`)
+                        .run(gus.pk, id, h, JSON.stringify({ envelope: { itemId: id }, payload: 'p'.repeat(40_000) }), attempts, nextTry, created, created);
+                }
+            };
+            const rows11 = (h: string) => (side === 'host fan-out'
+                ? db.prepare('SELECT attempts, next_try_at AS due FROM group_guest_outbox WHERE home = ?').all(h)
+                : db.prepare("SELECT attempts, next_try_at AS due FROM group_guest_sent WHERE host = ? AND state = 'queued'").all(h)) as Array<{ attempts: number; due: number }>;
+            const flush11 = () => (side === 'host fan-out' ? hostSide.flushGuestOutbox(simNow) : home.retryGroupSent(simNow));
+            for (let i = 0; i < 3; i++) queue11(X, i, sq.a0, t - 1, t - 10 * MIN + i);
+            // Y, another host, waiting on its own step: nothing X's answers do moves it.
+            for (let i = 0; i < 2; i++) queue11(Y, i, 3, t + 30 * MIN, t - 10 * MIN + i);
+            script.set(X, [...sq.answers]);
+            await flush11();
+            const got = rows11(X);
+            let ok = got.length === sq.left && got.every((r) => r.attempts === sq.attempts && r.due === t + sq.waitMin * MIN);
+            let detail = `${got.length} left, ${JSON.stringify(got.map((r) => [r.attempts, (r.due - t) / MIN]))}`;
+            if (sq.name.startsWith('failure then success')) {
+                // At the wait's end the host takes all three; a row queued after that fails: the steps start over.
+                simNow = t + 15 * MIN;
+                script.set(X, ['2xx', '2xx', '2xx']);
+                await flush11();
+                const emptied = rows11(X).length === 0;
+                simNow += MIN;
+                queue11(X, 9, 0, simNow, simNow);
+                script.set(X, ['timeout']);
+                await flush11();
+                const after = rows11(X);
+                ok &&= emptied && after.length === 1 && after[0].attempts === 1 && after[0].due === simNow + MIN;
+                detail += `; then emptied ${emptied}, a new row ${JSON.stringify(after.map((r) => [r.attempts, (r.due - simNow) / MIN]))}`;
+            }
+            const yRows = rows11(Y);
+            const yKept = yRows.length === 2 && yRows.every((r) => r.attempts === 3 && r.due === t + 30 * MIN);
+            assert(ok && yKept, `11. ${side} x ${sq.name}: ${sq.left} left at step ${sq.attempts}, due in ${sq.waitMin} min; another host's step untouched (got ${detail}; other host kept ${yKept})`);
+            script.delete(X);
+            if (side === 'host fan-out') db.prepare('DELETE FROM group_guest_outbox WHERE home IN (?, ?)').run(X, Y);
+            else db.prepare('DELETE FROM group_guest_sent WHERE host IN (?, ?)').run(X, Y);
+            simNow += 24 * 60 * MIN;
+        }
+    }
+    hostSide.__useFanoutClockForTests(null);
+    assert(row11 === SIDES.length * SEQS.length, `11z. the table has a row for every side and every sequence (${row11} rows)`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

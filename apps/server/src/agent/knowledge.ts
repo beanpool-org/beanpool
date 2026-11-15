@@ -13,6 +13,9 @@
  *   update_post, remove_post, remove_all_i_made) and Settings' "Remove its posts" never match: they match 'assistant:<grant id>'.
  *   It can't edit or remove approved knowledge.
  * - **No picture from the web** (copyright): a photo field is refused in words; the checking admin adds their own.
+ * - **Its own tags** (Learn's tags, 16 Nov 2026): `free_tags`, the words a member types in the apps' Tags field, under the
+ *   Market's rule for them (engine/knowledge.ts cleanKnowledgeInput, the same door as a member's). Never the library's ids:
+ *   `tags` is refused in words, as the node refuses it, so the assistant never believes a library tag is on a page.
  * - **Limits** (engine/knowledge-drafts.ts ASSISTANT_KNOWLEDGE_LIMITS): 10 waiting and 20 in 24 hours per connection, 30
  *   waiting from all assistants together, so members' suggestions are never buried.
  * - **Disconnecting drops its waiting drafts** (dropAssistantKnowledgeDrafts, beside dropSuggestionsOf on every revoke path).
@@ -25,7 +28,9 @@
  *
  * Nothing here calls a model or reaches another server: the assistant searches the web itself.
  */
-import { KNOWLEDGE_LIMITS, KNOWLEDGE_TOPICS, compareKnowledge, isKnowledgeTopic } from '@beanpool/core';
+import {
+    FREE_TAG_MAX_CHARS, FREE_TAG_MAX_WORDS, FREE_TAG_MIN_CHARS, FREE_TAGS_MAX, KNOWLEDGE_LIMITS, KNOWLEDGE_TOPICS, compareKnowledge, isKnowledgeTopic,
+} from '@beanpool/core';
 import type { MarketplacePost } from '@beanpool/engine';
 import { FeatureOffError, getProfileSwitches } from '../config/node-profile.js';
 import { StandbyLedgerError } from '../config/node-role.js';
@@ -48,12 +53,9 @@ export const KNOWLEDGE_OFF_WORDS = 'Local knowledge is switched off on this comm
 const NO_PICTURE = 'A draft carries no picture from the web: the admin adds their own when they check it.';
 const NO_FIX_YET = 'A fix to a page showing comes with a later version of this server: tell the admin what changed, with the source that says so, '
     + 'and they edit the page in the app (Learn, the page, Edit).';
-/**
- * Tags on a draft (Learn's tags, 16 Nov 2026): the node keeps a page's own tags, but members can't add them in the apps yet, and
- * an assistant drafts only what a member could. Refused in words, never dropped, so the assistant never believes a tag is on.
- */
-const NO_TAGS_YET = 'Tags on Local knowledge come with a later version of this server: send the draft without them, and never write a Tags line '
-    + 'into the body. Learn finds a page by its title, body, topic and place.';
+/** Library ids on a draft: Local knowledge takes its own tags only, as the node refuses them (engine/knowledge.ts). */
+const NO_LIBRARY_TAGS = 'Local knowledge takes no tags from the library: put its own words in free_tags.';
+const FREE_TAGS_NAME = 'Its own tags go in free_tags.';
 const NO_PAGE = 'No page of Local knowledge showing here has that id: list them with knowledge_list.';
 const NOT_ITS_DRAFT = 'This assistant has no draft waiting with that id: my_knowledge_drafts lists them.';
 /** What knowledge_draft answers, word for word (amended §A5): the assistant passes it on. */
@@ -74,6 +76,8 @@ export function knowledgeSummary(grant: AgentGrant): { waiting: number; waitingM
 
 /** A refusal the engine wrote in words (the form's, a limit's, a standby's), as the tool's error; anything else is thrown on. */
 function refused(e: unknown): ToolResult {
+    // A tag the rule refuses is named by its field, as the post tools name theirs (owner-posts.ts heldTags).
+    if (e instanceof KnowledgeRefusal && e.code === 'bad_tags') return { ok: false, error: `free_tags: ${e.message}` };
     if (e instanceof KnowledgeRefusal || e instanceof StandbyLedgerError) return { ok: false, error: e.message };
     if (e instanceof FeatureOffError) return { ok: false, error: KNOWLEDGE_OFF_WORDS };
     throw e;
@@ -216,7 +220,7 @@ export const KNOWLEDGE_TOOLS: AgentTool[] = [
         name: 'knowledge_draft',
         title: 'Draft Local knowledge',
         reads: 'nothing: it files a draft of Local knowledge (title, body, topic, what it is about, 1 to 5 sources, and if you like the '
-            + 'place and its language) that waits for an owner or admin to check in the app (Learn, To check) beside its sources; nothing '
+            + `place, its language and up to ${FREE_TAGS_MAX} tags of its own) that waits for an owner or admin to check in the app (Learn, To check) beside its sources; nothing `
             + `shows to members until a person approves it. At most ${ASSISTANT_KNOWLEDGE_LIMITS.waiting} waiting and `
             + `${ASSISTANT_KNOWLEDGE_LIMITS.perDay} in 24 hours for this connection, ${ASSISTANT_KNOWLEDGE_LIMITS.allWaiting} waiting from all `
             + 'assistants together. It answers the draft\'s id and the words to pass on',
@@ -228,7 +232,7 @@ export const KNOWLEDGE_TOOLS: AgentTool[] = [
             type: 'object',
             properties: {
                 title: { type: 'string', maxLength: KNOWLEDGE_LIMITS.title, description: 'what someone would look for, e.g. "How recycling works at the tip"' },
-                body: { type: 'string', maxLength: KNOWLEDGE_LIMITS.body, description: 'the answer first, then the details: short, in your own words, plain text; quote at most one sentence, in quotation marks' },
+                body: { type: 'string', maxLength: KNOWLEDGE_LIMITS.body, description: 'the answer first, then the details: short, in your own words, plain text; quote at most one sentence, in quotation marks; never a list of tags: those go in free_tags' },
                 topic: { type: 'string', enum: TOPIC_IDS },
                 about: { type: 'string', enum: [...KNOWLEDGE_ABOUT], description: 'a place, a service or how to do something: never a private person' },
                 sources: {
@@ -241,6 +245,13 @@ export const KNOWLEDGE_TOOLS: AgentTool[] = [
                 },
                 place: { type: 'string', maxLength: KNOWLEDGE_LIMITS.place, description: 'where, in words (there is no map pin)' },
                 language: { type: 'string', description: 'the language you wrote it in, as a code (en, fr, …)' },
+                free_tags: {
+                    type: 'array', maxItems: FREE_TAGS_MAX,
+                    items: { type: 'string', description: 'one tag, e.g. bulk waste' },
+                    description: `optional: the page's own tags, words someone would search Learn for that the title and body may not say. At most ${FREE_TAGS_MAX}, `
+                        + `each ${FREE_TAG_MIN_CHARS} to ${FREE_TAG_MAX_CHARS} characters and at most ${FREE_TAG_MAX_WORDS} words, never an email, a phone number, a web address `
+                        + 'or an @handle. Public with the page, never translated, found only by their own letters. Never ids from tags_search: Local knowledge takes none',
+                },
             },
             required: ['title', 'body', 'topic', 'about', 'sources'],
             additionalProperties: false,
@@ -250,7 +261,8 @@ export const KNOWLEDGE_TOOLS: AgentTool[] = [
             if (!knowledgeOn()) return { ok: false, error: KNOWLEDGE_OFF_WORDS };
             if (Object.keys(args).some((key) => PICTURE_FIELD.test(key))) return { ok: false, error: NO_PICTURE };
             if (args.fix_of !== undefined || args.note !== undefined) return { ok: false, error: NO_FIX_YET };
-            if (args.tags !== undefined || args.free_tags !== undefined || args.freeTags !== undefined) return { ok: false, error: NO_TAGS_YET };
+            if (args.tags !== undefined && args.tags !== null && !(Array.isArray(args.tags) && args.tags.length === 0)) return { ok: false, error: NO_LIBRARY_TAGS };
+            if (args.freeTags !== undefined) return { ok: false, error: FREE_TAGS_NAME };
             const sources = Array.isArray(args.sources)
                 ? args.sources.map((s) => {
                     const o = (s && typeof s === 'object' ? s : {}) as { url?: unknown; title?: unknown; label?: unknown };
@@ -260,7 +272,7 @@ export const KNOWLEDGE_TOOLS: AgentTool[] = [
             try {
                 const filed = fileAssistantKnowledgeDraft(
                     { id: grant.id, member: grant.member, name: grant.name },
-                    { title: args.title, body: args.body, topic: args.topic, place: args.place, sources, lang: args.language, about: args.about },
+                    { title: args.title, body: args.body, topic: args.topic, place: args.place, sources, lang: args.language, about: args.about, freeTags: args.free_tags },
                 );
                 return {
                     ok: true, rows: 1,

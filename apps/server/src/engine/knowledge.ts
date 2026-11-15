@@ -414,9 +414,13 @@ const byLearnOrder = (a: KnowledgeRow, b: KnowledgeRow) => compareKnowledge(a, b
  * KNOWLEDGE_UNCHECKED_DAYS, the oldest checked first, at most KNOWLEDGE_UNCHECKED_ROWS. Information, never a count in the bell.
  */
 export function knowledgeUnchecked(reader: string, now = Date.now()): { total: number; rows: KnowledgeRow[] } {
-    const rows = showingTo(reader).map((p) => knowledgeRowOf(p, now)).filter((r) => knowledgeUncheckedForAYear(r.checkedAt, now))
-        .sort((a, b) => Date.parse(a.checkedAt) - Date.parse(b.checkedAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const rows = showingTo(reader).map((p) => knowledgeRowOf(p, now)).filter((r) => knowledgeUncheckedForAYear(r.checkedAt, now)).sort(byOldestChecked);
     return { total: rows.length, rows: rows.slice(0, KNOWLEDGE_UNCHECKED_ROWS) };
+}
+
+/** The year list's order: the page checked longest ago first, then by id, so the same pages always read in the same order. */
+function byOldestChecked(a: KnowledgeRow, b: KnowledgeRow): number {
+    return Date.parse(a.checkedAt) - Date.parse(b.checkedAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
 /** Learn's front (amended §4.2): the pinned pages, then each topic that holds something, its count and its first rows. */

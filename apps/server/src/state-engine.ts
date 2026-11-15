@@ -84,7 +84,7 @@ import { setRequestBroadcast, heldFromUnread, countRequestsWaitingFor, expireOld
 import { evaluateRequestReports, liftRequestLimit, requestReceived, dropRequestLimitsOf } from './engine/request-limits.js';
 import { repaymentOf, assertPayableDebt, countDebtPayment, PAID_TO_COMMONS_MEMO } from './engine/names-debts.js';
 import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
-import { dropNamesListHoldOf } from './engine/names-list.js';
+import { dropNamesListHoldOf, mayReadNamesList } from './engine/names-list.js';
 import { dropContactCopyOf, contactCopySeqOf } from './engine/contact-copies.js';
 import { keepsContactCopies } from './config/contact-copies.js';
 import { withholdsNote, keepWithheldNote, noteAsReadBy, dropWithheldNotesOf, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './engine/withheld-notes.js';
@@ -2241,10 +2241,18 @@ export interface MyInviteRead extends MyInvite {
     usedByCallsign: string | null;
 }
 
-/** A member's own invites, for their eyes alone (GET /api/invite/mine/:publicKey checks the signer is the maker). */
+/**
+ * A member's own invites, for their eyes alone (GET /api/invite/mine/:publicKey checks the signer is the maker).
+ *
+ * An invite bound to a names-list entry says which entry (`namesEntryId`) only while its maker may read the names list
+ * (engine/names-list.ts mayReadNamesList: an owner or admin whose role acts, asked now): with it their phone shows that
+ * person's name beside the invite (Marty, 12 Nov). A maker who has since stopped being one (role revoked, changed to
+ * moderator, suspended) still has the invite, to share or revoke, with `namesEntryId` null, as a plain invite has it.
+ */
 export function getInvitesByMember(pubkey: string): MyInviteRead[] {
-    const rows = getInvitesByMemberEngine(db, pubkey);
-    if (rows.length === 0) return [];
+    const found = getInvitesByMemberEngine(db, pubkey);
+    if (found.length === 0) return [];
+    const rows = mayReadNamesList(pubkey) ? found : found.map((r) => (r.namesEntryId ? { ...r, namesEntryId: null } : r));
     const knocked = new Set((db.prepare('SELECT invite_code FROM join_requests WHERE decided_by = ? AND invite_code IS NOT NULL').all(pubkey) as { invite_code: string }[])
         .map((r) => r.invite_code));
     const callsignOf = db.prepare('SELECT callsign FROM members WHERE public_key = ?');

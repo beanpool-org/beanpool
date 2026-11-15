@@ -80,6 +80,11 @@ async function main() {
         return id;
     };
     const maker = row('maker');
+    // The maker owns the community: only an owner or admin binds an invite to a names-list entry, and its entry reaches the
+    // maker only while they may read the names list (test-invite-names-entry-readers has who does and who doesn't).
+    const { grantNodeRole } = await import('./engine/node-roles.js');
+    const { claimGrantor } = await import('./claim-code.js');
+    grantNodeRole(maker.pubKeyHex, 'owner', claimGrantor(crypto.randomBytes(4).toString('hex')));
     const other = row('otherMember');
     const joiner = row('joinerJo');
     const applicant = row('applicantAl');

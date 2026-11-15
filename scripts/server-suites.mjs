@@ -597,6 +597,7 @@ export const SUITES = [
     'test-names-list',
     'test-invite-bound-name',
     'test-invite-mine-fields',
+    'test-invite-names-entry-readers',
     'test-invite-adds-voucher',
     'test-invite-revoke',
     'test-invites-vouchers-block',
@@ -799,6 +800,8 @@ export const VARIANTS = [
     { name: 'test-invite-bound-name', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // What an invite is for and carries (I1) reaches its maker alone under the opt-out too: no code, entry id or amount to anyone else.
     { name: 'test-invite-mine-fields', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // Which names-list entry an invite is for reaches an owner or admin whose role acts alone under the opt-out too.
+    { name: 'test-invite-names-entry-readers', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // A member's friends list is read by its owner alone under the opt-out too: unsigned 401, anyone else's key 403.
     { name: 'test-friends-routes', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // Connections in common under the opt-out too: "show me as a connection in common" is read by its owner alone (T10),

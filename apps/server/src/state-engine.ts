@@ -1619,6 +1619,8 @@ import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
 import { preferredAddress, reachableFromInternet } from './engine/host-kinds.js';
+// Read only inside functions (getDirectoryInfo), never at load: own-addresses reads this module too.
+import { mainPublicUrl } from './engine/own-addresses.js';
 import { cleanLabel, AREA_NAME_MAX } from './config/clean-label.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
@@ -10066,7 +10068,8 @@ export function getDirectoryInfo(): any {
     const localConfig = getLocalConfig();
     const info: any = {
         name: directoryName(),
-        publicUrl: resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config),
+        // Where it lives: the owner's main address once chosen (engine/own-addresses.ts mainPublicUrl, design several-addresses §2.1).
+        publicUrl: mainPublicUrl(),
         communityName: localConfig.communityName || null,
     };
 

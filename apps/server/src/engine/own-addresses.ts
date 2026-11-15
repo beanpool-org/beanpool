@@ -63,7 +63,7 @@
 import { domainToASCII } from 'node:url';
 import { getNodeConfig, resolvePublicNodeUrl, updateNodeConfig, PUBLIC_URL_RULES } from '../state-engine.js';
 import { HOLDING_STATUSES, registrarNames, registrarNamesVersion } from './registrar-names.js';
-import { isCertifiableHost, isLocalNetworkHost, isLoopbackHost, normalizeAddress, preferredAddress } from './host-kinds.js';
+import { isCertifiableHost, isIpLiteral, isLocalNetworkHost, isLoopbackHost, normalizeAddress, preferredAddress, reachableFromInternet } from './host-kinds.js';
 import { logger } from '../logger.js';
 
 // The shapes of a host live in host-kinds.ts (pure, so `beanpool claim` reads them too); here as they always were.
@@ -234,9 +234,73 @@ export function isLostAddress(host: string): boolean {
 }
 
 /**
- * Where this community lives now, for `/api/community/info` and Settings (lost-name L4, design
- * scratch/registrar/DESIGN-lost-name-audience-opus.md §4.2): its current registrar name while the registrar says it is
- * live, else the first of its other published names, a name before an IP address (design
+ * The owner's main address (node_config `mainAddress`, Settings → Addresses → Make main; design
+ * scratch/fable-design/DESIGN-several-addresses-fable.md §2.1), while it may be main: published with a route
+ * (reachableAddresses), and a bare number only while the community has no name to send anyone to (a number does not
+ * outlive its server). Null when the owner never chose, or chose an address that is not one any more: then primaryAddress
+ * keeps today's rule, so a community that never chose behaves as it always did.
+ */
+export function chosenMainAddress(): string | null {
+    const chosen = normalizeAddress((getNodeConfig() as any).mainAddress);
+    if (!chosen) return null;
+    const reachable = reachableAddresses();
+    if (!reachable.includes(chosen)) return null;
+    if (isIpLiteral(chosen) && reachable.some(isInternetName)) return null;
+    return chosen;
+}
+
+/** A name, not a number, that people outside the home network can reach: what a bare number never stands above. */
+const isInternetName = (a: string) => !isIpLiteral(a) && reachableFromInternet(a);
+
+/**
+ * Why `host` can't be made main now, in words for the owner, or null when it can (routes/app-addresses.ts /main). Any
+ * published address with a route may be: a beanpool.org name, an own domain, a hand-set name, and a bare number while the
+ * community has no name. Never a former, lost or loopback name (none is published), nor a name still waiting for approval.
+ */
+export function mainAddressRefusal(host: string): string | null {
+    if (!publishedAddresses().includes(host)) {
+        return configuredAddresses().some((a) => a.address === host)
+            ? `${host} is not an address this community sends people to (a former or lost name), so it can't be the main one.`
+            : `${host} is not one of this community's addresses. Add it first, then make it the main one.`;
+    }
+    const reachable = reachableAddresses();
+    if (!reachable.includes(host)) return `${host} has no route yet (waiting for approval, or paused). It can be made main once it is live.`;
+    if (isIpLiteral(host) && reachable.some(isInternetName)) {
+        return `${host} is a number, and this community has a name. A number stops working when the server changes, so a name stays the main address.`;
+    }
+    return null;
+}
+
+/**
+ * Make main (routes/app-addresses.ts): `host` becomes the owner's main address. The caller has checked mainAddressRefusal
+ * and the owner's fresh proof. Returns the main address before.
+ */
+export function setMainAddress(host: string): string | null {
+    const before = primaryAddress();
+    updateNodeConfig({ mainAddress: host } as any);
+    forgetOwnAddresses();
+    return before;
+}
+
+/**
+ * This community's public address as a URL, for every reader of "where it lives" (design §2.1: the directory push, the
+ * search canonical, the community card, the assistant's welcome and origin, alerts): the owner's main address once they
+ * chose one, else resolvePublicNodeUrl's answer exactly as before. The resolver's own answer is kept when it already
+ * names the main address, so its port survives.
+ */
+export function mainPublicUrl(): string | null {
+    const url = resolvePublicNodeUrl(PUBLIC_URL_RULES.community);
+    const main = chosenMainAddress();
+    if (!main) return url;
+    const host = url ? normalizeAddress(url.replace(/^https?:\/\//, '').replace(/\/+$/, '')) : null;
+    return host === main ? url : `https://${main}`;
+}
+
+/**
+ * Where this community lives now, for `/api/community/info`, Settings and every reader of "where it lives"
+ * (mainPublicUrl): the owner's main address while it may be main (chosenMainAddress). Otherwise as before an owner chose
+ * (lost-name L4, design scratch/registrar/DESIGN-lost-name-audience-opus.md §4.2): its current registrar name while the
+ * registrar says it is live, else the first of its other published names, a name before an IP address (design
  * scratch/global-node/DESIGN-https-anywhere-fable.md §3, D3: a name survives a change of server, a number does not, so
  * new members are sent to the name while those holding the IP keep working); null on a node with none (one that knows
  * none of its names, or whose only name it released). Always one of publishedAddresses(), so never a former name or a
@@ -245,6 +309,8 @@ export function isLostAddress(host: string): boolean {
  * review 4305346684).
  */
 export function primaryAddress(): string | null {
+    const chosen = chosenMainAddress();
+    if (chosen) return chosen;
     const published = publishedAddresses();
     const live = registrarNames().find((r) => r.role === 'current' && r.status === 'live' && published.includes(r.address));
     if (live) return live.address;

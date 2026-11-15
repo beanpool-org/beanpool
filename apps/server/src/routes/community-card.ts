@@ -42,7 +42,8 @@ import {
     type CommunityCard, type Lang,
 } from '@beanpool/core';
 import { getLocalConfig } from '../config/local-config.js';
-import { getNodeConfig, communityCountsCached, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
+import { getNodeConfig, communityCountsCached } from '../state-engine.js';
+import { mainPublicUrl } from '../engine/own-addresses.js';
 import { getNodeProfile, getProfileSwitches } from '../config/node-profile.js';
 import { placeShownTo } from '../config/community-place.js';
 import { acceptingKnocks } from '../engine/directory-promise.js';
@@ -69,7 +70,7 @@ const ASK_PATH = '/app?door=ask';
 /** The card as a stranger reads it now. */
 export function communityCard(): CommunityCard {
     const config = getNodeConfig();
-    const published = resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config);
+    const published = mainPublicUrl();
     const host = published ? published.replace(/^https?:\/\//, '') : null;
     const own = getLocalConfig().communityName;
     const placeShared = placeShownTo({ ownerOrAdmin: false }) !== 'none';

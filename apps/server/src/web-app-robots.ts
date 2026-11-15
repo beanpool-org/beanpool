@@ -6,7 +6,7 @@
  *
  *   - The front door, /app (with any query, `?lang=` among them; `/app/`; any case the router answers), names one page in
  *     the HTML it serves: `<link rel="canonical" href="<this community's public address>/app">`. The address is the one
- *     the directory and the community's card already give out (state-engine.ts resolvePublicNodeUrl, the community
+ *     the directory and the community's card already give out (engine/own-addresses.ts mainPublicUrl: the owner's main address, the community
  *     rules). A server that knows none (a server on a home network, one not yet given an address) sends no canonical:
  *     the request's Host is not trusted for it, and a guess could name an address that is not this community's.
  *   - Every other path that answers with the page (/app/<anything>, and whatever else falls through to it) is a member's
@@ -21,7 +21,7 @@
  */
 import fs from 'node:fs';
 import type Koa from 'koa';
-import { resolvePublicNodeUrl, PUBLIC_URL_RULES } from './state-engine.js';
+import { mainPublicUrl } from './engine/own-addresses.js';
 
 /** The web app's front door: the one path of it a search engine is asked to list. */
 export const WEB_APP_ENTRY_PATH = '/app';
@@ -40,7 +40,7 @@ export function isWebAppEntryPath(path: string): boolean {
  * address (or what it holds is not an address), read per request so a change of address is seen at once.
  */
 export function webAppCanonicalUrl(): string | null {
-    const url = resolvePublicNodeUrl(PUBLIC_URL_RULES.community);
+    const url = mainPublicUrl();
     if (!url) return null;
     try {
         const origin = new URL(url).origin;

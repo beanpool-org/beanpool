@@ -30,7 +30,8 @@ import { looksLikeAutomationToken, noteAutomationTokenUse, verifyAutomationToken
 import { looksLikeOAuthAccessToken, noteOAuthGrantUse, verifyAccessToken } from './oauth.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
-import { directoryName, getMember, resolvePublicNodeUrl } from '../state-engine.js';
+import { directoryName, getMember } from '../state-engine.js';
+import { mainPublicUrl } from '../engine/own-addresses.js';
 import { getVersion } from '../version.js';
 import { logger } from '../logger.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
@@ -63,7 +64,7 @@ function jsonRpcError(ctx: any, status: number, message: string, code = -32000):
 
 /** This node's own origin (its public address), or null when it has none: then only a request with no Origin passes. */
 export function ownOrigin(): string | null {
-    const url = resolvePublicNodeUrl();
+    const url = mainPublicUrl();
     if (!url) return null;
     try { return new URL(url).origin; } catch { return null; }
 }
@@ -75,7 +76,7 @@ export function ownOrigin(): string | null {
  * under app.proxy would take it from anyone (#1881 review, finding 6).
  */
 export function nodeUrlFor(ctx: any): string {
-    const pub = resolvePublicNodeUrl();
+    const pub = mainPublicUrl();
     if (pub) return pub.replace(/\/+$/, '');
     const socket = ctx.req?.socket;
     const host = socket && !isTrustedProxy(socket.remoteAddress)

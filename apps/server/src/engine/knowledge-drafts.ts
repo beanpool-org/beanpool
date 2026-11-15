@@ -516,7 +516,9 @@ const toCheckOf = (r: DraftRow): KnowledgeDraftToCheck => ({
 export function knowledgeDraftsToCheck(limit: number, offset: number): { drafts: KnowledgeDraftToCheck[]; total: number } {
     const rows = db.prepare(`SELECT * FROM knowledge_drafts WHERE state = 'waiting' ORDER BY created_at ASC, id ASC LIMIT ? OFFSET ?`)
         .all(limit, offset) as DraftRow[];
-    return { drafts: rows.map(toCheckOf), total: knowledgeDraftCountAll() };
+    // A fix's row names the page as it shows, as its push and its notices do, not the title it suggests.
+    const named = (r: DraftRow) => (r.kind === 'fix' ? { ...toCheckOf(r), title: showingKnowledgeRow(r.post_id)?.title ?? r.title } : toCheckOf(r));
+    return { drafts: rows.map(named), total: knowledgeDraftCountAll() };
 }
 
 const knowledgeDraftCountAll = () => (db.prepare(`SELECT COUNT(*) AS n FROM knowledge_drafts WHERE state = 'waiting'`).get() as { n: number }).n;

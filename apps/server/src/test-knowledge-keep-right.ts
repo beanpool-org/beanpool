@@ -266,6 +266,8 @@ async function main(): Promise<void> {
     console.log('── 4. answering a fix ──');
     const list4 = await call(owen, 'GET', '/api/knowledge/drafts');
     assert(list4.body?.drafts?.some((d: any) => d.id === melFix && d.kind === 'fix'), '4. To check lists the fix');
+    const wesRow = list4.body?.drafts?.find((d: any) => d.id === wesFix.body?.draft?.id);
+    assert(wesRow?.title === PAGE.title, `4. a fix that renames the page is listed by the page as it shows (${wesRow?.title})`);
     const whole = await call(owen, 'GET', `/api/knowledge/drafts/${melFix}`);
     assert(whole.status === 200 && whole.body?.draft?.note === 'The tip is closed on Mondays since March' && whole.body?.draft?.post?.id === P
         && whole.body?.draft?.post?.body === PAGE.body && whole.body?.draft?.body.startsWith('Closed on Mondays'),

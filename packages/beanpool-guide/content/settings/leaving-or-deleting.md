@@ -48,6 +48,7 @@ This cannot be undone, even with your 12 words.
 - Events you host are cancelled and wiped the same way. The people going can still read the rest of the event's chat until 30 days after the event.
 - A poll you asked is closed. It keeps its question and its votes.
 - The block list your community kept for you goes too.
+- Your community's locked copy of your private contacts list is deleted, and so is an old one kept after a re-key. Your phone and your other communities keep theirs. See "Your private contacts".
 - If you help run a project or keep an enterprise, you stop being one of its collaborators or keepers. If you were a project's leader or an enterprise's lead keeper, the one who has been there longest takes over. If you were the only one, the project or enterprise pauses. Its beans stay with it.
 - It deletes your account only in the community you are using. Your accounts in other communities stay.
 - Your community can never bring the account back. To come back, join again with a new invite. The global community takes no invites: to come back there, join again as a new account, with new 12 words or a sign-in, from a phone or browser that does not hold this account. The global community refuses the deleted account for good, and a phone that is still in another community keeps it. On such a phone the app says **This account's place in the global community was closed, so it can't join again.** and stops offering the door to that account. The same sentence comes for a member the community removed.

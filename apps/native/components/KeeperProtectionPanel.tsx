@@ -17,7 +17,7 @@ import { GoogleButton, AppleButton, FacebookButton } from './SsoButton';
 import { SSO_PROVIDER_NAMES as PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { NO_WORDS_WAY_BACK, SSO_WORDS_NOTE } from '../utils/no-words-copy';
 import { hasVault, type SignInCopies } from '../utils/vault-config';
-import { t, tn, word } from '@beanpool/core';
+import { SIGN_IN_REFRESH_WORDS, t, tn, word } from '@beanpool/core';
 import { welcomeLineWords } from './welcome/welcome-lines';
 import { WhoCanOpen } from './WhoCanOpen';
 import { CopyCommunitiesTick } from './CopyCommunitiesTick';
@@ -130,6 +130,7 @@ export function KeeperProtectionPanel({
     listCommunitiesFor,
     listShown = false,
     onListShown,
+    refreshSso = [],
 }: {
     protection: Protection;
     /**
@@ -179,6 +180,13 @@ export function KeeperProtectionPanel({
      */
     listShown?: boolean;
     onListShown?: (on: boolean) => void;
+    /**
+     * Account Protection only (recovery S4): the connected sign-ins whose copy at the community its server can't find from
+     * the sign-in alone yet (@beanpool/core signInsToRefresh of the community's own answer). Each gets one Refresh, in
+     * place of Connect again, on a phone with or without the 12 words: it is the same Connect (`onProtectSso`), which makes
+     * that sign-in's copy again with its find hash. Never at the vault, whose copies aren't the community's.
+     */
+    refreshSso?: readonly string[];
 }): React.JSX.Element {
     const styles = stylesFor(colors);
     const enrolledSso = protection.enrolledSso ?? [];
@@ -261,6 +269,7 @@ export function KeeperProtectionPanel({
 
                 {allProviders.map((prov) => {
                     const isConnected = enrolledSso.includes(prov);
+                    const toRefresh = isConnected && !atVault && refreshSso.includes(prov);
                     if (isConnected) {
                         return (
                             <View key={prov} style={styles.providerConnectedRow}>
@@ -287,7 +296,19 @@ export function KeeperProtectionPanel({
                                     community) with a fresh one, which carries the 12 words: the way to add them to a
                                     copy made without them. Pointless on a phone without words. */}
                                 <View style={styles.providerActions}>
-                                    {hasWords && (
+                                    {/* Refresh (recovery S4) is this same Connect, offered once, for a copy the server can't
+                                        find from the sign-in yet; with it, Connect again would be a second button doing the same. */}
+                                    {toRefresh ? (
+                                        <TouchableOpacity
+                                            testID={`refresh-${prov}`}
+                                            style={styles.reconnectBtn}
+                                            onPress={() => protect(prov)}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={t(SIGN_IN_REFRESH_WORDS.label, { provider: PROVIDER_NAMES[prov] })}
+                                        >
+                                            <Text style={styles.reconnectText}>{t(SIGN_IN_REFRESH_WORDS.button)}</Text>
+                                        </TouchableOpacity>
+                                    ) : hasWords && (
                                         <TouchableOpacity
                                             style={styles.reconnectBtn}
                                             onPress={() => protect(prov)}
@@ -308,6 +329,7 @@ export function KeeperProtectionPanel({
                                         </TouchableOpacity>
                                     )}
                                 </View>
+                                {toRefresh && <Text style={styles.refreshLine}>{t(SIGN_IN_REFRESH_WORDS.line)}</Text>}
                             </View>
                         );
                     }
@@ -538,6 +560,13 @@ const make = (colors: AppColors) => StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
         color: colors.feedback.success.fg,
+    },
+    // Its own line under the sign-in's name and buttons (the row wraps), at any width and a 1.3x font.
+    refreshLine: {
+        flexBasis: '100%',
+        fontSize: 12,
+        lineHeight: 16,
+        color: colors.text.secondary,
     },
     // Wraps in the column at any width: no fixed height, no numberOfLines, so 320dp at a 1.3x font cuts nothing off.
     copyOpeners: {

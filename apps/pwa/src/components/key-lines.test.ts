@@ -20,7 +20,7 @@ import {
 import { NO_STORAGE_SENTENCE, STORE_WOULD_NOT_OPEN_SENTENCE, type JoinProvider } from '../lib/identity';
 import { aboutTime, busySentence, signInBusySentence, WORK_CANT_RUN } from '../lib/door-work';
 import { collectRefusalMessage, findRefusalMessage, noAccountMessage } from '../lib/web-restore';
-import { leaveForLink, linkRefusalMessage, linkResultMessage } from '../lib/link-signin';
+import { leaveForLink, linkRefusalMessage, linkResultMessage, refreshFailedMessage } from '../lib/link-signin';
 import { WEB_REKEY_TEXT } from '../lib/web-rekey';
 import { approveUnlock, lookupUnlock, pasteProblemMessage, unlockRefusalMessage } from '../lib/takeover-unlock';
 import { OWNER_WORDS_COPY } from '../lib/owner-words';
@@ -89,10 +89,14 @@ function libSentences(): string[] {
         out.push(linkResultMessage({ kind: 'linked', provider: p, recoveryStored: true }));
         out.push(linkResultMessage({ kind: 'linked', provider: p, recoveryStored: false }));
         out.push(linkResultMessage({ kind: 'linked', provider: p, recoveryStored: false, noCopies: true }));
+        // Refresh (recovery S4): its result and the plain refusal.
+        out.push(linkResultMessage({ kind: 'refreshed', provider: p }));
+        out.push(refreshFailedMessage(p));
         const left = leaveForLink({ publicKey: 'k' } as never, p, { nonce: 'n', expiresInSeconds: 600, providers: [p], clientIds: {} }, { navigate: () => {} });
         if (!left.ok) out.push(left.message);
     }
     out.push(linkResultMessage({ kind: 'cancelled', provider: 'google' }));
+    out.push(linkResultMessage({ kind: 'cancelled', provider: 'google', refresh: true }));
     for (const a of [answer(400), answer(409), answer(429), answer(500), answer(401)]) {
         out.push(findRefusalMessage(a, null));
         out.push(collectRefusalMessage(a));

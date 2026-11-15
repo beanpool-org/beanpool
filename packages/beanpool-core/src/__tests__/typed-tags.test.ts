@@ -222,3 +222,21 @@ describe('no two library tags show one label in a language, past the ones held b
         expect(index.search(bare, 8).slice(0, 2)).toEqual([TUTORING, COACHING]);
     });
 });
+
+describe("freeOnly: a field that takes the member's own tags alone (Learn's pages, which carry no library ids)", () => {
+    it("a library label typed there is the member's own word, never the library tag", () => {
+        expect(typedTag('Lemon', none, tagIndex(), undefined, true)).toEqual({ kind: 'free', tag: 'lemon' });
+        expect(typedTag('lemons', none, tagIndex(), undefined, true)).toEqual({ kind: 'free', tag: 'lemons' });
+        expect(enterTypedTags('Lemon, bulk waste, ', none, false, tagIndex(), () => LEMON, true)).toEqual({ tags: [], freeTags: ['lemon', 'bulk waste'], rest: ' ', refused: null });
+    });
+
+    it('under the same rule as any free tag: refusals, the five, the length together', () => {
+        expect(typedTag('0412 345 678', none, tagIndex(), undefined, true)).toEqual({ kind: 'refused', why: FREE_TAG_NOT_A_CONTACT });
+        const five = { tags: [], freeTags: ['one', 'two', 'three', 'four', 'five'] };
+        expect(typedTag('six', five, tagIndex(), undefined, true)).toEqual({ kind: 'refused', why: FREE_TAGS_TOO_MANY });
+    });
+
+    it("left off, the field is the Market's: the label picks the library tag", () => {
+        expect(typedTag('Lemon', none, tagIndex(), undefined, false)).toEqual({ kind: 'library', id: LEMON });
+    });
+});

@@ -17,8 +17,8 @@
  * part the member changed, with what the page said when they sent it (a part sent as the page has it is no change; the
  * note alone changes none). The writer's own fix waits too; an owner or admin edits at once instead (409 `edit_instead`).
  * One waiting fix per member per page; the same 3 waiting and 5 a day as a new page. A fix never brings photos: the page
- * keeps its own. The page stays as it is until an owner or admin answers. Approving writes only the parts the member
- * changed, over the page as it shows then (with any "Edit first" edits), so another fix approved meanwhile, or an owner's or
+ * keeps its own. Its tags are a part as its words are (FIX_PARTS): a fix that changes only the tags is a fix. The page stays
+ * as it is until an owner or admin answers. Approving writes only the parts the member changed, over the page as it shows then (with any "Edit first" edits), so another fix approved meanwhile, or an owner's or
  * admin's own edit, stays; it keeps the writer, stamps Checked and clears a "may be out of date" mark (engine/knowledge.ts
  * rewriteKnowledge, the same write as their own edit). A part the page itself changed under since the fix was sent is never
  * written over: the approval is refused (409 `page_changed`) until "Edit first" sends that part, or "Not this one" answers
@@ -58,7 +58,7 @@
  */
 import crypto from 'node:crypto';
 import {
-    KNOWLEDGE_DECLINE_REASONS, KNOWLEDGE_DRAFT_LIMITS, KNOWLEDGE_FIX_PARTS, KNOWLEDGE_LIMITS, knowledgeAnswerNotice, word, wordsFor,
+    KNOWLEDGE_DECLINE_REASONS, KNOWLEDGE_DRAFT_LIMITS, KNOWLEDGE_FIX_PARTS, KNOWLEDGE_LIMITS, freeTagsOf, knowledgeAnswerNotice, storedFreeTags, word, wordsFor,
     type KnowledgeDeclineReason, type KnowledgeDraftKind, type KnowledgeDraftMine, type KnowledgeDraftToCheck, type KnowledgeDraftWhole,
     type KnowledgeFixPart, type KnowledgePageWords, type KnowledgeSource,
 } from '@beanpool/core';
@@ -120,6 +120,8 @@ interface DraftRow {
     place: string | null;
     sources: string | null;
     lang: string | null;
+    /** Its own tags: a JSON list in their stored form, '' for none, as a page's `posts.free_tags`. */
+    free_tags: string;
     about: string | null;
     note: string | null;
     /** A fix's parts its member changed, with what the page said when they sent it: JSON `{ part: value }`. NULL for a new page. */
@@ -211,9 +213,9 @@ export function suggestKnowledge(member: string, raw: KnowledgeInput & { photos?
     const id = crypto.randomUUID();
     const at = iso(now);
     db.transaction(() => {
-        db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, title, body, topic, place, sources, lang, state, created_at)
-                    VALUES (?, 'new', NULL, ?, 'app', ?, ?, ?, ?, ?, ?, 'waiting', ?)`)
-            .run(id, member, k.title, k.body, k.topic, k.place, k.sources.length > 0 ? JSON.stringify(k.sources) : null, k.lang, at);
+        db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, title, body, topic, place, sources, lang, free_tags, state, created_at)
+                    VALUES (?, 'new', NULL, ?, 'app', ?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`)
+            .run(id, member, k.title, k.body, k.topic, k.place, k.sources.length > 0 ? JSON.stringify(k.sources) : null, k.lang, storedFreeTags(k.freeTags), at);
         const photo = db.prepare('INSERT INTO knowledge_draft_photos (draft_id, order_num, photo_data, bytes) VALUES (?, ?, ?, ?)');
         photos.forEach((p, i) => photo.run(id, i, p, incomingPhotosBytes([p])));
     })();
@@ -264,7 +266,7 @@ function suggestKnowledgeFix(member: string, raw: KnowledgeInput & { photos?: un
     const row = showingKnowledgeRow(page.id);
     if (!row) throw new KnowledgeRefusal(404, 'not_found', KNOWLEDGE_WORDS.notFound);
     const shows = partsOf(row);
-    const own = cleanKnowledgeInput(shows);
+    const own = cleanKnowledgeInput(shows, shows.freeTags);
     const pick = (sent: unknown, mine: unknown) => (sent !== undefined ? sent : mine);
     const k = cleanKnowledgeInput({
         title: pick(raw.title, own.title),
@@ -273,22 +275,24 @@ function suggestKnowledgeFix(member: string, raw: KnowledgeInput & { photos?: un
         place: pick(raw.place, own.place),
         sources: pick(raw.sources, own.sources),
         lang: pick(raw.lang, own.lang),
-    });
+        freeTags: pick(raw.freeTags, own.freeTags),
+        tags: raw.tags,
+    }, shows.freeTags);
     // What the member changed: each part that differs from the page as it shows, with the page's own words then. A part sent
     // as the page has it (the app may send the form whole) is no change.
-    const base: Partial<Record<KnowledgeFixPart, unknown>> = {};
-    for (const part of KNOWLEDGE_FIX_PARTS) if (!samePart(k[part], own[part])) base[part] = shows[part];
+    const base: Partial<Record<FixPart, unknown>> = {};
+    for (const part of FIX_PARTS) if (!samePart(k[part], own[part])) base[part] = shows[part];
     assertMayPost(member, 0, now);
     assertProfileComplete(member);
     const id = crypto.randomUUID();
-    db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, title, body, topic, place, sources, lang, note, fix_base, state, created_at)
-                VALUES (?, 'fix', ?, ?, 'app', ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`)
-        .run(id, page.id, member, k.title, k.body, k.topic, k.place, k.sources.length > 0 ? JSON.stringify(k.sources) : null, k.lang, note,
-            JSON.stringify(base), iso(now));
+    db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, title, body, topic, place, sources, lang, free_tags, note, fix_base, state, created_at)
+                VALUES (?, 'fix', ?, ?, 'app', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`)
+        .run(id, page.id, member, k.title, k.body, k.topic, k.place, k.sources.length > 0 ? JSON.stringify(k.sources) : null, k.lang,
+            storedFreeTags(k.freeTags), note, JSON.stringify(base), iso(now));
     return mineOf(db.prepare('SELECT * FROM knowledge_drafts WHERE id = ?').get(id) as DraftRow & { state: 'waiting' });
 }
 
-/** A page's words as its row holds them, part by part (they were cleaned when written). */
+/** A page's words and tags as its row holds them, part by part (they were cleaned when written). */
 const partsOf = (row: ShowingKnowledgeRow): CleanKnowledge => ({
     title: row.title,
     body: row.description,
@@ -296,12 +300,26 @@ const partsOf = (row: ShowingKnowledgeRow): CleanKnowledge => ({
     place: row.knowledge_place,
     sources: sourcesOf(row.knowledge_sources),
     lang: row.knowledge_lang,
+    freeTags: freeTagsOf(row.free_tags),
 });
+
+/** A suggestion's words and tags as its row holds them. */
+const draftWordsOf = (r: DraftRow): CleanKnowledge => ({
+    title: r.title, body: r.body, topic: r.topic, place: r.place, sources: sourcesOf(r.sources), lang: r.lang, freeTags: freeTagsOf(r.free_tags),
+});
+
+/**
+ * The parts a fix can change, here: core's KNOWLEDGE_FIX_PARTS (the words, which the apps draw as "Now" and "Suggested") and
+ * the page's tags. `fix_base` records each, and approval writes each, alike; To check sends the tags' change beside the
+ * words' (freeTagsChanged, freeTagsPageChanged) so an app from before Learn's tags reads the parts it knows.
+ */
+const FIX_PARTS = [...KNOWLEDGE_FIX_PARTS, 'freeTags'] as const;
+type FixPart = (typeof FIX_PARTS)[number];
 
 const samePart = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 /** A fix's recorded base (`fix_base`): its changed parts, each with the page's words when it was sent. */
-function fixBaseOf(raw: string | null): Partial<Record<KnowledgeFixPart, unknown>> {
+function fixBaseOf(raw: string | null): Partial<Record<FixPart, unknown>> {
     try {
         const base = raw ? JSON.parse(raw) : {};
         return base && typeof base === 'object' && !Array.isArray(base) ? base : {};
@@ -310,20 +328,23 @@ function fixBaseOf(raw: string | null): Partial<Record<KnowledgeFixPart, unknown
     }
 }
 
-const changedPartsOf = (r: DraftRow): KnowledgeFixPart[] => {
+const changedPartsOf = (r: DraftRow): FixPart[] => {
     const base = fixBaseOf(r.fix_base);
-    return KNOWLEDGE_FIX_PARTS.filter((part) => Object.prototype.hasOwnProperty.call(base, part));
+    return FIX_PARTS.filter((part) => Object.prototype.hasOwnProperty.call(base, part));
 };
+
+/** The word parts of a list of a fix's parts, as core's KnowledgeFixPart names them (the tags go beside them). */
+const wordParts = (parts: readonly FixPart[]): KnowledgeFixPart[] => parts.filter((part): part is KnowledgeFixPart => part !== 'freeTags');
 
 /**
  * A fix against the page as it shows now: the parts its member changed; those the page itself changed under since it was
  * sent (neither the page's words then nor the fix's own); and the page as Approve writes it, the page as it shows with
  * the changed parts put in.
  */
-function fixAgainst(r: DraftRow, page: ShowingKnowledgeRow): { changed: KnowledgeFixPart[]; pageChanged: KnowledgeFixPart[]; suggested: CleanKnowledge } {
+function fixAgainst(r: DraftRow, page: ShowingKnowledgeRow): { changed: FixPart[]; pageChanged: FixPart[]; suggested: CleanKnowledge } {
     const base = fixBaseOf(r.fix_base);
     const shows = partsOf(page);
-    const mine: CleanKnowledge = { title: r.title, body: r.body, topic: r.topic, place: r.place, sources: sourcesOf(r.sources), lang: r.lang };
+    const mine = draftWordsOf(r);
     const changed = changedPartsOf(r);
     const pageChanged = changed.filter((part) => !samePart(shows[part], base[part]) && !samePart(shows[part], mine[part]));
     const suggested: CleanKnowledge = { ...shows };
@@ -354,7 +375,7 @@ export function withdrawKnowledgeDraft(member: string, id: unknown, now = Date.n
     if (typeof id !== 'string' || id.length > 64) return false;
     return db.transaction(() => {
         const changed = db.prepare(`UPDATE knowledge_drafts SET state = 'withdrawn', answered_at = ?, title = '', body = '', place = NULL,
-                                        sources = NULL, note = NULL, about = NULL, fix_base = NULL
+                                        sources = NULL, free_tags = '', note = NULL, about = NULL, fix_base = NULL
                                     WHERE id = ? AND member_pubkey = ? AND via = 'app' AND state = 'waiting'`).run(iso(now), id, member).changes;
         if (changed === 1) deletePlainRows('knowledge_draft_photos', 'draft_id = ?', id);
         return changed === 1;
@@ -420,10 +441,10 @@ export function fileAssistantKnowledgeDraft(
         if (counts.today >= ASSISTANT_KNOWLEDGE_LIMITS.perDay) throw new KnowledgeRefusal(429, 'sent_enough_today', ASSISTANT_DRAFT_WORDS.perDay);
         const all = (db.prepare(`SELECT COUNT(*) AS n FROM knowledge_drafts WHERE via LIKE 'assistant:%' AND state = 'waiting'`).get() as { n: number }).n;
         if (all >= ASSISTANT_KNOWLEDGE_LIMITS.allWaiting) throw new KnowledgeRefusal(429, 'assistants_waiting', ASSISTANT_DRAFT_WORDS.allWaiting);
-        db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, assistant_name, title, body, topic, place, sources, lang, about, state, created_at)
-                    VALUES (?, 'new', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`)
+        db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, assistant_name, title, body, topic, place, sources, lang, free_tags, about, state, created_at)
+                    VALUES (?, 'new', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`)
             .run(id, grant.member, via, cleanMemberText(grant.name, 60) || null, k.title, k.body, k.topic, k.place,
-                JSON.stringify(k.sources), k.lang, raw.about, iso(now));
+                JSON.stringify(k.sources), k.lang, storedFreeTags(k.freeTags), raw.about, iso(now));
     })();
     return { id, ...assistantKnowledgeCounts(grant.id, now) };
 }
@@ -471,7 +492,7 @@ export function withdrawAssistantKnowledgeDraft(grantId: string, id: unknown, no
     if (typeof id !== 'string' || id.length > 64) return false;
     return db.transaction(() => {
         const changed = db.prepare(`UPDATE knowledge_drafts SET state = 'withdrawn', answered_at = ?, title = '', body = '', place = NULL,
-                                        sources = NULL, note = NULL, about = NULL, fix_base = NULL
+                                        sources = NULL, free_tags = '', note = NULL, about = NULL, fix_base = NULL
                                     WHERE id = ? AND via = ? AND state = 'waiting'`).run(iso(now), id, viaOf(grantId)).changes;
         if (changed === 1) deletePlainRows('knowledge_draft_photos', 'draft_id = ?', id);
         return changed === 1;
@@ -531,7 +552,9 @@ export function knowledgeDraftWhole(id: unknown): KnowledgeDraftWhole | null {
     const page = r.kind === 'fix' ? showingKnowledgeRow(r.post_id) : null;
     // A fix whose page shows: "Suggested" is what Approve writes, the page as it shows with the member's changed parts put in.
     const fix = page ? fixAgainst(r, page) : null;
-    const words = fix?.suggested ?? { title: r.title, body: r.body, topic: r.topic, place: r.place, sources: sourcesOf(r.sources), lang: r.lang };
+    const words = fix?.suggested ?? draftWordsOf(r);
+    const changed = r.kind === 'fix' ? (fix?.changed ?? changedPartsOf(r)) : null;
+    const pageChanged = r.kind === 'fix' ? (fix?.pageChanged ?? []) : null;
     return {
         ...toCheckOf(r),
         title: words.title,
@@ -545,8 +568,11 @@ export function knowledgeDraftWhole(id: unknown): KnowledgeDraftWhole | null {
         photos: draftPhotoData(r.id),
         needsSourcesTicked: assistantGrantOf(r.via) !== null,
         post: pageWordsOf(page),
-        changed: r.kind === 'fix' ? (fix?.changed ?? changedPartsOf(r)) : null,
-        pageChanged: r.kind === 'fix' ? (fix?.pageChanged ?? []) : null,
+        changed: changed && wordParts(changed),
+        pageChanged: pageChanged && wordParts(pageChanged),
+        freeTags: words.freeTags,
+        freeTagsChanged: changed && changed.includes('freeTags'),
+        freeTagsPageChanged: pageChanged && pageChanged.includes('freeTags'),
     };
 }
 
@@ -559,6 +585,7 @@ const pageWordsOf = (row: ShowingKnowledgeRow | null): KnowledgePageWords | null
     place: row.knowledge_place,
     sources: sourcesOf(row.knowledge_sources),
     lang: row.knowledge_lang,
+    freeTags: freeTagsOf(row.free_tags),
 } : null);
 
 const draftPhotoData = (id: string): string[] =>
@@ -599,6 +626,8 @@ function approvedFields(r: DraftRow, raw: KnowledgeInput): KnowledgeInput {
         place: pick(raw.place, r.place),
         sources: pick(raw.sources, sourcesOf(r.sources)),
         lang: pick(raw.lang, r.lang),
+        freeTags: pick(raw.freeTags, freeTagsOf(r.free_tags)),
+        tags: raw.tags,
     };
 }
 
@@ -693,8 +722,9 @@ function approveFix(broadcast: BroadcastFn, checker: string, r: DraftRow, raw: K
     const fix = fixAgainst(r, page);
     if (fix.pageChanged.some((part) => raw[part] === undefined)) throw new KnowledgeRefusal(409, 'page_changed', DRAFT_WORDS.pageChanged);
     const edited: KnowledgeInput = {};
-    for (const part of KNOWLEDGE_FIX_PARTS) if (raw[part] !== undefined) edited[part] = raw[part];
-    const post = rewriteKnowledge(broadcast, checker, page.id, cleanKnowledgeInput({ ...fix.suggested, ...edited }), now);
+    for (const part of FIX_PARTS) if (raw[part] !== undefined) edited[part] = raw[part];
+    // The page's own tags pass as stored, as on an owner's or admin's edit (engine/knowledge.ts cleanFreeTags).
+    const post = rewriteKnowledge(broadcast, checker, page.id, cleanKnowledgeInput({ ...fix.suggested, ...edited, tags: raw.tags }, partsOf(page).freeTags), now);
     const answered = db.prepare(`UPDATE knowledge_drafts SET state = 'approved', answered_at = ?, answered_by = ?, result_post_id = ?
                                  WHERE id = ? AND state = 'waiting'`).run(iso(now), checker, page.id, r.id).changes;
     if (answered !== 1) throw new Error('a suggestion was answered twice');

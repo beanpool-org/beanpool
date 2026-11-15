@@ -628,6 +628,9 @@ export const SUITES = [
     // Keep it right (slice K5): "This helped" (one per member, stamped at the tap, the count only), Suggest a fix through the
     // waiting list, the year list, and every action x every reader in one table.
     'test-knowledge-keep-right',
+    // Learn's tags, the node: free tags only, every path that writes a page or a draft x every kind of tags in one table, every
+    // rewrite keeps them in search, a fix of only the tags, search as the Market's, never offered as a listing's, a standby's copy.
+    'test-knowledge-tags',
     'test-forum',
     // The forum's moderation (slice F2): reports, auto-hide, restore, removal, the mute, first looks, new accounts, bursts.
     'test-forum-moderation',

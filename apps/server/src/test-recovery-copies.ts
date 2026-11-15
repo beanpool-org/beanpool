@@ -19,7 +19,8 @@
  *   5. A release's copy is kept 30 days, then emptied (Marty's pick 6): the row stays, as the record of the release, and
  *      reads as the same kind of copy; a release 29 days old, and one in a session still live, keep theirs; the boot's
  *      wrap leaves an emptied one alone; a second run empties nothing; a standby writes nothing. The device of an old
- *      completed or expired session whose copy went is answered by the release rules at its routes, its sign-in too.
+ *      completed or expired session whose copy went is answered by the release rules at its routes. (No route signs in to
+ *      a session since S3: a sign-in finds the account first, and the collect by its hold opens a new one.)
  *      With a reader holding the WAL (a copy being served to a standby), the sweep answers at once, never waiting out
  *      the busy timeout, and once the reader lets go the WAL is emptied and the copy is in neither file.
  *
@@ -369,8 +370,8 @@ async function main(): Promise<void> {
     assert((await rr.forgetOldReleasedCopies()) === 0 && JSON.stringify(rowById(oldId)) === JSON.stringify(old), 'a second run empties nothing');
 
     // The device that opened a session long gone still reaches its routes: they check the session is its own, and each
-    // release checks it is live. So its sign-in is answered by the release rules, never by a copy that is gone (an
-    // emptied release can't be opened, and "this server cannot open a copy" would blame the server's key).
+    // release checks it is live. So it is answered by the release rules, never by a copy that is gone (an emptied release
+    // can't be opened, and "this server cannot open a copy" would blame the server's key).
     const device = keypair('Device');
     const oldSessions = [
         { label: 'completed', id: 'gone-complete', status: 'complete', words: 'That recovery session is already complete.' },
@@ -386,12 +387,6 @@ async function main(): Promise<void> {
             const r = await call('POST', device, `/api/recovery/collect/${route}`, { collectionId: s.id });
             assert(r.status === 400 && r.body?.error === s.words, `an old ${s.label} session: /collect/${route} → 400, "${s.words}" (${show(r)})`);
         }
-        const n = await call('POST', device, '/api/recovery/collect/sso-nonce', { collectionId: s.id });
-        const signIn = await call('POST', device, '/api/recovery/collect/sso', {
-            collectionId: s.id, provider: 'google', idToken: googleToken(SAM_SUB, n.body?.nonce), nonce: n.body?.nonce,
-        });
-        assert(n.status === 200 && signIn.status === 400 && signIn.body?.error === s.words && signIn.body?.code === undefined,
-            `an old ${s.label} session: its device's good sign-in → 400, "${s.words}", not the server's key (${show(signIn)})`);
     }
 
     // A copy being served to a standby in pages holds a read on a second connection (engine/open-copies.ts). The sweep

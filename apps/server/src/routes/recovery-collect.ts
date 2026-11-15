@@ -23,13 +23,12 @@
  * ## When the owner is told
  *
  * When a sign-in releases their copy (notifySeedReleased): the owner learns it worked. That is the moment that
- * matters, since a sign-in releases the copy seconds after the session opens.
+ * matters, since a sign-in releases the copy in the very request that opens the session.
  *
- * Not when a session opens, any more (defence review FABLE-sec-sso finding 5, 2026-10-01). Opening one is
- * unauthenticated by necessity, so that alert was a push anybody with a callsign could send a member, as often as the
- * auth limiter allowed, and it defended nothing that remains: it was there for D7 and R1, the friend tier's colluding
- * keepers, which is scrapped. What an open with no sign-in can still reach is the hub's piece of a legacy two-layer copy
- * after 24 hours, half a seed, useless alone. The owner still sees how many sessions are live in the app
+ * Not when a session opens, any more (defence review FABLE-sec-sso finding 5, 2026-10-01): while a session opened for a
+ * typed name, that alert was a push anybody with a member's name could send, as often as the auth limiter allowed. Now a
+ * session opens only for an account a verified sign-in found, with that sign-in's release in the same request (the find,
+ * below), so the release's alert is the one. The owner still sees how many sessions are live in the app
  * (`/api/recovery/collect/mine`, the recovery banner) and can stop them all there, in one call (`/collect/cancel`).
  *
  * ## What leaves, and when
@@ -43,16 +42,18 @@
  * `POST /api/recovery/find-nonce` and `POST /api/recovery/find` take a sign-in and answer the accounts it protects here, by
  * name and key (engine/recovery-find.ts): only the holder of that sign-in gets a match, so an empty list tells the caller
  * only that their own sign-in has no account here. The find holds the verified sign-in for 5 minutes, keyed by the
- * restore's throwaway key, and `POST /api/recovery/collect {candidatePublicKey}` with no name opens the session for the
- * account picked and releases its copy in the same request, through the same per-row proof `/collect/sso` runs: the find's
- * index is never the proof. The name routes (the lookup, `callsign` here, `/collect/sso-nonce`, `/collect/sso`) stay
- * until the phone that no longer uses them ships (S3, in the same release as S2: Marty, 9 Nov).
+ * restore's throwaway key, and `POST /api/recovery/collect {candidatePublicKey}` opens the session for the account picked
+ * and releases its copy in the same request, through the per-row lookup-hash proof (engine/recovery-release.ts
+ * releaseSsoFragmentForIdentity): the find's index is never the proof.
+ *
+ * No account is found by a typed name (S3, in the same release as the S2 phone: Marty, 9 Nov). The name routes are
+ * deleted: the public lookup by name, a collect by name, `/collect/sso-nonce` and `/collect/sso`. An app from before S2
+ * that still asks one of those addresses is told so in words (nameRoutesGone, below).
  */
 
 import Router from '@koa/router';
 
-import { db } from '../db/db.js';
-import { foldName } from '@beanpool/engine';
+import type { Context, Next } from 'koa';
 import { isSingleBlobSso, KEEPER_ALG_RELEASE, sealReleaseToDevice, word } from '@beanpool/core';
 import { getActingMember, dispatchPushNotification } from '../state-engine.js';
 import {
@@ -60,7 +61,6 @@ import {
     discardUnreleasedCollection,
     collectionState,
     collectionProgress,
-    releasedShareIds,
     releasesForLiveSession,
     releaseHubFragment,
     releaseSsoFragmentForIdentity,
@@ -83,35 +83,45 @@ import {
     webClientIds,
     type SsoProvider,
 } from '../sso.js';
-import { isSingleBlobSsoStored, requireRecoverySealKey } from '../services/recovery-seal-key.js';
+import { requireRecoverySealKey } from '../services/recovery-seal-key.js';
 import { assertPlainTablesWritable, StandbyLedgerError } from '../config/node-role.js';
 import { FindBusy, findAccountsBySignIn, holdFind, isRestorableMember, takeFindHold } from '../engine/recovery-find.js';
 import { recoverySealFailure, signInFailure } from './keepers.js';
 import type { RouteDeps } from './types.js';
 
 /**
- * The account a sign-in restore by `callsign` is for: by the one name rule (`foldName`, the engine's names.ts), with the
- * status predicate of idx_members_callsign_unique, and never a visitor's row (a member of another community, or a key
- * someone sent to), which no restore here brings back and which a federation peer names (review of #1956, N3), nor an
- * enterprise's or a project's row, which no one restores and which may hold a member's name in another case from before
- * #1956, making an older app's restore by name ambiguous for nothing (deciding review of #1977, N6).
- *
- * `publicKey`, when the device sends one (`candidatePublicKey`, a candidate's key from the lookup, findRecoveryCandidates,
- * which lists the same rows; named so the middleware's spoof check reads it as someone else's key, as it is: the device
- * signs with a throwaway key), is the account it chose: it must be one of the rows here, so two members whose names fold the same (kept, never renamed)
- * can each still restore theirs, while a key this name does not hold opens nothing. With no key
- * (an app from before), a name two accounts hold is ambiguous, as it always was.
+ * What an app from before S2 hears at the address of a name route S3 deleted (design DESIGN-recovery-no-callsign-fable.md
+ * §3, §4): 404 and this sentence, code `no_restore_by_name`. A phone from 1.3.4 asks the lookup first and reads any answer
+ * but a list as "Can't reach the community right now", which nothing can change in it (design §4: S3 reaches nodes only
+ * with the S2 phone's release); the sentence is for whoever reads the answer itself, and for an older phone already past
+ * the lookup when its community updated, which shows a refusal's words.
  */
-function resolveCallsign(callsign: string, publicKey?: string): { pubkey?: string; ambiguous: boolean } {
-    const rows = db.prepare(`
-        SELECT public_key FROM members
-        WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND is_visitor = 0 AND COALESCE(is_treasury, 0) = 0
-    `).all(foldName(callsign)) as { public_key: string }[];
-    if (publicKey !== undefined) return { pubkey: rows.find((r) => r.public_key === publicKey)?.public_key, ambiguous: false };
-    if (rows.length > 1) return { ambiguous: true };
-    return { pubkey: rows[0]?.public_key, ambiguous: false };
-}
+export const NO_RESTORE_BY_NAME = word('This community no longer finds an account by its name. Update the app to restore with your sign-in, or use your 12 words.');
+export const NO_RESTORE_BY_NAME_CODE = 'no_restore_by_name';
 
+/**
+ * The deleted name routes' addresses, as their apps asked them: the lookup by a typed name (unsigned GET, and the HEAD the
+ * router answered with it), and a session's sign-in nonce and release (signed POSTs).
+ */
+const NAME_ROUTES_GONE: readonly { methods: readonly string[]; path: RegExp }[] = [
+    { methods: ['GET', 'HEAD'], path: /^\/api\/recovery\/lookup\/[^/]+\/?$/ },
+    { methods: ['POST'], path: /^\/api\/recovery\/collect\/(sso-nonce|sso)\/?$/ },
+];
+
+/**
+ * Koa middleware, mounted before the private preview's gate and the signature middleware (https-server.ts): each address
+ * in NAME_ROUTES_GONE answers 404 with NO_RESTORE_BY_NAME in JSON, never a 401 for a signature its app never sent (the
+ * lookup was public), the preview's sentence, or an empty "Not Found". Nothing is read or written. Conversion code (no
+ * conversion code without saying so, Marty 10 Nov): it goes once no phone the communities let in is older than the S2
+ * build.
+ */
+export function nameRoutesGone() {
+    return async function nameRoutesGoneMiddleware(ctx: Context, next: Next): Promise<void> {
+        if (!NAME_ROUTES_GONE.some((r) => r.methods.includes(ctx.method) && r.path.test(ctx.path))) return next();
+        ctx.status = 404;
+        ctx.body = { error: NO_RESTORE_BY_NAME, code: NO_RESTORE_BY_NAME_CODE };
+    };
+}
 
 /**
  * The one alert: a sign-in has just RELEASED this member's sign-in fragment. For a single-blob keeper
@@ -198,8 +208,14 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
     }
 
     /**
-     * Start collecting. Signed by the recovering device's EPHEMERAL key, which is not a member of
-     * anything — that is the situation, not a gap.
+     * Start collecting, for the account a find named (design §3): `candidatePublicKey` must be one the find this throwaway
+     * key signed named, inside its 5-minute hold. Then the session opens and, in the same request, the hold's sign-in
+     * releases the copy through the release's own per-row scrypt proof (releaseSsoFragmentForIdentity), never the find's
+     * index; the owner is told once, and the hold is spent. A name in the body is not read: no account is found by one.
+     *
+     * Signed by the recovering device's EPHEMERAL key, which is not a member of anything — that is the situation, not a
+     * gap. A standby, or a server without its key, refuses before the hold is touched, so the member's is kept for when
+     * the main server, or the key, answers. A release that does not happen leaves no session behind.
      */
     router.post('/api/recovery/collect', async (ctx) => {
         const requester = ctx.state?.actor as string | undefined;
@@ -208,67 +224,18 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'A recovery session must be signed by the device requesting it.' };
             return;
         }
-        // Hard-limited: this is the closest thing to an unauthenticated write in the system, since
-        // anybody can mint a keypair. This bounds the sessions in their sign-in window, which nothing evicts; the cap
-        // in pruneCollectionsFor bounds the idle ones.
+        // Hard-limited: anybody can mint a keypair, and a request with a hold runs a scrypt proof. The cap in
+        // pruneCollectionsFor bounds the sessions an owner's sign-in leaves idle.
         if (!rateLimit(ctx, 'sign-in-recovery')) return;
 
-        const callsign = String((ctx as any).requestBody?.callsign ?? '').trim();
-        // The account the device chose from the lookup, when it sends one (resolveCallsign): a string, or nothing.
-        const sentKey = (ctx as any).requestBody?.candidatePublicKey;
-        // No name: the account a find named, released by the find's own sign-in (collectByHold).
-        if (!callsign && typeof sentKey === 'string' && sentKey) return collectByHold(ctx, requester, sentKey);
-        if (!callsign) { ctx.status = 400; ctx.body = { error: word('Which account are you recovering?') }; return; }
-
-        if (sentKey !== undefined && sentKey !== null && (typeof sentKey !== 'string' || !sentKey)) {
-            ctx.status = 400; ctx.body = { error: word('Which account are you recovering?') }; return;
-        }
-        const { pubkey, ambiguous } = resolveCallsign(callsign, sentKey ?? undefined);
-        if (ambiguous) { ctx.status = 409; ctx.body = { error: word('That callsign is ambiguous on this node.') }; return; }
-        if (!pubkey) {
-            // Same shape a member with no split gets from openCollection, so this endpoint is no
-            // sharper an oracle than the public keeper summary already is. A key the name does not hold gets it too.
+        // The account the device picked from its find: named so the middleware's spoof check reads it as someone else's
+        // key, as it is (the device signs with a throwaway key).
+        const publicKey = (ctx as any).requestBody?.candidatePublicKey;
+        if (typeof publicKey !== 'string' || !publicKey) {
             ctx.status = 400;
-            ctx.body = { error: word('That account has no recovery fragments to collect.') };
+            ctx.body = { error: word('Which account are you recovering?') };
             return;
         }
-
-        let collection: Collection;
-        try {
-            collection = openCollection(pubkey, requester);
-        } catch (e) { return fail(ctx, e); }
-        // No push to the owner here: anybody can open one (see the header). They are told when a sign-in releases the
-        // copy (notifySeedReleased), and see live sessions in the app.
-
-        const progress = collectionProgress(collection.id);
-        const ssoRows = db.prepare(`
-            SELECT kdf_params FROM recovery_shares
-            WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'sso'
-        `).all(pubkey, collection.generation) as { kdf_params: string | null }[];
-        // Stored rows are wrapped; the client's scheme is readable beside the wrap without the key.
-        const isSingleBlob = ssoRows.length > 0 && ssoRows.every(r => isSingleBlobSsoStored(r.kdf_params));
-        const defaultThreshold = isSingleBlob ? 1 : 2;
-        const threshold = progress?.threshold ?? defaultThreshold;
-        ctx.status = 200;
-        ctx.body = {
-            collectionId: collection.id,
-            generation: collection.generation,
-            expiresAt: collection.expiresAt,
-            threshold,
-            progress,
-        };
-    });
-
-    /**
-     * A collect with no name (design §3): `publicKey` must be one the find this throwaway key signed named, inside its
-     * 5-minute hold. Then the session opens and, in the same request, the hold's sign-in releases the copy through the
-     * release's own per-row scrypt proof (releaseSsoFragmentForIdentity), never the find's index; the owner is told once,
-     * and the hold is spent. The answer is the one a collect by name gives, with the copy already released.
-     *
-     * A standby, or a server without its key, refuses before the hold is touched, so the member's is kept for when the
-     * main server, or the key, answers. A release that does not happen leaves no session behind.
-     */
-    async function collectByHold(ctx: any, requester: string, publicKey: string): Promise<void> {
         let collection: Collection | null = null;
         try {
             assertPlainTablesWritable();
@@ -303,12 +270,12 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
             threshold: progress?.threshold ?? 1,
             progress,
         };
-    }
+    });
 
     /**
-     * A sign-in nonce for finding the account (design §3): bound to the restore's throwaway key, as `/collect/sso-nonce`
-     * binds one to a session's key, with no session yet: the find comes first now. A standby refuses it (its gate), before
-     * the provider's sheet opens.
+     * A sign-in nonce for finding the account (design §3): bound to the restore's throwaway key, with no session yet: the
+     * find comes first. Separate from `/api/recovery/sso-nonce` in keepers.ts, which a member's own Connect asks. A standby
+     * refuses it (its gate), before the provider's sheet opens.
      */
     router.post('/api/recovery/find-nonce', async (ctx) => {
         const requester = ctx.state?.actor as string | undefined;
@@ -344,7 +311,8 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         const body = (ctx as any).requestBody || {};
         if (!isSsoProvider(body.provider)) {
             ctx.status = 400;
-            // As /collect/sso refuses it: at most 40 characters of what was sent.
+            // At most 40 characters of what was sent, as distance-query.ts writes a value it could not read: a refusal is
+            // no place for whatever a stranger chose to send.
             ctx.body = { error: `'${String(body.provider).slice(0, 40)}' is not a sign-in provider this node can verify.` };
             return;
         }
@@ -444,63 +412,6 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         if (!collection) return notMySession(ctx);
         try {
             releaseHubFragment(collection.id);
-            ctx.status = 200;
-            ctx.body = collectionProgress(collection.id);
-        } catch (e) { return fail(ctx, e); }
-    });
-
-    /**
-     * A sign-in nonce for the RECOVERING device.
-     *
-     * Separate from `/api/recovery/sso-nonce` in keepers.ts, which requires an active member. This
-     * caller is by definition not one — they are trying to become one again — so the nonce is
-     * bound to their ephemeral key instead. Same anti-replay property, different subject.
-     */
-    router.post('/api/recovery/collect/sso-nonce', async (ctx) => {
-        const collection = sessionFor(ctx);
-        if (!collection) return notMySession(ctx);
-        if (!rateLimit(ctx, 'sign-in-recovery')) return;
-        ctx.status = 200;
-        ctx.body = {
-            nonce: issueNonce(collection.requesterEphemeralPubkey),
-            expiresInSeconds: 600,
-            // The id a browser puts in its request to each provider it leaves the page for (sso.ts webClientId).
-            clientIds: webClientIds(),
-        };
-    });
-
-    /** K3 — released on a verified fresh sign-in with the provider account that is the keeper. */
-    router.post('/api/recovery/collect/sso', async (ctx) => {
-        const collection = sessionFor(ctx);
-        if (!collection) return notMySession(ctx);
-        if (!rateLimit(ctx, 'sign-in-recovery')) return;
-
-        const body = (ctx as any).requestBody || {};
-        if (!isSsoProvider(body.provider)) {
-            ctx.status = 400;
-            // At most 40 characters of what was sent, as distance-query.ts writes a value it could not read: a refusal is
-            // no place for whatever a stranger chose to send.
-            ctx.body = { error: `'${String(body.provider).slice(0, 40)}' is not a sign-in provider this node can verify.` };
-            return;
-        }
-        try {
-            // Every release is recorded wrapped, so a server without its recovery-seal key refuses before the sign-in
-            // is checked: the device keeps its nonce for when the key is back.
-            requireRecoverySealKey();
-            const identity = await verifySignIn(
-                body.provider,
-                signInCredentialFrom(body),
-                getConfiguredAudiences(body.provider),
-                typeof body.nonce === 'string' ? body.nonce : '',
-                // The nonce was issued to the ephemeral key, so it must be spent against it.
-                collection.requesterEphemeralPubkey,
-            );
-            // As stored, never opened: the release below checks the session is live, so a device whose session is long
-            // gone is told that, not that this server can't open the copy (it was emptied after 30 days).
-            const alreadyReleased = releasedShareIds(collection.id);
-            const released = await releaseSsoFragmentForIdentity(collection.id, identity.provider, identity.sub);
-            // Once per fragment released: a retry of a request that already released it tells nobody twice.
-            if (!alreadyReleased.has(released.shareId)) notifySeedReleased(collection, identity.provider);
             ctx.status = 200;
             ctx.body = collectionProgress(collection.id);
         } catch (e) { return fail(ctx, e); }

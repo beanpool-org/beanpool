@@ -103,9 +103,9 @@ async function part2Limiters() {
     console.log('\n— auth-attempt limiter (15/min) over IPv6 —');
     updateGatewayConfig(unlimited);
     {
-        const s = await burst(16, i => [`/api/recovery/lookup/nobody${i}`, viaTunnel(inPrefix('2001:db8:2:2', i))]);
-        assert(s.slice(0, 15).every(x => x !== 429) && s[15] === 429, `recovery lookups rotating inside one /64: 429 on 16 (got ${s[15]})`);
-        const other = await req('/api/recovery/lookup/nobody', { headers: viaTunnel('2001:db8:2:3::1') });
+        const s = await burst(16, i => [`/api/members/callsign-available/nobody${i}`, viaTunnel(inPrefix('2001:db8:2:2', i))]);
+        assert(s.slice(0, 15).every(x => x !== 429) && s[15] === 429, `name checks rotating inside one /64: 429 on 16 (got ${s[15]})`);
+        const other = await req('/api/members/callsign-available/nobody', { headers: viaTunnel('2001:db8:2:3::1') });
         assert(other.status !== 429, `a neighbouring /64 has its own auth bucket (got ${other.status})`);
     }
 

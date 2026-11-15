@@ -13,8 +13,8 @@ import { clientLimiterKey } from './client-ip.js';
  * They still share one bucket, so across them a guesser gets the 15 a minute per address they got before. Most admin
  * routes never called this limiter: the node has no admin password, and the one secret checkAdminAuth still checks (an
  * owner's break-glass code, on the enrol routes) is bounded by the brake (password-brake.ts), not by this bucket.
- * `names` is the name check and the recovery lookup together: both tell whether a name is here, so a prober gets the 15
- * a minute it got before across the two (the privacy review's F5, test-privacy-defaults.ts). Every other route that
+ * `names` is the name check, which tells whether a name is here: 15 a minute per address (the privacy review's F5,
+ * test-privacy-defaults.ts). The recovery lookup by name shared it until S3 deleted it. Every other route that
  * guards nothing a guess can win has its own. The open door's own name check is not here at all
  * (`doorRateLimit` below). Chat lines do NOT come through here — they have their own per-member bucket
  * (chat-rate-limit.ts), so members chatting behind one NAT cannot lock each other out of recovery.
@@ -27,12 +27,13 @@ export const AUTH_RATE_LIMIT = { perAddress: 15, windowMs: 60_000 } as const;
 export type AuthLimitBucket =
     | 'admin'
     | 'pairing'           // QR pairing: /api/pair/init and /api/pair/transfer, one pairing's two calls
-    | 'names'             // /api/recovery/lookup/:callsign and /api/members/callsign-available/:callsign (unless a key
-                          // joining at the open door signs it): one bucket, as both say whether a name is taken
+    | 'names'             // /api/members/callsign-available/:callsign (unless a key joining at the open door signs it),
+                          // which says whether a name is taken
     | 'funnel-event'      // the wizard's three counted steps, every newcomer's
     | 'knock'             // /api/join/knock (and its own daily caps, engine/knocks.ts)
     | 'pricing-guide'     // the pricing guide's read and its anonymous report
-    | 'sign-in-recovery'; // a restore by sign-in: /api/recovery/collect*, /api/recovery/sso-nonce, /api/recovery/shares/sso
+    | 'sign-in-recovery'; // a restore by sign-in: /api/recovery/find-nonce, /find and /collect; and a member's own sign-in:
+                          // /api/recovery/sso-nonce, /api/recovery/shares/sso, /api/recovery/community-copy(/half)
 const authAttempts = new Map<string, { count: number; resetAt: number }>();
 export function authRateLimit(ctx: Koa.Context, bucket: AuthLimitBucket = 'admin'): boolean {
     const ip = `${bucket} ${clientLimiterKey(ctx)}`;
@@ -71,7 +72,7 @@ export function pruneAuthAttempts(now = Date.now()): void {
  * The door's own limiter (global two-doors design §4.4), in place of the auth limiter's 15 a minute per address on the
  * open door's routes (routes/open-join.ts) and on the name check a joining key signs (routes/community.ts): 20 a minute
  * per signing key, and 600 a minute per address as a flood ceiling. The auth limiter is right for what it guards (a
- * password, a recovery lookup, a pairing), but at the door it turned a hall away after a handful of joins: a join takes
+ * password, a restore by sign-in, a pairing), but at the door it turned a hall away after a handful of joins: a join takes
  * at least three of these requests. The door guards nothing a key can't already ask, and its real cost is the work.
  *
  * Both are counted before either is charged, so a request one refuses spends nothing of the other. Answered as the auth

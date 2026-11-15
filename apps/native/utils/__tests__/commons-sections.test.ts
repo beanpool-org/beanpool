@@ -266,8 +266,12 @@ describe('the screens go through the helpers (source check)', () => {
 
     it("the header's vote icon asks for votes only where the node has Decisions, and draws them by Home's rule (PR #1483 review 4166559525, opus-1767 N3)", () => {
         const src = read('components/NeedsYouIcons.tsx');
-        // Home's own vote line, asked as Home asks it (lands=enterprise), so a keepers' vote shows and opens the enterprise.
-        expect(src).toContain("decisionsOn(features) ? settle(signedGet(homePath(['needs'])).then(r => (r.ok ? r.json() : null))) : null,");
+        // Home's own vote line, asked as Home asks it (lands=enterprise), so a keepers' vote shows and opens the enterprise. Home is
+        // asked where Decisions are on, and where bills are (DESIGN-getting-paid-fable §4.4: its bill lines, slice B2); a vote
+        // still comes only from a node with Decisions (the node sends none without) and is drawn by Home's rule below.
+        expect(src).toContain('const asksHome = decisionsOn(features) || features?.bills === true;');
+        expect(src).toContain("asksHome ? settle(signedGet(homePath(['needs'])).then(r => (r.ok ? r.json() : null))) : null,");
+        expect(src).toContain("needs.filter((i: HomeNeedsItem) => i?.kind === 'vote' || i?.kind === 'bill')");
         expect(src).toContain('...mergeNeeds(votes, null, now, features)');
         expect(src).not.toContain('getDecisions(');
         // Home's rule for a vote's landing, the one its own lines follow (mergeNeeds): Decisions on.

@@ -61,6 +61,8 @@ describe('the doors to the listing form', () => {
             'app/post/[id].tsx': ["'true'"],
             // A tool's Offer (through the List sheet) and its Need, and the Offer a starter draft opens (Home's "What could you offer?").
             'tools/doors.ts': ["'offer'", "'need'", "'offer'"],
+            // A bill the payer can't pay yet: "Post an Offer" beside its money line (DESIGN-getting-paid-fable §4.3, slice B2).
+            'components/Bills.tsx': ["'offer'"],
         });
         // Every fixed value a door passes is one the screen reads.
         for (const v of ['true', 'offer', 'need', 'poll', 'event']) expect(parseNewPostParam(v), v).not.toBeNull();

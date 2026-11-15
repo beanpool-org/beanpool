@@ -9,11 +9,19 @@
  * owner's or admin's "Edit" of one (at once). A fix and an edit change words, never photos: neither has the picker.
  * The node checks everything again; this only says the first thing missing before it sends (lib/learn.ts learnFormRefusal).
  * Photos are optional and the member's own (at most three, the browser's own picker, asked for nothing until 📷 is tapped).
+ * Tags (Learn's tags, 16 Nov 2026): the Market's own Tags field, the member's own tags alone (TagPicker `freeOnly`), in every use;
+ * an edit, a fix and "Edit first" open on the tags held, and taking them all off sends none.
  */
 import { useEffect, useState } from 'react';
-import { KNOWLEDGE_LIMITS, KNOWLEDGE_TOPICS, formatCount, t, type KnowledgeSource } from '@beanpool/core';
+import { KNOWLEDGE_LIMITS, KNOWLEDGE_TAG_WORDS, KNOWLEDGE_TOPICS, formatCount, t, type KnowledgeSource } from '@beanpool/core';
 import { learnFormRefusal, learnRefusalText, topicLabel, type LearnInput } from '../lib/learn';
 import { PostPhotoPicker } from './PostPhotoPicker';
+import { TagPicker } from './TagPicker';
+
+/** The Market's picker reads library tags it is never given here (freeOnly). */
+const NO_LIBRARY = () => {};
+/** Learn's line under the Tags field, in place of the Market's two. */
+const TAG_HINTS = [KNOWLEDGE_TAG_WORDS.hint];
 
 export type LearnFormUse = 'suggest' | 'publish' | 'approve' | 'fix' | 'edit';
 
@@ -41,6 +49,7 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdit
     const [topic, setTopic] = useState(initial?.topic ?? '');
     const [place, setPlace] = useState(initial?.place ?? '');
     const [sources, setSources] = useState<KnowledgeSource[]>(initial?.sources?.length ? initial.sources : []);
+    const [freeTags, setFreeTags] = useState<string[]>(initial?.freeTags ?? []);
     const [photos, setPhotos] = useState<string[]>(initial?.photos ?? []);
     const [note, setNote] = useState('');
     const fix = use === 'fix';
@@ -49,15 +58,16 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdit
     const [refusal, setRefusal] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
     // How it opened; photos (data URLs) are compared one by one, never turned into one long string on each key.
-    const [opened] = useState(() => ({ title, body, topic, place, sources: JSON.stringify(sources), photos }));
+    const [opened] = useState(() => ({ title, body, topic, place, sources: JSON.stringify(sources), photos, freeTags: JSON.stringify(freeTags) }));
     const edited = note !== '' || title !== opened.title || body !== opened.body || topic !== opened.topic || place !== opened.place
-        || JSON.stringify(sources) !== opened.sources || photos.length !== opened.photos.length || photos.some((p, i) => p !== opened.photos[i]);
+        || JSON.stringify(sources) !== opened.sources || JSON.stringify(freeTags) !== opened.freeTags
+        || photos.length !== opened.photos.length || photos.some((p, i) => p !== opened.photos[i]);
     useEffect(() => { onEdited?.(edited); }, [edited, onEdited]);
 
     const setSource = (i: number, part: Partial<KnowledgeSource>) => setSources((list) => list.map((s, j) => (j === i ? { ...s, ...part } : s)));
     const send = async () => {
         if (sending) return;
-        const input: LearnInput = { title, body, topic, place, sources, ...(wordsOnly ? {} : { photos }), ...(fix ? { note } : {}) };
+        const input: LearnInput = { title, body, topic, place, sources, freeTags, ...(wordsOnly ? {} : { photos }), ...(fix ? { note } : {}) };
         const said = fix && !note.trim() ? t('Say what changed.') : learnFormRefusal(input);
         setRefusal(said);
         if (said) return;
@@ -117,6 +127,7 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdit
                 <input id="learn-form-place" data-testid="learn-form-place" value={place} maxLength={KNOWLEDGE_LIMITS.place} onChange={(e) => setPlace(e.target.value)}
                     placeholder={t('e.g. The tip on Manse Road')} dir="auto" className={FIELD} />
             </div>
+            <TagPicker freeOnly testID="learn-form-tags" onChange={NO_LIBRARY} freeTags={freeTags} onFreeTagsChange={setFreeTags} hints={TAG_HINTS} />
             <fieldset className="m-0 p-0 border-0 min-w-0">
                 <legend className={LABEL}>{t('Where can people check this? (optional)')}</legend>
                 <div className="flex flex-col gap-3">

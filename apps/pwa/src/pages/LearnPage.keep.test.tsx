@@ -254,6 +254,8 @@ describe('what each action sends, and what the page shows after the node answers
         expect(writes()).toEqual([{ path: '/api/knowledge/posts/tip/edit', body: {
             title: 'How the tip works now', body: 'Sort it first.', topic: 'local-services', place: 'Manse Road',
             sources: [{ url: 'https://council.example/tip', label: 'Council tip page' }], lang: 'es',
+            // Learn's tags: an edit sends the page's whole list, as its words ([] takes them off), none here.
+            freeTags: [],
         } }]);
         expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('How the tip works now');
     });
@@ -275,6 +277,8 @@ describe('what a fix or an edit sends: the member\'s changes to the page the for
         edit: { path: '/api/knowledge/posts/tip/edit', body: {
             title: 'Tip hours (winter)', body: 'Sort it first.', topic: 'local-services', place: 'Manse Road',
             sources: [{ url: 'https://council.example/tip', label: 'Council tip page' }],
+            // Learn's tags: an edit sends the page's whole list (none here); a fix sends them only when changed.
+            freeTags: [],
         } },
     };
     const ACTION = {

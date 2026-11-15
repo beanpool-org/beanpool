@@ -25,7 +25,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, LEARN_HOME_WORDS, LOCAL_COMMUNITY_SHEET, formatCount, isKnowledgeTopic, pinLive, t, tn, upperCase, type KnowledgeFront,
+    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TAG_WORDS, LEARN_HOME_WORDS, LOCAL_COMMUNITY_SHEET, formatCount, isKnowledgeTopic, pinLive, t, tn, upperCase, type KnowledgeFront,
     type KnowledgeRow, type KnowledgeTopicPage,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -37,6 +37,7 @@ import {
     safeSourceUrl, searchLearn, showsLearn, sourceHost, suggestLearn, suggestLearnFix, topicEmoji, topicLabel, useChecksLearn, useLearn, type LearnPost,
 } from '../lib/learn';
 import { LearnForm } from '../components/LearnForm';
+import { PostTagChips } from '../components/PostTagChips';
 import { LearnMine } from '../components/LearnMine';
 import { LearnCheckList, LearnCheckOne } from '../components/LearnCheck';
 import { sampleLearnPosts } from '../components/ShowcasePreviews';
@@ -95,6 +96,8 @@ const LINK_BUTTON = 'min-h-[44px] inline-flex items-center gap-1 px-1 text-start
 const MUTED = 'text-nature-600 dark:text-nature-300';
 /** "3 to check ›": amber, never by colour alone (a ▲ leads it). */
 const WARN_LINK = LINK_BUTTON.replace('text-bp-ink-learn', 'text-bp-ink-warning');
+/** A page carries no library tags (Learn's tags are free tags only): the chips' library tap is never reached. */
+const NO_LIBRARY_TAG = () => {};
 /** A page's own tools (slice K5): the writer's, an owner's or admin's. */
 const TOOL = 'min-h-[44px] px-3 rounded-xl border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-900 font-bold text-nature-900 dark:text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-learn';
 
@@ -303,7 +306,8 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
     if (pageId) {
         return (
             <Shell>
-                <PageView id={pageId} preview={preview} identity={identity} samplePosts={samplePosts} onBack={closePage} onOpenProfile={onOpenProfile} />
+                <PageView id={pageId} preview={preview} identity={identity} samplePosts={samplePosts} onBack={closePage} onOpenProfile={onOpenProfile}
+                    onTag={(tag) => { setPageIsEntry(false); setView({ topic: null, words: tag, pageId: null, screen: 'list' }); }} />
             </Shell>
         );
     }
@@ -526,8 +530,10 @@ function TopicView({ topic, more, failed, onTopicAgain, moreFailed, moreLoading,
 
 // ── One page, whole ──────────────────────────────────────────────────────────────────────
 
-function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile }: {
+function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, onTag }: {
     id: string; preview: boolean; identity: BeanPoolIdentity | null; samplePosts: () => LearnPost[]; onBack: () => void; onOpenProfile: (pubkey: string) => void;
+    /** A tag on the page tapped: Learn searches for it (Learn's tags). */
+    onTag: (tag: string) => void;
 }) {
     const [state, setState] = useState<{ id: string; post: LearnPost | null } | 'failed' | null>(null);
     const [tries, setTries] = useState(0);
@@ -616,7 +622,8 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile }:
                         <button type="button" onClick={() => setEditing(null)} className={LINK_BUTTON}>{t('Back')}</button>
                     </section>
                 ) : (
-                    <LearnForm use={editing.use} initial={{ title: opened.title, body: opened.description, topic: opened.category, place: opened.knowledge.place ?? '', sources: opened.knowledge.sources }}
+                    <LearnForm use={editing.use}
+                        initial={{ title: opened.title, body: opened.description, topic: opened.category, place: opened.knowledge.place ?? '', sources: opened.knowledge.sources, freeTags: opened.freeTags ?? [] }}
                         onSend={async (input) => {
                             if (fix) { await suggestLearnFix(opened, input); setFixSent(true); return; }
                             const answer = await editLearnPage(opened, input);
@@ -647,6 +654,7 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile }:
                 {/* Plain text with paragraphs: no markup and no links made of it (§2.2). */}
                 <div dir="auto" lang={k.lang ?? undefined} data-testid="learn-post-body" className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-nature-900 dark:text-nature-50">{post.description}</div>
                 {k.place && <p dir="auto" data-testid="learn-post-place" className="m-0 text-sm font-bold text-nature-800 dark:text-nature-100 break-words">{t('Where: {place}', { place: k.place })}</p>}
+                <PostTagChips tags={[]} freeTags={post.freeTags} onPick={NO_LIBRARY_TAG} onPickFree={onTag} freeTagLabel={KNOWLEDGE_TAG_WORDS.searchFor} />
 
                 {photos.length > 0 && (
                     <div data-testid="learn-post-photos" className="flex flex-col gap-2">

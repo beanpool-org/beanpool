@@ -15,7 +15,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}), removeItem: vi.fn(async () => {}) },
 }));
 import { readNodeProfile } from '../node-profile';
-import { perItemAfterUnitsChanged, perItemEditFields, perItemOffered, priceUnitsOffered, readCount } from '@beanpool/core';
+import { perItemAfterUnitsChanged, perItemCreateFields, perItemEditFields, perItemLotHint, perItemOffered, priceUnitsOffered, readCount } from '@beanpool/core';
 
 const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, rel), 'utf-8');
 
@@ -70,6 +70,19 @@ describe('the create form (app/new-listing.tsx) reads core\'s rules', () => {
         expect(src).toMatch(/\{!eachChosen && \(\s*<Pressable[^>]*accessibilityState=\{\{ selected: postRepeatable \}\}/);
         expect(src).toContain('postItemCount, postItemLot, postRepeatable');
         expect(src).toContain('setPostItemCount(typeof d.postItemCount');
+    });
+
+    it('10 each, all 10 for 100 (the same as one by one) is taken, as on the web; 10 for 120 is refused with the total (Marty 16 Nov; red if the phone still refuses the same price)', () => {
+        // The create and edit screens send what perItemCreateFields / perItemEditFields return (pinned above), and draw the
+        // line perItemLotHint gives under the box (components/PerItemFields.tsx): the same three functions the web calls.
+        expect(src).toContain('perItemCreateFields(');
+        const same = { price: '10', count: '10', lot: '100' };
+        expect(perItemCreateFields(same)).toEqual({ ok: true, fields: { priceType: 'each', unitsLeft: 10, lot: { price_c: 10000 } } });
+        expect(perItemLotHint(same)).toEqual({ kind: 'good', text: 'All 10 for 100 Beans. One by one they come to 100.' });
+        expect(perItemEditFields(same, { wasEach: true, unitsLeft: 10, lot: null }, true))
+            .toEqual({ ok: true, fields: { priceType: 'each', unitsLeft: 10, unitsLeftWas: 10, lot: { price_c: 10000 } } });
+        const more = { price: '10', count: '10', lot: '120' };
+        expect(perItemCreateFields(more)).toMatchObject({ ok: false, refusal: { field: 'lot', code: 'lot_not_less', text: "One by one, 10 come to 100 Beans. A price for all of them can't be more than that." } });
     });
 
     it('PRICE FOR ONE labels the price box on Each, and the fee line is the Each one (red if the old fee sentence stays)', () => {

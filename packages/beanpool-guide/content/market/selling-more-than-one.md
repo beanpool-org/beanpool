@@ -28,8 +28,8 @@ Start a post as usual (see "Posting an Offer or a Need"), choose **Offer**, and 
 A line under the last box tells you where you stand:
 
 - Empty: **Leave this empty to sell them one by one only.**
-- A good price: **All 20 for 5,500 Beans. One by one they come to 6,000.**
-- Not less than buying them one by one: **One by one, 20 come to 6,000 Beans. A price for all of them has to be less.** The post is refused until you lower it.
+- A good price, less than one by one or the same: **All 20 for 5,500 Beans. One by one they come to 6,000.**
+- More than buying them one by one: **One by one, 20 come to 6,000 Beans. A price for all of them can't be more than that.** The post is refused until you lower it.
 
 Under the price, the app shows what you receive after the 1.5% market fee, for one and for all: **1.5% goes to the community. You receive 295.50 Beans for each one, or 5,417.50 Beans for all of them.** A free post has no price for all of them, and a price for all of them is for 2 or more items.
 
@@ -54,7 +54,7 @@ When none are left but a deal is still under way, the post says **All taken for 
 Open the Offer and tap **🤝 Accept Offer**. A box asks **How many would you like?**
 
 - **Choose how many:** use **−** and **+**, or type the number. It is a whole number from 1 to what is left, and the box shows the price for one and how many are left.
-- **All 20 for 5,500 Beans:** shown only while the price for all of them is on offer, with how much less it is than one by one. Stepping up to all 20 picks this choice for you, so nobody pays 6,000 where 5,500 is offered.
+- **All 20 for 5,500 Beans:** shown only while the price for all of them is on offer, with how much less it is than one by one (nothing more when it is the same price). Stepping up to all 20 picks this choice for you, so nobody pays 6,000 where 5,500 is offered.
 
 Under the choices, the box shows what you will pay and what happens to it: **3 × 300 = 900 Beans**, then **900 Beans go into trust now. Rob receives 886.50 when you release them (1.5% goes to the community).** For all of them: **All 20 for 5,500 Beans**, and **5,500 Beans go into trust now. Rob receives 5,417.50 when you release them (1.5% goes to the community).**
 

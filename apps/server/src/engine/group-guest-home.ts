@@ -284,8 +284,9 @@ function settleGroupMailFor(member: string, now: number): number {
                              ORDER BY received_at DESC, rowid DESC`).all(member) as Array<{ id: string; host: string; bytes: number }>;
     const kept = new Map<string, { n: number; bytes: number; full: boolean }>();
     const past: string[] = [];
+    const going = new Set(done);
     for (const r of half) {
-        if (done.includes(r.id)) continue;
+        if (going.has(r.id)) continue;
         const k = kept.get(r.host) ?? { n: 0, bytes: 0, full: false };
         k.full ||= k.n >= GROUP_MAIL_PER_HOST_ITEMS || k.bytes + r.bytes > GROUP_MAIL_PER_HOST_BYTES;
         if (k.full) past.push(r.id);

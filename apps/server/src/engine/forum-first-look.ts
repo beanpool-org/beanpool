@@ -20,6 +20,7 @@
 import crypto from 'node:crypto';
 import { FORUM_TIMES, word, wordsFor, type PushNoticeKind } from '@beanpool/core';
 import { db, deletePlainRows } from '../db/db.js';
+import { sectionAccess } from './forum-sections.js';
 import { getNodeRole } from './sync.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { getMember } from '@beanpool/engine';
@@ -136,8 +137,11 @@ export function okFirstLook(cb: ModerationNoticeCallbacks, moderator: string, id
     assertPlainTablesWritable();
     moderatorOnly(moderator);
     const row = stillWaiting(id);
-    const section = db.prepare('SELECT archived_at FROM forum_sections WHERE id = ?').get(row.section_id) as { archived_at: string | null } | undefined;
+    const section = db.prepare('SELECT archived_at, group_id FROM forum_sections WHERE id = ?').get(row.section_id) as { archived_at: string | null; group_id: string | null } | undefined;
     if (!section || section.archived_at) throw new ForumRefusal(409, 'section_gone', FIRST_LOOK_WORDS.sectionGone);
+    // A group's section its writer can no longer write in (they left the group, or are no longer a member of it): it is not
+    // theirs to go up in any more (slice F8, engine/forum-sections.ts).
+    if (sectionAccess(row.writer_pubkey, section.group_id) !== 'write') throw new ForumRefusal(409, 'section_gone', FIRST_LOOK_WORDS.sectionGone);
     const topicId = `ft-${crypto.randomBytes(12).toString('hex')}`;
     const postId = `fp-${crypto.randomBytes(12).toString('hex')}`;
     const at = iso(now);

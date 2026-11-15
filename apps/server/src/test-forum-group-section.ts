@@ -105,6 +105,10 @@ async function call(id: Id | null, method: 'GET' | 'POST', urlPath: string, body
     return { status: res.status, body: parsed, text, headers: res.headers };
 }
 const show = (r: Res | null) => (r ? `${r.status} ${r.text.slice(0, 200)}` : '-');
+/** The Market's feed answers a list of posts. */
+const feed = (r: Res): any[] => (Array.isArray(r.body) ? r.body : []);
+/** The two codes a key that is no member here is turned away with, at the gateway or the forum's own door, read as one. */
+const stranger = (code: unknown) => (code === 'not_member' || code === 'not_a_member' ? 'stranger' : code);
 
 const start = (id: Id, body: Record<string, unknown>) => call(id, 'POST', '/api/forum/topics', body);
 const reply = (id: Id, t: string, body: Record<string, unknown>) => call(id, 'POST', `/api/forum/topics/${t}/replies`, body);
@@ -264,23 +268,26 @@ async function main(): Promise<void> {
         const photo = await call(id, 'GET', `/api/forum/posts/${opening}/photos/0`);
         const hits = await search(id, word);
         const bell = await call(id, 'GET', '/api/notices/push');
-        const result = await call(id, 'GET', `/api/marketplace/posts?id=${POLL}`);
+        // A group's posts are read by the feed's group scope (the engine's getPosts): its members' and its author's.
+        const result = await call(id, 'GET', `/api/marketplace/posts?id=${POLL}&audienceScope=group`);
         const sections = (front.body?.sections ?? []) as any[];
         return {
             front: front.status !== 200 ? `${front.status}` : sections.some((s) => s.id === S) ? 'sees' : 'none',
             all: all.status !== 200 ? `${all.status}` : (all.body?.topics ?? []).some((t: any) => t.id === T) ? 'sees' : 'none',
-            section: inS.status === 200 ? 'sees' : `${inS.status} ${inS.body?.code ?? ''}`.trim(),
-            topic: topic.status === 200 ? `sees poll=${topic.body?.topic?.pollId === POLL ? 'yes' : topic.body?.topic?.pollId === null ? 'no' : '?'}` : `${topic.status} ${topic.body?.code ?? ''}`.trim(),
+            section: inS.status === 200 ? 'sees' : `${inS.status} ${stranger(inS.body?.code) ?? ''}`.trim(),
+            topic: topic.status === 200 ? `sees poll=${topic.body?.topic?.pollId === POLL ? 'yes' : topic.body?.topic?.pollId === null ? 'no' : '?'}` : `${topic.status} ${stranger(topic.body?.code) ?? ''}`.trim(),
             photo: `${photo.status}`,
             search: hits.status !== 200 ? `${hits.status}` : `${(hits.body?.hits ?? []).filter((h: any) => h.topicId === T).length > 0 ? 'hits' : 'none'}`,
             bell: bell.status !== 200 ? `${bell.status}` : (bell.body?.notices ?? []).some((n: any) => n.data?.topicId === T) ? 'row' : 'none',
-            result: result.status !== 200 ? `${result.status}` : (result.body?.posts ?? []).some((p: any) => p.id === POLL) ? 'sees' : 'none',
+            result: result.status !== 200 ? `${result.status}` : feed(result).some((p: any) => p.id === POLL) ? 'sees' : 'none',
         };
     }
     const expectedReads = (who: Who): Record<string, string> => {
         const reads = who === 'writer' || who === 'reader' || who === 'observer' || who === 'staff';
         const sees = who === 'writer' || who === 'reader' || who === 'observer';
-        if (who === 'stranger') return { front: '403', all: '403', section: '403 not_member', topic: '403 not_member', photo: '403', search: '403', bell: 'stranger', result: 'stranger' };
+        // A key that is no member here is turned away at the door, before any section is read: the gateway's 403 (not_a_member) or
+        // the forum's own (not_member), the same for every section and every id.
+        if (who === 'stranger') return { front: '403', all: '403', section: '403 stranger', topic: '403 stranger', photo: '403', search: '403', bell: 'stranger', result: 'stranger' };
         return {
             front: reads ? 'sees' : 'none',
             all: reads ? 'sees' : 'none',
@@ -324,10 +331,10 @@ async function main(): Promise<void> {
         const v = await call(a.id, 'POST', `/api/marketplace/posts/${POLL}/vote`, { optionId: 'opt_1' });
         const rep = await call(a.id, 'POST', '/api/reports', { targetForumPostId: coraPost, reason: 'Spam or a scam' });
         const vote = v.status === 200 ? 'voted' : /Poll not found/.test(v.body?.error ?? '') ? 'not found' : /convenor or member/.test(v.body?.error ?? '') ? 'members only'
-            : /active members/.test(v.body?.error ?? '') ? 'no member' : `${v.status} ${v.text.slice(0, 80)}`;
+            : /active members|Member not found|not_a_member/.test(`${v.body?.error ?? ''} ${v.body?.code ?? ''}`) ? 'no member' : `${v.status} ${v.text.slice(0, 80)}`;
         return {
-            reply: `${r.status} ${r.status === 201 ? '' : r.body?.code ?? ''}`.trim(),
-            start: `${s.status} ${s.status === 201 ? '' : s.body?.code ?? ''}`.trim(),
+            reply: `${r.status} ${r.status === 201 ? '' : stranger(r.body?.code) ?? ''}`.trim(),
+            start: `${s.status} ${s.status === 201 ? '' : stranger(s.body?.code) ?? ''}`.trim(),
             vote,
             report: rep.status === 200 || rep.status === 201 ? 'reported' : `${rep.status} ${rep.body?.error ?? rep.body?.code ?? ''}`.trim(),
         };
@@ -339,7 +346,7 @@ async function main(): Promise<void> {
             case 'observer': return { reply: '403 group_only', start: '403 group_only', vote: 'members only', report: 'reported' };
             case 'staff': return { reply: '403 group_only', start: '403 group_only', vote: 'not found', report: 'reported' };
             case 'outside': return { reply: '404 not_found', start: '404 not_found', vote: 'not found', report: '404 not_found' };
-            case 'stranger': return { reply: '403 not_member', start: '403 not_member', vote: 'no member', report: 'stranger' };
+            case 'stranger': return { reply: '403 stranger', start: '403 stranger', vote: 'no member', report: 'stranger' };
         }
     };
     for (const a of actors) {
@@ -352,7 +359,7 @@ async function main(): Promise<void> {
     }
     // Only members' votes count: the writer's and the convenor's, nobody else's.
     const tally = db.prepare('SELECT COUNT(*) FROM poll_votes WHERE post_id = ?').pluck().get(POLL) as number;
-    const shown = (await call(gil, 'GET', `/api/marketplace/posts?id=${POLL}`)).body?.posts?.[0]?.totalVotes;
+    const shown = feed(await call(gil, 'GET', `/api/marketplace/posts?id=${POLL}&audienceScope=group`))[0]?.totalVotes;
     assert(tally === 2 && shown === 2, `4. only the group's members' votes count (${tally} stored, ${shown} shown)`);
     // Follow and read, by each reader: the same rule.
     const follows = await Promise.all(actors.map(async (a) => (await call(a.id, 'POST', `/api/forum/topics/${T}/read`, { upTo: 1 })).status));

@@ -3241,7 +3241,11 @@ CREATE TABLE IF NOT EXISTS forum_sections (
     listed      INTEGER NOT NULL DEFAULT 0 CHECK (listed IN (0, 1)),
     archived_at TEXT,
     created_at  TEXT NOT NULL,
-    updated_at  TEXT
+    updated_at  TEXT,
+    -- The group this section belongs to (slice F8, engine/forum-sections.ts; design §4, §11), or empty: every member's. Set
+    -- when an owner or admin makes it and never changed after, so nothing written for a group ever becomes readable by
+    -- others. Only the group's active members and the moderators read it; its convenors and members write; never listed.
+    group_id    TEXT
 );
 -- A topic: its title and the facts its list row shows. The opening words are its post number 1 in forum_posts. `closed_by`:
 -- 'writer' or 'moderator' (closed by hand), 'quiet' (180 days with no reply on the global community, slice F2), 'removed'
@@ -3259,11 +3263,15 @@ CREATE TABLE IF NOT EXISTS forum_topics (
     closed_at        TEXT,
     closed_by        TEXT CHECK (closed_by IS NULL OR closed_by IN ('writer', 'moderator', 'quiet', 'removed')),
     created_at       TEXT NOT NULL,
-    updated_at       TEXT
+    updated_at       TEXT,
+    -- Its poll (slice F8, design §10.1): the posts row of the ordinary poll its writer added, at most one. Counted in its
+    -- section's own pool, never in the community's five (engine/forum-sections.ts, engine/posts.ts assertActivePollRoom).
+    poll_post_id     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_forum_topics_section ON forum_topics (section_id, last_activity_at);
 CREATE INDEX IF NOT EXISTS idx_forum_topics_activity ON forum_topics (last_activity_at);
 CREATE INDEX IF NOT EXISTS idx_forum_topics_writer ON forum_topics (writer_pubkey, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_forum_topics_poll ON forum_topics (poll_post_id) WHERE poll_post_id IS NOT NULL;
 -- A topic's opening words (number 1) and each reply (2 on), one table so reporting, hiding, removing, editing and photos are
 -- written once. `quotes`: the number of the one earlier post it quotes. `lang`: the writer's app language. `public_from`: when
 -- it may show on the public pages (slices F2 and F7 stamp and read it); empty in this slice, so nothing is public. A removed
@@ -3367,6 +3375,17 @@ CREATE TABLE IF NOT EXISTS forum_waiting_photos (
     bytes      INTEGER NOT NULL,
     updated_at TEXT,
     PRIMARY KEY (waiting_id, order_num)
+);
+-- What a topic links (design §3 forum_links, §10): slice F8 writes a community Decision (the Decision chip, one a topic, by the
+-- topic's writer or an owner or admin); slice F9 the rest of the kinds, up to 3 a topic. Only what its reader could already
+-- see shows. A plain table: a standby has the same chips; a removal goes with its tombstone.
+CREATE TABLE IF NOT EXISTS forum_links (
+    topic_id   TEXT NOT NULL,
+    kind       TEXT NOT NULL CHECK (kind IN ('listing', 'event', 'poll', 'group', 'decision', 'learn')),
+    target_id  TEXT NOT NULL CHECK (length(target_id) BETWEEN 1 AND 128),
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    PRIMARY KEY (topic_id, kind, target_id)
 );
 -- The forum's search (slice F6, engine/forum-search.ts; design §3 "a search index", §8, §16): one row per post, keyed by the
 -- post's rowid, holding its words and, on an opening post (number 1), its topic's title and place. This server's own, never

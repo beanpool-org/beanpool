@@ -589,8 +589,11 @@ export const TABLES: Record<string, TableEntry> = {
     // delete goes with a tombstone, so it leaves the standby too. The wording before an edit is aged out after 30 days on
     // each server, with no tombstone. An older importer drops the forum: after a take-over from its copy the sections are
     // made again as at the start and the topics are gone; no Bean is in it.
-    forum_sections: plain('id starter name about position starts listed archived_at created_at updated_at'),
-    forum_topics: plain('id section_id title writer_pubkey place lang reply_count last_activity_at pinned_at closed_at closed_by created_at updated_at'),
+    // A section's group and a topic's poll (slice F8, engine/forum-sections.ts) go in the copy with them, so a standby reads
+    // the same section as the group's only. An importer older than F8 drops both columns: a group's section would read as
+    // every member's there, so a standby is updated with its main server, or before it (said in the operators' manual).
+    forum_sections: plain('id starter name about position starts listed archived_at created_at updated_at group_id'),
+    forum_topics: plain('id section_id title writer_pubkey place lang reply_count last_activity_at pinned_at closed_at closed_by created_at updated_at poll_post_id'),
     forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at hidden_by_reports_at'),
     forum_post_photos: plain('post_id order_num photo_data bytes updated_at'),
     forum_post_edits: plain('post_id edited_at words title updated_at', { agedOut: { column: 'edited_at', days: 30 } }),
@@ -606,6 +609,9 @@ export const TABLES: Record<string, TableEntry> = {
     // older importer drops who follows: after a take-over from its copy nobody is told of replies until they reply or follow
     // again, and every topic reads as read.
     forum_follows: plain('topic_id member_pubkey state last_read created_at updated_at'),
+    // What a topic links (slice F8: a community Decision; F9 the other kinds): a promoted standby shows the same chips; a removal
+    // goes with its tombstone. An older importer drops it: after a take-over from its copy no topic links anything until linked again.
+    forum_links: plain('topic_id kind target_id created_at updated_at'),
     // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
     thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),
     // A group chat's keys (engine/group-keys.ts): each epoch's signed record and one wrap per member, none of which the

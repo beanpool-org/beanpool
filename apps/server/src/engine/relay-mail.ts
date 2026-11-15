@@ -6,9 +6,9 @@
  * Another community's server brings items for members here in a request it signed (engine/node-signature.ts, X1):
  * `POST /api/relay/mail { items: RelayItem[] }`. Four kinds are this slice's:
  *
- *   dm-line    a sealed direct line           held for its recipient until their device confirms it, then deleted
+ *   dm-line    a sealed direct line           held for its recipient until their devices confirm it, then deleted
  *   dm-blob    a sealed photo or voice part   held the same way, its bytes a file of its own (<data>/relay-mail/in/)
- *   dm-delete  a sealed "delete for everyone" held the same way: the recipient's device applies it
+ *   dm-delete  a sealed "delete for everyone" held the same way: each of the recipient's devices applies it
  *   receipt    "my device has these"          never held: the outbox row of each item it names goes `delivered`
  *
  * Every other kind (group items, a call signal, a complaint) is answered 202 and dropped until the slice that owns it.
@@ -23,19 +23,26 @@
  * `stale`), the caps on a sending server and on this server (429, counted over every item that passed its checks, held or
  * not), and a full mailbox or disk (503).
  *
- * **Held, then deleted.** The recipient's device fetches what waits (`GET /api/mail`, oldest first, 50 at a time; a blob's
- * bytes by `GET /api/mail/blob/:itemId`) and confirms what it has written (`POST /api/mail/confirm`), which deletes the rows
- * and their files. Nothing is held past MAIL_HELD_DAYS. A replay dies on its sender and id (relay_mail_seen, MAIL_SEEN_MS),
+ * **Held, then deleted, once every device has it** (X2b: scratch/fable-design/decisions/DECISION-outside-door.md). Each of
+ * the recipient's devices names itself (`device`, a random id its app keeps, @beanpool/core outside-devices.ts), fetches what
+ * it has not confirmed (`GET /api/mail?device=`, oldest first, 50 at a time; a blob's bytes by `GET /api/mail/blob/:itemId`)
+ * and confirms what it has written or dropped (`POST /api/mail/confirm { ids, device }`). An item's row and file go once a
+ * device has confirmed it and every device listed has (one device: at once). A fetch lists its device (relay_mail_devices,
+ * MAIL_DEVICES_MAX a member); Sign Out forgets it (`POST /api/mail/device/forget`), and so do MAIL_DEVICE_LAPSE_MS unseen:
+ * it comes back as new and gets what is still held. A member's caps count only the items no device has confirmed; those a
+ * device has get the same allowance again, the oldest going past it, so a device left idle never stops new mail. The server
+ * learns how many devices fetch a member's mail and when each last asked; nothing of doors, requests or accepts. Nothing is
+ * held past MAIL_HELD_DAYS. A replay dies on its sender and id (relay_mail_seen, MAIL_SEEN_MS),
  * and an item older than MAIL_ITEM_MAX_AGE_MS by its sender's clock, or dated more than MAIL_ITEM_MAX_AHEAD_MS ahead, is
  * stale, so none outlives the ids kept against it.
  *
- * **Never copied.** The three tables are `local` (engine/replication-manifest.ts), and every snapshot and backup file is
+ * **Never copied.** The five tables are `local` (engine/replication-manifest.ts), and every snapshot and backup file is
  * made without them (forgetRelayMailInCopy, from services/address-retention.ts). The files are never in the image store.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-    checkRelayItem, word, type RelayEnvelope, type RelayItem, type RelayItemDrop, type RelayItemKind,
+    OUTSIDE_DEVICE_ID, checkRelayItem, word, type RelayEnvelope, type RelayItem, type RelayItemDrop, type RelayItemKind,
 } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -87,9 +94,17 @@ export const MAIL_ITEM_MAX_AHEAD_MS = DAY_MS;
 /** Ids seen are kept past any item that could still be fresh: a replay is either seen or stale. */
 export const MAIL_SEEN_MS = MAIL_ITEM_MAX_AGE_MS + MAIL_ITEM_MAX_AHEAD_MS;
 
-/** Waiting for one member here (design §3.3): past either, a new item for them is dropped (202), the held ones kept. */
+/**
+ * Waiting for one member here (design §3.3), counting the items no device of theirs has confirmed: past either, a new item
+ * for them is dropped (202), the held ones kept. The items a device has confirmed and another not yet have the same
+ * allowance again, the oldest going past it (settleMailFor).
+ */
 export const MAIL_PER_MEMBER_ITEMS = 200;
 export const MAIL_PER_MEMBER_BYTES = 20 * 1024 * 1024;
+/** The devices a member's mail waits for (X2b); past it, the one unseen longest is forgotten. */
+export const MAIL_DEVICES_MAX = 5;
+/** A device unseen this long is forgotten: it no longer holds an item, and comes back as new. */
+export const MAIL_DEVICE_LAPSE_MS = 7 * DAY_MS;
 /** Waiting for everyone here together; past it, and past the free-disk floor photos keep (2 GB), 503 `mailbox_full`. */
 export const MAIL_SERVER_BYTES = 500 * 1024 * 1024;
 /** Items taken from one sending server (design 30 Oct §2.5), and from every server together: past either, 429. */
@@ -156,6 +171,10 @@ const payloadLength = (item: unknown): number => {
 };
 
 const count = (sql: string, ...args: unknown[]): number => (db.prepare(sql).get(...args) as { n: number }).n;
+
+/** The items held for one recipient (the one argument) that no device of theirs has confirmed. */
+const NO_DEVICE_HAS = `recipient = ? AND NOT EXISTS (SELECT 1 FROM relay_mail_got g
+                       WHERE g.recipient = relay_mail.recipient AND g.item_id = relay_mail.item_id)`;
 
 function heldBytes(where = '1 = 1', ...args: unknown[]): number {
     return (db.prepare(`SELECT COALESCE(SUM(bytes), 0) AS n FROM relay_mail WHERE ${where}`).get(...args) as { n: number }).n;
@@ -278,8 +297,9 @@ function mayHoldFor(env: RelayEnvelope, bytes: number, now: number): { stranger:
         if (count('SELECT COUNT(*) AS n FROM relay_mail_seen WHERE sender_key = ? AND stranger_to = ? AND seen_at > ?', env.senderKey, to, since) >= MAIL_STRANGER_PER_RECIPIENT_DAY) return null;
         if (count('SELECT COUNT(*) AS n FROM relay_mail_seen WHERE sender_key = ? AND stranger_to IS NOT NULL AND seen_at > ?', env.senderKey, since) >= MAIL_STRANGER_SERVER_DAY) return null;
     }
-    if (count('SELECT COUNT(*) AS n FROM relay_mail WHERE recipient = ?', to) >= MAIL_PER_MEMBER_ITEMS) return null;
-    return heldBytes('recipient = ?', to) + bytes <= MAIL_PER_MEMBER_BYTES ? { stranger } : null;
+    // Only the items no device of theirs has confirmed count: one a device has never stops new mail (settleMailFor).
+    if (count(`SELECT COUNT(*) AS n FROM relay_mail WHERE ${NO_DEVICE_HAS}`, to) >= MAIL_PER_MEMBER_ITEMS) return null;
+    return heldBytes(NO_DEVICE_HAS, to) + bytes <= MAIL_PER_MEMBER_BYTES ? { stranger } : null;
 }
 
 // ── Receipts ────────────────────────────────────────────────────────────────────────────────
@@ -316,7 +336,7 @@ function applyReceipt(env: RelayEnvelope, payload: string, now: number): void {
     }
 }
 
-// ── The recipient's device: fetch, a blob, confirm ──────────────────────────────────────────
+// ── The recipient's devices: fetch, a blob, confirm, forget ───────────────────────────────────
 
 export interface HeldItem {
     kind: string;
@@ -327,10 +347,87 @@ export interface HeldItem {
     receivedAt: number;
 }
 
-/** What waits for `member`, oldest first, MAIL_FETCH_PAGE at a time, and whether there is more. */
-export function heldMailFor(member: string): { items: HeldItem[]; more: boolean } {
-    const rows = db.prepare(`SELECT kind, envelope, payload, bytes, received_at FROM relay_mail WHERE recipient = ?
-                             ORDER BY received_at, item_id LIMIT ?`).all(member, MAIL_FETCH_PAGE + 1) as Array<{
+type HeldRow = { sender_key: string; item_id: string; kind: string; recipient: string };
+
+/** Whether `device` is a device's id as the apps make them (@beanpool/core OUTSIDE_DEVICE_ID). */
+export function isMailDevice(device: unknown): device is string {
+    return typeof device === 'string' && OUTSIDE_DEVICE_ID.test(device);
+}
+
+/** Held rows gone: each row, what its devices confirmed of it, and a blob's file. */
+function dropHeld(rows: HeldRow[]): number {
+    if (!rows.length) return 0;
+    const del = db.prepare('DELETE FROM relay_mail WHERE sender_key = ? AND item_id = ?');
+    const delGot = db.prepare('DELETE FROM relay_mail_got WHERE recipient = ? AND item_id = ?');
+    db.transaction(() => {
+        for (const r of rows) {
+            del.run(r.sender_key, r.item_id);
+            delGot.run(r.recipient, r.item_id);
+        }
+    })();
+    for (const r of rows) if (r.kind === 'dm-blob') removeRelayBlob(relayBlobFile('in', r.sender_key, r.item_id));
+    return rows.length;
+}
+
+/**
+ * The items held for `member` that are done: each one a device has confirmed and that every device still listed (seen in
+ * the last MAIL_DEVICE_LAPSE_MS) has confirmed goes, with its file. Then the items some device has and another not yet keep
+ * the member's allowance again (MAIL_PER_MEMBER_ITEMS, MAIL_PER_MEMBER_BYTES), newest first: the oldest past it go.
+ */
+export function settleMailFor(member: string, now = Date.now()): number {
+    const done = db.prepare(`SELECT m.sender_key, m.item_id, m.kind, m.recipient FROM relay_mail m
+                             WHERE m.recipient = ?
+                               AND EXISTS (SELECT 1 FROM relay_mail_got g WHERE g.recipient = m.recipient AND g.item_id = m.item_id)
+                               AND NOT EXISTS (SELECT 1 FROM relay_mail_devices d WHERE d.member = m.recipient AND d.seen_at >= ?
+                                   AND NOT EXISTS (SELECT 1 FROM relay_mail_got g WHERE g.recipient = m.recipient
+                                                   AND g.item_id = m.item_id AND g.device = d.device))`)
+        .all(member, now - MAIL_DEVICE_LAPSE_MS) as HeldRow[];
+    let gone = dropHeld(done);
+    const had = db.prepare(`SELECT m.sender_key, m.item_id, m.kind, m.recipient, m.bytes FROM relay_mail m
+                            WHERE m.recipient = ? AND EXISTS (SELECT 1 FROM relay_mail_got g WHERE g.recipient = m.recipient AND g.item_id = m.item_id)
+                            ORDER BY m.received_at DESC, m.item_id DESC`).all(member) as Array<HeldRow & { bytes: number }>;
+    let kept = 0, bytes = 0;
+    const past: HeldRow[] = [];
+    for (const r of had) {
+        if (past.length || kept >= MAIL_PER_MEMBER_ITEMS || bytes + r.bytes > MAIL_PER_MEMBER_BYTES) { past.push(r); continue; }
+        kept++;
+        bytes += r.bytes;
+    }
+    gone += dropHeld(past);
+    return gone;
+}
+
+/**
+ * `device` asked for `member`'s mail now: listed, or seen again. A new one past MAIL_DEVICES_MAX makes room: the device
+ * unseen longest is forgotten (forgetMailDevice), as at its own Sign Out.
+ */
+export function noteMailDevice(member: string, device: string, now = Date.now()): void {
+    db.prepare(`INSERT INTO relay_mail_devices (member, device, seen_at) VALUES (?, ?, ?)
+                ON CONFLICT (member, device) DO UPDATE SET seen_at = MAX(seen_at, excluded.seen_at)`).run(member, device, now);
+    const past = db.prepare(`SELECT device FROM relay_mail_devices WHERE member = ? AND device != ?
+                             ORDER BY seen_at DESC, device DESC LIMIT -1 OFFSET ?`).all(member, device, MAIL_DEVICES_MAX - 1) as Array<{ device: string }>;
+    for (const p of past) forgetMailDevice(member, p.device, now);
+}
+
+/**
+ * `device` is no longer one of `member`'s (its Sign Out, MAIL_DEVICE_LAPSE_MS unseen, room for a new one, or the member
+ * gone): no longer listed, what it confirmed forgotten, and what every device left has confirmed goes (settleMailFor).
+ * True when it was listed.
+ */
+export function forgetMailDevice(member: string, device: string, now = Date.now()): boolean {
+    const listed = db.transaction(() => {
+        db.prepare('DELETE FROM relay_mail_got WHERE recipient = ? AND device = ?').run(member, device);
+        return db.prepare('DELETE FROM relay_mail_devices WHERE member = ? AND device = ?').run(member, device).changes === 1;
+    })();
+    settleMailFor(member, now);
+    return listed;
+}
+
+/** What waits for `member` that `device` has not confirmed, oldest first, MAIL_FETCH_PAGE at a time, and whether there is more. */
+export function heldMailFor(member: string, device: string): { items: HeldItem[]; more: boolean } {
+    const rows = db.prepare(`SELECT kind, envelope, payload, bytes, received_at FROM relay_mail m WHERE recipient = ?
+                               AND NOT EXISTS (SELECT 1 FROM relay_mail_got g WHERE g.recipient = m.recipient AND g.item_id = m.item_id AND g.device = ?)
+                             ORDER BY received_at, item_id LIMIT ?`).all(member, device, MAIL_FETCH_PAGE + 1) as Array<{
         kind: string; envelope: string; payload: string | null; bytes: number; received_at: number;
     }>;
     return {
@@ -341,7 +438,7 @@ export function heldMailFor(member: string): { items: HeldItem[]; more: boolean 
     };
 }
 
-/** A blob held for `member`, by its id, or null when none is (theirs, not yet confirmed). */
+/** A blob held for `member`, by its id, or null when none is (theirs, and not yet gone). */
 export function heldBlobFor(member: string, itemId: string): string | null {
     if (!ITEM_ID.test(itemId)) return null;
     const row = db.prepare("SELECT sender_key FROM relay_mail WHERE recipient = ? AND item_id = ? AND kind = 'dm-blob'").get(member, itemId) as { sender_key: string } | undefined;
@@ -353,44 +450,54 @@ export function heldBlobFor(member: string, itemId: string): string | null {
     }
 }
 
-/** The member's device has these: the rows and their files go. The ids stay seen, so a replay is dropped. */
-export function confirmMail(member: string, itemIds: string[]): number {
+/**
+ * `device` of `member`'s has these (written, or dropped: either way it is done with them). Each is marked as that device's,
+ * the device seen again, and every item now done goes with its file (settleMailFor). The ids stay seen, so a replay is
+ * dropped. Answers how many of them this device had not confirmed before.
+ */
+export function confirmMail(member: string, device: string, itemIds: string[], now = Date.now()): number {
     const ids = [...new Set(itemIds.filter((id) => typeof id === 'string' && ITEM_ID.test(id)))];
     if (!ids.length) return 0;
     const marks = `(${ids.map(() => '?').join(', ')})`;
-    const gone = db.transaction(() => {
-        const rows = db.prepare(`SELECT sender_key, item_id, kind FROM relay_mail WHERE recipient = ? AND item_id IN ${marks}`)
-            .all(member, ...ids) as Array<{ sender_key: string; item_id: string; kind: string }>;
-        db.prepare(`DELETE FROM relay_mail WHERE recipient = ? AND item_id IN ${marks}`).run(member, ...ids);
-        return rows;
+    const confirmed = db.transaction(() => {
+        const held = db.prepare(`SELECT item_id FROM relay_mail WHERE recipient = ? AND item_id IN ${marks}`).all(member, ...ids) as Array<{ item_id: string }>;
+        const mark = db.prepare('INSERT INTO relay_mail_got (recipient, item_id, device) VALUES (?, ?, ?) ON CONFLICT DO NOTHING');
+        let n = 0;
+        for (const h of held) n += mark.run(member, h.item_id, device).changes;
+        db.prepare('UPDATE relay_mail_devices SET seen_at = MAX(seen_at, ?) WHERE member = ? AND device = ?').run(now, member, device);
+        return n;
     })();
-    for (const r of gone) if (r.kind === 'dm-blob') removeRelayBlob(relayBlobFile('in', r.sender_key, r.item_id));
-    return gone.length;
+    settleMailFor(member, now);
+    return confirmed;
 }
 
 // ── Hygiene ─────────────────────────────────────────────────────────────────────────────────
 
 /**
  * The mailbox's sweep (the minute timer, https-server.ts): mail held past MAIL_HELD_DAYS, or for a key that is no longer a
- * member here, goes with its file; ids seen past MAIL_SEEN_MS go.
+ * member here, goes with its file; a device unseen for MAIL_DEVICE_LAPSE_MS, or a key's that is no longer a member here, is
+ * forgotten (and what every device left has goes); ids seen past MAIL_SEEN_MS go.
  */
-export function sweepRelayMail(now = Date.now()): { expired: number; gone: number; seen: number } {
-    const drop = (rows: Array<{ sender_key: string; item_id: string; kind: string }>) => {
-        const del = db.prepare('DELETE FROM relay_mail WHERE sender_key = ? AND item_id = ?');
-        for (const r of rows) {
-            del.run(r.sender_key, r.item_id);
-            if (r.kind === 'dm-blob') removeRelayBlob(relayBlobFile('in', r.sender_key, r.item_id));
-        }
-        return rows.length;
-    };
-    const expired = drop(db.prepare('SELECT sender_key, item_id, kind FROM relay_mail WHERE received_at < ? LIMIT 1000')
-        .all(now - MAIL_HELD_DAYS * DAY_MS) as Array<{ sender_key: string; item_id: string; kind: string }>);
+export function sweepRelayMail(now = Date.now()): { expired: number; gone: number; seen: number; devices: number } {
+    const expired = dropHeld(db.prepare('SELECT sender_key, item_id, kind, recipient FROM relay_mail WHERE received_at < ? LIMIT 1000')
+        .all(now - MAIL_HELD_DAYS * DAY_MS) as HeldRow[]);
     let gone = 0;
     const recipients = db.prepare('SELECT DISTINCT recipient FROM relay_mail').all() as Array<{ recipient: string }>;
     for (const { recipient } of recipients) {
         if (isNodeMember(recipient)) continue;
-        gone += drop(db.prepare('SELECT sender_key, item_id, kind FROM relay_mail WHERE recipient = ?').all(recipient) as Array<{ sender_key: string; item_id: string; kind: string }>);
+        gone += dropHeld(db.prepare('SELECT sender_key, item_id, kind, recipient FROM relay_mail WHERE recipient = ?').all(recipient) as HeldRow[]);
     }
+    let devices = 0;
+    const members = new Map<string, boolean>();
+    for (const d of db.prepare('SELECT member, device, seen_at FROM relay_mail_devices').all() as Array<{ member: string; device: string; seen_at: number }>) {
+        if (!members.has(d.member)) members.set(d.member, isNodeMember(d.member));
+        if (d.seen_at >= now - MAIL_DEVICE_LAPSE_MS && members.get(d.member)) continue;
+        forgetMailDevice(d.member, d.device, now);
+        devices++;
+    }
+    // What a device confirmed of an item that went some other way.
+    db.prepare(`DELETE FROM relay_mail_got WHERE NOT EXISTS (SELECT 1 FROM relay_mail m WHERE m.recipient = relay_mail_got.recipient
+                AND m.item_id = relay_mail_got.item_id)`).run();
     const seen = db.prepare('DELETE FROM relay_mail_seen WHERE seen_at < ?').run(now - MAIL_SEEN_MS).changes;
-    return { expired, gone, seen };
+    return { expired, gone, seen, devices };
 }

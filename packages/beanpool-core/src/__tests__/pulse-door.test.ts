@@ -14,17 +14,15 @@ describe('the Pulse page (P2/P3)', () => {
         expect(pulseAddsHere('global')).toBe(false);
     });
 
-    it('the words: one add button, Your channels, and a quiet week that asks nothing and points at the Learn lane', () => {
+    it('the words: one add button, Your channels, and a quiet week that asks nothing and points at How it works', () => {
         expect(PULSE_PAGE_WORDS).toEqual({
             add: 'Add to Pulse',
             yourChannels: 'Your channels',
             quietTitle: 'Nothing new this week.',
             quietBody: 'Have a video, a song, a blog or photos of your own? Add a link and your neighbours see it here.',
-            learnLine: 'Nothing to add? The Learn lane has short videos on how BeanPool works.',
-            // The worldwide community, where nothing is asked to be added yet (§3.8): the Learn lane leads.
-            learnGlobal: 'The Learn lane has short videos on how BeanPool works.',
-            // The web app's pair: it has no Learn lane (and "Learn" there is the Local knowledge page), so the lines name the
-            // How it works chip that holds the same videos (review of 24850a67).
+            // One pair for both apps: "Learn" is the Local knowledge place, so the lines name How it works as it reads there,
+            // the web's chip and the phone's lane (review of 24850a67; the phone's Learn lane renamed in slice KP). The
+            // worldwide community, where nothing is asked to be added yet (§3.8), gets the second: the videos lead.
             learnLineWeb: 'Nothing to add? Tap {chip} for short videos about BeanPool.',
             learnGlobalWeb: 'Tap {chip} for short videos about BeanPool.',
         });

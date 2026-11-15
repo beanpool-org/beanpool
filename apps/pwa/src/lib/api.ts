@@ -9,6 +9,7 @@ import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury, WaitingVoucherRow } from '@beanpool/core';
 import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type KnockVia } from '@beanpool/core';
 import { readGroupInvitations, type GroupInvitations } from '@beanpool/core';
+import { PULSE_KNOWLEDGE_WITH, type PulseKnowledgeCard } from '@beanpool/core';
 import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
 import { communityTagsOf, libraryTagOf, type CommunityTag, type LibraryLabel } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
@@ -1223,6 +1224,8 @@ export interface PulseFeedItem {
     publishedAt: string | null;
     source: string;
     isVerified: boolean;
+    /** Local knowledge's card only (`source: 'knowledge'`, slice KP): its pages that day. Core's PulseKnowledgeCard. */
+    knowledge?: PulseKnowledgeCard['knowledge'];
 }
 
 export interface PulseFeedResponse {
@@ -1261,11 +1264,17 @@ export async function getPulseFeed(options?: {
     cursor?: string | null;
     category?: string | null;
     limit?: number;
+    /**
+     * Also Local knowledge's cards (slice KP: `with=knowledge`, one a day at most, `source: 'knowledge'`). Only a list that
+     * draws them asks (the Pulse page); every other read never holds one. The node gives none under a category.
+     */
+    withKnowledge?: boolean;
 }): Promise<PulseFeedResponse> {
     const params = new URLSearchParams();
     if (options?.cursor) params.set('cursor', options.cursor);
     if (options?.category && options.category !== 'all') params.set('category', options.category);
     if (options?.limit) params.set('limit', String(options.limit));
+    if (options?.withKnowledge) params.set('with', PULSE_KNOWLEDGE_WITH);
     const qs = params.toString();
     return request('GET', `/api/pulse/feed${qs ? `?${qs}` : ''}`);
 }

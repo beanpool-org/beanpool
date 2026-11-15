@@ -5,7 +5,9 @@
  * **My card.** Showing it the first time opens the member's door, after one screen that says what that means: people in
  * other communities who have the card can send a message request. The card is `{key, home, name}` signed on this phone, as
  * a QR code and a link (core outside-chat.ts). The door can be closed again here (and in Settings → Privacy, which opens
- * this screen): a stranger's line is then dropped on the phone. Chats already accepted carry on.
+ * this screen): a stranger's line is then dropped on the phone. Chats already accepted carry on. The door is this phone's
+ * own (X2b, DECISION-outside-door.md): each phone or browser the member uses has its own switch, and a request reaches each
+ * device whose door is open.
  *
  * **Someone's card.** Scanned (the camera is asked for at the tap, never before) or pasted. A card its key did not sign is no
  * card. Then one line, sent as a message request: it waits behind their requests row until they accept.
@@ -17,11 +19,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
-import { OUTSIDE_LINE_TEXT_MAX, addressCardFromText, addressCardLink, relayConversationId, t, type AddressCard } from '@beanpool/core';
+import { OUTSIDE_DOOR_EACH_DEVICE, OUTSIDE_LINE_TEXT_MAX, addressCardFromText, addressCardLink, t, type AddressCard } from '@beanpool/core';
 import { Alert } from '../utils/keyboard-alert';
 import { useTheme, useStyles } from './ThemeContext';
-import { doorOpen, myAddressCard, myHome, sendFromBox, setDoor } from '../utils/outside-mail';
+import { doorOpen, myAddressCard, myHome, openChatFromCard, sendFromBox, setDoor } from '../utils/outside-mail';
 import { OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, outsideMessagesHere } from '../utils/outside-chat-live';
+
+/** Core's sentence, the web's too (@beanpool/core outside-devices.ts). */
+const LINES = { doorEachDevice: OUTSIDE_DOOR_EACH_DEVICE };
 
 export default function AddressCardScreen() {
     const params = useLocalSearchParams<{ mode?: string }>();
@@ -78,6 +83,8 @@ export default function AddressCardScreen() {
         if (!ctx) return false;
         if (card.key === ctx.identity.publicKey) { setCardNote(t("That's your own card.")); return true; }
         if (card.home === await myHome(ctx).catch(() => null)) { setCardNote(t('{name} is in this community: write to them here.', { name: card.name })); return true; }
+        // A block is the account's: no box to write to them, and their chat here stays as it is (outside-mail.ts openChatFromCard).
+        if (await ctx.isBlocked(card.key)) { setCardNote(t('You have blocked this user. Messaging is disabled.')); return true; }
         setCardNote(null);
         setTheirs(card);
         return true;
@@ -95,8 +102,8 @@ export default function AddressCardScreen() {
         try {
             const ctx = await outsideContext();
             if (!ctx) return;
-            const chatId = relayConversationId(ctx.identity.publicKey, theirs.key);
-            await ctx.store.openChat(ctx.identity.publicKey, chatId, { key: theirs.key, home: theirs.home, name: theirs.name });
+            const chatId = await openChatFromCard(ctx, theirs);
+            if (!chatId) { setTheirs(null); setCardNote(t('You have blocked this user. Messaging is disabled.')); return; }
             // The words stay in this box while the line goes. Kept on this phone: on to the chat, which shows it (Sending… or
             // Not delivered). Not kept: this screen stays, with the words, to send again.
             const { kept, error } = await sendFromBox(ctx, chatId, words, OUTSIDE_SEND_MS, () => {});
@@ -169,10 +176,13 @@ export default function AddressCardScreen() {
                                         </>
                                     )}
                                     {open !== null && (open || mine) && (
-                                        <View style={styles.row}>
-                                            <Text style={styles.rowText}>{t('People in other communities can send me a message request')}</Text>
-                                            <Switch value={!!open} onValueChange={(v) => void switchDoor(v)} accessibilityLabel={t('People in other communities can send me a message request')} />
-                                        </View>
+                                        <>
+                                            <View style={styles.row}>
+                                                <Text style={styles.rowText}>{t('People in other communities can send me a message request on this phone')}</Text>
+                                                <Switch value={!!open} onValueChange={(v) => void switchDoor(v)} accessibilityLabel={t('People in other communities can send me a message request on this phone')} />
+                                            </View>
+                                            <Text style={styles.text} testID="door-each-device">{t(LINES.doorEachDevice)}</Text>
+                                        </>
                                     )}
                                 </View>
                             )}

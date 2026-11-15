@@ -223,12 +223,17 @@ import { LanguageProvider } from '../../components/LanguageProvider';
 import { yourGroupsStore } from '../../components/useYourGroups';
 // People asks where the member is to end a Show credit visit (utils/people-visit.ts; its own test and people-show-credit-visit-render.test.ts): nothing here leaves the tab.
 vi.mock('../people-visit', () => ({ usePeopleVisitEnds: () => 0 }));
-/** Chats with people in other communities, kept on this phone (utils/outside-chat-store.ts): none unless a test puts some. */
-const outside = vi.hoisted(() => ({ chats: [] as any[] }));
+/**
+ * Chats with people in other communities, kept on this phone (utils/outside-chat-store.ts): none unless a test puts some. The
+ * tab lists them through the real outside-mail.ts chatsShown; `blocked`, the keys this account blocked.
+ */
+const outside = vi.hoisted(() => ({ chats: [] as any[], blocked: [] as string[] }));
 vi.mock('../outside-chat-live', () => ({
     OUTSIDE_CHATS_UPDATED: 'outside_chats_updated',
     syncOutsideMailNow: async () => null,
-    outsideContext: async () => ({ identity: { publicKey: 'me-key' }, store: { chats: async () => outside.chats } }),
+    outsideContext: async () => ({
+        identity: { publicKey: 'me-key' }, store: { chats: async () => outside.chats }, isBlocked: async (key: string) => outside.blocked.includes(key),
+    }),
 }));
 import ChatsScreen from '../../app/(tabs)/chats';
 
@@ -280,6 +285,7 @@ beforeEach(() => {
     store.map.set('beanpool_anchor_url', NODE);
     yourGroupsStore.reset();
     outside.chats = [];
+    outside.blocked = [];
     globalThis.fetch = vi.fn(async () => new Response('{}', { status: 404 })) as typeof fetch;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
@@ -720,5 +726,24 @@ describe('a chat with someone in another community, in the Chats list at 320 dp 
         await renderIn('en');
         expect(row()!.textContent).toContain('Someone in another community');
         expect(communityLine()!.textContent).toBe('coast.example');
+    });
+
+    it('someone the account blocked: neither their open chat nor their request is listed (PR #3188 review)', async () => {
+        const request = { ...outsideChat('Quill Varga', 'hilltop.example'), id: 'oc-2', peerKey: 'e'.repeat(64), state: 'request' };
+        const requestsRow = () => host.querySelector('[data-testid="message-requests-row"]');
+        outside.chats = [outsideChat('Ana Ríos', 'coast.example'), request];
+        rememberProfile(LOCAL);
+        await renderIn('en');
+        expect(row(), 'their chat, while not blocked').not.toBeNull();
+        expect(requestsRow(), 'the requests row, while not blocked').not.toBeNull();
+        outside.blocked = ['f'.repeat(64), 'e'.repeat(64)];
+        try {
+            await reopenIn('en');
+            expect(row()).toBeNull();
+            expect(requestsRow()).toBeNull();
+            expect(host.textContent).not.toContain('Ana Ríos');
+        } finally {
+            outside.blocked = [];
+        }
     });
 });

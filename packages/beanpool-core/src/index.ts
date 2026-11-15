@@ -103,6 +103,7 @@ export * from './onboarding-funnel.js';
 export * from './live-updates.js';
 export * from './request-signing.js';
 export * from './node-request-signing.js';
+export * from './address-list.js';
 export * from './relay-envelope.js';
 export * from './outside-chat.js';
 // A guest in a group hosted by another community: the step their phone takes from the host's roster (G1b).

@@ -84,9 +84,13 @@ describe('the file is the whole table', () => {
             const taken = s.address !== null && s.input === s.address && s.listed === true;
             expect(rows[0].expect, JSON.stringify(s.input)).toEqual(taken ? replace('newer') : refuse('malformed'));
         }
-        // Not a token row: names, numbers and IPv6, in both outcomes.
-        const taken = ROWS.filter((r) => r.coords.spelling !== undefined && r.expect.action === 'replace');
-        expect(taken.length).toBeGreaterThan(20);
+        // Not token rows: names, IPv4 and IPv6 each, taken and refused, a port among the taken.
+        const kindOf = new Map(spellings.map((s) => [s.input, (s as { kind?: string }).kind]));
+        for (const action of ['replace', 'refuse'] as const) {
+            const rows = ROWS.filter((r) => r.coords.spelling !== undefined && r.expect.action === action);
+            expect(new Set(rows.map((r) => kindOf.get(r.coords.spelling))), action).toEqual(new Set(['name', 'ipv4', 'ipv6']));
+        }
+        expect(ROWS.some((r) => r.expect.action === 'replace' && /^\[.*\]$|:\d+$/.test(r.coords.spelling ?? '') && r.coords.spelling.includes(':'))).toBe(true);
         expect(ROWS.filter((r) => r.coords.spelling !== undefined && r.expect.action === 'refuse').length).toBeGreaterThan(60);
     });
 

@@ -579,7 +579,7 @@ async function main(): Promise<void> {
     const entry = TABLES.abuse_reports;
     const hashed = entry.kind === 'replicated' || entry.kind === 'replicated-except' ? entry.columns : [];
     const changed: Record<string, string> = { reporter_pubkey: bea.key, target_pubkey: bea.key, status: 'reviewed', created_at: '2026-01-02T03:04:05.678Z' };
-    const notTaken: string[] = [];
+    const notTaken: string[] = [], unseen: string[] = [];
     for (const column of hashed.filter((c) => c !== 'id' && c !== 'updated_at')) {
         const standbys = db.prepare('SELECT * FROM abuse_reports WHERE id = ?').get(id10) as Record<string, unknown>;
         const stamp = new Date(Date.parse(String(standbys.updated_at)) + 1000).toISOString();
@@ -587,6 +587,8 @@ async function main(): Promise<void> {
         const mains = tableContentHashes({ only: ['abuse_reports'] });
         const delta: any = await exportSyncState(nodeId, String(standbys.updated_at));
         db.prepare(`UPDATE abuse_reports SET ${column} = ?, updated_at = ? WHERE id = ?`).run(standbys[column] ?? null, standbys.updated_at, id10);
+        // The standby's earlier copy differs before the import, or the row's check below could pass without the import.
+        if (compareTableHashes(mains, tableContentHashes({ only: ['abuse_reports'] }), ['abuse_reports']).exact) unseen.push(column);
         setNodeRole('backup');
         try {
             await importRemoteState(delta);
@@ -595,8 +597,8 @@ async function main(): Promise<void> {
         }
         if (!compareTableHashes(mains, tableContentHashes({ only: ['abuse_reports'] }), ['abuse_reports']).exact) notTaken.push(column);
     }
-    assert(hashed.length >= 15 && notTaken.length === 0,
-        `10f. each of the ${hashed.length} hashed columns, changed on the main server later, reaches the standby by delta and reads exact (not taken: ${notTaken.join(', ') || 'none'})`);
+    assert(hashed.length >= 15 && unseen.length === 0 && notTaken.length === 0,
+        `10f. each of the ${hashed.length} hashed columns, changed on the main server later, differs on the standby until the next delta, which brings it: exact (not seen differing: ${unseen.join(', ') || 'none'}; not taken: ${notTaken.join(', ') || 'none'})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

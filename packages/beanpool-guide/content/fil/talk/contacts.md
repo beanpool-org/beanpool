@@ -1,6 +1,6 @@
 ---
 slug: contacts
-title: Ang iyong mga pribadong contact
+title: Mga pribadong contact mo
 summary: Isang listahan ng mga contact na ikaw lang ang makakabukas, sa anumang telepono o browser at sa bawat komunidad na kinabibilangan mo. Pagdadala ng mga tao, pag-imbita sa kanila, at kung ano ang nakikita at hindi nakikita ng server ng komunidad mo.
 related: messages, people, blocking, privacy, recovery, leaving-or-deleting
 help: Ang iyong mga pribadong contact. Ikaw lang ang makakabukas ng listahan. Magdala mula sa telepono o contacts file, magdagdag nang mano-mano, o mag-imbita.

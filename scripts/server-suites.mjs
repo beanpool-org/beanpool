@@ -627,6 +627,9 @@ export const SUITES = [
     // The forum's search (slice F6): every word, Thai and Chinese inside a run, every way a post stops being readable in no
     // answer, the index's own bytes forget, 100 a day, a standby's import builds the same index and answers the same.
     'test-forum-search',
+    // The community label on the worldwide forum (slice F10): the note on a member's own community, the check on a public forum,
+    // the three-way switch x every kind of note in one table, lapses and unlisting at each read, a standby, a re-key, no server asked.
+    'test-membership-note',
     'test-mcp-knowledge',
     'test-names-copy',
     'test-contact-copies',

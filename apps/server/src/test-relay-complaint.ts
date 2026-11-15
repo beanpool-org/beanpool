@@ -756,6 +756,25 @@ async function main(): Promise<void> {
                     `11b. ${deep}: the line ${generationNames[i]} signed, named under ${how}, on a standby too, nothing filed (got ${got.join(' | standby ')})`);
             }
         }
+        // A complaint filed in the very millisecond of the re-key is the replaced key's line (the new key's line is reported a
+        // round trip later at the soonest): on file under the key that signed it, never under the key the re-key gave.
+        if (rekeys === 1) {
+            resetGatewayRateLimit();
+            const [first, second] = signed;
+            const filedAt = (db.prepare("SELECT created_at FROM abuse_reports WHERE reporter_pubkey = 'community:a.example' AND target_message_id = ?").get(first.itemId) as { created_at: string }).created_at;
+            const rekeyedAt = (db.prepare('SELECT invalidated_at FROM invalidated_keys WHERE public_key = ? AND rekeyed_to = ?').get(first.k.key, second.k.key) as { invalidated_at: string }).invalidated_at;
+            const setFiled = db.prepare("UPDATE abuse_reports SET created_at = ? WHERE reporter_pubkey = 'community:a.example' AND target_message_id = ?");
+            setFiled.run(rekeyedAt, first.itemId);
+            let underSigner: [string, string], underNew: [string, string];
+            try {
+                underSigner = await ask(first.k.key, first);
+                underNew = await ask(second.k.key, first);
+            } finally {
+                setFiled.run(filedAt, first.itemId);
+            }
+            assert(filedAt < rekeyedAt && underSigner.every((a) => a === '202 {"received":true}') && underNew.every((a) => a === dropped) && rowsOf(first.itemId) === 1,
+                `11b. one re-key: the first key's line filed in the very millisecond of the re-key: on file under the key that signed it, 422 under the key the re-key gave, on a standby too (got ${underSigner.join(' | ')} / ${underNew.join(' | ')})`);
+        }
     }
 
     const { TABLES: manifest } = await import('./engine/replication-manifest.js');

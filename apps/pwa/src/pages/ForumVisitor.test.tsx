@@ -34,15 +34,19 @@ const topic = (id: string, title: string, created: number, sectionId = 's-ideas'
 const SECTIONS = [{ id: 's-ideas', starter: null, name: 'Seed swaps', about: null, position: 1, topicCount: 4 }];
 const TOPICS = [topic('ft-1', 'Oldest topic', 9), topic('ft-2', 'A tool library in a shed', 1), topic('ft-3', 'Seed swap ideas', 2), topic('ft-4', 'Starting small', 3)];
 const page = (id: string) => ({
+    section: SECTIONS[0],
     topic: TOPICS.find((x) => x.id === id) ?? topic(id, 'A door topic', 1),
     posts: [
-        { id: `${id}-1`, topicId: id, number: 1, writer, words: `We share tools for ${id}.\nSecond line`, quotes: null, createdAt: day(1), edited: false, removed: null, photos: 0, lang: 'en' },
-        { id: `${id}-2`, topicId: id, number: 2, writer: { name: 'Dax', community: 'Riverside' }, words: 'Count me in.', quotes: 1, createdAt: day(0), edited: false, removed: null, photos: 0, lang: 'en' },
+        { id: `${id}-1`, topicId: id, number: 1, writer, words: `We share tools for ${id}.\nSecond line`, quotes: null, createdAt: day(1), edited: false, photos: 0, lang: 'en' },
+        { id: `${id}-2`, topicId: id, number: 2, writer: { name: 'Dax', community: { kind: 'community', community: 'Riverside' } }, words: 'Count me in.', quotes: 1, createdAt: day(0), edited: false, photos: 0, lang: 'en' },
     ],
     next: null,
 });
 
-/** The node's public reads, by what the forum holds. Anything else read is a test failure (a member's route, say). */
+/**
+ * The node's public reads, by what the forum holds, at the server's routes (feat/forum-f7-server routes/forum-public.ts). Anything
+ * else read is a test failure (a member's route, say).
+ */
 function stubForum(holds: ForumPublicAnswer) {
     const calls: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -51,10 +55,11 @@ function stubForum(holds: ForumPublicAnswer) {
         expect(JSON.stringify(init?.headers ?? {})).not.toMatch(/signature|x-public-key/i);
         if (holds === 'unreachable') throw new TypeError('Failed to fetch');
         const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
-        const path = url.replace(/^https?:\/\/[^/]+/, '');
-        if (path.startsWith('/api/forum/public/topics/')) return json(page(decodeURIComponent(path.split('/').pop()!.split('?')[0])));
-        if (path.startsWith('/api/forum/public/topics')) return json({ topics: holds === 'topics' ? TOPICS : [], next: null });
-        if (path === '/api/forum/public') return json({ sections: SECTIONS, topics: holds === 'topics' ? TOPICS : [] });
+        const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
+        const topics = holds === 'topics' ? TOPICS : [];
+        if (path.startsWith('/api/forum/public/topics/')) return json(page(decodeURIComponent(path.split('/').pop()!)));
+        if (path.startsWith('/api/forum/public/sections/')) return json({ section: SECTIONS[0], topics, next: null });
+        if (path === '/api/forum/public') return json({ sections: SECTIONS, topics, next: null });
         throw new Error(`not a public forum read: ${url}`);
     }));
     return calls;

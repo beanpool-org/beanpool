@@ -13,7 +13,7 @@ import {
     FORUM_VISITOR_WORDS, forumSectionName, publicWriterLine, t, timeAgo, tn,
     type ForumPublicList, type ForumPublicSection, type ForumPublicTopicPage,
 } from '@beanpool/core';
-import { getPublicForum, getPublicTopic, getPublicTopics, keepLinkedTopic } from '../lib/forum-public';
+import { getPublicForum, getPublicSection, getPublicTopic, keepLinkedTopic } from '../lib/forum-public';
 import { ForumWords } from '../components/forum/ForumBits';
 import { TOPIC_WORDS } from '../components/forum/ForumTopicView';
 import { FORUM_WORDS } from './ForumPage';
@@ -56,8 +56,8 @@ export function ForumVisitorPage({ topicId = null, onTopic, onJoin }: {
     async function load(offset = 0) {
         const asked = section;
         try {
-            const [front, page] = await Promise.all([offset ? null : getPublicForum().catch(() => null), getPublicTopics(asked, offset)]);
-            if (front) setSections(front.sections.slice().sort((a, b) => a.position - b.position));
+            const page = asked ? await getPublicSection(asked, offset) : await getPublicForum(offset);
+            if ('sections' in page) setSections(page.sections.slice().sort((a, b) => a.position - b.position));
             if (picked.current !== asked) return;
             setList((was) => (offset && was ? { topics: [...was.topics, ...page.topics.filter((p) => !was.topics.some((x) => x.id === p.id))], next: page.next } : page));
             setFailed(false);
@@ -126,7 +126,7 @@ function VisitorTopic({ id, sections, onBack, onJoin }: { id: string; sections: 
     }
     useEffect(() => { setPage(null); void read(0); }, [id]);
     const topic = page?.topic;
-    const section = topic ? sections.find((s) => s.id === topic.sectionId) : undefined;
+    const section = page?.section ?? (topic ? sections.find((s) => s.id === topic.sectionId) : undefined);
     const member = t('A member');
     const quoted = (n: number | null) => (n ? page?.posts.find((p) => p.number === n) ?? null : null);
     return (
@@ -155,9 +155,7 @@ function VisitorTopic({ id, sections, onBack, onJoin }: { id: string; sections: 
                                 {t(TOPIC_WORDS.quoteLine, { name: publicWriterLine(q.writer, member), words: q.words })}
                             </p>
                         )}
-                        {post.removed
-                            ? <p className="m-0 text-sm italic" style={{ color: 'var(--text-muted)' }}>{t(TOPIC_WORDS.removedByWriter)}</p>
-                            : <ForumWords words={post.words} linksOn testId={`forum-visitor-words-${post.number}`} />}
+                        <ForumWords words={post.words} linksOn testId={`forum-visitor-words-${post.number}`} />
                     </article>
                 );
             })}

@@ -12,7 +12,7 @@ import {
     FORUM_HOME_WORDS, FORUM_VISITOR_GUIDE_PAGE, findGuidePage, firstLineOf, forumSectionName, newestPublicTopics, t, visitorForumShows,
     type ForumPublicAnswer, type ForumPublicSection, type ForumPublicTopic,
 } from '@beanpool/core';
-import { getPublicForum, getPublicTopic, getPublicTopics } from '../../lib/forum-public';
+import { getPublicForum, getPublicTopic } from '../../lib/forum-public';
 import { inShownLanguage, loadBundledGuide } from '../../lib/guide';
 
 export interface VisitorForumRow { topic: ForumPublicTopic; line: string; section: string }
@@ -20,14 +20,14 @@ export interface VisitorForumRow { topic: ForumPublicTopic; line: string; sectio
 /** The card's rows: the three newest topics, each with its opening's first line (none if that read fails) and section. */
 export async function readVisitorForumRows(): Promise<{ answer: ForumPublicAnswer; rows: VisitorForumRow[] }> {
     try {
-        const [front, list] = await Promise.all([getPublicForum().catch(() => null), getPublicTopics(null)]);
-        const sections: ForumPublicSection[] = front?.sections ?? [];
-        const newest = newestPublicTopics(list.topics);
+        const front = await getPublicForum();
+        const sections: ForumPublicSection[] = front.sections ?? [];
+        const newest = newestPublicTopics(front.topics ?? []);
         if (newest.length === 0) return { answer: 'none', rows: [] };
         const rows = await Promise.all(newest.map(async (topic) => {
             const opening = await getPublicTopic(topic.id).then((p) => p.posts.find((x) => x.number === 1) ?? null, () => null);
             const s = sections.find((x) => x.id === topic.sectionId);
-            return { topic, line: opening && !opening.removed ? firstLineOf(opening.words) : '', section: s ? forumSectionName(s) : '' };
+            return { topic, line: opening ? firstLineOf(opening.words) : '', section: s ? forumSectionName(s) : '' };
         }));
         return { answer: 'topics', rows };
     } catch {

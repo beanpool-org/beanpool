@@ -35,13 +35,20 @@ export function forgetDraftsForTests(): void {
  */
 export function useKeptDraft(key: string | null, keepable: string, setDraft: (text: string) => void): void {
     const latest = useRef(keepable);
-    latest.current = keepable;
+    // The key the box is showing. Only a render for that same key says what its box holds: the render that already names the
+    // next chat (or none) can carry words meant for the next one (a way in's prefill set with it), never this one's.
+    const showing = useRef<string | null>(null);
+    if (key !== null && key === showing.current) latest.current = keepable;
     useLayoutEffect(() => {
         if (!key) return;
         const kept = keptDraft(key);
+        showing.current = key;
         // What is in the box from now: kept again as it is if the chat closes before the member types anything.
         latest.current = kept;
         setDraft(kept);
-        return () => { keepDraft(key, latest.current); };
+        return () => {
+            keepDraft(key, latest.current);
+            showing.current = null;
+        };
     }, [key]);
 }

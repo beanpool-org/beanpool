@@ -542,7 +542,9 @@ export function newAddressProofNonce(): string {
  */
 export function addressProofRefusal(list: AddressList, question: { for?: unknown; nonce?: unknown }): 400 | 421 | null {
     if (typeof question.nonce !== 'string' || !NONCE_HEX.test(question.nonce)) return 400;
-    if (typeof question.for !== 'string' || !list.addresses.includes(question.for)) return 421;
+    // isAddress as well as the list: the signed text is one field per line, so a list built wrongly by hand (an address
+    // with a line break) still never gets one signed.
+    if (!isAddress(question.for) || !Array.isArray(list.addresses) || !list.addresses.includes(question.for)) return 421;
     return null;
 }
 

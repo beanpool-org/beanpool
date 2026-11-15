@@ -245,6 +245,13 @@ describe('the proof', () => {
         }
     });
 
+    it('never signs for an address with a line break, even when a list built by hand names one', async () => {
+        const broken = { ...KEPT.list, addresses: [...KEPT.list.addresses, 'riverside.example\n9\n9'] };
+        expect(addressProofRefusal(broken, { for: 'riverside.example\n9\n9', nonce: VECTORS.nonce })).toBe(421);
+        await expect(signAddressProof({ list: broken, for: 'riverside.example\n9\n9', nonce: VECTORS.nonce }, signerOf('community')))
+            .rejects.toThrow(/not on the list/);
+    });
+
     it('never signs a proof for a spare', async () => {
         const spare = VECTORS.lists['good-spare'].doc.list as AddressList;
         expect(addressProofRefusal(spare, { for: 'standby.example', nonce: VECTORS.nonce })).toBe(421);

@@ -46,5 +46,9 @@ claim code,"the code an operator types to claim a node",,Código de reclamo,Cód
 CONFIRM,"a word the member types exactly as shown; it stays English",untranslatable,,,,
 WIPE,"a word the member types exactly as shown; it stays English",untranslatable,,,,
 DELETE,"a word the member types exactly as shown; it stays English",untranslatable,,,,
+Forum,"the community's forum: sections, topics with a title, and replies; one side of the Chat tab",terminology,Foro,Fórum,Forum,Форум~
+topic,"a forum thread: a title, its opening words and the replies under it",terminology,tema,tópico,sujet,тем~
+first look,"a moderator's look at a new member's first forum topic before it shows",terminology,primera revisión | primeras revisiones,primeira análise | primeiras análises,premier examen | premiers examens,просмотр~
+voice message,"a recorded message in a chat, sealed like a photo",terminology,mensaje de voz | mensajes de voz,mensagem de voz | mensagens de voz,message vocal | messages vocaux,голосов~
 resilience,"a word we do not use, in any language",forbidden,resiliencia,resiliência,résilience,устойчивост~ | стойкост~
 survival,"a word we do not use, in any language",forbidden,,,,

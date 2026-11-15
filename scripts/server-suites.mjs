@@ -639,6 +639,9 @@ export const SUITES = [
     // A group's forum section, a poll in a topic, the polls' own pool, the Decision chip (slice F8): one table over every read
     // and write x every kind of reader, the bell and the doorbells, the pools, a standby the same.
     'test-forum-group-section',
+    // The community label on the worldwide forum (slice F10): the note on a member's own community, the check on a public forum,
+    // the three-way switch x every kind of note in one table, lapses and unlisting at each read, a standby, a re-key, no server asked.
+    'test-membership-note',
     'test-mcp-knowledge',
     'test-names-copy',
     'test-contact-copies',

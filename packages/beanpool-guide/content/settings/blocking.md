@@ -17,6 +17,7 @@ In the phone app, confirm with **Block User** (**Block** on an enterprise's page
 ## What it does
 
 - Their posts in the Market are hidden from you.
+- Their topics and replies in the forum are hidden from you, in its lists and its search. You can block someone from a forum post too: tap **⋯** on it, then **Block** and their name. See "The forum".
 - They disappear from your chats and from the People list, and you cannot message each other. In the phone app, someone you had added still shows on your **Friends** tab: see "What it does not do" below. The web app hides them from every list.
 - Their Pulse posts still show. On the phone, their pins on the Map still show too. The web app's Map hides them.
 - On your Ledger, Beans from them show "Beans from a member you blocked" instead of any note they sent.

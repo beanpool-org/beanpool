@@ -53,6 +53,14 @@ function nodeSigner(): NodeSigner | null {
     return signer;
 }
 
+/**
+ * This server's node key as a signer, or null while it has none: the membership note a member carries to a public forum
+ * (routes/membership-note.ts) is signed by it, as this server's requests to other communities are.
+ */
+export function ownNodeSigner(): Readonly<NodeSigner> | null {
+    return nodeSigner();
+}
+
 /** This server's key document, or null while it has no node key. */
 export async function ownNodeKeyDocument(now = Date.now()): Promise<NodeKeyDocument | null> {
     const s = nodeSigner();

@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Messaggi, gruppi e relative chat, persone e amici, i tuoi contatti privati, chat di eventi, silenziare, menzioni e chiavi cambiate.",
-        "sourceHash": "b8443e689c10d3a0"
+        "text": "Messaggi, messaggi vocali, il forum, gruppi e relative chat, persone e amici, i tuoi contatti privati, chat di eventi, silenziare, menzioni e chiavi cambiate.",
+        "sourceHash": "79e2bb34ba50acd7"
       }
     },
     "pulse": {
@@ -358,7 +358,7 @@
         "sourceHash": "04d7b48339271ea6"
       },
       "summary": {
-        "text": "Avvia una chat, invia foto, rispondi, invia reazioni, modifica, elimina, silenzia e gestisci la privacy.",
+        "text": "Avvia una chat, invia messaggi e foto, rispondi, invia reazioni, modifica, elimina, silenzia e gestisci la privacy.",
         "sourceHash": "d97a6ef5d498fdde"
       },
       "help": {
@@ -674,8 +674,8 @@
         "sourceHash": "59274c49ac87bb2f"
       },
       "summary": {
-        "text": "Segnala ai moderatori della comunità un post, un evento, un post su Polso, un progetto o un'impresa.",
-        "sourceHash": "4b773ef8eef237fa"
+        "text": "Segnala ai moderatori della comunità un post, un evento, un post su Polso, un progetto, un'impresa, un messaggio in una chat o un post nel forum.",
+        "sourceHash": "776b105137480ade"
       }
     },
     "notifications": {
@@ -762,6 +762,34 @@
       "help": {
         "text": "Le tue Offerte sotto un unico nome. Dagli un nome, indica che tipo di negozio è, chiudilo per ora oppure chiudilo.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "forum": {
+      "title": {
+        "text": "Il forum",
+        "sourceHash": "b82e3eeaaa246390"
+      },
+      "summary": {
+        "text": "Argomenti con un titolo e le risposte sotto, divisi in sezioni, per i membri della tua comunità. Dove si trova, come pubblicare, il primo argomento di chi è nuovo nella comunità globale, seguire un argomento e chi può leggerlo.",
+        "sourceHash": "584d9e9d8e32ba45"
+      },
+      "help": {
+        "text": "Argomenti e risposte della tua comunità. Tocca Forum in alto in Chat. Il suo server conserva le parole: non è protetto come una chat con una sola persona.",
+        "sourceHash": "4c2967ddbdd326d2"
+      }
+    },
+    "voice-messages": {
+      "title": {
+        "text": "Messaggi vocali",
+        "sourceHash": "45a7e7b9cb445ce8"
+      },
+      "summary": {
+        "text": "Registra un messaggio invece di scriverlo, in una chat con una persona o nella chat protetta di un gruppo. Dove puoi inviarlo, come ascoltarlo, per quanto tempo lo conserva il server e che cosa resta privato.",
+        "sourceHash": "1d56fd61c4d9e5e8"
+      },
+      "help": {
+        "text": "Tieni premuto il microfono per registrare e rilascia per inviare. Scorri a sinistra per annullare, in alto per bloccare. Fino a 3 minuti. Resta 30 giorni.",
+        "sourceHash": "a4c99f83c66ae115"
       }
     },
     "contacts": {

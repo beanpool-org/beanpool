@@ -27,8 +27,8 @@
     {
       "id": "talk",
       "title": "Chat",
-      "summary": "Messages, groups and their chats, people and friends, your private contacts, event chats, muting, mentions, and a key that changed.",
-      "pages": ["messages", "groups", "people", "contacts", "event-chat", "mute", "mentions", "key-changed"]
+      "summary": "Messages, voice messages, the forum, groups and their chats, people and friends, your private contacts, event chats, muting, mentions, and a key that changed.",
+      "pages": ["messages", "voice-messages", "forum", "groups", "people", "contacts", "event-chat", "mute", "mentions", "key-changed"]
     },
     {
       "id": "pulse",

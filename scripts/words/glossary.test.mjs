@@ -309,6 +309,8 @@ const DESIGN_TERMS = [
     'vouch', 'enterprise', 'steward', 'standby', 'level', 'tier',
     // The design's "+" rows, one term each.
     'Home', 'Market', 'Map', 'Chat', 'Ledger', 'People', 'Settings', 'group', 'channel', 'shop', 'event', 'assistant', 'claim code', 'CONFIRM', 'WIPE', 'DELETE',
+    // The forum and voice messages (F12 / V5 words, 15 Nov 2026).
+    'Forum', 'topic', 'first look', 'voice message',
     'resilience', 'survival',
 ];
 

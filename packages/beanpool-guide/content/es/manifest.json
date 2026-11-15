@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Mensajes, grupos y sus chats, personas y amistades, tus contactos privados, chats de eventos, silenciar, menciones y un cambio de clave.",
-        "sourceHash": "b8443e689c10d3a0"
+        "text": "Mensajes, mensajes de voz, el foro, grupos y sus chats, personas y amistades, tus contactos privados, chats de eventos, silenciar, menciones y un cambio de clave.",
+        "sourceHash": "79e2bb34ba50acd7"
       }
     },
     "pulse": {
@@ -358,7 +358,7 @@
         "sourceHash": "04d7b48339271ea6"
       },
       "summary": {
-        "text": "Iniciar un chat, enviar fotos, responder, reaccionar, editar, eliminar, silenciar y qué es privado.",
+        "text": "Iniciar un chat, enviar mensajes y fotos, responder, reaccionar, editar, eliminar, silenciar y qué es privado.",
         "sourceHash": "d97a6ef5d498fdde"
       },
       "help": {
@@ -674,8 +674,8 @@
         "sourceHash": "59274c49ac87bb2f"
       },
       "summary": {
-        "text": "Avisa a los moderadores de tu comunidad sobre una publicación, evento, publicación del Pulso, proyecto o emprendimiento.",
-        "sourceHash": "4b773ef8eef237fa"
+        "text": "Avisa a los moderadores de tu comunidad sobre una publicación, evento, publicación del Pulso, proyecto, emprendimiento, un mensaje de un chat o una publicación del foro.",
+        "sourceHash": "776b105137480ade"
       }
     },
     "notifications": {
@@ -762,6 +762,34 @@
       "help": {
         "text": "Tus Ofertas bajo un solo nombre. Ponle nombre, di de qué tipo es, ciérrala por ahora o ciérrala del todo.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "forum": {
+      "title": {
+        "text": "El foro",
+        "sourceHash": "b82e3eeaaa246390"
+      },
+      "summary": {
+        "text": "Temas con título y respuestas debajo, en secciones, para los miembros de tu comunidad. Dónde está, cómo publicar, el primer tema de una persona nueva en la comunidad mundial, seguir un tema y quién puede leerlo.",
+        "sourceHash": "584d9e9d8e32ba45"
+      },
+      "help": {
+        "text": "Temas y respuestas de tu comunidad. Toca Foro en la parte superior de Chat. Su servidor guarda las palabras: no está cifrado como un chat con una persona.",
+        "sourceHash": "4c2967ddbdd326d2"
+      }
+    },
+    "voice-messages": {
+      "title": {
+        "text": "Mensajes de voz",
+        "sourceHash": "45a7e7b9cb445ce8"
+      },
+      "summary": {
+        "text": "Graba un mensaje en vez de escribirlo, en un chat con una persona o en el chat cifrado de un grupo. Dónde puedes enviarlo, escucharlo, cuánto tiempo lo guarda el servidor y qué sigue siendo privado.",
+        "sourceHash": "1d56fd61c4d9e5e8"
+      },
+      "help": {
+        "text": "Mantén pulsado el micrófono para grabar y suelta para enviar. Desliza a la izquierda para cancelar, arriba para bloquear. Hasta 3 minutos. Se guarda 30 días.",
+        "sourceHash": "a4c99f83c66ae115"
       }
     },
     "contacts": {

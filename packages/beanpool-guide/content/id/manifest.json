@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Pesan, grup dan obrolannya, orang dan teman, kontak pribadimu, obrolan acara, membisukan, sebutan, dan kunci yang berubah.",
-        "sourceHash": "b8443e689c10d3a0"
+        "text": "Pesan, pesan suara, forum, grup dan obrolannya, orang dan teman, kontak pribadimu, obrolan acara, membisukan, sebutan, dan kunci yang berubah.",
+        "sourceHash": "79e2bb34ba50acd7"
       }
     },
     "pulse": {
@@ -358,7 +358,7 @@
         "sourceHash": "04d7b48339271ea6"
       },
       "summary": {
-        "text": "Mulai obrolan, kirim foto, balas, beri reaksi, edit, hapus, bisukan, dan apa saja yang bersifat pribadi.",
+        "text": "Mulai obrolan, kirim pesan dan foto, balas, beri reaksi, edit, hapus, bisukan, dan apa saja yang bersifat pribadi.",
         "sourceHash": "d97a6ef5d498fdde"
       },
       "help": {
@@ -674,8 +674,8 @@
         "sourceHash": "59274c49ac87bb2f"
       },
       "summary": {
-        "text": "Beri tahu moderator komunitas tentang kiriman, acara, kiriman Kabar, proyek, atau usaha.",
-        "sourceHash": "4b773ef8eef237fa"
+        "text": "Beri tahu moderator komunitasmu tentang kiriman, acara, kiriman Kabar, proyek, usaha, pesan di obrolan, atau kiriman di forum.",
+        "sourceHash": "776b105137480ade"
       }
     },
     "notifications": {
@@ -762,6 +762,34 @@
       "help": {
         "text": "Penawaranmu dalam satu nama. Beri nama, tentukan jenisnya, tutup untuk sementara, atau tutup sepenuhnya.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "forum": {
+      "title": {
+        "text": "Forum",
+        "sourceHash": "b82e3eeaaa246390"
+      },
+      "summary": {
+        "text": "Topik dengan judul dan balasan di bawahnya, dalam bagian-bagian, untuk anggota komunitasmu. Di mana letaknya, cara memposting, topik pertama orang baru di komunitas global, mengikuti topik, dan siapa yang bisa membacanya.",
+        "sourceHash": "584d9e9d8e32ba45"
+      },
+      "help": {
+        "text": "Topik dan balasan untuk komunitasmu. Ketuk Forum di bagian atas Obrolan. Server-nya menyimpan tulisannya: forum tidak terkunci seperti obrolan pribadi.",
+        "sourceHash": "4c2967ddbdd326d2"
+      }
+    },
+    "voice-messages": {
+      "title": {
+        "text": "Pesan suara",
+        "sourceHash": "45a7e7b9cb445ce8"
+      },
+      "summary": {
+        "text": "Rekam pesan alih-alih mengetiknya, di obrolan dengan satu orang atau obrolan grup yang terkunci. Di mana kamu bisa mengirimnya, mendengarkan, berapa lama server menyimpannya, dan apa yang tetap pribadi.",
+        "sourceHash": "1d56fd61c4d9e5e8"
+      },
+      "help": {
+        "text": "Tahan mikrofon untuk merekam dan lepas untuk mengirim. Geser ke kiri untuk membatalkan, ke atas untuk mengunci. Hingga 3 menit. Server menyimpannya 30 hari.",
+        "sourceHash": "a4c99f83c66ae115"
       }
     },
     "contacts": {

@@ -103,6 +103,8 @@ export const SUITES = [
     'test-nonce-store-global',
     'test-words-member',
     'test-web-door',
+    // What the web app's page tells search engines: /app names one canonical, every deeper path is noindex.
+    'test-web-app-robots',
     'test-web-visits',
     'test-global-moderation',
     'test-report-rings',

@@ -32,6 +32,12 @@
  *      complaint, every log line, the owners' notice) x every spelling of the reporter: absent; the logs carry counts
  *  10  a standby (round 4 of #3185): the main server tells the home after the standby copied the report (told queued ->
  *      sent): a delta and a whole copy each bring the new disclosure, and the copy check (each table's hash) reads exact
+ *  11  closing the class (the last review of #3185): the first send taken, its 202 lost, or refused x nothing, a re-key, a
+ *      second re-key, or another member's re-key between (the real issueRekeyCode + completeRekey) x the same complaint
+ *      again: on file is 202 in the same bytes and told `sent`, never filed twice; not on file stays 422, told `failed`; the
+ *      line named as the other member's is 422; a standby answers the same. Asked backwards (the deciding review of
+ *      #3196): one re-key and two re-keys deep, each key's line x each key the member had: on file only under the key that
+ *      signed it; under any older or newer key of theirs 422 in the bytes a stranger's key gets, on a standby too
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) BEANPOOL_SSRF_TEST_HOOK=1 pnpm exec tsx src/test-relay-complaint.ts
  */
@@ -599,6 +605,187 @@ async function main(): Promise<void> {
     }
     assert(hashed.length >= 15 && unseen.length === 0 && notTaken.length === 0,
         `10f. each of the ${hashed.length} hashed columns, changed on the main server later, differs on the standby until the next delta, which brings it: exact (not seen differing: ${unseen.join(', ') || 'none'}; not taken: ${notTaken.join(', ') || 'none'})`);
+
+    // ── 11. Closing the class: a retry across a re-key ────────────────────────────────────
+    // The last review of #3185: a.example's complaint is filed here, its 202 lost, the member redeems a re-key code (the
+    // real issueRekeyCode + completeRekey, which move this server's row to the new key), and a.example's retry names the
+    // key the line was signed with, the one it keeps. Each cell: how the first send went x what happened here between x
+    // the same complaint again. On file is answered 202, the same bytes whatever happened between (a repeat tells a.example
+    // nothing new, not whether the person re-keyed), and is told `sent` at a.example; one not on file stays 422 `not_taken`,
+    // told `failed`. Never a second row; never on file for another member's key; and a standby, reading the same rows,
+    // answers the same.
+    console.log('\n11. A complaint on file is matched across the member\'s re-keys, never as another member\'s, and a standby answers the same');
+    const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
+    /** The real re-key, by the owner: `from` is replaced by a new key, returned (with its seed, to sign as it). */
+    const rekeyTo = (from: string): Keys => {
+        const to = keys();
+        completeRekey(from, to.key, issueRekeyCode(from, olive.key).code, olive.key);
+        return to;
+    };
+    const rekey = (from: string): string => rekeyTo(from).key;
+    const firsts = ['taken', 'lost 202', 'refused'] as const;
+    const betweens = ['nothing', 'a re-key', 'a second re-key', 'another member\'s re-key'] as const;
+    const onFileAnswers = new Set<string>(), notTakenAnswers = new Set<string>();
+    const sendersKeys: string[] = [], sendersWords: string[] = [];
+    let cell = 0;
+    for (const first of firsts) {
+        for (const between of betweens) {
+            cell++;
+            const what = `11. ${first}, then ${between}, then the same complaint again`;
+            const sender = keys(), other = keys();
+            addLocal(sender, `Sender ${cell}`);
+            addLocal(other, `Other ${cell}`);
+            // Refused: the line went to Cara at c.example, so a.example's complaint about it is not one this server takes.
+            const to = first === 'refused' ? { k: cara, home: 'c.example' } : { k: ana, home: 'a.example' };
+            const l = await line(sender, 'b.example', to.k, to.home, `Line ${cell}`);
+            const sentL = await asMember(sender, '/api/mail/send', { items: [l] });
+            const complaint = { v: 1, id: crypto.randomUUID(), member: sender.key, itemId: l.envelope.itemId, at: l.envelope.at, reason: 'spam or scam', words: `Words of cell ${cell}` };
+            sendersWords.push(complaint.words);
+            const rowsFiled = () => db.prepare("SELECT target_pubkey FROM abuse_reports WHERE reporter_pubkey = 'community:a.example' AND target_message_id = ?")
+                .all(l.envelope.itemId) as { target_pubkey: string }[];
+            const firstR = await complain(complaint);
+            // What a.example made of its first send: taken (it read the 202), lost (no answer: still queued), or refused.
+            const toldFirst = first === 'lost 202' ? complaints.toldAfter(0, 60_000) : complaints.toldAfter(firstR.status, 60_000);
+            const wantFirst = first === 'refused' ? { status: 422, told: 'failed', rows: 0 } : { status: 202, told: first === 'taken' ? 'sent' : 'queued', rows: 1 };
+            assert(sentL.body?.items?.[0]?.state === 'sent' && firstR.status === wantFirst.status && toldFirst === wantFirst.told && rowsFiled().length === wantFirst.rows,
+                `${what}: (the first send: ${wantFirst.status}, ${wantFirst.rows} filed, told ${wantFirst.told} at a.example; got ${firstR.status}, ${rowsFiled().length}, ${toldFirst})`);
+
+            let senderNow = sender.key, otherNow = other.key;
+            if (between === 'a re-key') senderNow = rekey(sender.key);
+            if (between === 'a second re-key') senderNow = rekey(rekey(sender.key));
+            if (between === 'another member\'s re-key') otherNow = rekey(other.key);
+            sendersKeys.push(sender.key, senderNow);
+            const moved = rowsFiled().every((r) => r.target_pubkey === senderNow);
+            const retry = await complain(complaint);
+            const told = complaints.toldAfter(retry.status, 60_000);
+            const want = first === 'refused'
+                ? { status: 422, text: JSON.stringify(complaints.COMPLAINT_NOT_TAKEN), told: 'failed', rows: 0 }
+                : { status: 202, text: '{"received":true}', told: 'sent', rows: 1 };
+            (want.status === 202 ? onFileAnswers : notTakenAnswers).add(`${retry.status} ${retry.text}`);
+            const rowAt = want.rows === 0 ? '' : `, the row under the key ${senderNow === sender.key ? 'the line was signed with' : 'the last re-key gave'}: ${moved}`;
+            assert(moved && retry.status === want.status && retry.text === want.text && told === want.told && rowsFiled().length === want.rows,
+                `${what}: ${want.status} ${want.text}, told ${want.told} at a.example, ${want.rows} filed (got ${retry.status} ${retry.text}, told ${told}, ${rowsFiled().length} filed${rowAt})`);
+
+            // Never on file for another member: the other member's key, as it was and as it is, naming the same line.
+            const asOther: string[] = [];
+            for (const member of new Set([other.key, otherNow])) {
+                const r = await complain({ ...complaint, id: crypto.randomUUID(), member });
+                asOther.push(`${r.status} ${r.text}`);
+            }
+            assert(asOther.every((a) => a === `422 ${JSON.stringify(complaints.COMPLAINT_NOT_TAKEN)}`) && rowsFiled().length === want.rows,
+                `${what}: the same line named as the other member's (their key as it was${otherNow !== other.key ? ' and as their re-key made it' : ''}): 422 not_taken, nothing filed (got ${asOther.join(' | ')})`);
+
+            // A standby holds the same rows (abuse_reports and invalidated_keys are in its copy) and answers the same.
+            setNodeRole('backup');
+            let standby: Answer;
+            try {
+                standby = await complain(complaint);
+            } finally {
+                setNodeRole('primary');
+            }
+            assert(standby.status === retry.status && standby.text === retry.text && rowsFiled().length === want.rows,
+                `${what}: a standby answers the same (got ${standby.status} ${standby.text})`);
+        }
+    }
+
+    // ── 11, asked backwards: never which old key became which new one ────────────────────
+    // The deciding review of #3196: a community holding lines under two of a member's keys must not learn from the on-file
+    // check that they are one person's. Each key the member holds in turn sends Ana at a.example a line, which a.example
+    // reports naming that key (the honest complaint: filed, 202), and then the owner re-keys the member. Then every line is
+    // asked again naming every key the member had: on file (202) only under the key that signed it; under any other of
+    // their keys, older or newer, 422 in exactly the bytes a key that was never anyone's here gets, as another member's key
+    // does, nothing filed; and a standby answers each the same. One re-key, then two re-keys deep. In life a line a new key
+    // signed is reported a round trip after its re-key at the soonest; here the steps run inside a millisecond, so each
+    // re-key is followed by a short wait, and each filing by one before the next re-key.
+    const tick = () => new Promise((r) => setTimeout(r, 5));
+    // Each table asks some forty times in a few seconds from one address: the gateway's per-minute buckets are emptied
+    // before each burst (as other suites do), so every answer is the complaint route's own, never the gateway's 429.
+    const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
+    const dropped = `422 ${JSON.stringify(complaints.COMPLAINT_NOT_TAKEN)}`;
+    const generationNames = ['their first key', 'the key one re-key gave', 'the key a second re-key gave'];
+    for (const rekeys of [1, 2]) {
+        const deep = rekeys === 1 ? 'one re-key' : 'two re-keys deep';
+        resetGatewayRateLimit();
+        const signed: { k: Keys; itemId: string; at: number }[] = [];
+        const other = keys();
+        addLocal(other, `Other of ${deep}`);
+        let k = keys();
+        addLocal(k, `Re-keyed ${rekeys}`);
+        for (let g = 0; g <= rekeys; g++) {
+            if (g > 0) {
+                k = rekeyTo(k.key);
+                await tick();
+            }
+            const l = await line(k, 'b.example', ana, 'a.example', `Line ${rekeys}.${g}`);
+            const sentL = await asMember(k, '/api/mail/send', { items: [l] });
+            const words = `Words ${rekeys}.${g}`;
+            sendersWords.push(words);
+            sendersKeys.push(k.key);
+            const filed = await complain({ v: 1, id: crypto.randomUUID(), member: k.key, itemId: l.envelope.itemId, at: l.envelope.at, reason: 'spam or scam', words });
+            const rows = db.prepare("SELECT target_pubkey FROM abuse_reports WHERE reporter_pubkey = 'community:a.example' AND target_message_id = ?").all(l.envelope.itemId) as { target_pubkey: string }[];
+            assert(sentL.body?.items?.[0]?.state === 'sent' && filed.status === 202 && filed.text === '{"received":true}' && rows.length === 1 && rows[0].target_pubkey === k.key,
+                `11b. ${deep}: the line ${generationNames[g]} signed, reported by a.example naming that key: 202, filed under it (got ${sentL.body?.items?.[0]?.state}, ${filed.status} ${filed.text}, ${rows.length} filed)`);
+            signed.push({ k, itemId: l.envelope.itemId, at: l.envelope.at });
+            await tick();
+        }
+        const rowsOf = (itemId: string) => (db.prepare("SELECT COUNT(*) AS n FROM abuse_reports WHERE reporter_pubkey = 'community:a.example' AND target_message_id = ?").get(itemId) as { n: number }).n;
+        /** The primary's answer and a standby's, the same complaint a.example could send naming `member` for the line. */
+        const ask = async (member: string, s: { itemId: string; at: number }): Promise<[string, string]> => {
+            const complaint = { v: 1, id: crypto.randomUUID(), member, itemId: s.itemId, at: s.at, reason: 'spam or scam', words: 'Asked again' };
+            const p = await complain(complaint);
+            setNodeRole('backup');
+            try {
+                const b = await complain(complaint);
+                return [`${p.status} ${p.text}`, `${b.status} ${b.text}`];
+            } finally {
+                setNodeRole('primary');
+            }
+        };
+        for (const [i, s] of signed.entries()) {
+            resetGatewayRateLimit();
+            // The line named under a key that was never anyone's here, and under another member's: the answer every drop gets.
+            const stranger = await ask(keys().key, s), asOther = await ask(other.key, s);
+            assert([...stranger, ...asOther].every((a) => a === dropped) && stranger[0] === answersAlike[0] && rowsOf(s.itemId) === 1,
+                `11b. ${deep}: the line ${generationNames[i]} signed, named under a stranger's key or another member's: 422 as every drop, on a standby too, nothing filed (got ${[...stranger, ...asOther].join(' | ')})`);
+            for (const [j, named] of signed.entries()) {
+                const got = await ask(named.k.key, s);
+                const want = i === j ? '202 {"received":true}' : dropped;
+                (i === j ? onFileAnswers : notTakenAnswers).add(got[0]);
+                const how = i === j ? 'the key that signed it: on file, 202' : `${j < i ? 'an older' : 'a newer'} key of theirs (${generationNames[j]}): 422, the same bytes as a stranger's key`;
+                assert(got[0] === want && got[1] === want && rowsOf(s.itemId) === 1,
+                    `11b. ${deep}: the line ${generationNames[i]} signed, named under ${how}, on a standby too, nothing filed (got ${got.join(' | standby ')})`);
+            }
+        }
+        // A complaint filed in the very millisecond of the re-key is the replaced key's line (the new key's line is reported a
+        // round trip later at the soonest): on file under the key that signed it, never under the key the re-key gave.
+        if (rekeys === 1) {
+            resetGatewayRateLimit();
+            const [first, second] = signed;
+            const filedAt = (db.prepare("SELECT created_at FROM abuse_reports WHERE reporter_pubkey = 'community:a.example' AND target_message_id = ?").get(first.itemId) as { created_at: string }).created_at;
+            const rekeyedAt = (db.prepare('SELECT invalidated_at FROM invalidated_keys WHERE public_key = ? AND rekeyed_to = ?').get(first.k.key, second.k.key) as { invalidated_at: string }).invalidated_at;
+            const setFiled = db.prepare("UPDATE abuse_reports SET created_at = ? WHERE reporter_pubkey = 'community:a.example' AND target_message_id = ?");
+            setFiled.run(rekeyedAt, first.itemId);
+            let underSigner: [string, string], underNew: [string, string];
+            try {
+                underSigner = await ask(first.k.key, first);
+                underNew = await ask(second.k.key, first);
+            } finally {
+                setFiled.run(filedAt, first.itemId);
+            }
+            assert(filedAt < rekeyedAt && underSigner.every((a) => a === '202 {"received":true}') && underNew.every((a) => a === dropped) && rowsOf(first.itemId) === 1,
+                `11b. one re-key: the first key's line filed in the very millisecond of the re-key: on file under the key that signed it, 422 under the key the re-key gave, on a standby too (got ${underSigner.join(' | ')} / ${underNew.join(' | ')})`);
+        }
+    }
+
+    const { TABLES: manifest } = await import('./engine/replication-manifest.js');
+    const copied = (table: string) => { const e = manifest[table]; return e && (e.kind === 'replicated' || e.kind === 'replicated-except') ? e.columns : []; };
+    assert(['reporter_pubkey', 'target_pubkey', 'target_message_id', 'created_at'].every((c) => copied('abuse_reports').includes(c))
+        && ['public_key', 'rekeyed_to', 'invalidated_at'].every((c) => copied('invalidated_keys').includes(c)),
+        '11z. what the on-file check reads is in a standby\'s copy: abuse_reports\' reporter, member, line and filing time, invalidated_keys\' re-key link and its time');
+    const answers11 = [...onFileAnswers, ...notTakenAnswers].join('\n');
+    const leaked = [...sendersKeys, ...sendersWords].filter((v) => answers11.includes(v));
+    assert(onFileAnswers.size === 1 && notTakenAnswers.size === 1 && notTakenAnswers.has(answersAlike[0]) && leaked.length === 0,
+        `11y. every on-file answer is the same bytes, re-keyed or not, and every refusal is the one every drop gets; no answer carries a key or the words (got ${[...onFileAnswers, ...notTakenAnswers].join(' | ')}; carried ${leaked.length})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -137,7 +137,7 @@ async function main(): Promise<void> {
     const clearDrafts = () => db.prepare('DELETE FROM knowledge_drafts').run();
 
     const search = async (q: string): Promise<string[]> => {
-        const r = await call(owen, 'GET', `/api/knowledge?q=${encodeURIComponent(q)}`);
+        const r = await call(owen, 'GET', `/api/knowledge/front?q=${encodeURIComponent(q)}`);
         return Array.isArray(r.body?.rows) ? r.body.rows.map((x: any) => x.id as string) : [];
     };
 

@@ -32,7 +32,7 @@ import { InviteMadeCard, PendingInvites } from '../components/PendingInvites';
 import { useContactInviteNames } from '../lib/contact-invite-names';
 import { WaitingNameNotice } from '../components/WaitingNameNotice';
 import { MakeVoucherSheet } from '../components/MakeVoucherSheet';
-import { LOCAL_COMMUNITY_LINES, billsOn, formatDate, inviteBillFromForm, inviteBillLines, inviteRevokeWords, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, ownersHeading, waitingHeading, ownerRowWords, voucherRowWords, waitingRowWords, vouchersBlockSections, type InviteRowSource } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, billsOn, formatDate, inviteBillAfter, inviteBillAnswerOf, inviteBillToSend, inviteRevokeWords, inviteShareText, offersInviteAsk, offersNamesList, shareAddress, t, tn, vouchPresets, ownersHeading, waitingHeading, ownerRowWords, voucherRowWords, waitingRowWords, vouchersBlockSections, type InviteBillAnswer, type InviteBillHeld, type InviteRowSource } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, roleReadRefused, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
@@ -50,7 +50,10 @@ function refusalWords(said: string): string {
 /** A date on an invite or in the tree, as the phone's Invites says it ("20 Oct 2026"; it was the browser's own). */
 const dayWords = (iso: string) => formatDate(new Date(iso), 'day-month-year');
 
-/** A bill's own id (a UUID, or 32 random hex digits where the browser has no randomUUID): what a retry sends again. */
+/**
+ * A bill's own id (a UUID, or 32 random hex digits where the browser has no randomUUID): one per exact bill (core
+ * inviteBillToSend), so a retry of the same bill sends it again and an edit makes a new one.
+ */
 function newBillId(): string {
     if (typeof crypto?.randomUUID === 'function') return crypto.randomUUID().toLowerCase();
     return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -165,13 +168,14 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     // Vouchers (V3): the signer's budget presets, and the Vouchers block for owners and committee admins (§11).
     const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
     const [vouchPreset, setVouchPreset] = useState<number | null>(null);
-    // A bill with the invite (DESIGN-getting-paid-fable.md §4.5, slice B3): the fold's two boxes, and the bill's own id, made
-    // once for what is typed and kept until an invite is made, so a second tap after a lost answer is the same bill.
+    // A bill with the invite (DESIGN-getting-paid-fable.md §4.5, slice B3): the fold's two boxes, and the id of the bill last
+    // sent (core inviteBillToSend): the same bill again keeps it, so a second tap after a lost answer is the same bill on the
+    // node; an edit to either box makes a new one. Dropped once an invite is made, or when the node says it is spent.
     const [billOpen, setBillOpen] = useState(false);
     const [billWhatFor, setBillWhatFor] = useState('');
     const [billBeans, setBillBeans] = useState('');
-    const billId = useRef<string>(newBillId());
-    const clearBill = () => { setBillOpen(false); setBillWhatFor(''); setBillBeans(''); billId.current = newBillId(); };
+    const billHeld = useRef<InviteBillHeld | null>(null);
+    const clearBill = () => { setBillOpen(false); setBillWhatFor(''); setBillBeans(''); billHeld.current = null; };
     // The fold only where this community takes bills, and never in the sample community.
     const billsShown = !isPreview && billsOn(nodeInfo?.features);
     const [vouchersData, setVouchersData] = useState<VoucherSummary[] | null>(null);
@@ -309,13 +313,23 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
 
     async function handleGenerate() {
         setNotice(null);
-        // The fold read first: a bill that can't be sent makes no invite.
-        const billAsked = billsShown ? inviteBillFromForm(billWhatFor, billBeans) : { bill: null, error: null };
+        // The fold read first, as the member sees it: closed, no bill goes and none is refused, whatever its boxes still hold.
+        // Open, a bill that can't be sent makes no invite; one that can goes with the id of that exact bill (a retry of it
+        // keeps the id; an edit makes a new one).
+        const billAsked = inviteBillToSend({ open: billsShown && billOpen, whatFor: billWhatFor, beans: billBeans }, billHeld.current, newBillId);
         if (billAsked.error) {
             setNotice(billAsked.error);
             return;
         }
-        const bill = billAsked.bill ? { ...billAsked.bill, id: billId.current } : null;
+        billHeld.current = billAsked.held;
+        const bill = billAsked.bill;
+        // With a bill, no invite back: the node's refusal in its words, or, when nobody knows whether it was made, never "not
+        // made" (core inviteBillAfter). The same bill again finds out. No offline ticket either way: it would carry no bill.
+        const billNotMade = (answer: InviteBillAnswer) => {
+            const after = inviteBillAfter(billHeld.current, answer);
+            billHeld.current = after.held;
+            setNotice(after.words);
+        };
         setGenerating(true);
         setCopied(false);
         const chosenVouch = myVouching?.voucher ? vouchPreset : null;
@@ -332,7 +346,9 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                         : await generateInvite(identity.publicKey, intendedFor.trim() || undefined);
                 if (res?.invite?.code) {
                     setNewCode(res.invite.code);
-                    setMadeCard({ who: intendedFor.trim() || null, invite: res.invite });
+                    // With a bill, the answer may be the invite an earlier try made (a retry of the same bill): its note is the node's.
+                    const madeFor = bill ? (typeof res.invite.intendedFor === 'string' ? res.invite.intendedFor : '') : intendedFor;
+                    setMadeCard({ who: madeFor.trim() || null, invite: res.invite });
                     setMakeAnother(false);
                     setIntendedFor('');
                     setShowQR(true);
@@ -341,6 +357,11 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                     setInvites(prev => [res.invite, ...prev]);
                     void loadMyVouching();
                     void loadVouchersBlock();
+                    return;
+                }
+                // An answer with no invite in it: nobody knows whether it was made.
+                if (bill) {
+                    billNotMade({ kind: 'lost' });
                     return;
                 }
             } catch (e: any) {
@@ -368,14 +389,10 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                 }
                 // A refused vouch shows the node's sentence and makes no ticket:
                 const serverMsg = typeof e?.message === 'string' && e.message ? e.message : typeof e?.error === 'string' && e.error ? e.error : null;
-                // So does a refused bill, and a ticket would carry none:
-                if (bill && serverMsg && typeof e?.status === 'number') {
-                    setNotice(serverMsg);
-                    return;
-                }
-                // An offline ticket never carries a bill (§4.5): nothing is made, and the fold keeps what was typed.
+                // With a bill, a refusal the node words is shown as it said it; a lost answer, a 5xx or a page that isn't
+                // the node's may have made it. An offline ticket never carries a bill (§4.5); the fold keeps what was typed.
                 if (bill) {
-                    setNotice(inviteBillLines.noOffline());
+                    billNotMade(inviteBillAnswerOf(typeof e?.status === 'number' ? e.status : null, serverMsg, e?.code, e?.unsaid === true));
                     return;
                 }
                 if (chosenVouch !== null && serverMsg && typeof e?.status === 'number') {

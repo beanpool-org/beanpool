@@ -11,6 +11,13 @@
  *   4  Ben accepts and answers; Ana's browser takes it straight into her chat; Ben's reads Delivered
  *   5  Ben closes his door: a stranger's line from a.example is dropped in his browser, and nothing waits at his server
  *   6  Ana signs in on a new browser: the chat with Ben comes back empty, marked restored
+ *   7  each device for itself (X2b, DECISION-outside-door.md): Dee has two browsers at b.example, one with its door closed
+ *      and one with it open, each with its own store (this app's store module loaded afresh, on an IndexedDB of its own) and
+ *      so its own mail id. A stranger writes her: the closed-door browser runs first and drops it, and her server still holds
+ *      it; the open-door browser then shows the request. She accepts and answers there; the stranger's answer then reaches
+ *      both browsers, the closed-door one opening the chat from the tick of her own line
+ *   8  Dee signs out of the closed-door browser: her server forgets it (the real route, signed), so the next line goes as
+ *      soon as her other browser has it
  *
  * Nothing else is contacted: the browsers reach only their own node, and the nodes refuse every host but this machine.
  */
@@ -24,8 +31,10 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { addressCardFromText, addressCardLink, relayConversationId } from '@beanpool/core';
 import { memoryIndexedDB } from './memory-indexeddb';
 import { hearNodeVersionForTests } from './node-version-gate';
-import { clearOutsideChats, outsideChatStore } from './outside-chat-store';
-import { myAddressCard, sendOutsideLine, setDoor, syncOutsideMail, type OutsideMailContext } from './outside-mail';
+import { clearOutsideChats, outsideChatStore, type OutsideChatStore } from './outside-chat-store';
+import {
+    forgetThisBrowserForMail, mailDevice, myAddressCard, sendOutsideLine, setDoor, syncOutsideMail, type OutsideMailContext,
+} from './outside-mail';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -91,14 +100,22 @@ beforeAll(async () => {
     await control(nodes.a, 'peer', { home: 'b.example', port: nodes.b.port });
     await control(nodes.b, 'peer', { home: 'a.example', port: nodes.a.port });
     for (const n of Object.values(nodes)) hearNodeVersionForTests(n.url);
-    // The browsers reach only their own community's node.
+    // The browsers reach only their own community's node. Node's fetch takes only Node's own AbortSignal, not this test's
+    // (jsdom's, which the browser code makes): a signal is honoured here as a browser's fetch honours its own.
     globalThis.fetch = (async (input: any, init?: any) => {
         const href = String(input instanceof Request ? input.url : input);
         if (!href.startsWith(`${nodes.a.url}/`) && !href.startsWith(`${nodes.b.url}/`)) {
             elsewhere.push(href);
             throw new TypeError(`Failed to fetch: the browser contacted ${href}`);
         }
-        return realFetch(input, init);
+        const { signal, ...rest } = (init ?? {}) as RequestInit;
+        if (!signal) return realFetch(input, init);
+        const aborted = () => new DOMException('The request was aborted.', 'AbortError');
+        if (signal.aborted) throw aborted();
+        return new Promise<Response>((resolve, reject) => {
+            signal.addEventListener('abort', () => reject(aborted()), { once: true });
+            realFetch(input, rest).then(resolve, reject);
+        });
     }) as typeof fetch;
 }, START_MS);
 
@@ -120,9 +137,9 @@ afterAll(async () => {
 
 const member = (callsign: string) => { const seed = ed25519.utils.randomSecretKey(); return { publicKey: bytesToHex(ed25519.getPublicKey(seed)), privateKey: bytesToHex(seed), callsign }; };
 
-/** A browser on `node`: this app's store (documents per account) and its account. */
-function browser(identity: ReturnType<typeof member>, node: Node) {
-    const ctx: OutsideMailContext = { nodeUrl: node.url, identity, store: outsideChatStore(), isBlocked: async () => false };
+/** A browser on `node`: this app's store (documents per account), or another browser's, and its account. */
+function browser(identity: ReturnType<typeof member>, node: Node, store: OutsideChatStore = outsideChatStore()) {
+    const ctx: OutsideMailContext = { nodeUrl: node.url, identity, store, isBlocked: async () => false };
     const lines = async (peer: string) => (await ctx.store.lines(identity.publicKey, relayConversationId(identity.publicKey, peer)))
         .map((l) => ({ author: l.author, text: l.text, state: l.state }));
     const chat = (peer: string) => ctx.store.chat(identity.publicKey, relayConversationId(identity.publicKey, peer));
@@ -130,6 +147,27 @@ function browser(identity: ReturnType<typeof member>, node: Node) {
 }
 
 const heldAt = (n: Node) => control<any[]>(n, 'sql', { sql: 'SELECT item_id, kind, recipient FROM relay_mail', all: true });
+const listedAt = async (n: Node, member: string) => (await control<Array<{ device: string }>>(n, 'sql', {
+    sql: 'SELECT device FROM relay_mail_devices WHERE member = ? ORDER BY device', params: [member], all: true,
+})).map((r) => r.device);
+
+/**
+ * A second browser of the same account: this app's store module loaded afresh (vi.resetModules), its database opened on an
+ * IndexedDB of its own, so the two browsers share nothing but the account. The first browser's store keeps its own.
+ */
+async function anotherBrowserStore(): Promise<OutsideChatStore> {
+    const here = globalThis.indexedDB;
+    vi.stubGlobal('indexedDB', memoryIndexedDB());
+    try {
+        vi.resetModules();
+        const fresh = await import('./outside-chat-store');
+        const store = fresh.outsideChatStore();
+        await store.getMeta('0'.repeat(64), 'opened');   // its database opens now, on its own IndexedDB
+        return store;
+    } finally {
+        vi.stubGlobal('indexedDB', here);
+    }
+}
 
 describe('a chat between two communities, browser to browser through two real nodes', () => {
     it('card, request, write then confirm, Delivered both ways, a closed door, a new browser that explains the empty chat', async () => {
@@ -188,5 +226,61 @@ describe('a chat between two communities, browser to browser through two real no
         await syncOutsideMail(anaNew.ctx);
         expect(await anaNew.chat(ben.publicKey)).toMatchObject({ state: 'open', restored: true, peerHome: 'b.example' });
         expect(await anaNew.lines(ben.publicKey)).toEqual([]);
+    }, START_MS);
+
+    it('two browsers: the closed-door one drops a stranger\'s line first, the open-door one still shows the request; Sign Out on one leaves the other', async () => {
+        const [dee, tam] = [member('Dee'), member('Tam')];
+        await control(nodes.b, 'join', { key: dee.publicKey, callsign: 'Dee' });
+        await control(nodes.a, 'join', { key: tam.publicKey, callsign: 'Tam' });
+        const deeWeb = browser(dee, nodes.b);
+        const deeOther = browser(dee, nodes.b, await anotherBrowserStore());   // her second browser: its door closed
+        const tamWeb = browser(tam, nodes.a);
+        await setDoor(deeWeb.ctx, true);
+        // Each browser has asked once, so each is listed at her server, by its own id.
+        await syncOutsideMail(deeWeb.ctx);
+        await syncOutsideMail(deeOther.ctx);
+        const [mine, other] = [await mailDevice(deeWeb.ctx), await mailDevice(deeOther.ctx)];
+        expect(mine).not.toBe(other);
+        expect(await listedAt(nodes.b, dee.publicKey)).toEqual([mine, other].sort());
+
+        // 7. Tam, a stranger, writes Dee.
+        const chatId = relayConversationId(tam.publicKey, dee.publicKey);
+        await tamWeb.ctx.store.openChat(tam.publicKey, chatId, { key: dee.publicKey, home: 'b.example', name: 'Dee' });
+        expect(await sendOutsideLine(tamWeb.ctx, chatId, 'Hello Dee, is the ladder free on Saturday?')).toBe('sent');
+
+        // The closed-door browser first: dropped and confirmed there, and her server still holds it for the other.
+        expect(await syncOutsideMail(deeOther.ctx)).toMatchObject({ requests: 0, written: 0, dropped: 1, confirmed: 1 });
+        expect(await deeOther.chat(tam.publicKey)).toBeNull();
+        expect((await heldAt(nodes.b)).map((r) => [r.kind, r.recipient])).toEqual([['dm-line', dee.publicKey]]);
+
+        // The open-door browser: the request; then nothing waits at her server.
+        expect(await syncOutsideMail(deeWeb.ctx)).toMatchObject({ requests: 1, confirmed: 1 });
+        expect(await deeWeb.chat(tam.publicKey)).toMatchObject({ state: 'request', peerHome: 'a.example', peerName: 'Tam' });
+        expect(await heldAt(nodes.b)).toEqual([]);
+
+        // She accepts and answers there; Tam answers back.
+        await deeWeb.ctx.store.decide(dee.publicKey, chatId, 'open');
+        expect(await sendOutsideLine(deeWeb.ctx, chatId, 'Yes, come by at ten.')).toBe('sent');
+        expect(await syncOutsideMail(tamWeb.ctx)).toMatchObject({ written: 1 });
+        expect(await sendOutsideLine(tamWeb.ctx, chatId, 'See you then.')).toBe('sent');
+
+        // The closed-door browser: the tick of her own line opens the chat first, so Tam's answer is written there too.
+        expect(await syncOutsideMail(deeOther.ctx)).toMatchObject({ written: 1, dropped: 0 });
+        expect(await deeOther.chat(tam.publicKey)).toMatchObject({ state: 'open' });
+        expect((await deeOther.lines(tam.publicKey)).map((l) => l.text)).toEqual(['See you then.']);
+        expect((await heldAt(nodes.b)).length).toBe(1);
+        // The open-door browser: written, and with both browsers done, nothing waits at her server.
+        expect(await syncOutsideMail(deeWeb.ctx)).toMatchObject({ written: 1 });
+        expect((await deeWeb.lines(tam.publicKey)).map((l) => l.text)).toEqual(['Hello Dee, is the ladder free on Saturday?', 'Yes, come by at ten.', 'See you then.']);
+        expect(await heldAt(nodes.b)).toEqual([]);
+
+        // 8. Dee signs out of the closed-door browser: her server forgets it, and Tam's next line goes once the other has it.
+        const { done } = await forgetThisBrowserForMail(deeOther.ctx);
+        await done;
+        expect(await listedAt(nodes.b, dee.publicKey)).toEqual([mine]);
+        expect(await sendOutsideLine(tamWeb.ctx, chatId, 'One more thing: bring gloves.')).toBe('sent');
+        expect((await heldAt(nodes.b)).length).toBe(1);
+        expect(await syncOutsideMail(deeWeb.ctx)).toMatchObject({ written: 1, confirmed: 1 });
+        expect(await heldAt(nodes.b)).toEqual([]);
     }, START_MS);
 });

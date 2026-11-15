@@ -27,6 +27,7 @@ import {
     type AddressCard,
     type RelayEnvelope,
     type RelayEnvelopeFields,
+    type StandingAsk,
     type StandingAuthorisationFields,
     type StandingPeriodUnit,
     type StandingPhase,
@@ -1900,6 +1901,14 @@ export interface MarketplaceTransaction {
     standingStoppedBy?: string | null;
     standingEndedAt?: string | null;
     standingStopped?: boolean;
+    /**
+     * A short week (DESIGN-getting-paid-fable §5), on a running standing deal's current row: what the period due costs when
+     * lowered by agreement (absent at the full price), the payer's open ask, and how many asks are left (a node that takes a
+     * lowering always sends it: core standingLowerable shows no lowering without it).
+     */
+    standingDueBeans_c?: number;
+    standingAsk?: StandingAsk | null;
+    standingAsksLeft?: number;
 }
 
 export async function getMarketplacePosts(filter?: {
@@ -2516,6 +2525,24 @@ export async function signStandingStart(fields: StandingAuthorisationFields): Pr
 /** Stop a standing deal (either side, §1.3): the period under way is still paid, and nothing more is held. */
 export async function stopStandingDeal(standingId: string): Promise<{ success: boolean }> {
     return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/stop`, {});
+}
+
+/**
+ * A short week (DESIGN-getting-paid-fable §3.1): the payee lowers one period alone, or the payer asks to pay less for it
+ * (the node reads the side from the signer). `changeId` is the app's UUID (core standingChangeId), the same on a retry.
+ */
+export async function lowerStandingPeriod(standingId: string, changeId: string, periodNo: number, beans_c: number): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/lower`, { id: changeId, periodNo, beans_c });
+}
+
+/** The payee answers the payer's open ask: yes, that period costs what was asked; no, it stays as it was. */
+export async function answerStandingAsk(standingId: string, changeId: string, yes: boolean): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/lower/${encodeURIComponent(changeId)}/answer`, { yes });
+}
+
+/** The payer takes their open ask back: nothing changes. */
+export async function withdrawStandingAsk(standingId: string, changeId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/lower/${encodeURIComponent(changeId)}/withdraw`, {});
 }
 
 export async function requestMarketplacePost(

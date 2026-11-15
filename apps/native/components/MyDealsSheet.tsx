@@ -7,7 +7,7 @@ import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatHundredths, itemDealTitle, standingHistoryLine, standingLines, standingPanel, t, word, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatHundredths, itemDealTitle, standingHistoryLine, standingLines, standingLoweredHistoryLine, standingPanel, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showcase/LocalCommunityMark';
 import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
@@ -510,8 +510,12 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             const standing = dealsTab === 'pending' ? standingPanel(item, identity?.publicKey || '', (iso) => formatDate(new Date(iso), 'day-month')) : null;
             // Core's rule: a standing deal asks for one review, on its first period (design §3).
             const needsReview = !standing && isCompleted && step.state === 'done-to-review';
-            // An ended standing deal's History line: stopped in the grace, or its grace run out (amendment §1, §2).
-            const historyLine = dealsTab === 'history' ? standingHistoryLine(item, identity?.publicKey || '', (iso) => formatDate(new Date(iso), 'day-month')) : null;
+            // An ended standing deal's History line: stopped in the grace, or its grace run out (amendment §1, §2); else a period
+            // paid at less than the price by agreement, in the Ledger memo's words (DESIGN-getting-paid-fable §3.2), as on the web.
+            const historyLine = dealsTab === 'history'
+                ? (standingHistoryLine(item, identity?.publicKey || '', (iso) => formatDate(new Date(iso), 'day-month'))
+                    ?? standingLoweredHistoryLine(item, transactions, identity?.publicKey || ''))
+                : null;
             const partnerPubkey = isBuyer ? item.sellerPublicKey : item.buyerPublicKey;
             // No card held for the partner yet (a community that says `membersOnDemand`): the key's first 8 characters,
             // never a blank after "From " (DESIGN-global-members-by-area §2.4).
@@ -574,6 +578,13 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                                 style={[styles.dealStateText, standing?.warning && { color: colors.feedback.warning.fg, fontWeight: '800' }]}
                                 numberOfLines={standing ? 3 : 1}>
                                 {standing ? standing.status : dealStateWords(step, partnerCallsign)}
+                            </Text>
+                        )}
+                        {/* The payer's open ask to pay less, for either side (DESIGN-getting-paid-fable §3.2): its line only; the card
+                            opens the listing, where Answer and Take it back are (small cards open the item), as on the web. */}
+                        {!!standing?.askLine && (
+                            <Text testID={`deal-ask-${item.id}`} style={[styles.dealStateText, { color: colors.text.body, fontWeight: '700' }]} numberOfLines={3}>
+                                {standing.askLine}
                             </Text>
                         )}
                         {historyLine && (

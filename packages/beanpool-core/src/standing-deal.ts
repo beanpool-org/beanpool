@@ -23,7 +23,7 @@
 import { randomBytes } from '@noble/hashes/utils.js';
 import { audienceOf, signedRequestBytes, toBase64, type Signer } from './request-signing.js';
 import { t, tn } from './words.js';
-import { formatHundredths, isHundredths, type Hundredths } from './hundredths.js';
+import { formatHundredths, isHundredths, parseHundredths, type Hundredths } from './hundredths.js';
 
 /** The two periods a standing deal runs by. */
 export type StandingPeriodUnit = 'week' | 'month';
@@ -492,6 +492,8 @@ export const standingLines = {
         ? t('{name} pays this instead of {now} Beans for the month from {date}, and that month counts as paid in full here. You can lower it again, not raise it back. The month after is {n} Beans again.', { name, now: n2(now), date: from, n: n2(price) })
         : t('{name} pays this instead of {now} Beans for the week from {date}, and that week counts as paid in full here. You can lower it again, not raise it back. The week after is {n} Beans again.', { name, now: n2(now), date: from, n: n2(price) })),
     lowerButton: (beans: number) => t('Lower to {n} Beans', { n: n2(beans) }),
+    /** The lowering's button while no amount is chosen yet (an empty or refused "Another amount"): no figure nobody chose. */
+    lowerButtonNone: () => t('Lower to … Beans'),
     // The card while an ask is open (its own line, under the status: the status stays true, as an ask changes nothing)
     askOpenPayer: (unit: StandingPeriodUnit, beans: number, from: string, name: string) => (unit === 'month'
         ? t('You asked to pay {n} Beans for the month from {date} · waiting for {name}', { n: n2(beans), date: from, name })
@@ -589,6 +591,14 @@ function uuidOf(b: Uint8Array): string {
     const h = hexOf(b);
     const variant = ((parseInt(h[16], 16) & 3) | 8).toString(16);
     return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${variant}${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
+/**
+ * A fresh id for one lowering or ask (the node's `standing_period_changes.id`, the app's UUID). An app makes it when a sheet
+ * opens and sends the same one on a retry, so a lost answer never makes a second ask. `rand` is for tests.
+ */
+export function standingChangeId(rand: (n: number) => Uint8Array = randomBytes): string {
+    return uuidOf(rand(16));
 }
 
 /**
@@ -820,6 +830,142 @@ export function standingLowerChoices(amount_c: Hundredths): { beans_c: Hundredth
         ...(half > 0 ? [{ beans_c: half, label: standingLines.choiceHalf(half) }] : []),
         ...(amount_c > 0 ? [{ beans_c: 0, label: standingLines.choiceNone() }] : []),
     ];
+}
+
+/** The three lowering sheets (DESIGN-getting-paid-fable §3.2): the payer's ask, the payee's answer, the payee lowering alone. */
+export type StandingSheetKind = 'ask' | 'answer' | 'lower';
+
+/** Every line of one lowering sheet, both apps (standingSheet): the apps only draw them. */
+export interface StandingSheet {
+    kind: StandingSheetKind;
+    standingId: string;
+    unit: StandingPeriodUnit;
+    /** The period it is about (the app sends it, so a period paid meanwhile is never lowered by mistake). */
+    periodNo: number;
+    /** What that period costs now: the price, or less by agreement. */
+    amount_c: Hundredths;
+    /** "Ask to pay less?" · "Kim asks to pay less" · "Lower next week?" */
+    title: string;
+    /** "Room at Rob's · the week from 18 Nov · 200 Beans" (the ask), "Room at Rob's · the week from 18 Nov" (the others). */
+    about: string;
+    /** The answer only: "100 Beans instead of 200". */
+    instead: string | null;
+    /** The ask and the lowering: half, then 0, then "Another amount" (otherLabel). None on the answer. */
+    choices: { beans_c: Hundredths; label: string }[];
+    otherLabel: string | null;
+    /** The sheet's sentences, in order: what holds until a yes, and that the period counts as paid in full. */
+    lines: string[];
+    /** The go button for the chosen amount, or null while none is chosen: "Ask Rob", "Lower to 100 Beans" ("Lower to … Beans"), "Yes, 100 Beans". */
+    go: (beans_c: Hundredths | null) => string;
+    /** The answer's No ("No, keep 200"); null on the others. */
+    no: string | null;
+    cancel: string;
+    /** The answer: the ask's id and Beans. */
+    askId: string | null;
+    askBeans_c: Hundredths | null;
+}
+
+/**
+ * One lowering sheet for `actingAs` (DESIGN-getting-paid-fable §3.2), in the words both apps draw, or null when that side
+ * may not take that step now (standingLowerMoves): never a sheet whose button the node would refuse. `day` writes a date as
+ * the app does. The payee's sheets never carry the payer's balance (amendment §2).
+ */
+export function standingSheet(tx: StandingDealRow, actingAs: string, kind: StandingSheetKind, day: (iso: string) => string): StandingSheet | null {
+    const l = standingLowerable(tx);
+    const moves = standingLowerMoves(tx, actingAs);
+    if (!l || !tx.standingId) return null;
+    if ((kind === 'ask' && !moves.askLower) || (kind === 'lower' && !moves.lower) || (kind === 'answer' && !moves.answerLower)) return null;
+    const unit: StandingPeriodUnit = tx.standingUnit === 'month' ? 'month' : 'week';
+    const title = tx.postTitle || t('A standing deal');
+    const payeeName = tx.sellerCallsign || t('A member');
+    const payerName = tx.buyerCallsign || t('A member');
+    const from = day(l.from);
+    const base = { standingId: tx.standingId, unit, periodNo: l.n, amount_c: l.amount_c, cancel: t('Cancel') };
+    if (kind === 'answer') {
+        const a = l.ask!;
+        return {
+            ...base, kind, title: standingLines.answerTitle(payerName), about: standingLines.answerAbout(unit, title, from),
+            instead: standingLines.answerInstead(a.beans_c, l.amount_c), choices: [], otherLabel: null,
+            lines: [standingLines.answerCountsAsPaid(unit, l.price_c)],
+            go: () => standingLines.answerYes(a.beans_c), no: standingLines.answerNo(l.amount_c), askId: a.id, askBeans_c: a.beans_c,
+        };
+    }
+    const choices = standingLowerChoices(l.amount_c);
+    if (kind === 'ask') {
+        const graceEnds = tx.standingStartsAt ? day(standingGraceEndsAt(tx.standingStartsAt, unit, l.n)) : from;
+        return {
+            ...base, kind, title: standingLines.askTitle(), about: standingLines.askAbout(unit, title, from, l.amount_c), instead: null,
+            choices, otherLabel: standingLines.choiceOther(),
+            lines: [
+                l.short ? standingLines.askUntilYesShort(payeeName, l.amount_c, graceEnds) : standingLines.askUntilYes(payeeName, l.amount_c, from),
+                standingLines.askCountsAsPaid(unit, payeeName),
+            ],
+            go: () => standingLines.askButton(payeeName), no: null, askId: null, askBeans_c: null,
+        };
+    }
+    return {
+        ...base, kind, title: standingLines.lowerTitle(unit, l.short), about: standingLines.answerAbout(unit, title, from), instead: null,
+        choices, otherLabel: standingLines.choiceOther(),
+        lines: [standingLines.lowerCountsAsPaid(unit, payerName, l.amount_c, from, l.price_c)],
+        go: (b) => (b === null ? standingLines.lowerButtonNone() : standingLines.lowerButton(b)), no: null, askId: null, askBeans_c: null,
+    };
+}
+
+/**
+ * What one open lowering sheet was opened for (standingSheetBinding), which the app keeps while it is open: its kind, the
+ * period and what that period cost then, and the ask it answers (the answer only).
+ */
+export interface StandingSheetBinding { kind: StandingSheetKind; periodNo: number; amount_c: Hundredths; askId: string | null }
+
+/** What `sheet` is about, kept by the app from the tap that opens it (standingBoundSheet). */
+export function standingSheetBinding(sheet: StandingSheet): StandingSheetBinding {
+    return { kind: sheet.kind, periodNo: sheet.periodNo, amount_c: sheet.amount_c, askId: sheet.askId };
+}
+
+/**
+ * The sheet `opened` was opened for, as `tx` reads now, or null once that is gone or replaced: the side may no longer take
+ * that step, the period was paid, what it costs moved, or the ask it answers was taken back or swapped for another. Both apps
+ * close the sheet on null and forget what it was opened for, so it never opens again by itself (the member opens the new ask
+ * afresh), and whatever it sends is about the very ask and period the member opened it on.
+ */
+export function standingBoundSheet(tx: StandingDealRow, actingAs: string, opened: StandingSheetBinding, day: (iso: string) => string): StandingSheet | null {
+    const now = standingSheet(tx, actingAs, opened.kind, day);
+    if (!now) return null;
+    if (now.periodNo !== opened.periodNo) return null;
+    if (now.amount_c !== opened.amount_c) return null;
+    if (now.askId !== opened.askId) return null;
+    return now;
+}
+
+/**
+ * "Another amount" as the member types it (`lang`: the device's language when absent), for a period costing `amount_c`: the
+ * Beans in whole hundredths when it may be the period's new amount (from 0 up to just under what it costs now), else why
+ * not in words (lowerOnlyDown), or no words while the box is empty. Both apps; the node checks again.
+ */
+export function standingTypedAmount(text: string, amount_c: Hundredths, unit: StandingPeriodUnit, lang?: Parameters<typeof parseHundredths>[1]):
+    { ok: true; beans_c: Hundredths } | { ok: false; line: string | null } {
+    if (!text.trim()) return { ok: false, line: null };
+    const p = parseHundredths(text, lang);
+    if (p.ok && isStandingLowerAmount(p.value, amount_c)) return { ok: true, beans_c: p.value };
+    return { ok: false, line: standingLines.lowerOnlyDown(unit, amount_c) };
+}
+
+/**
+ * Your deals' History line of one period paid at less than the price by agreement (DESIGN-getting-paid-fable §3.2, the
+ * Ledger's memo in the same words): "Standing deal · Room at Rob's · week 4 · 100 of 200 Beans by agreement"; a week at 0
+ * (which has no Ledger row) says "0 of 200". The price and period come from the standing deal's current row among `rows`
+ * (an older period's row carries no price), so a list without it shows none. Null for a period paid in full, any other row
+ * or a stranger to it.
+ */
+export function standingLoweredHistoryLine(tx: StandingDealRow, rows: readonly StandingDealRow[], me: string): string | null {
+    if (!tx.standingId || tx.status !== 'completed' || !me || (tx.buyerPublicKey !== me && tx.sellerPublicKey !== me)) return null;
+    const n = Number(tx.periodNo);
+    if (!Number.isInteger(n) || n < 1 || !isHundredths(tx.amount_c)) return null;
+    const head = isHundredths(tx.standingBeans_c) ? tx : rows.find(r => r.standingId === tx.standingId && isHundredths(r.standingBeans_c));
+    const price = head?.standingBeans_c;
+    const unit = head?.standingUnit;
+    if (!isHundredths(price) || (unit !== 'week' && unit !== 'month') || tx.amount_c < 0 || tx.amount_c >= price) return null;
+    return standingLines.memoLowered(unit, tx.postTitle || t('A standing deal'), n, tx.amount_c, price);
 }
 
 /**

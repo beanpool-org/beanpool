@@ -1,13 +1,20 @@
 /**
  * Small parts the phone's forum screens share (slice F3; DESIGN-forums-fable.md §2, §5, §14), as the web's
- * components/forum/ForumBits.tsx: a post's words with their links, its photos read signed, the menu a ⋯ opens, the sheet a
- * public forum's first post waits on. Each draws with the forum's styles itself (components/forum/forum-style.ts).
+ * components/forum/ForumBits.tsx: a post's words with their links, its photos read signed, the photos waiting to go with a
+ * post (and the picker that adds them), the menu a ⋯ opens, the sheet a public forum's first post waits on. Each draws with the
+ * forum's styles itself (components/forum/forum-style.ts).
  */
 import React, { useEffect, useState } from 'react';
 import { Image, Linking, Modal, Pressable, Text, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { KeyboardController } from 'react-native-keyboard-controller';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { FORUM_LIMITS, forumWordRuns, t } from '@beanpool/core';
 import { Alert } from '../../utils/keyboard-alert';
 import { forumPhotoUri } from '../../utils/forum';
+import { chatPhotoDataUri, withinMs } from '../../utils/chat-photo';
+import { askPhotoSource } from '../../utils/post-photo';
+import { useTheme } from '../../app/ThemeContext';
 import { TOLD_WORDS, TOPIC_WORDS } from './forum-words';
 import { useForumStyles } from './forum-style';
 
@@ -48,6 +55,64 @@ export function ForumPhotos({ id, count, waiting }: { id: string; count: number;
     return (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 }} testID="forum-photos">
             {Array.from({ length: Math.min(count, FORUM_LIMITS.photos) }, (_, n) => <ForumPhoto key={n} id={id} n={n} waiting={waiting} />)}
+        </View>
+    );
+}
+
+/**
+ * Asks Camera, Gallery or Browse files, and hands back the picked picture as a forum photo: fitted within 800 px on its longest
+ * side, JPEG, a data address (utils/chat-photo.ts, the one helper every chat photo uses; photos stay 800 px). The phone is asked
+ * for nothing until a source is tapped, and the camera's permission only at Camera (permissions only when asked). Null: nothing
+ * picked, or it couldn't be read (the member is told).
+ */
+export async function pickForumPhoto(): Promise<string | null> {
+    // The source sheet and the picker are their own windows: the keyboard goes first (the group chat's pickPhoto, after the DM
+    // screen's phantom-keyboard note), never waited on past 400 ms.
+    await Promise.race([KeyboardController.dismiss().catch(() => {}), new Promise((r) => setTimeout(r, 400))]);
+    return new Promise((resolve) => {
+        const take = async (pick: () => Promise<ImagePicker.ImagePickerResult>) => {
+            try {
+                const r = await pick();
+                const asset = r.canceled ? null : r.assets[0];
+                if (!asset?.uri) { resolve(null); return; }
+                resolve(await withinMs(chatPhotoDataUri(asset), 30_000, t('Processing the image is taking too long — please try again.')));
+            } catch (e) {
+                Alert.alert(t('Photo not added'), (e as Error)?.message || t('Could not process image.'));
+                resolve(null);
+            }
+        };
+        askPhotoSource(t('Add a photo'), {
+            camera: async () => {
+                const perm = await ImagePicker.requestCameraPermissionsAsync();
+                if (!perm.granted) { Alert.alert(t('Permission needed'), t('Camera access is required.')); resolve(null); return; }
+                void take(() => ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 }));
+            },
+            gallery: () => void take(() => ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, defaultTab: 'albums' })),
+            files: () => void take(() => ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, legacy: true })),
+        }, () => resolve(null));
+    });
+}
+
+/**
+ * The photos waiting to go with a topic or a reply (up to 3), each with ✕ to take it off, as the web's row. `band`: in the reply
+ * box, on the composer's own band just above it (drawn beside the composer, never as its `attachment`, which would make Send
+ * live with no words).
+ */
+export function ForumAttached({ photos, onChange, disabled, band }: { photos: string[]; onChange: (photos: string[]) => void; disabled?: boolean; band?: boolean }) {
+    const styles = useForumStyles();
+    const { colors } = useTheme();
+    if (!photos.length) return null;
+    return (
+        <View style={[{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 12, paddingTop: 8 }, band && styles.attachedBand]} testID="forum-attached">
+            {photos.map((p, i) => (
+                <View key={i} style={styles.photo}>
+                    <Image source={{ uri: p }} style={{ width: '100%', height: '100%' }} resizeMode="cover" accessibilityLabel={t(TOPIC_WORDS.photo, { n: i + 1 })} />
+                    <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo {n}', { n: i + 1 })} disabled={disabled} testID="forum-attached-remove"
+                        onPress={() => onChange(photos.filter((_, j) => j !== i))} style={[styles.iconBtn, { position: 'absolute', top: -4, right: -4 }]}>
+                        <MaterialCommunityIcons name="close-circle" size={24} color={colors.text.body} />
+                    </Pressable>
+                </View>
+            ))}
         </View>
     );
 }

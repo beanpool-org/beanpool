@@ -44,6 +44,9 @@ export function forumStyleSpec(colors: AppColors) {
         label: { fontSize: 14, fontWeight: '700', color: colors.text.secondary },
         mine: { backgroundColor: colors.surface.subtle },
         quote: { borderLeftWidth: 3, borderLeftColor: colors.accent.fill, paddingLeft: 8 },
+        // The photos waiting in the reply box, just above it: the composer's own band (the chat's staged-photo row), so they read
+        // as the box's, never as the post above them. The composer's top line is under them (it is not handed the photos).
+        attachedBand: { borderTopWidth: 1, borderTopColor: colors.surface.subtle, backgroundColor: colors.surface.card, paddingBottom: 8 },
         photo: { width: 96, height: 96, borderRadius: 10, overflow: 'hidden', backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default },
         backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay.scrim, padding: 12 },
         sheet: { borderRadius: 16, padding: 8, backgroundColor: colors.surface.card },

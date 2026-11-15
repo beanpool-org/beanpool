@@ -9,10 +9,16 @@
  * - **The reader's range.** A topic is read 30 posts at a time. Every read again (opening it, a reply sent, a ⋯ action) reads
  *   through the last post the member had drawn, never only the first 30, and after Send on through their own reply.
  * - **Kept copy.** The last read draws at once (utils/forum-kept.ts); with no connection it is what shows.
- * - **Gone.** When the node says the topic isn't there for this member any more (`not_found`), the kept copy is dropped and the
- *   member is back on the list with one line saying so.
+ * - **A draft** (design §14): a reply not posted (no connection, a refusal, or the member left the topic with words in the box)
+ *   is kept on the phone with its quote and photos, and is back in the box the next time the topic opens.
+ * - **Photos:** where the forum takes this member's links and photos (`linksOn`), the box's photo button adds up to 3, each
+ *   fitted within 800 px on the phone (components/forum/ForumBits.tsx pickForumPhoto), as the web's 📎.
+ * - **At a post:** a search's hit opens the topic at the post found (`at`), read through to it.
+ * - **Gone.** When the node says the topic isn't there for this member any more (`not_found`: on a read, on Send, or on a tap
+ *   it refuses so, which a read again then confirms), the kept copy and the draft are dropped, nothing writes a draft for it
+ *   again (not even leaving with words in the box), and the member is back on the list with one line saying so.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,13 +32,14 @@ import { blockUser } from '../../utils/blocklist';
 import { loadIdentity } from '../../utils/identity';
 import { reportedAlertBody } from '../../utils/reportReasons';
 import {
-    closeForumTopic, followForumTopic, forgetForumTopic, getForumFront, getForumTopic, keptForumFront, keptForumTopic, markForumTold, noteForumBack,
+    closeForumTopic, followForumTopic, forgetForumTopic, getForumFront, getForumTopic, keepForumDraft, keptForumDraft, keptForumFront, keptForumTopic, markForumTold, noteForumBack,
     readForumTopic, removeForumPost, replyInForum, reportForumPost, type ForumFront, type ForumPost, type ForumTopicPage,
 } from '../../utils/forum';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { makeChatStyles } from '../../components/chat/styles';
 import { ReportMessageSheet } from '../../components/ReportMessageSheet';
-import { ForumMenu, ForumPhotos, ForumWords, askForumTold, type ForumMenuItem } from '../../components/forum/ForumBits';
+import { ForumAttached, ForumMenu, ForumPhotos, ForumWords, askForumTold, pickForumPhoto, type ForumMenuItem } from '../../components/forum/ForumBits';
+import type { ForumDraft } from '../../utils/forum-kept';
 import { useForumStyles } from '../../components/forum/forum-style';
 import { TOPIC_WORDS } from '../../components/forum/forum-words';
 
@@ -40,10 +47,14 @@ type Menu = { kind: 'post'; post: ForumPost; confirm?: 'block' | 'remove' } | { 
 
 /** The number of the last post a read drew (0: none). */
 const lastOf = (p: ForumTopicPage | null) => (p?.posts.length ? p.posts[p.posts.length - 1].number : 0);
+/** The node's answer that something isn't there for this member (a topic, or on a ⋯ action a post). */
+const isNotFound = (e: unknown) => (e as { status?: number; code?: string })?.status === 404 && (e as { code?: string }).code === 'not_found';
 
 export default function ForumTopicScreen() {
-    const { id } = useLocalSearchParams<{ id: string }>();
+    const { id, at } = useLocalSearchParams<{ id: string; at?: string }>();
     const topicId = String(id);
+    // A search's hit: the post to open the topic at (0: none).
+    const atPost = Math.max(0, Number(at) || 0);
     const styles = useForumStyles();
     const chatStyles = useStyles(makeChatStyles);
     const { colors } = useTheme();
@@ -57,11 +68,30 @@ export default function ForumTopicScreen() {
     const [quote, setQuote] = useState<ForumPost | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [photos, setPhotos] = useState<string[]>([]);
+    // The draft read from the phone, until the box is there to take it; `draftRead`: read (or none), so leaving may keep the box.
+    const [draft, setDraft] = useState<ForumDraft | null>(null);
+    const draftRead = useRef(false);
     const composer = useRef<ChatComposerHandle>(null);
+    const quoteRef = useRef(quote);
+    useEffect(() => { quoteRef.current = quote; }, [quote]);
+    const photosRef = useRef(photos);
+    useEffect(() => { photosRef.current = photos; }, [photos]);
+    const scroller = useRef<ScrollView>(null);
+    const jumped = useRef(false);
     const pageRef = useRef(page);
     useEffect(() => { pageRef.current = page; }, [page]);
     // Whether this topic is still the one on screen: an answer that lands after the member left it changes nothing.
     const shown = useRef(true);
+    // The node said the topic is gone for this member: its draft went with its kept copy, and nothing keeps one again.
+    const gone = useRef(false);
+
+    /** The topic isn't there for this member any more: its kept copy and draft dropped, and back to the list with `words`. */
+    const leaveGone = useCallback(async (words: string) => {
+        gone.current = true;
+        await forgetForumTopic(topicId);
+        if (shown.current) { noteForumBack({ kind: 'gone', words }); router.back(); }
+    }, [topicId]);
 
     /** Reads the posts after number `from` afresh, on through post `upTo` (or the topic's end), 30 a read. */
     const readThrough = useCallback(async (from: number, upTo: number, goneWords?: string) => {
@@ -77,16 +107,11 @@ export default function ForumTopicScreen() {
             const last = lastOf(p);
             if (last > p.lastRead) void readForumTopic(topicId, last).catch(() => { /* the next open marks it */ });
         } catch (e) {
-            const err = e as Error & { status?: number; code?: string };
             // Not there for this member any more: never the old copy left on screen with nothing said.
-            if (err?.status === 404 && err.code === 'not_found') {
-                await forgetForumTopic(topicId);
-                if (shown.current) { noteForumBack({ kind: 'gone', words: goneWords ?? err.message }); router.back(); }
-            } else if (shown.current) {
-                setFailed(true);
-            }
+            if (isNotFound(e)) await leaveGone(goneWords ?? (e as Error).message);
+            else if (shown.current) setFailed(true);
         }
-    }, [topicId]);
+    }, [topicId, leaveGone]);
 
     useEffect(() => {
         shown.current = true;
@@ -97,10 +122,23 @@ export default function ForumTopicScreen() {
         void getForumFront().then((f) => { if (shown.current) setFront(f); }).catch(() => { /* the kept front stands */ });
         void keptForumTopic(topicId).then((kept) => {
             if (kept && shown.current) setPage((now) => now ?? kept);
-            void readThrough(0, lastOf(kept));
+            void readThrough(0, Math.max(lastOf(kept), atPost));
+        });
+        void keptForumDraft(topicId).then((d) => {
+            if (!shown.current) return;
+            if (d) setDraft(d);
+            else draftRead.current = true;
         });
         return () => { shown.current = false; };
-    }, [topicId, readThrough]);
+    }, [topicId, readThrough, atPost]);
+
+    // Leaving the topic with words or photos not posted keeps them as its draft (the parent's cleanup runs before the box's
+    // handle is let go, so what is in the box is still readable here). Nothing is touched before the kept draft was read, nor
+    // once the topic is gone (its draft was dropped with it).
+    useLayoutEffect(() => () => {
+        if (!draftRead.current || gone.current || !composer.current) return;
+        void keepForumDraft(topicId, { words: composer.current.currentText(), quotes: quoteRef.current?.number ?? null, photos: photosRef.current });
+    }, [topicId]);
 
     const topic = page?.topic;
     const opening = page?.posts.find((p) => p.number === 1) ?? null;
@@ -108,6 +146,28 @@ export default function ForumTopicScreen() {
     const section = front?.sections.find((s) => s.id === topic?.sectionId);
     const open = !!topic && !topic.closed;
     const name = (p: { writer: { name: string } }) => p.writer.name || t(TOPIC_WORDS.member);
+
+    // The kept draft goes into the box once, when the box is drawn (an open topic), with its quote if that post is drawn then (a
+    // quote of a post gone or blocked since is dropped; the words stay). Once only: never again over what the member types next.
+    useEffect(() => {
+        if (!draft || !open || !composer.current) return;
+        composer.current.setText(draft.words);
+        setPhotos(draft.photos);
+        const q = draft.quotes ? page?.posts.find((p) => p.number === draft.quotes && !p.removed) ?? null : null;
+        if (q) setQuote(q);
+        setDraft(null);
+        draftRead.current = true;
+    }, [draft, open, page]);
+
+    /** Up to 3 photos with the reply, each fitted within 800 px; past 3 the web's line. */
+    async function attach() {
+        if (photosRef.current.length >= FORUM_LIMITS.photos) {
+            Alert.alert(t('At most {n} photos.', { n: FORUM_LIMITS.photos }));
+            return;
+        }
+        const photo = await pickForumPhoto();
+        if (photo && shown.current) setPhotos((now) => (now.length < FORUM_LIMITS.photos ? [...now, photo] : now));
+    }
 
     /** The box's words, sent (the box is already empty: a refusal puts them back). `told`: they just agreed to the sheet. */
     async function send(words: string, told = false) {
@@ -128,14 +188,25 @@ export default function ForumTopicScreen() {
         setBusy(true);
         setError(null);
         let mine: ForumPost;
+        const sending = photos;
         try {
-            mine = await replyInForum(topic.id, { words, quotes: quote?.number ?? null, lang: currentLanguage() });
+            mine = await replyInForum(topic.id, { words, quotes: quote?.number ?? null, lang: currentLanguage(), photos: sending });
         } catch (e) {
+            // The topic is gone (the reply's only `not_found`): no draft for it, and back to the list with the node's line.
+            if (isNotFound(e)) { await leaveGone((e as Error).message); setBusy(false); return; }
             composer.current?.setText(words);
+            // Not posted (no connection, or refused): kept on the phone as this topic's draft, its photos and quote with it.
+            void keepForumDraft(topic.id, { words, quotes: quote?.number ?? null, photos: sending });
             setError((e as Error)?.message || t(TOPIC_WORDS.saveFailed));
             setBusy(false);
             return;
         }
+        void keepForumDraft(topic.id, null);
+        // Emptied the way it was filled. A box filled by setText (a draft put back, a refused send's words) and sent untouched
+        // kept its words on Android 8 with Send greyed (F3 part 2 walk): the composer's own clear was dropped as stale and no
+        // echo came for its sweep. setText('') writes the native box itself, as the draft's setText did.
+        composer.current?.setText('');
+        setPhotos([]);
         setQuote(null);
         // On from the last post drawn, through their own reply: it shows where it went, and nothing read is lost.
         await readThrough(lastOf(pageRef.current), mine.number);
@@ -150,6 +221,8 @@ export default function ForumTopicScreen() {
             await fn();
         } catch (e) {
             setError((e as Error)?.message || t(TOPIC_WORDS.saveFailed));
+            // Something not there any more (the topic, or the post): a read again says which, and leaves a topic gone.
+            if (isNotFound(e)) await readThrough(0, lastOf(pageRef.current), goneWords);
             return;
         }
         await readThrough(0, lastOf(pageRef.current), goneWords);
@@ -247,7 +320,7 @@ export default function ForumTopicScreen() {
                         </Pressable>
                     )}
                 </View>
-                <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.pad, { paddingTop: 10 }]} keyboardShouldPersistTaps="handled">
+                <ScrollView ref={scroller} style={{ flex: 1 }} contentContainerStyle={[styles.pad, { paddingTop: 10 }]} keyboardShouldPersistTaps="handled">
                     {failed && !page && (
                         <View style={{ gap: 8, alignItems: 'flex-start' }}>
                             <Text style={styles.small}>{t(TOPIC_WORDS.failed)}</Text>
@@ -265,7 +338,13 @@ export default function ForumTopicScreen() {
                     {replies.map((post) => {
                         const q = quoted(post.quotes);
                         return (
-                            <View key={post.id} testID={`forum-post-${post.number}`} style={[styles.row, { flexDirection: 'column', alignItems: 'stretch', gap: 2, paddingHorizontal: 8, borderRadius: 8 }, post.writer.publicKey === me && styles.mine]}>
+                            <View key={post.id} testID={`forum-post-${post.number}`}
+                                onLayout={post.number === atPost ? (e) => {
+                                    if (jumped.current) return;
+                                    jumped.current = true;
+                                    scroller.current?.scrollTo({ y: Math.max(0, e.nativeEvent.layout.y - 8), animated: false });
+                                } : undefined}
+                                style={[styles.row, { flexDirection: 'column', alignItems: 'stretch', gap: 2, paddingHorizontal: 8, borderRadius: 8 }, post.writer.publicKey === me && styles.mine]}>
                                 {byline(post)}
                                 {q && (
                                     <Text style={[styles.small, styles.quote]} numberOfLines={2}>
@@ -279,11 +358,15 @@ export default function ForumTopicScreen() {
                     {page?.next != null && (
                         <Pressable accessibilityRole="button" onPress={() => void readThrough(page.next!, 0)} style={styles.quiet}><Text style={styles.quietText}>{t(TOPIC_WORDS.moreReplies)}</Text></Pressable>
                     )}
-                    {error && <Text style={styles.danger} accessibilityRole="alert">{error}</Text>}
+                    {/* With no reply box (a closed topic), the line ends the posts; with one, it sits just above the box (below). */}
+                    {error && !(topic && open) && <Text style={styles.danger} accessibilityRole="alert">{error}</Text>}
                     {topic && !open && <Text style={styles.italic} testID="forum-closed">{t(TOPIC_WORDS.closed)}</Text>}
                 </ScrollView>
                 {topic && open && (
                     <View testID="forum-reply">
+                        {/* Why a send didn't go (no connection: the words wait in the box, kept as the draft), where the eye is: the
+                            box is pinned at the foot, so a line at the end of a long topic's posts was never seen (F3 part 2 walk). */}
+                        {error && <Text style={[styles.danger, { marginHorizontal: 12, marginTop: 6 }]} accessibilityRole="alert" testID="forum-reply-error">{error}</Text>}
                         {quote && (
                             <View style={[styles.quote, { flexDirection: 'row', alignItems: 'center', marginHorizontal: 12, marginTop: 6 }]} testID="forum-quote">
                                 <Text style={[styles.small, { flex: 1 }]} numberOfLines={2}>{t(TOPIC_WORDS.replyingTo, { name: name(quote), words: quote.words })}</Text>
@@ -292,8 +375,13 @@ export default function ForumTopicScreen() {
                                 </Pressable>
                             </View>
                         )}
+                        {/* The photos waiting, on the box's band just above it, never handed to the composer as its `attachment`: the
+                            composer counts that as something to send and draws Send live with no words, and a reply has words, as on
+                            the web (Send stays off until there are some; the photos wait with the box). */}
+                        <ForumAttached photos={photos} onChange={setPhotos} disabled={busy} band />
                         <ChatComposer ref={composer} styles={chatStyles} onSend={(words) => send(words.trim())} placeholder={t(TOPIC_WORDS.writeReply)}
-                            accessibilityLabel={t(TOPIC_WORDS.writeReply)} busy={busy} disabled={busy} maxLength={FORUM_LIMITS.reply} bottomPadding={Math.max(insets.bottom, 12)} />
+                            accessibilityLabel={t(TOPIC_WORDS.writeReply)} busy={busy} disabled={busy} maxLength={FORUM_LIMITS.reply} bottomPadding={Math.max(insets.bottom, 12)}
+                            onAttach={front?.linksOn ? () => void attach() : undefined} />
                     </View>
                 )}
             </KeyboardAvoidingView>

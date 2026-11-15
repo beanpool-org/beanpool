@@ -3,7 +3,7 @@ import {
     HOME_CARD_TYPES, HOME_CATEGORY_HUES, HOME_CHAT_KIND_HUES, HOME_CHAT_ID_CHARS, HOME_CHAT_KINDS, HOME_CHAT_NAME_CHARS, HOME_COLUMN_CHOICES, HOME_DECIDE_CHOICES, HOME_DECIDE_ROWS,
     HOME_DECIDE_ROWS_MAX, HOME_DECIDE_SHOWS, HOME_FRAME_LIMITS, HOME_FRAME_MESSAGES, HOME_DEFAULT_LIST, HOME_STARTER_SET, HOME_V1_CARD_IDS, addCard, cardSettings,
     cardsToAsk, checkHomeLayout, defaultCards, endTourLayout, homeCardHue, homeColumns, moveCard, readChatSettings, readDecideSettings, readHomeLayout,
-    readSearchSettings, readToolsSettings, removeCard, setHomeColumns, translateV1, type HomeLayoutV2, type HomeNodeFacts,
+    readSearchSettings, readToolsSettings, removeCard, setHomeColumns, translateV1, homeCardType, type HomeLayoutV2, type HomeNodeFacts,
 } from '../home-frame.js';
 import { t } from '../words.js';
 import { BRAND_COLOURS } from '../brand-colours.js';
@@ -288,7 +288,7 @@ describe('home frame §5.2 (4): the default and the words', () => {
     });
 
     it('which node shows which type: no money, Decide or invites on the worldwide community', () => {
-        const local: HomeNodeFacts = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, wordsDoor: false, knowledge: true } };
+        const local: HomeNodeFacts = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, wordsDoor: false, knowledge: true, forum: true } };
         const global: HomeNodeFacts = { profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, wordsDoor: true } };
         const on = (a: HomeNodeFacts, role?: 'admin' | null) => HOME_CARD_TYPES.filter(t => t.onNode(a, role)).map(t => t.id);
         // A tool's card (tools/index.ts) is wherever its tool is, by its own manifest: the built-in types are pinned here.
@@ -296,6 +296,11 @@ describe('home frame §5.2 (4): the default and the words', () => {
         expect(on(global).filter(id => !toolCards.has(id))).toEqual(['needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'shop', 'events', 'market', 'asked', 'search', 'groups', 'chat', 'joined', 'pulse', 'sky', 'notices', 'tools', 'community']);
         expect(on(global).filter(id => toolCards.has(id))).toEqual(toolHomeCardTypes().filter(t => t.onNode(global)).map(t => t.id));
         expect(on(local)).toEqual(HOME_CARD_TYPES.map(t => t.id).filter(id => id !== 'safety' && id !== 'find'));
+        // The forum's card (slice F3) only where the forum is on (every kind reports it on from the start): the global fixture
+        // here has none; a node from before it, none.
+        expect(on(global)).not.toContain('forum');
+        expect(on({ ...global, features: { ...global.features, forum: true } })).toContain('forum');
+        expect(on({ ...local, features: { ...local.features, forum: undefined } })).not.toContain('forum');
         const adminsInvite = { ...local, features: { ...local.features, door: 'admins' } };
         expect(on(adminsInvite, null)).not.toContain('invite');
         expect(on(adminsInvite, 'admin')).toContain('invite');
@@ -306,7 +311,7 @@ describe('home frame §5.2 (4): the default and the words', () => {
         const safety = HOME_CARD_TYPES.find(t => t.id === 'safety')!;
         // As every invite-only local node answers: its 12-words door is shut (`wordsDoor: false`), and an invited member
         // gets no `cards.safety` (that body is the 12-words door's own).
-        const local: HomeNodeFacts = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, wordsDoor: false, knowledge: true } };
+        const local: HomeNodeFacts = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, wordsDoor: false, knowledge: true, forum: true } };
         expect(safety.onNode({ ...local, me: { wayBack: 'words' } })).toBe(true);
         // A sign-in's copy linked here is a second way back: the door's rule alone, so not on this node.
         expect(safety.onNode({ ...local, me: { wayBack: 'covered' } })).toBe(false);
@@ -573,3 +578,17 @@ describe('card hues (S1, scratch/fable-design/DESIGN-home-look-fable.md §2.2)',
     });
 });
 
+describe('the Home card "Forum" (DESIGN-forums-fable.md §14, slice F3)', () => {
+    it('one of a kind, Around you, worked out by the app (never asked of the node), not in the default list, its words from core', () => {
+        const forum = homeCardType('forum')!;
+        expect(forum).toMatchObject({ id: 'forum', group: 'around', asks: 'none' });
+        expect(forum.multiple).toBeUndefined();
+        expect(forum.fixed).toBeFalsy();
+        expect(t(forum.name)).toBe('Forum');
+        expect(t(forum.line)).toBe('The newest topics in the forum.');
+        expect(HOME_DEFAULT_LIST).not.toContain('forum');
+        expect(HOME_V1_CARD_IDS).not.toContain('forum');
+        // Never asked of the node, wherever it is in a member's list.
+        expect(cardsToAsk({ v: 2, cards: [{ id: 'forum', type: 'forum' }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: null })).not.toContain('forum');
+    });
+});

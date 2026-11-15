@@ -21,6 +21,8 @@ export const FORUM_WORDS = {
     failed: word('Couldn’t load the forum. Check your connection and try again.'),
     again: word('Try again'),
     archived: word('{name} (archived)'),
+    /** The phone's only, for now (joint design §2.2): opens the worldwide community's forum. */
+    worldwide: word('Worldwide forum ›'),
 };
 
 export const TOPIC_WORDS = {

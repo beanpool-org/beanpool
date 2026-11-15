@@ -25,6 +25,7 @@ import { isTagId } from './tags/index.js';
 import { POST_TAGS_MAX } from './tags/post-tags.js';
 import { toolHomeCardTypes } from './tools/index.js';
 import { KNOWLEDGE_PLACE_LINE, LEARN_HOME_WORDS, knowledgeFeatureMode } from './knowledge.js';
+import { FORUM_HOME_WORDS, forumOn } from './forum.js';
 import { t, word, type WordKey } from './words.js';
 import type { CardHue } from './brand-colours.js';
 
@@ -396,6 +397,11 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
     // arrives once on a Home its member already arranged (`arrives`), since a saved list never gains a type by itself. An app
     // asks for it and draws it only once it has its body (each app's HOME_DRAWN), as for every type.
     { id: 'learn', hue: 'sage', name: LEARN_HOME_WORDS.name, line: KNOWLEDGE_PLACE_LINE, group: 'around', asks: 'node', onNode: (a) => knowledgeFeatureMode(a.features) !== 'hidden', arrives: true },
+    // The forum's three newest topics (DESIGN-forums-fable.md §14, slice F3): where the forum is on, read by the app itself from
+    // the forum's own list (its kept copy with no connection), so the node builds nothing for it. An app draws it only once it
+    // has its body (each app's HOME_DRAWN): the phone from F3; the web's card is its own slice. Not in the default list yet:
+    // the design puts it in the worldwide community's starter set, and today both apps' defaults are one list for every kind.
+    { id: 'forum', hue: 'blue', name: FORUM_HOME_WORDS.name, line: FORUM_HOME_WORDS.line, group: 'around', asks: 'none', onNode: (a) => forumOn({ forum: a.features.forum }) },
     {
         id: 'search', hue: 'orange', name: word('A saved search'), line: word('Listings that match words you choose, near you.'), group: 'around',
         multiple: { max: 5 }, asks: 'node', onNode: everywhere, readSettings: readSearchSettings,

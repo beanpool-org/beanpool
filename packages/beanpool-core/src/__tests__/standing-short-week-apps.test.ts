@@ -138,6 +138,9 @@ describe('the three sheets, word for word (design §3.2)', () => {
         expect(s.title).toBe('Lower next week?');
         expect(s.lines).toEqual(['Kim pays this instead of 200 Beans for the week from 18 Nov, and that week counts as paid in full here. You can lower it again, not raise it back. The week after is 200 Beans again.']);
         expect(s.go(10000)).toBe('Lower to 100 Beans');
+        // No amount chosen yet (an empty or refused "Another amount"): no figure nobody chose (seen in the 320 px shots).
+        expect(s.go(null)).toBe('Lower to … Beans');
+        expect(standingSheet(row(), 'kim', 'ask', day)!.go(null)).toBe('Ask Rob');
         expect(standingSheet(row(GRACE), 'rob', 'lower', day)!.title).toBe('Lower this week?');
     });
     it('a week already lowered offers half of what it costs now, and says the price again for the week after', () => {

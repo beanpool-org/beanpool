@@ -178,6 +178,11 @@ describe('the payee answering, and lowering alone', () => {
         expect(within(sheet).getAllByText('Lower next week?')[0].tagName).toBe('P');
         expect(within(sheet).getByText('Kim pays this instead of 200 Beans for the week from 18 Nov, and that week counts as paid in full here. You can lower it again, not raise it back. The week after is 200 Beans again.')).toBeTruthy();
         expect(screen.getByTestId('standing-sheet-go').textContent).toBe('Lower to 100 Beans');
+        // A refused "Another amount": the button is off and names no figure nobody chose (seen in the 320 px shots).
+        await click(screen.getByTestId('standing-choice-other'));
+        fireEvent.change(screen.getByTestId('standing-other-amount'), { target: { value: '250' } });
+        expect(screen.getByTestId('standing-sheet-go').textContent).toBe('Lower to … Beans');
+        expect((screen.getByTestId('standing-sheet-go') as HTMLButtonElement).disabled).toBe(true);
         await click(screen.getByTestId('standing-choice-0'));
         expect(screen.getByTestId('standing-sheet-go').textContent).toBe('Lower to 0 Beans');
         await click(screen.getByTestId('standing-sheet-go'));

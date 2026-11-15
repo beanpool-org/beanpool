@@ -165,7 +165,7 @@ function LowerSheet({ sheet, busy, error, onGo, onNo, onCancel, onMessage, messa
                     ? <button type="button" data-testid="standing-sheet-no" className={QUIET} disabled={busy} onClick={onNo}>{sheet.no}</button>
                     : cancel}
                 <button type="button" data-testid="standing-sheet-go" className={GO} disabled={off} onClick={() => { if (chosen !== null) onGo(chosen); }}>
-                    {sheet.go(chosen ?? sheet.amount_c)}
+                    {sheet.go(chosen)}
                 </button>
             </div>
             {sheet.kind === 'answer' && (

@@ -492,6 +492,8 @@ export const standingLines = {
         ? t('{name} pays this instead of {now} Beans for the month from {date}, and that month counts as paid in full here. You can lower it again, not raise it back. The month after is {n} Beans again.', { name, now: n2(now), date: from, n: n2(price) })
         : t('{name} pays this instead of {now} Beans for the week from {date}, and that week counts as paid in full here. You can lower it again, not raise it back. The week after is {n} Beans again.', { name, now: n2(now), date: from, n: n2(price) })),
     lowerButton: (beans: number) => t('Lower to {n} Beans', { n: n2(beans) }),
+    /** The lowering's button while no amount is chosen yet (an empty or refused "Another amount"): no figure nobody chose. */
+    lowerButtonNone: () => t('Lower to … Beans'),
     // The card while an ask is open (its own line, under the status: the status stays true, as an ask changes nothing)
     askOpenPayer: (unit: StandingPeriodUnit, beans: number, from: string, name: string) => (unit === 'month'
         ? t('You asked to pay {n} Beans for the month from {date} · waiting for {name}', { n: n2(beans), date: from, name })
@@ -853,8 +855,8 @@ export interface StandingSheet {
     otherLabel: string | null;
     /** The sheet's sentences, in order: what holds until a yes, and that the period counts as paid in full. */
     lines: string[];
-    /** The go button for a chosen amount: "Ask Rob", "Lower to 100 Beans", "Yes, 100 Beans". */
-    go: (beans_c: Hundredths) => string;
+    /** The go button for the chosen amount, or null while none is chosen: "Ask Rob", "Lower to 100 Beans" ("Lower to … Beans"), "Yes, 100 Beans". */
+    go: (beans_c: Hundredths | null) => string;
     /** The answer's No ("No, keep 200"); null on the others. */
     no: string | null;
     cancel: string;
@@ -885,7 +887,7 @@ export function standingSheet(tx: StandingDealRow, actingAs: string, kind: Stand
             ...base, kind, title: standingLines.answerTitle(payerName), about: standingLines.answerAbout(unit, title, from),
             instead: standingLines.answerInstead(a.beans_c, l.amount_c), choices: [], otherLabel: null,
             lines: [standingLines.answerCountsAsPaid(unit, l.price_c)],
-            go: (b) => standingLines.answerYes(b), no: standingLines.answerNo(l.amount_c), askId: a.id, askBeans_c: a.beans_c,
+            go: () => standingLines.answerYes(a.beans_c), no: standingLines.answerNo(l.amount_c), askId: a.id, askBeans_c: a.beans_c,
         };
     }
     const choices = standingLowerChoices(l.amount_c);
@@ -905,7 +907,7 @@ export function standingSheet(tx: StandingDealRow, actingAs: string, kind: Stand
         ...base, kind, title: standingLines.lowerTitle(unit, l.short), about: standingLines.answerAbout(unit, title, from), instead: null,
         choices, otherLabel: standingLines.choiceOther(),
         lines: [standingLines.lowerCountsAsPaid(unit, payerName, l.amount_c, from, l.price_c)],
-        go: (b) => standingLines.lowerButton(b), no: null, askId: null, askBeans_c: null,
+        go: (b) => (b === null ? standingLines.lowerButtonNone() : standingLines.lowerButton(b)), no: null, askId: null, askBeans_c: null,
     };
 }
 

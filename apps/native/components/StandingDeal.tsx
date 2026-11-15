@@ -209,7 +209,7 @@ function LowerSheet({ sheet, busy, error, onGo, onNo, onCancel, onMessage, messa
                 ) : cancel}
                 <Pressable accessibilityRole="button" accessibilityState={{ disabled: off }} testID="standing-sheet-go" style={[s.go, off && { opacity: 0.6 }]}
                     disabled={off} onPress={() => { if (chosen !== null) onGo(chosen); }}>
-                    <Text style={s.goText}>{sheet.go(chosen ?? sheet.amount_c)}</Text>
+                    <Text style={s.goText}>{sheet.go(chosen)}</Text>
                 </Pressable>
             </View>
             {sheet.kind === 'answer' && (

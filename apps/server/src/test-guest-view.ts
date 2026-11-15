@@ -1375,6 +1375,9 @@ async function main(): Promise<void> {
             'POST /api/forum/topics/:id/follow', 'POST /api/forum/topics/:id/read',
             // Search (slice F6): a member's, signed, counted against their day's searches.
             'GET /api/forum/search',
+            // The community label (slice F10, routes/membership-note.ts): a member's note from their own community, and what they
+            // show on a public forum; all signed, the member the signer.
+            'GET /api/membership/note', 'GET /api/forum/label', 'POST /api/forum/label',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',

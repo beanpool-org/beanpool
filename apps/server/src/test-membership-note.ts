@@ -228,7 +228,6 @@ async function main(): Promise<void> {
     for (const who of [ada, bo, cy]) require_((await call(who, 'POST', '/api/forum/told', {})).status === 200, `${who.name} is told the forum is public`);
     const adaTopic = await call(ada, 'POST', '/api/forum/topics', { sectionId: section, title: 'Seed swap at the hall', words: 'Bring seeds marigold' });
     require_(adaTopic.status === 201, `Ada starts a topic (${show(adaTopic)})`);
-    const adaTopicId = adaTopic.body?.topic?.id as string;
     const boTopic = await call(bo, 'POST', '/api/forum/topics', { sectionId: section, title: 'Bo asks about tools', words: 'Who has a ladder' });
     require_(boTopic.status === 201, `Bo starts a topic (${show(boTopic)})`);
     const boTopicId = boTopic.body?.topic?.id as string;

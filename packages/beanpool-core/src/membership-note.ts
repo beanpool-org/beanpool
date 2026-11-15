@@ -131,7 +131,7 @@ export function checkMembershipNote(
     if (note.expiresAt <= opts.now) return { ok: false, problem: 'expired' };
     if (note.expiresAt - note.issuedAt > MEMBERSHIP_NOTE_MAX_MS) return { ok: false, problem: 'too_long' };
     if (!opts.communityPublicKey || opts.communityPublicKey.length !== 32) return { ok: false, problem: 'bad_signature' };
-    let good = false;
+    let good: boolean;
     try {
         good = ed25519.verify(hexToBytes(note.sig), membershipNoteBytes(note), opts.communityPublicKey, { zip215: false });
     } catch {

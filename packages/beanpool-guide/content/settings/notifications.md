@@ -15,6 +15,7 @@ related: mute, messages, my-deals, events, holiday-mode, the-top-bar, communitie
 - **When a neighbour asks for something I'm into:** when someone in your community posts a Need in a category you starred on **What are you into?** on **Home**, at most once a day. It is on until you switch it off. It comes with your **Marketplace Activity** alerts, so it stops if you switch those off too. Only communities that send it show this switch: the global community doesn't.
 - **Held in Trust & System:** beans held, released or in question.
 - **Requests to join:** when someone asks to join your community from the global community, so you can help welcome them. Only members who can let people in see it: owners and admins are always told, so they have no switch, and in a community where only admins let people in it isn't shown.
+- **Forum:** replies in forum topics you follow, mentions of you in the forum, and, for owners, admins and moderators, a first topic waiting for a look. Only communities whose forum sends alerts show this switch. See "The forum".
 
 The web app has the same switches, with the same names. They set what reaches your phone and, if you turn notifications on in a browser, that browser too: in the web app, the first row, **On this device**, says whether this browser gets them, with **Turn on** or **Turn off**. Your browser asks you first, at that tap.
 
@@ -51,6 +52,10 @@ An alert on your phone or in your browser says only what kind of news it is, for
 - "The member your jury is deciding about has answered the case."
 - "Someone asked to join your community."
 - "A community answered your request to join." It reaches the phone or the browser you asked from, before you have joined.
+- "There is a new reply in a topic you follow." More replies in that topic wait in the same row of your bell until you open it.
+- "You were mentioned in the forum."
+- "Your first topic has an answer." On the global community, when a moderator has looked at your first topic in the forum.
+- "A first topic is waiting for a look." For the global community's owners, admins and moderators.
 
 It never says who it is from, which listing, how many beans, or what your community's announcement says. Alerts pass through Apple's, Google's and Expo's servers on their way to your phone, and anyone can read a lock screen, so the rest stays with your community. Open BeanPool to see it. A browser's alert goes from your community's server through that browser's own service (Google's, Mozilla's, Apple's or Microsoft's), locked so that service can't read it, and carries the same few words.
 

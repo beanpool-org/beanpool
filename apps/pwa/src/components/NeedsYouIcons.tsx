@@ -32,6 +32,7 @@ import { freshHomeForHeader, homeForHeader, onHomeRead, HOME_HEADER_WAIT_MS, for
 import { onConversationRead } from '../lib/conversation-read';
 import { onSyncActivity } from '../lib/sync';
 import { useDialogFocus } from './dialog-focus';
+import { billDoor } from '../lib/bill-door';
 import * as api from '../lib/api';
 import { markYesSeen, yesMark } from '../lib/knock';
 import { YES_BELL_EVENT, landOnKnockRow, unseenYeses, type YesRow } from '../lib/yes-bell';
@@ -65,6 +66,8 @@ export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: strin
         case 'people': return kind === 'knock' ? onNavigate('people-invites', 'asked') : onNavigate('people-invites');
         // "Local knowledge to check: 3" (slice K4): To check in Learn, sent only because this app asks with lands=learn.
         case 'learn-check': return onNavigate('learn-check');
+        // A bill waiting on the member (sent only because this app asks with lands=bills): its sheet in Your deals → Bills.
+        case 'bill': return onNavigate('marketplace', billDoor(target.id));
         default: return undefined;
     }
 }
@@ -95,6 +98,8 @@ export function goToNoticeTarget(kind: string, data: Record<string, unknown>, on
         // Local knowledge (slice K4): a member's suggestion to check lands on To check; the answer to one's own, on My suggestions.
         case 'learn-check': return onNavigate('learn-check');
         case 'learn-mine': return onNavigate('learn-mine');
+        // A bill (engine/bills.ts `{ screen: 'bill', billId }`): its sheet in Your deals → Bills, as on the phone.
+        case 'bill': if (id(data.billId)) return onNavigate('marketplace', billDoor(id(data.billId)!)); break;
         case 'forum_topic': case 'forum_first_looks': return onNavigate('messages-forum');
         // A voucher's Ask for more (credit on the People list C3): People → Community, Show credit on, the Vouchers chip and that
         // voucher's row. A build without this screen lands on the kind's tab (People) through the default below.
@@ -188,6 +193,13 @@ function NeedSvg({ kind, shadow = false }: { kind: WebNeedsKind; shadow?: boolea
             return (
                 <svg className={cls} fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="learn">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                </svg>
+            );
+        case 'bill':
+            // A receipt: a bill waiting on the member (DESIGN-getting-paid-fable §4.4), as the phone's receipt-text icon.
+            return (
+                <svg className={cls} fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="bill">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 8h6m-6 4h6m-6 4h3M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21V3Z" />
                 </svg>
             );
         default:

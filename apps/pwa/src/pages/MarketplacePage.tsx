@@ -23,7 +23,8 @@ import { ShowOnGlobalHostRow } from '../components/ShowOnGlobalRow';
 import { YourEvents } from '../components/YourEvents';
 import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow, movedCopyContext } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
-import { MyDealsModal } from '../components/MyDealsModal';
+import { MyDealsModal, type DealsTab } from '../components/MyDealsModal';
+import { BILL_DOOR } from '../lib/bill-door';
 import { StandingPanel, StandingTakeUp, type StandingChoice, type StandingLowerStep } from '../components/StandingDeal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
 import { MarketCircleLine } from '../components/MarketCircleLine';
@@ -495,6 +496,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     const communityInfo = useCommunityInfo();
     const featuresPins = (communityInfo?.features as { pins?: boolean } | undefined)?.pins === true;
+    // Bills (DESIGN-getting-paid-fable §4): only where the node says they are on; a node that says nothing has none.
+    const billsOn = (communityInfo?.features as { bills?: boolean } | undefined)?.bills === true;
     const [myNodeRole, setMyNodeRole] = useState<string | null>(null);
     useEffect(() => {
         let alive = true;
@@ -634,7 +637,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         onNearYou: onNavigate ? () => { setSelectedPost(null); onNavigate('home'); } : undefined,
         onGuide: onNavigate ? (slug: string) => { setSelectedPost(null); onNavigate('guide', slug); } : undefined,
     };
-    const [dealsInitialTab, setDealsInitialTab] = useState<'active' | 'pending' | 'history'>('pending');
+    const [dealsInitialTab, setDealsInitialTab] = useState<DealsTab>('pending');
+    // The bill a door named, opened on Your deals → Bills once (components/Bills.tsx says so if it is no longer waiting).
+    const [openBillId, setOpenBillId] = useState<string | null>(null);
+    const clearOpenBill = useCallback(() => setOpenBillId(null), []);
 
     // Detail view
     const [selectedPost, setSelectedPost] = useState<MarketplacePost | null>(null);
@@ -786,6 +792,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
              setShowDealsModal(true);
              setDealsInitialTab('pending');
              onPostOpened?.();
+        } else if (openPostId?.startsWith(BILL_DOOR)) {
+            // A bill's bell row, push or notice (DESIGN-getting-paid-fable §4.3): Your deals → Bills, with that bill's sheet.
+            setOpenBillId(openPostId.slice(BILL_DOOR.length) || null);
+            setDealsInitialTab('bills');
+            setShowDealsModal(true);
+            onPostOpened?.();
         } else if (openPostId === 'new-poll' || openPostId === 'new-event') {
              onPostOpened?.();
              onNavigate?.(openPostId === 'new-poll' ? 'map-post-poll' : 'map-post-event');
@@ -1657,6 +1669,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             posts={posts}
             transactions={myTransactions}
             initialTab={dealsInitialTab}
+            bills={billsOn}
+            openBillId={openBillId}
+            onBillOpened={clearOpenBill}
+            onMessage={identity && onNavigate ? async (peer) => {
+                try {
+                    const result = await createConversationApi('dm', [identity.publicKey, peer], identity.publicKey);
+                    setShowDealsModal(false);
+                    onNavigate('messages', result.conversation.id);
+                } catch (e: any) {
+                    window.alert(nodeRefusal(e)?.message ?? (e?.message || t('Failed to start conversation')));
+                }
+            } : undefined}
+            onPostOffer={onNavigate ? () => { setShowDealsModal(false); onNavigate('map-post'); } : undefined}
             onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined}
             onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined}
             onNavigateToPost={async (postId, txId) => {

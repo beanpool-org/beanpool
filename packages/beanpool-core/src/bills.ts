@@ -197,6 +197,8 @@ export const billLines = {
     noneSent: () => t("You haven't sent a bill."),
     readFailed: () => t("Your bills couldn't be read just now. Check your connection and try again."),
     paid: (name: string, amount_c: Hundredths) => t('Paid: {n} Beans to {name}.', { n: n2(amount_c), name }),
+    payConfirmCancel: () => t('Cancel'),
+    close: () => t('Close'),
     // A lost answer (billAnswerLost) never says nothing happened: it may have gone through, and the same press finds out.
     payLost: () => t("Your community's server didn't answer, so this bill may have been paid. Press Pay again to find out: it is never paid twice."),
     declineLost: () => t("Your community's server didn't answer, so this bill may have been declined. Press Decline again to find out."),

@@ -85,9 +85,15 @@ export type NeedsTarget =
     /** Learn's To check, for an owner or admin with members' suggestions waiting; sent only to an app that asks with `lands=learn`. */
     | { to: 'learn-check' }
     | { to: 'shop'; id: string }
-    | { to: 'shop-mine' };
-/** `knock`: requests to join (front doors S1), only to an app that asks with lands=people (lib/api.ts getHome); People → Invites lists them (S2). */
-export interface NeedsItem { kind: 'admin' | 'knock' | 'ask' | 'learn' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
+    | { to: 'shop-mine' }
+    /** One bill waiting on the member (DESIGN-getting-paid-fable §4.4); sent only to an app that asks with `lands=bills`. */
+    | { to: 'bill'; id: string };
+/**
+ * `knock`: requests to join (front doors S1), only to an app that asks with lands=people (lib/api.ts getHome); People → Invites
+ * lists them (S2). `bill`: a bill waiting on the member, amber and counted from someone they know, calm and listed from a
+ * stranger (core needsYouCounts), only with lands=bills.
+ */
+export interface NeedsItem { kind: 'admin' | 'knock' | 'ask' | 'learn' | 'deal' | 'bill' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
 export interface HomeProbation {
     onProbation: boolean;

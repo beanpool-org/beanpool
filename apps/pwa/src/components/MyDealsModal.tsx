@@ -14,12 +14,13 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { MarketplacePost, MarketplaceTransaction } from '../lib/api';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, itemDealTitle, standingHistoryLine, standingLines, standingLoweredHistoryLine, standingPanel, t, word, type WordKey, formatHundredths } from '@beanpool/core';
+import { billLines, dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, itemDealTitle, standingHistoryLine, standingLines, standingLoweredHistoryLine, standingPanel, t, word, type WordKey, formatHundredths } from '@beanpool/core';
 import { ListPhoto } from './ListPhoto';
 import { LocalCommunityAction, LocalCommunityStrip, LocalCommunitySheet, type LocalCommunityWays } from './LocalCommunityMark';
 import { StartCommunityScreen } from './StartCommunityScreen';
 import { SampleHeader, sampleDealChip, sampleDeals } from './ShowcasePreviews';
 import { Sentence } from './Sentence';
+import { BillsPanel } from './Bills';
 
 /** A marker's own sheet or Start screen (LocalCommunityAction draws them inside the card): its Escape is its own. */
 const MARKER_SHEET = '[data-testid="local-community-sheet"], [data-testid="start-community-screen"]';
@@ -62,11 +63,22 @@ interface Props extends LocalCommunityWays {
     onClose: () => void;
     posts?: MarketplacePost[];
     transactions?: MarketplaceTransaction[];
-    initialTab?: 'active' | 'pending' | 'history';
+    initialTab?: DealsTab;
     onNavigateToPost?: (postId: string, txId?: string) => void;
     onPromptReview?: (tx: { txId: string; targetPubkey: string; targetCallsign: string; targetRole: 'provider' | 'receiver' }) => void;
     preview?: boolean;
+    /**
+     * Bills are on here (the node's `features.bills`; DESIGN-getting-paid-fable §4): the Bills tab (components/Bills.tsx), opened
+     * at `openBillId`'s sheet when a door names one. Never in preview: a node with bills has Beans.
+     */
+    bills?: boolean;
+    openBillId?: string | null;
+    onBillOpened?: () => void;
+    onMessage?: (publicKey: string) => void;
+    onPostOffer?: () => void;
 }
+
+export type DealsTab = 'active' | 'pending' | 'history' | 'bills';
 
 export function MyDealsModal({
     visible,
@@ -80,8 +92,15 @@ export function MyDealsModal({
     preview = false,
     onNearYou,
     onGuide,
+    bills = false,
+    openBillId,
+    onBillOpened,
+    onMessage,
+    onPostOffer,
 }: Props) {
-    const [dealsTab, setDealsTab] = useState<'active' | 'pending' | 'history'>(initialTab);
+    const [dealsTab, setDealsTab] = useState<DealsTab>(initialTab);
+    // A door to a bill opens the tab even before the node's info says bills are on: only a node with bills sends one.
+    const billsShown = !preview && (bills || initialTab === 'bills');
     const [historyFilter, setHistoryFilter] = useState<'all' | 'buying' | 'selling'>('all');
 
     // The card's sheet: read by the key handler through a ref, so opening it does not re-run the focus effect
@@ -292,7 +311,8 @@ export function MyDealsModal({
                             { id: 'pending' as const, label: t('In Progress'), badge: pendingCount },
                             { id: 'active' as const, label: t('My Posts') },
                             { id: 'history' as const, label: t('History') },
-                        ].map(tab => (
+                            ...(billsShown ? [{ id: 'bills' as const, label: billLines.tab() }] : []),
+                        ].map((tab: { id: DealsTab; label: string; badge?: number }) => (
                             <button
                                 key={tab.id}
                                 onClick={() => setDealsTab(tab.id)}
@@ -346,7 +366,10 @@ export function MyDealsModal({
                             <SampleHeader />
                         </div>
                     )}
-                    {listData.length === 0 ? (
+                    {dealsTab === 'bills' && billsShown ? (
+                        <BillsPanel me={currentPubkey} openBillId={openBillId} onBillOpened={onBillOpened} onMessage={onMessage}
+                            onOpenPost={onNavigateToPost ? (postId) => onNavigateToPost(postId) : undefined} onPostOffer={onPostOffer} />
+                    ) : listData.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                             <span className="text-5xl opacity-30 mb-4">{dealsTab === 'history' ? '📜' : dealsTab === 'pending' ? '🤝' : '📋'}</span>
                             <h4 className="font-bold text-lg text-nature-900 dark:text-white mb-2">

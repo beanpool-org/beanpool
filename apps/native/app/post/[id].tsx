@@ -2872,6 +2872,7 @@ function PostDetailModal() {
                     identity={identity}
                     onClose={() => setShowDealsSheet(false)}
                     initialTab="pending"
+                    bills={reader.node?.bills === true}
                 />
             )}
             

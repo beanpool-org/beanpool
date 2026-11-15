@@ -18,7 +18,7 @@ import { useGlobalGuestVisit } from '../../utils/use-global-guest-visit';
 import { requestSync, isPillarSyncActive, syncLandedOnThisCopy, PILLAR_SYNC_ENDED } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
-import { MyDealsSheet, usePendingDealsCount } from '../../components/MyDealsSheet';
+import { MyDealsSheet, usePendingDealsCount, type DealsTab } from '../../components/MyDealsSheet';
 import { PostAuthorTrust, isElder } from '../../components/PostAuthorTrust';
 import { ListingCopyLine } from '../../components/ListingCopyLine';
 import { TrustPickerSheet, TRUST_FILTERS } from '../../components/TrustPickerSheet';
@@ -673,7 +673,7 @@ export default function MarketScreen() {
     
     // Deals Sheet
     const [showDealsSheet, setShowDealsSheet] = useState(false);
-    const [dealsInitialTab, setDealsInitialTab] = useState<'active' | 'pending' | 'history'>('pending');
+    const [dealsInitialTab, setDealsInitialTab] = useState<DealsTab>('pending');
     const [showNewPollModal, setShowNewPollModal] = useState(false);
     const [showNewEventModal, setShowNewEventModal] = useState(false);
     // For the distance on event cards. Read only when location is already allowed; the feed never prompts.
@@ -728,7 +728,9 @@ export default function MarketScreen() {
         }, [filter, groupFilter, identity?.publicKey, userGroupsKey, escrowMode])
     );
 
-    const params = useLocalSearchParams<{ tab?: string, dealsTab?: string, filter?: string, q?: string, new?: string, tag?: string, free?: string }>();
+    const params = useLocalSearchParams<{ tab?: string, dealsTab?: string, bill?: string, filter?: string, q?: string, new?: string, tag?: string, free?: string }>();
+    const [openBillId, setOpenBillId] = useState<string | null>(null);
+    const clearOpenBill = useCallback(() => setOpenBillId(null), []);
 
     // A tag chip tapped on a post detail page opens the Market filtered by that tag (§4.4)
     useEffect(() => {
@@ -785,7 +787,12 @@ export default function MarketScreen() {
             setShowDealsSheet(true);
             router.setParams({ dealsTab: '' });
         }
-    }, [params.tab, params.dealsTab]);
+        // A bill's bell row, push or notice (utils/needs-you.ts billHref): Bills, with that bill's sheet once it is read.
+        if (params.bill) {
+            setOpenBillId(params.bill);
+            router.setParams({ bill: '' });
+        }
+    }, [params.tab, params.dealsTab, params.bill]);
 
     useEffect(() => {
         // Data changed on SOME sync path (messages, balance, or marketplace) → refresh the
@@ -2272,6 +2279,9 @@ export default function MarketScreen() {
                 initialTab={dealsInitialTab}
                 showsBeans={showsBeans || dealsPreview}
                 preview={dealsPreview}
+                bills={reader.node?.bills === true}
+                openBillId={openBillId}
+                onBillOpened={clearOpenBill}
             />
 
             {/* The one way to post: the same chooser the map's + opens (components/NewPostTypeSheet). */}

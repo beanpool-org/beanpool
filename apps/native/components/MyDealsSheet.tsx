@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { View, Text, Pressable, Modal, FlatList, Image, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, Pressable, Modal, FlatList, Image, StyleSheet, Dimensions, ScrollView } from 'react-native';
 import { ListPhoto } from './ListPhoto';
 import { router } from 'expo-router';
-import { getMarketplaceTransactions, getPosts, getMyPosts } from '../utils/db';
+import { createConversationApi, getMarketplaceTransactions, getPosts, getMyPosts } from '../utils/db';
+import { Alert } from '../utils/keyboard-alert';
+import { BillsPanel } from './Bills';
 import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatHundredths, itemDealTitle, standingHistoryLine, standingLines, standingLoweredHistoryLine, standingPanel, t, word, type WordKey } from '@beanpool/core';
+import { billLines, dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatHundredths, itemDealTitle, standingHistoryLine, standingLines, standingLoweredHistoryLine, standingPanel, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showcase/LocalCommunityMark';
 import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
@@ -38,7 +40,12 @@ interface MyDealsSheetProps {
     identity: { publicKey: string } | null;
     onClose: () => void;
     /** Optional: which sub-tab to default open to */
-    initialTab?: 'active' | 'pending' | 'history';
+    initialTab?: DealsTab;
+    /** The node's `bills` switch (utils/node-profile.ts): Your deals → Bills (components/Bills.tsx). */
+    bills?: boolean;
+    /** A bill to open on Bills (a bell row, a push, a notice: DESIGN-getting-paid-fable §4.3); `onBillOpened` once looked for. */
+    openBillId?: string | null;
+    onBillOpened?: () => void;
     /** False on a community with Beans off (the Market's `showsBeans`): the cards draw no Beans amount. The sheet
      *  still opens there from a link (`dealsTab`), and My Posts lists the member's posts. */
     showsBeans?: boolean;
@@ -48,8 +55,13 @@ interface MyDealsSheetProps {
     preview?: boolean;
 }
 
-export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview = false, initialTab = 'pending', showsBeans = true }: MyDealsSheetProps) {
+export type DealsTab = 'active' | 'pending' | 'history' | 'bills';
+
+export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview = false, initialTab = 'pending', showsBeans = true, bills = false, openBillId, onBillOpened }: MyDealsSheetProps) {
     const identity = preview ? SAMPLE_DEALS_ME : ownIdentity;
+    // Bills (components/Bills.tsx) where the node says they are on; a door to a bill opens the tab before that is read, as
+    // only a node with bills sends one. Never in preview.
+    const billsShown = !preview && (bills || initialTab === 'bills');
     const [markOpen, setMarkOpen] = useState(false);
     const openMark = () => setMarkOpen(true);
     const { colors, theme } = useTheme();
@@ -359,7 +371,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         },
     }));
 
-    const [dealsTab, setDealsTab] = useState<'active' | 'pending' | 'history'>(initialTab);
+    const [dealsTab, setDealsTab] = useState<DealsTab>(initialTab);
     const [historyFilter, setHistoryFilter] = useState<'all' | 'buying' | 'selling'>('all');
     const [heldPosts, setPosts] = useState<any[]>(NONE);
     const [heldTransactions, setTransactions] = useState<any[]>(NONE);
@@ -734,7 +746,8 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             { id: 'pending' as const, label: t('In Progress'), badge: pendingCount },
                             { id: 'active' as const, label: t('My Posts') },
                             { id: 'history' as const, label: t('History') },
-                        ].map(tab => (
+                            ...(billsShown ? [{ id: 'bills' as const, label: billLines.tab() }] : []),
+                        ].map((tab: { id: DealsTab; label: string; badge?: number }) => (
                             <Pressable
                                 accessibilityRole="button"
                                 accessibilityState={{ selected: dealsTab === tab.id }}
@@ -773,7 +786,23 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         </View>
                     )}
 
-                    {/* List */}
+                    {/* List; Bills is its own (components/Bills.tsx), read from the node as it opens. */}
+                    {dealsTab === 'bills' && billsShown && identity ? (
+                        <ScrollView contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled" testID="deals-bills">
+                            <BillsPanel me={identity.publicKey} openBillId={openBillId} onBillOpened={onBillOpened}
+                                onMessage={async (peer) => {
+                                    try {
+                                        const conv = await createConversationApi('dm', [identity.publicKey, peer], identity.publicKey);
+                                        onClose();
+                                        router.push(`/chat/${conv.id}`);
+                                    } catch (e: any) {
+                                        Alert.alert(t('Error'), typeof e?.message === 'string' && e.message ? e.message : t('Connect to your community to start a chat.'));
+                                    }
+                                }}
+                                onOpenPost={(postId) => { onClose(); router.push(`/post/${postId}`); }}
+                                onPostOffer={() => { onClose(); router.push({ pathname: '/new-listing', params: { newPost: 'offer' } }); }} />
+                        </ScrollView>
+                    ) : (
                     <FlatList
                         data={listData}
                         keyExtractor={item => item.id}
@@ -816,6 +845,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             </View>
                         }
                     />
+                    )}
                 </Pressable>
             </Pressable>
 

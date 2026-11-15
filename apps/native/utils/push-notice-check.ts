@@ -127,6 +127,8 @@ const UNKNOWN_KIND = /^(?=.{1,64}$)[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$/;
 
 /** A post or conversation id in the shape the node issues them: a UUID (utils/events.ts POST_ID_RE). */
 const NODE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** A bill's id as the node takes it (engine/bills.ts BILL_ID): letters, digits, - and _, 8 to 128. Safe in a route as it is. */
+const BILL_ID = /^[A-Za-z0-9_-]{8,128}$/;
 
 interface Storage {
     getItem(key: string): Promise<string | null>;
@@ -517,7 +519,7 @@ export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats?view=mes
     | '/(tabs)/chats?filter=requests' | '/(tabs)/projects?section=decide'
     | '/(tabs)/people?view=community&credit=vouchers' | `/(tabs)/people?view=community&credit=vouchers&voucher=${string}`
     | `/post/${string}` | `/chat/${string}` | '/learn/mine'
-    | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1`;
+    | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1` | `/(tabs)/market?dealsTab=bills&bill=${string}`;
 
 /**
  * The Chat tab on Chats, at Messages: where a notice about messages lands when it names no chat or screen (the phone's own
@@ -606,6 +608,8 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     // An owner or admin answered the member's suggestion of Local knowledge (community.knowledge-answer): My suggestions, where
     // it shows as added (a tap opens the page) or not, with the reason (slice K4).
     if (d.screen === 'learn-mine') return '/learn/mine';
+    // A bill (engine/bills.ts `{ screen: 'bill', billId }`; DESIGN-getting-paid-fable §4.4): Your deals → Bills, with its sheet.
+    if (d.screen === 'bill' && typeof d.billId === 'string' && BILL_ID.test(d.billId)) return `/(tabs)/market?dealsTab=bills&bill=${d.billId}`;
     const tab = kind && isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
     return TAB_ROUTES[tab] ?? TAB_ROUTES.home;
 }

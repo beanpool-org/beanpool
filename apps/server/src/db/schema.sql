@@ -3989,3 +3989,48 @@ CREATE INDEX IF NOT EXISTS idx_relay_outbox_due ON relay_outbox(state, next_try_
 CREATE INDEX IF NOT EXISTS idx_relay_outbox_sender ON relay_outbox(sender_key, updated_at, item_id);
 CREATE INDEX IF NOT EXISTS idx_relay_outbox_pair ON relay_outbox(sender_key, recipient);
 CREATE INDEX IF NOT EXISTS idx_relay_outbox_updated ON relay_outbox(updated_at);
+
+-- Group guests (slice G1: scratch/fable-design/DESIGN-forums-messaging-joint-fable.md §2.3; DESIGN-cross-chat-voice-fable.md
+-- §4.2; engine/group-guests.ts). Someone from another community a convenor invited into ONE group's chat, by their address
+-- card: their key, their home (the server of their community, as relay envelopes spell it), the name their card gave, and
+-- where the invitation stands: `invited` (sent, not yet answered), `in` (they said yes: in the chat's roster and its key
+-- epochs), `left` (their own signed leave), `removed` (a convenor's Remove, or the owners switching guests off). Their own
+-- table, never a group_members role: nothing that reads group_members (posts, polls, Decisions, a group's forum section,
+-- succession votes, the members list) can count a guest, and no table is rebuilt. A row is never deleted (a state moves),
+-- so a removal sticks until a convenor invites them again. A plain table: a standby copies every row (engine/
+-- replication-manifest.ts), so a promoted standby has the same guests; an older importer drops it, and after a take-over
+-- from its copy the group has no guests until a convenor invites them again. Day zero: a new table, nothing converted.
+CREATE TABLE IF NOT EXISTS group_guests (
+    group_id   TEXT NOT NULL CHECK (length(group_id) BETWEEN 1 AND 64),
+    guest_key  TEXT NOT NULL CHECK (length(guest_key) = 64),
+    home       TEXT NOT NULL CHECK (length(home) BETWEEN 1 AND 260),
+    name       TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 60),
+    state      TEXT NOT NULL CHECK (state IN ('invited', 'in', 'left', 'removed')),
+    invited_by TEXT NOT NULL CHECK (length(invited_by) = 64),
+    invited_at TEXT NOT NULL,
+    -- When the row took the state it has now.
+    state_at   TEXT NOT NULL,
+    updated_at TEXT,
+    PRIMARY KEY (group_id, guest_key)
+);
+CREATE INDEX IF NOT EXISTS idx_group_guests_state ON group_guests(group_id, state);
+
+-- group_guest_outbox: what this server, hosting a group, still has to tell another community's server about its guests there
+-- (engine/group-guests.ts): one row is one signed request to one home (a line, an epoch, the roster, an invitation, a
+-- removal), naming that home's guests in the group: never one per guest. Tried at once, then again with backoff for 24
+-- hours; gone at the first 2xx. Each home is sent to on its own, so one that doesn't answer holds up no other. A roster
+-- still waiting is replaced by the newer one (only the latest names count). This server's own (`local`): never copied to a
+-- standby, and a promoted standby starts with none: what was waiting is still in the group's chat, which the next line's
+-- fan-out does not resend (said in the manual).
+CREATE TABLE IF NOT EXISTS group_guest_outbox (
+    id          TEXT PRIMARY KEY,
+    group_id    TEXT NOT NULL,
+    home        TEXT NOT NULL CHECK (length(home) BETWEEN 1 AND 260),
+    kind        TEXT NOT NULL CHECK (kind IN ('invite', 'roster', 'line', 'epoch', 'removed')),
+    body        TEXT NOT NULL CHECK (length(body) <= 1900000),
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    next_try_at INTEGER NOT NULL,
+    created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_group_guest_outbox_due ON group_guest_outbox(next_try_at);
+CREATE INDEX IF NOT EXISTS idx_group_guest_outbox_home ON group_guest_outbox(home, next_try_at);

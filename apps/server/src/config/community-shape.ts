@@ -157,6 +157,9 @@ export interface ShapeSettings {
     /** Messages from other communities (engine/relay-mail.ts, X2): on by default; off, nothing from outside is taken and no
      *  member here sends out. No lock. */
     outsideMessages: ShapeSetting<boolean>;
+    /** Groups may invite guests from other communities (engine/group-guests.ts, G1): on by default; off, no invitation goes
+     *  out or is taken and every guest is removed, their home told. No lock. */
+    groupGuests: ShapeSetting<boolean>;
     /** Members may share one post outside the community (front doors S6, engine/peek-tickets.ts): off while the private
      *  preview is on, which shows visitors nothing. */
     shareOutside: ShapeSetting<boolean>;
@@ -263,6 +266,7 @@ export const SHAPE_SWITCH_PLACES: Readonly<Record<ProfileSwitch | 'dmRequests', 
     decisions: 'decisions',
     forum: 'forum',
     outsideMessages: 'outsideMessages',
+    groupGuests: 'groupGuests',
     shareOutside: 'shareOutside',
     publishToDirectory: 'listed',
     guestListingsOnly: 'visitors',
@@ -585,6 +589,7 @@ export function readShape(): Shape {
         decisions: plain('decisions'),
         forum: plain('forum'),
         outsideMessages: plain('outsideMessages'),
+        groupGuests: plain('groupGuests'),
         shareOutside: {
             ...plain('shareOutside'),
             value: s.shareOutside && !preview,

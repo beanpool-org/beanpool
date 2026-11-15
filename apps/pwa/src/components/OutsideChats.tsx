@@ -155,7 +155,7 @@ export function OutsideChatThread({ chatId, onBack }: { chatId: string; onBack: 
     const block = async () => {
         if (!chat) return;
         const name = outsideName(chat);
-        if (!window.confirm(`${t('Block {name}?', { name })}\n\n${t("They won't be told. Nothing more from them will reach you.")}`)) return;
+        if (!window.confirm(t("Block {name}?\n\nThey won't be told. Nothing more from them will reach you.", { name }))) return;
         try {
             await blockUser(chat.peerKey);
         } catch (e) {

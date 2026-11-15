@@ -50,6 +50,8 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import type { PhotoReference } from '../engine/sync.js';
+import type { HashComparison } from '../engine/replica-hashes.js';
+import type { NotCompared } from './standby-copy-record.js';
 import { formatHundredths, isHundredths } from '@beanpool/core';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -104,19 +106,81 @@ export class StagedCopyRefused extends Error {
     }
 }
 
+/** The closing check's verdict on a copy's table hashes (closingHashVerdict). */
+export interface ClosingHashVerdict {
+    /** `uncompared`: nothing compared differs, but not every table either side hashes was compared (`notCompared`). */
+    verdict: 'exact' | 'inexact' | 'uncompared';
+    /** Every table that makes the copy not exact: `refused`, `mendable` and `drift` together. */
+    differs: string[];
+    /** The tables whose values or rows this database's rules refused: reported, and the copy kept. */
+    refused: string[];
+    /** The tables whose count or content differs, which the held force-resync mends (accounts as the ledger's). */
+    mendable: string[];
+    /** Schema drift: tables hashed another way here, or on one side alone, with the same release's definitions. */
+    drift: string[];
+    /** Tables another release hashes another way, or hashes and this one doesn't, or the other way round: not compared. */
+    otherRelease: string[];
+    /** What was not compared: each table's content (`content`, no hashes), or tables of another release's (`release`). */
+    notCompared: NotCompared[];
+}
+
 /** What the stager's closing checks found in a copy they let through. */
-export interface StagedCopyChecked {
+export interface StagedCopyChecked extends ClosingHashVerdict {
     pages: number;
     rows: number;
     /** Every table hashed as the copy's hashes say: its tables and its values, but the photos the main server left out. */
     exact: boolean;
-    /** The tables whose values this database's rules refused (reported, never refused). */
-    differs: string[];
     /** The copy carried table hashes. */
     hashed: boolean;
     photosLeftOut: number;
     generatedAt: string | null;
     cursor: string | null;
+}
+
+/**
+ * The closing check's verdict on a copy's table hashes: `found`, the copy's own (its last page's `tableHashes`, `sent`)
+ * against the staging's, made over the same rows (engine/replica-hashes.ts compareTableHashes, the one reading every
+ * check makes), or null when the copy's can't be read. `valuesDiffer`: the tables whose values or rows this database's
+ * rules refused, reported on their own; `plainLeftOut`: the plain tables among them, whose other rows aren't compared.
+ * `mendable`: what the held force-resync mends (accounts as the ledger's, standby-report.ts LEDGER_DIFFERS); `drift`:
+ * tables hashed another way with the same release's definitions, not exact and named, with no force-resync. A verdict
+ * only from a check that compared every table either side hashes: nothing differing and something not compared (no hashes,
+ * `content`; another release's, `release`) is none. Pure, so the boot's swap (db/swap-at-boot.ts) can import this file
+ * before any database is open; exported so a suite can run it.
+ */
+export function closingHashVerdict(
+    sent: unknown, found: HashComparison | null, valuesDiffer: ReadonlySet<string>, plainLeftOut: ReadonlySet<string>,
+): ClosingHashVerdict {
+    const mendable = (found?.differing ?? []).filter((d) => !plainLeftOut.has(d.table)).map((d) => (d.table === 'accounts' ? 'ledger' : d.table));
+    const drift = found?.drift ?? [];
+    const otherRelease = found?.otherRelease ?? [];
+    const refused = [...valuesDiffer].sort();
+    const differs = [...new Set([...refused, ...mendable, ...drift])].sort();
+    const notCompared: NotCompared[] = found ? (otherRelease.length > 0 ? ['release'] : []) : [sent === undefined || sent === null ? 'content' : 'release'];
+    const verdict = differs.length > 0 ? 'inexact' : notCompared.length > 0 ? 'uncompared' : 'exact';
+    return { verdict, differs, refused, mendable, drift, otherRelease, notCompared };
+}
+
+/**
+ * A staged copy's closing check in the operator's words, for the puller's log: the verdict's own words, each table named
+ * under what it is (drift, differing, values refused, another release's), never one verdict's words for another's.
+ */
+export function stagedVerdictInWords(c: ClosingHashVerdict): string {
+    const release = c.otherRelease.length > 0
+        ? `the main server runs another release, which hashes ${c.otherRelease.join(', ')} another way`
+        : 'the main server runs another release, whose table hashes this one does not read';
+    if (c.verdict === 'exact') return 'exact';
+    if (c.verdict === 'uncompared') {
+        return `not compared (${c.notCompared.map((n) => (n === 'content' ? 'no table hashes: the main server was written to while making it'
+            : n === 'release' ? release : 'accounts this server cannot hold')).join('; ')})`;
+    }
+    const parts = [
+        c.drift.length > 0 ? `schema drift: ${c.drift.join(', ')} hashed another way here, with the same release's definitions` : null,
+        c.mendable.length > 0 ? `${c.mendable.join(', ')} differing` : null,
+        c.refused.length > 0 ? `${c.refused.join(', ')}: values this server's tables refuse` : null,
+        c.otherRelease.length > 0 ? `not compared: ${release}` : null,
+    ].filter((p): p is string => p !== null);
+    return `not exact (${parts.join('; ')})`;
 }
 
 let current: StagedCopy | null = null;
@@ -496,12 +560,11 @@ async function stagerChild(): Promise<void> {
     const { TABLES, nodeConfigKeyEntry, isInternalTable, travellingRows } = await import('../engine/replication-manifest.js');
     const { copyPartOf, noteMainLedger, noteReplicaFormat, valueLeftOutName, LEDGER_CONSERVATION_TOLERANCE } = await import('../engine/sync.js');
     const { isWellFormedKey } = await import('@beanpool/engine');
-    const { tableContentHashes, readTableHashes } = await import('../engine/replica-hashes.js');
+    const { tableContentHashes, readTableHashes, compareTableHashes } = await import('../engine/replica-hashes.js');
     const { emptyCopiedTables } = await import('../engine/copied-tables.js');
     const { noteMainServerEpoch } = await import('./recovery-seal-key.js');
     const { keepMainServerRecords, LEDGER_RESYNC_EVERY_MS } = await import('./backup-puller.js');
     const { noteCopyLanded, noteWholeCopyCheck, noteUncomparedCheck, noteWholeCopyTaken, readCopyRecord } = await import('./standby-copy-record.js');
-    const { LEDGER_DIFFERS } = await import('./standby-report.js');
     const { getImageStore, scanOurObjectsAsync } = await import('../storage/image-store.js');
 
     await ensureGenesis();
@@ -634,19 +697,19 @@ async function stagerChild(): Promise<void> {
         //    add up, so a table that differs is one this importer writes otherwise than the main server holds it: reported,
         //    and the held force-resync asked for at most every six hours, as for any whole copy that doesn't match; never a
         //    reason to keep the older copy, which the same importer wrote. The values this database's rules refuse are
-        //    reported on their own and ask for none. A copy with no hashes gives no verdict.
+        //    reported on their own and ask for none. A table hashed another way on the two, or on one alone, is schema drift
+        //    with the same release's definitions (not exact, no force-resync) and not compared with another's
+        //    (closingHashVerdict). A copy with no hashes, or another release's, gives no verdict when nothing else differs.
         const theirs = readTableHashes(closing.tableHashes);
         const valuesDiffer = new Set<string>([...plainLeftOut, ...(membersLeftOut.size > 0 ? ['members'] : [])]);
-        const mendable: string[] = [];
-        if (theirs) {
-            const mine = tableContentHashes({ photosLeftOut: new Set(photosOmitted), membersLeftOut }).tables;
-            for (const [t, h] of Object.entries(theirs)) {
-                if (mine[t] === undefined || plainLeftOut.has(t) || (mine[t].rows === h.rows && mine[t].hash === h.hash)) continue;
-                mendable.push(t === 'accounts' ? LEDGER_DIFFERS.ledger : t);
-                console.warn(`[Stager] ${t} differs from the copy's own hash of it (${mine[t].rows} rows here, ${h.rows} there): not exact.`);
-            }
+        const found = theirs ? compareTableHashes(theirs, tableContentHashes({ photosLeftOut: new Set(photosOmitted), membersLeftOut })) : null;
+        for (const d of found?.differing ?? []) {
+            if (!plainLeftOut.has(d.table)) console.warn(`[Stager] ${d.table} differs from the copy's own hash of it (${d.rows} rows here, ${d.theirRows} there): not exact.`);
         }
-        const differs = new Set<string>([...valuesDiffer, ...mendable]);
+        for (const t of found?.drift ?? []) console.warn(`[Stager] ${t} is hashed another way here than in the copy, with the same release's definitions: schema drift, not exact, no force-resync.`);
+        const check = closingHashVerdict(closing.tableHashes, found, valuesDiffer, plainLeftOut);
+        const mendable = check.mendable;
+        const differs = new Set<string>(check.differs);
 
         /**
          * The whole-copy check's report of this copy (engine audit.ts ReplicaConsistency), as the status shows it after the
@@ -679,7 +742,7 @@ async function stagerChild(): Promise<void> {
                 valuesLeftOut: valuesLeftOutNames.length > 0 ? { count: valuesLeftOutNames.length, examples: valuesLeftOutNames.slice(0, 5) } : null,
                 plainTablesLeftOut: plainLeftOutEntries.length > 0
                     ? { count: plainLeftOutEntries.length, tables: [...plainLeftOut].sort(), examples: plainLeftOutEntries.slice(0, 5) } : null,
-                ok: differs.size === 0 && !!theirs && tables.every((t) => t.match),
+                ok: check.verdict === 'exact' && tables.every((t) => t.match),
             };
         };
 
@@ -776,19 +839,21 @@ async function stagerChild(): Promise<void> {
                 noteReplicaFormat();
                 if (typeof opening!.cursor === 'string') setSyncCursor('backup:primary', opening!.cursor);
                 const now = Date.now();
-                const exact = differs.size === 0 && !!theirs;
+                const exact = check.verdict === 'exact';
                 const generatedAt = typeof opening!.generatedAt === 'string' ? opening!.generatedAt : null;
                 noteCopyLanded(now, { whole: true, leftOut: [], resync: a.resync });
-                if (theirs) {
+                if (check.verdict !== 'uncompared') {
                     // The held force-resync, as the whole-copy check asks for it: at most one in six hours, restarts
                     // included (the record's last ask); the puller takes it at its first pull (nextMode).
                     const resyncAsked = mendable.length > 0 && now - (readCopyRecord().lastMismatchResyncAt ?? 0) >= LEDGER_RESYNC_EVERY_MS;
                     noteWholeCopyCheck({
-                        at: now, exact, differs: [...differs].sort(), ledgerDiffering: 0, hashed: true, photosLeftOut: photosOmitted.length,
+                        at: now, exact, differs: [...differs].sort(), ledgerDiffering: 0, hashed: !!theirs, photosLeftOut: photosOmitted.length,
                         resyncAsked, snapshotGeneratedAt: generatedAt,
                     });
                 } else {
-                    noteUncomparedCheck({ at: now, notCompared: ['content'], photosLeftOut: photosOmitted.length, snapshotGeneratedAt: generatedAt });
+                    noteUncomparedCheck({
+                        at: now, notCompared: check.notCompared, otherRelease: check.otherRelease, photosLeftOut: photosOmitted.length, snapshotGeneratedAt: generatedAt,
+                    });
                 }
                 noteWholeCopyTaken({ at: now, pages, generatedAt: typeof opening!.generatedAt === 'string' ? opening!.generatedAt : null });
                 set.run(SWAPPED_COPY_KEY, JSON.stringify({
@@ -797,10 +862,11 @@ async function stagerChild(): Promise<void> {
                 }));
             })();
             live.exec('COMMIT');
-            return {
-                pages, rows, exact: differs.size === 0 && !!theirs, differs: [...differs].sort(), hashed: !!theirs, photosLeftOut: photosOmitted.length,
+            const done: StagedCopyChecked = {
+                pages, rows, exact: check.verdict === 'exact', ...check, differs: [...differs].sort(), hashed: !!theirs, photosLeftOut: photosOmitted.length,
                 generatedAt: opening.generatedAt ?? null, cursor: opening.cursor ?? null,
             };
+            return done as unknown as Record<string, unknown>;
         } finally {
             live.close();
         }

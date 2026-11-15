@@ -12,6 +12,14 @@
  *   media-src    blob: (a voice message is opened in the page and played from a blob URL the page made; voice messages
  *                V4). Without it the media element falls back to default-src 'self', and Chrome and Firefox refuse to play
  *   connect-src  Nominatim (place search), wss: (the live feed), https: (peer nodes' public routes)
+ *   script-src   'wasm-unsafe-eval' beside 'self' (voice messages in a browser whose recorder can't write AAC in .m4a,
+ *                Firefox and Brave on Android: apps/pwa/src/lib/voice-encode.ts). The web app's own AAC encoder is
+ *                WebAssembly, and a browser compiles WebAssembly under a CSP only with it. It lets a script that is
+ *                already running on the page compile WebAssembly, and nothing else: no eval(), no new Function, no inline
+ *                script, no other host ('unsafe-eval' stays out). The encoder ships inside the node's own chunk
+ *   worker-src   'self' blob: (the same encoder runs in a worker it makes from a blob: URL of its own code, which is in
+ *                that chunk). A worker can only be made by a script already running here, so injected HTML stays text
+ *                as before. The capture worklet is a file of the node's own (script-src 'self')
  * and nothing may frame it, change its base URL, embed a plugin, or send a form off the node.
  *
  * This is every node's web app, not only the global node's: a host the web app starts loading has to be added here,
@@ -36,7 +44,8 @@
 
 export const APP_DOCUMENT_CSP = [
     "default-src 'self'",
-    "script-src 'self'",
+    "script-src 'self' 'wasm-unsafe-eval'",
+    "worker-src 'self' blob:",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     "img-src 'self' data: blob: https://*.tile.openstreetmap.org",

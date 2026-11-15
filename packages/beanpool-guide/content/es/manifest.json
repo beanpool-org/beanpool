@@ -777,6 +777,16 @@
         "text": "Tus contactos privados. Solo tú puedes abrir la lista. Trae personas desde tu teléfono o desde un archivo de contactos, agrega a alguien a mano o invítalo.",
         "sourceHash": "783e4da3badc2f05"
       }
+    },
+    "bills": {
+      "title": {
+        "text": "Facturas",
+        "sourceHash": "245ad028f7d23252"
+      },
+      "summary": {
+        "text": "Pedirle a alguien que te pague frijoles por algo. Una factura nunca se paga sola: la otra persona decide si pagar. Por ahora, una factura puede ir con una invitación.",
+        "sourceHash": "18291f51ed018672"
+      }
     }
   }
 }

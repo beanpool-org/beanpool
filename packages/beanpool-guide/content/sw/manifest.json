@@ -777,6 +777,16 @@
         "text": "Anwani zako za faragha. Wewe tu unaweza kufungua orodha. Leta watu kutoka simuni au faili ya anwani, ongeza mtu kwa mkono, au waalike.",
         "sourceHash": "783e4da3badc2f05"
       }
+    },
+    "bills": {
+      "title": {
+        "text": "Ombi la malipo",
+        "sourceHash": "245ad028f7d23252"
+      },
+      "summary": {
+        "text": "Kumwomba mtu akulipe maharagwe kwa jambo fulani. Ombi la malipo halijilipi lenyewe; mtu huyo huchagua kama atalipa. Kwa sasa, ombi la malipo linaweza kuambatana na mwaliko.",
+        "sourceHash": "18291f51ed018672"
+      }
     }
   }
 }

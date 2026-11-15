@@ -777,6 +777,16 @@
         "text": "Vos contacts privés. Vous seul·e ouvrez la liste. Importez depuis votre téléphone ou un fichier de contacts, ajoutez quelqu'un à la main ou invitez-le.",
         "sourceHash": "783e4da3badc2f05"
       }
+    },
+    "bills": {
+      "title": {
+        "text": "Factures",
+        "sourceHash": "245ad028f7d23252"
+      },
+      "summary": {
+        "text": "Demander à quelqu'un de vous payer des haricots pour quelque chose. Une facture ne se paie jamais d'elle-même : l'autre personne choisit de payer ou non. Pour l'instant, une facture peut accompagner une invitation.",
+        "sourceHash": "18291f51ed018672"
+      }
     }
   }
 }

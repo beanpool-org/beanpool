@@ -7,7 +7,7 @@ related: joining, standing-deals, credit-line, a-deal-step-by-step, blocking, re
 
 ## What a bill is
 
-A bill asks one member to pay you a number of Beans: who it is from, what it is for, and how many Beans. **A bill never pays itself. Nothing is ever taken by itself.** The person it goes to chooses whether to pay it, and can say no.
+A bill asks one member to pay you some Beans. It says who it is from, what it is for and how many Beans. **A bill never pays itself. Nothing is ever taken by itself.** The person it goes to chooses whether to pay it, and can say no.
 
 - **What it is for:** 3 to 80 characters, in your own words.
 - **How many Beans:** more than 0, and 2,000 at most.
@@ -25,7 +25,7 @@ For now, the one place to send a bill is an invite: you can add a bill for the p
 - Under the note (and under **Vouch for them**, if you are a voucher), tap **Add a bill for them (optional)**. Two boxes open: **What is it for?** and **How many Beans?**
 - Under them it says what you would receive, such as **You receive 59.10 of 60 Beans: 1.5% goes to the community.**, and **They choose whether to pay, once they have joined. Nothing is taken by itself.**
 - Tap **Generate Ticket** (in the web app, **Generate New Invite**). The bill goes with the invite only while the fold is open: close it and the invite goes without a bill. What you typed stays, in case you open it again.
-- One bill per invite. A bill can't go on a ticket made without a connection (**Generate Offline Ticket**). If no answer comes back, the app says **No answer came back, so it isn't known whether the invite was made. Try the same bill again when you're online: if it was made, you'll get that invite, not a second one. A bill can't go with an offline ticket.**
+- One bill per invite. A bill can't go on a ticket made without a connection. If no answer comes back, the app says it isn't known whether the invite was made, and **Try the same bill again when you're online: if it was made, you'll get that invite, not a second one.**
 - On the phone, an invite for a name on the names list has no bill fold.
 
 **What they see.** When you share the invite, the message says **Rob has also sent you a bill to pay in Beans once you're in.** It never says how much. Joining never shows the bill and never waits for it: nothing in joining asks about it.

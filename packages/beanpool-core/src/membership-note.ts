@@ -76,6 +76,16 @@ export function isMembershipNoteName(name: unknown): name is string {
 }
 
 /**
+ * A community's name as a note carries it, or null when nothing is left: the characters that hide or turn text taken out,
+ * trimmed, and cut to 80 characters (as the directory cuts a shown name, engine/directory-cache.ts).
+ */
+export function toMembershipNoteName(raw: unknown): string | null {
+    if (typeof raw !== 'string') return null;
+    const cut = [...raw.replace(new RegExp(UNSAFE_NAME_RE.source, 'g'), '').trim()].slice(0, MEMBERSHIP_NOTE_NAME_MAX).join('').trim();
+    return isMembershipNoteName(cut) ? cut : null;
+}
+
+/**
  * The note `raw` is, or null: an object with exactly the seven fields, each what it says. Any other field, a number as text,
  * a key in capitals, a time that is not a whole number of milliseconds, and it is no note.
  */

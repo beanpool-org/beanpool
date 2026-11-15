@@ -35,7 +35,7 @@
 import crypto from 'node:crypto';
 import {
     FORUM_DAY_LIMITS, FORUM_LIMITS, FORUM_STARTER_SECTIONS, FORUM_TIMES, forumLinksFit, forumMentionsFit, isLang, word, wordsFor,
-    type ForumFollow, type ForumSectionStarts,
+    type ForumFollow, type ForumSectionStarts, type ForumWriterLabel,
 } from '@beanpool/core';
 import { getMember, validatePostPhotos } from '@beanpool/engine';
 import { db, deletePlainRows } from '../db/db.js';
@@ -55,6 +55,7 @@ import { assertMayEditForumToday } from './writer-bounds.js';
 import { WRITER_LIMITS } from '../config/writer-limits.js';
 import { forumNewness, inNewAccountDays, isForumModerator, knownWriters, type ForumNewness } from './forum-moderation.js';
 import { dropForumFollowsOf, followForumTopic, forumFollowOf, markForumTopicRead, setForumFollow, type ForumNoticeCallbacks } from './forum-notices.js';
+import { dropForumLabelOf, forumLabelsOf, forumLabelsTag } from './membership-note.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -132,6 +133,18 @@ const isStaff = (pk: string) => {
 };
 const newId = (prefix: string) => `${prefix}-${crypto.randomBytes(12).toString('hex')}`;
 const nameOf = (pk: string) => getMember(db, pk)?.callsign ?? '';
+/**
+ * The writers of one answer as it names them: each one's name, and the label a public forum proved for them (slice F10,
+ * engine/membership-note.ts: one read for all of them, and none where the forum is not public).
+ */
+export function forumWriters(keys: readonly string[]): (pk: string) => ForumWriter {
+    const labels = forumLabelsOf(keys);
+    const names = new Map<string, string>();
+    return (pk) => {
+        if (!names.has(pk)) names.set(pk, nameOf(pk));
+        return { publicKey: pk, name: names.get(pk)!, label: labels.get(pk) ?? null };
+    };
+}
 
 // ── Rows and what an answer holds ───────────────────────────────────────────────────────────────────────────────
 
@@ -146,7 +159,12 @@ interface PostRow {
 }
 
 export interface ForumSection { id: string; starter: string | null; name: string | null; about: string | null; position: number; starts: ForumSectionStarts; listed: boolean; archived: boolean }
-export interface ForumWriter { publicKey: string; name: string }
+/**
+ * A writer: their key, their name, and what they show beside it (slice F10): their community, proved by its note, or
+ * "waiting to join", only on a public forum and only where they chose it; null, the name alone. Both apps write the line
+ * with @beanpool/core forumWriterNameLine and nameLine.
+ */
+export interface ForumWriter { publicKey: string; name: string; label: ForumWriterLabel | null }
 export interface ForumTopic {
     id: string; sectionId: string; title: string; writer: ForumWriter; place: string | null; lang: string | null; replyCount: number;
     lastActivityAt: string; createdAt: string; pinned: boolean; closed: string | null; removed: boolean;
@@ -172,8 +190,8 @@ const sectionOut = (r: SectionRow): ForumSection => ({
 });
 /** A topic row as the reader reads it; `follow_state`, `last_read` and `last_number` are theirs (READER_FOLLOW). */
 type TopicRowRead = TopicRow & { opening_removed?: number; opening_hidden?: number; follow_state?: ForumFollow | null; last_read?: number | null; last_number?: number | null };
-const topicOut = (r: TopicRowRead): ForumTopic => ({
-    id: r.id, sectionId: r.section_id, title: r.title, writer: { publicKey: r.writer_pubkey, name: nameOf(r.writer_pubkey) }, place: r.place, lang: r.lang,
+const topicOut = (r: TopicRowRead, writer: (pk: string) => ForumWriter): ForumTopic => ({
+    id: r.id, sectionId: r.section_id, title: r.title, writer: writer(r.writer_pubkey), place: r.place, lang: r.lang,
     replyCount: r.reply_count, lastActivityAt: r.last_activity_at, createdAt: r.created_at, pinned: r.pinned_at !== null, closed: r.closed_by,
     removed: !!r.opening_removed, hidden: !!r.opening_hidden,
     follow: r.follow_state ?? null, unread: r.follow_state === 'following' && (r.last_number ?? 0) > (r.last_read ?? 0),
@@ -196,18 +214,18 @@ const photoCount = (postId: string) => (db.prepare('SELECT COUNT(*) AS n FROM fo
  * A post as `reader` may read it: a removed one's words and photos are gone; a hidden one's are for its writer and the
  * moderators only. `known` says whose links are links (knownWriters).
  */
-const postOut = (r: PostRow, reader: string, known: Map<string, boolean>, moderator: boolean): ForumPost => {
+const postOut = (r: PostRow, reader: string, known: Map<string, boolean>, moderator: boolean, writer: (pk: string) => ForumWriter): ForumPost => {
     const veiled = !!r.removed_by || (!!r.hidden_by_reports_at && r.writer_pubkey !== reader && !moderator);
     return {
-        id: r.id, topicId: r.topic_id, number: r.number, writer: { publicKey: r.writer_pubkey, name: nameOf(r.writer_pubkey) },
+        id: r.id, topicId: r.topic_id, number: r.number, writer: writer(r.writer_pubkey),
         words: veiled ? '' : r.words, quotes: r.quotes, lang: r.lang, createdAt: r.created_at, editedAt: r.edited_at, removed: r.removed_by,
         photos: veiled ? 0 : photoCount(r.id), hidden: !!r.hidden_by_reports_at, linksOn: known.get(r.writer_pubkey) ?? false,
     };
 };
-const postsOut = (rows: PostRow[], reader: string): ForumPost[] => {
+const postsOut = (rows: PostRow[], reader: string, writer = forumWriters(rows.map((r) => r.writer_pubkey))): ForumPost[] => {
     const known = knownWriters(rows.map((r) => r.writer_pubkey));
     const moderator = isForumModerator(reader);
-    return rows.map((r) => postOut(r, reader, known, moderator));
+    return rows.map((r) => postOut(r, reader, known, moderator, writer));
 };
 const onePostOut = (id: string, reader: string): ForumPost => postsOut([postRow(id)!], reader)[0];
 
@@ -245,7 +263,7 @@ export function resetForumStartersCheckForTests(): void {
 
 /**
  * What a list answer depends on, as a tag: the topics and sections (their count and newest stamp, which a standby's copy
- * moves too), members' names, the reader's own block list (its count and newest stamp: a block or an unblock moves one) and
+ * moves too), members' names, writers' labels (slice F10), the reader's own block list (its count and newest stamp: a block or an unblock moves one) and
  * whether they see archived sections. Same tag, same answer, so a list answers "not changed" (304) when nothing did.
  */
 export function forumListTag(reader: string): string {
@@ -260,6 +278,8 @@ export function forumListTag(reader: string): string {
         stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM member_blocks WHERE owner_pubkey = ?', reader),
         // The reader's follows and how far they read (slice F5): each row's follow and unread dot.
         stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM forum_follows WHERE member_pubkey = ?', reader),
+        // What writers show beside their names on a public forum (slice F10), a lapse and the directory's changes included.
+        forumLabelsTag(),
         getMembersVersion(),
         // What the reader's role shows: archived sections (owners, admins) and hidden topics (moderators).
         nodeRoleOf(reader) ?? 'member',
@@ -322,7 +342,9 @@ export function forumTopics(reader: string, opts: { sectionId?: string; offset: 
         .all({ reader, mod: isForumModerator(reader) ? 1 : 0, section: opts.sectionId ?? null, limit: FORUM_LIMITS.topicsPerPage + 1, offset: opts.offset }) as
         TopicRowRead[];
     const more = rows.length > FORUM_LIMITS.topicsPerPage;
-    return { topics: rows.slice(0, FORUM_LIMITS.topicsPerPage).map(topicOut), next: more ? opts.offset + FORUM_LIMITS.topicsPerPage : null };
+    const page = rows.slice(0, FORUM_LIMITS.topicsPerPage);
+    const writer = forumWriters(page.map((r) => r.writer_pubkey));
+    return { topics: page.map((r) => topicOut(r, writer)), next: more ? opts.offset + FORUM_LIMITS.topicsPerPage : null };
 }
 
 /**
@@ -350,9 +372,10 @@ export function forumTopic(reader: string, id: string, after: number): { topic: 
     const posts = rows.slice(0, FORUM_LIMITS.postsPerPage);
     const { follow, lastRead } = forumFollowOf(reader, id);
     const lastNumber = (db.prepare(`SELECT ${LAST_SHOWN('@id')}`).pluck().get({ id, reader }) as number | null) ?? 0;
+    const writer = forumWriters([t.writer_pubkey, ...posts.map((p) => p.writer_pubkey)]);
     return {
-        topic: topicOut({ ...t, opening_removed: opening?.removed_by ? 1 : 0, opening_hidden: opening?.hidden_by_reports_at ? 1 : 0, follow_state: follow, last_read: lastRead, last_number: lastNumber }),
-        posts: postsOut(posts, reader),
+        topic: topicOut({ ...t, opening_removed: opening?.removed_by ? 1 : 0, opening_hidden: opening?.hidden_by_reports_at ? 1 : 0, follow_state: follow, last_read: lastRead, last_number: lastNumber }, writer),
+        posts: postsOut(posts, reader, writer),
         next: more ? posts[posts.length - 1].number : null,
         lastRead,
     };
@@ -502,7 +525,7 @@ function holdFirstTopic(member: string, t: { sectionId: string; title: string; w
     })();
     return {
         id, sectionId: t.sectionId, title: t.title, words: t.words, place: t.place, lang: t.lang, photos: photos.length,
-        writer: { publicKey: member, name: nameOf(member) }, createdAt: at,
+        writer: forumWriters([member])(member), createdAt: at,
     };
 }
 
@@ -788,6 +811,8 @@ export function dropForumOf(member: string, now = Date.now()): void {
         db.prepare('UPDATE forum_topics SET reply_count = (SELECT COUNT(*) FROM forum_posts WHERE topic_id = ? AND number > 1 AND removed_by IS NULL) WHERE id = ?').run(topicId, topicId);
     }
     deletePlainRows('forum_members', 'member_pubkey = ?', member);
+    // What they showed beside their name (slice F10).
+    dropForumLabelOf(member);
     // The topics they followed or muted (slice F5).
     dropForumFollowsOf(member);
     // A first topic of theirs, waiting or answered, and its photos (engine/forum-first-look.ts): gone with tombstones.

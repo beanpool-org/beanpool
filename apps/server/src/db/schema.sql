@@ -3358,6 +3358,23 @@ CREATE TABLE IF NOT EXISTS forum_follows (
     PRIMARY KEY (topic_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_forum_follows_member ON forum_follows (member_pubkey);
+-- What a member shows beside their name on a public forum, the worldwide community's ("Show my community on global", slice
+-- F10; DESIGN-forums-fable.md §12, engine/membership-note.ts). A row only for a member who chose to show something; "Don't
+-- show" deletes it, with its tombstone. `kind` 'community': `community_key` is the directory key (the PeerId) of the
+-- community whose signed note said this key is a member there, checked when it came, and `lapses_at` when that note
+-- lapses (30 days at the most). The name drawn is the directory's for that key at each read, and only while the community
+-- is listed and the note lasts. 'waiting': the member's own word that they are waiting to join one; nothing checks it.
+-- The note itself is not kept: this server keeps only which community a member chose to show, and until when.
+CREATE TABLE IF NOT EXISTS forum_labels (
+    member_pubkey TEXT PRIMARY KEY,
+    kind          TEXT NOT NULL CHECK (kind IN ('community', 'waiting')),
+    community_key TEXT,
+    lapses_at     TEXT,
+    updated_at    TEXT,
+    CHECK ((kind = 'community' AND community_key IS NOT NULL AND lapses_at IS NOT NULL)
+        OR (kind = 'waiting' AND community_key IS NULL AND lapses_at IS NULL))
+);
+CREATE INDEX IF NOT EXISTS idx_forum_labels_lapses ON forum_labels (lapses_at) WHERE lapses_at IS NOT NULL;
 -- A waiting first topic's photos, at most 3, as forum_post_photos keeps a post's: a moderator sees them first. They move to
 -- the topic's opening post on OK and are deleted on any other answer.
 CREATE TABLE IF NOT EXISTS forum_waiting_photos (

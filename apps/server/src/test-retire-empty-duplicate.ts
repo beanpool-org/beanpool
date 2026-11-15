@@ -151,6 +151,8 @@ const NOT_ACTIVITY: Record<string, string> = {
     'forum_posts.removed_by': "who removed a post, a word ('writer', 'moderator', 'account'), never a key",
     // The forum's notices (engine/forum-notices.ts, F5): following a topic is reading, not writing (what it wrote is `posts`).
     'forum_follows.member_pubkey': 'a topic it follows or muted, and how far it read: its own setting',
+    // What it shows beside its name on a public forum (engine/membership-note.ts, F10): its own setting, no act.
+    'forum_labels.member_pubkey': 'what it shows beside its name on a public forum (its community, or waiting to join): its own setting',
 };
 
 /**

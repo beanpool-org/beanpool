@@ -1362,6 +1362,8 @@ async function main(): Promise<void> {
             // Its waiting list (slice K3): a member's suggestion, their own, taking one back; an owner's or admin's To check.
             'POST /api/knowledge/drafts', 'GET /api/knowledge/drafts/mine', 'POST /api/knowledge/drafts/:id/withdraw', 'GET /api/knowledge/drafts',
             'GET /api/knowledge/drafts/:id', 'POST /api/knowledge/drafts/:id/approve', 'POST /api/knowledge/drafts/:id/no',
+            // "This helped" (slice K5): a member's tap on a page, signed.
+            'POST /api/knowledge/posts/:id/helped',
             // The forum (routes/forum.ts, slice F1): members' reads and writes, all signed; the public pages are slice F7's.
             'GET /api/free-tags',
             'GET /api/forum', 'GET /api/forum/topics', 'GET /api/forum/topics/:id', 'GET /api/forum/posts/:id/photos/:n', 'POST /api/forum/told',

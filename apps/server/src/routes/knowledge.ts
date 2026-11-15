@@ -16,19 +16,27 @@
  *   POST /api/knowledge/posts/:id/take-down          { reasonCategory? } → { ok: true }   (Settings' own removal)
  * Its writer, an owner or an admin; anyone else 403 `writer_or_admins`:
  *   POST /api/knowledge/posts/:id/outdated           { note? } → { post }
+ * Any active member but its writer (403 `own_page`), "This helped" (slice K5), one per member per page:
+ *   POST /api/knowledge/posts/:id/helped             { on: true | false } → { helped, helpedByMe }
  * A page that isn't showing is 404 `not_found`.
  *
  * The waiting list (slice K3; engine/knowledge-drafts.ts). A member:
  *   POST /api/knowledge/drafts                       { title, body, topic, place?, sources?, lang?, photos? } → 201 { draft }
  *        (409 `publish_instead` for an owner or admin; 429 `too_many_waiting`, `sent_enough_today`; a mute, a new account's
  *        limits and the photo budget as for posting)
+ *        A fix (slice K5): { fixOf, note, title?, body?, topic?, place?, sources?, lang? } → 201 { draft }, the page's own
+ *        words for any field not sent (409 `edit_instead` for an owner or admin, `fix_waiting`; 400 `no_note`, `fix_photos`;
+ *        404 `not_found`)
  *   GET  /api/knowledge/drafts/mine                  → { waiting: [draft], answered: [draft] }   (a paused member reads too)
  *   POST /api/knowledge/drafts/:id/withdraw          → { ok: true } | 404 `not_found`             (paused or not)
  * An owner or admin; anyone else 403 `admins_only`:
- *   GET  /api/knowledge/drafts?limit&offset          → { drafts: [row], total, limit, offset }  (the longest waiting first)
- *   GET  /api/knowledge/drafts/:id                   → { draft }  (whole, its photos as data URLs) | 404 `not_found`
+ *   GET  /api/knowledge/drafts?limit&offset          → { drafts: [row], total, limit, offset, unchecked: { total, rows } }
+ *        (the longest waiting first; `unchecked`: the pages "Not checked for a year", the oldest first, never in the bell)
+ *   GET  /api/knowledge/drafts/:id                   → { draft }  (whole, its photos as data URLs; a fix's page as it shows
+ *        in `post`) | 404 `not_found`
  *   POST /api/knowledge/drafts/:id/approve           { title?, body?, topic?, place?, sources?, lang?, checkedSources?, photos? }
  *        → { post } | 404 `not_found` | 409 `already_answered`, `writer_paused` | 400 `sources_not_checked` (an assistant's)
+ *        A fix changes its page (its writer and photos stay; 400 `fix_photos`; 404 when the page stopped showing).
  *   POST /api/knowledge/drafts/:id/no                { reason, words? } → { ok: true } | 404 | 409 `already_answered`
  *
  * All 404 `feature_off` where the `knowledge` switch is off (routes/profile-feature-gate.ts): the global community. A standby
@@ -44,14 +52,14 @@ import { POST_PHOTO_FORMAT_ERROR } from '../engine/posts.js';
 import { assertMayPost } from '../engine/probation.js';
 import {
     KNOWLEDGE_WORDS, KnowledgeRefusal, assertMayTakeDownKnowledge, checksKnowledge, clearKnowledgeOutdated, confirmKnowledge, editKnowledge, knowledgeFront,
-    knowledgeSearch, knowledgeTopicPage, markKnowledgeOutdated, publishKnowledge,
+    knowledgeSearch, knowledgeTopicPage, knowledgeUnchecked, markKnowledgeHelped, markKnowledgeOutdated, publishKnowledge,
 } from '../engine/knowledge.js';
 import {
     DRAFT_WORDS, approveKnowledgeDraft, declineKnowledgeDraft, knowledgeCheckers, knowledgeDraftWhole, knowledgeDraftsToCheck,
     myKnowledgeDrafts, suggestKnowledge, withdrawKnowledgeDraft, type KnowledgeAnswer,
 } from '../engine/knowledge-drafts.js';
 import { keptNoticeDetails } from '../engine/kept-notices.js';
-import { KNOWLEDGE_DRAFT_WORDS, KNOWLEDGE_LIMITS, isKnowledgeTopic, word, wordsFor, type KnowledgeDraftMine } from '@beanpool/core';
+import { KNOWLEDGE_DRAFT_WORDS, KNOWLEDGE_LIMITS, isKnowledgeTopic, word, wordsFor, type KnowledgeDraftMine, type KnowledgeToCheckList } from '@beanpool/core';
 import type { RouteDeps } from './types.js';
 
 // A refusal with a value in it, in English as a template wrote it, its sentence marked for the way out to find again in the
@@ -194,6 +202,16 @@ export function createKnowledgeRoutes(deps: RouteDeps): Router {
         }
     });
 
+    router.post('/api/knowledge/posts/:id/helped', async (ctx) => {
+        const key = writer(ctx);
+        if (!key) return;
+        try {
+            ctx.body = markKnowledgeHelped(key, ctx.params.id, (((ctx as any).requestBody || {}) as Record<string, unknown>).on);
+        } catch (e) {
+            refused(ctx, e);
+        }
+    });
+
     router.post('/api/knowledge/posts/:id/outdated/clear', async (ctx) => {
         const key = writer(ctx);
         if (!key) return;
@@ -214,8 +232,9 @@ export function createKnowledgeRoutes(deps: RouteDeps): Router {
         const to = knowledgeCheckers().filter((pk) => pk !== sender);
         if (to.length === 0) return;
         const name = getMember(sender)?.callsign || '';
+        const body = draft.kind === 'fix' ? KNOWLEDGE_DRAFT_WORDS.suggestedFixBody : KNOWLEDGE_DRAFT_WORDS.suggestedBody;
         try {
-            dispatchPushNotification(to, sender, tr(KNOWLEDGE_DRAFT_WORDS.suggestedTitle), tr(KNOWLEDGE_DRAFT_WORDS.suggestedBody, { name, title: draft.title }),
+            dispatchPushNotification(to, sender, tr(KNOWLEDGE_DRAFT_WORDS.suggestedTitle), tr(body, { name, title: draft.title }),
                 { screen: 'learn-check', draftId: draft.id }, 'marketplace', 'community.knowledge');
         } catch { /* the bell's count says so all the same */ }
     };
@@ -274,7 +293,7 @@ export function createKnowledgeRoutes(deps: RouteDeps): Router {
         const limit = wholeQuery(ctx.query.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
         const offset = wholeQuery(ctx.query.offset, 0, 1_000_000);
         if (limit === null || limit < 1 || offset === null) return answer(ctx, 400, `limit is 1 to ${MAX_LIST_LIMIT}, and offset a whole number.`, 'bad_request');
-        ctx.body = { ...knowledgeDraftsToCheck(limit, offset), limit, offset };
+        ctx.body = { ...knowledgeDraftsToCheck(limit, offset), limit, offset, unchecked: knowledgeUnchecked(key) } satisfies KnowledgeToCheckList;
     });
 
     router.get('/api/knowledge/drafts/:id', async (ctx) => {

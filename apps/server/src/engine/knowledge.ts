@@ -19,20 +19,21 @@
  * Every write here answers 503 on a standby at the route (routes/knowledge.ts); none is a ledger write.
  */
 import {
-    KNOWLEDGE_FRONT_ROWS, KNOWLEDGE_LIMITS, KNOWLEDGE_SEARCH_MAX, KNOWLEDGE_TOPIC_PAGE, KNOWLEDGE_TOPICS, LANGS, LEARN_HOME_NEW_DAYS, LEARN_HOME_ROWS,
-    PULSE_KNOWLEDGE_DAYS, PULSE_KNOWLEDGE_ID_PREFIX, PULSE_KNOWLEDGE_MAX_PAGES, PULSE_KNOWLEDGE_ROWS, PULSE_KNOWLEDGE_SOURCE,
-    compareKnowledge, isKnowledgeTopic, knowledgeFirstLine, knowledgeTopic, pinLive, word, wordsFor,
-    type HomeLearnRow, type KnowledgeFront, type KnowledgeRow, type KnowledgeSearch, type KnowledgeSource, type KnowledgeTopicPage,
+    KNOWLEDGE_FRONT_ROWS, KNOWLEDGE_LIMITS, KNOWLEDGE_SEARCH_MAX, KNOWLEDGE_TOPIC_PAGE, KNOWLEDGE_TOPICS, KNOWLEDGE_UNCHECKED_ROWS, LANGS, LEARN_HOME_NEW_DAYS,
+    LEARN_HOME_ROWS, PULSE_KNOWLEDGE_DAYS, PULSE_KNOWLEDGE_ID_PREFIX, PULSE_KNOWLEDGE_MAX_PAGES, PULSE_KNOWLEDGE_ROWS, PULSE_KNOWLEDGE_SOURCE,
+    compareKnowledge, isKnowledgeTopic, knowledgeFirstLine, knowledgeTopic, knowledgeUncheckedForAYear, pinLive, word, wordsFor,
+    type HomeLearnRow, type KnowledgeFront, type KnowledgeHelped, type KnowledgeRow, type KnowledgeSearch, type KnowledgeSource, type KnowledgeTopicPage,
     type PulseKnowledgeCard, type PulseKnowledgePost,
 } from '@beanpool/core';
 import { getPosts, type MarketplacePost } from '@beanpool/engine';
-import { db } from '../db/db.js';
+import { db, deletePlainRows } from '../db/db.js';
 import { cleanMemberText } from '../agent/fence.js';
 import { createPost, knowledgeDoorbell } from './posts.js';
 import { nodeRoleOf } from './node-roles.js';
 import { bumpPostsVersion } from './versions.js';
 import { assertNotMuted } from './auto-moderation.js';
 import { assertMayPostToday } from './writer-bounds.js';
+import { probationState } from './probation.js';
 
 // A refusal with a value in it, in English as a template wrote it, its sentence marked for the way out to find again in the
 // member's language (member-words.ts).
@@ -58,6 +59,7 @@ export const KNOWLEDGE_WORDS = {
     badLink: word('A link must start with https:// or http://'),
     linkWithLogin: word('A link must not hold a user name or password.'),
     photos: word('A photo must be one you took, as an image.'),
+    ownPage: word('This is your own page: “This helped” is for other members.'),
 } as const;
 
 /** What a form sends: the page's words, its topic, and what is optional. */
@@ -159,13 +161,30 @@ function assertChecker(key: string): void {
     if (!checksKnowledge(key)) throw new KnowledgeRefusal(403, 'admins_only', KNOWLEDGE_WORDS.adminsOnly);
 }
 
+/** A showing knowledge post's row, as an owner or admin acts on it (one hidden by reports included). */
+export interface ShowingKnowledgeRow {
+    id: string;
+    author_pubkey: string;
+    title: string;
+    description: string;
+    category: string;
+    knowledge_place: string | null;
+    knowledge_sources: string | null;
+    knowledge_lang: string | null;
+}
+
+/** A showing knowledge post's row, or null. */
+export function showingKnowledgeRow(postId: unknown): ShowingKnowledgeRow | null {
+    return typeof postId === 'string' && postId.length <= 200
+        ? (db.prepare(`SELECT id, author_pubkey, title, description, category, knowledge_place, knowledge_sources, knowledge_lang FROM posts
+                        WHERE id = ? AND type = 'knowledge' AND active = 1 AND status = 'active' AND removed_by_moderator_at IS NULL`)
+            .get(postId) as ShowingKnowledgeRow | undefined) ?? null
+        : null;
+}
+
 /** A showing knowledge post's row, or a 404 refusal. */
-function showingRow(postId: unknown): { id: string; author_pubkey: string; knowledge_place: string | null } {
-    const row = typeof postId === 'string' && postId.length <= 200
-        ? db.prepare(`SELECT id, author_pubkey, knowledge_place FROM posts
-                       WHERE id = ? AND type = 'knowledge' AND active = 1 AND status = 'active' AND removed_by_moderator_at IS NULL`)
-            .get(postId) as { id: string; author_pubkey: string; knowledge_place: string | null } | undefined
-        : undefined;
+function showingRow(postId: unknown): ShowingKnowledgeRow {
+    const row = showingKnowledgeRow(postId);
     if (!row) throw new KnowledgeRefusal(404, 'not_found', KNOWLEDGE_WORDS.notFound);
     return row;
 }
@@ -221,17 +240,24 @@ export function editKnowledge(broadcast: BroadcastFn, checker: string, postId: u
     assertChecker(checker);
     assertNotMuted(checker);
     const row = showingRow(postId);
-    const k = cleanKnowledgeInput(raw);
+    return rewriteKnowledge(broadcast, checker, row.id, cleanKnowledgeInput(raw), now);
+}
+
+/**
+ * Writes a page's words as an owner or admin confirmed them: their own edit, or a fix they approved (engine/knowledge-drafts.ts,
+ * slice K5). Its writer and photos stay; Checked is stamped and a "may be out of date" mark cleared. `postId` is showing.
+ */
+export function rewriteKnowledge(broadcast: BroadcastFn, checker: string, postId: string, k: CleanKnowledge, now = Date.now()): MarketplacePost {
     const at = new Date(now).toISOString();
     const keywords = `${k.topic} ${knowledgeKeywords(k)}`;
     db.prepare(`UPDATE posts SET title = ?, description = ?, category = ?, search_keywords = ?,
                     knowledge_sources = ?, knowledge_place = ?, knowledge_lang = ?, knowledge_checked_at = ?,
                     knowledge_outdated_at = NULL, knowledge_outdated_note = NULL, updated_at = ?
                  WHERE id = ?`)
-        .run(k.title, k.body, k.topic, keywords, k.sources.length > 0 ? JSON.stringify(k.sources) : null, k.place, k.lang, at, at, row.id);
+        .run(k.title, k.body, k.topic, keywords, k.sources.length > 0 ? JSON.stringify(k.sources) : null, k.place, k.lang, at, at, postId);
     bumpPostsVersion();
-    ring(broadcast, row.id, at);
-    return readKnowledgePost(row.id, checker)!;
+    ring(broadcast, postId, at);
+    return readKnowledgePost(postId, checker)!;
 }
 
 /** "Still right" (§2.4): an owner or admin confirms a page as it shows. Re-stamps Checked and clears a mark. */
@@ -271,6 +297,52 @@ export function clearKnowledgeOutdated(broadcast: BroadcastFn, checker: string, 
     bumpPostsVersion();
     ring(broadcast, row.id, at);
     return readKnowledgePost(row.id, checker)!;
+}
+
+// ── "This helped" (slice K5) ─────────────────────────────────────────────────────────────
+
+/**
+ * "This helped" (§2.10): one tap per member per page, taken back by a second (`on` false). Only a page the member can read
+ * now (pageShowingTo), never their own (403 `own_page`). Whether the tap counts is stamped at the tap and never worked out
+ * again (the anonymous-counts rule): it counts unless the member is on probation where the node has probation (an owner
+ * or admin never is). The page's count (`posts.knowledge_helped`) is the counted taps, written with the tap, so a sync and a
+ * standby carry it; the row of who tapped (`knowledge_helped`) goes to nobody. Tapping on again, or taking back a tap
+ * that isn't there, changes nothing. Pays nothing (no Beans for steps). The route has checked an active member on the
+ * main server.
+ */
+export function markKnowledgeHelped(reader: string, postId: unknown, on: unknown, now = Date.now()): KnowledgeHelped {
+    if (typeof on !== 'boolean') throw new KnowledgeRefusal(400, 'bad_request', 'on is true or false.');
+    const page = pageShowingTo(reader, postId);
+    if (!page) throw new KnowledgeRefusal(404, 'not_found', KNOWLEDGE_WORDS.notFound);
+    if (page.authorPublicKey === reader) throw new KnowledgeRefusal(403, 'own_page', KNOWLEDGE_WORDS.ownPage);
+    return db.transaction((): KnowledgeHelped => {
+        const had = !!db.prepare('SELECT 1 FROM knowledge_helped WHERE post_id = ? AND member_pubkey = ?').get(page.id, reader);
+        if (on && !had) {
+            const counted = probationState(reader, now).onProbation ? 0 : 1;
+            db.prepare('INSERT INTO knowledge_helped (post_id, member_pubkey, counted, at) VALUES (?, ?, ?, ?)').run(page.id, reader, counted, new Date(now).toISOString());
+        } else if (!on && had) {
+            deletePlainRows('knowledge_helped', 'post_id = ? AND member_pubkey = ?', page.id, reader);
+        }
+        const helped = (db.prepare('SELECT COUNT(*) AS n FROM knowledge_helped WHERE post_id = ? AND counted = 1').get(page.id) as { n: number }).n;
+        const was = (db.prepare('SELECT knowledge_helped AS n FROM posts WHERE id = ?').get(page.id) as { n: number }).n;
+        if (helped !== was) {
+            db.prepare('UPDATE posts SET knowledge_helped = ?, updated_at = ? WHERE id = ?').run(helped, new Date(now).toISOString(), page.id);
+            bumpPostsVersion();
+        }
+        return { helped, helpedByMe: on };
+    })();
+}
+
+/**
+ * A member's signed read of pages by id, with `helpedByMe` on each knowledge post: whether this reader tapped "This helped".
+ * routes/marketplace.ts adds it to an `id=` or `ids=` read only (never a list, a sync or a copy).
+ */
+export function withHelpedByMe(posts: MarketplacePost[], reader: string): MarketplacePost[] {
+    const ids = posts.filter((p) => p.knowledge).map((p) => p.id);
+    if (ids.length === 0) return posts;
+    const mine = new Set((db.prepare(`SELECT post_id FROM knowledge_helped WHERE member_pubkey = ? AND post_id IN (${ids.map(() => '?').join(',')})`)
+        .all(reader, ...ids) as { post_id: string }[]).map((r) => r.post_id));
+    return posts.map((p) => (p.knowledge ? { ...p, knowledge: { ...p.knowledge, helpedByMe: mine.has(p.id) } } : p));
 }
 
 /** An owner's or admin's take-down: checks the page is one, then the route runs Settings' own removal (adminDeletePost). */
@@ -318,6 +390,16 @@ export function pageShowingTo(reader: string, postId: unknown): MarketplacePost 
 }
 
 const byLearnOrder = (a: KnowledgeRow, b: KnowledgeRow) => compareKnowledge(a, b);
+
+/**
+ * "Not checked for a year" (§5.2), for To check: the pages showing to this owner or admin that nobody confirmed for more than
+ * KNOWLEDGE_UNCHECKED_DAYS, the oldest checked first, at most KNOWLEDGE_UNCHECKED_ROWS. Information, never a count in the bell.
+ */
+export function knowledgeUnchecked(reader: string, now = Date.now()): { total: number; rows: KnowledgeRow[] } {
+    const rows = showingTo(reader).map((p) => knowledgeRowOf(p, now)).filter((r) => knowledgeUncheckedForAYear(r.checkedAt, now))
+        .sort((a, b) => Date.parse(a.checkedAt) - Date.parse(b.checkedAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    return { total: rows.length, rows: rows.slice(0, KNOWLEDGE_UNCHECKED_ROWS) };
+}
 
 /** Learn's front (amended §4.2): the pinned pages, then each topic that holds something, its count and its first rows. */
 export function knowledgeFront(reader: string, now = Date.now()): KnowledgeFront {

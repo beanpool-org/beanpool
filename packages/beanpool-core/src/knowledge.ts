@@ -137,6 +137,32 @@ export interface KnowledgeFields {
     outdatedNote: string | null;
     helped: number;
     gathered: boolean;
+    /**
+     * Whether this reader tapped "This helped" (slice K5): only on a member's signed read of one page by id (`id=` or
+     * `ids=`, not a sync), so a list or a copy never carries one member's taps. Absent elsewhere.
+     */
+    helpedByMe?: boolean;
+}
+
+/**
+ * "This helped" (slice K5; §2.10): what POST /api/knowledge/posts/:id/helped answers. The count of counted taps, and whether
+ * the reader's own tap is on. Who tapped is never sent.
+ */
+export interface KnowledgeHelped {
+    helped: number;
+    helpedByMe: boolean;
+}
+
+/**
+ * "Not checked for a year" (§5.2; the row card's amber "Checked over a year ago", §3.1): a page an owner or admin last
+ * confirmed more than this many days ago. Listed for the owners and admins in To check; it never counts in the bell.
+ */
+export const KNOWLEDGE_UNCHECKED_DAYS = 365;
+
+/** Whether a page was last checked more than {@link KNOWLEDGE_UNCHECKED_DAYS} days before `now`. An unreadable date: no. */
+export function knowledgeUncheckedForAYear(checkedAt: string | null | undefined, now: number = Date.now()): boolean {
+    const at = typeof checkedAt === 'string' ? Date.parse(checkedAt) : NaN;
+    return Number.isFinite(at) && now - at > KNOWLEDGE_UNCHECKED_DAYS * 24 * 60 * 60 * 1000;
 }
 
 /**
@@ -325,6 +351,8 @@ export interface KnowledgeDraftMine {
     answeredAt: string | null;
     /** The page it made or changed, once added. */
     postId: string | null;
+    /** A fix's page (slice K5), waiting or answered; null for a new page. */
+    fixOf: string | null;
     /** Why it wasn't added (a KNOWLEDGE_DECLINE_REASONS id), and the owner's or admin's own few words. */
     reason: KnowledgeDeclineReason | null;
     reasonWords: string | null;
@@ -357,7 +385,39 @@ export interface KnowledgeDraftWhole extends KnowledgeDraftToCheck {
     photos: string[];
     /** Approving waits for the tick "I opened the sources and they say this.": an assistant's draft. */
     needsSourcesTicked: boolean;
+    /**
+     * A fix's page as it shows now (§5.3: each changed part as "Now" beside "Suggested"); null for a new page, or when the
+     * page no longer shows (approving it is then refused: say "Not this one").
+     */
+    post: KnowledgePageWords | null;
 }
+
+/** A page's words as it shows (its photos stay where they are: a fix never changes them). */
+export interface KnowledgePageWords {
+    id: string;
+    title: string;
+    body: string;
+    topic: string;
+    place: string | null;
+    sources: KnowledgeSource[];
+    lang: string | null;
+}
+
+/**
+ * To check (GET /api/knowledge/drafts, owners and admins): what waits, a page at a time, the longest waiting first; and
+ * under it the pages "Not checked for a year" (§5.2), the oldest checked first, at most {@link KNOWLEDGE_UNCHECKED_ROWS}.
+ * Those are information, not a problem: they never count in the bell or the admin queue.
+ */
+export interface KnowledgeToCheckList {
+    drafts: KnowledgeDraftToCheck[];
+    total: number;
+    limit: number;
+    offset: number;
+    unchecked: { total: number; rows: KnowledgeRow[] };
+}
+
+/** The most rows of "Not checked for a year" one read of To check carries. */
+export const KNOWLEDGE_UNCHECKED_ROWS = 50;
 
 /**
  * The words of the waiting list's notices (§3.4 and §5.6, as amended). A kept notice and a push's details name nobody who
@@ -369,30 +429,42 @@ export const KNOWLEDGE_DRAFT_WORDS = Object.freeze({
     declinedTitle: word("Your local knowledge wasn't added"),
     declinedBody: word('"{title}" wasn\'t added. Reason: {reason}.'),
     declinedBodyWords: word('"{title}" wasn\'t added. Reason: {reason}. {words}'),
+    /** A fix's answer (slice K5; §3.4): the page's title, the reason and the admin's words; never who answered. */
+    fixAddedTitle: word('Your fix is in'),
+    fixAddedBody: word('Your fix to "{title}" is showing now. Thank you.'),
+    fixDeclinedTitle: word("Your fix wasn't used"),
+    fixDeclinedBody: word('Your fix to "{title}" wasn\'t used. Reason: {reason}.'),
+    fixDeclinedBodyWords: word('Your fix to "{title}" wasn\'t used. Reason: {reason}. {words}'),
     /** To owners and admins, when a member suggests a page: who, what, one action. */
     suggestedTitle: word('Local knowledge to check'),
     suggestedBody: word('{name} suggested local knowledge: "{title}". Check it in Learn.'),
+    /** The same when a member suggests a fix to a page showing (slice K5). */
+    suggestedFixBody: word('{name} suggested a fix to "{title}". Check it in Learn.'),
 });
 
 /**
  * The notice a member keeps when an owner or admin answers their suggestion, in `words`' language: the node keeps it in
  * English (wordsFor('en')), and an app writes the same from the same facts in its member's. An unknown reason reads as
- * "Another reason".
+ * "Another reason". `kind` 'fix' (slice K5): "Your fix is in" / "Your fix wasn't used", `title` the page's.
  */
 export function knowledgeAnswerNotice(
-    answer: { outcome: 'approved' | 'declined'; title: string; reason?: string | null; words?: string | null },
+    answer: { outcome: 'approved' | 'declined'; title: string; reason?: string | null; words?: string | null; kind?: KnowledgeDraftKind },
     words: Pick<Words, 't'> = { t },
 ): { title: string; body: string } {
+    const W = KNOWLEDGE_DRAFT_WORDS;
+    const fix = answer.kind === 'fix';
     if (answer.outcome === 'approved') {
-        return { title: words.t(KNOWLEDGE_DRAFT_WORDS.addedTitle), body: words.t(KNOWLEDGE_DRAFT_WORDS.addedBody, { title: answer.title }) };
+        return fix
+            ? { title: words.t(W.fixAddedTitle), body: words.t(W.fixAddedBody, { title: answer.title }) }
+            : { title: words.t(W.addedTitle), body: words.t(W.addedBody, { title: answer.title }) };
     }
     const reason = KNOWLEDGE_DECLINE_REASONS.find((r) => r.id === answer.reason) ?? KNOWLEDGE_DECLINE_REASONS[KNOWLEDGE_DECLINE_REASONS.length - 1];
     const said = typeof answer.words === 'string' ? answer.words.trim() : '';
     const values = { title: answer.title, reason: words.t(reason.label), words: said };
-    return {
-        title: words.t(KNOWLEDGE_DRAFT_WORDS.declinedTitle),
-        body: said ? words.t(KNOWLEDGE_DRAFT_WORDS.declinedBodyWords, values) : words.t(KNOWLEDGE_DRAFT_WORDS.declinedBody, values),
-    };
+    if (fix) {
+        return { title: words.t(W.fixDeclinedTitle), body: said ? words.t(W.fixDeclinedBodyWords, values) : words.t(W.fixDeclinedBody, values) };
+    }
+    return { title: words.t(W.declinedTitle), body: said ? words.t(W.declinedBodyWords, values) : words.t(W.declinedBody, values) };
 }
 
 /** The Needs-you line for an owner or admin with suggestions to check (§5.1): a count, never a name. */

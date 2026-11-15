@@ -2,8 +2,9 @@
  * One topic on the web (slice F4; DESIGN-forums-fable.md §2, §6, §9, §14 "A topic"): its title and opening words, then the
  * replies in time order, full-width rows with a name on top (bubbles waste a 320 px screen on long writing), the member's
  * own faintly tinted and still on the left. Each post's ⋯ holds Reply (a quote of it) · Copy · Report · Block · Remove, each
- * only where it applies. The topic's bell follows or leaves it; its ⋯ mutes it or closes it. The reply box is the chat's
- * shape: words, 📎, Send, and a quoted reply above it. Opening the topic marks it read up to the last post drawn, which takes
+ * only where it applies. The topic's bell follows or leaves it; its ⋯ mutes it or closes it. The reply box: the words on the
+ * row's whole width (so its hint reads whole at 320 px with 1.3x text), 📎 and Send under them, and a quoted reply above
+ * it. Opening the topic marks it read up to the last post drawn, which takes
  * the forum's own bell rows for it off (POST /read, slice F5).
  *
  * - **The reader's range.** A topic is read 30 posts at a time. Every read again (opening it, a reply sent, a ⋯ action) reads
@@ -272,14 +273,16 @@ export function ForumTopicView({ topicId, at, front, me, onBack, onTold, onGone,
                             <button type="button" onClick={() => setQuote(null)} aria-label={t(TOPIC_WORDS.cancelQuote)} className="min-w-[44px] min-h-[44px]">✕</button>
                         </div>
                     )}
+                    {/* The box has the row's whole width, 📎 and Send on the line under it (walk 2, 15 Nov): between them at 320 px with
+                        1.3x text the box was ~120 px of words wide and its hint showed only "Write a". */}
                     <div className="flex flex-wrap items-end gap-2">
-                        {front?.linksOn && <ForumPhotoAttach photos={photos} onChange={setPhotos} disabled={busy} />}
                         <textarea ref={box} value={words} onChange={(e) => setWords(e.target.value)} rows={1} placeholder={t(TOPIC_WORDS.writeReply)}
                             aria-label={t(TOPIC_WORDS.writeReply)} data-testid="forum-reply-box"
-                            className="flex-1 min-w-0 min-h-[44px] rounded-lg px-3 py-2 text-[0.95rem] resize-none"
+                            className="w-full min-w-0 min-h-[44px] rounded-lg px-3 py-2 text-[0.95rem] resize-none"
                             style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-input)' }} />
+                        {front?.linksOn && <ForumPhotoAttach photos={photos} onChange={setPhotos} disabled={busy} />}
                         <button type="button" onClick={() => void send()} disabled={busy || !words.trim() || tooLong} data-testid="forum-send" aria-label={t(TOPIC_WORDS.send)} title={t(TOPIC_WORDS.send)}
-                            className="min-w-[44px] min-h-[44px] px-3 rounded-lg font-bold text-lg disabled:opacity-50" style={{ background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)' }}><span aria-hidden="true">➤</span></button>
+                            className="ml-auto min-w-[44px] min-h-[44px] px-3 rounded-lg font-bold text-lg disabled:opacity-50" style={{ background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)' }}><span aria-hidden="true">➤</span></button>
                     </div>
                     {tooLong && <p className="m-0 text-xs" style={{ color: 'var(--bp-ink-danger)' }}>{t(TOPIC_WORDS.tooLong, { n: FORUM_LIMITS.reply })}</p>}
                 </div>

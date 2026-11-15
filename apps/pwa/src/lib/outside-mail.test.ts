@@ -14,6 +14,13 @@
  *   7  typed words are never lost on a failed send; ticks: Delivered, and a chat this browser lacks comes back restored
  *   8  a stalled wait never holds the round's lock: every wait a round makes x how it stalls; the round lets go of it and
  *      of the lock at its deadline, waits on nothing after it, and the next round runs (#3183's deciding finding)
+ *   9  each device for itself (X2b, scratch/fable-design/decisions/DECISION-outside-door.md; the phone's 14 to 19): every
+ *      fetch and confirm names this browser's own id; another device listed is still served what this one wrote or dropped;
+ *      my ticks are in before any held item is judged; a tick for a line I wrote elsewhere opens its chat here, never one
+ *      with someone blocked; Sign Out asks the community to forget this browser, 4 s at most, never a reason it stops
+ *
+ * The mailbox played here is X2b's: GET /api/mail and POST /api/mail/confirm refuse a request without the device (400
+ * bad_device), an item is served to each device until it has confirmed it, and goes once every device listed has.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -43,7 +50,26 @@ const server = vi.hoisted(() => ({
     receiptTries: [] as Array<{ to: string; ids: string[] }>,
     /** Section 8: every wait a round makes goes through here, by name, so one of them can be made to stall. */
     point: null as null | ((name: string, run: () => any) => any),
+    /** X2b: the device each fetch, confirm and forget named, in order (`call` GET, confirm or forget). */
+    named: [] as Array<{ call: string; device: unknown }>,
+    /** The devices listed for Ben (each that fetched, until forgotten), and which device has confirmed which item. */
+    listed: new Set<string>(),
+    got: new Map<string, Set<string>>(),
+    forgot: [] as string[],
+    /** Ticks served a page at a time (`more`: outboxMore), when set; else `outbox` on every fetch. */
+    outboxPages: null as null | Array<{ ticks: any[]; more: boolean }>,
+    /** How the forget is answered, when set (a stall, a throw). */
+    forgetAnswer: null as null | ((signal: AbortSignal | undefined) => Promise<Response>),
 }));
+const MAIL_DEVICE = /^[0-9a-f]{32}$/;
+const badDevice = () => new Response(JSON.stringify({ error: "device is this device's mail id: 32 lowercase hex characters, made by the app.", code: 'bad_device' }), { status: 400 });
+/** As the server's settleMailFor: an item goes once a device has confirmed it and every device listed has. */
+function settleHeld() {
+    server.held = server.held.filter((h) => {
+        const got = server.got.get(h.envelope.itemId);
+        return !(got && got.size > 0 && [...server.listed].every((d) => got.has(d)));
+    });
+}
 const blocks = vi.hoisted(() => ({ loaded: true }));
 
 function stopHere(how: string): Promise<Response> | Response {
@@ -76,8 +102,23 @@ vi.mock('./api', async () => {
             server.signals.push({ path: bare, signal });
             if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
             if (method === 'GET') {
+                const device = new URLSearchParams(path.split('?')[1] ?? '').get('device');
+                server.named.push({ call: 'GET', device });
+                if (!device || !MAIL_DEVICE.test(device)) return badDevice();
+                server.listed.add(device);
                 if (server.stallGet) await new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
-                return new Response(JSON.stringify({ items: server.held.slice(0, 50), more: false, outbox: server.outbox, outboxMore: false }), { status: 200 });
+                const page = server.outboxPages ? (server.outboxPages.shift() ?? { ticks: [], more: false }) : { ticks: server.outbox, more: false };
+                const items = server.held.filter((h) => !server.got.get(h.envelope.itemId)?.has(device)).slice(0, 50);
+                return new Response(JSON.stringify({ items, more: false, outbox: page.ticks, outboxMore: page.more }), { status: 200 });
+            }
+            if (path === '/api/mail/device/forget') {
+                server.named.push({ call: 'forget', device: body?.device });
+                if (server.forgetAnswer) return server.forgetAnswer(signal);
+                if (typeof body?.device !== 'string' || !MAIL_DEVICE.test(body.device)) return badDevice();
+                server.forgot.push(body.device);
+                server.listed.delete(body.device);
+                settleHeld();
+                return new Response(JSON.stringify({ forgotten: true }), { status: 200 });
             }
             const isReceipt = path === '/api/mail/send' && body.items?.[0]?.envelope?.kind === 'receipt';
             if (isReceipt) server.receiptTries.push({ to: `${body.items[0].envelope.recipient}@${body.items[0].envelope.recipientHome}`, ids: JSON.parse(body.items[0].payload).items });
@@ -86,10 +127,18 @@ vi.mock('./api', async () => {
             if (stop && !stop.taken) return stopHere(stop.how);
             let answer: Response;
             if (path === '/api/mail/confirm') {
+                server.named.push({ call: 'confirm', device: body?.device });
+                if (typeof body?.device !== 'string' || !MAIL_DEVICE.test(body.device)) return badDevice();
                 server.confirmed.push(body.ids);
-                const before = server.held.length;
-                server.held = server.held.filter((h) => !body.ids.includes(h.envelope.itemId));
-                answer = new Response(JSON.stringify({ confirmed: before - server.held.length }), { status: 200 });
+                let mine = 0;
+                for (const h of server.held) {
+                    if (!body.ids.includes(h.envelope.itemId)) continue;
+                    const got = server.got.get(h.envelope.itemId) ?? new Set<string>();
+                    if (!got.has(body.device)) { got.add(body.device); mine++; }
+                    server.got.set(h.envelope.itemId, got);
+                }
+                settleHeld();
+                answer = new Response(JSON.stringify({ confirmed: mine }), { status: 200 });
             } else {
                 if (server.sendFails) throw new TypeError('Failed to fetch');
                 server.batches.push(body.items.map((i: RelayItem) => i.envelope.itemId));
@@ -129,7 +178,9 @@ vi.mock('./outside-chat-store', async (importOriginal) => {
 });
 
 import { clearOutsideChats, outsideChatStore } from './outside-chat-store';
-import { myAddressCard, sendFromBox, setDoor, syncOutsideMail, type OutsideMailContext } from './outside-mail';
+import {
+    FORGET_DEVICE_MS, forgetThisBrowserForMail, mailDevice, myAddressCard, sendFromBox, setDoor, syncOutsideMail, type OutsideMailContext,
+} from './outside-mail';
 
 const DAY = 24 * 60 * 60_000;
 const seedKey = () => { const seed = ed25519.utils.randomSecretKey(); return { seed: bytesToHex(seed), key: bytesToHex(ed25519.getPublicKey(seed)) }; };
@@ -145,6 +196,7 @@ beforeEach(async () => {
     Object.assign(server, {
         held: [], outbox: [], calls: [], sent: [], confirmed: [], batches: [], sendState: 'sent', sendFails: false, refuse: null, signals: [],
         stallGet: false, stop: null, seen: { confirm: 0, receipt: 0 }, stopped: false, deadline: null, receiptTries: [], point: null,
+        named: [], listed: new Set(), got: new Map(), forgot: [], outboxPages: null, forgetAnswer: null,
     });
     blocks.loaded = true;
     idb = memoryIndexedDB();
@@ -458,12 +510,15 @@ describe('8  a stalled wait never holds the round\'s lock (#3183: "a stalled blo
      * confirms and receipts a line from Ana, and applies the tick for my line. Switch off: the round that fails my waiting
      * line. The first test proves these ARE every wait such a round makes, so a wait added later has to join this table.
      */
+    // X2b: this browser's mail id (store.metaOrMake), then the ticks (hasLine, setMineState, the cursor's setMeta) before the
+    // held item is judged.
     const ON = [
         'loadIdentity#1', 'communityInfo#1', 'store.unsent#1', 'POST /api/mail/send#1', 'store.setMineState#1', 'store.getMeta#1',
-        'store.getMeta#2', 'GET /api/mail#1', 'store.hasLine#1', 'store.chat#1', 'store.theirLines#1', 'loadBlocklist#1',
+        'store.metaOrMake#1', 'store.getMeta#2', 'GET /api/mail#1', 'store.hasLine#1', 'store.setMineState#2', 'store.setMeta#1',
+        'store.hasLine#2', 'store.chat#1', 'store.theirLines#1', 'loadBlocklist#1',
         'store.writeTheirs#1', 'store.oweReceipt#1', 'POST /api/mail/confirm#1', 'store.forgetReceiptsOwedBefore#1',
-        'store.owedReceipts#1', 'store.getMeta#3', 'fetch /api/community/info#1', 'store.setMeta#1', 'sign#1', 'POST /api/mail/send#2',
-        'store.receiptsSent#1', 'store.hasLine#2', 'store.setMineState#2', 'store.setMeta#2',
+        'store.owedReceipts#1', 'store.getMeta#3', 'fetch /api/community/info#1', 'store.setMeta#2', 'sign#1', 'POST /api/mail/send#2',
+        'store.receiptsSent#1',
     ];
     const OFF = ['loadIdentity#1', 'communityInfo#1', 'store.unsent#1', 'store.setMineState#1', 'store.unsent#2'];
     /** Never asked and never answered; asked and never answered; answered, but after the deadline. */
@@ -613,4 +668,214 @@ describe('8  a stalled wait never holds the round\'s lock (#3183: "a stalled blo
             });
         });
     }
+});
+
+describe('9  each device for itself (X2b: "each device confirms for itself", DECISION-outside-door.md)', () => {
+    /** Another browser or phone of Ben's, listed at his server (it has fetched once). */
+    const OTHER = 'f'.repeat(32);
+    const named = (call: string) => server.named.filter((n) => n.call === call).map((n) => n.device);
+    const chatOf = (key: string) => ctx.store.chat(BEN.key, chatWith(key));
+    /** A tick for a line I wrote `key` on another device (or before this browser was signed in). */
+    const tickTo = (key: string, state = 'sent', at = Date.now()) => ({ itemId: uuid(), kind: 'dm-line', recipient: key, recipientHome: ANA_HOME, state, at });
+
+    it('every fetch and confirm names this browser\'s id: one for the account, kept round to round, its own for another account here, a new one after Sign Out', async () => {
+        await openWith(ANA.key);
+        await heldLine(ANA, 'One');
+        await syncOutsideMail(ctx);
+        await heldLine(ANA, 'Two');
+        await syncOutsideMail(ctx);
+        const id = await mailDevice(ctx);
+        expect(id).toMatch(MAIL_DEVICE);
+        expect(named('GET')).toEqual([id, id]);
+        expect(named('confirm')).toEqual([id, id]);
+        expect(server.listed).toEqual(new Set([id]));
+        expect(server.held).toEqual([]);
+        // Another account in this browser: its own id, in its own documents; Ben's is unchanged.
+        const cyId = await mailDevice({ ...ctx, identity: { publicKey: CY.key, privateKey: CY.seed, callsign: 'Cy' } });
+        expect(cyId).toMatch(MAIL_DEVICE);
+        expect(cyId).not.toBe(id);
+        expect(await mailDevice(ctx)).toBe(id);
+        // Sign Out takes the store and the id with it: the next round here names a new one.
+        await clearOutsideChats();
+        server.named = [];
+        await syncOutsideMail(ctx);
+        expect(named('GET')).toHaveLength(1);
+        expect(named('GET')[0]).toMatch(MAIL_DEVICE);
+        expect(named('GET')[0]).not.toBe(id);
+        // A kept value that is no device id is never sent: a new one replaces it.
+        await ctx.store.setMeta(BEN.key, 'device', 'not-a-device');
+        expect(await mailDevice(ctx)).toMatch(MAIL_DEVICE);
+    });
+
+    it('another device listed is still served what this browser wrote and what it dropped; once it has them too, they go', async () => {
+        server.listed.add(OTHER);
+        await openWith(ANA.key);
+        const line = await heldLine(ANA, 'To both of Ben\'s devices');
+        const stranger = await heldLine(SOL, 'A stranger at this browser\'s closed door');
+        expect(await syncOutsideMail(ctx)).toMatchObject({ written: 1, dropped: 1, confirmed: 2 });
+        expect(await textsWith(ANA.key)).toEqual(['To both of Ben\'s devices']);
+        expect(await chatOf(SOL.key)).toBeNull();
+        expect(server.held.map((h) => h.envelope.itemId)).toEqual([line.envelope.itemId, stranger.envelope.itemId]);
+        // Not served here again.
+        expect(await syncOutsideMail(ctx)).toMatchObject({ written: 0, dropped: 0, confirmed: 0 });
+        // The other device confirms them: now every device listed has them, and they go.
+        const api = await import('./api');
+        await api.signedMailFetch('POST', 'https://b.example', '/api/mail/confirm', { ids: [line.envelope.itemId, stranger.envelope.itemId], device: OTHER }, ctx.identity as any);
+        expect(server.held).toEqual([]);
+    });
+
+    describe('my ticks are in before any held item is judged (a new browser\'s first page; the phone\'s 15)', () => {
+        it('a line from someone I wrote to on another device is written here, though this browser\'s door is closed', async () => {
+            await heldLine(SOL, 'Answering what you wrote on your phone');
+            server.outbox = [tickTo(SOL.key, 'delivered', Date.now() - 1_000)];
+            expect(await syncOutsideMail(ctx)).toMatchObject({ written: 1, requests: 0, dropped: 0, ticks: 1 });
+            expect(await chatOf(SOL.key)).toMatchObject({ state: 'open', restored: true, peerHome: ANA_HOME });
+            expect(await textsWith(SOL.key)).toEqual(['Answering what you wrote on your phone']);
+            expect(server.held).toEqual([]);
+        });
+
+        it('every page of ticks first: the held items wait, neither judged nor confirmed, while more ticks wait', async () => {
+            await heldLine(SOL, 'Answering what you wrote on your phone');
+            server.outboxPages = [
+                { ticks: [{ ...tickTo(ANA.key, 'delivered', 1763020900000), kind: 'receipt' }], more: true },
+                { ticks: [tickTo(SOL.key, 'sent', 1763020900001)], more: false },
+            ];
+            expect(await syncOutsideMail(ctx)).toMatchObject({ written: 1, dropped: 0, confirmed: 1, ticks: 1 });
+            expect(named('GET')).toHaveLength(2);
+            expect(server.confirmed).toHaveLength(1);
+            expect(await textsWith(SOL.key)).toEqual(['Answering what you wrote on your phone']);
+            expect(await ctx.store.getMeta(BEN.key, 'outbox-cursor')).toMatch(/^1763020900001:/);
+        });
+    });
+
+    describe('a tick for a line I wrote elsewhere opens its chat here (the phone\'s noteRestored)', () => {
+        it('from a request: open, its line kept, counted', async () => {
+            await setDoor(ctx, true);
+            await heldLine(SOL, 'Hello Ben');
+            await syncOutsideMail(ctx);
+            expect((await chatOf(SOL.key))?.state).toBe('request');
+            server.outbox = [tickTo(SOL.key)];
+            expect(await syncOutsideMail(ctx)).toMatchObject({ ticks: 1 });
+            expect(await chatOf(SOL.key)).toMatchObject({ state: 'open', restored: false });
+            expect(await textsWith(SOL.key)).toEqual(['Hello Ben']);
+        });
+
+        it('from a decline: open', async () => {
+            await ctx.store.openChat(BEN.key, chatWith(SOL.key), { key: SOL.key, home: ANA_HOME, name: 'Sol' });
+            await ctx.store.decide(BEN.key, chatWith(SOL.key), 'declined');
+            server.outbox = [tickTo(SOL.key)];
+            expect(await syncOutsideMail(ctx)).toMatchObject({ ticks: 1 });
+            expect((await chatOf(SOL.key))?.state).toBe('open');
+        });
+
+        it('an open chat stays as it is, and is not counted', async () => {
+            await openWith(SOL.key);
+            await heldLine(SOL, 'Kept');
+            await syncOutsideMail(ctx);
+            const before = await chatOf(SOL.key);
+            server.outbox = [tickTo(SOL.key)];
+            expect(await syncOutsideMail(ctx)).toMatchObject({ ticks: 0 });
+            expect(await chatOf(SOL.key)).toEqual(before);
+            expect(await textsWith(SOL.key)).toEqual(['Kept']);
+        });
+    });
+
+    describe('a blocked person\'s chat never opens from a tick (the phone\'s 18; #3188 review)', () => {
+        // Sol, blocked on this account (a block is the account's). Ben's door here is open, so the block alone stands between
+        // Sol and Ben's chats. Each start: no chat here (a new browser), a request, an open chat (blocked from another screen),
+        // a declined one.
+        const starts = ['none', 'request', 'open', 'declined'] as const;
+        const ways: Array<{ way: string; set: () => void }> = [
+            { way: 'a tick for a line I wrote on another device', set: () => { server.outbox = [tickTo(SOL.key, 'sent')]; } },
+            { way: 'its receipt: Delivered', set: () => { server.outbox = [tickTo(SOL.key, 'delivered')]; } },
+            { way: 'it expired', set: () => { server.outbox = [tickTo(SOL.key, 'expired')]; } },
+            {
+                way: 'a tick on the second page of a new browser\'s history',
+                set: () => { server.outboxPages = [{ ticks: [{ ...tickTo(ANA.key, 'delivered', 1763020900000), kind: 'receipt' }], more: true }, { ticks: [tickTo(SOL.key, 'sent', 1763020900001)], more: false }]; },
+            },
+        ];
+        async function start(s: typeof starts[number]) {
+            await setDoor(ctx, true);
+            if (s === 'request') { await heldLine(SOL, 'Hello'); await syncOutsideMail(ctx); }
+            if (s === 'open' || s === 'declined') await ctx.store.openChat(BEN.key, chatWith(SOL.key), { key: SOL.key, home: ANA_HOME, name: 'Sol' });
+            if (s === 'declined') await ctx.store.decide(BEN.key, chatWith(SOL.key), 'declined');
+            expect((await chatOf(SOL.key))?.state).toBe(s === 'none' ? undefined : s);
+        }
+        for (const s of starts) for (const w of ways) {
+            it(`${s} x ${w.way}: nothing changes here`, async () => {
+                await start(s);
+                blocked.add(SOL.key);
+                const before = await chatOf(SOL.key);
+                w.set();
+                expect(await syncOutsideMail(ctx)).toMatchObject({ ticks: 0 });
+                expect(await chatOf(SOL.key)).toEqual(before);
+            });
+        }
+        for (const s of ['none', 'request', 'declined'] as const) {
+            it(`control: ${s}, not blocked: the same tick opens the chat`, async () => {
+                await start(s);
+                ways[0].set();
+                expect(await syncOutsideMail(ctx)).toMatchObject({ ticks: 1 });
+                expect((await chatOf(SOL.key))?.state).toBe('open');
+            });
+        }
+    });
+
+    describe('Sign Out: the community forgets this browser (forgetThisBrowserForMail; the phone\'s 19)', () => {
+        it('reads the id before the store goes, asks once with it, signed, with its own deadline; the community lists it no more', async () => {
+            await syncOutsideMail(ctx);
+            const id = await mailDevice(ctx);
+            const api = await import('./api');
+            vi.mocked(api.signedMailFetch).mockClear();
+            const { done } = await forgetThisBrowserForMail(ctx);
+            await clearOutsideChats();   // Sign Out takes the store next: the id was read before
+            await done;
+            expect(named('forget')).toEqual([id]);
+            expect(server.listed.has(id)).toBe(false);
+            const call = vi.mocked(api.signedMailFetch).mock.calls.at(-1)!;
+            expect(call.slice(0, 5)).toEqual(['POST', 'https://b.example', '/api/mail/device/forget', { device: id }, ctx.identity]);
+            expect(call[5]).toBeInstanceOf(AbortSignal);
+        });
+
+        it('a browser that never ran a round asks nothing', async () => {
+            const { done } = await forgetThisBrowserForMail(ctx);
+            await done;
+            expect(named('forget')).toEqual([]);
+            expect(await ctx.store.getMeta(BEN.key, 'device')).toBeNull();
+        });
+
+        it('a refusal or no network: done all the same, never a throw', async () => {
+            await syncOutsideMail(ctx);
+            for (const answer of [() => Promise.reject(new TypeError('Failed to fetch')), async () => new Response('{"error":"No."}', { status: 403 })]) {
+                server.forgetAnswer = answer;
+                const { done } = await forgetThisBrowserForMail(ctx);
+                await expect(done).resolves.toBeUndefined();
+            }
+            expect(named('forget')).toHaveLength(2);
+        });
+
+        it('a community that never answers nor hears the abort, or a store that never reads: settled at 4 s, never a reason Sign Out stops', async () => {
+            await syncOutsideMail(ctx);
+            let aborted = false;
+            server.forgetAnswer = (signal) => { signal?.addEventListener('abort', () => { aborted = true; }); return new Promise<Response>(() => {}); };
+            const stalledStore = { ...ctx.store, getMeta: () => new Promise<string | null>(() => {}) };
+            vi.useFakeTimers();
+            try {
+                for (const which of ['community', 'store'] as const) {
+                    let settled = false;
+                    const started = forgetThisBrowserForMail(which === 'store' ? { ...ctx, store: stalledStore } : ctx)
+                        .then(({ done }) => done).then(() => { settled = true; });
+                    await vi.advanceTimersByTimeAsync(FORGET_DEVICE_MS - 1);
+                    expect(settled, `${which}: not before 4 s`).toBe(false);
+                    await vi.advanceTimersByTimeAsync(1);
+                    expect(settled, `${which}: at 4 s`).toBe(true);
+                    await started;
+                }
+            } finally {
+                vi.useRealTimers();
+            }
+            expect(aborted, 'the request was aborted at 4 s').toBe(true);
+            expect(named('forget')).toHaveLength(1);
+        });
+    });
 });

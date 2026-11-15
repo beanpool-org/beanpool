@@ -2,8 +2,9 @@
  * Chats with people in other communities, kept in this browser only (messages across communities X4, the web side of the
  * phone's X3: scratch/fable-design/DESIGN-cross-chat-voice-fable.md §3.2, §3.4, §3.5; the phone's utils/outside-chat-store.ts).
  *
- * Nobody else keeps these lines: the other community's server held each one sealed until a device of this member's had it,
- * then deleted it (the mailbox, X2). So this is not a copy of the node's. Its own database (`beanpool-outside-chats`), one
+ * Nobody else keeps these lines: the member's community held each one sealed until every device of theirs had it, then
+ * deleted it (the mailbox, X2; each device for itself, X2b). Their lines reach each phone and browser signed in when they
+ * came; what I write shows only where I wrote it. So this is not a copy of the node's. Its own database (`beanpool-outside-chats`), one
  * per web address as every store of this app is, documents per account (`<my key>/…`), so another account in this browser
  * starts on its own. Sign Out and the delete at the last community clear it (lib/device-prefs.ts clearAccountStorage). A
  * browser newly signed in has none of it: a chat it learns of from the outbox comes back empty and `restored`, and says why.
@@ -173,11 +174,25 @@ export function outsideChatStore() {
                 return [{ ...chats, [id]: chat }];
             });
         },
-        /** A chat this account wrote to before this browser had it (the outbox says so): open and `restored`. Nothing changes for one it has. */
-        async noteRestored(me: string, id: string, peer: { key: string; home: string }, now = Date.now()): Promise<void> {
-            await change([chatsKey(me)], ([chats]: [Chats | undefined]) => (chats?.[id] ? [undefined] : [{
-                ...chats, [id]: { id, peerKey: peer.key, peerHome: peer.home, peerName: null, state: 'open', restored: true, updatedAt: now, lastText: null, lastAt: null },
-            }]));
+        /**
+         * A chat this account wrote to that this browser lacks the line of (the outbox says so): a browser newly signed in, or
+         * a line written on another phone or browser (X2b). None here: made open and `restored`, so it says why it is empty. A
+         * request or a decline here: opened, since I wrote to them (DECISION-outside-door.md). An open chat stays as it is.
+         * True when this changed anything. The phone's noteRestored, the same rule.
+         */
+        async noteRestored(me: string, id: string, peer: { key: string; home: string }, now = Date.now()): Promise<boolean> {
+            let changed = false;
+            await change([chatsKey(me)], ([chats]: [Chats | undefined]) => {
+                const was = chats?.[id];
+                if (!was) {
+                    changed = true;
+                    return [{ ...chats, [id]: { id, peerKey: peer.key, peerHome: peer.home, peerName: null, state: 'open', restored: true, updatedAt: now, lastText: null, lastAt: null } }];
+                }
+                if (was.state !== 'request' && was.state !== 'declined') return [undefined];
+                changed = true;
+                return [{ ...chats, [id]: { ...was, state: 'open', updatedAt: now } }];
+            });
+            return changed;
         },
         /** A line from the peer, past the gate: written with its chat (made a request, or moved on), in one transaction. Idempotent by id. */
         async writeTheirs(me: string, line: { id: string; chatId: string; author: string; text: string; replyTo: string | null; at: number },
@@ -256,6 +271,20 @@ export function outsideChatStore() {
         },
         async setMeta(me: string, k: string, v: string): Promise<void> {
             await change([metaKey(me)], ([meta]: [Record<string, string> | undefined]) => [{ ...meta, [k]: v }]);
+        },
+        /**
+         * `k`'s value when it has one `fit` takes, else `make()`'s, kept as it: read and written in ONE transaction, so two tabs
+         * asking at once get the same value (the browser runs one readwrite transaction on a store at a time).
+         */
+        async metaOrMake(me: string, k: string, fit: (v: string) => boolean, make: () => string): Promise<string> {
+            let value = '';
+            await change([metaKey(me)], ([meta]: [Record<string, string> | undefined]) => {
+                const kept = meta?.[k];
+                if (kept && fit(kept)) { value = kept; return [undefined]; }
+                value = make();
+                return [{ ...meta, [k]: value }];
+            });
+            return value;
         },
     };
 }

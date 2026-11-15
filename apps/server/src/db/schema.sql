@@ -3184,6 +3184,9 @@ CREATE TABLE IF NOT EXISTS knowledge_drafts (
     -- JSON list of { url, label }, at most 5, as a page's knowledge_sources.
     sources        TEXT,
     lang           TEXT,
+    -- Its own tags, free tags only (Learn's tags, 16 Nov 2026): a JSON list in their stored form, '' for none, as a page's
+    -- posts.free_tags; a fix's are the page's with the member's put in. Approval carries them onto the page.
+    free_tags      TEXT NOT NULL DEFAULT '',
     about          TEXT,
     note           TEXT,
     -- A fix's parts its member changed, each with what the page said when it was sent (K5): JSON { part: value }, {} for the

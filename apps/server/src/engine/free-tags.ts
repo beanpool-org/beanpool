@@ -103,13 +103,17 @@ const stampHolds = (s: string, hp: string) => {
     return `(${openReportOn(`${s}.post_id`)} OR (MAX(${events}) != '' AND MAX(COALESCE(${s}.gone_at, ''), ${events}) > @weekAgo))`;
 };
 
-/** Each typed tag on each live listing here (posts p, its author m, the tag j): what is counted, and what free_tag_seen keeps. */
+/**
+ * Each typed tag on each live listing here (posts p, its author m, the tag j): what is counted, and what free_tag_seen keeps.
+ * Never a page of Local knowledge's tags (engine/knowledge.ts): a page is no listing, and its tags were checked by an owner
+ * or admin when it was approved, so they are neither offered on the Market's Tags field nor counted on the owners' Tags page.
+ */
 const LIVE_TAGS_FROM = `
         FROM posts p
         JOIN members m ON m.public_key = p.author_pubkey
         JOIN json_each(CASE WHEN json_valid(p.free_tags) THEN p.free_tags ELSE '[]' END) j`;
 const LIVE_TAGS_WHERE = `
-        WHERE p.free_tags != '' AND j.type = 'text'
+        WHERE p.free_tags != '' AND j.type = 'text' AND p.type != 'knowledge'
           AND COALESCE(p.active, 0) = 1 AND p.status = 'active' AND p.audience_scope = 'public'
           AND p.hidden_by_reports_at IS NULL AND p.removed_by_moderator_at IS NULL AND p.origin_node IS NULL
           AND m.status = 'active'`;

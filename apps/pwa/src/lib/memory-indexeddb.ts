@@ -42,6 +42,8 @@ export interface MemoryIndexedDB {
     peek(db: string, store: string, key: IDBValidKey): unknown;
     /** Whether a database of this name exists. For assertions. */
     has(db: string): boolean;
+    /** Every key and value one store holds now, copied ({} when there is no such database). For assertions. */
+    dump(db: string, store: string): Record<string, unknown>;
     /**
      * The next readwrite transaction fails as it commits, as the real one does when the disk is full: its writes are
      * undone, `error` is set, and it fires `abort`, never `error` or `complete`.
@@ -189,6 +191,10 @@ export function memoryIndexedDB(): MemoryIndexedDB {
         },
         has(db: string) {
             return databases.has(db);
+        },
+        dump(db: string, store: string) {
+            return Object.fromEntries([...(databases.get(db)?.get(store) ?? new Map()).entries()]
+                .map(([k, v]) => [String(k), structuredClone(v)]));
         },
         failNextCommit(error: unknown = new DOMException('The quota has been exceeded.', 'QuotaExceededError')) {
             failCommit = { error };

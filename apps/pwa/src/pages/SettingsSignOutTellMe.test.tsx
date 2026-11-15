@@ -4,6 +4,10 @@
  * community keeps an `asker` row for it. Before the key and the pins go (localStorage.clear()), that community is told to let
  * go (signed DELETE) and the registration ends, so a yes for the account that has gone never reaches this browser. Driven
  * through Settings as a member uses it; nothing contacts a node.
+ *
+ * And mail from other communities (X2b, DECISION-outside-door.md): Sign Out reads this browser's mail id before its store
+ * goes and asks the community to forget it, signed, before the key goes; a community that never answers holds Sign Out
+ * 4 s at most (lib/outside-mail.ts forgetThisBrowserForMail).
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +17,7 @@ import { wipeIdentity, type BeanPoolIdentity } from '../lib/identity';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetHomeCacheForTest } from '../lib/home-cache';
 import { resetAccountEpochForTest } from '../lib/account-epoch';
+import { clearOutsideChats, outsideChatStore } from '../lib/outside-chat-store';
 
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual('../lib/api');
@@ -28,6 +33,7 @@ vi.mock('../lib/api', async () => {
         getHome: vi.fn(),
         sendSignedAt: vi.fn(async () => {}),
         signedFetchAt: vi.fn(async () => new Response('{}', { status: 200 })),
+        signedMailFetch: vi.fn(async () => new Response('{}', { status: 200 })),
     };
 });
 vi.mock('../lib/identity', async () => {
@@ -149,5 +155,48 @@ describe("every path that takes the key from this browser lets go of Home's Tell
         expect(deletesTo(RIVERSIDE)).toEqual([]);
         expect(knock.unregister).not.toHaveBeenCalled();
         expect(JSON.parse(localStorage.getItem('beanpool_web_push') ?? '[]').map((p: { origin: string }) => p.origin)).toEqual([RIVERSIDE]);
+    });
+});
+
+describe('Sign Out: the community forgets this browser for mail from other communities (X2b), before the key goes', () => {
+    const DEVICE = 'ab'.repeat(16);
+    const forgets = () => vi.mocked(api.signedMailFetch).mock.calls.filter(c => c[2] === '/api/mail/device/forget');
+
+    async function signOut() {
+        openSettings();
+        fireEvent.click(await screen.findByText('⚠️ Account Deletion & Sign Out'));
+        fireEvent.click(screen.getByRole('button', { name: 'Sign Out (Device Only)' }));
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Confirm Sign Out' })); });
+    }
+
+    beforeEach(async () => {
+        // This test's IndexedDB holds this browser's mail id, as a round left it.
+        await clearOutsideChats();
+        await outsideChatStore(api.nodeAddress()).setMeta(identity.publicKey, 'device', DEVICE);
+        vi.mocked(api.signedMailFetch).mockReset();
+        vi.mocked(api.signedMailFetch).mockImplementation(async (method, _community, path) => {
+            order.push(`${method} ${path}`);
+            return new Response(JSON.stringify({ forgotten: true }), { status: 200 });
+        });
+    });
+
+    it('the id read before the store goes, sent once, signed by the key, before the key and the store go', async () => {
+        await signOut();
+        await waitFor(() => expect(wipeIdentity).toHaveBeenCalledTimes(1));
+        expect(forgets().map(c => [c[0], c[3], c[4]])).toEqual([['POST', { device: DEVICE }, identity]]);
+        expect(order.indexOf('POST /api/mail/device/forget')).toBeGreaterThan(-1);
+        expect(order.indexOf('POST /api/mail/device/forget')).toBeLessThan(order.indexOf('wipe key'));
+        await waitFor(async () => expect(await outsideChatStore(api.nodeAddress()).getMeta(identity.publicKey, 'device')).toBeNull());
+    });
+
+    it('a community that never answers holds Sign Out 4 s at most', async () => {
+        vi.mocked(api.signedMailFetch).mockImplementation(async (method, _community, path) => {
+            order.push(`${method} ${path}`);
+            return new Promise<Response>(() => {});
+        });
+        await signOut();
+        await waitFor(() => expect(forgets()).toHaveLength(1));
+        await act(async () => { await vi.advanceTimersByTimeAsync(4_000); });
+        await waitFor(() => expect(wipeIdentity).toHaveBeenCalledTimes(1));
     });
 });

@@ -26,7 +26,7 @@ function sourceFiles(dir: string): string[] {
 const FILES = sourceFiles(SRC);
 const read = (rel: string) => readFileSync(join(SRC, rel), 'utf8');
 
-const CORE_BUILDERS = ['buildBoundRequestHeaders', 'buildBoundWsParams', 'buildInviteTicket', 'signReEnroll', 'copyIdOf', 'signStandingAuthorisation'];
+const CORE_BUILDERS = ['buildBoundRequestHeaders', 'buildBoundWsParams', 'buildInviteTicket', 'signReEnroll', 'copyIdOf', 'signStandingAuthorisation', 'signAddressCard', 'signRelayEnvelope'];
 
 describe('the web app signs only through core\'s builders', () => {
     it('finds the app\'s source', () => {
@@ -52,8 +52,9 @@ describe('the web app signs only through core\'s builders', () => {
             .map(m => m.index!)
             .filter(at => !api.slice(0, at).endsWith('function '));
         // The request headers, the socket, an offline ticket, a re-key ask's statement (lib/web-rekey.ts), a copy's id
-        // (lib/show-on-global.ts) and a standing deal's authorisation (signStandingStart: core builds the text and its bytes).
-        expect(uses).toHaveLength(6);
+        // (lib/show-on-global.ts), a standing deal's authorisation (signStandingStart: core builds the text and its bytes), and
+        // across communities an address card and a relay envelope (lib/outside-mail.ts: each under its own tag in core).
+        expect(uses).toHaveLength(8);
         for (const at of uses) {
             // Made inside the arguments of a call to one of core's builders: the nearest such call before it, with no
             // `;` between (so not a signer kept in a variable, and not one handed to anything else).

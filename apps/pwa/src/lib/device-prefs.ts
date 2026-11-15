@@ -16,6 +16,7 @@ import { ACCOUNT_EPOCH_KEY } from './account-epoch';
 import { clearToolStore } from '../tools/store';
 import { clearCopyPairs } from './copy-pairs';
 import { clearContactsStore } from './contacts-store';
+import { clearOutsideChats } from './outside-chat-store';
 
 const DEVICE_KEYS = [
     'beanpool-install-dismissed',
@@ -46,6 +47,8 @@ export async function clearAccountStorage(): Promise<void> {
     const tools = clearToolStore();
     const copies = clearCopyPairs();
     const contacts = clearContactsStore();
+    // Chats with people in other communities, kept in this browser only (lib/outside-chat-store.ts): the account's own.
+    const outside = clearOutsideChats();
     const keep = new Map<string, string>();
     for (const key of [...DEVICE_KEYS, ACCOUNT_EPOCH_KEY]) {
         const value = localStorage.getItem(key);
@@ -55,5 +58,5 @@ export async function clearAccountStorage(): Promise<void> {
     for (const [key, value] of keep) {
         try { localStorage.setItem(key, value); } catch { /* quota/private mode — not worth failing sign-out over */ }
     }
-    await Promise.all([home, locks, tools, copies, contacts]);
+    await Promise.all([home, locks, tools, copies, contacts, outside]);
 }

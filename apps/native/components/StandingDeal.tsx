@@ -162,10 +162,12 @@ export type StandingLowerStep =
  * One lowering sheet (design §3.2), drawn from core's lines (standingSheet): the payer's ask and the payee's lowering offer
  * half, 0 and "Another amount"; the payee's answer, Yes or No. A refusal stays on the sheet, which stays open.
  */
-function LowerSheet({ sheet, busy, error, onGo, onNo, onCancel, onMessage, messageLabel, s }: {
+function LowerSheet({ sheet, busy, error, onGo, onNo, onCancel, onMessage, messageLabel }: {
     sheet: StandingSheet; busy: boolean; error: string | null; onGo: (beans_c: number) => void; onNo: () => void; onCancel: () => void;
-    onMessage?: () => void; messageLabel?: string; s: ReturnType<typeof useStandingStyles>;
+    onMessage?: () => void; messageLabel?: string;
 }) {
+    // Its own styles from the same table (not handed in), so the contrast check reads every pair on the sheet.
+    const s = useStandingStyles();
     const [pick, setPick] = useState<number | 'other'>(sheet.choices.length ? 0 : 'other');
     const [typed, setTyped] = useState('');
     const typedAmount = standingTypedAmount(typed, sheet.amount_c, sheet.unit);
@@ -293,7 +295,7 @@ export function StandingPanel({ tx, actingAs, busy, onStop, onMessage, messageLa
             )}
             {!!error && !sheet && <Text style={s.refusal} accessibilityRole="alert" accessibilityLiveRegion="polite" testID="standing-step-refusal">{error}</Text>}
             {!!sheet && !!open && (
-                <LowerSheet key={open.changeId} s={s} sheet={sheet} busy={off} error={error}
+                <LowerSheet key={open.changeId} sheet={sheet} busy={off} error={error}
                     onGo={(beans_c) => send(sheet.kind === 'answer'
                         ? { move: 'answer', standingId: sheet.standingId, changeId: sheet.askId!, yes: true }
                         : { move: 'lower', standingId: sheet.standingId, changeId: open.changeId, periodNo: sheet.periodNo, beans_c })}

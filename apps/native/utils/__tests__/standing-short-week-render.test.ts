@@ -46,7 +46,7 @@ vi.mock('../../app/ThemeContext', async () => {
 import { formatDate, type StandingDealRow } from '@beanpool/core';
 import { StandingPanel, StandingTakeUp, type StandingLowerStep } from '../../components/StandingDeal';
 import { standingJsonOf, standingOfRow } from '../standing-row';
-import { buildNeedsYou } from '../needs-you';
+import { buildNeedsYou, type NeedsYouTransaction } from '../needs-you';
 import { lightColors, darkColors } from '../../constants/colors';
 
 const PAYER = 'a'.repeat(64);
@@ -106,7 +106,7 @@ describe("the phone's copy of a deal row keeps the ask (design §5)", () => {
     });
     it("so the provider's bell has the ask's row, amber and counted, from the phone's own copy (§3.3); the payer has none", () => {
         const node = { ...row(), ...ASK };
-        const stored = { ...row(), standingAsk: undefined, standingAsksLeft: undefined, ...standingOfRow({ standing_id: 'sd-1', period_no: 1, standing: standingJsonOf(node) }) };
+        const stored = { ...row(), id: 'tx-1', standingAsk: undefined, standingAsksLeft: undefined, ...standingOfRow({ standing_id: 'sd-1', period_no: 1, standing: standingJsonOf(node) }) } as NeedsYouTransaction;
         const quiet = (me: string) => buildNeedsYou({ me, now: Date.parse('2026-11-14T09:00:00.000Z'), transactions: [stored], decisions: null, conversations: null, groupChats: null, admin: null });
         const rows = quiet(PAYEE);
         expect(rows).toHaveLength(1);

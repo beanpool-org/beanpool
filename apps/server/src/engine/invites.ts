@@ -32,6 +32,7 @@ import { ticketJoinRefusal } from './writer-bounds.js';
 import { inviteLogTag } from '../sanitize-message.js';
 import { assertMayBindInvite, confirmByInvite, liveInvitesOnEntry, NamesListError } from './names-list.js';
 import { VoucherError, checkInviteVouch, checkInviteVoucherLevel, holdForInvite, landInviteVouch, landInviteVoucher, promiseInviteVoucher, returnHoldOnRevoke, endPromiseOnRevoke } from './vouchers.js';
+import { BillRefusal, bindInviteBill, checkInviteBill, placeInviteBill, withdrawInviteBill } from './bills.js';
 
 /**
  * Whether a code's maker can still bring someone in (the engine's mayBringSomeoneIn): a member of this node, not just a
@@ -115,12 +116,25 @@ function assertInvitesOn(): void {
  * I2), `true` revokes that one in this invite's transaction (its maker or an owner: engine/names-list.ts assertMayBindInvite);
  * without it the bind is refused (409 `invite_out`). A failure anywhere leaves the old invite as it was and writes nothing.
  */
-export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void, namesEntryId?: string, vouchAmount?: unknown, voucherLevel?: unknown, replace?: unknown): (InviteCode & { namesEntryId?: string; vouchAmount?: number; voucherLevel?: number }) | null {
+/**
+ * `bill`: a bill the invite carries (DESIGN-getting-paid-fable.md §4.5, slice B3; engine/bills.ts WITH AN INVITE), `{ id?,
+ * whatFor, amount_c }`, on a member's own invite only (never one bound to a names-list entry). Checked whole once the maker may
+ * invite here and before any vouch or limit (BillRefusal, nothing written), then written in this invite's transaction with no
+ * payer; whoever joins with the code is its payer (redeemInvite). The same bill id again, while that invite is unused, answers
+ * that invite and writes nothing: a retry is the same invite and the same bill.
+ */
+export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void, namesEntryId?: string, vouchAmount?: unknown, voucherLevel?: unknown, replace?: unknown, bill?: unknown): (InviteCode & { namesEntryId?: string; vouchAmount?: number; voucherLevel?: number; bill?: InviteBillRead }) | null {
     assertPlainTablesWritable();
     assertInvitesOn();
     const inviter = getMember(db, inviterPubkey);
     if (!inviter || !canInvite(inviterPubkey)) return null;
     assertMayInviteHere(inviterPubkey);
+    const billAsked = bill !== undefined && bill !== null;
+    if (billAsked && namesEntryId !== undefined) throw new BillRefusal(400, 'bill_on_entry', word('A bill goes only with an invite of your own, not one for a names-list entry.'));
+    // First, before a vouch is checked against a budget the first try already holds from: a retry answers its invite.
+    const billChecked = billAsked ? checkInviteBill(inviterPubkey, bill) : null;
+    if (billChecked && billChecked.replayOf !== undefined) return inviteWithBill(billChecked.replayOf);
+    const newBill = billChecked && billChecked.replayOf === undefined ? billChecked : null;
     // An invite bound to a names-list entry (community modes slice 3): only an admin who could confirm someone against
     // that entry now, and never one with a live confirmation (NamesListError, before the limit and before any write).
     const boundEntry = namesEntryId === undefined ? null : assertMayBindInvite(inviterPubkey, namesEntryId, replace);
@@ -149,14 +163,32 @@ export function generateInvite(inviterPubkey: string, intendedFor?: string, befo
             .run(code, inviterPubkey, createdAt, intendedFor || null, boundEntry, vouch, level);
         if (vouch) holdForInvite(inviterPubkey, code, vouch);
         if (level && boundEntry) promiseInviteVoucher(inviterPubkey, boundEntry, level);
+        if (newBill) placeInviteBill(inviterPubkey, code, newBill, createdAt);
     })();
 
-    const invite: InviteCode & { namesEntryId?: string; vouchAmount?: number; voucherLevel?: number } = { code, createdBy: inviterPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
+    const invite: InviteCode & { namesEntryId?: string; vouchAmount?: number; voucherLevel?: number; bill?: InviteBillRead } = { code, createdBy: inviterPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
     if (boundEntry) invite.namesEntryId = boundEntry;
     if (vouch) invite.vouchAmount = vouch;
     if (level) invite.voucherLevel = level;
+    if (newBill) invite.bill = { id: newBill.id, whatFor: newBill.whatFor, amount_c: newBill.amount_c };
     // Never the code itself: it lets anyone join for 30 days. Its tag lets an operator follow it (FABLE-sec-errors M2).
     console.log(`🎟️  Invite generated: ${inviteLogTag(code)} by ${inviter.callsign}`);
+    return invite;
+}
+
+/** The bill an invite carries, as its maker reads it (never the payer: there is none until someone joins). */
+export interface InviteBillRead { id: string; whatFor: string; amount_c: number }
+
+/** A retry of an invite with a bill (checkInviteBill's `replayOf`): the invite as the first try answered it, read again. */
+function inviteWithBill(code: string): InviteCode & { vouchAmount?: number; bill?: InviteBillRead } {
+    const row = db.prepare('SELECT code, created_by, created_at, intended_for, vouch_amount_c FROM invite_codes WHERE code = ?').get(code) as
+        { code: string; created_by: string; created_at: string; intended_for: string | null; vouch_amount_c: number | null };
+    const b = db.prepare('SELECT id, what_for, amount_c FROM bills WHERE invite_code = ?').get(code) as { id: string; what_for: string; amount_c: number };
+    const invite: InviteCode & { vouchAmount?: number; bill?: InviteBillRead } = {
+        code: row.code, createdBy: row.created_by, createdAt: row.created_at, usedBy: null, usedAt: null, intendedFor: row.intended_for ?? undefined,
+    };
+    if (row.vouch_amount_c) invite.vouchAmount = row.vouch_amount_c;
+    invite.bill = { id: b.id, whatFor: b.what_for, amount_c: b.amount_c };
     return invite;
 }
 
@@ -185,7 +217,8 @@ export interface RevokeOutcome { revoked: number; returned: number; promiseEnded
 
 /**
  * Revokes one unused invite, inside the caller's transaction: the vouch its code holds back in the holder's budget (a seed
- * invite's holder is the admin it was issued by, as at the redeem), a promised voucher budget ended, and the row deleted.
+ * invite's holder is the admin it was issued by, as at the redeem), a promised voucher budget ended, a bill it carries
+ * withdrawn (engine/bills.ts withdrawInviteBill: it never reaches anyone), and the row deleted.
  * The delete leaves a tombstone on a main server (deletePlainRows), so a standby that takes over before its next whole copy
  * admits nobody with the code either: unlike the hourly prune's codes, a revoked one is still in its 30 days.
  */
@@ -194,6 +227,7 @@ function revokeRowInside(revoker: string, row: RevokedRow): { returned: number; 
     const returned = row.vouch_amount_c ? returnHoldOnRevoke(holder, row.code, revoker) : 0;
     const promiseEnded = !!row.names_entry_id && row.voucher_level_c != null;
     if (promiseEnded) endPromiseOnRevoke(revoker, row.names_entry_id!, row.voucher_level_c!);
+    withdrawInviteBill(row.code);
     // A revoke runs on a main server only (assertPlainTablesWritable), so the tombstone is always written.
     const gone = deletePlainRows('invite_codes', 'code = ? AND used_by IS NULL', row.code);
     // Read in this same transaction as unused, so it is: anything else is a fault, and nothing commits.
@@ -432,7 +466,8 @@ export function redeemInvite(
     // for an invite bound to a names-list entry the confirmation (confirmByInvite), for one carrying a vouch the room
     // it gives (engine/vouchers.ts landInviteVouch): never a member without them. A voucher budget the invite promises
     // (landInviteVoucher) lands in it too, after the confirmation, and never refuses: where it can't land, the invite says
-    // why and the joiner joins all the same.
+    // why and the joiner joins all the same. A bill the invite carries (engine/bills.ts bindInviteBill) is the joiner's from
+    // here, the key this redeem registered and no other, with its 30 days from now: never shown while they join, one row after.
     let vouch: { landed: number } | { ended: string } | undefined;
     const member = db.transaction(() => {
         const m = registerMemberInternal(broadcast, publicKey, callsign, invite.created_by, code);
@@ -444,6 +479,7 @@ export function redeemInvite(
             : null;
         db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ?, names_bind_outcome = ?, voucher_outcome = ? WHERE code COLLATE NOCASE = ?")
             .run(publicKey, new Date().toISOString(), outcome, voucher?.outcome ?? null, code);
+        bindInviteBill(invite.code, publicKey);
         const voucherMaker = invite.issued_by || invite.created_by;
         if (invite.vouch_amount_c) vouch = landInviteVouch(voucherMaker, invite.code, publicKey, invite.vouch_amount_c);
         // A genesis invite (trusted, ambassador, elder) gives a badge in its maker's name: recognition only, no credit

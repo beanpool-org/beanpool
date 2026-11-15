@@ -22,7 +22,7 @@ import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getMember, getConversation, isVisitorKey, assertConvenorPowersActive, type Conversation, type Message } from '@beanpool/engine';
-import { detectMentions, groupPictureUrlOf, isGroupEncryptedPayload, isLockedAwayLine, GROUP_NONCE_PREFIX, type GroupRole, type GroupMemberStatus, word, wordsFor } from '@beanpool/core';
+import { detectMentions, groupPictureUrlOf, isGroupEncryptedPayload, isLockedAwayLine, GROUP_NONCE_PREFIX, nameLine, type GroupRole, type GroupMemberStatus, word, wordsFor } from '@beanpool/core';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { participantWriteAt, toThreadMessage, type EventThreadMessage } from './event-thread.js';
 import { getChatMute, unmutedRecipients, type ChatMute } from './chat-mutes.js';
@@ -31,18 +31,30 @@ import type { MessagingCallbacks } from './messaging.js';
 import {
     assertLineEpochIsCurrent, filterDeclaredMentions, fromEpochOf, fromEpochsOf, groupChatEncryption, GroupKeyError, GROUP_CHAT_UPDATE_APP,
 } from './group-keys.js';
-import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
+import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes, assertDiskFloorSpace } from './photo-upload-budget.js';
 import { VOICE_LINE_TYPE, voiceLineRefusal } from './voice-lines.js';
 import { withheldLine } from './withheld-lines.js';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
 import { storeAttachmentColumns, type AttachmentColumns } from '../storage/image-columns.js';
 import { GROUP_PHOTO_MAX_BYTES } from '../config/writer-limits.js';
+import { fanOutGroupLine } from './group-guests.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
 const { t: tr } = wordsFor('en');
 
 // Moved to core (group-crypto.ts): the sending app detects mentions and declares them (§9). Still exported from here.
 export { detectMentions };
+
+/**
+ * How a guest from another community is named in what a line of theirs makes for members here (its push, the bell): the
+ * name their card gave, their community (their home, which the envelope proved) and "guest", in core's one name line
+ * (joint design §2.6: as a guest the community always shows), "Dax · riverside.example · guest". Never the card's name
+ * alone, which a guest chooses and nothing checks: a guest whose card says a member's name never passes as that member.
+ */
+export function guestLineName(groupId: string, key: string): string | null {
+    const g = db.prepare('SELECT name, home FROM group_guests WHERE group_id = ? AND guest_key = ?').get(groupId, key) as { name: string; home: string } | undefined;
+    return g ? nameLine({ kind: 'guest', name: nameLine({ kind: 'community', name: g.name, community: g.home }) }) : null;
+}
 
 export const GROUP_THREAD_TYPE = 'group_thread';
 /** What a live chat update is about, beside a plain new message (chat parity, 2026-09-23). */
@@ -491,9 +503,12 @@ export function postGroupThreadMessage(
     authorPubkey: string,
     line: GroupLineIn,
     clientId?: string,
+    opts: { guest?: true } = {},
 ): EventThreadMessage {
     const group = loadGroupForThread(groupId);
-    assertCanWriteInGroupChat(groupId, authorPubkey);
+    // A guest from another community (engine/group-guests.ts) is no member here: the caller checked they are in this group's
+    // chat, and their photos and voice count against the guests' own day (GUEST_MEDIA_BYTES_DAY), not a member's budget.
+    if (!opts.guest) assertCanWriteInGroupChat(groupId, authorPubkey);
 
     const declared = metadataObject(line?.metadata);
     assertSealedGroupLineForm(line?.ciphertext, line?.nonce);
@@ -522,11 +537,13 @@ export function postGroupThreadMessage(
     }
     // The day's photo budget and the storage floor: after every refusal of who may write here and the idempotent retry
     // above, before anything is written (as a DM photo, engine/messaging.ts sendMessage).
-    const photoBytes = photo ? incomingPhotoBytes(photo.data) : 0;
-    if (photo) assertMayStorePhotoBytes(authorPubkey, photoBytes);
+    const photoBytes = photo && !opts.guest ? incomingPhotoBytes(photo.data) : 0;
+    if (photo && !opts.guest) assertMayStorePhotoBytes(authorPubkey, photoBytes);
+    // A guest's photo or voice keeps the free-disk floor every photo keeps; their day's bytes are the guests' cap.
+    if (photo && opts.guest) assertDiskFloorSpace();
 
     ensureGroupThread(groupId);
-    addParticipant(groupId, authorPubkey, new Date().toISOString());
+    if (!opts.guest) addParticipant(groupId, authorPubkey, new Date().toISOString());
 
     const mentions = filterDeclaredMentions(groupId, authorPubkey, declared.mentions);
     const msgId = clientId;
@@ -566,10 +583,16 @@ export function postGroupThreadMessage(
     // After the answer, never inside it: the push skips anyone who has blocked the author (state-engine.ts
     // dispatchPushNotification), and their badge count's work in the answer would make a line's answer faster when
     // someone in the group has blocked its author, which would tell them (#1403 review).
-    const senderName = sender?.callsign || 'A member';
+    // A guest is named by core's guest line, never by the name on their card alone (guestLineName).
+    const senderName = opts.guest
+        ? guestLineName(groupId, authorPubkey) ?? nameLine({ kind: 'guest', name: authorPubkey.slice(0, 8) })
+        : sender?.callsign || 'A member';
     setImmediate(() => {
         try { pushGroupMessage(cb, group, authorPubkey, senderName, mentions); }
         catch (e: any) { console.warn('[Push] A group line push failed:', e?.message ?? e); }
+        // To each community with guests in this chat, one request each (engine/group-guests.ts).
+        try { fanOutGroupLine(groupId, msgId, authorPubkey); }
+        catch (e: any) { console.warn('[Guests] A group line could not be sent to its guests:', e?.message ?? e); }
     });
     return msg;
 }

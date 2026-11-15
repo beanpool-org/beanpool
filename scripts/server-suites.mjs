@@ -566,6 +566,7 @@ export const SUITES = [
     'test-standing-deals',
     'test-standing-lower',
     'test-bills',
+    'test-bills-invite',
     'test-enterprise-text',
     'test-event-chat',
     'test-event-chat-rsvp-fixes',
@@ -599,6 +600,7 @@ export const SUITES = [
     'test-names-list',
     'test-invite-bound-name',
     'test-invite-mine-fields',
+    'test-invite-names-entry-readers',
     'test-invite-adds-voucher',
     'test-invite-revoke',
     'test-invites-vouchers-block',
@@ -623,6 +625,9 @@ export const SUITES = [
     // Local knowledge in the Pulse (slice KP): with=knowledge only, one card a day, 30 days and 20 pages, the keyset merge, every
     // way a page stops showing takes its card, a standby the same, mute and report not found, Home's Pulse card creators only.
     'test-knowledge-pulse',
+    // Keep it right (slice K5): "This helped" (one per member, stamped at the tap, the count only), Suggest a fix through the
+    // waiting list, the year list, and every action x every reader in one table.
+    'test-knowledge-keep-right',
     'test-forum',
     // The forum's moderation (slice F2): reports, auto-hide, restore, removal, the mute, first looks, new accounts, bursts.
     'test-forum-moderation',
@@ -631,6 +636,9 @@ export const SUITES = [
     // The forum's search (slice F6): every word, Thai and Chinese inside a run, every way a post stops being readable in no
     // answer, the index's own bytes forget, 100 a day, a standby's import builds the same index and answers the same.
     'test-forum-search',
+    // A group's forum section, a poll in a topic, the polls' own pool, the Decision chip (slice F8): one table over every read
+    // and write x every kind of reader, the bell and the doorbells, the pools, a standby the same.
+    'test-forum-group-section',
     'test-mcp-knowledge',
     'test-names-copy',
     'test-contact-copies',
@@ -686,6 +694,7 @@ export const SUITES = [
     'test-node-signature',
     'test-relay-mail',
     'test-relay-complaint',
+    'test-group-guests',
     'test-dm-standby-order',
     'test-keeper-read-cursor',
     'test-groups-chat-sync',
@@ -801,6 +810,8 @@ export const VARIANTS = [
     { name: 'test-invite-bound-name', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // What an invite is for and carries (I1) reaches its maker alone under the opt-out too: no code, entry id or amount to anyone else.
     { name: 'test-invite-mine-fields', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // Which names-list entry an invite is for reaches an owner or admin whose role acts alone under the opt-out too.
+    { name: 'test-invite-names-entry-readers', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // A member's friends list is read by its owner alone under the opt-out too: unsigned 401, anyone else's key 403.
     { name: 'test-friends-routes', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // Connections in common under the opt-out too: "show me as a connection in common" is read by its owner alone (T10),

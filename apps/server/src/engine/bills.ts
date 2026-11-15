@@ -38,12 +38,21 @@
 //
 // WHERE. A main server with Beans on and the `bills` switch on (config/node-profile.ts): Beans off answers 403
 // profile_no_beans, bills off 404 feature_off. A standby refuses every write (routes/standby-ledger-gate.ts) and moves nothing.
+//
+// WITH AN INVITE (slice B3, design §4.5). A member may send a bill with an invite they make (engine/invites.ts
+// generateInvite): checked whole first (checkInviteBill, the same rules and limits as a bill sent, counted as one to someone
+// new), then written in the invite's own transaction with no payer (placeInviteBill), waiting as long as the invite does. The
+// redeem that uses that invite gives it its payer, the key that joined, and its 30 days, in the redeem's own transaction
+// (bindInviteBill); nothing else ever gives it one. A revoke withdraws it with its invite (withdrawInviteBill); an invite that
+// lapses unused takes it with it (its expires_at is the invite's own end, so expireBills ends it). An offline ticket carries
+// none. Its payer reads it as from someone they know (knownTo): they joined with its sender's invite.
 
 import {
-    BILL_RULES, billLines, billMoneyLine, billNeedsLine, billWhatForOf, formatHundredths, isBillAmount, type BillNeedsLine, type BillState,
+    BILL_RULES, INVITE_LIFE_MS, billLines, billMoneyLine, billNeedsLine, billWhatForOf, formatHundredths, isBillAmount, type BillNeedsLine, type BillState,
     type BillView, type PushNoticeKind,
 } from '@beanpool/core';
 import { isNodeMember } from '@beanpool/engine';
+import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { assertBeansOn, assertFeatureOn, getProfileSwitches } from '../config/node-profile.js';
 import { assertLedgerWritable, assertPlainTablesWritable, standbyWritesNothing } from '../config/node-role.js';
@@ -118,8 +127,12 @@ function dealtWith(payer: string, biller: string): boolean {
                            AND ((payer_pubkey = @a AND payee_pubkey = @b) OR (payer_pubkey = @b AND payee_pubkey = @a)) LIMIT 1`).get({ a: payer, b: biller });
 }
 
-/** The payer knows the sender (the message-request rule: added, written to or traded with): a push, an amber row. */
-const knownTo = (payer: string, bill: Pick<BillRow, 'biller_pubkey'>): boolean => !requestNeeded(bill.biller_pubkey, payer);
+/**
+ * The payer knows the sender (the message-request rule: added, written to or traded with): a push, an amber row. A bill that
+ * went with an invite reached its payer only because they joined with its sender's invite (bindInviteBill), so they know them.
+ */
+const knownTo = (payer: string, bill: Pick<BillRow, 'biller_pubkey' | 'invite_code'>): boolean =>
+    !!bill.invite_code || !requestNeeded(bill.biller_pubkey, payer);
 
 /** The payer has blocked the sender, or the keeper who sent it: the bill is never shown to them. */
 const hiddenFrom = (payer: string, bill: Pick<BillRow, 'biller_pubkey' | 'sent_by'>): boolean =>
@@ -221,6 +234,8 @@ function billViewFor(b: BillRow, role: 'to-pay' | 'sent'): BillView {
         state: role === 'sent' ? senderState(b.state) : b.state,
         sentAt: b.delivered_at ?? b.created_at, expiresAt: b.expires_at ?? '', paidAt: b.state === 'paid' ? b.answered_at : null,
     };
+    // Still waiting with its invite: withdrawn or lapsed with it, it waits for nobody.
+    if (role === 'sent' && !payer && b.invite_code && b.state === 'sent') return { ...base, awaitingJoin: true };
     return role === 'to-pay' && payer ? { ...base, known: knownTo(payer, b), creditOpen: dealtWith(payer, b.biller_pubkey) } : base;
 }
 
@@ -272,8 +287,12 @@ export interface BillSend {
 /** A date and time as a refusal writes when a limit lets up (UTC, as every kept notice). */
 const whenWords = (ms: number) => `${new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC`;
 
-/** Throws the first limit `biller` is over for one more bill to `payer` (design §4.4), counted from the bills table. */
-function assertUnderLimits(biller: string, payer: string, now: number): void {
+/**
+ * Throws the first limit `biller` is over for one more bill to `payer` (design §4.4), counted from the bills table. `payer`
+ * null: a bill with an invite, whose payer is whoever joins with it, so it is to someone new ("a bill on an invite counts as
+ * one of the 3").
+ */
+function assertUnderLimits(biller: string, payer: string | null, now: number): void {
     const times = BILL_RULES.enterpriseTimes;
     const enterprise = isEnterprise(biller);
     const day = db.prepare('SELECT payer_pubkey AS payer, created_at AS at FROM bills WHERE biller_pubkey = ? AND created_at > ? ORDER BY created_at')
@@ -283,7 +302,7 @@ function assertUnderLimits(biller: string, payer: string, now: number): void {
         const at = Date.parse(day[day.length - sentLimit].at) + DAY_MS;
         throw refuse(429, 'bills_sent_day', billLines.limitSent(sentLimit, whenWords(at)), iso(at));
     }
-    if (!dealtWith(payer, biller)) {
+    if (!payer || !dealtWith(payer, biller)) {
         // A bill on an invite (no payer yet) is to someone new.
         const toNew = day.filter((r) => !r.payer || !dealtWith(r.payer, biller));
         const newLimit = BILL_RULES.newPeoplePerDay * (enterprise ? times : 1);
@@ -294,10 +313,10 @@ function assertUnderLimits(biller: string, payer: string, now: number): void {
     }
     // Every bill to them in the 30 days that isn't paid counts: a declined one, so the limit never tells the sender a bill was
     // declined, and a withdrawn one, so withdrawing frees nothing: each one sent was a push and a notice to them (the deciding
-    // review of #3066, finding 3). An expired one is past the 30 days already.
-    const toOne = db.prepare(`SELECT created_at AS at FROM bills WHERE biller_pubkey = ? AND payer_pubkey = ? AND state != 'paid'
+    // review of #3066, finding 3). An expired one is past the 30 days already. A bill with an invite has nobody yet to count it for.
+    const toOne = payer === null ? [] : db.prepare(`SELECT created_at AS at FROM bills WHERE biller_pubkey = ? AND payer_pubkey = ? AND state != 'paid'
                                AND created_at > ? ORDER BY created_at`).all(biller, payer, iso(now - BILL_RULES.waitDays * DAY_MS)) as { at: string }[];
-    if (toOne.length >= BILL_RULES.unpaidToOnePer30Days) {
+    if (payer !== null && toOne.length >= BILL_RULES.unpaidToOnePer30Days) {
         const at = Date.parse(toOne[toOne.length - BILL_RULES.unpaidToOnePer30Days].at) + BILL_RULES.waitDays * DAY_MS;
         throw refuse(429, 'bills_to_one', billLines.limitToOne(BILL_RULES.unpaidToOnePer30Days, nameOf(payer), whenWords(at)), iso(at));
     }
@@ -368,7 +387,7 @@ export function sendBill(hooks: BillHooks, signer: string, body: BillSend, now: 
     const at = iso(now);
     const expires = iso(now + BILL_RULES.waitDays * DAY_MS);
     const hidden = hiddenFrom(payer, { biller_pubkey: biller, sent_by: signer });
-    const known = !hidden && knownTo(payer, { biller_pubkey: biller });
+    const known = !hidden && knownTo(payer, { biller_pubkey: biller, invite_code: null });
     let told: BillNotice[] = [];
     db.transaction(() => {
         db.prepare(`INSERT INTO bills (id, biller_pubkey, sent_by, payer_pubkey, amount_c, what_for, post_id, standing_id, state, created_at, delivered_at, expires_at)
@@ -386,6 +405,82 @@ export function sendBill(hooks: BillHooks, signer: string, body: BillSend, now: 
     }
     tell(hooks, told, 'trade.update');
     return billViewFor(readBill(id)!, 'sent');
+}
+
+// ── A bill with an invite (slice B3, design §4.5; the file header's WITH AN INVITE) ─────────────────────────────────────
+
+/** What an app sends with an invite (POST /api/invite/generate `bill`): its own id, what for, how many Beans. */
+export interface InviteBillSend { id?: unknown; whatFor?: unknown; amount_c?: unknown }
+
+/** A bill checked to go with an invite: the row to write in the invite's transaction, or, for a retry, the invite it went with. */
+export type InviteBillChecked = { id: string; amount_c: number; whatFor: string; replayOf?: undefined } | { replayOf: string };
+
+/**
+ * Checks a bill `maker` would send with an invite, before anything is written (generateInvite calls it once the maker may
+ * invite). Refused as a bill sent is: Beans or bills off, a bad id, amount or "what for", a maker who isn't an active member or
+ * is muted, bills on hold, or a limit, this bill counting as one to someone new (429 with resetsAt). The app's id again, for
+ * the same bill on an invite of the maker's nobody has used and still in its days, is a retry: it answers that invite, and
+ * nothing is written or counted. The same id for anything else is 409, and nothing is written.
+ */
+export function checkInviteBill(maker: string, body: unknown, now: number = Date.now()): InviteBillChecked {
+    assertBillsHere();
+    const b = (body && typeof body === 'object' ? body : {}) as InviteBillSend;
+    const id = b.id === undefined || b.id === null || b.id === '' ? crypto.randomUUID() : b.id;
+    if (typeof id !== 'string' || !BILL_ID.test(id)) throw refuse(400, 'bill_id', billLines.badId());
+    if (!activeHere(maker)) throw refuse(403, 'bill_sender', billLines.notAMember());
+    assertNotMuted(maker, now);
+    const amount = b.amount_c;
+    if (!isBillAmount(amount)) throw refuse(400, 'bill_amount', billLines.badAmount());
+    const whatFor = billWhatForOf(b.whatFor);
+    if (!whatFor) throw refuse(400, 'bill_what_for', billLines.badWhatFor());
+    const prior = readBill(id);
+    if (prior) {
+        const sameBill = prior.biller_pubkey === maker && prior.sent_by === maker && prior.payer_pubkey === null && prior.state === 'sent'
+            && prior.amount_c === amount && prior.what_for === whatFor && !!prior.expires_at && Date.parse(prior.expires_at) > now;
+        const unused = sameBill && !!prior.invite_code
+            && !!db.prepare('SELECT 1 FROM invite_codes WHERE code = ? AND created_by = ? AND used_by IS NULL').get(prior.invite_code, maker);
+        if (unused) return { replayOf: prior.invite_code! };
+        throw refuse(409, 'bill_id_reused', billLines.idReused());
+    }
+    if (billOnHold({ biller_pubkey: maker, sent_by: maker })) throw refuse(403, 'bills_on_hold', billLines.onHold());
+    assertUnderLimits(maker, null, now);
+    return { id, amount_c: amount, whatFor };
+}
+
+/**
+ * Inside the invite's transaction: the checked bill (checkInviteBill), from its maker, on invite `code`, with no payer. It
+ * waits exactly as long as the invite works (30 days from `inviteMadeAt`), so an invite that lapses unused takes it with it
+ * (expireBills). Never told to anyone: nobody can read it but its sender until someone joins.
+ */
+export function placeInviteBill(maker: string, code: string, bill: { id: string; amount_c: number; whatFor: string }, inviteMadeAt: string): void {
+    db.prepare(`INSERT INTO bills (id, biller_pubkey, sent_by, payer_pubkey, invite_code, amount_c, what_for, state, created_at, expires_at)
+                VALUES (?, ?, ?, NULL, ?, ?, ?, 'sent', ?, ?)`)
+        .run(bill.id, maker, maker, code, bill.amount_c, bill.whatFor, inviteMadeAt, iso(Date.parse(inviteMadeAt) + INVITE_LIFE_MS));
+}
+
+/**
+ * Inside the redeem's transaction (engine/invites.ts redeemInvite), once `payer` is a member by invite `code`: the bill that
+ * waited with it, if any, is theirs, reaching them now and waiting 30 days from now. Only a bill still waiting with no payer
+ * and in its days: one withdrawn, ended with its sender's account, or lapsed with the invite stays as it is. Returns whether
+ * one was given its payer.
+ */
+export function bindInviteBill(code: string, payer: string, now: number = Date.now()): boolean {
+    return db.prepare(`UPDATE bills SET payer_pubkey = ?, delivered_at = ?, expires_at = ?
+                        WHERE invite_code = ? AND payer_pubkey IS NULL AND state = 'sent' AND expires_at > ?`)
+        .run(payer, iso(now), iso(now + BILL_RULES.waitDays * DAY_MS), code, iso(now)).changes === 1;
+}
+
+/** Inside a revoke's transaction (engine/invites.ts): the bill waiting with invite `code` is withdrawn with it. Returns how many. */
+export function withdrawInviteBill(code: string, now: number = Date.now()): number {
+    return db.prepare(`UPDATE bills SET state = 'withdrawn', answered_at = ? WHERE invite_code = ? AND payer_pubkey IS NULL AND state = 'sent'`)
+        .run(iso(now), code).changes;
+}
+
+/** The bills `maker` sent with their invites, by code: what each invite carries (GET /api/invite/mine). */
+export function inviteBillsOf(maker: string): Map<string, { whatFor: string; amount_c: number }> {
+    const rows = db.prepare('SELECT invite_code AS code, what_for, amount_c FROM bills WHERE sent_by = ? AND invite_code IS NOT NULL')
+        .all(maker) as { code: string; what_for: string; amount_c: number }[];
+    return new Map(rows.map((r) => [r.code, { whatFor: r.what_for, amount_c: r.amount_c }]));
 }
 
 // ── Paying, declining, withdrawing ──────────────────────────────────────────────────────────────────────────────────

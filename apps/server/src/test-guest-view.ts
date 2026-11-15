@@ -1335,6 +1335,8 @@ async function main(): Promise<void> {
             'POST /api/groups/:id/keys/:epoch/reject', 'POST /api/groups/:id/keys/wrap', 'POST /api/groups/:id/lead',
             'GET /api/groups/:id/members', 'GET /api/groups/:id/invitations', 'DELETE /api/groups/:id/invitations/:pubkey', 'POST /api/groups/:id/members', 'DELETE /api/groups/:id/members/:pubkey',
             'PATCH /api/groups/:id/members/:pubkey', 'GET /api/groups/:id/picture', 'DELETE /api/groups/:id/posts/:postId', 'GET /api/groups/:id/succession',
+            // Guests from other communities in a group's chat (engine/group-guests.ts, G1): its active members only.
+            'GET /api/groups/:id/guests', 'POST /api/groups/:id/guests', 'DELETE /api/groups/:id/guests/:key',
             'POST /api/groups/:id/succession/:proposalId/vote', 'POST /api/groups/:id/succession/propose',
             // A chat group's votes (routes/group-decisions.ts): its members see them, everyone else 404.
             'GET /api/groups/:id/decisions', 'POST /api/groups/:id/decisions', 'GET /api/groups/:id/decisions/:decisionId',
@@ -1352,6 +1354,8 @@ async function main(): Promise<void> {
             // Its waiting list (slice K3): a member's suggestion, their own, taking one back; an owner's or admin's To check.
             'POST /api/knowledge/drafts', 'GET /api/knowledge/drafts/mine', 'POST /api/knowledge/drafts/:id/withdraw', 'GET /api/knowledge/drafts',
             'GET /api/knowledge/drafts/:id', 'POST /api/knowledge/drafts/:id/approve', 'POST /api/knowledge/drafts/:id/no',
+            // "This helped" (slice K5): a member's tap on a page, signed.
+            'POST /api/knowledge/posts/:id/helped',
             // The forum (routes/forum.ts, slice F1): members' reads and writes, all signed; the public pages are slice F7's.
             'GET /api/free-tags',
             'GET /api/forum', 'GET /api/forum/topics', 'GET /api/forum/topics/:id', 'GET /api/forum/posts/:id/photos/:n', 'POST /api/forum/told',
@@ -1365,6 +1369,8 @@ async function main(): Promise<void> {
             'POST /api/forum/topics/:id/follow', 'POST /api/forum/topics/:id/read',
             // Search (slice F6): a member's, signed, counted against their day's searches.
             'GET /api/forum/search',
+            // A poll in a topic and the Decision chip (slice F8).
+            'POST /api/forum/topics/:id/poll', 'POST /api/forum/topics/:id/decision',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',

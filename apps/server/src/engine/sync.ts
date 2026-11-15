@@ -128,15 +128,20 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  * 15. Money is whole hundredths (DESIGN-atomic-beans-fable.md): every money field `*_c`, an integer (balance_c, amount_c,
  *     fee_c, price_c, commonsBalance_c, ...). An importer before this one reads none of them, so OLDEST_STANDBY_FORMAT is 15:
  *     a copy or a delta is never sent to an older standby.
+ * 16. A forum section's group and a topic's poll (slice F8, engine/forum-sections.ts: forum_sections.group_id,
+ *     forum_topics.poll_post_id), and what topics link (forum_links). An importer before this one drops the group: a group's
+ *     section would land as every member's, and every member reading that standby, or a server promoted from it, would read
+ *     the group's topics. OLDEST_STANDBY_FORMAT is 16 from here, as 11 was for the let-in: a copy or a delta is never sent to
+ *     an older standby.
  */
-export const REPLICA_FORMAT = 15;
+export const REPLICA_FORMAT = 16;
 
 /**
  * The oldest importer a main server sends a copy to (routes/backup.ts sync-copy, a whole copy or a delta): 8 photos by
- * reference, 10 event times, 11 the let-in, 12 repeating events; raise it with any format whose older importer drops a
- * column.
+ * reference, 10 event times, 11 the let-in, 12 repeating events, 15 money in hundredths, 16 a forum section's group; raise it
+ * with any format whose older importer drops a column.
  */
-export const OLDEST_STANDBY_FORMAT = 15;
+export const OLDEST_STANDBY_FORMAT = 16;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only

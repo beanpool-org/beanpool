@@ -84,7 +84,7 @@ import { setRequestBroadcast, heldFromUnread, countRequestsWaitingFor, expireOld
 import { evaluateRequestReports, liftRequestLimit, requestReceived, dropRequestLimitsOf } from './engine/request-limits.js';
 import { repaymentOf, assertPayableDebt, countDebtPayment, PAID_TO_COMMONS_MEMO } from './engine/names-debts.js';
 import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
-import { dropNamesListHoldOf } from './engine/names-list.js';
+import { dropNamesListHoldOf, mayReadNamesList } from './engine/names-list.js';
 import { dropContactCopyOf, contactCopySeqOf } from './engine/contact-copies.js';
 import { keepsContactCopies } from './config/contact-copies.js';
 import { withholdsNote, keepWithheldNote, noteAsReadBy, dropWithheldNotesOf, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './engine/withheld-notes.js';
@@ -106,7 +106,7 @@ import {
 import {
     sendBill as sendBillEngine, payBill as payBillEngine, declineBill as declineBillEngine, withdrawBill as withdrawBillEngine,
     listBills as listBillsEngine, billReported as billReportedEngine, expireBills, endBillsOf, billReportReason, billsReportedIn,
-    type BillRow, type BillSend, type PaidBill,
+    inviteBillsOf, type BillRow, type BillSend, type PaidBill,
 } from './engine/bills.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
@@ -472,6 +472,8 @@ import {
 } from './engine/group-thread.js';
 export { GROUP_THREAD_NOTICE, GROUP_THREAD_MESSAGE_MAX, GroupSystemType, canReadGroupThread } from './engine/group-thread.js';
 import { withMembershipEpoch, markGroupEpochsStaleFor, markGroupEpochStale, groupKeyRoster, setMembershipFromEpoch } from './engine/group-keys.js';
+// For a re-key's roster changes (engine/member-wizards.ts), which can't import group-keys itself without a cycle.
+export { markGroupEpochsStaleFor };
 import { clearInviteDecline, recordInviteDecline } from './engine/group-invitations.js';
 import {
     proposeGroupConvenor as proposeGroupConvenorEngine,
@@ -2239,16 +2241,27 @@ export interface MyInviteRead extends MyInvite {
     forKnock: boolean;
     /** The callsign of whoever joined with it, once used. */
     usedByCallsign: string | null;
+    /** The bill that went with it (engine/bills.ts WITH AN INVITE, slice B3): what for and how many Beans; absent without one. */
+    bill?: { whatFor: string; amount_c: number };
 }
 
-/** A member's own invites, for their eyes alone (GET /api/invite/mine/:publicKey checks the signer is the maker). */
+/**
+ * A member's own invites, for their eyes alone (GET /api/invite/mine/:publicKey checks the signer is the maker).
+ *
+ * An invite bound to a names-list entry says which entry (`namesEntryId`) only while its maker may read the names list
+ * (engine/names-list.ts mayReadNamesList: an owner or admin whose role acts, asked now): with it their phone shows that
+ * person's name beside the invite (Marty, 12 Nov). A maker who has since stopped being one (role revoked, changed to
+ * moderator, suspended) still has the invite, to share or revoke, with `namesEntryId` null, as a plain invite has it.
+ */
 export function getInvitesByMember(pubkey: string): MyInviteRead[] {
-    const rows = getInvitesByMemberEngine(db, pubkey);
-    if (rows.length === 0) return [];
+    const found = getInvitesByMemberEngine(db, pubkey);
+    if (found.length === 0) return [];
+    const rows = mayReadNamesList(pubkey) ? found : found.map((r) => (r.namesEntryId ? { ...r, namesEntryId: null } : r));
     const knocked = new Set((db.prepare('SELECT invite_code FROM join_requests WHERE decided_by = ? AND invite_code IS NOT NULL').all(pubkey) as { invite_code: string }[])
         .map((r) => r.invite_code));
     const callsignOf = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
     const joiners = new Map<string, string | null>();
+    const bills = inviteBillsOf(pubkey);
     return rows.map((r) => {
         if (r.usedBy && !joiners.has(r.usedBy)) joiners.set(r.usedBy, (callsignOf.get(r.usedBy) as { callsign: string } | undefined)?.callsign ?? null);
         // The knock row is deleted 30 days after the yes (tidyKnocks, engine/knocks.ts), so a used code is told by its own
@@ -2258,7 +2271,8 @@ export function getInvitesByMember(pubkey: string): MyInviteRead[] {
         // is the maker's own words.
         const forKnock = knocked.has(r.code)
             || (!!r.usedBy && (r.intendedFor === r.usedBy || (r.intendedFor != null && isMemberKeySpelling(r.intendedFor))));
-        return { ...r, forKnock, usedByCallsign: r.usedBy ? joiners.get(r.usedBy) ?? null : null };
+        const bill = bills.get(r.code);
+        return { ...r, forKnock, usedByCallsign: r.usedBy ? joiners.get(r.usedBy) ?? null : null, ...(bill ? { bill } : {}) };
     });
 }
 
@@ -5827,6 +5841,8 @@ export function createPost(
         freeTags?: unknown;
         /** No photo needed: for the server's own callers only (tests); no route passes it. */
         allowNoPhoto?: boolean;
+        /** A poll a forum topic will hold, in this section (engine/forum.ts addForumPoll): its own pool. No route passes it from a body. */
+        forumSectionId?: string;
         shownCopy?: CopyColumns | null;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
         beforeWrite?: () => void;
@@ -8848,6 +8864,10 @@ export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled
     if (status !== 'pruned' && isDeletedByOwner(publicKey)) throw new Error(OWNER_DELETED_REFUSAL);
     const was = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(publicKey) as { status: string | null } | undefined)?.status;
     db.prepare("UPDATE members SET status=? WHERE public_key=?").run(status, publicKey);
+    // Into or out of 'pruned', the key leaves or rejoins every group chat roster they hold a row in (isNodeMember; a
+    // prune keeps the group rows, so a reinstate vote brings the key back): stale, and the roster to the guests' homes.
+    // A pause ('disabled') changes no roster: the account keeps every membership and its key while it lasts.
+    if (was !== undefined && (was === 'pruned') !== (status === 'pruned')) markGroupEpochsStaleFor(publicKey);
     // A retired empty duplicate's mark (retired_accounts, engine/retire-duplicate.ts) holds only while the account stays
     // 'disabled' from that retire. Every way out of 'disabled' but one comes through here (Bring back, a passed unsuspend
     // or reinstate vote, Lift, a prune), so the mark goes here: a later pause is then a pause, with its own vote and its
@@ -11908,6 +11928,12 @@ export function getGroupThread(groupId: string, viewerPubkey: string | undefined
 export function postGroupThreadMessage(groupId: string, authorPubkey: string, line: GroupLineIn, clientId?: string): EventThreadMessage {
     assertGroupNotClosed(groupId);
     return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, line, clientId);
+}
+
+/** A guest's line from another community (engine/group-guests.ts takeGuestItem, which checked they are in): as a member's. */
+export function postGuestGroupLine(groupId: string, guestKey: string, line: GroupLineIn, clientId?: string): EventThreadMessage {
+    assertGroupNotClosed(groupId);
+    return postGroupThreadMessageEngine(getMessagingCb(), groupId, guestKey, line, clientId, { guest: true });
 }
 
 export function removeGroupThreadMessage(groupId: string, messageId: string, actorPubkey: string): EventThreadMessage {

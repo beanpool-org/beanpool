@@ -27,6 +27,15 @@
  *   writer removes with no one else's reply in it is gone from every list and read (`closed_by` 'removed'); with others'
  *   replies, its title and opening words are blanked, it closes, and the replies stay. Deleting an account does the same to
  *   every post of theirs; the wording before an edit and their photos go with tombstones.
+ * - **A group's section** (slice F8, engine/forum-sections.ts): its group's active members and the moderators read it, its
+ *   convenors and members write; nobody else learns it exists (every read takes sectionReadSql; a topic, a photo, a reply or a
+ *   follow there answers 404 as an id nobody has). Its group is set when it is made and never changes, it is never listed, and
+ *   no topic moves into or out of it. A writer who left the group may still remove their own words there, not edit them.
+ * - **A poll in a topic** (slice F8, design §10.1; addForumPoll): the ordinary poll, added by the topic's writer, one a topic;
+ *   a group's section's is the group's poll (only its convenors and members vote). Counted in its section's own pool (3 open),
+ *   never in the community's five, still one open a member (engine/posts.ts assertActivePollRoom).
+ * - **The Decision chip** (slice F8; linkForumDecision): the topic's writer or an owner or admin links one of the community's
+ *   Decisions (forum_links), where Decisions are on; whoever reads the topic sees its title and state.
  * - **Starter sections** are made once, by the main server, the first time it finds the forum with none, and a marker in
  *   node_config stops them coming back (design §20). A standby makes nothing: its main server's come in its copy.
  *
@@ -55,6 +64,9 @@ import { assertMayEditForumToday } from './writer-bounds.js';
 import { WRITER_LIMITS } from '../config/writer-limits.js';
 import { forumNewness, inNewAccountDays, isForumModerator, knownWriters, type ForumNewness } from './forum-moderation.js';
 import { dropForumFollowsOf, followForumTopic, forumFollowOf, markForumTopicRead, setForumFollow, type ForumNoticeCallbacks } from './forum-notices.js';
+import { forumSectionOpenPolls, sectionAccess, sectionReadSql, type SectionAccess } from './forum-sections.js';
+import { postOutOfSight } from './post-sight.js';
+import { getDecision, titleForMembers } from '../decisions-engine.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -94,6 +106,16 @@ export const FORUM_WORDS = {
     newNoPhotos: word('While your account is new, photos go only in your first topic, which a moderator looks at first.'),
     newEditWindow: word('While your account is new, you can edit a post only in the hour after you wrote it.'),
     waitingAlready: word('Your first topic is still waiting for a moderator’s look. You can start another once it has an answer, or withdraw it.'),
+    groupOnly: word('Only this group’s convenors and members write here. You can read it.'),
+    groupNotFound: word('That group isn’t here.'),
+    groupFixed: word('A section’s group is set when it is made and can’t change. Make a new section instead.'),
+    groupUnlisted: word('A group’s section is for its members, so search engines never list it.'),
+    groupSection: word('A topic can’t move into or out of a group’s section.'),
+    pollNotYours: word('Only the topic’s writer can add a poll to it.'),
+    pollAlready: word('This topic already has a poll.'),
+    decisionsOff: word('Decisions are switched off in this community, so a topic can’t link one.'),
+    decisionNotFound: word('That Decision isn’t here any more.'),
+    decisionNotYours: word('Only its writer, an owner or an admin can link a Decision to this topic.'),
 };
 
 /** A member's own text: control and hidden characters out, at most `max` characters, or a refusal over it. */
@@ -135,17 +157,21 @@ const nameOf = (pk: string) => getMember(db, pk)?.callsign ?? '';
 
 // ── Rows and what an answer holds ───────────────────────────────────────────────────────────────────────────────
 
-interface SectionRow { id: string; starter: string | null; name: string | null; about: string | null; position: number; starts: ForumSectionStarts; listed: number; archived_at: string | null }
+interface SectionRow { id: string; starter: string | null; name: string | null; about: string | null; position: number; starts: ForumSectionStarts; listed: number; archived_at: string | null; group_id: string | null }
 interface TopicRow {
     id: string; section_id: string; title: string; writer_pubkey: string; place: string | null; lang: string | null; reply_count: number;
-    last_activity_at: string; pinned_at: string | null; closed_at: string | null; closed_by: string | null; created_at: string;
+    last_activity_at: string; pinned_at: string | null; closed_at: string | null; closed_by: string | null; created_at: string; poll_post_id: string | null;
 }
 interface PostRow {
     id: string; topic_id: string; number: number; writer_pubkey: string; words: string; quotes: number | null; lang: string | null;
     created_at: string; edited_at: string | null; removed_at: string | null; removed_by: string | null; hidden_by_reports_at: string | null;
 }
 
-export interface ForumSection { id: string; starter: string | null; name: string | null; about: string | null; position: number; starts: ForumSectionStarts; listed: boolean; archived: boolean }
+export interface ForumSection {
+    id: string; starter: string | null; name: string | null; about: string | null; position: number; starts: ForumSectionStarts; listed: boolean; archived: boolean;
+    /** The group it belongs to (slice F8), only ever in an answer to someone who reads it; null: every member's. */
+    group: { id: string; name: string } | null;
+}
 export interface ForumWriter { publicKey: string; name: string }
 export interface ForumTopic {
     id: string; sectionId: string; title: string; writer: ForumWriter; place: string | null; lang: string | null; replyCount: number;
@@ -156,6 +182,10 @@ export interface ForumTopic {
     follow: ForumFollow | null;
     /** They follow it and it has a post they are shown (none by someone they blocked) past the last one they opened: the list's unread dot. */
     unread: boolean;
+    /** Its poll (slice F8), the posts row's id, for a reader who may see that poll (a group's: its members); else null. */
+    pollId: string | null;
+    /** The community Decision it links (slice F8, the Decision chip): its title and state; null for none. */
+    decision: { id: string; title: string; status: string } | null;
 }
 export interface ForumPost {
     id: string; topicId: string; number: number; writer: ForumWriter; words: string; quotes: number | null; lang: string | null;
@@ -167,16 +197,59 @@ export interface ForumPost {
     linksOn: boolean;
 }
 
+const groupOf = (id: string | null) => {
+    if (!id) return null;
+    const name = db.prepare('SELECT name FROM groups WHERE id = ?').pluck().get(id) as string | undefined;
+    return { id, name: name ?? '' };
+};
 const sectionOut = (r: SectionRow): ForumSection => ({
     id: r.id, starter: r.starter, name: r.name, about: r.about, position: r.position, starts: r.starts, listed: r.listed === 1, archived: r.archived_at !== null,
+    group: groupOf(r.group_id),
 });
+/** The poll a topic holds, when `reader` may see it (engine/post-sight.ts: a group's poll, its active members and its author). */
+function pollFor(r: { poll_post_id: string | null }, reader: string): string | null {
+    if (!r.poll_post_id) return null;
+    const row = db.prepare('SELECT author_pubkey, audience_scope, target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?').get(r.poll_post_id) as
+        { author_pubkey: string; audience_scope: string | null; target_group_id: string | null; target_pubkey: string | null; assigned_to: string | null } | undefined;
+    return row && !postOutOfSight(row, reader) ? r.poll_post_id : null;
+}
+/**
+ * The Decision chip's rows: the community's Decisions alone, as every member may open them (routes/commons.ts). A scoped one,
+ * a group's or an enterprise's, is its roll's only (getGroupDecision, getScopedDecision): never linked, never shown, whoever reads.
+ */
+interface ChipRow { id: string; title: string; status: string; case_hidden_at: string | null }
+const CHIP_COLUMNS = 'd.id, d.title, d.status, d.case_hidden_at';
+const COMMUNITY_DECISION = "d.scope_kind = 'community'";
+/** A chip as members read it: the title through titleForMembers, so a removal whose case an admin hid shows the node's title, not the member's own. */
+const chipOut = (r: ChipRow): NonNullable<ForumTopic['decision']> => {
+    const decision = r.case_hidden_at ? getDecision(r.id) : null;
+    return { id: r.id, title: decision ? titleForMembers(decision) : r.title, status: r.status };
+};
+/** One of the community's Decisions, as its chip shows it; null for an id nobody has, or one only its roll may open. */
+function communityDecision(id: string): ForumTopic['decision'] {
+    const row = db.prepare(`SELECT ${CHIP_COLUMNS} FROM decisions d WHERE d.id = ? AND ${COMMUNITY_DECISION}`).get(id) as ChipRow | undefined;
+    return row ? chipOut(row) : null;
+}
+/** The community Decision a topic links (forum_links), as its chip reads it; null for none, one no longer there, or a scoped one. */
+function decisionOf(topicId: string): ForumTopic['decision'] {
+    const row = db.prepare(`SELECT ${CHIP_COLUMNS} FROM forum_links l JOIN decisions d ON d.id = l.target_id
+        WHERE l.topic_id = ? AND l.kind = 'decision' AND ${COMMUNITY_DECISION} ORDER BY l.created_at LIMIT 1`).get(topicId) as ChipRow | undefined;
+    return row ? chipOut(row) : null;
+}
+/** Every chip the topics show, as shown (forumListTag): a state, a title as members read it, one gone or out of sight, each moves the tag. */
+function chipsShown(): string {
+    const rows = db.prepare(`SELECT ${CHIP_COLUMNS} FROM decisions d WHERE ${COMMUNITY_DECISION}
+        AND d.id IN (SELECT target_id FROM forum_links WHERE kind = 'decision') ORDER BY d.id`).all() as ChipRow[];
+    return crypto.createHash('sha256').update(JSON.stringify(rows.map(chipOut))).digest('hex').slice(0, 16);
+}
 /** A topic row as the reader reads it; `follow_state`, `last_read` and `last_number` are theirs (READER_FOLLOW). */
 type TopicRowRead = TopicRow & { opening_removed?: number; opening_hidden?: number; follow_state?: ForumFollow | null; last_read?: number | null; last_number?: number | null };
-const topicOut = (r: TopicRowRead): ForumTopic => ({
+const topicOut = (r: TopicRowRead, reader: string): ForumTopic => ({
     id: r.id, sectionId: r.section_id, title: r.title, writer: { publicKey: r.writer_pubkey, name: nameOf(r.writer_pubkey) }, place: r.place, lang: r.lang,
     replyCount: r.reply_count, lastActivityAt: r.last_activity_at, createdAt: r.created_at, pinned: r.pinned_at !== null, closed: r.closed_by,
     removed: !!r.opening_removed, hidden: !!r.opening_hidden,
     follow: r.follow_state ?? null, unread: r.follow_state === 'following' && (r.last_number ?? 0) > (r.last_read ?? 0),
+    pollId: pollFor(r, reader), decision: decisionOf(r.id),
 });
 /** Leaves out what `reader` blocked: `col` names the writer's key column. */
 const NOT_BLOCKED = (col: string) => `${col} NOT IN (SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = @reader)`;
@@ -260,6 +333,12 @@ export function forumListTag(reader: string): string {
         stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM member_blocks WHERE owner_pubkey = ?', reader),
         // The reader's follows and how far they read (slice F5): each row's follow and unread dot.
         stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM forum_follows WHERE member_pubkey = ?', reader),
+        // The groups the reader is in (slice F8): joining, leaving or a role moved changes which sections' topics they read.
+        stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM group_members WHERE member_pubkey = ?', reader),
+        // The Decisions topics link and the polls they hold (slice F8): a row's chip and pollId. The chips as shown, not a
+        // stamp of the rows: the title a member reads changes when an admin hides a removal's case.
+        stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM forum_links'),
+        chipsShown(),
         getMembersVersion(),
         // What the reader's role shows: archived sections (owners, admins) and hidden topics (moderators).
         nodeRoleOf(reader) ?? 'member',
@@ -269,6 +348,25 @@ export function forumListTag(reader: string): string {
 
 function sectionRow(id: string): SectionRow | undefined {
     return db.prepare('SELECT * FROM forum_sections WHERE id = ?').get(id) as SectionRow | undefined;
+}
+
+/** A section `member` may read, with what they may do there; or a 404 as for a section nobody has (a group's they are not in). */
+function readableSection(member: string, id: unknown): { section: SectionRow; access: SectionAccess } {
+    const section = typeof id === 'string' ? sectionRow(id) : undefined;
+    const access = section ? sectionAccess(member, section.group_id) : 'none';
+    if (!section || access === 'none') throw new ForumRefusal(404, 'not_found', FORUM_WORDS.sectionNotFound);
+    return { section, access };
+}
+
+/** In a group's section only its convenors and members write: anyone else who reads it is refused (403 `group_only`). */
+function assertWritesIn(member: string, sectionId: string): void {
+    const section = sectionRow(sectionId);
+    if (section && sectionAccess(member, section.group_id) !== 'write') throw new ForumRefusal(403, 'group_only', FORUM_WORDS.groupOnly);
+}
+
+/** The section a topic is in, or null (slice F8: a new topic's doorbell goes to who reads that section). */
+export function forumTopicSection(topicId: string): string | null {
+    return (db.prepare('SELECT section_id FROM forum_topics WHERE id = ?').pluck().get(topicId) as string | undefined) ?? null;
 }
 
 export interface ForumFront {
@@ -291,7 +389,9 @@ export interface ForumFront {
 export function forumFront(reader: string): ForumFront {
     ensureForumStarters();
     const staff = isStaff(reader);
-    const rows = db.prepare(`SELECT * FROM forum_sections ${staff ? '' : 'WHERE archived_at IS NULL'} ORDER BY position, created_at, id`).all() as SectionRow[];
+    // A group's section only to who reads it (engine/forum-sections.ts): nobody else's list holds it or counts it.
+    const rows = db.prepare(`SELECT s.* FROM forum_sections s WHERE ${staff ? '1' : 's.archived_at IS NULL'} AND ${sectionReadSql('s.id', '@reader')}
+        ORDER BY s.position, s.created_at, s.id`).all({ reader }) as SectionRow[];
     const moderator = isForumModerator(reader);
     const newness = forumNewness(reader);
     return {
@@ -307,14 +407,16 @@ export function forumTopics(reader: string, opts: { sectionId?: string; offset: 
     ensureForumStarters();
     if (opts.sectionId !== undefined) {
         // An archived section is out of members' lists, by its id too; owners and admins still list it.
-        const section = sectionRow(opts.sectionId);
-        if (!section || (section.archived_at && !isStaff(reader))) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.sectionNotFound);
+        // A group's section the reader is not in: the same 404 (readableSection).
+        const { section } = readableSection(reader, opts.sectionId);
+        if (section.archived_at && !isStaff(reader)) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.sectionNotFound);
     }
     const where = [
         "COALESCE(t.closed_by, '') != 'removed'",
         NOT_BLOCKED('t.writer_pubkey'),
         NOT_HIDDEN_TO_READER,
         opts.sectionId !== undefined ? 't.section_id = @section' : 't.section_id IN (SELECT id FROM forum_sections WHERE archived_at IS NULL)',
+        sectionReadSql('t.section_id', '@reader'),
     ];
     const rows = db.prepare(`
         SELECT t.*, ${OPENING_REMOVED}, ${OPENING_HIDDEN}, ${READER_FOLLOW} FROM forum_topics t WHERE ${where.join(' AND ')}
@@ -322,16 +424,18 @@ export function forumTopics(reader: string, opts: { sectionId?: string; offset: 
         .all({ reader, mod: isForumModerator(reader) ? 1 : 0, section: opts.sectionId ?? null, limit: FORUM_LIMITS.topicsPerPage + 1, offset: opts.offset }) as
         TopicRowRead[];
     const more = rows.length > FORUM_LIMITS.topicsPerPage;
-    return { topics: rows.slice(0, FORUM_LIMITS.topicsPerPage).map(topicOut), next: more ? opts.offset + FORUM_LIMITS.topicsPerPage : null };
+    return { topics: rows.slice(0, FORUM_LIMITS.topicsPerPage).map((r) => topicOut(r, reader)), next: more ? opts.offset + FORUM_LIMITS.topicsPerPage : null };
 }
 
 /**
- * A topic the reader may see: not gone, not by someone they blocked, not hidden from them (its opening post hidden).
- * `hiddenOk`: a writer's own post in it is still theirs to edit or remove while it is hidden (ownPost).
+ * A topic the reader may see: not gone, not by someone they blocked, not hidden from them (its opening post hidden), not in a
+ * group's section they are not in (slice F8). `hiddenOk`: a writer's own post in it is still theirs to edit or remove while it
+ * is hidden (ownPost). `anySection`: the writer of a post there may still remove it after leaving the group (removeForumPost).
  */
-function visibleTopic(reader: string, id: string, opts: { hiddenOk?: boolean } = {}): TopicRow {
+function visibleTopic(reader: string, id: string, opts: { hiddenOk?: boolean; anySection?: boolean } = {}): TopicRow {
     const row = db.prepare(`SELECT t.* FROM forum_topics t WHERE t.id = @id AND COALESCE(t.closed_by, '') != 'removed'
-        AND ${NOT_BLOCKED('t.writer_pubkey')} AND ${NOT_HIDDEN_TO_READER}`).get({ id, reader, mod: opts.hiddenOk || isForumModerator(reader) ? 1 : 0 }) as TopicRow | undefined;
+        AND ${NOT_BLOCKED('t.writer_pubkey')} AND ${NOT_HIDDEN_TO_READER} ${opts.anySection ? '' : `AND ${sectionReadSql('t.section_id', '@reader')}`}`)
+        .get({ id, reader, mod: opts.hiddenOk || isForumModerator(reader) ? 1 : 0 }) as TopicRow | undefined;
     if (!row) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.notFound);
     return row;
 }
@@ -351,7 +455,7 @@ export function forumTopic(reader: string, id: string, after: number): { topic: 
     const { follow, lastRead } = forumFollowOf(reader, id);
     const lastNumber = (db.prepare(`SELECT ${LAST_SHOWN('@id')}`).pluck().get({ id, reader }) as number | null) ?? 0;
     return {
-        topic: topicOut({ ...t, opening_removed: opening?.removed_by ? 1 : 0, opening_hidden: opening?.hidden_by_reports_at ? 1 : 0, follow_state: follow, last_read: lastRead, last_number: lastNumber }),
+        topic: topicOut({ ...t, opening_removed: opening?.removed_by ? 1 : 0, opening_hidden: opening?.hidden_by_reports_at ? 1 : 0, follow_state: follow, last_read: lastRead, last_number: lastNumber }, reader),
         posts: postsOut(posts, reader),
         next: more ? posts[posts.length - 1].number : null,
         lastRead,
@@ -450,8 +554,9 @@ export interface ForumWaitingTopic {
 export function startForumTopic(member: string, raw: TopicInput, now = Date.now()): { topic: ForumTopic; post: ForumPost } | { waiting: ForumWaitingTopic } {
     writable(member, now);
     ensureForumStarters(now);
-    const section = typeof raw.sectionId === 'string' ? sectionRow(raw.sectionId) : undefined;
-    if (!section || section.archived_at) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.sectionNotFound);
+    const { section, access } = readableSection(member, raw.sectionId);
+    if (section.archived_at) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.sectionNotFound);
+    if (access !== 'write') throw new ForumRefusal(403, 'group_only', FORUM_WORDS.groupOnly);
     if (section.starts === 'staff' && !isStaff(member)) throw new ForumRefusal(403, 'staff_only', FORUM_WORDS.staffOnly);
     assertTold(member);
     const title = text(raw.title, FORUM_LIMITS.title, 'title').replace(/\s+/g, ' ');
@@ -514,6 +619,7 @@ export interface ReplyInput { words?: unknown; quotes?: unknown; lang?: unknown;
 export function replyInForum(member: string, topicId: string, raw: ReplyInput, now = Date.now()): ForumPost {
     writable(member, now);
     const topic = visibleTopic(member, topicId);
+    assertWritesIn(member, topic.section_id);
     if (topic.closed_at || sectionRow(topic.section_id)?.archived_at) throw new ForumRefusal(409, 'closed', FORUM_WORDS.closed);
     assertTold(member);
     const words = text(raw.words, FORUM_LIMITS.reply, 'words');
@@ -545,11 +651,12 @@ export function replyInForum(member: string, topicId: string, raw: ReplyInput, n
     return onePostOut(id, member);
 }
 
-/** The writer's own post, still there, in a topic they may see; or a refusal. */
-function ownPost(member: string, postId: string): { post: PostRow; topic: TopicRow } {
+/** The writer's own post, still there, in a topic they may see (`anySection`: or one in a group's section they left); or a refusal. */
+function ownPost(member: string, postId: string, opts: { anySection?: boolean } = {}): { post: PostRow; topic: TopicRow } {
     const post = postRow(postId);
     if (!post || post.removed_by) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.postNotFound);
-    const topic = visibleTopic(member, post.topic_id, { hiddenOk: post.writer_pubkey === member });
+    const mine = post.writer_pubkey === member;
+    const topic = visibleTopic(member, post.topic_id, { hiddenOk: mine, anySection: mine && opts.anySection });
     if (post.writer_pubkey !== member) throw new ForumRefusal(403, 'not_yours', FORUM_WORDS.notYours);
     return { post, topic };
 }
@@ -566,6 +673,7 @@ export function editForumPost(member: string, postId: string, raw: { words?: unk
     // is hidden reads nothing of it, and is refused here, before anything is saved or an edit spent (F2's follow-up: the
     // answer's own read used to 404 after the save). Removing their reply (removeForumPost) is still theirs.
     const topic = visibleTopic(member, post.topic_id);
+    assertWritesIn(member, topic.section_id);
     if (topic.closed_at) throw new ForumRefusal(409, 'closed', FORUM_WORDS.closed);
     // While an account is new, only in the hour after writing it, so an approved first topic can't be swapped (design §3).
     // By the new-account days, not by "known": OK makes its writer known, and the rule is there for exactly that topic.
@@ -645,7 +753,8 @@ export function removeForumPostAsModerator(postId: string, now = Date.now()): bo
 /** The writer removes their own post: a reply leaves a marker; an opening post takes its topic's title with it. */
 export function removeForumPost(member: string, postId: string, now = Date.now()): void {
     assertPlainTablesWritable();
-    const { post, topic } = ownPost(member, postId);
+    // Their own words are always theirs to take down: also in a group's section they have left since.
+    const { post, topic } = ownPost(member, postId, { anySection: true });
     const at = iso(now);
     db.transaction(() => {
         blankPost(post.id, 'writer', at);
@@ -699,14 +808,75 @@ export function moveForumTopic(member: string, topicId: string, sectionId: unkno
     const to = typeof sectionId === 'string' ? sectionRow(sectionId) : undefined;
     if (!to || to.archived_at) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.sectionNotFound);
     if (to.id === topic.section_id) throw new ForumRefusal(409, 'same_section', FORUM_WORDS.sameSection);
+    // A group's talk never moves where others read it, nor others' talk into a group's (slice F8).
+    if ((sectionRow(topic.section_id)?.group_id ?? null) !== (to.group_id ?? null)) throw new ForumRefusal(409, 'group_section', FORUM_WORDS.groupSection);
     const keepPin = topic.pinned_at !== null && pinsIn(to.id, topic.id) < FORUM_LIMITS.pinsPerSection;
     db.prepare('UPDATE forum_topics SET section_id = ?, pinned_at = ? WHERE id = ?').run(to.id, keepPin ? topic.pinned_at : null, topicId);
     return forumTopic(member, topicId, 0).topic;
 }
 
+// ── A poll in a topic, and the Decision chip (slice F8) ─────────────────────────────────────────────────────────
+
+/** How a topic's poll is made: the ordinary poll's own door (state-engine createPost), for this audience and section's pool, with its question. */
+export type MakeForumPoll = (where: { audienceScope: 'public' | 'group'; targetGroupId?: string; forumSectionId: string; question: string }) => string;
+
+/**
+ * The topic's writer adds its poll (design §10.1): the ordinary poll, made by `make` (state-engine createPost holds every rule
+ * of a poll, the one open a member and this section's own pool of FORUM_LIMITS.pollsPerSection among them), linked to the topic
+ * in the same transaction. In a group's section it is the group's poll, so only its convenors and members vote and only they
+ * see it. One a topic; an open topic; a writer who may still write there. `question` defaults to the topic's title.
+ */
+export function addForumPoll(member: string, topicId: string, question: unknown, make: MakeForumPoll, now = Date.now()): { topic: ForumTopic; pollId: string } {
+    // `question`: the poll's own title, as the Market's poll form sends it; none, the topic's title.
+    writable(member, now);
+    const topic = visibleTopic(member, topicId);
+    if (topic.writer_pubkey !== member) throw new ForumRefusal(403, 'not_yours', FORUM_WORDS.pollNotYours);
+    assertWritesIn(member, topic.section_id);
+    if (topic.closed_at || sectionRow(topic.section_id)?.archived_at) throw new ForumRefusal(409, 'closed', FORUM_WORDS.closed);
+    if (topic.poll_post_id) throw new ForumRefusal(409, 'poll_already', FORUM_WORDS.pollAlready);
+    // The pool first in the forum's own words; engine/posts.ts holds it again for every way a poll goes up (a resume too).
+    if (forumSectionOpenPolls(topic.section_id, now) >= FORUM_LIMITS.pollsPerSection) {
+        throw new ForumRefusal(409, 'section_polls', tr('A section can have {n} open polls at a time. Try again when one closes.', { n: FORUM_LIMITS.pollsPerSection }));
+    }
+    const asked = text(question, FORUM_LIMITS.title, 'question').replace(/\s+/g, ' ') || topic.title;
+    const groupId = sectionRow(topic.section_id)?.group_id ?? null;
+    const pollId = db.transaction(() => {
+        const id = make({ audienceScope: groupId ? 'group' : 'public', ...(groupId ? { targetGroupId: groupId } : {}), forumSectionId: topic.section_id, question: asked });
+        if (db.prepare('UPDATE forum_topics SET poll_post_id = ? WHERE id = ? AND poll_post_id IS NULL').run(id, topic.id).changes !== 1) {
+            throw new ForumRefusal(409, 'poll_already', FORUM_WORDS.pollAlready);
+        }
+        return id;
+    })();
+    return { topic: forumTopic(member, topic.id, 0).topic, pollId };
+}
+
+/**
+ * The Decision chip (design §10.1): the topic's writer, or an owner or admin, links one of the community's Decisions to a topic
+ * they may read, or takes it off (`decisionId` null). One a topic, kept in forum_links; where Decisions are switched off
+ * (the global community), none. Only the community's own Decisions, which every member may open, so the chip shows nothing
+ * its readers could not see: a group's or an enterprise's vote is refused exactly as an id nobody has (no existence leak).
+ */
+export function linkForumDecision(member: string, topicId: string, decisionId: unknown, now = Date.now()): ForumTopic {
+    writable(member, now);
+    if (decisionId === undefined) throw new ForumRefusal(400, 'bad_request', 'decisionId is a Decision\'s id, or null to take it off.');
+    if (!getProfileSwitches().decisions) throw new ForumRefusal(404, 'decisions_off', FORUM_WORDS.decisionsOff);
+    const topic = visibleTopic(member, topicId);
+    if (topic.writer_pubkey !== member && !isStaff(member)) throw new ForumRefusal(403, 'not_yours', FORUM_WORDS.decisionNotYours);
+    if (decisionId !== null && (typeof decisionId !== 'string' || !communityDecision(decisionId))) {
+        throw new ForumRefusal(404, 'decision_not_found', FORUM_WORDS.decisionNotFound);
+    }
+    db.transaction(() => {
+        deletePlainRows('forum_links', "topic_id = ? AND kind = 'decision'", topic.id);
+        if (decisionId !== null) {
+            db.prepare("INSERT INTO forum_links (topic_id, kind, target_id, created_at) VALUES (?, 'decision', ?, ?)").run(topic.id, decisionId, iso(now));
+        }
+    })();
+    return forumTopic(member, topic.id, 0).topic;
+}
+
 // ── Sections ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export interface SectionInput { name?: unknown; about?: unknown; starts?: unknown; listed?: unknown; position?: unknown; archived?: unknown }
+export interface SectionInput { name?: unknown; about?: unknown; starts?: unknown; listed?: unknown; position?: unknown; archived?: unknown; groupId?: unknown }
 
 const activeSections = () => (db.prepare('SELECT COUNT(*) AS n FROM forum_sections WHERE archived_at IS NULL').get() as { n: number }).n;
 const tooManySections = () => new ForumRefusal(409, 'too_many_sections', tr('A forum has at most {n} sections. Archive one first.', { n: FORUM_LIMITS.sections }));
@@ -729,11 +899,18 @@ export function createForumSection(member: string, raw: SectionInput, now = Date
     const about = text(raw.about, FORUM_LIMITS.sectionAbout, 'about') || null;
     const starts = raw.starts === undefined ? 'members' : startsOf(raw.starts);
     const listed = raw.listed === undefined ? false : boolOf(raw.listed, 'listed');
+    // Tied to a group (slice F8): one that is here, and never listed for search engines.
+    let groupId: string | null = null;
+    if (raw.groupId !== undefined && raw.groupId !== null) {
+        if (typeof raw.groupId !== 'string' || !db.prepare('SELECT 1 FROM groups WHERE id = ?').get(raw.groupId)) throw new ForumRefusal(404, 'group_not_found', FORUM_WORDS.groupNotFound);
+        if (listed) throw new ForumRefusal(400, 'group_unlisted', FORUM_WORDS.groupUnlisted);
+        groupId = raw.groupId;
+    }
     if (activeSections() >= FORUM_LIMITS.sections) throw tooManySections();
     const id = newId('fs');
     const position = (db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM forum_sections').get() as { p: number }).p;
-    db.prepare('INSERT INTO forum_sections (id, starter, name, about, position, starts, listed, created_at) VALUES (?, NULL, ?, ?, ?, ?, ?, ?)')
-        .run(id, name, about, position, starts, listed ? 1 : 0, iso(now));
+    db.prepare('INSERT INTO forum_sections (id, starter, name, about, position, starts, listed, created_at, group_id) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)')
+        .run(id, name, about, position, starts, listed ? 1 : 0, iso(now), groupId);
     return sectionOut(sectionRow(id)!);
 }
 
@@ -742,6 +919,9 @@ export function editForumSection(member: string, id: string, raw: SectionInput, 
     staffOnly(member, now);
     const row = sectionRow(id);
     if (!row) throw new ForumRefusal(404, 'not_found', FORUM_WORDS.sectionNotFound);
+    // Its group is set when it is made, and a group's section is never listed (slice F8).
+    if (raw.groupId !== undefined) throw new ForumRefusal(400, 'group_fixed', FORUM_WORDS.groupFixed);
+    if (row.group_id && raw.listed === true) throw new ForumRefusal(400, 'group_unlisted', FORUM_WORDS.groupUnlisted);
     const set: string[] = [];
     const args: unknown[] = [];
     if (raw.name !== undefined) {

@@ -127,6 +127,12 @@ describe('bill states x readers: the lines and buttons each one gets (both apps 
         expect(off({ balance_c: 2000, usableFloor_c: -100000, floor_c: -100000, liveOffers: 1 }, true).canPay).toBe(true);
     });
 
+    it('a bill with an invite nobody has joined with yet (B3): its own line, no Withdraw (the invite takes it), never "expired"', () => {
+        const b = bill('sent', { payerPublicKey: '', payerName: '', expiresAt: '', awaitingJoin: true });
+        expect(billSentRow(b, ROB, NOW, day)).toEqual({ billId: 'bill-0001', line: 'With an invite · Power, October · 60 Beans · waiting for them to join', withdraw: null });
+        expect(billSentRow(b, ZED, NOW, day)).toBeNull();
+    });
+
     it('the sheet names the listing it is about, and opens it', () => {
         const s = billPaySheet(bill('to-pay', { postId: 'post-1', postTitle: "Room at Rob's" }), KIM, HOLDS, NOW, day)!;
         expect(s.about).toBe("About: Room at Rob's ›");

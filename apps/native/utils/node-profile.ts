@@ -161,9 +161,9 @@ export interface NodeFeatures {
      */
     forumNotices?: boolean;
     /**
-     * Bills are on here (apps/server engine/bills.ts; DESIGN-getting-paid-fable §4): Your deals shows Bills, and the bell a
-     * line for each bill waiting on the member (components/Bills.tsx). A node that doesn't say (the worldwide one, or one
-     * from before bills) has none.
+     * This community takes bills (apps/server engine/bills.ts; core billsOn): the invite panel offers "Add a bill for them"
+     * (slice B3), Your deals shows Bills and the bell a line for each bill waiting on the member (components/Bills.tsx, slice
+     * B2). A node that doesn't say (the global community, or one from before bills) takes none.
      */
     bills?: boolean;
 }

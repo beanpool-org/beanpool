@@ -4210,7 +4210,7 @@ describe('MapPage: the seller\'s fields for a price for each one (P4)', () => {
         expect(document.activeElement).toBe(price);
     });
 
-    it('the live line and the fee line follow the boxes: good, then not less (red if the compare or the sums drift)', async () => {
+    it('the live line and the fee line follow the boxes: good, the same as one by one (good), then more (red if the compare or the sums drift)', async () => {
         const panel = await open(WITH_EACH);
         await act(async () => { fireEvent.change(unit(panel), { target: { value: 'each' } }); });
         typeInto(within(panel).getByPlaceholderText('B'), '300');
@@ -4218,8 +4218,26 @@ describe('MapPage: the seller\'s fields for a price for each one (P4)', () => {
         typeInto(within(panel).getByTestId('per-item-lot'), '5500');
         expect(within(panel).getByTestId('per-item-hint')).toHaveTextContent('All 20 for 5,500 Beans. One by one they come to 6,000.');
         expect(within(panel).getByText(/You receive 295\.50 Beans for each one, or 5,417\.50 Beans for all of them\./)).toBeInTheDocument();
+        // The same as one by one is allowed (Marty 16 Nov: "10 each or 10 for 100 should be okay").
         typeInto(within(panel).getByTestId('per-item-lot'), '6000');
-        expect(within(panel).getByTestId('per-item-hint')).toHaveTextContent('One by one, 20 come to 6,000 Beans. A price for all of them has to be less.');
+        expect(within(panel).getByTestId('per-item-hint')).toHaveTextContent('All 20 for 6,000 Beans. One by one they come to 6,000.');
+        expect(within(panel).getByText(/You receive 295\.50 Beans for each one, or 5,910 Beans for all of them\./)).toBeInTheDocument();
+        typeInto(within(panel).getByTestId('per-item-lot'), '6001');
+        expect(within(panel).getByTestId('per-item-hint')).toHaveTextContent("One by one, 20 come to 6,000 Beans. A price for all of them can't be more than that.");
+    });
+
+    it('10 each, all 10 for 100 (the same as one by one) is posted (red if the form still refuses an equal price for all)', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'offer-new' } } as any);
+        const panel = await open(WITH_EACH);
+        await fillOffer(panel);
+        await act(async () => { fireEvent.change(unit(panel), { target: { value: 'each' } }); });
+        typeInto(within(panel).getByPlaceholderText('B'), '10');
+        typeInto(within(panel).getByTestId('per-item-count'), '10');
+        typeInto(within(panel).getByTestId('per-item-lot'), '100');
+        await post(panel);
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+        expect(create.mock.calls[0][0]).toMatchObject({ priceType: 'each', price_c: 1000, unitsLeft: 10, lot: { price_c: 10000 } });
+        expect(within(panel).queryByTestId('per-item-refusal')).toBeNull();
     });
 
     it('Free: no price-for-all box at all (red if the box stays for a free listing)', async () => {
@@ -4270,9 +4288,9 @@ describe('MapPage: the seller\'s fields for a price for each one (P4)', () => {
         await post(panel);
         expect(await within(panel).findByTestId('per-item-refusal')).toHaveTextContent('A price for all of them needs 2 or more.');
         typeInto(within(panel).getByTestId('per-item-count'), '20');
-        typeInto(within(panel).getByTestId('per-item-lot'), '6000');
+        typeInto(within(panel).getByTestId('per-item-lot'), '6000.50');
         await post(panel);
-        expect(await within(panel).findByTestId('per-item-refusal')).toHaveTextContent('One by one, 20 come to 6,000 Beans. A price for all of them has to be less.');
+        expect(await within(panel).findByTestId('per-item-refusal')).toHaveTextContent("One by one, 20 come to 6,000 Beans. A price for all of them can't be more than that.");
         // Said once, in red, not again as the live line under it.
         expect(within(panel).queryByTestId('per-item-hint')).toBeNull();
         expect(create).not.toHaveBeenCalled();

@@ -42,7 +42,7 @@ export function PerItemFields({ text, onCount, onLot, edit = false, refusal = nu
     const inputClass = variant === 'edit' ? EDIT_INPUT : CREATE_INPUT;
     const free = perItemIsFree(text);
     const bad = (field: PerItemField) => refusal?.field === field;
-    // A refusal on this box says what the live line would (not less than one by one): said once, in red, under the box.
+    // A refusal on this box says what the live line would (more than one by one): said once, in red, under the box.
     // A price for all that was set for another number says so in its place (§2.5) rather than "leave this empty to sell one by one".
     const staleLine = lotForOtherLine && text.lot.trim() === '' ? lotForOtherLine : null;
     const hint = free || bad('lot') || staleLine ? null : perItemLotHint(text);

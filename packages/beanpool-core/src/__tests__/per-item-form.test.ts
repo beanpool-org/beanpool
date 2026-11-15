@@ -72,7 +72,8 @@ describe('the boxes are read as typed, never rounded', () => {
         expect(readPerItemForm(text('٣٠٠', '٢٠', '٥٥٠٠'), 'ar')).toEqual({ price_c: c(300), count: 20, lot_c: c(5500), lotBad: false });
         expect(perItemCreateFields(text('٣٠٠', '٢٠', '٥٥٠٠'), 'ar')).toEqual({ ok: true, fields: { priceType: 'each', unitsLeft: 20, lot: { price_c: c(5500) } } });
         expect(perItemFormRefusal(text('٣٠٠', '٢٠', '٥٥٠٠'), null, 'ar')).toBe(null);
-        expect(perItemFormRefusal(text('٣٠٠', '٢٠', '٦٠٠٠'), null, 'ar')).toMatchObject({ field: 'lot', code: 'lot_not_less' });
+        expect(perItemFormRefusal(text('٣٠٠', '٢٠', '٦٠٠٠'), null, 'ar')).toBe(null);
+        expect(perItemFormRefusal(text('٣٠٠', '٢٠', '٧٠٠٠'), null, 'ar')).toMatchObject({ field: 'lot', code: 'lot_not_less' });
     });
 
     it('prices are whole hundredths through parseHundredths (red if a float is used)', () => {
@@ -99,11 +100,16 @@ describe('the one live line under the price for all (§2.4)', () => {
     it('good: "All 20 for 5,500 Beans. One by one they come to 6,000."', () => {
         expect(perItemLotHint(panels)).toEqual({ kind: 'good', text: 'All 20 for 5,500 Beans. One by one they come to 6,000.' });
     });
-    it('not less: the sentence names the one-by-one total (red if "less" is compared with <=)', () => {
-        expect(perItemLotHint(text('300', '20', '6000'))).toEqual({
-            kind: 'notLess', text: 'One by one, 20 come to 6,000 Beans. A price for all of them has to be less.',
+    it('more: the sentence names the one-by-one total; the same as one by one is good (Marty 16 Nov; red if "more" is compared with >=)', () => {
+        expect(perItemLotHint(text('300', '20', '6000.01'))).toEqual({
+            kind: 'more', text: "One by one, 20 come to 6,000 Beans. A price for all of them can't be more than that.",
         });
-        expect(perItemLotHint(text('300', '20', '7000'))?.kind).toBe('notLess');
+        expect(perItemLotHint(text('300', '20', '7000'))?.kind).toBe('more');
+        expect(perItemLotHint(text('300', '20', '6000'))).toEqual({ kind: 'good', text: 'All 20 for 6,000 Beans. One by one they come to 6,000.' });
+        expect(perItemLotHint(text('10', '10', '100'))).toEqual({ kind: 'good', text: 'All 10 for 100 Beans. One by one they come to 100.' });
+        expect(perItemLotHint(text('10', '10', '120'))).toEqual({
+            kind: 'more', text: "One by one, 10 come to 100 Beans. A price for all of them can't be more than that.",
+        });
         expect(perItemLotHint(text('300', '20', '5999.99'))?.kind).toBe('good');
     });
     it('hidden when the count is 1, the price is Free or not yet a price, or the box holds no figure (red if any shows)', () => {
@@ -123,9 +129,12 @@ describe('the fee line (§2.4)', () => {
     it('says what the seller receives for one, and for all of them while that price is good', () => {
         expect(perItemFeeLine(panels)).toBe('1.5% goes to the community. You receive 295.50 Beans for each one, or 5,417.50 Beans for all of them.');
     });
-    it('names no price for all when there is none, or it is not less (red if a bad lot is promised)', () => {
+    it('names no price for all when there is none, or it is more than one by one (red if a bad lot is promised)', () => {
         expect(perItemFeeLine(text('300', '20'))).toBe('1.5% goes to the community. You receive 295.50 Beans for each one.');
-        expect(perItemFeeLine(text('300', '20', '6000'))).toBe('1.5% goes to the community. You receive 295.50 Beans for each one.');
+        expect(perItemFeeLine(text('300', '20', '6000.01'))).toBe('1.5% goes to the community. You receive 295.50 Beans for each one.');
+    });
+    it('names the price for all when it is the same as one by one (Marty 16 Nov)', () => {
+        expect(perItemFeeLine(text('300', '20', '6000'))).toBe('1.5% goes to the community. You receive 295.50 Beans for each one, or 5,910 Beans for all of them.');
     });
     it('is none for a Free or empty price', () => {
         expect(perItemFeeLine(text('0', '20'))).toBe(null);
@@ -157,13 +166,18 @@ describe('what the node would refuse, the form refuses first, with the same code
         expect(perItemFormRefusal(text('300', '1'))).toBe(null);
         expect(perItemFormRefusal(text('300', '9999'))).toBe(null);
     });
-    it('a price for all of them needs 2 or more, is a Beans figure above 0, and is less than one by one', () => {
+    it('a price for all of them needs 2 or more, is a Beans figure above 0, and is not more than one by one', () => {
         expect(perItemFormRefusal(text('300', '1', '200'))).toMatchObject({ field: 'lot', code: 'lot_needs_two', text: 'A price for all of them needs 2 or more.' });
         expect(perItemFormRefusal(text('300', '20', '0'))).toMatchObject({ field: 'lot', code: 'lot_price_refused' });
         expect(perItemFormRefusal(text('300', '20', 'abc'))).toMatchObject({ field: 'lot', code: 'lot_price_refused' });
-        expect(perItemFormRefusal(text('300', '20', '6000'))).toMatchObject({
-            field: 'lot', code: 'lot_not_less', text: 'One by one, 20 come to 6,000 Beans. A price for all of them has to be less.',
+        expect(perItemFormRefusal(text('300', '20', '6000.01'))).toMatchObject({
+            field: 'lot', code: 'lot_not_less', text: "One by one, 20 come to 6,000 Beans. A price for all of them can't be more than that.",
         });
+        // The same as one by one is taken: 10 each, or all 10 for 100 (Marty 16 Nov); 10 for 120 is not.
+        expect(perItemFormRefusal(text('300', '20', '6000'))).toBe(null);
+        expect(perItemFormRefusal(text('10', '10', '100'))).toBe(null);
+        expect(perItemFormRefusal(text('10', '10', '120'))).toMatchObject({ field: 'lot', code: 'lot_not_less' });
+        expect(perItemCreateFields(text('10', '10', '100'))).toEqual({ ok: true, fields: { priceType: 'each', unitsLeft: 10, lot: { price_c: c(100) } } });
         expect(perItemFormRefusal(panels)).toBe(null);
     });
     it('is the node\'s own rule: whatever the form lets through, itemColumnsRefusal takes, and the other way (red if they drift apart)', () => {
@@ -228,8 +242,9 @@ describe('an edit: the count the screen read, the count now, and the price for a
 
     it('sends the count it read as unitsLeftWas, always (red if it is dropped: a blind write undoes a sale)', () => {
         const s = stored(20, { units: 20, beans: 5500 });
-        // 18 one by one come to 5,400, so a price for all of 5,500 would be refused as not less; 5,000 is good.
+        // 18 one by one come to 5,400, so a price for all of 5,500 would be refused as more; 5,400 (the same) and 5,000 are good.
         expect(perItemEditFields(text('300', '18', '5500'), s, false)).toMatchObject({ ok: false, refusal: { code: 'lot_not_less' } });
+        expect(perItemEditFields(text('300', '18', '5400'), s, false)).toMatchObject({ ok: true, fields: { unitsLeft: 18, lot: { price_c: c(5400) } } });
         const made = perItemEditFields(text('300', '18', '5000'), s, false);
         expect(made).toMatchObject({ ok: true, fields: { priceType: 'each', unitsLeft: 18, unitsLeftWas: 20, lot: { price_c: c(5000) } } });
         const same = perItemEditFields(text('300', '20', '5500'), s, false);
@@ -257,10 +272,10 @@ describe('an edit: the count the screen read, the count now, and the price for a
         expect(made.ok && made.fields.lot).toBe(null);
     });
 
-    it('a price for all set for another number that the new price for one makes not-less: the box is empty and untouched, so it is CLEARED, not left for the node to refuse about a box nobody sees (red if lot stays absent)', () => {
+    it('a price for all set for another number that the new price for one makes more than one by one: the box is empty and untouched, so it is CLEARED, not left for the node to refuse about a box nobody sees (red if lot stays absent)', () => {
         // Rob's panels: 20 for 5,500 at 300; 3 sold, released; 17 left. He lowers the price to 250 and leaves the empty box alone.
         const s = stored(17, { units: 20, beans: 5500 });
-        // What the node says if the stale price is kept: 20 × 250 = 5,000, and 5,500 for all is no longer less than that.
+        // What the node says if the stale price is kept: 20 × 250 = 5,000, and 5,500 for all is now more than that.
         expect(itemColumnsRefusal(c(250), { units_left: 17, lot_price_c: c(5500), lot_units: 20 })).toMatchObject({ code: 'lot_not_less', count: 20 });
         const made = perItemEditFields(text('250', '17', ''), s, false);
         expect(made).toEqual({ ok: true, fields: { priceType: 'each', unitsLeft: 17, unitsLeftWas: 17, lot: null } });
@@ -268,15 +283,15 @@ describe('an edit: the count the screen read, the count now, and the price for a
         expect(itemColumnsRefusal(c(250), { units_left: 17, lot_price_c: null, lot_units: null })).toBe(null);
     });
 
-    it('a stored price for another number that is STILL less one by one is kept (lot absent), so a title edit or a price that leaves it good does not clear it', () => {
+    it('a stored price for another number that is STILL not more than one by one is kept (lot absent), so a title edit or a price that leaves it good does not clear it', () => {
         const s = stored(17, { units: 20, beans: 5500 });
-        // 20 × 276 = 5,520 > 5,500: still less.
-        for (const price of ['300', '299', '276']) {
+        // 20 × 276 = 5,520 > 5,500: still less. 20 × 275 = 5,500: the same, which is allowed (Marty 16 Nov).
+        for (const price of ['300', '299', '276', '275']) {
             const made = perItemEditFields(text(price, '17', ''), s, false);
             expect(made.ok && 'lot' in made.fields, price).toBe(false);
         }
-        // 20 × 275 = 5,500: equal is not less, and below that it is more so.
-        for (const price of ['275', '250', '100']) {
+        // 20 × 274.99 = 5,499.80 < 5,500: the price for all is now more than one by one, and below that more so.
+        for (const price of ['274.99', '250', '100']) {
             const made = perItemEditFields(text(price, '17', ''), s, false);
             expect(made.ok && made.fields.lot, price).toBe(null);
         }

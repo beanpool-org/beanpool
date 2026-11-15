@@ -108,7 +108,7 @@ async function main(): Promise<void> {
         for (const spelling of SPELLINGS) {
             const r = await open(spelling);
             if (r.app) appLoads++;
-            const policy = r.csp === null ? 'no CSP' : (/script-src 'self';/.test(r.csp) ? "script-src 'self'" : 'script-src with unsafe-inline');
+            const policy = r.csp === null ? 'no CSP' : (/script-src 'self'( 'wasm-unsafe-eval')?;/.test(r.csp) ? "script-src 'self'" : 'script-src with unsafe-inline');
             assert(!r.inline, `${spelling.padEnd(44)} → ${String(r.status).padEnd(3)} ${r.path.padEnd(22)} ${r.app ? 'web app' : 'no app '}  `
                 + `inline script ran: ${r.inline}  (${policy})`);
             if (r.app) {

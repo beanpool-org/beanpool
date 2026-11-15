@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { sealDmVoice, VOICE_BARS, VOICE_MAX_MS } from '@beanpool/core';
 import {
     browserRecordsVoice, nodeTakesVoice, openDmVoiceLine, voiceBarsFromLevels, voiceClock, voiceRecorderStep,
-    voiceSendWithin, nextVoiceSpeed, isGoneAnswer, VOICE_IDLE, VOICE_RECORD_TYPE, type VoiceRecorderState,
+    voiceSendWithin, nextVoiceSpeed, isGoneAnswer, VOICE_IDLE, VOICE_RECORD_TYPE, VOICE_WORDS, type VoiceRecorderState,
 } from './voice';
 import { person } from './group-chat-fake-node.test-support';
 
@@ -22,6 +22,15 @@ function run(events: Parameters<typeof voiceRecorderStep>[1][], from: VoiceRecor
 }
 
 describe('the recorder steps', () => {
+    it('the encoder that didn\'t load or finish is said as such and keeps nothing, even after Stop; a plain failure after Stop keeps the recording', () => {
+        expect(run([{ type: 'start' }, { type: 'failed', encoder: true }])).toEqual({ state: { phase: 'idle', hint: 'encoder' }, effects: ['ask', 'discard'] });
+        expect(run([{ type: 'start' }, { type: 'permission', granted: true }, { type: 'failed', encoder: true }]).state).toEqual({ phase: 'idle', hint: 'encoder' });
+        const stopped: Parameters<typeof voiceRecorderStep>[1][] = [{ type: 'start' }, { type: 'permission', granted: true }, { type: 'tick', ms: 2000 }, { type: 'stop' }];
+        expect(run([...stopped, { type: 'failed', encoder: true }])).toEqual({ state: { phase: 'idle', hint: 'encoder' }, effects: ['ask', 'start', null, 'keep', 'discard'] });
+        // The browser recorder's path is as before: a failure after Stop changes nothing.
+        expect(run([...stopped, { type: 'failed' }]).state).toEqual({ phase: 'review', ms: 2000, limit: false });
+    });
+
     it('a click asks the browser, then records once it says yes; refused, it says how to allow it', () => {
         expect(run([{ type: 'start' }]).effects).toEqual(['ask']);
         const yes = run([{ type: 'start' }, { type: 'permission', granted: true }]);
@@ -66,15 +75,40 @@ describe('where the microphone shows', () => {
         expect(nodeTakesVoice(null)).toBe(false);
     });
 
-    it('only where the browser writes AAC in .m4a on a secure page: Firefox and plain http get a line instead', () => {
+    it('the browser recorder where it writes AAC in .m4a on a secure page; plain http gets a line instead', () => {
         const env = (writes: boolean, secure = true) => ({
             MediaRecorder: { isTypeSupported: vi.fn((tp: string) => writes && tp === VOICE_RECORD_TYPE) },
             isSecureContext: secure, navigator: { mediaDevices: secure ? { getUserMedia: () => {} } : undefined },
         });
         expect(browserRecordsVoice(env(true))).toBe('yes');
-        expect(browserRecordsVoice(env(false))).toBe('no-format');
         expect(browserRecordsVoice(env(true, false))).toBe('no-microphone');
         expect(browserRecordsVoice({})).toBe('no-format');
+    });
+
+    it('no AAC recorder but a microphone (Firefox, Brave on Android): the web app\'s own encoder; without what it needs, or on http, a line', () => {
+        const encoderNeeds = { AudioContext: function AudioContext() {}, AudioWorkletNode: function AudioWorkletNode() {}, WebAssembly: {}, Worker: function Worker() {} };
+        const env = (over: Record<string, unknown> = {}, secure = true) => ({
+            MediaRecorder: { isTypeSupported: vi.fn(() => false) },
+            isSecureContext: secure, navigator: { mediaDevices: secure ? { getUserMedia: () => {} } : undefined },
+            ...encoderNeeds, ...over,
+        });
+        expect(browserRecordsVoice(env())).toBe('encoder');
+        // No MediaRecorder at all is the same: the encoder records without it.
+        expect(browserRecordsVoice(env({ MediaRecorder: undefined }))).toBe('encoder');
+        // A recorder that throws when asked is one that can't write it.
+        expect(browserRecordsVoice(env({ MediaRecorder: { isTypeSupported: () => { throw new Error('no'); } } }))).toBe('encoder');
+        // Plain http: no browser gives the microphone there, so the address is why.
+        expect(browserRecordsVoice(env({}, false))).toBe('no-microphone');
+        // A secure page with no microphone API, or nothing the encoder needs: this browser can't record at all.
+        expect(browserRecordsVoice(env({ navigator: {} }))).toBe('no-format');
+        for (const missing of ['AudioContext', 'AudioWorkletNode', 'WebAssembly', 'Worker']) {
+            expect(browserRecordsVoice(env({ [missing]: undefined }))).toBe('no-format');
+        }
+    });
+
+    it('the "can\'t record" line names no browser that can (Firefox and Brave record now)', () => {
+        expect(VOICE_WORDS.cantRecordBrowser).toBe("This browser can't record voice messages. The phone app can.");
+        expect(VOICE_WORDS.cantRecordBrowser).not.toMatch(/Chrome|Edge|Safari|Firefox/);
     });
 });
 

@@ -55,3 +55,22 @@ Your garden's crop table and zone mapping
   packages/beanpool-core/src/tools/garden/crops.ts, packages/beanpool-core/src/tools/garden/zones.ts
   Written by the BeanPool contributors and dedicated to the public domain under CC0 1.0
   (https://creativecommons.org/publicdomain/zero/1.0/): any community may copy them into its own guide.
+
+Third-party code
+The web app's own voice encoder, fetched only by a browser whose recorder can't write AAC in .m4a (apps/pwa/src/lib/
+voice-encode.ts), includes:
+
+Mediabunny 1.66.0 (the MP4 muxer)
+  Copyright (c) Vanilagy and contributors. https://github.com/Vanilagy/mediabunny
+  Licence: Mozilla Public License 2.0 (licences/mediabunny-MPL-2.0.txt). Not marked "Incompatible With Secondary
+  Licenses", so it is combined with this work under the AGPL (MPL-2.0 section 3.3). Unchanged; its source is the
+  published npm package mediabunny@1.66.0 and the repository above.
+
+@mediabunny/aac-encoder 1.66.0 (FFmpeg's AAC encoder compiled to WebAssembly, with its wrapper)
+  Copyright (c) Vanilagy and contributors; FFmpeg Copyright (c) the FFmpeg developers. https://ffmpeg.org
+  Licences: the wrapper under the Mozilla Public License 2.0 (licences/mediabunny-MPL-2.0.txt); the FFmpeg code under
+  the GNU Lesser General Public License 2.1 or later (licences/ffmpeg-LGPL-2.1.txt, licences/ffmpeg-LICENSE.md), used
+  here under its option to apply the GPL, version 3, with which the AGPL is compatible. Unchanged; its source,
+  including the C bridge and the build, is the published npm package @mediabunny/aac-encoder@1.66.0 and
+  https://github.com/Vanilagy/mediabunny/tree/main/packages/aac-encoder, and FFmpeg's own source is at
+  https://ffmpeg.org/download.html.

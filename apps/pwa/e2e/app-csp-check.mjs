@@ -135,7 +135,7 @@ async function checkView(browser, origin, view, me) {
     // A fresh browser: the welcome page.
     const doc = await page.goto(`${origin}/app`, { waitUntil: 'load' });
     const servedPolicy = doc?.headers()['content-security-policy'];
-    if (!servedPolicy?.includes("script-src 'self';")) failures.push(`the document was not served under the app policy (got ${servedPolicy})`);
+    if (!servedPolicy?.includes("script-src 'self' 'wasm-unsafe-eval';")) failures.push(`the document was not served under the app policy (got ${servedPolicy})`);
     await scaleText();
     try {
         await page.getByText('Welcome to BeanPool').waitFor({ timeout: 20_000 });

@@ -1609,15 +1609,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
     }
 
-    /**
-     * The node took a new line of this member's in `convId`: where it said their next line was their request's, that was
-     * it, so the chat waits now, before the read after it lands or if it never does (lib/dm-requests.ts requestAfterOwnLine).
-     */
     /** A line of mine left this tab in `convId`: its chat goes to the top of the list at once (lib/chat-list-order.ts). */
     function movedByMyLine(convId: string) {
         noteLineSentHere(convId, conversations, outsideChats.filter((c) => c.state === 'open'));
     }
 
+    /**
+     * The node took a new line of this member's in `convId`: where it said their next line was their request's, that was
+     * it, so the chat waits now, before the read after it lands or if it never does (lib/dm-requests.ts requestAfterOwnLine).
+     */
     function ownLineTaken(convId: string) {
         setActiveConv(prev => {
             if (!prev || prev.id !== convId) return prev;

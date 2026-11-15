@@ -137,8 +137,8 @@ afterAll(async () => {
 
 const member = (callsign: string) => { const seed = ed25519.utils.randomSecretKey(); return { publicKey: bytesToHex(ed25519.getPublicKey(seed)), privateKey: bytesToHex(seed), callsign }; };
 
-/** A browser on `node`: this app's store (documents per account), or another browser's, and its account. */
-function browser(identity: ReturnType<typeof member>, node: Node, store: OutsideChatStore = outsideChatStore()) {
+/** A browser on `node`: this app's store for that community (documents per community and account), or another browser's, and its account. */
+function browser(identity: ReturnType<typeof member>, node: Node, store: OutsideChatStore = outsideChatStore(node.url)) {
     const ctx: OutsideMailContext = { nodeUrl: node.url, identity, store, isBlocked: async () => false };
     const lines = async (peer: string) => (await ctx.store.lines(identity.publicKey, relayConversationId(identity.publicKey, peer)))
         .map((l) => ({ author: l.author, text: l.text, state: l.state }));
@@ -155,13 +155,13 @@ const listedAt = async (n: Node, member: string) => (await control<Array<{ devic
  * A second browser of the same account: this app's store module loaded afresh (vi.resetModules), its database opened on an
  * IndexedDB of its own, so the two browsers share nothing but the account. The first browser's store keeps its own.
  */
-async function anotherBrowserStore(): Promise<OutsideChatStore> {
+async function anotherBrowserStore(node: Node): Promise<OutsideChatStore> {
     const here = globalThis.indexedDB;
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     try {
         vi.resetModules();
         const fresh = await import('./outside-chat-store');
-        const store = fresh.outsideChatStore();
+        const store = fresh.outsideChatStore(node.url);
         await store.getMeta('0'.repeat(64), 'opened');   // its database opens now, on its own IndexedDB
         return store;
     } finally {
@@ -233,7 +233,7 @@ describe('a chat between two communities, browser to browser through two real no
         await control(nodes.b, 'join', { key: dee.publicKey, callsign: 'Dee' });
         await control(nodes.a, 'join', { key: tam.publicKey, callsign: 'Tam' });
         const deeWeb = browser(dee, nodes.b);
-        const deeOther = browser(dee, nodes.b, await anotherBrowserStore());   // her second browser: its door closed
+        const deeOther = browser(dee, nodes.b, await anotherBrowserStore(nodes.b));   // her second browser: its door closed
         const tamWeb = browser(tam, nodes.a);
         await setDoor(deeWeb.ctx, true);
         // Each browser has asked once, so each is listed at her server, by its own id.

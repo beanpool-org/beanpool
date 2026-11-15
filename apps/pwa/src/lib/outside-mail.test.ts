@@ -18,6 +18,10 @@
  *      fetch and confirm names this browser's own id; another device listed is still served what this one wrote or dropped;
  *      my ticks are in before any held item is judged; a tick for a line I wrote elsewhere opens its chat here, never one
  *      with someone blocked; Sign Out asks the community to forget this browser, 4 s at most, never a reason it stops
+ *  10  a round never acts for an account or a community it no longer belongs to (#3183 round 4): Sign Out, a move to
+ *      another community, the delete here x every wait a round makes x answered after / asked after -> nothing asked, no
+ *      wait started, nothing written for the old account or community; and what is kept (the home among it) is the
+ *      community's own, as the phone keeps it in each community's file
  *
  * The mailbox played here is X2b's: GET /api/mail and POST /api/mail/confirm refuse a request without the device (400
  * bad_device), an item is served to each device until it has confirmed it, and goes once every device listed has.
@@ -29,7 +33,7 @@ import {
     checkRelayItem, ed25519Signer, gateOutsideItem, relayConversationId, relayPayloadHash, sealOutsideLine, signRelayEnvelope,
     type OutsideChatState, type RelayItem,
 } from '@beanpool/core';
-import { memoryIndexedDB, type MemoryIndexedDB } from './memory-indexeddb';
+import { MemoryIDBKeyRange, memoryIndexedDB, type MemoryIndexedDB } from './memory-indexeddb';
 
 const server = vi.hoisted(() => ({
     held: [] as any[],
@@ -60,6 +64,8 @@ const server = vi.hoisted(() => ({
     outboxPages: null as null | Array<{ ticks: any[]; more: boolean }>,
     /** How the forget is answered, when set (a stall, a throw). */
     forgetAnswer: null as null | ((signal: AbortSignal | undefined) => Promise<Response>),
+    /** Every request a server took, in order: asked with a signal not yet aborted (an aborted fetch never leaves a browser). */
+    served: [] as string[],
 }));
 const MAIL_DEVICE = /^[0-9a-f]{32}$/;
 const badDevice = () => new Response(JSON.stringify({ error: "device is this device's mail id: 32 lowercase hex characters, made by the app.", code: 'bad_device' }), { status: 400 });
@@ -81,11 +87,13 @@ function stopHere(how: string): Promise<Response> | Response {
     return new Response(JSON.stringify({ error: `No (${status}).`, code: 'no' }), { status });
 }
 
-vi.mock('./api', async () => {
+vi.mock('./api', async (importOriginal) => {
     const core = await import('@beanpool/core');
     const { hexToBytes } = await import('@noble/hashes/utils.js');
+    // The real module (the node address the web app talks to, kept in localStorage as a browser keeps it); its mail calls played here.
+    const real = await importOriginal<typeof import('./api')>();
     return {
-        nodeAddress: () => 'https://b.example',
+        ...real,
         signAddressCardFor: (c: any, id: any) => core.signAddressCard(c, core.ed25519Signer(hexToBytes(id.privateKey))),
         signRelayEnvelopeFor: (f: any, id: any) => {
             const sign = () => core.signRelayEnvelope(f, core.ed25519Signer(hexToBytes(id.privateKey)));
@@ -101,6 +109,7 @@ vi.mock('./api', async () => {
             server.calls.push(`${method} ${bare}`);
             server.signals.push({ path: bare, signal });
             if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+            server.served.push(`${method} ${bare}`);
             if (method === 'GET') {
                 const device = new URLSearchParams(path.split('?')[1] ?? '').get('device');
                 server.named.push({ call: 'GET', device });
@@ -168,8 +177,8 @@ vi.mock('./outside-chat-store', async (importOriginal) => {
     const real = await importOriginal<typeof import('./outside-chat-store')>();
     return {
         ...real,
-        outsideChatStore: () => {
-            const store = real.outsideChatStore();
+        outsideChatStore: (...args: Parameters<typeof real.outsideChatStore>) => {
+            const store = real.outsideChatStore(...args);
             if (!server.point) return store;
             return Object.fromEntries(Object.entries(store).map(([k, v]) => [k, typeof v === 'function'
                 ? (...a: unknown[]) => server.point!(`store.${k}`, () => (v as (...a: unknown[]) => unknown).apply(store, a)) : v])) as typeof store;
@@ -179,13 +188,20 @@ vi.mock('./outside-chat-store', async (importOriginal) => {
 
 import { clearOutsideChats, outsideChatStore } from './outside-chat-store';
 import {
-    FORGET_DEVICE_MS, forgetThisBrowserForMail, mailDevice, myAddressCard, sendFromBox, setDoor, syncOutsideMail, type OutsideMailContext,
+    FORGET_DEVICE_MS, doorOpen, forgetThisBrowserForMail, mailDevice, myAddressCard, myHome, sendFromBox, setDoor, syncOutsideMail,
+    type OutsideMailContext,
 } from './outside-mail';
+import { setNodeApiUrl } from './api';
+import { resetAccountEpochForTest } from './account-epoch';
 
 const DAY = 24 * 60 * 60_000;
 const seedKey = () => { const seed = ed25519.utils.randomSecretKey(); return { seed: bytesToHex(seed), key: bytesToHex(ed25519.getPublicKey(seed)) }; };
 const BEN = seedKey(), ANA = seedKey(), SOL = seedKey(), CY = seedKey();
 const HOME = 'b.example', ANA_HOME = 'a.example', CY_HOME = 'c.example';
+/** The community this web app talks to here (Settings' node address), and the one a move takes it to. */
+const B = 'https://b.example', C = 'https://c.example';
+/** Ben's home as this browser keeps it for B: `<home> <when> <community>`. */
+const keptHome = (at = Date.now()) => `${HOME} ${at} ${B}`;
 const uuid = () => crypto.randomUUID();
 
 let ctx: OutsideMailContext;
@@ -196,15 +212,20 @@ beforeEach(async () => {
     Object.assign(server, {
         held: [], outbox: [], calls: [], sent: [], confirmed: [], batches: [], sendState: 'sent', sendFails: false, refuse: null, signals: [],
         stallGet: false, stop: null, seen: { confirm: 0, receipt: 0 }, stopped: false, deadline: null, receiptTries: [], point: null,
-        named: [], listed: new Set(), got: new Map(), forgot: [], outboxPages: null, forgetAnswer: null,
+        named: [], listed: new Set(), got: new Map(), forgot: [], outboxPages: null, forgetAnswer: null, served: [],
     });
     blocks.loaded = true;
     idb = memoryIndexedDB();
     vi.stubGlobal('indexedDB', idb);
+    vi.stubGlobal('IDBKeyRange', MemoryIDBKeyRange);
     await clearOutsideChats();
+    // This page, as one loaded now, signed in, the web app pointed at B.
+    localStorage.clear();
+    setNodeApiUrl(B);
+    resetAccountEpochForTest();
     blocked = new Set();
-    ctx = { nodeUrl: 'https://b.example', identity: { publicKey: BEN.key, privateKey: BEN.seed, callsign: 'Ben' }, store: outsideChatStore(), isBlocked: async (k) => blocked.has(k) };
-    await ctx.store.setMeta(BEN.key, 'home', `${HOME} ${Date.now()}`);
+    ctx = { nodeUrl: B, identity: { publicKey: BEN.key, privateKey: BEN.seed, callsign: 'Ben' }, store: outsideChatStore(B), isBlocked: async (k) => blocked.has(k) };
+    await ctx.store.setMeta(BEN.key, 'home', keptHome());
 });
 
 /** A line `from` writes Ben, as their device seals it and their server brings it: held for Ben. */
@@ -473,7 +494,7 @@ describe('7  typed words, ticks, the card', () => {
         expect(await textsWith(ANA.key)).toEqual([]);
         vi.unstubAllGlobals();
         vi.stubGlobal('indexedDB', idb);
-        await ctx.store.setMeta(BEN.key, 'home', `${HOME} ${Date.now()}`);
+        await ctx.store.setMeta(BEN.key, 'home', keptHome());
         server.sendFails = true;
         const kept = await sendFromBox(ctx, chatWith(ANA.key), 'Keep me', 5_000, () => { emptied++; });
         expect(kept.kept).toBe(true);
@@ -503,105 +524,110 @@ describe('7  typed words, ticks, the card', () => {
     });
 });
 
+// ─── A round as a browser runs it (sections 8 and 10) ─────────────────────────────────────────────────────────
+
+/**
+ * Every wait a round makes, in order, as `name#n` (its n-th in the round). Switch on: a round that resends a waiting line
+ * of mine, reads its community's home again (two hours old), reads the block list (not yet read on this page), writes,
+ * confirms and receipts a line from Ana, and applies the tick for my line. Switch off: the round that fails my waiting
+ * line. The first test proves these ARE every wait such a round makes, so a wait added later has to join this table.
+ */
+// X2b: this browser's mail id (store.metaOrMake), then the ticks (hasLine, setMineState, the cursor's setMeta) before the
+// held item is judged.
+const ON = [
+    'loadIdentity#1', 'communityInfo#1', 'store.unsent#1', 'POST /api/mail/send#1', 'store.setMineState#1', 'store.getMeta#1',
+    'store.metaOrMake#1', 'store.getMeta#2', 'GET /api/mail#1', 'store.hasLine#1', 'store.setMineState#2', 'store.setMeta#1',
+    'store.hasLine#2', 'store.chat#1', 'store.theirLines#1', 'loadBlocklist#1',
+    'store.writeTheirs#1', 'store.oweReceipt#1', 'POST /api/mail/confirm#1', 'store.forgetReceiptsOwedBefore#1',
+    'store.owedReceipts#1', 'store.getMeta#3', 'fetch /api/community/info#1', 'store.setMeta#2', 'sign#1', 'POST /api/mail/send#2',
+    'store.receiptsSent#1',
+];
+const OFF = ['loadIdentity#1', 'communityInfo#1', 'store.unsent#1', 'store.setMineState#1', 'store.unsent#2'];
+/** Never asked and never answered; asked and never answered; answered, but after the deadline. */
+const HOW = ['lost', 'unanswered', 'late'] as const;
+/** Section 10's: asked before and answered after its event (`late`), or asked only after it (`gap`: the call was under way). */
+type Stall = typeof HOW[number] | 'gap';
+/** Round 1's deadline: its timer is caught and fired by hand the moment the round reaches its stall. */
+const BUDGET = 7_777;
+const OFF_WORDS = "This community doesn't take messages from other communities.";
+const realSetTimeout = globalThis.setTimeout;
+const settle = async () => { for (let i = 0; i < 10; i++) await new Promise((r) => realSetTimeout(r, 0)); };
+
+/** One round's waits, recorded; `stall` makes one of them stall, as its `how` says. */
+function pointer(stall: { at: string; how: Stall } | null) {
+    const seen: string[] = [];
+    const counts = new Map<string, number>();
+    let reachedIt!: () => void;
+    let release!: () => void;
+    const reached = new Promise<void>((r) => { reachedIt = r; });
+    const released = new Promise<void>((r) => { release = r; });
+    const point = (name: string, run: () => any) => {
+        const n = (counts.get(name) ?? 0) + 1;
+        counts.set(name, n);
+        seen.push(`${name}#${n}`);
+        if (stall?.at !== `${name}#${n}`) return run();
+        reachedIt();
+        if (stall.how === 'lost') return new Promise(() => {});
+        if (stall.how === 'gap') return released.then(run);
+        const answer = Promise.resolve().then(run);
+        answer.catch(() => {});
+        return stall.how === 'unanswered' ? new Promise(() => {}) : released.then(() => answer);
+    };
+    return { seen, point, reached, release };
+}
+
+/** navigator.locks as a browser's: one holder; `ifAvailable` gets null while it is held; held until the callback settles. */
+function lockStandIn() {
+    const state = { held: false };
+    const locks = {
+        async request(name: string, _opts: { ifAvailable?: boolean }, callback: (lock: object | null) => unknown) {
+            if (state.held) return callback(null);
+            state.held = true;
+            try { return await callback({ name }); } finally { state.held = false; }
+        },
+    };
+    return { state, locks };
+}
+
+async function scenario(on: boolean) {
+    await openWith(ANA.key);
+    server.sendFails = true;
+    await sendFromBox(ctx, chatWith(ANA.key), 'Mine, waiting', 5_000, () => {});
+    server.sendFails = false;
+    const [mine] = await ctx.store.lines(BEN.key, chatWith(ANA.key));
+    if (!on) return { mine, held: null };
+    const held = await heldLine(ANA, 'From Ana');
+    server.outbox = [{ itemId: mine.id, kind: 'dm-line', recipient: ANA.key, recipientHome: ANA_HOME, state: 'delivered', at: Date.now() }];
+    await ctx.store.setMeta(BEN.key, 'home', keptHome(Date.now() - 2 * 60 * 60_000));
+    blocks.loaded = false;
+    return { mine, held };
+}
+
+/** Runs `body` with the account, the community's info and address, and the lock as a browser has them; then puts them back. */
+async function inABrowser<T>(on: boolean, body: (lock: { held: boolean }) => Promise<T>): Promise<T> {
+    const identity = await import('./identity');
+    const gate = await import('./visitor-lobby-gate');
+    vi.mocked(identity.loadIdentity).mockImplementation(() => server.point!('loadIdentity', async () => ({ publicKey: BEN.key, privateKey: BEN.seed, callsign: 'Ben', createdAt: '' })));
+    vi.mocked(gate.communityInfoOnce).mockImplementation(() => server.point!('communityInfo', async () => ({ features: { outsideMessages: on } })));
+    vi.stubGlobal('fetch', vi.fn((url: string) => server.point!('fetch /api/community/info', async () => {
+        expect(String(url)).toBe('https://b.example/api/community/info');
+        return new Response(JSON.stringify({ primaryAddress: HOME }), { status: 200 });
+    })));
+    const { state, locks } = lockStandIn();
+    Object.defineProperty(navigator, 'locks', { value: locks, configurable: true });
+    try {
+        return await body(state);
+    } finally {
+        delete (navigator as { locks?: unknown }).locks;
+        vi.mocked(identity.loadIdentity).mockImplementation(async () => null);
+        vi.mocked(gate.communityInfoOnce).mockImplementation(async () => ({ features: { outsideMessages: true } }) as any);
+        vi.unstubAllGlobals();
+        vi.stubGlobal('indexedDB', idb);
+        server.point = null;
+    }
+}
+
 describe('8  a stalled wait never holds the round\'s lock (#3183: "a stalled block-list read keeps the round\'s lock past its deadline")', () => {
-    /**
-     * Every wait a round makes, in order, as `name#n` (its n-th in the round). Switch on: a round that resends a waiting line
-     * of mine, reads its community's home again (two hours old), reads the block list (not yet read on this page), writes,
-     * confirms and receipts a line from Ana, and applies the tick for my line. Switch off: the round that fails my waiting
-     * line. The first test proves these ARE every wait such a round makes, so a wait added later has to join this table.
-     */
-    // X2b: this browser's mail id (store.metaOrMake), then the ticks (hasLine, setMineState, the cursor's setMeta) before the
-    // held item is judged.
-    const ON = [
-        'loadIdentity#1', 'communityInfo#1', 'store.unsent#1', 'POST /api/mail/send#1', 'store.setMineState#1', 'store.getMeta#1',
-        'store.metaOrMake#1', 'store.getMeta#2', 'GET /api/mail#1', 'store.hasLine#1', 'store.setMineState#2', 'store.setMeta#1',
-        'store.hasLine#2', 'store.chat#1', 'store.theirLines#1', 'loadBlocklist#1',
-        'store.writeTheirs#1', 'store.oweReceipt#1', 'POST /api/mail/confirm#1', 'store.forgetReceiptsOwedBefore#1',
-        'store.owedReceipts#1', 'store.getMeta#3', 'fetch /api/community/info#1', 'store.setMeta#2', 'sign#1', 'POST /api/mail/send#2',
-        'store.receiptsSent#1',
-    ];
-    const OFF = ['loadIdentity#1', 'communityInfo#1', 'store.unsent#1', 'store.setMineState#1', 'store.unsent#2'];
-    /** Never asked and never answered; asked and never answered; answered, but after the deadline. */
-    const HOW = ['lost', 'unanswered', 'late'] as const;
-    /** Round 1's deadline: its timer is caught and fired by hand the moment the round reaches its stall. */
-    const BUDGET = 7_777;
-    const OFF_WORDS = "This community doesn't take messages from other communities.";
-    const realSetTimeout = globalThis.setTimeout;
-    const settle = async () => { for (let i = 0; i < 10; i++) await new Promise((r) => realSetTimeout(r, 0)); };
-
-    /** One round's waits, recorded; `stall` makes one of them stall, as its `how` says. */
-    function pointer(stall: { at: string; how: typeof HOW[number] } | null) {
-        const seen: string[] = [];
-        const counts = new Map<string, number>();
-        let reachedIt!: () => void;
-        let release!: () => void;
-        const reached = new Promise<void>((r) => { reachedIt = r; });
-        const released = new Promise<void>((r) => { release = r; });
-        const point = (name: string, run: () => any) => {
-            const n = (counts.get(name) ?? 0) + 1;
-            counts.set(name, n);
-            seen.push(`${name}#${n}`);
-            if (stall?.at !== `${name}#${n}`) return run();
-            reachedIt();
-            if (stall.how === 'lost') return new Promise(() => {});
-            const answer = Promise.resolve().then(run);
-            answer.catch(() => {});
-            return stall.how === 'unanswered' ? new Promise(() => {}) : released.then(() => answer);
-        };
-        return { seen, point, reached, release };
-    }
-
-    /** navigator.locks as a browser's: one holder; `ifAvailable` gets null while it is held; held until the callback settles. */
-    function lockStandIn() {
-        const state = { held: false };
-        const locks = {
-            async request(name: string, _opts: { ifAvailable?: boolean }, callback: (lock: object | null) => unknown) {
-                if (state.held) return callback(null);
-                state.held = true;
-                try { return await callback({ name }); } finally { state.held = false; }
-            },
-        };
-        return { state, locks };
-    }
-
-    async function scenario(on: boolean) {
-        await openWith(ANA.key);
-        server.sendFails = true;
-        await sendFromBox(ctx, chatWith(ANA.key), 'Mine, waiting', 5_000, () => {});
-        server.sendFails = false;
-        const [mine] = await ctx.store.lines(BEN.key, chatWith(ANA.key));
-        if (!on) return { mine, held: null };
-        const held = await heldLine(ANA, 'From Ana');
-        server.outbox = [{ itemId: mine.id, kind: 'dm-line', recipient: ANA.key, recipientHome: ANA_HOME, state: 'delivered', at: Date.now() }];
-        await ctx.store.setMeta(BEN.key, 'home', `${HOME} ${Date.now() - 2 * 60 * 60_000}`);
-        blocks.loaded = false;
-        return { mine, held };
-    }
-
-    /** Runs `body` with the account, the community's info and address, and the lock as a browser has them; then puts them back. */
-    async function inABrowser<T>(on: boolean, body: (lock: { held: boolean }) => Promise<T>): Promise<T> {
-        const identity = await import('./identity');
-        const gate = await import('./visitor-lobby-gate');
-        vi.mocked(identity.loadIdentity).mockImplementation(() => server.point!('loadIdentity', async () => ({ publicKey: BEN.key, privateKey: BEN.seed, callsign: 'Ben', createdAt: '' })));
-        vi.mocked(gate.communityInfoOnce).mockImplementation(() => server.point!('communityInfo', async () => ({ features: { outsideMessages: on } })));
-        vi.stubGlobal('fetch', vi.fn((url: string) => server.point!('fetch /api/community/info', async () => {
-            expect(String(url)).toBe('https://b.example/api/community/info');
-            return new Response(JSON.stringify({ primaryAddress: HOME }), { status: 200 });
-        })));
-        const { state, locks } = lockStandIn();
-        Object.defineProperty(navigator, 'locks', { value: locks, configurable: true });
-        try {
-            return await body(state);
-        } finally {
-            delete (navigator as { locks?: unknown }).locks;
-            vi.mocked(identity.loadIdentity).mockImplementation(async () => null);
-            vi.mocked(gate.communityInfoOnce).mockImplementation(async () => ({ features: { outsideMessages: true } }) as any);
-            vi.unstubAllGlobals();
-            vi.stubGlobal('indexedDB', idb);
-            server.point = null;
-        }
-    }
-
     for (const on of [true, false]) {
         it(`the table names every wait a round makes, in order (switch ${on ? 'on' : 'off'})`, async () => {
             const { syncOutsideMailNow } = await import('./outside-mail');
@@ -877,5 +903,156 @@ describe('9  each device for itself (X2b: "each device confirms for itself", DEC
             expect(aborted, 'the request was aborted at 4 s').toBe(true);
             expect(named('forget')).toHaveLength(1);
         });
+    });
+});
+
+describe('10  a round never acts for an account or a community it no longer belongs to (#3183 round 4)', () => {
+    // The deciding pass's findings: "a round still running when Sign Out clears this browser keeps working for the account
+    // that left" (it dropped and confirmed a line never shown, wrote private lines into a fresh database, made a new mail id)
+    // and "the kept home is per account, not per community" (pointed at another community, the browser signed as the old one).
+    const DB = 'beanpool-outside-chats';
+    const docs = () => idb.dump(DB, 'docs');
+    const ofB = (all: Record<string, unknown>) => Object.keys(all).filter((k) => k.startsWith(`${B} `));
+
+    /** What leaves where this page stands, each as the app does it. */
+    const EVENTS: Record<string, () => Promise<void>> = {
+        // Settings' Sign Out (Device Only) and the delete at the last community: the routine both run.
+        'sign out': async () => { const { clearAccountStorage } = await import('./device-prefs'); await clearAccountStorage(); },
+        // Settings' node address, set in another tab of this web address: this tab hears it as a storage change.
+        'switch community': async () => {
+            setNodeApiUrl(C);
+            window.dispatchEvent(new StorageEvent('storage', { key: 'bp_node_url', newValue: C }));
+        },
+        // The delete at the community the web app was pointed at, the key kept for the page's own (lib/delete-here.ts).
+        'delete here': async () => { const { leaveThisCommunity } = await import('./delete-here'); await leaveThisCommunity(); },
+    };
+    /** The wait was asked before the event and answered after it, or it was under way and asks only after it. */
+    const WHEN = { 'answered after': 'late', 'asked after': 'gap' } as const;
+
+    it('the round this table stops at every wait of is the one section 8 names: every wait, in order', async () => {
+        const { syncOutsideMailNow } = await import('./outside-mail');
+        await scenario(true);
+        const seen = await inABrowser(true, async () => {
+            const p = pointer(null);
+            server.point = p.point;
+            expect(await syncOutsideMailNow(30_000)).toMatchObject({ written: 1, confirmed: 1, ticks: 1 });
+            return p.seen;
+        });
+        expect(seen).toEqual(ON);
+    });
+
+    for (const [event, run] of Object.entries(EVENTS)) for (const at of ON) for (const [when, how] of Object.entries(WHEN)) {
+        it(`${event}, the round at ${at}, ${when}: nothing asked, no wait started, nothing written for the old account or community`, async () => {
+            const { syncOutsideMailNow } = await import('./outside-mail');
+            await scenario(true);
+            await inABrowser(true, async () => {
+                const p = pointer({ at, how });
+                server.point = p.point;
+                const round = syncOutsideMailNow(30_000);
+                expect(await Promise.race([p.reached.then(() => 'reached'), round.then(() => 'finished')]), `the round reached ${at}`).toBe('reached');
+                const entered = p.seen.length;
+                const served = server.served.length;
+                await run();
+                await settle();
+                // What the documents hold once the event is done (and a write asked before it has landed).
+                const atEvent = docs();
+                p.release();
+                await round;
+                await settle();
+                expect(p.seen.slice(entered), 'no wait started after it: no store call, no request, no block read, no signature').toEqual([]);
+                expect(server.served.slice(served), 'no server asked anything after it: no confirm, no send, no fetch naming a new id').toEqual([]);
+                if (event === 'switch community') {
+                    expect(docs(), 'nothing written after it, in the old community\'s documents or the new one\'s').toEqual(atEvent);
+                } else {
+                    expect(docs(), 'nothing of the old account or community written back').toEqual({});
+                }
+                if (event === 'sign out') expect(idb.has(DB), 'no fresh database made after Sign Out deleted it').toBe(false);
+            });
+        });
+    }
+
+    it('a page that missed the news of a Sign Out in another tab still stops at its next store call or request', async () => {
+        const { syncOutsideMailNow } = await import('./outside-mail');
+        const { ACCOUNT_EPOCH_KEY } = await import('./account-epoch');
+        await scenario(true);
+        await inABrowser(true, async () => {
+            const p = pointer({ at: 'GET /api/mail#1', how: 'late' });
+            server.point = p.point;
+            const round = syncOutsideMailNow(30_000);
+            await p.reached;
+            await settle();   // the GET is out (served), its answer held
+            const served = server.served.length;
+            // Another tab signed out: its value is in storage, and its database gone; no channel or storage event reached this page.
+            localStorage.setItem(ACCOUNT_EPOCH_KEY, `99.${'s'.repeat(8)}.${'c'.repeat(8)}`);
+            await clearOutsideChats();
+            p.release();
+            expect(await round).toBeNull();
+            await settle();
+            expect(server.served.slice(served)).toEqual([]);
+            expect(idb.has(DB)).toBe(false);
+        });
+    });
+
+    it('the kept home is the community\'s own: pointed at another, this browser asks it and signs as it; pointed back, the first one\'s documents are there', async () => {
+        const identity = await import('./identity');
+        const { outsideContext } = await import('./outside-mail');
+        vi.mocked(identity.loadIdentity).mockResolvedValue({ publicKey: BEN.key, privateKey: BEN.seed, callsign: 'Ben', createdAt: '' });
+        const asked: string[] = [];
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+            asked.push(String(url));
+            return new Response(JSON.stringify({ primaryAddress: new URL(String(url)).hostname }), { status: 200 });
+        }));
+        try {
+            const atB = (await outsideContext())!;
+            expect(atB.nodeUrl).toBe(B);
+            expect((await myAddressCard(atB))?.home).toBe(HOME);
+            const bDevice = await mailDevice(atB);
+            await setDoor(atB, true);
+            expect(asked, 'b\'s home is kept, and fresh').toEqual([]);
+            // Settings' node address moves the web app to c while b's kept home is still fresh: c is asked, and the card names c.
+            setNodeApiUrl(C);
+            const atC = (await outsideContext())!;
+            expect(atC.nodeUrl).toBe(C);
+            expect((await myAddressCard(atC))?.home).toBe('c.example');
+            expect(asked).toEqual([`${C}/api/community/info`]);
+            // Nothing of b's carried over: c has its own door, and this browser its own mail id there.
+            expect(await doorOpen(atC)).toBe(false);
+            expect(await mailDevice(atC)).not.toBe(bDevice);
+            // The context made at b answers for b no more: its store opens nothing, its requests go nowhere.
+            await expect(atB.store.getMeta(BEN.key, 'device')).rejects.toThrow();
+            // Pointed back at b, however typed: b's documents are there again, as the phone keeps each community's file.
+            setNodeApiUrl('https://B.example:443/');
+            const back = (await outsideContext())!;
+            expect(await mailDevice(back)).toBe(bDevice);
+            expect(await doorOpen(back)).toBe(true);
+            expect((await myAddressCard(back))?.home).toBe(HOME);
+            expect(asked).toHaveLength(1);
+            // A home kept for another address is never this one's: a store holding b's, read for c, asks c.
+            expect(await myHome({ ...atC, store: outsideChatStore(B), holds: undefined })).toBe('c.example');
+            expect(asked).toEqual([`${C}/api/community/info`, `${C}/api/community/info`]);
+        } finally {
+            vi.mocked(identity.loadIdentity).mockImplementation(async () => null);
+            vi.unstubAllGlobals();
+            vi.stubGlobal('indexedDB', idb);
+            vi.stubGlobal('IDBKeyRange', MemoryIDBKeyRange);
+        }
+    });
+
+    it('the delete here clears that community\'s documents, every one, and leaves every other community\'s', async () => {
+        await openWith(ANA.key);
+        await heldLine(ANA, 'At b');
+        await syncOutsideMail(ctx);
+        await mailDevice(ctx);
+        const own = window.location.origin;
+        const ownDevice = 'a'.repeat(32), nearDevice = 'b'.repeat(32);
+        await outsideChatStore(own).setMeta(BEN.key, 'device', ownDevice);
+        // An address that starts as b's does: another community all the same.
+        await outsideChatStore('https://b.example.org').setMeta(BEN.key, 'device', nearDevice);
+        expect(ofB(docs()).length, 'b holds chats, lines, receipts and meta').toBeGreaterThanOrEqual(3);
+        const { leaveThisCommunity } = await import('./delete-here');
+        await leaveThisCommunity();
+        expect(ofB(docs())).toEqual([]);
+        expect(await outsideChatStore(own).getMeta(BEN.key, 'device')).toBe(ownDevice);
+        expect(await outsideChatStore('https://b.example.org').getMeta(BEN.key, 'device')).toBe(nearDevice);
     });
 });

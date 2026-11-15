@@ -172,7 +172,7 @@ describe('Sign Out: the community forgets this browser for mail from other commu
     beforeEach(async () => {
         // This test's IndexedDB holds this browser's mail id, as a round left it.
         await clearOutsideChats();
-        await outsideChatStore().setMeta(identity.publicKey, 'device', DEVICE);
+        await outsideChatStore(api.nodeAddress()).setMeta(identity.publicKey, 'device', DEVICE);
         vi.mocked(api.signedMailFetch).mockReset();
         vi.mocked(api.signedMailFetch).mockImplementation(async (method, _community, path) => {
             order.push(`${method} ${path}`);
@@ -186,7 +186,7 @@ describe('Sign Out: the community forgets this browser for mail from other commu
         expect(forgets().map(c => [c[0], c[3], c[4]])).toEqual([['POST', { device: DEVICE }, identity]]);
         expect(order.indexOf('POST /api/mail/device/forget')).toBeGreaterThan(-1);
         expect(order.indexOf('POST /api/mail/device/forget')).toBeLessThan(order.indexOf('wipe key'));
-        await waitFor(async () => expect(await outsideChatStore().getMeta(identity.publicKey, 'device')).toBeNull());
+        await waitFor(async () => expect(await outsideChatStore(api.nodeAddress()).getMeta(identity.publicKey, 'device')).toBeNull());
     });
 
     it('a community that never answers holds Sign Out 4 s at most', async () => {

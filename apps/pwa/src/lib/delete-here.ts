@@ -21,6 +21,7 @@
  */
 import { fetchMembershipAt, getNodeApiUrl, purgeAccountApi, setNodeApiUrl } from './api';
 import { clearHomeCache } from './home-cache';
+import { clearOutsideChatsAt } from './outside-chat-store';
 
 /** How long the page's own node has to answer, as the phone waits for each community. */
 export const MEMBERSHIP_TIMEOUT_MS = 8000;
@@ -167,16 +168,20 @@ export async function purgeHere(
  * Once the node the web app is pointed at has deleted the account ({@link WebDeletePlan} 'this-one'): the web app goes
  * back to the page's own node. The key, its 12 words and the browser's settings stay. Home's kept answers go (the
  * deleted account's Beans, messages and groups at that community among them), and a Home still open in another tab
- * drops what it holds and reads the page's own community's afresh; the page's own Home is read again.
+ * drops what it holds and reads the page's own community's afresh; the page's own Home is read again. The chats with
+ * people in other communities kept for that community go too (lib/outside-chat-store.ts, its mail id and kept home among
+ * them): the account there is gone, and a round still running for it stops when the address moves (lib/outside-mail.ts).
  */
 export async function leaveThisCommunity(): Promise<void> {
     const node = getNodeApiUrl();
     setNodeApiUrl(null);
     if (node) {
+        const outside = clearOutsideChatsAt(node);
         try {
             const { clearToolRecordsFor } = await import('../tools/store');
             await clearToolRecordsFor(node);
         } catch { /* best effort */ }
+        await outside;
     }
     await clearHomeCache('cleared');
 }

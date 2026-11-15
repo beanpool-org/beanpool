@@ -71,7 +71,7 @@ export interface BillView extends BillAbout {
     known?: boolean;
     /** The payer's credit line may pay it: they have finished a deal with the sender, or have a standing deal running. */
     creditOpen?: boolean;
-    /** On the sender's read only: it went with an invite nobody has joined with yet, so it has no payer (slice B3). */
+    /** On the sender's read only: it went with an invite nobody has joined with yet and still waits, so it has no payer (slice B3). */
     awaitingJoin?: true;
 }
 

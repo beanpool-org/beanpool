@@ -204,6 +204,7 @@ import { pruneChatLines } from './chat-rate-limit.js';
 import { clientIp, clientLimiterKey, limiterKeyForIp, resolveClientIp } from './client-ip.js';
 import { adminIpAllowed } from './config/gateway.js';
 import { countWebAppPageLoad } from './engine/web-visits.js';
+import { isWebAppPageFile, serveWebAppPage, WEB_APP_NOINDEX } from './web-app-robots.js';
 import {
     gatewayAdmit, gatewayAdmitMember, gatewayAdmitDayBudget, gatewaySettle, pruneGatewayBuckets, gatewayClaimVerified,
     gatewayAdmitPeerRead, gatewayAdmitUpgrade, gatewaySettleUpgrade, gatewayNoRoomUpgrade, gatewayChargeLargeClaim, CLAIM_SMALL_BODY_BYTES,
@@ -2176,8 +2177,11 @@ export async function startHttpsServer(port: number): Promise<number> {
         gzip: true,
         setHeaders: (res, filePath) => {
             const headers = { set: (f: string, v: string) => res.setHeader(f, v), remove: (f: string) => res.removeHeader(f) };
-            if (isDocumentPolicyFile(path.relative(PUBLIC_DIR, filePath))) useDocumentPolicy(headers);
+            const file = path.relative(PUBLIC_DIR, filePath);
+            if (isDocumentPolicyFile(file)) useDocumentPolicy(headers);
             else useAppDocumentPolicy(headers);
+            // The web app's page asked for by name (/index.html): noindex, as every path of it but /app (web-app-robots.ts).
+            if (isWebAppPageFile(file)) headers.set('X-Robots-Tag', WEB_APP_NOINDEX);
         },
     });
     app.use(async (ctx, next) => (isApiOrWsPath(ctx.path) ? next() : servePublic(ctx, next)));
@@ -2219,9 +2223,9 @@ export async function startHttpsServer(port: number): Promise<number> {
                     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
                     ctx.set('Pragma', 'no-cache');
                     ctx.set('Expires', '0');
-                    ctx.type = 'html';
-                    ctx.body = fs.createReadStream(indexPath);
-                    return;
+                    // A member's page (/app/…): noindex, by header and in the page; /app itself, should it ever reach this
+                    // line, names its canonical as the route does (web-app-robots.ts).
+                    if (await serveWebAppPage(ctx, indexPath)) return;
                 }
             }
         }

@@ -1445,7 +1445,8 @@ router.put('/api/profile/privacy', async (ctx) => {
 // a key to join the node, and a used one says who joined through whom and when. With read auth opted out this list went to
 // anyone, unsigned too, unused codes and all. Every reader but the maker gets the same refusal, before any lookup, so it
 // says nothing about the key asked about. An invite bound to a names-list entry is among them, so it too reaches its maker
-// alone (engine/names-list.ts readBoundInvites).
+// alone (engine/names-list.ts readBoundInvites), and says which entry only while the maker may read the names list
+// (state-engine.ts getInvitesByMember).
 router.get('/api/invite/mine/:publicKey', async (ctx) => {
     const { publicKey } = ctx.params;
     const actor = ctx.state.actor as string | undefined;

@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Messages, groupes et leurs discussions, contacts et amis, échanges d'événements, mise en sourdine, mentions et changement de clé.",
-        "sourceHash": "e680a96492c72e47"
+        "text": "Messages, groupes et leurs discussions, contacts et amis, vos contacts privés, échanges d'événements, mise en sourdine, mentions et changement de clé.",
+        "sourceHash": "b8443e689c10d3a0"
       }
     },
     "pulse": {
@@ -762,6 +762,20 @@
       "help": {
         "text": "Vos Offres sous un seul nom. Nommez-la, dites de quel type elle est, fermez-la pour le moment, ou fermez-la définitivement.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "Vos contacts privés",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Une liste de contacts que vous seul·e pouvez ouvrir, sur n'importe quel téléphone ou navigateur et dans toutes les communautés dont vous faites partie. Faire venir des personnes, les inviter, et ce que le serveur de votre communauté peut voir ou non.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "Vos contacts privés. Vous seul·e ouvrez la liste. Importez depuis votre téléphone ou un fichier de contacts, ajoutez quelqu'un à la main ou invitez-le.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

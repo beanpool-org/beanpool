@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Tin nhắn, nhóm và các đoạn chat, mọi người và bạn bè, chat sự kiện, tắt thông báo, nhắc đến và khóa đã đổi.",
-        "sourceHash": "e680a96492c72e47"
+        "text": "Tin nhắn, nhóm và các đoạn chat, mọi người và bạn bè, danh bạ riêng của bạn, chat sự kiện, tắt thông báo, nhắc đến và khóa đã đổi.",
+        "sourceHash": "b8443e689c10d3a0"
       }
     },
     "pulse": {
@@ -762,6 +762,20 @@
       "help": {
         "text": "Các Chia sẻ của bạn dưới một cái tên. Đặt tên, cho biết đó là loại gì, tạm đóng hoặc đóng hẳn.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "Danh bạ riêng của bạn",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Một danh bạ chỉ mình bạn mở được, trên mọi điện thoại hay trình duyệt và trong mọi cộng đồng bạn tham gia. Cách đưa mọi người vào, mời họ, và những gì máy chủ của cộng đồng bạn thấy được và không thấy được.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "Danh bạ riêng của bạn. Chỉ bạn mở được danh sách. Đưa người từ điện thoại hoặc tệp danh bạ vào, thêm ai đó thủ công, hoặc mời họ.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

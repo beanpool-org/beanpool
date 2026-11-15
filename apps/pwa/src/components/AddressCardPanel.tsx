@@ -64,8 +64,8 @@ export function AddressCardPanel({ onBack, onOpenChat }: { onBack: () => void; o
     useEffect(() => {
         let alive = true;
         void (async () => {
-            const ctx = await outsideContext();
-            const on = ctx ? await outsideMessagesHere() : false;
+            const ctx = await outsideContext().catch(() => null);
+            const on = ctx ? await outsideMessagesHere().catch(() => null) : false;
             if (!alive) return;
             setHere(on === true);
             if (ctx && on) setOpen(await doorOpen(ctx).catch(() => false));

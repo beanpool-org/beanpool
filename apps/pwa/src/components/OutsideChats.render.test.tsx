@@ -24,7 +24,7 @@ const seedKey = () => { const seed = ed25519.utils.randomSecretKey(); return { s
 const BEN = seedKey(), SOL = seedKey();
 const B = 'https://b.example', HOME = 'b.example', SOL_HOME = 'a.example';
 
-const here = vi.hoisted(() => ({ ctx: null as any, blocked: new Set<string>() }));
+const here = vi.hoisted(() => ({ ctx: null as any, blocked: new Set<string>(), roundThrows: false }));
 vi.mock('../lib/outside-mail', async (importOriginal) => {
     const real = await importOriginal<typeof import('../lib/outside-mail')>();
     const core = await import('@beanpool/core');
@@ -33,7 +33,8 @@ vi.mock('../lib/outside-mail', async (importOriginal) => {
         ...real,
         outsideContext: async () => here.ctx,
         outsideMessagesHere: async () => true,
-        syncOutsideMailNow: async () => null,
+        // A round that throws at once (as one did in a page whose api had no node address): the screen stays up.
+        syncOutsideMailNow: () => { if (here.roundThrows) throw new Error('no node address'); return Promise.resolve(null); },
         myHome: async () => HOME,
         myAddressCard: async (ctx: any) => core.signAddressCard({ key: ctx.identity.publicKey, home: HOME, name: 'Ben' }, core.ed25519Signer(hex(ctx.identity.privateKey))),
         sendFromBox: vi.fn(async () => ({ kept: true, error: null })),
@@ -43,7 +44,7 @@ vi.mock('../lib/outside-mail', async (importOriginal) => {
 import { outsideChatStore, clearOutsideChats } from '../lib/outside-chat-store';
 import { doorOpen } from '../lib/outside-mail';
 import { AddressCardPanel } from './AddressCardPanel';
-import { OutsideChatThread } from './OutsideChats';
+import { OutsideChatThread, outsideRoundNow } from './OutsideChats';
 
 const chatId = relayConversationId(BEN.key, SOL.key);
 
@@ -52,6 +53,7 @@ beforeEach(async () => {
     vi.stubGlobal('IDBKeyRange', MemoryIDBKeyRange);
     await clearOutsideChats();
     here.blocked = new Set();
+    here.roundThrows = false;
     here.ctx = {
         nodeUrl: B, identity: { publicKey: BEN.key, privateKey: BEN.seed, callsign: 'Ben' }, store: outsideChatStore(B),
         isBlocked: async (k: string) => here.blocked.has(k),
@@ -118,5 +120,15 @@ describe('the chat (OutsideChatThread)', () => {
         fireEvent.click(screen.getByTestId('outside-request-accept'));
         expect(await screen.findByTestId('outside-chat-input')).toBeTruthy();
         expect((await here.ctx.store.chat(BEN.key, chatId))?.state).toBe('open');
+    });
+});
+
+describe('the round never takes a screen down (preflight: every MessagesPage test went red on a round that threw at once)', () => {
+    it('outsideRoundNow answers null when the round throws at once, and the chat still draws', async () => {
+        here.roundThrows = true;
+        await expect(outsideRoundNow()).resolves.toBeNull();
+        await here.ctx.store.openChat(BEN.key, chatId, { key: SOL.key, home: SOL_HOME, name: 'Sol' });
+        render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+        expect(await screen.findByTestId('outside-chat-kept-here')).toBeTruthy();
     });
 });

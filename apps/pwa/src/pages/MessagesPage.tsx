@@ -18,9 +18,9 @@ import {
 import { requestsWaitingOnGlobal } from '../lib/show-on-global';
 import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, requestReportNotSentWords, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
 import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPreviews } from '../components/MessageRequests';
-import { OutsideChatRow, OutsideChatThread, OutsideRequestCard } from '../components/OutsideChats';
+import { OutsideChatRow, OutsideChatThread, OutsideRequestCard, outsideRoundNow } from '../components/OutsideChats';
 import { AddressCardPanel } from '../components/AddressCardPanel';
-import { OUTSIDE_CHATS_EVENT, chatsShown, outsideContext, syncOutsideMailNow } from '../lib/outside-mail';
+import { OUTSIDE_CHATS_EVENT, chatsShown, outsideContext } from '../lib/outside-mail';
 import type { OutsideChat } from '../lib/outside-chat-store';
 import { ChatPhotoViewer } from '../components/ChatPhotoViewer';
 import { ChatImageBubble, ChatPhotoShown } from '../components/ChatImageBubble';
@@ -329,8 +329,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 .then((list) => { if (alive) setOutsideChats(list); }, () => {});
         };
         read();
-        void syncOutsideMailNow().then(read);
-        const timer = setInterval(() => { if (document.visibilityState !== 'hidden') void syncOutsideMailNow().then(read); }, 30_000);
+        // outsideRoundNow never throws: the outside mailbox can never take Chat down.
+        void outsideRoundNow().then(read);
+        const timer = setInterval(() => { if (document.visibilityState !== 'hidden') void outsideRoundNow().then(read); }, 30_000);
         window.addEventListener(OUTSIDE_CHATS_EVENT, read);
         return () => { alive = false; clearInterval(timer); window.removeEventListener(OUTSIDE_CHATS_EVENT, read); };
     }, [identity.publicKey]);

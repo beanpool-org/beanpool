@@ -28,6 +28,18 @@ const commit: CSSProperties = { ...button, border: 'none', background: 'var(--bp
 const danger: CSSProperties = { ...button, border: '1px solid var(--bp-chip-danger-ink)', background: 'var(--bp-chip-danger-tint)', color: 'var(--bp-chip-danger-ink)' };
 const wrap: CSSProperties = { overflowWrap: 'anywhere', wordBreak: 'break-word' };
 
+/**
+ * A round of the mailbox now, for a screen (Chat, an open chat). It never throws, synchronously or later: whatever goes wrong
+ * in the round, or before it starts, the page that asked keeps working (it answers null).
+ */
+export function outsideRoundNow(): Promise<unknown> {
+    try {
+        return syncOutsideMailNow().catch(() => null);
+    } catch {
+        return Promise.resolve(null);
+    }
+}
+
 /** Their name as shown: the one they gave, else who they are in words. */
 export function outsideName(chat: Pick<OutsideChat, 'peerName'>): string {
     return chat.peerName ?? t('Someone in another community');
@@ -102,7 +114,7 @@ export function OutsideChatThread({ chatId, onBack }: { chatId: string; onBack: 
     const endRef = useRef<HTMLDivElement | null>(null);
 
     const load = useCallback(async () => {
-        const ctx = await outsideContext();
+        const ctx = await outsideContext().catch(() => null);
         if (!alive.current) return;
         if (!ctx) { setChat(null); return; }
         setMe(ctx.identity.publicKey);
@@ -116,8 +128,8 @@ export function OutsideChatThread({ chatId, onBack }: { chatId: string; onBack: 
     useEffect(() => {
         alive.current = true;
         void load();
-        void syncOutsideMailNow().then(load);
-        const timer = setInterval(() => { if (document.visibilityState !== 'hidden') void syncOutsideMailNow().then(load); }, POLL_MS);
+        void outsideRoundNow().then(load);
+        const timer = setInterval(() => { if (document.visibilityState !== 'hidden') void outsideRoundNow().then(load); }, POLL_MS);
         window.addEventListener(OUTSIDE_CHATS_EVENT, load);
         return () => { alive.current = false; clearInterval(timer); window.removeEventListener(OUTSIDE_CHATS_EVENT, load); };
     }, [load]);

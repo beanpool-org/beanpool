@@ -98,7 +98,10 @@ async function main(): Promise<void> {
 
     await initTls();
     initStateEngine();
-    const BASE = `https://localhost:${await startHttpsServer(0)}`;
+    // Port 0: the system picks a free port for this server alone (never a fixed one a sibling suite could hold), and
+    // startHttpsServer answers it only once the server is listening on it.
+    const PORT = await startHttpsServer(0);
+    const BASE = `https://localhost:${PORT}`;
     setSignedForHost('a.example');
 
     // ── People and servers ──────────────────────────────────────────────────────────────────
@@ -127,7 +130,10 @@ async function main(): Promise<void> {
     });
     // The owners blocked c.example (the connector's blocked level).
     addConnector('c.example:4001', 'blocked', 'Blocked', 'https://c.example', false);
-    const aDoc = readNodeKeyDocument(await (await fetch(`${BASE}/api/node/key`)).json());
+    // The first call: the server answers on the port it was given before anything else is asked of it (no retry).
+    const keyRes = await fetch(`${BASE}/api/node/key`, { headers: { connection: 'close' } });
+    if (keyRes.status !== 200) throw new Error(`a.example is not answering on port ${PORT} (${keyRes.status})`);
+    const aDoc = readNodeKeyDocument(await keyRes.json());
     if (!aDoc) throw new Error('a.example has no key document');
 
     // What the node sends other servers: a member's items to b.example's /api/relay/mail; the backoff table's notices.
@@ -226,6 +232,23 @@ async function main(): Promise<void> {
         console.log(`\n${passed}/${run} passed`);
         process.exit(1);
     }
+
+    // ── 0. The suite's own calls ────────────────────────────────────────────────────────────
+    console.log('\n0. The suite\'s own calls: a call after this process\'s loop was held past the server\'s keep-alive still reaches it');
+    // CI run 43759989771 (shard server-1): section 9 calls the engine thousands of times without a turn, holding this
+    // process's loop, the server's with it, for seconds. The next call went out on the pooled socket the server's 5 s
+    // keep-alive (and Node's 1 s buffer) was closing, and read ECONNRESET. So no call here leaves a socket waiting in a pool
+    // (Connection: close, as test-backup-owner-gate and test-moderation-notifications). The hold below is that, made sure:
+    // Atomics.wait stops the loop without using the CPU, inside a timer, so the next call is written before the server's
+    // keep-alive timer, which ran out during the hold, fires in the same turn (on CI the order fell that way by chance).
+    const KEEP_ALIVE_HOLD_MS = 5000 + 1000 + 500;
+    const before0 = await call('GET', gus, `/api/mail/group?device=${device()}`);
+    const after0 = await new Promise<Res | string>((resolve) => setTimeout(() => {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, KEEP_ALIVE_HOLD_MS);
+        call('GET', gus, `/api/mail/group?device=${device()}`).then(resolve, (e: any) => resolve(String(e?.cause?.code ?? e?.message ?? e)));
+    }, 1));
+    assert(before0.status === 200 && typeof after0 !== 'string' && after0.status === 200,
+        `0. the loop held ${KEEP_ALIVE_HOLD_MS} ms between two calls: both reach the server on port ${PORT} (got ${before0.status}, then ${typeof after0 === 'string' ? after0 : after0.status})`);
 
     // ── 1. Every notice x where the guest stands ────────────────────────────────────────────
     console.log('\n1. Close the class: every notice a host brings x where the guest stands -> held or dropped, answered alike');
@@ -771,6 +794,221 @@ async function main(): Promise<void> {
     }
     hostSide.__useFanoutClockForTests(null);
     assert(row11 === SIDES.length * SEQS.length, `11z. the table has a row for every side and every sequence (${row11} rows)`);
+
+    // ── 12. Every state the copied table holds settles from the copy alone ──────────────────
+    console.log('\n12. Close the class (invariant D, #3217 round 2): where a member stands with a group elsewhere x (main server, standby, promoted standby holding only the copy) x every action -> answered sensibly, and nothing left stuck');
+    // A host of its own, with its own key document, so this table's rows meet no other section's.
+    const H12 = 'h.example', HK12 = newId('H');
+    hostKey[H12] = HK12;
+    docs.set(`https://${H12}/api/node/key`, await signNodeKeyDocument({ key: HK12.pk, validUntil: Date.now() + NODE_KEY_VALIDITY_MS, previousKeys: [] }, signerOf(HK12.seed)));
+    /** Each copied (plain) table's rows, as a count and a digest: what a standby must leave as its main server's copy made it. */
+    const PLAIN = Object.entries(TABLES as Record<string, any>).filter(([, e]) => e.kind === 'replicated' && e.plain === true).map(([t]) => t);
+    const plainPrint = (): Map<string, string> => new Map(PLAIN.map((t): [string, string] => {
+        let rows: unknown[];
+        try { rows = db.prepare(`SELECT * FROM "${t}"`).all(); } catch { return [t, 'no such table']; }
+        return [t, `${rows.length}:${crypto.createHash('sha256').update(rows.map((r) => JSON.stringify(r)).sort().join('\n')).digest('hex').slice(0, 16)}`];
+    }));
+    const plainChanged = (a: Map<string, string>, b: Map<string, string>) => PLAIN.filter((t) => a.get(t) !== b.get(t));
+    // The states the copied table can hold, read from its own CHECK: each must be one a standing below leaves in it (12y).
+    const linksSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'group_guest_links'").pluck().get() as string;
+    const STORED12 = [...(/\bstate\s+TEXT NOT NULL CHECK \(state IN \(([^)]*)\)\)/.exec(linksSql)?.[1] ?? '').matchAll(/'([a-z]+)'/g)].map((m) => m[1]);
+    type Standing12 = 'invited' | 'their yes queued' | 'in' | 'declined' | 'left' | 'removed';
+    const STANDINGS12: Standing12[] = ['invited', 'their yes queued', 'in', 'declined', 'left', 'removed'];
+    type Role12 = 'main' | 'standby' | 'promoted standby';
+    const ROLES12: Role12[] = ['main', 'standby', 'promoted standby'];
+    type Action12 = 'yes' | 'no' | 'leave' | 'line' | 'epoch' | 'roster' | 'removal' | "host's line" | 'invitation';
+    const ACTIONS12: Action12[] = ['yes', 'no', 'leave', 'line', 'epoch', 'roster', 'removal', "host's line", 'invitation'];
+    /** The host's notices among the actions (the rest are the member's items, through POST /api/mail/send). */
+    const NOTICE12: Partial<Record<Action12, [string, unknown]>> = {
+        roster: ['roster', DATA.roster], removal: ['removed', { why: 'removed' }], "host's line": ['line', DATA.line], invitation: ['invite', DATA.invite],
+    };
+    /** Where they stand as their device reads it: on the server that queued their yes, and on one holding only the copy. */
+    const MAIN_READS: Record<Standing12, string> = { invited: 'invited', 'their yes queued': 'joining', in: 'in', declined: 'declined', left: 'left', removed: 'removed' };
+    const COPY_READS: Record<Standing12, string> = { ...MAIN_READS, 'their yes queued': 'invited' };
+    const out = (s: string): Record<Action12, string> => ({ yes: `403 ${s}`, no: `403 ${s}`, leave: `403 ${s}`, line: `403 ${s}`, epoch: `403 ${s}`, roster: `202 ${s}`, removal: `202 ${s}`, "host's line": `202 ${s}`, invitation: '202 invited +' });
+    /**
+     * [where they stand, as their device reads it][action] on a server that is main (as it always was, or promoted): the
+     * answer, where they stand then ('-': no link), and '+' when a notice was held for them. The host answers every item.
+     */
+    const E12: Record<string, Record<Action12, string>> = {
+        invited: { yes: '200 in', no: '200 declined', leave: '200 left', line: '403 invited', epoch: '403 invited', roster: '202 invited', removal: '202 - +', "host's line": '202 invited', invitation: '202 invited' },
+        // The leave goes behind the yes still queued: the host takes both, in order.
+        joining: { yes: '403 joining', no: '403 joining', leave: '200 left', line: '403 joining', epoch: '403 joining', roster: '202 joining +', removal: '202 removed +', "host's line": '202 joining +', invitation: '202 joining' },
+        in: { yes: '403 in', no: '403 in', leave: '200 left', line: '200 in', epoch: '200 in', roster: '202 in +', removal: '202 removed +', "host's line": '202 in +', invitation: '202 in' },
+        declined: out('declined'), left: out('left'), removed: out('removed'),
+    };
+    const item12 = (who: Id, a: Action12, g: string) => {
+        const [kind, payload] = payloadOf(a === 'yes' || a === 'no' || a === 'leave' || a === 'epoch' ? a : 'line');
+        return item(who, kind, g, payload, H12);
+    };
+    const standing12 = (who: Id, g: string): string => {
+        const view = (home.heldGroupMailFor(who.pk, 'f'.repeat(32)).groups as any[]).find((x) => x.host === H12 && x.group === g);
+        return view?.state ?? linkOf(who, H12, g)?.state ?? '-';
+    };
+    const queuedFor = (who: Id) => db.prepare("SELECT COUNT(*) FROM group_guest_sent WHERE sender_key = ? AND state = 'queued'").pluck().get(who.pk) as number;
+    /** The member's standing made as it is made: an invitation from the host, and their yes while the host is down. */
+    async function seed12(who: Id, g: string, st: Standing12): Promise<string> {
+        if (st === 'invited' || st === 'their yes queued') home.receiveGroupNotice(H12, { v: 1, kind: 'invite', group: g, host: H12, guests: [who.pk], data: DATA.invite });
+        else setLink(who, H12, g, st);
+        if (st !== 'their yes queued') return '';
+        failing.add(H12);
+        const r = await send(who, [await item12(who, 'yes', g)]);
+        failing.delete(H12);
+        return r.body?.items?.[0]?.state ?? `${r.status}`;
+    }
+    /** A promoted standby holds the copy alone: none of this server's own rows for them. */
+    const keepOnlyTheCopy = (who: Id) => {
+        db.prepare('DELETE FROM group_guest_sent WHERE sender_key = ?').run(who.pk);
+        db.prepare('DELETE FROM group_guest_mail_got WHERE member = ?').run(who.pk);
+        db.prepare('DELETE FROM group_guest_mail WHERE member = ?').run(who.pk);
+    };
+    let row12 = 0;
+    const reached = new Set<string>();
+    for (const st of STANDINGS12) {
+        for (const role of ROLES12) {
+            for (const act of ACTIONS12) {
+                const who = addLocal(`Pa${++row12}`);
+                const g = `g12-${row12}`;
+                const seeded = await seed12(who, g, st);
+                reached.add(linkOf(who, H12, g)?.state ?? '-');
+                if (role === 'promoted standby') keepOnlyTheCopy(who);
+                const before = standing12(who, g);
+                const heldBefore = heldCount(who, H12, g), sentBefore12 = sentCount(), printBefore = plainPrint();
+                const notice12 = NOTICE12[act];
+                if (role === 'standby') setNodeRole('backup');
+                let status = 0;
+                try {
+                    status = notice12 ? (await notice(H12, { v: 1, kind: notice12[0], group: g, host: H12, guests: [who.pk], data: notice12[1] })).status
+                        : (await send(who, [await item12(who, act, g)])).status;
+                } finally {
+                    if (role === 'standby') setNodeRole('primary');
+                }
+                const after = standing12(who, g);
+                const held = heldCount(who, H12, g) > heldBefore;
+                let want: string, ok: boolean;
+                if (role === 'standby') {
+                    // A standby writes nothing at all: no copied row, nothing held, nothing queued; the member is told it is one.
+                    const changed = plainChanged(printBefore, plainPrint());
+                    want = `${notice12 ? 202 : 503} ${before}, nothing written`;
+                    ok = status === (notice12 ? 202 : 503) && after === before && !held && sentCount() === sentBefore12 && changed.length === 0;
+                    if (changed.length) want += ` (changed: ${changed.join(', ')})`;
+                } else {
+                    const reads = role === 'main' ? MAIN_READS[st] : COPY_READS[st];
+                    want = E12[reads][act];
+                    ok = before === reads && `${status} ${after}${held ? ' +' : ''}` === want;
+                }
+                // Nothing stuck: back on a main server with the host answering, whatever was queued settles, and no link is
+                // left joining with nothing queued to move it.
+                await home.retryGroupSent(Date.now() + 3 * MIN);
+                const settled = standing12(who, g), queued = queuedFor(who);
+                ok &&= settled !== 'joining' && queued === 0;
+                assert(ok, `12. ${st} x ${role} x ${act}: ${want}; then nothing stuck (got ${seeded ? `seeded ${seeded}, ` : ''}${before} -> ${status} ${after}${held ? ' +' : ''}; settled ${settled}, ${queued} queued)`);
+            }
+        }
+    }
+    assert(row12 === STANDINGS12.length * ROLES12.length * ACTIONS12.length, `12z. the table has a row for every standing, server and action (${row12} rows)`);
+    assert(STORED12.length > 0 && STORED12.every((s) => reached.has(s)),
+        `12y. every state the copied table can hold (its CHECK: ${STORED12.join(', ')}) is one a standing above leaves in it (reached: ${[...reached].join(', ')})`);
+    // From every standing, a server holding only the copy has a way back in: the host's invitation, the member's yes, a line.
+    for (const st of STANDINGS12) {
+        const who = addLocal(`Pb${++row12}`);
+        const g = `g12-${row12}`;
+        await seed12(who, g, st);
+        keepOnlyTheCopy(who);
+        const steps: Action12[] = COPY_READS[st] === 'in' ? [] : COPY_READS[st] === 'invited' ? ['yes'] : ['invitation', 'yes'];
+        const got: string[] = [];
+        for (const s of steps) {
+            const n12 = NOTICE12[s];
+            const r = n12 ? await notice(H12, { v: 1, kind: n12[0], group: g, host: H12, guests: [who.pk], data: n12[1] }) : await send(who, [await item12(who, s, g)]);
+            got.push(`${s} ${r.status} ${standing12(who, g)}`);
+        }
+        const line = await send(who, [await item12(who, 'line', g)]);
+        assert(standing12(who, g) === 'in' && line.status === 200 && line.body?.items?.[0]?.state === 'sent',
+            `12x. ${st}, on a server holding only the copy: ${steps.length ? steps.join(', then ') : 'nothing to do'}, and a line goes (got ${got.join('; ') || 'no step'}; line ${line.status} ${line.body?.items?.[0]?.state ?? line.body?.code})`);
+    }
+
+    // ── 13. Nothing a standby's timer runs writes a copied table ────────────────────────────
+    console.log('\n13. Close the class (invariant D): every timer job in the guest files x (standby, main) -> on a standby no row of any copied table is written; on a main server the job does its work');
+    const { applyShapeChanges } = await import('./config/community-shape-write.js');
+    const serverSrc = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'https-server.ts'), 'utf8');
+    const timerNames = [...serverSrc.matchAll(/import \{([^}]*)\} from '\.\/engine\/group-guest(?:s|-home)\.js'/g)]
+        .flatMap((m) => m[1].split(',').map((s) => s.trim()).filter(Boolean)).sort();
+    let n13 = 0;
+    /** Each job: what it is given to do (made as it is made), the job, and whether a main server did it. */
+    const TIMERS: Record<string, { seed: () => Promise<{ who: Id; g: string; extra?: string }>; run: (t: number) => unknown; at: number; did: (s: { who: Id; g: string; extra?: string }) => boolean; after?: () => void }> = {
+        // The owners switched guests off: each guest invited here is removed (group_guests, a copied table).
+        closeGuestsIfSwitchedOff: {
+            seed: async () => {
+                const key = crypto.randomBytes(32).toString('hex'), g = `g13-close-${++n13}`;
+                const iso = new Date().toISOString();
+                db.prepare(`INSERT INTO group_guests (group_id, guest_key, home, name, state, invited_by, invited_at, state_at) VALUES (?, ?, 'q.example', 'Quinn', 'invited', ?, ?, ?)`)
+                    .run(g, key, olive.pk, iso, iso);
+                applyShapeChanges({ actor: olive.pk, actorRole: 'owner' }, { changes: { groupGuests: false } });
+                return { who: gus, g, extra: key };
+            },
+            run: () => hostSide.closeGuestsIfSwitchedOff(),
+            at: Date.now(),
+            did: (s) => db.prepare('SELECT state FROM group_guests WHERE group_id = ? AND guest_key = ?').pluck().get(s.g, s.extra) === 'removed',
+            after: () => applyShapeChanges({ actor: olive.pk, actorRole: 'owner' }, { changes: { groupGuests: true } }),
+        },
+        // A notice for a guest's home, due.
+        flushGuestOutbox: {
+            seed: async () => {
+                const id = crypto.randomUUID(), g = `g13-flush-${++n13}`, t = Date.now();
+                db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)')
+                    .run(id, g, 'q.example', 'line', JSON.stringify({ v: 1, kind: 'line', group: g, host: 'a.example', guests: [gus.pk], data: {} }), t, t);
+                return { who: gus, g, extra: id };
+            },
+            run: (t) => hostSide.flushGuestOutbox(t),
+            at: Date.now() + MIN,
+            did: (s) => !db.prepare('SELECT 1 FROM group_guest_outbox WHERE id = ?').get(s.extra),
+        },
+        // A member's yes queued a day ago for a host that never answered, the roster that came meanwhile kept: it fails.
+        sweepGroupGuestMail: {
+            seed: async () => {
+                const who = addLocal(`Sw${++n13}`), g = `g13-sweep-${n13}`;
+                await seed12(who, g, 'their yes queued');
+                home.receiveGroupNotice(H12, { v: 1, kind: 'roster', group: g, host: H12, guests: [who.pk], data: DATA.roster });
+                return { who, g };
+            },
+            run: (t) => home.sweepGroupGuestMail(t),
+            at: Date.now() + 25 * 60 * MIN,
+            did: (s) => queuedFor(s.who) === 0 && standing12(s.who, s.g) === 'invited',
+        },
+        // A member's yes queued while the host was down, due now that it is up: the host takes it, and they are in.
+        retryGroupSent: {
+            seed: async () => {
+                const who = addLocal(`Rt${++n13}`), g = `g13-retry-${n13}`;
+                await seed12(who, g, 'their yes queued');
+                return { who, g };
+            },
+            run: (t) => home.retryGroupSent(t),
+            at: Date.now() + 3 * MIN,
+            did: (s) => queuedFor(s.who) === 0 && standing12(s.who, s.g) === 'in',
+        },
+    };
+    assert(JSON.stringify(timerNames) === JSON.stringify(Object.keys(TIMERS).sort()),
+        `13z. the table has a row for every job the server's timer takes from the guest files (imports: ${timerNames.join(', ')})`);
+    for (const [name, job] of Object.entries(TIMERS)) {
+        for (const role of ['standby', 'main'] as const) {
+            const s = await job.seed();
+            const printBefore = plainPrint();
+            if (role === 'standby') setNodeRole('backup');
+            try {
+                await job.run(job.at);
+            } finally {
+                if (role === 'standby') setNodeRole('primary');
+            }
+            const changed = plainChanged(printBefore, plainPrint());
+            const did = job.did(s);
+            job.after?.();
+            if (role === 'standby') {
+                assert(changed.length === 0, `13. ${name} x standby: no row of any copied table written (changed: ${changed.join(', ') || 'none'})`);
+            } else {
+                assert(did, `13. ${name} x main: the job does its work (so the standby's row above can fail; copied tables changed: ${changed.join(', ') || 'none'})`);
+            }
+        }
+    }
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

@@ -25,6 +25,9 @@ export const LEARN_KEEP = {
     noNote: word('Say what changed.'),
     fixLine: word('An owner or admin checks it first. The page stays as it is until then.'),
     save: word('Save'),
+    // An owner's or admin's "Edit" opens on the node's page: not reached, it says so (the words other screens already say).
+    unreached: word("Couldn't reach your community. Check your connection and try again."),
+    again: word('Try again'),
 } as const;
 
 /** Which of a page's actions a reader is offered (§2.4). */

@@ -40,6 +40,9 @@ const node = {
     role: null as string | null,
     post: page(),
     refuse: null as null | { status?: number; error: string; code?: string },
+    // One action whose answer the node holds back until the test lets it land (`land`): the web's one way a page newer than
+    // the one a form opened on can arrive while the form is open.
+    held: null as null | { path: string; land?: (answer: () => unknown) => void },
 };
 let request: MockInstance<typeof api.request>;
 const writes = () => request.mock.calls.filter((c) => c[0] === 'POST').map((c) => ({ path: String(c[1]), body: c[2] as Record<string, unknown> | undefined }));
@@ -48,6 +51,10 @@ function stubNode() {
     vi.spyOn(api, 'myNodeRoleOnce').mockImplementation(async () => node.role);
     request = vi.spyOn(api, 'request').mockImplementation((async (method: string, path: string, body?: any) => {
         if (method === 'POST') {
+            const held = node.held;
+            if (held && path === held.path && !held.land) {
+                return new Promise((resolve, reject) => { held.land = (answer) => { try { resolve(answer()); } catch (e) { reject(e); } }; });
+            }
             if (node.refuse) {
                 const r = node.refuse;
                 throw Object.assign(new Error(r.error), r.status === undefined ? {} : { status: r.status, code: r.code });
@@ -81,7 +88,7 @@ const type = (id: string, value: string) => fireEvent.change(screen.getByTestId(
 beforeEach(() => {
     vi.restoreAllMocks();
     info.current = { features: { knowledge: true } };
-    Object.assign(node, { role: null, post: page(), refuse: null });
+    Object.assign(node, { role: null, post: page(), refuse: null, held: null });
     stubNode();
 });
 afterEach(() => cleanup());
@@ -249,6 +256,60 @@ describe('what each action sends, and what the page shows after the node answers
             sources: [{ url: 'https://council.example/tip', label: 'Council tip page' }], lang: 'es',
         } }]);
         expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('How the tip works now');
+    });
+});
+
+describe('what a fix or an edit sends: the member\'s changes to the page the form opened on, whatever arrives meanwhile (review of #3218)', () => {
+    const GONE = 'This page of Local knowledge isn’t showing any more.';
+    // The web reads no copy: a newer page reaches an open form only as the answer to an action tapped just before it opened
+    // (the writer's "Mark as out of date", an owner's "Still right"). The same version: only the stamp moved. A newer one: an
+    // owner saved another body, place and language meanwhile. The page gone: the node answers that it isn't showing.
+    type Arrival = 'nothing arriving' | 'an answer with the same version' | 'an answer with a newer version' | 'the page gone';
+    const LAND: Record<Exclude<Arrival, 'nothing arriving'>, () => unknown> = {
+        'an answer with the same version': () => ({ post: page({}, { checkedAt: '2026-11-16T00:00:00.000Z' }) }),
+        'an answer with a newer version': () => ({ post: page({ description: 'Open daily 8-5.' }, { place: 'Old Road', lang: 'fr' }) }),
+        'the page gone': () => { throw Object.assign(new Error(GONE), { status: 404, code: 'not_found' }); },
+    };
+    const SENT = {
+        fix: { path: '/api/knowledge/drafts', body: { fixOf: 'tip', note: 'Winter hours', title: 'Tip hours (winter)' } },
+        edit: { path: '/api/knowledge/posts/tip/edit', body: {
+            title: 'Tip hours (winter)', body: 'Sort it first.', topic: 'local-services', place: 'Manse Road',
+            sources: [{ url: 'https://council.example/tip', label: 'Council tip page' }],
+        } },
+    };
+    const ACTION = {
+        fix: { path: '/api/knowledge/posts/tip/outdated', body: { note: '' }, tap: async () => { await click('learn-post-mark'); await click('learn-post-mark-send'); } },
+        edit: { path: '/api/knowledge/posts/tip/checked', body: undefined, tap: () => click('learn-post-still-right') },
+    };
+    const TABLE: Array<['fix' | 'edit', Arrival]> = [
+        ['fix', 'nothing arriving'], ['fix', 'an answer with the same version'], ['fix', 'an answer with a newer version'], ['fix', 'the page gone'],
+        ['edit', 'nothing arriving'], ['edit', 'an answer with the same version'], ['edit', 'an answer with a newer version'], ['edit', 'the page gone'],
+    ];
+    it.each(TABLE)('%s, %s: only the member\'s changes to the page it opened on are sent', async (use, arrival) => {
+        await openAs(use === 'fix' ? 'writer' : 'checker');
+        if (arrival !== 'nothing arriving') {
+            node.held = { path: ACTION[use].path };
+            await ACTION[use].tap();
+        }
+        await click(use === 'fix' ? 'learn-post-fix' : 'learn-post-edit');
+        if (arrival !== 'nothing arriving') {
+            const answer = LAND[arrival];
+            await act(async () => { node.held!.land!(answer); });
+            await wait();
+        }
+        // The form holds the words it opened with.
+        expect((screen.getByTestId('learn-form-body') as HTMLTextAreaElement).value).toBe('Sort it first.');
+        expect((screen.getByTestId('learn-form-place') as HTMLInputElement).value).toBe('Manse Road');
+        if (use === 'fix') type('learn-form-note', 'Winter hours');
+        type('learn-form-title', 'Tip hours (winter)');
+        if (arrival === 'the page gone') node.refuse = { status: 404, error: GONE, code: 'not_found' };
+        await click('learn-form-send');
+        const action = { path: ACTION[use].path, body: ACTION[use].body };
+        expect(writes()).toEqual(arrival === 'nothing arriving' ? [SENT[use]] : [action, SENT[use]]);
+        if (arrival === 'the page gone') {
+            expect(screen.getByTestId('learn-form-refusal').textContent).toBe(GONE);
+            expect(has('learn-fix-sent')).toBe(false);
+        }
     });
 });
 

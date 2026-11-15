@@ -23,6 +23,8 @@ const h = vi.hoisted(() => ({
     byId: null as null | Record<string, unknown>,
     sent: [] as Array<{ method: string; path: string; body: any }>,
     refuse: null as null | { status?: number; message: string; code?: string },
+    // Who listens for a sync (useKnowledgePage): a test fires `sync_data_updated` as the phone's sync does when it lands.
+    listeners: [] as Array<{ event: string; fn: () => void }>,
 }));
 const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn(), navigate: vi.fn(), canGoBack: vi.fn(() => true) }));
 
@@ -49,7 +51,14 @@ vi.mock('react-native', async () => {
         View: host('div'), Text: host('span'), Pressable: host('button'), ScrollView: host('div'), ActivityIndicator: host('i'),
         TextInput: ({ value, onChangeText, testID, placeholder }: any) => el('input', { value, placeholder, 'data-testid': testID, onChange: (e: any) => onChangeText(e.target.value) }),
         StyleSheet: { create: (s: unknown) => s, flatten: (s: unknown) => s, hairlineWidth: 1 },
-        DeviceEventEmitter: { addListener: () => ({ remove: () => {} }), emit: vi.fn() },
+        DeviceEventEmitter: {
+            addListener: (event: string, fn: () => void) => {
+                const l = { event, fn };
+                h.listeners.push(l);
+                return { remove: () => { h.listeners = h.listeners.filter((x) => x !== l); } };
+            },
+            emit: vi.fn(),
+        },
         Keyboard: { dismiss: vi.fn() },
         Linking: { openURL: vi.fn(async () => {}) },
         Alert: { alert: vi.fn() },
@@ -119,7 +128,7 @@ beforeEach(() => {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
-    Object.assign(h, { mode: 'live', params: {}, checks: false, identity: { publicKey: ME, privateKey: 'p' }, pages: [page()], byId: null, sent: [], refuse: null });
+    Object.assign(h, { mode: 'live', params: {}, checks: false, identity: { publicKey: ME, privateKey: 'p' }, pages: [page()], byId: null, sent: [], refuse: null, listeners: [] });
     vi.clearAllMocks();
 });
 afterEach(() => {
@@ -139,6 +148,11 @@ const type = (id: string, text: string) => {
     act(() => { set.call(input, text); input.dispatchEvent(new Event('input', { bubbles: true })); });
 };
 const showPage = () => show(createElement(KnowledgeDetail, { page: h.pages[0] }));
+/** A sync lands: the copy is read again by whoever listens (useKnowledgePage). */
+const sync = async () => { await act(async () => { for (const l of h.listeners.filter((x) => x.event === 'sync_data_updated')) l.fn(); }); await settle(); };
+/** The page as the node answers a read of it by id (the copy's rows carry no type). */
+const fromNode = (p: Record<string, unknown>) => ({ ...p, type: 'knowledge' });
+const value = (id: string) => (q(id) as HTMLInputElement).value;
 
 type Reader = 'member' | 'writer' | 'checker' | 'visitor' | 'off' | 'preview';
 function as(reader: Reader) {
@@ -296,6 +310,7 @@ describe('the form as "Suggest a fix" and as "Edit" (§3.5)', () => {
     it('an owner\'s edit saves at once, in the page\'s language, without photos, and goes back to the page', async () => {
         h.checks = true;
         h.pages = [page({}, { lang: 'es' })];
+        h.byId = fromNode(page({}, { lang: 'es' }));
         h.params = { edit: 'tip' };
         await show(createElement(NewKnowledgeScreen));
         expect(q('learn-new-send')!.textContent).toBe('Save');
@@ -322,6 +337,97 @@ describe('the form as "Suggest a fix" and as "Edit" (§3.5)', () => {
         expect(fixBody(p, { ...formOfPage(p), title: ` ${p.title} `, topic: 'emergencies', place: '', sources: [] }, 'x'))
             .toEqual({ fixOf: 'tip', note: 'x', topic: 'emergencies', place: '', sources: [] });
         expect(editBody(p, { ...formOfPage(p), place: '', sources: [] })).toEqual({ title: p.title, body: p.description, topic: 'local-services', place: '', sources: [] });
+    });
+});
+
+describe('what a fix or an edit sends: the member\'s changes to the page the form opened on, whatever arrives meanwhile (review of #3218)', () => {
+    const EARLIER = '2026-11-01T00:00:00.000Z';
+    const LATER = '2026-11-16T09:00:00.000Z';
+    const GONE = 'This page of Local knowledge isn’t showing any more.';
+    // An owner saved a newer page meanwhile: another body, another place, another language.
+    const newer = () => page({ description: 'Open daily 8-5.', updatedAt: LATER }, { place: 'Old Road', lang: 'fr' });
+    type Arrival = 'no sync' | 'a sync with the same version' | 'a sync with a newer version' | 'the page gone';
+    const ARRIVE: Record<Arrival, () => void> = {
+        'no sync': () => {},
+        'a sync with the same version': () => { h.pages = [page({ updatedAt: EARLIER })]; },
+        'a sync with a newer version': () => { h.pages = [newer()]; },
+        'the page gone': () => { h.pages = []; },
+    };
+    // The member changed the title (and wrote what changed); nothing else.
+    const SENT = {
+        fix: { method: 'POST', path: '/api/knowledge/drafts', body: { fixOf: 'tip', note: 'Winter hours', title: 'Tip hours (winter)' } },
+        edit: { method: 'POST', path: '/api/knowledge/posts/tip/edit', body: {
+            title: 'Tip hours (winter)', body: 'Sort it first.', topic: 'local-services', place: 'Manse Road',
+            sources: [{ url: 'https://council.example/tip', label: 'Council tip page' }],
+        } },
+    };
+    const TABLE: Array<['fix' | 'edit', Arrival]> = [
+        ['fix', 'no sync'], ['fix', 'a sync with the same version'], ['fix', 'a sync with a newer version'], ['fix', 'the page gone'],
+        ['edit', 'no sync'], ['edit', 'a sync with the same version'], ['edit', 'a sync with a newer version'], ['edit', 'the page gone'],
+    ];
+    it.each(TABLE)('%s, %s: only the member\'s changes to the page it opened on are sent', async (use, arrival) => {
+        h.pages = [page({ updatedAt: EARLIER })];
+        h.byId = fromNode(page({ updatedAt: EARLIER }));
+        if (use === 'edit') h.checks = true;
+        h.params = { [use]: 'tip' };
+        await show(createElement(NewKnowledgeScreen));
+        expect(value('learn-new-body')).toBe('Sort it first.');
+        ARRIVE[arrival]();
+        if (arrival !== 'no sync') {
+            // The node has the same page now (none, when it went).
+            h.byId = h.pages[0] ? fromNode(h.pages[0]) : null;
+            await sync();
+        }
+        // The form holds the words it opened with: nothing arriving rewrites them, and a page going takes no one's typing away.
+        expect(value('learn-new-body')).toBe('Sort it first.');
+        expect(value('learn-new-place')).toBe('Manse Road');
+        if (use === 'fix') type('learn-new-note', 'Winter hours');
+        type('learn-new-title', 'Tip hours (winter)');
+        if (arrival === 'the page gone') h.refuse = { status: 404, message: GONE, code: 'not_found' };
+        await click('learn-new-send');
+        expect(h.sent).toEqual([SENT[use]]);
+        if (arrival === 'the page gone') {
+            // The node says the page went, in its words; no "Sent".
+            expect(q('learn-new-problem')!.textContent).toBe(GONE);
+            expect(has('learn-new-done-screen')).toBe(false);
+        }
+    });
+
+    it('an edit opens on the node\'s page, not on a copy that\'s behind: older words never go back through /edit', async () => {
+        h.checks = true;
+        h.pages = [page({ updatedAt: EARLIER })];
+        h.byId = fromNode(newer());
+        h.params = { edit: 'tip' };
+        await show(createElement(NewKnowledgeScreen));
+        expect(value('learn-new-body')).toBe('Open daily 8-5.');
+        type('learn-new-title', 'Tip hours (winter)');
+        await click('learn-new-send');
+        expect(h.sent).toEqual([{ method: 'POST', path: '/api/knowledge/posts/tip/edit', body: {
+            title: 'Tip hours (winter)', body: 'Open daily 8-5.', topic: 'local-services', place: 'Old Road',
+            sources: [{ url: 'https://council.example/tip', label: 'Council tip page' }], lang: 'fr',
+        } }]);
+    });
+
+    it('an edit with the node not reached doesn\'t open from the copy: it says so, and Try again reads the node again', async () => {
+        h.checks = true;
+        h.byId = null;
+        h.params = { edit: 'tip' };
+        await show(createElement(NewKnowledgeScreen));
+        expect(q('learn-new-unreached')!.textContent).toBe('Couldn\'t reach your community. Check your connection and try again.');
+        expect(has('learn-new-send')).toBe(false);
+        h.byId = fromNode(page());
+        await click('learn-new-again');
+        expect(value('learn-new-title')).toBe('How recycling works at the tip');
+        expect(has('learn-new-send')).toBe(true);
+    });
+
+    it('an edit of a page the node no longer has: one line, no form', async () => {
+        h.checks = true;
+        h.byId = fromNode(page({ id: 'another' }));
+        h.params = { edit: 'tip' };
+        await show(createElement(NewKnowledgeScreen));
+        expect(q('learn-new-page-missing')!.textContent).toContain('This page isn’t in Learn any more.');
+        expect(has('learn-new-send')).toBe(false);
     });
 });
 

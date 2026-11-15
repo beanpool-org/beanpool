@@ -534,12 +534,14 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile }:
     const [photo, setPhoto] = useState<{ index: number; trigger: HTMLElement | null } | null>(null);
     const [reporting, setReporting] = useState(false);
     // Keeping it right (K5): this member's tap and the count it answered, "Still right" done, the out-of-date note being
-    // written (null: the box is shut), the fix or edit form open and a fix sent, and the node's last refusal.
+    // written (null: the box is shut), the fix or edit form open with the page it opened on, a fix sent, and the node's last
+    // refusal. The form is sent against that page alone (review of #3218): an action's answer that lands while the form is open
+    // redraws the page behind it and adds nothing to what the form sends.
     const checks = useChecksLearn(!preview && !!identity);
     const [helped, setHelped] = useState<{ n: number; mine: boolean } | null>(null);
     const [stillRight, setStillRight] = useState(false);
     const [marking, setMarking] = useState<string | null>(null);
-    const [editing, setEditing] = useState<'fix' | 'edit' | null>(null);
+    const [editing, setEditing] = useState<{ use: 'fix' | 'edit'; opened: LearnPost } | null>(null);
     const [fixSent, setFixSent] = useState(false);
     const [busy, setBusy] = useState(false);
     const [refusal, setRefusal] = useState<string | null>(null);
@@ -602,7 +604,8 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile }:
     const helpedN = helped?.n ?? k.helped ?? 0;
     const helpedMine = helped?.mine ?? !!k.helpedByMe;
     if (editing) {
-        const fix = editing === 'fix';
+        const fix = editing.use === 'fix';
+        const opened = editing.opened;
         return (
             <>
                 <Header title={fix ? t('Suggest a fix') : t('Edit')} onBack={() => setEditing(null)} />
@@ -613,10 +616,10 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile }:
                         <button type="button" onClick={() => setEditing(null)} className={LINK_BUTTON}>{t('Back')}</button>
                     </section>
                 ) : (
-                    <LearnForm use={editing} initial={{ title: post.title, body: post.description, topic: post.category, place: k.place ?? '', sources: k.sources }}
+                    <LearnForm use={editing.use} initial={{ title: opened.title, body: opened.description, topic: opened.category, place: opened.knowledge.place ?? '', sources: opened.knowledge.sources }}
                         onSend={async (input) => {
-                            if (fix) { await suggestLearnFix(post, input); setFixSent(true); return; }
-                            const answer = await editLearnPage(post, input);
+                            if (fix) { await suggestLearnFix(opened, input); setFixSent(true); return; }
+                            const answer = await editLearnPage(opened, input);
                             if (answer?.post?.knowledge) showAnswer(answer.post); else setTries((n) => n + 1);
                             setEditing(null);
                         }} />
@@ -715,13 +718,13 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile }:
                     </div>
                 )}
                 {acts.fix && (
-                    <button type="button" data-testid="learn-post-fix" onClick={() => { setFixSent(false); setRefusal(null); setEditing('fix'); }} className={`${LINK_BUTTON} self-start`}>
+                    <button type="button" data-testid="learn-post-fix" onClick={() => { setFixSent(false); setRefusal(null); setEditing({ use: 'fix', opened: post }); }} className={`${LINK_BUTTON} self-start`}>
                         {own ? t('Suggest a fix') : t('Something changed? Suggest a fix')}
                     </button>
                 )}
                 {(acts.edit || acts.stillRight || acts.markOutdated || acts.clearMark) && (
                     <div data-testid="learn-post-tools" className="flex flex-wrap gap-2">
-                        {acts.edit && <button type="button" data-testid="learn-post-edit" onClick={() => { setRefusal(null); setEditing('edit'); }} className={TOOL}>{t('Edit')}</button>}
+                        {acts.edit && <button type="button" data-testid="learn-post-edit" onClick={() => { setRefusal(null); setEditing({ use: 'edit', opened: post }); }} className={TOOL}>{t('Edit')}</button>}
                         {acts.stillRight && (
                             <button type="button" data-testid="learn-post-still-right" aria-pressed={stillRight} disabled={busy || stillRight}
                                 onClick={() => void act(() => confirmLearnPage(post.id), () => setStillRight(true))} className={TOOL}>

@@ -18,6 +18,21 @@ import { DeviceEventEmitter } from 'react-native';
 import { getKnowledgePost, signedGet } from '../../utils/db';
 import type { KnowledgePage } from '../../utils/learn-copy';
 
+/**
+ * The page as the node has it now, read by id naming the type (the web's lib/learn.ts getLearnPost reads the same). null: the
+ * node answered without it. undefined: the node wasn't reached or didn't answer, which says nothing about the page.
+ */
+export async function readNodePage(id: string): Promise<KnowledgePage | null | undefined> {
+    try {
+        const res = await signedGet(`/api/marketplace/posts?type=knowledge&id=${encodeURIComponent(id)}`);
+        if (!res.ok) return undefined;
+        const rows = await res.json();
+        return Array.isArray(rows) ? rows.find((r: any) => r?.id === id && r?.type === 'knowledge') ?? null : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 export function useKnowledgePage(id: string | undefined, asked: boolean): { page: KnowledgePage | null; settled: boolean; isPage: boolean } {
     const [page, setPage] = useState<KnowledgePage | null>(null);
     const [settled, setSettled] = useState(false);
@@ -53,17 +68,8 @@ export function useKnowledgePage(id: string | undefined, asked: boolean): { page
             if (!latest()) return;
             if (held) { nodeSaidNone = false; show(held, 'copy'); return; }
             if (asked && !nodeSaidNone) {
-                // undefined: the node wasn't reached or didn't answer, which says nothing about the page.
-                let answer: KnowledgePage | null | undefined;
-                try {
-                    const res = await signedGet(`/api/marketplace/posts?type=knowledge&id=${encodeURIComponent(id)}`);
-                    if (res.ok) {
-                        const rows = await res.json();
-                        answer = Array.isArray(rows) ? rows.find((r: any) => r?.id === id && r?.type === 'knowledge') ?? null : undefined;
-                    }
-                } catch {
-                    // Not reachable: settled below with what is shown.
-                }
+                // undefined: not reached, settled below with what is shown.
+                const answer = await readNodePage(id);
                 if (!latest()) return;
                 if (answer !== undefined) {
                     nodeSaidNone = answer === null;

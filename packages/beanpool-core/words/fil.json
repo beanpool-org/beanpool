@@ -2506,9 +2506,9 @@
     "one": "Lahat ng {count} sa halagang {n} munggo. Kapag isa-isa, aabot ito sa {total}.",
     "other": "Lahat ng {count} sa halagang {n} munggo. Kapag isa-isa, aabot ito sa {total}."
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "one": "Kapag isa-isa, aabot sa {n} munggo ang {count}. Dapat mas mababa rito ang presyo para sa lahat.",
-    "other": "Kapag isa-isa, aabot sa {n} munggo ang {count}. Dapat mas mababa rito ang presyo para sa lahat."
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "one": "Kapag isa-isa, aabot sa {n} munggo ang {count}. Hindi puwedeng mas mataas dito ang presyo para sa lahat.",
+    "other": "Kapag isa-isa, aabot sa {n} munggo ang {count}. Hindi puwedeng mas mataas dito ang presyo para sa lahat."
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "one": "1.5% ay mapupunta sa komunidad. Makakatanggap ka ng {n} munggo para sa bawat isa.",

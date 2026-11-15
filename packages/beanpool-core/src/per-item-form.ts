@@ -97,11 +97,12 @@ function oneByOne(r: PerItemRead): Hundredths | null {
 }
 
 /** The one live line under the price-for-all box (§2.4). Null where there is none to show. */
-export type LotHint = { kind: 'empty' | 'good' | 'notLess'; text: string };
+export type LotHint = { kind: 'empty' | 'good' | 'more'; text: string };
 
 /**
- * empty: "Leave this empty to sell them one by one only."; good: "All 20 for 5,500 Beans. One by one they come to 6,000.";
- * not less: "One by one, 20 come to 6,000 Beans. A price for all of them has to be less." Hidden (null) when the count is 1
+ * empty: "Leave this empty to sell them one by one only."; good (less than one by one, or the same): "All 20 for 5,500 Beans.
+ * One by one they come to 6,000."; more: "One by one, 20 come to 6,000 Beans. A price for all of them can't be more than
+ * that." Hidden (null) when the count is 1
  * or not yet a count, the price is Free or not yet a price, or the box holds something that is not a figure.
  */
 export function perItemLotHint(text: PerItemFormText, lang?: UiLang): LotHint | null {
@@ -109,9 +110,9 @@ export function perItemLotHint(text: PerItemFormText, lang?: UiLang): LotHint | 
     const r = readPerItemForm(text, lang);
     const total = oneByOne(r);
     if (total === null || r.lot_c === null) return null;
-    return r.lot_c < total
+    return r.lot_c <= total
         ? { kind: 'good', text: perItemLines.lotGood(r.count!, r.lot_c, r.price_c!) }
-        : { kind: 'notLess', text: perItemLines.lotNotLess(r.count!, r.price_c!) };
+        : { kind: 'more', text: perItemLines.lotMore(r.count!, r.price_c!) };
 }
 
 /**
@@ -122,7 +123,7 @@ export function perItemFeeLine(text: PerItemFormText, lang?: UiLang): string | n
     const r = readPerItemForm(text, lang);
     if (r.price_c === null || r.price_c <= 0) return null;
     const total = oneByOne(r);
-    const lot = total !== null && r.lot_c !== null && r.lot_c < total ? r.lot_c : null;
+    const lot = total !== null && r.lot_c !== null && r.lot_c <= total ? r.lot_c : null;
     return perItemLines.feeLine(r.price_c, lot);
 }
 
@@ -167,7 +168,7 @@ export function perItemFormRefusal(text: PerItemFormText, was: number | null = n
     if (r.lotBad || r.lot_c === null) return refuse('lot', { code: 'lot_price_refused' });
     if (r.count < LOT_UNITS_MIN) return refuse('lot', { code: 'lot_needs_two' });
     const total = r.price_c !== null ? itemsAmount(r.price_c, r.count) : null;
-    return total !== null && r.lot_c >= total ? refuse('lot', { code: 'lot_not_less', count: r.count, total_c: total }) : null;
+    return total !== null && r.lot_c > total ? refuse('lot', { code: 'lot_not_less', count: r.count, total_c: total }) : null;
 }
 
 /** What a create sends for a listing priced for each one (merge into the body beside `price_c`). */
@@ -244,7 +245,7 @@ export function perItemAfterUnitsChanged(
  * The edit's fields, or the first refusal. `touched` is whether the seller changed the price-for-all box since the form
  * opened: an empty box they left alone keeps what is stored, one they emptied clears it (a stored price for another
  * number is never cleared by a title edit, so it is back if the deal that took one is cancelled). One exception, for a
- * stored price for another number that the price for one now leaves not less than its own number one by one (the node's
+ * stored price for another number that the price for one now leaves more than its own number one by one (the node's
  * `lot_not_less` on the columns it would keep): it is cleared, since it can never be on offer at this price, and the node
  * must not refuse a box the seller can't see.
  */

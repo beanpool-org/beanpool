@@ -2506,9 +2506,9 @@
     "one": "Alle {count} für {n} Bohne. Einzeln ergibt das {total}.",
     "other": "Alle {count} für {n} Bohnen. Einzeln ergibt das {total}."
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "one": "Einzeln kosten {count} zusammen {n} Bohne. Der Preis für alle muss niedriger sein.",
-    "other": "Einzeln kosten {count} zusammen {n} Bohnen. Der Preis für alle muss niedriger sein."
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "one": "Einzeln kosten {count} zusammen {n} Bohne. Der Preis für alle darf nicht höher sein.",
+    "other": "Einzeln kosten {count} zusammen {n} Bohnen. Der Preis für alle darf nicht höher sein."
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "one": "1.5% gehen an die Community. Du erhältst {n} Bohne pro Stück.",

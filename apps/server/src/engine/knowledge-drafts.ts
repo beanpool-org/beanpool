@@ -13,12 +13,16 @@
  * ## A fix (slice K5, §3.5)
  *
  * "Something changed? Suggest a fix" waits here too, `kind` 'fix', `post_id` the page: the whole page as the member would
- * have it (any field not sent is the page's own as it shows) and "What changed?" (`note`, required, 300). The writer's own
- * fix waits too; an owner or admin edits at once instead (409 `edit_instead`). One waiting fix per member per page; the
- * same 3 waiting and 5 a day as a new page. A fix never brings photos: the page keeps its own. The page stays as it is
- * until an owner or admin answers: approving writes the page as the checking screen shows it "Suggested" (with any "Edit
- * first" edits), keeps its writer, stamps Checked and clears a "may be out of date" mark (engine/knowledge.ts
- * rewriteKnowledge, the same write as their own edit). The member is told "Your fix is in" or "Your fix wasn't used".
+ * have it (any field not sent is the page's own as it shows), "What changed?" (`note`, required, 300), and `fix_base`: each
+ * part the member changed, with what the page said when they sent it (a part sent as the page has it is no change; the
+ * note alone changes none). The writer's own fix waits too; an owner or admin edits at once instead (409 `edit_instead`).
+ * One waiting fix per member per page; the same 3 waiting and 5 a day as a new page. A fix never brings photos: the page
+ * keeps its own. The page stays as it is until an owner or admin answers. Approving writes only the parts the member
+ * changed, over the page as it shows then (with any "Edit first" edits), so another fix approved meanwhile, or an owner's or
+ * admin's own edit, stays; it keeps the writer, stamps Checked and clears a "may be out of date" mark (engine/knowledge.ts
+ * rewriteKnowledge, the same write as their own edit). A part the page itself changed under since the fix was sent is never
+ * written over: the approval is refused (409 `page_changed`) until "Edit first" sends that part, or "Not this one" answers
+ * it. The member is told "Your fix is in" or "Your fix wasn't used".
  *
  * ## Who
  *
@@ -54,9 +58,9 @@
  */
 import crypto from 'node:crypto';
 import {
-    KNOWLEDGE_DECLINE_REASONS, KNOWLEDGE_DRAFT_LIMITS, KNOWLEDGE_LIMITS, knowledgeAnswerNotice, word, wordsFor,
+    KNOWLEDGE_DECLINE_REASONS, KNOWLEDGE_DRAFT_LIMITS, KNOWLEDGE_FIX_PARTS, KNOWLEDGE_LIMITS, knowledgeAnswerNotice, word, wordsFor,
     type KnowledgeDeclineReason, type KnowledgeDraftKind, type KnowledgeDraftMine, type KnowledgeDraftToCheck, type KnowledgeDraftWhole,
-    type KnowledgePageWords, type KnowledgeSource,
+    type KnowledgeFixPart, type KnowledgePageWords, type KnowledgeSource,
 } from '@beanpool/core';
 import { getMember, validatePostPhotos, type MarketplacePost } from '@beanpool/engine';
 import { db, deletePlainRows } from '../db/db.js';
@@ -73,7 +77,7 @@ import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes }
 import { keepNotice } from './kept-notices.js';
 import {
     KNOWLEDGE_WORDS, KnowledgeRefusal, checksKnowledge, cleanKnowledgeInput, pageShowingTo, publishKnowledge, recountKnowledgeHelped, rewriteKnowledge,
-    showingKnowledgeRow, type KnowledgeInput, type ShowingKnowledgeRow,
+    showingKnowledgeRow, type CleanKnowledge, type KnowledgeInput, type ShowingKnowledgeRow,
 } from './knowledge.js';
 import { logger } from '../logger.js';
 
@@ -100,6 +104,7 @@ export const DRAFT_WORDS = {
     fixWaiting: word('You’ve already suggested a fix to this page. Wait for an answer, or take it back.'),
     noNote: word('Say what changed.'),
     fixPhotos: word('A fix changes the words: the page keeps its own photos.'),
+    pageChanged: word('This page has changed since the fix was sent. Choose the words with “Edit first”, or say “Not this one”.'),
 } as const;
 
 interface DraftRow {
@@ -117,6 +122,8 @@ interface DraftRow {
     lang: string | null;
     about: string | null;
     note: string | null;
+    /** A fix's parts its member changed, with what the page said when they sent it: JSON `{ part: value }`. NULL for a new page. */
+    fix_base: string | null;
     state: 'waiting' | 'approved' | 'declined' | 'withdrawn';
     answered_at: string | null;
     answered_by: string | null;
@@ -254,22 +261,74 @@ function suggestKnowledgeFix(member: string, raw: KnowledgeInput & { photos?: un
         throw new KnowledgeRefusal(409, 'fix_waiting', DRAFT_WORDS.fixWaiting);
     }
     assertDraftRoom(member, now);
-    const pick = (sent: unknown, own: unknown) => (sent !== undefined ? sent : own);
+    const row = showingKnowledgeRow(page.id);
+    if (!row) throw new KnowledgeRefusal(404, 'not_found', KNOWLEDGE_WORDS.notFound);
+    const shows = partsOf(row);
+    const own = cleanKnowledgeInput(shows);
+    const pick = (sent: unknown, mine: unknown) => (sent !== undefined ? sent : mine);
     const k = cleanKnowledgeInput({
-        title: pick(raw.title, page.title),
-        body: pick(raw.body, page.description),
-        topic: pick(raw.topic, page.category),
-        place: pick(raw.place, page.knowledge?.place ?? null),
-        sources: pick(raw.sources, page.knowledge?.sources ?? []),
-        lang: pick(raw.lang, page.knowledge?.lang ?? null),
+        title: pick(raw.title, own.title),
+        body: pick(raw.body, own.body),
+        topic: pick(raw.topic, own.topic),
+        place: pick(raw.place, own.place),
+        sources: pick(raw.sources, own.sources),
+        lang: pick(raw.lang, own.lang),
     });
+    // What the member changed: each part that differs from the page as it shows, with the page's own words then. A part sent
+    // as the page has it (the app may send the form whole) is no change.
+    const base: Partial<Record<KnowledgeFixPart, unknown>> = {};
+    for (const part of KNOWLEDGE_FIX_PARTS) if (!samePart(k[part], own[part])) base[part] = shows[part];
     assertMayPost(member, 0, now);
     assertProfileComplete(member);
     const id = crypto.randomUUID();
-    db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, title, body, topic, place, sources, lang, note, state, created_at)
-                VALUES (?, 'fix', ?, ?, 'app', ?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`)
-        .run(id, page.id, member, k.title, k.body, k.topic, k.place, k.sources.length > 0 ? JSON.stringify(k.sources) : null, k.lang, note, iso(now));
+    db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, title, body, topic, place, sources, lang, note, fix_base, state, created_at)
+                VALUES (?, 'fix', ?, ?, 'app', ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`)
+        .run(id, page.id, member, k.title, k.body, k.topic, k.place, k.sources.length > 0 ? JSON.stringify(k.sources) : null, k.lang, note,
+            JSON.stringify(base), iso(now));
     return mineOf(db.prepare('SELECT * FROM knowledge_drafts WHERE id = ?').get(id) as DraftRow & { state: 'waiting' });
+}
+
+/** A page's words as its row holds them, part by part (they were cleaned when written). */
+const partsOf = (row: ShowingKnowledgeRow): CleanKnowledge => ({
+    title: row.title,
+    body: row.description,
+    topic: row.category,
+    place: row.knowledge_place,
+    sources: sourcesOf(row.knowledge_sources),
+    lang: row.knowledge_lang,
+});
+
+const samePart = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/** A fix's recorded base (`fix_base`): its changed parts, each with the page's words when it was sent. */
+function fixBaseOf(raw: string | null): Partial<Record<KnowledgeFixPart, unknown>> {
+    try {
+        const base = raw ? JSON.parse(raw) : {};
+        return base && typeof base === 'object' && !Array.isArray(base) ? base : {};
+    } catch {
+        return {};
+    }
+}
+
+const changedPartsOf = (r: DraftRow): KnowledgeFixPart[] => {
+    const base = fixBaseOf(r.fix_base);
+    return KNOWLEDGE_FIX_PARTS.filter((part) => Object.prototype.hasOwnProperty.call(base, part));
+};
+
+/**
+ * A fix against the page as it shows now: the parts its member changed; those the page itself changed under since it was
+ * sent (neither the page's words then nor the fix's own); and the page as Approve writes it, the page as it shows with
+ * the changed parts put in.
+ */
+function fixAgainst(r: DraftRow, page: ShowingKnowledgeRow): { changed: KnowledgeFixPart[]; pageChanged: KnowledgeFixPart[]; suggested: CleanKnowledge } {
+    const base = fixBaseOf(r.fix_base);
+    const shows = partsOf(page);
+    const mine: CleanKnowledge = { title: r.title, body: r.body, topic: r.topic, place: r.place, sources: sourcesOf(r.sources), lang: r.lang };
+    const changed = changedPartsOf(r);
+    const pageChanged = changed.filter((part) => !samePart(shows[part], base[part]) && !samePart(shows[part], mine[part]));
+    const suggested: CleanKnowledge = { ...shows };
+    for (const part of changed) (suggested as unknown as Record<string, unknown>)[part] = mine[part];
+    return { changed, pageChanged, suggested };
 }
 
 /**
@@ -295,7 +354,7 @@ export function withdrawKnowledgeDraft(member: string, id: unknown, now = Date.n
     if (typeof id !== 'string' || id.length > 64) return false;
     return db.transaction(() => {
         const changed = db.prepare(`UPDATE knowledge_drafts SET state = 'withdrawn', answered_at = ?, title = '', body = '', place = NULL,
-                                        sources = NULL, note = NULL, about = NULL
+                                        sources = NULL, note = NULL, about = NULL, fix_base = NULL
                                     WHERE id = ? AND member_pubkey = ? AND via = 'app' AND state = 'waiting'`).run(iso(now), id, member).changes;
         if (changed === 1) deletePlainRows('knowledge_draft_photos', 'draft_id = ?', id);
         return changed === 1;
@@ -412,7 +471,7 @@ export function withdrawAssistantKnowledgeDraft(grantId: string, id: unknown, no
     if (typeof id !== 'string' || id.length > 64) return false;
     return db.transaction(() => {
         const changed = db.prepare(`UPDATE knowledge_drafts SET state = 'withdrawn', answered_at = ?, title = '', body = '', place = NULL,
-                                        sources = NULL, note = NULL, about = NULL
+                                        sources = NULL, note = NULL, about = NULL, fix_base = NULL
                                     WHERE id = ? AND via = ? AND state = 'waiting'`).run(iso(now), id, viaOf(grantId)).changes;
         if (changed === 1) deletePlainRows('knowledge_draft_photos', 'draft_id = ?', id);
         return changed === 1;
@@ -467,17 +526,25 @@ export function knowledgeDraftWhole(id: unknown): KnowledgeDraftWhole | null {
     if (typeof id !== 'string' || id.length > 64) return null;
     const r = db.prepare(`SELECT * FROM knowledge_drafts WHERE id = ? AND state = 'waiting'`).get(id) as DraftRow | undefined;
     if (!r) return null;
+    const page = r.kind === 'fix' ? showingKnowledgeRow(r.post_id) : null;
+    // A fix whose page shows: "Suggested" is what Approve writes, the page as it shows with the member's changed parts put in.
+    const fix = page ? fixAgainst(r, page) : null;
+    const words = fix?.suggested ?? { title: r.title, body: r.body, topic: r.topic, place: r.place, sources: sourcesOf(r.sources), lang: r.lang };
     return {
         ...toCheckOf(r),
-        body: r.body,
-        place: r.place,
-        sources: sourcesOf(r.sources),
-        lang: r.lang,
+        title: words.title,
+        topic: words.topic,
+        body: words.body,
+        place: words.place,
+        sources: words.sources,
+        lang: words.lang,
         about: r.about,
         note: r.note,
         photos: draftPhotoData(r.id),
         needsSourcesTicked: assistantGrantOf(r.via) !== null,
-        post: r.kind === 'fix' ? pageWordsOf(showingKnowledgeRow(r.post_id)) : null,
+        post: pageWordsOf(page),
+        changed: r.kind === 'fix' ? (fix?.changed ?? changedPartsOf(r)) : null,
+        pageChanged: r.kind === 'fix' ? (fix?.pageChanged ?? []) : null,
     };
 }
 
@@ -608,17 +675,24 @@ export function approveKnowledgeDraft(
 }
 
 /**
- * Approving a fix (§3.5, §5.5): the page it names, still showing, takes the fix's words as the checking screen shows them
- * "Suggested", with any "Edit first" edits; its writer and photos stay ("Edit first" can't send photos), Checked is stamped
- * and a mark cleared (rewriteKnowledge). A page that stopped showing: 404, and the owner or admin says "Not this one".
- * Inside approveKnowledgeDraft's transaction.
+ * Approving a fix (§3.5, §5.5): the page it names, still showing, takes the parts the member changed over its words as they
+ * show now (the checking screen's "Suggested"), with any "Edit first" edits; every other part stays as it shows, so a fix
+ * approved meanwhile or an owner's or admin's own edit is kept. A changed part the page itself changed under since the fix
+ * was sent is refused, 409 `page_changed`, unless "Edit first" sends that part: never written over without a word. Its
+ * writer and photos stay ("Edit first" can't send photos), Checked is stamped and a mark cleared (rewriteKnowledge). A page
+ * that stopped showing: 404, and the owner or admin says "Not this one". Inside approveKnowledgeDraft's transaction, so the
+ * page read here is the page written.
  */
 function approveFix(broadcast: BroadcastFn, checker: string, r: DraftRow, raw: KnowledgeInput & { photos?: unknown }, now: number): KnowledgeAnswer & { post: MarketplacePost } {
     if (raw.photos !== undefined) throw new KnowledgeRefusal(400, 'fix_photos', DRAFT_WORDS.fixPhotos);
     const page = showingKnowledgeRow(r.post_id);
     if (!page) throw new KnowledgeRefusal(404, 'not_found', KNOWLEDGE_WORDS.notFound);
     assertNotMuted(checker, now);
-    const post = rewriteKnowledge(broadcast, checker, page.id, cleanKnowledgeInput(approvedFields(r, raw)), now);
+    const fix = fixAgainst(r, page);
+    if (fix.pageChanged.some((part) => raw[part] === undefined)) throw new KnowledgeRefusal(409, 'page_changed', DRAFT_WORDS.pageChanged);
+    const edited: KnowledgeInput = {};
+    for (const part of KNOWLEDGE_FIX_PARTS) if (raw[part] !== undefined) edited[part] = raw[part];
+    const post = rewriteKnowledge(broadcast, checker, page.id, cleanKnowledgeInput({ ...fix.suggested, ...edited }), now);
     const answered = db.prepare(`UPDATE knowledge_drafts SET state = 'approved', answered_at = ?, answered_by = ?, result_post_id = ?
                                  WHERE id = ? AND state = 'waiting'`).run(iso(now), checker, page.id, r.id).changes;
     if (answered !== 1) throw new Error('a suggestion was answered twice');

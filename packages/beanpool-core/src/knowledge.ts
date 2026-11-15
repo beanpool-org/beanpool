@@ -391,7 +391,22 @@ export interface KnowledgeDraftWhole extends KnowledgeDraftToCheck {
      * doesn't.
      */
     post?: KnowledgePageWords | null;
+    /**
+     * A fix's parts its member changed, in {@link KNOWLEDGE_FIX_PARTS} order (§5.3: "each changed part as Now and
+     * Suggested"); [] for the note alone, null for a new page. For a fix the words above are the page as it shows with those
+     * parts put in: what Approve writes. A server before K5 round 2 doesn't send it.
+     */
+    changed?: KnowledgeFixPart[] | null;
+    /**
+     * The changed parts the page itself changed under since the fix was sent (another fix approved, an owner's or admin's
+     * edit): Approve is refused, 409 `page_changed`, until "Edit first" sends each of them; or "Not this one". [] when none.
+     */
+    pageChanged?: KnowledgeFixPart[] | null;
 }
+
+/** The parts of a page a fix can change (slice K5): its words, never its photos. */
+export const KNOWLEDGE_FIX_PARTS = Object.freeze(['title', 'body', 'topic', 'place', 'sources', 'lang'] as const);
+export type KnowledgeFixPart = (typeof KNOWLEDGE_FIX_PARTS)[number];
 
 /** A page's words as it shows (its photos stay where they are: a fix never changes them). */
 export interface KnowledgePageWords {

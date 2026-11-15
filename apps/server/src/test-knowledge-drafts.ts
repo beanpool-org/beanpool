@@ -310,9 +310,12 @@ async function main(): Promise<void> {
     assert(dropped.status === 200 && (db.prepare('SELECT COUNT(*) AS n FROM post_photos WHERE post_id = ?').get(dropped.body?.post?.id) as { n: number }).n === 0
         && photoRows(withPhoto) === 0, `7. "Edit first" may leave the member's photo out (${show(dropped)})`);
     const fixId = crypto.randomUUID();
-    db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, title, body, topic, note, state, created_at)
-                VALUES (?, 'fix', ?, ?, 'app', 'A fix', 'Closed on Mondays now.', 'local-services', 'Closed on Mondays', 'waiting', ?)`)
-        .run(fixId, dropped.body?.post?.id, gus.pk, new Date().toISOString());
+    // A fix's row as the node writes one (test-knowledge-keep-right sends them through the route): the part its member changed,
+    // the body, with what the page said then (`fix_base`).
+    const bodyThen = (db.prepare('SELECT description FROM posts WHERE id = ?').get(dropped.body?.post?.id) as { description: string }).description;
+    db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, title, body, topic, note, fix_base, state, created_at)
+                VALUES (?, 'fix', ?, ?, 'app', 'A fix', 'Closed on Mondays now.', 'local-services', 'Closed on Mondays', ?, 'waiting', ?)`)
+        .run(fixId, dropped.body?.post?.id, gus.pk, JSON.stringify({ body: bodyThen }), new Date().toISOString());
     const pagesBeforeFix = knowledgePosts();
     const fixYes = await approve(owen, fixId);
     const fixedPage = db.prepare('SELECT description, author_pubkey FROM posts WHERE id = ?').get(dropped.body?.post?.id) as any;

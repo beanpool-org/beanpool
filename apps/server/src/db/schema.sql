@@ -3186,6 +3186,10 @@ CREATE TABLE IF NOT EXISTS knowledge_drafts (
     lang           TEXT,
     about          TEXT,
     note           TEXT,
+    -- A fix's parts its member changed, each with what the page said when it was sent (K5): JSON { part: value }, {} for the
+    -- note alone; NULL for a new page and once taken back. Approval writes only those parts, and refuses one the page itself
+    -- changed under since (engine/knowledge-drafts.ts approveFix).
+    fix_base       TEXT,
     state          TEXT NOT NULL CHECK (state IN ('waiting', 'approved', 'declined', 'withdrawn')),
     answered_at    TEXT,
     -- Who answered: never sent to the member.

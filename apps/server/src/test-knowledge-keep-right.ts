@@ -19,6 +19,9 @@
  *     owner, admin, moderator, visitor, unsigned, standby, switch off) -> the expected answer, and its effect only on a yes.
  *  7. A standby: the copy holds the taps and the page's count; no token and no Settings session reaches the new route.
  *  8. A member removed takes their tap, and the page's count falls with it.
+ *  9. Close the class: two fixes waiting on one page (each changing the body, the title, both or only the note) x approved
+ *     A,B or B,A x an owner's edit before, between or none -> the page holds every approved change and the owner's edit, or
+ *     the approval is refused with its line ("Edit first" or "Not this one" answers it); nothing is lost without a word.
  *
  * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-knowledge-keep-right" node ../../scripts/run-server-suites.mjs
  */
@@ -44,6 +47,7 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { issueAutomationToken } from './automation-tokens.js';
 import { getAdminQueue } from './engine/admin-queue.js';
 import { publishKnowledge } from './engine/knowledge.js';
+import { DRAFT_WORDS } from './engine/knowledge-drafts.js';
 import { TEST_PHOTO } from './post-test-helper.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
@@ -104,6 +108,7 @@ const markOutdated = (id: Id | null, post: string) => call(id, 'POST', `/api/kno
 const stillRight = (id: Id | null, post: string) => call(id, 'POST', `/api/knowledge/posts/${post}/checked`, {});
 const approve = (id: Id, draft: string, body: Record<string, unknown> = {}) => call(id, 'POST', `/api/knowledge/drafts/${draft}/approve`, body);
 const no = (id: Id, draft: string, body: Record<string, unknown> = { reason: 'unchecked' }) => call(id, 'POST', `/api/knowledge/drafts/${draft}/no`, body);
+const withdrawn = async (id: Id, draft: string) => (await call(id, 'POST', `/api/knowledge/drafts/${draft}/withdraw`, {})).status === 200;
 const byId = (id: Id, post: string) => call(id, 'GET', `/api/marketplace/posts?type=knowledge&id=${post}`);
 const rowOf = (id: string) => db.prepare('SELECT * FROM posts WHERE id = ?').get(id) as any;
 const tapOf = (post: string, pk: string) => db.prepare('SELECT counted, at FROM knowledge_helped WHERE post_id = ? AND member_pubkey = ?').get(post, pk) as { counted: number; at: string } | undefined;
@@ -223,6 +228,14 @@ async function main(): Promise<void> {
     const dr = draftRow(melFix);
     assert(dr?.note === 'The tip is closed on Mondays since March' && dr?.title === PAGE.title && dr?.topic === PAGE.topic && dr?.place === PAGE.place
         && JSON.parse(dr?.sources)?.[0]?.url === PAGE.sources[0].url, '3. the fix holds what changed, and the page\'s own words where none were sent');
+    const melBase = JSON.parse(dr?.fix_base ?? 'null');
+    assert(Object.keys(melBase ?? {}).join() === 'body' && melBase.body === pageBefore.description,
+        `3. it records what Mel changed (the body) and what the page said then, nothing else (${dr?.fix_base})`);
+    // The form sent whole, as the app fills it from the page: a field sent as the page has it is not a change.
+    const sameAsPage = await fix(pat, P, { ...PAGE, body: 'Closed on Mondays.\nBring glass, cans and paper sorted.' });
+    const sameBase = JSON.parse(draftRow(sameAsPage.body?.draft?.id)?.fix_base ?? 'null');
+    assert(sameAsPage.status === 201 && Object.keys(sameBase ?? {}).join() === 'body', `3. the whole form sent: only the field that differs is a change (${show(sameAsPage)})`);
+    require_(withdrawn(pat, sameAsPage.body?.draft?.id), 'Pat takes that one back');
     const twice = await fix(mel, P);
     assert(twice.status === 409 && twice.body?.code === 'fix_waiting', `3. one waiting fix per member per page (${show(twice)})`);
     const wesFix = await fix(wes, P, { title: 'How the tip works now' });
@@ -243,6 +256,9 @@ async function main(): Promise<void> {
     const told = pushes('community.knowledge');
     assert(told.some((p) => p.recipient === owen.pk && p.body === `Mel suggested a fix to "${PAGE.title}". Check it in Learn.` && JSON.parse(p.data).draftId === melFix)
         && !told.some((p) => p.recipient === mel.pk || p.recipient === mod.pk), `3. owners and admins are told who and what, nobody else (${told.length})`);
+    const wesTold = told.filter((p) => JSON.parse(p.data).draftId === wesFix.body?.draft?.id);
+    assert(wesTold.length > 0 && wesTold.every((p) => p.body === `Wes suggested a fix to "${PAGE.title}". Check it in Learn.`),
+        `3. a fix that renames the page: the push names the page as it shows, not the title it suggests (${wesTold.map((p) => p.body).join(' | ')})`);
     const melMine = await call(mel, 'GET', '/api/knowledge/drafts/mine');
     assert(melMine.body?.waiting?.[0]?.kind === 'fix' && melMine.body?.waiting?.[0]?.fixOf === P, '3. My suggestions lists it as a fix to the page');
 
@@ -254,6 +270,11 @@ async function main(): Promise<void> {
     assert(whole.status === 200 && whole.body?.draft?.note === 'The tip is closed on Mondays since March' && whole.body?.draft?.post?.id === P
         && whole.body?.draft?.post?.body === PAGE.body && whole.body?.draft?.body.startsWith('Closed on Mondays'),
         `4. the checking screen: what changed, the page as it shows ("Now") and the fix ("Suggested") (${show(whole)})`);
+    assert(JSON.stringify(whole.body?.draft?.changed) === '["body"]' && JSON.stringify(whole.body?.draft?.pageChanged) === '[]',
+        `4. it names the parts the member changed, and none the page changed under since (${JSON.stringify([whole.body?.draft?.changed, whole.body?.draft?.pageChanged])})`);
+    const noteWhole = await call(owen, 'GET', `/api/knowledge/drafts/${patFix}`);
+    assert(JSON.stringify(noteWhole.body?.draft?.changed) === '[]' && noteWhole.body?.draft?.body === rowOf(P0).description,
+        `4. the note alone changes no part: "Suggested" is the page as it shows (${JSON.stringify(noteWhole.body?.draft?.changed)})`);
     db.prepare('UPDATE posts SET knowledge_outdated_at = ?, knowledge_outdated_note = ?, knowledge_checked_at = ? WHERE id = ?').run(OLD, 'Mondays?', OLD, P);
     const withPhotos = await approve(owen, melFix, { photos: [] });
     assert(withPhotos.status === 400 && withPhotos.body?.code === 'fix_photos' && draftRow(melFix)?.state === 'waiting', `4. "Edit first" can't touch the photos (${show(withPhotos)})`);
@@ -387,6 +408,101 @@ async function main(): Promise<void> {
         `8. removing a member takes their tap with its tombstone, and the page counts the taps that are there (${rowOf(T).knowledge_helped})`);
     const front8 = await call(mel, 'GET', `/api/knowledge/front?topic=${PAGE.topic}`);
     assert(front8.body?.rows?.find((r: any) => r.id === T)?.helped === 1, '8. Learn reads the count that is there');
+
+    // ── 9. Close the class: two fixes on one page, every order, an owner's edit or none ──────────
+    // An approval writes only what its member changed, over the page as it shows then. A part the page changed under since the
+    // fix was sent (another approved fix, the owner's own edit) is never written over: that approval is refused with its line,
+    // and the fix keeps waiting for "Edit first" or "Not this one". So the final page holds every approved change and the
+    // owner's edit; nothing is lost without a word.
+    console.log('── 9. two fixes on one page: every order, an owner\'s edit or none ──');
+    type FixKind = 'body' | 'title' | 'both' | 'note';
+    type EditAt = 'none' | 'before' | 'between';
+    const PARTS: Record<FixKind, ('title' | 'body')[]> = { body: ['body'], title: ['title'], both: ['title', 'body'], note: [] };
+    const OWNER_BODY = 'Owen checked it: closed on Mondays and public holidays.';
+    const SENDERS = { A: mel, B: pat } as const;
+    let n9 = 0;
+    for (const ka of Object.keys(PARTS) as FixKind[]) {
+        for (const kb of Object.keys(PARTS) as FixKind[]) {
+            for (const order of [['A', 'B'], ['B', 'A']] as const) {
+                for (const at of ['none', 'before', 'between'] as EditAt[]) {
+                    n9++;
+                    db.prepare('DELETE FROM knowledge_drafts').run(); // each case starts inside the day's limits, as section 6 does
+                    const orig = { title: `Table page ${n9}`, body: PAGE.body };
+                    const page = publishKnowledge(broadcast, owen.pk, { ...PAGE, title: orig.title }, { writer: wes.pk }).id;
+                    const kinds = { A: ka, B: kb };
+                    const words = (x: 'A' | 'B') => ({ title: `${orig.title}, as ${x} has it`, body: `What ${x} knows now.` });
+                    const ask = (x: 'A' | 'B'): Record<string, unknown> => {
+                        const mine: Record<string, unknown> = {};
+                        for (const part of PARTS[kinds[x]]) mine[part] = words(x)[part];
+                        // A sends the form whole, as the app fills it from the page; B sends only what it changed.
+                        return x === 'A' ? { ...PAGE, title: orig.title, ...mine } : mine;
+                    };
+                    const sentA = await fix(SENDERS.A, page, ask('A'));
+                    const sentB = await fix(SENDERS.B, page, ask('B'));
+                    require_(sentA.status === 201 && sentB.status === 201, `9.${n9} both fixes wait (${show(sentA)} | ${show(sentB)})`);
+                    const ids = { A: sentA.body.draft.id as string, B: sentB.body.draft.id as string };
+                    const model = { ...orig };
+                    const steps: ('A' | 'B' | 'edit')[] = at === 'before' ? ['edit', ...order] : at === 'between' ? [order[0], 'edit', order[1]] : [...order];
+                    const approved: { x: 'A' | 'B'; editAfter: boolean }[] = [];
+                    const wrong: string[] = [];
+                    for (const step of steps) {
+                        if (step === 'edit') {
+                            const now = rowOf(page);
+                            const e = await call(owen, 'POST', `/api/knowledge/posts/${page}/edit`, {
+                                title: now.title, body: OWNER_BODY, topic: now.category, place: now.knowledge_place,
+                                sources: JSON.parse(now.knowledge_sources ?? '[]'), lang: now.knowledge_lang,
+                            });
+                            require_(e.status === 200, `9.${n9} Owen edits the page as it shows (${show(e)})`);
+                            model.body = OWNER_BODY;
+                            approved.forEach((a) => { a.editAfter = true; });
+                            continue;
+                        }
+                        const parts = PARTS[kinds[step]];
+                        const moved = parts.filter((part) => model[part] !== orig[part] && model[part] !== words(step)[part]);
+                        const before = rowOf(page);
+                        const seen = moved.length > 0 ? await call(owen, 'GET', `/api/knowledge/drafts/${ids[step]}`) : null;
+                        const r = await approve(owen, ids[step]);
+                        if (moved.length > 0) {
+                            const still = rowOf(page);
+                            if (!(r.status === 409 && r.body?.code === 'page_changed' && r.body?.error === DRAFT_WORDS.pageChanged
+                                && draftRow(ids[step])?.state === 'waiting' && still.title === before.title && still.description === before.description
+                                && JSON.stringify(seen?.body?.draft?.pageChanged) === JSON.stringify(moved))) {
+                                wrong.push(`${step} should be refused with its line, ${moved.join('+')} named: ${show(r)} ${JSON.stringify(seen?.body?.draft?.pageChanged)}`);
+                            }
+                        } else {
+                            if (r.status !== 200 || draftRow(ids[step])?.state !== 'approved') wrong.push(`${step} should be approved: ${show(r)}`);
+                            for (const part of parts) model[part] = words(step)[part];
+                            approved.push({ x: step, editAfter: false });
+                        }
+                    }
+                    const final = rowOf(page);
+                    const shows = { title: final.title, body: final.description };
+                    if (shows.title !== model.title || shows.body !== model.body) wrong.push(`the page shows ${JSON.stringify(shows)}, not ${JSON.stringify(model)}`);
+                    // Nothing silently lost: every approved change is there unless Owen's own edit came after it, and Owen's edit is there.
+                    for (const a of approved) {
+                        for (const part of PARTS[kinds[a.x]]) {
+                            if (shows[part] !== words(a.x)[part] && !(a.editAfter && part === 'body')) wrong.push(`${a.x}'s approved ${part} was lost`);
+                        }
+                    }
+                    if (at !== 'none' && shows.body !== OWNER_BODY) wrong.push('Owen\'s edit was lost');
+                    assert(wrong.length === 0, `9. A ${ka} × B ${kb}, approved ${order.join(',')}, owner's edit ${at}: ${wrong.length === 0
+                        ? `${approved.map((a) => a.x).join(',') || 'none'} approved, the rest refused with the line` : wrong.join('; ')}`);
+                }
+            }
+        }
+    }
+    // A refused fix still has its answers: "Edit first" writes the owner's or admin's chosen words, "Not this one" leaves the page.
+    db.prepare('DELETE FROM knowledge_drafts').run();
+    const R = publishKnowledge(broadcast, owen.pk, { ...PAGE, title: 'The refused one' }, { writer: wes.pk }).id;
+    const r1 = (await fix(mel, R, { body: 'Mel says so.' })).body?.draft?.id as string;
+    const r2 = (await fix(pat, R, { body: 'Pat says otherwise.' })).body?.draft?.id as string;
+    require_((await approve(owen, r1)).status === 200, "Owen approves Mel's");
+    const refusedR = await approve(owen, r2);
+    assert(refusedR.status === 409 && refusedR.body?.code === 'page_changed' && rowOf(R).description === 'Mel says so.',
+        `9. Pat's over the same part is refused, Mel's stays (${show(refusedR)})`);
+    const chosen = await approve(owen, r2, { body: 'Mel says so. Pat adds: on Sundays too.' });
+    assert(chosen.status === 200 && rowOf(R).description === 'Mel says so. Pat adds: on Sundays too.' && draftRow(r2)?.state === 'approved',
+        `9. "Edit first" with the words chosen goes through (${show(chosen)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

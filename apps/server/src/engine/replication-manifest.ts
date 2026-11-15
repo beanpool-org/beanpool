@@ -581,7 +581,7 @@ export const TABLES: Record<string, TableEntry> = {
     // and every delete (answered, taken back, 30 days after, the member gone) goes with a tombstone, so it leaves the standby too.
     // An older importer drops the suggestions waiting, their photos and taps: after a take-over from its copy their members
     // see none waiting and send them again; a page already approved is a post, copied whatever the importer.
-    knowledge_drafts: plain('id kind post_id member_pubkey via assistant_name title body topic place sources lang about note state answered_at answered_by reason reason_words result_post_id created_at updated_at'),
+    knowledge_drafts: plain('id kind post_id member_pubkey via assistant_name title body topic place sources lang about note fix_base state answered_at answered_by reason reason_words result_post_id created_at updated_at'),
     knowledge_draft_photos: plain('draft_id order_num photo_data bytes updated_at'),
     knowledge_helped: plain('post_id member_pubkey counted at updated_at'),
     // The forum (engine/forum.ts, DESIGN-forums-fable.md §3, §16, slice F1): sections, topics, posts and their photos (in the

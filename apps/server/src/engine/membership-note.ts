@@ -45,6 +45,7 @@ export const MEMBERSHIP_NOTE_WORDS = {
     notListed: word('Your community isn’t listed publicly, so its name can’t be shown.'),
     otherKey: word('This note from your community is for another account, so its name can’t be shown. Ask your community again from this account.'),
     expired: word('This note from your community has run out. Ask your community again.'),
+    badTime: word('This note from your community has dates this forum can’t take (its server’s clock may be wrong), so its name can’t be shown.'),
     badSignature: word('This note couldn’t be checked against your community’s key, so its name can’t be shown.'),
     malformed: word('That isn’t a note from a community.'),
     notHere: word('Only the worldwide community’s forum shows the community you are from.'),
@@ -53,9 +54,11 @@ export const MEMBERSHIP_NOTE_WORDS = {
 const PROBLEM_REFUSAL: Record<MembershipNoteProblem, [number, string, string]> = {
     malformed: [400, 'note_malformed', MEMBERSHIP_NOTE_WORDS.malformed],
     other_key: [403, 'note_other_key', MEMBERSHIP_NOTE_WORDS.otherKey],
-    not_yet: [400, 'note_expired', MEMBERSHIP_NOTE_WORDS.expired],
+    // Dated ahead of this server's clock, or promising more than 30 days: asking again doesn't mend either, so neither reads
+    // as one that ran out.
+    not_yet: [400, 'note_bad_time', MEMBERSHIP_NOTE_WORDS.badTime],
     expired: [400, 'note_expired', MEMBERSHIP_NOTE_WORDS.expired],
-    too_long: [400, 'note_expired', MEMBERSHIP_NOTE_WORDS.expired],
+    too_long: [400, 'note_bad_time', MEMBERSHIP_NOTE_WORDS.badTime],
     bad_signature: [400, 'note_bad_signature', MEMBERSHIP_NOTE_WORDS.badSignature],
 };
 

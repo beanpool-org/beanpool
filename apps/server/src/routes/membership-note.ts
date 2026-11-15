@@ -15,8 +15,8 @@
  * On a public forum (`forumPublic`, the worldwide community's; anywhere else 404 `not_here`), a member who reads as one:
  *   GET  /api/forum/label → { show, community, lapsesAt, label, why }   (engine/membership-note.ts ForumLabelState)
  *   POST /api/forum/label { show: 'none' | 'community' | 'waiting', note? } → the same   an active member, on the main server
- *        (a standby 503 `standby`). 'community' takes a note that passes: 400 `note_malformed`, `note_expired` or
- *        `note_bad_signature`; 403 `note_other_key`; 409 `not_listed`. A refused note changes nothing kept.
+ *        (a standby 503 `standby`). 'community' takes a note that passes: 400 `note_malformed`, `note_expired`, `note_bad_time`
+ *        (dated ahead of this server's clock, or promising more than 30 days) or `note_bad_signature`; 403 `note_other_key`; 409 `not_listed`. A refused note changes nothing kept.
  */
 import Router from '@koa/router';
 import { MEMBERSHIP_NOTE_MAX_MS, signMembershipNote, toMembershipNoteName, word } from '@beanpool/core';

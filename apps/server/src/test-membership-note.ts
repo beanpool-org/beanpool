@@ -259,6 +259,11 @@ async function main(): Promise<void> {
         expired: [400, 'note_expired'], 'for another key': [403, 'note_other_key'], 'bad signature': [400, 'note_bad_signature'],
         'community unlisted': [409, 'not_listed'], 'no note': [400, 'note_malformed'],
     };
+    // Dated ahead of this server's clock, or promising more than 30 days: refused for its dates, never as one that ran out.
+    const ahead = await setLabel(bo, { show: 'community', note: hillside.note(bo.pk, { issuedAt: Date.now() + 3_600_000 }) });
+    const tooLong = await setLabel(bo, { show: 'community', note: hillside.note(bo.pk, { expiresAt: Date.now() + MEMBERSHIP_NOTE_MAX_MS + 3_600_000 }) });
+    assert([ahead, tooLong].every((r) => r.status === 400 && r.body?.code === 'note_bad_time' && /clock/.test(r.body?.error ?? '')) && !labelRow(bo.pk),
+        `3. a note dated ahead, or promising more than 30 days: refused for its dates (${show(ahead)} / ${show(tooLong)})`);
     for (const choice of ['none', 'community', 'waiting'] as const) {
         for (const [kind, make] of Object.entries(notes)) {
             require_((await setLabel(bo, { show: 'none' })).status === 200 && !labelRow(bo.pk), `Bo starts from Don't show (${choice} x ${kind})`);

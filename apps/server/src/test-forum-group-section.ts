@@ -28,9 +28,9 @@
  *     them; a first topic waiting in a group's section is answered `section_gone` once its writer cannot write there.
  *  8. A standby answers the same: every read of the table answers on it as on the main server, from an import of the copy
  *     (the new table and columns in it), and every write answers 503 `standby`.
- *  9. Close the class: every forum write that makes something new (a topic, a reply, a poll) x (probation off, on with posts
- *     left, on with them used) x (the day's posts reached or not): the poll, a post as the Market's, is refused exactly as the
- *     Market refuses the same poll; topics and replies keep the forum's own day limits.
+ *  9. Close the class: every forum write that makes something new (a topic, a reply, a poll, a first look's OK) x (probation
+ *     off, on with posts left, on with them used) x (the day's posts reached or not): the poll, a post as the Market's, is
+ *     refused exactly as the Market refuses the same poll; topics, replies and a first look keep the forum's own limits.
  *
  * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-forum-group-section" node ../../scripts/run-server-suites.mjs
  */
@@ -673,7 +673,7 @@ async function main(): Promise<void> {
     const OPTIONS = [{ id: 'a', text: 'Monday' }, { id: 'b', text: 'Tuesday' }];
     const marketPoll = (id: Id) => call(id, 'POST', '/api/marketplace/posts',
         { type: 'poll', category: 'community', title: 'Which day suits?', description: '', authorPublicKey: id.pk, pollOptions: OPTIONS, durationDays: 7 });
-    const PATHS = ['topic', 'reply', 'poll'] as const;
+    const PATHS = ['topic', 'reply', 'poll', 'first look OK'] as const;
     const limitMiss: string[] = [];
     let newcomers = 0;
     for (const st of STATES) {
@@ -689,9 +689,16 @@ async function main(): Promise<void> {
                 own = t.body.topic.id;
             }
             for (let i = 0; i < st.earlier; i++) earlierPost.run(`p-f8-earlier-${crypto.randomBytes(8).toString('hex')}`, who.pk, ago(HOUR / 2));
+            // A first topic that waited for a look (asked before the earlier posts), made a topic by a moderator's OK.
+            const waiting = `fw-f8-limits-${newcomers}`;
+            if (path === 'first look OK') {
+                db.prepare(`INSERT INTO forum_waiting (id, section_id, writer_pubkey, title, words, state, created_at) VALUES (?, ?, ?, ?, 'Words.', 'waiting', ?)`)
+                    .run(waiting, general, who.pk, `Waited ${newcomers}`, ago(HOUR));
+            }
             const r = path === 'topic' ? await start(who, { sectionId: general, title: `New topic ${newcomers}`, words: 'Words.' })
                 : path === 'reply' ? await reply(who, host.body.topic.id, { words: `A reply ${newcomers}.` })
-                : await addPoll(who, own, { pollOptions: OPTIONS });
+                : path === 'poll' ? await addPoll(who, own, { pollOptions: OPTIONS })
+                : await call(mo, 'POST', `/api/forum/first-looks/${waiting}/ok`);
             const marketRefuses = path === 'poll' && st.earlier >= (st.probation ? PROBATION.posts : WRITER_LIMITS.postsPerDay);
             let got: string, want: string;
             if (marketRefuses) {
@@ -710,7 +717,7 @@ async function main(): Promise<void> {
     }
     setSwitchOverride('probation', false);
     assert(limitMiss.length === 0,
-        `9. (topic, reply, poll) x (probation off / on with posts left / on with them used) x (the day reached / not): the poll refused exactly as the Market refuses the same poll, topics and replies under the forum's own limits (${STATES.length * PATHS.length} cells${limitMiss.length ? `: ${limitMiss.join(' | ')}` : ''})`);
+        `9. (topic, reply, poll, a first look's OK) x (probation off / on with posts left / on with them used) x (the day reached / not): the poll refused exactly as the Market refuses the same poll, topics and replies under the forum's own limits (${STATES.length * PATHS.length} cells${limitMiss.length ? `: ${limitMiss.join(' | ')}` : ''})`);
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exit(1);

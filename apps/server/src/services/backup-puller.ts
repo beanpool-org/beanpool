@@ -57,6 +57,7 @@ import {
 import { getImageStore, headObject, readObject, writeObject, MAX_OBJECT_BYTES } from '../storage/image-store.js';
 import {
     StagedCopy, StagedCopyRefused, roomForStaging, stagingDir, READY_FILE, PREVIOUS_DB, SWAPPED_COPY_KEY, keepFetchedObjects, releaseFetchedObjects, fetchedObjectsKept,
+    stagedVerdictInWords,
 } from './stager.js';
 import { COPY_MAX_MS } from '../engine/copy-pages.js';
 import { deletePreviousDatabase as deletePreviousFile, previousDatabaseThere, takeoverUnderWay } from '../db/swap-at-boot.js';
@@ -70,6 +71,7 @@ import { LEDGER_DIFFERS, STANDBY_REPORT_HEADER, standbyReportHeader } from './st
 import {
     HEALING_MS, lastMismatchResyncAt, noteCopyFailed, noteCopyLanded, noteMismatchResyncAsked, noteMismatchResyncTaken,
     notePastRetention, noteUncomparedCheck, noteWholeCopyCheck, noteWholeCopyTaken, pendingMismatchResync, readCopyRecord, standbyReport, whyOf,
+    type NotCompared,
 } from './standby-copy-record.js';
 import { errorMessage } from '../error-message.js';
 import { EXPORT_CATEGORIES, STATE_HASH_TABLES } from '@beanpool/engine';
@@ -960,7 +962,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             const restarting = swapRestart !== null;
             swapReady = restarting;
             logger.sync('P2P', `[Backup] ⬇️ ${fresh ? 'Re-seeded' : 'Whole copy'} from primary in ${checked.pages} page(s), ${checked.rows} rows, `
-                + `${checked.exact ? 'exact' : checked.hashed ? `not exact (${checked.differs.join(', ')}: values this server's tables refuse)` : 'not compared'}: `
+                + `${stagedVerdictInWords(checked)}: `
                 + (restarting ? 'restarting to swap it in.' : 'ready in data/staging; this process registered no restart, so the next start swaps it in.'));
             if (restarting) swapRestart!();
             return { ok: true, staged: true, restarting };
@@ -1270,18 +1272,18 @@ function staleTablesOfCopy(thisDelta: readonly string[]): string[] {
 
 /**
  * Of the tables a whole copy left out, the ones this standby holds exactly as the main server did when it made the copy:
- * the copy's own hash of each (SyncPayload `tableHashes`, as checkWholeCopy reads them) equals this standby's, hashed now.
- * None when the copy sent no hashes (one written to while it was being made), or they can't be read here.
+ * the copy's own hash of each (SyncPayload `tableHashes`, as checkWholeCopy reads them) was compared with this standby's,
+ * hashed now, and is equal (engine/replica-hashes.ts compareTableHashes: hashed the same way on both). None when the copy
+ * sent no hashes (one written to while it was being made), or they can't be read here. Exported so a suite can run it.
  */
-function leftOutTablesCurrent(payload: SyncPayload, leftOut: readonly string[]): string[] {
+export function leftOutTablesCurrent(payload: SyncPayload, leftOut: readonly string[]): string[] {
     try {
         const theirs = readTableHashes((payload as SyncPayload & { tableHashes?: unknown }).tableHashes);
-        if (!theirs) return [];
-        const hashed = leftOut.filter((t) => Object.hasOwn(theirs, t));
-        if (hashed.length === 0) return [];
+        if (!theirs || leftOut.length === 0) return [];
         const photosLeftOut = new Set((Array.isArray(payload.photosOmitted) ? payload.photosOmitted : []).filter((k): k is string => typeof k === 'string'));
-        const mine = tableContentHashes({ only: hashed, photosLeftOut }).tables;
-        return hashed.filter((t) => mine[t] !== undefined && mine[t].rows === theirs[t].rows && mine[t].hash === theirs[t].hash);
+        const found = compareTableHashes(theirs, tableContentHashes({ only: leftOut, photosLeftOut }), leftOut);
+        const differing = new Set(found.differing.map((d) => d.table));
+        return found.compared.filter((t) => !differing.has(t));
     } catch (e: any) {
         logger.warn('P2P', `[Backup] The tables this whole copy left out could not be hashed here: ${e?.message || e}`);
         return [];
@@ -1322,6 +1324,10 @@ function recordQuietly(write: () => void): void {
  * `tablesLeftOut`: the tables the import left out whole, over the row cap (engine/sync.ts ImportResult.tablesLeftOut,
  * design §5). The copy isn't exact, and says which, but none of them is a difference a force-resync mends (it would read
  * the same rows): they are neither compared nor counted in `differs`, and ask for none.
+ * A table the two servers hash another way, or one of them alone (engine/replica-hashes.ts compareTableHashes): with the
+ * same release's definitions on both it is schema drift, named and not exact, and asks for no force-resync (a copy brings
+ * rows, never a schema); with another release's it is not compared, and a copy that found nothing else differing gives no
+ * verdict ('release', the tables named).
  * Exported so a suite can run it on a copy it fetched.
  */
 export function checkWholeCopy(
@@ -1346,7 +1352,8 @@ export function checkWholeCopy(
     // it was being made). The listing photos the main server could not read from its own storage are not in the copy,
     // which names them, nor in its hash of that table (routes/backup.ts): no copy brings them, so they are left out here
     // too, and never read as a copy gone wrong that a force-resync would mend (review 4118340860).
-    const theirs = readTableHashes((payload as SyncPayload & { tableHashes?: unknown }).tableHashes);
+    const sent = (payload as SyncPayload & { tableHashes?: unknown }).tableHashes;
+    const theirs = readTableHashes(sent);
     const photosLeftOut = new Set((Array.isArray(payload.photosOmitted) ? payload.photosOmitted : []).filter((k): k is string => typeof k === 'string'));
     // The members values the import left out, as the copy names them: the main server's hash has them, this standby's row
     // can't, and they are reported on their own (valuesLeftOut above), never as a difference a force-resync would mend.
@@ -1361,7 +1368,10 @@ export function checkWholeCopy(
             membersLeftOut.set(v.publicKey, cells);
         }
     }
-    const contents = theirs ? compareTableHashes(theirs, { photosLeftOut, membersLeftOut }) : null;
+    // Each table both servers hash the same way, compared row for row (engine/replica-hashes.ts compareTableHashes); one
+    // hashed another way on one of them, or on one alone, is schema drift between the same release's definitions, and is
+    // not compared between two releases'.
+    const contents = theirs ? compareTableHashes(theirs, tableContentHashes({ photosLeftOut, membersLeftOut })) : null;
     // The ledger compared whole: every account the copy names is one this server can hold, each once, and c.ledger
     // compared each. A copy that names none carries no ledger, as the importer reads it: whole only when this server holds
     // none either. Otherwise the accounts' count, their sum and their content say nothing a force-resync would mend: it
@@ -1393,18 +1403,27 @@ export function checkWholeCopy(
     if (c.valuesLeftOut) differs.add('members');
     // And each plain table a row or value of the copy was left out of, the same way (review 4123472786).
     for (const t of plainLeftOut) differs.add(t);
+    // Something other than drift differs: the operator's "differs" line below. Drift has its own line, which names it.
+    const differsButDrift = differs.size > 0;
+    // Schema drift: never exact, and named, so its main server tells the owners at once (nothing mends it by itself), but
+    // no force-resync, which brings rows and never a schema: after `wrong`.
+    const drift = (contents?.drift ?? []).filter((t) => !tablesOut.has(t));
+    for (const t of drift) differs.add(t);
     // A verdict only from a check that compared everything: each table's content (a copy the main server sent without its
     // hashes, one written to while it was being made, can't show it differing) and every account. Finding nothing short
     // of that is no "exact": it neither ends nor starts anything the last verdict says, and the last exact copy's time
-    // stays the older one (review 4118340714).
-    const notCompared: ('content' | 'ledger')[] = [...(contents ? [] : ['content' as const]), ...(ledgerWhole ? [] : ['ledger' as const])];
+    // stays the older one (review 4118340714). Each table's content is not compared when the copy came without hashes
+    // (`content`), or with hashes made another way, or with tables hashed another way, by another release (`release`).
+    const otherRelease = contents?.otherRelease ?? [];
+    const contentNotCompared: NotCompared[] = contents ? (otherRelease.length > 0 ? ['release'] : []) : [sent === undefined || sent === null ? 'content' : 'release'];
+    const notCompared: NotCompared[] = [...contentNotCompared, ...(ledgerWhole ? [] : ['ledger' as const])];
     const verdict: 'exact' | 'inexact' | 'uncompared' = differs.size > 0 || tablesOut.size > 0 ? 'inexact' : notCompared.length === 0 ? 'exact' : 'uncompared';
     const exact = verdict === 'exact';
     if (tablesOut.size > 0) {
         logger.warn('P2P', `[Backup] ⚠️ This whole copy left out ${[...tablesOut].sort().join(', ')} (more rows than one copy carries): not compared, `
             + 'and no force-resync asked for them, which would read the same rows.');
     }
-    if (differs.size > 0) {
+    if (differsButDrift) {
         const bad = c.tables.filter(t => !t.match && !tablesOut.has(t.name)).map(t => `${t.name} ${t.backup}/${t.primary}`);
         if (c.ledger && !c.ledger.match) bad.push(`${c.ledger.differing} account(s) differ`);
         for (const d of contents?.differing ?? []) if (!bad.some((b) => b.startsWith(`${d.table} `))) bad.push(`${d.table} content`);
@@ -1418,11 +1437,18 @@ export function checkWholeCopy(
     const now = Date.now();
     const resync = wrong && askMismatchResync(now);
     const lastResyncAt = lastLedgerResyncAt;
+    if (drift.length > 0) {
+        logger.warn('P2P', `[Backup] ⚠️ Schema drift: ${drift.join(', ')} ${drift.length === 1 ? 'is' : 'are'} hashed another way here than on the main server, or `
+            + 'on one of the two alone, with the same release\'s definitions: one database\'s schema is not its code\'s. Not exact, and no force-resync asked for it.');
+    }
     if (verdict === 'uncompared') {
         logger.info('P2P', `[Backup] This whole copy could not be compared in full (${notCompared.map((n) => (n === 'content'
-            ? 'no table hashes: the main server was written to while making it' : 'accounts this server cannot hold')).join('; ')}); `
-            + 'nothing compared differs. No verdict.');
-        recordQuietly(() => noteUncomparedCheck({ at: now, notCompared, photosLeftOut: photosLeftOut.size, snapshotGeneratedAt: c.snapshotGeneratedAt }));
+            ? 'no table hashes: the main server was written to while making it'
+            : n === 'release' ? `the main server runs another release${otherRelease.length > 0 ? `, which hashes ${otherRelease.join(', ')} another way` : ', whose table hashes this one does not read'}`
+                : 'accounts this server cannot hold')).join('; ')}); nothing compared differs. No verdict.`);
+        recordQuietly(() => noteUncomparedCheck({
+            at: now, notCompared, otherRelease, photosLeftOut: photosLeftOut.size, snapshotGeneratedAt: c.snapshotGeneratedAt,
+        }));
     } else {
         recordQuietly(() => noteWholeCopyCheck({
             at: now, exact, differs: [...differs].sort(), ledgerDiffering, hashed: !!contents, photosLeftOut: photosLeftOut.size,

@@ -386,7 +386,7 @@ async function closingHashes(copy: Copy): Promise<TableHashes> {
     // In the manifest's order, as tableContentHashes lists them.
     const tables: TableHashes['tables'] = {};
     for (const table of Object.keys(TABLES)) if (all[table]) tables[table] = all[table];
-    return { v: made.hashes.v, tables };
+    return { v: made.hashes.v, def: made.hashes.def, tables };
 }
 
 function pace(copy: Copy) {

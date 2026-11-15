@@ -1,12 +1,26 @@
 /**
- * Test Suite: `engine/replica-hashes.ts` utility functions.
+ * Test Suite: `engine/replica-hashes.ts`, the table hashes a standby's whole copy is checked against
+ * (scratch/fable-design/decisions/DECISION-table-hashes-version.md: `v` 'd1', a recipe fingerprint `d` per table, the
+ * definitions' fingerprint `def` per payload, one reading of them for every check).
  *
  * Verifies:
- * 1. `readTableHashes` parses raw payload objects, validating version and hash shapes.
- * 2. `tableContentHashes` generates table hashes matching schema definition.
- * 3. `tableContentHashesInSlices` produces identical table hashes incrementally and respects `stopped()`.
- * 4. `compareTableHashes` identifies matching vs differing table counts and hashes between nodes.
- * 5. A standby's copy of the directory cache hashes as the main server's (list-on-global G5, #3152): an unlisted row, and
+ * 1. `readTableHashes` reads the 'd1' shape strictly; an older release's (a number for `v`, no `d`) reads null.
+ * 2. Golden rows: fixed rows (null, integer, bigint, real, text, blob) hash to the digests pinned for TABLE_HASHES_VERSION,
+ *    as rowLine bytes and through the hasher on a database. So do hasherFingerprint (how this code hashes any table, in
+ *    every `d` and in `def`) and a made-up manifest entry's `d`, hash and `def` (a boot stamp, a row rule, a column left
+ *    out, no key). A change to a row's bytes, selectOf's CASE, the order rule, the left-out handling or what `d` or `def`
+ *    takes is a new `v` and a new line here.
+ * 3. A table's `d` moves on each change of its recipe (a column added, dropped or reordered; its row rule; a boot stamp; its
+ *    order), and back when the change goes; the sync and sliced hashers give every table the same `d` and hash.
+ * 4. `def` moves on each input of the manifest it is made from (a table's columns, key, row rule, boot stamps; the tables and
+ *    columns left out), and not on a reason's words.
+ * 5. Every cell of compareTableHashes's table (same or other `def`; `d` equal and rows equal, `d` equal and rows differing,
+ *    `d` differing, the table on their side alone, on mine alone), through each check that reads it: compareTableHashes
+ *    itself, checkWholeCopy (its verdict and force-resync in the standby's record), the stager's closing check
+ *    (closingHashVerdict) and leftOutTablesCurrent. An old payload's hashes give 'release', a copy without any 'content'.
+ *    The operator's logs say what each verdict is: drift alone logs drift, the table named, and no "Replica differs";
+ *    a staged copy's verdict is worded as drift, differing, values refused or another release, never one for another.
+ * 6. A standby's copy of the directory cache hashes as the main server's (list-on-global G5, #3152): an unlisted row, and
  *    a row from before `listings_from_here` (db.ts's own ALTER on the table as it was), copy with the value they hold.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-replica-hashes.ts
@@ -18,13 +32,20 @@ import Database from 'better-sqlite3';
 import { EXPORT_CATEGORIES } from '@beanpool/engine';
 import { db, initSchema } from './db/db.js';
 import { mergeReplicatedDirectory, normaliseRegistryRow, writeDirectoryRows, type DirectoryRow } from './engine/directory-cache.js';
+import { BOOT_STAMPED, TABLES } from './engine/replication-manifest.js';
 import {
+    COLUMNS_NOT_HASHED,
+    NOT_HASHED,
+    TABLE_HASHES_VERSION,
+    compareTableHashes,
+    definitionFingerprint,
+    hashedTables,
+    hasherFingerprint,
     readTableHashes,
+    rowLine,
     tableContentHashes,
     tableContentHashesInSlices,
-    compareTableHashes,
-    TABLE_HASHES_VERSION,
-    hashedTables,
+    type TableHashes,
 } from './engine/replica-hashes.js';
 
 let testsRun = 0;
@@ -40,6 +61,47 @@ function assert(cond: unknown, msg: string): void {
     }
 }
 
+const sha256 = (s: string | Buffer) => createHash('sha256').update(s).digest('hex');
+const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
+/** A manifest entry, to change for one check and put back after it. */
+const entryOf = (table: string) => TABLES[table] as unknown as { columns: string[]; key?: string[]; rows?: { where: string; reason: string } };
+
+/**
+ * What each TABLE_HASHES_VERSION pins: `rows`, sha256 over rowLine of GOLDEN_ROWS; `table`, the hasher's hash of
+ * GOLDEN_TABLE_ROWS in member_badges on a database; `how`, hasherFingerprint; `madeUp`, MADE_UP's `d` and hash on a
+ * database of its own, and `def` with it the only table the manifest holds. A change to a row's bytes, to selectOf's CASE,
+ * the order rule, the row rule's or the left-out columns' use, what `d` or `def` takes, or the photos and members values
+ * left out fails here: raise the version and add its line, never edit an old one.
+ */
+const GOLDEN: Record<string, { rows: string; table: string; how: string; madeUp: { d: string; hash: string; def: string } }> = {
+    d1: {
+        rows: 'a958d9443cbe4d7311d353e4d38823c5026640631877ef3889bdc5c1332e9705', table: '433de24a744cbc096ae8afcec2bfdb9f0c6f1c1c27b2786cf7a20d10eb900275',
+        how: '65a3e4c11b63dd5e',
+        madeUp: { d: 'af5c5cc4c740cbd6', hash: 'ff3cdf0cadf0f013a516a41edff1d62a94d1291612b65fa14e25bc7ce0b4f10f', def: '003750c9f6cc84c6' },
+    },
+};
+/**
+ * A made-up manifest entry, read as a real table's is: a boot stamp, a row rule, a column left out, and no key, so ordered
+ * by every column hashed. A real table's change moves nothing it pins.
+ */
+const MADE_UP = {
+    table: 'hash_suite_made_up',
+    entry: { kind: 'replicated', payload: 'hashSuite', watermark: 'updated_at', columns: ['id', 'state', 'stamp', 'note', 'aside'], rows: { where: "state <> 'draft'", reason: 'a check of this suite' } },
+    stamp: { table: 'hash_suite_made_up', column: 'stamp', where: "id = 'seeded'", reason: 'a check of this suite' },
+    columnsLeftOut: { aside: 'a check of this suite' },
+    schema: `CREATE TABLE hash_suite_made_up (id, state, stamp, note, aside);
+        INSERT INTO hash_suite_made_up VALUES ('seeded', 'live', '2026-11-15T00:00:00.000Z', 'b', 1), ('b', 'live', 'kept', NULL, 2), ('c', 'draft', 'x', 'y', 3),
+            ('a', 'live', 'kept', 'z', 4);`,
+};
+const GOLDEN_ROWS: unknown[][] = [
+    [null, 0, -42, 1n << 62n, 1.5, -0.25, 'text', 'naïve "quoted"\né', Buffer.from([0, 1, 254, 255]), Buffer.alloc(0), ''],
+    [9007199254740991, 1e-7, '0', null],
+];
+const GOLDEN_TABLE_ROWS: unknown[][] = [
+    ['a-member', null, 7, 2.5, Buffer.from('beans')],
+    ['b-member', 'Elder', -1, 'set "at"', null],
+];
+
 async function main(): Promise<void> {
     if (!process.env.BEANPOOL_DATA_DIR) {
         throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
@@ -52,105 +114,318 @@ async function main(): Promise<void> {
     assert(readTableHashes(undefined) === null, 'undefined raw payload returns null');
     assert(readTableHashes('string') === null, 'string raw payload returns null');
     assert(readTableHashes({}) === null, 'empty object returns null');
-    // The columns hashed belong to a version. A column added with the version left alone makes two sides on different releases
-    // read every whole copy as wrong (#2736, and decisions in af712414 before it). Changed the columns? Raise
-    // TABLE_HASHES_VERSION, say why in its notes, and add a line here.
-    const hashedColumns = createHash('sha256')
-        .update(JSON.stringify(hashedTables(db).map((t) => [t.table, t.columns]).sort()))
-        .digest('hex').slice(0, 16);
-    const COLUMNS_OF_VERSION: Record<number, string> = { 12: '94ccf348f3c0a4d2', 13: '1eddae5ac2206a8f', 14: '328e536e828a0c8f', 15: 'e000deb40cdb8c0b', 16: '81b5a378f62edbe1', 17: '5b6e068af63cda88', 18: '2866f78fb2b501e0', 19: 'd0a7e99a402c6281', 20: 'ba4952783ffdbd19', 21: '0d5be0f41cf54ef5', 22: '663002c14983ab05', 23: 'ffdbd0746a1a8d42', 24: '873ddd99258062ef', 25: '11af18a2c10c6c53', 26: '39fdfeea1be6782e', 27: '19a2d097427cc373', 28: 'c23b2c7f33899cb6', 29: '45f24e376949a399', 30: 'b0b032ac0fb22adc', 31: 'd18bf1cc914fe840', 32: '86254bafd624e8c2', 33: '80929547e06f7305', 34: '1f5d3b4ae56beede', 35: '4cdd10fa37ef7ae9', 36: '469d04d7f5d63f0d', 37: '56aed40441c90fd2', 38: '7b715bf5e20a6ffc', 39: 'b3b42e582f6591ab', 40: '639e641f370b059b', 41: '3fd4e96288f20d70', 42: '798658666fbabdef', 43: '5b7b25fca0f847e7', 44: '6791cef5b8847f53' };
-    assert(COLUMNS_OF_VERSION[TABLE_HASHES_VERSION] === hashedColumns,
-        `the hashed columns belong to version ${TABLE_HASHES_VERSION} (they read ${hashedColumns})`);
-
-    assert(readTableHashes({ v: TABLE_HASHES_VERSION - 1, tables: {} }) === null, 'wrong version returns null');
-    assert(readTableHashes({ v: TABLE_HASHES_VERSION, tables: 'invalid' }) === null, 'non-object tables returns null');
-
     const validHash = 'a'.repeat(64);
-    assert(readTableHashes({
-        v: TABLE_HASHES_VERSION,
-        tables: {
-            accounts: { rows: 2, hash: 'invalid-hash' },
-        },
-    }) === null, 'invalid table hash string causes readTableHashes to return null');
+    const d = '0123456789abcdef';
+    const def = 'fedcba9876543210';
+    // An older release's payload (v 43, 44: a number, and no `d` in a table): not this one's, whatever it holds.
+    assert(readTableHashes({ v: 43, tables: { accounts: { rows: 2, hash: validHash } } }) === null, 'the old shape (v 43, no d) reads null');
+    assert(readTableHashes({ v: 44, tables: { accounts: { rows: 2, hash: validHash } } }) === null, 'the old shape (v 44, no d) reads null');
+    assert(readTableHashes({ v: 44, def, tables: { accounts: { rows: 2, hash: validHash, d } } }) === null, 'a number for v reads null, even with d and def');
+    assert(readTableHashes({ v: TABLE_HASHES_VERSION, tables: {} }) === null, 'no def returns null');
+    assert(readTableHashes({ v: TABLE_HASHES_VERSION, def: 'xyz', tables: {} }) === null, 'a def that is no fingerprint returns null');
+    assert(readTableHashes({ v: TABLE_HASHES_VERSION, def, tables: 'invalid' }) === null, 'non-object tables returns null');
+    assert(readTableHashes({ v: TABLE_HASHES_VERSION, def, tables: [] }) === null, 'a list for tables returns null');
+    assert(readTableHashes({ v: TABLE_HASHES_VERSION, def, tables: { accounts: { rows: 2, hash: 'invalid-hash', d } } }) === null,
+        'invalid table hash string causes readTableHashes to return null');
+    assert(readTableHashes({ v: TABLE_HASHES_VERSION, def, tables: { accounts: { rows: 'two', hash: validHash, d } } }) === null,
+        'invalid table row count causes readTableHashes to return null');
+    assert(readTableHashes({ v: TABLE_HASHES_VERSION, def, tables: { accounts: { rows: 2, hash: validHash } } }) === null,
+        'a table without d returns null');
+    assert(readTableHashes({ v: TABLE_HASHES_VERSION, def, tables: { accounts: { rows: 2, hash: validHash, d: 'D'.repeat(16) } } }) === null,
+        'a d that is no fingerprint returns null');
+    assert(readTableHashes({ v: TABLE_HASHES_VERSION, def, tables: { 'no such; table': { rows: 2, hash: validHash, d } } }) === null,
+        'a table name that is no name returns null');
+    const parsed = readTableHashes({ v: TABLE_HASHES_VERSION, def, tables: { accounts: { rows: 2, hash: validHash, d } } });
+    assert(parsed !== null && parsed.def === def && parsed.v === TABLE_HASHES_VERSION, 'valid table hashes object returns them');
+    assert(parsed?.tables.accounts?.rows === 2 && parsed.tables.accounts.hash === validHash && parsed.tables.accounts.d === d, 'valid table entry parsed correctly');
 
-    assert(readTableHashes({
-        v: TABLE_HASHES_VERSION,
-        tables: {
-            accounts: { rows: 'two', hash: validHash },
-        },
-    }) === null, 'invalid table row count causes readTableHashes to return null');
+    console.log('\n— 2. golden rows —');
+    const golden = GOLDEN[TABLE_HASHES_VERSION];
+    const rowsDigest = sha256(GOLDEN_ROWS.map(rowLine).join(''));
+    assert(golden?.rows === rowsDigest, `the golden rows' bytes are version ${TABLE_HASHES_VERSION}'s (they read ${rowsDigest})`);
+    const goldenDb = new Database(':memory:');
+    goldenDb.exec('CREATE TABLE member_badges (member_pubkey, tier, set_by, set_at, updated_at, PRIMARY KEY (member_pubkey))');
+    const putGolden = goldenDb.prepare('INSERT INTO member_badges (member_pubkey, tier, set_by, set_at, updated_at) VALUES (?, ?, ?, ?, ?)');
+    for (const row of GOLDEN_TABLE_ROWS) putGolden.run(...row);
+    const goldenTable = tableContentHashes({ only: ['member_badges'] }, goldenDb).tables.member_badges;
+    assert(goldenTable?.rows === 2 && golden?.table === goldenTable.hash,
+        `the hasher's hash of the golden table is version ${TABLE_HASHES_VERSION}'s (it reads ${goldenTable?.hash})`);
+    assert(goldenTable?.hash === sha256(GOLDEN_TABLE_ROWS.map(rowLine).join('')), 'the hasher hashes each row as rowLine says, in key order');
+    // How this code hashes any table (hasherFingerprint): in every table's d and in def, so a change to that code moves them
+    // by construction, and two releases that hash another way read each other as another release, never as drift.
+    const how = hasherFingerprint();
+    assert(/^[0-9a-f]{16}$/.test(how) && golden?.how === how, `how this code hashes a table is version ${TABLE_HASHES_VERSION}'s (it reads ${how})`);
+    // MADE_UP in the manifest, and on a database of its own: its d and hash. Then the manifest's only table, for def.
+    const tablesNow = { ...TABLES };
+    const stampsNow = [...BOOT_STAMPED];
+    const notHashedNow = { ...NOT_HASHED };
+    const columnsLeftOutNow = { ...COLUMNS_NOT_HASHED };
+    const madeUpDb = new Database(':memory:');
+    madeUpDb.exec(MADE_UP.schema);
+    let madeUp: { d?: string; hash?: string; rows?: number; order?: string; def?: string };
+    try {
+        (TABLES as Record<string, unknown>)[MADE_UP.table] = MADE_UP.entry;
+        BOOT_STAMPED.push(MADE_UP.stamp);
+        COLUMNS_NOT_HASHED[MADE_UP.table] = MADE_UP.columnsLeftOut;
+        const made = tableContentHashes({ only: [MADE_UP.table] }, madeUpDb).tables[MADE_UP.table];
+        const order = hashedTables(madeUpDb).find((t) => t.table === MADE_UP.table)?.order.join(', ');
+        for (const t of Object.keys(TABLES)) if (t !== MADE_UP.table) delete (TABLES as Record<string, unknown>)[t];
+        BOOT_STAMPED.splice(0, BOOT_STAMPED.length, MADE_UP.stamp);
+        for (const t of Object.keys(NOT_HASHED)) delete NOT_HASHED[t];
+        for (const t of Object.keys(COLUMNS_NOT_HASHED)) if (t !== MADE_UP.table) delete COLUMNS_NOT_HASHED[t];
+        madeUp = { d: made?.d, hash: made?.hash, rows: made?.rows, order, def: definitionFingerprint() };
+    } finally {
+        for (const t of Object.keys(TABLES)) delete (TABLES as Record<string, unknown>)[t];
+        Object.assign(TABLES, tablesNow);
+        BOOT_STAMPED.splice(0, BOOT_STAMPED.length, ...stampsNow);
+        for (const t of Object.keys(NOT_HASHED)) delete NOT_HASHED[t];
+        Object.assign(NOT_HASHED, notHashedNow);
+        for (const t of Object.keys(COLUMNS_NOT_HASHED)) delete COLUMNS_NOT_HASHED[t];
+        Object.assign(COLUMNS_NOT_HASHED, columnsLeftOutNow);
+        madeUpDb.close();
+    }
+    assert(madeUp.rows === 3 && madeUp.order === 'id, state, stamp, note',
+        `the made-up table: its row rule leaves a row out, and it is ordered by every column hashed (${madeUp.rows} rows, by ${madeUp.order})`);
+    assert(golden?.madeUp.d === madeUp.d, `the made-up table's d is version ${TABLE_HASHES_VERSION}'s (it reads ${madeUp.d})`);
+    assert(golden?.madeUp.hash === madeUp.hash, `the made-up table's hash is version ${TABLE_HASHES_VERSION}'s (it reads ${madeUp.hash})`);
+    assert(golden?.madeUp.def === madeUp.def, `def, with the made-up table the manifest's only one, is version ${TABLE_HASHES_VERSION}'s (it reads ${madeUp.def})`);
+    assert(JSON.stringify(Object.keys(TABLES)) === JSON.stringify(Object.keys(tablesNow)) && JSON.stringify(BOOT_STAMPED) === JSON.stringify(stampsNow)
+        && !Object.hasOwn(COLUMNS_NOT_HASHED, MADE_UP.table) && definitionFingerprint() !== madeUp.def, 'the manifest is put back whole after');
 
-    const parsed = readTableHashes({
-        v: TABLE_HASHES_VERSION,
-        tables: {
-            accounts: { rows: 2, hash: validHash },
-        },
-    });
+    console.log('\n— 3. a table\'s d —');
+    // member_badges, on a database of its own: every column the manifest names, keyed on the member.
+    const badges = (columns: string) => {
+        const conn = new Database(':memory:');
+        conn.exec(`CREATE TABLE member_badges (${columns}, PRIMARY KEY (member_pubkey))`);
+        return conn;
+    };
+    const dOf = (conn: Database.Database, table = 'member_badges') => hashedTables(conn).find((t) => t.table === table)?.d;
+    const full = badges('member_pubkey, tier, set_by, set_at, updated_at');
+    const base = dOf(full);
+    assert(typeof base === 'string' && /^[0-9a-f]{16}$/.test(base), `a table's d is 16 hex (${base})`);
+    assert(dOf(badges('updated_at, set_at, set_by, tier, member_pubkey')) === base, 'the database\'s own column order moves no d (the manifest\'s order is hashed)');
+    const dropped = dOf(badges('member_pubkey, tier, set_at, updated_at'));
+    assert(dropped !== undefined && dropped !== base, `a column dropped moves d (${dropped} vs ${base})`);
+    const entry = entryOf('member_badges');
+    const columnsBefore = entry.columns;
+    entry.columns = [...columnsBefore, 'note'];
+    const added = dOf(badges('member_pubkey, tier, set_by, set_at, updated_at, note'));
+    assert(added !== undefined && added !== base, `a column added moves d (${added} vs ${base})`);
+    entry.columns = [columnsBefore[1], columnsBefore[0], ...columnsBefore.slice(2)];
+    const reordered = dOf(full);
+    assert(reordered !== base, `the manifest's columns reordered move d (${reordered} vs ${base})`);
+    entry.columns = columnsBefore;
+    assert(dOf(full) === base, 'the columns put back give the same d');
+    entry.rows = { where: "tier IS NOT NULL", reason: 'a check of this suite' };
+    const ruled = dOf(full);
+    assert(ruled !== base, `a row rule moves d (${ruled} vs ${base})`);
+    delete entry.rows;
+    BOOT_STAMPED.push({ table: 'member_badges', column: 'updated_at', where: "tier = 'Elder'", reason: 'a check of this suite' });
+    const stamped = dOf(full);
+    BOOT_STAMPED.pop();
+    assert(stamped !== base, `a boot stamp moves d (${stamped} vs ${base})`);
+    entry.key = ['tier', 'member_pubkey'];
+    const ordered = dOf(full);
+    delete entry.key;
+    assert(ordered !== base, `another order moves d (${ordered} vs ${base})`);
+    assert(dOf(full) === base, 'everything put back gives the same d');
+    assert(dOf(badges('member_pubkey, tier, set_by, set_at, updated_at, local_only')) === base, 'a column the manifest doesn\'t name moves no d (it isn\'t hashed)');
 
-    assert(parsed !== null, 'valid table hashes object returns parsed map');
-    assert(parsed?.accounts?.rows === 2 && parsed?.accounts?.hash === validHash, 'valid table entry parsed correctly');
-
-    console.log('\n— 2. tableContentHashes —');
     const syncHashes = tableContentHashes();
-    assert(syncHashes.v === TABLE_HASHES_VERSION, 'version matches TABLE_HASHES_VERSION');
-    assert(typeof syncHashes.tables.accounts === 'object', 'accounts table hash generated');
-    assert(typeof syncHashes.tables.accounts.rows === 'number', 'accounts table row count is numeric');
-    assert(/^[0-9a-f]{64}$/.test(syncHashes.tables.accounts.hash), 'accounts table hash is a 64-char hex string');
-
+    assert(syncHashes.v === TABLE_HASHES_VERSION && syncHashes.def === definitionFingerprint(), 'the sync hashes carry this version and the definitions\' fingerprint');
+    assert(typeof syncHashes.tables.accounts === 'object' && /^[0-9a-f]{64}$/.test(syncHashes.tables.accounts.hash), 'accounts table hash generated');
     const accountsOnly = tableContentHashes({ only: ['accounts'] });
     assert(Object.keys(accountsOnly.tables).length === 1 && 'accounts' in accountsOnly.tables, '`only` option filters to specified tables');
-
-    console.log('\n— 3. tableContentHashesInSlices —');
-    const slicedHashes = await tableContentHashesInSlices(
-        db,
-        { only: ['accounts'] },
-        {
-            sliceRows: 1,
-            sliceBytes: 100,
-            pause: async () => {},
-            stopped: () => false,
-        },
-    );
-
-    assert(slicedHashes.v === TABLE_HASHES_VERSION, 'sliced version matches TABLE_HASHES_VERSION');
-    assert(slicedHashes.tables.accounts.hash === accountsOnly.tables.accounts.hash, 'sliced hash matches synchronous hash');
-    assert(slicedHashes.tables.accounts.rows === accountsOnly.tables.accounts.rows, 'sliced row count matches synchronous count');
-
+    const slicedHashes = await tableContentHashesInSlices(db, {}, { sliceRows: 1, sliceBytes: 100, pause: async () => {}, stopped: () => false });
+    assert(slicedHashes.v === TABLE_HASHES_VERSION && slicedHashes.def === syncHashes.def, 'the sliced hashes carry the same version and def');
+    const notSame = Object.keys(syncHashes.tables).filter((t) => JSON.stringify(slicedHashes.tables[t]) !== JSON.stringify(syncHashes.tables[t]));
+    assert(Object.keys(syncHashes.tables).length > 100 && notSame.length === 0 && Object.keys(slicedHashes.tables).length === Object.keys(syncHashes.tables).length,
+        `the sync and sliced hashers give every table (${Object.keys(syncHashes.tables).length}) the same d, rows and hash (${notSame.join(', ') || 'none differ'})`);
+    const stampedTable = BOOT_STAMPED[0].table;
+    assert(syncHashes.tables[stampedTable]?.d === dOf(db, stampedTable) && syncHashes.tables[stampedTable].d !== undefined,
+        `a boot-stamped table (${stampedTable}) carries the d hashedTables gives it`);
     let stoppedErrorCaught = false;
     try {
-        await tableContentHashesInSlices(
-            db,
-            { only: ['accounts'] },
-            {
-                sliceRows: 1,
-                sliceBytes: 100,
-                pause: async () => {},
-                stopped: () => true,
-            },
-        );
+        await tableContentHashesInSlices(db, { only: ['accounts'] }, { sliceRows: 1, sliceBytes: 100, pause: async () => {}, stopped: () => true });
     } catch (e: any) {
         stoppedErrorCaught = e?.message === 'stopped';
     }
     assert(stoppedErrorCaught, 'tableContentHashesInSlices throws when stopped() returns true');
 
-    console.log('\n— 4. compareTableHashes —');
-    const comparison = compareTableHashes({
-        accounts: syncHashes.tables.accounts,
-        fake_table: { rows: 99, hash: validHash },
+    console.log('\n— 4. def —');
+    const def0 = definitionFingerprint();
+    assert(/^[0-9a-f]{16}$/.test(def0), `def is 16 hex (${def0})`);
+    const moves = (what: string, change: () => () => void) => {
+        const undo = change();
+        const moved = definitionFingerprint();
+        undo();
+        assert(moved !== def0 && definitionFingerprint() === def0, `def moves on ${what}, and comes back (${moved} vs ${def0})`);
+    };
+    moves('a table\'s columns', () => { entry.columns = [...columnsBefore, 'note']; return () => { entry.columns = columnsBefore; }; });
+    moves('a table\'s columns reordered', () => { entry.columns = [...columnsBefore].reverse(); return () => { entry.columns = columnsBefore; }; });
+    moves('a table\'s key', () => { entry.key = ['member_pubkey']; return () => { delete entry.key; }; });
+    moves('a table\'s row rule', () => { entry.rows = { where: 'tier IS NOT NULL', reason: 'r' }; return () => { delete entry.rows; }; });
+    moves('a boot stamp', () => {
+        BOOT_STAMPED.push({ table: 'member_badges', column: 'updated_at', where: "tier = 'Elder'", reason: 'r' });
+        return () => { BOOT_STAMPED.pop(); };
     });
-
-    assert(comparison.compared.includes('accounts'), 'accounts table compared');
-    assert(!comparison.compared.includes('fake_table'), 'unmatched local table not listed in compared');
-    assert(comparison.differing.length === 0, 'matching accounts table reports no differences');
-
-    const mismatchedComparison = compareTableHashes({
-        accounts: { rows: syncHashes.tables.accounts.rows + 10, hash: validHash },
+    moves('a boot stamp\'s rows', () => {
+        const was = BOOT_STAMPED[0].where;
+        BOOT_STAMPED[0].where = `${was} OR 0`;
+        return () => { BOOT_STAMPED[0].where = was; };
     });
-    assert(mismatchedComparison.differing.length === 1, 'mismatched rows/hash detected');
-    assert(mismatchedComparison.differing[0].table === 'accounts', 'differing table name identified as accounts');
-    assert(mismatchedComparison.differing[0].theirRows === syncHashes.tables.accounts.rows + 10, 'theirRows count accurately reported');
+    moves('a new table', () => {
+        (TABLES as Record<string, unknown>).hash_suite_table = { ...TABLES.member_badges };
+        return () => { delete (TABLES as Record<string, unknown>).hash_suite_table; };
+    });
+    moves('a table left out (NOT_HASHED)', () => { NOT_HASHED.member_badges = 'r'; return () => { delete NOT_HASHED.member_badges; }; });
+    // The list itself, apart from what it takes out of the tables hashed: a name no table hashed carries.
+    moves('the list of tables left out alone', () => { NOT_HASHED.hash_suite_table = 'r'; return () => { delete NOT_HASHED.hash_suite_table; }; });
+    moves('a column left out (COLUMNS_NOT_HASHED)', () => {
+        COLUMNS_NOT_HASHED.member_badges = { set_by: 'r' };
+        return () => { delete COLUMNS_NOT_HASHED.member_badges; };
+    });
+    const reasonWas = BOOT_STAMPED[0].reason;
+    BOOT_STAMPED[0].reason = 'other words';
+    const stampWords = definitionFingerprint();
+    BOOT_STAMPED[0].reason = reasonWas;
+    entry.rows = { where: 'tier IS NOT NULL', reason: 'one reason' };
+    const ruleWords = definitionFingerprint();
+    entry.rows = { where: 'tier IS NOT NULL', reason: 'another reason' };
+    const ruleOtherWords = definitionFingerprint();
+    delete entry.rows;
+    assert(stampWords === def0 && ruleWords === ruleOtherWords && ruleWords !== def0,
+        'a reason\'s words move no def, a boot stamp\'s or a row rule\'s (code only)');
 
-    console.log('\n— 5. A standby\'s copy of the directory cache hashes as the main server\'s —');
+    console.log('\n— 5. every cell, through every check —');
+    const { checkWholeCopy, leftOutTablesCurrent } = await import('./services/backup-puller.js');
+    const { closingHashVerdict, stagedVerdictInWords } = await import('./services/stager.js');
+    const { readCopyRecord } = await import('./services/standby-copy-record.js');
+    const { logger } = await import('./logger.js');
+    // checkWholeCopy's warnings, as the operator reads them.
+    const warned: string[] = [];
+    const realWarn = logger.warn;
+    logger.warn = ((category, message, metadata) => { warned.push(message); return realWarn(category, message, metadata); }) as typeof logger.warn;
+    // Each check runs seven hours after the last, so the held force-resync's six-hour limit never hides one asked for.
+    const realNow = Date.now;
+    let shift = 0;
+    Date.now = () => realNow() + shift;
+    const T = 'member_badges';
+    const mine0 = tableContentHashes();
+    type Shape = 'equal' | 'rows differ' | 'd differs' | 'theirs only' | 'mine only';
+    interface Cell { shape: Shape; sameDef: boolean; cmp: 'compared' | 'differing' | 'drift' | 'otherRelease'; verdict: 'exact' | 'inexact' | 'uncompared'; resync: boolean; current: boolean }
+    const cells: Cell[] = [
+        { shape: 'equal', sameDef: true, cmp: 'compared', verdict: 'exact', resync: false, current: true },
+        { shape: 'rows differ', sameDef: true, cmp: 'differing', verdict: 'inexact', resync: true, current: false },
+        { shape: 'd differs', sameDef: true, cmp: 'drift', verdict: 'inexact', resync: false, current: false },
+        { shape: 'theirs only', sameDef: true, cmp: 'drift', verdict: 'inexact', resync: false, current: false },
+        { shape: 'mine only', sameDef: true, cmp: 'drift', verdict: 'inexact', resync: false, current: false },
+        { shape: 'equal', sameDef: false, cmp: 'compared', verdict: 'exact', resync: false, current: true },
+        { shape: 'rows differ', sameDef: false, cmp: 'differing', verdict: 'inexact', resync: true, current: false },
+        { shape: 'd differs', sameDef: false, cmp: 'otherRelease', verdict: 'uncompared', resync: false, current: false },
+        { shape: 'theirs only', sameDef: false, cmp: 'otherRelease', verdict: 'uncompared', resync: false, current: false },
+        { shape: 'mine only', sameDef: false, cmp: 'otherRelease', verdict: 'uncompared', resync: false, current: false },
+    ];
+    const recordOf = () => readCopyRecord();
+    for (const cell of cells) {
+        const name = `${cell.shape}, ${cell.sameDef ? 'same def' : 'other def'}`;
+        const theirs: TableHashes = clone(mine0);
+        if (!cell.sameDef) theirs.def = '0000000000000000';
+        if (cell.shape === 'rows differ') theirs.tables[T] = { ...theirs.tables[T], rows: theirs.tables[T].rows + 1, hash: 'f'.repeat(64) };
+        if (cell.shape === 'd differs') theirs.tables[T] = { ...theirs.tables[T], d: '0123456789abcdef' };
+        if (cell.shape === 'mine only') delete theirs.tables[T];
+        // On their side alone: this database lacks the table (a migration that failed), as the main server has it.
+        if (cell.shape === 'theirs only') db.exec(`ALTER TABLE ${T} RENAME TO hash_suite_aside`);
+        try {
+            shift += 7 * 3600_000;
+            db.prepare("DELETE FROM node_config WHERE key = 'standby_copy_record'").run();
+            const mine = tableContentHashes();
+            const found = compareTableHashes(theirs, mine);
+            const where = (['compared', 'drift', 'otherRelease'] as const).filter((k) => found[k].includes(T));
+            const differing = found.differing.some((x) => x.table === T);
+            assert(JSON.stringify(where) === JSON.stringify(cell.cmp === 'differing' ? ['compared'] : [cell.cmp]) && differing === (cell.cmp === 'differing'),
+                `${name}: compareTableHashes puts ${T} in ${cell.cmp} (${JSON.stringify(where)}${differing ? ', differing' : ''})`);
+            const notOnlyT = [...found.drift, ...found.otherRelease, ...found.differing.map((x) => x.table)].filter((t) => t !== T);
+            assert(notOnlyT.length === 0 && found.compared.length === Object.keys(mine0.tables).length - (where.includes('compared') ? 0 : 1)
+                && found.exact === (cell.verdict === 'exact'),
+                `${name}: every other table compared and equal, and exact is ${cell.verdict === 'exact'} (${found.exact}; ${notOnlyT.join(', ') || 'no other'})`);
+
+            // checkWholeCopy: a copy carrying these hashes, and nothing else it would count.
+            warned.length = 0;
+            checkWholeCopy({ tableHashes: theirs, accounts: [] } as any);
+            const differsLine = warned.find((w) => w.includes('Replica differs from primary snapshot'));
+            const driftLine = warned.find((w) => w.includes('Schema drift'));
+            assert(cell.cmp === 'drift' ? !differsLine && driftLine?.includes(T) === true
+                : !driftLine && (differsLine?.includes(T) ?? false) === (cell.cmp === 'differing'),
+                `${name}: checkWholeCopy's log says ${cell.cmp === 'drift' ? `schema drift, ${T} named, and no "Replica differs"` : cell.cmp === 'differing' ? `${T} differs, and no drift` : 'no drift and no difference'} (${JSON.stringify(warned)})`);
+            const r = recordOf();
+            const verdict = r.lastWhole ? (r.lastWhole.exact ? 'exact' : 'inexact') : r.lastUncompared ? 'uncompared' : 'none';
+            assert(verdict === cell.verdict, `${name}: checkWholeCopy's verdict is ${cell.verdict} (${verdict}: ${JSON.stringify(r.lastWhole ?? r.lastUncompared)})`);
+            if (cell.verdict === 'inexact') {
+                assert(r.lastWhole?.differs.includes(T) === true && r.lastWhole.resyncAsked === cell.resync,
+                    `${name}: checkWholeCopy names ${T} and ${cell.resync ? 'asks' : 'asks no'} force-resync (${JSON.stringify(r.lastWhole?.differs)}, ${r.lastWhole?.resyncAsked})`);
+            }
+            if (cell.verdict === 'uncompared') {
+                assert(JSON.stringify(r.lastUncompared?.notCompared) === '["release"]' && JSON.stringify(r.lastUncompared?.otherRelease) === JSON.stringify([T]),
+                    `${name}: checkWholeCopy says another release, ${T} not compared (${JSON.stringify(r.lastUncompared)})`);
+            }
+
+            // The stager's closing check.
+            const staged = closingHashVerdict(theirs, found, new Set(), new Set());
+            assert(staged.verdict === cell.verdict && staged.mendable.includes(T) === cell.resync
+                && staged.drift.includes(T) === (cell.cmp === 'drift') && staged.otherRelease.includes(T) === (cell.cmp === 'otherRelease')
+                && staged.differs.includes(T) === (cell.verdict === 'inexact'),
+                `${name}: the stager's closing check says ${cell.verdict}${cell.resync ? ', mended by a force-resync' : ''} (${JSON.stringify(staged)})`);
+            assert(JSON.stringify(staged.notCompared) === (cell.verdict === 'uncompared' ? '["release"]' : '[]'),
+                `${name}: the stager's closing check says what wasn't compared (${JSON.stringify(staged.notCompared)})`);
+            // The puller's log of a staged copy: the verdict's own words, the table named under what it is.
+            const words = stagedVerdictInWords(staged);
+            const wordsRight = cell.verdict === 'exact' ? words === 'exact'
+                : cell.cmp === 'drift' ? words === `not exact (schema drift: ${T} hashed another way here, with the same release's definitions)`
+                    : cell.cmp === 'differing' ? words === `not exact (${T} differing)`
+                        : words === `not compared (the main server runs another release, which hashes ${T} another way)`;
+            assert(wordsRight, `${name}: the puller's log of a staged copy says ${cell.cmp === 'compared' ? 'exact' : `${cell.cmp}, ${T} named`} ("${words}")`);
+
+            // leftOutTablesCurrent: the table, left out of the copy, is current here only when compared and equal.
+            const current = leftOutTablesCurrent({ tableHashes: theirs } as any, [T]);
+            assert(JSON.stringify(current) === JSON.stringify(cell.current ? [T] : []), `${name}: leftOutTablesCurrent ${cell.current ? 'finds' : 'doesn\'t find'} ${T} current (${JSON.stringify(current)})`);
+        } finally {
+            if (cell.shape === 'theirs only') db.exec(`ALTER TABLE hash_suite_aside RENAME TO ${T}`);
+        }
+    }
+    logger.warn = realWarn;
+    // An empty list of hashes is no exact copy: every table this server hashes is on its side alone.
+    const empty = compareTableHashes({ ...mine0, tables: {} }, mine0);
+    assert(!empty.exact && empty.drift.length === Object.keys(mine0.tables).length, `an empty list of hashes is drift for every table (${empty.drift.length})`);
+    // A copy without hashes: 'content'. One with an older release's (v 44, no d): 'release', and no table named.
+    shift += 7 * 3600_000;
+    checkWholeCopy({ accounts: [] } as any);
+    assert(JSON.stringify(recordOf().lastUncompared?.notCompared) === '["content"]', `a copy without hashes: not compared, 'content' (${JSON.stringify(recordOf().lastUncompared)})`);
+    shift += 7 * 3600_000;
+    const oldShape = { v: 44, tables: Object.fromEntries(Object.entries(mine0.tables).map(([t, h]) => [t, { rows: h.rows, hash: h.hash }])) };
+    checkWholeCopy({ tableHashes: oldShape, accounts: [] } as any);
+    const old = recordOf().lastUncompared;
+    assert(JSON.stringify(old?.notCompared) === '["release"]' && JSON.stringify(old?.otherRelease) === '[]',
+        `an older release's hashes (v 44, no d): not compared, 'release', no table named (${JSON.stringify(old)})`);
+    assert(closingHashVerdict(oldShape, null, new Set(), new Set()).verdict === 'uncompared'
+        && JSON.stringify(closingHashVerdict(oldShape, null, new Set(), new Set()).notCompared) === '["release"]'
+        && JSON.stringify(closingHashVerdict(undefined, null, new Set(), new Set()).notCompared) === '["content"]',
+        'the stager\'s closing check says the same of both');
+    assert(JSON.stringify(leftOutTablesCurrent({ tableHashes: oldShape } as any, [T])) === '[]', 'leftOutTablesCurrent finds nothing current from an older release\'s hashes');
+    // Values this database's rules refused are not exact whatever the hashes, as checkWholeCopy has it, and no force-resync.
+    const refused = closingHashVerdict(oldShape, null, new Set(['members']), new Set());
+    assert(refused.verdict === 'inexact' && JSON.stringify(refused.differs) === '["members"]' && refused.mendable.length === 0,
+        `the stager's closing check: values refused, with an older release's hashes, are not exact and mend nothing (${JSON.stringify(refused)})`);
+    assert(stagedVerdictInWords(refused) === "not exact (members: values this server's tables refuse)"
+        && stagedVerdictInWords(closingHashVerdict(oldShape, null, new Set(), new Set())) === 'not compared (the main server runs another release, whose table hashes this one does not read)'
+        && stagedVerdictInWords(closingHashVerdict(undefined, null, new Set(), new Set())) === 'not compared (no table hashes: the main server was written to while making it)',
+        'the puller\'s log of a staged copy: values refused, an older release\'s hashes and no hashes each in their own words');
+    const mixed = closingHashVerdict(mine0, { compared: [], differing: [], drift: [], otherRelease: [T], exact: false }, new Set(['members']), new Set());
+    assert(stagedVerdictInWords(mixed) === `not exact (members: values this server's tables refuse; not compared: the main server runs another release, which hashes ${T} another way)`,
+        `the puller's log of a staged copy: values refused and another release's table, each in its own words ("${stagedVerdictInWords(mixed)}")`);
+    Date.now = realNow;
+
+    console.log('\n— 6. A standby\'s copy of the directory cache hashes as the main server\'s —');
     // The main server's rows go out as a whole copy does (the engine's export category), the table is emptied as a
     // force-resync empties it, and the standby's merge takes them: the two hashes are one.
     const directoryCategory = EXPORT_CATEGORIES.find((c) => c.key === 'directoryCache')!;

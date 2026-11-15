@@ -16,8 +16,8 @@
  *  5. The day limit holds: 100 searches in any 24 hours a member, the 101st 429 with Retry-After; a search refused for its
  *     words is not counted; another member's count is their own. Who may search: members who read as members; unsigned 401,
  *     a stranger and a paused member 403, as the forum's reads.
- *  6. A standby answers the same: the index is this server's own (manifest 'local', in no copy, not hashed, so
- *     TABLE_HASHES_VERSION stays as it is); a standby's import of the whole copy rebuilds it by the triggers, FTS5's own check
+ *  6. A standby answers the same: the index is this server's own (manifest 'local', in no copy, not hashed: nothing in the
+ *     hashes is edited for a table); a standby's import of the whole copy rebuilds it by the triggers, FTS5's own check
  *     passes, and every search answers the same posts in the same order.
  *  7. A boot again leaves the index's own tables byte for byte (FTS5 counts each setting it is told in the index's header,
  *     so `secure-delete` is told once, when the index is made), and `secure-delete` is still on.
@@ -42,7 +42,7 @@ import { restoreHiddenForumPost } from './engine/forum-moderation.js';
 import { FORUM_SEARCH_PAGE, forumSearchQuery, forumSearchWords, resetForumSearchBudget } from './engine/forum-search.js';
 import { importPlainTables } from './engine/plain-tables.js';
 import { TABLES } from './engine/replication-manifest.js';
-import { TABLE_HASHES_VERSION, hashedTables, tableContentHashes } from './engine/replica-hashes.js';
+import { hashedTables, tableContentHashes } from './engine/replica-hashes.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 import { FORUM_SEARCHES_PER_DAY } from '@beanpool/core';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -325,9 +325,9 @@ async function main(): Promise<void> {
     assert(!('forum_search' in (copy.plainTables ?? {})) && FORUM_TABLES.every((t) => Array.isArray(copy.plainTables?.[t])),
         `6. a whole copy carries every forum table and not the index (${FORUM_TABLES.join(', ')})`);
     const hashesBefore = tableContentHashes({ only: FORUM_TABLES });
-    // TABLE_HASHES_VERSION is not raised for it: no hashed table or column changed (test-replica-hashes.ts holds the columns to it).
+    // A 'local' table is in no copy, so the hashes leave it out by the manifest alone: no hash version or list is edited for it.
     assert(!hashedTables(db).some((t) => t.table.startsWith('forum_search')) && !Object.keys(tableContentHashes().tables).some((t) => t.startsWith('forum_search')),
-        `6. the replica hashes leave the index out (hashes version ${TABLE_HASHES_VERSION})`);
+        '6. the replica hashes leave the index out');
     const count = (t: string) => (db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n;
     require_(count('forum_search') === count('forum_posts'), `one index row a post on the main server (${count('forum_search')} / ${count('forum_posts')})`);
     // The standby: its own copy of the forum, from nothing, by the import a puller runs.

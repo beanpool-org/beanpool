@@ -5837,6 +5837,8 @@ export function createPost(
         freeTags?: unknown;
         /** No photo needed: for the server's own callers only (tests); no route passes it. */
         allowNoPhoto?: boolean;
+        /** A poll a forum topic will hold, in this section (engine/forum.ts addForumPoll): its own pool. No route passes it from a body. */
+        forumSectionId?: string;
         shownCopy?: CopyColumns | null;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
         beforeWrite?: () => void;

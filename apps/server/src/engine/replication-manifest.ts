@@ -593,8 +593,12 @@ export const TABLES: Record<string, TableEntry> = {
     // has the same guests in the same states. A row is never deleted, only its state moved. An older importer drops it: after
     // a take-over from its copy, the group has no guests until a convenor invites them again.
     group_guests: plain('group_id guest_key home name state invited_by invited_at state_at updated_at'),
-    forum_sections: plain('id starter name about position starts listed archived_at created_at updated_at'),
-    forum_topics: plain('id section_id title writer_pubkey place lang reply_count last_activity_at pinned_at closed_at closed_by created_at updated_at'),
+    // A section's group and a topic's poll (slice F8, engine/forum-sections.ts) go in the copy with them, so a standby reads
+    // the same section as the group's only. An importer older than F8 would drop both columns, and a group's section would
+    // read as every member's there: REPLICA_FORMAT moves to 16 with them, and a main server sends no copy to an older standby
+    // (engine/sync.ts OLDEST_STANDBY_FORMAT, the 426 the operators' manual names).
+    forum_sections: plain('id starter name about position starts listed archived_at created_at updated_at group_id'),
+    forum_topics: plain('id section_id title writer_pubkey place lang reply_count last_activity_at pinned_at closed_at closed_by created_at updated_at poll_post_id'),
     forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at hidden_by_reports_at'),
     forum_post_photos: plain('post_id order_num photo_data bytes updated_at'),
     forum_post_edits: plain('post_id edited_at words title updated_at', { agedOut: { column: 'edited_at', days: 30 } }),
@@ -610,6 +614,9 @@ export const TABLES: Record<string, TableEntry> = {
     // older importer drops who follows: after a take-over from its copy nobody is told of replies until they reply or follow
     // again, and every topic reads as read.
     forum_follows: plain('topic_id member_pubkey state last_read created_at updated_at'),
+    // What a topic links (slice F8: a community Decision; F9 the other kinds): a promoted standby shows the same chips; a removal
+    // goes with its tombstone. Format 16 with the section's group above, so no older importer is sent it.
+    forum_links: plain('topic_id kind target_id created_at updated_at'),
     // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
     thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),
     // A group chat's keys (engine/group-keys.ts): each epoch's signed record and one wrap per member, none of which the

@@ -635,6 +635,9 @@ export const SUITES = [
     // The forum's search (slice F6): every word, Thai and Chinese inside a run, every way a post stops being readable in no
     // answer, the index's own bytes forget, 100 a day, a standby's import builds the same index and answers the same.
     'test-forum-search',
+    // A group's forum section, a poll in a topic, the polls' own pool, the Decision chip (slice F8): one table over every read
+    // and write x every kind of reader, the bell and the doorbells, the pools, a standby the same.
+    'test-forum-group-section',
     'test-mcp-knowledge',
     'test-names-copy',
     'test-contact-copies',

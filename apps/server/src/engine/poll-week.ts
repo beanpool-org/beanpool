@@ -60,8 +60,11 @@ const WAIT_DAYS = wordn(
     'You can start one community poll a week. Your next one can start in {n} days.',
 );
 
-/** The polls that count: shown to the whole community. A group's or one person's is not (see the top of this file). */
-const COMMUNITY_POLL = "audience_scope = 'public'";
+/**
+ * The polls that count: shown to the whole community. A group's or one person's is not (see the top of this file), nor one a
+ * forum topic holds (slice F8, DESIGN-forums-fable.md §10.1): that is counted in its section's own pool.
+ */
+const COMMUNITY_POLL = "audience_scope = 'public' AND id NOT IN (SELECT poll_post_id FROM forum_topics WHERE poll_post_id IS NOT NULL)";
 
 /**
  * When `authorPublicKey` may next start a poll for the whole community, as an ISO time, or null when they may now: the start

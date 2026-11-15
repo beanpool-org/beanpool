@@ -544,6 +544,14 @@ export function initSchema() {
         try { db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column}`).run(); } catch { }
     }
 
+    // Born with the groups' forum sections and the polls in topics (slice F8; DESIGN-forums-fable.md §3, §10.1, §11, §20): two
+    // empty columns, NULL on every row that is there, so every section stays every member's and no topic holds a poll. Additions,
+    // not conversion code, as F2's above: nothing is read, filled in or rewritten. A file from before the forum finds no table
+    // and does nothing; schema.sql below makes the tables whole. On a fresh install each finds its column.
+    for (const [table, column] of [['forum_sections', 'group_id TEXT'], ['forum_topics', 'poll_post_id TEXT']]) {
+        try { db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column}`).run(); } catch { }
+    }
+
     // Born with the community's name on its members' listings on the global community (list-on-global G5): one column on the
     // directory mirror's cache, as schema.sql has it, 1 (on) on every row that is there: SQLite gives a column added with a
     // constant default that value on every row at once, so nothing is read, filled in or rewritten, and the mirror's next run

@@ -564,17 +564,21 @@ async function main(): Promise<void> {
             // 14: the last format whose money was REAL Beans; money is whole hundredths (`*_c`) from 15 (engine/sync.ts).
             const fourteen = await open('14');
             await closeIfOpened(fourteen);
+            // 15: the last format before a forum section's group (16, slice F8): its importer would read a group's section as everyone's.
+            const fifteen = await open('15');
+            await closeIfOpened(fifteen);
             const log = await main.send('access-log');
-            const needs = /reads replica format 14, and copies from this server need 15; update it/;
-            assert(none.status === 426 && seven.status === 426 && /reads replica format none, and copies from this server need 15/.test(none.text)
-                && nine.status === 426 && /reads replica format 9, and copies from this server need 15; update it/.test(nine.text)
-                && ten.status === 426 && /reads replica format 10, and copies from this server need 15; update it/.test(ten.text)
-                && eleven.status === 426 && /reads replica format 11, and copies from this server need 15; update it/.test(eleven.text)
-                && fourteen.status === 426 && needs.test(fourteen.text) && JSON.parse(fourteen.text).needsReplicaFormat === 15
+            const needs = /reads replica format 15, and copies from this server need 16; update it/;
+            assert(none.status === 426 && seven.status === 426 && /reads replica format none, and copies from this server need 16/.test(none.text)
+                && nine.status === 426 && /reads replica format 9, and copies from this server need 16; update it/.test(nine.text)
+                && ten.status === 426 && /reads replica format 10, and copies from this server need 16; update it/.test(ten.text)
+                && eleven.status === 426 && /reads replica format 11, and copies from this server need 16; update it/.test(eleven.text)
+                && fourteen.status === 426 && /reads replica format 14, and copies from this server need 16; update it/.test(fourteen.text)
+                && fifteen.status === 426 && needs.test(fifteen.text) && JSON.parse(fifteen.text).needsReplicaFormat === 16
                 && needs.test(log?.[0]?.reason ?? '') && log?.[0]?.auth === 'rejected',
-                `a copy asked for by a standby older than OLDEST_STANDBY_FORMAT 15 (no format, 7 before photos by reference, 9 before event times, `
-                + `10 before the let-in, 11 before repeating events, 14 before money in whole hundredths) is refused, 426, and M's Replication Access log says why `
-                + `(${none.status} ${none.text.slice(0, 120)}; ${seven.status}; ${nine.status}; ${ten.status}; ${eleven.status}; ${fourteen.status} ${fourteen.text.slice(0, 160)}; ${JSON.stringify(log?.[0])})`);
+                `a copy asked for by a standby older than OLDEST_STANDBY_FORMAT 16 (no format, 7 before photos by reference, 9 before event times, `
+                + `10 before the let-in, 11 before repeating events, 14 before money in whole hundredths, 15 before a forum section's group) is refused, 426, and M's Replication Access log says why `
+                + `(${none.status} ${none.text.slice(0, 120)}; ${seven.status}; ${nine.status}; ${ten.status}; ${eleven.status}; ${fourteen.status}; ${fifteen.status} ${fifteen.text.slice(0, 160)}; ${JSON.stringify(log?.[0])})`);
             const current = await open(String(await main.send('replica-format')));
             await closeIfOpened(current);
             assert(current.status === 200, `one at this build's REPLICA_FORMAT opens its copy (${current.status} ${current.text.slice(0, 120)})`);

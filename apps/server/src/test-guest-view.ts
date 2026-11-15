@@ -1369,6 +1369,8 @@ async function main(): Promise<void> {
             'POST /api/forum/topics/:id/follow', 'POST /api/forum/topics/:id/read',
             // Search (slice F6): a member's, signed, counted against their day's searches.
             'GET /api/forum/search',
+            // A poll in a topic and the Decision chip (slice F8).
+            'POST /api/forum/topics/:id/poll', 'POST /api/forum/topics/:id/decision',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',

@@ -28,6 +28,12 @@
  *  8. The three ways a community moves, end to end (rename S2): (a) its own domain, then a beanpool.org name; (b) its own
  *     name, a gated name pending, then approved: nothing moves until it is, on any surface, and the old name keeps its
  *     tunnel; (c) a registrar name to a registrar name, both answering.
+ *  9. The owner picks the main address (several-addresses S1, design scratch/fable-design/DESIGN-several-addresses-fable.md
+ *     §2.1, §7): the owner adds an own domain beside a beanpool.org name and makes it main, then makes the name main again;
+ *     every surface follows each time, a signature for every listed address passes both ways (no 421), the members are
+ *     told once per real change. Then the table: owner (phone, and computer with no fresh proof), admin, member, visitor
+ *     and standby × add an address, Make main, remove → allowed, or refused in words with nothing changed. Make main
+ *     refuses what can't be main (not listed, a number beside a name), and removing the main address clears the choice.
  *
  * Run: SERVER_SUITES_ONLY=test-rename-main-name TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -265,7 +271,7 @@ async function main(): Promise<void> {
         delete process.env.BEANPOOL_ADDRESSES;
         if (s.cf) process.env.CF_RECORD_NAME = s.cf;
         if (s.env) process.env.BEANPOOL_ADDRESSES = s.env;
-        updateNodeConfig({ publicAddress: null, ownerAddresses: [], registrarNames: [], ...s.config } as any);
+        updateNodeConfig({ publicAddress: null, ownerAddresses: [], registrarNames: [], mainAddress: null, ...s.config } as any);
         updateLocalConfig({ turnedAwayNames: [], addressNoticeDue: null } as any);
         held.clear();
         gated.clear();
@@ -949,6 +955,113 @@ async function main(): Promise<void> {
         assert(await until(() => notices().length > n0) && notices().length === n0 + 1 && notices()[n0].body === SOFT_BODY, `(c) the members hear the soft words, once (${show(notices().slice(n0))}; on main the critical ones)`);
         assert(onlyAt(BYRON) && (await info()).addresses?.includes(OLD), `(c) every surface says the new name, the old one still listed (${show(surfaces())})`);
         assert((await signedFor(OLD)).status === 200 && (await signedFor(BYRON)).status === 200, '(c) a signature for either passes');
+    }
+
+    // ── 9 ──
+    console.log('\n— 9. the owner picks the main address —');
+    const { setNodeRole } = await import('./config/node-role.js');
+    const ADD = '/api/local/admin/app-addresses/confirm', MAIN = '/api/local/admin/app-addresses/main', REMOVE = '/api/local/admin/app-addresses/remove';
+    {
+        // From (c): the new name is main, the old one listed beside it. The owner adds an own domain, from the phone.
+        const OLD = 'oldvale.beanpool.org';
+        const n0 = notices().length;
+        const added = await post(ADD, phone(), { address: DOMAIN });
+        assert(added.status === 200 && added.json?.addresses?.some((a: any) => a.address === DOMAIN), `(9) the owner adds ${DOMAIN} (${added.status} ${show(added.json?.error)})`);
+        assert(onlyAt(BYRON), `(9) adding an address only adds: the main stays (${show(surfaces())})`);
+        const toDomain = await post(MAIN, phone(), { address: DOMAIN });
+        assert(toDomain.status === 200 && stored().mainAddress === DOMAIN, `(9) Make main on the own domain (${toDomain.status} ${show(toDomain.json?.error)})`);
+        assert(onlyAt(DOMAIN), `(9) every surface says the domain, over a live beanpool.org name (${show(surfaces())}; on main the name always won)`);
+        for (const h of [DOMAIN, BYRON, OLD]) assert((await signedFor(h)).status === 200, `(9) a signature for ${h} passes (no 421 at any listed address)`);
+        const i1 = await info();
+        assert(i1.primaryAddress === DOMAIN && [DOMAIN, BYRON, OLD].every((h) => i1.addresses?.includes(h)), `(9) info: the domain main, every address still listed (${show(i1)})`);
+        assert(notices().length === n0 + 1, `(9) the members are told once (${show(notices().slice(n0))})`);
+        const again = await post(MAIN, phone(), { address: DOMAIN });
+        assert(again.status === 200 && notices().length === n0 + 1, `(9) the same main again tells nobody twice (${again.status}, ${notices().length - n0})`);
+        const back = await post(MAIN, phone(), { address: BYRON });
+        assert(back.status === 200 && onlyAt(BYRON), `(9) and back: Make main on the name, every surface follows (${back.status}, ${show(surfaces())})`);
+        for (const h of [DOMAIN, BYRON, OLD]) assert((await signedFor(h)).status === 200, `(9) after the way back, a signature for ${h} still passes`);
+        assert(notices().length === n0 + 2, `(9) told once more, for the way back (${notices().length - n0})`);
+
+        // What can't be main is refused in words, and nothing moves.
+        const notListed = await post(MAIN, phone(), { address: 'elsewhere.example.org' });
+        assert(notListed.status === 409 && /not one of this community's addresses/.test(notListed.json?.error ?? '') && onlyAt(BYRON),
+            `(9) an address not on the list can't be main (${notListed.status} ${show(notListed.json)})`);
+        await post(ADD, phone(), { address: IP });
+        const number = await post(MAIN, phone(), { address: IP });
+        assert(number.status === 409 && /number/.test(number.json?.error ?? '') && onlyAt(BYRON), `(9) a number beside a name can't be main (${number.status} ${show(number.json)})`);
+        await post(REMOVE, phone(), { address: IP });
+
+        // Removing the main address clears the choice: added back later, it is not main without Make main.
+        await post(MAIN, phone(), { address: DOMAIN });
+        const gone = await post(REMOVE, phone(), { address: DOMAIN });
+        assert(gone.status === 200 && !stored().mainAddress && onlyAt(BYRON), `(9) removing the main address clears the choice; the name is main again (${gone.status}, ${show(surfaces())})`);
+        await post(ADD, phone(), { address: DOMAIN });
+        assert(onlyAt(BYRON), `(9) added again, the domain is not main without Make main (${show(surfaces())})`);
+    }
+    {
+        // The table: who may add an address, change the main one, or remove one.
+        const adminSeed = new Uint8Array(crypto.randomBytes(32));
+        const adminKey = Buffer.from(ed25519.getPublicKey(adminSeed)).toString('hex');
+        seedGenesisMember(adminKey, 'Ada');
+        grantNodeRole(adminKey, 'admin', owner);
+        const adminPhone = () => {
+            const ex = consumeHandshakeToken(mintHandshakeToken(adminKey, 'admin').handshakeToken, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
+            if (!ex.ok) throw new Error(`setup: no admin session: ${ex.error}`);
+            return { 'x-admin-session': ex.sessionId! };
+        };
+        const memberSeed = new Uint8Array(crypto.randomBytes(32));
+        const memberPk = Buffer.from(ed25519.getPublicKey(memberSeed)).toString('hex');
+        seedGenesisMember(memberPk, 'Milo');
+        /** A member's own signed request, as their app would send it to this route. */
+        const memberSigned = async (route: string, body: unknown) => {
+            const url = `https://${DOMAIN}${route}`;
+            const text = JSON.stringify(body);
+            return core.buildBoundRequestHeaders({ method: 'POST', url, body: text, publicKeyHex: memberPk, sign: core.ed25519Signer(memberSeed) });
+        };
+        const SPARE = 'spare.example.org';
+        const state = () => show({ owned: stored().ownerAddresses ?? [], main: stored().mainAddress ?? null });
+        type Who = 'owner (phone)' | 'owner (computer)' | 'admin' | 'member' | 'visitor' | 'standby owner (phone)';
+        const WHO: Who[] = ['owner (phone)', 'owner (computer)', 'admin', 'member', 'visitor', 'standby owner (phone)'];
+        const ACTS = [
+            { act: 'add an address', route: ADD, body: { address: SPARE }, ready: async () => { await post(REMOVE, phone(), { address: SPARE }); } },
+            { act: 'Make main', route: MAIN, body: { address: DOMAIN }, ready: async () => { await post(MAIN, phone(), { address: BYRON }); } },
+            { act: 'remove an address', route: REMOVE, body: { address: SPARE }, ready: async () => { await post(ADD, phone(), { address: SPARE }); } },
+        ];
+        // allowed, or the words a refusal must hold.
+        const WANT: Record<Who, Record<string, RegExp | 'allowed'>> = {
+            'owner (phone)': { 'add an address': 'allowed', 'Make main': 'allowed', 'remove an address': 'allowed' },
+            'owner (computer)': { 'add an address': /from your phone/i, 'Make main': /from your phone/i, 'remove an address': /from your phone/i },
+            admin: { 'add an address': /only an owner/i, 'Make main': /only an owner/i, 'remove an address': /only an owner/i },
+            member: { 'add an address': /./, 'Make main': /./, 'remove an address': /./ },
+            visitor: { 'add an address': /./, 'Make main': /./, 'remove an address': /./ },
+            'standby owner (phone)': { 'add an address': 'allowed', 'Make main': /standby/i, 'remove an address': 'allowed' },
+        };
+        const rows: string[] = [];
+        for (const who of WHO) {
+            for (const a of ACTS) {
+                await a.ready();
+                const before = state();
+                if (who.startsWith('standby')) setNodeRole('backup');
+                let r: { status: number; json: any };
+                try {
+                    const headers = who === 'owner (phone)' || who === 'standby owner (phone)' ? phone()
+                        : who === 'owner (computer)' ? computer()
+                            : who === 'admin' ? adminPhone()
+                                : who === 'member' ? await memberSigned(a.route, a.body)
+                                    : {};
+                    r = await post(a.route, headers, a.body);
+                } finally {
+                    if (who.startsWith('standby')) setNodeRole('primary');
+                }
+                const want = WANT[who][a.act];
+                const ok = want === 'allowed'
+                    ? r.status === 200 && state() !== before
+                    : r.status >= 400 && r.status < 500 && typeof r.json?.error === 'string' && want.test(r.json.error) && state() === before;
+                rows.push(`| ${who} | ${a.act} | ${r.status} ${want === 'allowed' ? 'allowed' : show(r.json?.error)} |`);
+                assert(ok, `(9 table) ${who} × ${a.act} → ${want === 'allowed' ? 'allowed' : `refused in words ${want}`}, nothing else changed (${r.status} ${show(r.json?.error)}; ${before} → ${state()})`);
+            }
+        }
+        console.log(rows.join('\n'));
     }
     await resetTunnelConnectorForTests();
 

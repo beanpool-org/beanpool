@@ -41,8 +41,8 @@
  *   POST /api/local/admin/app-addresses/main     { address, code? }: Make main (node_config.mainAddress, engine/own-addresses.ts
  *                                                 chosenMainAddress): any published address with a route, of any kind; a
  *                                                 bare number only while the community has no name (409 in words
- *                                                 otherwise). An owner's, with the owner's fresh proof. Nothing else moves
- *                                                 the main address once chosen.
+ *                                                 otherwise). An owner's, with the owner's fresh proof; refused on a
+ *                                                 standby (409 standby). Nothing else moves the main address once chosen.
  *   POST /api/local/admin/app-addresses/remove   { address, code? }: takes an owner-confirmed address off the list again,
  *                                                 an owner's, with the owner's fresh proof (admin-auth.ts
  *                                                 requireFreshProof); an own address that is also the community's address
@@ -61,6 +61,7 @@ import {
     primaryAddress, setMainAddress, MAX_OWNER_ADDRESSES,
 } from '../engine/own-addresses.js';
 import { tellMembersOfNewMain } from '../services/address-notice.js';
+import { getNodeRole } from '../config/node-role.js';
 import { registrarNames } from '../engine/registrar-names.js';
 import { nameStandings } from '../services/registrar-name-watch.js';
 import { addressReaches, checkAddressesNow, namesStoppedByProject } from '../services/address-check.js';
@@ -78,6 +79,8 @@ export { MAX_OWNER_ADDRESSES };
 /** Adding an address and Make main are an owner's (design several-addresses §7; decided pick 4). */
 const ADD_OWNER_ONLY = 'Only an owner of this community can add an address';
 const MAIN_OWNER_ONLY = 'Only an owner of this community can change its main address';
+/** A standby is not where the community lives until it takes over: its main address is its main server's. */
+const MAIN_ON_STANDBY = 'This server is a standby. The main address is chosen on the community\'s main server, and a take-over keeps it.';
 
 /**
  * `pageHost` is the host Settings is open at (`?host=`): the only host offered with one tap (engine/address-offers.ts),
@@ -237,6 +240,11 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
     router.post('/api/local/admin/app-addresses/main', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         if (!requireAdminRole(ctx, ['owner'], MAIN_OWNER_ONLY)) return;
+        if (getNodeRole() === 'backup') {
+            ctx.status = 409;
+            ctx.body = { code: 'standby', error: MAIN_ON_STANDBY };
+            return;
+        }
         const body = bodyOf(ctx);
         const address = normalizeAddress(body.address);
         if (!address) {

@@ -43,7 +43,7 @@ A local community has no first looks: topics go up at once, and only the server'
 Members report a forum post from its **⋯** menu with the same reasons as any report. It lands in your moderation list as **Forum topic** or **Forum reply**, with the writer's name, the topic's title and the words.
 
 - **Remove the post** takes it down and offers a reason, which the writer is told. A removed post reads "Removed by a moderator"; its words and photos are gone at once. A removed opening post blanks its topic's title: with others' replies the topic reads "A removed topic", is closed, and their replies stay.
-- Where **Reported posts hidden and message requests cleared automatically** is on (the global community), a post reported in 3 independent circles is hidden (1 for a 12-words newcomer's post) until a moderator looks. Others read "Hidden while moderators look". **Restore (show it again)** brings it back.
+- Where **Reported posts hidden and message requests cleared automatically** is on (on the global community by default, and on a local community whose owners turn it on), a post reported in 3 independent circles is hidden (1 for a 12-words newcomer's post) until a moderator looks. Others read "Hidden while moderators look". **Restore (show it again)** brings it back.
 - Where **Repeat offenders muted automatically** is on, a third removal in 30 days mutes the writer: no topics, replies or edits until a moderator lifts it.
 - An owner's AI assistant can't read or take down forum posts.
 

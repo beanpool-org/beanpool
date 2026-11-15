@@ -912,6 +912,32 @@ export function standingSheet(tx: StandingDealRow, actingAs: string, kind: Stand
 }
 
 /**
+ * What one open lowering sheet was opened for (standingSheetBinding), which the app keeps while it is open: its kind, the
+ * period and what that period cost then, and the ask it answers (the answer only).
+ */
+export interface StandingSheetBinding { kind: StandingSheetKind; periodNo: number; amount_c: Hundredths; askId: string | null }
+
+/** What `sheet` is about, kept by the app from the tap that opens it (standingBoundSheet). */
+export function standingSheetBinding(sheet: StandingSheet): StandingSheetBinding {
+    return { kind: sheet.kind, periodNo: sheet.periodNo, amount_c: sheet.amount_c, askId: sheet.askId };
+}
+
+/**
+ * The sheet `opened` was opened for, as `tx` reads now, or null once that is gone or replaced: the side may no longer take
+ * that step, the period was paid, what it costs moved, or the ask it answers was taken back or swapped for another. Both apps
+ * close the sheet on null and forget what it was opened for, so it never opens again by itself (the member opens the new ask
+ * afresh), and whatever it sends is about the very ask and period the member opened it on.
+ */
+export function standingBoundSheet(tx: StandingDealRow, actingAs: string, opened: StandingSheetBinding, day: (iso: string) => string): StandingSheet | null {
+    const now = standingSheet(tx, actingAs, opened.kind, day);
+    if (!now) return null;
+    if (now.periodNo !== opened.periodNo) return null;
+    if (now.amount_c !== opened.amount_c) return null;
+    if (now.askId !== opened.askId) return null;
+    return now;
+}
+
+/**
  * "Another amount" as the member types it (`lang`: the device's language when absent), for a period costing `amount_c`: the
  * Beans in whole hundredths when it may be the period's new amount (from 0 up to just under what it costs now), else why
  * not in words (lowerOnlyDown), or no words while the box is empty. Both apps; the node checks again.

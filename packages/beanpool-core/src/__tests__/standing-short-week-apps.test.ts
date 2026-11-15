@@ -8,12 +8,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+    standingBoundSheet,
     standingChangeId,
     standingLoweredHistoryLine,
     standingPanel,
     standingSheet,
+    standingSheetBinding,
     standingTypedAmount,
     type StandingDealRow,
+    type StandingSheetBinding,
     type StandingSheetKind,
 } from '../standing-deal.js';
 
@@ -205,5 +208,64 @@ describe('the change id', () => {
         expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
         expect(a).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
         expect(standingChangeId(() => new Uint8Array(16))).toBe('00000000-0000-4000-8000-000000000000');
+    });
+});
+
+/*
+ * A sheet acts only on what it was opened for (the #3205 deciding review): an Answer sheet opened on Kim's ask of 100 (chg-1)
+ * must never answer the ask of 0 (chg-2) she makes after taking the first back. One table over (sheet) x (what the reads bring
+ * while it is open) -> the sheet stays bound to what it was opened for, or closes (null). The apps close it on null and clear
+ * what it was opened for, so it never opens again by itself (their own table tests: the re-render after a close).
+ */
+describe('an open sheet stays bound to the period, cost and ask it was opened for, or closes', () => {
+    const TAKEN_BACK = { standingAsk: null, standingAsksLeft: 2 };
+    const NEW_ASK = { standingAsk: { id: 'chg-2', beans_c: 0, periodNo: 2, askedAt: '2026-11-14T09:00:00.000Z' }, standingAsksLeft: 1 };
+    const PAID = { periodNo: 2, completedAt: '2026-11-18T08:00:00.000Z', standingNextDueAt: '2026-11-25T08:00:00.000Z', standingAsk: null, standingAsksLeft: 3 };
+    const STOPPED = { standingStopped: true };
+    const ENDED = { standingPhase: 'ended' as const, standingEndedReason: 'stopped', standingEndedAt: '2026-11-18T08:00:00.000Z', standingAsk: null };
+    /** [sheet, the side, the row it opens on] */
+    const SHEETS: Array<[StandingSheetKind, Side, Partial<StandingDealRow>]> = [['answer', 'payee', ASK], ['lower', 'payee', {}], ['ask', 'payer', {}]];
+    /** [what the reads bring while it is open, the rows read one after another (each over the row it opened on), per sheet: bound?] */
+    type Event = [string, Partial<StandingDealRow>[], Record<StandingSheetKind, boolean>];
+    const EVENTS: Event[] = [
+        ['nothing', [], { answer: true, lower: true, ask: true }],
+        ['a sync with no change', [{}], { answer: true, lower: true, ask: true }],
+        // The answer: Kim takes chg-1 back. The others: an ask comes (the sheet hides) and is taken back (it must stay closed).
+        ['ask taken back', [ASK, TAKEN_BACK], { answer: false, lower: false, ask: false }],
+        ['taken back, then a new ask', [ASK, TAKEN_BACK, NEW_ASK], { answer: false, lower: false, ask: false }],
+        ['the ask swapped for a new one in one read', [NEW_ASK], { answer: false, lower: false, ask: false }],
+        ['the period paid', [PAID], { answer: false, lower: false, ask: false }],
+        ["the period's cost lowered meanwhile", [{ standingDueBeans_c: 15000 }], { answer: false, lower: false, ask: false }],
+        ['Stop tapped', [STOPPED], { answer: false, lower: false, ask: false }],
+        ['the deal ended', [ENDED], { answer: false, lower: false, ask: false }],
+    ];
+    for (const [kind, side, at] of SHEETS) {
+        for (const [what, reads, bound] of EVENTS) {
+            it(`${kind} · ${what} -> ${bound[kind] ? 'stays bound' : 'closes'}`, () => {
+                const first = standingSheet(row(at), KEY[side], kind, day)!;
+                expect(first).not.toBeNull();
+                let opened: StandingSheetBinding | null = standingSheetBinding(first);
+                const was = { ...opened };
+                // As the app does: each read works the sheet out again from the row; on null it closes and forgets it.
+                for (const over of reads) {
+                    if (!opened) break;
+                    if (!standingBoundSheet(row({ ...at, ...over }), KEY[side], opened, day)) opened = null;
+                }
+                if (!bound[kind]) { expect(opened).toBeNull(); return; }
+                const now = standingBoundSheet(row({ ...at, ...(reads[reads.length - 1] ?? {}) }), KEY[side], opened!, day)!;
+                expect([now.kind, now.periodNo, now.amount_c, now.askId]).toEqual([was.kind, was.periodNo, was.amount_c, was.askId]);
+            });
+        }
+    }
+    it('what each sheet is bound to: the answer to its ask, every sheet to its period and what that period cost', () => {
+        expect(standingSheetBinding(standingSheet(row(ASK), 'rob', 'answer', day)!)).toEqual({ kind: 'answer', periodNo: 2, amount_c: 20000, askId: 'chg-1' });
+        expect(standingSheetBinding(standingSheet(row(), 'rob', 'lower', day)!)).toEqual({ kind: 'lower', periodNo: 2, amount_c: 20000, askId: null });
+        expect(standingSheetBinding(standingSheet(row(GRACE), 'kim', 'ask', day)!)).toEqual({ kind: 'ask', periodNo: 2, amount_c: 20000, askId: null });
+    });
+    it("the review's case, measured: Answer on chg-1 (100), taken back, chg-2 (0) -> closed, never \"Yes, 0 Beans\" for chg-2", () => {
+        const opened = standingSheetBinding(standingSheet(row(ASK), 'rob', 'answer', day)!);
+        expect(standingBoundSheet(row({ ...ASK, ...NEW_ASK }), 'rob', opened, day)).toBeNull();
+        // Core alone would draw the new ask's sheet: the binding is what stops it.
+        expect(standingSheet(row({ ...ASK, ...NEW_ASK }), 'rob', 'answer', day)?.go(0)).toBe('Yes, 0 Beans');
     });
 });

@@ -197,6 +197,92 @@ describe('the payee answering, and lowering alone', () => {
     });
 });
 
+/*
+ * A sheet acts only on what it was opened for (the #3205 deciding review, StandingDeal.tsx:205): Rob's Answer sheet, opened on
+ * Kim's ask of 100 (chg-1), must never answer the ask of 0 (chg-2) she makes after taking the first back, and a sheet a read
+ * closed never opens again by itself. One table over (sheet) x (what the reads bring while it is open): the same panel is drawn
+ * again with each row (no remount, as when a page reloads the listing with the same deal row), then the sheet is still bound
+ * (and what it sends carries the ask and period it was opened on) or it is closed and stays closed, the row it opened on back
+ * or not. The same table on the phone (utils/__tests__/standing-short-week-render.test.ts) and in core.
+ */
+describe('an open sheet stays bound to what it was opened for, or closes and stays closed', () => {
+    const TAKEN_BACK = { standingAsk: null, standingAsksLeft: 2 };
+    const NEW_ASK = { standingAsk: { id: 'chg-2', beans_c: 0, periodNo: 2, askedAt: '2026-11-14T09:00:00.000Z' }, standingAsksLeft: 1 };
+    const PAID = { periodNo: 2, completedAt: '2026-11-18T08:00:00.000Z', standingNextDueAt: '2026-11-25T08:00:00.000Z', standingAsk: null, standingAsksLeft: 3 };
+    const STOPPED = { standingStopped: true };
+    const ENDED = { standingPhase: 'ended' as const, standingEndedReason: 'stopped', standingEndedAt: '2026-11-18T08:00:00.000Z', standingAsk: null };
+    type Kind = 'answer' | 'lower' | 'ask';
+    /** [sheet, the side, the row it opens on, what opens it] */
+    const SHEETS: Array<[Kind, string, Partial<MarketplaceTransaction>, string]> = [
+        ['answer', PAYEE, ASK, 'standing-ask-answer'], ['lower', PAYEE, {}, 'standing-lower-link'], ['ask', PAYER, {}, 'standing-lower-link'],
+    ];
+    /** [what the reads bring while it is open, the rows read one after another (each over the row it opened on), per sheet: bound?] */
+    const EVENTS: Array<[string, Partial<MarketplaceTransaction>[], Record<Kind, boolean>]> = [
+        ['nothing', [], { answer: true, lower: true, ask: true }],
+        ['a sync with no change', [{}], { answer: true, lower: true, ask: true }],
+        // The answer: Kim takes chg-1 back. The others: an ask comes (the sheet hides) and is taken back (it must stay closed).
+        ['ask taken back', [ASK, TAKEN_BACK], { answer: false, lower: false, ask: false }],
+        ['taken back, then a new ask', [ASK, TAKEN_BACK, NEW_ASK], { answer: false, lower: false, ask: false }],
+        ['the ask swapped for a new one in one read', [NEW_ASK], { answer: false, lower: false, ask: false }],
+        ['the period paid', [PAID], { answer: false, lower: false, ask: false }],
+        ["the period's cost lowered meanwhile", [{ standingDueBeans_c: 15000 }], { answer: false, lower: false, ask: false }],
+        ['Stop tapped', [STOPPED], { answer: false, lower: false, ask: false }],
+        ['the deal ended', [ENDED], { answer: false, lower: false, ask: false }],
+    ];
+    const anySheet = () => screen.queryAllByTestId(/^standing-sheet-(answer|lower|ask)$/);
+    for (const [kind, side, at, opener] of SHEETS) {
+        for (const [what, reads, bound] of EVENTS) {
+            it(`${kind} · ${what} -> ${bound[kind] ? 'stays bound' : 'closes'}`, async () => {
+                // The first send is lost (a refusal stays on the sheet), so the table also sees what a retry carries.
+                const onLower = vi.fn(async (_s: StandingLowerStep) => {}).mockRejectedValueOnce(new Error('No connection'));
+                const draw = (tx: MarketplaceTransaction) => (
+                    <StandingPanel tx={tx} actingAs={side} busy={false} onStop={vi.fn()} onMessage={vi.fn()} messageLabel="Message Kim" onLower={onLower} />
+                );
+                const view = render(draw(row(at)));
+                await click(screen.getByTestId(opener));
+                const go = screen.getByTestId('standing-sheet-go').textContent;
+                await click(screen.getByTestId('standing-sheet-go'));
+                expect(screen.getByTestId('standing-sheet-refusal').textContent).toBe('No connection');
+                const first = onLower.mock.calls[0][0] as { changeId: string };
+                for (const over of reads) view.rerender(draw(row({ ...at, ...over })));
+                if (!bound[kind]) {
+                    expect(anySheet()).toEqual([]);
+                    // Nothing of the gone sheet is left: its refusal was about an ask or a period no longer there.
+                    expect(screen.queryByTestId('standing-sheet-refusal')).toBeNull();
+                    expect(screen.queryByTestId('standing-step-refusal')).toBeNull();
+                    // It never opens again by itself, even when the row it was opened on comes back.
+                    view.rerender(draw(row(at)));
+                    expect(anySheet()).toEqual([]);
+                    expect(onLower).toHaveBeenCalledTimes(1);
+                    return;
+                }
+                expect(screen.getByTestId(`standing-sheet-${kind}`)).toBeTruthy();
+                expect(screen.getByTestId('standing-sheet-go').textContent).toBe(go);
+                await click(screen.getByTestId('standing-sheet-go'));
+                const again = onLower.mock.calls[1][0];
+                expect(again).toEqual(first);
+                if (kind === 'answer') expect(again).toEqual({ move: 'answer', standingId: 'sd-1', changeId: 'chg-1', yes: true });
+                else expect(again).toMatchObject({ move: 'lower', standingId: 'sd-1', periodNo: 2, beans_c: 10000 });
+            });
+        }
+    }
+    it("the review's case: Rob's open Answer on chg-1 (100); Kim takes it back and asks 0 (chg-2): the sheet closes, nothing is sent; Rob opens chg-2 afresh", async () => {
+        const onLower = vi.fn(async (_s: StandingLowerStep) => {});
+        const draw = (tx: MarketplaceTransaction) => <StandingPanel tx={tx} actingAs={PAYEE} busy={false} onStop={vi.fn()} onLower={onLower} />;
+        const view = render(draw(row(ASK)));
+        await click(screen.getByTestId('standing-ask-answer'));
+        expect(screen.getByTestId('standing-sheet-go').textContent).toBe('Yes, 100 Beans');
+        view.rerender(draw(row(TAKEN_BACK)));
+        view.rerender(draw(row(NEW_ASK)));
+        expect(anySheet()).toEqual([]);
+        expect(screen.getByTestId('standing-ask-line').textContent).toBe('⚠️ Kim asks to pay 0 Beans for the week from 18 Nov');
+        await click(screen.getByTestId('standing-ask-answer'));
+        expect(screen.getByTestId('standing-sheet-go').textContent).toBe('Yes, 0 Beans');
+        await click(screen.getByTestId('standing-sheet-go'));
+        expect(onLower.mock.calls).toEqual([[{ move: 'answer', standingId: 'sd-1', changeId: 'chg-2', yes: true }]]);
+    });
+});
+
 describe('Your deals', () => {
     it('the card of a running deal with an open ask carries its line for each side; tapping the card opens the listing', () => {
         const onNavigateToPost = vi.fn();

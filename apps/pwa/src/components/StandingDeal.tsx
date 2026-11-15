@@ -5,9 +5,9 @@
  */
 import { useState } from 'react';
 import {
-    STANDING_PICK_DAYS, STANDING_PICK_MAX, formatDate, standingChangeId, standingPanel, standingSheet, standingStartAt, standingStopConfirm,
-    standingTakeUpLines, standingTypedAmount, t,
-    type StandingDealRow, type StandingPeriodUnit, type StandingSheet, type StandingSheetKind,
+    STANDING_PICK_DAYS, STANDING_PICK_MAX, formatDate, standingBoundSheet, standingChangeId, standingPanel, standingSheet, standingSheetBinding,
+    standingStartAt, standingStopConfirm, standingTakeUpLines, standingTypedAmount, t,
+    type StandingDealRow, type StandingPeriodUnit, type StandingSheet, type StandingSheetBinding, type StandingSheetKind,
 } from '@beanpool/core';
 
 const day = (iso: string) => formatDate(new Date(iso), 'day-month');
@@ -191,9 +191,15 @@ export function StandingPanel({ tx, actingAs, busy, onStop, onMessage, messageLa
     onStop: () => void; onMessage?: () => void; messageLabel?: string;
     onLower?: (step: StandingLowerStep) => Promise<void>;
 }) {
-    const [open, setOpen] = useState<{ kind: StandingSheetKind; changeId: string } | null>(null);
+    // What the open sheet was opened for (its period, what that cost, the ask it answers) and its change id.
+    const [open, setOpen] = useState<(StandingSheetBinding & { changeId: string }) | null>(null);
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // A sheet acts only on what it was opened for (the #3205 review): worked out again from the row on every draw, and null once
+    // a read pays that period, moves what it costs, ends the deal, or takes back or replaces the ask it answers. Then it closes
+    // here and now, with its refusal, and is forgotten, so it never opens again by itself: the member opens the new one afresh.
+    const sheet = open && onLower ? standingBoundSheet(tx, actingAs, open, day) : null;
+    if (open && !sheet) { setOpen(null); setError(null); }
     const p = standingPanel(tx, actingAs, day);
     if (!p) return null;
     const ask = () => {
@@ -201,8 +207,6 @@ export function StandingPanel({ tx, actingAs, busy, onStop, onMessage, messageLa
         const question = [c.title, c.body].join('\n\n');
         if (window.confirm(question)) onStop();
     };
-    // Worked out again from the row on every draw: a read that pays the period or closes the ask closes the sheet.
-    const sheet = open && onLower ? standingSheet(tx, actingAs, open.kind, day) : null;
     const send = async (step: StandingLowerStep) => {
         if (!onLower || sending) return;
         setSending(true);
@@ -217,7 +221,11 @@ export function StandingPanel({ tx, actingAs, busy, onStop, onMessage, messageLa
         }
     };
     // One change id per sheet opened, sent again on a retry, so a lost answer never makes a second ask.
-    const openSheet = (kind: StandingSheetKind) => { setError(null); setOpen({ kind, changeId: standingChangeId() }); };
+    const openSheet = (kind: StandingSheetKind) => {
+        const now = standingSheet(tx, actingAs, kind, day);
+        setError(null);
+        setOpen(now ? { ...standingSheetBinding(now), changeId: standingChangeId() } : null);
+    };
     const off = busy || sending;
     const askAction = p.askAction;
     return (
@@ -254,10 +262,10 @@ export function StandingPanel({ tx, actingAs, busy, onStop, onMessage, messageLa
             {error && !sheet && <p data-testid="standing-step-refusal" role="alert" className={REFUSAL}>{error}</p>}
             {sheet && open && (
                 <LowerSheet key={open.changeId} sheet={sheet} busy={off} error={error}
-                    onGo={(beans_c) => send(sheet.kind === 'answer'
-                        ? { move: 'answer', standingId: sheet.standingId, changeId: sheet.askId!, yes: true }
-                        : { move: 'lower', standingId: sheet.standingId, changeId: open.changeId, periodNo: sheet.periodNo, beans_c })}
-                    onNo={() => send({ move: 'answer', standingId: sheet.standingId, changeId: sheet.askId!, yes: false })}
+                    onGo={(beans_c) => send(open.kind === 'answer'
+                        ? { move: 'answer', standingId: sheet.standingId, changeId: open.askId!, yes: true }
+                        : { move: 'lower', standingId: sheet.standingId, changeId: open.changeId, periodNo: open.periodNo, beans_c })}
+                    onNo={() => send({ move: 'answer', standingId: sheet.standingId, changeId: open.askId!, yes: false })}
                     onCancel={() => { setOpen(null); setError(null); }}
                     onMessage={onMessage} messageLabel={messageLabel} />
             )}

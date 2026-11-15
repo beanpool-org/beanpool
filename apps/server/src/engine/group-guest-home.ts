@@ -50,7 +50,7 @@ import { isServerBlocked } from '../connector-manager.js';
 import { isNodeMember, readsAsMember } from '../state-engine.js';
 import { hasBlocked } from './member-blocks.js';
 import { isOwnNodeHome, ownNodeHome } from './node-key.js';
-import { GROUP_GUESTS_MAX, GUESTS_OFF_ERROR, GUEST_ITEM_KINDS, groupGuestsOn, guestItemMaxChars, nextFanoutTry } from './group-guests.js';
+import { GROUP_GUESTS_MAX, GUESTS_OFF_ERROR, GUEST_ITEM_KINDS, fanoutNow, groupGuestsOn, guestItemMaxChars, nextFanoutTry } from './group-guests.js';
 import {
     MAILBOX_FULL_ERROR, MAIL_DEVICE_LAPSE_MS, MAIL_FETCH_PAGE, MAIL_HELD_DAYS, MAIL_ITEM_MAX_AGE_MS, MAIL_ITEM_MAX_AHEAD_MS,
     MAIL_RETRY_AFTER_SEC, MAIL_SERVER_BYTES, RELAY_ITEMS_PER_REQUEST, RELAY_MAIL_PATH, relayMailDir,
@@ -347,7 +347,7 @@ export async function sendGroupItems(member: string, items: unknown[], now = Dat
                 JSON.stringify({ envelope: c.envelope, payload: c.payload }), now, at, now);
         }
     })();
-    await Promise.all([...new Set(fresh.map((c) => c.envelope.recipientHome))].map((host) => sendToHost(host, now)));
+    await Promise.all([...new Set(fresh.map((c) => c.envelope.recipientHome))].map((host) => sendToHost(host)));
     const rows = db.prepare(`SELECT item_id, state, refused FROM group_guest_sent WHERE sender_key = ? AND item_id IN (${checked.map(() => '?').join(', ')})`)
         .all(member, ...checked.map((c) => c.envelope.itemId)) as Array<{ item_id: string; state: string; refused: string | null }>;
     const of = new Map(rows.map((r) => [r.item_id, r]));
@@ -362,10 +362,10 @@ interface SentRow { sender_key: string; item_id: string; item: string; attempts:
 /** Each host being sent to now: one send a host at a time, every host on its own (as the host's fan-out is). */
 const sendingTo = new Map<string, Promise<void>>();
 
-function sendToHost(host: string, now: number): Promise<void> {
+function sendToHost(host: string): Promise<void> {
     const running = sendingTo.get(host);
-    if (running) return running.then(() => sendToHost(host, now));
-    const send = sendHostQueue(host, now).finally(() => sendingTo.delete(host));
+    if (running) return running.then(() => sendToHost(host));
+    const send = sendHostQueue(host).finally(() => sendingTo.delete(host));
     sendingTo.set(host, send);
     return send;
 }
@@ -383,11 +383,9 @@ function refusedAt(answer: unknown, index: number, itemId: string, sent: number)
  * One host's queue, oldest first, until none is left or the host doesn't take a request: up to RELAY_ITEMS_PER_REQUEST
  * items a request (GROUP_SENT_REQUEST_CHARS together, a larger item alone). A 2xx settles each item as its answer says
  * (`sent`, or `refused` and why); a 400 or 413 fails them; anything else and every item for that host waits one backoff, by
- * time (nextFanoutTry), for GROUP_SENT_QUEUE_MS. `now` is the clock the send starts at.
+ * time (nextFanoutTry), for GROUP_SENT_QUEUE_MS.
  */
-async function sendHostQueue(host: string, now: number): Promise<void> {
-    const started = Date.now();
-    const clock = () => now + (Date.now() - started);
+async function sendHostQueue(host: string): Promise<void> {
     const url = `https://${host}${RELAY_MAIL_PATH}`;
     for (;;) {
         const queue = db.prepare(`SELECT sender_key, item_id, item, attempts, next_try_at, created_at FROM group_guest_sent
@@ -402,7 +400,7 @@ async function sendHostQueue(host: string, now: number): Promise<void> {
         }
         const travelling = batch.map((r) => JSON.parse(r.item) as unknown);
         const { status, body } = await forwardSignedForAnswer(url, JSON.stringify({ items: travelling }));
-        const at = clock();
+        const at = fanoutNow();
         const settle = db.prepare(`UPDATE group_guest_sent SET state = ?, refused = ?, item = NULL, next_try_at = NULL, updated_at = ?
                                    WHERE sender_key = ? AND item_id = ? AND state = 'queued'`);
         if (status >= 200 && status < 300) {
@@ -434,7 +432,7 @@ async function sendHostQueue(host: string, now: number): Promise<void> {
 export async function retryGroupSent(now = Date.now()): Promise<number> {
     if (getNodeRole() === 'backup' || !groupGuestsOn()) return 0;
     const hosts = db.prepare("SELECT DISTINCT host FROM group_guest_sent WHERE state = 'queued' AND next_try_at <= ?").pluck().all(now) as string[];
-    await Promise.all(hosts.map((h) => sendToHost(h, now)));
+    await Promise.all(hosts.map((h) => sendToHost(h)));
     return hosts.length;
 }
 

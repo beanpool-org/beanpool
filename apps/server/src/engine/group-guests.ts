@@ -102,6 +102,22 @@ export function nextFanoutTry(attempts: number, dueAt: number, at: number, steps
     if (attempts > 0 && at < dueAt) return { attempts, nextTryAt: dueAt };
     return { attempts: attempts + 1, nextTryAt: at + steps[Math.min(attempts, steps.length - 1)] };
 }
+
+let clockForTests: (() => number) | null = null;
+
+/**
+ * Tests: the clock a send stamps its tries with (a suite's own time, to walk an outage of hours); null puts Date.now back.
+ * Refuses to run unless BEANPOOL_SSRF_TEST_HOOK=1, which nothing in production sets.
+ */
+export function __useFanoutClockForTests(clock: (() => number) | null): void {
+    if (process.env.BEANPOOL_SSRF_TEST_HOOK !== '1') throw new Error('The fan-out clock hook is disabled (BEANPOOL_SSRF_TEST_HOOK is not 1)');
+    clockForTests = clock;
+}
+
+/** When a try to another community's server happened: now, by this server's clock (or a suite's). */
+export function fanoutNow(): number {
+    return clockForTests ? clockForTests() : Date.now();
+}
 /** The kinds a guest's home brings for a group here. */
 export const GUEST_ITEM_KINDS: ReadonlySet<string> = new Set(['group-invite', 'group-leave', 'group-line', 'group-epoch']);
 /** The most a guest's item of each kind may carry, in characters as it travels. A line carries its sealed photo or voice. */
@@ -489,7 +505,7 @@ export async function flushGuestOutbox(now = Date.now()): Promise<number> {
     const counts = await Promise.all(homes.map((home) => {
         const running = sendingTo.get(home);
         if (running) return running.then(() => 0);
-        const send = sendToHome(home, now).finally(() => sendingTo.delete(home));
+        const send = sendToHome(home).finally(() => sendingTo.delete(home));
         sendingTo.set(home, send);
         return send;
     }));
@@ -503,12 +519,10 @@ export async function flushGuestOutbox(now = Date.now()): Promise<number> {
  * send, so none waits out a backoff its home has ended. A 2xx, or an answer that says it will never be taken (400, 404,
  * 413), and the row goes; anything else and ALL the home's rows wait one backoff, by time (nextFanoutTry: the step moves on
  * only when the oldest row's wait has passed), until GUEST_FANOUT_QUEUE_MS, then a row goes. A 2xx starts the steps over.
- * With guests switched off, only removals go. `now` is the clock the send starts at (the timer's, or a suite's).
+ * With guests switched off, only removals go.
  */
-async function sendToHome(home: string, now: number): Promise<number> {
+async function sendToHome(home: string): Promise<number> {
     let handled = 0;
-    const started = Date.now();
-    const clock = () => now + (Date.now() - started);
     const url = `https://${home}${GROUP_GUEST_PATH}`;
     const drop = db.prepare('DELETE FROM group_guest_outbox WHERE id = ?');
     for (;;) {
@@ -523,7 +537,7 @@ async function sendToHome(home: string, now: number): Promise<number> {
             handled++;
             if (!on && r.kind !== 'removed') { drop.run(r.id); continue; }
             const status = await forwardSigned(url, r.body);
-            const at = clock();
+            const at = fanoutNow();
             const taken = status >= 200 && status < 300;
             const final = taken || status === 400 || status === 404 || status === 413;
             if (final || at - r.created_at >= GUEST_FANOUT_QUEUE_MS) {

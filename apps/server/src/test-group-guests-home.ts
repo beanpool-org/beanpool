@@ -446,6 +446,8 @@ async function main(): Promise<void> {
     type Side = 'host fan-out' | 'member sends';
     const SIDES: Side[] = ['host fan-out', 'member sends'];
     let gN = 0;
+    let simNow = Date.now();
+    hostSide.__useFanoutClockForTests(() => simNow);
     for (const side of SIDES) {
         for (const n of [1, 6, 30]) {
             for (const outage of [30, 180]) {
@@ -462,7 +464,8 @@ async function main(): Promise<void> {
                             .run(gus.pk, `bk-${gN}-${String(i).padStart(3, '0')}`, far, JSON.stringify({ envelope: { itemId: `bk-${gN}-${String(i).padStart(3, '0')}` }, payload: String(i) }), t, t, t);
                     }
                 };
-                const flush = (t: number) => (side === 'host fan-out' ? hostSide.flushGuestOutbox(t) : home.retryGroupSent(t));
+                // The suite walks the outage on its own clock: due rows by it, and each try stamped by it (__useFanoutClockForTests).
+                const flush = (t: number) => { simNow = t; return side === 'host fan-out' ? hostSide.flushGuestOutbox(t) : home.retryGroupSent(t); };
                 const due = (): number | null => (side === 'host fan-out'
                     ? db.prepare('SELECT MIN(next_try_at) FROM group_guest_outbox WHERE home = ?').pluck().get(far)
                     : db.prepare("SELECT MIN(next_try_at) FROM group_guest_sent WHERE host = ? AND state = 'queued'").pluck().get(far)) as number | null;
@@ -504,6 +507,7 @@ async function main(): Promise<void> {
             }
         }
     }
+    hostSide.__useFanoutClockForTests(null);
     const step = hostSide.nextFanoutTry;
     assert(JSON.stringify(step(0, 0, 1000)) === JSON.stringify({ attempts: 1, nextTryAt: 61_000 }) && JSON.stringify(step(2, 10 * MIN, 3 * MIN)) === JSON.stringify({ attempts: 2, nextTryAt: 10 * MIN })
         && JSON.stringify(step(2, 10 * MIN, 10 * MIN)) === JSON.stringify({ attempts: 3, nextTryAt: 25 * MIN }) && step(9, 0, 0).nextTryAt === 120 * MIN,

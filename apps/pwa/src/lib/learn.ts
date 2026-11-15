@@ -17,8 +17,8 @@ import { useEffect, useState } from 'react';
 import {
     KNOWLEDGE_EMOJI, KNOWLEDGE_FRONT_ROWS, KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_SEARCH_MAX, KNOWLEDGE_TOPICS, KNOWLEDGE_TOPIC_PAGE, compareKnowledge,
     isKnowledgeTopic, knowledgeFeatureMode, knowledgeFirstLine, knowledgeTopic, pinLive, t, type FeatureMode, type KnowledgeDraftMine,
-    type KnowledgeDraftToCheck, type KnowledgeDraftWhole, type KnowledgeFields, type KnowledgeFront, type KnowledgeRow, type KnowledgeSearch,
-    type KnowledgeSource, type KnowledgeTopicPage,
+    type KnowledgeDraftToCheck, type KnowledgeDraftWhole, type KnowledgeFields, type KnowledgeFront, type KnowledgeHelped, type KnowledgeRow,
+    type KnowledgeSearch, type KnowledgeSource, type KnowledgeTopicPage,
 } from '@beanpool/core';
 import { myNodeRoleOnce, request } from './api';
 import { useCommunityInfo, useReaderFeatures } from './features';
@@ -220,6 +220,8 @@ export interface LearnInput {
     sources?: KnowledgeSource[];
     lang?: string;
     photos?: string[];
+    /** A fix's "What changed?" (slice K5): the form's own field, sent beside the page's words, never as one of them. */
+    note?: string;
 }
 
 /** The first thing the form must say before it sends (§3.3's refusals), or null when it may go. */
@@ -269,11 +271,15 @@ export function withdrawLearnDraft(id: string): Promise<{ ok: true }> {
     return request('POST', `/api/knowledge/drafts/${encodeURIComponent(id)}/withdraw`);
 }
 
-/** To check (owners and admins): the waiting suggestions, the longest waiting first, 50 at a time. */
-export async function getLearnToCheck(): Promise<{ drafts: KnowledgeDraftToCheck[]; total: number }> {
-    const r = await request<{ drafts?: KnowledgeDraftToCheck[]; total?: number }>('GET', '/api/knowledge/drafts?limit=50&offset=0');
+/**
+ * To check (owners and admins): the waiting suggestions, the longest waiting first, 50 at a time; and under them the pages "Not
+ * checked for a year" (slice K5), the oldest first, which never count in the bell. A node before K5 sends none of those.
+ */
+export async function getLearnToCheck(): Promise<{ drafts: KnowledgeDraftToCheck[]; total: number; unchecked: { total: number; rows: KnowledgeRow[] } }> {
+    const r = await request<{ drafts?: KnowledgeDraftToCheck[]; total?: number; unchecked?: { total?: number; rows?: KnowledgeRow[] } }>('GET', '/api/knowledge/drafts?limit=50&offset=0');
     const drafts = Array.isArray(r?.drafts) ? r.drafts : [];
-    return { drafts, total: typeof r?.total === 'number' ? r.total : drafts.length };
+    const rows = Array.isArray(r?.unchecked?.rows) ? r.unchecked.rows : [];
+    return { drafts, total: typeof r?.total === 'number' ? r.total : drafts.length, unchecked: { total: typeof r?.unchecked?.total === 'number' ? r.unchecked.total : rows.length, rows } };
 }
 
 /** One waiting suggestion whole, for the checking screen; null when it is no longer waiting. */
@@ -286,12 +292,16 @@ export async function getLearnDraft(id: string): Promise<KnowledgeDraftWhole | n
     }
 }
 
-/** Approve, with the checker's edits ("Edit first", the whole form) and, for an assistant's draft, the tick. */
-export function approveLearnDraft(id: string, opts: { edits?: LearnInput; lang?: string | null; checkedSources?: boolean } = {}): Promise<{ post: LearnPost }> {
+/**
+ * Approve, with the checker's edits ("Edit first", the whole form) and, for an assistant's draft, the tick. `fix`: a fix's
+ * "Edit first" sends no photos at all, an empty list included: a fix never changes a page's photos, and the node refuses any
+ * (`fix_photos`).
+ */
+export function approveLearnDraft(id: string, opts: { edits?: LearnInput; lang?: string | null; checkedSources?: boolean; fix?: boolean } = {}): Promise<{ post: LearnPost }> {
     // "Edit first" keeps the suggestion's own language (§2.8: the writer's), never the checker's: one sent with none stays
     // with none, which the node keeps when no `lang` is sent.
     const edits: Partial<LearnInput> | null = opts.edits ? learnInputToSend(opts.edits) : null;
-    if (edits) { delete edits.lang; if (opts.lang) edits.lang = opts.lang; }
+    if (edits) { delete edits.lang; if (opts.lang) edits.lang = opts.lang; if (opts.fix) delete edits.photos; }
     return request('POST', `/api/knowledge/drafts/${encodeURIComponent(id)}/approve`, {
         ...(edits ?? {}),
         ...(opts.checkedSources ? { checkedSources: true } : {}),
@@ -322,4 +332,94 @@ export function learnRefusalText(e: unknown): string {
     const err = (e ?? {}) as { message?: unknown; unsaid?: boolean; status?: unknown };
     return typeof err.status === 'number' && !err.unsaid && typeof err.message === 'string' && err.message
         ? err.message : t("Couldn't send it. Check your connection and try again.");
+}
+
+// ── Keeping it right (slice K5) ──────────────────────────────────────────────────────────
+// DESIGN-local-knowledge-fable.md §3.2 items 9-11, §3.5, §2.4 and §2.10. Every action is the member's own, signed; the node
+// decides again and answers a refusal in the member's words, which the page shows as it comes (learnRefusalText). Nothing pays.
+
+/** Which of a page's actions a reader is offered (§2.4); the phone's components/learn/learn-keep.ts says the same. */
+export interface LearnPageActions {
+    /** "👍 This helped": any member but the page's writer. */
+    helped: boolean;
+    /** "Something changed? Suggest a fix": a member, the writer too (their own fix waits as well); never an owner or admin. */
+    fix: boolean;
+    /** An owner or admin changes a page at once ("Edit"), "Still right" re-stamps Checked. */
+    edit: boolean;
+    stillRight: boolean;
+    /** "Mark as out of date" with a note: the writer, an owner or an admin, while it isn't marked. */
+    markOutdated: boolean;
+    /** "Clear the mark": an owner or admin, while it is marked. */
+    clearMark: boolean;
+}
+
+/**
+ * The actions on a page for one reader. A visitor (no key), the preview of Example Valley's pages (Learn off here) and a page
+ * gathered with the assistant for nobody in particular take none of a member's: the page is read, and nothing is offered that
+ * the node would refuse. `checks`: an owner or admin here.
+ */
+export function learnPageActions(f: { signedIn: boolean; preview: boolean; own: boolean; checks: boolean; outdated: boolean }): LearnPageActions {
+    const none: LearnPageActions = { helped: false, fix: false, edit: false, stillRight: false, markOutdated: false, clearMark: false };
+    if (!f.signedIn || f.preview) return none;
+    return {
+        helped: !f.own,
+        fix: !f.checks,
+        edit: f.checks,
+        stillRight: f.checks,
+        markOutdated: (f.own || f.checks) && !f.outdated,
+        clearMark: f.checks && f.outdated,
+    };
+}
+
+/** "This helped" on, or taken back: the page's count of counted taps and whether this member's is on. Who tapped is never sent. */
+export function markLearnHelped(id: string, on: boolean): Promise<KnowledgeHelped> {
+    return request('POST', `/api/knowledge/posts/${encodeURIComponent(id)}/helped`, { on });
+}
+
+/** "Still right" (an owner or admin): Checked is stamped now and a mark cleared. */
+export function confirmLearnPage(id: string): Promise<{ post: LearnPost }> {
+    return request('POST', `/api/knowledge/posts/${encodeURIComponent(id)}/checked`);
+}
+
+/** "Mark as out of date" (the writer, an owner or an admin), with why: at most 140 characters, may be empty. */
+export function markLearnOutdated(id: string, note: string): Promise<{ post: LearnPost }> {
+    return request('POST', `/api/knowledge/posts/${encodeURIComponent(id)}/outdated`, { note: note.trim().slice(0, KNOWLEDGE_LIMITS.outdatedNote) });
+}
+
+/** "Clear the mark" (an owner or admin): Checked stays as it was. */
+export function clearLearnOutdated(id: string): Promise<{ post: LearnPost }> {
+    return request('POST', `/api/knowledge/posts/${encodeURIComponent(id)}/outdated/clear`);
+}
+
+/** An owner's or admin's "Edit": the whole form, in the page's own language (the writer's, §2.8), never its photos. */
+export function editLearnPage(page: LearnPost, input: LearnInput): Promise<{ post: LearnPost }> {
+    const words: Partial<LearnInput> = learnInputToSend(input);
+    delete words.photos;
+    delete words.lang;
+    return request('POST', `/api/knowledge/posts/${encodeURIComponent(page.id)}/edit`, { ...words, ...(page.knowledge.lang ? { lang: page.knowledge.lang } : {}) });
+}
+
+const sameSources = (a: readonly KnowledgeSource[], b: readonly KnowledgeSource[]) =>
+    JSON.stringify(a.map((s) => [s.url, s.label])) === JSON.stringify(b.map((s) => [s.url.trim(), (s.label ?? '').trim()]));
+
+/**
+ * What "Suggest a fix" sends (§3.5): the page it names, "What changed?", and only the parts the member changed from `page`, the
+ * page the form opened on (LearnPage keeps it: an answer landing meanwhile adds nothing, review of #3218). The node treats a part
+ * sent as it shows as no change, but this page may be older than the node's: a part sent unchanged from an older copy would read
+ * as a change (PR #3203, "For K5 B"), so an untouched part is never sent. Never photos.
+ */
+export function learnFixToSend(page: LearnPost, input: LearnInput): Record<string, unknown> {
+    const now = learnInputToSend(input);
+    const out: Record<string, unknown> = { fixOf: page.id, note: (input.note ?? '').trim().slice(0, KNOWLEDGE_LIMITS.changeNote) };
+    if (now.title !== page.title.trim()) out.title = now.title;
+    if (now.body !== page.description.trim()) out.body = now.body;
+    if (now.topic !== page.category) out.topic = now.topic;
+    if ((now.place ?? '') !== (page.knowledge.place ?? '').trim()) out.place = now.place;
+    if (!sameSources(now.sources ?? [], page.knowledge.sources ?? [])) out.sources = now.sources;
+    return out;
+}
+
+/** A member's fix: it waits for an owner or admin, and the page shows as it is until one answers. */
+export function suggestLearnFix(page: LearnPost, input: LearnInput): Promise<{ draft: KnowledgeDraftMine }> {
+    return request('POST', '/api/knowledge/drafts', learnFixToSend(page, input));
 }

@@ -16,21 +16,25 @@
  * whose page publishes at once) opens the form (components/LearnForm.tsx); line 4 under the search is "1 of yours is waiting for
  * an admin ›" (My suggestions, components/LearnMine.tsx) and, amber, "3 to check ›" (To check, components/LearnCheck.tsx).
  * Doors: `learn-suggest`, `learn-mine`, `learn-check`. Not in the preview: Example Valley takes no suggestions.
- * Still to come: "This helped", "Suggest a fix", pin and edit (K5), "Thank" (K8). Report is the existing sheet, by post id.
+ * Keeping it right (slice K5, §3.2 items 9-11, §3.5): on a page, "👍 This helped" and its count, "Something changed? Suggest a fix"
+ * (the form with "What changed?" first; it waits for an owner or admin), and for the writer, an owner or an admin "Mark as out
+ * of date" with a note; an owner or admin also "Edit", "Still right" and "Clear the mark" (lib/learn.ts learnPageActions). The
+ * node's refusal is shown in its own words, never a success it didn't give. Still to come: pin, take down and Share; "Thank" (K8).
+ * Report is the existing sheet, by post id.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    KNOWLEDGE_NAMES, LEARN_HOME_WORDS, LOCAL_COMMUNITY_SHEET, formatCount, isKnowledgeTopic, pinLive, t, tn, upperCase, type KnowledgeFront,
+    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, LEARN_HOME_WORDS, LOCAL_COMMUNITY_SHEET, formatCount, isKnowledgeTopic, pinLive, t, tn, upperCase, type KnowledgeFront,
     type KnowledgeRow, type KnowledgeTopicPage,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { resolveImageUrl } from '../lib/avatar';
 import { shownLanguage } from '../lib/language';
 import {
-    getLearnFront, getLearnPost, getLearnToCheck, getLearnTopic, getMyLearnDrafts, languageNameOf, learnFrontOf, learnSearchOf, learnTopicOf,
-    monthYear, publishLearn, safeSourceUrl, searchLearn, showsLearn, sourceHost, suggestLearn, topicEmoji, topicLabel, useChecksLearn, useLearn,
-    type LearnPost,
+    clearLearnOutdated, confirmLearnPage, editLearnPage, getLearnFront, getLearnPost, getLearnToCheck, getLearnTopic, getMyLearnDrafts, languageNameOf,
+    learnFrontOf, learnPageActions, learnRefusalText, learnSearchOf, learnTopicOf, markLearnHelped, markLearnOutdated, monthYear, publishLearn,
+    safeSourceUrl, searchLearn, showsLearn, sourceHost, suggestLearn, suggestLearnFix, topicEmoji, topicLabel, useChecksLearn, useLearn, type LearnPost,
 } from '../lib/learn';
 import { LearnForm } from '../components/LearnForm';
 import { LearnMine } from '../components/LearnMine';
@@ -91,6 +95,8 @@ const LINK_BUTTON = 'min-h-[44px] inline-flex items-center gap-1 px-1 text-start
 const MUTED = 'text-nature-600 dark:text-nature-300';
 /** "3 to check ›": amber, never by colour alone (a ▲ leads it). */
 const WARN_LINK = LINK_BUTTON.replace('text-bp-ink-learn', 'text-bp-ink-warning');
+/** A page's own tools (slice K5): the writer's, an owner's or admin's. */
+const TOOL = 'min-h-[44px] px-3 rounded-xl border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-900 font-bold text-nature-900 dark:text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-learn';
 
 function Shell({ children }: { children: React.ReactNode }) {
     return (
@@ -351,7 +357,7 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
                 {checkId
                     ? <LearnCheckOne key={checkId} id={checkId} editing={checkEditing} onEditing={setCheckEditing} onEdited={setCheckEdited}
                         onAnswered={(said) => { setCheckSaid(said); closeCheckOne(); }} />
-                    : <LearnCheckList onOpen={(id) => { setCheckSaid(null); closeCheckOne(); setCheckId(id); }} />}
+                    : <LearnCheckList onOpen={(id) => { setCheckSaid(null); closeCheckOne(); setCheckId(id); }} onOpenPage={openPage} />}
             </Shell>
         );
     }
@@ -527,15 +533,51 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile }:
     const [tries, setTries] = useState(0);
     const [photo, setPhoto] = useState<{ index: number; trigger: HTMLElement | null } | null>(null);
     const [reporting, setReporting] = useState(false);
+    // Keeping it right (K5): this member's tap and the count it answered, "Still right" done, the out-of-date note being
+    // written (null: the box is shut), the fix or edit form open with the page it opened on, a fix sent, and the node's last
+    // refusal. The form is sent against that page alone (review of #3218): an action's answer that lands while the form is open
+    // redraws the page behind it and adds nothing to what the form sends.
+    const checks = useChecksLearn(!preview && !!identity);
+    const [helped, setHelped] = useState<{ n: number; mine: boolean } | null>(null);
+    const [stillRight, setStillRight] = useState(false);
+    const [marking, setMarking] = useState<string | null>(null);
+    const [editing, setEditing] = useState<{ use: 'fix' | 'edit'; opened: LearnPost } | null>(null);
+    const [fixSent, setFixSent] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [refusal, setRefusal] = useState<string | null>(null);
     useEffect(() => {
         let live = true;
         setState(null);
+        setHelped(null); setStillRight(false); setMarking(null); setEditing(null); setRefusal(null);
         const read = preview ? Promise.resolve(samplePosts().find((p) => p.id === id) ?? null) : getLearnPost(id);
         read.then((post) => { if (live) setState({ id, post }); }, () => { if (live) setState('failed'); });
         return () => { live = false; };
     }, [id, preview, tries]);
 
     const header = <Header title={upperCase(t(KNOWLEDGE_NAMES.kind))} label onBack={onBack} />;
+    /**
+     * The node's answer to an action redraws the page. Its answer never says whether this member tapped "This helped" (only a
+     * read of the page by id does), so the page keeps what it knew rather than reading a pressed tap as taken back.
+     */
+    const showAnswer = (next: LearnPost) => setState((prev) => {
+        const mine = prev && prev !== 'failed' ? prev.post?.knowledge.helpedByMe : undefined;
+        return { id, post: next.knowledge.helpedByMe === undefined && mine !== undefined ? { ...next, knowledge: { ...next.knowledge, helpedByMe: mine } } : next };
+    });
+    /** One action: the node's answer redraws the page; its refusal is shown in its own words, and nothing else changes. */
+    const act = async (go: () => Promise<unknown>, after?: () => void) => {
+        if (busy) return;
+        setBusy(true);
+        setRefusal(null);
+        try {
+            const answer = (await go()) as { post?: LearnPost } | undefined;
+            if (answer?.post?.knowledge) showAnswer(answer.post);
+            after?.();
+        } catch (e) {
+            setRefusal(learnRefusalText(e));
+        } finally {
+            setBusy(false);
+        }
+    };
     if (state === 'failed') return <>{header}<Failed onAgain={() => setTries((n) => n + 1)} /></>;
     if (!state || state.id !== id) return <>{header}<p className={`mt-4 ${MUTED}`}>{t('Loading...')}</p></>;
     const post = state.post;
@@ -558,6 +600,33 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile }:
     // A preview names nobody and has nothing to report: it is Example Valley's.
     const writer = !preview && post.authorPublicKey !== '';
     const markedOn = k.outdatedAt ? new Date(k.outdatedAt).toLocaleDateString(shownLanguage(), { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    const acts = learnPageActions({ signedIn: !!identity, preview, own, checks, outdated: !!k.outdatedAt });
+    const helpedN = helped?.n ?? k.helped ?? 0;
+    const helpedMine = helped?.mine ?? !!k.helpedByMe;
+    if (editing) {
+        const fix = editing.use === 'fix';
+        const opened = editing.opened;
+        return (
+            <>
+                <Header title={fix ? t('Suggest a fix') : t('Edit')} onBack={() => setEditing(null)} />
+                {fixSent ? (
+                    <section data-testid="learn-fix-sent" role="status" className="py-6 flex flex-col gap-2">
+                        <h2 className="m-0 text-xl font-extrabold text-nature-900 dark:text-white">{t('Sent')}</h2>
+                        <p className={`m-0 ${MUTED}`}>{t("An owner or admin will check it. You'll hear back here.")}</p>
+                        <button type="button" onClick={() => setEditing(null)} className={LINK_BUTTON}>{t('Back')}</button>
+                    </section>
+                ) : (
+                    <LearnForm use={editing.use} initial={{ title: opened.title, body: opened.description, topic: opened.category, place: opened.knowledge.place ?? '', sources: opened.knowledge.sources }}
+                        onSend={async (input) => {
+                            if (fix) { await suggestLearnFix(opened, input); setFixSent(true); return; }
+                            const answer = await editLearnPage(opened, input);
+                            if (answer?.post?.knowledge) showAnswer(answer.post); else setTries((n) => n + 1);
+                            setEditing(null);
+                        }} />
+                )}
+            </>
+        );
+    }
     return (
         <>
             {header}
@@ -634,8 +703,56 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile }:
                         </button>
                     </section>
                 )}
-                {/* K5 puts "This helped", Share, "Suggest a fix" and the writer's and admins' tools here; K8 "Thank {name}". */}
                 <p className={`m-0 text-xs ${MUTED}`}>{t('Local knowledge is written by members. Check the source before you rely on it.')}</p>
+                {/* Keeping it right (K5): "This helped" and its count, then "Suggest a fix", then the writer's and admins' tools. */}
+                {(acts.helped || helpedN > 0) && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {acts.helped && (
+                            <button type="button" data-testid="learn-post-helped" aria-pressed={helpedMine} disabled={busy}
+                                onClick={() => void act(() => markLearnHelped(post.id, !helpedMine).then((h) => setHelped({ n: h.helped, mine: h.helpedByMe })))}
+                                className={`${TOOL} ${helpedMine ? '!bg-bp-chip-learn-tint !text-bp-chip-learn-ink !border-bp-ink-learn' : ''}`}>
+                                {helpedMine ? t('👍 Helped ✓') : t('👍 This helped')}
+                            </button>
+                        )}
+                        {helpedN > 0 && <span data-testid="learn-post-helped-count" className={`text-sm font-bold ${MUTED}`}>{t('Helped {n}', { n: formatCount(helpedN) })}</span>}
+                    </div>
+                )}
+                {acts.fix && (
+                    <button type="button" data-testid="learn-post-fix" onClick={() => { setFixSent(false); setRefusal(null); setEditing({ use: 'fix', opened: post }); }} className={`${LINK_BUTTON} self-start`}>
+                        {own ? t('Suggest a fix') : t('Something changed? Suggest a fix')}
+                    </button>
+                )}
+                {(acts.edit || acts.stillRight || acts.markOutdated || acts.clearMark) && (
+                    <div data-testid="learn-post-tools" className="flex flex-wrap gap-2">
+                        {acts.edit && <button type="button" data-testid="learn-post-edit" onClick={() => { setRefusal(null); setEditing({ use: 'edit', opened: post }); }} className={TOOL}>{t('Edit')}</button>}
+                        {acts.stillRight && (
+                            <button type="button" data-testid="learn-post-still-right" aria-pressed={stillRight} disabled={busy || stillRight}
+                                onClick={() => void act(() => confirmLearnPage(post.id), () => setStillRight(true))} className={TOOL}>
+                                {stillRight ? t('Still right ✓') : t('Still right')}
+                            </button>
+                        )}
+                        {acts.markOutdated && marking === null && (
+                            <button type="button" data-testid="learn-post-mark" onClick={() => { setRefusal(null); setMarking(''); }} className={TOOL}>{t('Mark as out of date')}</button>
+                        )}
+                        {acts.clearMark && (
+                            <button type="button" data-testid="learn-post-clear" disabled={busy} onClick={() => void act(() => clearLearnOutdated(post.id))} className={TOOL}>{t('Clear the mark')}</button>
+                        )}
+                    </div>
+                )}
+                {acts.markOutdated && marking !== null && (
+                    <div data-testid="learn-post-mark-box" className={`${PAGE_BOX} flex flex-col gap-2`}>
+                        <input data-testid="learn-post-mark-note" value={marking} maxLength={KNOWLEDGE_LIMITS.outdatedNote} onChange={(e) => setMarking(e.target.value)} dir="auto"
+                            placeholder={t('What may be out of date? (optional)')} aria-label={t('What may be out of date? (optional)')}
+                            className="w-full min-h-[44px] py-2 px-3 rounded-xl border border-nature-200 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-bp-ink-learn" />
+                        <div className="flex flex-wrap gap-2">
+                            <button type="button" data-testid="learn-post-mark-send" disabled={busy}
+                                onClick={() => void act(() => markLearnOutdated(post.id, marking), () => { setMarking(null); setStillRight(false); })}
+                                className="min-h-[44px] px-4 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover font-bold text-bp-cta-on disabled:opacity-60">{t('Mark as out of date')}</button>
+                            <button type="button" onClick={() => setMarking(null)} className={TOOL}>{t('Cancel')}</button>
+                        </div>
+                    </div>
+                )}
+                {refusal && <p role="alert" data-testid="learn-post-refusal" className="m-0 text-sm font-bold text-red-700 dark:text-red-300">{refusal}</p>}
                 {writer && !own && identity && (
                     <button type="button" data-testid="learn-post-report" onClick={() => setReporting(true)}
                         className={`self-start inline-flex items-center min-h-[48px] px-0 bg-transparent border-0 cursor-pointer hover:underline ${PAGE_TYPE.report} ${PAGE_INK.danger} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded`}>

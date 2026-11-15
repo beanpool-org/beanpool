@@ -5,27 +5,38 @@
  * "This may be out of date." box, the body, "Where:", the photos (tap to see the same photo whole), SOURCES (each opens the
  * phone's browser, never inside the app), "Checked {month year}", then the writer's card or "Gathered with the assistant…",
  * the standing line, and Report. A shared link, a bell line and a Learn row all land here through post/[id].
+ *
+ * Keeping it right (slice K5 B, §3.2 items 9-11): under the standing line "👍 This helped" and "Helped {n}", "Something changed?
+ * Suggest a fix" (app/learn/new.tsx?fix=…: it waits for an owner or admin), and the writer's, owner's and admin's tools: "Edit",
+ * "Still right", "Mark as out of date" with a note, "Clear the mark" (learn-keep.ts pageActions; the web's are the same). Only
+ * on a live Learn, to a member with a key. The node's refusal shows in its own words (learnRefusal), never a success it didn't give.
  */
-import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-    KNOWLEDGE_NAMES, currentLanguage, formatDate, inCapitalsOf, pinLive, t,
+    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, currentLanguage, formatCount, formatDate, inCapitalsOf, pinLive, t,
 } from '@beanpool/core';
-import { useStyles } from '../../app/ThemeContext';
+import { useStyles, useTheme } from '../../app/ThemeContext';
 import { useIdentity } from '../../app/IdentityContext';
 import { AuthorCard, useMemberRating } from '../AuthorCard';
 import { PhotoCarousel } from '../PhotoCarousel';
 import { ReportReasonBox } from '../ReportReasonBox';
 import { ChatPhotoViewer } from '../chat/ChatPhoto';
-import { reportAbuse } from '../../utils/db';
+import { reportAbuse, signedGet, signedRequestWithMethod } from '../../utils/db';
+// The page has a text field (the out-of-date note), so its alerts close the keyboard first (utils/keyboard-alert.ts).
+import { Alert } from '../../utils/keyboard-alert';
+import { useLearnMode } from '../../utils/use-learn-mode';
 import { reportedAlertBody } from '../../utils/reportReasons';
 import { signedRequestWords } from '../signed-request-lines';
 import { LANGUAGE_NAMES } from '../../utils/language-choice';
 import type { KnowledgePage } from '../../utils/learn-copy';
 import { ChipText } from './KnowledgeRowCard';
 import { LEARN_LINES, monthYear, topicOf } from './learn-lines';
+import { LEARN_KEEP, pageActions } from './learn-keep';
+import { learnRefusal } from './learn-write';
+import { useLearnWriter } from './useLearnWriter';
 
 /**
  * Whether a source's address may be opened: http or https, a host, no user name or password (the node's own rule for a join
@@ -75,12 +86,58 @@ export function KnowledgeMissing({ settled }: { settled: boolean }) {
     );
 }
 
-export function KnowledgeDetail({ page }: { page: KnowledgePage }) {
+export function KnowledgeDetail({ page: held }: { page: KnowledgePage }) {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { identity } = useIdentity();
+    const { colors } = useTheme();
     const [viewerUri, setViewerUri] = useState<string | null>(null);
     const [reporting, setReporting] = useState(false);
+    // Keeping it right (K5): the node's answer to an action, shown until the copy catches up (a new `held` drops it); this
+    // member's tap and its count; "Still right" done; the out-of-date note being written (null: shut); the node's refusal.
+    const [answered, setAnswered] = useState<KnowledgePage | null>(null);
+    const [helped, setHelped] = useState<{ n: number; mine: boolean } | null>(null);
+    const [stillRight, setStillRight] = useState(false);
+    const [marking, setMarking] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [refusal, setRefusal] = useState<string | null>(null);
+    // The copy has caught up once it holds this change or a later one; a sync that brings nothing newer keeps the answer.
+    const caughtUp = !!answered && !!held.updatedAt && !!answered.updatedAt && held.updatedAt >= answered.updatedAt;
+    const page = answered && answered.id === held.id && !caughtUp ? answered : held;
+    const live = useLearnMode() === 'live';
+    const { checks } = useLearnWriter(live, false);
+    const own = !!identity?.publicKey && page.authorPublicKey === identity.publicKey;
+    const acts = pageActions({ signedIn: !!identity?.publicKey, live, own, checks, outdated: !!page.knowledge?.outdatedAt });
+    // Whether this member tapped before: only a signed read of the page by id says (never the copy, never a list).
+    useEffect(() => {
+        setHelped(null); setStillRight(false); setMarking(null); setRefusal(null);
+        if (!acts.helped) return undefined;
+        let gone = false;
+        signedGet(`/api/marketplace/posts?type=knowledge&id=${encodeURIComponent(held.id)}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((rows) => {
+                const k = Array.isArray(rows) ? rows.find((r: any) => r?.id === held.id)?.knowledge : null;
+                if (!gone && k && typeof k.helpedByMe === 'boolean') setHelped({ n: typeof k.helped === 'number' ? k.helped : 0, mine: k.helpedByMe });
+            })
+            .catch(() => { /* offline: the count is the copy's, and a tap asks the node */ });
+        return () => { gone = true; };
+    }, [held.id, acts.helped]);
+    /** One action, signed: the node's answer redraws the page; its refusal is shown in its own words, and nothing else changes. */
+    const act = async (method: string, path: string, body?: unknown, after?: (answer: any) => void) => {
+        if (busy) return;
+        setBusy(true);
+        setRefusal(null);
+        try {
+            const answer = await signedRequestWithMethod(method, path, body, { withStatus: true });
+            if (answer?.post?.knowledge) setAnswered(answer.post);
+            after?.(answer);
+        } catch (e) {
+            setRefusal(learnRefusal(e));
+        } finally {
+            setBusy(false);
+        }
+    };
+    const at = `/api/knowledge/posts/${encodeURIComponent(page.id)}`;
     const styles = useStyles(({ colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
         header: {
@@ -118,6 +175,25 @@ export function KnowledgeDetail({ page }: { page: KnowledgePage }) {
         standing: { fontSize: 12.5, color: colors.text.secondary },
         report: { minHeight: 48, justifyContent: 'center' },
         reportText: { fontSize: 14, fontWeight: '700', color: colors.feedback.danger.fg },
+        row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+        tool: {
+            minHeight: 44, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 12, borderWidth: 1,
+            borderColor: colors.border.default, backgroundColor: colors.surface.card,
+        },
+        toolOn: { backgroundColor: colors.chip.learn.bg, borderColor: colors.chip.learn.fg },
+        toolText: { fontSize: 15, fontWeight: '800', color: colors.text.body },
+        toolTextOn: { color: colors.chip.learn.fg },
+        count: { fontSize: 14, fontWeight: '700', color: colors.text.secondary },
+        fixLink: { minHeight: 44, justifyContent: 'center' },
+        fixText: { fontSize: 15, fontWeight: '800', color: colors.chip.learn.fg },
+        markBox: { gap: 8, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card },
+        input: {
+            minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.page,
+            paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, color: colors.text.body,
+        },
+        primary: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 12, backgroundColor: colors.brand.fill },
+        primaryText: { fontSize: 15, fontWeight: '800', color: colors.text.inverse },
+        refusal: { fontSize: 14, fontWeight: '700', color: colors.feedback.danger.fg },
     }));
     const k = page.knowledge ?? {};
     const topic = topicOf(page.category);
@@ -190,6 +266,76 @@ export function KnowledgeDetail({ page }: { page: KnowledgePage }) {
                     />
                 ) : null}
                 <Text style={styles.standing}>{t(LEARN_LINES.standing)}</Text>
+                {(() => {
+                    const n = helped?.n ?? page.knowledge?.helped ?? 0;
+                    const mine = helped?.mine ?? !!(page.knowledge as { helpedByMe?: boolean } | undefined)?.helpedByMe;
+                    const tools = acts.edit || acts.stillRight || acts.markOutdated || acts.clearMark;
+                    return (
+                        <>
+                            {acts.helped || n > 0 ? (
+                                <View style={styles.row}>
+                                    {acts.helped ? (
+                                        <Pressable testID="knowledge-helped" accessibilityRole="button" accessibilityState={{ selected: mine, disabled: busy }} disabled={busy}
+                                            style={[styles.tool, mine && styles.toolOn]}
+                                            onPress={() => void act('POST', `${at}/helped`, { on: !mine }, (a) => setHelped({ n: Number(a?.helped) || 0, mine: !!a?.helpedByMe }))}>
+                                            <Text style={[styles.toolText, mine && styles.toolTextOn]}>{mine ? t(LEARN_KEEP.helpedDone) : t(LEARN_KEEP.helped)}</Text>
+                                        </Pressable>
+                                    ) : null}
+                                    {n > 0 ? <Text style={styles.count} testID="knowledge-helped-count">{t(LEARN_LINES.helped, { n: formatCount(n) })}</Text> : null}
+                                </View>
+                            ) : null}
+                            {acts.fix ? (
+                                <Pressable testID="knowledge-fix" accessibilityRole="button" style={styles.fixLink}
+                                    onPress={() => router.push({ pathname: '/learn/new', params: { fix: page.id } } as any)}>
+                                    <Text style={styles.fixText}>{own ? t(LEARN_KEEP.fix) : t(LEARN_KEEP.fixAsk)}</Text>
+                                </Pressable>
+                            ) : null}
+                            {tools ? (
+                                <View style={styles.row} testID="knowledge-tools">
+                                    {acts.edit ? (
+                                        <Pressable testID="knowledge-edit" accessibilityRole="button" style={styles.tool}
+                                            onPress={() => router.push({ pathname: '/learn/new', params: { edit: page.id } } as any)}>
+                                            <Text style={styles.toolText}>{t(LEARN_KEEP.edit)}</Text>
+                                        </Pressable>
+                                    ) : null}
+                                    {acts.stillRight ? (
+                                        <Pressable testID="knowledge-still-right" accessibilityRole="button" accessibilityState={{ selected: stillRight, disabled: busy || stillRight }}
+                                            disabled={busy || stillRight} style={[styles.tool, stillRight && styles.toolOn]} onPress={() => void act('POST', `${at}/checked`, undefined, () => setStillRight(true))}>
+                                            <Text style={[styles.toolText, stillRight && styles.toolTextOn]}>{stillRight ? t(LEARN_KEEP.stillRightDone) : t(LEARN_KEEP.stillRight)}</Text>
+                                        </Pressable>
+                                    ) : null}
+                                    {acts.markOutdated && marking === null ? (
+                                        <Pressable testID="knowledge-mark" accessibilityRole="button" style={styles.tool} onPress={() => { setRefusal(null); setMarking(''); }}>
+                                            <Text style={styles.toolText}>{t(LEARN_KEEP.markOutdated)}</Text>
+                                        </Pressable>
+                                    ) : null}
+                                    {acts.clearMark ? (
+                                        <Pressable testID="knowledge-clear" accessibilityRole="button" disabled={busy} style={styles.tool} onPress={() => void act('POST', `${at}/outdated/clear`)}>
+                                            <Text style={styles.toolText}>{t(LEARN_KEEP.clearMark)}</Text>
+                                        </Pressable>
+                                    ) : null}
+                                </View>
+                            ) : null}
+                            {acts.markOutdated && marking !== null ? (
+                                <View style={styles.markBox} testID="knowledge-mark-box">
+                                    <TextInput testID="knowledge-mark-note" style={styles.input} value={marking} onChangeText={setMarking} maxLength={KNOWLEDGE_LIMITS.outdatedNote}
+                                        multiline scrollEnabled={false} placeholder={t(LEARN_KEEP.outdatedHint)} placeholderTextColor={colors.text.muted} accessibilityLabel={t(LEARN_KEEP.outdatedHint)} />
+                                    <View style={styles.row}>
+                                        <Pressable testID="knowledge-mark-send" accessibilityRole="button" disabled={busy} style={styles.primary}
+                                            onPress={() => void act('POST', `${at}/outdated`, { note: marking.trim() }, () => { setMarking(null); setStillRight(false); })}>
+                                            <Text style={styles.primaryText}>{t(LEARN_KEEP.markOutdated)}</Text>
+                                        </Pressable>
+                                        <Pressable accessibilityRole="button" style={styles.tool} onPress={() => setMarking(null)}>
+                                            <Text style={styles.toolText}>{t(LEARN_KEEP.cancel)}</Text>
+                                        </Pressable>
+                                    </View>
+                                </View>
+                            ) : null}
+                            {busy ? <ActivityIndicator /> : null}
+                            {refusal ? <Text style={styles.refusal} testID="knowledge-refusal" accessibilityLiveRegion="polite">{refusal}</Text> : null}
+                        </>
+                    );
+                })()}
                 {identity && page.authorPublicKey !== identity.publicKey ? (
                     <View>
                         <Pressable accessibilityRole="button" accessibilityLabel={t('Report this page')} style={styles.report} onPress={() => setReporting((v) => !v)} testID="knowledge-report">

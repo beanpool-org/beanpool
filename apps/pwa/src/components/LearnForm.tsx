@@ -3,8 +3,10 @@
  * "＋ Suggest knowledge", the New Post panel's fifth button and Home's "Add the first thing…". The phone's is the same screen
  * (apps/native app/learn/new.tsx), the same words in the same order.
  *
- * Three uses, one form: a member's suggestion ("Send to the admins": it waits for an owner or admin), an owner's or admin's own
- * page ("Publish": it goes into Learn at once), and an owner's or admin's "Edit first" on a member's suggestion ("Approve").
+ * Five uses, one form: a member's suggestion ("Send to the admins": it waits for an owner or admin), an owner's or admin's own
+ * page ("Publish": it goes into Learn at once), an owner's or admin's "Edit first" on a member's suggestion ("Approve"), and
+ * (slice K5, §3.5) a member's fix to a page showing ("What changed?" first, then the page's words: it waits too) and an
+ * owner's or admin's "Edit" of one (at once). A fix and an edit change words, never photos: neither has the picker.
  * The node checks everything again; this only says the first thing missing before it sends (lib/learn.ts learnFormRefusal).
  * Photos are optional and the member's own (at most three, the browser's own picker, asked for nothing until 📷 is tapped).
  */
@@ -13,7 +15,7 @@ import { KNOWLEDGE_LIMITS, KNOWLEDGE_TOPICS, formatCount, t, type KnowledgeSourc
 import { learnFormRefusal, learnRefusalText, topicLabel, type LearnInput } from '../lib/learn';
 import { PostPhotoPicker } from './PostPhotoPicker';
 
-export type LearnFormUse = 'suggest' | 'publish' | 'approve';
+export type LearnFormUse = 'suggest' | 'publish' | 'approve' | 'fix' | 'edit';
 
 const LABEL = 'block mb-1 text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300';
 const FIELD = 'w-full min-h-[44px] py-2 px-3 rounded-xl border border-nature-200 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-bp-ink-learn';
@@ -21,8 +23,10 @@ const MUTED = 'text-nature-600 dark:text-nature-300';
 /** A link's box shows how an address starts: the same in every language. */
 const URL_HINT = 'https://';
 
-export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdited }: {
+export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdited, approvesFix = false }: {
     use: LearnFormUse;
+    /** "Edit first" on a fix (slice K5): approving changes a page that shows, and announces nothing. */
+    approvesFix?: boolean;
     /** "Edit first": the suggestion as it was sent. */
     initial?: LearnInput;
     /** "Edit first" on a member's suggestion: their own photos may be kept or taken off, never added to (the node refuses). */
@@ -38,19 +42,23 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdit
     const [place, setPlace] = useState(initial?.place ?? '');
     const [sources, setSources] = useState<KnowledgeSource[]>(initial?.sources?.length ? initial.sources : []);
     const [photos, setPhotos] = useState<string[]>(initial?.photos ?? []);
+    const [note, setNote] = useState('');
+    const fix = use === 'fix';
+    // A fix, an edit and "Edit first" on a fix change words, never photos: no picker, and none sent.
+    const wordsOnly = fix || use === 'edit' || approvesFix;
     const [refusal, setRefusal] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
     // How it opened; photos (data URLs) are compared one by one, never turned into one long string on each key.
     const [opened] = useState(() => ({ title, body, topic, place, sources: JSON.stringify(sources), photos }));
-    const edited = title !== opened.title || body !== opened.body || topic !== opened.topic || place !== opened.place
+    const edited = note !== '' || title !== opened.title || body !== opened.body || topic !== opened.topic || place !== opened.place
         || JSON.stringify(sources) !== opened.sources || photos.length !== opened.photos.length || photos.some((p, i) => p !== opened.photos[i]);
     useEffect(() => { onEdited?.(edited); }, [edited, onEdited]);
 
     const setSource = (i: number, part: Partial<KnowledgeSource>) => setSources((list) => list.map((s, j) => (j === i ? { ...s, ...part } : s)));
     const send = async () => {
         if (sending) return;
-        const input: LearnInput = { title, body, topic, place, sources, photos };
-        const said = learnFormRefusal(input);
+        const input: LearnInput = { title, body, topic, place, sources, ...(wordsOnly ? {} : { photos }), ...(fix ? { note } : {}) };
+        const said = fix && !note.trim() ? t('Say what changed.') : learnFormRefusal(input);
         setRefusal(said);
         if (said) return;
         setSending(true);
@@ -63,13 +71,20 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdit
         }
     };
 
-    const button = use === 'suggest' ? t('Send to the admins') : use === 'publish' ? t('Publish') : t('Approve');
+    const button = use === 'suggest' || fix ? t('Send to the admins') : use === 'publish' ? t('Publish') : use === 'edit' ? t('Save') : t('Approve');
     return (
         <form data-testid="learn-form" className="flex flex-col gap-4 pt-2 pb-4" onSubmit={(e) => { e.preventDefault(); void send(); }} noValidate>
-            {use !== 'approve' && (
+            {(use === 'suggest' || use === 'publish') && (
                 <p className="m-0 rounded-xl p-3 text-sm bg-bp-chip-learn-tint text-bp-chip-learn-ink">
                     {t('Share something worth knowing about this place: how something works, where to go, who to call. Not about private people. In your own words.')}
                 </p>
+            )}
+            {fix && (
+                <div>
+                    <label htmlFor="learn-form-note" className={LABEL}>{t('What changed? *')}</label>
+                    <input id="learn-form-note" data-testid="learn-form-note" value={note} maxLength={KNOWLEDGE_LIMITS.changeNote} onChange={(e) => setNote(e.target.value)}
+                        placeholder={t('e.g. The tip is closed on Mondays since March')} dir="auto" className={FIELD} />
+                </div>
             )}
             <div>
                 <label htmlFor="learn-form-title" className={LABEL}>{t('Title *')}</label>
@@ -125,20 +140,26 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdit
                     )}
                 </div>
             </fieldset>
-            <div>
-                <PostPhotoPicker photos={photos} onChange={setPhotos} max={keepPhotosOnly ? photos.length : KNOWLEDGE_LIMITS.photos} label={t('Photo (optional)')} />
-                <p className={`m-0 mt-1 text-xs ${MUTED}`}>{t('Your own photo. Without one, a picture for the topic is shown.')}</p>
-            </div>
+            {!wordsOnly && (
+                <div>
+                    <PostPhotoPicker photos={photos} onChange={setPhotos} max={keepPhotosOnly ? photos.length : KNOWLEDGE_LIMITS.photos} label={t('Photo (optional)')} />
+                    <p className={`m-0 mt-1 text-xs ${MUTED}`}>{t('Your own photo. Without one, a picture for the topic is shown.')}</p>
+                </div>
+            )}
             {refusal && <p role="alert" data-testid="learn-form-refusal" className="m-0 text-sm font-bold text-red-700 dark:text-red-300">{refusal}</p>}
             <button type="submit" data-testid="learn-form-send" disabled={sending} aria-busy={sending}
                 className="w-full min-h-[48px] rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover px-4 py-2.5 font-bold text-bp-cta-on disabled:opacity-60 disabled:cursor-wait">
                 {sending ? t('Sending...') : button}
             </button>
-            <p className={`m-0 text-xs ${MUTED}`}>
-                {use === 'suggest' ? t('An owner or admin checks it before anyone sees it.')
-                    : use === 'publish' ? t('It goes into Learn, and the Pulse announces it.')
-                    : t('Approving adds it to Learn and announces it in the Pulse.')}
-            </p>
+            {use !== 'edit' && (
+                <p className={`m-0 text-xs ${MUTED}`}>
+                    {use === 'suggest' ? t('An owner or admin checks it before anyone sees it.')
+                        : use === 'publish' ? t('It goes into Learn, and the Pulse announces it.')
+                        : fix ? t('An owner or admin checks it first. The page stays as it is until then.')
+                        : approvesFix ? t('Approving changes the page now.')
+                        : t('Approving adds it to Learn and announces it in the Pulse.')}
+                </p>
+            )}
         </form>
     );
 }

@@ -7,13 +7,21 @@
  * {name}") · how long. One opened: the page as members would see it, "Before you approve" (three lines), for an assistant's
  * draft the chip and the tick the button waits for, then Approve · Edit first (the form, then Approve) · Not this one (a reason
  * from core's list and a few words the writer reads). No bulk approve: each is opened.
+ *
+ * Slice K5: a fix shows "What changed" (its note), then only the parts its member changed, each as "Now" beside "Suggested"
+ * (`changed`; the note alone says so), a part the page changed under since marked amber (`pageChanged`: Approve is refused
+ * until "Edit first" chooses those words). Under the list, "Not checked for a year ({n})": information, never a count in the bell.
  */
 import { useEffect, useState } from 'react';
 import {
-    KNOWLEDGE_DECLINE_REASONS, KNOWLEDGE_LIMITS, t, timeAgo, upperCase, type KnowledgeDraftToCheck, type KnowledgeDraftWhole,
+    KNOWLEDGE_DECLINE_REASONS, KNOWLEDGE_LIMITS, t, timeAgo, upperCase, type KnowledgeDraftToCheck, type KnowledgeDraftWhole, type KnowledgeFixPart,
+    type KnowledgePageWords, type KnowledgeRow,
 } from '@beanpool/core';
-import { approveLearnDraft, declineLearnDraft, getLearnDraft, getLearnToCheck, learnRefusalText, safeSourceUrl, sourceHost, topicEmoji, topicLabel } from '../lib/learn';
+import {
+    approveLearnDraft, declineLearnDraft, getLearnDraft, getLearnToCheck, languageNameOf, learnRefusalText, safeSourceUrl, sourceHost, topicEmoji, topicLabel,
+} from '../lib/learn';
 import { LearnForm } from './LearnForm';
+import { LearnRow } from './LearnRow';
 import { CHIP, PAGE_BOX, BOX_LABEL } from './market-card-shell';
 
 const MUTED = 'text-nature-600 dark:text-nature-300';
@@ -37,9 +45,45 @@ const fromWords = (d: KnowledgeDraftToCheck) => (d.assistant
     ? t('gathered with {assistant} for {name}', { assistant: d.assistant, name: d.from.name })
     : t('from {name}', { name: d.from.name }));
 
-/** The list of what waits. */
-export function LearnCheckList({ onOpen }: { onOpen: (id: string) => void }) {
-    const [list, setList] = useState<{ drafts: KnowledgeDraftToCheck[]; total: number } | 'failed' | null>(null);
+/** A part of a page as the checker reads it beside its other version (slice K5): words as written, a topic and a language by name. */
+function partText(part: KnowledgeFixPart, w: Pick<KnowledgePageWords, KnowledgeFixPart>): string {
+    if (part === 'topic') return topicLabel(w.topic);
+    if (part === 'lang') return w.lang ? languageNameOf(w.lang) : '';
+    if (part === 'sources') return w.sources.map((s) => s.label ? `${s.label} (${sourceHost(s.url)})` : sourceHost(s.url)).join('\n');
+    return w[part] ?? '';
+}
+const partLabel = (part: KnowledgeFixPart) => ({
+    title: t('Title'), body: t('What to know'), topic: t('Topic'), place: t('Where', undefined, 'To check: the part of a page of Local knowledge that names its place'),
+    sources: t('Sources'), lang: t('Language'),
+})[part];
+
+/** A fix's changed parts, each as "Now" (the page as it shows) beside "Suggested" (what Approve writes). */
+function FixParts({ d }: { d: KnowledgeDraftWhole }) {
+    const changed = d.changed ?? [];
+    const moved = new Set(d.pageChanged ?? []);
+    // The page stopped showing (taken down, hidden): nothing to compare, and Approve is refused; "Not this one" answers it.
+    if (!d.post) return <p data-testid="learn-check-page-gone" className={`m-0 text-sm ${MUTED}`}>{t("This page of Local knowledge isn't showing any more.")}</p>;
+    if (changed.length === 0) return <p data-testid="learn-check-note-alone" className={`m-0 text-sm ${MUTED}`}>{t('Only the note: no words changed.')}</p>;
+    const now = d.post;
+    return (
+        <div data-testid="learn-check-parts" className="flex flex-col gap-2">
+            {changed.map((part) => (
+                <section key={part} data-testid={`learn-check-part-${part}`} className={PAGE_BOX}>
+                    <h3 className={BOX_LABEL.muted}>{partLabel(part)}</h3>
+                    {moved.has(part) && <p data-testid="learn-check-moved" className="m-0 mb-1 text-sm font-bold text-bp-ink-warning">{t('▲ The page changed here since the fix was sent.')}</p>}
+                    <p className={`m-0 text-xs font-bold ${MUTED}`}>{t('Now', undefined, 'To check: a part of a page of Local knowledge as it shows now, beside the fix')}</p>
+                    <p dir="auto" className="m-0 mb-1 text-sm whitespace-pre-wrap break-words">{partText(part, now)}</p>
+                    <p className={`m-0 text-xs font-bold ${MUTED}`}>{t('Suggested', undefined, 'To check: the same part as the fix would write it')}</p>
+                    <p dir="auto" className="m-0 text-sm font-bold whitespace-pre-wrap break-words">{partText(part, d)}</p>
+                </section>
+            ))}
+        </div>
+    );
+}
+
+/** The list of what waits, and under it the pages not checked for a year. */
+export function LearnCheckList({ onOpen, onOpenPage }: { onOpen: (id: string) => void; onOpenPage?: (id: string) => void }) {
+    const [list, setList] = useState<{ drafts: KnowledgeDraftToCheck[]; total: number; unchecked?: { total: number; rows: KnowledgeRow[] } } | 'failed' | null>(null);
     const [tries, setTries] = useState(0);
     useEffect(() => {
         let live = true;
@@ -48,8 +92,16 @@ export function LearnCheckList({ onOpen }: { onOpen: (id: string) => void }) {
     }, [tries]);
     if (list === 'failed') return <Failed onAgain={() => setTries((n) => n + 1)} />;
     if (!list) return <p className={MUTED}>{t('Loading...')}</p>;
-    if (list.drafts.length === 0) return <p data-testid="learn-check-empty" className={`py-4 ${MUTED}`}>{t('Nothing to check.')}</p>;
+    const old = list.unchecked && list.unchecked.rows.length > 0 ? list.unchecked : null;
+    const year = old && (
+        <section data-testid="learn-check-year" className="pt-4">
+            <h2 className="m-0 mb-2 text-sm font-extrabold text-nature-800 dark:text-nature-100">{t('Not checked for a year ({n})', { n: old.total })}</h2>
+            <div className="flex flex-col gap-2">{old.rows.map((row) => <LearnRow key={row.id} row={row} onOpen={() => onOpenPage?.(row.id)} />)}</div>
+        </section>
+    );
+    if (list.drafts.length === 0) return <><p data-testid="learn-check-empty" className={`py-4 ${MUTED}`}>{t('Nothing to check.')}</p>{year}</>;
     return (
+        <>
         <section data-testid="learn-check-list" className="pt-2">
             <h2 className="m-0 mb-2 text-sm font-extrabold text-nature-800 dark:text-nature-100">{t('Waiting ({n})', { n: list.total })}</h2>
             <div className="flex flex-col gap-2">
@@ -62,6 +114,8 @@ export function LearnCheckList({ onOpen }: { onOpen: (id: string) => void }) {
                 ))}
             </div>
         </section>
+        {year}
+        </>
     );
 }
 
@@ -96,6 +150,7 @@ export function LearnCheckOne({ id, onAnswered, editing, onEditing, onEdited }: 
     const d = draft;
     // An assistant's draft (K6): its name may be empty, so it is told by the field being there, not by what it says.
     const byAssistant = d.assistant !== null;
+    const fix = d.kind === 'fix';
     const mayApprove = !d.needsSourcesTicked || ticked;
     const act = async (go: () => Promise<unknown>, said: string) => {
         if (busy) return;
@@ -114,10 +169,10 @@ export function LearnCheckOne({ id, onAnswered, editing, onEditing, onEdited }: 
     if (editing) {
         return (
             <LearnForm use="approve" keepPhotosOnly={!byAssistant} initial={{ title: d.title, body: d.body, topic: d.topic, place: d.place ?? '', sources: d.sources, photos: d.photos }}
-                onEdited={onEdited}
+                onEdited={onEdited} approvesFix={fix}
                 onSend={async (edits) => {
-                    await approveLearnDraft(d.id, { edits, lang: d.lang, checkedSources: d.needsSourcesTicked });
-                    onAnswered(t('Approved. It is in Learn.'));
+                    await approveLearnDraft(d.id, { edits, lang: d.lang, checkedSources: d.needsSourcesTicked, fix });
+                    onAnswered(fix ? t('Approved. The page shows the fix now.') : t('Approved. It is in Learn.'));
                 }} />
         );
     }
@@ -137,6 +192,7 @@ export function LearnCheckOne({ id, onAnswered, editing, onEditing, onEdited }: 
                     <p dir="auto" className="m-0 text-sm break-words">{d.note}</p>
                 </section>
             )}
+            {fix && <FixParts d={d} />}
             <div dir="auto" data-testid="learn-check-body" className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-nature-900 dark:text-nature-50">{d.body}</div>
             {d.place && <p dir="auto" className="m-0 text-sm font-bold text-nature-800 dark:text-nature-100 break-words">{t('Where: {place}', { place: d.place })}</p>}
             {d.photos.length > 0 && (
@@ -205,10 +261,10 @@ export function LearnCheckOne({ id, onAnswered, editing, onEditing, onEdited }: 
                 </fieldset>
             ) : (
                 <div className="flex flex-col gap-2">
-                    <p className={`m-0 text-xs ${MUTED}`}>{t('Approving adds it to Learn and announces it in the Pulse.')}</p>
+                    <p className={`m-0 text-xs ${MUTED}`}>{fix ? t('Approving changes the page now.') : t('Approving adds it to Learn and announces it in the Pulse.')}</p>
                     {refusal && <p role="alert" className="m-0 text-sm font-bold text-red-700 dark:text-red-300">{refusal}</p>}
                     <button type="button" data-testid="learn-check-approve" disabled={!mayApprove || busy}
-                        onClick={() => void act(() => approveLearnDraft(d.id, { checkedSources: d.needsSourcesTicked }), t('Approved. It is in Learn.'))}
+                        onClick={() => void act(() => approveLearnDraft(d.id, { checkedSources: d.needsSourcesTicked }), fix ? t('Approved. The page shows the fix now.') : t('Approved. It is in Learn.'))}
                         className={`${BUTTON} bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on`}>{t('Approve')}</button>
                     <button type="button" data-testid="learn-check-edit" disabled={!mayApprove || busy} onClick={() => onEditing(true)} className={SECOND}>{t('Edit first')}</button>
                     <button type="button" data-testid="learn-check-not" disabled={busy} onClick={() => setMode('no')} className={SECOND}>{t('Not this one')}</button>

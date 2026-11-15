@@ -7,8 +7,18 @@
  * what it can (a title, what to know, a topic, a link's start).
  *
  * `?from=learn`: opened from Learn, so "Open Learn" after publishing goes back to it rather than opening a second.
+ *
+ * Slice K5 B (§3.5): `?fix=<page id>` is "Suggest a fix": the same form filled with the page as it shows, "WHAT CHANGED? *"
+ * first, no photo; it sends only the parts changed and the note to the waiting list (learn-keep.ts fixBody), never onto the page.
+ * `?edit=<page id>` is an owner's or admin's "Edit": the same form, saved at once (POST /api/knowledge/posts/:id/edit).
+ *
+ * Both are sent against the page the form opened on, and only that (review of #3218): the member's changes to it. A sync while
+ * the form is open, or the page leaving the copy, changes nothing in the form or in what it sends; the node answers when it is
+ * sent (a page taken down meanwhile is refused in its words). A fix opens on the page as it shows (the copy, or the node when the
+ * copy hasn't it). An edit opens on the page as the node has it, read when the form opens, as the web does: /edit rewrites the
+ * whole page, so starting from a copy that's behind would put older words back. Not reached, the edit doesn't open.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Image } from 'expo-image';
@@ -22,6 +32,9 @@ import {
     type KnowledgeFormValues,
 } from '../../components/learn/learn-write';
 import { forgetLearnRole, useLearnWriter } from '../../components/learn/useLearnWriter';
+import { LEARN_KEEP, editBody, fixBody, formOfPage } from '../../components/learn/learn-keep';
+import { readNodePage, useKnowledgePage } from '../../components/learn/useKnowledgePage';
+import type { KnowledgePage } from '../../utils/learn-copy';
 import { useIdentity } from '../IdentityContext';
 import { useLearnMode } from '../../utils/use-learn-mode';
 import { askForPostPhoto } from '../../utils/post-photo';
@@ -31,7 +44,17 @@ export default function NewKnowledgeScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
-    const { from } = useLocalSearchParams<{ from?: string }>();
+    const { from, fix, edit } = useLocalSearchParams<{ from?: string; fix?: string; edit?: string }>();
+    // "Suggest a fix" or "Edit" (K5): the page they start from. `opened`: the page the form was filled from, kept as it was:
+    // what is sent is the member's changes to it, never to a newer copy that a sync brings meanwhile.
+    const pageId = typeof fix === 'string' && fix ? fix : typeof edit === 'string' && edit ? edit : undefined;
+    const use: 'new' | 'fix' | 'edit' = !pageId ? 'new' : pageId === fix ? 'fix' : 'edit';
+    const { page, settled } = useKnowledgePage(use === 'fix' ? pageId : undefined, true);
+    const [opened, setOpened] = useState<KnowledgePage | null>(null);
+    // An edit's read of the node's page: under way, the node has no such page, or not reached (then "Try again").
+    const [nodeRead, setNodeRead] = useState<'reading' | 'none' | 'unreached'>('reading');
+    const [tries, setTries] = useState(0);
+    const [note, setNote] = useState('');
     const live = useLearnMode() === 'live';
     const writer = useLearnWriter(live);
     const { identity } = useIdentity();
@@ -44,6 +67,19 @@ export default function NewKnowledgeScreen() {
     const [busy, setBusy] = useState(false);
     const [done, setDone] = useState<'sent' | 'published' | null>(null);
     const set = (patch: Partial<KnowledgeFormValues>) => { setForm((f) => ({ ...f, ...patch })); setProblem(null); };
+    useEffect(() => {
+        if (use === 'fix' && page && !opened) { setForm(formOfPage(page)); setOpened(page); }
+    }, [use, page, opened]);
+    useEffect(() => {
+        if (use !== 'edit' || !pageId) return undefined;
+        let gone = false;
+        setNodeRead('reading');
+        void readNodePage(pageId).then((p) => {
+            if (gone) return;
+            if (p) { setForm(formOfPage(p)); setOpened(p); } else setNodeRead(p === null ? 'none' : 'unreached');
+        });
+        return () => { gone = true; };
+    }, [use, pageId, tries]);
 
     const s = useStyles(({ colors: c }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: c.surface.page },
@@ -96,15 +132,35 @@ export default function NewKnowledgeScreen() {
                 <Text style={s.backArrow}>‹</Text>
                 <Text style={s.backText}>{t(LEARN_LINES.back)}</Text>
             </Pressable>
-            <Text style={s.title} accessibilityRole="header" numberOfLines={1}>{t(KNOWLEDGE_NAMES.kind)}</Text>
+            <Text style={s.title} accessibilityRole="header" numberOfLines={1}>
+                {use === 'fix' ? t(LEARN_KEEP.fix) : use === 'edit' ? t(LEARN_KEEP.edit) : t(KNOWLEDGE_NAMES.kind)}
+            </Text>
         </View>
     );
 
     const send = async () => {
         Keyboard.dismiss();
-        const wrong = knowledgeFormProblem(form);
+        const wrong = use === 'fix' && !note.trim() ? t(LEARN_KEEP.noNote) : knowledgeFormProblem(form);
         if (wrong) { setProblem(wrong); return; }
         setBusy(true);
+        if (use !== 'new' && opened) {
+            // A fix waits for an owner or admin; an owner's or admin's edit is saved at once. Each against the page it opened on.
+            // The node's refusal, in its words.
+            try {
+                if (use === 'fix') {
+                    await signedRequestWithMethod('POST', '/api/knowledge/drafts', fixBody(opened, form, note), { withStatus: true });
+                    setDone('sent');
+                } else {
+                    await signedRequestWithMethod('POST', `/api/knowledge/posts/${encodeURIComponent(opened.id)}/edit`, editBody(opened, form), { withStatus: true });
+                    leave();
+                }
+            } catch (e) {
+                setProblem(learnRefusal(e));
+            } finally {
+                setBusy(false);
+            }
+            return;
+        }
         const body = knowledgeFormBody(form, currentLanguage());
         const post = (publish: boolean) => signedRequestWithMethod('POST', knowledgeFormPath(publish), body, { withStatus: true });
         try {
@@ -162,11 +218,41 @@ export default function NewKnowledgeScreen() {
         askForPostPhoto((photo) => setForm((f) => (f.photos.length < KNOWLEDGE_LIMITS.photos ? { ...f, photos: [...f.photos, photo] } : f)));
     };
 
+    if (use !== 'new' && !opened) {
+        // The page is being read, isn't in Learn any more (taken down meanwhile), or the node wasn't reached for an edit (which
+        // never starts from the copy): nothing to fix or edit yet.
+        const gone = use === 'fix' ? settled && !page : nodeRead === 'none';
+        const unreached = use === 'edit' && nodeRead === 'unreached';
+        return (
+            <View style={[s.container, { paddingTop: insets.top }]} testID="learn-new-page-missing">
+                {header}
+                <View style={[s.content, { gap: 12 }]}>
+                    {gone ? <Text style={s.doneLine}>{t(LEARN_LINES.notFound)}</Text> : unreached ? (
+                        <>
+                            <Text style={s.doneLine} testID="learn-new-unreached">{t(LEARN_KEEP.unreached)}</Text>
+                            <Pressable testID="learn-new-again" accessibilityRole="button" style={s.secondary} onPress={() => setTries((n) => n + 1)}>
+                                <Text style={s.secondaryText}>{t(LEARN_KEEP.again)}</Text>
+                            </Pressable>
+                        </>
+                    ) : <ActivityIndicator />}
+                </View>
+            </View>
+        );
+    }
+    const wordsOnly = use !== 'new';
     return (
         <View style={[s.container, { paddingTop: insets.top }]} testID="learn-new">
             {header}
             <KeyboardAwareScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-                <View style={s.box}><Text style={s.boxText}>{t(LEARN_WRITE.formBox)}</Text></View>
+                {use === 'new' ? <View style={s.box}><Text style={s.boxText}>{t(LEARN_WRITE.formBox)}</Text></View> : null}
+                {use === 'fix' ? (
+                    <>
+                        <Text style={s.label}>{t(LEARN_KEEP.noteLabel)}</Text>
+                        <TextInput testID="learn-new-note" style={s.input} value={note} onChangeText={(v) => { setNote(v); setProblem(null); }}
+                            maxLength={KNOWLEDGE_LIMITS.changeNote} multiline scrollEnabled={false} placeholder={t(LEARN_KEEP.noteHint)}
+                            placeholderTextColor={colors.text.muted} accessibilityLabel={t(LEARN_KEEP.noteLabel)} />
+                    </>
+                ) : null}
 
                 <Text style={s.label}>{t(LEARN_WRITE.titleLabel)}</Text>
                 {/* Grows to a second line rather than cutting one (its hint and an 80-letter title at 320 dp with 1.3x text); Enter
@@ -218,6 +304,7 @@ export default function NewKnowledgeScreen() {
                     </Pressable>
                 ) : null}
 
+                {wordsOnly ? null : <>
                 <Text style={s.label}>{t(LEARN_WRITE.photoLabel)}</Text>
                 <View style={s.photos}>
                     {form.photos.map((photo, i) => (
@@ -232,12 +319,17 @@ export default function NewKnowledgeScreen() {
                     ) : null}
                 </View>
                 <Text style={s.small}>{t(LEARN_WRITE.photoLine)}</Text>
+                </>}
 
                 {problem ? <Text style={s.problem} testID="learn-new-problem" accessibilityLiveRegion="polite">{problem}</Text> : null}
                 <Pressable testID="learn-new-send" accessibilityRole="button" style={[s.primary, busy && { opacity: 0.6 }]} disabled={busy} onPress={send}>
-                    {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={s.primaryText}>{checks ? t(LEARN_WRITE.publish) : t(LEARN_WRITE.send)}</Text>}
+                    {busy ? <ActivityIndicator color={colors.text.inverse} /> : (
+                        <Text style={s.primaryText}>{use === 'edit' ? t(LEARN_KEEP.save) : checks && use === 'new' ? t(LEARN_WRITE.publish) : t(LEARN_WRITE.send)}</Text>
+                    )}
                 </Pressable>
-                <Text style={s.small}>{checks ? t(LEARN_WRITE.publishLine) : t(LEARN_WRITE.sendLine)}</Text>
+                {use === 'edit' ? null : (
+                    <Text style={s.small}>{use === 'fix' ? t(LEARN_KEEP.fixLine) : checks ? t(LEARN_WRITE.publishLine) : t(LEARN_WRITE.sendLine)}</Text>
+                )}
             </KeyboardAwareScrollView>
         </View>
     );

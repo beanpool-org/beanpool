@@ -388,9 +388,10 @@ describe('a page', () => {
         expect(screen.getByTestId('lightbox').textContent).toBe('https://img.example/b.jpg');
     });
 
-    it('has no action of the later slices: no helped, share, fix, edit or take-down', async () => {
+    // K5 drew "This helped", "Suggest a fix" and the tools (LearnPage.keep.test.tsx holds them); what is still to come stays off.
+    it('has no action of the later slices: no share, take-down, thank or pin', async () => {
         await openFlood();
-        expect(screen.queryByRole('button', { name: /helped|share|fix|edit|take.?down|thank|pin/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: /share|take.?down|thank|pin/i })).toBeNull();
     });
 });
 

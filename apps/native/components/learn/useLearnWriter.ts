@@ -48,7 +48,8 @@ export async function forgetLearnRole(identity: { publicKey?: string } | null | 
     if (url) forgetNodeRole(url, identity.publicKey);
 }
 
-export function useLearnWriter(live: boolean): LearnWriter {
+/** `countWaiting` false: the role alone (a page's tools, slice K5), with no read of My suggestions. */
+export function useLearnWriter(live: boolean, countWaiting = true): LearnWriter {
     const { identity } = useIdentity();
     const [writer, setWriter] = useState<LearnWriter>({ checks: false, waiting: 0 });
     useFocusEffect(useCallback(() => {
@@ -58,10 +59,10 @@ export function useLearnWriter(live: boolean): LearnWriter {
             const url = await anchorUrl().catch(() => null);
             const role = url ? (await cachedNodeRoleHeard(url, identity))?.role : null;
             const checks = role === 'owner' || role === 'admin';
-            const mine = checks ? null : await readMyDrafts();
+            const mine = checks || !countWaiting ? null : await readMyDrafts();
             if (!gone) setWriter({ checks, waiting: mine?.waiting.length ?? 0 });
         })().catch(() => {});
         return () => { gone = true; };
-    }, [live, identity]));
+    }, [live, identity, countWaiting]));
     return writer;
 }

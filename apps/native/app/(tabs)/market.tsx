@@ -19,6 +19,7 @@ import { requestSync, isPillarSyncActive, syncLandedOnThisCopy, PILLAR_SYNC_ENDE
 import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
 import { MyDealsSheet, usePendingDealsCount, type DealsTab } from '../../components/MyDealsSheet';
+import { BillsTab } from '../../components/Bills';
 import { PostAuthorTrust, isElder } from '../../components/PostAuthorTrust';
 import { ListingCopyLine } from '../../components/ListingCopyLine';
 import { TrustPickerSheet, TRUST_FILTERS } from '../../components/TrustPickerSheet';
@@ -2279,9 +2280,10 @@ export default function MarketScreen() {
                 initialTab={dealsInitialTab}
                 showsBeans={showsBeans || dealsPreview}
                 preview={dealsPreview}
-                bills={reader.node?.bills === true}
-                openBillId={openBillId}
-                onBillOpened={clearOpenBill}
+                // Bills where the node has them on, or a door names a bill (only a node with bills sends one).
+                bills={identity && (reader.node?.bills === true || dealsInitialTab === 'bills')
+                    ? (leave) => <BillsTab me={identity.publicKey} openBillId={openBillId} onBillOpened={clearOpenBill} leave={leave} />
+                    : null}
             />
 
             {/* The one way to post: the same chooser the map's + opens (components/NewPostTypeSheet). */}

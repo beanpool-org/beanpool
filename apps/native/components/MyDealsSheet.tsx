@@ -2,9 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, Pressable, Modal, FlatList, Image, StyleSheet, Dimensions, ScrollView } from 'react-native';
 import { ListPhoto } from './ListPhoto';
 import { router } from 'expo-router';
-import { createConversationApi, getMarketplaceTransactions, getPosts, getMyPosts } from '../utils/db';
-import { Alert } from '../utils/keyboard-alert';
-import { BillsPanel } from './Bills';
+import { getMarketplaceTransactions, getPosts, getMyPosts } from '../utils/db';
 import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
@@ -41,11 +39,11 @@ interface MyDealsSheetProps {
     onClose: () => void;
     /** Optional: which sub-tab to default open to */
     initialTab?: DealsTab;
-    /** The node's `bills` switch (utils/node-profile.ts): Your deals → Bills (components/Bills.tsx). */
-    bills?: boolean;
-    /** A bill to open on Bills (a bell row, a push, a notice: DESIGN-getting-paid-fable §4.3); `onBillOpened` once looked for. */
-    openBillId?: string | null;
-    onBillOpened?: () => void;
+    /**
+     * Your deals → Bills (DESIGN-getting-paid-fable §4), drawn by the screen (components/Bills.tsx BillsTab) where the node's
+     * `bills` switch is on or a door names a bill; handed the sheet's close, as every way forward closes it first. Absent: no tab.
+     */
+    bills?: ((leave: () => void) => React.ReactNode) | null;
     /** False on a community with Beans off (the Market's `showsBeans`): the cards draw no Beans amount. The sheet
      *  still opens there from a link (`dealsTab`), and My Posts lists the member's posts. */
     showsBeans?: boolean;
@@ -57,11 +55,10 @@ interface MyDealsSheetProps {
 
 export type DealsTab = 'active' | 'pending' | 'history' | 'bills';
 
-export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview = false, initialTab = 'pending', showsBeans = true, bills = false, openBillId, onBillOpened }: MyDealsSheetProps) {
+export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview = false, bills, initialTab = 'pending', showsBeans = true }: MyDealsSheetProps) {
     const identity = preview ? SAMPLE_DEALS_ME : ownIdentity;
-    // Bills (components/Bills.tsx) where the node says they are on; a door to a bill opens the tab before that is read, as
-    // only a node with bills sends one. Never in preview.
-    const billsShown = !preview && (bills || initialTab === 'bills');
+    // Bills where the screen draws them (never in preview: a node with bills has Beans).
+    const billsShown = !preview && !!bills;
     const [markOpen, setMarkOpen] = useState(false);
     const openMark = () => setMarkOpen(true);
     const { colors, theme } = useTheme();
@@ -786,21 +783,10 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         </View>
                     )}
 
-                    {/* List; Bills is its own (components/Bills.tsx), read from the node as it opens. */}
-                    {dealsTab === 'bills' && billsShown && identity ? (
+                    {/* List; Bills is the screen's (components/Bills.tsx BillsTab), read from the node as it opens. */}
+                    {dealsTab === 'bills' && bills && !preview ? (
                         <ScrollView contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled" testID="deals-bills">
-                            <BillsPanel me={identity.publicKey} openBillId={openBillId} onBillOpened={onBillOpened}
-                                onMessage={async (peer) => {
-                                    try {
-                                        const conv = await createConversationApi('dm', [identity.publicKey, peer], identity.publicKey);
-                                        onClose();
-                                        router.push(`/chat/${conv.id}`);
-                                    } catch (e: any) {
-                                        Alert.alert(t('Error'), typeof e?.message === 'string' && e.message ? e.message : t('Connect to your community to start a chat.'));
-                                    }
-                                }}
-                                onOpenPost={(postId) => { onClose(); router.push(`/post/${postId}`); }}
-                                onPostOffer={() => { onClose(); router.push({ pathname: '/new-listing', params: { newPost: 'offer' } }); }} />
+                            {bills(onClose)}
                         </ScrollView>
                     ) : (
                     <FlatList

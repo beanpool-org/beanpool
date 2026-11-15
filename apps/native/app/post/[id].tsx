@@ -37,6 +37,7 @@ import { loadIdentity } from '../../utils/identity';
 import { getProfileStatus, acceptNeedsProfileLine } from '../../utils/profile-status';
 import { ReviewModal } from '../../components/ReviewModal';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
+import { BillsTab } from '../../components/Bills';
 import { askForPostPhoto } from '../../utils/post-photo';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { BeansText } from '../../components/BeansText';
@@ -2872,7 +2873,7 @@ function PostDetailModal() {
                     identity={identity}
                     onClose={() => setShowDealsSheet(false)}
                     initialTab="pending"
-                    bills={reader.node?.bills === true}
+                    bills={identity && reader.node?.bills === true ? (leave) => <BillsTab me={identity.publicKey} leave={leave} /> : null}
                 />
             )}
             

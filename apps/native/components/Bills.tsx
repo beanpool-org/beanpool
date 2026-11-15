@@ -14,12 +14,14 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import {
-    billAnswerLost, billBinding, billBoundSheet, billLines, billPayRequestFor, billPaySheet, billSentRow, billToPayRow, formatDate,
+    billAnswerLost, billBinding, billBoundSheet, billLines, billPayRequestFor, billPaySheet, billSentRow, billToPayRow, formatDate, t,
     type BillBalanceRead, type BillBinding, type BillPayRequest, type BillView,
 } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
-import { declineBill, getBalance, getBills, payBill, reportBill, withdrawBill } from '../utils/db';
+import { createConversationApi, declineBill, getBalance, getBills, payBill, reportBill, withdrawBill } from '../utils/db';
+import { Alert } from '../utils/keyboard-alert';
 import { blockUser, getBlockedUsers } from '../utils/blocklist';
 import { ReportReasonBox } from './ReportReasonBox';
 
@@ -74,6 +76,28 @@ function Button({ label, onPress, go, disabled, testID }: { label: string; onPre
             style={[go ? s.go : s.quiet, disabled && s.off]}>
             <Text style={go ? s.goText : s.quietText}>{label}</Text>
         </Pressable>
+    );
+}
+
+/**
+ * Your deals → Bills as a screen hands it to the deals sheet (MyDealsSheet's `bills`): the panel with its ways forward, each
+ * closing the sheet first (`leave`) so the next screen opens on top: Message opens a direct chat with the sender, the listing a
+ * bill is about opens that listing, Post an Offer opens the composer on an Offer.
+ */
+export function BillsTab({ me, openBillId, onBillOpened, leave }: { me: string; openBillId?: string | null; onBillOpened?: () => void; leave: () => void }) {
+    return (
+        <BillsPanel me={me} openBillId={openBillId} onBillOpened={onBillOpened}
+            onMessage={async (peer) => {
+                try {
+                    const conv = await createConversationApi('dm', [me, peer], me);
+                    leave();
+                    router.push(`/chat/${conv.id}`);
+                } catch (e: any) {
+                    Alert.alert(t('Error'), typeof e?.message === 'string' && e.message ? e.message : t('Connect to your community to start a chat.'));
+                }
+            }}
+            onOpenPost={(postId) => { leave(); router.push(`/post/${postId}`); }}
+            onPostOffer={() => { leave(); router.push({ pathname: '/new-listing', params: { newPost: 'offer' } }); }} />
     );
 }
 

@@ -18,6 +18,7 @@ import {
     linkResultMessage,
     loadPendingLink,
     requestLinkNonce,
+    requestRefreshNonce,
     PENDING_LINK_TTL_MS,
 } from './link-signin';
 
@@ -202,5 +203,119 @@ describe('the way back', () => {
         const out = await finishLink(member, googleReturn(NONCE, SUB, 'another-nonce'));
         expect(out.kind).toBe('failed');
         expect(calls).toHaveLength(0);
+    });
+});
+
+/**
+ * Refresh (recovery without a typed name, slice S4): the ordinary Connect, for a sign-in the account already has whose copy
+ * the community's server can't find from the sign-in alone. The same trip; the phone's two requests.
+ */
+describe('Refresh', () => {
+    const SUB = 'g-sub-88';
+    const googleReturn = (state = NONCE, sub = SUB, nonce = NONCE) =>
+        readAuthReturn('/app/auth/google', `#state=${state}&id_token=${fakeJwt({ sub, nonce })}`)!;
+
+    async function leftToRefresh(now: number = Date.now()): Promise<string> {
+        const calls = stubNode({ '/api/recovery/sso-nonce': nonceAnswer });
+        const got = await requestRefreshNonce(member, 'google');
+        if (!('nonce' in got)) throw new Error(got.message);
+        const navigate = vi.fn();
+        expect(leaveForLink(member, 'google', got.nonce, { origin: ORIGIN, navigate, now, purpose: 'refresh' })).toEqual({ ok: true });
+        expect(calls.map((c) => c.path)).toEqual(['/api/recovery/sso-nonce']);
+        expect(calls[0].headers['X-Public-Key']).toBe(member.publicKey);
+        return navigate.mock.calls[0][0] as string;
+    }
+
+    it("asks the ordinary Connect's nonce, signed by the member, and keeps that the trip is a Refresh", async () => {
+        const url = new URL(await leftToRefresh(2_000));
+        expect(url.origin).toBe('https://accounts.google.com');
+        expect(url.searchParams.get('nonce')).toBe(NONCE);
+        expect(loadPendingLink(2_000)).toEqual({
+            publicKey: member.publicKey, provider: 'google', nonce: NONCE, startedAt: 2_000, expiresAt: 2_000 + PENDING_LINK_TTL_MS, purpose: 'refresh',
+        });
+    });
+
+    it("on the way back: one signed deposit at the ordinary Connect's route, the copy opening to the key and words; refreshed on the server's word", async () => {
+        await leftToRefresh();
+        expect(isLinkReturn(googleReturn(), member)).toBe(true);
+        const calls = stubNode({
+            '/api/recovery/shares/sso': () => json(200, { generation: 3, provider: 'google', enrolledSso: ['google'], findableSso: ['google'], threshold: 1 }),
+        });
+        const result = await finishLink(member, googleReturn());
+        expect(result).toEqual({ kind: 'refreshed', provider: 'google' });
+        expect(calls.map((c) => c.path)).toEqual(['/api/recovery/shares/sso']);
+        const sent = calls[0];
+        expect(sent.headers['X-Public-Key']).toBe(member.publicKey);
+        expect(Object.keys(sent.body).sort()).toEqual(['idToken', 'nonce', 'provider', 'shares']);
+        expect(sent.body).toMatchObject({ provider: 'google', nonce: NONCE, idToken: googleReturn().idToken });
+        expect(sent.body.shares).toHaveLength(1);
+        const opened = await openSeedFromSso(sent.body.shares[0], 'google', SUB);
+        expect(bytesToHex(opened.seed)).toBe(member.privateKey.slice(32));
+        expect(opened.words).toEqual(member.mnemonic);
+        expect(loadPendingLink()).toBeNull();
+        expect(linkResultMessage(result)).toBe('Google is refreshed. Signing in with it brings this account back, with nothing to type.');
+    });
+
+    it('a browser without its 12 words refreshes all the same: the key alone is sealed, nothing is asked for', async () => {
+        member = { ...member, mnemonic: undefined } as BeanPoolIdentity;
+        await leftToRefresh();
+        const calls = stubNode({ '/api/recovery/shares/sso': () => json(200, { enrolledSso: ['google'], findableSso: ['google'] }) });
+        const result = await finishLink(member, googleReturn());
+        expect(result).toEqual({ kind: 'refreshed', provider: 'google' });
+        const opened = await openSeedFromSso(calls[0].body.shares[0], 'google', SUB);
+        expect(bytesToHex(opened.seed)).toBe(member.privateKey.slice(32));
+        expect(opened.words ?? null).toBeNull();
+    });
+
+    it("never a false success: a refusal, an answer that doesn't say findable, or no answer is a sentence, and nothing is retried", async () => {
+        const cases: Array<[() => Response, RegExp]> = [
+            [() => json(400, { error: 'Google token is not valid JWT JSON' }), /^Couldn't refresh Google, so nothing changed\. Try again in a minute\.$/],
+            // The signature middleware's refusal (no code): the web reads it as this device's clock, as every signed trip does.
+            [() => json(401, { error: 'Unauthorized' }), /date and time look wrong/],
+            [() => json(409, { error: "This community keeps no copies of members' accounts.", code: 'no_copies_here' }), /keeps no copies/],
+            [() => json(503, { error: "This server can't lock recovery copies right now." }), /can't lock recovery copies/],
+            [() => json(429, { error: 'Too many attempts.' }, { 'Retry-After': '61' }), /^Too many tries just now\. Try again in 2 minutes\.$/],
+            [() => json(200, { enrolledSso: ['google'], findableSso: [] }), /^Couldn't refresh Google/],
+            [() => json(200, { enrolledSso: ['google'] }), /^Couldn't refresh Google/],
+            [() => new Response('<html>a proxy</html>', { status: 502 }), /^Couldn't refresh Google/],
+        ];
+        for (const [res, said] of cases) {
+            await leftToRefresh();
+            const calls = stubNode({ '/api/recovery/shares/sso': res });
+            const result = await finishLink(member, googleReturn());
+            expect(result.kind).toBe('failed');
+            expect(linkResultMessage(result)).toMatch(said);
+            expect(calls).toHaveLength(1);
+        }
+    });
+
+    it("can't reach the community: says so", async () => {
+        await leftToRefresh();
+        vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+        const result = await finishLink(member, googleReturn());
+        expect(result.kind).toBe('failed');
+        expect(linkResultMessage(result)).toBe("Can't reach the community right now. Try again in a minute.");
+    });
+
+    it('cancelled at the provider: nothing is sent, in words for a Refresh', async () => {
+        await leftToRefresh();
+        const calls = stubNode({});
+        const result = await finishLink(member, readAuthReturn('/app/auth/google', `#state=${NONCE}&error=access_denied`)!);
+        expect(result).toEqual({ kind: 'cancelled', provider: 'google', refresh: true });
+        expect(calls).toHaveLength(0);
+        expect(linkResultMessage(result)).toBe('Refreshing your sign-in was cancelled. Nothing changed.');
+    });
+
+    it("the nonce's refusals are sentences: a community that keeps no copies, too many tries, no answer", async () => {
+        const cases: Array<[() => Response, RegExp]> = [
+            [() => json(409, { error: "This community keeps no copies of members' accounts.", code: 'no_copies_here' }), /keeps no copies/],
+            [() => json(429, { error: 'Too many attempts.' }, { 'Retry-After': '40' }), /^Too many tries just now\. Try again in 1 minute\.$/],
+            [() => json(404, { error: 'Not Found' }), /^Couldn't refresh Google, so nothing changed\./],
+        ];
+        for (const [res, said] of cases) {
+            stubNode({ '/api/recovery/sso-nonce': res });
+            const got = await requestRefreshNonce(member, 'google');
+            expect('message' in got && got.message).toMatch(said);
+        }
     });
 });

@@ -7,7 +7,7 @@ import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury, WaitingVoucherRow } from '@beanpool/core';
-import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type KnockVia } from '@beanpool/core';
+import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, signInsToRefresh, t, type DmLineDisclosure, type KnockVia } from '@beanpool/core';
 import { readGroupInvitations, type GroupInvitations } from '@beanpool/core';
 import { PULSE_KNOWLEDGE_WITH, type PulseKnowledgeCard } from '@beanpool/core';
 import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
@@ -3720,6 +3720,20 @@ export async function getSignInRecovery(): Promise<string[] | null> {
         return Array.isArray(res?.enrolledSso) ? res.enrolledSso.filter((p): p is string => typeof p === 'string') : null;
     } catch {
         return null;
+    }
+}
+
+/**
+ * The sign-ins whose copy this community's server can't find from the sign-in alone yet (recovery S4): Account Protection
+ * offers each a Refresh. From the same signed `POST /api/recovery/shares/status`, by core's rule for both apps
+ * (signInsToRefresh): empty for a server from before S4, no answer, or anything else, so nothing is offered on a guess.
+ * Asked only once the node has named a sign-in (getSignInRecovery). Never throws.
+ */
+export async function getSignInsToRefresh(): Promise<string[]> {
+    try {
+        return signInsToRefresh(await request<unknown>('POST', '/api/recovery/shares/status', {}));
+    } catch {
+        return [];
     }
 }
 

@@ -87,6 +87,8 @@ export const SUITES = [
     'test-recovery-collect',
     // Getting an account back with a sign-in and nothing typed (S0): as a local community here, as the global one in VARIANTS.
     'test-recovery-find',
+    // Whether each sign-in's copy is findable, and Refresh (S4).
+    'test-recovery-findable',
     'test-sso-copy-hardening',
     'test-sso-recovery-roundtrip',
     withTimeout('test-recovery-seal', 600),

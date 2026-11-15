@@ -14,6 +14,16 @@
  * and every refusal is a sentence. Where the community keeps no copies of members' accounts (its rule, vault rethink VR2),
  * only the second job is done: the node keeps no copy (`recovery.code` `no_copies_here`), and the result says it was the
  * rule, not a failure.
+ *
+ * ## Refresh (recovery without a typed name, slice S4)
+ *
+ * The same trip for a sign-in the account already has, whose copy the community's server can't find from the sign-in alone
+ * (`findableSso` of `POST /api/recovery/shares/status`, @beanpool/core signInsToRefresh). It is the ordinary Connect, the
+ * phone's: a nonce from `POST /api/recovery/sso-nonce` and, on the way back, the same sealed copy in a signed
+ * `POST /api/recovery/shares/sso`, which makes that sign-in's copy again in place of the old one and writes its find hash.
+ * The pending record says which it is (`purpose: 'refresh'`). Nothing is asked for: the key and any words this browser
+ * holds are what is sealed. Refreshed only on the server's own word that the sign-in is now findable; anything else is a
+ * sentence, and the old copy stays as it was.
  */
 
 import {
@@ -30,6 +40,8 @@ export interface PendingLink {
     nonce: string;
     startedAt: number;
     expiresAt: number;
+    /** A Refresh of a sign-in the account already has (the header's "Refresh"); absent for adding one. */
+    purpose?: 'refresh';
 }
 
 const PENDING_LINK_KEY = 'beanpool_pending_link';
@@ -53,7 +65,10 @@ export function loadPendingLink(now: number = Date.now()): PendingLink | null {
         const v = JSON.parse(raw);
         if (v && typeof v.publicKey === 'string' && isJoinProvider(v.provider) && typeof v.nonce === 'string' && v.nonce
             && typeof v.expiresAt === 'number' && v.expiresAt > now) {
-            return { publicKey: v.publicKey, provider: v.provider, nonce: v.nonce, startedAt: Number(v.startedAt) || 0, expiresAt: v.expiresAt };
+            return {
+                publicKey: v.publicKey, provider: v.provider, nonce: v.nonce, startedAt: Number(v.startedAt) || 0, expiresAt: v.expiresAt,
+                ...(v.purpose === 'refresh' ? { purpose: 'refresh' as const } : {}),
+            };
         }
     } catch { /* not ours */ }
     clearPendingLink();
@@ -90,6 +105,48 @@ export function linkRefusalMessage(answer: DoorAnswer, provider: JoinProvider | 
 
 const UNREACHABLE = "Can't reach the community right now. Try again in a minute.";
 
+/** A Refresh the community didn't take: the old copy is as it was (key-lines.ts says it in the member's language). */
+export function refreshFailedMessage(provider: JoinProvider): string {
+    return `Couldn't refresh ${providerLabel(provider)}, so nothing changed. Try again in a minute.`;
+}
+
+/**
+ * The refusals of `/api/recovery/sso-nonce` and `/api/recovery/shares/sso` for a Refresh, as sentences: the community's
+ * own where it says its rule or its state (no copies kept, can't lock a copy, a provider it can't ask), a wait for too
+ * many tries, else the plain one. A verifier's technical reason is never shown.
+ */
+function refreshRefusalMessage(answer: DoorAnswer, provider: JoinProvider): string {
+    const said = typeof answer.body.error === 'string' && answer.body.error ? answer.body.error : null;
+    if (isWrongClock(answer)) return WRONG_CLOCK;
+    if (answer.status === 429) return `Too many tries just now. ${tryAgainIn(answer.retryAfterSeconds ?? 60)}`;
+    if ((answer.status === 409 || answer.status === 503) && said) return said;
+    return refreshFailedMessage(provider);
+}
+
+/**
+ * Ask the node for a nonce for a Refresh (the ordinary Connect's, bound to this member), signed by the member's key. Asked
+ * when the member taps Refresh, never before: a nonce is single use.
+ */
+export async function requestRefreshNonce(identity: BeanPoolIdentity, provider: JoinProvider): Promise<{ nonce: JoinNonce } | { message: string }> {
+    let answer: DoorAnswer;
+    try {
+        answer = await door('POST', '/api/recovery/sso-nonce', {}, identity);
+    } catch (e) {
+        if (!(e instanceof DoorUnreachableError)) console.error('[LinkSignIn] could not ask for a refresh nonce:', e);
+        return { message: UNREACHABLE };
+    }
+    const b = answer.body;
+    if (answer.status !== 200 || typeof b.nonce !== 'string' || !b.nonce) return { message: refreshRefusalMessage(answer, provider) };
+    return {
+        nonce: {
+            nonce: b.nonce,
+            expiresInSeconds: typeof b.expiresInSeconds === 'number' ? b.expiresInSeconds : 600,
+            providers: Array.isArray(b.providers) ? b.providers.filter(isJoinProvider) : [],
+            clientIds: b.clientIds && typeof b.clientIds === 'object' ? b.clientIds : {},
+        },
+    };
+}
+
 /**
  * Ask the node for a nonce bound to adding a sign-in to this member (and so which sign-ins it offers a browser), signed
  * by the member's key. Asked when the member chooses to add one, never before: a nonce is single use.
@@ -122,13 +179,16 @@ export function leaveForLink(
     identity: BeanPoolIdentity,
     provider: JoinProvider,
     n: JoinNonce,
-    o: { origin?: string; navigate?: (url: string) => void; now?: number } = {},
+    o: { origin?: string; navigate?: (url: string) => void; now?: number; purpose?: 'refresh' } = {},
 ): { ok: false; message: string } | { ok: true } {
     const clientId = n.clientIds[provider];
     if (typeof clientId !== 'string' || !clientId) return { ok: false, message: `${providerLabel(provider)} sign-in isn't available here.` };
     const now = o.now ?? Date.now();
     try {
-        savePendingLink({ publicKey: identity.publicKey, provider, nonce: n.nonce, startedAt: now, expiresAt: now + PENDING_LINK_TTL_MS });
+        savePendingLink({
+            publicKey: identity.publicKey, provider, nonce: n.nonce, startedAt: now, expiresAt: now + PENDING_LINK_TTL_MS,
+            ...(o.purpose === 'refresh' ? { purpose: 'refresh' as const } : {}),
+        });
     } catch (e) {
         console.error('[LinkSignIn] could not keep the link while away:', e);
         return { ok: false, message: "This browser couldn't keep track of the sign-in, so it didn't start. Try again." };
@@ -145,7 +205,9 @@ export type LinkResult =
      * `noCopies`: no copy was kept because this community keeps none (its rule `none`), never because saving one failed.
      */
     | { kind: 'linked'; provider: JoinProvider; recoveryStored: boolean; noCopies?: true }
-    | { kind: 'cancelled'; provider: JoinProvider }
+    /** Refreshed: the community made this sign-in's copy again and says it now finds the account from it. */
+    | { kind: 'refreshed'; provider: JoinProvider }
+    | { kind: 'cancelled'; provider: JoinProvider; refresh?: true }
     | { kind: 'failed'; provider: JoinProvider | null; message: string };
 
 /**
@@ -165,10 +227,11 @@ export async function finishLink(identity: BeanPoolIdentity, ret: AuthReturn, no
         return { kind: 'failed', provider: ret.provider, message: refusalMessage('no_pending', ret.provider) };
     }
     const outcome = matchAuthReturn(ret, { provider: pending.provider, nonce: pending.nonce });
-    if (outcome.kind === 'cancelled') return { kind: 'cancelled', provider: outcome.provider };
+    if (outcome.kind === 'cancelled') return { kind: 'cancelled', provider: outcome.provider, ...(pending.purpose === 'refresh' ? { refresh: true as const } : {}) };
     if (outcome.kind === 'provider_error') return { kind: 'failed', provider: outcome.provider, message: outcome.message };
     if (outcome.kind === 'refused') return { kind: 'failed', provider: pending.provider, message: refusalMessage(outcome.reason, pending.provider) };
     const { provider, idToken, nonce, sub } = outcome;
+    if (pending.purpose === 'refresh') return finishRefresh(identity, provider, idToken, nonce, sub);
     // The same copy the join makes: the key and its 12 words, sealed to this sign-in. Null when it can't be made, and
     // the sign-in is added without it.
     const sealed = await sealJoinRecovery(identity, provider, sub);
@@ -193,6 +256,25 @@ export async function finishLink(identity: BeanPoolIdentity, ret: AuthReturn, no
     return { kind: 'failed', provider, message: linkRefusalMessage(answer, provider) };
 }
 
+/**
+ * A Refresh's way back: the copy sealed as the join seals it, and the ordinary Connect's deposit. Refreshed only when the
+ * community answers that this sign-in is findable; a copy that can't be made sends nothing, and says so.
+ */
+async function finishRefresh(identity: BeanPoolIdentity, provider: JoinProvider, idToken: string, nonce: string, sub: string): Promise<LinkResult> {
+    const sealed = await sealJoinRecovery(identity, provider, sub);
+    if (!sealed) return { kind: 'failed', provider, message: refreshFailedMessage(provider) };
+    let answer: DoorAnswer;
+    try {
+        answer = await door('POST', '/api/recovery/shares/sso', { provider, idToken, nonce, shares: sealed.shares }, identity);
+    } catch (e) {
+        if (!(e instanceof DoorUnreachableError)) console.error('[LinkSignIn] could not send the refresh:', e);
+        return { kind: 'failed', provider, message: UNREACHABLE };
+    }
+    const findable = answer.body.findableSso;
+    if (answer.status === 200 && Array.isArray(findable) && findable.includes(provider)) return { kind: 'refreshed', provider };
+    return { kind: 'failed', provider, message: answer.status === 200 ? refreshFailedMessage(provider) : refreshRefusalMessage(answer, provider) };
+}
+
 /** The sentence for a link's result, shown in Settings. */
 export function linkResultMessage(r: LinkResult): string {
     switch (r.kind) {
@@ -201,8 +283,10 @@ export function linkResultMessage(r: LinkResult): string {
             return r.recoveryStored
                 ? `${providerLabel(r.provider)} is added. Signing in with it also brings this account back, and your new-account limits are now the usual ones.`
                 : `${providerLabel(r.provider)} is added, and your new-account limits are now the usual ones. Its copy of your account couldn't be saved, so your 12 words are still your only way back.`;
+        case 'refreshed':
+            return `${providerLabel(r.provider)} is refreshed. Signing in with it brings this account back, with nothing to type.`;
         case 'cancelled':
-            return 'Adding a sign-in was cancelled. Nothing changed.';
+            return r.refresh ? 'Refreshing your sign-in was cancelled. Nothing changed.' : 'Adding a sign-in was cancelled. Nothing changed.';
         case 'failed':
             return r.message;
     }

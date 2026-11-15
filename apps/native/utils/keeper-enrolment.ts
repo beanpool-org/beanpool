@@ -69,6 +69,12 @@ export interface KeeperEnrolmentResult {
     available: number;
     /** Specific SSO providers currently protecting the account. */
     enrolledSso?: string[];
+    /**
+     * Which of them the community's server finds the account from, with nothing typed (recovery S4): its `findableSso`,
+     * on a status read and on a deposit's answer at the community. Absent from a server from before S4, and from the vault:
+     * then Account Protection offers no Refresh (@beanpool/core signInsToRefresh).
+     */
+    findableSso?: string[];
     /** Effective threshold required for recovery. */
     threshold?: number;
     /** Whether single-blob SSO format is in use. */
@@ -258,7 +264,7 @@ async function enrolAtCommunity(input: CommunityEnrolmentInput): Promise<KeeperE
             const detail = await res.text().catch(() => '');
             return nothing(`node refused the fragments (${res.status}): ${detail.slice(0, 200)}`);
         }
-        const body = await res.json() as { generation?: number; enrolledSso?: string[]; threshold?: number };
+        const body = await res.json() as { generation?: number; enrolledSso?: string[]; findableSso?: unknown; threshold?: number };
         const enrolledSso = body.enrolledSso ?? [provider];
         return {
             enrolled: enrolledSso.map(() => 'sso' as const),
@@ -266,6 +272,8 @@ async function enrolAtCommunity(input: CommunityEnrolmentInput): Promise<KeeperE
             skipped,
             available: enrolledSso.length,
             enrolledSso,
+            // The server's word, so a Refresh (this same Connect) shows the sign-in findable at once; none from an older one.
+            ...findableFrom(body.findableSso),
             threshold: body.threshold ?? 1,
             isSingleBlob: true,
             wordsSealed,
@@ -275,6 +283,11 @@ async function enrolAtCommunity(input: CommunityEnrolmentInput): Promise<KeeperE
     } catch (e) {
         return nothing(`could not reach the node: ${(e as Error).message}`);
     }
+}
+
+/** A server's `findableSso`, when it sent a list: its names only. Nothing for a server from before recovery S4. */
+export function findableFrom(raw: unknown): { findableSso?: string[] } {
+    return Array.isArray(raw) ? { findableSso: raw.filter((p): p is string => typeof p === 'string') } : {};
 }
 
 /** The deposit's one piece: the whole seed (and the words, when they make it) sealed to a sign-in. */

@@ -18,6 +18,8 @@ export * from './recovery-split.js';
 export * from './two-layer-split.js';
 export * from './keeper-crypto.js';
 export * from './copy-communities.js';
+// Which sign-ins Account Protection offers to Refresh, so a restore finds the account from them (recovery S4), both apps.
+export * from './sign-in-refresh.js';
 export * from './names-list-crypto.js';
 export * from './names-list-trust.js';
 // The names list's flows, health, bound invites and debts, shared by the phone and the web app (DESIGN-names-list-web-fable.md S1).

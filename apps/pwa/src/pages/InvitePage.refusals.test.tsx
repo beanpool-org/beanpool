@@ -144,6 +144,7 @@ describe('C: every refusal of Make invite shows its own words, and the page stay
         if (read === 'gone') {
             // The invites' own switch: the page is "Bring someone here", with the node's words.
             expect(generateButton()).not.toBeInTheDocument();
+            expect(screen.getByText('📤 Bring someone here')).toBeInTheDocument();
             expect(screen.getByText(body!.error as string)).toBeInTheDocument();
         } else if (read === 'admins') {
             expect(generateButton(), 'no generator where only admins invite').not.toBeInTheDocument();
@@ -160,7 +161,7 @@ describe('C: every refusal of Make invite shows its own words, and the page stay
             if (read === 'busy') expect(alert(), 'the busy sentence').toBe(busyWords());
             if (read === 'lost') expect(alert()).toBe(withBill ? inviteBillLines.answerLost() : null);
         }
-        expect(screen.queryByText('📤 Bring someone here') !== null && read !== 'gone' && read !== 'admins', 'never "Bring someone here" for another refusal').toBe(false);
+        if (read !== 'gone' && read !== 'admins') expect(screen.queryByText('📤 Bring someone here'), 'never "Bring someone here" for another refusal').toBeNull();
         // An offline ticket only where nobody knows and no bill went: a refusal is never answered with one.
         expect(page.tickets, 'offline tickets').toBe(read === 'lost' && !withBill ? 1 : 0);
     });

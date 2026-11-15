@@ -12,7 +12,7 @@
  * on a live Learn, to a member with a key. The node's refusal shows in its own words (learnRefusal), never a success it didn't give.
  */
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -25,6 +25,8 @@ import { PhotoCarousel } from '../PhotoCarousel';
 import { ReportReasonBox } from '../ReportReasonBox';
 import { ChatPhotoViewer } from '../chat/ChatPhoto';
 import { reportAbuse, signedGet, signedRequestWithMethod } from '../../utils/db';
+// The page has a text field (the out-of-date note), so its alerts close the keyboard first (utils/keyboard-alert.ts).
+import { Alert } from '../../utils/keyboard-alert';
 import { useLearnMode } from '../../utils/use-learn-mode';
 import { reportedAlertBody } from '../../utils/reportReasons';
 import { signedRequestWords } from '../signed-request-lines';

@@ -30,6 +30,7 @@
  *      counted as new; and the same ways without the block do change it, so the table can fail
  *  19  Sign Out's forget (X2b): this phone's id read at once, the forget asked with it, settled within its 4 s whatever the
  *      community does (a fetch that never gives up included), never a throw; a phone that never ran a round asks nothing
+ *  X5  report a line from another community: the line as it came, its words and the reason; a refusal reads as a sentence
  *
  * The mailbox is played as the server keeps it since X2b: each device listed by its fetch, an item gone once every listed
  * device has confirmed it (apps/server/src/engine/relay-mail.ts settleMailFor).
@@ -52,6 +53,8 @@ const readReceiptPayloadForTests = (payload: string): string[] | null => {
 };
 
 const server = vi.hoisted(() => ({
+    /** What each report of an outside line handed my server (X5). */
+    reports: [] as any[],
     held: [] as any[],
     outbox: [] as any[],
     calls: [] as string[],
@@ -62,7 +65,9 @@ const server = vi.hoisted(() => ({
     /** The batches /api/mail/send was posted, by their items' ids. */
     batches: [] as string[][],
     /** An item the server refuses, as relay-outbox.ts sendRelayItems does: the whole request answered with the first problem. */
-    refuse: null as null | ((item: RelayItem) => { status: number; error: string; code: string } | null),
+    refuse: null as null | ((item: RelayItem) => { status: number; error: string; code: string } | { status: number; body: unknown } | null),
+    /** What my server answers a report instead of taking it (X5): its status and body as sent. */
+    reportAnswer: null as null | { status: number; body: unknown },
     /** Every request's signal, by its path. */
     signals: [] as Array<{ path: string; signal: AbortSignal | undefined }>,
     /** A GET that never answers until its signal aborts (React Native's fetch never gives up by itself). */
@@ -163,10 +168,14 @@ vi.mock('../node-post', () => ({
             server.batches.push(body.items.map((i: RelayItem) => i.envelope.itemId));
             for (const i of body.items) {
                 const problem = server.refuse?.(i);
-                if (problem) return new Response(JSON.stringify({ error: problem.error, code: problem.code }), { status: problem.status });
+                if (problem) return new Response(JSON.stringify('body' in problem ? problem.body : { error: problem.error, code: problem.code }), { status: problem.status });
             }
             server.sent.push(...body.items);
             answer = new Response(JSON.stringify({ items: body.items.map((i: RelayItem) => ({ itemId: i.envelope.itemId, state: server.sendState })) }), { status: 200 });
+        } else if (path === '/api/mail/report') {
+            if (server.reportAnswer) return new Response(JSON.stringify(server.reportAnswer.body), { status: server.reportAnswer.status });
+            server.reports.push(body);
+            answer = new Response(JSON.stringify({ success: true, report: { id: 'r-1' } }), { status: 200 });
         } else if (path === '/api/mail/device/forget') {
             server.forgets.push({ device: body.device, signal });
             if (server.forgetAnswer === 'refused') return new Response(JSON.stringify({ error: 'Busy.', code: 'busy' }), { status: 503 });
@@ -198,7 +207,7 @@ vi.mock('../member-statements', async () => {
 import { outsideChatStore, gateIncoming, OUTSIDE_CHAT_TABLES_SQL, type OutsideChatState } from '../outside-chat-store';
 import {
     DEVICE_META, FORGET_DEVICE_MS, chatsShown, failUnsent, forgetThisPhoneForMail, mailDevice, myAddressCard, myHome, openChatFromCard,
-    syncOutsideMail, sendFromBox, sendOutsideLine, setDoor, type OutsideMailContext, type SyncOutcome,
+    reportOutsideLine, syncOutsideMail, sendFromBox, sendOutsideLine, setDoor, OutsideMailError, type OutsideMailContext, type SyncOutcome,
 } from '../outside-mail';
 
 const seedKey = () => { const seed = randomBytes(32); return { seed: bytesToHex(seed), key: bytesToHex(ed25519.getPublicKey(seed)) }; };
@@ -223,7 +232,7 @@ let sql: DatabaseSync;
 let blocked: Set<string>;
 
 beforeEach(async () => {
-    server.held = []; server.outbox = []; server.calls = []; server.sent = []; server.confirmed = []; server.sendFails = false; server.sendState = 'sent';
+    server.reports = []; server.reportAnswer = null; server.held = []; server.outbox = []; server.calls = []; server.sent = []; server.confirmed = []; server.sendFails = false; server.sendState = 'sent';
     server.batches = []; server.refuse = null; server.signals = []; server.stallGet = false; server.stallSend = false;
     server.stop = null; server.seen = { confirm: 0, receipt: 0 }; server.stopped = false; server.deadline = null; server.receiptTries = [];
     server.devices = new Set(); server.got = new Map(); server.named = []; server.outboxPages = []; server.forgets = []; server.forgetAnswer = 'ok';
@@ -1112,4 +1121,59 @@ describe('19  Sign Out\'s forget (X2b)', () => {
         await expect((await forgetThisPhoneForMail(broken)).done).resolves.toBeUndefined();
         expect(server.forgets).toHaveLength(1);
     });
+});
+
+describe('X5  report a line from another community', () => {
+    it('hands my server the line exactly as it came, its words and the reason, and nothing else', async () => {
+        await ctx.store.openChat(BEN.key, relayConversationId(BEN.key, ANA.key), { key: ANA.key, home: ANA_HOME, name: 'Ana' });
+        const item = await heldLine(ANA, 'Buy my miracle seeds');
+        await syncOutsideMail(ctx);
+        await reportOutsideLine(ctx, item.envelope.itemId, 'Spam or scam');
+        expect(server.reports).toHaveLength(1);
+        const sent = server.reports[0];
+        expect(Object.keys(sent).sort()).toEqual(['item', 'reason', 'words']);
+        expect(sent.item).toEqual({ envelope: item.envelope, payload: item.payload });
+        expect(sent).toMatchObject({ reason: 'Spam or scam', words: 'Buy my miracle seeds' });
+    });
+
+    it('a line of mine, or one not on this phone, is never sent as a report', async () => {
+        await ctx.store.openChat(BEN.key, relayConversationId(BEN.key, ANA.key), { key: ANA.key, home: ANA_HOME, name: 'Ana' });
+        await sendOutsideLine(ctx, relayConversationId(BEN.key, ANA.key), 'Mine');
+        const mine = lineRows().find((r) => r.text === 'Mine');
+        await expect(reportOutsideLine(ctx, mine.id, 'Other')).rejects.toBeInstanceOf(OutsideMailError);
+        await expect(reportOutsideLine(ctx, uuid(), 'Other')).rejects.toBeInstanceOf(OutsideMailError);
+        expect(server.reports).toHaveLength(0);
+    });
+
+    // Every shape a refusal comes in, on the report and send paths (every outside-mail path reads my server's answer through
+    // one reader, answerOf; the fetch and confirm paths too): the words a screen shows are the server's sentence or `HTTP <n>`
+    // (which each screen turns into its own sentence), never a code.
+    const RATE = 'You have sent a lot of reports recently. Please try again in an hour.';
+    const MEMBERS = 'Only members of this community can do this.';
+    const shapes: Array<[string, number, unknown, string, string | undefined]> = [
+        ['a report\'s 429: a code in error, its words in message', 429, { error: 'rate_limited', message: RATE }, RATE, 'rate_limited'],
+        ['words in error beside a code', 403, { error: MEMBERS, code: 'not_a_member' }, MEMBERS, 'not_a_member'],
+        ['words in message beside a code in code', 429, { error: 'rate_limited', code: 'rate_limited', message: RATE }, RATE, 'rate_limited'],
+        ['a code alone', 429, { error: 'rate_limited' }, 'HTTP 429', 'rate_limited'],
+        ['no body', 503, null, 'HTTP 503', undefined],
+    ];
+    for (const [what, status, body, says, code] of shapes) {
+        it(`a refusal, ${what}: reads "${says}" on the report path and the send path`, async () => {
+            const chatId = relayConversationId(BEN.key, ANA.key);
+            await ctx.store.openChat(BEN.key, chatId, { key: ANA.key, home: ANA_HOME, name: 'Ana' });
+            const item = await heldLine(ANA, 'Buy my miracle seeds');
+            await syncOutsideMail(ctx);
+            server.reportAnswer = { status, body };
+            const reported = await reportOutsideLine(ctx, item.envelope.itemId, 'Spam or scam').catch((e) => e);
+            server.refuse = () => ({ status, body });
+            const sent = await sendOutsideLine(ctx, chatId, 'Hello').catch((e) => e);
+            for (const e of [reported, sent]) {
+                expect(e).toBeInstanceOf(OutsideMailError);
+                expect(e.message).toBe(says);
+                expect(e.code).toBe(code);
+                expect(e.message).not.toMatch(/^[a-z0-9_]+$/);
+            }
+            expect(server.reports).toHaveLength(0);
+        });
+    }
 });

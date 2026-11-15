@@ -24,6 +24,7 @@ import { bulkDeleteInBatches, sendBulkDeleteBatch, describeBulkDeleteOutcome } f
 import { nodeCredential } from '../../lib/profiles';
 import { ReportedGroupMessage } from './ReportedGroupMessage';
 import { ReportedDirectMessage } from './ReportedDirectMessage';
+import { ReportedComplaint } from './ReportedComplaint';
 import { AgentSuggestionsPanel } from './AgentSuggestionsPanel';
 import { useInPageConfirm } from '../common/InPageConfirm';
 
@@ -653,7 +654,11 @@ export function PeopleSafetySection({
                                                         credential={nodeCredential(activeNode)}
                                                     />
                                                 )}
-                                                {report.targetMessageId && !report.directMessage && report.id && (
+                                                {report.fromAnotherCommunity && report.id && (
+                                                    // A complaint another community's server sent about a member here. It never names who reported.
+                                                    <ReportedComplaint nodeUrl={activeNode.url} reportId={String(report.id)} credential={nodeCredential(activeNode)} />
+                                                )}
+                                                {report.targetMessageId && !report.directMessage && !report.fromAnotherCommunity && report.id && (
                                                     // A locked group chat's message, reported with its key (server: engine/group-chat-report.ts).
                                                     <ReportedGroupMessage
                                                         nodeUrl={activeNode.url}

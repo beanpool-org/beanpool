@@ -194,9 +194,12 @@ function iso(value: unknown): string | null {
     return null;
 }
 
-function targetKind(r: AbuseReport): 'post' | 'pulse_item' | 'group_message' | 'direct_message' | 'member' {
+function targetKind(r: AbuseReport): 'post' | 'pulse_item' | 'group_message' | 'direct_message' | 'outside_message' | 'member' {
     if (r.targetPulseItemId) return 'pulse_item';
     if (r.targetPostId || r.postId) return 'post';
+    // A complaint from another community's server (engine/relay-complaint.ts): about a line a member here sent there. Before
+    // the group line below, as it names a message too and no group: never read as a group chat message.
+    if (r.fromAnotherCommunity) return 'outside_message';
     // A chat message's report (engine/group-chat-report.ts, dm-line-report.ts): about its author, and never its key or its
     // words here.
     if (r.directMessage) return 'direct_message';
@@ -217,6 +220,8 @@ function reportView(r: AbuseReport, withText: boolean, boundary: string): Record
         // Read as the alerts and the queue read it (the review of #1912, finding 5): the list's order alone said so.
         childSafety: r.childSafety === true,
         targetKind: targetKind(r),
+        // A complaint another community's server sent: that a community did, never which one (it is the report's reporter).
+        fromAnotherCommunity: !!r.fromAnotherCommunity,
         postRemoved: r.postRemoved === true || r.pulseItem?.removed === true,
         hiddenByReports: r.postHiddenByReports === true,
         pulsePlatform: r.pulseItem ? cleanMemberText(r.pulseItem.platform, 40) || null : null,
@@ -233,12 +238,14 @@ function reportView(r: AbuseReport, withText: boolean, boundary: string): Record
     view.authorCallsign = kind === 'post'
         ? fence(boundary, what("reported post author's name"), r.postAuthorCallsign)
         : kind === 'member' ? fence(boundary, what("reported member's name"), r.targetCallsign)
-            : kind === 'group_message' || kind === 'direct_message' ? fence(boundary, what("reported message author's name"), r.targetCallsign) : null;
+            : kind === 'group_message' || kind === 'direct_message' || kind === 'outside_message'
+                ? fence(boundary, what("reported message author's name"), r.targetCallsign) : null;
     return view;
 }
 
 const REPORT_SUMMARY_PROPS: Record<string, JsonSchema> = {
-    id: STR, at: STR, status: STR, targetKind: STR, postRemoved: BOOL, hiddenByReports: BOOL, pulsePlatform: STR_OR_NULL, settingsPath: STR,
+    id: STR, at: STR, status: STR, targetKind: STR, fromAnotherCommunity: BOOL, postRemoved: BOOL, hiddenByReports: BOOL, pulsePlatform: STR_OR_NULL,
+    settingsPath: STR,
 };
 const REPORT_TEXT_PROPS: Record<string, JsonSchema> = {
     reason: FENCED_OR_NULL, postTitle: FENCED_OR_NULL, postDescription: FENCED_OR_NULL, authorCallsign: FENCED_OR_NULL,
@@ -472,9 +479,10 @@ export const AGENT_TOOLS: AgentTool[] = [
         name: 'reports_list',
         title: 'Moderation reports',
         reads: `the moderation reports, open (the default) or all, open child-safety reports first, then newest first, at most `
-            + `${AGENT_LIST_MAX}: id, when, status, whether it is a child-safety report, what kind of thing was reported and a `
-            + 'Settings path; with include_text, the reason, the reported title and description and its '
-            + "author's name, fenced",
+            + `${AGENT_LIST_MAX}: id, when, status, whether it is a child-safety report, what kind of thing was reported (an `
+            + "outside_message is a complaint another community's server sent about a message a member here sent there), whether "
+            + 'it came from another community, and a Settings path; with include_text, the reason, the reported title and '
+            + "description and its author's name, fenced",
         never: "who reported (their name or key), any key, a Pulse item's URL, or chat text",
         memberText: true,
         inputSchema: {
@@ -502,8 +510,8 @@ export const AGENT_TOOLS: AgentTool[] = [
     {
         name: 'report_get',
         title: 'One moderation report',
-        reads: "one moderation report with its text: id, when, status, what kind of thing was reported, the reason, the reported title "
-            + "and description and its author's name (fenced), and the Settings path that opens it",
+        reads: "one moderation report with its text: id, when, status, what kind of thing was reported, whether it came from another "
+            + "community, the reason, the reported title and description and its author's name (fenced), and the Settings path that opens it",
         never: "who reported (their name or key), any key, a Pulse item's URL, or chat text",
         memberText: true,
         inputSchema: {
@@ -715,6 +723,9 @@ AGENT_TOOLS.push({
         if (kind === 'remove_reported' && kindOf === 'member') return { ok: false, error: 'That report is about a member, not a post: there is nothing to remove.' };
         if (kind === 'remove_reported' && kindOf === 'group_message') return { ok: false, error: 'That report is about a group chat message, not a post: there is nothing to remove.' };
         if (kind === 'remove_reported' && kindOf === 'direct_message') return { ok: false, error: 'That report is about a direct message, not a post: there is nothing to remove.' };
+        if (kind === 'remove_reported' && kindOf === 'outside_message') {
+            return { ok: false, error: 'That report is a complaint from another community about a message a member here sent there, not a post: there is nothing to remove.' };
+        }
         if (kind !== 'restore_post' && (r.status === 'reviewed' || r.status === 'actioned')) {
             return { ok: false, error: 'That report is already closed: there is nothing to suggest about it.' };
         }

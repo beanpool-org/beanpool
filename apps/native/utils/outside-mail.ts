@@ -105,9 +105,21 @@ function refusalWords(e: OutsideMailError): string {
     return e.message && !/^HTTP \d+$/.test(e.message) ? e.message : t('Your community refused this message.');
 }
 
+/** A server's code, not words: one lower-case token (`rate_limited`, `not_a_member`). */
+const CODE_ONLY = /^[a-z0-9_]+$/;
+
 async function answerOf(res: Response): Promise<any> {
     const body = await res.json().catch(() => null);
-    if (!res.ok) throw new OutsideMailError(res.status, typeof body?.error === 'string' ? body.error : `HTTP ${res.status}`, body?.code);
+    if (!res.ok) {
+        // The server's sentence: `message` when it sent one beside a code in `error` (a report's 429: { error: 'rate_limited',
+        // message }), as utils/db.ts reportRefusal reads it; else `error`, its words beside `code`. Never a bare code
+        // (`rate_limited`): that reads as `HTTP <n>`, which every screen shows as its own sentence.
+        const said = typeof body?.message === 'string' && body.message ? body.message : null;
+        const error = typeof body?.error === 'string' && body.error ? body.error : null;
+        const errorIsCode = !!error && CODE_ONLY.test(error);
+        const code = typeof body?.code === 'string' ? body.code : error && (errorIsCode || said) ? error : undefined;
+        throw new OutsideMailError(res.status, said ?? (error && !errorIsCode ? error : `HTTP ${res.status}`), code);
+    }
     return body;
 }
 
@@ -257,6 +269,20 @@ async function envelopeFor(ctx: OutsideMailContext, fields: Omit<RelayEnvelopeFi
 async function postItems(ctx: OutsideMailContext, items: RelayItem[]): Promise<Array<{ itemId: string; state: string }>> {
     const answer = await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/send', { items }, ctx.identity as BeanPoolIdentity, ctx.signal));
     return Array.isArray(answer?.items) ? answer.items : [];
+}
+
+/**
+ * Report a line from another community (X5): the item as it came, kept on this phone (its sender's signed envelope and the
+ * sealed line inside), and the words it opened to, to my own community's server. That server checks the sender's signatures,
+ * blocks them for me, and tells their community, never naming me (server: engine/relay-complaint.ts). Throws
+ * OutsideMailError with my server's words when it refuses.
+ */
+export async function reportOutsideLine(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'identity' | 'store' | 'signal'>, lineId: string, reason: string): Promise<void> {
+    const kept = await ctx.store.kept(lineId);
+    let item: unknown = null;
+    try { item = kept ? JSON.parse(kept.sealed) : null; } catch { /* not kept as it came */ }
+    if (!kept || !item) throw new OutsideMailError(404, t('That did not go through. Please try again.'), 'not_kept');
+    await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/report', { item, reason, words: kept.text }, ctx.identity as BeanPoolIdentity, ctx.signal));
 }
 
 /**

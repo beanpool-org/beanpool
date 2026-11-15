@@ -77,9 +77,11 @@ const RELEASABLE: readonly KeeperType[] = ['hub', 'sso'];
 /**
  * Most IDLE live sessions one account may have at once: sessions past their sign-in window that have released nothing.
  *
- * A cap that REFUSED the new session would be worse than the problem it solves: opening one is
- * deliberately unauthenticated (it has to be — see the header), so anyone could park the maximum
+ * A cap that REFUSED the new session would be worse than the problem it solves: opening one asks
+ * nothing of the caller here (see the header), so anyone could park the maximum
  * against a member and lock them out of their own recovery. So the oldest idle session is evicted instead.
+ * (Since S3 the route opens one only for the account a verified sign-in found, routes/recovery-collect.ts, so a
+ * stranger opens none; the cap stays as this file's own bound.)
  *
  * And only an idle one (defence review FABLE-sec-sso finding 5, 2026-10-01). Evicting the oldest of ALL live sessions
  * let anybody with a callsign push out the member's own: open, then ten throwaway opens while the member is on
@@ -535,14 +537,6 @@ function storedReleases(collectionId: string): ReleasedFragment[] {
         releasedBy: (r.released_by as string | null) ?? null,
         releasedAt: r.released_at as string,
     }));
-}
-
-/**
- * Which shares a session has released, from the rows as stored: nothing is opened. So it answers before the release
- * rules have run, for a session long dead whose copies are gone (forgetOldReleasedCopies) as for a live one.
- */
-export function releasedShareIds(collectionId: string): Set<number> {
-    return new Set(storedReleases(collectionId).map(r => r.shareId));
 }
 
 /**

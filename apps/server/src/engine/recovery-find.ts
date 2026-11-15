@@ -69,8 +69,8 @@ export function ssoFindHash(provider: SsoProvider, sub: string): string {
 }
 
 /**
- * The accounts a restore here may bring back, as the restore by name has them (routes/recovery-collect.ts resolveCallsign):
- * not migrated or pruned, not a visitor's row, not an enterprise's or a project's.
+ * The accounts a restore here may bring back: not migrated or pruned, not a visitor's row (a member of another community,
+ * or a key someone sent to, which no restore here brings back), not an enterprise's or a project's, which no one restores.
  */
 const RESTORABLE = "m.status NOT IN ('migrated', 'pruned') AND m.is_visitor = 0 AND COALESCE(m.is_treasury, 0) = 0";
 /** The owner's current generation: a copy from a superseded one is not a copy. */
@@ -84,7 +84,7 @@ export function isRestorableMember(publicKey: string): boolean {
     return !!db.prepare(`SELECT 1 FROM members m WHERE m.public_key = ? AND ${RESTORABLE}`).get(publicKey);
 }
 
-/** One account a find names: what the restore by name named (its key and name), nothing more. */
+/** One account a find names: its key and name, nothing more. */
 export interface FoundAccount {
     publicKey: string;
     callsign: string;
@@ -166,8 +166,8 @@ async function scanUnfindable(provider: SsoProvider, sub: string, live: string):
 /**
  * Every account this verified sign-in protects here: by the index AND by the scan of copies made before it, both at every
  * find (Marty's decision 3, 9 Nov). One sign-in can protect a copy made before the find hash and another made after it:
- * the index alone would name only the newer one, at every restore, and once the name routes go the older one would be
- * lost to it. The scan takes no turn once that provider has no copy left without a find hash. While another scan runs
+ * the index alone would name only the newer one, at every restore, and with the name routes gone (S3) the older one
+ * would be lost to it. The scan takes no turn once that provider has no copy left without a find hash. While another scan runs
  * this throws {@link FindBusy} even when the index found accounts: a find names both sets or none, because half a list
  * could hide the account the member came for. `sub` must be from a sign-in this node verified in the same request (sso.ts
  * verifySignIn). Several accounts are each named, by name and key, in name order. Throws {@link RecoverySealKeyMissing}

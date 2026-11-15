@@ -117,7 +117,7 @@ export interface ProfileSwitches {
      *  their rough area, and not the people: no author, name, face, trade, voter or exact place (routes/viewer.ts,
      *  the engine's guestPost). The Commons decisions, pool balance and Pulse feed are members-only, and the membership
      *  probe names only the signer. Faces are served only to URLs carrying a member-only key (engine/avatar-keys.ts,
-     *  read at boot), and the recovery lookup matches the typed name exactly, with no photo or join date. On, a main
+     *  read at boot), and no route finds an account by a typed name (the recovery lookup by name went in S3). On, a main
      *  server refuses to start with ENFORCE_READ_AUTH=false or ENFORCE_WS_AUTH=false, either of which would undo it
      *  (GuestViewAuthOffError). */
     guestListingsOnly: boolean;

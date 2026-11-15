@@ -11,9 +11,10 @@
  *      with no usable keys, answering something that is not JSON, or unreachable → 503 sign_in_unavailable, and
  *      nothing stored. A forged token → 400 { error } as before, and a split refused before the sign-in → 400 as
  *      before. The same token and nonce then succeed, so "try again" is true: no outage spent the nonce.
- *   2. POST /api/recovery/collect/sso, the recovering device: the same four outages → 503 sign_in_unavailable, and
- *      nothing released. A forged token → 400 { error } as before. The same token and nonce then release the
- *      fragment. The session's other refusals (asking for a hub a single-blob keeper does not have) still answer 400.
+ *   2. POST /api/recovery/find, the recovering device (the sign-in's one check since S3, before the collect by its
+ *      hold): the same four outages → 503 sign_in_unavailable, no hold left and nothing released. A forged token → 400
+ *      { error } as before. The same token and nonce then find the account, and its collect releases the fragment. The
+ *      session's other refusals (asking for a hub a single-blob keeper does not have) still answer 400.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-sso-unavailable.ts
  */
@@ -198,34 +199,34 @@ async function main(): Promise<void> {
     assert(countCurrentShares(ada.pk) === 1, '...and the sign-in keeper is stored');
 
     // ── 2. the recovering device ─────────────────────────────────────────────────────────────────
-    console.log('\n── 2. POST /api/recovery/collect/sso ──');
+    console.log('\n── 2. POST /api/recovery/find ──');
     const device = newId();
-    const opened = await call(device, '/api/recovery/collect', { callsign: ada.callsign });
-    assert(opened.status === 200 && typeof opened.body?.collectionId === 'string', `a device opens a recovery for Ada (got ${opened.status} ${opened.raw})`);
-    const cid = opened.body.collectionId as string;
-    const collectNonceRes = await call(device, '/api/recovery/collect/sso-nonce', { collectionId: cid });
-    assert(collectNonceRes.status === 200 && typeof collectNonceRes.body?.nonce === 'string', `...and gets a nonce bound to its key (got ${collectNonceRes.status})`);
-    const collectNonce = collectNonceRes.body.nonce as string;
-    const collectToken = mint(ADA_SUB, collectNonce);
-    const collect = (idToken: string) => call(device, '/api/recovery/collect/sso', { collectionId: cid, provider: 'google', idToken, nonce: collectNonce });
+    const findNonceRes = await call(device, '/api/recovery/find-nonce', {});
+    assert(findNonceRes.status === 200 && typeof findNonceRes.body?.nonce === 'string', `a device gets a find nonce bound to its key (got ${findNonceRes.status})`);
+    const findNonce = findNonceRes.body.nonce as string;
+    const findToken = mint(ADA_SUB, findNonce);
+    const find = (idToken: string) => call(device, '/api/recovery/find', { provider: 'google', idToken, nonce: findNonce });
+    const sessionsOfAda = (): number =>
+        (db.prepare('SELECT COUNT(*) AS n FROM recovery_collections WHERE owner_pubkey = ?').get(ada.pk) as { n: number }).n;
 
-    await eachKeyOutage(() => collect(collectToken), (label, r) => {
+    await eachKeyOutage(() => find(findToken), (label, r) => {
         assert(unavailable(r), `${label} → 503 sign_in_unavailable, not a refused sign-in (got ${r.status} ${r.raw})`);
     });
-    assert(listReleases(cid).length === 0, '...and none of them released anything');
+    const noHold = await call(device, '/api/recovery/collect', { candidatePublicKey: ada.pk });
+    assert(noHold.status === 400 && sessionsOfAda() === 0, `...and none of them left a hold to collect with: nothing opened or released (got ${noHold.status} ${noHold.raw})`);
 
-    const forgedCollect = await collect(mint(ADA_SUB, collectNonce, impostor.privateKey));
-    assert(refusedAsBefore(forgedCollect), `a forged token → 400 { error }, as before (got ${forgedCollect.status} ${forgedCollect.raw})`);
-    assert(listReleases(cid).length === 0, '...and it released nothing');
+    const forgedFind = await find(mint(ADA_SUB, findNonce, impostor.privateKey));
+    assert(refusedAsBefore(forgedFind), `a forged token → 400 { error }, as before (got ${forgedFind.status} ${forgedFind.raw})`);
+    assert(sessionsOfAda() === 0, '...and it opened nothing');
 
-    const recovered = await collect(collectToken);
-    assert(recovered.status === 200 && listReleases(cid).length === 1,
-        `the same token and nonce release the fragment once Google answers: no outage spent the nonce (got ${recovered.status} ${recovered.raw})`);
+    const found = await find(findToken);
+    const recovered = await call(device, '/api/recovery/collect', { candidatePublicKey: ada.pk });
+    const cid = recovered.body?.collectionId as string;
+    assert(found.status === 200 && found.body?.accounts?.some((a: any) => a.publicKey === ada.pk) && recovered.status === 200 && listReleases(cid).length === 1,
+        `the same token and nonce find Ada once Google answers, and her collect releases the fragment: no outage spent the nonce (got ${found.status} ${recovered.status} ${recovered.raw})`);
 
-    const otherDevice = newId();
-    const coldOpen = await call(otherDevice, '/api/recovery/collect', { callsign: ada.callsign });
-    const coldHub = await call(otherDevice, '/api/recovery/collect/hub', { collectionId: coldOpen.body?.collectionId });
-    assert(refusedAsBefore(coldHub), `the session's own refusals are unchanged: a hub this account does not have → 400 { error } (got ${coldHub.status} ${coldHub.raw})`);
+    const hub = await call(device, '/api/recovery/collect/hub', { collectionId: cid });
+    assert(refusedAsBefore(hub), `the session's own refusals are unchanged: a hub this account does not have → 400 { error } (got ${hub.status} ${hub.raw})`);
 
     const strays = outbound.filter(u => !/^https:\/\/(www\.googleapis\.com|exp\.host)\//.test(u));
     assert(strays.length === 0, `nothing else was contacted (${strays.join(', ') || 'none'})`);

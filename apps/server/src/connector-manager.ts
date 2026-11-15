@@ -891,8 +891,8 @@ function connectorHostNames(c: ConnectorConfig): string[] {
 
 /**
  * Whether the owners blocked the server at `home` (a relay home: its host, and its port when not 443): a connector at the
- * `blocked` level names that host, on any port. Nothing between communities goes to it or is taken from it: a group's
- * notices to a guest's home, and a host's notices to members here (engine/group-guests.ts, engine/group-guest-home.ts).
+ * `blocked` level names that host, on any port. Read today by a guest's home (engine/group-guest-home.ts): a blocked host's
+ * group notices are taken from nobody. The host's own side, sending no fan-out to a blocked server, is G1b's next part.
  */
 export function isServerBlocked(home: string): boolean {
     const host = home.trim().toLowerCase().replace(/:\d+$/, '').replace(/^\[|\]$/g, '');

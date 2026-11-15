@@ -45,7 +45,7 @@
 import crypto from 'node:crypto';
 import { readRelayEnvelope, relayEnvelopeVerifies, relayPayloadHash, word, type RelayEnvelope } from '@beanpool/core';
 import { db } from '../db/db.js';
-import { getNodeRole } from '../config/node-role.js';
+import { getNodeRole, STANDBY_WRITE_MESSAGE } from '../config/node-role.js';
 import { isServerBlocked } from '../connector-manager.js';
 import { isNodeMember, readsAsMember } from '../state-engine.js';
 import { hasBlocked } from './member-blocks.js';
@@ -55,7 +55,7 @@ import {
     MAILBOX_FULL_ERROR, MAIL_DEVICE_LAPSE_MS, MAIL_FETCH_PAGE, MAIL_HELD_DAYS, MAIL_ITEM_MAX_AGE_MS, MAIL_ITEM_MAX_AHEAD_MS,
     MAIL_RETRY_AFTER_SEC, MAIL_SERVER_BYTES, RELAY_ITEMS_PER_REQUEST, RELAY_MAIL_PATH, relayMailDir,
 } from './relay-mail.js';
-import { OUTBOX_PER_MEMBER_DAY, OutboxError, forwardSignedForAnswer } from './relay-outbox.js';
+import { NO_HOME_ERROR, OUTBOX_PER_MEMBER_DAY, OUTBOX_RATE_ERROR, OutboxError, forwardSignedForAnswer } from './relay-outbox.js';
 import { assertFolderFloorSpace, StorageNearlyFullError } from './photo-upload-budget.js';
 import { logger } from '../logger.js';
 
@@ -301,8 +301,11 @@ function groupItemProblem(raw: unknown, member: string, home: string, now: numbe
 function linkAfter(member: string, c: Checked): LinkState | null | 'refused' {
     const state = linkOf(member, c.envelope.recipientHome, c.groupId)?.state ?? null;
     if (c.envelope.kind === 'group-invite') {
-        let answer: unknown;
-        try { answer = (JSON.parse(c.payload) as { v?: unknown; answer?: unknown }).v === 1 ? JSON.parse(c.payload).answer : null; } catch { answer = null; }
+        let answer: unknown = null;
+        try {
+            const o = JSON.parse(c.payload) as { v?: unknown; answer?: unknown } | null;
+            if (o?.v === 1) answer = o.answer;
+        } catch { /* not an answer */ }
         if (state !== 'invited' || (answer !== 'yes' && answer !== 'no')) return 'refused';
         return answer === 'yes' ? 'in' : 'declined';
     }
@@ -317,9 +320,9 @@ function linkAfter(member: string, c: Checked): LinkState | null | 'refused' {
  */
 export async function sendGroupItems(member: string, items: unknown[], now = Date.now()): Promise<GroupSentState[]> {
     if (!groupGuestsOn()) throw new OutboxError(403, 'guests_off', GUESTS_OFF_ERROR);
-    if (getNodeRole() === 'backup') throw new OutboxError(503, 'standby', "This is a community's standby server: send from its main server.");
+    if (getNodeRole() === 'backup') throw new OutboxError(503, 'standby', STANDBY_WRITE_MESSAGE);
     const home = ownNodeHome();
-    if (!home) throw new OutboxError(503, 'no_home', "This community's server knows none of its own names yet, so it can't send to another community.");
+    if (!home) throw new OutboxError(503, 'no_home', NO_HOME_ERROR);
     if (items.length === 0 || items.length > RELAY_ITEMS_PER_REQUEST) throw new OutboxError(400, 'bad_items', `items is a list of 1 to ${RELAY_ITEMS_PER_REQUEST} relay items.`);
     const checked: Checked[] = [];
     for (const raw of items) {
@@ -332,7 +335,7 @@ export async function sendGroupItems(member: string, items: unknown[], now = Dat
     const fresh = checked.filter((c) => !had.has(c.envelope.itemId));
     const today = sum('SELECT COUNT(*) AS n FROM relay_outbox WHERE sender_key = ? AND created_at > ?', member, now - DAY_MS)
         + sum('SELECT COUNT(*) AS n FROM group_guest_sent WHERE sender_key = ? AND created_at > ?', member, now - DAY_MS);
-    if (today + fresh.length > OUTBOX_PER_MEMBER_DAY) throw new OutboxError(429, 'rate_limited', word("You've sent a lot to other communities today. Try again tomorrow."));
+    if (today + fresh.length > OUTBOX_PER_MEMBER_DAY) throw new OutboxError(429, 'rate_limited', OUTBOX_RATE_ERROR);
     db.transaction(() => {
         const insert = db.prepare(`INSERT INTO group_guest_sent (sender_key, item_id, kind, host, group_id, state, item, attempts, next_try_at, created_at, updated_at)
                                    VALUES (?, ?, ?, ?, ?, 'queued', ?, 0, ?, ?, ?) ON CONFLICT (sender_key, item_id) DO NOTHING`);

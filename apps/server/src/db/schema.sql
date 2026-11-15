@@ -4086,7 +4086,7 @@ CREATE TABLE IF NOT EXISTS group_guest_links (
     host       TEXT NOT NULL CHECK (length(host) BETWEEN 1 AND 260),
     group_id   TEXT NOT NULL CHECK (length(group_id) BETWEEN 1 AND 64),
     state      TEXT NOT NULL CHECK (state IN ('invited', 'in', 'declined', 'left', 'removed')),
-    roster     TEXT CHECK (roster IS NULL OR length(roster) <= 200000),
+    roster     TEXT CHECK (roster IS NULL OR length(roster) <= 1900000),
     roster_at  INTEGER,
     state_at   INTEGER NOT NULL,
     updated_at TEXT,
@@ -4129,7 +4129,8 @@ CREATE TABLE IF NOT EXISTS group_guest_sent (
     group_id    TEXT NOT NULL CHECK (length(group_id) BETWEEN 1 AND 64),
     state       TEXT NOT NULL CHECK (state IN ('queued', 'sent', 'refused', 'failed')),
     refused     TEXT CHECK (refused IS NULL OR length(refused) <= 40),
-    item        TEXT CHECK (item IS NULL OR length(item) <= 1400000),
+    -- JSON: the envelope and a payload of up to 1,300,000 characters (a line's sealed photo or voice), with room to escape.
+    item        TEXT CHECK (item IS NULL OR length(item) <= 2000000),
     attempts    INTEGER NOT NULL DEFAULT 0,
     next_try_at INTEGER,
     created_at  INTEGER NOT NULL,

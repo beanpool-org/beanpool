@@ -1059,6 +1059,10 @@ export default function WelcomeScreen() {
     inviteCodeRef.current = inviteCode;
     const accountRef = useRef(accountOnPhone);
     accountRef.current = accountOnPhone;
+    // The doors are what the home draws (utils/first-question.ts). Back on them asks "Used BeanPool before?" again with the
+    // mode still 'home', so an Explore still asking reads this, not the mode alone (PR #3209 review).
+    const onDoorsRef = useRef(false);
+    onDoorsRef.current = mode === 'home' && homeView({ hasAccount: !!accountOnPhone, waiting: waitingToJoin, answer: firstAnswer }) === 'doors';
     const applyHeldInvite = useCallback((held: HeldInvite) => {
         const key = heldInviteKey(held);
         if (appliedInvites.current.has(key)) return;
@@ -2000,9 +2004,10 @@ export default function WelcomeScreen() {
             // same: the door, whose Join refuses to write over it, as before the look (identity.ts readStoredIdentity).
             const keyHeld = await readStoredIdentity().then(Boolean, () => true);
             const pending = keyHeld ? null : await getPendingOnboarding().catch(() => null);
-            // Asked again just before the visit writes anything: a screen that left home while the door was asked (Join with an
-            // invite works all the while) keeps the phone where it was, no guest mark, no saved row, no switch behind it.
-            const stillHome = () => screenMountedRef.current && modeRef.current === 'home';
+            // Asked again just before the visit writes anything: a screen that left the doors while the door was asked (Join with
+            // an invite works all the while, and Back goes to the question) keeps the phone where it was, no guest mark, no saved
+            // row, no switch behind it.
+            const stillHome = () => screenMountedRef.current && onDoorsRef.current;
             const answer = keyHeld || pending ? null : await visitGlobalAsGuest(null, GLOBAL_NODE_URL, { proceed: stillHome }).catch(() => null);
             if (!stillHome()) return;
             if (answer?.kind === 'guest') {

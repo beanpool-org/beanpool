@@ -32,6 +32,15 @@ const TICK_MS = 100;
 /** How long the encoder's path waits for a suspended AudioContext to start before it says the recorder didn't start. */
 const RESUME_WAIT_MS = 3000;
 
+type VoiceEncodeModule = typeof import('../lib/voice-encode');
+const loadEncoderChunk = (): Promise<VoiceEncodeModule> => import('../lib/voice-encode');
+/** The encoder's chunk, fetched at the first click on the microphone and never before. */
+let loadVoiceEncoder = loadEncoderChunk;
+/** A test holds the chunk's load, to play a first load that takes seconds; null puts the real load back. */
+export function setVoiceEncoderLoadForTest(load: (() => Promise<VoiceEncodeModule>) | null): void {
+    loadVoiceEncoder = load ?? loadEncoderChunk;
+}
+
 interface Live {
     stream: MediaStream;
     /** The browser's recorder; null on the encoder's path. */
@@ -96,6 +105,14 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null, useEn
      * and the sound, so the bin, another chat or leaving lets the microphone go at once, not when the load settles.
      */
     const pending = useRef<{ stream: MediaStream; ctx: AudioContext } | null>(null);
+    /**
+     * The one recording attempt that may still go live. Each click on the microphone is a new attempt, and every way of
+     * ending one (the bin, Stop, another chat, closing, a failure) moves this on (stopLive), so an attempt whose wait comes
+     * back late finds it is no longer the one: it lets go of its own microphone and sound and touches nothing else. The chat
+     * and the phase alone can't tell: after the bin and a second click it is the same chat and "asking" again, and the first
+     * attempt went live on the sound the bin had closed (Firefox hears nothing there; PR #3212 review, round 2).
+     */
+    const attempt = useRef(0);
     const sendRef = useRef(onSend);
     sendRef.current = onSend;
 
@@ -108,6 +125,7 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null, useEn
 
     /** Stop the microphone and collect what it wrote: the .m4a's bytes, its length, its waveform. */
     const stopLive = useCallback(async (keepIt: boolean): Promise<VoiceInput | null> => {
+        attempt.current += 1; // every attempt still waiting is over
         const p = pending.current;
         pending.current = null;
         if (p) {
@@ -152,18 +170,25 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null, useEn
     /** Still the same chat, still on screen: what an answer that took a while checks before it acts. */
     const current = (g: number) => mounted.current && gen.current === g;
 
+    /** A new attempt, ending every one before it: `ours()` is true while it is still the one, checked after every wait. */
+    function newAttempt() {
+        const g = gen.current;
+        const a = ++attempt.current;
+        return () => current(g) && attempt.current === a;
+    }
+
     async function ask() {
         if (encoderRef.current) { await askEncoder(); return; }
         setError(null);
-        const g = gen.current;
+        const ours = newAttempt();
         let stream: MediaStream;
         try {
             stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
         } catch {
-            if (current(g)) dispatch({ type: 'permission', granted: false });
+            if (ours()) dispatch({ type: 'permission', granted: false });
             return;
         }
-        if (!current(g) || stateRef.current.phase !== 'asking') { for (const tr of stream.getTracks()) tr.stop(); return; }
+        if (!ours() || stateRef.current.phase !== 'asking') { for (const tr of stream.getTracks()) tr.stop(); return; }
         try {
             const recorder = new MediaRecorder(stream, { mimeType: VOICE_RECORD_TYPE, audioBitsPerSecond: VOICE_BITS_PER_SECOND });
             const chunks: Blob[] = [];
@@ -208,14 +233,14 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null, useEn
      */
     async function askEncoder() {
         setError(null);
-        const g = gen.current;
+        const ours = newAttempt();
         let context: AudioContext | null = null;
         try { context = new AudioContext(); } catch { context = null; }
-        const loading = import('../lib/voice-encode');
+        const loading = loadVoiceEncoder();
         loading.catch(() => {}); // answered below, after the microphone's question
         const broken = () => {
             void context?.close().catch(() => {});
-            if (!current(g)) return;
+            if (!ours()) return;
             setEncoderFailed(true);
             dispatch({ type: 'failed', encoder: true });
         };
@@ -225,16 +250,17 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null, useEn
             stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
         } catch {
             void context.close().catch(() => {});
-            if (current(g)) dispatch({ type: 'permission', granted: false });
+            if (ours()) dispatch({ type: 'permission', granted: false });
             return;
         }
         const ctx = context;
+        // An attempt that is over lets go of its own microphone and sound only: never `pending` when it is another's.
         const letGo = () => {
             if (pending.current?.stream === stream) pending.current = null;
             for (const tr of stream.getTracks()) { try { tr.stop(); } catch { /* gone */ } }
             void ctx.close().catch(() => {});
         };
-        const stillAsking = () => current(g) && stateRef.current.phase === 'asking';
+        const stillAsking = () => ours() && stateRef.current.phase === 'asking';
         if (!stillAsking()) { letGo(); return; }
         pending.current = { stream, ctx };
         let capture: VoiceCapture;
@@ -249,14 +275,15 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null, useEn
             const mod = await loading;
             if (!stillAsking()) { letGo(); return; }
             capture = await mod.startVoiceCapture(ctx, source, () => {
-                if (!mounted.current) return;
+                // An attempt that is over says nothing (after Stop, the file's own finish says why).
+                if (!ours()) return;
                 setEncoderFailed(true);
                 if (stateRef.current.phase === 'recording') dispatch({ type: 'failed', encoder: true });
             });
         } catch {
-            const mine = pending.current?.stream === stream;
+            const mine = ours();
             letGo();
-            if (mine) broken(); // else the bin, another chat or leaving already let it go: nothing to say
+            if (mine) broken(); // else the bin, another chat, leaving or a new click already ended it: nothing to say
             return;
         }
         if (!stillAsking()) { capture.cancel(); letGo(); return; }

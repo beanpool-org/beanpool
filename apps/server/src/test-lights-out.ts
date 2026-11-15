@@ -438,7 +438,7 @@ console.log('\n3b. One direct-LAN rule: /hall, the hall exemption and /android a
 // ── 4. §2.7 ──────────────────────────────────────────────────────────────────────────────────────────────────────
 console.log('\n4. Address changes are refused while the hall is open');
 {
-    for (const p of ['/api/local/admin/public-address/claim', '/api/local/admin/public-address/offline', '/api/local/admin/app-addresses/confirm', '/api/local/admin/app-addresses/remove']) {
+    for (const p of ['/api/local/admin/public-address/claim', '/api/local/admin/public-address/offline', '/api/local/admin/app-addresses/confirm', '/api/local/admin/app-addresses/remove', '/api/local/admin/app-addresses/main']) {
         const a = await send(LAN, 'POST', p, HALL, harness.ownerPhoneSessionHeaders(owner.pk), JSON.stringify({ address: '192.168.8.1' }));
         check(`${p} → 409 lights_out`, a.status === 409 && a.json?.code === 'lights_out', `${a.status} ${a.body.slice(0, 100)}`);
     }

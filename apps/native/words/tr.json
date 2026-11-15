@@ -6994,6 +6994,8 @@
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "Topluluğunu seç, sonra {provider} ile bir kez daha giriş yap. Giriş hesabını bulur, bu yüzden yazman gereken başka bir şey yok. 12 kelimen her zaman geçerlidir.",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "BeanPool kişilerini yalnızca Kişileri içe aktar'a dokunduğunda, seçebileceğin bir liste göstermek için okur. İçe aktardıkların kilitlenir, böylece yalnızca sen okuyabilirsin.",
   "People in other communities can send me a message request on this phone": "Diğer topluluklardaki kişiler bu telefonda bana mesaj isteği gönderebilir",
+  "I'm Already a Member →": "Zaten Üyeyim →",
+  "I'm New Here": "Buraya Yeni Geldim",
   "A removed topic": "Kaldırılmış bir konu",
   "Against this community’s rules": "Bu topluluğun kurallarına aykırı",
   "All sections": "Tüm bölümler",

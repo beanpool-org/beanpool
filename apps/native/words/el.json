@@ -6994,6 +6994,8 @@
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "Επιλέξτε την κοινότητά σας και μετά συνδεθείτε ξανά με {provider}. Η σύνδεση βρίσκει τον λογαριασμό σας, οπότε δεν χρειάζεται να πληκτρολογήσετε τίποτα άλλο. Οι 12 λέξεις σας λειτουργούν πάντα.",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "Το BeanPool διαβάζει τις επαφές σου μόνο όταν πατάς Εισαγωγή επαφών, για να σου δείξει μια λίστα να διαλέξεις. Ό,τι εισάγεις κλειδώνεται, ώστε να μπορείς να το διαβάσεις μόνο εσύ.",
   "People in other communities can send me a message request on this phone": "Άτομα από άλλες κοινότητες μπορούν να μου στείλουν αίτημα μηνύματος σε αυτό το τηλέφωνο",
+  "I'm Already a Member →": "Είμαι ήδη μέλος →",
+  "I'm New Here": "Είμαι νέο μέλος",
   "A removed topic": "Ένα θέμα που αφαιρέθηκε",
   "Against this community’s rules": "Παραβιάζει τους κανόνες αυτής της κοινότητας",
   "All sections": "Όλες οι ενότητες",

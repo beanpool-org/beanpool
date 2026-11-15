@@ -1267,9 +1267,11 @@ const CLAIM_PATH_PAGES = [
     path.join(CONTENT_DIR, 'getting-started', 'beans-and-the-global-community.md'),
 ];
 /** Where the phone draws the claim path: the claim screen, the first screen's link, the BeanPool sheet and its row, Settings. */
+// With no account, the claim link is under the doors, after "Used BeanPool before?" is answered I'm New Here
+// (components/welcome/UsedBefore.tsx).
 const CLAIM_PATH_PHONE_FILES = [
-    'app/claim-community.tsx', 'app/welcome.tsx', 'app/beanpool.tsx', 'components/SetUpServerRow.tsx',
-    'components/NoOwnerCard.tsx', 'app/(tabs)/settings.tsx',
+    'app/claim-community.tsx', 'app/welcome.tsx', 'components/welcome/UsedBefore.tsx', 'app/beanpool.tsx',
+    'components/SetUpServerRow.tsx', 'components/NoOwnerCard.tsx', 'app/(tabs)/settings.tsx',
 ];
 /** Each line of a page that tells someone how to claim: it names the first screen's claim link. */
 const claimLines = (file) => fs.readFileSync(file, 'utf8').split('\n').filter(l => l.includes('Claim it**'));

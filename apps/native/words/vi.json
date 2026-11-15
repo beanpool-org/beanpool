@@ -6743,6 +6743,8 @@
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "Chọn cộng đồng của bạn, rồi đăng nhập bằng {provider} thêm một lần nữa. Việc đăng nhập sẽ tìm thấy tài khoản của bạn, nên không cần nhập thêm gì. 12 từ của bạn luôn dùng được bất cứ lúc nào.",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "BeanPool chỉ đọc danh bạ của bạn khi bạn nhấn Nhập danh bạ, để cho bạn xem một danh sách để chọn. Những gì bạn nhập sẽ được khóa để chỉ mình bạn đọc được.",
   "People in other communities can send me a message request on this phone": "Người ở cộng đồng khác có thể gửi yêu cầu nhắn tin cho tôi trên điện thoại này",
+  "I'm Already a Member →": "Tôi đã là thành viên →",
+  "I'm New Here": "Tôi mới đến",
   "A removed topic": "Một chủ đề đã bị xóa",
   "Against this community’s rules": "Vi phạm quy tắc của cộng đồng này",
   "All sections": "Tất cả các mục",

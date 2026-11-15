@@ -549,7 +549,8 @@ const APP_STORE_URL = 'https://apps.apple.com/app/id6761870086';
  * apps/native/app/claim-community.tsx (titled "Claim ‹name›" once it knows the server, "Claim a community" while it asks
  * for the address). Without the camera there are two routes to that screen, by what the phone has (Marty claimed
  * apollobay.beanpool.org by hand on 9 Nov and it took four tries; DESIGN-new-operator-path-fable.md §Recommendations 2):
- * no account yet, the first screen's "Installed BeanPool on a server? Claim it" (app/welcome.tsx); with an account, the
+ * no account yet, "I'm New Here" on the first screen (components/welcome/UsedBefore.tsx), then "Installed BeanPool on a
+ * server? Claim it" under the doors (app/welcome.tsx); with an account, the
  * bean at the top (the BeanPool sheet, app/beanpool.tsx) → "Set up a new community server" (components/SetUpServerRow.tsx).
  * That row on the BeanPool sheet arrives with S1 (lane operator-claim-phone); until it is on main it exists on Find a
  * community and Start a community only. The "Add a community" → "Add & Connect" → "Claim ‹name›" route is S2's to add to
@@ -573,7 +574,7 @@ function phoneSteps(address: string | null): string[] {
                 `     type this server's address under "Server address", tap "Check this server", type your name under "Your name here" and tap "Claim and become owner". ${made}`,
             ]),
         '     Already have BeanPool and an account on this phone? Scan the code: the account you have becomes the owner.',
-        '  3. No camera, and no account yet? Open BeanPool and, at the bottom of its first screen, tap "Installed BeanPool on a server? Claim it".',
+        '  3. No camera, and no account yet? Open BeanPool, tap "I\'m New Here" on its first screen, then "Installed BeanPool on a server? Claim it" at the bottom.',
         `     Type ${where} under "Server address", tap "Check this server", type the code under "Claim code", your name under "Your name here", and tap "Claim and become owner".`,
         '  4. No camera, and an account already? Open BeanPool, tap the bean at the top, then tap "Set up a new community server":',
         `     type ${where} under "Server address", tap "Check this server", type the code under "Claim code", your name under "Your name here", and tap "Claim and become owner".`,

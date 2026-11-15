@@ -6743,6 +6743,8 @@
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "請選擇你的社群，然後再次使用 {provider} 登入。登入會找到你的帳號，所以不需要再輸入其他內容。你的 12 個詞隨時可用。",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "只有在你點按「匯入聯絡人」時，BeanPool 才會讀取你的聯絡人，以便顯示一份清單讓你選擇。你匯入的內容會被鎖住，只有你能讀取。",
   "People in other communities can send me a message request on this phone": "其他社群的人可以在這支手機上向我傳送訊息請求",
+  "I'm Already a Member →": "我已是成員 →",
+  "I'm New Here": "我是新來的",
   "A removed topic": "已刪除的主題",
   "Against this community’s rules": "違反本社群規則",
   "All sections": "所有版區",

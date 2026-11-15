@@ -8002,6 +8002,8 @@
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "اختر مجتمعك، ثم سجّل الدخول باستخدام {provider} مرة أخرى. يعثر تسجيل الدخول على حسابك، فلا حاجة إلى كتابة أي شيء آخر. كلماتك الـ 12 تعمل في أي وقت.",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "يقرأ BeanPool جهات اتصالك فقط عندما تنقر على استيراد جهات الاتصال، ليعرض لك قائمة تختار منها. ما تستورده يُقفَل بحيث لا يقرؤه أحد سواك.",
   "People in other communities can send me a message request on this phone": "يمكن لأشخاص في مجتمعات أخرى أن يرسلوا إليّ طلب رسالة على هذا الهاتف",
+  "I'm Already a Member →": "أنا عضو بالفعل →",
+  "I'm New Here": "هذه زيارتي الأولى",
   "A removed topic": "موضوع محذوف",
   "Against this community’s rules": "مخالف لقواعد هذا المجتمع",
   "All sections": "كل الأقسام",

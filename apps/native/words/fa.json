@@ -6998,6 +6998,8 @@
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "جامعه خود را انتخاب کنید، سپس یک بار دیگر با {provider} وارد شوید. این ورود حسابتان را پیدا می‌کند، پس چیز دیگری برای نوشتن نیست. 12 کلمه‌تان همیشه کار می‌کنند.",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "BeanPool فقط وقتی روی وارد کردن مخاطبان ضربه می‌زنید مخاطبان شما را می‌خواند، تا فهرستی برای انتخاب به شما نشان دهد. آنچه وارد می‌کنید قفل می‌شود تا فقط خودتان بتوانید آن را بخوانید.",
   "People in other communities can send me a message request on this phone": "افراد در جوامع دیگر می‌توانند در این تلفن برایم درخواست پیام بفرستند",
+  "I'm Already a Member →": "من از قبل عضو هستم →",
+  "I'm New Here": "اینجا تازه‌واردم",
   "A removed topic": "یک موضوع حذف‌شده",
   "Against this community’s rules": "خلاف قوانین این جامعه",
   "All sections": "همه بخش‌ها",

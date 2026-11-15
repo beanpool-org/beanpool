@@ -6998,6 +6998,8 @@
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "Chagua jumuiya yako, kisha ingia tena kupitia {provider}. Kuingia kunapata akaunti yako, kwa hiyo hakuna kingine cha kuandika. Maneno yako 12 hufanya kazi wakati wowote.",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "BeanPool husoma anwani zako pale tu unapogusa Ingiza anwani, ili ikuonyeshe orodha ya kuchagua. Unachoingiza hufungwa ili wewe tu uweze kukisoma.",
   "People in other communities can send me a message request on this phone": "Watu wa jumuiya nyingine wanaweza kunitumia ombi la ujumbe kwenye simu hii",
+  "I'm Already a Member →": "Tayari Mimi ni Mwanachama →",
+  "I'm New Here": "Mimi ni Mpya Hapa",
   "A removed topic": "Mada iliyoondolewa",
   "Against this community’s rules": "Inakiuka sheria za jumuiya hii",
   "All sections": "Sehemu zote",

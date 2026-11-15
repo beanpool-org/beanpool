@@ -19,6 +19,8 @@
  * 7. Join with an invite tapped while Explore is asking (it works all the while): the visit, answering after, is told the
  *    first screen has moved on (its `proceed`), so nothing is marked, saved or switched behind the invite form (PR #2559
  *    review).
+ * 8. Back on the doors to "Used BeanPool before?" while Explore is asking: the doors are gone though the screen is still
+ *    on its home, so the answer moves nothing: no guest mark, no Market, no door (PR #3209 review).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -397,6 +399,19 @@ async function mount(): Promise<void> {
         root!.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(WelcomeScreen, { key: 'welcome' })) as any);
     });
     await settle();
+    await answerNewHere();
+}
+
+/**
+ * A phone with no account is asked "Used BeanPool before?" first (components/welcome/UsedBefore.tsx, utils/first-question.ts).
+ * These are a new person's screens: when the question is up, they answer I'm New Here, as a new person does, and the doors
+ * are drawn. A screen that opens elsewhere (an invite, a waiting account) never shows the question, and nothing is pressed.
+ */
+async function answerNewHere(): Promise<void> {
+    const isNew = host!.querySelector('[data-testid="used-before-new"]') as HTMLElement | null;
+    if (!isNew) return;
+    await act(async () => { isNew.click(); });
+    await settle();
 }
 const all = (sel: string) => Array.from(host!.querySelectorAll(sel)) as HTMLElement[];
 function button(name: string): HTMLElement {
@@ -553,6 +568,34 @@ describe('look before you join on a new phone (slice S12)', () => {
         expect(work.keysDrafted).toBe(0);
         expect(work.started).toEqual([]);
         expect(all('input').some((i) => i.getAttribute('aria-label') === 'Invite link or code')).toBe(true);
+    });
+
+    // Back on the doors goes to "Used BeanPool before?" with the screen still on its home (utils/first-question.ts): the
+    // answer only, not the mode. An Explore still asking reads that the doors are gone, as it reads a mode that left home
+    // (PR #3209 review): whatever the answer, the phone stays on the question.
+    it.each([
+        ['it can be looked at: no guest mark, no Market', { kind: 'guest' }],
+        ['it can\'t be looked at: the door stays shut', { kind: 'door' }],
+    ] as const)('8. Back to the question while Explore is asking, and %s', async (_case, answer) => {
+        look.answer = answer;
+        let answered!: () => void;
+        look.gate = new Promise<void>((resolve) => { answered = resolve; });
+        await mount();
+        await press('Explore BeanPool worldwide');
+        expect(look.askedFor).toEqual([null]);
+        expect(all('span').some((s) => s.textContent === 'Connecting to the global community…')).toBe(true);
+        await press('Back');
+        const onQuestion = () => all('[data-testid="used-before-new"]').length > 0;
+        expect(onQuestion()).toBe(true);
+        answered();
+        await settle();
+        // Asked once the answer came, where it is asked at all: the doors were gone, so the visit wrote nothing (its `left`).
+        expect(look.proceeded).toEqual(answer.kind === 'guest' ? [false] : []);
+        expect(nav.replaced).toEqual([]);
+        expect(onQuestion()).toBe(true);
+        expect(doorOpen()).toBe(false);
+        expect(work.keysDrafted).toBe(0);
+        expect(work.started).toEqual([]);
     });
 
     it('6b. a key the phone can\'t read, with guest marks of its own: not looking around, so its community fills the field as before', async () => {

@@ -7496,6 +7496,8 @@
   "Choose your community, then sign in with {provider} once more. It finds your account, so there is nothing else to type. Your 12 words work any time.": "Выберите своё сообщество, затем войдите через {provider} ещё раз. Вход сам найдёт ваш аккаунт, поэтому больше ничего вводить не нужно. Ваши 12 слов работают в любое время.",
   "BeanPool reads your contacts only when you tap Import contacts, to show you a list to choose from. What you import is locked so only you can read it.": "BeanPool читает ваши контакты, только когда вы нажимаете «Импортировать контакты», чтобы показать список для выбора. То, что вы импортируете, закрыто так, что прочитать это можете только вы.",
   "People in other communities can send me a message request on this phone": "Люди из других сообществ могут отправить мне запрос на сообщение на этом телефоне",
+  "I'm Already a Member →": "Я уже участник →",
+  "I'm New Here": "Я здесь впервые",
   "A removed topic": "Удалённая тема",
   "Against this community’s rules": "Нарушает правила этого сообщества",
   "All sections": "Все разделы",

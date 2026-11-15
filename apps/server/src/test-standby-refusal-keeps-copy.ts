@@ -77,8 +77,9 @@ const PW_STANDBY = 'Refusal-Keeps-Standby-Pw-9082!';
 /** S's row cap, scaled down from 250,000 as test-dos-caps scales it. */
 const CAP = 150;
 const FLOOD = 160;
-/** The wait after a refused force-resync or first copy (BACKUP_RESYNC_RETRY_MS), scaled down from an hour. */
-const RETRY_MS = 3000;
+/** The wait after a refused force-resync or first copy (BACKUP_RESYNC_RETRY_MS), scaled down from an hour. Long enough
+ *  that §6's two pulls and §7's pull, two snapshots and next pull all finish inside it on a slow runner (3 s was tight). */
+const RETRY_MS = 8000;
 /** The tables hashed on S, row for row, to show a refused copy changed nothing. */
 const HASHED = [
     'members', 'member_preferences', 'accounts', 'transactions', 'marketplace_transactions', 'posts', 'post_photos', 'projects',

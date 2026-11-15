@@ -4,7 +4,7 @@ title: Sesli mesajlar
 summary: Bir mesajı yazmak yerine kaydedin, bire bir bir sohbette ya da bir grubun kilitli sohbetinde. Nerede gönderebileceğiniz, dinleme, sunucunun onu ne kadar tuttuğu ve nelerin gizli kaldığı.
 related: messages, groups, reporting, notifications, privacy, forum
 help: Kaydetmek için mikrofonu basılı tutun, göndermek için bırakın. İptal için sola, kilitlemek için yukarı kaydırın. En fazla 3 dakika. Sunucu 30 gün tutar.
-source-hash: 59ea9da2aec78bdf
+source-hash: 2d16565dd0af8fbe
 ---
 
 ## Nerede gönderebilirsiniz
@@ -43,11 +43,11 @@ Başlatmak için mikrofona tıklayın, işiniz bitince durdurun. Sonra dinleyin,
 
 - Oynat'a dokunun. İçinde ilerlemek için dalga boyunca sürükleyin.
 - Hız düğmesi 1×, 1.5×, 2× arasında döner ve seçiminizi hatırlar.
-- Biri bittiğinde sohbetteki sizin olmayan ve henüz oynatmadığınız sıradaki sesli mesaj kendiliğinden oynar. Aynı anda yalnızca biri oynar.
+- Biri bittiğinde sohbette hemen ardından gelen sesli mesaj, sizin değilse ve henüz oynatmadıysanız kendiliğinden oynar. Aynı anda yalnızca biri oynar.
 - Telefonda telefon sessizdeyken bile hoparlörden oynar. Sohbetten ayrıldığınızda ya da başka bir uygulamaya geçtiğinizde durur. Web uygulamasında sohbetten ayrıldığınızda durur.
 - Dinlediğinizi kimseye söylenmez. İki mavi onay işareti yine de bir mesajın okunduğunu söyler.
 
-Sohbet listeniz, Ana Sayfa'daki bir sohbet kartı ve alıntılanmış bir yanıt "🎤 Sesli mesaj" gösterir. Bir uyarı yalnızca şunu söyler: "Yeni bir mesajın var." (bir grupta, "Gruplarından birinde yeni mesaj var.").
+Telefonda sohbet listeniz "🎤 Sesli mesaj" gösterir; Ana Sayfa'daki bir sohbet kartı ve alıntılanmış bir yanıt da her iki uygulamada bunu gösterir. Bir uyarı yalnızca şunu söyler: "Yeni bir mesajın var." (bir grupta, "Gruplarından birinde yeni mesaj var.").
 
 Sesli mesajlar düzenlenemez. Kendi sesli mesajlarınızdan birini, her mesaj gibi, silebilirsiniz: bkz. "Mesajlar".
 

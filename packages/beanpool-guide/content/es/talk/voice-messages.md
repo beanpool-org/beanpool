@@ -4,7 +4,7 @@ title: Mensajes de voz
 summary: Graba un mensaje en vez de escribirlo, en un chat con una persona o en el chat cifrado de un grupo. Dónde puedes enviarlo, escucharlo, cuánto tiempo lo guarda el servidor y qué sigue siendo privado.
 related: messages, groups, reporting, notifications, privacy, forum
 help: Mantén pulsado el micrófono para grabar y suelta para enviar. Desliza a la izquierda para cancelar, arriba para bloquear. Hasta 3 minutos. Se guarda 30 días.
-source-hash: 59ea9da2aec78bdf
+source-hash: 2d16565dd0af8fbe
 ---
 
 ## Dónde puedes enviarlo
@@ -43,11 +43,11 @@ Haz clic en el micrófono para empezar y detén la grabación cuando termines. L
 
 - Toca reproducir. Arrastra sobre la onda para moverte por el mensaje.
 - El botón de velocidad pasa por 1×, 1.5×, 2×, y recuerda tu elección.
-- Cuando termina uno, se reproduce solo el siguiente mensaje de voz del chat que no es tuyo y que no has escuchado. Solo se reproduce uno a la vez.
+- Cuando termina uno, el mensaje de voz que va justo después en el chat se reproduce solo, si no es tuyo y no lo has escuchado. Solo se reproduce uno a la vez.
 - En el teléfono suena por el altavoz, incluso con el teléfono en silencio. Se detiene cuando sales del chat o cambias a otra aplicación. En la aplicación web se detiene cuando sales del chat.
 - A nadie se le avisa de que lo escuchaste. Las dos marcas azules siguen indicando que un mensaje se leyó.
 
-Tu lista de chats, una tarjeta de chat en Inicio y una respuesta citada muestran «🎤 Mensaje de voz». Un aviso dice solo «Tienes un mensaje nuevo.» (en un grupo, «Mensaje nuevo en uno de tus grupos.»).
+En el teléfono, tu lista de chats muestra «🎤 Mensaje de voz»; también lo muestran una tarjeta de chat en Inicio y una respuesta citada, en las dos apps. Un aviso dice solo «Tienes un mensaje nuevo.» (en un grupo, «Mensaje nuevo en uno de tus grupos.»).
 
 Los mensajes de voz no se pueden editar. Puedes eliminar uno tuyo, como cualquier mensaje: consulta «Mensajes».
 

@@ -4,7 +4,7 @@ title: Pesan suara
 summary: Rekam pesan alih-alih mengetiknya, di obrolan dengan satu orang atau obrolan grup yang terkunci. Di mana kamu bisa mengirimnya, mendengarkan, berapa lama server menyimpannya, dan apa yang tetap pribadi.
 related: messages, groups, reporting, notifications, privacy, forum
 help: Tahan mikrofon untuk merekam dan lepas untuk mengirim. Geser ke kiri untuk membatalkan, ke atas untuk mengunci. Hingga 3 menit. Server menyimpannya 30 hari.
-source-hash: 59ea9da2aec78bdf
+source-hash: 2d16565dd0af8fbe
 ---
 
 ## Di mana kamu bisa mengirimnya
@@ -43,11 +43,11 @@ Klik mikrofon untuk mulai, dan berhenti saat selesai. Lalu putar ulang, hapus, a
 
 - Ketuk putar. Seret di sepanjang gelombang untuk berpindah.
 - Tombol kecepatan bergantian 1×, 1,5×, 2×, dan mengingat pilihanmu.
-- Saat satu selesai, pesan suara berikutnya di obrolan itu yang bukan milikmu dan belum kamu putar diputar sendiri. Hanya satu yang diputar pada satu waktu.
+- Saat satu selesai, pesan suara tepat berikutnya di obrolan itu diputar sendiri, jika bukan milikmu dan belum kamu putar. Hanya satu yang diputar pada satu waktu.
 - Di ponsel suara diputar lewat speaker, bahkan saat ponsel disetel senyap. Pemutaran berhenti saat kamu meninggalkan obrolan, atau beralih ke aplikasi lain. Di aplikasi web pemutaran berhenti saat kamu meninggalkan obrolan.
 - Tidak ada yang diberi tahu bahwa kamu sudah mendengarkan. Dua centang biru tetap menandakan pesan sudah dibaca.
 
-Daftar obrolanmu, kartu obrolan di Beranda, dan balasan yang mengutip menampilkan "🎤 Pesan suara". Sebuah peringatan hanya berbunyi "Kamu punya pesan baru." (di grup, "Pesan baru di salah satu grupmu.").
+Di ponsel, daftar obrolanmu menampilkan "🎤 Pesan suara"; begitu juga kartu obrolan di Beranda dan balasan yang mengutip, di kedua aplikasi. Sebuah peringatan hanya berbunyi "Kamu punya pesan baru." (di grup, "Pesan baru di salah satu grupmu.").
 
 Pesan suara tidak bisa diedit. Kamu bisa menghapus milikmu, seperti pesan lain: lihat "Pesan".
 

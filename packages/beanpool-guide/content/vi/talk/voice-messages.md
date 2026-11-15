@@ -4,7 +4,7 @@ title: Tin nhắn thoại
 summary: Ghi âm một tin nhắn thay vì gõ, trong chat với một người hoặc chat nhóm được khóa. Nơi bạn gửi được, nghe, máy chủ giữ bao lâu, và điều gì vẫn riêng tư.
 related: messages, groups, reporting, notifications, privacy, forum
 help: Giữ micro để ghi âm và thả ra để gửi. Vuốt sang trái để hủy, lên trên để khóa. Tối đa 3 phút. Máy chủ giữ 30 ngày.
-source-hash: 59ea9da2aec78bdf
+source-hash: 2d16565dd0af8fbe
 ---
 
 ## Nơi bạn gửi được
@@ -43,11 +43,11 @@ Nhấp micro để bắt đầu, và dừng khi xong. Rồi nghe lại, xóa, ho
 
 - Chạm phát. Kéo dọc theo sóng âm để di chuyển trong đó.
 - Nút tốc độ đi qua 1×, 1,5×, 2×, và nhớ lựa chọn của bạn.
-- Khi một tin kết thúc, tin nhắn thoại tiếp theo trong chat không phải của bạn và bạn chưa nghe sẽ tự phát. Mỗi lúc chỉ một tin phát.
+- Khi một tin kết thúc, tin nhắn thoại ngay sau nó trong chat sẽ tự phát, nếu không phải của bạn và bạn chưa nghe. Mỗi lúc chỉ một tin phát.
 - Trên điện thoại, âm thanh phát qua loa, kể cả khi điện thoại đặt chế độ im lặng. Nó dừng khi bạn rời khỏi chat, hoặc chuyển sang ứng dụng khác. Trên ứng dụng web, nó dừng khi bạn rời khỏi chat.
 - Không ai được báo là bạn đã nghe. Hai dấu tích xanh vẫn cho biết một tin nhắn đã được đọc.
 
-Danh sách chat của bạn, thẻ chat ở Trang chủ và một trả lời có trích dẫn hiện "🎤 Tin nhắn thoại". Một cảnh báo chỉ ghi "Bạn có tin nhắn mới." (trong nhóm, "Tin nhắn mới trong một nhóm của bạn.").
+Trên điện thoại, danh sách chat của bạn hiện "🎤 Tin nhắn thoại"; thẻ chat ở Trang chủ và một trả lời có trích dẫn cũng vậy, trên cả hai ứng dụng. Một cảnh báo chỉ ghi "Bạn có tin nhắn mới." (trong nhóm, "Tin nhắn mới trong một nhóm của bạn.").
 
 Tin nhắn thoại không chỉnh sửa được. Bạn có thể xóa tin của mình, như mọi tin nhắn khác: xem "Tin nhắn".
 

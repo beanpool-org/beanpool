@@ -4,7 +4,7 @@ title: Mensaheng boses
 summary: Mag-record ng mensahe sa halip na i-type ito, sa usapan ng dalawang tao o sa naka-lock na usapan ng grupo. Kung saan ka makakapadala, pakikinig, gaano katagal itong itinatago ng server, at ano ang nananatiling pribado.
 related: messages, groups, reporting, notifications, privacy, forum
 help: Pindutin ang mikropono para mag-record, bitawan para ipadala. Pakaliwa para kanselahin, pataas para i-lock. Hanggang 3 minuto. Itinatago ng server nang 30 araw.
-source-hash: 59ea9da2aec78bdf
+source-hash: 2d16565dd0af8fbe
 ---
 
 ## Kung saan ka makakapadala
@@ -43,11 +43,11 @@ I-click ang mikropono para magsimula, at huminto kapag tapos ka na. Pagkatapos, 
 
 - I-tap ang play. I-drag sa kahabaan ng alon para lumipat sa loob nito.
 - Ang button ng bilis ay nagpapalit-palit sa 1×, 1.5×, 2×, at naaalala ang pinili mo.
-- Kapag natapos ang isa, ang susunod na mensaheng boses sa usapan na hindi sa iyo at hindi mo pa napapakinggan ay kusang magpe-play. Isa lang ang nagpe-play sa isang pagkakataon.
+- Kapag natapos ang isa, kusang magpe-play ang mismong kasunod na mensaheng boses sa usapan, kung hindi ito sa iyo at hindi mo pa ito napapakinggan. Isa lang ang nagpe-play sa isang pagkakataon.
 - Sa telepono, nagpe-play ito sa speaker, kahit naka-silent ang telepono. Humihinto ito kapag umalis ka sa usapan, o lumipat sa ibang app. Sa web app, humihinto ito kapag umalis ka sa usapan.
 - Walang sinasabihan na nakinig ka. Ang dalawang asul na tsek ay nagsasabi pa rin na nabasa ang isang mensahe.
 
-Ang listahan ng mga usapan mo, ang card ng usapan sa Home at ang sinipi na sagot ay nagpapakita ng "🎤 Mensaheng boses". Ang alerto ay nagsasabi lang ng "May bago kang mensahe." (sa grupo, "May bagong mensahe sa isa sa mga grupo mo.").
+Sa telepono, ang listahan ng mga usapan mo ay nagpapakita ng "🎤 Mensaheng boses"; ganoon din ang card ng usapan sa Home at ang sinipi na sagot, sa parehong app. Ang alerto ay nagsasabi lang ng "May bago kang mensahe." (sa grupo, "May bagong mensahe sa isa sa mga grupo mo.").
 
 Hindi maaaring i-edit ang mga mensaheng boses. Maaari mong burahin ang sa iyo, tulad ng anumang mensahe: tingnan ang "Mga Mensahe".
 

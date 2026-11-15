@@ -4,7 +4,7 @@ title: Jumbe za sauti
 summary: Rekodi ujumbe badala ya kuuandika, kwenye gumzo na mtu mmoja au gumzo lililofungwa la kikundi. Mahali unapoweza kutuma, kusikiliza, seva inauhifadhi kwa muda gani, na nini kinabaki cha faragha.
 related: messages, groups, reporting, notifications, privacy, forum
 help: Shikilia maikrofoni ili kurekodi na uachilie ili kutuma. Telezesha kushoto kughairi, juu kufunga. Hadi dakika 3. Seva huuhifadhi siku 30.
-source-hash: 59ea9da2aec78bdf
+source-hash: 2d16565dd0af8fbe
 ---
 
 ## Mahali unapoweza kutuma
@@ -43,11 +43,11 @@ Bofya maikrofoni ili kuanza, na usimamishe ukimaliza. Kisha uusikilize tena, uuf
 
 - Gusa cheza. Buruta kando ya wimbi ili kusogea ndani yake.
 - Kitufe cha kasi hupitia 1×, 1.5×, 2×, na kukumbuka chaguo lako.
-- Moja inapoisha, ujumbe unaofuata wa sauti kwenye gumzo ambao si wako na ambao hujaucheza hucheza wenyewe. Ni mmoja tu anayecheza kwa wakati mmoja.
+- Moja inapoisha, ujumbe wa sauti unaofuata moja kwa moja kwenye gumzo hucheza wenyewe, ikiwa si wako na hujaucheza. Ni mmoja tu anayecheza kwa wakati mmoja.
 - Kwenye simu unacheza kupitia spika, hata simu ikiwa imewekwa kimya. Unasimama unapoondoka kwenye gumzo, au kubadilisha hadi programu nyingine. Kwenye programu ya wavuti unasimama unapoondoka kwenye gumzo.
 - Hakuna anayeambiwa kwamba ulisikiliza. Vitiki viwili vya buluu bado vinasema ujumbe umesomwa.
 
-Orodha yako ya gumzo, kadi ya gumzo kwenye Nyumbani na jibu lililonukuliwa huonyesha "🎤 Ujumbe wa sauti". Arifa inasema tu "Una ujumbe mpya." (kwenye kikundi, "Ujumbe mpya katika mojawapo ya vikundi vyako.").
+Kwenye simu, orodha yako ya gumzo huonyesha "🎤 Ujumbe wa sauti"; vivyo hivyo kadi ya gumzo kwenye Nyumbani na jibu lililonukuliwa, katika programu zote mbili. Arifa inasema tu "Una ujumbe mpya." (kwenye kikundi, "Ujumbe mpya katika mojawapo ya vikundi vyako.").
 
 Jumbe za sauti haziwezi kuhaririwa. Unaweza kufuta wako, kama ujumbe wowote: tazama "Ujumbe".
 

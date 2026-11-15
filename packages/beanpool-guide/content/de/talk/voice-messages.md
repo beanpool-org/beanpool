@@ -4,7 +4,7 @@ title: Sprachnachrichten
 summary: Nimm eine Nachricht auf, statt sie zu tippen, in einem Chat mit einer Person oder im verschlüsselten Chat einer Gruppe. Wo du eine senden kannst, Zuhören, wie lange der Server sie aufbewahrt und was privat bleibt.
 related: messages, groups, reporting, notifications, privacy, forum
 help: Halte das Mikrofon zum Aufnehmen und lass zum Senden los. Nach links wischen bricht ab, nach oben sperrt. Bis zu 3 Minuten. Der Server behält sie 30 Tage.
-source-hash: 59ea9da2aec78bdf
+source-hash: 2d16565dd0af8fbe
 ---
 
 ## Wo du eine senden kannst
@@ -43,11 +43,11 @@ Klicke auf das Mikrofon zum Starten und höre auf, wenn du fertig bist. Dann kan
 
 - Tippe auf Wiedergabe. Ziehe an der Wellenform entlang, um dich darin zu bewegen.
 - Die Geschwindigkeits-Schaltfläche geht 1×, 1,5×, 2× und merkt sich deine Wahl.
-- Wenn eine endet, wird die nächste Sprachnachricht im Chat, die nicht von dir ist und die du noch nicht gehört hast, von selbst abgespielt. Es wird immer nur eine abgespielt.
+- Wenn eine endet, wird die direkt folgende Sprachnachricht im Chat von selbst abgespielt, wenn sie nicht von dir ist und du sie noch nicht gehört hast. Es wird immer nur eine abgespielt.
 - Auf dem Telefon wird sie über den Lautsprecher abgespielt, auch wenn das Telefon auf lautlos steht. Sie stoppt, wenn du den Chat verlässt oder zu einer anderen App wechselst. In der Web-App stoppt sie, wenn du den Chat verlässt.
 - Niemand erfährt, dass du zugehört hast. Die zwei blauen Haken sagen weiterhin, dass eine Nachricht gelesen wurde.
 
-Deine Chatliste, eine Chat-Karte auf der Startseite und eine zitierte Antwort zeigen „🎤 Sprachnachricht“. Eine Benachrichtigung sagt nur „Du hast eine neue Nachricht.“ (in einer Gruppe „Neue Nachricht in einer deiner Gruppen.“).
+Auf dem Telefon zeigt deine Chatliste „🎤 Sprachnachricht“; ebenso eine Chat-Karte auf der Startseite und eine zitierte Antwort, in beiden Apps. Eine Benachrichtigung sagt nur „Du hast eine neue Nachricht.“ (in einer Gruppe „Neue Nachricht in einer deiner Gruppen.“).
 
 Sprachnachrichten können nicht bearbeitet werden. Du kannst eine von dir löschen, wie jede Nachricht: siehe „Nachrichten“.
 

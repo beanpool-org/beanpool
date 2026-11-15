@@ -4,7 +4,7 @@ title: Messages vocaux
 summary: Enregistrez un message au lieu de l'écrire, dans une discussion avec une personne ou dans la discussion verrouillée d'un groupe. Où l'envoyer, l'écouter, combien de temps le serveur le garde et ce qui reste privé.
 related: messages, groups, reporting, notifications, privacy, forum
 help: Maintenez le micro pour enregistrer, relâchez pour envoyer. Glissez à gauche pour annuler, vers le haut pour verrouiller. Jusqu'à 3 minutes. Gardé 30 jours.
-source-hash: 59ea9da2aec78bdf
+source-hash: 2d16565dd0af8fbe
 ---
 
 ## Où l'envoyer
@@ -43,11 +43,11 @@ Cliquez sur le micro pour commencer, et arrêtez quand vous avez fini. Puis ré�
 
 - Touchez lecture. Faites glisser le doigt le long de l'onde pour vous déplacer dedans.
 - Le bouton de vitesse passe par 1×, 1.5×, 2×, et se souvient de votre choix.
-- Quand un message se termine, le message vocal suivant de la discussion qui n'est pas de vous et que vous n'avez pas écouté se lit tout seul. Un seul est lu à la fois.
+- Quand un message se termine, le message vocal qui le suit juste après dans la discussion se lit tout seul, s'il n'est pas de vous et que vous ne l'avez pas écouté. Un seul est lu à la fois.
 - Sur le téléphone, il passe par le haut-parleur, même quand le téléphone est en mode silencieux. Il s'arrête quand vous quittez la discussion ou passez à une autre appli. Dans l'appli web, il s'arrête quand vous quittez la discussion.
 - Personne n'est prévenu que vous avez écouté. Les deux coches bleues indiquent toujours qu'un message a été lu.
 
-Votre liste de discussions, une carte de discussion sur Accueil et une réponse citée affichent « 🎤 Message vocal ». Une alerte indique seulement « Vous avez un nouveau message. » (dans un groupe, « Nouveau message dans l'un de vos groupes. »).
+Sur le téléphone, votre liste de discussions affiche « 🎤 Message vocal » ; une carte de discussion sur Accueil et une réponse citée l'affichent aussi, dans les deux applis. Une alerte indique seulement « Vous avez un nouveau message. » (dans un groupe, « Nouveau message dans l'un de vos groupes. »).
 
 Les messages vocaux ne peuvent pas être modifiés. Vous pouvez en supprimer un des vôtres, comme n'importe quel message : voir « Messages ».
 

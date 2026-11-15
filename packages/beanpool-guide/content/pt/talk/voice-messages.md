@@ -4,7 +4,7 @@ title: Mensagens de voz
 summary: Grave uma mensagem em vez de digitar, em uma conversa com uma pessoa ou na conversa protegida de um grupo. Onde enviar, como ouvir, por quanto tempo o servidor guarda e o que continua privado.
 related: messages, groups, reporting, notifications, privacy, forum
 help: Segure o microfone para gravar e solte para enviar. Deslize para a esquerda para cancelar, para cima para travar. Até 3 minutos. O servidor guarda por 30 dias.
-source-hash: 59ea9da2aec78bdf
+source-hash: 2d16565dd0af8fbe
 ---
 
 ## Onde enviar
@@ -43,11 +43,11 @@ Clique no microfone para começar e pare quando terminar. Depois ouça, apague o
 
 - Toque em reproduzir. Arraste ao longo da onda para avançar ou voltar.
 - O botão de velocidade passa por 1×, 1.5×, 2×, e lembra sua escolha.
-- Quando uma termina, a próxima mensagem de voz da conversa que não é sua e que você ainda não ouviu toca sozinha. Só uma toca por vez.
+- Quando uma termina, a mensagem de voz que vem logo depois na conversa toca sozinha, se não for sua e você ainda não a tiver ouvido. Só uma toca por vez.
 - No celular, ela toca pelo alto-falante, mesmo com o celular no silencioso. Para quando você sai da conversa ou troca para outro app. No app web, para quando você sai da conversa.
 - Ninguém é avisado de que você ouviu. Os dois vistos azuis continuam indicando que uma mensagem foi lida.
 
-Sua lista de conversas, um cartão de conversa no Início e uma resposta citada mostram "🎤 Mensagem de voz". Um alerta diz só "Você tem uma nova mensagem." (em um grupo, "Nova mensagem em um dos seus grupos.").
+No celular, sua lista de conversas mostra "🎤 Mensagem de voz"; um cartão de conversa no Início e uma resposta citada também mostram, nos dois apps. Um alerta diz só "Você tem uma nova mensagem." (em um grupo, "Nova mensagem em um dos seus grupos.").
 
 Mensagens de voz não podem ser editadas. Você pode excluir uma das suas, como qualquer mensagem: veja "Mensagens".
 

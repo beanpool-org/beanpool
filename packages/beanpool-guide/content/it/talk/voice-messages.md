@@ -4,7 +4,7 @@ title: Messaggi vocali
 summary: Registra un messaggio invece di scriverlo, in una chat con una persona o nella chat protetta di un gruppo. Dove puoi inviarlo, come ascoltarlo, per quanto tempo lo conserva il server e che cosa resta privato.
 related: messages, groups, reporting, notifications, privacy, forum
 help: Tieni premuto il microfono per registrare e rilascia per inviare. Scorri a sinistra per annullare, in alto per bloccare. Fino a 3 minuti. Resta 30 giorni.
-source-hash: 59ea9da2aec78bdf
+source-hash: 2d16565dd0af8fbe
 ---
 
 ## Dove puoi inviarlo
@@ -43,11 +43,11 @@ Clicca il microfono per iniziare e ferma quando hai finito. Poi riascolta, elimi
 
 - Tocca riproduci. Trascina lungo l'onda per spostarti.
 - Il pulsante della velocità passa per 1×, 1.5×, 2×, e ricorda la tua scelta.
-- Quando uno finisce, il messaggio vocale successivo nella chat che non è tuo e che non hai ascoltato parte da solo. Ne parte uno solo alla volta.
+- Quando uno finisce, parte da solo il messaggio vocale subito successivo nella chat, se non è tuo e non l'hai già ascoltato. Ne parte uno solo alla volta.
 - Sul telefono suona dall'altoparlante, anche quando il telefono è in modalità silenziosa. Si ferma quando esci dalla chat o passi a un'altra app. Nell'app web si ferma quando esci dalla chat.
 - Nessuno viene avvisato che hai ascoltato. Le due spunte blu dicono ancora che un messaggio è stato letto.
 
-L'elenco delle tue chat, una scheda chat in Home e una risposta citata mostrano "🎤 Messaggio vocale". Un avviso dice solo "Hai un nuovo messaggio." (in un gruppo, "Nuovo messaggio in uno dei tuoi gruppi.").
+Sul telefono, l'elenco delle tue chat mostra "🎤 Messaggio vocale"; lo mostrano anche una scheda chat in Home e una risposta citata, in entrambe le app. Un avviso dice solo "Hai un nuovo messaggio." (in un gruppo, "Nuovo messaggio in uno dei tuoi gruppi.").
 
 I messaggi vocali non si possono modificare. Puoi eliminarne uno tuo, come qualsiasi messaggio: vedi "Messaggi".
 

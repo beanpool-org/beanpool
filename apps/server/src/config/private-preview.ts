@@ -95,7 +95,7 @@ export const VISITOR_OPEN_ROUTES: readonly { path: RegExp; why: string }[] = [
     { path: /^\/api\/federation\/verify-member\/?$/, why: 'federation handshake: a peer asks whether a key is a member here, signed by the peer' },
     { path: /^\/api\/invite\/(redeem|redeem-offline|check)\/?$/, why: 'redeeming an owner\'s or admin\'s invite (a member\'s is refused in the engine)' },
     { path: /^\/api\/member\/re-enroll(\/status)?\/?$/, why: 'a member moving to a new key asks, and polls, with the key it wants bound, not yet a member' },
-    { path: /^\/api\/recovery\/(sso-nonce|collect)(\/|$)/, why: 'recovery by a sign-in: the recovering device signs with a fresh key' },
+    { path: /^\/api\/recovery\/(sso-nonce|find-nonce|find|collect)(\/|$)/, why: 'recovery by a sign-in: the recovering device signs with a fresh key, finds the account and collects its copy' },
     { path: /^\/api\/pair\//, why: 'pairing a member\'s new device: its own one-time code' },
     { path: /^\/api\/(local|admin|node-admin)\//, why: 'the operator surface (Manager, claim code, break-glass): its own password, claim or node-role auth' },
     { path: /^\/api\/push-tokens\/leave\//, why: 'a leaving phone removes its own push token, signed inside the body' },

@@ -19,6 +19,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement, useEffect, useImperativeHandle, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { BRAND_SETS, contrastRatio } from '@beanpool/core';
 
 (globalThis as any).__DEV__ = false;
@@ -73,19 +75,31 @@ vi.mock('../identity', () => ({ loadIdentity: async () => ({ publicKey: ME }) })
 vi.mock('../use-pin-role', () => ({ usePinRole: () => null }));
 vi.mock('../../components/chat/styles', () => ({ makeChatStyles: () => ({}) }));
 // The chat's composer, as far as the forum uses it: its handle (setText, currentText), the photo button where onAttach is
-// given, the waiting photos above the box, and Send (asking canSend first, emptying the box, then onSend), as the real one does.
+// given, the waiting photos above the box, and Send, as the real one does: drawn live by the real one's rule (words, or a photo
+// handed to it as `attachment`; pinned to components/chat/ChatComposer.tsx below), and on a tap the real guard (no words and
+// no attachment: nothing), then canSend, then the box emptied and onSend with the trimmed words.
 vi.mock('../../components/chat/ChatComposer', async () => {
     const { forwardRef } = await import('react');
-    type P = { placeholder: string; onSend: (w: string) => unknown; canSend?: () => boolean; onAttach?: () => void; attachment?: unknown };
+    type P = { placeholder: string; onSend: (w: string) => unknown; canSend?: () => boolean; onAttach?: () => void; attachment?: unknown; disabled?: boolean; busy?: boolean };
     return {
         ChatComposer: forwardRef((props: P, ref) => {
             const [text, setText] = useState('');
             useImperativeHandle(ref, () => ({ setText: (w: string) => { composerCalls.push(`setText:${w}`); setText(w); }, reset: () => setText(''), focus: () => {}, currentText: () => text.trim() }), [text]);
+            const live = (text.trim().length > 0 || !!props.attachment) && !props.disabled && !props.busy;
             return createElement('div', { 'data-testid': 'forum-composer' },
                 props.attachment as any,
                 props.onAttach ? createElement('button', { 'data-testid': 'forum-composer-attach', onClick: props.onAttach }) : null,
                 createElement('textarea', { 'data-testid': 'forum-reply-box', placeholder: props.placeholder, value: text, onChange: (e: { target: { value: string } }) => setText(e.target.value) }),
-                createElement('button', { 'data-testid': 'forum-composer-send', onClick: async () => { if (props.canSend && !props.canSend()) return; const w = text; setText(''); await props.onSend(w); } }));
+                createElement('button', {
+                    'data-testid': 'forum-composer-send', 'data-live': String(live),
+                    onClick: async () => {
+                        const w = text.trim();
+                        if ((!w && !props.attachment) || props.disabled) return;
+                        if (props.canSend && !props.canSend()) return;
+                        setText('');
+                        await props.onSend(w);
+                    },
+                }));
         }),
     };
 });
@@ -381,6 +395,14 @@ describe.each(LOOKS)('the forum list\'s search in %s (%s)', (_name, set) => {
     });
 });
 
+describe('the composer stand-in', () => {
+    it('draws Send live by the real composer\'s rule and guards a tap as it does (components/chat/ChatComposer.tsx)', () => {
+        const src = fs.readFileSync(path.resolve(__dirname, '../../components/chat/ChatComposer.tsx'), 'utf-8');
+        expect(src).toContain('const canSend = (draft.trim().length > 0 || !!attachment) && !disabled && !busy;');
+        expect(src).toContain('if ((!text && !attachment) || disabled || sendingRef.current) return;');
+    });
+});
+
 describe.each(LOOKS)('a topic\'s photos and draft in %s (%s)', (_name, set) => {
     it('the reply box has the photo button where the forum takes the member\'s photos; a picked photo waits with ✕ and goes with the reply', async () => {
         const host = await render(set, ForumTopicScreen);
@@ -390,14 +412,21 @@ describe.each(LOOKS)('a topic\'s photos and draft in %s (%s)', (_name, set) => {
         expect(picker.asked).toBe(1);
         expect(byId(host, 'forum-attached').querySelector('img')!.getAttribute('data-src')).toBe(PHOTO);
         expect(byId(host, 'forum-attached-remove').getAttribute('aria-label')).toBe('Remove photo 1');
-        // On the box's own band (the chat's staged-photo row), never on the page under the post above.
+        // On the box's own band (the chat's staged-photo row), never on the page under the post above: in the reply box's block,
+        // drawn just above the composer, never handed to it (the composer counts a photo it is given as something to send).
         expect(styleOf(byId(host, 'forum-attached')).backgroundColor).toBe(COLOUR_SETS[set].surface.card);
+        expect(byId(host, 'forum-reply').contains(byId(host, 'forum-attached'))).toBe(true);
+        expect(byId(host, 'forum-composer').contains(byId(host, 'forum-attached'))).toBe(false);
         expectHoldsSmall(host);
-        // Photos alone don't send (a reply has words, as on the web); with words they go together.
+        // Photos alone don't send (a reply has words, as on the web), and Send says so: drawn off, never live and silent.
+        expect(byId(host, 'forum-composer-send').getAttribute('data-live')).toBe('false');
         const { replyInForum, keepForumDraft } = await import('../forum');
         await press(byId(host, 'forum-composer-send'));
         expect(replyInForum).not.toHaveBeenCalled();
+        expect(byId(host, 'forum-attached').querySelector('img')!.getAttribute('data-src')).toBe(PHOTO);
+        // With words, Send is live and they go together.
         await typeIn(byId(host, 'forum-reply-box'), 'Here is our seed table.');
+        expect(byId(host, 'forum-composer-send').getAttribute('data-live')).toBe('true');
         await press(byId(host, 'forum-composer-send'));
         expect(vi.mocked(replyInForum).mock.calls[0][1]).toMatchObject({ words: 'Here is our seed table.', photos: [PHOTO] });
         expect(byId(host, 'forum-attached')).toBeNull();
@@ -455,6 +484,42 @@ describe.each(LOOKS)('a topic\'s photos and draft in %s (%s)', (_name, set) => {
         const { keepForumDraft } = await import('../forum');
         await act(async () => { lastRoot!.unmount(); });
         expect(keepForumDraft).toHaveBeenLastCalledWith('t1', { words: 'Half a thought', quotes: null, photos: [] });
+    });
+
+    // A gone topic leaves no draft (the draft goes with the kept copy, utils/forum-kept.ts): every way the node can say the topic
+    // isn't there for this member any more, with a draft in the box. Nothing of it is written then, nor on leaving.
+    type Forum = typeof import('../forum');
+    const gone = () => Object.assign(new Error('That topic isn’t here any more.'), { status: 404, code: 'not_found' });
+    it.each<[string, (forum: Forum) => void, (host: HTMLElement, forum: Forum) => Promise<void>]>([
+        ['as it opens (the kept copy drawn, the draft in its box)', (forum) => {
+            node.kept.topic = TOPIC;
+            vi.mocked(forum.getForumTopic).mockRejectedValueOnce(gone());
+        }, async () => {}],
+        ['on a read again after a tap (here the bell; blocking its writer is the same read)', () => {}, async (host, forum) => {
+            vi.mocked(forum.followForumTopic).mockResolvedValueOnce('following');
+            vi.mocked(forum.getForumTopic).mockRejectedValueOnce(gone());
+            await press(byId(host, 'forum-follow'));
+        }],
+        ['on a tap the node refuses so (the bell on a topic gone since), which a read again confirms', () => {}, async (host, forum) => {
+            vi.mocked(forum.followForumTopic).mockRejectedValueOnce(gone());
+            vi.mocked(forum.getForumTopic).mockRejectedValueOnce(gone());
+            await press(byId(host, 'forum-follow'));
+        }],
+        ['on Send (the reply refused: the topic is gone)', () => {}, async (host, forum) => {
+            vi.mocked(forum.replyInForum).mockRejectedValueOnce(gone());
+            await press(byId(host, 'forum-composer-send'));
+        }],
+    ])('the topic gone %s: no draft is left, and the member is back on the list with the line', async (_how, before, then) => {
+        node.draft = { words: 'Typed on the bus', quotes: 2, photos: [PHOTO] };
+        const forum = await import('../forum');
+        before(forum);
+        const host = await render(set, ForumTopicScreen);
+        await then(host, forum);
+        expect(forum.forgetForumTopic).toHaveBeenCalledWith('t1');
+        expect(forum.noteForumBack).toHaveBeenCalledWith({ kind: 'gone', words: 'That topic isn’t here any more.' });
+        expect(nav.back).toBe(1);
+        await act(async () => { lastRoot!.unmount(); });
+        expect(vi.mocked(forum.keepForumDraft).mock.calls.filter(([, d]) => d !== null)).toEqual([]);
     });
 });
 

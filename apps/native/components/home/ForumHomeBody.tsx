@@ -7,6 +7,9 @@
  *   a writer's card opens only from inside it. ● where a followed topic has a reply not opened, as in the list.
  * - **Open the forum ›** opens the Chat tab's Forum side.
  * - Nothing kept and no answer: the forum's own line. No topics: the list's line.
+ * - **Read again with Home** (its return to the front, the app back, its two-minute poll, a pull: `turn`, which Home moves at
+ *   each), so ● goes once the topic is read and a topic started since shows. Never on a render that changed nothing. A read
+ *   again that gets no answer keeps what is drawn.
  */
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
@@ -22,17 +25,18 @@ export function newestForumTopics(topics: readonly ForumTopic[], n = 3): ForumTo
     return topics.filter((x) => !x.removed).slice().sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, n);
 }
 
-export function ForumHomeBody({ colors, now }: { colors: AppColors; now?: number }) {
+export function ForumHomeBody({ colors, now, turn }: { colors: AppColors; now?: number; turn?: number }) {
     const [topics, setTopics] = useState<ForumTopic[] | null>(null);
     const [failed, setFailed] = useState(false);
     useEffect(() => {
         let live = true;
+        // The kept list only until something is drawn (it never stands over a newer answer).
         void keptForumList(null).then((kept) => { if (live && kept) setTopics((was) => was ?? kept.topics); });
         void getForumTopics(null, 0)
             .then((list) => { if (live) { setTopics(list.topics); setFailed(false); } })
             .catch(() => { if (live) setFailed(true); });
         return () => { live = false; };
-    }, []);
+    }, [turn]);
     const at = now ?? Date.now();
     const rows = topics ? newestForumTopics(topics) : [];
     return (

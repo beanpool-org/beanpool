@@ -8,11 +8,15 @@
  *   the topic; ● on a followed topic with a reply not opened.
  * - "Open the forum ›" opens the Chat tab's Forum side.
  * - The kept list draws at once; with no connection and nothing kept, the forum's own line; no topics, the list's line.
+ * - Read again at each of Home's own reads (back at Home, its poll, a pull: the `turn` Home hands it), so ● clears once the
+ *   topic is read and a new topic shows; never on a render that changed nothing.
  * - Every word in readable ink on its ground (4.5:1), every tappable row 44 dp or more, no width fixed on words.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { BRAND_SETS, contrastRatio } from '@beanpool/core';
 
 (globalThis as any).__DEV__ = false;
@@ -118,6 +122,7 @@ beforeEach(() => {
     document.body.innerHTML = '';
     nav.pushed = [];
     Object.assign(node, { list: LIST, kept: null, offline: false });
+    vi.clearAllMocks();
 });
 
 describe('the newest topics', () => {
@@ -127,7 +132,49 @@ describe('the newest topics', () => {
     });
 });
 
+describe('Home reads the card again with its own reads', () => {
+    it('app/(tabs)/index.tsx hands the card a turn that moves at Home\'s focus read (a return, the app back), its poll and a pull', () => {
+        const src = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/index.tsx'), 'utf-8');
+        expect(src).toMatch(/<ForumHomeBody[^>]*\bturn=\{homeTurn\}/);
+        const refresh = src.slice(src.indexOf('const refresh = useCallback(async (why'));
+        expect(refresh.slice(0, refresh.indexOf('\n    }, ['))).toMatch(/if \(why === 'focus' \|\| why === 'poll' \|\| why === 'pull'\) setHomeTurn\(\(n\) => n \+ 1\);/);
+    });
+});
+
 describe.each(LOOKS)('the Home card "Forum" in %s (%s)', (_name, set) => {
+    it('reads the forum again at each new turn of Home\'s: ● goes once the topic is read, a topic started since shows', async () => {
+        const host = document.createElement('div');
+        host.setAttribute('data-style', JSON.stringify({ backgroundColor: COLOUR_SETS[set].surface.card }));
+        document.body.appendChild(host);
+        const root = createRoot(host);
+        const draw = async (turn: number) => {
+            await act(async () => { root.render(createElement(ForumHomeBody, { colors: COLOUR_SETS[set], now: NOW, turn }) as unknown as Parameters<Root['render']>[0]); });
+            await act(async () => {});
+        };
+        const { getForumTopics } = await import('../forum');
+        await draw(1);
+        const unread = () => all(host, 'home-forum-topic').map((r) => !!r.querySelector('[aria-label="New replies"]'));
+        const ids = () => all(host, 'home-forum-topic').map((r) => r.getAttribute('aria-label')!.split('. ')[0]);
+        expect(unread()).toEqual([true, false, false]);
+        // Meanwhile the member read t1, and someone started a topic.
+        node.list = { topics: [topicOf('t5', 0.2, { title: 'Seed swap on Saturday?' }), ...LIST.topics.map((x) => (x.id === 't1' ? { ...x, unread: false } : x))], next: null };
+        // Home drawn again with nothing new (its many renders): nothing read.
+        await draw(1);
+        expect(getForumTopics).toHaveBeenCalledTimes(1);
+        expect(unread()).toEqual([true, false, false]);
+        // Home's next read: the card reads with it.
+        await draw(2);
+        expect(getForumTopics).toHaveBeenCalledTimes(2);
+        expect(ids()).toEqual(['Seed swap on Saturday?', LIST.topics[2].title, LIST.topics[1].title]);
+        expect(unread()).toEqual([false, false, false]);
+        // A read again that finds no connection keeps what is drawn, never the line over it.
+        node.offline = true;
+        await draw(3);
+        expect(ids()).toEqual(['Seed swap on Saturday?', LIST.topics[2].title, LIST.topics[1].title]);
+        expect(words(host)).not.toContain('Couldn’t load the forum');
+        await act(async () => { root.unmount(); });
+    });
+
     it('the three newest topics, each row opening its topic; ● on the followed one; Open the forum › opens the Forum side', async () => {
         const host = await render(set);
         const rows = all(host, 'home-forum-topic');

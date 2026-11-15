@@ -236,6 +236,8 @@ export default function HomeScreen() {
     /** A node from before the frame refused the member's cards: they stay on the phone and are sent again (§2.3). */
     const [notOnAccount, setNotOnAccount] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    /** Moves at each of Home's own reads (a return, the app back, the poll, a pull): a card the phone reads itself reads again. */
+    const [homeTurn, setHomeTurn] = useState(0);
     const [offlineNote, setOfflineNote] = useState(false);
     const [postPicker, setPostPicker] = useState(false);
     const [pollModal, setPollModal] = useState(false);
@@ -575,6 +577,8 @@ export default function HomeScreen() {
     // `again` is a read while Home stays in front after the member's own step there (a notice opened, a poll or event made,
     // an edit made while the phone's list is the phone's only).
     const refresh = useCallback(async (why: 'focus' | 'pull' | 'bell' | 'poll' | 'layout' | 'again') => {
+        // The cards the phone reads itself (the Forum card) read again with Home's own reads: a return, the poll, a pull.
+        if (why === 'focus' || why === 'poll' || why === 'pull') setHomeTurn((n) => n + 1);
         const id = identityRef.current;
         if (!id) { await refreshAsVisitor(why); return; }
         const whose = homeAccount(id.publicKey);
@@ -1385,7 +1389,7 @@ export default function HomeScreen() {
                 );
             }
             // The forum's three newest topics (slice F3 part 2), read by the phone itself: each row opens its topic.
-            case 'forum': return frame(<ForumHomeBody colors={colors} now={now} />);
+            case 'forum': return frame(<ForumHomeBody colors={colors} now={now} turn={homeTurn} />);
             case 'decide': return c.decide ? frame(<DecideBody card={c.decide} features={answer.features} colors={colors} now={now} />) : null;
             case 'groups': return c.groups ? frame(<GroupsBody card={c.groups} colors={colors} />) : null;
             case 'joined': return c.joined ? frame(<JoinedBody card={c.joined} profile={profile} colors={colors} />) : null;

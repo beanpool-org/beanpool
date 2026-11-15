@@ -95,7 +95,8 @@ export async function pickForumPhoto(): Promise<string | null> {
 
 /**
  * The photos waiting to go with a topic or a reply (up to 3), each with ✕ to take it off, as the web's row. `band`: in the reply
- * box, on the composer's own band.
+ * box, on the composer's own band just above it (drawn beside the composer, never as its `attachment`, which would make Send
+ * live with no words).
  */
 export function ForumAttached({ photos, onChange, disabled, band }: { photos: string[]; onChange: (photos: string[]) => void; disabled?: boolean; band?: boolean }) {
     const styles = useForumStyles();

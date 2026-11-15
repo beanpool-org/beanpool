@@ -1,8 +1,8 @@
 /**
  * The auth limiter's buckets, one per route (auth-rate-limit.ts; the privacy review's S8, 2026-10-14), through the
- * real middleware, from one address: a hall's Wi-Fi or a carrier's NAT. Pairing, the names (the name check and the
- * recovery lookup, which share one bucket: both say whether a name is here) and the admin routes' bucket each keep their
- * own 15 a minute per address; none spends another's. The admin routes that call this limiter (the first invite, the
+ * real middleware, from one address: a hall's Wi-Fi or a carrier's NAT. Pairing, the names (the name check, which says
+ * whether a name is here; the recovery lookup by name that shared its bucket was deleted in S3) and the admin routes'
+ * bucket each keep their own 15 a minute per address; none spends another's. The admin routes that call this limiter (the first invite, the
  * identity update, the connectors and the rest: auth-rate-limit.ts) still share their one bucket, so across them a
  * guesser gets no more than before. (The password check that was here went with the admin password, 11 Nov 2026.)
  *
@@ -37,7 +37,6 @@ const pairInit = async () => {
     })).status;
 };
 const nameCheck = async (name: string) => (await fetch(`${BASE}/api/members/callsign-available/${name}`)).status;
-const lookup = async (name: string) => (await fetch(`${BASE}/api/recovery/lookup/${name}`)).status;
 /** The first invite (POST /api/admin/seed-invite), on the admin routes' bucket: with no credential, 401 once it is read. */
 const adminRoute = async () => (await fetch(`${BASE}/api/admin/seed-invite`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
@@ -69,19 +68,17 @@ async function main() {
     assert(await pairInit() === 429, `the ${N + 1}th pairing in the minute: 429 (pairing keeps its own limit)`);
     const afterPairs = await nameCheck('HallNewcomer');
     assert(afterPairs === 200, `FAIL-FIRST: after ${N} pairings, the name check still answers (${afterPairs}; was 429)`);
-    const lookupAfterPairs = await lookup('hallnewcomer');
-    assert(lookupAfterPairs === 200, `FAIL-FIRST: and the recovery lookup (${lookupAfterPairs}; was 429)`);
     const adminAfterPairs = await adminRoute();
     assert(adminAfterPairs === 401, `FAIL-FIRST: and an admin route reads the request (${adminAfterPairs}: 401 no credential; was 429)`);
 
     // ── 2. Each bucket still meets its own limit at its own number ──
     console.log('\n── 2. each bucket keeps its own 15 a minute ──');
     resetGatewayRateLimit();
-    // Section 1 spent 2 of the names bucket (one name check, one lookup).
-    const names = await statuses(N - 2, i => (i % 2 ? lookup(`name${i}`) : nameCheck(`Name${i}`)));
-    const namesFull = [await nameCheck('NameLast'), await lookup('namelast')];
-    assert(names.every(s => s === 200) && namesFull.join(',') === '429,429',
-        `the name check and the recovery lookup: ${N} in the minute between them, then 429 for both (${[...names, ...namesFull].join(',')})`);
+    // Section 1 spent 1 of the names bucket (one name check).
+    const names = await statuses(N - 1, i => nameCheck(`Name${i}`));
+    const namesFull = await nameCheck('NameLast');
+    assert(names.every(s => s === 200) && namesFull === 429,
+        `the name check: ${N} in the minute, then 429 (${[...names, namesFull].join(',')})`);
     resetGatewayRateLimit();
     const admins = await statuses(N - 1, () => adminRoute());
     assert(admins.every(s => s === 401) && await adminRoute() === 429,
@@ -93,12 +90,12 @@ async function main() {
     console.log('\n── 3. the windows reopen ──');
     pruneAuthAttempts(Date.now() + 120_000);
     resetGatewayRateLimit();
-    const reopened = [await pairInit(), await nameCheck('Again'), await lookup('again'), await adminRoute()];
-    assert(reopened.join(',') === '200,200,200,401', `a minute on, every bucket answers again (${reopened.join(',')})`);
+    const reopened = [await pairInit(), await nameCheck('Again'), await adminRoute()];
+    assert(reopened.join(',') === '200,200,401', `a minute on, every bucket answers again (${reopened.join(',')})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
-    console.log('⭐️ People sharing one address no longer lock each other out of pairing, the name check or a recovery lookup.');
+    console.log('⭐️ People sharing one address no longer lock each other out of pairing, the name check or an admin route.');
 }
 
 main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });

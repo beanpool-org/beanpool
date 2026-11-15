@@ -91,6 +91,8 @@ export function fixBody(page: KnowledgePage, form: KnowledgeFormValues, note: st
 
 /** What an owner's or admin's "Edit" sends: the whole form, in the page's own language (the writer's, §2.8), never photos. */
 export function editBody(page: KnowledgePage, form: KnowledgeFormValues): Record<string, unknown> {
-    const { photos: _photos, lang: _lang, ...words } = knowledgeFormBody({ ...form, photos: [] }, '');
+    const words: Record<string, unknown> = { ...knowledgeFormBody({ ...form, photos: [] }, '') };
+    delete words.photos;
+    delete words.lang;
     return { ...words, place: words.place ?? '', ...(page.knowledge?.lang ? { lang: page.knowledge.lang } : {}) };
 }

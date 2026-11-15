@@ -393,7 +393,9 @@ export function clearLearnOutdated(id: string): Promise<{ post: LearnPost }> {
 
 /** An owner's or admin's "Edit": the whole form, in the page's own language (the writer's, §2.8), never its photos. */
 export function editLearnPage(page: LearnPost, input: LearnInput): Promise<{ post: LearnPost }> {
-    const { photos: _photos, lang: _lang, ...words } = learnInputToSend(input);
+    const words: Partial<LearnInput> = learnInputToSend(input);
+    delete words.photos;
+    delete words.lang;
     return request('POST', `/api/knowledge/posts/${encodeURIComponent(page.id)}/edit`, { ...words, ...(page.knowledge.lang ? { lang: page.knowledge.lang } : {}) });
 }
 

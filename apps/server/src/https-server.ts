@@ -162,6 +162,7 @@ import { createRelayRoutes } from './routes/relay.js';
 import { sweepRelayMail } from './engine/relay-mail.js';
 import { retryRelayOutbox, sweepRelayOutbox } from './engine/relay-outbox.js';
 import { closeGuestsIfSwitchedOff, flushGuestOutbox } from './engine/group-guests.js';
+import { retryGroupSent, sweepGroupGuestMail } from './engine/group-guest-home.js';
 import { retryComplaints } from './engine/relay-complaint.js';
 import { isNodeSignedPath, pruneNodeRequestNonces, requireNodeSignature } from './engine/node-signature.js';
 import { createInviteAskRoutes } from './routes/invite-asks.js';
@@ -1616,6 +1617,9 @@ export async function startHttpsServer(port: number): Promise<number> {
         // guest's home is tried again.
         try { closeGuestsIfSwitchedOff(); } catch (e: any) { console.warn('[Guests] Closing guests after the switch went off failed:', e?.message || e); }
         flushGuestOutbox(now).catch((e: any) => console.warn('[Guests] Sending to guests\' homes failed:', e?.message || e));
+        // Members here who are guests in groups elsewhere (engine/group-guest-home.ts): old notices go, waiting items are sent again.
+        try { sweepGroupGuestMail(now); } catch (e: any) { console.warn('[Guests] The group notices sweep failed:', e?.message || e); }
+        retryGroupSent(now).catch((e: any) => console.warn('[Guests] Sending to groups\' hosts failed:', e?.message || e));
         retryComplaints(now).catch((e: any) => console.warn('[Mail] Telling other communities of reports failed:', e?.message || e));
     }, 60 * 1000);
     if (rateLimitCleaner.unref) rateLimitCleaner.unref();

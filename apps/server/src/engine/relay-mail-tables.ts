@@ -5,7 +5,11 @@
  */
 import type Database from 'better-sqlite3';
 
-export const RELAY_MAIL_TABLES = ['relay_mail', 'relay_mail_seen', 'relay_mail_devices', 'relay_mail_got', 'relay_outbox'] as const;
+export const RELAY_MAIL_TABLES = [
+    'relay_mail', 'relay_mail_seen', 'relay_mail_devices', 'relay_mail_got', 'relay_outbox',
+    // A group's notices held for members here, and what they sent to groups at other communities (engine/group-guest-home.ts).
+    'group_guest_mail', 'group_guest_mail_got', 'group_guest_sent',
+] as const;
 
 /**
  * Every row of the mailbox out of a copy of the database (a snapshot or a backup file: services/address-retention.ts

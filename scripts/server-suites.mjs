@@ -701,6 +701,7 @@ export const SUITES = [
     'test-relay-mail',
     'test-relay-complaint',
     'test-group-guests',
+    'test-group-guests-home',
     'test-dm-standby-order',
     'test-keeper-read-cursor',
     'test-groups-chat-sync',

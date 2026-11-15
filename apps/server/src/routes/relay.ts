@@ -4,7 +4,9 @@
  *
  *   POST /api/relay/mail            another community's server's signed request only (engine/node-signature.ts)
  *                                   { items: RelayItem[] } → 202 { items: [{ itemId, received: true } | { itemId, refused }] }
- *   POST /api/mail/send             a member here       { items: RelayItem[] } → { items: [{ itemId, state }] }
+ *   POST /api/mail/send             a member here       { items: RelayItem[] } → { items: [{ itemId, state }] }; group
+ *                                                          items (group-invite, -leave, -line, -epoch to group:<id>) go to
+ *                                                          its host (engine/group-guest-home.ts), and may carry `refused`
  *   GET  /api/mail?device=<id>&since=<ms>&sinceId=<itemId>
  *                                   a member here       → { items: HeldItem[], more, outbox: [{ itemId, kind, recipient,
  *                                                          recipientHome, state, at }], outboxMore }: what waits that THIS
@@ -18,6 +20,16 @@
  *   POST /api/mail/report           a member here       { item: { envelope, payload }, reason, words } → { success, report }:
  *                                                          a line from another community reported, its sender blocked for
  *                                                          them, and their home told (engine/relay-complaint.ts)
+ *   POST /api/relay/group           a group's host's signed request only (engine/group-guest-home.ts, G1b)
+ *                                   { v: 1, kind, group, host, guests, data } → 202 { received: true }, held for each named
+ *                                                          guest it may reach or dropped alike; 400 not a notice, or a host
+ *                                                          that is not its signer; 503 mailbox_full
+ *   GET  /api/mail/group?device=<id>&since=<ms>&sinceId=<itemId>
+ *                                   a member here       → { items, more, groups, sent, sentMore }: the group notices THIS
+ *                                                          device has not confirmed, where they stand with each group at
+ *                                                          another community (with its latest roster), and what became of
+ *                                                          their own group items after the device's last tick
+ *   POST /api/mail/group/confirm    a member here       { ids: string[], device } → { confirmed }
  *   POST /api/relay/complaint       another community's server's signed request only
  *                                   { complaint } → 202 { received: true } (filed, or on file already); every drop
  *                                                          422 not_taken alike; 503 while the name its line went to
@@ -42,6 +54,7 @@ import { noteNewReport } from '../services/alerts.js';
 import { logger } from '../logger.js';
 import { GroupLineReportError } from '../engine/group-chat-report.js';
 import { fileMessageReport } from './message-report.js';
+import { confirmGroupMail, heldGroupMailFor, isGroupItem, isGroupItemId, receiveGroupNotice, sendGroupItems } from '../engine/group-guest-home.js';
 
 /** The verified signer, when they are a member here who reads as one; else the route has answered 403. */
 function memberHere(ctx: any): string | null {
@@ -84,7 +97,8 @@ export function createRelayRoutes(): Router {
         if (!member) return;
         try {
             assertNotMuted(member);
-            ctx.body = { items: await sendRelayItems(member, ((ctx.request as any).body as { items?: unknown } | undefined)?.items) };
+            const items = ((ctx.request as any).body as { items?: unknown } | undefined)?.items;
+            ctx.body = { items: Array.isArray(items) && items.some(isGroupItem) ? await sendGroupItems(member, items) : await sendRelayItems(member, items) };
         } catch (e) {
             if (e instanceof OutboxError || e instanceof MutedError) {
                 ctx.status = e.status;
@@ -173,6 +187,48 @@ export function createRelayRoutes(): Router {
         });
         // Told after the answer is decided, before it goes: a member's send waits for its forward the same way.
         if (filed) await tellHomeOf(filed);
+    });
+
+    router.post('/api/relay/group', async (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        // Set only by the node signature door, as for /api/relay/mail.
+        const from = ctx.state.nodeOrigin as NodeOrigin | undefined;
+        if (!from) {
+            ctx.status = 401;
+            ctx.body = { error: 'This path takes only requests signed by a community\'s server.', code: 'node_signature_missing' };
+            return;
+        }
+        const answer = receiveGroupNotice(from.origin, (ctx.request as any).body);
+        ctx.status = answer.status;
+        if ('retryAfterSec' in answer && answer.retryAfterSec) ctx.set('Retry-After', String(answer.retryAfterSec));
+        ctx.body = answer.body;
+    });
+
+    router.get('/api/mail/group', async (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        const member = memberHere(ctx);
+        if (!member) return;
+        const device = deviceOf(ctx, ctx.query.device);
+        if (!device) return;
+        const since = Number(ctx.query.since ?? 0);
+        noteMailDevice(member, device);
+        ctx.body = heldGroupMailFor(member, device, Number.isSafeInteger(since) && since > 0 ? since : 0, isGroupItemId(ctx.query.sinceId) ? ctx.query.sinceId : '');
+    });
+
+    router.post('/api/mail/group/confirm', async (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        const member = memberHere(ctx);
+        if (!member) return;
+        const body = (ctx.request as any).body as { ids?: unknown; device?: unknown } | undefined;
+        const ids = body?.ids;
+        if (!Array.isArray(ids) || ids.length === 0 || ids.length > MAIL_FETCH_PAGE || !ids.every((id) => typeof id === 'string')) {
+            ctx.status = 400;
+            ctx.body = { error: `ids is a list of 1 to ${MAIL_FETCH_PAGE} notice ids.`, code: 'bad_ids' };
+            return;
+        }
+        const device = deviceOf(ctx, body?.device);
+        if (!device) return;
+        ctx.body = { confirmed: confirmGroupMail(member, device, ids as string[]) };
     });
 
     router.post('/api/relay/complaint', async (ctx) => {

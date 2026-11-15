@@ -77,8 +77,9 @@ const PW_STANDBY = 'Refusal-Keeps-Standby-Pw-9082!';
 /** S's row cap, scaled down from 250,000 as test-dos-caps scales it. */
 const CAP = 150;
 const FLOOD = 160;
-/** The wait after a refused force-resync or first copy (BACKUP_RESYNC_RETRY_MS), scaled down from an hour. */
-const RETRY_MS = 3000;
+/** The wait after a refused force-resync or first copy (BACKUP_RESYNC_RETRY_MS), scaled down from an hour. Long enough
+ *  that §6's two pulls and §7's pull, two snapshots and next pull all finish inside it on a slow runner (3 s was tight). */
+const RETRY_MS = 8000;
 /** The tables hashed on S, row for row, to show a refused copy changed nothing. */
 const HASHED = [
     'members', 'member_preferences', 'accounts', 'transactions', 'marketplace_transactions', 'posts', 'post_photos', 'projects',
@@ -563,6 +564,8 @@ async function main(): Promise<void> {
         assert(delta4.ok === true && delta4.mode === 'delta' && s4.tables.members.hash === m4.tables.members.hash && r4.lastWhy === null,
             `S's delta lands with every member (${JSON.stringify(delta4)}; ${counts(s4, 'members')}; before: refused, why 'oversized')`);
         // Five pulls inside one reconcile interval: the first is the routine whole copy, due, and lands; then deltas.
+        // Once it has landed the interval goes back to a day, so the four after it stay inside it however slow the
+        // runner is (a 4 s window once let a slow CI runner's fifth pull fall due: full, delta, delta, delta, full).
         await standby.send('set-reconcile-ms', { ms: 4000 });
         await sleep(4200);
         const t4 = Date.now();
@@ -570,9 +573,9 @@ async function main(): Promise<void> {
         for (let i = 0; i < 5; i++) {
             const p = await standby.send('pull', {});
             modes4.push(`${p.mode}:${p.ok ? 'ok' : 'refused'}`);
+            if (i === 0) await standby.send('set-reconcile-ms', { ms: 86400000 });
             await sleep(400);
         }
-        await standby.send('set-reconcile-ms', { ms: 86400000 });
         const served4 = await main.send('whole-copies', { since: t4 });
         assert(served4 === 1 && modes4[0] === 'full:ok' && modes4.slice(1).every((x) => x === 'delta:ok'),
             `five pulls inside one reconcile interval ask M for one whole copy, which lands, then deltas (${served4} served; ${modes4.join(', ')})`);
@@ -801,12 +804,14 @@ async function main(): Promise<void> {
         await standby.send('set-reconcile-ms', { ms: HOLD_MS });
         await sleep(HOLD_MS + 200);
         const routine12 = await standby.send('pull', {});
+        // The routine copy has landed: back to a day, so the next two pulls can't fall due on a slow runner (only the
+        // canary may ask the mend's whole copy).
+        await standby.send('set-reconcile-ms', { ms: 86400000 });
         await standby.send('sql', { sql: 'DELETE FROM posts WHERE id = ?', args: [jam.id] });
         const drift12 = await standby.send('pull', {});
         const mend12 = await standby.send('pull', {});
         const s12: Snap = await standby.send('snapshot', { tables: HASHED });
         const m12: Snap = await main.send('snapshot', { tables: HASHED });
-        await standby.send('set-reconcile-ms', { ms: 86400000 });
         assert(routine12.ok === true && routine12.mode === 'full' && drift12.ok === true && drift12.mode === 'delta'
             && mend12.ok === true && mend12.mode === 'full' && s12.tables.posts.hash === m12.tables.posts.hash,
             `the routine whole copy lands whole; the drift the next delta's canary finds is mended by a whole copy at the next pull (${JSON.stringify({ routine: [routine12.mode, routine12.ok], then: [drift12.mode, mend12.mode] })}; ${counts(s12, 'posts')}; M ${counts(m12, 'posts')}; before: held back until the next routine time)`);
@@ -834,6 +839,8 @@ async function main(): Promise<void> {
         });
         await standby.send('set-reconcile-ms', { ms: HOLD_MS });
         const whole13 = await standby.send('pull', {});
+        // As in 12: the routine copy has landed, so the drift and mend pulls below can't fall due on a slow runner.
+        await standby.send('set-reconcile-ms', { ms: 86400000 });
         const r13a = await standby.send('record');
         assert(whole13.ok === true && whole13.mode === 'full' && r13a.lastLeftOut === null && r13a.lastLacking === null && r13a.lastWhole?.exact === true,
             `the restart's routine whole copy lands, exact, carrying every listing (${JSON.stringify({ pull: whole13, leftOut: r13a.lastLeftOut, lacking: r13a.lastLacking, whole: r13a.lastWhole })}; before: listings left out)`);
@@ -849,7 +856,6 @@ async function main(): Promise<void> {
             && s13b.tables.group_members.hash === m13b.tables.group_members.hash,
             `the next delta's canary finds the drift, and one whole copy brings the membership back (${JSON.stringify({ drift: drift13.mode, mend: mend13.mode, served: served13 })}; ${counts(s13b, 'group_members')}; M ${counts(m13b, 'group_members')})`);
         await main.send('unflood');
-        await standby.send('set-reconcile-ms', { ms: 86400000 });
         await pullAndSwap({}, 'resync');
 
         // ── 14. A record an older version wrote ──

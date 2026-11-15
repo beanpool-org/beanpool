@@ -2679,17 +2679,31 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
 
             if (remote.abuseReports) {
                 for (const ar of remote.abuseReports) {
-                    // A message's report and its key come with the row, written once: the reporter's disclosure never changes.
-                    // Its reason can: a pending report changed to Child safety (updatePendingReportReason,
-                    // changeGroupLineReportReason) moves updated_at, and a copy that took only the status kept the old reason,
-                    // so a server that took over neither marked it nor listed it first (the review of #2470).
+                    // A newer row from the main server is taken whole: every copied column (replication-manifest abuse_reports),
+                    // as a standby writes no report of its own. Columns do change after a report is filed: its reason (a pending
+                    // one changed to Child safety, updatePendingReportReason and changeGroupLineReportReason: a copy that took
+                    // only the status was never marked, the review of #2470), and the disclosure of a report of a line from
+                    // another community, whose `told` moves as that community is told (engine/relay-complaint.ts setTold: a
+                    // copy that kept the old one differed in the copy check, the review of #3185). Taking them all closes the
+                    // class: a column a writer changes later reaches the standby without a line here for it.
                     db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at, status, updated_at,
                                     target_message_id, disclosure, request_conversation_id, request_wording, target_forum_post_id, target_home)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
+                                    reporter_pubkey = excluded.reporter_pubkey,
+                                    target_pubkey = excluded.target_pubkey,
+                                    target_post_id = excluded.target_post_id,
+                                    target_pulse_item_id = excluded.target_pulse_item_id,
                                     reason = excluded.reason,
+                                    created_at = excluded.created_at,
                                     status = excluded.status,
-                                    updated_at = excluded.updated_at
+                                    updated_at = excluded.updated_at,
+                                    target_message_id = excluded.target_message_id,
+                                    disclosure = excluded.disclosure,
+                                    request_conversation_id = excluded.request_conversation_id,
+                                    request_wording = excluded.request_wording,
+                                    target_forum_post_id = excluded.target_forum_post_id,
+                                    target_home = excluded.target_home
                                 WHERE excluded.updated_at IS NOT NULL
                                   AND (abuse_reports.updated_at IS NULL OR excluded.updated_at > abuse_reports.updated_at)`).run(
                         ar.id,

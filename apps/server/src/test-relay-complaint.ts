@@ -15,7 +15,8 @@
  *   3  a report that is not one: a changed envelope, a changed payload, a line to someone else, a line signed inside by
  *      another sender, a line from here, no reason, a key that is no member: refused, nothing filed, nothing sent
  *   4  a.example cannot be reached: the complaint waits and is tried again; a 400 is final
- *   5  a complaint from a.example about Ben's line to Ana: filed, from another community, its reporter a server
+ *   5  a complaint from a.example about Ben's line to Ana: filed, from another community, its reporter a server; the owners'
+ *      assistant reads it as an outside_message from another community (never a group chat message), and can't remove it
  *   6  on file already (again, another complaint id): 202, nothing filed again; dropped and answered alike, 422 not_taken,
  *      never as one taken: from a community the line never went to, an id never sent, a key that is no member, a member
  *      gone since, the owner's switch off; a field naming a reporter is never kept; a retry after a lost 202 (round 3 of
@@ -29,6 +30,8 @@
  *      the home gave, handed back to it: told `sent` only for one taken (202), never for a drop
  *   8  closing the class: every outward path (complaint body and headers, the answer, the moderators' list, the stored
  *      complaint, every log line, the owners' notice) x every spelling of the reporter: absent; the logs carry counts
+ *  10  a standby (round 4 of #3185): the main server tells the home after the standby copied the report (told queued ->
+ *      sent): a delta and a whole copy each bring the new disclosure, and the copy check (each table's hash) reads exact
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) BEANPOOL_SSRF_TEST_HOOK=1 pnpm exec tsx src/test-relay-complaint.ts
  */
@@ -48,6 +51,7 @@ import {
     type RelayItem,
 } from '@beanpool/core';
 import { signedHeaders } from './signed-request-test-helper.js';
+import type { AgentGrant } from './agent/tools.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -85,7 +89,8 @@ async function main(): Promise<void> {
     const dataDir = process.env.BEANPOOL_DATA_DIR;
     if (!dataDir) throw new Error('BEANPOOL_DATA_DIR must be set to a fresh directory');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
+    const nodeIdentity = await generateKeyPair('Ed25519');
+    fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(nodeIdentity));
 
     const { initTls } = await import('./services/tls.js');
     const { initStateEngine, seedGenesisMember, getReports } = await import('./state-engine.js');
@@ -98,6 +103,7 @@ async function main(): Promise<void> {
     const { hasBlocked, addBlocks, MEMBER_BLOCKS_MAX } = await import('./engine/member-blocks.js');
     const outbox = await import('./engine/relay-outbox.js');
     const complaints = await import('./engine/relay-complaint.js');
+    const { AGENT_TOOLS } = await import('./agent/tools.js');
 
     await initTls();
     initStateEngine();
@@ -276,6 +282,27 @@ async function main(): Promise<void> {
     assert(open5?.kind === 'complaint' && open5.from === 'a.example' && open5.words.text === 'Rude words for Ana' && open5.authorPubkey === ben.key
         && open5.id === benToAna.envelope.itemId, `5f. the moderators open it: from a.example, its reporter's word, about Ben's line (got ${JSON.stringify(open5)?.slice(0, 120)})`);
     assert(r5.text === '{"received":true}', '5e. the answer says received, nothing of what was filed');
+    // The owners' assistant (agent/tools.ts) reads it as what it is: a complaint from another community about a line a member
+    // here sent there. Never a group chat message, never which community or its words; and there is no post to remove.
+    const grant: AgentGrant = { id: 'test-grant', name: 'Test', member: olive.key, role: 'owner', via: 'token', createdAt: Date.now(), expiresAt: null, canPost: false };
+    const tool = (name: string) => AGENT_TOOLS.find((t) => t.name === name)!;
+    const got5 = await tool('report_get').run(grant, { report_id: row5?.id ?? '' }, 'B0UNDARY') as any;
+    const list5 = await tool('reports_list').run(grant, { include_text: true }, 'B0UNDARY') as any;
+    const listed5 = (list5.result?.reports ?? []).find((r: any) => r.id === row5?.id);
+    assert(got5.ok && got5.result?.report?.targetKind === 'outside_message' && got5.result.report.fromAnotherCommunity === true
+        && listed5?.targetKind === 'outside_message' && listed5.fromAnotherCommunity === true,
+        `5g. the assistant's report_get and reports_list call it an outside_message report, from another community (got ${got5.result?.report?.targetKind}/${got5.result?.report?.fromAnotherCommunity} and ${listed5?.targetKind}/${listed5?.fromAnotherCommunity})`);
+    const ofLine = await tool('report_get').run(grant, { report_id: reportId }, 'B0UNDARY') as any;
+    assert(ofLine.result?.report?.targetKind === 'direct_message' && ofLine.result.report.fromAnotherCommunity === false,
+        `5h. Ben's own report of Ana's line is still a direct_message report, not one from another community (got ${ofLine.result?.report?.targetKind}/${ofLine.result?.report?.fromAnotherCommunity})`);
+    const fenced5 = String(got5.result?.report?.authorCallsign?.text ?? '');
+    const seen5 = JSON.stringify([got5, listed5]);
+    const named5 = fenced5.includes(BEN_NAME), community5 = seen5.includes('a.example'), words5 = seen5.includes('Rude words for Ana');
+    assert(named5 && !community5 && !words5,
+        `5i. it names the member here who sent the line (fenced), as a message's report does, and never the community or the line's words (named ${named5}, community ${community5}, words ${words5})`);
+    const remove5 = await tool('suggest_action').run(grant, { kind: 'remove_reported', report_id: row5?.id ?? '', reason: 'Take it down' }, 'B0UNDARY') as any;
+    assert(!remove5.ok && /another community/.test(remove5.error ?? '') && !/group chat/.test(remove5.error ?? ''),
+        `5j. nor may it suggest removing it, in words that say what it is: a complaint from another community (got ${JSON.stringify(remove5)})`);
 
     // ── 6. On file, or dropped and answered alike ─────────────────────────────────────────
     console.log('\n6. A complaint on file already is taken; every drop is answered alike, and never as one taken');
@@ -492,6 +519,84 @@ async function main(): Promise<void> {
     const all = logs.join('');
     assert(/Complaints to other communities: 1 taken by a\.example\./.test(all) && /Complaints from other communities: 1 filed from a\.example\./.test(all),
         '8c. the logs carry counts and community names: "1 taken by a.example", "1 filed from a.example"');
+
+    // ── 10. A complaint's state on a standby ──────────────────────────────────────────────
+    // Last, after 8's look at every log line: the copies are imported into this same database, as test-group-chat-report's
+    // section 8 does it (the main server's change made here, then the standby's earlier copy of the row put back).
+    console.log('\n10. A complaint\'s told state reaches a standby that already holds the report, and the copy check reads exact');
+    const { exportSyncState, importRemoteState } = await import('./state-engine.js');
+    const { setNodeRole } = await import('./config/node-role.js');
+    const { setPrivateKeyForTests } = await import('./p2p.js');
+    const { tableContentHashes, compareTableHashes, TABLE_HASHES_VERSION } = await import('./engine/replica-hashes.js');
+    const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+    const { pinMainServerForTests } = await import('./standby-pin-test-helper.js');
+    setPrivateKeyForTests(nodeIdentity);
+    const nodeId = peerIdFromPrivateKey(nodeIdentity).toString();
+    pinMainServerForTests(nodeId);
+    // Dot reports a line from Ana while a.example can't be reached: told `queued`, and the standby's next delta copies the row.
+    const dot = keys();
+    addLocal(dot, 'Dot');
+    otherUnreachable = true;
+    const r10 = await asMember(dot, '/api/mail/report', { item: await line(ana, 'a.example', dot, 'b.example', 'Seeds again'), reason: 'Spam or scam', words: 'Seeds again' });
+    otherUnreachable = false;
+    const id10 = r10.body?.report?.id as string;
+    const rowOf10 = () => db.prepare('SELECT disclosure, updated_at FROM abuse_reports WHERE id = ?').get(id10) as { disclosure: string; updated_at: string };
+    const standbys10 = rowOf10();
+    assert(r10.status === 200 && toldOf(id10) === 'queued', `10a. the report is filed, its complaint waiting (got ${r10.status} ${toldOf(id10)})`);
+    // Then the main server tells a.example: told `sent` (setTold rewrites the disclosure and moves updated_at).
+    await new Promise((r) => setTimeout(r, 5));
+    const since10 = new Date(Date.now() - 1000).toISOString();
+    await complaints.retryComplaints(Date.now() + outbox.RETRY_BACKOFF_MS[0] + 1);
+    const mains10 = rowOf10();
+    assert(toldOf(id10) === 'sent' && mains10.disclosure !== standbys10.disclosure && mains10.updated_at > standbys10.updated_at,
+        `10b. on the main server it is told sent: the disclosure and updated_at changed (got ${toldOf(id10)})`);
+    const mainHashes = tableContentHashes();
+    const delta10: any = await exportSyncState(nodeId, since10);
+    const whole10: any = await exportSyncState(nodeId);
+    const carried10 = (delta10.abuseReports ?? []).find((r: any) => r.id === id10);
+    assert(carried10?.disclosure === mains10.disclosure && mainHashes.v === TABLE_HASHES_VERSION && !!mainHashes.tables.abuse_reports?.d,
+        `10c. the delta carries the new disclosure, and the main server's hashes are this release's (v ${mainHashes.v}, abuse_reports d ${mainHashes.tables.abuse_reports?.d?.slice(0, 12)})`);
+    const putStandbysBack = () => db.prepare('UPDATE abuse_reports SET disclosure = ?, updated_at = ? WHERE id = ?').run(standbys10.disclosure, standbys10.updated_at, id10);
+    for (const [what, payload, full] of [['a delta', delta10, false], ['a whole copy', whole10, true]] as Array<[string, any, boolean]>) {
+        putStandbysBack();
+        const before = compareTableHashes(mainHashes, tableContentHashes());
+        assert(before.differing.some((d) => d.table === 'abuse_reports'),
+            `10d. (${what}: with the standby's earlier copy of the row, the check finds abuse_reports differing: it can fail)`);
+        setNodeRole('backup');
+        try {
+            await importRemoteState(payload, { full });
+        } finally {
+            setNodeRole('primary');
+        }
+        const after = compareTableHashes(mainHashes, tableContentHashes());
+        assert(rowOf10().disclosure === mains10.disclosure && toldOf(id10) === 'sent' && after.compared.includes('abuse_reports') && after.exact,
+            `10e. ${what}: the standby takes the new disclosure, and the copy check reads exact, abuse_reports compared (differing: ${after.differing.map((d) => d.table).join(', ') || 'none'}; drift: ${after.drift.join(', ') || 'none'})`);
+    }
+    // 10f. Closing the class: every column the copy check hashes (the manifest's abuse_reports columns), changed on the main
+    // server after the standby copied the row, reaches it with the next delta, and the check reads exact. A column added
+    // later that the import doesn't take goes red here.
+    const { TABLES } = await import('./engine/replication-manifest.js');
+    const entry = TABLES.abuse_reports;
+    const hashed = entry.kind === 'replicated' || entry.kind === 'replicated-except' ? entry.columns : [];
+    const changed: Record<string, string> = { reporter_pubkey: bea.key, target_pubkey: bea.key, status: 'reviewed', created_at: '2026-01-02T03:04:05.678Z' };
+    const notTaken: string[] = [];
+    for (const column of hashed.filter((c) => c !== 'id' && c !== 'updated_at')) {
+        const standbys = db.prepare('SELECT * FROM abuse_reports WHERE id = ?').get(id10) as Record<string, unknown>;
+        const stamp = new Date(Date.parse(String(standbys.updated_at)) + 1000).toISOString();
+        db.prepare(`UPDATE abuse_reports SET ${column} = ?, updated_at = ? WHERE id = ?`).run(changed[column] ?? `changed ${column}`, stamp, id10);
+        const mains = tableContentHashes({ only: ['abuse_reports'] });
+        const delta: any = await exportSyncState(nodeId, String(standbys.updated_at));
+        db.prepare(`UPDATE abuse_reports SET ${column} = ?, updated_at = ? WHERE id = ?`).run(standbys[column] ?? null, standbys.updated_at, id10);
+        setNodeRole('backup');
+        try {
+            await importRemoteState(delta);
+        } finally {
+            setNodeRole('primary');
+        }
+        if (!compareTableHashes(mains, tableContentHashes({ only: ['abuse_reports'] }), ['abuse_reports']).exact) notTaken.push(column);
+    }
+    assert(hashed.length >= 15 && notTaken.length === 0,
+        `10f. each of the ${hashed.length} hashed columns, changed on the main server later, reaches the standby by delta and reads exact (not taken: ${notTaken.join(', ') || 'none'})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

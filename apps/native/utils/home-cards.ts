@@ -27,7 +27,7 @@ import {
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
     type SkyToday, featureModeFor, isNearKm, readTourRecord, resetHomeLayout, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
     currentLanguage, formatCount, formatHundredths, isHundredths, tn, word, type TierName, type WordKey,
-    knockStillAnswerable, capitalFirst, inviteAskNeedsLine, freePriceWords,
+    knockStillAnswerable, capitalFirst, inviteAskNeedsLine, freePriceWords, FORUM_VISITOR_WORDS, forumPublicOn,
     copyFromLine, eventCopyOf, type ShownFromLine, reorderIds, newInstanceId, readChatSettings, homeChatPicked,
     HOME_BELL_SETTLE_MS, crowdBellDelayMs, createHomeBellSettle, isCrowdDoorbell, type HomeBellTimers,
     FIRST_STEPS_WORDS, firstStepsCount, firstStepsLeft, firstStepsOver, welcomeDrawn, welcomeFacts as coreWelcomeFacts, type WelcomeFacts,
@@ -1233,9 +1233,10 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             // Worked out on the phone; drawn only where a place is known (CARD-FRAME §4).
             case 'sky': return skyOf(answer, { settings }, ctx.place) !== null;
             case 'community': return true;
-            // The forum's newest topics (slice F3 part 2): worked out on the phone from the forum's list, a member's only (the
-            // forum is read by its members), drawn with no body yet too, so it never jumps in when the list comes.
-            case 'forum': return !!answer.me;
+            // The forum's newest topics (slice F3 part 2): worked out on the phone from the forum's list, a member's (drawn with no
+            // body yet too, so it never jumps in when the list comes), and a visitor's where anyone may read the forum ("From the
+            // forum", slice F7: its body draws the frame only around something).
+            case 'forum': return !!answer.me || forumPublicOn(answer.features);
             // A Your tools card (home-tools-card) or a tool's card: worked out on the phone (asks: 'none').
             case 'tools': return !!answer.me;
             default: return isToolHomeCard(type) ? !!answer.me : c[id] !== undefined;
@@ -1243,8 +1244,16 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
     };
     // No saved layout: the default list, Welcome on top, until the tour ends, then the same less Welcome (a Done whose
     // write is still out). Nothing folds behind Welcome: the cards are there from the first second (DESIGN-home-default §2.2).
-    const base = shownLayout(answer, layout, ctx);
+    const base = withVisitorForum(shownLayout(answer, layout, ctx), answer);
     return cardOrder(base, pinned).filter(shows);
+}
+
+/** "From the forum" (slice F7) on a visitor's Home where anyone may read the forum: after the Market card, beside "Near you". */
+function withVisitorForum(layout: HomeLayout | null, answer: HomeAnswer): HomeLayout | null {
+    if (answer.me || !layout || !forumPublicOn(answer.features) || layout.cards.some(c => c.type === 'forum')) return layout;
+    const cards = layout.cards.slice();
+    cards.splice(cards.findIndex(c => c.type === 'market') + 1, 0, { id: 'forum', type: 'forum' });
+    return { ...layout, cards };
 }
 
 /**
@@ -1549,8 +1558,10 @@ export function marketCaption(profile: string): string {
 }
 
 /** A card's caption: its type's name (fixed words, never member text); the Market's and the community's depend on the node. */
-export function cardCaption(type: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'cards'>): string {
+export function cardCaption(type: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'cards'> & Partial<Pick<HomeAnswer, 'me'>>): string {
     if (type === 'community') return communityLines(answer.cards.community, answer.profile, false).title;
+    // A visitor's forum card (slice F7): "From the forum", beside "Near you".
+    if (type === 'forum' && answer.me === null) return t(FORUM_VISITOR_WORDS.card);
     // The one you keep is a project: "Your project" (group decisions §3.1). A node too old to say: "Your enterprise".
     if (type === 'enterprise' && answer.cards.enterprise?.lifecycle === 'bounded') return t('Your project');
     return cardName(type, answer.profile);

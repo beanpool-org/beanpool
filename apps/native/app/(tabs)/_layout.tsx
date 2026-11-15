@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useIdentity } from '../IdentityContext';
 import { usePathname, router } from 'expo-router';
 import { useMemo } from 'react';
-import { dealsNeedingMe, forumOn, helpSheetFor, isOthersListingDoorbell, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
+import { FORUM_HOME_WORDS, dealsNeedingMe, forumOn, helpSheetFor, isOthersListingDoorbell, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
 import { webSocketAliveSince } from '../../services/ws-client';
 import { useWords } from '../../components/LanguageProvider';
 import { TourBar, tourSceneInset } from '../../components/TourBar';
@@ -22,6 +22,7 @@ import { useTheme } from '../ThemeContext';
 import { useNodeStatus } from '../NodeStatusContext';
 import { withJitter } from '../../utils/jitter';
 import { fetchNodeProfile, getCachedNodeProfile, hiddenTabsFor, type HideableTab } from '../../utils/node-profile';
+import { useVisitorForum } from '../../utils/forum-public';
 import { UNKNOWN_NODE_PROFILE, anchorRead, profileArrived, type AnchoredNodeProfile } from '../../utils/node-profile-anchor';
 import { keepCommunityIdentity } from '../../utils/address-follow';
 import { HallBanner } from '../../components/HallBanner';
@@ -170,6 +171,9 @@ export default function TabLayout() {
     const [strip, setStrip] = useState<AnchoredNodeProfile>(UNKNOWN_NODE_PROFILE);
     const stripReadFor = useRef<string | null | undefined>(undefined);
     const hiddenTabs: HideableTab[] = hiddenTabsFor(strip.profile?.features);
+    // A visitor on the global community (a guest there, with a key or none): the Forum, read only, in Chat's place (slice F7;
+    // Talk is an account's). Asked again for each community the strip is read for.
+    const visitorForum = useVisitorForum(strip.profile);
     useEffect(() => {
         // No `cancelled`: an answer is kept only while the phone is still on the community it is for, so one still
         // out when the screen changes lands as it should, and one for the community before never does.
@@ -437,10 +441,22 @@ export default function TabLayout() {
                 <Tabs.Screen
                     name="chats"
                     options={{
+                        ...(visitorForum ? { href: null } : {}),
                         title: t(TAB.chats),
                         tabBarAccessibilityLabel: t(TAB.chats),
                         tabBarButtonTestID: 'tab-talk',
                         tabBarIcon: ({ focused, color }) => <TabItem label={t(TAB.chats)} icon="💬" focused={focused} color={color} count={unread} />
+                    }}
+                />
+                {/* The visitors' Forum (slice F7): in the bar only for a visitor on the global community, in Chat's place. */}
+                <Tabs.Screen
+                    name="forum"
+                    options={{
+                        ...(visitorForum ? {} : { href: null }),
+                        title: t(FORUM_HOME_WORDS.name),
+                        tabBarAccessibilityLabel: t(FORUM_HOME_WORDS.name),
+                        tabBarButtonTestID: 'tab-forum',
+                        tabBarIcon: ({ focused, color }) => <TabItem label={t(FORUM_HOME_WORDS.name)} icon="💬" focused={focused} color={color} />
                     }}
                 />
                 {/* Still a route: GlobalHeader and public-profile deep-link here with a `view`

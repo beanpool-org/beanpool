@@ -36,7 +36,7 @@ export async function readVisitorForumRows(): Promise<{ answer: ForumPublicAnswe
 }
 
 export function ForumVisitorHome({ features, onNavigate, frame }: {
-    features: { forum?: unknown; forumPublic?: unknown };
+    features: object;
     onNavigate: (to: string, contextId?: string) => void;
     /** Home's card frame around the body; never called with nothing in it. */
     frame: (body: ReactNode) => ReactNode;

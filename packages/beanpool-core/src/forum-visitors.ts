@@ -63,8 +63,9 @@ export const FORUM_VISITOR_WORDS = {
 export const FORUM_VISITOR_GUIDE_PAGE = 'how-it-works';
 
 /** Whether a node's `features` says anyone may read its forum: the global community's, with the forum on. */
-export function forumPublicOn(features: { forum?: unknown; forumPublic?: unknown } | null | undefined): boolean {
-    return forumOn(features) && features?.forumPublic === true;
+export function forumPublicOn(features: object | null | undefined): boolean {
+    const f = features as { forum?: unknown; forumPublic?: unknown } | null | undefined;
+    return forumOn(f) && f?.forumPublic === true;
 }
 
 /** What the public read gave: topics, none public, or no answer (yet, or at all). */
@@ -77,7 +78,7 @@ export type ForumPublicAnswer = 'topics' | 'none' | 'unreachable';
  */
 export function visitorForumShows(
     reader: 'visitor' | 'member',
-    features: { forum?: unknown; forumPublic?: unknown } | null | undefined,
+    features: object | null | undefined,
     answer: ForumPublicAnswer,
 ): { tab: boolean; card: 'topics' | 'guide' | null } {
     if (reader !== 'visitor' || !forumPublicOn(features)) return { tab: false, card: null };

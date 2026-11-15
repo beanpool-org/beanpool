@@ -495,6 +495,10 @@ async function main(): Promise<void> {
         { path: `/api/shops/${aliceShop}` },
         // A shop's banner, without the key only a member's shop read hands out: 404 to anyone (routes/shops.ts).
         { path: `/api/shops/${aliceShop}/photo` },
+        // The public forum (slice F7): a section, a topic and a post's photo by id; none here is public, so each is 404.
+        { path: '/api/forum/public/sections/fs-sentinel' },
+        { path: '/api/forum/public/topics/ft-sentinel' },
+        { path: '/api/forum/photos/fp-sentinel/0' },
     ];
     for (const re of PATTERNS ?? []) {
         assert(patternExamples.some(e => re.test(e.path.split('?')[0])),
@@ -1374,6 +1378,10 @@ async function main(): Promise<void> {
             // The community label (slice F10, routes/membership-note.ts): a member's note from their own community, and what they
             // show on a public forum; all signed, the member the signer.
             'GET /api/membership/note', 'GET /api/forum/label', 'POST /api/forum/label',
+            // The worldwide forum for anyone on the web (slice F7, routes/forum-public.ts): its public JSON, a public post's photo,
+            // the plain pages, the sitemap and robots.txt; 404 wherever the forum is not public.
+            'GET /api/forum/public', 'GET /api/forum/public/sections/:id', 'GET /api/forum/public/topics/:id', 'GET /api/forum/photos/:postId/:n',
+            'GET /forum', 'GET /forum/s/:id', 'GET /forum/t/:id', 'GET /forum/sitemap.xml', 'GET /robots.txt',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',

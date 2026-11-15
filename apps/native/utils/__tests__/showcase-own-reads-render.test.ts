@@ -82,6 +82,9 @@ vi.mock('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsy
 vi.mock('expo-location', () => ({
     getForegroundPermissionsAsync: async () => ({ status: 'denied' }), getLastKnownPositionAsync: async () => null,
 }));
+// The phone's lock module, whose native side doesn't load in node: a Learn page in the listing route reads the member's role
+// for its tools (components/learn/useLearnWriter.ts → utils/node-admin.ts), as the other render tests that reach it stand in.
+vi.mock('expo-local-authentication', () => ({ SecurityLevel: { NONE: 0 }, hasHardwareAsync: async () => false, isEnrolledAsync: async () => false, authenticateAsync: async () => ({ success: false }) }));
 vi.mock('../../services/pillar-sync', () => ({ requestSync: async () => {}, isPillarSyncActive: () => false, syncLandedOnThisCopy: async () => false, PILLAR_SYNC_ENDED: 'pillar_sync_ended' }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');

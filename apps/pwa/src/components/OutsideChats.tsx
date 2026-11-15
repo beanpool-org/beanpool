@@ -7,12 +7,15 @@
  * never checked by this community, shown "name not confirmed here".
  */
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { OUTSIDE_LINE_TEXT_MAX, t } from '@beanpool/core';
+import { OUTSIDE_LINE_TEXT_MAX, OUTSIDE_WRITES_STAY_THERE, t } from '@beanpool/core';
 import { blockUser } from '../lib/blocklist';
 import {
     OUTSIDE_CHATS_EVENT, OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, ring, sendFromBox, syncOutsideMailNow,
 } from '../lib/outside-mail';
 import type { OutsideChat, OutsideLine, OutsideLineState } from '../lib/outside-chat-store';
+
+/** Core's sentence, the phone's too (@beanpool/core outside-devices.ts): my own lines stay where I wrote them (X2b). */
+const LINES = { writesStayThere: OUTSIDE_WRITES_STAY_THERE };
 
 /** How often an open chat asks for what waits, while it is on screen. */
 const POLL_MS = 15_000;
@@ -190,6 +193,8 @@ export function OutsideChatThread({ chatId, onBack }: { chatId: string; onBack: 
                         padding: '0.75rem', borderRadius: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', fontSize: '0.85rem',
                     }}>
                         <p style={{ margin: 0, fontWeight: 600, color: 'var(--text-primary)' }}>{t('Kept in this browser only. Your community keeps no copy.')}</p>
+                        {/* Each device for itself (X2b): their lines reach every device; mine stay where I wrote them. */}
+                        <p data-testid="outside-chat-writes-stay" style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)' }}>{t(LINES.writesStayThere)}</p>
                         {chat.restored && lines.length === 0 && (
                             <p data-testid="outside-chat-restored" style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)' }}>
                                 {t("Earlier messages in this chat aren't in this browser. Messages with people in other communities are kept only on the phone or browser that got them.")}

@@ -20,7 +20,7 @@ import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto
 import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPreviews } from '../components/MessageRequests';
 import { OutsideChatRow, OutsideChatThread, OutsideRequestCard } from '../components/OutsideChats';
 import { AddressCardPanel } from '../components/AddressCardPanel';
-import { OUTSIDE_CHATS_EVENT, outsideContext, syncOutsideMailNow } from '../lib/outside-mail';
+import { OUTSIDE_CHATS_EVENT, chatsShown, outsideContext, syncOutsideMailNow } from '../lib/outside-mail';
 import type { OutsideChat } from '../lib/outside-chat-store';
 import { ChatPhotoViewer } from '../components/ChatPhotoViewer';
 import { ChatImageBubble, ChatPhotoShown } from '../components/ChatImageBubble';
@@ -317,14 +317,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [userTransactions, setUserTransactions] = useState<MarketplaceTransaction[]>([]);
     // Chats with people in other communities (X4), kept in this browser only (lib/outside-chat-store.ts): read from it, and a
     // round of the mailbox now and every half minute while this page is open and seen (the round asks nothing where the
-    // community doesn't take them). A request among them waits behind the one "Message requests" row.
+    // community doesn't take them). A request among them waits behind the one "Message requests" row. None with someone the
+    // account blocked (lib/outside-mail.ts chatsShown), whatever state their chat is in here.
     const [outsideChats, setOutsideChats] = useState<OutsideChat[]>([]);
     const [openOutside, setOpenOutside] = useState<string | null>(null);
     const [showCard, setShowCard] = useState(false);
     useEffect(() => {
         let alive = true;
         const read = () => {
-            void outsideContext().then((ctx) => (ctx ? ctx.store.chats(ctx.identity.publicKey) : []))
+            void outsideContext().then((ctx) => (ctx ? chatsShown(ctx) : []))
                 .then((list) => { if (alive) setOutsideChats(list); }, () => {});
         };
         read();

@@ -22,3 +22,8 @@ export function newOutsideDeviceId(): string {
 export const OUTSIDE_DOOR_EACH_DEVICE = word('Each phone or browser you use has its own switch.');
 /** In a chat's banner, on the phone and on the web: my own lines stay where I wrote them. */
 export const OUTSIDE_WRITES_STAY_THERE = word('What you write on another phone or browser shows only there.');
+/**
+ * The door's switch on the web: this browser's own (the phone's says "on this phone", apps/native/app/address-card.tsx). Core's,
+ * so its drafts sit beside the two sentences above.
+ */
+export const OUTSIDE_DOOR_SWITCH_BROWSER = word('People in other communities can send me a message request in this browser');

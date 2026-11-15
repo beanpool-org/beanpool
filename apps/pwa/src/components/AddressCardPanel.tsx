@@ -12,10 +12,16 @@
  */
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { OUTSIDE_LINE_TEXT_MAX, addressCardFromText, addressCardLink, relayConversationId, t, type AddressCard } from '@beanpool/core';
 import {
-    OUTSIDE_SEND_MS, doorOpen, myAddressCard, myHome, outsideContext, outsideErrorWords, outsideMessagesHere, ring, sendFromBox, setDoor,
+    OUTSIDE_DOOR_EACH_DEVICE, OUTSIDE_DOOR_SWITCH_BROWSER, OUTSIDE_LINE_TEXT_MAX, addressCardFromText, addressCardLink, t, type AddressCard,
+} from '@beanpool/core';
+import {
+    OUTSIDE_SEND_MS, doorOpen, myAddressCard, myHome, openChatFromCard, outsideContext, outsideErrorWords, outsideMessagesHere, ring, sendFromBox,
+    setDoor,
 } from '../lib/outside-mail';
+
+/** Core's sentences, the phone's too (@beanpool/core outside-devices.ts): the door is this browser's own (X2b). */
+const LINES = { doorSwitch: OUTSIDE_DOOR_SWITCH_BROWSER, doorEachDevice: OUTSIDE_DOOR_EACH_DEVICE };
 
 const card: CSSProperties = {
     padding: '1rem', borderRadius: '14px', background: 'var(--bg-card)', border: '1px solid var(--border-primary)',
@@ -98,6 +104,8 @@ export function AddressCardPanel({ onBack, onOpenChat }: { onBack: () => void; o
         if (!ctx) return;
         if (c.key === ctx.identity.publicKey) { setCardNote(t("That's your own card.")); return; }
         if (c.home === await myHome(ctx).catch(() => null)) { setCardNote(t('{name} is in this community: write to them here.', { name: c.name })); return; }
+        // A block is the account's: no box to write to them (as the phone's card screen).
+        if (await ctx.isBlocked(c.key).catch(() => false)) { setCardNote(t('You have blocked this user. Messaging is disabled.')); return; }
         setCardNote(null);
         setTheirs(c);
     };
@@ -126,8 +134,9 @@ export function AddressCardPanel({ onBack, onOpenChat }: { onBack: () => void; o
         try {
             const ctx = await outsideContext();
             if (!ctx) return;
-            const chatId = relayConversationId(ctx.identity.publicKey, theirs.key);
-            await ctx.store.openChat(ctx.identity.publicKey, chatId, { key: theirs.key, home: theirs.home, name: theirs.name });
+            // A block is the account's: no box to write to them, and their chat here stays as it is (outside-mail.ts openChatFromCard).
+            const chatId = await openChatFromCard(ctx, theirs);
+            if (!chatId) { setTheirs(null); setCardNote(t('You have blocked this user. Messaging is disabled.')); return; }
             // The words stay in this box while the line goes. Kept here: on to the chat, which shows it. Not kept: they stay.
             const { kept, error } = await sendFromBox(ctx, chatId, w, OUTSIDE_SEND_MS, () => {});
             ring();
@@ -180,11 +189,14 @@ export function AddressCardPanel({ onBack, onOpenChat }: { onBack: () => void; o
                             </>
                         )}
                         {open !== null && (open || mine) && (
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minHeight: '44px', fontSize: '0.9rem', overflowWrap: 'anywhere' }}>
-                                <input type="checkbox" data-testid="door-switch" checked={!!open} onChange={(e) => void switchDoor(e.target.checked)}
-                                    style={{ width: '22px', height: '22px', flexShrink: 0 }} />
-                                <span>{t('People in other communities can send me a message request')}</span>
-                            </label>
+                            <>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minHeight: '44px', fontSize: '0.9rem', overflowWrap: 'anywhere' }}>
+                                    <input type="checkbox" data-testid="door-switch" checked={!!open} onChange={(e) => void switchDoor(e.target.checked)}
+                                        style={{ width: '22px', height: '22px', flexShrink: 0 }} />
+                                    <span>{t(LINES.doorSwitch)}</span>
+                                </label>
+                                <p data-testid="door-each-device" style={words}>{t(LINES.doorEachDevice)}</p>
+                            </>
                         )}
                     </section>
                     <section data-testid="their-address-card" style={card}>

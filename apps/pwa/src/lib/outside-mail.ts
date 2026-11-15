@@ -51,7 +51,7 @@ import { accountEpoch, accountEpochHolds, onAccountEpochEnd } from './account-ep
 import { communityInfoOnce } from './visitor-lobby-gate';
 import { getBlocklistStatus, isUserBlocked, loadBlocklist } from './blocklist';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
-import { outsideChatStore, outsideCommunityOf, type OutsideChatStore, type OutsideLineState } from './outside-chat-store';
+import { outsideChatStore, outsideCommunityOf, type OutsideChat, type OutsideChatStore, type OutsideLineState } from './outside-chat-store';
 
 export const DOOR_META = 'door';
 export const CURSOR_META = 'outbox-cursor';
@@ -199,6 +199,28 @@ export async function myAddressCard(ctx: OutsideMailContext): Promise<AddressCar
     if (!home) return null;
     const name = addressCardName(String(ctx.identity.callsign ?? '').replace(/\s+/g, ' ').trim().slice(0, ADDRESS_CARD_NAME_MAX)) ?? '…';
     return signAddressCardFor({ key: ctx.identity.publicKey, home, name }, ctx.identity as BeanPoolIdentity);
+}
+
+/**
+ * The chats the Messages page may list (pages/MessagesPage.tsx: its open rows and the requests behind its one row): none with
+ * someone the account blocked, whatever state their chat is in here (blocked from another screen or device, or before this
+ * browser had the chat). Their chat stays as it is in the store: unblocked, it shows again. The phone's chatsShown.
+ */
+export async function chatsShown(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked'>): Promise<OutsideChat[]> {
+    const shown: OutsideChat[] = [];
+    for (const c of await ctx.store.chats(ctx.identity.publicKey)) if (!(await ctx.isBlocked(c.peerKey))) shown.push(c);
+    return shown;
+}
+
+/**
+ * A chat begun from someone's card (components/AddressCardPanel.tsx): opened here, a declined one too, and its id. Null, with
+ * nothing changed, when the account blocked them. The phone's openChatFromCard.
+ */
+export async function openChatFromCard(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked'>, card: Pick<AddressCard, 'key' | 'home' | 'name'>): Promise<string | null> {
+    if (await ctx.isBlocked(card.key)) return null;
+    const chatId = relayConversationId(ctx.identity.publicKey, card.key);
+    await ctx.store.openChat(ctx.identity.publicKey, chatId, { key: card.key, home: card.home, name: card.name });
+    return chatId;
 }
 
 export async function doorOpen(ctx: Pick<OutsideMailContext, 'store' | 'identity'>): Promise<boolean> {

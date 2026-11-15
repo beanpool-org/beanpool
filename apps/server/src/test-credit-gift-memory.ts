@@ -65,9 +65,24 @@ function require_(cond: unknown, msg: string): void {
 }
 
 interface Id { pk: string; priv: crypto.KeyObject; name: string }
+/** Every key newId made, and whose (withoutTestKeys). */
+const testKeys = new Map<string, string>();
 function newId(name: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
-    return { pk: (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex'), priv: privateKey, name };
+    const pk = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
+    testKeys.set(pk, name);
+    return { pk, priv: privateKey, name };
+}
+/**
+ * `text` with each key newId made written as `@<name>`, for test 32's search for the figure "90000". A key is 64 random hex
+ * digits, and about one in 17,000 holds "90000": a look line, or a member's answer, that names such a key read as a leak
+ * with no figure in it (merge queue run 43699352663; six keys reach the search, so about one run in 3,000). Only those exact
+ * keys go: the figure anywhere else in the text, beside a key too, is still found.
+ */
+function withoutTestKeys(text: string): string {
+    let out = text;
+    for (const [pk, name] of testKeys) out = out.split(pk).join(`@${name}`);
+    return out;
 }
 
 interface Res { status: number; body: any; text: string }
@@ -429,7 +444,7 @@ async function main(): Promise<void> {
         await call(owen, 'GET', '/api/credit/people?q=Sam'), await call(val!, 'GET', '/api/credit/people?q=Sam'),
     ];
     const leaks = (t: string) => [fred!.pk, 'Fred', giftRow.id, giftRow.timestamp, giftRow.timestamp.slice(0, 10), 'for you'].filter((s) => t.includes(s));
-    assert(givers.every((r) => r.status === 200 && r.text.includes('90000') && leaks(r.text).length === 0),
+    assert(givers.every((r) => r.status === 200 && withoutTestKeys(r.text).includes('90000') && leaks(r.text).length === 0),
         `32. the owner's, the admin's, the voucher's and Sam's own answers carry the figure and no sender key or callsign, no timestamp, no row id, no note (red when someone adds "sent by" or "on") (${JSON.stringify(givers.map((r) => leaks(r.text)))})`);
     const others: string[] = [];
     for (const who of [mel!, mo!]) {
@@ -438,13 +453,16 @@ async function main(): Promise<void> {
         others.push((await call(who, 'POST', '/api/trust/profile', { targetPubkey: sam!.pk })).text);
         others.push((await call(who, 'GET', '/api/credit/me')).text);
     }
-    assert(others.length === 12 && others.every((t) => !t.includes('90000') && !t.includes('By their own trading')),
-        '32. nothing a member or a moderator reads, from a credit route or the profile routes, holds 90000 (red when the figure leaks past the givers)');
+    const holding = others.filter((t) => withoutTestKeys(t).includes('90000') || t.includes('By their own trading')).length;
+    assert(others.length === 12 && holding === 0,
+        `32. nothing a member or a moderator reads, from a credit route or the profile routes, holds 90000 (red when the figure leaks past the givers) (${holding} of ${others.length} hold it)`);
     const looksAfter = db.prepare('SELECT * FROM credit_look_log ORDER BY rowid').all() as Record<string, unknown>[];
     const newLooks = looksAfter.slice(looksBefore.length);
-    assert(newLooks.every((l) => JSON.stringify(Object.keys(l).sort()) === JSON.stringify(['actor_pubkey', 'at', 'day', 'sight', 'subject_pubkey', 'surface', 'updated_at']) && !JSON.stringify(l).includes('90000'))
-        && noticeRows() === noticesAt && count("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'") === tablesBefore,
-        `32. the look lines are as any look's (no figure), and no notice or push row and no table is written by a look (${newLooks.length} new look lines; ${noticesAt})`);
+    const oddLooks = newLooks.filter((l) => JSON.stringify(Object.keys(l).sort()) !== JSON.stringify(['actor_pubkey', 'at', 'day', 'sight', 'subject_pubkey', 'surface', 'updated_at'])
+        || withoutTestKeys(JSON.stringify(l)).includes('90000')).length;
+    const [noticesAfter, tablesAfter] = [noticeRows(), count("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'")];
+    assert(oddLooks === 0 && noticesAfter === noticesAt && tablesAfter === tablesBefore,
+        `32. the look lines are as any look's (no figure), and no notice or push row and no table is written by a look (${newLooks.length} new look lines, ${oddLooks} not as any look's; ${noticesAt}${noticesAfter === noticesAt ? '' : ` then ${noticesAfter}`}; ${tablesBefore}${tablesAfter === tablesBefore ? '' : ` then ${tablesAfter}`} tables)`);
 
     // ── 33. Cost, and no Bean moved ──────────────────────────────────────────────────────────────────────────────
     console.log('\n— 33. cost —');

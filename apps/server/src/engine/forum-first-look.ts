@@ -23,8 +23,7 @@ import { db, deletePlainRows } from '../db/db.js';
 import { sectionAccess } from './forum-sections.js';
 import { getNodeRole } from './sync.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
-import { getMember } from '@beanpool/engine';
-import { ForumRefusal, type ForumWaitingTopic } from './forum.js';
+import { ForumRefusal, forumWriters, type ForumWaitingTopic } from './forum.js';
 import { forumModerators, isForumModerator } from './forum-moderation.js';
 import { normaliseRemovalReason, REMOVAL_REASON_LABELS, tell, type ModerationNoticeCallbacks, type TellPush } from './moderation-notices.js';
 import { followForumTopic } from './forum-notices.js';
@@ -72,7 +71,7 @@ const photosOf = (id: string) => (db.prepare('SELECT COUNT(*) FROM forum_waiting
 function out(r: WaitingRow): ForumWaitingTopic {
     return {
         id: r.id, sectionId: r.section_id, title: r.title, words: r.words, place: r.place, lang: r.lang, photos: photosOf(r.id),
-        writer: { publicKey: r.writer_pubkey, name: getMember(db, r.writer_pubkey)?.callsign ?? '' }, createdAt: r.created_at,
+        writer: forumWriters([r.writer_pubkey])(r.writer_pubkey), createdAt: r.created_at,
     };
 }
 

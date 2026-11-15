@@ -597,7 +597,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const requestMode = requestModeOf(activeConv, identity.publicKey, activeConv && loadedDmId === activeConv.id ? shownMessages : null);
     // Voice messages (V4): the open chat's recorder, started over for each chat; one voice send at a time.
     const voiceSendingRef = useRef(false);
-    const voiceRec = useVoiceRecorder(sendVoice, activeConv?.id ?? null);
+    // A browser whose recorder can't write AAC in .m4a records through the web app's own encoder, fetched at the first click.
+    const voiceRec = useVoiceRecorder(sendVoice, activeConv?.id ?? null, voiceRecordable === 'encoder');
     // The open chat's voice lines in the order they are drawn, for the next one to play on; leaving the chat stops it.
     useEffect(() => {
         setVoiceOrder(shownMessages.filter((m) => m.type === 'voice').map((m) => ({ id: m.id, mine: m.authorPubkey === identity.publicKey })));
@@ -2326,9 +2327,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         const voiceChat = nodeVoice && !editingMessage && !pendingImage && !isPeerBlocked && (
             (activeConv.type === 'dm' && requestMode === 'none')
             || (activeConv.type === 'group_thread' && groupLocked && openGroup?.answer?.canPost !== false));
-        const showMic = voiceChat && voiceRecordable === 'yes' && !draft.trim();
-        const cantRecordVoice = !voiceChat || voiceRecordable === 'yes' ? null
-            : voiceRecordable === 'no-format' ? t(VOICE_WORDS.cantRecordBrowser) : t(VOICE_WORDS.cantRecordAddress);
+        // The encoder that didn't load leaves this browser unable to record: the line, not a microphone that fails again.
+        const recordable = voiceRec.encoderFailed ? 'no-format' : voiceRecordable;
+        const canRecordVoice = recordable === 'yes' || recordable === 'encoder';
+        const showMic = voiceChat && canRecordVoice && !draft.trim();
+        const cantRecordVoice = !voiceChat || canRecordVoice ? null
+            : recordable === 'no-format' ? t(VOICE_WORDS.cantRecordBrowser) : t(VOICE_WORDS.cantRecordAddress);
 
         // Dropping onto a blocked conversation would only produce a message the
         // person cannot send, so the chat takes no drops at all while blocked; nor

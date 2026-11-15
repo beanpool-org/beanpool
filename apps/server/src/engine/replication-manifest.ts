@@ -603,6 +603,10 @@ export const TABLES: Record<string, TableEntry> = {
     forum_post_photos: plain('post_id order_num photo_data bytes updated_at'),
     forum_post_edits: plain('post_id edited_at words title updated_at', { agedOut: { column: 'edited_at', days: 30 } }),
     forum_members: plain('member_pubkey told_public_at updated_at known_at'),
+    // What a member shows beside their name on a public forum (engine/membership-note.ts, slice F10): a standby draws the same
+    // label, and "Don't show" goes with a tombstone, so it leaves the standby too. The note is never kept, so nothing of it
+    // travels. An older importer drops it: after a take-over from its copy every label is gone until its member sets it again.
+    forum_labels: plain('member_pubkey kind community_key lapses_at updated_at'),
     // A new member's first topic waiting for a moderator's look, and its photos (engine/forum-first-look.ts, slice F2): a
     // promoted standby still has it to answer. It is not a topic, so the standby's topics hold no row for it until OK makes
     // one; every delete (answered 30 days ago, the member gone) goes with a tombstone. An older importer drops it: after a

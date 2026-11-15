@@ -19,7 +19,7 @@ Tap **Chat**.
 - **On the phone:** tap the people button beside the pencil, in the row with the search box. Until you use it or close it, a line under that row says **Bring your contacts with you.**, with **Import contacts** and ⓘ.
 - **In the web app:** tap **👥 Import contacts** beside **✉️ New DM**. It reads **👥 Contacts** once you have someone in your list. The ⓘ beside it says how the list is kept.
 
-The first row of **New message**, in both apps, opens it too.
+The first row of **New Message**, in both apps, opens it too.
 
 ## Bringing people in
 

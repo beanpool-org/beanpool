@@ -4,7 +4,7 @@ title: Kontak pribadimu
 summary: Daftar kontak yang hanya bisa kamu buka, di ponsel atau browser mana pun dan di setiap komunitas yang kamu ikuti. Cara memasukkan orang, mengundang mereka, dan apa yang bisa serta tidak bisa dilihat server komunitasmu.
 related: messages, people, blocking, privacy, recovery, leaving-or-deleting
 help: Kontak pribadimu. Hanya kamu yang bisa membuka daftarnya. Bawa orang dari ponsel atau file kontak, tambahkan seseorang secara manual, atau undang mereka.
-source-hash: 37d8da7abe050c1d
+source-hash: feb5f08e450fe4f9
 ---
 
 ## Apa itu
@@ -20,7 +20,7 @@ Ketuk **Obrolan**.
 - **Di ponsel:** ketuk tombol orang di samping pensil, pada baris dengan kotak pencarian. Sampai kamu menggunakannya atau menutupnya, satu baris di bawah baris itu berbunyi **Bawa kontakmu bersamamu.**, dengan **Impor kontak** dan ⓘ.
 - **Di aplikasi web:** ketuk **👥 Impor kontak** di samping **✉️ DM Baru**. Tombolnya berbunyi **👥 Kontak** setelah ada seseorang di daftarmu. ⓘ di sampingnya menjelaskan bagaimana daftar itu disimpan.
 
-Baris pertama di **Pesan baru**, di kedua aplikasi, juga membukanya.
+Baris pertama di **Pesan Baru**, di kedua aplikasi, juga membukanya.
 
 ## Memasukkan orang
 

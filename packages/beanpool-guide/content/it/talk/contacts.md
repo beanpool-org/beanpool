@@ -4,7 +4,7 @@ title: I tuoi contatti privati
 summary: Un elenco di contatti che solo tu puoi aprire, su qualsiasi telefono o browser e in ogni comunità di cui fai parte. Portare dentro le persone, invitarle e cosa può e non può vedere il server della tua comunità.
 related: messages, people, blocking, privacy, recovery, leaving-or-deleting
 help: I tuoi contatti privati. Solo tu puoi aprire l'elenco. Porta dentro le persone dal telefono o da un file di contatti, aggiungi qualcuno a mano o invitalo.
-source-hash: 37d8da7abe050c1d
+source-hash: feb5f08e450fe4f9
 ---
 
 ## Che cos'è

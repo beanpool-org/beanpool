@@ -4,7 +4,7 @@ title: Deine privaten Kontakte
 summary: Eine Kontaktliste, die nur du öffnen kannst, auf jedem Telefon oder Browser und in jeder Community, der du angehörst. Leute herholen, sie einladen und was der Server deiner Community sehen kann und was nicht.
 related: messages, people, blocking, privacy, recovery, leaving-or-deleting
 help: Deine privaten Kontakte. Nur du kannst die Liste öffnen. Hole Leute vom Telefon oder aus einer Kontaktdatei, füge jemanden von Hand hinzu oder lade ihn ein.
-source-hash: 37d8da7abe050c1d
+source-hash: feb5f08e450fe4f9
 ---
 
 ## Was es ist

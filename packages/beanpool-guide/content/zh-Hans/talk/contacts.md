@@ -4,7 +4,7 @@ title: 你的私人联系人
 summary: 只有你能打开的联系人列表，在任何手机或浏览器上、在你加入的每个社区里都能使用。如何导入联系人、邀请他们，以及你所在社区的服务器能看到什么、看不到什么。
 related: messages, people, blocking, privacy, recovery, leaving-or-deleting
 help: 你的私人联系人。只有你能打开这份列表。可以从手机或联系人文件导入，也可以手动添加某人，或邀请他们加入。
-source-hash: 37d8da7abe050c1d
+source-hash: feb5f08e450fe4f9
 ---
 
 ## 它是什么

@@ -4,7 +4,7 @@ title: 你的私人聯絡人
 summary: 只有你能開啟的聯絡人清單，在任何手機或瀏覽器上、在你加入的每個社群裡都能使用。如何匯入聯絡人、邀請他們，以及你所在社群的伺服器能看到什麼、看不到什麼。
 related: messages, people, blocking, privacy, recovery, leaving-or-deleting
 help: 你的私人聯絡人。只有你能開啟這份清單。可以從手機或聯絡人檔案匯入，也可以手動新增某人，或邀請他們加入。
-source-hash: 37d8da7abe050c1d
+source-hash: feb5f08e450fe4f9
 ---
 
 ## 它是什麼

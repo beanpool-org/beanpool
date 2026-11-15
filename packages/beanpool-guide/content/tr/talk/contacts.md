@@ -4,7 +4,7 @@ title: Özel kişi listeniz
 summary: Yalnızca sizin açabildiğiniz bir kişi listesi; herhangi bir telefonda veya tarayıcıda ve üyesi olduğunuz her toplulukta. İnsanları listeye getirme, onları davet etme ve topluluğunuzun sunucusunun neleri görüp neleri göremediği.
 related: messages, people, blocking, privacy, recovery, leaving-or-deleting
 help: Özel kişi listeniz. Listeyi yalnızca siz açabilirsiniz. İnsanları telefonunuzdan veya bir kişi dosyasından getirin, birini elle ekleyin ya da davet edin.
-source-hash: 37d8da7abe050c1d
+source-hash: feb5f08e450fe4f9
 ---
 
 ## Nedir
@@ -20,7 +20,7 @@ Arkadaşlarla aynı şey değildir. Bir arkadaş tek bir topluluğa aittir ve on
 - **Telefonda:** arama kutusunun bulunduğu satırda, kalemin yanındaki kişiler düğmesine dokunun. Siz onu kullanana ya da kapatana kadar, o satırın altında **Kişilerinizi de yanınızda getirin.** yazan bir satır, yanında **Kişileri içe aktar** ve ⓘ ile görünür.
 - **Web uygulamasında:** **✉️ Yeni Doğrudan Mesaj** düğmesinin yanındaki **👥 Kişileri içe aktar** düğmesine dokunun. Listenizde biri olduğunda **👥 Kişiler** yazar. Yanındaki ⓘ listenin nasıl saklandığını anlatır.
 
-Her iki uygulamada da **Yeni mesaj** ekranının ilk satırı da onu açar.
+Her iki uygulamada da **Yeni Mesaj** ekranının ilk satırı da onu açar.
 
 ## İnsanları getirme
 

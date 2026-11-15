@@ -4,7 +4,7 @@ title: Tus contactos privados
 summary: Una lista de contactos que solo tú puedes abrir, en cualquier teléfono o navegador y en todas las comunidades a las que perteneces. Cómo traer personas, invitarlas y qué puede ver y qué no el servidor de tu comunidad.
 related: messages, people, blocking, privacy, recovery, leaving-or-deleting
 help: Tus contactos privados. Solo tú puedes abrir la lista. Trae personas desde tu teléfono o desde un archivo de contactos, agrega a alguien a mano o invítalo.
-source-hash: 37d8da7abe050c1d
+source-hash: feb5f08e450fe4f9
 ---
 
 ## Qué es

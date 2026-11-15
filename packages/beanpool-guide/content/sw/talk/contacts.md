@@ -4,7 +4,7 @@ title: Anwani zako za faragha
 summary: Orodha ya anwani ambayo wewe tu unaweza kuifungua, kwenye simu au kivinjari chochote na katika kila jumuiya uliyomo. Kuleta watu, kuwaalika, na kile ambacho seva ya jumuiya yako inaweza kuona na isichoweza.
 related: messages, people, blocking, privacy, recovery, leaving-or-deleting
 help: Anwani zako za faragha. Wewe tu unaweza kufungua orodha. Leta watu kutoka simuni au faili ya anwani, ongeza mtu kwa mkono, au waalike.
-source-hash: 37d8da7abe050c1d
+source-hash: feb5f08e450fe4f9
 ---
 
 ## Ni nini
@@ -20,7 +20,7 @@ Gusa **Gumzo**.
 - **Kwenye simu:** gusa kitufe cha watu kando ya penseli, kwenye safu yenye kisanduku cha kutafuta. Hadi utakapokitumia au kukifunga, mstari chini ya safu hiyo unasema **Leta anwani zako pamoja nawe.**, pamoja na **Leta anwani** na ⓘ.
 - **Kwenye programu ya wavuti:** gusa **👥 Leta anwani** kando ya **✉️ Ujumbe Mpya wa Moja kwa Moja**. Kinasomeka **👥 Anwani** ukishakuwa na mtu kwenye orodha yako. ⓘ kando yake inasema orodha inatunzwa vipi.
 
-Safu ya kwanza ya **Ujumbe mpya**, katika programu zote mbili, pia inaifungua.
+Safu ya kwanza ya **Ujumbe Mpya**, katika programu zote mbili, pia inaifungua.
 
 ## Kuleta watu
 

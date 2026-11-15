@@ -4,7 +4,7 @@ title: Danh bạ riêng của bạn
 summary: Một danh bạ chỉ mình bạn mở được, trên mọi điện thoại hay trình duyệt và trong mọi cộng đồng bạn tham gia. Cách đưa mọi người vào, mời họ, và những gì máy chủ của cộng đồng bạn thấy được và không thấy được.
 related: messages, people, blocking, privacy, recovery, leaving-or-deleting
 help: Danh bạ riêng của bạn. Chỉ bạn mở được danh sách. Đưa người từ điện thoại hoặc tệp danh bạ vào, thêm ai đó thủ công, hoặc mời họ.
-source-hash: 37d8da7abe050c1d
+source-hash: feb5f08e450fe4f9
 ---
 
 ## Danh bạ là gì

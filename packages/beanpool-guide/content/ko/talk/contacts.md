@@ -4,7 +4,7 @@ title: 나만의 연락처
 summary: 나만 열 수 있는 연락처 목록이에요. 어느 휴대폰이나 브라우저에서도, 가입한 모든 커뮤니티에서 쓸 수 있어요. 사람을 가져오는 방법, 초대하는 방법, 커뮤니티 서버가 볼 수 있는 것과 볼 수 없는 것을 알려 드려요.
 related: messages, people, blocking, privacy, recovery, leaving-or-deleting
 help: 나만의 연락처예요. 목록은 나만 열 수 있어요. 휴대폰이나 연락처 파일에서 가져오거나, 직접 추가하거나, 초대할 수 있어요.
-source-hash: 37d8da7abe050c1d
+source-hash: feb5f08e450fe4f9
 ---
 
 ## 연락처란

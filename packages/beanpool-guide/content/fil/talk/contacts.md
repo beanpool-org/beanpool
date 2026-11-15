@@ -4,7 +4,7 @@ title: Mga pribadong contact mo
 summary: Isang listahan ng mga contact na ikaw lang ang makakabukas, sa anumang telepono o browser at sa bawat komunidad na kinabibilangan mo. Pagdadala ng mga tao, pag-imbita sa kanila, at kung ano ang nakikita at hindi nakikita ng server ng komunidad mo.
 related: messages, people, blocking, privacy, recovery, leaving-or-deleting
 help: Ang iyong mga pribadong contact. Ikaw lang ang makakabukas ng listahan. Magdala mula sa telepono o contacts file, magdagdag nang mano-mano, o mag-imbita.
-source-hash: 37d8da7abe050c1d
+source-hash: feb5f08e450fe4f9
 ---
 
 ## Ano ito
@@ -20,7 +20,7 @@ I-tap ang **Usapan**.
 - **Sa telepono:** i-tap ang button ng mga tao sa tabi ng lapis, sa hanay na may search box. Hangga't hindi mo ito ginagamit o isinasara, may linya sa ilalim ng hanay na iyon na nagsasabing **Dalhin ang mga contact mo.**, kasama ang **I-import ang mga contact** at ⓘ.
 - **Sa web app:** i-tap ang **👥 I-import ang mga contact** sa tabi ng **✉️ Bagong DM**. Mababasa itong **👥 Mga Contact** kapag may tao ka na sa listahan mo. Sinasabi ng ⓘ sa tabi nito kung paano iniingatan ang listahan.
 
-Binubuksan din ito ng unang hanay ng **Bagong mensahe**, sa dalawang app.
+Binubuksan din ito ng unang hanay ng **Bagong Mensahe**, sa dalawang app.
 
 ## Pagdadala ng mga tao
 

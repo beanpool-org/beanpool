@@ -40,7 +40,7 @@ import {
     openMyGroupKey, parseNodeRequestHeader, readNodeKeyDocument, relayPayloadHash, sealGroupLine, signAddressCard, signNodeKeyDocument,
     signRelayEnvelope, type GroupEpochReason, type GroupEpochRecord, type RelayItem, type RelayItemKind,
 } from '@beanpool/core';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { setSignedForHost, signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -84,6 +84,8 @@ async function main(): Promise<void> {
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;
+    // Members sign for the community's own name, as their apps do (BEANPOOL_ADDRESSES).
+    setSignedForHost('b.example');
 
     // ── People ──────────────────────────────────────────────────────────────────────────────
     const olive = newId('Olive');
@@ -301,7 +303,11 @@ async function main(): Promise<void> {
     db.prepare(`INSERT INTO group_guests (group_id, guest_key, home, name, state, invited_by, invited_at, state_at) VALUES (?, ?, 'a.example', 'Hal', 'removed', ?, ?, ?)`)
         .run(G, hal.pk, ana.pk, new Date().toISOString(), new Date().toISOString());
     const lineFor = (who: Id) => { const id = crypto.randomUUID(); return { ...sealGroupLine('z', { myEdPrivHex: who.seedHex, groupKey: e1.groupKey, groupId: G, epoch: 1, messageId: id }), metadata: { epoch: 1 }, clientId: id }; };
-    const routes: Array<[string, 'GET' | 'POST' | 'DELETE' | 'PATCH', string, (who: Id) => unknown]> = [
+    // The answer each outsider gets: refused before anything of the group is read. Most routes ask first whether the caller
+    // is an active member (401/403/404, an invite-only group answering 404 as if it did not exist); joining asks first
+    // whether the key is a member here at all (400, "Member not found"), and a report checks its form first (400).
+    const REFUSED = [401, 403, 404];
+    const routes: Array<[string, 'GET' | 'POST' | 'DELETE' | 'PATCH', string, (who: Id) => unknown, number[]?]> = [
         ['the group', 'GET', `/api/groups/${G}`, () => undefined],
         ['its members', 'GET', `/api/groups/${G}/members`, () => undefined],
         ['its invitations', 'GET', `/api/groups/${G}/invitations`, () => undefined],
@@ -313,13 +319,13 @@ async function main(): Promise<void> {
         ['its guests', 'GET', `/api/groups/${G}/guests`, () => undefined],
         ['its succession', 'GET', `/api/groups/${G}/succession`, () => undefined],
         ['a line', 'POST', `/api/groups/${G}/chat/message`, (who) => lineFor(who)],
-        ['an epoch', 'POST', `/api/groups/${G}/keys/epoch`, (who) => ({ epoch: epochBy(who, G, 2, 'rotate', [ana, ben, gus, gia, cara]).record })],
+        ['an epoch', 'POST', `/api/groups/${G}/keys/epoch`, () => ({ epoch: epochBy(ana, G, 2, 'rotate', [ana, ben, gus, gia, cara]).record })],
         ['a wrap', 'POST', `/api/groups/${G}/keys/wrap`, () => ({})],
-        ['a report', 'POST', `/api/groups/${G}/chat/report`, () => ({ messageId: anaId, reason: 'spam' })],
+        ['a report', 'POST', `/api/groups/${G}/chat/report`, () => ({ messageId: anaId, reason: 'spam' }), [400, ...REFUSED]],
         ['a removal of a line', 'POST', `/api/groups/${G}/chat/remove`, () => ({ messageId: anaId })],
         ['an invitation of a guest', 'POST', `/api/groups/${G}/guests`, () => ({ card: null })],
         ['a removal of a guest', 'DELETE', `/api/groups/${G}/guests/${gia.pk}`, () => undefined],
-        ['joining', 'POST', `/api/groups/${G}/join`, () => ({})],
+        ['joining', 'POST', `/api/groups/${G}/join`, () => ({}), [400, ...REFUSED]],
         ['a member added', 'POST', `/api/groups/${G}/members`, () => ({ memberPubkey: stray.pk })],
         ['a role changed', 'PATCH', `/api/groups/${G}/members/${ben.pk}`, () => ({ role: 'convenor' })],
         ['a member removed', 'DELETE', `/api/groups/${G}/members/${ben.pk}`, () => undefined],
@@ -337,7 +343,7 @@ async function main(): Promise<void> {
         db.prepare('SELECT name FROM groups WHERE id = ?').get(G),
     ]);
     const outsiders: Array<[string, Id]> = [['guest Gus', gus], ['removed guest Hal', hal], ['visitor Vic', vic]];
-    for (const [what, method, p, bodyOf] of routes) {
+    for (const [what, method, p, bodyOf, expected = REFUSED] of routes) {
         // A member (Ben) reaches each GET; nothing below asks what a member's write does, which the group suites own.
         if (method === 'GET') {
             const r = await call('GET', ben, p);
@@ -347,7 +353,7 @@ async function main(): Promise<void> {
             const before = snapshot();
             const r = await call(method, id, p, bodyOf(id));
             const body = JSON.stringify(r.body ?? '');
-            assert([401, 403, 404].includes(r.status) && snapshot() === before && !body.includes(anaLine.ciphertext) && !body.includes('Seed Library'),
+            assert(expected.includes(r.status) && snapshot() === before && !body.includes(anaLine.ciphertext) && !body.includes('Seed Library'),
                 `5. ${who}, ${what} (${method}): refused ${r.status}, nothing changed, nothing of the group in the answer`);
         }
     }
@@ -370,7 +376,7 @@ async function main(): Promise<void> {
         `6b. Gia is removed and her home told, naming her alone (got ${removed.status}, ${JSON.stringify(told6.map((o) => o.body))})`);
     const k6 = await call('GET', ana, `/api/groups/${G}/keys`);
     assert(k6.body?.stale === true && !k6.body?.roster.includes(gia.pk), '6c. the epoch is stale and the roster is without her');
-    const stillHer = await call('POST', ana, `/api/groups/${G}/keys/epoch`, { epoch: epochBy(ana, G, 2, 'remove', [ana, ben, gus, gia, cara]).record });
+    const stillHer = await call('POST', ana, `/api/groups/${G}/keys/epoch`, { epoch: epochBy(ana, G, 2, 'rotate', [ana, ben, gus, gia, cara]).record });
     assert(stillHer.status === 409, `6d. an epoch still wrapped to her is refused (got ${stillHer.status})`);
     const e2 = epochBy(ana, G, 2, 'rotate', [ana, ben, gus, cara]);
     const rot = await call('POST', ana, `/api/groups/${G}/keys/epoch`, { epoch: e2.record });

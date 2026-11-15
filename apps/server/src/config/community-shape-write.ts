@@ -53,7 +53,7 @@
  *               shared outside stops at once (engine/peek-tickets.ts stopAllPeekTickets), in the same transaction: set on
  *               again, none of them opens anything.
  *   doorCheck   only where the open door is set (400 otherwise); no lock.
- *   dmRequests, decisions, forum, outsideMessages, probation, autoHide, autoMute, shareLocation, shareMemberCount, shareEmail,
+ *   dmRequests, decisions, forum, outsideMessages, groupGuests, probation, autoHide, autoMute, shareLocation, shareMemberCount, shareEmail,
  *   sharePhone, shareHealth, shareListingsFromHere: no lock. shareListingsFromHere (our name on members' listings on the
  *               global community, list-on-global G5) is pushed to the directory at once while the community is listed, so a
  *               global node's next mirror run has it, not the next timed push.

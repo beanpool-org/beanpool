@@ -212,6 +212,8 @@ export function receiveRelayItems(origin: string, items: unknown, now = Date.now
 
     const answers: ReceivedItem[] = [];
     const fresh: RelayItem[] = [];
+    /** Where each fresh item's answer stands, by its sender and id: a guest's refusal replaces that one answer only. */
+    const answerAt = new Map<string, number>();
     for (const raw of items) {
         const verdict = checkRelayItem(raw, { signedBy: origin, isHere: isOwnNodeHome });
         if (!verdict.ok) { answers.push({ itemId: idOf(raw), refused: verdict.reason }); continue; }
@@ -221,7 +223,10 @@ export function receiveRelayItems(origin: string, items: unknown, now = Date.now
             continue;
         }
         answers.push({ itemId: env.itemId, received: true });
-        if (!fresh.some((f) => f.envelope.senderKey === env.senderKey && f.envelope.itemId === env.itemId)) fresh.push(verdict.item);
+        if (!fresh.some((f) => f.envelope.senderKey === env.senderKey && f.envelope.itemId === env.itemId)) {
+            fresh.push(verdict.item);
+            answerAt.set(`${env.senderKey}\n${env.itemId}`, answers.length - 1);
+        }
     }
     const isNew = (i: RelayItem) => !db.prepare('SELECT 1 FROM relay_mail_seen WHERE sender_key = ? AND item_id = ?').get(i.envelope.senderKey, i.envelope.itemId);
     const newItems = fresh.filter(isNew);
@@ -252,8 +257,8 @@ export function receiveRelayItems(origin: string, items: unknown, now = Date.now
     for (const item of newItems) {
         const refused = takeItem(origin, item, now);
         if (!refused) continue;
-        const at = answers.findIndex((a) => a.itemId === item.envelope.itemId && 'received' in a);
-        if (at >= 0) answers[at] = { itemId: item.envelope.itemId, refused };
+        const at = answerAt.get(`${item.envelope.senderKey}\n${item.envelope.itemId}`);
+        if (at !== undefined) answers[at] = { itemId: item.envelope.itemId, refused };
     }
     return { status: 202, body: { items: answers } };
 }

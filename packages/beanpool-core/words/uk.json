@@ -2934,5 +2934,6 @@
   "Delete the old copy": "Видалити стару копію",
   "Your old contacts list is in your contacts now. Its old locked copy is still kept here.": "Ваш старий список контактів тепер у ваших контактах. Його стара заблокована копія все ще зберігається тут.",
   "This community didn't answer. Your old contacts list is still kept here. Try again later.": "Ця спільнота не відповіла. Ваш старий список контактів все ще зберігається тут. Спробуйте пізніше.",
-  "Learn": "Навчання"
+  "Learn": "Навчання",
+  "People in other communities can send me a message request in this browser": "Люди з інших спільнот можуть надіслати мені запит на повідомлення в цьому браузері"
 }

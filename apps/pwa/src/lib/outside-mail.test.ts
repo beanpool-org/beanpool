@@ -22,6 +22,9 @@
  *      another community, the delete here x every wait a round makes x answered after / asked after -> nothing asked, no
  *      wait started, nothing written for the old account or community; and what is kept (the home among it) is the
  *      community's own, as the phone keeps it in each community's file
+ *  11  each device for itself, the whole gate table (kind x chat x door x block) through a round with a second device listed
+ *      (the phone's 15; X4b): this browser judges and confirms under its own id, and the phone is still served every item
+ *  12  a blocked person's chat is never listed nor opened from their card (the phone's chatsShown, openChatFromCard; X4b)
  *
  * The mailbox played here is X2b's: GET /api/mail and POST /api/mail/confirm refuse a request without the device (400
  * bad_device), an item is served to each device until it has confirmed it, and goes once every device listed has.
@@ -188,8 +191,8 @@ vi.mock('./outside-chat-store', async (importOriginal) => {
 
 import { clearOutsideChats, outsideChatStore } from './outside-chat-store';
 import {
-    FORGET_DEVICE_MS, doorOpen, forgetThisBrowserForMail, mailDevice, myAddressCard, myHome, sendFromBox, setDoor, syncOutsideMail,
-    type OutsideMailContext,
+    FORGET_DEVICE_MS, chatsShown, doorOpen, forgetThisBrowserForMail, mailDevice, myAddressCard, myHome, openChatFromCard, sendFromBox, setDoor,
+    syncOutsideMail, type OutsideMailContext,
 } from './outside-mail';
 import { setNodeApiUrl } from './api';
 import { resetAccountEpochForTest } from './account-epoch';
@@ -1054,5 +1057,107 @@ describe('10  a round never acts for an account or a community it no longer belo
         expect(ofB(docs())).toEqual([]);
         expect(await outsideChatStore(own).getMeta(BEN.key, 'device')).toBe(ownDevice);
         expect(await outsideChatStore('https://b.example.org').getMeta(BEN.key, 'device')).toBe(nearDevice);
+    });
+});
+
+describe('11  each device for itself: the gate table through a round, a second device listed (the phone\'s 15; X4b)', () => {
+    /** Ben's phone, which fetched once (so it is listed) and has not run a round since. */
+    const PHONE = 'e'.repeat(32);
+    /** What the mailbox serves `device` now: what it has not confirmed. */
+    const servedTo = (device: string) => server.held.filter((h) => !server.got.get(h.envelope.itemId)?.has(device));
+    // Section 3's kinds: the three the mailbox holds for a member, and a group line, which it never holds but the gate drops.
+    const kinds = ['dm-line', 'dm-blob', 'dm-delete', 'group-line'];
+    // Every chat this browser's store can hold (a request is made by their first line, so it has one; the phone's request/0
+    // is a state only its SQL can be put in).
+    const chats: Array<{ state: OutsideChatState; theirLines: number } | null> = [
+        null, { state: 'request', theirLines: 1 }, { state: 'open', theirLines: 0 }, { state: 'open', theirLines: 5 }, { state: 'declined', theirLines: 1 },
+    ];
+    const expected = (kind: string, chat: typeof chats[number], door: boolean, isBlocked: boolean) => {
+        if (isBlocked) return 'drop';
+        if (chat?.state === 'open') return kind === 'dm-line' ? 'line' : 'drop';
+        if (kind !== 'dm-line' || chat?.state === 'declined') return 'drop';
+        if (chat?.state === 'request') return chat.theirLines === 0 ? 'request' : 'drop';
+        return door ? 'request' : 'drop';
+    };
+    async function chatHere(chat: NonNullable<typeof chats[number]>) {
+        const chatId = chatWith(SOL.key);
+        const earlier = (i: number) => ({ id: uuid(), chatId, author: SOL.key, text: `Earlier ${i}`, replyTo: null, at: Date.now() - 10_000 + i });
+        if (chat.state === 'open') {
+            await ctx.store.openChat(BEN.key, chatId, { key: SOL.key, home: ANA_HOME, name: 'Sol' });
+            for (let i = 0; i < chat.theirLines; i++) await ctx.store.writeTheirs(BEN.key, earlier(i), { home: ANA_HOME, name: null }, 'line');
+            return;
+        }
+        await ctx.store.writeTheirs(BEN.key, earlier(0), { home: ANA_HOME, name: null }, 'request');
+        if (chat.state === 'declined') await ctx.store.decide(BEN.key, chatId, 'declined');
+    }
+    for (const kind of kinds) for (const chat of chats) for (const door of [false, true]) for (const isBlocked of [false, true]) {
+        const want = expected(kind, chat, door, isBlocked);
+        it(`${kind}, chat ${chat ? `${chat.state}/${chat.theirLines}` : 'none'}, door ${door ? 'open' : 'closed'}${isBlocked ? ', blocked' : ''}: ${want} in this browser, and the phone is still served it`, async () => {
+            server.listed.add(PHONE);
+            if (chat) {
+                await chatHere(chat);
+                expect([(await ctx.store.chat(BEN.key, chatWith(SOL.key)))?.state, await ctx.store.theirLines(BEN.key, chatWith(SOL.key), SOL.key)]).toEqual([chat.state, chat.theirLines]);
+            }
+            await setDoor(ctx, door);
+            if (isBlocked) blocked.add(SOL.key);
+            const item = await heldLine(SOL, 'The row\'s line', { kind });
+            const id = item.envelope.itemId;
+            const out = await syncOutsideMail(ctx);
+            const browser = await mailDevice(ctx);
+            const written = await ctx.store.hasLine(BEN.key, chatWith(SOL.key), id);
+            const state = (await ctx.store.chat(BEN.key, chatWith(SOL.key)))?.state;
+            // This browser did its part: the item judged as the gate says, then confirmed, under this browser's own id.
+            if (want === 'line') expect([out.written, written, state]).toEqual([1, true, chat?.state]);
+            if (want === 'request') expect([out.requests, written, state]).toEqual([1, true, 'request']);
+            if (want === 'drop') expect([out.dropped, written]).toEqual([1, false]);
+            expect(browser).toMatch(MAIL_DEVICE);
+            expect(browser).not.toBe(PHONE);
+            expect(server.got.get(id)).toEqual(new Set([browser]));
+            // The phone is still served it, drops included: its own door, chats and blocks decide there.
+            expect(servedTo(PHONE).map((h) => h.envelope.itemId)).toContain(id);
+            expect(servedTo(browser).map((h) => h.envelope.itemId)).not.toContain(id);
+        });
+    }
+});
+
+describe('12  a blocked person\'s chat is never listed nor opened from their card (the phone\'s chatsShown and openChatFromCard; X4b)', () => {
+    // Sol, blocked on this account (a block is the account's: on another device, another screen, or before this browser had
+    // the chat). Ana's open chat stands beside it: the list keeps it.
+    const starts = ['none', 'request', 'open', 'declined'] as const;
+    const sol = { key: SOL.key, home: ANA_HOME, name: 'Sol' };
+    const solChat = () => ctx.store.chat(BEN.key, chatWith(SOL.key));
+    async function start(s: typeof starts[number]) {
+        await openWith(ANA.key);
+        await setDoor(ctx, true);
+        if (s === 'request') { await heldLine(SOL, 'Hello'); await syncOutsideMail(ctx); }
+        if (s === 'open' || s === 'declined') await ctx.store.openChat(BEN.key, chatWith(SOL.key), sol);
+        if (s === 'declined') await ctx.store.decide(BEN.key, chatWith(SOL.key), 'declined');
+        expect((await solChat())?.state).toBe(s === 'none' ? undefined : s);
+    }
+    for (const s of starts) {
+        it(`${s === 'none' ? 'no chat here' : `a chat ${s} here`}, blocked: not listed, and their card opens nothing and changes nothing`, async () => {
+            await start(s);
+            blocked.add(SOL.key);
+            const before = await solChat();
+            expect((await chatsShown(ctx)).map((c) => c.peerKey)).toEqual([ANA.key]);
+            expect(await openChatFromCard(ctx, sol)).toBeNull();
+            expect(await solChat()).toEqual(before);
+            expect((await chatsShown(ctx)).map((c) => c.peerKey)).toEqual([ANA.key]);
+            // Unblocked, it shows again as it was kept.
+            blocked.delete(SOL.key);
+            expect((await chatsShown(ctx)).map((c) => c.peerKey).sort()).toEqual(s === 'none' ? [ANA.key] : [ANA.key, SOL.key].sort());
+        });
+        it(`control: ${s === 'none' ? 'no chat here' : `a chat ${s} here`}, not blocked: their card opens the chat, listed`, async () => {
+            await start(s);
+            expect(await openChatFromCard(ctx, sol)).toBe(chatWith(SOL.key));
+            expect(await solChat()).toMatchObject({ state: 'open', peerKey: SOL.key, peerName: 'Sol' });
+            expect((await chatsShown(ctx)).map((c) => c.peerKey).sort()).toEqual([ANA.key, SOL.key].sort());
+        });
+    }
+    it('a block list that can\'t be read lists nothing rather than guess (the page keeps what it showed)', async () => {
+        await start('open');
+        ctx.isBlocked = async () => { throw new Error('The block list could not be read.'); };
+        await expect(chatsShown(ctx)).rejects.toThrow('could not be read');
+        await expect(openChatFromCard(ctx, sol)).rejects.toThrow('could not be read');
     });
 });

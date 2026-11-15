@@ -106,7 +106,7 @@ import {
 import {
     sendBill as sendBillEngine, payBill as payBillEngine, declineBill as declineBillEngine, withdrawBill as withdrawBillEngine,
     listBills as listBillsEngine, billReported as billReportedEngine, expireBills, endBillsOf, billReportReason, billsReportedIn,
-    type BillRow, type BillSend, type PaidBill,
+    inviteBillsOf, type BillRow, type BillSend, type PaidBill,
 } from './engine/bills.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
@@ -2241,6 +2241,8 @@ export interface MyInviteRead extends MyInvite {
     forKnock: boolean;
     /** The callsign of whoever joined with it, once used. */
     usedByCallsign: string | null;
+    /** The bill that went with it (engine/bills.ts WITH AN INVITE, slice B3): what for and how many Beans; absent without one. */
+    bill?: { whatFor: string; amount_c: number };
 }
 
 /**
@@ -2259,6 +2261,7 @@ export function getInvitesByMember(pubkey: string): MyInviteRead[] {
         .map((r) => r.invite_code));
     const callsignOf = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
     const joiners = new Map<string, string | null>();
+    const bills = inviteBillsOf(pubkey);
     return rows.map((r) => {
         if (r.usedBy && !joiners.has(r.usedBy)) joiners.set(r.usedBy, (callsignOf.get(r.usedBy) as { callsign: string } | undefined)?.callsign ?? null);
         // The knock row is deleted 30 days after the yes (tidyKnocks, engine/knocks.ts), so a used code is told by its own
@@ -2268,7 +2271,8 @@ export function getInvitesByMember(pubkey: string): MyInviteRead[] {
         // is the maker's own words.
         const forKnock = knocked.has(r.code)
             || (!!r.usedBy && (r.intendedFor === r.usedBy || (r.intendedFor != null && isMemberKeySpelling(r.intendedFor))));
-        return { ...r, forKnock, usedByCallsign: r.usedBy ? joiners.get(r.usedBy) ?? null : null };
+        const bill = bills.get(r.code);
+        return { ...r, forKnock, usedByCallsign: r.usedBy ? joiners.get(r.usedBy) ?? null : null, ...(bill ? { bill } : {}) };
     });
 }
 

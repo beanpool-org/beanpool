@@ -26,13 +26,14 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
-import { LOCAL_COMMUNITY_LINES, MEMBER_SORT_WORDS, formatDate, formatNumber, inviteRevokeWords, inviteShareText, offersInviteAsk, shareAddress, t, tn, word, vouchPresets, type InviteRowSource, type MemberSort, type WaitingVoucherRow, type WordKey } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, MEMBER_SORT_WORDS, billsOn, formatDate, formatNumber, inviteBillAfter, inviteBillAnswerOf, inviteBillToSend, inviteRevokeWords, inviteShareText, isBusyAnswer, listWithInvite, BUSY_CODE, offersInviteAsk, shareAddress, t, tn, word, vouchPresets, type InviteBillAnswer, type InviteBillHeld, type InviteRowSource, type MemberSort, type WaitingVoucherRow, type WordKey } from '@beanpool/core';
 import { fetchPeekCommunityName } from '../../utils/peek';
 import { shareCommunityName } from '../../utils/invite-share-name';
 import { Sentence } from '../../components/Sentence';
 import { beansOn, invitesOn, membersByKey } from '../../utils/node-profile';
 import { askMyVouching, rereadMyVouching, type MyVouching } from '../../utils/vouchers';
 import { VouchPresetChoice } from '../../components/VouchPresetChoice';
+import { InviteBillFold } from '../../components/InviteBillFold';
 import { InviteNamesBoxes, useInviteNames, useRoleOnInvites } from '../../components/InviteNamesBoxes';
 import { InviteMadeCard, PendingInvites } from '../../components/InviteRows';
 import { useContactInviteNames } from '../../utils/use-contact-invite-names';
@@ -93,6 +94,14 @@ const SORT_OPTIONS: ReadonlyArray<{ key: SortOption; icon: string; label: WordKe
 function dateWords(iso: string | null | undefined, pattern: 'day-month' | 'day-month-year'): string {
     const d = iso ? new Date(iso) : null;
     return d && Number.isFinite(d.getTime()) ? formatDate(d, pattern) : '';
+}
+
+/**
+ * A bill's own id (slice B3): 32 random hex digits, from the getRandomValues utils/crypto.ts makes sure this phone has. One per
+ * exact bill (core inviteBillToSend), so a second tap after a lost answer is the same bill on the node, and an edit a new one.
+ */
+function newBillId(): string {
+    return Array.from(globalThis.crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export default function PeopleScreen() {
@@ -336,8 +345,18 @@ export default function PeopleScreen() {
         return () => { alive = false; };
     }, [doorAdminsOnly, identity, anchorUrl, isGuest, view]);
     const mayInvite = mayInviteHere(nodeProfile?.features, inviteRole);
+    // The bill fold (slice B3): only where this community takes bills, and never in the sample community.
+    const billsShown = !invitesPreview && billsOn(nodeProfile?.features);
     const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
     const [vouchPreset, setVouchPreset] = useState<number | null>(null);
+    // A bill with the invite (DESIGN-getting-paid-fable.md §4.5, slice B3): the fold's two boxes, and the id of the bill last
+    // sent (core inviteBillToSend): the same bill again keeps it, so a second tap after a lost answer is the same bill on the
+    // node; an edit to either box makes a new one. Dropped once an invite is made, or when the node says it is spent.
+    const [billOpen, setBillOpen] = useState(false);
+    const [billWhatFor, setBillWhatFor] = useState('');
+    const [billBeans, setBillBeans] = useState('');
+    const billHeld = useRef<InviteBillHeld | null>(null);
+    const clearBill = () => { setBillOpen(false); setBillWhatFor(''); setBillBeans(''); billHeld.current = null; };
     useEffect(() => {
         if (!anchorUrl || !identity || isGuest) return;
         let alive = true;
@@ -357,6 +376,8 @@ export default function PeopleScreen() {
         here: view === 'invites',
         committee: onCommittee, voucherBudget: vouchersData?.settings?.voucherBudget, needList,
     });
+    // The fold is drawn where bills are on and the names box isn't ticked; a bill goes only while it is drawn and open.
+    const billFoldShown = billsShown && !(inviteNames.offered && inviteNames.namesTicked);
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
     // Show credit (slice C4): offered only where Beans are on, to someone the NODE just said gives credit (owner or admin by
@@ -622,7 +643,7 @@ export default function PeopleScreen() {
         };
         setMadeCard({ who: forName, invite: inviteObj });
         setMakeAnother(false);
-        const updated = [inviteObj, ...invites];
+        const updated = listWithInvite(invites, inviteObj);
         setInvites(updated);
         await AsyncStorage.setItem(`bp_offline_invites_${identity.publicKey}`, JSON.stringify(updated));
         inviteNames.reset();
@@ -644,6 +665,23 @@ export default function PeopleScreen() {
 
     const handleGenerate = async () => {
         if (!identity || invitesPreview) return;
+        // The fold read first, as the member sees it: closed or not drawn (the names box ticked), no bill goes and none is
+        // refused, whatever its boxes still hold. Open, a bill that can't be sent makes no invite; one that can goes with the id
+        // of that exact bill (a retry of it keeps the id; an edit makes a new one).
+        const billAsked = inviteBillToSend({ open: billFoldShown && billOpen, whatFor: billWhatFor, beans: billBeans }, billHeld.current, newBillId);
+        if (billAsked.error) {
+            Alert.alert(t('Could not add the bill'), billAsked.error);
+            return;
+        }
+        billHeld.current = billAsked.held;
+        const bill = billAsked.bill;
+        // With a bill, no invite back: the node's refusal in its words, or, when nobody knows whether it was made, never "not
+        // made" (core inviteBillAfter). The same bill again finds out. No offline ticket either way: it would carry no bill.
+        const billNotMade = (answer: InviteBillAnswer) => {
+            const after = inviteBillAfter(billHeld.current, answer);
+            billHeld.current = after.held;
+            Alert.alert(after.title, after.words);
+        };
         setGenerating(true);
         const chosenVouch = myVouching?.voucher ? vouchPreset : null;
         try {
@@ -657,6 +695,7 @@ export default function PeopleScreen() {
                     publicKey: identity.publicKey,
                     intendedFor: intendedFor || undefined,
                     ...(chosenVouch !== null ? { vouchAmount: chosenVouch } : {}),
+                    ...(bill ? { bill } : {}),
                 };
                 const apiPayloadStr = JSON.stringify(apiPayload);
                 const generateUrl = `${anchorUrl}/api/invite/generate`;
@@ -675,18 +714,27 @@ export default function PeopleScreen() {
                         setNewCode(code);
                         setIntendedFor('');
                         setVouchPreset(null);
-                        
+                        // With a bill, the answer may be the invite an earlier try made (a retry of the same bill), so its
+                        // note and vouch are the node's, not what the panel holds now.
+                        const madeFor: string = bill ? (typeof data.invite.intendedFor === 'string' ? data.invite.intendedFor : '') : intendedFor;
+                        const madeVouch: number | null = bill ? (typeof data.invite.vouchAmount === 'number' ? data.invite.vouchAmount : null) : chosenVouch;
+
                         const inviteObj: InviteRowSource & { createdBy: string } = {
                             code,
                             createdBy: identity.publicKey,
-                            createdAt: new Date().toISOString(),
-                            intendedFor: intendedFor || undefined,
-                            ...(chosenVouch !== null ? { vouchAmount: chosenVouch } : {}),
+                            // The node's: a retry's answer is the invite made the first time, and its days run from then.
+                            createdAt: typeof data.invite.createdAt === 'string' ? data.invite.createdAt : new Date().toISOString(),
+                            intendedFor: madeFor || undefined,
+                            ...(madeVouch !== null ? { vouchAmount: madeVouch } : {}),
+                            ...(data.invite.bill ? { bill: { whatFor: data.invite.bill.whatFor, amount_c: data.invite.bill.amount_c } } : {}),
                         };
-                        setMadeCard({ who: intendedFor.trim() || null, invite: inviteObj });
+                        clearBill();
+                        setMadeCard({ who: madeFor.trim() || null, invite: inviteObj });
                         setMakeAnother(false);
-                        
-                        const updated = [inviteObj, ...invites];
+
+                        // Once, by its code: a retry answered with an invite Pending already holds (re-read from the node
+                        // after a lost answer) replaces its row, never a second copy (core listWithInvite).
+                        const updated = listWithInvite(invites, inviteObj);
                         setInvites(updated);
                         await AsyncStorage.setItem(`bp_offline_invites_${identity.publicKey}`, JSON.stringify(updated));
                         setGenerating(false);
@@ -697,7 +745,8 @@ export default function PeopleScreen() {
                     }
                 } else {
                     // The node takes no invites (this phone's copy of its profile was older than the switch): say so, and
-                    // make no offline ticket, which it would refuse just the same.
+                    // make no offline ticket, which it would refuse just the same. Only the invites' own `feature_off`: a
+                    // bill's (`bills`, switched off after this phone read the node) is the bill's refusal below.
                     const body = await res.json().catch(() => null);
                     const refusal = invitesOffRefusal(res.status, body, nodeProfile?.features);
                     if (refusal) {
@@ -722,6 +771,14 @@ export default function PeopleScreen() {
                     }
                     // A refused vouch shows the node's sentence and makes no ticket:
                     const serverMsg = typeof body?.error === 'string' && body.error ? body.error : typeof body?.message === 'string' && body.message ? body.message : null;
+                    // A refusal the node words (or a busy network's 429, which never reached it) is shown as it said it; any
+                    // other answer (a 5xx, a page that isn't the node's) may have made it (core inviteBillAnswerOf).
+                    const answer = inviteBillAnswerOf(res.status, serverMsg, isBusyAnswer(res.status, body) ? BUSY_CODE : body?.code, body === null, body?.feature);
+                    // With a bill, no ticket either way.
+                    if (bill) {
+                        billNotMade(answer);
+                        return;
+                    }
                     if (chosenVouch !== null && serverMsg) {
                         Alert.alert(t('Could not vouch'), serverMsg);
                         return;
@@ -730,13 +787,30 @@ export default function PeopleScreen() {
                         Alert.alert(t('Could not vouch'), t(vouchPresets.noOfflineVouch));
                         return;
                     }
+                    // Refused (a limit, a door, a switch): its own words, and no offline ticket, which the node would refuse
+                    // at the join or which would get round the limit it just named. The phone is online: never "offline".
+                    if (answer.kind === 'refused') {
+                        Alert.alert(t('Invite not made'), answer.words);
+                        return;
+                    }
                 }
             } catch (err) {
                 console.log('Online invite generation failed. Falling back to offline ticket...', err);
+                // The answer was lost: the node may have made it.
+                if (bill) {
+                    billNotMade({ kind: 'lost' });
+                    return;
+                }
                 if (chosenVouch !== null) {
                     Alert.alert(t('Offline'), t(vouchPresets.noOfflineVouch));
                     return;
                 }
+            }
+            // An answer with no invite in it: nobody knows whether it was made. An offline ticket never carries a bill (§4.5),
+            // and the fold keeps what was typed.
+            if (bill) {
+                billNotMade({ kind: 'lost' });
+                return;
             }
 
             // Where only admins invite, a ticket only from a member the node has said is one (invite-entries.ts).
@@ -769,7 +843,7 @@ export default function PeopleScreen() {
             setMadeCard({ who: ticketFor?.trim() || null, invite: inviteObj });
             setMakeAnother(false);
             
-            const updated = [inviteObj, ...invites];
+            const updated = listWithInvite(invites, inviteObj);
             setInvites(updated);
             await AsyncStorage.setItem(`bp_offline_invites_${identity.publicKey}`, JSON.stringify(updated));
         } catch (e: any) {
@@ -827,7 +901,9 @@ export default function PeopleScreen() {
         // on the screen for someone standing next to you to scan.
         const address = shareAddress(anchorUrl);
         const name = await shareCommunityName(address, () => fetchPeekCommunityName(anchorUrl));
-        const message = inviteShareText({ name, link: magicLink, code: codeToShare, address });
+        // An invite carrying a bill says so in one sentence, with no amount (slice B3).
+        const carriesBill = invites.some((i) => i.code.toLowerCase() === codeToShare.toLowerCase() && !!i.bill);
+        const message = inviteShareText({ name, link: magicLink, code: codeToShare, address, billFrom: carriesBill ? identity?.callsign : null });
 
         await Share.share({ message });
     };
@@ -1565,6 +1641,10 @@ export default function PeopleScreen() {
                                     budgetTotal={myVouching.budget?.level ?? 0}
                                     noLimit={myVouching.noLimit === true}
                                 />
+                            )}
+
+                            {billFoldShown && (
+                                <InviteBillFold open={billOpen} onOpen={setBillOpen} whatFor={billWhatFor} onWhatFor={setBillWhatFor} beans={billBeans} onBeans={setBillBeans} />
                             )}
 
                             <InviteNamesBoxes names={inviteNames} busy={generating} onInviteExisting={(id) => { void inviteExistingEntry(id); }} />

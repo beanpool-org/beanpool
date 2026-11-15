@@ -23,8 +23,8 @@ import { membersOnlyHere } from './viewer.js';
 import { isServerFault, memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import type { RouteDeps } from './types.js';
 
-/** Answer a refusal from the bills engine or underneath it, in its own status and code. */
-function respondBillRefusal(ctx: Context, e: any): void {
+/** Answer a refusal from the bills engine or underneath it, in its own status and code (an invite's bill too, routes/community.ts). */
+export function respondBillRefusal(ctx: Context, e: any): void {
     if (e instanceof BillRefusal) {
         ctx.status = e.status;
         ctx.body = { error: e.message, code: e.code, ...(e.resetsAt ? { resetsAt: e.resetsAt } : {}) };

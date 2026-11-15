@@ -160,6 +160,11 @@ export interface NodeFeatures {
      * that doesn't say (no forum, or from before F5) sends none and refuses the key.
      */
     forumNotices?: boolean;
+    /**
+     * This community takes bills (apps/server engine/bills.ts; core billsOn): the invite panel offers "Add a bill for them"
+     * (slice B3). A node that doesn't say (the global community, or one from before bills) takes none.
+     */
+    bills?: boolean;
 }
 
 export type NodeDoor = 'open' | 'members' | 'admins';
@@ -174,7 +179,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
-    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forum', 'forumNotices', 'outsideMessages',
+    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forum', 'forumNotices', 'outsideMessages', 'bills',
 ];
 
 export interface NodeProfile {

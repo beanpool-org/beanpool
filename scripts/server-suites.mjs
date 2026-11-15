@@ -566,6 +566,7 @@ export const SUITES = [
     'test-standing-deals',
     'test-standing-lower',
     'test-bills',
+    'test-bills-invite',
     'test-enterprise-text',
     'test-event-chat',
     'test-event-chat-rsvp-fixes',

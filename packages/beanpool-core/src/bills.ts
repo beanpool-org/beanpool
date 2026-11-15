@@ -17,7 +17,8 @@
  */
 
 import { t, tn } from './words.js';
-import { feeOf, formatHundredths, isHundredths, type Hundredths } from './hundredths.js';
+import { feeOf, formatHundredths, isHundredths, parseHundredths, type Hundredths } from './hundredths.js';
+import { BUSY_CODE, busyWords } from './busy-answer.js';
 
 /** Where a bill is (the node's `bills.state`). The sender reads a declined bill as `sent` until it expires. */
 export type BillState = 'sent' | 'paid' | 'declined' | 'withdrawn' | 'expired';
@@ -71,6 +72,8 @@ export interface BillView extends BillAbout {
     known?: boolean;
     /** The payer's credit line may pay it: they have finished a deal with the sender, or have a standing deal running. */
     creditOpen?: boolean;
+    /** On the sender's read only: it went with an invite nobody has joined with yet and still waits, so it has no payer (slice B3). */
+    awaitingJoin?: true;
 }
 
 /** A figure in the words: whole hundredths (formatHundredths). */
@@ -118,6 +121,9 @@ export const billLines = {
         t('{name} · {whatFor} · {n} Beans · expired, not paid', { name, whatFor, n: n2(amount_c) }),
     sentWithdrawn: (name: string, whatFor: string, amount_c: Hundredths) =>
         t('{name} · {whatFor} · {n} Beans · withdrawn', { name, whatFor, n: n2(amount_c) }),
+    // A bill that went with an invite nobody has joined with yet (slice B3): no payer to name.
+    sentAwaitingJoin: (whatFor: string, amount_c: Hundredths) =>
+        t('With an invite · {whatFor} · {n} Beans · waiting for them to join', { whatFor, n: n2(amount_c) }),
     withdraw: () => t('Withdraw'),
 
     // Receiving and paying (§4.3)
@@ -257,10 +263,120 @@ export function billNeedsLine(b: Pick<BillView, 'id' | 'role' | 'state' | 'bille
 }
 
 /** The sender's line for one of their bills (§4.2), by where it is; `day` writes a date as the app does. */
-export function billSentLine(b: Pick<BillView, 'payerName' | 'whatFor' | 'amount_c' | 'state' | 'sentAt' | 'paidAt'>, day: (iso: string) => string): string {
+export function billSentLine(b: Pick<BillView, 'payerName' | 'whatFor' | 'amount_c' | 'state' | 'sentAt' | 'paidAt' | 'awaitingJoin'>, day: (iso: string) => string): string {
+    if (b.awaitingJoin && b.state === 'sent') return billLines.sentAwaitingJoin(b.whatFor, b.amount_c);
     const name = b.payerName || t('A member');
     if (b.state === 'paid') return billLines.sentPaid(name, b.whatFor, b.amount_c, day(b.paidAt || b.sentAt));
     if (b.state === 'expired') return billLines.sentExpired(name, b.whatFor, b.amount_c);
     if (b.state === 'withdrawn') return billLines.sentWithdrawn(name, b.whatFor, b.amount_c);
     return billLines.sentNotPaid(name, b.whatFor, b.amount_c, day(b.sentAt));
+}
+
+// ── A bill with an invite (design §4.5, slice B3) ───────────────────────────────────────────────────────────────────────
+
+/** Whether a node's `features` says it takes bills: present, and true, only where they are on (never the global node). */
+export function billsOn(features: { bills?: unknown } | null | undefined): boolean {
+    return features?.bills === true;
+}
+
+/**
+ * A bill that goes with an invite: what for and how many Beans, nothing else. It waits with the invite and gets its payer,
+ * and its 30 days, when someone joins with it; a revoked or lapsed invite takes it with it. One bill per invite; never on an
+ * offline ticket. `id` is the app's own (a retry of the same invite is the same bill).
+ */
+export interface InviteBill { id?: string; whatFor: string; amount_c: Hundredths }
+
+/** The words of the invite panel's bill fold (§4.5). The boxes reuse the send sheet's labels (billLines). */
+export const inviteBillLines = {
+    fold: () => t('Add a bill for them (optional)'),
+    /** The send sheet's "Kim chooses whether to pay", for someone who has no name here yet. */
+    theyChoose: () => t('They choose whether to pay, once they have joined. Nothing is taken by itself.'),
+    /**
+     * No answer came to an invite sent with a bill (inviteBillAfter): the node may have made it, so never "nothing was made".
+     * The same bill again keeps its id, and the node answers that with the invite it already made, so trying again finds out.
+     */
+    answerLost: () => t("No answer came back, so it isn't known whether the invite was made. Try the same bill again when you're online: if it was made, you'll get that invite, not a second one. A bill can't go with an offline ticket."),
+    /** What the invite carries (core inviteCarries): "bill 60 Beans". */
+    carries: (amount_c: Hundredths) => t('bill {n} Beans', { n: n2(amount_c) }),
+};
+
+/**
+ * The fold's two boxes read as the bill they ask for: both empty is no bill (and no refusal); anything else is a bill when
+ * the amount is one a bill may ask for and "what for" is 3 to 80 characters, else the send sheet's own refusal. The amount
+ * is read as typed in the device's language (parseHundredths).
+ */
+export function inviteBillFromForm(whatFor: string, beansText: string): { bill: InviteBill | null; error: string | null } {
+    const words = typeof whatFor === 'string' ? whatFor.trim() : '';
+    const figure = typeof beansText === 'string' ? beansText.trim() : '';
+    if (!words && !figure) return { bill: null, error: null };
+    const parsed = parseHundredths(figure);
+    if (!parsed.ok || !isBillAmount(parsed.value)) return { bill: null, error: billLines.badAmount() };
+    const clean = billWhatForOf(words);
+    if (!clean) return { bill: null, error: billLines.badWhatFor() };
+    return { bill: { whatFor: clean, amount_c: parsed.value }, error: null };
+}
+
+/**
+ * The id a bill with an invite goes with, which the invite panel keeps between taps (§4.5). It belongs to one exact bill: its
+ * "what for" as the node stores it, and its amount. A tap that sends that same bill again sends the same id, so after a lost
+ * answer the node answers with the invite it already made and writes nothing (apps/server engine/bills.ts checkInviteBill).
+ * A bill changed in either box gets a new id: a new bill, on a new invite. Dropped once an invite is made, and when the node
+ * says the id is spent (409 `bill_id_reused`: the invite it went with was used, revoked or lapsed).
+ */
+export interface InviteBillHeld { readonly key: string; readonly id: string }
+
+/**
+ * What one tap on Make invite sends as a bill (§4.5). `open` is whether the member can see the fold's boxes now: closed,
+ * hidden or not offered, no bill goes and no bill refusal is shown, whatever the boxes still hold. Open, the boxes are read
+ * as inviteBillFromForm reads them, and a bill goes with the id `held` has for that exact bill, or a new one from `newId`.
+ * The panel keeps the `held` it returns for its next tap.
+ */
+export function inviteBillToSend(
+    fold: { open: boolean; whatFor: string; beans: string },
+    held: InviteBillHeld | null,
+    newId: () => string,
+): { bill: (InviteBill & { id: string }) | null; error: string | null; held: InviteBillHeld | null } {
+    if (!fold.open) return { bill: null, error: null, held };
+    const read = inviteBillFromForm(fold.whatFor, fold.beans);
+    if (!read.bill) return { bill: null, error: read.error, held };
+    const key = `${read.bill.amount_c} ${read.bill.whatFor}`;
+    const id = held !== null && held.key === key ? held.id : newId();
+    return { bill: { ...read.bill, id }, error: null, held: { key, id } };
+}
+
+/**
+ * How the node answered a tap on Make invite when no invite came back (inviteBillAnswerOf), with a bill or without one.
+ * `feature`: the switch a 404 `feature_off` names (`bills` for a bill's, `invites` for the invites' own).
+ */
+export type InviteBillAnswer = { kind: 'refused'; words: string; code: string | null; feature?: string } | { kind: 'lost' };
+
+/**
+ * `refused`: a 4xx in the node's own words, which it answers before writing anything (a bill's or an invite's refusal), or a
+ * busy network's answer (`busy`, which never reached the node), in the busy sentence. `lost`: anything else (no answer, a cut
+ * answer, a page that is not the node's (`unsaid`), a 5xx), after which nobody here knows whether the invite was made.
+ */
+export function inviteBillAnswerOf(status: number | null | undefined, words: string | null | undefined, code: unknown, unsaid = false, feature?: unknown): InviteBillAnswer {
+    if (code === BUSY_CODE) return { kind: 'refused', words: busyWords(), code: BUSY_CODE };
+    if (typeof status === 'number' && status >= 400 && status < 500 && !unsaid && typeof words === 'string' && words) {
+        return { kind: 'refused', words, code: typeof code === 'string' ? code : null, ...(typeof feature === 'string' ? { feature } : {}) };
+    }
+    return { kind: 'lost' };
+}
+
+/**
+ * After a tap that sent a bill and got no invite back: what the member reads, and the id the panel keeps. Refused: the node's
+ * words, under "Could not add the bill" for a bill's own code or the bills switch being off; the id kept, or dropped when the
+ * node says it is spent. Lost: never "nothing was made"; the same bill keeps its id, so trying it again finds out; no offline
+ * ticket, which would carry no bill.
+ */
+export function inviteBillAfter(held: InviteBillHeld | null, answer: InviteBillAnswer): { held: InviteBillHeld | null; title: string; words: string } {
+    if (answer.kind === 'refused') {
+        const billsOwn = (answer.code !== null && /^bills?_/.test(answer.code)) || (answer.code === 'feature_off' && answer.feature === 'bills');
+        return {
+            held: answer.code === 'bill_id_reused' ? null : held,
+            title: billsOwn ? t('Could not add the bill') : t('Invite not made'),
+            words: answer.words,
+        };
+    }
+    return { held, title: t('No answer'), words: inviteBillLines.answerLost() };
 }

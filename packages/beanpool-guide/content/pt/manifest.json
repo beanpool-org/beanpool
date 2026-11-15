@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Mensagens, mensagens de voz, o fórum, grupos e chats, pessoas e amigos, conversas de eventos, silenciar, menções e chave alterada.",
-        "sourceHash": "0d1deaefb627a1e9"
+        "text": "Mensagens, mensagens de voz, o fórum, grupos e chats, pessoas e amigos, seus contatos privados, conversas de eventos, silenciar, menções e chave alterada.",
+        "sourceHash": "79e2bb34ba50acd7"
       }
     },
     "pulse": {
@@ -790,6 +790,20 @@
       "help": {
         "text": "Segure o microfone para gravar e solte para enviar. Deslize para a esquerda para cancelar, para cima para travar. Até 3 minutos. O servidor guarda por 30 dias.",
         "sourceHash": "a4c99f83c66ae115"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "Seus contatos privados",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Uma lista de contatos que só você pode abrir, em qualquer celular ou navegador e em todas as comunidades de que você faz parte. Como trazer pessoas, convidá-las e o que o servidor da sua comunidade pode e não pode ver.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "Seus contatos privados. Só você pode abrir a lista. Traga pessoas do seu celular ou de um arquivo de contatos, adicione alguém à mão ou convide.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

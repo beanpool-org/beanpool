@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Mensajes, mensajes de voz, el foro, grupos y sus chats, personas y amistades, chats de eventos, silenciar, menciones y un cambio de clave.",
-        "sourceHash": "0d1deaefb627a1e9"
+        "text": "Mensajes, mensajes de voz, el foro, grupos y sus chats, personas y amistades, tus contactos privados, chats de eventos, silenciar, menciones y un cambio de clave.",
+        "sourceHash": "79e2bb34ba50acd7"
       }
     },
     "pulse": {
@@ -790,6 +790,20 @@
       "help": {
         "text": "Mantén pulsado el micrófono para grabar y suelta para enviar. Desliza a la izquierda para cancelar, arriba para bloquear. Hasta 3 minutos. Se guarda 30 días.",
         "sourceHash": "a4c99f83c66ae115"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "Tus contactos privados",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Una lista de contactos que solo tú puedes abrir, en cualquier teléfono o navegador y en todas las comunidades a las que perteneces. Cómo traer personas, invitarlas y qué puede ver y qué no el servidor de tu comunidad.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "Tus contactos privados. Solo tú puedes abrir la lista. Trae personas desde tu teléfono o desde un archivo de contactos, agrega a alguien a mano o invítalo.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

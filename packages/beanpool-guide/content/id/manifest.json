@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Pesan, pesan suara, forum, grup dan obrolannya, orang dan teman, obrolan acara, membisukan, sebutan, dan kunci yang berubah.",
-        "sourceHash": "0d1deaefb627a1e9"
+        "text": "Pesan, pesan suara, forum, grup dan obrolannya, orang dan teman, kontak pribadimu, obrolan acara, membisukan, sebutan, dan kunci yang berubah.",
+        "sourceHash": "79e2bb34ba50acd7"
       }
     },
     "pulse": {
@@ -790,6 +790,20 @@
       "help": {
         "text": "Tahan mikrofon untuk merekam dan lepas untuk mengirim. Geser ke kiri untuk membatalkan, ke atas untuk mengunci. Hingga 3 menit. Server menyimpannya 30 hari.",
         "sourceHash": "a4c99f83c66ae115"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "Kontak pribadimu",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Daftar kontak yang hanya bisa kamu buka, di ponsel atau browser mana pun dan di setiap komunitas yang kamu ikuti. Cara memasukkan orang, mengundang mereka, dan apa yang bisa serta tidak bisa dilihat server komunitasmu.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "Kontak pribadimu. Hanya kamu yang bisa membuka daftarnya. Bawa orang dari ponsel atau file kontak, tambahkan seseorang secara manual, atau undang mereka.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

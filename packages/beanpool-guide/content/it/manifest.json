@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Messaggi, messaggi vocali, il forum, gruppi e relative chat, persone e amici, chat di eventi, silenziare, menzioni e chiavi cambiate.",
-        "sourceHash": "0d1deaefb627a1e9"
+        "text": "Messaggi, messaggi vocali, il forum, gruppi e relative chat, persone e amici, i tuoi contatti privati, chat di eventi, silenziare, menzioni e chiavi cambiate.",
+        "sourceHash": "79e2bb34ba50acd7"
       }
     },
     "pulse": {
@@ -790,6 +790,20 @@
       "help": {
         "text": "Tieni premuto il microfono per registrare e rilascia per inviare. Scorri a sinistra per annullare, in alto per bloccare. Fino a 3 minuti. Resta 30 giorni.",
         "sourceHash": "a4c99f83c66ae115"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "I tuoi contatti privati",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Un elenco di contatti che solo tu puoi aprire, su qualsiasi telefono o browser e in ogni comunità di cui fai parte. Portare dentro le persone, invitarle e cosa può e non può vedere il server della tua comunità.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "I tuoi contatti privati. Solo tu puoi aprire l'elenco. Porta dentro le persone dal telefono o da un file di contatti, aggiungi qualcuno a mano o invitalo.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Mesajlar, sesli mesajlar, forum, gruplar ve sohbetleri, kişiler ve arkadaşlar, etkinlik sohbetleri, sessize alma, bahsetmeler ve değişen anahtarlar.",
-        "sourceHash": "0d1deaefb627a1e9"
+        "text": "Mesajlar, sesli mesajlar, forum, gruplar ve sohbetleri, kişiler ve arkadaşlar, özel kişi listeniz, etkinlik sohbetleri, sessize alma, bahsetmeler ve değişen anahtarlar.",
+        "sourceHash": "79e2bb34ba50acd7"
       }
     },
     "pulse": {
@@ -790,6 +790,20 @@
       "help": {
         "text": "Kaydetmek için mikrofonu basılı tutun, göndermek için bırakın. İptal için sola, kilitlemek için yukarı kaydırın. En fazla 3 dakika. Sunucu 30 gün tutar.",
         "sourceHash": "a4c99f83c66ae115"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "Özel kişi listeniz",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Yalnızca sizin açabildiğiniz bir kişi listesi; herhangi bir telefonda veya tarayıcıda ve üyesi olduğunuz her toplulukta. İnsanları listeye getirme, onları davet etme ve topluluğunuzun sunucusunun neleri görüp neleri göremediği.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "Özel kişi listeniz. Listeyi yalnızca siz açabilirsiniz. İnsanları telefonunuzdan veya bir kişi dosyasından getirin, birini elle ekleyin ya da davet edin.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

@@ -16,6 +16,7 @@ import {
     submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance, refreshBalanceFromServer,
     treasuryApprove, treasuryComplete, treasuryReject, getMarketplaceTransactions, getDealsFor,
     fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode, signStandingStart, stopStandingDeal, getListingItems, refreshPost,
+    lowerStandingPeriod, answerStandingAsk, withdrawStandingAsk,
 } from '../../utils/db';
 import { PerItemFields } from '../../components/PerItemFields';
 import { PerItemTakeUp } from '../../components/PerItemTakeUp';
@@ -24,7 +25,7 @@ import {
     perItemLotForOtherLine, perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
     ITEM_BOX_START, itemDealRow, itemDealTakenLine, itemSellerStock, itemTakeUpBox, itemTakeUpRefusalIn, type ItemBoxState,
 } from '@beanpool/core';
-import { StandingPanel, StandingTakeUp, type StandingChoice } from '../../components/StandingDeal';
+import { StandingPanel, StandingTakeUp, type StandingChoice, type StandingLowerStep } from '../../components/StandingDeal';
 import { standingOfRow } from '../../utils/standing-row';
 import { missingListingLine, openedForListing } from '../../utils/listing-after-join';
 import { isPostPinned, pinnedDetailLine, showPinMenu, pinFailureText } from '../../utils/pins';
@@ -1131,6 +1132,23 @@ function PostDetailModal() {
             afterDealStep();
         } catch (e: any) { hapticWarning(); Alert.alert(t('Error'), signedRequestWords(e.message)); } finally { setAccepting(false); }
     };
+    // A short week (DESIGN-getting-paid-fable §3.1): the panel's lowering, ask, answer or take-back. A refusal comes back to
+    // the panel in words, which shows it on its sheet and changes nothing; once the node has said yes, the deal is read again
+    // so the card says what holds now (a sync that fails after a yes is not a refusal).
+    const lowerStep = async (step: StandingLowerStep) => {
+        try {
+            if (step.move === 'lower') await lowerStandingPeriod(step.standingId, step.changeId, step.periodNo, step.beans_c);
+            else if (step.move === 'answer') await answerStandingAsk(step.standingId, step.changeId, step.yes);
+            else await withdrawStandingAsk(step.standingId, step.changeId);
+        } catch (e: any) {
+            hapticWarning();
+            throw new Error(signedRequestWords(String(e?.message ?? '')));
+        }
+        hapticSuccess();
+        // Wait a little for the fresh read, so the card doesn't offer the same step again meanwhile; never long.
+        await Promise.race([requestSync().catch(console.error), new Promise(done => setTimeout(done, 5000))]);
+        afterDealStep();
+    };
     // Agree (§2.2, §6): the payer's phone signs the authorisation (core builds the text and its bytes) and sends it with the
     // accept (an Offer) or the approval (a Need's author, paying the helper the request names).
     const takeUpStanding = async (choice: StandingChoice, payee: string, approveTxId?: string) => {
@@ -1837,6 +1855,7 @@ function PostDetailModal() {
                     return (
                         <StandingPanel key={m.tx.id} tx={m.tx as any} actingAs={m.actingAs} busy={accepting}
                             onStop={() => standingStep(() => stopStandingDeal(m.tx.standingId!))}
+                            onLower={lowerStep}
                             onMessage={m.asKeeper ? undefined : () => messageRow(other)}
                             messageLabel={t('Message {name}', { name: otherName })} />
                     );
@@ -2823,7 +2842,7 @@ function PostDetailModal() {
                                         }
                                     }}
                                 >
-                                    <Text style={styles.confirmActionBtnText}>{submittingReport ? t('Sending...') : t('Submit Report')}</Text>
+                                    <Text style={styles.confirmActionBtnText}>{submittingReport ? t('Sending...') : t('Submit report')}</Text>
                                 </Pressable>
                             </View>
                         )}

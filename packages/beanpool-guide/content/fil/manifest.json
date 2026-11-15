@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Mga mensahe, mga mensaheng boses, ang forum, mga grupo at kanilang mga chat, mga tao at kaibigan, mga chat sa event, pag-mute, mga pagbanggit, at susing nabago.",
-        "sourceHash": "0d1deaefb627a1e9"
+        "text": "Mga mensahe, mga mensaheng boses, ang forum, mga grupo at kanilang mga chat, mga tao at kaibigan, ang iyong mga pribadong contact, mga chat sa event, pag-mute, mga pagbanggit, at susing nabago.",
+        "sourceHash": "79e2bb34ba50acd7"
       }
     },
     "pulse": {
@@ -790,6 +790,20 @@
       "help": {
         "text": "Pindutin ang mikropono para mag-record, bitawan para ipadala. Pakaliwa para kanselahin, pataas para i-lock. Hanggang 3 minuto. Itinatago ng server nang 30 araw.",
         "sourceHash": "a4c99f83c66ae115"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "Mga pribadong contact mo",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Isang listahan ng mga contact na ikaw lang ang makakabukas, sa anumang telepono o browser at sa bawat komunidad na kinabibilangan mo. Pagdadala ng mga tao, pag-imbita sa kanila, at kung ano ang nakikita at hindi nakikita ng server ng komunidad mo.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "Ang iyong mga pribadong contact. Ikaw lang ang makakabukas ng listahan. Magdala mula sa telepono o contacts file, magdagdag nang mano-mano, o mag-imbita.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

@@ -55,6 +55,7 @@ vi.mock('expo-secure-store', () => ({
 }));
 
 import * as WebBrowser from 'expo-web-browser';
+import { signInsToRefresh } from '@beanpool/core';
 import { SsoSignInError } from '../sso-signin';
 import { connectAndDeposit } from '../sso-sheet-connect';
 
@@ -220,12 +221,81 @@ describe("the protection sheet's connect", () => {
     });
 });
 
+/**
+ * Account Protection's Refresh (recovery S4) is this same connect, for a sign-in whose copy the community's server can't
+ * find from the sign-in alone: the node plays a server with S4, whose deposit answer says which sign-ins are findable.
+ */
+function installS4Node(deposit: Answer): Seen[] {
+    const seen: Seen[] = [];
+    globalThis.fetch = vi.fn(async (input: any, init?: any) => {
+        const url = String(input);
+        const p = url.startsWith(NODE) ? url.slice(NODE.length) : url;
+        seen.push({ url, path: p, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined });
+        if (!url.startsWith(`${NODE}/`)) throw new TypeError(`Network request failed: the app contacted ${url}`);
+        if (p === NONCE) return answer({ status: 200, body: { nonce: NODE_NONCE, expiresInSeconds: 600, providers: ['facebook'] } });
+        if (p === DEPOSIT) return answer(deposit);
+        return answer({ status: 404, body: { error: 'Not Found' } });
+    }) as any;
+    return seen;
+}
+
+describe('Refresh: the ordinary connect, for a copy the server could not find yet', () => {
+    it('sends the two requests every connect sends, asks for no words, and comes back findable, so Refresh goes', async () => {
+        const seen = installS4Node({ status: 200, body: { generation: 2, enrolledSso: ['facebook'], findableSso: ['facebook'], threshold: 1 } });
+        facebookSaysYes();
+
+        const { value, error } = await connect({ signal: new AbortController().signal });
+
+        expect(error).toBeUndefined();
+        expect(value?.error).toBeUndefined();
+        expect(paths(seen)).toEqual([NONCE, DEPOSIT]);
+        expect(Object.keys(seen[1].body).sort()).toEqual(['idToken', 'nonce', 'provider', 'shares']);
+        expect(seen[1].body.shares).toHaveLength(1);
+        expect(value?.findableSso).toEqual(['facebook']);
+        expect(signInsToRefresh(value)).toEqual([]);
+    });
+
+    it('a refused deposit says so in words and reports nothing findable: never a false success', async () => {
+        installS4Node({ status: 400, body: { error: 'Facebook token is not valid JWT JSON' } });
+        facebookSaysYes();
+
+        const { value, error } = await connect({ signal: new AbortController().signal });
+
+        expect(error).toBeUndefined();
+        expect(value?.error).toMatch(/node refused the fragments \(400\)/);
+        expect(value?.enrolled).toEqual([]);
+        expect(value?.findableSso).toBeUndefined();
+    });
+
+    it('a server from before S4 answers without findableSso: the result claims nothing either way', async () => {
+        installS4Node({ status: 200, body: { generation: 2, enrolledSso: ['facebook'], threshold: 1 } });
+        facebookSaysYes();
+
+        const { value } = await connect({ signal: new AbortController().signal });
+
+        expect(value?.error).toBeUndefined();
+        expect(value && 'findableSso' in value).toBe(false);
+        expect(signInsToRefresh(value)).toEqual([]);
+    });
+});
+
 describe('components/SsoEnrolSheet.tsx', () => {
     const src = () => fs.readFileSync(path.resolve(__dirname, '../../components/SsoEnrolSheet.tsx'), 'utf-8');
 
     it('connects with connectAndDeposit, and goes to saving, with the app in front, once the provider is done', () => {
         expect(src()).toMatch(/connectAndDeposit\(\{/);
         expect(src()).toMatch(/onSignedIn: async \(\) => \{\s*setStep\('saving'\);[^}]*await returnToApp\(\);\s*\}/);
+    });
+
+    it('reports a connect to the screen only when it worked: an error stays on the sheet, in words (no false success)', () => {
+        const s = src();
+        const start = s.indexOf('if (result.error) {');
+        const end = s.indexOf('} else {', start);
+        expect(start).toBeGreaterThan(-1);
+        const failed = s.slice(start, end);
+        expect(failed).toMatch(/setErrorMessage\(/);
+        expect(failed).toMatch(/setStep\('error'\)/);
+        expect(failed).not.toMatch(/onEnrolled/);
     });
 
     it('offers no Cancel while saving', () => {

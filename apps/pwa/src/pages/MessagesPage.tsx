@@ -2152,7 +2152,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // from their chats' rows, then a search the node answers, never a list of everyone. Every control at least 44 px.
     // Someone in another community (X4): their chat, or the address cards, each a page of its own as on the phone.
     if (openOutside) {
-        return <OutsideChatThread chatId={openOutside} onBack={() => setOpenOutside(null)} />;
+        // Accepted from the requests: Back goes on to the chats, as an accepted community request's does (onAccepted below).
+        return <OutsideChatThread chatId={openOutside} onBack={() => setOpenOutside(null)} onAccepted={() => setActiveTab('all')} />;
     }
     if (showCard) {
         return <AddressCardPanel onBack={() => setShowCard(false)} onOpenChat={(id) => { setShowCard(false); setOpenOutside(id); }} />;
@@ -3964,6 +3965,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     return (
         <div className="p-4 md:p-6 max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full">
+            {/* Message requests are a view of their own, as a chat is: their "‹ Back to chats" at the top (walk 2, 15 Nov: it sat
+                under the switch, the title and the filter chips, mid-page at 320 px), so none of the list's top shows with them. */}
+            {!showingRequests && (<>
             {/* The Chat tab's Chats · Forum switch where this community's forum is on (pages/ChatTabPage.tsx): the list's top only. */}
             {frame}
             {/* Wraps: at 320px with 1.3x text, Groups' two buttons go under the title rather than squeeze it. */}
@@ -4040,6 +4044,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     );
                 })}
             </div>
+            </>)}
 
             {(requestCount > 0 || !!onGlobal || outsideRequests.length > 0) && !showingRequests && (
                 <button type="button" data-testid="message-requests-row" onClick={() => setActiveTab('requests')} style={{

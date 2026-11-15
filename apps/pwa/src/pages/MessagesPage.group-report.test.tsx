@@ -109,7 +109,7 @@ describe('Report message in a locked group chat on the web (S6)', () => {
         const card = screen.getByRole('dialog');
         fireEvent.click(within(card).getByRole('button', { name: 'Spam or scam' }));
         fireEvent.change(within(card).getByRole('textbox'), { target: { value: 'again and again' } });
-        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
+        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit report' })); });
         await waitFor(() => expect(node.reports).toHaveLength(1));
         const [r] = node.reports;
         expect(r).toEqual({ reporter: ana.publicKey, messageId: bens.id, reason: 'Spam or scam: again and again', disclosure: { epoch: bens.epoch, mk: Buffer.from(groupMessageKey(bens.key, bens.id)).toString('base64') } });
@@ -129,7 +129,7 @@ describe('Report message in a locked group chat on the web (S6)', () => {
         await act(async () => { fireEvent.click(reportButtons()[0]); });
         const card = screen.getByRole('dialog');
         fireEvent.click(within(card).getByRole('button', { name: 'Offensive content' }));
-        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
+        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit report' })); });
         expect(await within(card).findByText('Message not found')).toBeInTheDocument();
         expect(within(card).getByRole('button', { name: '✓ Offensive content' })).toHaveAttribute('aria-pressed', 'true');
         expect(within(card).queryByTestId('report-sent')).toBeNull();

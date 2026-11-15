@@ -87,6 +87,8 @@ export const SUITES = [
     'test-recovery-collect',
     // Getting an account back with a sign-in and nothing typed (S0): as a local community here, as the global one in VARIANTS.
     'test-recovery-find',
+    // Whether each sign-in's copy is findable, and Refresh (S4).
+    'test-recovery-findable',
     'test-sso-copy-hardening',
     'test-sso-recovery-roundtrip',
     withTimeout('test-recovery-seal', 600),
@@ -103,6 +105,8 @@ export const SUITES = [
     'test-nonce-store-global',
     'test-words-member',
     'test-web-door',
+    // What the web app's page tells search engines: /app names one canonical, every deeper path is noindex.
+    'test-web-app-robots',
     'test-web-visits',
     'test-global-moderation',
     'test-report-rings',
@@ -619,6 +623,9 @@ export const SUITES = [
     // Local knowledge in the Pulse (slice KP): with=knowledge only, one card a day, 30 days and 20 pages, the keyset merge, every
     // way a page stops showing takes its card, a standby the same, mute and report not found, Home's Pulse card creators only.
     'test-knowledge-pulse',
+    // Keep it right (slice K5): "This helped" (one per member, stamped at the tap, the count only), Suggest a fix through the
+    // waiting list, the year list, and every action x every reader in one table.
+    'test-knowledge-keep-right',
     'test-forum',
     // The forum's moderation (slice F2): reports, auto-hide, restore, removal, the mute, first looks, new accounts, bursts.
     'test-forum-moderation',
@@ -682,6 +689,7 @@ export const SUITES = [
     'test-node-signature',
     'test-relay-mail',
     'test-relay-complaint',
+    'test-group-guests',
     'test-dm-standby-order',
     'test-keeper-read-cursor',
     'test-groups-chat-sync',

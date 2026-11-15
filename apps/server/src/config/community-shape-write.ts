@@ -53,7 +53,7 @@
  *               shared outside stops at once (engine/peek-tickets.ts stopAllPeekTickets), in the same transaction: set on
  *               again, none of them opens anything.
  *   doorCheck   only where the open door is set (400 otherwise); no lock.
- *   dmRequests, decisions, forum, outsideMessages, probation, autoHide, autoMute, shareLocation, shareMemberCount, shareEmail,
+ *   dmRequests, decisions, forum, outsideMessages, groupGuests, probation, autoHide, autoMute, shareLocation, shareMemberCount, shareEmail,
  *   sharePhone, shareHealth, shareListingsFromHere: no lock. shareListingsFromHere (our name on members' listings on the
  *               global community, list-on-global G5) is pushed to the directory at once while the community is listed, so a
  *               global node's next mirror run has it, not the next timed push.
@@ -121,7 +121,7 @@ const bad = (setting: string | undefined, message: string, code = 'bad_setting')
 
 /** Each a profile switch's override, in the shape's name. The 12-words door is `ssoRequiredForJoin` the other way up. */
 const SWITCH_OF = {
-    doorCheck: 'doorCheck', knocks: 'knocks', beans: 'beans', dmRequests: 'dmRequests', decisions: 'decisions', forum: 'forum', outsideMessages: 'outsideMessages', shareOutside: 'shareOutside', listed: 'publishToDirectory',
+    doorCheck: 'doorCheck', knocks: 'knocks', beans: 'beans', dmRequests: 'dmRequests', decisions: 'decisions', forum: 'forum', outsideMessages: 'outsideMessages', groupGuests: 'groupGuests', shareOutside: 'shareOutside', listed: 'publishToDirectory',
     probation: 'probation', autoHide: 'autoHideReports', autoMute: 'autoMute',
 } as const satisfies Record<string, ProfileSwitch>;
 type SwitchSetting = keyof typeof SWITCH_OF;
@@ -135,7 +135,7 @@ type ShareSetting = keyof typeof SHARE_FIELD_OF;
 
 /** Checked and written in this order, so a request with two refusals is always refused for the same one. */
 const SETTINGS_IN_ORDER = [
-    'join', 'wordsDoor', 'doorCheck', 'knocks', 'beans', 'knownFloor', 'voucherBudget', 'memberGift', 'dmRequests', 'decisions', 'forum', 'outsideMessages', 'shareOutside', 'listed',
+    'join', 'wordsDoor', 'doorCheck', 'knocks', 'beans', 'knownFloor', 'voucherBudget', 'memberGift', 'dmRequests', 'decisions', 'forum', 'outsideMessages', 'groupGuests', 'shareOutside', 'listed',
     'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth', 'shareListingsFromHere', 'probation', 'autoHide', 'autoMute',
     'recoveryCopies', 'contacts', 'removalDecider',
 ] as const;
@@ -156,6 +156,7 @@ export const SETTING_NAMES: Record<ShapeSettingName, string> = {
     knownFloor: 'Known floor for confirmed members', voucherBudget: 'Budget per voucher', memberGift: 'Members giving part of their credit line',
     dmRequests: 'First message from someone new',
     decisions: 'Community votes (Decisions)', forum: 'Forum', outsideMessages: 'Messages from other communities',
+    groupGuests: 'Groups may invite guests from other communities',
     shareOutside: 'Members may share listings outside the community',
     listed: 'Listed in the BeanPool directory',
     shareLocation: 'Share location & radius', shareMemberCount: 'Share member count', shareEmail: 'Share email',
@@ -655,7 +656,7 @@ function planShapeChanges(body: unknown): ShapePlan {
     // Votes, the forum, messages from other communities and the three safety switches: no lock. Members are not told of the
     // outside switch (memberSentence: none): no app shows an outside chat until X3, so a sentence would name something they
     // can't see.
-    for (const setting of ['decisions', 'forum', 'outsideMessages', 'probation', 'autoHide', 'autoMute'] as const satisfies readonly SwitchSetting[]) {
+    for (const setting of ['decisions', 'forum', 'outsideMessages', 'groupGuests', 'probation', 'autoHide', 'autoMute'] as const satisfies readonly SwitchSetting[]) {
         if (asked[setting] === undefined) continue;
         const v = boolOf(setting, asked[setting]);
         if (v === S[setting].configured) continue;

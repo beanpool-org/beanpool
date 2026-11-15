@@ -52,6 +52,7 @@ async function main() {
         retention: true,
         dmRequests: true,
         outsideMessages: true,
+        groupGuests: true,
         shareOutside: false,
         knowledge: false,
         bills: false,

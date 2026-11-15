@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Ujumbe, jumbe za sauti, jukwaa, vikundi na soga zao, watu na marafiki, soga za matukio, kunyamazisha, kutaja, na ufunguo uliobadilika.",
-        "sourceHash": "0d1deaefb627a1e9"
+        "text": "Ujumbe, jumbe za sauti, jukwaa, vikundi na soga zao, watu na marafiki, anwani zako za faragha, soga za matukio, kunyamazisha, kutaja, na ufunguo uliobadilika.",
+        "sourceHash": "79e2bb34ba50acd7"
       }
     },
     "pulse": {
@@ -790,6 +790,20 @@
       "help": {
         "text": "Shikilia maikrofoni ili kurekodi na uachilie ili kutuma. Telezesha kushoto kughairi, juu kufunga. Hadi dakika 3. Seva huuhifadhi siku 30.",
         "sourceHash": "a4c99f83c66ae115"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "Anwani zako za faragha",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Orodha ya anwani ambayo wewe tu unaweza kuifungua, kwenye simu au kivinjari chochote na katika kila jumuiya uliyomo. Kuleta watu, kuwaalika, na kile ambacho seva ya jumuiya yako inaweza kuona na isichoweza.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "Anwani zako za faragha. Wewe tu unaweza kufungua orodha. Leta watu kutoka simuni au faili ya anwani, ongeza mtu kwa mkono, au waalike.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

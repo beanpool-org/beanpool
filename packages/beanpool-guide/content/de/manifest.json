@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Nachrichten, Sprachnachrichten, das Forum, Gruppen und deren Chats, Leute und Freunde, Event-Chats, Stummschalten, Erwähnungen und geänderte Schlüssel.",
-        "sourceHash": "0d1deaefb627a1e9"
+        "text": "Nachrichten, Sprachnachrichten, das Forum, Gruppen und deren Chats, Leute und Freunde, deine privaten Kontakte, Event-Chats, Stummschalten, Erwähnungen und geänderte Schlüssel.",
+        "sourceHash": "79e2bb34ba50acd7"
       }
     },
     "pulse": {
@@ -790,6 +790,20 @@
       "help": {
         "text": "Halte das Mikrofon zum Aufnehmen und lass zum Senden los. Nach links wischen bricht ab, nach oben sperrt. Bis zu 3 Minuten. Der Server behält sie 30 Tage.",
         "sourceHash": "a4c99f83c66ae115"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "Deine privaten Kontakte",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Eine Kontaktliste, die nur du öffnen kannst, auf jedem Telefon oder Browser und in jeder Community, der du angehörst. Leute herholen, sie einladen und was der Server deiner Community sehen kann und was nicht.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "Deine privaten Kontakte. Nur du kannst die Liste öffnen. Hole Leute vom Telefon oder aus einer Kontaktdatei, füge jemanden von Hand hinzu oder lade ihn ein.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

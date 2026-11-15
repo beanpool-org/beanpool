@@ -108,6 +108,7 @@ On the global community, automated safety rules are on by default. On a local co
 - **Limits on new accounts (probation)**: New accounts have small daily posting and messaging limits during their first days, protecting the community from rapid spam.
 - **Reported posts hidden and message requests cleared automatically (auto-hide reports)**: Posts reported by members in 3 independent circles are hidden automatically until a moderator reviews them. Reports clear a sender's message requests by the same switch. Off by default on local communities (where reports wait for a moderator to review).
 - **Repeat offenders muted automatically (auto-mute)**: A member whose posts moderators have removed 3 times in 30 days is automatically muted from posting and messaging until a moderator lifts it.
+- **Keep members' locked contact lists**: Each member may keep a locked copy of their private contacts list here, which only they can open. On by default on every community; only an owner changes it, and off deletes every copy kept here. See Members' locked contacts lists in Privacy and what your server can see.
 
 ### How posts are hidden by reports
 

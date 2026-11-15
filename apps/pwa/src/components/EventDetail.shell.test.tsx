@@ -355,7 +355,7 @@ describe('🚩 Report, at the foot (the web\'s event page had none)', () => {
         await userEvent.click(screen.getByTestId('event-report'));
         const form = await screen.findByRole('dialog');
         await userEvent.click(within(form).getAllByRole('button', { pressed: false })[0]);
-        await userEvent.click(within(form).getByRole('button', { name: 'Submit Report' }));
+        await userEvent.click(within(form).getByRole('button', { name: 'Submit report' }));
         await waitFor(() => expect(api.reportAbuse).toHaveBeenCalledTimes(1));
         const [reporter, target, , postId] = vi.mocked(api.reportAbuse).mock.calls[0];
         expect([reporter, target, postId]).toEqual(['me-pk', 'host-pk', 'ev-mullum']);

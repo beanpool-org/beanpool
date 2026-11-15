@@ -176,6 +176,11 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('forum_topics', 'writer_pubkey');
     move('forum_posts', 'writer_pubkey');
     move('forum_members', 'member_pubkey');
+    // What they showed beside their name on a public forum (engine/membership-note.ts, slice F10) is NOT moved: their
+    // community's note was for the old key, so the new key shows no community until their app brings a note for it. The main
+    // server deletes it with its tombstone; a standby's copy carries that delete, and a row it still holds names a key no
+    // writer has, so it draws nothing meanwhile.
+    if (!keepStamps) deletePlainRows('forum_labels', 'member_pubkey = ?', oldKey);
     // A first topic of theirs waiting for a moderator's look (engine/forum-first-look.ts): still theirs to withdraw, and OK
     // makes the topic in the key they hold then.
     move('forum_waiting', 'writer_pubkey');

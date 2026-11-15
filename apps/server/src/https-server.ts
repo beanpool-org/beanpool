@@ -167,6 +167,7 @@ import { isNodeSignedPath, pruneNodeRequestNonces, requireNodeSignature } from '
 import { createInviteAskRoutes } from './routes/invite-asks.js';
 import { createKnowledgeRoutes } from './routes/knowledge.js';
 import { createForumRoutes } from './routes/forum.js';
+import { createMembershipNoteRoutes } from './routes/membership-note.js';
 import { createFreeTagRoutes } from './routes/free-tags.js';
 import { createNoticeRoutes } from './routes/notices.js';
 import { createBlockRoutes } from './routes/blocks.js';
@@ -536,6 +537,10 @@ const SIGNED_KNOCK_CORS: ReadonlyMap<string, string> = new Map([
     // and takes it back. The same rule as the three above: the signature, no cookie, the node answers only for the signer.
     ['/api/web-push', 'POST, DELETE, OPTIONS'],
     ['/api/web-push/key', 'GET, OPTIONS'],
+    // "Show my community on global" from the web app (forums F10, routes/membership-note.ts): the worldwide community's page
+    // asks the member's own community for its note, signed by the member's key. The same rule: the signature, no cookie, the
+    // node answers only for the signer (a member here, or no note).
+    ['/api/membership/note', 'GET, OPTIONS'],
 ]);
 const SIGNED_KNOCK_HEADERS = 'Content-Type, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for, x-language';
 
@@ -2110,6 +2115,8 @@ export async function startHttpsServer(port: number): Promise<number> {
         createInviteAskRoutes(deps),
         createKnowledgeRoutes(deps),
         createForumRoutes(deps),
+        // The note a member carries to the worldwide forum, and what it shows there (slice F10, routes/membership-note.ts).
+        createMembershipNoteRoutes(),
         createFreeTagRoutes(deps),
         createNoticeRoutes(deps),
         createBlockRoutes(deps),

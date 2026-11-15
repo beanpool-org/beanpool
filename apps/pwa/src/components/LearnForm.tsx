@@ -10,7 +10,7 @@
  * The node checks everything again; this only says the first thing missing before it sends (lib/learn.ts learnFormRefusal).
  * Photos are optional and the member's own (at most three, the browser's own picker, asked for nothing until 📷 is tapped).
  * Tags (Learn's tags, 16 Nov 2026): the Market's own Tags field, the member's own tags alone (TagPicker `freeOnly`), in every use;
- * an edit, a fix and "Edit first" open on the tags held, and taking them all off sends none.
+ * an edit, a fix and "Edit first" open on the tags held, and taking them all off sends an empty list, which takes the page's off.
  */
 import { useEffect, useState } from 'react';
 import { KNOWLEDGE_LIMITS, KNOWLEDGE_TAG_WORDS, KNOWLEDGE_TOPICS, formatCount, t, type KnowledgeSource } from '@beanpool/core';

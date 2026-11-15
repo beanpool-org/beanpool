@@ -48,6 +48,12 @@ export const KNOWLEDGE_OFF_WORDS = 'Local knowledge is switched off on this comm
 const NO_PICTURE = 'A draft carries no picture from the web: the admin adds their own when they check it.';
 const NO_FIX_YET = 'A fix to a page showing comes with a later version of this server: tell the admin what changed, with the source that says so, '
     + 'and they edit the page in the app (Learn, the page, Edit).';
+/**
+ * Tags on a draft (Learn's tags, 16 Nov 2026): the node keeps a page's own tags, but members can't add them in the apps yet, and
+ * an assistant drafts only what a member could. Refused in words, never dropped, so the assistant never believes a tag is on.
+ */
+const NO_TAGS_YET = 'Tags on Local knowledge come with a later version of this server: send the draft without them, and never write a Tags line '
+    + 'into the body. Learn finds a page by its title, body, topic and place.';
 const NO_PAGE = 'No page of Local knowledge showing here has that id: list them with knowledge_list.';
 const NOT_ITS_DRAFT = 'This assistant has no draft waiting with that id: my_knowledge_drafts lists them.';
 /** What knowledge_draft answers, word for word (amended §A5): the assistant passes it on. */
@@ -244,6 +250,7 @@ export const KNOWLEDGE_TOOLS: AgentTool[] = [
             if (!knowledgeOn()) return { ok: false, error: KNOWLEDGE_OFF_WORDS };
             if (Object.keys(args).some((key) => PICTURE_FIELD.test(key))) return { ok: false, error: NO_PICTURE };
             if (args.fix_of !== undefined || args.note !== undefined) return { ok: false, error: NO_FIX_YET };
+            if (args.tags !== undefined || args.free_tags !== undefined || args.freeTags !== undefined) return { ok: false, error: NO_TAGS_YET };
             const sources = Array.isArray(args.sources)
                 ? args.sources.map((s) => {
                     const o = (s && typeof s === 'object' ? s : {}) as { url?: unknown; title?: unknown; label?: unknown };

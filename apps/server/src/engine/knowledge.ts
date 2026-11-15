@@ -21,7 +21,7 @@
 import {
     KNOWLEDGE_FRONT_ROWS, KNOWLEDGE_LIMITS, KNOWLEDGE_SEARCH_MAX, KNOWLEDGE_TOPIC_PAGE, KNOWLEDGE_TOPICS, KNOWLEDGE_UNCHECKED_ROWS, LANGS, LEARN_HOME_NEW_DAYS,
     LEARN_HOME_ROWS, PULSE_KNOWLEDGE_DAYS, PULSE_KNOWLEDGE_ID_PREFIX, PULSE_KNOWLEDGE_MAX_PAGES, PULSE_KNOWLEDGE_ROWS, PULSE_KNOWLEDGE_SOURCE,
-    compareKnowledge, isKnowledgeTopic, knowledgeFirstLine, knowledgeTopic, knowledgeUncheckedForAYear, pinLive, word, wordsFor,
+    compareKnowledge, freeTagsOf, isKnowledgeTopic, knowledgeFirstLine, knowledgeTopic, knowledgeUncheckedForAYear, pinLive, storedFreeTags, word, wordsFor,
     type HomeLearnRow, type KnowledgeFront, type KnowledgeHelped, type KnowledgeRow, type KnowledgeSearch, type KnowledgeSource, type KnowledgeTopicPage,
     type PulseKnowledgeCard, type PulseKnowledgePost,
 } from '@beanpool/core';
@@ -34,6 +34,8 @@ import { bumpPostsVersion } from './versions.js';
 import { assertNotMuted } from './auto-moderation.js';
 import { assertMayPostToday } from './writer-bounds.js';
 import { probationState } from './probation.js';
+import { assertFreeTags } from './post-fields.js';
+import { postSearchKeywords } from './search-keywords.js';
 
 // A refusal with a value in it, in English as a template wrote it, its sentence marked for the way out to find again in the
 // member's language (member-words.ts).
@@ -62,7 +64,12 @@ export const KNOWLEDGE_WORDS = {
     ownPage: word('This is your own page: “This helped” is for other members.'),
 } as const;
 
-/** What a form sends: the page's words, its topic, and what is optional. */
+/**
+ * What a form sends: the page's words, its topic, and what is optional. `freeTags`: its own tags, free tags only, under the
+ * Market's rule for the tags a member types (DESIGN-tags-free-entry-fable.md; @beanpool/core tags/free-tags.ts): at most 5,
+ * each stored lower-cased with its accents, refused in words, never dropped. Never the library's ids (`tags`): that list is
+ * kinds of listing, and a page is none (director, 16 Nov, from the card Marty answered).
+ */
 export interface KnowledgeInput {
     title?: unknown;
     body?: unknown;
@@ -70,6 +77,8 @@ export interface KnowledgeInput {
     place?: unknown;
     sources?: unknown;
     lang?: unknown;
+    freeTags?: unknown;
+    tags?: unknown;
 }
 
 /** The page's words, cleaned and held to the limits (KNOWLEDGE_LIMITS). */
@@ -80,6 +89,8 @@ export interface CleanKnowledge {
     place: string | null;
     sources: KnowledgeSource[];
     lang: string | null;
+    /** Its own tags, each in its stored form, in the order sent; [] for none. */
+    freeTags: string[];
 }
 
 const charCount = (s: string): number => Array.from(s).length;
@@ -116,8 +127,22 @@ function cleanSourceUrl(raw: unknown): string {
     return url.href;
 }
 
-/** The form's fields, cleaned, or a refusal in the words the form shows (§3.3). */
-export function cleanKnowledgeInput(raw: KnowledgeInput): CleanKnowledge {
+/**
+ * A page's tags as they will be stored (post-fields.ts assertFreeTags, the Market's door), or a 400 in its words. Absent,
+ * null or [] is none. `kept`: the page's own tags, each of which passes as stored though a stricter rule came since (an
+ * edit or a fix sends them back), as a listing's do.
+ */
+function cleanFreeTags(raw: unknown, kept: readonly string[]): string[] {
+    if (raw === undefined) return [];
+    try {
+        return assertFreeTags(raw, kept);
+    } catch (e) {
+        throw new KnowledgeRefusal(400, 'bad_tags', (e as Error).message);
+    }
+}
+
+/** The form's fields, cleaned, or a refusal in the words the form shows (§3.3). `keptTags`: the page's own (cleanFreeTags). */
+export function cleanKnowledgeInput(raw: KnowledgeInput, keptTags: readonly string[] = []): CleanKnowledge {
     const title = oneLine(raw.title, KNOWLEDGE_LIMITS.title);
     if (!title) throw new KnowledgeRefusal(400, 'no_title', KNOWLEDGE_WORDS.noTitle);
     if (charCount(title) > KNOWLEDGE_LIMITS.title) throw tooLong(tr('Keep the title to {n} characters.', { n: KNOWLEDGE_LIMITS.title }));
@@ -139,7 +164,12 @@ export function cleanKnowledgeInput(raw: KnowledgeInput): CleanKnowledge {
         return { url: cleanSourceUrl(item.url), label };
     });
     const lang = typeof raw.lang === 'string' && (LANGS as readonly string[]).includes(raw.lang) ? raw.lang : null;
-    return { title, body, topic: raw.topic, place: place || null, sources, lang };
+    // A page carries free tags only: an id from the Market's library sent here would be dropped, and its sender believe it on.
+    if (raw.tags !== undefined && raw.tags !== null && !(Array.isArray(raw.tags) && raw.tags.length === 0)) {
+        throw new KnowledgeRefusal(400, 'bad_tags', 'Local knowledge takes its own tags only, as freeTags: never ids from the library (tags).');
+    }
+    const freeTags = cleanFreeTags(raw.freeTags, keptTags);
+    return { title, body, topic: raw.topic, place: place || null, sources, lang, freeTags };
 }
 
 /**
@@ -149,6 +179,16 @@ export function cleanKnowledgeInput(raw: KnowledgeInput): CleanKnowledge {
 export function knowledgeKeywords(k: Pick<CleanKnowledge, 'topic' | 'place'>): string {
     const topic = knowledgeTopic(k.topic);
     return [topic ? `${topic.label} ${topic.keywords}` : '', k.place ?? ''].join(' ').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * A page's whole `search_keywords`, as createPost writes it when publishKnowledge makes the page: the node's own words for a
+ * post (its topic id and its tags' words and compounds, engine/search-keywords.ts, as a listing's), then knowledgeKeywords.
+ * An edit and an approved fix write the same (rewriteKnowledge), so a page is found by its tags after any change.
+ */
+export function knowledgeSearchKeywords(k: Pick<CleanKnowledge, 'title' | 'body' | 'topic' | 'place' | 'freeTags'>): string {
+    const own = knowledgeKeywords(k);
+    return postSearchKeywords(k.title, k.body, k.topic, [], k.freeTags) + (own ? ` ${own}` : '');
 }
 
 /** Whether this key may publish, edit, confirm, clear a mark on and take down Local knowledge: an owner or an admin. */
@@ -171,12 +211,14 @@ export interface ShowingKnowledgeRow {
     knowledge_place: string | null;
     knowledge_sources: string | null;
     knowledge_lang: string | null;
+    /** Its own tags: a JSON list in their stored form, '' for none (core storedFreeTags). */
+    free_tags: string;
 }
 
 /** A showing knowledge post's row, or null. */
 export function showingKnowledgeRow(postId: unknown): ShowingKnowledgeRow | null {
     return typeof postId === 'string' && postId.length <= 200
-        ? (db.prepare(`SELECT id, author_pubkey, title, description, category, knowledge_place, knowledge_sources, knowledge_lang FROM posts
+        ? (db.prepare(`SELECT id, author_pubkey, title, description, category, knowledge_place, knowledge_sources, knowledge_lang, free_tags FROM posts
                         WHERE id = ? AND type = 'knowledge' AND active = 1 AND status = 'active' AND removed_by_moderator_at IS NULL`)
             .get(postId) as ShowingKnowledgeRow | undefined) ?? null
         : null;
@@ -224,6 +266,8 @@ export function publishKnowledge(
     const at = new Date(opts.now ?? Date.now()).toISOString();
     const post = createPost(broadcast, 'knowledge', k.topic, k.title, k.body, 0, 'fixed', writer, undefined, undefined, photos, false, undefined, false, {
         knowledge: { sources: k.sources.length > 0 ? JSON.stringify(k.sources) : null, place: k.place, lang: k.lang, checkedAt: at, keywords: knowledgeKeywords(k) },
+        // Its tags and their words in search_keywords, by createPost's own rule for a listing's (knowledgeSearchKeywords).
+        ...(k.freeTags.length > 0 ? { freeTags: k.freeTags } : {}),
         beforeWrite: () => assertMayPostToday(writer),
         ...(opts.createdVia ? { createdVia: opts.createdVia } : {}),
         ...(opts.photosPaidFor ? { photosPaidFor: true } : {}),
@@ -234,13 +278,16 @@ export function publishKnowledge(
 
 /**
  * An owner's or admin's own edit of a page showing (§2.4: "at once"): the whole page as the form sends it, words, topic,
- * place, sources and language; its photos stay. Stamps Checked and clears a "may be out of date" mark, as approving does.
+ * place, sources and language; its photos stay. Its tags: the list sent is the whole new list ([] or null takes them all
+ * off); left out, they stay, as a listing's edit keeps them (an app from before Learn's tags sends none). Stamps Checked and
+ * clears a "may be out of date" mark, as approving does.
  */
 export function editKnowledge(broadcast: BroadcastFn, checker: string, postId: unknown, raw: KnowledgeInput, now = Date.now()): MarketplacePost {
     assertChecker(checker);
     assertNotMuted(checker);
     const row = showingRow(postId);
-    return rewriteKnowledge(broadcast, checker, row.id, cleanKnowledgeInput(raw), now);
+    const own = freeTagsOf(row.free_tags);
+    return rewriteKnowledge(broadcast, checker, row.id, cleanKnowledgeInput({ ...raw, freeTags: raw.freeTags === undefined ? own : raw.freeTags }, own), now);
 }
 
 /**
@@ -249,12 +296,12 @@ export function editKnowledge(broadcast: BroadcastFn, checker: string, postId: u
  */
 export function rewriteKnowledge(broadcast: BroadcastFn, checker: string, postId: string, k: CleanKnowledge, now = Date.now()): MarketplacePost {
     const at = new Date(now).toISOString();
-    const keywords = `${k.topic} ${knowledgeKeywords(k)}`;
-    db.prepare(`UPDATE posts SET title = ?, description = ?, category = ?, search_keywords = ?,
+    db.prepare(`UPDATE posts SET title = ?, description = ?, category = ?, search_keywords = ?, free_tags = ?,
                     knowledge_sources = ?, knowledge_place = ?, knowledge_lang = ?, knowledge_checked_at = ?,
                     knowledge_outdated_at = NULL, knowledge_outdated_note = NULL, updated_at = ?
                  WHERE id = ?`)
-        .run(k.title, k.body, k.topic, keywords, k.sources.length > 0 ? JSON.stringify(k.sources) : null, k.place, k.lang, at, at, postId);
+        .run(k.title, k.body, k.topic, knowledgeSearchKeywords(k), storedFreeTags(k.freeTags), k.sources.length > 0 ? JSON.stringify(k.sources) : null,
+            k.place, k.lang, at, at, postId);
     bumpPostsVersion();
     ring(broadcast, postId, at);
     return readKnowledgePost(postId, checker)!;
@@ -441,9 +488,10 @@ export function knowledgeTopicPage(reader: string, topic: string, offset = 0, no
 }
 
 /**
- * A search of Learn (amended §2.7): the node's search over title, body, place and topic words (the Market's own, FTS with
- * its fallback for unspaced scripts), best match first: a word in the title counts most, then in the place, then in the
- * body; ties in Learn's order. At most KNOWLEDGE_SEARCH_MAX rows.
+ * A search of Learn (amended §2.7): the node's search over title, body, place, topic words and the page's own tags (the
+ * Market's own, FTS with its fallback for unspaced scripts; a tag is found in any case, as a listing's is), best match
+ * first: a word in the title counts most, then in a tag or the place, then in the body; ties in Learn's order. At most
+ * KNOWLEDGE_SEARCH_MAX rows.
  */
 export function knowledgeSearch(reader: string, q: string, now = Date.now()): KnowledgeSearch {
     const found = showingTo(reader, q);
@@ -452,7 +500,8 @@ export function knowledgeSearch(reader: string, q: string, now = Date.now()): Kn
         const title = p.title.toLowerCase();
         const place = (p.knowledge?.place ?? '').toLowerCase();
         const body = p.description.toLowerCase();
-        return terms.reduce((n, w) => n + (title.includes(w) ? 3 : 0) + (place.includes(w) ? 2 : 0) + (body.includes(w) ? 1 : 0), 0);
+        const tags = (p.freeTags ?? []).join(' ');
+        return terms.reduce((n, w) => n + (title.includes(w) ? 3 : 0) + (place.includes(w) || tags.includes(w) ? 2 : 0) + (body.includes(w) ? 1 : 0), 0);
     };
     const scored = found.map((p) => ({ score: score(p), row: knowledgeRowOf(p, now) }));
     scored.sort((a, b) => b.score - a.score || byLearnOrder(a.row, b.row));

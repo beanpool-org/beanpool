@@ -383,6 +383,15 @@ export interface KnowledgeDraftWhole extends KnowledgeDraftToCheck {
     note: string | null;
     /** Its photos as data URLs, metadata stripped: the sender's own, at most 3. */
     photos: string[];
+    /**
+     * Its own tags (free tags only, the Market's rule: core tags/free-tags.ts), each in its stored form; for a fix, the page's
+     * tags with the member's put in if they changed them: what Approve writes. A server before Learn's tags doesn't send it.
+     */
+    freeTags?: string[];
+    /** A fix: whether its member changed the tags (they are not one of {@link KNOWLEDGE_FIX_PARTS}); null for a new page. */
+    freeTagsChanged?: boolean | null;
+    /** A fix: whether the page's own tags changed under it since it was sent, as {@link pageChanged} says of a part. */
+    freeTagsPageChanged?: boolean | null;
     /** Approving waits for the tick "I opened the sources and they say this.": an assistant's draft. */
     needsSourcesTicked: boolean;
     /**
@@ -417,6 +426,8 @@ export interface KnowledgePageWords {
     place: string | null;
     sources: KnowledgeSource[];
     lang: string | null;
+    /** Its own tags as it shows, each in its stored form. A server before Learn's tags doesn't send it. */
+    freeTags?: string[];
 }
 
 /**

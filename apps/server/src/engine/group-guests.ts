@@ -27,17 +27,28 @@
  *         for each thing told, naming the guests there in it, never one per guest: an invitation, the roster at every
  *         change of it, each new line, each new epoch (with only that home's guests' wraps), a removal. Each home is sent
  *         to on its own (flushGuestOutbox): one that doesn't answer holds up no other, and a row queued while its home is
- *         being sent to goes as soon as that send ends.
+ *         being sent to goes as soon as that send ends. QUEUE ORDER: for each home, rows go out strictly oldest first,
+ *         always (an invitation, a removal and a roster carry no time, so the home can't put them back in order). A new
+ *         row is due at once and its try sends the home's queue from the oldest row, so it never leaves before an older
+ *         row waiting in backoff; once the home takes a row, every row behind it goes in the same send (sendToHome).
  *
  * **Roster and epochs.** A guest who is `in` is in the chat's key roster (engine/group-keys.ts groupKeyRoster), so each
  * epoch must wrap the key to them, and a member's or a guest's line goes in only under an epoch that covers the roster. A
  * guest leaving or removed takes their key out of the roster: the epoch goes stale, nothing more is sent to them, and the
  * next epoch (the next member's phone rotates it, as for a member who leaves) is wrapped without them.
  *
- * **The roster, at every change** (queueGroupRoster). Every change of the chat's key roster, a member's (a join, a leave,
- * a removal by a convenor or a vote, a prune) or a guest's (in, left, removed), ends in group-keys.ts markGroupEpochStale
- * or withMembershipEpoch's new epoch, and each calls queueGroupRoster: the names in the chat, members and guests, and the
- * current epoch, to every home with guests in. A roster still waiting for its home is replaced by the newer one.
+ * **The roster, at every change** (queueGroupRoster). groupKeyRoster reads three things: active group_members rows, whether
+ * each key is a member here (isNodeMember: not pruned, not a key a re-key holds or replaced) and guests `in`. Every write
+ * that can change one of them ends in group-keys.ts markGroupEpochStale (directly, or markGroupEpochsStaleFor) or
+ * withMembershipEpoch's new epoch, and each calls queueGroupRoster: the names in the chat, members and guests, and the
+ * current epoch, to every home with guests in. The paths: a member joins (with or without an epoch), says yes to an
+ * invitation, is approved, is seated in a circle, leaves, is removed by a convenor or a vote (state-engine.ts,
+ * withMembershipEpoch or removeGroupMemberByVote); deletes their account (purgeMemberSelf); is pruned or reinstated, both
+ * through setUserStatusRow across 'pruned'; a re-key starts, is cancelled, completes (member-wizards.ts issueRekeyCode,
+ * cancelRekeyCode, completeRekey); a guest is in, leaves, is removed, or the switch removes them all (here). What changes
+ * no roster: a pause (the account keeps its memberships and its key), an invitation or a request to join (no key until the
+ * yes or the approval), a role. A standby queues nothing (queueToHome): the main server made the change and sends it. A
+ * roster still waiting for its home is withdrawn for the newer one. test-group-guests §12 is the table of all of them.
  *
  * **Back from epoch-stale.** A guest's line or epoch refused for its epoch answers `epoch-stale`, and the roster follows to
  * their home: who is in now (the keys a new epoch must wrap to, exactly) and the current epoch, with that home's guests'

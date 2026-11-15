@@ -23,8 +23,11 @@
  *  10  a home that can't be reached: the request waits and is tried again, then goes once taken
  *  11  a standby copies group_guests (a plain table) and never the outbox; the routes are in the guest-view list
  *  12  close the class: every kind of roster change (a member joins with no epoch or their own, leaves, is removed by a
- *      convenor or a vote, deletes their account; a guest is invited, says yes, leaves, is removed) -> the roster once to
- *      each community with guests in, naming its guests, with exactly the chat's keys (an invitation: none, only itself)
+ *      convenor or a vote, deletes their account, says yes to an invitation, is approved, is voted out of the community
+ *      and reinstated; a re-key starts, is cancelled, completes; a guest is invited, says yes, leaves, is removed) -> the
+ *      epoch stale or moved on, and the roster once to each community with guests in, naming its guests, with exactly the
+ *      chat's keys; what changes no roster says so (an invitation, a request, a pause; a standby queues nothing); 12z: the
+ *      table holds every path; the owners' switch is 16
  *  13  back from epoch-stale: a guest's refused epoch or line -> the roster follows to their home alone, with the current
  *      epoch (stale, or its record and their home's wraps); the epoch they make from it goes in, and so does the line they
  *      send again under the key they open from it; two refusals in one request -> one roster
@@ -33,7 +36,9 @@
  *  15  each home on its own: while one home doesn't answer, another gets its line at once; a row queued during a send goes
  *      when that send ends; a home that refuses costs one try for all its rows, which wait, then go
  *  16  close the class: every timer job https-server.ts runs from group-guests x (standby, main server) -> a standby returns
- *      at once, writes no copied row, tells nobody; the main server removes and tells
+ *      at once, writes no copied row, tells nobody; the main server removes and tells (removals only, no roster)
+ *  17  close the class: (a home that answers / fails / fails then answers) x (rows queued before / during / after the
+ *      failure) x (one flush / many) -> the home gets its rows once each in the order queued, and none waits once it answers
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests node scripts/run-server-suites.mjs
  */
@@ -539,7 +544,7 @@ async function main(): Promise<void> {
     // Each kind of roster change once. A member's: joining (with no epoch, and with her own), leaving, removed by a convenor,
     // removed by a vote, deleting their account. A guest's: invited (no change of the names in the chat: the invitation alone
     // goes, and the roster follows their yes, design §4.2 "Joining"), in, left, removed.
-    const quin = addLocal('Quin'), quin2 = newId('Quin');
+    const quin = addLocal('Quin'), quin2 = newId('Quin'), ula = addLocal('Ula');
     let rekeyCode = '';
     const rosterRows: Array<{ change: string; act: () => Promise<unknown>; names: (d: any) => boolean; invites?: Id; none?: string; standby?: true }> = [
         { change: 'a member joins (an app that sends no epoch)', act: () => call('POST', hugo, `/api/groups/${S}/join`, {}),
@@ -559,6 +564,18 @@ async function main(): Promise<void> {
             names: (d) => d.guests.some((g: any) => g.key === kit.pk && g.home === 'a.example' && g.name === 'Kit') },
         { change: 'a guest leaves', act: async () => bring([await item(kit, 'a.example', shedTo, 'group-leave', JSON.stringify({ v: 1 }))]), names: (d) => !d.guests.some((g: any) => g.key === kit.pk) },
         { change: 'a convenor removes a guest', act: () => call('DELETE', ana, `/api/groups/${S}/guests/${lu.pk}`), names: (d) => !d.guests.some((g: any) => g.key === lu.pk) },
+        // A request to join, while the group asks for one, and a convenor's approval of it (the policy is put back after).
+        { change: 'a member asks to join (no key joins until a convenor approves)', none: 'a request is no key in the chat',
+            act: async () => {
+                db.prepare("UPDATE groups SET join_policy = 'request_to_join', updated_at = ? WHERE id = ?").run(new Date().toISOString(), S);
+                return call('POST', ula, `/api/groups/${S}/join`, {});
+            }, names: () => true },
+        { change: 'a convenor approves the request', act: async () => {
+            const r = await call('POST', ana, `/api/groups/${S}/members`, { targetPubkey: ula.pk, action: 'approve' });
+            db.prepare("UPDATE groups SET join_policy = 'open', updated_at = ? WHERE id = ?").run(new Date().toISOString(), S);
+            return r;
+        }, names: (d) => d.members.some((m: any) => m.key === ula.pk && m.name === 'Ula') },
+        { change: 'the approved member leaves', act: () => call('DELETE', ula, `/api/groups/${S}/members/${ula.pk}`), names: (d) => !d.members.some((m: any) => m.key === ula.pk) },
         // A member's key through a re-key, a pause, a removal from the community and a reinstate vote (Quin; Quin2 is the key
         // the re-key moves him to). Quin convenes a group of his own with a guest he invited, for the re-key's move of it.
         { change: 'a convenor invites a member (no key joins until they say yes)', none: 'an invited row is no key in the chat',
@@ -621,6 +638,7 @@ async function main(): Promise<void> {
     const rosterPaths: Record<string, string> = {
         'member joins': 'a member joins (an app that sends no epoch)', 'member joins with an epoch': 'a member joins with her own epoch',
         'member invited, then yes': 'the member says yes to the invitation', 'member leaves': 'a member leaves',
+        'member asks to join': 'a member asks to join (no key joins until a convenor approves)', 'request approved': 'a convenor approves the request',
         'member removed by a convenor': 'a convenor removes a member', 'member removed by a vote': 'a member is removed by a vote',
         'account deleted': 'a member deletes their account', 'account paused': 'an admin pauses the member', 'pause lifted': 'the pause is lifted',
         'removed from the community (prune)': 'the community votes the member out (removed from the community)', 'reinstated': 'a vote reinstates them (their group rows stayed)',

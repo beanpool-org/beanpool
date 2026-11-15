@@ -5,7 +5,13 @@
  *   Invite Dee to riverside.example
  *   One invite, for one person. It works once, for 30 days.
  *   Dee's name and number are not sent to the server.
- *   [ Share… ] (where the browser has it)  [ Email ] (when there is an address)  [ Copy ]
+ *   [ Text message ] (when there is a number)  [ Share… ] (where the browser has it)  [ Email ] (when there is an address)  [ Copy ]
+ *
+ * The first one is the main action. Text message (Damo via Marty, 15 Nov: on his Android phone's Brave the sheet offered only
+ * Copy, "make the invite button actually invite people") opens the device's own text app with the contact's first number and
+ * the whole message filled in (lib/contact-text-link.ts); the link is opened here and never sent. Share… shows only where
+ * `navigator.share` exists at all: no canShare, no files. A browser without it (Brave's Tor windows, an app's in-app browser,
+ * a plain http:// address) has no share sheet to offer, which is why Text message doesn't depend on it.
  *
  * A tap makes the community's ordinary invite with NO note (lib/api.ts generateInvite with the maker's key alone), keeps "this
  * code was for Dee" inside the locked list, and hands today's invite message to the member's own app. Nothing is made before
@@ -31,13 +37,14 @@ import {
 } from '../lib/node-invites';
 import { changeContacts } from '../lib/contacts-store';
 import { copyChatText } from '../lib/copy-chat-text';
+import { contactTextLink, textNumber } from '../lib/contact-text-link';
 import { useDialogFocus } from './dialog-focus';
 import { AskSheet } from './InviteAsks';
 
 const BTN = 'min-h-[44px] px-4 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white font-bold cursor-pointer disabled:opacity-60';
 const GO = 'min-h-[44px] px-4 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold cursor-pointer disabled:opacity-60';
 
-type How = 'share' | 'email' | 'copy';
+type How = 'text' | 'share' | 'email' | 'copy';
 
 export function ContactInviteSheet({ contact, identity, community, onClose }: {
     contact: Contact; identity: BeanPoolIdentity; community: string; onClose: () => void;
@@ -67,7 +74,10 @@ export function ContactInviteSheet({ contact, identity, community, onClose }: {
     const here = nodeAddress();
     const email = contact.emails[0];
     const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+    const hasNumber = textNumber(contact.phones) !== null;
     const send = async (how: How, message: string): Promise<boolean> => {
+        // Opened on this device, as Email is: the number and the message go to the text app, not to any server.
+        if (how === 'text') { window.open(contactTextLink(contact.phones, message, navigator.userAgent ?? '')!, '_self'); return true; }
         if (how === 'share') { await navigator.share({ text: message }); return true; }
         if (how === 'email') { window.open(contactMailtoLink(email!, contactInviteWords.emailSubject(), message)!, '_self'); return true; }
         // The clipboard, or the older copy command where there is none (a community at a plain http:// address).
@@ -146,14 +156,20 @@ export function ContactInviteSheet({ contact, identity, community, onClose }: {
     } else {
         titled = true;
         const [once, kept] = contactInviteLines(contact);
+        // Text message first whenever there is a number, then Share…, Email, and Copy always; the first is the main action.
+        const ways: Array<[How, string]> = [];
+        if (hasNumber) ways.push(['text', contactInviteWords.text()]);
+        if (canShare) ways.push(['share', contactInviteWords.share()]);
+        if (email && contactMailtoLink(email, '', '')) ways.push(['email', contactInviteWords.email()]);
+        ways.push(['copy', contactInviteWords.copy()]);
         body = <>
             <h2 id="contact-invite-title" className="m-0 text-lg font-extrabold text-nature-950 dark:text-white break-words">{contactInviteTitle(contact.name, community)}</h2>
             <p className="m-0 text-base leading-relaxed text-nature-800 dark:text-nature-200">{once}</p>
             <p className="m-0 text-base leading-relaxed text-nature-800 dark:text-nature-200">{kept}</p>
             <div className="flex flex-wrap gap-2">
-                {canShare && <button type="button" className={GO} disabled={busy} onClick={() => void go('share')}>{contactInviteWords.share()}</button>}
-                {!!email && !!contactMailtoLink(email, '', '') && <button type="button" className={canShare ? BTN : GO} disabled={busy} onClick={() => void go('email')}>{contactInviteWords.email()}</button>}
-                <button type="button" className={BTN} disabled={busy} onClick={() => void go('copy')}>{contactInviteWords.copy()}</button>
+                {ways.map(([how, label], i) => (
+                    <button key={how} type="button" className={i === 0 ? GO : BTN} disabled={busy} onClick={() => void go(how)}>{label}</button>
+                ))}
             </div>
         </>;
     }

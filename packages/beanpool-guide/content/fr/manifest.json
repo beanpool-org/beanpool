@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Messages, groupes et leurs discussions, contacts et amis, échanges d'événements, mise en sourdine, mentions et changement de clé.",
-        "sourceHash": "e680a96492c72e47"
+        "text": "Messages, messages vocaux, le forum, groupes et leurs discussions, contacts et amis, échanges d'événements, mise en sourdine, mentions et changement de clé.",
+        "sourceHash": "0d1deaefb627a1e9"
       }
     },
     "pulse": {
@@ -674,8 +674,8 @@
         "sourceHash": "59274c49ac87bb2f"
       },
       "summary": {
-        "text": "Alerter les modérateurs de votre communauté à propos d'une annonce, d'un événement, d'une publication du Pouls, d'un projet ou d'une entreprise.",
-        "sourceHash": "4b773ef8eef237fa"
+        "text": "Alerter les modérateurs de votre communauté à propos d'une annonce, d'un événement, d'une publication du Pouls, d'un projet, d'une entreprise, d'un message dans une discussion ou d'une publication du forum.",
+        "sourceHash": "776b105137480ade"
       }
     },
     "notifications": {
@@ -762,6 +762,34 @@
       "help": {
         "text": "Vos Offres sous un seul nom. Nommez-la, dites de quel type elle est, fermez-la pour le moment, ou fermez-la définitivement.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "forum": {
+      "title": {
+        "text": "Le forum",
+        "sourceHash": "b82e3eeaaa246390"
+      },
+      "summary": {
+        "text": "Des sujets avec un titre et des réponses en dessous, rangés en rubriques, pour les membres de votre communauté. Où le trouver, publier, le premier sujet d'une personne nouvelle sur la communauté mondiale, suivre un sujet et qui peut le lire.",
+        "sourceHash": "584d9e9d8e32ba45"
+      },
+      "help": {
+        "text": "Sujets et réponses de votre communauté. Touchez Forum en haut de Chat. Son serveur garde les mots : pas de verrou comme dans une discussion à deux.",
+        "sourceHash": "4c2967ddbdd326d2"
+      }
+    },
+    "voice-messages": {
+      "title": {
+        "text": "Messages vocaux",
+        "sourceHash": "45a7e7b9cb445ce8"
+      },
+      "summary": {
+        "text": "Enregistrez un message au lieu de l'écrire, dans une discussion avec une personne ou dans la discussion verrouillée d'un groupe. Où l'envoyer, l'écouter, combien de temps le serveur le garde et ce qui reste privé.",
+        "sourceHash": "1d56fd61c4d9e5e8"
+      },
+      "help": {
+        "text": "Maintenez le micro pour enregistrer, relâchez pour envoyer. Glissez à gauche pour annuler, vers le haut pour verrouiller. Jusqu'à 3 minutes. Gardé 30 jours.",
+        "sourceHash": "a4c99f83c66ae115"
       }
     }
   }

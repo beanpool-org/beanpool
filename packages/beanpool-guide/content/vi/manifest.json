@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Tin nhắn, nhóm và các đoạn chat, mọi người và bạn bè, chat sự kiện, tắt thông báo, nhắc đến và khóa đã đổi.",
-        "sourceHash": "e680a96492c72e47"
+        "text": "Tin nhắn, tin nhắn thoại, diễn đàn, nhóm và các đoạn chat của nhóm, mọi người và bạn bè, chat sự kiện, tắt thông báo, nhắc đến và khóa đã đổi.",
+        "sourceHash": "0d1deaefb627a1e9"
       }
     },
     "pulse": {
@@ -674,8 +674,8 @@
         "sourceHash": "59274c49ac87bb2f"
       },
       "summary": {
-        "text": "Báo cho kiểm duyệt viên cộng đồng về bài đăng, sự kiện, bài đăng Nhịp đập hoặc dự án.",
-        "sourceHash": "4b773ef8eef237fa"
+        "text": "Báo cho điều hành viên cộng đồng về một bài đăng, sự kiện, bài đăng Nhịp đập, dự án, doanh nghiệp, tin nhắn trong chat hoặc bài trong diễn đàn.",
+        "sourceHash": "776b105137480ade"
       }
     },
     "notifications": {
@@ -762,6 +762,34 @@
       "help": {
         "text": "Các Chia sẻ của bạn dưới một cái tên. Đặt tên, cho biết đó là loại gì, tạm đóng hoặc đóng hẳn.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "forum": {
+      "title": {
+        "text": "Diễn đàn",
+        "sourceHash": "b82e3eeaaa246390"
+      },
+      "summary": {
+        "text": "Các chủ đề có tiêu đề và trả lời bên dưới, chia theo mục, dành cho thành viên cộng đồng của bạn. Diễn đàn ở đâu, cách đăng bài, chủ đề đầu tiên của người mới ở cộng đồng toàn cầu, theo dõi một chủ đề và ai đọc được.",
+        "sourceHash": "584d9e9d8e32ba45"
+      },
+      "help": {
+        "text": "Chủ đề và trả lời cho cộng đồng của bạn. Chạm Diễn đàn ở đầu Chat. Máy chủ giữ nội dung: diễn đàn không bị khóa như chat với một người.",
+        "sourceHash": "4c2967ddbdd326d2"
+      }
+    },
+    "voice-messages": {
+      "title": {
+        "text": "Tin nhắn thoại",
+        "sourceHash": "45a7e7b9cb445ce8"
+      },
+      "summary": {
+        "text": "Ghi âm một tin nhắn thay vì gõ, trong chat với một người hoặc chat nhóm được khóa. Nơi bạn gửi được, nghe, máy chủ giữ bao lâu, và điều gì vẫn riêng tư.",
+        "sourceHash": "1d56fd61c4d9e5e8"
+      },
+      "help": {
+        "text": "Giữ micro để ghi âm và thả ra để gửi. Vuốt sang trái để hủy, lên trên để khóa. Tối đa 3 phút. Máy chủ giữ 30 ngày.",
+        "sourceHash": "a4c99f83c66ae115"
       }
     }
   }

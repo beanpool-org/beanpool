@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Nachrichten, Gruppen und deren Chats, Leute und Freunde, Event-Chats, Stummschalten, Erwähnungen und geänderte Schlüssel.",
-        "sourceHash": "e680a96492c72e47"
+        "text": "Nachrichten, Sprachnachrichten, das Forum, Gruppen und deren Chats, Leute und Freunde, Event-Chats, Stummschalten, Erwähnungen und geänderte Schlüssel.",
+        "sourceHash": "0d1deaefb627a1e9"
       }
     },
     "pulse": {
@@ -674,8 +674,8 @@
         "sourceHash": "59274c49ac87bb2f"
       },
       "summary": {
-        "text": "Den Moderatoren deiner Community einen Beitrag, ein Event, einen Puls-Beitrag, ein Projekt oder einen Betrieb melden.",
-        "sourceHash": "4b773ef8eef237fa"
+        "text": "Den Moderatoren deiner Community einen Beitrag, ein Event, einen Puls-Beitrag, ein Projekt, einen Betrieb, eine Nachricht in einem Chat oder einen Beitrag im Forum melden.",
+        "sourceHash": "776b105137480ade"
       }
     },
     "notifications": {
@@ -762,6 +762,34 @@
       "help": {
         "text": "Deine Angebote unter einem Namen. Gib ihm einen Namen, sag, was für ein Shop er ist, schließe ihn vorübergehend oder ganz.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "forum": {
+      "title": {
+        "text": "Das Forum",
+        "sourceHash": "b82e3eeaaa246390"
+      },
+      "summary": {
+        "text": "Themen mit Titel und Antworten darunter, in Bereichen, für die Mitglieder deiner Community. Wo du es findest, Beiträge schreiben, das erste Thema einer neuen Person in der globalen Community, einem Thema folgen und wer es lesen kann.",
+        "sourceHash": "584d9e9d8e32ba45"
+      },
+      "help": {
+        "text": "Themen und Antworten für deine Community. Tippe oben im Chat auf Forum. Der Server hält die Worte: Es ist nicht verschlüsselt wie ein Chat mit einer Person.",
+        "sourceHash": "4c2967ddbdd326d2"
+      }
+    },
+    "voice-messages": {
+      "title": {
+        "text": "Sprachnachrichten",
+        "sourceHash": "45a7e7b9cb445ce8"
+      },
+      "summary": {
+        "text": "Nimm eine Nachricht auf, statt sie zu tippen, in einem Chat mit einer Person oder im verschlüsselten Chat einer Gruppe. Wo du eine senden kannst, Zuhören, wie lange der Server sie aufbewahrt und was privat bleibt.",
+        "sourceHash": "1d56fd61c4d9e5e8"
+      },
+      "help": {
+        "text": "Halte das Mikrofon zum Aufnehmen und lass zum Senden los. Nach links wischen bricht ab, nach oben sperrt. Bis zu 3 Minuten. Der Server behält sie 30 Tage.",
+        "sourceHash": "a4c99f83c66ae115"
       }
     }
   }

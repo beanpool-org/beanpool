@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Ujumbe, vikundi na soga zao, watu na marafiki, soga za matukio, kunyamazisha, kutaja, na ufunguo uliobadilika.",
-        "sourceHash": "e680a96492c72e47"
+        "text": "Ujumbe, jumbe za sauti, jukwaa, vikundi na soga zao, watu na marafiki, soga za matukio, kunyamazisha, kutaja, na ufunguo uliobadilika.",
+        "sourceHash": "0d1deaefb627a1e9"
       }
     },
     "pulse": {
@@ -674,8 +674,8 @@
         "sourceHash": "59274c49ac87bb2f"
       },
       "summary": {
-        "text": "Waambie wasimamizi wa jumuiya yako kuhusu tangazo, tukio, chapisho la Mwenendo, au mradi.",
-        "sourceHash": "4b773ef8eef237fa"
+        "text": "Waambie wasimamizi wa jumuiya yako kuhusu chapisho, tukio, chapisho la Mwenendo, mradi, biashara, ujumbe kwenye gumzo au chapisho kwenye jukwaa.",
+        "sourceHash": "776b105137480ade"
       }
     },
     "notifications": {
@@ -762,6 +762,34 @@
       "help": {
         "text": "Ofa zako chini ya jina moja. Lipe jina, sema ni aina gani, lifunge kwa sasa, au lifunge kabisa.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "forum": {
+      "title": {
+        "text": "Jukwaa",
+        "sourceHash": "b82e3eeaaa246390"
+      },
+      "summary": {
+        "text": "Mada zenye kichwa na majibu chini yake, katika sehemu, kwa wanachama wa jumuiya yako. Mahali lilipo, kuchapisha, mada ya kwanza ya mtu mpya kwenye jumuiya ya kimataifa, kufuatilia mada, na nani anaweza kulisoma.",
+        "sourceHash": "584d9e9d8e32ba45"
+      },
+      "help": {
+        "text": "Mada na majibu kwa jumuiya yako. Gusa Jukwaa juu ya Gumzo. Seva yake ndiyo inayoshika maneno: halijafungwa kama gumzo la mtu mmoja.",
+        "sourceHash": "4c2967ddbdd326d2"
+      }
+    },
+    "voice-messages": {
+      "title": {
+        "text": "Jumbe za sauti",
+        "sourceHash": "45a7e7b9cb445ce8"
+      },
+      "summary": {
+        "text": "Rekodi ujumbe badala ya kuuandika, kwenye gumzo na mtu mmoja au gumzo lililofungwa la kikundi. Mahali unapoweza kutuma, kusikiliza, seva inauhifadhi kwa muda gani, na nini kinabaki cha faragha.",
+        "sourceHash": "1d56fd61c4d9e5e8"
+      },
+      "help": {
+        "text": "Shikilia maikrofoni ili kurekodi na uachilie ili kutuma. Telezesha kushoto kughairi, juu kufunga. Hadi dakika 3. Seva huuhifadhi siku 30.",
+        "sourceHash": "a4c99f83c66ae115"
       }
     }
   }

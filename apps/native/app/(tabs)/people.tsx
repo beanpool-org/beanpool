@@ -26,7 +26,7 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
-import { LOCAL_COMMUNITY_LINES, MEMBER_SORT_WORDS, billsOn, formatDate, formatNumber, inviteBillAfter, inviteBillAnswerOf, inviteBillToSend, inviteRevokeWords, inviteShareText, offersInviteAsk, shareAddress, t, tn, word, vouchPresets, type InviteBillAnswer, type InviteBillHeld, type InviteRowSource, type MemberSort, type WaitingVoucherRow, type WordKey } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, MEMBER_SORT_WORDS, billsOn, formatDate, formatNumber, inviteBillAfter, inviteBillAnswerOf, inviteBillToSend, inviteRevokeWords, inviteShareText, isBusyAnswer, listWithInvite, BUSY_CODE, offersInviteAsk, shareAddress, t, tn, word, vouchPresets, type InviteBillAnswer, type InviteBillHeld, type InviteRowSource, type MemberSort, type WaitingVoucherRow, type WordKey } from '@beanpool/core';
 import { fetchPeekCommunityName } from '../../utils/peek';
 import { shareCommunityName } from '../../utils/invite-share-name';
 import { Sentence } from '../../components/Sentence';
@@ -643,7 +643,7 @@ export default function PeopleScreen() {
         };
         setMadeCard({ who: forName, invite: inviteObj });
         setMakeAnother(false);
-        const updated = [inviteObj, ...invites];
+        const updated = listWithInvite(invites, inviteObj);
         setInvites(updated);
         await AsyncStorage.setItem(`bp_offline_invites_${identity.publicKey}`, JSON.stringify(updated));
         inviteNames.reset();
@@ -722,7 +722,8 @@ export default function PeopleScreen() {
                         const inviteObj: InviteRowSource & { createdBy: string } = {
                             code,
                             createdBy: identity.publicKey,
-                            createdAt: new Date().toISOString(),
+                            // The node's: a retry's answer is the invite made the first time, and its days run from then.
+                            createdAt: typeof data.invite.createdAt === 'string' ? data.invite.createdAt : new Date().toISOString(),
                             intendedFor: madeFor || undefined,
                             ...(madeVouch !== null ? { vouchAmount: madeVouch } : {}),
                             ...(data.invite.bill ? { bill: { whatFor: data.invite.bill.whatFor, amount_c: data.invite.bill.amount_c } } : {}),
@@ -730,8 +731,10 @@ export default function PeopleScreen() {
                         clearBill();
                         setMadeCard({ who: madeFor.trim() || null, invite: inviteObj });
                         setMakeAnother(false);
-                        
-                        const updated = [inviteObj, ...invites];
+
+                        // Once, by its code: a retry answered with an invite Pending already holds (re-read from the node
+                        // after a lost answer) replaces its row, never a second copy (core listWithInvite).
+                        const updated = listWithInvite(invites, inviteObj);
                         setInvites(updated);
                         await AsyncStorage.setItem(`bp_offline_invites_${identity.publicKey}`, JSON.stringify(updated));
                         setGenerating(false);
@@ -742,7 +745,8 @@ export default function PeopleScreen() {
                     }
                 } else {
                     // The node takes no invites (this phone's copy of its profile was older than the switch): say so, and
-                    // make no offline ticket, which it would refuse just the same.
+                    // make no offline ticket, which it would refuse just the same. Only the invites' own `feature_off`: a
+                    // bill's (`bills`, switched off after this phone read the node) is the bill's refusal below.
                     const body = await res.json().catch(() => null);
                     const refusal = invitesOffRefusal(res.status, body, nodeProfile?.features);
                     if (refusal) {
@@ -767,10 +771,12 @@ export default function PeopleScreen() {
                     }
                     // A refused vouch shows the node's sentence and makes no ticket:
                     const serverMsg = typeof body?.error === 'string' && body.error ? body.error : typeof body?.message === 'string' && body.message ? body.message : null;
-                    // With a bill, a refusal the node words is shown as it said it; any other answer (a 5xx, a page that
-                    // isn't the node's) may have made it. No ticket either way.
+                    // A refusal the node words (or a busy network's 429, which never reached it) is shown as it said it; any
+                    // other answer (a 5xx, a page that isn't the node's) may have made it (core inviteBillAnswerOf).
+                    const answer = inviteBillAnswerOf(res.status, serverMsg, isBusyAnswer(res.status, body) ? BUSY_CODE : body?.code, body === null, body?.feature);
+                    // With a bill, no ticket either way.
                     if (bill) {
-                        billNotMade(inviteBillAnswerOf(res.status, serverMsg, body?.code, body === null));
+                        billNotMade(answer);
                         return;
                     }
                     if (chosenVouch !== null && serverMsg) {
@@ -779,6 +785,12 @@ export default function PeopleScreen() {
                     }
                     if (chosenVouch !== null) {
                         Alert.alert(t('Could not vouch'), t(vouchPresets.noOfflineVouch));
+                        return;
+                    }
+                    // Refused (a limit, a door, a switch): its own words, and no offline ticket, which the node would refuse
+                    // at the join or which would get round the limit it just named. The phone is online: never "offline".
+                    if (answer.kind === 'refused') {
+                        Alert.alert(t('Invite not made'), answer.words);
                         return;
                     }
                 }
@@ -831,7 +843,7 @@ export default function PeopleScreen() {
             setMadeCard({ who: ticketFor?.trim() || null, invite: inviteObj });
             setMakeAnother(false);
             
-            const updated = [inviteObj, ...invites];
+            const updated = listWithInvite(invites, inviteObj);
             setInvites(updated);
             await AsyncStorage.setItem(`bp_offline_invites_${identity.publicKey}`, JSON.stringify(updated));
         } catch (e: any) {

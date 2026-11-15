@@ -8,7 +8,7 @@
  * admin there makes none either, and is told so in plain words. Their role is the node's answer, never a tier.
  */
 
-import { t, word } from '@beanpool/core';
+import { isInvitesOffAnswer, t, word } from '@beanpool/core';
 import { invitesOn, wordsDoorOn, type NodeFeatures } from './node-profile';
 
 /** What the share sheet sends: the community's plain address, which opens its front door. */
@@ -45,13 +45,14 @@ export function bringSomeoneHereText(features: NodeFeatures | null | undefined):
 }
 
 /**
- * The node's answer to a generate when it takes no invites (404 `feature_off`), in its own words, or null for any
- * other answer. A phone that hadn't heard the switch yet (an old copy of the node's profile) asks anyway; this stops
- * the screen falling back to an offline ticket, which the node would refuse just the same.
+ * The node's answer to a generate when it takes no invites (404 `feature_off` for the `invites` switch), in its own words,
+ * or null for any other answer: a bill's own `feature_off` (`bills`) included (core isInvitesOffAnswer). A phone that hadn't
+ * heard the switch yet (an old copy of the node's profile) asks anyway; this stops the screen falling back to an offline
+ * ticket, which the node would refuse just the same.
  */
 export function invitesOffRefusal(status: number, body: unknown, features?: NodeFeatures | null): string | null {
-    const b = body as { code?: unknown; error?: unknown } | null | undefined;
-    if (status !== 404 || !b || typeof b !== 'object' || b.code !== 'feature_off') return null;
+    const b = body as { code?: unknown; feature?: unknown; error?: unknown } | null | undefined;
+    if (!b || typeof b !== 'object' || !isInvitesOffAnswer(status, b.code, b.feature)) return null;
     return typeof b.error === 'string' && b.error.trim() ? b.error : invitesOffFallback(features);
 }
 

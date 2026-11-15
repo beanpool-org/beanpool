@@ -805,6 +805,16 @@
         "text": "Deine privaten Kontakte. Nur du kannst die Liste öffnen. Hole Leute vom Telefon oder aus einer Kontaktdatei, füge jemanden von Hand hinzu oder lade ihn ein.",
         "sourceHash": "783e4da3badc2f05"
       }
+    },
+    "bills": {
+      "title": {
+        "text": "Rechnungen",
+        "sourceHash": "245ad028f7d23252"
+      },
+      "summary": {
+        "text": "Jemanden bitten, dir für etwas Bohnen zu zahlen. Eine Rechnung bezahlt sich nie von selbst: Die andere Person entscheidet, ob sie zahlt. Vorerst kann eine Rechnung zu einer Einladung gehören.",
+        "sourceHash": "18291f51ed018672"
+      }
     }
   }
 }

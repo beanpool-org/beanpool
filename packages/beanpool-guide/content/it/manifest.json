@@ -805,6 +805,16 @@
         "text": "I tuoi contatti privati. Solo tu puoi aprire l'elenco. Porta dentro le persone dal telefono o da un file di contatti, aggiungi qualcuno a mano o invitalo.",
         "sourceHash": "783e4da3badc2f05"
       }
+    },
+    "bills": {
+      "title": {
+        "text": "Fatture",
+        "sourceHash": "245ad028f7d23252"
+      },
+      "summary": {
+        "text": "Chiedere a qualcuno di pagarti dei fagioli per qualcosa. Una fattura non si paga mai da sola: l'altra persona sceglie se pagare. Per ora, una fattura può accompagnare un invito.",
+        "sourceHash": "18291f51ed018672"
+      }
     }
   }
 }

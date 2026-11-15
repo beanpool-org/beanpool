@@ -805,6 +805,16 @@
         "text": "Seus contatos privados. Só você pode abrir a lista. Traga pessoas do seu celular ou de um arquivo de contatos, adicione alguém à mão ou convide.",
         "sourceHash": "783e4da3badc2f05"
       }
+    },
+    "bills": {
+      "title": {
+        "text": "Cobranças",
+        "sourceHash": "245ad028f7d23252"
+      },
+      "summary": {
+        "text": "Pedir a alguém que pague feijões a você por alguma coisa. Uma cobrança nunca se paga sozinha: a outra pessoa decide se paga. Por enquanto, uma cobrança pode ir junto com um convite.",
+        "sourceHash": "18291f51ed018672"
+      }
     }
   }
 }

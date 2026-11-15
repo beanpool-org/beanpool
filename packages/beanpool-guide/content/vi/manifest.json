@@ -805,6 +805,16 @@
         "text": "Danh bạ riêng của bạn. Chỉ bạn mở được danh sách. Đưa người từ điện thoại hoặc tệp danh bạ vào, thêm ai đó thủ công, hoặc mời họ.",
         "sourceHash": "783e4da3badc2f05"
       }
+    },
+    "bills": {
+      "title": {
+        "text": "Hóa đơn",
+        "sourceHash": "245ad028f7d23252"
+      },
+      "summary": {
+        "text": "Nhờ ai đó trả đậu cho bạn vì một việc gì đó. Hóa đơn không tự trả; người nhận tự quyết định có trả hay không. Hiện tại, hóa đơn có thể đi kèm một lời mời.",
+        "sourceHash": "18291f51ed018672"
+      }
     }
   }
 }

@@ -805,6 +805,16 @@
         "text": "Özel kişi listeniz. Listeyi yalnızca siz açabilirsiniz. İnsanları telefonunuzdan veya bir kişi dosyasından getirin, birini elle ekleyin ya da davet edin.",
         "sourceHash": "783e4da3badc2f05"
       }
+    },
+    "bills": {
+      "title": {
+        "text": "Ödeme isteği",
+        "sourceHash": "245ad028f7d23252"
+      },
+      "summary": {
+        "text": "Birinden size bir şey karşılığında fasulye ödemesini istemek. Ödeme isteği kendiliğinden ödenmez; ödeyip ödemeyeceğine karşı taraf karar verir. Şimdilik bir ödeme isteği bir davetle birlikte gidebilir.",
+        "sourceHash": "18291f51ed018672"
+      }
     }
   }
 }

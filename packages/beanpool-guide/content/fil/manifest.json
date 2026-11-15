@@ -805,6 +805,16 @@
         "text": "Ang iyong mga pribadong contact. Ikaw lang ang makakabukas ng listahan. Magdala mula sa telepono o contacts file, magdagdag nang mano-mano, o mag-imbita.",
         "sourceHash": "783e4da3badc2f05"
       }
+    },
+    "bills": {
+      "title": {
+        "text": "Mga singil",
+        "sourceHash": "245ad028f7d23252"
+      },
+      "summary": {
+        "text": "Paghiling sa isang tao na bayaran ka ng munggo para sa isang bagay. Hindi nagbabayad nang kusa ang singil; ang tao ang pipili kung magbabayad. Sa ngayon, puwedeng sumama ang singil sa isang imbitasyon.",
+        "sourceHash": "18291f51ed018672"
+      }
     }
   }
 }

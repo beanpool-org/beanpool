@@ -2,7 +2,7 @@
 slug: standing-deals
 title: Standing deals
 summary: Paying for something by the week or the month. Each week or month is paid when it starts, nothing is held, and either of you can stop it.
-related: a-deal-step-by-step, my-deals, when-a-deal-goes-wrong, posting, credit-line, holiday-mode, notifications
+related: a-deal-step-by-step, my-deals, when-a-deal-goes-wrong, posting, credit-line, holiday-mode, notifications, bills
 ---
 
 ## What a standing deal is
@@ -27,6 +27,7 @@ A one-off deal holds the payer's Beans in trust until the job is done. A standin
 - Under **How long?** choose **Until one of us stops it**, or **For 6 months** (or weeks). The **−** and **+** change the number, from 1 to 52.
 - Under **Start:** choose **Today**, or **Up to 30 days ahead** and use the **−** and **+** to pick the day.
 - Read the lines under that. They say what happens now, such as **50 Beans go to Rob now for the first month (9 Nov – 9 Dec), then 50 at the start of each month, until one of you stops it.** If you chose a later start, the first period is still paid when you tap Agree, and it covers the period that begins on your start day.
+- The last lines are about being short: **If you're short when a month is due, you'll be told a few days before.** and **Short one month? You can ask Rob to lower it.** (On a weekly deal: **the day before** and **Short one week?**) See "A short week: paying less for one period" below.
 - Tap **Agree and pay 50 Beans**. Or tap **Cancel** and nothing happens.
 
 Your phone (or your browser) signs one agreement with your key when you tap Agree. It names the amount, the week or month, how many, who is paid and the start day. Your community's server can only pay exactly that: never more, never more often, never past the count, never to anyone else.
@@ -45,7 +46,7 @@ The post shows the deal, so you never have to look for it, in the phone app and 
 
 - **The payer sees:** **🔁 Standing deal since 9 Nov · 50 Beans a month**, then **This month's 50 went to Rob on 9 Nov · the next 50 go on 9 Dec**. If you chose a number, it also says **Month 3 of 6**.
 - **The provider sees:** **Marty's standing deal · 50 Beans a month · paid for this month on 9 Nov · next on 9 Dec**.
-- Both have **Stop…** and **Message**. Nothing else: no Release, no Cancel, no Hold back.
+- Both have **Stop…** and **Message**. Under the line, on the post, there is one more quiet link for lowering a period: **Ask to pay less next month…** for the payer, **Lower next month…** for the provider. See "A short week: paying less for one period" below. There is no Release, no Cancel and no Hold back.
 
 A standing deal that is running well never adds to the red number on **Your deals** or to the count on the bell: it is not waiting on anyone.
 
@@ -113,6 +114,44 @@ A short deal is a step for the payer, so while it is short:
 - The line rewrites its own days each day. **✕** and **Clear all** do not remove it. It goes by itself when the period is paid, or the deal is stopped or ended. Tap it to open the deal.
 - Each alert above is also kept as a notice in the bell, under **Needs you**. You can clear these, and they go by themselves after 7 days. On your lock screen an alert says only **There is news on one of your trades.** The words are in the bell. See "Notifications".
 
+## A short week: paying less for one period
+
+One week or month of a standing deal can cost less than its price, from 0 Beans up. The provider can lower it alone. The payer can ask, and the provider says yes or no. It is always one period at a time: the one due next, or, while the deal is short, the one that couldn't be paid. Never a period already paid, and not on a deal that is stopping or has reached its last period. The period after costs the full price again by itself.
+
+A lowered period **counts as paid in full** in the app. The dates don't move, the deal carries on, and nothing more is owed through the app for it. Anything else the two of you agree for that period is between you: BeanPool keeps no record of it.
+
+**The provider lowers it.**
+
+- On the post, tap **Lower next month…** (**Lower this month…** while the deal is short; on a weekly deal, **week**).
+- A sheet, **Lower next month?**, offers half of what it costs now, such as **25 Beans (half)**, then **0 Beans** and **Another amount**. It says **Marty pays this instead of 50 Beans for the month from 9 Dec, and that month counts as paid in full here. You can lower it again, not raise it back. The month after is 50 Beans again.**
+- Tap **Lower to 25 Beans**, or **Cancel**. It holds at once.
+- The payer gets an alert, a notice in the bell and a line in the deal's chat: **Rob lowered the month from 9 Dec of Vehicle Storage to 25 Beans. It counts as paid in full here.**
+
+**The payer asks.**
+
+- On the post, tap **Ask to pay less next month…** (**…this month…** while the deal is short).
+- A sheet, **Ask to pay less?**, says **Vehicle Storage · the month from 9 Dec · 50 Beans**, with the same choices. It says **Rob has to say yes. Until then nothing changes: the full 50 Beans go on 9 Dec if you have them.** (While the deal is short: **…we keep trying for the full 50 Beans until 24 Dec.**) And: **If Rob says yes, that month counts as paid in full here. Anything else you two agree is between you; BeanPool keeps no record of it.**
+- Tap **Ask Rob**, or **Cancel**. Your card then says **You asked to pay 25 Beans for the month from 9 Dec · waiting for Rob**, with **Take it back**.
+- One ask can wait at a time, and you can ask about one period 3 times at most. After the third, the link is gone until the next period.
+
+**The provider answers.** The provider gets an alert and a line under **Needs you**, amber and counted, because it is their step: **Marty asks to pay 25 Beans, not 50, for the month from 9 Dec of Vehicle Storage.** Their card says **⚠️ Marty asks to pay 25 Beans for the month from 9 Dec**, with **Answer**. The sheet says **25 Beans instead of 50** and **If you say yes, that month counts as paid in full here: nothing more is owed through the app for it. The month after is 50 Beans again.**
+
+- **Yes, 25 Beans**: the payer gets an alert, a notice and a chat line: **Rob said yes: the month from 9 Dec of Vehicle Storage is 25 Beans, not 50. It counts as paid in full here.**
+- **No, keep 50**: the payer gets an alert and a notice, **Rob said no: the month from 9 Dec of Vehicle Storage stays 50 Beans.** Nothing goes in the chat.
+- While an ask waits, the provider answers it instead of lowering alone. After the answer they can lower the period again.
+- Saying nothing is not a yes. When the period is due, the full price is tried as always. If it is paid, the ask closes. If it can't be paid, the ask stays open through the grace, and the provider can still say yes. An ask that closes unanswered leaves the payer a notice in the bell, with no alert: **Your ask to pay less for the month from 9 Dec wasn't answered in time.** Stopping the deal closes an open ask without a word.
+
+**What a lowered period does.**
+
+- It is paid at its start like any other, at the lower amount, and the warning a few days before uses the lower amount too. The 1.5% fee comes off that amount. The Ledger row says **Standing deal · Vehicle Storage · month 2 · 25 of 50 Beans by agreement**, and so does the deal's line in **History** in Your deals.
+- At 0, nothing moves: no Ledger row and no fee. **History** says **Standing deal · Vehicle Storage · month 2 · 0 of 50 Beans by agreement**.
+- The cards say so. Before it is due, the payer reads **…· next month is 25 Beans by agreement, on 9 Dec**. Once it is paid: **This month's 25 went to Rob on 9 Dec (by agreement, not 50) · the next 50 go on 9 Jan**, and the provider reads **Marty's standing deal · 50 Beans a month · paid for this month on 9 Dec: 25 by agreement · next 50 on 9 Jan**. At 0: **This month is 0 Beans by agreement · the next 50 go on 9 Jan**.
+- **In the grace**, a lowering or a yes pays the lower amount at once if the payer's room covers it, and at 0 the period is simply paid. If the room doesn't cover it, the deal stays short at the lower amount, with the same last day. From then on the reminders, the **Needs you** lines and what has to arrive all use the lower amount. Beans that reach the payer while an ask still waits for an answer pay the full price at once, as always.
+- A lowered period can be lowered again, never raised back.
+- While an ask waits, its line is on the deal's card in **Your deals** too. Tap the card to open the post, where **Answer** and **Take it back** are.
+
+Lowering moves fewer Beans; it never makes any. Nothing here buys or sells Beans.
+
 ## Other ways it ends
 
 - **The count runs out.** You are told when the last period is paid, and it ends on the day that period ends: **Vehicle Storage: the last month of this standing deal is paid. It ends on 9 Jun.**
@@ -121,6 +160,19 @@ A short deal is a step for the payer, so while it is short:
 - **Either of you deletes your account, or is removed from the community.** The deal ends at once.
 - **The server was away.** If it is off for a short time, the period is paid when it is back, with the dates unchanged. If a whole week or month goes by with nobody to pay it, nothing is paid for it and the deal ends. Both are told: **This community's server was away for longer than a whole period, so the standing deal for Vehicle Storage has ended and nothing was paid for it. Talk to each other, and take it up again if you both want to.**
 - **It cannot go on.** If something no longer allows it, it ends and both are told: **The standing deal for Vehicle Storage can't carry on, so it has ended. Nothing more will be paid.**
+
+## Pricing by the week or month
+
+Before you post a weekly or monthly price, work out what the payer can really earn in Beans. A rough guide is 40 Beans an hour of someone's time.
+
+- **200 Beans a week is about 5 hours of work** that the payer has to sell to other members, every week, for as long as the deal runs: 10,400 Beans a year. To have 200 left after the 1.5% fee on their own sales, they need to sell about 203.
+- **A credit line covers a few weeks, once.** It is not an income: Beans spent from it are gone until they are earned back. With no live Offer, none of it is open, and **Agree** is greyed out. One live Offer opens the first 200 of credit someone earned, which is one week at 200. A confirmed member's known floor, 1,000 Beans unless your community chose another amount, is five weeks. The deepest line, 2,000 Beans unless your community chose more, is ten weeks. See "Your credit line".
+- **Paying one person builds little credit.** Trade with any one person counts toward trust only up to 500 Beans. See "The 500-bean partner limit".
+- **The provider has to spend it too.** At 200 a week the provider receives 197 (3 go to the Commons), over 10,000 Beans a year to spend in the community. Beans held above 200 pay the monthly circulation fee on the part above. See "The circulation fee".
+
+So put on the post the Beans you can spend and the payer can really earn, say 50 or 100 a week, and settle the rest between you outside BeanPool. Say so in the description, in your own words. Keep lowering a period for the odd bad week, not every week: it mends one week, and only the price on the post makes the deal work week after week.
+
+BeanPool only ever carries Beans. Nothing here buys Beans, sells them, or turns money into Beans.
 
 ## Good to know
 

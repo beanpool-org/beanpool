@@ -805,6 +805,16 @@
         "text": "Kontak pribadimu. Hanya kamu yang bisa membuka daftarnya. Bawa orang dari ponsel atau file kontak, tambahkan seseorang secara manual, atau undang mereka.",
         "sourceHash": "783e4da3badc2f05"
       }
+    },
+    "bills": {
+      "title": {
+        "text": "Tagihan",
+        "sourceHash": "245ad028f7d23252"
+      },
+      "summary": {
+        "text": "Meminta seseorang membayarmu dengan kacang untuk sesuatu. Tagihan tidak pernah membayar dirinya sendiri; orang itu yang memilih apakah akan membayar. Untuk saat ini, tagihan bisa disertakan pada undangan.",
+        "sourceHash": "18291f51ed018672"
+      }
     }
   }
 }

@@ -5,6 +5,14 @@ summary: What changed in the app, in plain words.
 related: home, the-bean, how-it-works, rules, faq, communities
 ---
 
+## A short week, and bills
+
+On the phone you get these with an up-to-date app; in a web browser, when your community's server is updated.
+
+- **A short week.** One week or month of a standing deal can cost less, from 0 Beans up. The provider taps **Lower next week…**, or the payer taps **Ask to pay less next week…** and the provider says yes or no. A lowered week counts as paid in full in the app, and the week after is the full price again. See "Standing deals".
+- **Pricing by the week.** "Standing deals" now says what a weekly price asks of the person paying, and how to set one they can keep up.
+- **A bill with an invite.** On **Invites**, **Add a bill for them (optional)** sends a bill with the invite, for the person to pay in Beans once they have joined. A bill never pays itself: nothing is ever taken by itself. Seeing and paying bills in the app is coming soon. See "Bills".
+
 ## BeanPool on a computer
 
 On the phone you get this with an up-to-date app; in a web browser, when your community's server is updated.

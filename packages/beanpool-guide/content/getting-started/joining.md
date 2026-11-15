@@ -3,7 +3,7 @@ slug: joining
 title: Joining BeanPool
 summary: Two ways in: a community, with an invite from a member, or the global community when it is open, with 12 secret words or one sign-in. Asking a community to let you in, and how to invite someone else.
 help: Join a community with an invite from a member, or the global community with 12 secret words or one sign-in.
-related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
+related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app, bills
 ---
 
 ## Two ways in
@@ -27,6 +27,7 @@ An invite is a link, a QR code or a code. A code looks like **INV-** followed by
 
 - An invite works **once**.
 - An invite lasts **30 days**. After that, ask for a new one.
+- An invite can come with a bill from the person who invited you, to pay in Beans once you are in. It never stops you joining, and nothing in joining shows it. See "Bills".
 - If a community has **paused joining**, it is not taking new members for now. Existing invites cannot be used while joining is paused, and members cannot make new ones. Try again once the community reopens, or ask the admins.
 
 To join:
@@ -119,6 +120,8 @@ A community's admins can turn invites off for the whole community.
 - If you stop being a voucher before they join, they still join, with no credit line.
 - A ticket made without a connection cannot carry a vouch.
 - There are no vouchers where a community has no Beans, so the global community does not show this.
+
+**A bill on an invite.** Where your community has Beans, **Invites** also has **Add a bill for them (optional)**: what it is for and how many Beans, for the person to pay once they have joined. Nothing is taken by itself: they choose whether to pay. The message you share says you have sent them a bill, never how much. A ticket made without a connection can't carry one. See "Bills".
 
 **Vouching for someone already inside.** A voucher can also vouch for a member who has already joined: open their profile and tap **Vouch for @name**, choosing from the same presets (**25**, **50**, **75** or **100** Beans, and **200** or **500** for an owner) from your budget. You can only vouch for each person once, though you can later raise your vouch for them up to 100 in total (500 for an owner). At most 3 vouchers may vouch for the same person (up to 300 Beans total). Once an owner has vouched for someone, they can hold up to 500 Beans of vouches in all, and an owner can top up someone who already has 3 vouchers, to 500 at most. You cannot vouch for someone who is below zero: hardship help goes through credit-line gifts or community Decisions.
 

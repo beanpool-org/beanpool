@@ -11912,6 +11912,12 @@ export function postGroupThreadMessage(groupId: string, authorPubkey: string, li
     return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, line, clientId);
 }
 
+/** A guest's line from another community (engine/group-guests.ts takeGuestItem, which checked they are in): as a member's. */
+export function postGuestGroupLine(groupId: string, guestKey: string, line: GroupLineIn, clientId?: string): EventThreadMessage {
+    assertGroupNotClosed(groupId);
+    return postGroupThreadMessageEngine(getMessagingCb(), groupId, guestKey, line, clientId, { guest: true });
+}
+
 export function removeGroupThreadMessage(groupId: string, messageId: string, actorPubkey: string): EventThreadMessage {
     assertGroupActorIsMember(actorPubkey);
     return removeGroupThreadMessageEngine(getMessagingCb(), groupId, messageId, actorPubkey);

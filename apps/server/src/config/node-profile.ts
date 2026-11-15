@@ -199,6 +199,14 @@ export interface ProfileSwitches {
      *  that is no member here, and a member's send is refused. The owners' setting under How this community works
      *  (`outsideMessages`) is this switch's override. */
     outsideMessages: boolean;
+    /** Groups may invite guests from other communities (slice G1: engine/group-guests.ts; scratch/fable-design/
+     *  DESIGN-cross-chat-voice-fable.md §4.2, DESIGN-forums-messaging-joint-fable.md §2.3): a convenor may invite someone from
+     *  another community into a group's chat, by their address card; they read and write the chat and nothing else of the
+     *  group. On by default on every kind (design §4.2: "on by default"). Their lines ride the mailbox, so guests also need
+     *  `outsideMessages` on. Off: no invitation goes out and none is taken, every guest in a group here is removed and their
+     *  home told, as at a convenor's Remove. The owners' setting under How this community works (`groupGuests`) is this
+     *  switch's override. */
+    groupGuests: boolean;
     /** A member may share one listing or event outside the community: a link that opens that post, under the
      *  visitors' rules (the engine's guestPost), to whoever holds it, for seven days or until the member stops it
      *  (engine/peek-tickets.ts; front doors S6, DESIGN-entry-points-fable.md §3.4, Marty 2026-10-27). On (a local
@@ -272,6 +280,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         retention: false,
         dmRequests: false,
         outsideMessages: true,
+        groupGuests: true,
         shareOutside: true,
         knowledge: true,
         bills: true,
@@ -327,6 +336,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         dmRequests: true,
         // On, as on every kind (decided 1 Nov 2026): a line from outside is always a request on the phone, whatever this says.
         outsideMessages: true,
+        // On, as on every kind (design §4.2): a guest in a group here reads and writes its chat only.
+        groupGuests: true,
         // Its listings are a visitor's read already (guestListingsOnly): a plain link to one shows it to anyone.
         shareOutside: false,
         // Not a place (Marty, 11 Nov 2026): Local knowledge lives in a local community; global previews it (showcase).
@@ -420,6 +431,9 @@ export interface NodeFeatures {
      *  what waits for them (GET /api/mail). Absent (switched off, or a server from before it): nothing from outside is
      *  taken, and the apps offer no outside chat. */
     outsideMessages?: true;
+    /** Present, and true, only where `groupGuests` and `outsideMessages` are both on: a convenor may invite someone from
+     *  another community into a group's chat (POST /api/groups/:id/guests). Absent: the apps offer no invitation. */
+    groupGuests?: true;
     /** Present only on member-authenticated reads (GET /api/community/me, GET /api/home) when Beans and the confirmation
      *  dial are on: the community's known floor amount (design §4.2, §4.3, §6.2, S5). Absent for non-members and on public info. */
     knownFloor?: number;
@@ -732,6 +746,7 @@ export function getNodeFeatures(): NodeFeatures {
         ...(s.openMembership ? { openMembership: true as const } : {}),
         ...(s.dmRequests ? { dmRequests: true as const } : {}),
         ...(s.outsideMessages ? { outsideMessages: true as const } : {}),
+        ...(s.groupGuests && s.outsideMessages ? { groupGuests: true as const } : {}),
         ...(s.shareOutside ? { shareOutside: true as const } : {}),
         ...(askedPushSent(getNodeProfile(), s.beans) ? { askedPush: true as const } : {}),
         ...(s.knowledge ? { knowledge: true as const } : {}),

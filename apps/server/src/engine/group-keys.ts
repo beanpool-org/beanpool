@@ -17,6 +17,7 @@
 import { db } from '../db/db.js';
 import { isNodeMember } from '@beanpool/engine';
 import { formerKeysReader } from './key-succession.js';
+import { fanOutGroupEpoch } from './group-guests.js';
 import {
     verifyGroupEpochRecord, verifyGroupTopUp, groupEpochCoversExactly, groupMembersDigest, GroupKeyNotVerifiedError,
     type GroupEpochReason, type GroupEpochRecord, type GroupKeyWrap, type GroupTopUp,
@@ -48,10 +49,15 @@ interface EpochRow {
     key_commit: string; members_digest: string; wraps_digest: string; sig: string; stored_at: string; stale_since: string | null;
 }
 
-/** The active members an epoch of this group must cover, sorted: active rows whose key is a member of this node. */
+/**
+ * The keys an epoch of this group must cover, sorted: active rows whose key is a member of this node, and the guests from
+ * other communities who are in its chat (group_guests state 'in', engine/group-guests.ts G1). A guest leaving or removed
+ * leaves the roster, so the epoch goes stale and the next is wrapped without them.
+ */
 export function groupKeyRoster(groupId: string): string[] {
     const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(groupId) as { member_pubkey: string }[];
-    return rows.map((r) => r.member_pubkey).filter((pk) => isNodeMember(db, pk)).sort();
+    const guests = db.prepare("SELECT guest_key FROM group_guests WHERE group_id = ? AND state = 'in'").all(groupId) as { guest_key: string }[];
+    return [...new Set([...rows.map((r) => r.member_pubkey).filter((pk) => isNodeMember(db, pk)), ...guests.map((g) => g.guest_key)])].sort();
 }
 
 function epochRow(groupId: string, epoch: number): EpochRow | undefined {
@@ -194,6 +200,8 @@ export function storeGroupEpoch(
     const wrap = db.prepare(`INSERT INTO group_key_wraps (group_id, epoch, recipient_pubkey, wrapper_pubkey, eph_pub, nonce, wrapped, sig, created_at, updated_at)
                              VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`);
     for (const w of record.wraps!) wrap.run(groupId, record.epoch, w.recipient, record.createdBy, w.ephPub, w.nonce, w.wrapped, now, now);
+    // To each community with guests in the chat, their wraps only (engine/group-guests.ts): queued in this transaction.
+    fanOutGroupEpoch(groupId, record.epoch);
     return { epoch: record.epoch };
 }
 

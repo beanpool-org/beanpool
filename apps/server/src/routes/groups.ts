@@ -44,6 +44,7 @@ import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } fr
 import { circleCardFor } from '../engine/place-circles.js';
 import { pendingGroupInvites } from '../engine/group-invites.js';
 import { groupInvitationsFor } from '../engine/group-invitations.js';
+import { GROUP_GUESTS_MAX, GroupGuestError, groupGuestsOn, inviteGroupGuest, listGroupGuests, removeGroupGuest } from '../engine/group-guests.js';
 import {
     GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getFormerGroupWraps, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rejectGroupWrap,
     rotateGroupEpoch, storeGroupTopUp,
@@ -550,6 +551,50 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             }
             ctx.status = msg.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.body = { error: memberErrorText(e, word('Failed to withdraw the invitation')) };
+        }
+    });
+
+    // 8a. Guests from other communities in the group's chat (slice G1, engine/group-guests.ts). Every route is a signed
+    // active member's, refused to anyone else exactly as the chat is (requireGroupMember); inviting and removing are a
+    // convenor's. A guest's key is no member here, so none of these, nor any other group route, answers a guest.
+    router.get('/api/groups/:id/guests', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        ctx.set('Cache-Control', 'private, no-store');
+        ctx.body = { guests: listGroupGuests(ctx.params.id, actor), max: GROUP_GUESTS_MAX, on: groupGuestsOn() };
+    });
+
+    router.post('/api/groups/:id/guests', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        const body = (ctx as any).requestBody || {};
+        try {
+            assertNotMuted(actor);
+            ctx.status = 201;
+            ctx.body = { success: true, guest: inviteGroupGuest(ctx.params.id, actor, body.card) };
+        } catch (e: any) {
+            if (e instanceof GroupGuestError) {
+                ctx.status = e.status;
+                ctx.body = { error: e.message, code: e.code };
+                return;
+            }
+            if (respondProfileRefusal(ctx, e)) return;
+            throw e;
+        }
+    });
+
+    router.delete('/api/groups/:id/guests/:key', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        try {
+            ctx.body = { success: true, guest: removeGroupGuest(ctx.params.id, actor, ctx.params.key) };
+        } catch (e: any) {
+            if (!(e instanceof GroupGuestError)) throw e;
+            ctx.status = e.status;
+            ctx.body = { error: e.message, code: e.code };
         }
     });
 

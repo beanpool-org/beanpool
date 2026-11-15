@@ -37,12 +37,18 @@ import { withheldLine } from './withheld-lines.js';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
 import { storeAttachmentColumns, type AttachmentColumns } from '../storage/image-columns.js';
 import { GROUP_PHOTO_MAX_BYTES } from '../config/writer-limits.js';
+import { fanOutGroupLine } from './group-guests.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
 const { t: tr } = wordsFor('en');
 
 // Moved to core (group-crypto.ts): the sending app detects mentions and declares them (§9). Still exported from here.
 export { detectMentions };
+
+/** A guest's name as their card gave it, for the push a line of theirs makes (engine/group-guests.ts). */
+function guestNameIn(groupId: string, key: string): string | null {
+    return (db.prepare('SELECT name FROM group_guests WHERE group_id = ? AND guest_key = ?').get(groupId, key) as { name: string } | undefined)?.name ?? null;
+}
 
 export const GROUP_THREAD_TYPE = 'group_thread';
 /** What a live chat update is about, beside a plain new message (chat parity, 2026-09-23). */
@@ -491,9 +497,12 @@ export function postGroupThreadMessage(
     authorPubkey: string,
     line: GroupLineIn,
     clientId?: string,
+    opts: { guest?: true } = {},
 ): EventThreadMessage {
     const group = loadGroupForThread(groupId);
-    assertCanWriteInGroupChat(groupId, authorPubkey);
+    // A guest from another community (engine/group-guests.ts) is no member here: the caller checked they are in this group's
+    // chat, and their photos and voice count against the guests' own day (GUEST_MEDIA_BYTES_DAY), not a member's budget.
+    if (!opts.guest) assertCanWriteInGroupChat(groupId, authorPubkey);
 
     const declared = metadataObject(line?.metadata);
     assertSealedGroupLineForm(line?.ciphertext, line?.nonce);
@@ -522,11 +531,11 @@ export function postGroupThreadMessage(
     }
     // The day's photo budget and the storage floor: after every refusal of who may write here and the idempotent retry
     // above, before anything is written (as a DM photo, engine/messaging.ts sendMessage).
-    const photoBytes = photo ? incomingPhotoBytes(photo.data) : 0;
-    if (photo) assertMayStorePhotoBytes(authorPubkey, photoBytes);
+    const photoBytes = photo && !opts.guest ? incomingPhotoBytes(photo.data) : 0;
+    if (photo && !opts.guest) assertMayStorePhotoBytes(authorPubkey, photoBytes);
 
     ensureGroupThread(groupId);
-    addParticipant(groupId, authorPubkey, new Date().toISOString());
+    if (!opts.guest) addParticipant(groupId, authorPubkey, new Date().toISOString());
 
     const mentions = filterDeclaredMentions(groupId, authorPubkey, declared.mentions);
     const msgId = clientId;
@@ -566,10 +575,13 @@ export function postGroupThreadMessage(
     // After the answer, never inside it: the push skips anyone who has blocked the author (state-engine.ts
     // dispatchPushNotification), and their badge count's work in the answer would make a line's answer faster when
     // someone in the group has blocked its author, which would tell them (#1403 review).
-    const senderName = sender?.callsign || 'A member';
+    const senderName = sender?.callsign || (opts.guest ? guestNameIn(groupId, authorPubkey) : null) || 'A member';
     setImmediate(() => {
         try { pushGroupMessage(cb, group, authorPubkey, senderName, mentions); }
         catch (e: any) { console.warn('[Push] A group line push failed:', e?.message ?? e); }
+        // To each community with guests in this chat, one request each (engine/group-guests.ts).
+        try { fanOutGroupLine(groupId, msgId, authorPubkey); }
+        catch (e: any) { console.warn('[Guests] A group line could not be sent to its guests:', e?.message ?? e); }
     });
     return msg;
 }

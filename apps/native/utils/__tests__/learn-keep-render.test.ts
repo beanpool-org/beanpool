@@ -234,6 +234,28 @@ describe('what each action sends, and what the page shows after the node answers
         expect(has('knowledge-outdated')).toBe(false);
     });
 
+    it('the node\'s answer stays shown until the copy holds that change: a sync that brings an older copy doesn\'t undo it', async () => {
+        as('checker');
+        h.pages = [page({ updatedAt: '2026-11-01T00:00:00.000Z' })];
+        await showPage();
+        const later = '2026-11-16T09:00:00.000Z';
+        const mod = await import('../db');
+        (mod.signedRequestWithMethod as any).mockImplementationOnce(async (method: string, path: string, body: any) => {
+            h.sent.push({ method, path, body });
+            return { post: { ...h.pages[0], updatedAt: later, knowledge: { ...h.pages[0].knowledge, outdatedAt: later, outdatedNote: body.note } } };
+        });
+        await click('knowledge-mark');
+        type('knowledge-mark-note', 'Closed on Mondays');
+        await click('knowledge-mark-send');
+        expect(q('knowledge-outdated')!.textContent).toContain('Closed on Mondays');
+        // An unrelated sync re-reads the copy, which doesn't hold the mark yet: the mark stays.
+        await show(createElement(KnowledgeDetail, { page: { ...h.pages[0] } }));
+        expect(q('knowledge-outdated')!.textContent).toContain('Closed on Mondays');
+        // The copy catches up (and here another admin's later word wins): the copy is shown.
+        await show(createElement(KnowledgeDetail, { page: page({ updatedAt: '2026-11-16T10:00:00.000Z' }, { outdatedAt: '2026-11-16T10:00:00.000Z', outdatedNote: 'Open again' }) }));
+        expect(q('knowledge-outdated')!.textContent).toContain('Open again');
+    });
+
     it('"Suggest a fix" and "Edit" open the form screen for this page', async () => {
         await showPage();
         expect(q('knowledge-fix')!.textContent).toBe('Something changed? Suggest a fix');

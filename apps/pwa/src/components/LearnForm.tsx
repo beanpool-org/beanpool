@@ -44,7 +44,8 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdit
     const [photos, setPhotos] = useState<string[]>(initial?.photos ?? []);
     const [note, setNote] = useState('');
     const fix = use === 'fix';
-    const wordsOnly = fix || use === 'edit';
+    // A fix, an edit and "Edit first" on a fix change words, never photos: no picker, and none sent.
+    const wordsOnly = fix || use === 'edit' || approvesFix;
     const [refusal, setRefusal] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
     // How it opened; photos (data URLs) are compared one by one, never turned into one long string on each key.

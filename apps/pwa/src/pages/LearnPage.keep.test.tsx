@@ -162,6 +162,15 @@ describe('what each action sends, and what the page shows after the node answers
         expect(screen.getByTestId('learn-post-helped').textContent).toBe('👍 Helped ✓');
     });
 
+    it('a tap made before stays shown as done after "Still right" (the node\'s answer to it never says whose taps there are)', async () => {
+        node.post = page({}, { helpedByMe: true });
+        await openAs('checker');
+        expect(screen.getByTestId('learn-post-helped').textContent).toBe('👍 Helped ✓');
+        await click('learn-post-still-right');
+        expect(screen.getByTestId('learn-post-still-right').textContent).toBe('Still right ✓');
+        expect(screen.getByTestId('learn-post-helped').textContent).toBe('👍 Helped ✓');
+    });
+
     it('"Still right": shown as done, and Checked is this month', async () => {
         await openAs('checker');
         await click('learn-post-still-right');
@@ -365,10 +374,20 @@ describe('To check: a fix with only its changed parts marked, and the pages not 
         expect(has('learn-check-one')).toBe(true);
     });
 
-    it('"Edit first" on a fix sends the words and no photos at all (the node refuses any on a fix)', async () => {
+    it('a fix whose page stopped showing says so, not "only the note"', async () => {
+        draft = fixDraft({ post: null });
+        await openPage({ target: { kind: 'check' } });
+        await click('learn-check-row');
+        expect(screen.getByTestId('learn-check-page-gone').textContent).toBe("This page of Local knowledge isn't showing any more.");
+        expect(has('learn-check-note-alone')).toBe(false);
+    });
+
+    it('"Edit first" on a fix has no photo picker, and sends the words and no photos at all (the node refuses any on a fix)', async () => {
         await openPage({ target: { kind: 'check' } });
         await click('learn-check-row');
         await click('learn-check-edit');
+        expect(screen.queryByText('Photo (optional)')).toBeNull();
+        expect(screen.getByTestId('learn-form').textContent).toContain('Approving changes the page now.');
         await click('learn-form-send');
         const approve = writes().find((w) => w.path === '/api/knowledge/drafts/f1/approve')!;
         expect(approve).toBeTruthy();

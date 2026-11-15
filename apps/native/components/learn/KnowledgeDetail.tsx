@@ -99,8 +99,9 @@ export function KnowledgeDetail({ page: held }: { page: KnowledgePage }) {
     const [marking, setMarking] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const [refusal, setRefusal] = useState<string | null>(null);
-    useEffect(() => { setAnswered(null); }, [held]);
-    const page = answered && answered.id === held.id ? answered : held;
+    // The copy has caught up once it holds this change or a later one; a sync that brings nothing newer keeps the answer.
+    const caughtUp = !!answered && !!held.updatedAt && !!answered.updatedAt && held.updatedAt >= answered.updatedAt;
+    const page = answered && answered.id === held.id && !caughtUp ? answered : held;
     const live = useLearnMode() === 'live';
     const { checks } = useLearnWriter(live, false);
     const own = !!identity?.publicKey && page.authorPublicKey === identity.publicKey;

@@ -53,14 +53,17 @@ function partText(part: KnowledgeFixPart, w: Pick<KnowledgePageWords, KnowledgeF
     return w[part] ?? '';
 }
 const partLabel = (part: KnowledgeFixPart) => ({
-    title: t('Title'), body: t('What to know'), topic: t('Topic'), place: t('Where'), sources: t('Sources'), lang: t('Language'),
+    title: t('Title'), body: t('What to know'), topic: t('Topic'), place: t('Where', undefined, 'To check: the part of a page of Local knowledge that names its place'),
+    sources: t('Sources'), lang: t('Language'),
 })[part];
 
 /** A fix's changed parts, each as "Now" (the page as it shows) beside "Suggested" (what Approve writes). */
 function FixParts({ d }: { d: KnowledgeDraftWhole }) {
     const changed = d.changed ?? [];
     const moved = new Set(d.pageChanged ?? []);
-    if (!d.post || changed.length === 0) return <p data-testid="learn-check-note-alone" className={`m-0 text-sm ${MUTED}`}>{t('Only the note: no words changed.')}</p>;
+    // The page stopped showing (taken down, hidden): nothing to compare, and Approve is refused; "Not this one" answers it.
+    if (!d.post) return <p data-testid="learn-check-page-gone" className={`m-0 text-sm ${MUTED}`}>{t("This page of Local knowledge isn't showing any more.")}</p>;
+    if (changed.length === 0) return <p data-testid="learn-check-note-alone" className={`m-0 text-sm ${MUTED}`}>{t('Only the note: no words changed.')}</p>;
     const now = d.post;
     return (
         <div data-testid="learn-check-parts" className="flex flex-col gap-2">
@@ -68,9 +71,9 @@ function FixParts({ d }: { d: KnowledgeDraftWhole }) {
                 <section key={part} data-testid={`learn-check-part-${part}`} className={PAGE_BOX}>
                     <h3 className={BOX_LABEL.muted}>{partLabel(part)}</h3>
                     {moved.has(part) && <p data-testid="learn-check-moved" className="m-0 mb-1 text-sm font-bold text-bp-ink-warning">{t('▲ The page changed here since the fix was sent.')}</p>}
-                    <p className={`m-0 text-xs font-bold ${MUTED}`}>{t('Now')}</p>
+                    <p className={`m-0 text-xs font-bold ${MUTED}`}>{t('Now', undefined, 'To check: a part of a page of Local knowledge as it shows now, beside the fix')}</p>
                     <p dir="auto" className="m-0 mb-1 text-sm whitespace-pre-wrap break-words">{partText(part, now)}</p>
-                    <p className={`m-0 text-xs font-bold ${MUTED}`}>{t('Suggested')}</p>
+                    <p className={`m-0 text-xs font-bold ${MUTED}`}>{t('Suggested', undefined, 'To check: the same part as the fix would write it')}</p>
                     <p dir="auto" className="m-0 text-sm font-bold whitespace-pre-wrap break-words">{partText(part, d)}</p>
                 </section>
             ))}

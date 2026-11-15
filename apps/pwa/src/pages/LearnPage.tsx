@@ -553,6 +553,14 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile }:
     }, [id, preview, tries]);
 
     const header = <Header title={upperCase(t(KNOWLEDGE_NAMES.kind))} label onBack={onBack} />;
+    /**
+     * The node's answer to an action redraws the page. Its answer never says whether this member tapped "This helped" (only a
+     * read of the page by id does), so the page keeps what it knew rather than reading a pressed tap as taken back.
+     */
+    const showAnswer = (next: LearnPost) => setState((prev) => {
+        const mine = prev && prev !== 'failed' ? prev.post?.knowledge.helpedByMe : undefined;
+        return { id, post: next.knowledge.helpedByMe === undefined && mine !== undefined ? { ...next, knowledge: { ...next.knowledge, helpedByMe: mine } } : next };
+    });
     /** One action: the node's answer redraws the page; its refusal is shown in its own words, and nothing else changes. */
     const act = async (go: () => Promise<unknown>, after?: () => void) => {
         if (busy) return;
@@ -560,7 +568,7 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile }:
         setRefusal(null);
         try {
             const answer = (await go()) as { post?: LearnPost } | undefined;
-            if (answer?.post?.knowledge) setState({ id, post: answer.post });
+            if (answer?.post?.knowledge) showAnswer(answer.post);
             after?.();
         } catch (e) {
             setRefusal(learnRefusalText(e));
@@ -609,7 +617,7 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile }:
                         onSend={async (input) => {
                             if (fix) { await suggestLearnFix(post, input); setFixSent(true); return; }
                             const answer = await editLearnPage(post, input);
-                            if (answer?.post?.knowledge) setState({ id, post: answer.post }); else setTries((n) => n + 1);
+                            if (answer?.post?.knowledge) showAnswer(answer.post); else setTries((n) => n + 1);
                             setEditing(null);
                         }} />
                 )}

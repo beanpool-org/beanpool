@@ -6,7 +6,9 @@
  */
 import { t, word } from '@beanpool/core';
 import { signInNames } from '../lib/join-recovery';
+import { isJoinProvider, type BeanPoolIdentity } from '../lib/identity';
 import { BoldWords } from './BoldWords';
+import { RefreshSignIn } from './RefreshSignIn';
 import { signInNamesWords, twoSentences } from './key-lines';
 
 /** The line's sentences that are said in more than one place: marked here, translated where they are shown. */
@@ -77,10 +79,21 @@ interface Props {
     phoneLater?: string[];
     /** The community keeps no copies (its rule `none`, /api/community/info `recoveryCopies`). */
     keepsNoCopies?: boolean;
+    /**
+     * Recovery S4: the sign-ins whose copy the server can't find from the sign-in alone yet (api.ts getSignInsToRefresh),
+     * each offered one Refresh under the line, with `identity`, whose ordinary Connect it runs. Only sign-ins on the node's
+     * list that a browser can use.
+     */
+    refresh?: readonly string[];
+    identity?: BeanPoolIdentity;
+    /** For tests: where Refresh leaves the page for. */
+    navigate?: (url: string) => void;
+    origin?: string;
 }
 
-export function SignInRecoveryLine({ enrolled, hasWords, phoneLater = [], keepsNoCopies = false }: Props) {
+export function SignInRecoveryLine({ enrolled, hasWords, phoneLater = [], keepsNoCopies = false, refresh = [], identity, navigate, origin }: Props) {
     if (!enrolled) return null;
+    const toRefresh = identity ? [...new Set(refresh)].filter(isJoinProvider).filter((p) => enrolled.includes(p)) : [];
     const english = signInNames(enrolled);
     const names = english ? signInNamesWords(english) : null;
     return (
@@ -117,6 +130,7 @@ export function SignInRecoveryLine({ enrolled, hasWords, phoneLater = [], keepsN
                         {hasWords ? twoSentences(t(LINE_WORDS.openers), t(LINE_WORDS.wordsOnly)) : t(LINE_WORDS.openers)}
                     </div>
                 )}
+                {identity && toRefresh.map((p) => <RefreshSignIn key={p} identity={identity} provider={p} navigate={navigate} origin={origin} />)}
                 {phoneLater.length > 0 && (
                     <div data-testid="signin-recovery-phone-later" className="mt-1.5 text-xs font-normal text-nature-600 dark:text-nature-400">
                         {phoneLater.map((line) => <p key={line} className="m-0 mt-1 first:mt-0"><BoldWords text={line} /></p>)}

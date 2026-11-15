@@ -42,11 +42,11 @@ Click the microphone to start, and stop when you are done. Then play it back, de
 
 - Tap play. Drag along the wave to move through it.
 - The speed button goes 1×, 1.5×, 2×, and remembers your choice.
-- When one ends, the next voice message in the chat that isn't yours and that you haven't played plays by itself. Only one plays at a time.
+- When one ends, the very next voice message in the chat plays by itself, if it isn't yours and you haven't played it. Only one plays at a time.
 - On the phone it plays through the speaker, even when the phone is set to silent. It stops when you leave the chat, or switch to another app. In the web app it stops when you leave the chat.
 - Nobody is told that you listened. The two blue ticks still say a message was read.
 
-Your list of chats, a chat card on Home and a quoted reply show "🎤 Voice message". An alert says only "You have a new message." (in a group, "New message in one of your groups.").
+On the phone, your list of chats shows "🎤 Voice message"; so do a chat card on Home and a quoted reply, in both apps. An alert says only "You have a new message." (in a group, "New message in one of your groups.").
 
 Voice messages can't be edited. You can delete one of yours, as any message: see "Messages".
 

@@ -24,7 +24,7 @@ Your server can make, rename, order and archive sections (12 at most), pin topic
 
 - A title up to 100 characters, the opening words up to 5,000, a reply up to 3,000, a place in words up to 80. Up to 3 photos a post, each made at most 800 px by the app, refused over the same size as a listing's photo. Up to 5 links and 5 mentions a post.
 - Each member: 10 topics and 100 replies in any 24 hours, removed ones counted. Owners and admins use the **Owner and admin limit** instead, as for posts.
-- On the global community, a new account (still on probation): 2 topics and 10 replies (1 and 5 for 12 words); its links show as plain words; its photos only in a first topic that waits; its mentions tell nobody.
+- Wherever probation is on (on the global community by default, and on a local community whose owners turn on **Limits on new accounts**), a new account: 2 topics and 10 replies (1 and 5 for 12 words); its links show as plain words; its photos only in a first topic that waits, so none where no first topic waits; its mentions tell nobody.
 - 100 searches a day a member. The count is kept in memory, so a restart starts it again.
 
 ## First looks (global community)
@@ -36,7 +36,7 @@ On the global community a new account's first topic waits for a look before anyo
 - **Known:** a member stops waiting once a moderator has put one of their topics up, their probation is over (72 hours and 3 posts still up; 7 days for 12 words; forum posts count), or they hold a role.
 - Moderators get "A first topic is waiting for a look." as an alert, under the members' **Forum** switch.
 
-A local community has no first looks and no probation: topics go up at once. Neither is a setting you can change.
+A local community has no first looks: topics go up at once, and only the server's kind sets first looks. Probation is off there unless the owners turn on **Limits on new accounts** (Settings, **People & Safety → Triage & Moderation**). Then a new account gets the smaller forum limits above, its links show as plain words, its mentions tell nobody, and it can't add photos to forum posts until its first days are over, because no first topic waits.
 
 ## Reports on forum posts
 

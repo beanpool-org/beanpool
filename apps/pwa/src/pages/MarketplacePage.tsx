@@ -850,6 +850,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // A Live Pulse chip names a listing that the browse list need not be holding — an older post, or one
     // the current filters hide. Same two steps as the deep-link above: open what we already have, else
     // ask the node once, which applies the same visibility rules it applies to every other card.
+    // A listing Your deals names by id (a deal's row, a bill's "About: … ›"), as the phone opens /post/<id>: the one in the
+    // feed, else the node's read of it by id (a filter, a search or a read by area need not hold it). One gone says so, and so
+    // does a read that failed, on the Market, never a bare page.
+    const openListingById = (postId: string, txId?: string) => {
+        const opened = (p: MarketplacePost) => { setPostLinkNotice(null); setSelectedPost(p); if (txId) setSelectedTxId(txId); };
+        const found = posts.find(p => p.id === postId);
+        if (found) { opened(found); return; }
+        const notOpened = (words: string) => { setSelectedPost(null); setPostLinkNotice(words); };
+        getMarketplacePosts({ id: postId, types: CLIENT_POST_TYPES })
+            .then(rows => { if (rows[0]) opened(rows[0]); else notOpened(t('That listing can no longer be opened. It may have been taken down.')); })
+            .catch(() => notOpened(t("That listing couldn't be loaded. Check your connection and try again.")));
+    };
+
     const openPostFromActivity = useCallback((postId: string) => {
         const found = posts.find(p => p.id === postId);
         if (found) {
@@ -1684,18 +1697,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 }
             } : undefined}
             onPostOffer={onNavigate ? () => { closeDeals(); onNavigate('map-post-offer'); } : undefined}
-            onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined}
-            onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined}
-            onNavigateToPost={async (postId, txId) => {
-                setShowDealsModal(false);
-                const found = posts.find(p => p.id === postId);
-                if (found) {
-                    setSelectedPost(found);
-                    if (txId) setSelectedTxId(txId);
-                }
+            onNearYou={onNavigate ? () => { closeDeals(); onNavigate('home'); } : undefined}
+            onGuide={onNavigate ? (slug) => { closeDeals(); onNavigate('guide', slug); } : undefined}
+            onNavigateToPost={(postId, txId) => {
+                closeDeals();
+                openListingById(postId, txId);
             }}
             onPromptReview={(review) => {
-                setShowDealsModal(false);
+                closeDeals();
                 setReviewStars(5);
                 setReviewComment('');
                 setPromptReviewForTx(review);

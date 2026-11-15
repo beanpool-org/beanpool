@@ -16,11 +16,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import {
-    billAnswerLost, billBinding, billBoundSheet, billLines, billPayRequestFor, billPaySheet, billSentRow, billToPayRow, formatDate, t,
-    type BillBalanceRead, type BillBinding, type BillPayRequest, type BillView,
+    billAnswerLost, billBalanceOf, billBinding, billBoundSheet, billDoor, billLines, billPayRequestFor, billPaySheet, billSentRow, billToPayRow,
+    formatDate, t, type BillBalanceState, type BillBinding, type BillPayRequest, type BillView,
 } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
-import { createConversationApi, declineBill, getBalance, getBills, payBill, reportBill, withdrawBill } from '../utils/db';
+import { createConversationApi, declineBill, getBills, payBill, refreshBalanceFromServer, reportBill, withdrawBill } from '../utils/db';
 import { Alert } from '../utils/keyboard-alert';
 import { blockUser, getBlockedUsers } from '../utils/blocklist';
 import { ReportReasonBox } from './ReportReasonBox';
@@ -47,6 +47,8 @@ function useBillStyles() {
         said: { color: colors.text.body, fontSize: 14, fontWeight: '700', lineHeight: 20 },
         none: { color: colors.text.secondary, fontSize: 14, textAlign: 'center', paddingVertical: 24 },
         row: { minHeight: 48, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, gap: 8 },
+        rowShown: { borderWidth: 2, borderColor: colors.text.body },
+        waitRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
         rowAccent: { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border },
         rowText: { color: colors.text.body, fontSize: 14, fontWeight: '700', lineHeight: 20 },
         rowPlain: { color: colors.text.body, fontSize: 14, lineHeight: 20 },
@@ -121,6 +123,8 @@ export function BillsPanel({ me, openBillId, onBillOpened, onMessage, onOpenPost
     const [said, setSaid] = useState<string | null>(null);
     const [withdrawing, setWithdrawing] = useState<string | null>(null);
     const [rowError, setRowError] = useState<{ id: string; line: string } | null>(null);
+    // The Sent row a door named (core billDoor), marked until the member moves on.
+    const [shown, setShown] = useState<string | null>(null);
 
     const read = useCallback(async () => {
         try {
@@ -134,12 +138,15 @@ export function BillsPanel({ me, openBillId, onBillOpened, onMessage, onOpenPost
     }, []);
     useEffect(() => { void read(); }, [read]);
 
-    // The bill a door named: opened once the first read has it; one no longer waiting says so in place of a sheet.
+    // The bill a door named, once the first read has it, on the tab of the list that holds it (core billDoor): the payer's
+    // sheet, or the sender's row on Sent (the node pushes a paid bill to its sender too); in neither, the plain line.
     useEffect(() => {
         if (!openBillId || !bills) return;
-        const b = bills.toPay.find((x) => x.id === openBillId);
-        if (b && billToPayRow(b, me, Date.now())) { setSide('to-pay'); setOpen(billBinding(b)); setSaid(null); }
-        else setSaid(billLines.notWaiting());
+        const door = billDoor(bills, openBillId, me, Date.now());
+        setSide(door.side);
+        setOpen(door.open);
+        setShown(door.open ? null : door.shown);
+        setSaid(door.said);
         onBillOpened?.();
     }, [openBillId, bills, me, onBillOpened]);
 
@@ -177,13 +184,18 @@ export function BillsPanel({ me, openBillId, onBillOpened, onMessage, onOpenPost
             <View style={s.sides} accessibilityRole="tablist">
                 {([['to-pay', billLines.toPayTab()], ['sent', billLines.sentTab()]] as const).map(([id, label]) => (
                     <Pressable key={id} accessibilityRole="tab" accessibilityState={{ selected: side === id }} testID={`bills-side-${id}`}
-                        style={[s.side, side === id && s.sideOn]} onPress={() => setSide(id)}>
+                        style={[s.side, side === id && s.sideOn]} onPress={() => { setSide(id); setShown(null); }}>
                         <Text style={[s.sideText, side === id && s.sideTextOn]}>{label}</Text>
                     </Pressable>
                 ))}
             </View>
             {!!said && <Text style={s.said} testID="bills-said" accessibilityLiveRegion="polite">{said}</Text>}
-            {failed && <Text style={s.refusal} testID="bills-failed" accessibilityRole="alert">{billLines.readFailed()}</Text>}
+            {failed && (
+                <View style={s.waitRow}>
+                    <Text style={s.refusal} testID="bills-failed" accessibilityRole="alert">{billLines.readFailed()}</Text>
+                    <Button label={billLines.tryAgain()} testID="bills-retry" onPress={() => { void read(); }} />
+                </View>
+            )}
             {side === 'to-pay' && !!bills && (toPay.length === 0
                 ? <Text style={s.none}>{billLines.noneToPay()}</Text>
                 : toPay.map(({ b, row }) => (
@@ -195,7 +207,8 @@ export function BillsPanel({ me, openBillId, onBillOpened, onMessage, onOpenPost
             {side === 'sent' && !!bills && (sent.length === 0
                 ? <Text style={s.none}>{billLines.noneSent()}</Text>
                 : sent.map((r) => (
-                    <View key={r.billId} style={s.row} testID={`bill-sent-${r.billId}`}>
+                    <View key={r.billId} style={[s.row, shown === r.billId && s.rowShown]} testID={`bill-sent-${r.billId}`}
+                        accessibilityState={shown === r.billId ? { selected: true } : undefined}>
                         <Text style={s.rowPlain}>{r.line}</Text>
                         {rowError?.id === r.billId && <Text style={s.refusal} accessibilityRole="alert">{rowError.line}</Text>}
                         {!!r.withdraw && (
@@ -215,7 +228,11 @@ export function BillSheet({ bill, me, onDone, onRefused, onClose, onMessage, onO
     onMessage?: (publicKey: string) => void; onOpenPost?: (postId: string) => void; onPostOffer?: () => void;
 }) {
     const s = useBillStyles();
-    const [balance, setBalance] = useState<BillBalanceRead | null>(null);
+    // The NODE's read of the payer's balance (refreshBalanceFromServer, as the web reads it; core billBalanceOf), never the
+    // phone's cached getBalance, which reads 0 for a missing row or tier cache and would turn Pay off on a guess (or say a
+    // false line). Pay waits on it, saying so; a failed read says so, with a retry.
+    const [balance, setBalance] = useState<BillBalanceState>('reading');
+    const [readNo, setReadNo] = useState(0);
     const [confirming, setConfirming] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -225,11 +242,14 @@ export function BillSheet({ bill, me, onDone, onRefused, onClose, onMessage, onO
 
     useEffect(() => {
         let alive = true;
-        getBalance(me).then((b: any) => {
-            if (alive) setBalance({ balance_c: b.balance_c, usableFloor_c: b.usableFloor_c ?? 0, floor_c: b.floor_c ?? 0, liveOffers: b.liveOffers ?? 0 });
-        }, () => {});
+        setBalance('reading');
+        refreshBalanceFromServer(me).then((fresh) => {
+            if (alive) setBalance(billBalanceOf(fresh) ?? 'failed');
+        }, () => {
+            if (alive) setBalance('failed');
+        });
         return () => { alive = false; };
-    }, [me]);
+    }, [me, readNo]);
 
     const sheet = billPaySheet(bill, me, balance, Date.now(), day);
     if (!sheet) return null;
@@ -281,6 +301,13 @@ export function BillSheet({ bill, me, onDone, onRefused, onClose, onMessage, onO
                 <View style={s.banner} testID="bill-stranger"><Text style={s.bannerText}>{sheet.stranger}</Text></View>
             )}
             {!!sheet.money && <Text style={s.body} testID="bill-money">{sheet.money.line}</Text>}
+            {!!sheet.balanceWait && (
+                <View style={s.waitRow}>
+                    <Text style={sheet.balanceRetry ? s.refusal : s.body} testID="bill-balance-wait"
+                        accessibilityRole={sheet.balanceRetry ? 'alert' : undefined} accessibilityLiveRegion="polite">{sheet.balanceWait}</Text>
+                    {!!sheet.balanceRetry && <Button label={sheet.balanceRetry} testID="bill-balance-retry" onPress={() => setReadNo((n) => n + 1)} />}
+                </View>
+            )}
             {!!sheet.postOffer && !!onPostOffer && (
                 <View style={s.buttons}><Button label={sheet.postOffer} testID="bill-post-offer" onPress={onPostOffer} /></View>
             )}

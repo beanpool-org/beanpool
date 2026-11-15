@@ -17,10 +17,11 @@ import { createRoot, type Root } from 'react-dom/client';
 vi.mock('react-native', () => {
     const flat = (s: unknown): Record<string, unknown> => Object.assign({}, ...[s].flat(3).filter(Boolean));
     const el = (tag: string) => (props: Record<string, any>) => {
-        const { children, onPress, accessibilityRole, testID, disabled, style } = props;
+        const { children, onPress, accessibilityRole, accessibilityState, testID, disabled, style } = props;
         const attrs: Record<string, unknown> = { 'data-style': JSON.stringify(flat(style)) };
         if (onPress && !disabled) attrs.onClick = () => onPress();
         if (accessibilityRole) attrs['data-role'] = accessibilityRole;
+        if (accessibilityState?.selected) attrs['aria-selected'] = 'true';
         if (testID) attrs['data-testid'] = testID;
         if (disabled) attrs['aria-disabled'] = 'true';
         return createElement(tag, attrs, children);
@@ -38,10 +39,12 @@ vi.mock('../../app/ThemeContext', async () => {
     return { useTheme: () => (theme.dark ? { theme: 'dark', colors: darkColors } : { theme: 'light', colors: lightColors }) };
 });
 const db = vi.hoisted(() => ({
-    getBills: vi.fn(), getBalance: vi.fn(), payBill: vi.fn(), declineBill: vi.fn(), withdrawBill: vi.fn(), reportBill: vi.fn(),
+    getBills: vi.fn(), getBalance: vi.fn(), refreshBalanceFromServer: vi.fn(), payBill: vi.fn(), declineBill: vi.fn(), withdrawBill: vi.fn(),
+    reportBill: vi.fn(), createConversationApi: vi.fn(),
 }));
 vi.mock('../db', () => db);
-vi.mock('expo-router', () => ({ router: { push: vi.fn() } }));
+const nav = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('expo-router', () => ({ router: nav }));
 vi.mock('../keyboard-alert', () => ({ Alert: { alert: vi.fn() } }));
 const blocks = vi.hoisted(() => ({ list: [] as string[], blockUser: vi.fn(async () => true) }));
 vi.mock('../blocklist', () => ({ blockUser: blocks.blockUser, getBlockedUsers: vi.fn(async () => blocks.list) }));
@@ -51,7 +54,7 @@ vi.mock('../../components/ReportReasonBox', () => ({
 }));
 
 import type { BillView } from '@beanpool/core';
-import { BillsPanel } from '../../components/Bills';
+import { BillsPanel, BillsTab } from '../../components/Bills';
 import { lightColors, darkColors } from '../../constants/colors';
 
 const ROB = 'a'.repeat(64);
@@ -93,7 +96,11 @@ beforeEach(() => {
     blocks.list = [];
     for (const f of Object.values(db)) f.mockReset();
     blocks.blockUser.mockClear();
-    db.getBalance.mockResolvedValue({ balance_c: 8500, usableFloor_c: 0, floor_c: 0, liveOffers: 0 });
+    nav.push.mockReset();
+    // The node's read (what the sheet goes by), and the phone's cached copy with no row and no tier cache (what it must not):
+    // every figure 0 and the line not known. A sheet that read the cache would say "You need 60 Beans" with Pay off.
+    db.refreshBalanceFromServer.mockResolvedValue({ balance_c: 8500, usableFloor_c: 0, floor_c: 0, liveOffers: 0 });
+    db.getBalance.mockResolvedValue({ balance_c: 0, usableFloor_c: 0, floor_c: 0, liveOffers: 0, lineKnown: false });
 });
 afterEach(() => { host?.remove(); });
 
@@ -167,7 +174,7 @@ describe('bill states x readers, through the real panel and sheet', () => {
 
 describe('the sheet', () => {
     const open = async (b: BillView, balance?: object) => {
-        if (balance) db.getBalance.mockResolvedValue(balance);
+        if (balance) db.refreshBalanceFromServer.mockResolvedValue(balance);
         db.getBills.mockResolvedValue({ toPay: [b], sent: [] });
         await panel(KIM);
         await tap(byId(`bill-row-${b.id}`));
@@ -274,5 +281,121 @@ describe('the sheet', () => {
             expect(style(byId('bill-pay')!).backgroundColor).toBe(c.brand.fill);
             expect(style(byId('bill-pay')!).minHeight).toBe(44);
         }
+    });
+});
+
+describe('a door lands on the list that holds the bill (round 2 of #3210: the node pushes a paid bill to its sender too)', () => {
+    /** Where a door to bill-0001 lands for `me`: the tab, the sheet or the Sent row it marks, and the line. */
+    async function landed(me: string, toPay: BillView[], sent: BillView[]) {
+        db.getBills.mockResolvedValue({ toPay, sent });
+        const opened = vi.fn();
+        await panel(me, { openBillId: 'bill-0001', onBillOpened: opened });
+        // An open sheet stands in place of the list (the To pay side's); otherwise the selected tab says which list shows.
+        const sheet = !!byId('bill-sheet-bill-0001');
+        return {
+            tab: sheet || byId('bills-side-to-pay')!.getAttribute('aria-selected') === 'true' ? 'to-pay' : 'sent',
+            sheet,
+            row: byId('bill-sent-bill-0001')?.getAttribute('aria-selected') === 'true',
+            said: byId('bills-said')?.textContent ?? null,
+            opened: opened.mock.calls.length,
+        };
+    }
+    const NOT_WAITING = { tab: 'to-pay', sheet: false, row: false, said: "This bill isn't waiting to be paid any more.", opened: 1 };
+    const SENT_ROW = { tab: 'sent', sheet: false, row: true, said: null, opened: 1 };
+    // Each state as the node lists it to each side (engine/bills.ts listBills): a payer's bill only while it waits on them.
+    const STATES: Array<{ state: string; payerList: BillView[]; senderList: BillView[] }> = [
+        { state: 'open', payerList: [bill('to-pay')], senderList: [bill('sent')] },
+        { state: 'paid', payerList: [], senderList: [bill('sent', { state: 'paid', paidAt: '2026-11-14T09:00:00.000Z' })] },
+        { state: 'declined', payerList: [], senderList: [bill('sent')] },
+        { state: 'expired', payerList: [], senderList: [bill('sent', { state: 'expired' })] },
+        { state: 'left to expire', payerList: [bill('to-pay', { expiresAt: PAST })], senderList: [bill('sent', { expiresAt: PAST })] },
+        { state: 'withdrawn', payerList: [], senderList: [bill('sent', { state: 'withdrawn' })] },
+    ];
+    for (const s of STATES) {
+        it(`${s.state}: payer and sender`, async () => {
+            expect(await landed(KIM, s.payerList, []), 'payer').toEqual(s.state === 'open'
+                ? { tab: 'to-pay', sheet: true, row: false, said: null, opened: 1 } : NOT_WAITING);
+            // "Kim paid your bill" (and every other bill door to its sender): Sent, that bill's row marked, nothing said.
+            expect(await landed(ROB, [], s.senderList), 'sender').toEqual(SENT_ROW);
+        });
+    }
+    it('the marked row takes the body ink as its border, light and dark, until the member moves to another tab', async () => {
+        for (const dark of [false, true]) {
+            theme.dark = dark;
+            await landed(ROB, [], [bill('sent', { state: 'paid', paidAt: '2026-11-14T09:00:00.000Z' })]);
+            expect(style(byId('bill-sent-bill-0001')!).borderColor).toBe((dark ? darkColors : lightColors).text.body);
+            expect(byId('bill-sent-bill-0001')!.textContent).toBe('Kim · Power, October · 60 Beans · paid 14 Nov · 59.10 Beans received');
+        }
+        await tap(byId('bills-side-to-pay'));
+        await tap(byId('bills-side-sent'));
+        expect(byId('bill-sent-bill-0001')!.getAttribute('aria-selected')).toBeNull();
+    });
+});
+
+describe("the sheet's money line and Pay read the NODE's balance, never the phone's cached copy", () => {
+    const openOn = async (b: BillView = bill('to-pay', { creditOpen: true })) => {
+        db.getBills.mockResolvedValue({ toPay: [b], sent: [] });
+        await panel(KIM);
+        await tap(byId(`bill-row-${b.id}`));
+    };
+    const payOff = () => byId('bill-pay')!.getAttribute('aria-disabled') === 'true';
+
+    it("on credit by the node's read while the cache (no row, no tier cache) reads 0: Pay on, the credit line", async () => {
+        db.refreshBalanceFromServer.mockResolvedValue({ balance_c: 1000, usableFloor_c: -20000, floor_c: -20000, liveOffers: 1 });
+        await openOn();
+        expect(db.refreshBalanceFromServer).toHaveBeenCalledWith(KIM);
+        expect(db.getBalance).not.toHaveBeenCalled();
+        expect(byId('bill-money')!.textContent).toBe('This takes you to 50 Beans below zero. Your line goes to 200.');
+        expect(payOff()).toBe(false);
+        // Holding 100 Beans with no row on the phone yet: the node's figure, never "You need 60 Beans".
+        db.refreshBalanceFromServer.mockResolvedValue({ balance_c: 10000, usableFloor_c: 0, floor_c: 0, liveOffers: 0 });
+        await openOn(bill('to-pay'));
+        expect(byId('bill-money')!.textContent).toBe('You have 100 Beans. After this: 40.');
+        expect(payOff()).toBe(false);
+    });
+
+    it('while it is read: Pay off, the reading line, no money line', async () => {
+        db.refreshBalanceFromServer.mockReturnValue(new Promise(() => {}));
+        await openOn();
+        expect(payOff()).toBe(true);
+        expect(byId('bill-balance-wait')!.textContent).toBe('Reading your balance from your community…');
+        expect(byId('bill-money')).toBeNull();
+        expect(byId('bill-balance-retry')).toBeNull();
+    });
+
+    it('a failed read (the node unread: null) says why Pay waits; Try again reads the node again and Pay comes on', async () => {
+        db.refreshBalanceFromServer.mockResolvedValueOnce(null).mockResolvedValue({ balance_c: 1000, usableFloor_c: -20000, floor_c: -20000, liveOffers: 1 });
+        await openOn();
+        expect(payOff()).toBe(true);
+        expect(byId('bill-balance-wait')!.textContent).toBe("Your balance couldn't be read just now, so Pay waits. Check your connection and try again.");
+        expect(byId('bill-money')).toBeNull();
+        await tap(byId('bill-balance-retry'));
+        expect(db.refreshBalanceFromServer).toHaveBeenCalledTimes(2);
+        expect(byId('bill-balance-wait')).toBeNull();
+        expect(byId('bill-money')!.textContent).toBe('This takes you to 50 Beans below zero. Your line goes to 200.');
+        expect(payOff()).toBe(false);
+    });
+
+    it("a list that couldn't be read says so with Try again, which reads it again", async () => {
+        db.getBills.mockRejectedValueOnce(new Error('Network request failed')).mockResolvedValue({ toPay: [bill('to-pay')], sent: [] });
+        await panel(KIM);
+        expect(byId('bills-failed')!.textContent).toBe("Your bills couldn't be read just now. Check your connection and try again.");
+        await tap(byId('bills-retry'));
+        expect(byId('bills-failed')).toBeNull();
+        expect(byId('bill-row-bill-0001')).not.toBeNull();
+    });
+});
+
+describe('the bill\'s "About: <listing> ›" closes Your deals and opens the listing by id (/post/<id> reads it; a gone one says so)', () => {
+    it('leaves the sheet first (the Market resets a door\'s Bills tab on that close), then opens the listing by id', async () => {
+        const leave = vi.fn();
+        db.getBills.mockResolvedValue({ toPay: [bill('to-pay', { postId: 'post-0009', postTitle: "Room at Rob's" })], sent: [] });
+        await show(createElement(BillsTab, { me: KIM, leave }));
+        await tap(byId('bill-row-bill-0001'));
+        const about = Array.from(host.querySelectorAll('[data-role="link"]')).find((el) => el.textContent === "About: Room at Rob's ›")!;
+        await tap(about);
+        expect(leave).toHaveBeenCalledTimes(1);
+        expect(nav.push).toHaveBeenCalledWith('/post/post-0009');
+        expect(leave.mock.invocationCallOrder[0]).toBeLessThan(nav.push.mock.invocationCallOrder[0]);
     });
 });

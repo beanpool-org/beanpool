@@ -6,8 +6,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-    billAnswerLost, billBinding, billBoundSheet, billLedgerNote, billLines, billPayRequestFor, billPaySheet, billSendIdFor, billSentRow,
-    billToPayRow, type BillBalanceRead, type BillDraft, type BillView,
+    billAnswerLost, billBalanceOf, billBinding, billBoundSheet, billDoor, billLedgerNote, billLines, billPayRequestFor, billPaySheet, billSendIdFor,
+    billSentRow, billToPayRow, type BillBalanceRead, type BillBalanceState, type BillDraft, type BillView,
 } from '../bills';
 
 const ROB = 'a'.repeat(64);
@@ -203,5 +203,72 @@ describe("the Ledger's line for a bill", () => {
         expect(billLedgerNote('Bill · Power, October', true, null)).toBe('Bill · Power, October');
         expect(billLedgerNote('Standing deal · Room', true, 'Rob')).toBeNull();
         expect(billLedgerNote(undefined, true, 'Rob')).toBeNull();
+    });
+});
+
+// ── Round 2 of #3210: a door lands where the bill is; the sheet's balance is the node's, and a failed read says so ──────
+
+describe('a door to a bill lands on the list that holds it (billDoor), never "not waiting" for a bill a list holds', () => {
+    // Each state as the node lists it to each side (engine/bills.ts listBills): the payer's To pay holds a bill only while it
+    // waits on them (one past its 30 days not yet flipped may still be listed); the sender's Sent holds every bill they sent.
+    const CASES: Array<{ state: string; payerList: BillView[]; senderList: BillView[] }> = [
+        { state: 'open', payerList: [bill('to-pay')], senderList: [bill('sent')] },
+        { state: 'paid', payerList: [], senderList: [bill('sent', STATES.paid.sender)] },
+        { state: 'declined', payerList: [], senderList: [bill('sent', STATES.declined.sender)] },
+        { state: 'expired', payerList: [], senderList: [bill('sent', STATES.expired.sender)] },
+        { state: 'left to expire', payerList: [bill('to-pay', STATES['left to expire'].payer)], senderList: [bill('sent', STATES['left to expire'].sender)] },
+        { state: 'withdrawn', payerList: [], senderList: [bill('sent', { state: 'withdrawn' })] },
+    ];
+    const NOT_WAITING = { side: 'to-pay', open: null, shown: null, said: billLines.notWaiting() };
+    for (const c of CASES) {
+        it(`${c.state}: its payer, its sender, and a stranger to it`, () => {
+            // The payer: To pay with the sheet bound to it while it waits; otherwise it is in no list of theirs, and the line says so.
+            const payer = billDoor({ toPay: c.payerList, sent: [] }, 'bill-0001', KIM, NOW);
+            if (c.state === 'open') expect(payer).toEqual({ side: 'to-pay', open: billBinding(bill('to-pay')), shown: 'bill-0001', said: null });
+            else expect(payer).toEqual(NOT_WAITING);
+            // The sender (the node pushes "paid your bill" to them with the same { screen: 'bill', billId }): Sent, its row shown.
+            expect(billDoor({ toPay: [], sent: c.senderList }, 'bill-0001', ROB, NOW)).toEqual({ side: 'sent', open: null, shown: 'bill-0001', said: null });
+            // Someone handed either copy who is neither side: no sheet, no row.
+            expect(billDoor({ toPay: c.payerList, sent: c.senderList }, 'bill-0001', ZED, NOW)).toEqual(NOT_WAITING);
+        });
+    }
+    it('with both lists full, each id lands on its own side', () => {
+        const lists = { toPay: [bill('to-pay')], sent: [bill('sent', { id: 'bill-0002', billerPublicKey: KIM, payerPublicKey: ROB })] };
+        expect(billDoor(lists, 'bill-0002', KIM, NOW).side).toBe('sent');
+        expect(billDoor(lists, 'bill-0001', KIM, NOW).side).toBe('to-pay');
+    });
+    it('an id in neither list says the plain line', () => {
+        expect(billDoor({ toPay: [bill('to-pay')], sent: [bill('sent')] }, 'bill-9999', KIM, NOW)).toEqual(NOT_WAITING);
+    });
+});
+
+describe("the sheet's balance: the node's read only (billBalanceOf), Pay off with a line until it lands, a failure says so", () => {
+    it("billBalanceOf: the node's figures, or no read at all; never a guessed figure", () => {
+        expect(billBalanceOf({ balance_c: 1000, usableFloor_c: -20000, floor_c: -50000, liveOffers: 2, tier: {} }))
+            .toEqual({ balance_c: 1000, usableFloor_c: -20000, floor_c: -50000, liveOffers: 2 });
+        // Missing line figures read as no credit (Pay never on where the node refuses).
+        expect(billBalanceOf({ balance_c: 1000 })).toEqual({ balance_c: 1000, usableFloor_c: 0, floor_c: 0, liveOffers: 0 });
+        expect(billBalanceOf({ balance_c: 1000, usableFloor_c: 'x', floor_c: 1.5, liveOffers: -1 })).toEqual({ balance_c: 1000, usableFloor_c: 0, floor_c: 0, liveOffers: 0 });
+        // No balance in whole hundredths is no read: the sheet says it failed rather than "You need 60 Beans".
+        for (const answer of [null, undefined, {}, { balance: 10 }, { balance_c: '1000' }, { balance_c: 10.5 }, { balance_c: null }, 'x', 42]) {
+            expect(billBalanceOf(answer), JSON.stringify(answer)).toBeNull();
+        }
+    });
+    it('reading, failed and read: the line in place of the money line, the retry, and Pay', () => {
+        const b = bill('to-pay', { creditOpen: true });
+        const rows: Array<[BillBalanceState, { wait: string | null; retry: string | null; money: string | null; canPay: boolean }]> = [
+            [null, { wait: billLines.balanceReading(), retry: null, money: null, canPay: false }],
+            ['reading', { wait: billLines.balanceReading(), retry: null, money: null, canPay: false }],
+            ['failed', { wait: billLines.balanceFailed(), retry: 'Try again', money: null, canPay: false }],
+            // On credit from the node's read: 10 held, 200 usable (the phone's cached read with no tier cache said "You need 60").
+            [billBalanceOf({ balance_c: 1000, usableFloor_c: -20000, floor_c: -20000, liveOffers: 1 }),
+                { wait: null, retry: null, money: 'This takes you to 50 Beans below zero. Your line goes to 200.', canPay: true }],
+        ];
+        for (const [read, want] of rows) {
+            const s = billPaySheet(b, KIM, read, NOW, day)!;
+            expect({ wait: s.balanceWait, retry: s.balanceRetry, money: s.money?.line ?? null, canPay: s.canPay }, String(read)).toEqual(want);
+            expect(s.postOffer).toBe(s.money?.postOffer ? billLines.postOffer() : null);
+        }
+        expect(billLines.balanceFailed()).not.toMatch(/nothing/i);
     });
 });

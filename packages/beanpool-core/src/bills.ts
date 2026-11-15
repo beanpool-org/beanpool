@@ -210,6 +210,10 @@ export const billLines = {
     declineLost: () => t("Your community's server didn't answer, so this bill may have been declined. Press Decline again to find out."),
     withdrawLost: () => t("Your community's server didn't answer, so this bill may have been withdrawn. Press Withdraw again to find out."),
     reportLost: () => t("Your community's server didn't answer, so your report may have gone. Send it again to find out."),
+    // The payer's balance on the sheet: Pay waits, saying so, until the node's own read lands; a failed read says so, with a retry.
+    balanceReading: () => t('Reading your balance from your community…'),
+    balanceFailed: () => t("Your balance couldn't be read just now, so Pay waits. Check your connection and try again."),
+    tryAgain: () => t('Try again'),
 };
 
 /** The payer's balance as the node reads it for them (GET /api/ledger/balance): every figure whole hundredths. */
@@ -221,6 +225,27 @@ export interface BillBalanceRead {
     floor_c: Hundredths;
     liveOffers: number;
 }
+
+/**
+ * The node's balance answer (GET /api/ledger/balance: the web's getBalance, the phone's refreshBalanceFromServer) as a bill's
+ * sheet reads it, or null when it is no read at all (no answer, or no balance in whole hundredths): never a figure guessed
+ * from a cache or a missing field. A missing usable floor or allowance reads as 0 (no credit), so Pay is never on where the
+ * node would refuse.
+ */
+export function billBalanceOf(answer: unknown): BillBalanceRead | null {
+    const a = answer && typeof answer === 'object' ? (answer as Record<string, unknown>) : null;
+    if (!a || !isHundredths(a.balance_c)) return null;
+    const offers = typeof a.liveOffers === 'number' && Number.isFinite(a.liveOffers) && a.liveOffers > 0 ? Math.floor(a.liveOffers) : 0;
+    return {
+        balance_c: a.balance_c,
+        usableFloor_c: isHundredths(a.usableFloor_c) ? a.usableFloor_c : 0,
+        floor_c: isHundredths(a.floor_c) ? a.floor_c : 0,
+        liveOffers: offers,
+    };
+}
+
+/** Where a sheet's balance read is: the node's figures, still being read (null too), or failed. */
+export type BillBalanceState = BillBalanceRead | 'reading' | 'failed' | null;
 
 /** Which of the five cases a payer is in (design §4.3). */
 export type BillPayCase = 'holds' | 'credit' | 'open_line' | 'first_bill' | 'nothing';
@@ -311,8 +336,12 @@ export interface BillPaySheet {
     sent: string;
     /** A sender the payer hasn't dealt with (the message-request rule): the warning, with Block and Report beside Decline. */
     stranger: string | null;
-    /** The one money line; null while the balance is still being read, and Pay stays off until it is. */
+    /** The one money line, from the node's own balance read; null until it lands, and Pay stays off until it does. */
     money: BillMoneyLine | null;
+    /** In place of the money line until the node's read lands: the reading line, or, when it failed, why Pay waits. */
+    balanceWait: string | null;
+    /** "Try again" beside a failed balance read: it reads the node again. Null otherwise. */
+    balanceRetry: string | null;
     pay: string;
     canPay: boolean;
     decline: string;
@@ -327,13 +356,16 @@ export interface BillPaySheet {
 
 /**
  * The payer's sheet for `b`, or null when it is not waiting on `me` now (any other reader, or a bill paid, declined,
- * withdrawn or past its 30 days). `read` is the payer's own balance (null while it is read); `day` writes a date as the app does.
+ * withdrawn or past its 30 days). `read` is the payer's balance as the NODE reads it (billBalanceOf), 'reading' (or null)
+ * until it lands, 'failed' when it couldn't be read: Pay is on only from the node's figures, never a cached copy's; `day`
+ * writes a date as the app does.
  */
-export function billPaySheet(b: BillView, me: string, read: BillBalanceRead | null, now: number, day: (iso: string) => string): BillPaySheet | null {
+export function billPaySheet(b: BillView, me: string, read: BillBalanceState, now: number, day: (iso: string) => string): BillPaySheet | null {
     if (!billWaitsOn(b, me, now)) return null;
     const name = b.billerName || t('A member');
     const until = day(b.expiresAt);
-    const money = read ? billMoneyLine(b.amount_c, read, b.creditOpen === true, until) : null;
+    const figures = read && typeof read === 'object' ? read : null;
+    const money = figures ? billMoneyLine(b.amount_c, figures, b.creditOpen === true, until) : null;
     const stranger = b.known !== true;
     return {
         billId: b.id,
@@ -345,6 +377,8 @@ export function billPaySheet(b: BillView, me: string, read: BillBalanceRead | nu
         sent: billLines.sentWaits(day(b.sentAt), until),
         stranger: stranger ? billLines.strangerBanner(name) : null,
         money,
+        balanceWait: figures ? null : read === 'failed' ? billLines.balanceFailed() : billLines.balanceReading(),
+        balanceRetry: !figures && read === 'failed' ? billLines.tryAgain() : null,
         pay: billLines.pay(b.amount_c),
         canPay: money?.canPay === true,
         decline: billLines.decline(),
@@ -378,6 +412,23 @@ export function billSentRow(b: BillView, actingAs: string, now: number, day: (is
     const lapsed = b.state === 'sent' && !(Date.parse(b.expiresAt) > now);
     const line = lapsed ? billLines.sentExpired(b.payerName || t('A member'), b.whatFor, b.amount_c) : billSentLine(b, day);
     return { billId: b.id, line, withdraw: b.state === 'sent' && !lapsed ? billLines.withdraw() : null };
+}
+
+/**
+ * Where a door to a bill lands (a bell row, a push or a notice names it by id; the node sends `{ screen: 'bill', billId }`
+ * to BOTH sides, engine/bills.ts tell()): the list that holds it, on that tab. Waiting on `me`: To pay, with its sheet. One
+ * `me` sent: Sent, with its row shown (`shown`), in any state (open, paid, declined as not paid, expired, withdrawn). In no
+ * list: the node lists a payer's bill only while it waits on them, so it is one that no longer does (paid, declined,
+ * withdrawn, expired), and the plain line says so. Never "not waiting" for a bill a list holds.
+ */
+export interface BillDoor { side: 'to-pay' | 'sent'; open: BillBinding | null; shown: string | null; said: string | null }
+
+export function billDoor(lists: { toPay: readonly BillView[]; sent: readonly BillView[] }, billId: string, me: string, now: number): BillDoor {
+    const toPay = lists.toPay.find((x) => x.id === billId);
+    if (toPay && billToPayRow(toPay, me, now)) return { side: 'to-pay', open: billBinding(toPay), shown: toPay.id, said: null };
+    const sent = lists.sent.find((x) => x.id === billId);
+    if (sent && billSentRow(sent, me, now, (iso) => iso)) return { side: 'sent', open: null, shown: sent.id, said: null };
+    return { side: 'to-pay', open: null, shown: null, said: billLines.notWaiting() };
 }
 
 /** What a payer's sheet was opened for: the exact bill (its id, and what it asks, of whom, from whom). */

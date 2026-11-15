@@ -13,8 +13,8 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import {
-    billAnswerLost, billBinding, billBoundSheet, billLines, billPayRequestFor, billPaySheet, billSentRow, billToPayRow, formatDate, t,
-    type BillBalanceRead, type BillBinding, type BillPayRequest, type BillView,
+    billAnswerLost, billBalanceOf, billBinding, billBoundSheet, billDoor, billLines, billPayRequestFor, billPaySheet, billSentRow, billToPayRow,
+    formatDate, t, type BillBalanceState, type BillBinding, type BillPayRequest, type BillView,
 } from '@beanpool/core';
 import { declineBill, getBalance, getBills, payBill, reportBill, withdrawBill } from '../lib/api';
 import { blockUser } from '../lib/blocklist';
@@ -50,6 +50,8 @@ export function BillsPanel({ me, openBillId, onBillOpened, onMessage, onOpenPost
     const [said, setSaid] = useState<string | null>(null);
     const [withdrawing, setWithdrawing] = useState<string | null>(null);
     const [rowError, setRowError] = useState<{ id: string; line: string } | null>(null);
+    // The Sent row a door named (core billDoor), marked until the member moves on.
+    const [shown, setShown] = useState<string | null>(null);
 
     const read = useCallback(async () => {
         try {
@@ -62,12 +64,15 @@ export function BillsPanel({ me, openBillId, onBillOpened, onMessage, onOpenPost
     }, []);
     useEffect(() => { void read(); }, [read]);
 
-    // The bill a door named: opened once the first read has it; one no longer waiting says so in place of a sheet.
+    // The bill a door named, once the first read has it, on the tab of the list that holds it (core billDoor): the payer's
+    // sheet, or the sender's row on Sent (the node pushes a paid bill to its sender too); in neither, the plain line.
     useEffect(() => {
         if (!openBillId || !bills) return;
-        const b = bills.toPay.find((x) => x.id === openBillId);
-        if (b && billToPayRow(b, me, Date.now())) { setSide('to-pay'); setOpen(billBinding(b)); setSaid(null); }
-        else setSaid(billLines.notWaiting());
+        const door = billDoor(bills, openBillId, me, Date.now());
+        setSide(door.side);
+        setOpen(door.open);
+        setShown(door.open ? null : door.shown);
+        setSaid(door.said);
         onBillOpened?.();
     }, [openBillId, bills, me, onBillOpened]);
 
@@ -104,7 +109,7 @@ export function BillsPanel({ me, openBillId, onBillOpened, onMessage, onOpenPost
         <div data-testid="bills-panel" className="flex flex-col gap-3">
             <div className="flex flex-wrap justify-center gap-2">
                 {([['to-pay', billLines.toPayTab()], ['sent', billLines.sentTab()]] as const).map(([id, label]) => (
-                    <button key={id} type="button" data-testid={`bills-side-${id}`} aria-pressed={side === id} onClick={() => setSide(id)}
+                    <button key={id} type="button" data-testid={`bills-side-${id}`} aria-pressed={side === id} onClick={() => { setSide(id); setShown(null); }}
                         className={`min-h-[44px] px-4 text-sm font-bold rounded-full border ${side === id
                             ? 'bg-nature-800 dark:bg-nature-200 text-white dark:text-nature-900 border-nature-900 dark:border-nature-100'
                             : 'bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 border-nature-200 dark:border-nature-700'}`}>
@@ -113,7 +118,12 @@ export function BillsPanel({ me, openBillId, onBillOpened, onMessage, onOpenPost
                 ))}
             </div>
             {said && <p data-testid="bills-said" role="status" className="text-sm font-bold text-nature-900 dark:text-white break-words">{said}</p>}
-            {failed && <p data-testid="bills-failed" role="alert" className={REFUSAL}>{billLines.readFailed()}</p>}
+            {failed && (
+                <div className="flex flex-wrap items-center gap-2">
+                    <p data-testid="bills-failed" role="alert" className={REFUSAL}>{billLines.readFailed()}</p>
+                    <button type="button" data-testid="bills-retry" className={`${QUIET} flex-none px-4`} onClick={() => { void read(); }}>{billLines.tryAgain()}</button>
+                </div>
+            )}
             {side === 'to-pay' && bills && (toPay.length === 0
                 ? <p className="text-sm text-nature-600 dark:text-nature-300 text-center py-8">{billLines.noneToPay()}</p>
                 : toPay.map(({ b, row }) => (
@@ -127,7 +137,9 @@ export function BillsPanel({ me, openBillId, onBillOpened, onMessage, onOpenPost
             {side === 'sent' && bills && (sent.length === 0
                 ? <p className="text-sm text-nature-600 dark:text-nature-300 text-center py-8">{billLines.noneSent()}</p>
                 : sent.map((r) => (
-                    <div key={r.billId} data-testid={`bill-sent-${r.billId}`} className="rounded-2xl p-4 border bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-700 flex flex-col gap-2">
+                    <div key={r.billId} data-testid={`bill-sent-${r.billId}`} aria-current={shown === r.billId ? 'true' : undefined}
+                        className={`rounded-2xl p-4 border bg-white dark:bg-nature-900 flex flex-col gap-2 ${shown === r.billId
+                            ? 'border-2 border-nature-900 dark:border-white' : 'border-nature-200 dark:border-nature-700'}`}>
                         <p className="text-sm text-nature-900 dark:text-white break-words">{r.line}</p>
                         {rowError?.id === r.billId && <p role="alert" className={REFUSAL}>{rowError.line}</p>}
                         {r.withdraw && (
@@ -145,7 +157,9 @@ export function BillSheet({ bill, me, onDone, onRefused, onClose, onMessage, onO
     bill: BillView; me: string; onDone: (said: string) => void; onRefused?: (said: string) => void; onClose: () => void;
     onMessage?: (publicKey: string) => void; onOpenPost?: (postId: string) => void; onPostOffer?: () => void;
 }) {
-    const [balance, setBalance] = useState<BillBalanceRead | null>(null);
+    // The node's own read of the payer's balance (core billBalanceOf): Pay waits on it, and a failed read says so with a retry.
+    const [balance, setBalance] = useState<BillBalanceState>('reading');
+    const [readNo, setReadNo] = useState(0);
     const [confirming, setConfirming] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -155,11 +169,14 @@ export function BillSheet({ bill, me, onDone, onRefused, onClose, onMessage, onO
 
     useEffect(() => {
         let alive = true;
+        setBalance('reading');
         getBalance(me).then((b) => {
-            if (alive) setBalance({ balance_c: b.balance_c, usableFloor_c: b.usableFloor_c ?? 0, floor_c: b.floor_c, liveOffers: b.liveOffers ?? 0 });
-        }, () => {});
+            if (alive) setBalance(billBalanceOf(b) ?? 'failed');
+        }, () => {
+            if (alive) setBalance('failed');
+        });
         return () => { alive = false; };
-    }, [me]);
+    }, [me, readNo]);
 
     const s = billPaySheet(bill, me, balance, Date.now(), day);
     if (!s) return null;
@@ -213,6 +230,16 @@ export function BillSheet({ bill, me, onDone, onRefused, onClose, onMessage, onO
                 <p data-testid="bill-stranger" role="note" className="text-sm font-bold rounded-lg p-3 border bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 break-words">{s.stranger}</p>
             )}
             {s.money && <p data-testid="bill-money" className="text-sm text-nature-700 dark:text-nature-300 break-words">{s.money.line}</p>}
+            {s.balanceWait && (
+                <div className="flex flex-wrap items-center gap-2">
+                    <p data-testid="bill-balance-wait" role={s.balanceRetry ? 'alert' : 'status'}
+                        className={s.balanceRetry ? REFUSAL : 'text-sm text-nature-700 dark:text-nature-300 break-words'}>{s.balanceWait}</p>
+                    {s.balanceRetry && (
+                        <button type="button" data-testid="bill-balance-retry" className={`${QUIET} flex-none px-4`}
+                            onClick={() => setReadNo((n) => n + 1)}>{s.balanceRetry}</button>
+                    )}
+                </div>
+            )}
             {s.postOffer && onPostOffer && (
                 <button type="button" data-testid="bill-post-offer" className={`${QUIET} self-start flex-none px-4`} onClick={onPostOffer}>{s.postOffer}</button>
             )}

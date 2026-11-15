@@ -236,6 +236,103 @@ describe('the sheet', () => {
     });
 });
 
+describe('a door lands on the list that holds the bill (round 2 of #3210: the node pushes a paid bill to its sender too)', () => {
+    /** Where a door to bill-0001 lands for `me`: the tab pressed, the sheet or the Sent row it shows, and the line. */
+    async function landed(me: string, toPay: BillView[], sent: BillView[]) {
+        api.getBills.mockResolvedValue({ toPay, sent });
+        const opened = vi.fn();
+        render(<BillsPanel me={me} openBillId="bill-0001" onBillOpened={opened} />);
+        await settle();
+        // An open sheet stands in place of the list (the To pay side's); otherwise the pressed tab says which list shows.
+        const sheet = !!screen.queryByTestId('bill-sheet-bill-0001');
+        const got = {
+            tab: sheet || screen.getByTestId('bills-side-to-pay').getAttribute('aria-pressed') === 'true' ? 'to-pay' : 'sent',
+            sheet,
+            row: screen.queryByTestId('bill-sent-bill-0001')?.getAttribute('aria-current') === 'true',
+            said: screen.queryByTestId('bills-said')?.textContent ?? null,
+            opened: opened.mock.calls.length,
+        };
+        cleanup();
+        return got;
+    }
+    const NOT_WAITING = { tab: 'to-pay', sheet: false, row: false, said: "This bill isn't waiting to be paid any more.", opened: 1 };
+    const SENT_ROW = { tab: 'sent', sheet: false, row: true, said: null, opened: 1 };
+    // Each state as the node lists it to each side (engine/bills.ts listBills): a payer's bill only while it waits on them.
+    const STATES: Array<{ state: string; payerList: BillView[]; senderList: BillView[] }> = [
+        { state: 'open', payerList: [bill('to-pay')], senderList: [bill('sent')] },
+        { state: 'paid', payerList: [], senderList: [bill('sent', { state: 'paid', paidAt: '2026-11-14T09:00:00.000Z' })] },
+        { state: 'declined', payerList: [], senderList: [bill('sent')] },
+        { state: 'expired', payerList: [], senderList: [bill('sent', { state: 'expired' })] },
+        { state: 'left to expire', payerList: [bill('to-pay', { expiresAt: PAST })], senderList: [bill('sent', { expiresAt: PAST })] },
+        { state: 'withdrawn', payerList: [], senderList: [bill('sent', { state: 'withdrawn' })] },
+    ];
+    for (const s of STATES) {
+        it(`${s.state}: payer and sender`, async () => {
+            expect(await landed(KIM, s.payerList, []), 'payer').toEqual(s.state === 'open'
+                ? { tab: 'to-pay', sheet: true, row: false, said: null, opened: 1 } : NOT_WAITING);
+            // "Kim paid your bill" (and every other bill door to its sender): Sent, that bill's row marked, nothing said.
+            expect(await landed(ROB, [], s.senderList), 'sender').toEqual(SENT_ROW);
+        });
+    }
+    it('the marked row is shown until the member moves to another tab', async () => {
+        api.getBills.mockResolvedValue({ toPay: [], sent: [bill('sent', { state: 'paid', paidAt: '2026-11-14T09:00:00.000Z' })] });
+        render(<BillsPanel me={ROB} openBillId="bill-0001" />);
+        await settle();
+        expect(screen.getByTestId('bill-sent-bill-0001').textContent).toBe('Kim · Power, October · 60 Beans · paid 14 Nov · 59.10 Beans received');
+        await click(screen.getByTestId('bills-side-to-pay'));
+        await click(screen.getByTestId('bills-side-sent'));
+        expect(screen.getByTestId('bill-sent-bill-0001').getAttribute('aria-current')).toBeNull();
+    });
+});
+
+describe("the sheet's money line and Pay read the node's balance; a read that fails says so, with Try again", () => {
+    const openOn = async () => {
+        api.getBills.mockResolvedValue({ toPay: [bill('to-pay', { creditOpen: true })], sent: [] });
+        render(<BillsPanel me={KIM} />);
+        await settle();
+        await click(screen.getByTestId('bill-row-bill-0001'));
+    };
+    const pay = () => screen.getByTestId('bill-pay') as HTMLButtonElement;
+
+    it('while it is read: Pay off, the reading line, no money line', async () => {
+        api.getBalance.mockReturnValue(new Promise(() => {}));
+        await openOn();
+        expect(pay().disabled).toBe(true);
+        expect(screen.getByTestId('bill-balance-wait').textContent).toBe('Reading your balance from your community…');
+        expect(screen.queryByTestId('bill-money')).toBeNull();
+        expect(screen.queryByTestId('bill-balance-retry')).toBeNull();
+    });
+
+    it('a failed read (or an answer with no balance) says why Pay waits; Try again reads the node again and Pay comes on', async () => {
+        for (const fail of [() => api.getBalance.mockRejectedValueOnce(new TypeError('Failed to fetch')), () => api.getBalance.mockResolvedValueOnce({})]) {
+            api.getBalance.mockReset();
+            fail();
+            api.getBalance.mockResolvedValue({ balance_c: 1000, usableFloor_c: -20000, floor_c: -20000, liveOffers: 1 });
+            await openOn();
+            expect(pay().disabled).toBe(true);
+            expect(screen.getByTestId('bill-balance-wait').textContent).toBe("Your balance couldn't be read just now, so Pay waits. Check your connection and try again.");
+            expect(screen.queryByTestId('bill-money')).toBeNull();
+            await click(screen.getByTestId('bill-balance-retry'));
+            expect(api.getBalance).toHaveBeenCalledTimes(2);
+            expect(api.getBalance).toHaveBeenLastCalledWith(KIM);
+            expect(screen.queryByTestId('bill-balance-wait')).toBeNull();
+            expect(screen.getByTestId('bill-money').textContent).toBe('This takes you to 50 Beans below zero. Your line goes to 200.');
+            expect(pay().disabled).toBe(false);
+            cleanup();
+        }
+    });
+
+    it("a list that couldn't be read says so with Try again, which reads it again", async () => {
+        api.getBills.mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValue({ toPay: [bill('to-pay')], sent: [] });
+        render(<BillsPanel me={KIM} />);
+        await settle();
+        expect(screen.getByTestId('bills-failed').textContent).toBe("Your bills couldn't be read just now. Check your connection and try again.");
+        await click(screen.getByTestId('bills-retry'));
+        expect(screen.queryByTestId('bills-failed')).toBeNull();
+        expect(screen.getByTestId('bill-row-bill-0001')).toBeTruthy();
+    });
+});
+
 describe("the doors: a bell row, a notice and Home's line open the bill", () => {
     it('lands on the Market with the bill door', () => {
         const nav = vi.fn();

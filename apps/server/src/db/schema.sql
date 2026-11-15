@@ -4075,9 +4075,11 @@ CREATE INDEX IF NOT EXISTS idx_group_guest_outbox_home ON group_guest_outbox(hom
 -- guest in, a group hosted by another community's server. Day zero: new tables, nothing converted; the mailbox's own tables
 -- (relay_mail, relay_outbox) are left as they are.
 --
--- group_guest_links: each (member, host, group) and where it stands: `invited` (the host's invitation came), `in` (the
--- member said yes, through this server), `declined` (no), `left` (their own leave), `removed` (the host's removal). Only a
--- host a member said yes to brings them anything more than an invitation (the roster, lines, epochs). `roster` is the
+-- group_guest_links: each (member, host, group) and where it stands: `invited` (the host's invitation came), `joining`
+-- (the member said yes, through this server, and the host has not taken it yet), `in` (the host took their yes),
+-- `declined` (the host took their no), `left` (the host took their leave), `removed` (the host's removal). A link moves
+-- on the host's answer only: a yes the host never took puts the invitation back. A withdrawn invitation leaves no row.
+-- Only a host a member said yes to brings them anything more than an invitation (the roster, lines, epochs). `roster` is the
 -- latest roster that host sent for the group, as this member's devices read it (their own wrap only), `roster_at` when it
 -- came. A plain table: a standby copies it, so a promoted standby still knows which hosts its members answered; a standby
 -- writes none of its own.
@@ -4085,7 +4087,7 @@ CREATE TABLE IF NOT EXISTS group_guest_links (
     member     TEXT NOT NULL CHECK (length(member) = 64),
     host       TEXT NOT NULL CHECK (length(host) BETWEEN 1 AND 260),
     group_id   TEXT NOT NULL CHECK (length(group_id) BETWEEN 1 AND 64),
-    state      TEXT NOT NULL CHECK (state IN ('invited', 'in', 'declined', 'left', 'removed')),
+    state      TEXT NOT NULL CHECK (state IN ('invited', 'joining', 'in', 'declined', 'left', 'removed')),
     roster     TEXT CHECK (roster IS NULL OR length(roster) <= 1900000),
     roster_at  INTEGER,
     state_at   INTEGER NOT NULL,
@@ -4096,7 +4098,9 @@ CREATE TABLE IF NOT EXISTS group_guest_links (
 -- group_guest_mail: what a host brought for a member here (an invitation, the roster, a line, an epoch, a removal), held
 -- for their devices as the mailbox holds a line (relay_mail_devices lists them): each device fetches what it has not
 -- confirmed, and a row goes once every device listed has it (group_guest_mail_got), or after 30 days. `body` is what the
--- host sent, with only this member's own wrap. Like the mailbox's tables, this server's own (`local`): never in a copy.
+-- host sent, with only this member's own wrap. `answered` is 1 for what came under a link the member answered (a roster,
+-- a line, an epoch, the removal of one), 0 for an invitation or its withdrawal: each counts against its own allowance
+-- (engine/group-guest-home.ts mayHold). Like the mailbox's tables, this server's own (`local`): never in a copy.
 CREATE TABLE IF NOT EXISTS group_guest_mail (
     id          TEXT PRIMARY KEY CHECK (length(id) BETWEEN 8 AND 64),
     member      TEXT NOT NULL CHECK (length(member) = 64),
@@ -4105,6 +4109,7 @@ CREATE TABLE IF NOT EXISTS group_guest_mail (
     kind        TEXT NOT NULL CHECK (kind IN ('invite', 'roster', 'line', 'epoch', 'removed')),
     body        TEXT NOT NULL CHECK (length(body) <= 1900000),
     bytes       INTEGER NOT NULL CHECK (bytes >= 0),
+    answered    INTEGER NOT NULL CHECK (answered IN (0, 1)),
     received_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_group_guest_mail_member ON group_guest_mail(member, received_at);

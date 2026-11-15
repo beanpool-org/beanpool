@@ -336,7 +336,7 @@ async function main(): Promise<void> {
     // ...and as a guest in a group at another community: its yes (an answer, no line), the roster kept, a notice waiting.
     const at = Date.now();
     db.prepare(`INSERT INTO group_guest_links (member, host, group_id, state, roster, roster_at, state_at) VALUES (?, 'riverside.example', 'g-far', 'in', '{}', ?, ?)`).run(mailed.pk, at, at);
-    db.prepare(`INSERT INTO group_guest_mail (id, member, host, group_id, kind, body, bytes, received_at) VALUES (?, ?, 'riverside.example', 'g-far', 'roster', '{}', 2, ?)`)
+    db.prepare(`INSERT INTO group_guest_mail (id, member, host, group_id, kind, body, bytes, answered, received_at) VALUES (?, ?, 'riverside.example', 'g-far', 'roster', '{}', 2, 1, ?)`)
         .run(crypto.randomUUID(), mailed.pk, at);
     db.prepare(`INSERT INTO group_guest_sent (sender_key, item_id, kind, host, group_id, state, attempts, created_at, updated_at)
                 VALUES (?, ?, 'group-invite', 'riverside.example', 'g-far', 'sent', 1, ?, ?)`).run(mailed.pk, crypto.randomBytes(8).toString('hex'), at, at);

@@ -546,8 +546,10 @@ async function sendToHome(home: string): Promise<number> {
                 else logger.warn('SYS', `Group guests: ${home} did not take a notice (status ${status}); it is not tried again.`);
                 continue;
             }
-            // One schedule for the home, held on every row of it: the oldest row's, moved on by time (nextFanoutTry).
-            const next = nextFanoutTry(r.attempts, r.next_try_at, at);
+            // One schedule for the home, held on every row of it: the oldest row's, moved on by time (nextFanoutTry). Read
+            // from the table now, not from `queue`: a 2xx earlier in this send started the steps over (#3217 round 2).
+            const step = db.prepare('SELECT attempts, next_try_at FROM group_guest_outbox WHERE id = ?').get(r.id) as { attempts: number; next_try_at: number } | undefined;
+            const next = nextFanoutTry(step?.attempts ?? r.attempts, step?.next_try_at ?? r.next_try_at, at);
             db.transaction(() => {
                 db.prepare('DELETE FROM group_guest_outbox WHERE home = ? AND created_at <= ?').run(home, at - GUEST_FANOUT_QUEUE_MS);
                 db.prepare('UPDATE group_guest_outbox SET attempts = ?, next_try_at = ? WHERE home = ?').run(next.attempts, next.nextTryAt, home);

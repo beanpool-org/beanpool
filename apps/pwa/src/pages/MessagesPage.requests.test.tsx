@@ -202,6 +202,24 @@ describe('the Message requests row', () => {
         expect((await screen.findByTestId('message-requests-row')).textContent).not.toMatch(/\d/);
     });
 
+    it('opens a view of its own, as a chat does: Back to chats at its top, with no Chats · Forum switch, title or filter chips above it (walk 2)', async () => {
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        render(<MessagesPage identity={idOf(ann)} frame={<div data-testid="chat-frame" />} />);
+        expect(await screen.findByTestId('chat-frame')).toBeInTheDocument();
+        expect(await chips()).toBeInTheDocument();
+        const view = await openRequests();
+        const back = within(view).getByRole('button', { name: 'Back to chats' });
+        expect(view.firstElementChild).toBe(back);
+        expect(screen.queryByTestId('chat-frame')).toBeNull();
+        expect(screen.queryByTestId('conversation-filter-chips')).toBeNull();
+        expect(screen.queryByRole('heading', { name: /Messages/ })).toBeNull();
+        // Nothing of the page's own is drawn before the view: its back link is the first control on the page.
+        expect(document.body.querySelector('button')).toBe(back);
+        fireEvent.click(back);
+        expect(await screen.findByTestId('chat-frame')).toBeInTheDocument();
+        expect(await chips()).toBeInTheDocument();
+    });
+
     it('Back to chats leaves the requests', async () => {
         node.list = annListWith([requestEntry(bo, CONV)]);
         render(<MessagesPage identity={idOf(ann)} />);
@@ -531,7 +549,7 @@ describe('a request card', () => {
         const card = await screen.findByRole('dialog');
         expect(within(card).getByTestId('report-note')).toHaveTextContent('Reporting a request blocks its sender too.');
         fireEvent.click(within(card).getByRole('button', { name: 'Spam or scam' }));
-        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
+        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit report' })); });
         await waitFor(() => expect(blockUser).toHaveBeenCalledWith(bo.publicKey));
         const [messageId, reason, disclosure] = vi.mocked(reportDmLineApi).mock.calls[0];
         expect(messageId).toBe(hello.id);
@@ -552,7 +570,7 @@ describe('a request card', () => {
         fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Report' }));
         const card = await screen.findByRole('dialog');
         fireEvent.click(within(card).getByRole('button', { name: 'Spam or scam' }));
-        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
+        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit report' })); });
         expect(await within(card).findByText(/The node refused it/)).toBeInTheDocument();
         expect(blockUser).not.toHaveBeenCalled();
     });
@@ -565,7 +583,7 @@ describe('a request card', () => {
         fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Report' }));
         const card = await screen.findByRole('dialog');
         fireEvent.click(within(card).getByRole('button', { name: 'Spam or scam' }));
-        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
+        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit report' })); });
         await waitFor(() => expect(blockUser).toHaveBeenCalledWith(bo.publicKey));
         expect(await within(card).findByText('You have sent a lot of reports recently, so this one did not go. They are blocked.')).toBeInTheDocument();
     });
@@ -577,7 +595,7 @@ describe('a request card', () => {
         fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Report' }));
         const card = await screen.findByRole('dialog');
         fireEvent.click(within(card).getByRole('button', { name: 'Spam or scam' }));
-        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
+        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit report' })); });
         return card;
     }
 
@@ -652,7 +670,7 @@ describe('a request card', () => {
         fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Report' }));
         const card = await screen.findByRole('dialog');
         fireEvent.click(within(card).getByRole('button', { name: 'Spam or scam' }));
-        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
+        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit report' })); });
         expect(await within(card).findByText('Reported, but not blocked. Please try again.')).toBeInTheDocument();
     });
 
@@ -760,7 +778,7 @@ describe('a line of an ordinary direct message (R0)', () => {
         const card = screen.getByRole('dialog');
         expect(within(card).getByTestId('report-note')).not.toHaveTextContent('blocks');
         fireEvent.click(within(card).getByRole('button', { name: 'Spam or scam' }));
-        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit Report' })); });
+        await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Submit report' })); });
         const [messageId, , disclosure] = vi.mocked(reportDmLineApi).mock.calls[0];
         expect(messageId).toBe(hello.id);
         expect(disclosure).toMatchObject({ ciphertext: hello.ciphertext, nonce: hello.nonce, conversationId: CONV, words: 'Hello' });

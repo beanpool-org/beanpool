@@ -4,7 +4,7 @@
  * (utils/__tests__/needs-you.test.ts); the component only loads the data and draws the result.
  */
 
-import { capitalFirst, dealsNeedingMe, fitNeedsYou, formatDate, standingNeedsLines, type StandingPeriodUnit, type StandingPhase, inviteAskNeedsLine, isOwnInviteChange, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT, needsYouRowOrder, t, tn, type NeedsYouKind } from '@beanpool/core';
+import { capitalFirst, dealsNeedingMe, fitNeedsYou, formatDate, standingNeedsLines, type StandingAsk, type StandingPeriodUnit, type StandingPhase, inviteAskNeedsLine, isOwnInviteChange, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT, needsYouRowOrder, t, tn, type NeedsYouKind } from '@beanpool/core';
 import type { DecisionWithTally, MyPoolVoting } from './db';
 import { isMuted, type YourChatMute } from './your-groups';
 import { isOwnRemoval, poolVoteBlocker } from './decision-card';
@@ -136,6 +136,11 @@ export interface NeedsYouTransaction {
     standingStartsAt?: string | null;
     standingShortSince?: string | null;
     standingStopped?: boolean;
+    /** A short week (utils/standing-row.ts): the payer's open ask is the payee's live line (core standingAskNeedsLine). */
+    standingMaxPeriods?: number | null;
+    standingDueBeans_c?: number | null;
+    standingAsk?: StandingAsk | null;
+    standingAsksLeft?: number | null;
 }
 
 export interface NeedsYouConversation {
@@ -245,7 +250,10 @@ function dealsWaiting(txns: NeedsYouTransaction[], me: string, now: number = Dat
 
 const standingDay = (iso: string) => formatDate(new Date(iso), 'day-month');
 
-/** One live line per short standing deal the member is a side of, in core's words (standingNeedsLines), oldest due first. */
+/**
+ * One live line per short standing deal the member is a side of, and the payee's while the payer asks to pay less for a period
+ * (DESIGN-getting-paid-fable §3.3: amber, counted), in core's words (standingNeedsLines), oldest due first.
+ */
 function standingEntries(txns: NeedsYouTransaction[], me: string, now: number): NeedsYouEntry[] {
     return standingNeedsLines(txns, me, now, standingDay).map((line): NeedsYouEntry => ({
         kind: 'deal', count: 1, accent: line.accent, label: line.label, standingId: line.standingId,

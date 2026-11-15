@@ -11,7 +11,8 @@
  *     on another phone or browser shows only there."; Ben answers. The node recorded this browser's device and its confirm.
  *   Cy's card (hillside.example) pasted: the first-message box, sent, on into the chat.
  * Light for the walk; then Dark for the card, the requests and the chat. Fails on any sideways scroll at 320 px, a control
- * under 44 px on these screens, or a request from the browser to any host but this machine.
+ * under 44 px on these screens, a request from the browser to any host but this machine, or the requests' "‹ Back to chats"
+ * anywhere but at the top of their view, where the chat's sits (walk 2, 15 Nov).
  *
  * Run (from apps/pwa): node e2e/outside-chats-320.mjs   OUTSIDE_TMP sets where the build and the node's data go (os.tmpdir());
  * OUTSIDE_SHOTS a folder for screenshots. Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
@@ -179,6 +180,21 @@ async function holdFirstLine(node, sol, ben, benHome, text) {
     return itemId;
 }
 
+/** Where "‹ Back to chats" sits in a view (`scope`): its top on the screen, and whether the list's filter chips show with it. */
+async function backAt(page, scope) {
+    return page.evaluate((sel) => {
+        const view = document.querySelector(sel);
+        const back = view && Array.from(view.querySelectorAll('button')).find((b) => (b.textContent || '').includes('Back to chats'));
+        const firstCard = view?.querySelector('[data-testid="outside-request-card"]');
+        const r = back?.getBoundingClientRect();
+        return {
+            top: r ? Math.round(r.top) : null,
+            aboveCards: !!(r && (!firstCard || r.bottom <= firstCard.getBoundingClientRect().top)),
+            chips: !!document.querySelector('[data-testid="conversation-filter-chips"]'),
+        };
+    }, scope);
+}
+
 async function main() {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
@@ -226,6 +242,11 @@ async function main() {
         await page.getByTestId('outside-request-card').waitFor({ timeout: 15_000 });
         check((await page.getByTestId('outside-request-card').textContent()).includes('riverside.example'), 'the request card names their community');
         await fits(page, 'the request card');
+        // The requests are a view of their own, as a chat is (walk 2, 15 Nov: their back link sat under the filter chips,
+        // mid-page): no chips with them, the back link first, at the height the chat's own sits (checked at the chat below).
+        const requestsBack = await backAt(page, '[data-testid="message-requests"]');
+        check(!requestsBack.chips && requestsBack.aboveCards && requestsBack.top !== null,
+            `the requests: "‹ Back to chats" at the top, above the cards, with no filter chips (top ${requestsBack.top}px, chips ${requestsBack.chips})`);
         await shot(page, '05-request-card-light');
         const devices = await node.sql('SELECT device FROM relay_mail_devices WHERE member = ?', [ben.publicKey]);
         check(devices.length === 1 && /^[0-9a-f]{32}$/.test(devices[0].device), `the node lists this browser as one device (${devices.length})`);
@@ -244,11 +265,17 @@ async function main() {
         await page.getByTestId('outside-chat-send').click();
         await page.getByTestId('outside-line-mine').waitFor({ timeout: 15_000 });
         await fits(page, 'the chat');
+        const chatBack = await backAt(page, '[data-testid="outside-chat"]');
+        check(chatBack.top !== null && requestsBack.top !== null && Math.abs(chatBack.top - requestsBack.top) <= 24,
+            `the requests' back link sits where the chat's does (${requestsBack.top}px and ${chatBack.top}px)`);
         await shot(page, '07-chat-light');
 
         console.log('Cy\'s card, pasted: one line as a request');
         const cyCard = await signAddressCard({ key: cy.key, home: 'hillside.example', name: 'Cy' }, signerOf(cy.seed));
+        // Accepted from the requests: Back lands on the chats (with New DM), not on the requests it came from.
         await page.getByRole('button', { name: 'Back to chats' }).first().click();
+        await page.getByTestId('conversation-filter-chips').waitFor({ timeout: 15_000 });
+        check(await page.getByTestId('message-requests').count() === 0, 'after Accept, Back to chats lands on the chats, not the requests');
         await page.getByRole('button', { name: /New DM/ }).first().click({ timeout: 30_000 });
         await page.getByTestId('new-message-outside').first().click({ timeout: 30_000 });
         await page.getByTestId('paste-card').fill(addressCardLink(cyCard));

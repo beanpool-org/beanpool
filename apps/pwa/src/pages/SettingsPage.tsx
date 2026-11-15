@@ -23,7 +23,7 @@ import {
     getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, getProfilePrivacy, setProfilePrivacy, type MemberProfile,
     getFriends, removeFriendApi,
     getNodeApiUrl, getStoredNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
-    updateNotificationPreferences, getNodeStats, getSignInRecovery, request, getCommunityMe,
+    updateNotificationPreferences, getNodeStats, getSignInRecovery, getSignInsToRefresh, request, getCommunityMe,
 } from '../lib/api';
 import { keepWordsOnAccount } from '../lib/words-kept';
 import { signInNames } from '../lib/join-recovery';
@@ -250,9 +250,18 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     // Whether a sign-in also brings this account back (G11-c): the node's list, asked once. Undefined while asking,
     // null when it could not be asked; neither is drawn as "connected" or "not connected".
     const [signInRecovery, setSignInRecovery] = useState<string[] | null | undefined>(undefined);
+    // Recovery S4: which of those sign-ins' copies the server can't find from the sign-in alone yet, each offered a Refresh.
+    // Asked only once the node names a sign-in.
+    const [signInsToRefresh, setSignInsToRefresh] = useState<string[]>([]);
+    const readSignInRecovery = (alive: () => boolean = () => true) => getSignInRecovery().then((r) => {
+        if (!alive()) return;
+        setSignInRecovery(r);
+        if (!r?.length) { setSignInsToRefresh([]); return; }
+        getSignInsToRefresh().then((list) => { if (alive()) setSignInsToRefresh(list); });
+    });
     useEffect(() => {
         let cancelled = false;
-        getSignInRecovery().then((r) => { if (!cancelled) setSignInRecovery(r); });
+        void readSignInRecovery(() => !cancelled);
         return () => { cancelled = true; };
     }, [identity.publicKey]);
     const signInRecoveryNames = signInRecovery ? signInNames(signInRecovery) : null;
@@ -1108,7 +1117,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     </div>
                                     <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
-                                <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasWords} phoneLater={phoneLater} keepsNoCopies={communityInfo?.recoveryCopies === 'none'} />
+                                <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasWords} phoneLater={phoneLater} keepsNoCopies={communityInfo?.recoveryCopies === 'none'}
+                                    refresh={signInsToRefresh} identity={identity} />
                                 {/* Where a copy of this account is kept, as far as this browser can ask, and removing this
                                     server's (vault rethink VR1). After a removal the server's list is read again, so the
                                     line above says what it keeps now. */}
@@ -1119,7 +1129,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     adminsHalf={communityCopy?.shared ? { since: communityCopy.since } : null}
                                     hasWords={hasWords}
                                     onShowWords={() => setMode('seed')}
-                                    onChanged={() => { getSignInRecovery().then(setSignInRecovery); void readCommunityCopy(); }}
+                                    onChanged={() => { void readSignInRecovery(); void readCommunityCopy(); }}
                                 />
                                 {/* The third way back (vault rethink VR3): your community's admins, where this community keeps
                                     copies itself and is not the global community, or where it already keeps this member's. */}

@@ -161,6 +161,7 @@ import { createNodeKeyRoutes } from './routes/node-key.js';
 import { createRelayRoutes } from './routes/relay.js';
 import { sweepRelayMail } from './engine/relay-mail.js';
 import { retryRelayOutbox, sweepRelayOutbox } from './engine/relay-outbox.js';
+import { closeGuestsIfSwitchedOff, flushGuestOutbox } from './engine/group-guests.js';
 import { retryComplaints } from './engine/relay-complaint.js';
 import { isNodeSignedPath, pruneNodeRequestNonces, requireNodeSignature } from './engine/node-signature.js';
 import { createInviteAskRoutes } from './routes/invite-asks.js';
@@ -203,6 +204,7 @@ import { pruneChatLines } from './chat-rate-limit.js';
 import { clientIp, clientLimiterKey, limiterKeyForIp, resolveClientIp } from './client-ip.js';
 import { adminIpAllowed } from './config/gateway.js';
 import { countWebAppPageLoad } from './engine/web-visits.js';
+import { isWebAppPageFile, serveWebAppPage, WEB_APP_NOINDEX } from './web-app-robots.js';
 import {
     gatewayAdmit, gatewayAdmitMember, gatewayAdmitDayBudget, gatewaySettle, pruneGatewayBuckets, gatewayClaimVerified,
     gatewayAdmitPeerRead, gatewayAdmitUpgrade, gatewaySettleUpgrade, gatewayNoRoomUpgrade, gatewayChargeLargeClaim, CLAIM_SMALL_BODY_BYTES,
@@ -1605,6 +1607,10 @@ export async function startHttpsServer(port: number): Promise<number> {
         // The mailbox between communities: due forwards tried again, old mail, ids and outbox rows settled or gone.
         try { sweepRelayMail(now); sweepRelayOutbox(now); } catch (e: any) { console.warn('[Mail] The mailbox sweep failed:', e?.message || e); }
         retryRelayOutbox(now).catch((e: any) => console.warn('[Mail] Forwarding the waiting mail failed:', e?.message || e));
+        // Group guests (engine/group-guests.ts): switched off, every guest goes and their home is told; what waits for a
+        // guest's home is tried again.
+        try { closeGuestsIfSwitchedOff(); } catch (e: any) { console.warn('[Guests] Closing guests after the switch went off failed:', e?.message || e); }
+        flushGuestOutbox(now).catch((e: any) => console.warn('[Guests] Sending to guests\' homes failed:', e?.message || e));
         retryComplaints(now).catch((e: any) => console.warn('[Mail] Telling other communities of reports failed:', e?.message || e));
     }, 60 * 1000);
     if (rateLimitCleaner.unref) rateLimitCleaner.unref();
@@ -2171,8 +2177,11 @@ export async function startHttpsServer(port: number): Promise<number> {
         gzip: true,
         setHeaders: (res, filePath) => {
             const headers = { set: (f: string, v: string) => res.setHeader(f, v), remove: (f: string) => res.removeHeader(f) };
-            if (isDocumentPolicyFile(path.relative(PUBLIC_DIR, filePath))) useDocumentPolicy(headers);
+            const file = path.relative(PUBLIC_DIR, filePath);
+            if (isDocumentPolicyFile(file)) useDocumentPolicy(headers);
             else useAppDocumentPolicy(headers);
+            // The web app's page asked for by name (/index.html): noindex, as every path of it but /app (web-app-robots.ts).
+            if (isWebAppPageFile(file)) headers.set('X-Robots-Tag', WEB_APP_NOINDEX);
         },
     });
     app.use(async (ctx, next) => (isApiOrWsPath(ctx.path) ? next() : servePublic(ctx, next)));
@@ -2214,9 +2223,9 @@ export async function startHttpsServer(port: number): Promise<number> {
                     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
                     ctx.set('Pragma', 'no-cache');
                     ctx.set('Expires', '0');
-                    ctx.type = 'html';
-                    ctx.body = fs.createReadStream(indexPath);
-                    return;
+                    // A member's page (/app/…): noindex, by header and in the page; /app itself, should it ever reach this
+                    // line, names its canonical as the route does (web-app-robots.ts).
+                    if (await serveWebAppPage(ctx, indexPath)) return;
                 }
             }
         }

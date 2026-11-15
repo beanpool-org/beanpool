@@ -469,6 +469,22 @@ describe('search (slice F6)', () => {
         expect(screen.queryByTestId('forum-search-hit')).toBeNull();
     });
 
+    it('🔍 is a live button with the box empty too (walk 2: faded, it read as off): the tap asks nothing and puts the cursor in the box', async () => {
+        render(<ForumPage me={ME} />);
+        await screen.findAllByTestId('forum-topic-row');
+        const go = screen.getByRole('button', { name: 'Search' });
+        expect(go).toBeEnabled();
+        expect(go.className).not.toMatch(/(^| )opacity-/);
+        const before = node.calls.length;
+        fireEvent.click(go);
+        expect(screen.getByTestId('forum-search-box')).toHaveFocus();
+        fireEvent.change(screen.getByTestId('forum-search-box'), { target: { value: '   ' } });
+        fireEvent.click(go);
+        await act(async () => {});
+        expect(node.calls.slice(before).some((c) => c.path.startsWith('/api/forum/search'))).toBe(false);
+        expect(screen.queryByTestId('forum-search-none')).toBeNull();
+    });
+
     it('says so when nothing has every word, and shows the node\'s words when it refuses (the day\'s searches spent)', async () => {
         searched = () => ({ hits: [], next: null });
         render(<ForumPage me={ME} />);

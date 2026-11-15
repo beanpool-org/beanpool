@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Mensajes, grupos y sus chats, personas y amistades, chats de eventos, silenciar, menciones y un cambio de clave.",
-        "sourceHash": "e680a96492c72e47"
+        "text": "Mensajes, grupos y sus chats, personas y amistades, tus contactos privados, chats de eventos, silenciar, menciones y un cambio de clave.",
+        "sourceHash": "b8443e689c10d3a0"
       }
     },
     "pulse": {
@@ -762,6 +762,20 @@
       "help": {
         "text": "Tus Ofertas bajo un solo nombre. Ponle nombre, di de qué tipo es, ciérrala por ahora o ciérrala del todo.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "Tus contactos privados",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Una lista de contactos que solo tú puedes abrir, en cualquier teléfono o navegador y en todas las comunidades a las que perteneces. Cómo traer personas, invitarlas y qué puede ver y qué no el servidor de tu comunidad.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "Tus contactos privados. Solo tú puedes abrir la lista. Trae personas desde tu teléfono o desde un archivo de contactos, agrega a alguien a mano o invítalo.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

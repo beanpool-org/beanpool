@@ -472,6 +472,8 @@ import {
 } from './engine/group-thread.js';
 export { GROUP_THREAD_NOTICE, GROUP_THREAD_MESSAGE_MAX, GroupSystemType, canReadGroupThread } from './engine/group-thread.js';
 import { withMembershipEpoch, markGroupEpochsStaleFor, markGroupEpochStale, groupKeyRoster, setMembershipFromEpoch } from './engine/group-keys.js';
+// For a re-key's roster changes (engine/member-wizards.ts), which can't import group-keys itself without a cycle.
+export { markGroupEpochsStaleFor };
 import { clearInviteDecline, recordInviteDecline } from './engine/group-invitations.js';
 import {
     proposeGroupConvenor as proposeGroupConvenorEngine,
@@ -8850,6 +8852,10 @@ export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled
     if (status !== 'pruned' && isDeletedByOwner(publicKey)) throw new Error(OWNER_DELETED_REFUSAL);
     const was = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(publicKey) as { status: string | null } | undefined)?.status;
     db.prepare("UPDATE members SET status=? WHERE public_key=?").run(status, publicKey);
+    // Into or out of 'pruned', the key leaves or rejoins every group chat roster they hold a row in (isNodeMember; a
+    // prune keeps the group rows, so a reinstate vote brings the key back): stale, and the roster to the guests' homes.
+    // A pause ('disabled') changes no roster: the account keeps every membership and its key while it lasts.
+    if (was !== undefined && (was === 'pruned') !== (status === 'pruned')) markGroupEpochsStaleFor(publicKey);
     // A retired empty duplicate's mark (retired_accounts, engine/retire-duplicate.ts) holds only while the account stays
     // 'disabled' from that retire. Every way out of 'disabled' but one comes through here (Bring back, a passed unsuspend
     // or reinstate vote, Lift, a prune), so the mark goes here: a later pause is then a pause, with its own vote and its
@@ -11910,6 +11916,12 @@ export function getGroupThread(groupId: string, viewerPubkey: string | undefined
 export function postGroupThreadMessage(groupId: string, authorPubkey: string, line: GroupLineIn, clientId?: string): EventThreadMessage {
     assertGroupNotClosed(groupId);
     return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, line, clientId);
+}
+
+/** A guest's line from another community (engine/group-guests.ts takeGuestItem, which checked they are in): as a member's. */
+export function postGuestGroupLine(groupId: string, guestKey: string, line: GroupLineIn, clientId?: string): EventThreadMessage {
+    assertGroupNotClosed(groupId);
+    return postGroupThreadMessageEngine(getMessagingCb(), groupId, guestKey, line, clientId, { guest: true });
 }
 
 export function removeGroupThreadMessage(groupId: string, messageId: string, actorPubkey: string): EventThreadMessage {

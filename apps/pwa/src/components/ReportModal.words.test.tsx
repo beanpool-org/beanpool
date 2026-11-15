@@ -25,7 +25,7 @@ describe('the report card in the pseudo-locale', () => {
 
         fireEvent.click(screen.getByRole('button', { name: xx('Child safety') }));
         expect(screen.getByRole('button', { pressed: true }).textContent).toBe(xx('✓ {reason}').replace('{reason}', xx('Child safety')));
-        fireEvent.click(screen.getByRole('button', { name: xx('Submit Report') }));
+        fireEvent.click(screen.getByRole('button', { name: xx('Submit report') }));
         await waitFor(() => expect(reportAbuse).toHaveBeenCalledWith('pubkey_123', 'target_456', 'Child safety', 'post_9', undefined));
         expect(await screen.findByTestId('report-sent')).toBeInTheDocument();
         expect(bypassing(document.body, { others: ['Alice'] })).toEqual([]);
@@ -36,7 +36,7 @@ describe('the report card in the pseudo-locale', () => {
         vi.mocked(reportAbuse).mockRejectedValueOnce(new Error(''));
         render(<ReportModal {...props} />);
         fireEvent.click(screen.getByRole('button', { name: xx('Spam or scam') }));
-        fireEvent.click(screen.getByRole('button', { name: xx('Submit Report') }));
+        fireEvent.click(screen.getByRole('button', { name: xx('Submit report') }));
         expect(await screen.findByText(xx('Failed to submit report. Please try again.'))).toBeInTheDocument();
         expect(bypassing(document.body, { others: ['Alice'] })).toEqual([]);
     });

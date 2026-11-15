@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Messaggi, gruppi e relative chat, persone e amici, chat di eventi, silenziare, menzioni e chiavi cambiate.",
-        "sourceHash": "e680a96492c72e47"
+        "text": "Messaggi, gruppi e relative chat, persone e amici, i tuoi contatti privati, chat di eventi, silenziare, menzioni e chiavi cambiate.",
+        "sourceHash": "b8443e689c10d3a0"
       }
     },
     "pulse": {
@@ -762,6 +762,20 @@
       "help": {
         "text": "Le tue Offerte sotto un unico nome. Dagli un nome, indica che tipo di negozio è, chiudilo per ora oppure chiudilo.",
         "sourceHash": "129a28e32f7e3d56"
+      }
+    },
+    "contacts": {
+      "title": {
+        "text": "I tuoi contatti privati",
+        "sourceHash": "8187a0790a1ec762"
+      },
+      "summary": {
+        "text": "Un elenco di contatti che solo tu puoi aprire, su qualsiasi telefono o browser e in ogni comunità di cui fai parte. Portare dentro le persone, invitarle e cosa può e non può vedere il server della tua comunità.",
+        "sourceHash": "d6797ae4be69456a"
+      },
+      "help": {
+        "text": "I tuoi contatti privati. Solo tu puoi aprire l'elenco. Porta dentro le persone dal telefono o da un file di contatti, aggiungi qualcuno a mano o invitalo.",
+        "sourceHash": "783e4da3badc2f05"
       }
     }
   }

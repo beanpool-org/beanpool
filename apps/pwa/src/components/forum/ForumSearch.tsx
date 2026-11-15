@@ -3,13 +3,15 @@
  * (pages/ForumPage.tsx). The node finds every word typed in titles, opening posts and replies, newest first, and never a
  * post the member may not read (apps/server/src/engine/forum-search.ts).
  *
- * - **Asked on Search, never as they type:** each search is one of the member's 100 a day.
+ * - **Asked on Search, never as they type:** each search is one of the member's 100 a day. 🔍 always looks like the
+ *   live button it is (walk 2, 15 Nov: faded while the box was empty, it read as off): with nothing typed, it puts the
+ *   cursor in the box and asks nothing.
  * - **The hits** replace the topic list while they show: the topic's title, who wrote the post, its section, when, and its
  *   words around the find. A tap anywhere on a hit opens the topic at that post (the small-cards rule). ✕ clears the search
  *   and the list is back.
  * - **Kept for the page's life** (lib/forum.ts keptSearch): back from a hit, the same hits show without asking again.
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { forumSectionName, t, timeAgo, word } from '@beanpool/core';
 import { forgetForumSearch, keptSearch, searchForum, type ForumSearchAnswer, type ForumSearchHit, type ForumSection } from '../../lib/forum';
 import { TOPIC_WORDS } from './ForumTopicView';
@@ -34,9 +36,11 @@ export function ForumSearch({ sections, onOpen, onShowing }: {
     const [typed, setTyped] = useState(() => keptSearch()?.q ?? '');
     const [busy, setBusy] = useState(false);
     const [failed, setFailed] = useState<string | null>(null);
+    const box = useRef<HTMLInputElement>(null);
 
     async function ask(offset = 0) {
         const q = offset ? answer?.q ?? '' : typed.trim();
+        if (!q && !offset) box.current?.focus();
         if (!q || busy) return;
         setBusy(true);
         setFailed(null);
@@ -67,11 +71,11 @@ export function ForumSearch({ sections, onOpen, onShowing }: {
     return (
         <div className="flex flex-col gap-2" data-testid="forum-search">
             <form role="search" className="flex items-center gap-2 min-w-0" onSubmit={(e) => { e.preventDefault(); void ask(0); }}>
-                <input type="search" value={typed} onChange={(e) => setTyped(e.target.value)} aria-label={t(SEARCH_WORDS.box)} placeholder={t(SEARCH_WORDS.box)}
+                <input ref={box} type="search" value={typed} onChange={(e) => setTyped(e.target.value)} aria-label={t(SEARCH_WORDS.box)} placeholder={t(SEARCH_WORDS.box)}
                     maxLength={200} enterKeyHint="search" data-testid="forum-search-box"
                     className="flex-1 min-w-0 min-h-[44px] rounded-lg px-3 text-[0.95rem]"
                     style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-input)' }} />
-                <button type="submit" disabled={busy || !typed.trim()} aria-label={t(SEARCH_WORDS.search)} data-testid="forum-search-go"
+                <button type="submit" disabled={busy} aria-label={t(SEARCH_WORDS.search)} data-testid="forum-search-go"
                     className={`${button} disabled:opacity-50`} style={quiet}><span aria-hidden="true">🔍</span></button>
                 {answer && (
                     <button type="button" onClick={clear} aria-label={t(SEARCH_WORDS.clear)} data-testid="forum-search-clear" className={button} style={quiet}>

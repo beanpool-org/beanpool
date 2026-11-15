@@ -17,7 +17,7 @@
  * Anything else (a community's own words, a sign-in provider's own error, a member's name) is shown exactly as given.
  * The 12 words, codes and keys are never looked up: a name or a number is only put into a sentence.
  */
-import { formatDate, t, tn, word, type WordKey } from '@beanpool/core';
+import { formatDate, SIGN_IN_REFRESH_WORDS, t, tn, word, type WordKey } from '@beanpool/core';
 
 /** Whole sentences, by their English. */
 const FIXED: Readonly<Record<string, WordKey>> = {
@@ -49,6 +49,8 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     "This community doesn't take sign-ins right now.": word("This community doesn't take sign-ins right now."),
     "This browser couldn't keep track of the sign-in, so it didn't start. Try again.": word("This browser couldn't keep track of the sign-in, so it didn't start. Try again."),
     'Adding a sign-in was cancelled. Nothing changed.': word('Adding a sign-in was cancelled. Nothing changed.'),
+    // lib/link-signin.ts: Refresh (recovery S4), a sign-in the account already has, whose copy the server can't find yet.
+    'Refreshing your sign-in was cancelled. Nothing changed.': word('Refreshing your sign-in was cancelled. Nothing changed.'),
     // Before tryAgainIn's sentence (linkRefusalMessage's 429): see WITH_WAIT.
     'Too many tries just now.': word('Too many tries just now.'),
     // lib/web-rekey.ts WEB_REKEY_TEXT: a re-key code's answers (the phone's rekey-redeem.ts says two of them the same).
@@ -234,6 +236,15 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
     {
         pattern: new RegExp(`^${PROVIDER} is added, and your new-account limits are now the usual ones\\. This community keeps no copies of members' accounts, so your 12 words are still your way back\\.$`),
         words: (m) => t("{provider} is added, and your new-account limits are now the usual ones. This community keeps no copies of members' accounts, so your 12 words are still your way back.", { provider: m[1] }),
+    },
+    // lib/link-signin.ts: Refresh's result (recovery S4), in core's words, which the phone's Account Protection shares.
+    {
+        pattern: new RegExp(`^${PROVIDER} is refreshed\\. Signing in with it brings this account back, with nothing to type\\.$`),
+        words: (m) => t(SIGN_IN_REFRESH_WORDS.done, { provider: m[1] }),
+    },
+    {
+        pattern: new RegExp(`^Couldn't refresh ${PROVIDER}, so nothing changed\\. Try again in a minute\\.$`),
+        words: (m) => t(SIGN_IN_REFRESH_WORDS.failed, { provider: m[1] }),
     },
     // lib/delete-here.ts webKeepsKeyLine: the page's own community keeps the key, by its address and the one deleted at.
     {

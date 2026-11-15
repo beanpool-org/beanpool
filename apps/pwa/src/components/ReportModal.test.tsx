@@ -42,7 +42,7 @@ describe('ReportModal Component', () => {
     it('opens with no reason picked and Submit off; choosing one turns Submit on, and nothing is sent before that', async () => {
         vi.mocked(reportAbuse).mockClear();
         render(<ReportModal {...props} />);
-        const submit = screen.getByRole('button', { name: /Submit Report/i });
+        const submit = screen.getByRole('button', { name: /Submit report/i });
         expect(submit).toBeDisabled();
         // Off looks off, from the theme's roles: no red fill until there is something to send.
         expect(submit.className).toMatch(/(^| )bg-bg-hover( |$)/);
@@ -59,6 +59,20 @@ describe('ReportModal Component', () => {
         await waitFor(() => expect(reportAbuse).toHaveBeenCalledWith('pubkey_123', 'target_456', 'Spam or scam: words but no reason', 'post_9', undefined));
     });
 
+    it('says "Submit report" in sentence case, and where less motion is asked a picked reason and Submit change at once (walk 2: caught mid-fade it read as off)', () => {
+        render(<ReportModal {...props} />);
+        const submit = screen.getByRole('button', { name: 'Submit report' });
+        expect(screen.queryByRole('button', { name: 'Submit Report' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /^Spam or scam$/ }));
+        const picked = screen.getByRole('button', { pressed: true });
+        for (const el of [submit, picked]) {
+            expect(el.className).toMatch(/(^| )transition-all( |$)/);
+            expect(el.className).toMatch(/(^| )motion-reduce:transition-none( |$)/);
+        }
+        expect(picked.className).toMatch(/(^| )bg-bp-danger-fill( |$)/);
+        expect(submit.className).toMatch(/(^| )bg-bp-danger-fill( |$)/);
+    });
+
     it('a failed send says why and keeps the choice and the words; the next try sends them (review of #1912, finding 3)', async () => {
         vi.spyOn(window, 'alert').mockImplementation(() => {});
         const onClose = vi.fn();
@@ -67,13 +81,13 @@ describe('ReportModal Component', () => {
         render(<ReportModal {...props} onClose={onClose} />);
         fireEvent.click(screen.getByRole('button', { name: /^Child safety$/ }));
         fireEvent.change(screen.getByLabelText(/Additional details/i), { target: { value: 'he asked my son for photos' } });
-        fireEvent.click(screen.getByRole('button', { name: /Submit Report/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Submit report/i }));
         expect(await screen.findByText('Could not reach the node.')).toBeInTheDocument();
         expect(onClose).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: /Child safety$/ })).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByLabelText(/Additional details/i)).toHaveValue('he asked my son for photos');
-        expect(screen.getByRole('button', { name: /Submit Report/i })).toBeEnabled();
-        fireEvent.click(screen.getByRole('button', { name: /Submit Report/i }));
+        expect(screen.getByRole('button', { name: /Submit report/i })).toBeEnabled();
+        fireEvent.click(screen.getByRole('button', { name: /Submit report/i }));
         // Sent: said in the card (rehearsal 14 Oct N3), and Done closes it.
         expect(await screen.findByTestId('report-sent')).toBeInTheDocument();
         expect(onClose).not.toHaveBeenCalled();
@@ -113,7 +127,7 @@ describe('ReportModal Component', () => {
         const { unmount } = render(<ReportModal {...props} />);
         expect(screen.getByText(/A child at risk, or sexual content involving a minor\./)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /^Child safety$/ }));
-        fireEvent.click(screen.getByRole('button', { name: /Submit Report/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Submit report/i }));
         await waitFor(() => expect(reportAbuse).toHaveBeenCalledWith('pubkey_123', 'target_456', 'Child safety', 'post_9', undefined));
         unmount();
 
@@ -121,14 +135,14 @@ describe('ReportModal Component', () => {
         render(<ReportModal {...props} />);
         fireEvent.click(screen.getByRole('button', { name: /^Child safety$/ }));
         fireEvent.change(screen.getByLabelText(/Additional details/i), { target: { value: 'messages to my daughter' } });
-        fireEvent.click(screen.getByRole('button', { name: /Submit Report/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Submit report/i }));
         await waitFor(() => expect(reportAbuse).toHaveBeenCalledWith('pubkey_123', 'target_456', 'Child safety: messages to my daughter', 'post_9', undefined));
     });
 
     it('keeps Cancel and Submit at the foot of the card while it scrolls, in light and dark (review of #1895, finding 6)', () => {
         render(<ReportModal isOpen onClose={() => {}} reporterPubkey="a" targetPubkey="b" targetName="Bob" />);
         const row = screen.getByTestId('report-actions');
-        expect(within(row).getByRole('button', { name: 'Submit Report' })).toBeInTheDocument();
+        expect(within(row).getByRole('button', { name: 'Submit report' })).toBeInTheDocument();
         expect(within(row).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
         // Sticky to the bottom of the scrolling card, with a solid background in each theme so the fields slide under it.
         expect(row.className).toMatch(/(^| )sticky( |$)/);

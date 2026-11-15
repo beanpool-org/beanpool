@@ -518,6 +518,11 @@ export function initSchema() {
         try { db.prepare(`ALTER TABLE posts ADD COLUMN ${column}`).run(); } catch { }
     }
 
+    // Born with Local knowledge's fixes (slice K5): one empty column on the waiting list, NULL on every row that is there. An
+    // addition, as K1's above (Marty's pick 6, 11 Nov 2026): nothing is read, filled in or rewritten. A fix waiting from before
+    // it (the test node only) has no recorded change, so it reads as the note alone. On a fresh install it finds its column.
+    try { db.prepare('ALTER TABLE knowledge_drafts ADD COLUMN fix_base TEXT').run(); } catch { }
+
     // Born with per-item prices (DESIGN-per-item-price-fable.md §3, §6; Marty's Q5, 12 Nov 2026): four empty columns, each with
     // schema.sql's own CHECK, NULL on every row that is there. Nothing is read, filled in or rewritten: a listing becomes
     // per-item only by its seller's own edit. On a fresh install each finds its column and does nothing.

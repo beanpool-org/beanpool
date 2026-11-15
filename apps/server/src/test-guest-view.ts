@@ -1345,6 +1345,8 @@ async function main(): Promise<void> {
             'POST /api/groups/:id/keys/:epoch/reject', 'POST /api/groups/:id/keys/wrap', 'POST /api/groups/:id/lead',
             'GET /api/groups/:id/members', 'GET /api/groups/:id/invitations', 'DELETE /api/groups/:id/invitations/:pubkey', 'POST /api/groups/:id/members', 'DELETE /api/groups/:id/members/:pubkey',
             'PATCH /api/groups/:id/members/:pubkey', 'GET /api/groups/:id/picture', 'DELETE /api/groups/:id/posts/:postId', 'GET /api/groups/:id/succession',
+            // Guests from other communities in a group's chat (engine/group-guests.ts, G1): its active members only.
+            'GET /api/groups/:id/guests', 'POST /api/groups/:id/guests', 'DELETE /api/groups/:id/guests/:key',
             'POST /api/groups/:id/succession/:proposalId/vote', 'POST /api/groups/:id/succession/propose',
             // A chat group's votes (routes/group-decisions.ts): its members see them, everyone else 404.
             'GET /api/groups/:id/decisions', 'POST /api/groups/:id/decisions', 'GET /api/groups/:id/decisions/:decisionId',

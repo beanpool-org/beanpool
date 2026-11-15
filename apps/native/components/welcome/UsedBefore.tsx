@@ -72,8 +72,8 @@ function makeStyles(colors: AppColors, dark: boolean) {
         memberBtnText: { color: colors.text.inverse, fontSize: 18, fontWeight: '700', textAlign: 'center' },
         inviteOnlyHint: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 22, marginTop: 4 },
         restorePromptBox: { marginTop: 16, padding: 14, borderRadius: 14, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.25)', alignItems: 'center', width: '100%' },
-        restorePromptLabel: { color: colors.text.secondary, fontSize: 13, marginBottom: 8, fontWeight: '500', textAlign: 'center' },
+        restorePromptLabel: { color: colors.text.body, fontSize: 13, marginBottom: 8, fontWeight: '500', textAlign: 'center' },
         restorePromptBtn: { width: '100%', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, borderWidth: 1, borderColor: palette.blue600, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', minHeight: 44 },
-        restorePromptBtnText: { color: dark ? palette.blue400 : palette.blue600, fontSize: 14, fontWeight: '700', textAlign: 'center' },
+        restorePromptBtnText: { color: dark ? palette.blue400 : palette.blue700, fontSize: 14, fontWeight: '700', textAlign: 'center' },
     });
 }

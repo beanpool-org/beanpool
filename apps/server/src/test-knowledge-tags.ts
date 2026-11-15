@@ -375,11 +375,16 @@ async function main(): Promise<void> {
     // ── 6. A standby's copy ─────────────────────────────────────────────────────────────────────
     console.log('── 6. a standby\'s copy ──');
     clearDrafts();
-    const waiting = await call(nextMember(), 'POST', '/api/knowledge/drafts', { ...PAGE, freeTags: ['Kerbside'] });
+    const waiter = nextMember();
+    const waiting = await call(waiter, 'POST', '/api/knowledge/drafts', { ...PAGE, freeTags: ['Kerbside'] });
     require_(waiting.status === 201, 'a suggestion with a tag waits');
     const copy = await exportSyncState('test-knowledge-tags') as any;
     const copied = ((copy.plainTables?.knowledge_drafts ?? []) as any[]).find((r) => r.id === waiting.body.draft.id);
     assert(copied?.free_tags === '["kerbside"]', `6. the copy carries the suggestion's tags (${copied?.free_tags})`);
+    // Taken back, its tags are blanked with its other words (the row stays only so it counts for the day).
+    const back = await call(waiter, 'POST', `/api/knowledge/drafts/${waiting.body.draft.id}/withdraw`, {});
+    assert(back.status === 200 && draftRow(waiting.body.draft.id)?.state === 'withdrawn' && draftRow(waiting.body.draft.id)?.free_tags === '',
+        `6. taken back, its tags go with its words (${show(back)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

@@ -22,6 +22,18 @@
  *   9  the owners' switch: off, no invitation, every guest removed and their home told, nothing from a guest goes in
  *  10  a home that can't be reached: the request waits and is tried again, then goes once taken
  *  11  a standby copies group_guests (a plain table) and never the outbox; the routes are in the guest-view list
+ *  12  close the class: every kind of roster change (a member joins with no epoch or their own, leaves, is removed by a
+ *      convenor or a vote, deletes their account; a guest is invited, says yes, leaves, is removed) -> the roster once to
+ *      each community with guests in, naming its guests, with exactly the chat's keys (an invitation: none, only itself)
+ *  13  back from epoch-stale: a guest's refused epoch or line -> the roster follows to their home alone, with the current
+ *      epoch (stale, or its record and their home's wraps); the epoch they make from it goes in, and so does the line they
+ *      send again under the key they open from it; two refusals in one request -> one roster
+ *  14  close the class: every kind a guest's home brings x a guest whose card says a member's name -> every notice it makes
+ *      says "Ana · a.example · guest", never "Ana" alone
+ *  15  each home on its own: while one home doesn't answer, another gets its line at once; a row queued during a send goes
+ *      when that send ends; a home that refuses costs one try for all its rows, which wait, then go
+ *  16  close the class: every timer job https-server.ts runs from group-guests x (standby, main server) -> a standby returns
+ *      at once, writes no copied row, tells nobody; the main server removes and tells
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests node scripts/run-server-suites.mjs
  */
@@ -68,7 +80,8 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
 
     const { initTls } = await import('./services/tls.js');
-    const { initStateEngine, seedGenesisMember, createGroup, exportSyncState } = await import('./state-engine.js');
+    const { initStateEngine, seedGenesisMember, createGroup, exportSyncState, removeGroupMemberByVote, purgeMemberSelf } = await import('./state-engine.js');
+    const { setNodeRole } = await import('./config/node-role.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
@@ -122,9 +135,18 @@ async function main(): Promise<void> {
     interface Out { home: string; path: string; signed: boolean; body: any; at: number }
     const outs: Out[] = [];
     let unreachable = false;
+    /** A home that doesn't answer until its gate opens (a server behind a firewall that drops packets, until FORWARD_TIMEOUT_MS). */
+    const gates = new Map<string, Promise<void>>();
+    /** Each home's tries, and the homes that refuse every request (a connection that times out). */
+    const tries = new Map<string, number>();
+    const refusing = new Set<string>();
     __useRelayTransportForTests(async (url, init) => {
         if (unreachable) throw new Error('connect ECONNREFUSED');
         const u = new URL(url);
+        const gate = gates.get(u.host);
+        if (gate) await gate;
+        tries.set(u.host, (tries.get(u.host) ?? 0) + 1);
+        if (refusing.has(u.host)) throw new Error('connect ETIMEDOUT');
         const header = parseNodeRequestHeader(init.headers[NODE_REQUEST_HEADER] ?? '');
         const signed = !!header && header.key === bDoc.key && header.destination === u.host && header.origin === 'b.example'
             && nodeRequestSignatureVerifies(header, { method: 'POST', path: u.pathname, body: init.body });
@@ -480,6 +502,243 @@ async function main(): Promise<void> {
     const guestView = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'test-guest-view.ts'), 'utf8');
     assert(['GET /api/groups/:id/guests', 'POST /api/groups/:id/guests', 'DELETE /api/groups/:id/guests/:key'].every((r) => guestView.includes(`'${r}'`)),
         '11c. the new routes are in test-guest-view\'s EVERY_ROUTE');
+
+    // ── Round 2 (the deciding review of 6b7cc38a): close each class ─────────────────────────
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const waitFor = async (cond: () => boolean, ms = 3000) => {
+        const end = Date.now() + ms;
+        while (!cond() && Date.now() < end) await sleep(10);
+        return cond();
+    };
+    const lineIn = (who: Id, g: string, key: Uint8Array, epoch: number, extra: Record<string, unknown> = {}) => {
+        const id = crypto.randomUUID();
+        return { ...sealGroupLine('hi', { myEdPrivHex: who.seedHex, groupKey: key, groupId: g, epoch, messageId: id }), metadata: { epoch, ...extra }, clientId: id };
+    };
+    const keysOfRoster = (d: any): string[] => [...(d?.members ?? []).map((m: any) => m.key), ...(d?.guests ?? []).map((g: any) => g.key)].sort();
+
+    // ── 12. The roster, at every change of it ───────────────────────────────────────────────
+    console.log('\n12. Every change of the names in the chat sends the roster, once to each community with guests in');
+    const S = createGroup({ name: 'Tool Shed', joinPolicy: 'open', createdBy: ana.pk }).id;
+    const shedTo = `group:${S}`;
+    const shedKeys = async () => (await call('GET', ana, `/api/groups/${S}/keys`)).body;
+    const homeGuests = (home: string) => db.prepare("SELECT guest_key FROM group_guests WHERE group_id = ? AND home = ? AND state = 'in' ORDER BY guest_key").pluck().all(S, home) as string[];
+    const homesIn = () => [...new Set(db.prepare("SELECT home FROM group_guests WHERE group_id = ? AND state = 'in'").pluck().all(S) as string[])].sort();
+    const gwen = newId('Gwen'), kit = newId('Kit');     // at a.example
+    const cy = newId('Cy'), lu = newId('Lu');           // at c.example
+    const ivy = addLocal('Ivy'), max = addLocal('Max'), ned = addLocal('Ned'), hugo = addLocal('Hugo'), jo = addLocal('Jo');
+    for (const m of [ivy, max, ned]) await call('POST', m, `/api/groups/${S}/join`, {});
+    for (const [g, home] of [[gwen, 'a.example'], [cy, 'c.example'], [lu, 'c.example']] as Array<[Id, 'a.example' | 'c.example']>) {
+        await call('POST', ana, `/api/groups/${S}/guests`, { card: await cardOf(g, home) });
+        await bring([await item(g, home, shedTo, 'group-invite', yes)], home);
+    }
+    const s1 = epochBy(ana, S, 1, 'start', [ana, ivy, max, ned, gwen, cy, lu]);
+    const s1r = await call('POST', ana, `/api/groups/${S}/keys/epoch`, { epoch: s1.record });
+    assert(s1r.status === 201 && JSON.stringify(homesIn()) === JSON.stringify(['a.example', 'c.example']),
+        `12a. Tool Shed: four members, guests at two communities, one epoch over them all (got ${s1r.status} ${JSON.stringify(s1r.body)})`);
+    // Each kind of roster change once. A member's: joining (with no epoch, and with her own), leaving, removed by a convenor,
+    // removed by a vote, deleting their account. A guest's: invited (no change of the names in the chat: the invitation alone
+    // goes, and the roster follows their yes, design §4.2 "Joining"), in, left, removed.
+    const rosterRows: Array<{ change: string; act: () => Promise<unknown>; names: (d: any) => boolean; invites?: Id }> = [
+        { change: 'a member joins (an app that sends no epoch)', act: () => call('POST', hugo, `/api/groups/${S}/join`, {}),
+            names: (d) => d.members.some((m: any) => m.key === hugo.pk && m.name === 'Hugo') },
+        { change: 'a member joins with her own epoch', act: async () => {
+            const k = await shedKeys();
+            const e = makeGroupEpochRecord({ myEdPrivHex: jo.seedHex, groupId: S, epoch: k.current + 1, reason: 'join', subject: jo.pk, createdAt: new Date().toISOString(), recipients: [...k.roster, jo.pk] });
+            return call('POST', jo, `/api/groups/${S}/join`, { epoch: e.record });
+        }, names: (d) => d.members.some((m: any) => m.key === jo.pk && m.name === 'Jo') && d.epoch?.stale === false },
+        { change: 'a member leaves', act: () => call('DELETE', hugo, `/api/groups/${S}/members/${hugo.pk}`), names: (d) => !d.members.some((m: any) => m.key === hugo.pk) },
+        { change: 'a convenor removes a member', act: () => call('DELETE', ana, `/api/groups/${S}/members/${ivy.pk}`), names: (d) => !d.members.some((m: any) => m.key === ivy.pk) },
+        { change: 'a member is removed by a vote', act: async () => db.transaction(() => removeGroupMemberByVote(S, max.pk))(),
+            names: (d) => !d.members.some((m: any) => m.key === max.pk) },
+        { change: 'a member deletes their account', act: async () => purgeMemberSelf(ned.pk), names: (d) => !d.members.some((m: any) => m.key === ned.pk) },
+        { change: 'a guest is invited', act: async () => call('POST', ana, `/api/groups/${S}/guests`, { card: await cardOf(kit, 'a.example') }), names: () => true, invites: kit },
+        { change: 'a guest says yes', act: async () => bring([await item(kit, 'a.example', shedTo, 'group-invite', yes)]),
+            names: (d) => d.guests.some((g: any) => g.key === kit.pk && g.home === 'a.example' && g.name === 'Kit') },
+        { change: 'a guest leaves', act: async () => bring([await item(kit, 'a.example', shedTo, 'group-leave', JSON.stringify({ v: 1 }))]), names: (d) => !d.guests.some((g: any) => g.key === kit.pk) },
+        { change: 'a convenor removes a guest', act: () => call('DELETE', ana, `/api/groups/${S}/guests/${lu.pk}`), names: (d) => !d.guests.some((g: any) => g.key === lu.pk) },
+    ];
+    for (const row of rosterRows) {
+        const before = Date.now();
+        const res: any = await row.act();
+        await settle();
+        const rosters = outsOf('roster', before).filter((o) => o.body.group === S);
+        const want = row.invites ? [] : homesIn();
+        const roster = (await shedKeys()).roster;
+        const once = want.every((h) => {
+            const to = rosters.filter((o) => o.home === h);
+            return to.length === 1 && JSON.stringify(to[0].body.guests) === JSON.stringify(homeGuests(h));
+        });
+        const right = rosters.every((o) => o.signed && row.names(o.body.data) && JSON.stringify(keysOfRoster(o.body.data)) === JSON.stringify(roster));
+        const invited = !row.invites || outsOf('invite', before).filter((o) => o.body.group === S && o.home === 'a.example' && JSON.stringify(o.body.guests) === JSON.stringify([row.invites!.pk])).length === 1;
+        const status = res && typeof res === 'object' && 'status' in res ? res.status : 'ok';
+        assert(rosters.length === want.length && once && right && invited,
+            `12. ${row.change} (${status}): the roster goes once to each community with guests in (${want.join(', ') || 'none'}), naming its guests, with exactly the chat's keys (got ${rosters.map((o) => o.home).join(', ') || 'none'})`);
+    }
+
+    // ── 13. Back from epoch-stale ───────────────────────────────────────────────────────────
+    console.log('\n13. A guest who hears epoch-stale is sent what they need to get back in');
+    const t13 = Date.now();
+    const wrong = epochBy(gwen, S, (await shedKeys()).current + 1, 'rotate', [ana, jo, gwen, cy, lu]);
+    const r13 = await bring([await item(gwen, 'a.example', shedTo, 'group-epoch', JSON.stringify({ epoch: wrong.record }))]);
+    const back13 = outsOf('roster', t13).filter((o) => o.body.group === S);
+    const k13 = await shedKeys();
+    assert(r13.body?.items?.[0]?.refused === 'epoch-stale' && back13.length === 1 && back13[0].home === 'a.example' && back13[0].signed
+        && JSON.stringify(back13[0].body.guests) === JSON.stringify(homeGuests('a.example')) && back13[0].body.data.epoch?.stale === true
+        && back13[0].body.data.epoch?.current === k13.current && JSON.stringify(keysOfRoster(back13[0].body.data)) === JSON.stringify(k13.roster),
+        `13a. Gwen's epoch over a roster that is gone: epoch-stale, and the roster follows to her home alone, the epoch marked stale (got ${JSON.stringify(r13.body)}, ${back13.map((o) => o.home)})`);
+    const right13 = makeGroupEpochRecord({ myEdPrivHex: gwen.seedHex, groupId: S, epoch: (back13[0]?.body.data.epoch?.current ?? 0) + 1, reason: 'rotate', subject: null,
+        createdAt: new Date().toISOString(), recipients: keysOfRoster(back13[0]?.body.data) });
+    const r13b = await bring([await item(gwen, 'a.example', shedTo, 'group-epoch', JSON.stringify({ epoch: right13.record }))]);
+    const k13b = await shedKeys();
+    assert(r13b.body?.items?.[0]?.received === true && k13b.current === right13.record.epoch && k13b.stale === false,
+        `13b. the epoch she makes over exactly the keys she was sent goes in (got ${JSON.stringify(r13b.body)}, current ${k13b.current})`);
+    // Ana rotates; Gwen's phone missed it and writes under the epoch before.
+    const s4 = epochBy(ana, S, k13b.current + 1, 'rotate', [ana, jo, gwen, cy]);
+    await call('POST', ana, `/api/groups/${S}/keys/epoch`, { epoch: s4.record });
+    await settle();
+    const t13c = Date.now();
+    const r13c = await bring([await item(gwen, 'a.example', shedTo, 'group-line', JSON.stringify(lineIn(gwen, S, right13.groupKey, right13.record.epoch)))]);
+    const back13c = outsOf('roster', t13c).filter((o) => o.body.group === S);
+    const ep13 = back13c[0]?.body.data.epoch;
+    let opened13: Uint8Array | null = null;
+    try {
+        opened13 = openMyGroupKey({ groupId: S, ...ep13.record } as GroupEpochRecord, { epoch: ep13.current, ...ep13.wraps.find((w: any) => w.recipient === gwen.pk), sig: null } as any, gwen.seedHex, { groupId: S });
+    } catch { /* stays null */ }
+    assert(r13c.body?.items?.[0]?.refused === 'epoch-stale' && back13c.length === 1 && back13c[0].home === 'a.example' && ep13?.current === s4.record.epoch && ep13?.stale === false
+        && ep13.wraps.length > 0 && ep13.wraps.every((w: any) => homeGuests('a.example').includes(w.recipient)) && !!opened13 && Buffer.from(opened13).equals(Buffer.from(s4.groupKey)),
+        `13c. her line under the epoch before: epoch-stale, and the roster follows with the current epoch and her home's wraps only; she opens its key (got ${JSON.stringify(r13c.body)}, ${JSON.stringify(ep13 && { current: ep13.current, stale: ep13.stale, wraps: ep13.wraps?.length })})`);
+    const again13 = lineIn(gwen, S, opened13 ?? s4.groupKey, s4.record.epoch);
+    const r13d = await bring([await item(gwen, 'a.example', shedTo, 'group-line', JSON.stringify(again13))]);
+    assert(r13d.body?.items?.[0]?.received === true && !!db.prepare('SELECT 1 FROM messages WHERE id = ?').get(again13.clientId), '13d. sent again under it, her line goes in');
+    const t13e = Date.now();
+    const r13e = await bring([
+        await item(gwen, 'a.example', shedTo, 'group-line', JSON.stringify(lineIn(gwen, S, right13.groupKey, right13.record.epoch))),
+        await item(gwen, 'a.example', shedTo, 'group-line', JSON.stringify(lineIn(gwen, S, right13.groupKey, right13.record.epoch))),
+    ]);
+    assert(r13e.body?.items?.every((i: any) => i.refused === 'epoch-stale') && outsOf('roster', t13e).filter((o) => o.body.group === S).length === 1,
+        `13e. two refused in one request: one roster follows, not two (got ${outsOf('roster', t13e).filter((o) => o.body.group === S).length})`);
+
+    // ── 14. Every notice a guest's action makes names them as a guest, with their community ─
+    console.log('\n14. Every notice a guest\'s action can make shows their community, never their card\'s name alone');
+    // A guest whose card says the convenor's name (the review's case): "Ana", at a.example.
+    const fakeAna = newId('Ana');
+    const oz = newId('Oz');
+    await call('POST', ana, `/api/groups/${S}/guests`, { card: await cardOf(fakeAna, 'a.example') });
+    await bring([await item(fakeAna, 'a.example', shedTo, 'group-invite', yes)]);
+    await call('POST', ana, `/api/groups/${S}/guests`, { card: await cardOf(oz, 'c.example') });
+    let curEpoch = 0;
+    let curKey: Uint8Array = s4.groupKey;
+    const lastNotice = () => (db.prepare('SELECT COALESCE(MAX(rowid), 0) AS n FROM push_notices').get() as { n: number }).n;
+    const noticeRows: Array<{ kind: string; label: string; who: Id; home: 'a.example' | 'c.example'; act: () => Promise<unknown>; want?: { to: Id; body: string } }> = [
+        { kind: 'group-invite', label: 'yes to an invitation', who: oz, home: 'c.example', act: async () => bring([await item(oz, 'c.example', shedTo, 'group-invite', yes)], 'c.example') },
+        { kind: 'group-leave', label: 'leaving', who: oz, home: 'c.example', act: async () => bring([await item(oz, 'c.example', shedTo, 'group-leave', JSON.stringify({ v: 1 }))], 'c.example') },
+        { kind: 'group-epoch', label: 'epoch', who: fakeAna, home: 'a.example', act: async () => {
+            const k = await shedKeys();
+            const e = makeGroupEpochRecord({ myEdPrivHex: fakeAna.seedHex, groupId: S, epoch: k.current + 1, reason: 'rotate', subject: null, createdAt: new Date().toISOString(), recipients: k.roster });
+            curEpoch = e.record.epoch;
+            curKey = e.groupKey;
+            return bring([await item(fakeAna, 'a.example', shedTo, 'group-epoch', JSON.stringify({ epoch: e.record }))]);
+        } },
+        { kind: 'group-line', label: 'line', who: fakeAna, home: 'a.example', want: { to: ana, body: 'Ana · a.example · guest sent a message' },
+            act: async () => bring([await item(fakeAna, 'a.example', shedTo, 'group-line', JSON.stringify(lineIn(fakeAna, S, curKey, curEpoch)))]) },
+        { kind: 'group-line', label: 'line mentioning a member', who: fakeAna, home: 'a.example', want: { to: jo, body: 'Ana · a.example · guest mentioned you' },
+            act: async () => bring([await item(fakeAna, 'a.example', shedTo, 'group-line', JSON.stringify(lineIn(fakeAna, S, curKey, curEpoch, { mentions: [jo.pk] })))]) },
+    ];
+    for (const row of noticeRows) {
+        const from = lastNotice();
+        const res: any = await row.act();
+        await settle();
+        await sleep(30);
+        const made = db.prepare('SELECT recipient, title, body FROM push_notices WHERE rowid > ?').all(from) as Array<{ recipient: string; title: string; body: string }>;
+        const line = `${row.who.name} · ${row.home} · guest`;
+        const bare = made.filter((n) => `${n.title}\n${n.body}`.includes(row.who.name) && !`${n.title}\n${n.body}`.includes(line));
+        const wanted = !row.want || made.some((n) => n.recipient === row.want!.to.pk && n.body === row.want!.body);
+        assert(res?.body?.items?.[0]?.received === true && bare.length === 0 && wanted,
+            `14. a guest's ${row.label}: every notice it makes says "${line}", never "${row.who.name}" alone (${made.length} notice(s): ${made.map((n) => n.body).join(' | ') || 'none'})`);
+    }
+    const kindsCovered = [...(guests?.GUEST_ITEM_KINDS ?? [])].every((k: string) => noticeRows.some((r) => r.kind === k));
+    assert(kindsCovered && noticeRows.some((r) => r.want), '14z. the table covers every kind a guest\'s home brings, and the lines make notices');
+
+    // ── 15. Each home on its own ────────────────────────────────────────────────────────────
+    console.log('\n15. One community that doesn\'t answer holds up no other; a row queued during a send goes when it ends');
+    let openC: () => void = () => {};
+    gates.set('c.example', new Promise<void>((r) => { openC = r; }));
+    const pia = newId('Pia');
+    const t15 = Date.now();
+    await call('POST', ana, `/api/groups/${S}/guests`, { card: await cardOf(pia, 'c.example') });     // c.example's row, the oldest: its send hangs
+    await sleep(30);
+    const busy = lineIn(ana, S, curKey, curEpoch);
+    const posted15 = await call('POST', ana, `/api/groups/${S}/chat/message`, busy);
+    const aGot = await waitFor(() => outs.some((o) => o.home === 'a.example' && o.body.kind === 'line' && o.body.data.id === busy.clientId), 2000);
+    assert(posted15.status === 201 && aGot && !outs.some((o) => o.home === 'c.example' && o.at >= t15),
+        `15a. while c.example doesn't answer, Ana's line reaches a.example at once (got ${posted15.status}, a.example ${aGot})`);
+    openC();
+    gates.delete('c.example');
+    const cGot = await waitFor(() => outs.some((o) => o.home === 'c.example' && o.body.kind === 'line' && o.body.data.id === busy.clientId), 2000);
+    assert(cGot && outsOf('invite', t15).some((o) => o.home === 'c.example' && o.body.guests.includes(pia.pk)),
+        '15b. once c.example answers, the invitation goes and then the line queued while it hung, with no other flush and no minute tick');
+    // Three lines queued for c.example at once while it refuses: one try for the home, not one a row; a.example gets all three.
+    const ids15 = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+    for (const id of ids15) {
+        await call('POST', ana, `/api/groups/${S}/chat/message`, { ...sealGroupLine('x', { myEdPrivHex: ana.seedHex, groupKey: curKey, groupId: S, epoch: curEpoch, messageId: id }), metadata: { epoch: curEpoch }, clientId: id });
+    }
+    await settle();
+    refusing.add('c.example');
+    const triesC = tries.get('c.example') ?? 0;
+    const t15c = Date.now();
+    for (const id of ids15) guests?.fanOutGroupLine(S, id, ana.pk);
+    const aAll = await waitFor(() => ids15.every((id) => outs.some((o) => o.home === 'a.example' && o.at >= t15c && o.body.data?.id === id)), 2000);
+    await settle();
+    const cWaiting = db.prepare('SELECT next_try_at FROM group_guest_outbox WHERE home = ?').pluck().all('c.example') as number[];
+    assert(aAll && (tries.get('c.example') ?? 0) - triesC === 1 && cWaiting.length === 3 && cWaiting.every((t) => t > Date.now()),
+        `15c. c.example refuses: one try for its three rows, all three wait; a.example has all three (got ${(tries.get('c.example') ?? 0) - triesC} tries, ${cWaiting.length} waiting)`);
+    refusing.delete('c.example');
+    await guests?.flushGuestOutbox(Date.now() + 10 * 60_000);
+    assert(ids15.every((id) => outs.some((o) => o.home === 'c.example' && o.at >= t15c && o.body.data?.id === id))
+        && (db.prepare('SELECT COUNT(*) AS n FROM group_guest_outbox WHERE home = ?').get('c.example') as { n: number }).n === 0,
+        '15d. when it answers again, all three go, then the outbox is empty');
+
+    // ── 16. Every timer job x (main server, standby) ────────────────────────────────────────
+    console.log('\n16. Every timer job of the guests, on a main server and on a standby');
+    const httpsSource = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'https-server.ts'), 'utf8');
+    const timerJobs = (httpsSource.match(/import \{([^}]*)\} from '\.\/engine\/group-guests\.js'/)?.[1] ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+    // A line waits for a.example (it refused), guests are in, and then the owners' switch goes off as a standby's copy has it.
+    refusing.add('a.example');
+    await call('POST', ana, `/api/groups/${S}/chat/message`, lineIn(ana, S, curKey, curEpoch));
+    await settle();
+    refusing.delete('a.example');
+    const offKey = 'nodeProfile.groupGuests';
+    const snap16 = () => JSON.stringify([
+        db.prepare('SELECT guest_key, state FROM group_guests WHERE group_id = ? ORDER BY guest_key').all(S),
+        db.prepare('SELECT epoch, stale_since FROM group_key_epochs WHERE group_id = ? ORDER BY epoch').all(S),
+        db.prepare('SELECT id, attempts, next_try_at FROM group_guest_outbox ORDER BY id').all(),
+    ]);
+    const jobs16: Record<string, () => Promise<number> | number> = {
+        closeGuestsIfSwitchedOff: () => guests?.closeGuestsIfSwitchedOff() ?? -1,
+        flushGuestOutbox: () => guests?.flushGuestOutbox(Date.now() + 60 * 60_000) ?? -1,
+    };
+    const waitingA16 = (db.prepare('SELECT COUNT(*) AS n FROM group_guest_outbox WHERE home = ?').get('a.example') as { n: number }).n;
+    const inBefore16 = (db.prepare("SELECT COUNT(*) AS n FROM group_guests WHERE group_id = ? AND state IN ('invited', 'in')").get(S) as { n: number }).n;
+    setNodeRole('backup');
+    db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(offKey, 'false');
+    for (const name of timerJobs) {
+        const job = jobs16[name];
+        const before = snap16(), sent = outs.length, triesA = tries.get('a.example') ?? 0;
+        const r = job ? await job() : -1;
+        await sleep(30);
+        assert(!!job && r === 0 && snap16() === before && outs.length === sent && (tries.get('a.example') ?? 0) === triesA,
+            `16. standby, ${name}: returns at once, writes no copied row, tells no other community (got ${r})`);
+    }
+    setNodeRole('primary');
+    const closed16 = await jobs16.closeGuestsIfSwitchedOff();
+    const t16 = Date.now();
+    await jobs16.flushGuestOutbox();
+    const told16 = outsOf('removed', t16).filter((o) => o.body.group === S);
+    assert(waitingA16 >= 1 && inBefore16 > 0 && closed16 >= inBefore16 && told16.length === 2 && told16.every((o) => o.body.data.why === 'closed')
+        && (db.prepare('SELECT COUNT(*) AS n FROM group_guest_outbox').get() as { n: number }).n === 0,
+        `16. main server, closeGuestsIfSwitchedOff then flushGuestOutbox: the guests go, each home is told once, the waiting line is dropped (got ${closed16}, ${told16.map((o) => o.home)})`);
+    assert(timerJobs.length === 2 && timerJobs.every((n) => n in jobs16), `16z. the table covers every job https-server.ts's timer runs from group-guests (${timerJobs.join(', ')})`);
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(offKey);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

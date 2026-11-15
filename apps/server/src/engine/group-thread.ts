@@ -22,7 +22,7 @@ import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getMember, getConversation, isVisitorKey, assertConvenorPowersActive, type Conversation, type Message } from '@beanpool/engine';
-import { detectMentions, groupPictureUrlOf, isGroupEncryptedPayload, isLockedAwayLine, GROUP_NONCE_PREFIX, type GroupRole, type GroupMemberStatus, word, wordsFor } from '@beanpool/core';
+import { detectMentions, groupPictureUrlOf, isGroupEncryptedPayload, isLockedAwayLine, GROUP_NONCE_PREFIX, nameLine, type GroupRole, type GroupMemberStatus, word, wordsFor } from '@beanpool/core';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { participantWriteAt, toThreadMessage, type EventThreadMessage } from './event-thread.js';
 import { getChatMute, unmutedRecipients, type ChatMute } from './chat-mutes.js';
@@ -45,9 +45,15 @@ const { t: tr } = wordsFor('en');
 // Moved to core (group-crypto.ts): the sending app detects mentions and declares them (§9). Still exported from here.
 export { detectMentions };
 
-/** A guest's name as their card gave it, for the push a line of theirs makes (engine/group-guests.ts). */
-function guestNameIn(groupId: string, key: string): string | null {
-    return (db.prepare('SELECT name FROM group_guests WHERE group_id = ? AND guest_key = ?').get(groupId, key) as { name: string } | undefined)?.name ?? null;
+/**
+ * How a guest from another community is named in what a line of theirs makes for members here (its push, the bell): the
+ * name their card gave, their community (their home, which the envelope proved) and "guest", in core's one name line
+ * (joint design §2.6: as a guest the community always shows), "Dax · riverside.example · guest". Never the card's name
+ * alone, which a guest chooses and nothing checks: a guest whose card says a member's name never passes as that member.
+ */
+export function guestLineName(groupId: string, key: string): string | null {
+    const g = db.prepare('SELECT name, home FROM group_guests WHERE group_id = ? AND guest_key = ?').get(groupId, key) as { name: string; home: string } | undefined;
+    return g ? nameLine({ kind: 'guest', name: nameLine({ kind: 'community', name: g.name, community: g.home }) }) : null;
 }
 
 export const GROUP_THREAD_TYPE = 'group_thread';
@@ -577,7 +583,10 @@ export function postGroupThreadMessage(
     // After the answer, never inside it: the push skips anyone who has blocked the author (state-engine.ts
     // dispatchPushNotification), and their badge count's work in the answer would make a line's answer faster when
     // someone in the group has blocked its author, which would tell them (#1403 review).
-    const senderName = sender?.callsign || (opts.guest ? guestNameIn(groupId, authorPubkey) : null) || 'A member';
+    // A guest is named by core's guest line, never by the name on their card alone (guestLineName).
+    const senderName = opts.guest
+        ? guestLineName(groupId, authorPubkey) ?? nameLine({ kind: 'guest', name: authorPubkey.slice(0, 8) })
+        : sender?.callsign || 'A member';
     setImmediate(() => {
         try { pushGroupMessage(cb, group, authorPubkey, senderName, mentions); }
         catch (e: any) { console.warn('[Push] A group line push failed:', e?.message ?? e); }

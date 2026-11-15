@@ -4014,15 +4014,19 @@ CREATE INDEX IF NOT EXISTS idx_group_guests_state ON group_guests(group_id, stat
 -- group_guest_outbox: what this server, hosting a group, still has to tell another community's server about its guests there
 -- (engine/group-guests.ts): one row is one signed request to one home (a line, an epoch, the roster, an invitation, a
 -- removal), naming that home's guests in the group: never one per guest. Tried at once, then again with backoff for 24
--- hours; gone at the first 2xx. This server's own (`local`): never copied to a standby, and a promoted standby starts with
--- none: what was waiting is still in the group's chat, which the next line's fan-out does not resend (said in the manual).
+-- hours; gone at the first 2xx. Each home is sent to on its own, so one that doesn't answer holds up no other. A roster
+-- still waiting is replaced by the newer one (only the latest names count). This server's own (`local`): never copied to a
+-- standby, and a promoted standby starts with none: what was waiting is still in the group's chat, which the next line's
+-- fan-out does not resend (said in the manual).
 CREATE TABLE IF NOT EXISTS group_guest_outbox (
     id          TEXT PRIMARY KEY,
     group_id    TEXT NOT NULL,
     home        TEXT NOT NULL CHECK (length(home) BETWEEN 1 AND 260),
+    kind        TEXT NOT NULL CHECK (kind IN ('invite', 'roster', 'line', 'epoch', 'removed')),
     body        TEXT NOT NULL CHECK (length(body) <= 1900000),
     attempts    INTEGER NOT NULL DEFAULT 0,
     next_try_at INTEGER NOT NULL,
     created_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_group_guest_outbox_due ON group_guest_outbox(next_try_at);
+CREATE INDEX IF NOT EXISTS idx_group_guest_outbox_home ON group_guest_outbox(home, next_try_at);

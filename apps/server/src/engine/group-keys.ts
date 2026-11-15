@@ -17,7 +17,7 @@
 import { db } from '../db/db.js';
 import { isNodeMember } from '@beanpool/engine';
 import { formerKeysReader } from './key-succession.js';
-import { fanOutGroupEpoch } from './group-guests.js';
+import { fanOutGroupEpoch, queueGroupRoster } from './group-guests.js';
 import {
     verifyGroupEpochRecord, verifyGroupTopUp, groupEpochCoversExactly, groupMembersDigest, GroupKeyNotVerifiedError,
     type GroupEpochReason, type GroupEpochRecord, type GroupKeyWrap, type GroupTopUp,
@@ -133,11 +133,16 @@ export function groupChatEncryption(groupId: string, viewer: string): { current:
     return { current: cur?.epoch ?? null, stale: cur ? cur.stale : true, fromEpoch: fromEpochOf(groupId, viewer) };
 }
 
-/** Mark the current epoch stale (a leaver, a prune, a membership change that carried no epoch). Inside the caller's transaction. */
+/**
+ * Mark the current epoch stale (a leaver, a prune, a membership change that carried no epoch, a guest in, left or removed).
+ * Inside the caller's transaction, after the roster changed: the roster goes to the guests' homes (engine/group-guests.ts
+ * queueGroupRoster, which never throws into the change), as it does from withMembershipEpoch's new epoch.
+ */
 export function markGroupEpochStale(groupId: string): void {
     db.prepare(`UPDATE group_key_epochs SET stale_since = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                 WHERE group_id = ? AND stale_since IS NULL AND epoch = (SELECT MAX(epoch) FROM group_key_epochs WHERE group_id = ?)`)
         .run(new Date().toISOString(), groupId, groupId);
+    queueGroupRoster(groupId);
 }
 
 /** Every group `pubkey` is an active member of has its current epoch marked stale (a prune or an account deletion, §2.3). */
@@ -234,6 +239,8 @@ export function withMembershipEpoch<T>(
             const joinedAt = (db.prepare("SELECT joined_at FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'")
                 .get(groupId, opts.subject) as { joined_at: string } | undefined)?.joined_at ?? null;
             fromEpoch = storeGroupEpoch(groupId, actor, raw, { ...opts, storedNotBefore: joinedAt }).epoch;
+            // The roster moved with this epoch: to the guests' homes (the stale path below sends it from markGroupEpochStale).
+            queueGroupRoster(groupId);
         } else if (changed) {
             markGroupEpochStale(groupId);
         }

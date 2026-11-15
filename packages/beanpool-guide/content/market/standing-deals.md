@@ -132,7 +132,7 @@ A lowered period **counts as paid in full** in the app. The dates don't move, th
 - On the post, tap **Ask to pay less next month…** (**…this month…** while the deal is short).
 - A sheet, **Ask to pay less?**, says **Vehicle Storage · the month from 9 Dec · 50 Beans**, with the same choices. It says **Rob has to say yes. Until then nothing changes: the full 50 Beans go on 9 Dec if you have them.** (While the deal is short: **…we keep trying for the full 50 Beans until 24 Dec.**) And: **If Rob says yes, that month counts as paid in full here. Anything else you two agree is between you; BeanPool keeps no record of it.**
 - Tap **Ask Rob**, or **Cancel**. Your card then says **You asked to pay 25 Beans for the month from 9 Dec · waiting for Rob**, with **Take it back**.
-- One ask can wait at a time, and you can ask about one period 3 times at most. A fourth try says **You've asked about this month three times, which is the most.**
+- One ask can wait at a time, and you can ask about one period 3 times at most. After the third, the link is gone until the next period.
 
 **The provider answers.** The provider gets an alert and a line under **Needs you**, amber and counted, because it is their step: **Marty asks to pay 25 Beans, not 50, for the month from 9 Dec of Vehicle Storage.** Their card says **⚠️ Marty asks to pay 25 Beans for the month from 9 Dec**, with **Answer**. The sheet says **25 Beans instead of 50** and **If you say yes, that month counts as paid in full here: nothing more is owed through the app for it. The month after is 50 Beans again.**
 
@@ -143,8 +143,8 @@ A lowered period **counts as paid in full** in the app. The dates don't move, th
 
 **What a lowered period does.**
 
-- It is paid at its start like any other, at the lower amount, and the warning a few days before uses the lower amount too. The 1.5% fee comes off that amount. The Ledger row says **Standing deal · Vehicle Storage · month 3 · 25 of 50 Beans by agreement**, and so does the deal's line in **History** in Your deals.
-- At 0, nothing moves: no Ledger row and no fee. **History** says **0 of 50 Beans by agreement**.
+- It is paid at its start like any other, at the lower amount, and the warning a few days before uses the lower amount too. The 1.5% fee comes off that amount. The Ledger row says **Standing deal · Vehicle Storage · month 2 · 25 of 50 Beans by agreement**, and so does the deal's line in **History** in Your deals.
+- At 0, nothing moves: no Ledger row and no fee. **History** says **Standing deal · Vehicle Storage · month 2 · 0 of 50 Beans by agreement**.
 - The cards say so. Before it is due, the payer reads **…· next month is 25 Beans by agreement, on 9 Dec**. Once it is paid: **This month's 25 went to Rob on 9 Dec (by agreement, not 50) · the next 50 go on 9 Jan**, and the provider reads **Marty's standing deal · 50 Beans a month · paid for this month on 9 Dec: 25 by agreement · next 50 on 9 Jan**. At 0: **This month is 0 Beans by agreement · the next 50 go on 9 Jan**.
 - **In the grace**, a lowering or a yes pays the lower amount at once if the payer's room covers it, and at 0 the period is simply paid. If the room doesn't cover it, the deal stays short at the lower amount, with the same last day. From then on the reminders, the **Needs you** lines and what has to arrive all use the lower amount. Beans that reach the payer while an ask still waits for an answer pay the full price at once, as always.
 - A lowered period can be lowered again, never raised back.

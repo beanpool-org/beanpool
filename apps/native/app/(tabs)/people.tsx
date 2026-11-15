@@ -34,7 +34,6 @@ import { beansOn, invitesOn, membersByKey } from '../../utils/node-profile';
 import { askMyVouching, rereadMyVouching, type MyVouching } from '../../utils/vouchers';
 import { VouchPresetChoice } from '../../components/VouchPresetChoice';
 import { InviteBillFold } from '../../components/InviteBillFold';
-import * as Crypto from 'expo-crypto';
 import { InviteNamesBoxes, useInviteNames, useRoleOnInvites } from '../../components/InviteNamesBoxes';
 import { InviteMadeCard, PendingInvites } from '../../components/InviteRows';
 import { useContactInviteNames } from '../../utils/use-contact-invite-names';
@@ -95,6 +94,14 @@ const SORT_OPTIONS: ReadonlyArray<{ key: SortOption; icon: string; label: WordKe
 function dateWords(iso: string | null | undefined, pattern: 'day-month' | 'day-month-year'): string {
     const d = iso ? new Date(iso) : null;
     return d && Number.isFinite(d.getTime()) ? formatDate(d, pattern) : '';
+}
+
+/**
+ * A bill's own id (slice B3): 32 random hex digits, from the getRandomValues utils/crypto.ts makes sure this phone has. Kept
+ * for what is typed until an invite is made, so a second tap after a lost answer is the same bill on the node.
+ */
+function newBillId(): string {
+    return Array.from(globalThis.crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export default function PeopleScreen() {
@@ -347,8 +354,8 @@ export default function PeopleScreen() {
     const [billOpen, setBillOpen] = useState(false);
     const [billWhatFor, setBillWhatFor] = useState('');
     const [billBeans, setBillBeans] = useState('');
-    const billId = useRef<string>(Crypto.randomUUID().toLowerCase());
-    const clearBill = () => { setBillOpen(false); setBillWhatFor(''); setBillBeans(''); billId.current = Crypto.randomUUID().toLowerCase(); };
+    const billId = useRef<string>('');
+    const clearBill = () => { setBillOpen(false); setBillWhatFor(''); setBillBeans(''); billId.current = ''; };
     useEffect(() => {
         if (!anchorUrl || !identity || isGuest) return;
         let alive = true;
@@ -661,6 +668,7 @@ export default function PeopleScreen() {
             Alert.alert(t('Could not add the bill'), billAsked.error);
             return;
         }
+        if (billAsked.bill && !billId.current) billId.current = newBillId();
         const bill = billAsked.bill ? { ...billAsked.bill, id: billId.current } : null;
         setGenerating(true);
         const chosenVouch = myVouching?.voucher ? vouchPreset : null;

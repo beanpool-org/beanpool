@@ -17,6 +17,7 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { beansOn } from '../../utils/node-profile';
 import { talkSort } from '../../utils/beans-off';
+import { orderTalkRows } from '../../utils/talk-list-order';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 import { initialTalkView, type TalkView } from '../../utils/talk-views';
@@ -425,28 +426,9 @@ export default function ChatsScreen() {
             };
         });
         
-        // 4. Advanced Sorting
-        regular = [...regular].sort((a, b) => {
-            if (sortBy === 'unread') {
-                // Prioritize unread messages
-                if (a.unread > 0 && b.unread === 0) return -1;
-                if (a.unread === 0 && b.unread > 0) return 1;
-            } else if (sortBy === 'credits_desc') {
-                // Whole hundredths of a Bean (the conversation's listing price, else what its deal holds): compared exactly.
-                const credA = a.postPrice_c || a.pendingAmount_c || 0;
-                const credB = b.postPrice_c || b.pendingAmount_c || 0;
-                if (credA !== credB) return credB - credA;
-            } else if (sortBy === 'credits_asc') {
-                const credA = a.postPrice_c || a.pendingAmount_c || 0;
-                const credB = b.postPrice_c || b.pendingAmount_c || 0;
-                if (credA !== credB) return credA - credB;
-            }
-
-            // Fallback: raw timestamp
-            const timeA = a.rawTimestamp ? new Date(a.rawTimestamp).getTime() : 0;
-            const timeB = b.rawTimestamp ? new Date(b.rawTimestamp).getTime() : 0;
-            return timeB - timeA;
-        });
+        // 4. The order (utils/talk-list-order.ts, both apps' rule; Marty, 16 Nov 2026): by each chat's newest line, the member's
+        // own included, newest first; a chat with no line by when it was made. Unread is the badge, unless ✉ Unread is picked.
+        regular = orderTalkRows(regular, sortBy);
 
         return { actionRequired, regularConversations: regular };
     }, [conversations, outsideChats, deals, searchQuery, sortBy, readFilter, peopleFilter, friendPubkeys]);

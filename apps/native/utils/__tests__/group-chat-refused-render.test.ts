@@ -70,7 +70,7 @@ vi.mock('../../components/chat/useChatPoll', async () => {
 });
 vi.mock('../../components/chat/useChatSoftInputMode', () => ({ useChatSoftInputMode: () => { } }));
 vi.mock('../../components/useYourGroups', () => ({
-    yourGroupsStore: { getState: () => ({ items: [] }), markRead: vi.fn(), setMute: vi.fn() },
+    yourGroupsStore: { getState: () => ({ items: [] }), markRead: vi.fn(), setMute: vi.fn(), noteSent: vi.fn() },
 }));
 vi.mock('../haptics', () => ({ hapticTick: vi.fn(), hapticSuccess: vi.fn(), hapticWarning: vi.fn() }));
 // The chat's own pieces never draw on this screen (no chat to show); the info sheet stays shut (no group read).

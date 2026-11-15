@@ -98,6 +98,7 @@ vi.mock('../../components/chat/ChatPhoto', () => ({ ChatPhotoViewer: () => null 
 vi.mock('../../components/signed-request-lines', () => ({ signedRequestWords: (m: string) => m }));
 vi.mock('expo-modules-core', () => ({ requireNativeModule: vi.fn(() => ({})), requireOptionalNativeModule: vi.fn(() => null), EventEmitter: vi.fn(() => ({})), NativeModulesProxy: {} }));
 
+import { pseudoLocalise, setLanguage } from '@beanpool/core';
 import { KnowledgeDetail } from '../../components/learn/KnowledgeDetail';
 import { editBody, fixBody, formOfPage, pageActions } from '../../components/learn/learn-keep';
 import NewKnowledgeScreen from '../../app/learn/new';
@@ -321,6 +322,30 @@ describe('the form as "Suggest a fix" and as "Edit" (§3.5)', () => {
         expect(fixBody(p, { ...formOfPage(p), title: ` ${p.title} `, topic: 'emergencies', place: '', sources: [] }, 'x'))
             .toEqual({ fixOf: 'tip', note: 'x', topic: 'emergencies', place: '', sources: [] });
         expect(editBody(p, { ...formOfPage(p), place: '', sources: [] })).toEqual({ title: p.title, body: p.description, topic: 'local-services', place: '', sources: [] });
+    });
+});
+
+describe('in the member\'s language: every new word goes through t() (the xx pseudo-language)', () => {
+    afterEach(() => setLanguage('en'));
+    it('the page\'s actions and tools, and the fix form', async () => {
+        setLanguage('xx');
+        as('checker');
+        h.pages = [page({}, { outdatedAt: '2026-11-01T00:00:00.000Z' })];
+        await showPage();
+        for (const w of ['👍 This helped', 'Edit', 'Still right', 'Clear the mark']) expect(host.textContent).toContain(pseudoLocalise(w));
+        h.checks = false;
+        h.pages = [page({ authorPublicKey: ME })];
+        await showPage();
+        expect(host.textContent).toContain(pseudoLocalise('Suggest a fix'));
+        await click('knowledge-mark');
+        expect((q('knowledge-mark-note') as HTMLInputElement).placeholder).toBe(pseudoLocalise('What may be out of date? (optional)'));
+        expect(host.textContent).toContain(pseudoLocalise('Cancel'));
+        h.params = { fix: 'tip' };
+        h.pages = [page()];
+        await show(createElement(NewKnowledgeScreen));
+        for (const w of ['WHAT CHANGED? *', 'Suggest a fix', 'An owner or admin checks it first. The page stays as it is until then.']) expect(host.textContent).toContain(pseudoLocalise(w));
+        await click('learn-new-send');
+        expect(q('learn-new-problem')!.textContent).toBe(pseudoLocalise('Say what changed.'));
     });
 });
 

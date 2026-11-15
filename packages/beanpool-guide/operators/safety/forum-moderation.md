@@ -1,6 +1,6 @@
 ---
-slug: forum
-title: The forum
+slug: forum-moderation
+title: Running the forum
 summary: Turning the forum on or off, its starting sections, first looks for new people on the global community, reports on forum posts, and what your server holds and copies.
 related: reports-and-takedowns, global-limits, core-settings, what-the-server-sees, backups-and-replicas, roles
 ---

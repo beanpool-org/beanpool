@@ -7,7 +7,7 @@ related: pulse-and-announcements, members-and-invites, decisions-and-emergencies
 
 ## How members report
 
-In the app, members report a post, an event, a Pulse item, a project, an enterprise, a message in a group's chat, a post in the forum (see The forum) (and, in the web app, a person) and choose a reason: spam or scam, offensive content, misleading post, child safety, or other. Every report screen offers the same list. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report.
+In the app, members report a post, an event, a Pulse item, a project, an enterprise, a message in a group's chat, a post in the forum (see Running the forum) (and, in the web app, a person) and choose a reason: spam or scam, offensive content, misleading post, child safety, or other. Every report screen offers the same list. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report.
 
 - A member can file at most **10 reports an hour**.
 - Reporting the same thing again, while the first report is still open, does nothing new, unless the member now chooses **Child safety**: the open report changes to it, and you are told as for a new child-safety report.

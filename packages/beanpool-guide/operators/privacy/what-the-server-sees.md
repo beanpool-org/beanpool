@@ -25,7 +25,7 @@ Anyone with the server's files can read these, and so can anyone who can open a 
 - the log of credit looks: who looked at whom and when, in which place and as what, never a balance;
 - on a community that works by area (the global community), each member's rough area, if they gave one: a place rounded to about 10 km. It is how the server picks the listings near them. Only that member can read it back, and other members see only a distance in whole kilometres. A listing a member posts with no place of its own is shown at their area to everyone who can read it;
 - **event chats and enterprise chats**: these are not encrypted, and the server could write in them in anyone's name;
-- **the forum**: every topic, reply and photo, in every section, and the earlier wording of an edited post for 30 days (see The forum);
+- **the forum**: every topic, reply and photo, in every section, and the earlier wording of an edited post for 30 days (see Running the forum);
 - the notices the server adds to a direct message about a deal: Beans placed in escrow, released, or refunded when a deal is cancelled, the amount, and how a dispute was settled and why;
 - who messaged whom, and when, which message each one answers, and their emoji reactions, even for direct messages;
 - the messages you send members from the admin page;

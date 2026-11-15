@@ -50,8 +50,7 @@ import { setLanguage } from '@beanpool/core';
 import { homeView, offersStartNew } from '../first-question';
 import { onboardingColors } from '../onboarding-colors';
 
-const QUESTION_STYLES = { homeDoors: {}, usedBeforeQuestion: {}, memberBtn: {}, memberBtnText: {}, inviteOnlyHint: {} };
-const START_NEW_STYLES = { restorePromptBox: {}, restorePromptLabel: {}, restorePromptBtn: {}, restorePromptBtnText: {} };
+const SCREEN = onboardingColors('light');
 const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
 
 let host: HTMLDivElement;
@@ -104,7 +103,7 @@ describe('which first screen the home draws (utils/first-question.ts)', () => {
 describe('the question and its two answers', () => {
     it('asks "Used BeanPool before?", then I\'m New Here, then I\'m Already a Member, and the line about a lost phone', async () => {
         const taps = { new: 0, returning: 0 };
-        await draw(createElement(UsedBefore, { onNew: () => { taps.new++; }, onReturning: () => { taps.returning++; }, styles: QUESTION_STYLES }));
+        await draw(createElement(UsedBefore, { ...SCREEN, onNew: () => { taps.new++; }, onReturning: () => { taps.returning++; } }));
         expect(reading()).toEqual([
             'Used BeanPool before?',
             "I'm New Here",
@@ -134,7 +133,7 @@ describe('the question and its two answers', () => {
 describe('"Start a new account instead": never a dead end, and plain about what it does', () => {
     it('says it makes a new account, and its tap only calls back', async () => {
         let started = 0;
-        await draw(createElement(StartNewInstead, { onStartNew: () => { started++; }, styles: START_NEW_STYLES }));
+        await draw(createElement(StartNewInstead, { ...SCREEN, onStartNew: () => { started++; } }));
         expect(reading()).toEqual([
             "Can't bring your account back? You can start again, but that makes a new account. Your old account stays as it is, and the two can never be joined into one.",
             'Start a new account instead →',

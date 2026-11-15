@@ -3721,7 +3721,7 @@ export default function WelcomeScreen() {
                         {/* Never a dead end (utils/first-question.ts): a person with no account here who can't get back in may
                             start new, told plainly that it makes a new account. The tap only opens the doors; a join there makes it. */}
                         {offersStartNew(!!accountOnPhone) && (
-                            <StartNewInstead onStartNew={() => { setError(null); setFirstAnswer('new'); setMode('home'); }} styles={styles} />
+                            <StartNewInstead colors={colors} dark={dark} onStartNew={() => { setError(null); setFirstAnswer('new'); setMode('home'); }} />
                         )}
 
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel={t('Back to Home')}>
@@ -4308,9 +4308,10 @@ export default function WelcomeScreen() {
                         <LanguageSwitch />
                         <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
                         <UsedBefore
+                            colors={colors}
+                            dark={dark}
                             onNew={() => { setError(null); setFirstAnswer('new'); }}
                             onReturning={() => { setError(null); setMode('member'); }}
-                            styles={styles}
                         />
                     </View>
                 </ScrollView>
@@ -4405,8 +4406,6 @@ const styles = StyleSheet.create({
     homeMain: { width: '100%', alignItems: 'center' },
     // The two doors (components/WelcomeDoors.tsx), right under the title; the line under Explore when its door can't be used.
     homeDoors: { width: '100%', alignItems: 'center', marginTop: 16 },
-    // "Used BeanPool before?" above its two answers (components/welcome/UsedBefore.tsx).
-    usedBeforeQuestion: { fontSize: 20, fontWeight: '700', color: colors.text.heading, textAlign: 'center', marginBottom: 16 },
     doorLine: { fontSize: 15, color: colors.text.secondary, textAlign: 'center', lineHeight: 21, marginBottom: 8 },
     // The sentence about BeanPool, under the doors (it was the subtitle above them).
     homeAbout: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 24, marginTop: 20 },

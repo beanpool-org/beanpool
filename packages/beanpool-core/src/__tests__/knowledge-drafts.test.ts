@@ -9,11 +9,13 @@ import {
     KNOWLEDGE_DRAFT_LIMITS,
     KNOWLEDGE_DRAFT_WORDS,
     KNOWLEDGE_LIMITS,
+    KNOWLEDGE_UNCHECKED_DAYS,
     PUSH_NOTICE_KINDS,
     PUSH_NOTICE_TITLE,
     isPushNoticeKind,
     knowledgeAnswerNotice,
     knowledgeToCheckLine,
+    knowledgeUncheckedForAYear,
     pushNoticeWords,
     wordsFor,
 } from '../index.js';
@@ -61,6 +63,61 @@ describe('the answer a member keeps', () => {
         expect(not.body).toContain('Tip');
         expect(not.body).toContain('Mine');
         expect(not.body).not.toContain('It looks copied');
+    });
+});
+
+describe("a fix's answer (slice K5)", () => {
+    it('added: "Your fix is in", the page\'s title, naming nobody who answered', () => {
+        expect(knowledgeAnswerNotice({ outcome: 'approved', title: 'How the tip works', kind: 'fix' }, EN)).toEqual({
+            title: 'Your fix is in',
+            body: 'Your fix to "How the tip works" is showing now. Thank you.',
+        });
+    });
+
+    it('not used: the reason, then the admin\'s own words when they wrote some', () => {
+        expect(knowledgeAnswerNotice({ outcome: 'declined', title: 'Tip', reason: 'unchecked', words: ' Ask at the gate ', kind: 'fix' }, EN)).toEqual({
+            title: "Your fix wasn't used",
+            body: `Your fix to "Tip" wasn't used. Reason: I couldn't check it. Ask at the gate`,
+        });
+        expect(knowledgeAnswerNotice({ outcome: 'declined', title: 'Tip', reason: 'nonsense', kind: 'fix' }, EN).body).toBe(`Your fix to "Tip" wasn't used. Reason: Another reason.`);
+    });
+
+    it('a new page reads as before when the kind is new or not given', () => {
+        expect(knowledgeAnswerNotice({ outcome: 'approved', title: 'X', kind: 'new' }, EN)).toEqual(knowledgeAnswerNotice({ outcome: 'approved', title: 'X' }, EN));
+    });
+
+    it("is written in the reader's language (xx), the title and words as written", () => {
+        const added = knowledgeAnswerNotice({ outcome: 'approved', title: 'Tip', kind: 'fix' }, XX);
+        expect(added.title).not.toBe(KNOWLEDGE_DRAFT_WORDS.fixAddedTitle);
+        expect(added.body).toContain('Tip');
+        const not = knowledgeAnswerNotice({ outcome: 'declined', title: 'Tip', reason: 'copied', words: 'Mine', kind: 'fix' }, XX);
+        expect(not.title).not.toBe(KNOWLEDGE_DRAFT_WORDS.fixDeclinedTitle);
+        expect(not.body).toContain('Mine');
+        expect(not.body).not.toContain('It looks copied');
+    });
+
+    it("a long title and the admin's 200 characters fit the 400 a kept notice holds", () => {
+        const body = knowledgeAnswerNotice({ outcome: 'declined', title: 't'.repeat(KNOWLEDGE_LIMITS.title), reason: 'elsewhere', words: 'w'.repeat(KNOWLEDGE_LIMITS.reasonWords), kind: 'fix' }, EN).body;
+        expect(body.length).toBeLessThanOrEqual(400);
+    });
+
+    it("the owners' push names who and which page", () => {
+        expect(EN.t(KNOWLEDGE_DRAFT_WORDS.suggestedFixBody, { name: 'Mel', title: 'Tip' })).toBe('Mel suggested a fix to "Tip". Check it in Learn.');
+    });
+});
+
+describe('not checked for a year (slice K5)', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const NOW = Date.parse('2026-11-15T00:00:00.000Z');
+    it('more than 365 days since an owner or admin last confirmed it; a day short is not', () => {
+        expect(KNOWLEDGE_UNCHECKED_DAYS).toBe(365);
+        expect(knowledgeUncheckedForAYear(new Date(NOW - 366 * DAY).toISOString(), NOW)).toBe(true);
+        expect(knowledgeUncheckedForAYear(new Date(NOW - 365 * DAY).toISOString(), NOW)).toBe(false);
+        expect(knowledgeUncheckedForAYear(new Date(NOW - 30 * DAY).toISOString(), NOW)).toBe(false);
+    });
+
+    it('an unreadable or missing date is never listed', () => {
+        for (const bad of ['', 'yesterday', null, undefined]) expect(knowledgeUncheckedForAYear(bad as string | null | undefined, NOW)).toBe(false);
     });
 });
 

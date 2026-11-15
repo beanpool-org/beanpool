@@ -332,10 +332,10 @@ async function main(): Promise<void> {
     };
     const yes = (status: number) => [status, null] as const;
     const EXPECT: Record<Action, Record<Reader, readonly [number, string | null]>> = {
-        helped: { member: yes(200), writer: [403, 'own_page'], owner: yes(200), admin: yes(200), moderator: yes(200), visitor: [403, 'not_member'], unsigned: [401, null], standby: [503, 'standby'], off: [404, 'feature_off'] },
-        fix: { member: yes(201), writer: yes(201), owner: [409, 'edit_instead'], admin: [409, 'edit_instead'], moderator: yes(201), visitor: [403, 'not_member'], unsigned: [401, null], standby: [503, 'standby'], off: [404, 'feature_off'] },
-        outdated: { member: [403, 'writer_or_admins'], writer: yes(200), owner: yes(200), admin: yes(200), moderator: [403, 'writer_or_admins'], visitor: [403, 'not_member'], unsigned: [401, null], standby: [503, 'standby'], off: [404, 'feature_off'] },
-        checked: { member: [403, 'admins_only'], writer: [403, 'admins_only'], owner: yes(200), admin: yes(200), moderator: [403, 'admins_only'], visitor: [403, 'not_member'], unsigned: [401, null], standby: [503, 'standby'], off: [404, 'feature_off'] },
+        helped: { member: yes(200), writer: [403, 'own_page'], owner: yes(200), admin: yes(200), moderator: yes(200), visitor: [403, 'not_a_member'], unsigned: [401, null], standby: [503, 'standby'], off: [404, 'feature_off'] },
+        fix: { member: yes(201), writer: yes(201), owner: [409, 'edit_instead'], admin: [409, 'edit_instead'], moderator: yes(201), visitor: [403, 'not_a_member'], unsigned: [401, null], standby: [503, 'standby'], off: [404, 'feature_off'] },
+        outdated: { member: [403, 'writer_or_admins'], writer: yes(200), owner: yes(200), admin: yes(200), moderator: [403, 'writer_or_admins'], visitor: [403, 'not_a_member'], unsigned: [401, null], standby: [503, 'standby'], off: [404, 'feature_off'] },
+        checked: { member: [403, 'admins_only'], writer: [403, 'admins_only'], owner: yes(200), admin: yes(200), moderator: [403, 'admins_only'], visitor: [403, 'not_a_member'], unsigned: [401, null], standby: [503, 'standby'], off: [404, 'feature_off'] },
     };
     const reset = () => {
         db.prepare('DELETE FROM knowledge_helped WHERE post_id = ?').run(T);

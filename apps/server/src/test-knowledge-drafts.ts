@@ -315,10 +315,12 @@ async function main(): Promise<void> {
         .run(fixId, dropped.body?.post?.id, gus.pk, new Date().toISOString());
     const pagesBeforeFix = knowledgePosts();
     const fixYes = await approve(owen, fixId);
+    const fixedPage = db.prepare('SELECT description, author_pubkey FROM posts WHERE id = ?').get(dropped.body?.post?.id) as any;
+    assert(fixYes.status === 200 && fixYes.body?.post?.id === dropped.body?.post?.id && knowledgePosts() === pagesBeforeFix && draftRow(fixId)?.state === 'approved'
+        && fixedPage?.description === 'Closed on Mondays now.' && fixedPage?.author_pubkey === mel.pk,
+        `7. a fix (slice K5) is never answered as a new page: it changes the page it names, whose writer stays (${show(fixYes)})`);
     const fixNo = await no(owen, fixId);
-    assert(fixYes.status === 409 && fixYes.body?.code === 'not_yet' && fixNo.status === 409 && fixNo.body?.code === 'not_yet' && draftRow(fixId)?.state === 'waiting'
-        && knowledgePosts() === pagesBeforeFix,
-        `7. a fix (slice K5) is never answered as a new page here (${show(fixYes)})`);
+    assert(fixNo.status === 409 && fixNo.body?.code === 'already_answered', `7. and is answered once (${show(fixNo)})`);
     db.prepare('DELETE FROM knowledge_drafts WHERE id = ?').run(fixId);
 
     // ── 8. Two answers at once ──────────────────────────────────────────────────────────────────

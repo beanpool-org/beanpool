@@ -3821,7 +3821,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 reportReason ? 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on shadow-sm' : 'bg-nature-300 text-white cursor-not-allowed'
                                             }`}
                                         >
-                                            {submittingReport ? t('Sending...') : t('Submit Report')}
+                                            {submittingReport ? t('Sending...') : t('Submit report')}
                                         </button>
                                     </div>
                                 )}

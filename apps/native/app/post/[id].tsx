@@ -2823,7 +2823,7 @@ function PostDetailModal() {
                                         }
                                     }}
                                 >
-                                    <Text style={styles.confirmActionBtnText}>{submittingReport ? t('Sending...') : t('Submit Report')}</Text>
+                                    <Text style={styles.confirmActionBtnText}>{submittingReport ? t('Sending...') : t('Submit report')}</Text>
                                 </Pressable>
                             </View>
                         )}

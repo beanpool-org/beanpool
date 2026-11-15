@@ -110,16 +110,19 @@ describe('the chat (OutsideChatThread)', () => {
         expect(screen.getByTestId('outside-chat-home').textContent).toBe('a.example · name not confirmed here');
     });
 
-    it('a request: its one line, Accept / Decline / Block, no box until Accept; Accept opens it', async () => {
+    it('a request: its one line, Accept / Decline / Block, no box until Accept; Accept opens it and tells the page (Back then lands on the chats)', async () => {
         await here.ctx.store.writeTheirs(BEN.key, { id: crypto.randomUUID(), chatId, author: SOL.key, text: 'Hello Ben', replyTo: null, at: Date.now() }, { home: SOL_HOME, name: 'Sol' }, 'request');
-        render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+        const onAccepted = vi.fn();
+        render(<OutsideChatThread chatId={chatId} onBack={() => {}} onAccepted={onAccepted} />);
         expect(await screen.findByTestId('outside-request')).toBeTruthy();
         expect(screen.getByText('Hello Ben')).toBeTruthy();
         expect(screen.getByTestId('outside-chat-writes-stay')).toBeTruthy();
         expect(screen.queryByTestId('outside-chat-input')).toBeNull();
+        expect(onAccepted).not.toHaveBeenCalled();
         fireEvent.click(screen.getByTestId('outside-request-accept'));
         expect(await screen.findByTestId('outside-chat-input')).toBeTruthy();
         expect((await here.ctx.store.chat(BEN.key, chatId))?.state).toBe('open');
+        expect(onAccepted).toHaveBeenCalledTimes(1);
     });
 });
 

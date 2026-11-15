@@ -283,6 +283,26 @@ async function main(): Promise<void> {
     const gone = await take(dana, second, 1, 'each', hc(300));
     assert(gone.status === 400 && gone.body?.code === 'post_gone' && dealsOn(second) === 2, `a sold-out listing can't be taken up (${brief(gone)})`);
 
+    // The same as one by one (Marty 16 Nov: "10 each or 10 for 100 should be okay"): 10 each, all 10 for 100. Stored, on offer,
+    // taken for all at exactly 100 (expect_c, dealAmountFor's figure for 10 one by one too), released: Dana pays 100, Rob
+    // receives 98.50 and the Commons 1.50. Red if the rule refuses the same price, or the deal for all is re-rated.
+    const same = await made(rob, { title: 'Seedlings, the same for all', priceType: 'each', price_c: hc(10), unitsLeft: 10, lot: { price_c: hc(100) } });
+    assert(listing(same).lot_price_c === hc(100) && listing(same).lot_units === 10 && lotOffered(await byId(dana, same)),
+        `a price for all the same as one by one is stored and on offer (${JSON.stringify(listing(same))})`);
+    const danaSame = bal(dana.pk);
+    const sameAll = await take(dana, same, 10, 'lot', hc(100));
+    const dSame = sameAll.body?.transaction?.id as string;
+    const drSame = sameAll.status === 200 ? deal(dSame) : null;
+    assert(!!drSame && drSame.item_option === 'lot' && drSame.hours === 10 && drSame.amount_c === hc(100) && escrowOf(dSame) === hc(100) && bal(dana.pk) === danaSame - hc(100)
+        && listing(same).units_left === 0, `Dana takes all 10 for 100: one deal, lot, 10, exactly 100 held (${brief(sameAll)})`);
+    const robSame = bal(rob.pk);
+    const comSame = commons();
+    const paidSame = await release(dana, dSame);
+    assert(paidSame.status === 200 && deal(dSame).status === 'completed' && deal(dSame).amount_c === hc(100) && escrowOf(dSame) === 0
+        && bal(rob.pk) === robSame + hc(98.5) && commons() === comSame + hc(1.5) && bal(dana.pk) === danaSame - hc(100),
+        `released: settles for exactly 100, Rob receives 98.50 and the Commons 1.50 (${brief(paidSame)})`);
+    conserved('all 10 at the same price as one by one, released');
+
     // ── 4. Sold out only when no deal is held ───────────────────────────────────────────────────────────────────────
     console.log('\n— 4. Sold out only when no deal is held');
     const jars = await made(rob, { title: 'Honey jars', priceType: 'each', price_c: hc(10), unitsLeft: 2 });

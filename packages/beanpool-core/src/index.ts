@@ -58,6 +58,7 @@ export * from './listing-price.js';
 export * from './post-type-lines.js';
 export * from './knowledge.js';
 export * from './knowledge-write-words.js';
+export * from './pulse-knowledge-words.js';
 export * from './forum.js';
 export * from './name-line.js';
 export * from './chat-frame.js';
@@ -101,6 +102,7 @@ export * from './request-signing.js';
 export * from './node-request-signing.js';
 export * from './relay-envelope.js';
 export * from './outside-chat.js';
+export * from './outside-devices.js';
 export * from './cleartext-address.js';
 export * from './public-ipv4.js';
 export * from './claim-proof.js';
@@ -219,3 +221,5 @@ export * from './contacts-vcard.js';
 export * from './contacts-invite.js';
 // After a re-key (slice C6): the old contacts list's words, both apps.
 export * from './contacts-former-words.js';
+// Local knowledge's card on the Pulse (slice KP, apps): what it draws from PULSE_KNOWLEDGE_WORDS, and one card a day across pages.
+export * from './pulse-knowledge-card.js';

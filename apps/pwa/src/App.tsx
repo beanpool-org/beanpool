@@ -1537,6 +1537,7 @@ export function App() {
                                     identity={identity}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     profile={nodeInfo?.profile}
+                                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                 />
                             )}
                             {activeTab === 'learn' && (

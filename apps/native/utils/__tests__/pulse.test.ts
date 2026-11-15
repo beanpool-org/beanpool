@@ -16,6 +16,7 @@ import {
     canReportPulseItem,
     formatRelativeTime,
     resolvePulseThumbnailUrl,
+    mergePulsePage,
     PULSE_FIXTURE_ITEMS,
     type PulseFeedItem,
     PULSE_REPORT_REASONS,
@@ -130,10 +131,23 @@ describe('pulse utility (native)', () => {
             const res = await fetchPulseFeed({ category: 'food', limit: 10, cursor: 'c_99' });
             expect(res.items).toEqual(mockItems);
             expect(res.nextCursor).toBe('next_100');
+            // Every read asks for Local knowledge's card (slice KP): the node gives it only under All, so a category read
+            // asking for it gets none, and an older node ignores the word.
             expect(mockFetch).toHaveBeenCalledWith(
-                'https://test.beanpool.org/api/pulse/feed?cursor=c_99&category=food&limit=10',
+                'https://test.beanpool.org/api/pulse/feed?cursor=c_99&category=food&limit=10&with=knowledge',
                 expect.objectContaining({ method: 'GET' })
             );
+        });
+
+        it('asks for the knowledge card on the first page and on every later page (with=knowledge)', async () => {
+            const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items: [], nextCursor: null }) });
+            global.fetch = mockFetch;
+            await fetchPulseFeed({ limit: 20 });
+            await fetchPulseFeed({ limit: 20, cursor: '2026-11-14T10:00:00.000Z|item_9' });
+            const urls = mockFetch.mock.calls.map((c) => new URL(String(c[0])));
+            expect(urls).toHaveLength(2);
+            for (const u of urls) expect(u.searchParams.getAll('with')).toEqual(['knowledge']);
+            expect(urls[1].searchParams.get('cursor')).toBe('2026-11-14T10:00:00.000Z|item_9');
         });
 
         // These three used to assert the OPPOSITE — that an unreachable node yields the
@@ -330,5 +344,66 @@ describe('resolvePulseThumbnailUrl (preview images go through the node)', () => 
     it('is null, not the platform URL, when there is no node to proxy through', () => {
         expect(resolvePulseThumbnailUrl(null, { id: 'item_1', thumbnailUrl: platformThumb })).toBeNull();
         expect(resolvePulseThumbnailUrl('  ', { id: 'item_1', thumbnailUrl: platformThumb })).toBeNull();
+    });
+});
+
+// ── Local knowledge's card across pages (slice KP; the KP node review's note) ──────────────────────────────────────────
+// A day's card sits at that day's newest page, so it can move between two page reads: a page taken down mid-scroll moves
+// it older, and a later page carries the same know_<day> id again. The list keeps one card a day, the newest copy read.
+describe('mergePulsePage (the accumulated feed, keyed by id)', () => {
+    const creator = (id: string, at: string): PulseFeedItem => ({
+        id, ownerPubkey: `${id}-key`, callsign: id, avatarUrl: null, platform: 'youtube', category: 'food', url: `https://www.youtube.com/watch?v=${id}`,
+        title: id, thumbnailUrl: null, publishedAt: at, source: 'autolist', isVerified: false,
+    });
+    const know = (day: string, at: string, titles: string[]): PulseFeedItem => ({
+        id: `know_${day}`, ownerPubkey: '', callsign: '', avatarUrl: null, platform: 'beanpool', category: 'knowledge', url: null,
+        title: titles[0], thumbnailUrl: null, publishedAt: at, source: 'knowledge', isVerified: false,
+        knowledge: { count: titles.length, posts: titles.map((title, i) => ({ id: `k${day}-${i}`, title, topic: 'local-services', line: '', photo: null, by: null, gathered: false })) },
+    });
+
+    it('a later page adds what is new, in its order', () => {
+        const page1 = [creator('a', '2026-11-15T09:00:00Z'), creator('b', '2026-11-15T08:00:00Z')];
+        const page2 = [creator('c', '2026-11-14T09:00:00Z')];
+        expect(mergePulsePage(page1, page2).map((i) => i.id)).toEqual(['a', 'b', 'c']);
+    });
+
+    it("a day's card that comes again on a later page (its newest page taken down) is one card: the newest copy, never two", () => {
+        const before = know('2026-11-15', '2026-11-15T10:00:00Z', ['Tip hours', 'Water quality']);
+        const after = know('2026-11-15', '2026-11-15T06:00:00Z', ['Water quality']);
+        const page1 = [before, creator('a', '2026-11-15T09:00:00Z')];
+        const page2 = [creator('b', '2026-11-15T07:00:00Z'), after, creator('c', '2026-11-14T09:00:00Z')];
+        const merged = mergePulsePage(page1, page2);
+        expect(merged.filter((i) => i.id === 'know_2026-11-15')).toHaveLength(1);
+        const card = merged.find((i) => i.id === 'know_2026-11-15')!;
+        // The newest copy read: the taken-down page's title is gone from it.
+        expect(card.title).toBe('Water quality');
+        expect(card.knowledge?.count).toBe(1);
+        expect(card.knowledge?.posts.map((p) => p.title)).toEqual(['Water quality']);
+        // It keeps the place the member already scrolled past: nothing above the reader jumps.
+        expect(merged.map((i) => i.id)).toEqual(['know_2026-11-15', 'a', 'b', 'c']);
+    });
+
+    it('never two cards for one day across three pages, and each other day keeps its own card', () => {
+        const page1 = [know('2026-11-15', '2026-11-15T10:00:00Z', ['One']), creator('a', '2026-11-15T09:00:00Z')];
+        const page2 = [know('2026-11-15', '2026-11-15T08:00:00Z', ['Two']), know('2026-11-14', '2026-11-14T10:00:00Z', ['Three'])];
+        const page3 = [know('2026-11-15', '2026-11-15T07:00:00Z', ['Four']), know('2026-11-14', '2026-11-14T09:00:00Z', ['Five'])];
+        const merged = mergePulsePage(mergePulsePage(page1, page2), page3);
+        const cards = merged.filter((i) => i.source === 'knowledge');
+        expect(cards.map((i) => i.id)).toEqual(['know_2026-11-15', 'know_2026-11-14']);
+        expect(cards.map((i) => i.title)).toEqual(['Four', 'Five']);
+        expect(new Set(merged.map((i) => i.id)).size).toBe(merged.length);
+    });
+
+    it("a creator's item that comes again stays one item", () => {
+        const page1 = [creator('a', '2026-11-15T09:00:00Z'), creator('b', '2026-11-15T08:00:00Z')];
+        const page2 = [creator('b', '2026-11-15T08:00:00Z'), creator('c', '2026-11-14T09:00:00Z')];
+        expect(mergePulsePage(page1, page2).map((i) => i.id)).toEqual(['a', 'b', 'c']);
+    });
+
+    it('does not change the list it was given', () => {
+        const page1 = [know('2026-11-15', '2026-11-15T10:00:00Z', ['One'])];
+        const copy = JSON.parse(JSON.stringify(page1));
+        mergePulsePage(page1, [know('2026-11-15', '2026-11-15T08:00:00Z', ['Two'])]);
+        expect(page1).toEqual(copy);
     });
 });

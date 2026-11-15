@@ -24,6 +24,8 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => void }> }));
+/** The feed list's onEndReached as last drawn: a test scrolls to the end by calling it. */
+const list = vi.hoisted(() => ({ onEndReached: null as null | (() => unknown) }));
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert', switch: 'switch' };
@@ -50,12 +52,12 @@ vi.mock('react-native', () => {
         return createElement(tag, attrs, children);
     };
     const listener = () => ({ remove() {} });
-    const FlatList = ({ data, renderItem, keyExtractor, ListHeaderComponent, ListFooterComponent, ListEmptyComponent }: Record<string, any>) => createElement('div', null,
+    const FlatList = ({ data, renderItem, keyExtractor, ListHeaderComponent, ListFooterComponent, ListEmptyComponent, onEndReached }: Record<string, any>) => (list.onEndReached = onEndReached ?? null, createElement('div', null,
         ListHeaderComponent,
         (data ?? []).length
             ? data.map((item: any, index: number) => createElement(Fragment, { key: keyExtractor ? keyExtractor(item, index) : index }, renderItem({ item, index })))
             : (typeof ListEmptyComponent === 'function' ? createElement(ListEmptyComponent) : ListEmptyComponent),
-        typeof ListFooterComponent === 'function' ? createElement(ListFooterComponent) : ListFooterComponent);
+        typeof ListFooterComponent === 'function' ? createElement(ListFooterComponent) : ListFooterComponent));
     class Value { constructor(public v = 0) {} setValue() {} setOffset() {} stopAnimation() {} interpolate() { return this; } addListener() { return ''; } removeListener() {} removeAllListeners() {} }
     const animation = () => ({ start(cb?: () => void) { cb?.(); }, stop() {} });
     return {
@@ -180,13 +182,15 @@ vi.mock('../pulse-oauth', () => {
     };
 });
 /** The feed's reads and the card's report, as utils/pulse.ts gives them: its own English when they fail. */
-const feed = vi.hoisted(() => ({ items: [] as any[], byCategory: new Map<string, any[]>(), fail: null as null | string, reportFails: null as null | string }));
+/** `pages`: when set, the feed under All answers by cursor (the first page under ''), so a test can scroll it. */
+const feed = vi.hoisted(() => ({ items: [] as any[], byCategory: new Map<string, any[]>(), fail: null as null | string, reportFails: null as null | string, pages: null as null | Map<string, { items: any[]; nextCursor: string | null }> }));
 vi.mock('../pulse', async (importOriginal) => {
     const real = await importOriginal<Record<string, any>>();
     return {
         ...real,
-        fetchPulseFeed: async ({ category }: { category?: string } = {}) => {
+        fetchPulseFeed: async ({ category, cursor }: { category?: string; cursor?: string | null } = {}) => {
             if (feed.fail) throw new Error(feed.fail);
+            if (!category && feed.pages) return feed.pages.get(cursor ?? '') ?? { items: [], nextCursor: null };
             return { items: category ? feed.byCategory.get(category) ?? [] : feed.items, nextCursor: null };
         },
         mutePulseItem: async () => {},
@@ -224,6 +228,20 @@ const FEED = [
     { id: 'p4', ownerPubkey: 'daily-key', callsign: 'Daily Pulse', avatarUrl: null, platform: 'website', category: 'learn', url: null, title: 'On giving', thumbnailUrl: null, publishedAt: iso(now - 2 * DAY), source: 'member', isVerified: false },
 ];
 const PREVIEW = { url: 'https://www.instagram.com/p/kiln/', title: 'Kiln firing at dawn', thumbnailUrl: null, platform: 'instagram', category: 'craft', isDuplicate: true, channelId: 'ch-ig' };
+/** Local knowledge's card as the node sends it on a read with with=knowledge (core PulseKnowledgeCard; slice KP). */
+const knowCard = (day: string, at: number, count: number, posts: Array<{ id: string; title: string; topic: string; line: string; by?: string | null }>) => ({
+    id: `know_${day}`, ownerPubkey: '', callsign: '', avatarUrl: null, platform: 'beanpool', category: 'knowledge', url: null, title: posts[0].title,
+    thumbnailUrl: null, publishedAt: iso(at), source: 'knowledge', isVerified: false,
+    knowledge: { count, posts: posts.map((p) => ({ photo: null, gathered: false, ...p, by: p.by ?? null })) },
+});
+const KNOW_ONE = knowCard('2026-11-15', now - 2 * 3600_000, 1, [
+    { id: 'kp-tip', title: 'How recycling works at the tip', topic: 'local-services', line: 'Open Saturdays from eight; bring your own bags.', by: 'Mira' },
+]);
+const KNOW_MANY = knowCard('2026-11-14', now - 26 * 3600_000, 8, [
+    { id: 'kp-hours', title: 'Tip hours over the holidays', topic: 'local-services', line: 'Closed on the public holiday itself.' },
+    { id: 'kp-creek', title: 'Water quality at the creek', topic: 'emergencies', line: 'After heavy rain, stay out for two days.' },
+    { id: 'kp-tree', title: 'Who to call about a fallen tree', topic: 'good-to-know', line: 'On a road: the council line, any hour.' },
+]);
 
 /** A platform's brand: written as it is in every language. */
 const BRANDS = ['YouTube', 'Instagram', 'TikTok', 'SoundCloud', 'Facebook'];
@@ -232,6 +250,8 @@ const BRANDS = ['YouTube', 'Instagram', 'TikTok', 'SoundCloud', 'Facebook'];
 const OTHERS = [
     ...BRANDS, ...CHANNELS.flatMap((c) => [c.handle, c.url]), CLIPPED, ...FEED.flatMap((i) => [i.callsign, i.title, i.url]),
     PREVIEW.url, PREVIEW.title, ME.callsign, 'https://mullum.example', 'ℹ️',
+    // What members wrote on Learn's pages, and the writer's name: shown as written.
+    ...[KNOW_ONE, KNOW_MANY].flatMap((c) => c.knowledge.posts.flatMap((p) => [p.title, p.line, p.by])),
 ].filter((s): s is string => typeof s === 'string' && /\p{L}/u.test(s)).sort((a, b) => b.length - a.length);
 
 let host: HTMLDivElement;
@@ -257,6 +277,8 @@ beforeEach(() => {
     ]);
     feed.items = FEED;
     feed.byCategory = new Map();
+    feed.pages = null;
+    list.onEndReached = null;
     feed.fail = null;
     feed.reportFails = null;
     webview.props = null;
@@ -478,8 +500,8 @@ describe('the Pulse tab in the pseudo-locale (words S3f)', () => {
 
     it('the empty lanes and categories, and a feed that would not load', async () => {
         await renderIn('xx', createElement(PulseScreen));
-        await click(byLabel(xx('Learn feed')), 'Learn');
-        expect(host.textContent).toContain(xx('No learning guides yet'));
+        await click(byLabel(xx('How it works feed')), 'How it works');
+        expect(host.textContent).toContain(xx('No videos here yet'));
         expect(bypassing(), 'learn').toEqual([]);
 
         await again('xx', createElement(PulseScreen));
@@ -653,7 +675,9 @@ describe('the Pulse page: one add button, Your channels, a quiet week (P2)', () 
         await renderIn('en', createElement(PulseScreen));
         expect(host.textContent).toContain('Nothing new this week.');
         expect(host.textContent).toContain('Have a video, a song, a blog or photos of your own? Add a link and your neighbours see it here.');
-        expect(host.textContent).toContain('Nothing to add? The Learn lane has short videos on how BeanPool works.');
+        // The lane is How it works now (amended §2.1, Marty's Question 3): the line names it as its tab reads, as the web's does.
+        expect(host.textContent).toContain('Nothing to add? Tap How it works for short videos about BeanPool.');
+        expect(host.textContent).not.toContain('Learn lane');
         expect(host.textContent).not.toContain('The Pulse is quiet right now');
         expect(host.textContent).not.toContain('once syndicated');
         expect(adds()).toHaveLength(1);
@@ -672,7 +696,8 @@ describe('the Pulse page: one add button, Your channels, a quiet week (P2)', () 
         await again('en', createElement(PulseScreen));
         expect(adds()).toHaveLength(0);
         expect(host.textContent).toContain('Nothing new this week.');
-        expect(host.textContent).toContain('The Learn lane has short videos on how BeanPool works.');
+        expect(host.textContent).toContain('Tap How it works for short videos about BeanPool.');
+        expect(host.textContent).not.toContain('Learn lane');
         expect(host.textContent).not.toContain('Add a link');
     });
 
@@ -698,8 +723,138 @@ describe('the Pulse page: one add button, Your channels, a quiet week (P2)', () 
         expect(bypassing(), 'quiet').toEqual([]);
         community.profile = 'global';
         await again('xx', createElement(PulseScreen));
-        expect(host.textContent).toContain(xx('The Learn lane has short videos on how BeanPool works.'));
+        expect(host.textContent).toContain(xx('Tap {chip} for short videos about BeanPool.').replace('{chip}', xx('How it works')));
         expect(bypassing(), 'global quiet').toEqual([]);
+    });
+});
+
+// DESIGN-local-knowledge-amend-fable.md §2.12, §3.8 (slice KP): the node's knowledge card is drawn by PulseKnowledgeCard, never
+// by the creator's card: a 📖 head, no face, no ⚑, no Hide, rows that open the page in the app, and "Open Learn ›".
+describe("the Pulse: Local knowledge's card (KP)", () => {
+    const cardOf = (item: { id: string }) => host.querySelector(`[data-testid="pulse-knowledge-${item.id}"]`);
+    const POST = (id: string) => ({ pathname: '/post/[id]', params: { id, kind: 'knowledge' } });
+
+    it('one page, between two creators\' cards: its own card, no face, no ⚑, no Hide, no link out; the card opens the page and the foot opens Learn', async () => {
+        feed.items = [FEED[0], KNOW_ONE, FEED[1]];
+        await renderIn('en', createElement(PulseScreen));
+        const card = cardOf(KNOW_ONE)!;
+        expect(card, 'the knowledge card').not.toBeNull();
+        // Between the two creators' cards, in the order the node sent.
+        const text = host.textContent!;
+        expect(text.indexOf('Planting garlic by the moon')).toBeLessThan(text.indexOf('How recycling works at the tip'));
+        expect(text.indexOf('How recycling works at the tip')).toBeLessThan(text.indexOf('View post on Instagram'));
+        expect(card.textContent).toContain('New local knowledge');
+        expect(card.textContent).toContain('2h ago');
+        expect(card.textContent).toContain('How recycling works at the tip');
+        expect(card.textContent).toContain('Open Saturdays from eight; bring your own bags.');
+        expect(card.textContent).toContain('by Mira');
+        expect(card.textContent).toContain('Open Learn ›');
+        // Nothing of the creator's card: no face, no report, no hide, no platform, no way out of the app.
+        expect(card.querySelector('[data-avatar]')).toBeNull();
+        expect(card.textContent).not.toMatch(/⚑|Hide|Open on|YouTube|beanpool/);
+        expect(card.querySelector('[aria-label="Report this post"]')).toBeNull();
+        expect(host.querySelectorAll('[aria-label="Report this post"]')).toHaveLength(1);
+        expect(host.querySelectorAll('[aria-label="Hide this item from feed"]')).toHaveLength(1);
+        await click(byLabel('New local knowledge: How recycling works at the tip. Opens it in Learn.'), 'the card');
+        expect(nav.pushed.at(-1)).toEqual(POST('kp-tip'));
+        await click(card.querySelector('[aria-label="Open Learn"]'), 'Open Learn');
+        expect(nav.pushed.at(-1)).toBe('/learn');
+    });
+
+    it('a single page gathered with the assistant names nobody, even with a name on the wire', async () => {
+        const gathered = knowCard('2026-11-15', now - 2 * 3600_000, 1, KNOW_ONE.knowledge.posts.map((p) => ({ ...p })));
+        gathered.knowledge.posts[0].gathered = true;
+        feed.items = [gathered];
+        await renderIn('en', createElement(PulseScreen));
+        expect(cardOf(gathered)!.textContent).toContain('How recycling works at the tip');
+        expect(cardOf(gathered)!.textContent).not.toContain('Mira');
+    });
+
+    it('several the same day: "{n} new in Local knowledge", the first three titles each opening its page, "and {n} more ›" and the foot to Learn; nobody named', async () => {
+        feed.items = [FEED[0], KNOW_MANY, FEED[1]];
+        await renderIn('en', createElement(PulseScreen));
+        const card = cardOf(KNOW_MANY)!;
+        expect(card).not.toBeNull();
+        expect(card.textContent).toContain('8 new in Local knowledge');
+        expect(card.textContent).toContain('1d ago');
+        for (const p of KNOW_MANY.knowledge.posts) expect(card.textContent).toContain(p.title);
+        expect(card.textContent).toContain('and 5 more ›');
+        expect(card.textContent).not.toContain('by ');
+        expect(card.textContent).not.toContain('New local knowledge');
+        await click(byLabel('8 new in Local knowledge. Opens Learn.'), 'the head');
+        expect(nav.pushed.at(-1)).toBe('/learn');
+        await click(byLabel('Local knowledge: Water quality at the creek'), 'a row');
+        expect(nav.pushed.at(-1)).toEqual(POST('kp-creek'));
+        await click(byLabel('5 more in Learn'), 'and 5 more');
+        expect(nav.pushed.at(-1)).toBe('/learn');
+        await click(card.querySelector('[aria-label="Open Learn"]'), 'Open Learn');
+        expect(nav.pushed.at(-1)).toBe('/learn');
+    });
+
+    it('in the pseudo-locale every word on the card came through t(), one page and several', async () => {
+        feed.items = [FEED[0], KNOW_ONE, FEED[1], KNOW_MANY];
+        await renderIn('xx', createElement(PulseScreen));
+        expect(cardOf(KNOW_ONE)!.textContent).toContain(xx('New local knowledge'));
+        expect(cardOf(KNOW_ONE)!.textContent).toContain(xx('by {name}').replace('{name}', 'Mira'));
+        expect(cardOf(KNOW_ONE)!.textContent).toContain(xx('Open Learn ›'));
+        expect(byLabel(xx('New local knowledge: {title}. Opens it in Learn.').replace('{title}', 'How recycling works at the tip'))).not.toBeNull();
+        expect(cardOf(KNOW_MANY)!.textContent).toContain(xx('{n} new in Local knowledge').replace('{n}', '8'));
+        expect(cardOf(KNOW_MANY)!.textContent).toContain(xx('and {n} more ›').replace('{n}', '5'));
+        expect(byLabel(xx('{n} new in Local knowledge. Opens Learn.').replace('{n}', '8'))).not.toBeNull();
+        expect(byLabel(xx('Local knowledge: {title}').replace('{title}', 'Tip hours over the holidays'))).not.toBeNull();
+        expect(byLabel(xx('{n} more in Learn').replace('{n}', '5'))).not.toBeNull();
+        expect(byLabel(xx('Open Learn'))).not.toBeNull();
+        expect(bypassing()).toEqual([]);
+    });
+
+    it("scrolling on: a day's card that comes again on a later page (its newest page taken down) is one card, the newest copy", async () => {
+        const before = knowCard('2026-11-14', now - 26 * 3600_000, 2, KNOW_MANY.knowledge.posts.slice(0, 2));
+        const after = knowCard('2026-11-14', now - 30 * 3600_000, 1, KNOW_MANY.knowledge.posts.slice(1, 2));
+        feed.pages = new Map([
+            ['', { items: [FEED[0], before, FEED[1]], nextCursor: 'c1' }],
+            ['c1', { items: [after, FEED[3]], nextCursor: null }],
+        ]);
+        await renderIn('en', createElement(PulseScreen));
+        expect(cardOf(before)!.textContent).toContain('Tip hours over the holidays');
+        expect(list.onEndReached, 'the list scrolls on').toBeTruthy();
+        await act(async () => { await list.onEndReached!(); });
+        await settle();
+        expect(host.textContent).toContain('On giving');
+        expect(host.querySelectorAll('[data-testid="pulse-knowledge-know_2026-11-14"]')).toHaveLength(1);
+        const card = cardOf(before)!;
+        expect(card.textContent).toContain('Water quality at the creek');
+        expect(card.textContent).not.toContain('Tip hours over the holidays');
+        expect(card.textContent).toContain('New local knowledge');
+    });
+
+    it('at 320 dp with 1.3× text: the head\'s words wrap beside the 📖 tile and the topic chip gives way to its picture', async () => {
+        feed.items = [KNOW_ONE];
+        await renderIn('xx', createElement(PulseScreen));
+        const card = cardOf(KNOW_ONE)!;
+        const head = Array.from(card.querySelectorAll('span')).find((s) => s.textContent === xx('New local knowledge'))!;
+        expect(head, 'the head').toBeTruthy();
+        expect(head.getAttribute('data-lines')).toBe('2');
+        expect(head.parentElement!.getAttribute('data-flex-shrink')).toBe('1');
+        expect(card.querySelector('[data-testid="pulse-knowledge-topic"]')!.textContent).toBe('🚰');
+    });
+});
+
+describe('the Pulse lane How it works (amended §2.1, Question 3: the phone\'s "Learn" lane takes the web\'s name)', () => {
+    it('its name and its spoken lines say How it works; "Learn" now means only the Local knowledge place', async () => {
+        feed.byCategory = new Map([['learn', [FEED[3]]]]);
+        await renderIn('en', createElement(PulseScreen));
+        expect(byLabel('How it works feed')).not.toBeNull();
+        expect(Array.from(host.querySelectorAll('[role="radio"] > span[data-shrinks]')).map((s) => s.textContent)).toEqual(['Neighbours', 'Local', 'How it works']);
+        expect(host.textContent).not.toMatch(/Learn feed|📚 {2}Learn/);
+        await click(byLabel('How it works feed'), 'How it works');
+        expect(byLabel('How it works feed, 1 item')).not.toBeNull();
+        expect(host.textContent).toContain('Short videos on how BeanPool works');
+        expect(host.textContent).not.toMatch(/reflection/i);
+        feed.byCategory = new Map();
+        await again('en', createElement(PulseScreen));
+        await click(byLabel('How it works feed'), 'How it works');
+        expect(host.textContent).toContain('No videos here yet');
+        expect(host.textContent).not.toMatch(/reflection/i);
     });
 });
 

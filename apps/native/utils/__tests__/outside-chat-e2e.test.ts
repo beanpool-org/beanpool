@@ -12,6 +12,11 @@
  *   4  Ben accepts and answers; Ana's phone takes it straight into her chat (she wrote first); Ben's reads Delivered
  *   5  Ana restores her account from 12 words onto a new phone: the chat with Ben comes back empty, marked restored
  *   6  Ben closes his door: a stranger's line from a.example is dropped on his phone, and nothing waits at his server
+ *   7  each device for itself (X2b, DECISION-outside-door.md): Dee has two devices at b.example, her second with its door
+ *      closed (the web's browser store is X4's; a second store of this code stands in for it) and her phone with its door
+ *      open. A stranger writes her: the closed-door device runs first and drops it, and her server still holds it; her
+ *      phone then shows the request. She accepts and answers on her phone; the stranger's answer then reaches both devices,
+ *      the closed-door one opening the chat from the tick of her own line
  *
  * Nothing else is contacted: the phones reach only their own node, and the nodes refuse every host but this machine.
  */
@@ -226,6 +231,50 @@ describe('a chat between two communities, phone to phone through two real nodes'
         expect(await sendOutsideLine(solPhone.ctx, solChat, 'Hi, you don\'t know me')).toBe('sent');
         expect(await syncOutsideMail(benPhone.ctx)).toMatchObject({ requests: 0, written: 0, dropped: 1, confirmed: 1 });
         expect(benPhone.chat(sol.publicKey)).toBeUndefined();
+        expect(await heldAt(nodes.b)).toEqual([]);
+    }, START_MS);
+
+    it('two devices: the closed-door one drops a stranger\'s line first, and the open-door phone still shows the request', async () => {
+        const [dee, tam] = await Promise.all([draftIdentity('Dee'), draftIdentity('Tam')]);
+        await control(nodes.b, 'join', { key: dee.publicKey, callsign: 'Dee' });
+        await control(nodes.a, 'join', { key: tam.publicKey, callsign: 'Tam' });
+        const deePhone = phone(dee, nodes.b);
+        const deeOther = phone(dee, nodes.b);   // her second device: its own store, its door closed
+        const tamPhone = phone(tam, nodes.a);
+        await setDoor(deePhone.ctx.store, true);
+        // Each device has asked once, so each is listed at her server.
+        await syncOutsideMail(deePhone.ctx);
+        await syncOutsideMail(deeOther.ctx);
+
+        // 7. Tam, a stranger, writes Dee.
+        const chatId = relayConversationId(tam.publicKey, dee.publicKey);
+        await tamPhone.ctx.store.openChat(tam.publicKey, chatId, { key: dee.publicKey, home: 'b.example', name: 'Dee' });
+        expect(await sendOutsideLine(tamPhone.ctx, chatId, 'Hello Dee, is the ladder free on Saturday?')).toBe('sent');
+
+        // The closed-door device first: dropped and confirmed there, and her server still holds it for her phone.
+        expect(await syncOutsideMail(deeOther.ctx)).toMatchObject({ requests: 0, written: 0, dropped: 1, confirmed: 1 });
+        expect(deeOther.chat(tam.publicKey)).toBeUndefined();
+        expect((await heldAt(nodes.b)).map((r) => [r.kind, r.recipient])).toEqual([['dm-line', dee.publicKey]]);
+
+        // Her phone, door open: the request; then nothing waits at her server.
+        expect(await syncOutsideMail(deePhone.ctx)).toMatchObject({ requests: 1, confirmed: 1 });
+        expect(deePhone.chat(tam.publicKey)).toMatchObject({ state: 'request', peer_home: 'a.example', peer_name: 'Tam' });
+        expect(await heldAt(nodes.b)).toEqual([]);
+
+        // She accepts and answers on her phone; Tam answers back.
+        await deePhone.ctx.store.decide(dee.publicKey, chatId, 'open');
+        expect(await sendOutsideLine(deePhone.ctx, chatId, 'Yes, come by at ten.')).toBe('sent');
+        expect(await syncOutsideMail(tamPhone.ctx)).toMatchObject({ written: 1 });
+        expect(await sendOutsideLine(tamPhone.ctx, chatId, 'See you then.')).toBe('sent');
+
+        // The closed-door device: the tick of her own line opens the chat first, so Tam's answer is written there too.
+        expect(await syncOutsideMail(deeOther.ctx)).toMatchObject({ written: 1, dropped: 0 });
+        expect(deeOther.chat(tam.publicKey)).toMatchObject({ state: 'open' });
+        expect(deeOther.lines().map((l) => l.text)).toEqual(['See you then.']);
+        expect((await heldAt(nodes.b)).length).toBe(1);
+        // Her phone: written, and with both devices done, nothing waits at her server.
+        expect(await syncOutsideMail(deePhone.ctx)).toMatchObject({ written: 1 });
+        expect(deePhone.lines().map((l) => l.text)).toEqual(['Hello Dee, is the ladder free on Saturday?', 'Yes, come by at ten.', 'See you then.']);
         expect(await heldAt(nodes.b)).toEqual([]);
     }, START_MS);
 });

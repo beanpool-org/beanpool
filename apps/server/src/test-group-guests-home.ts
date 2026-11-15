@@ -130,8 +130,15 @@ async function main(): Promise<void> {
     });
     // The owners blocked c.example (the connector's blocked level).
     addConnector('c.example:4001', 'blocked', 'Blocked', 'https://c.example', false);
+    /**
+     * Every request this suite makes (section 0 pins it): Connection: close, so no socket waits in a pool. Section 9 calls
+     * the engine thousands of times without a turn, holding this process's loop, the server's with it, for seconds; on CI
+     * (run 43759989771, shard server-1, Node 22) the next call went out on the pooled socket the server's 5 s keep-alive
+     * was closing and read ECONNRESET. The same remedy as test-backup-owner-gate and test-moderation-notifications.
+     */
+    const suiteFetch = (url: string, init: RequestInit = {}) => fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), connection: 'close' } });
     // The first call: the server answers on the port it was given before anything else is asked of it (no retry).
-    const keyRes = await fetch(`${BASE}/api/node/key`, { headers: { connection: 'close' } });
+    const keyRes = await suiteFetch(`${BASE}/api/node/key`);
     if (keyRes.status !== 200) throw new Error(`a.example is not answering on port ${PORT} (${keyRes.status})`);
     const aDoc = readNodeKeyDocument(await keyRes.json());
     if (!aDoc) throw new Error('a.example has no key document');
@@ -172,11 +179,9 @@ async function main(): Promise<void> {
         const headers: Record<string, string> = {
             'X-Public-Key': signer.pk, 'X-Signature': signRequest(signer.priv, { method, path: p.split('?')[0], timestamp: ts, nonce, body: raw }),
             [SIGNED_FOR_HEADER]: signedForHost(), 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-            // No socket left waiting in a pool: section 9 holds the loop past the server's keep-alive (section 0 says why).
-            connection: 'close',
         };
         if (method !== 'GET') headers['Content-Type'] = 'application/json';
-        const res = await fetch(`${BASE}${p}`, { method, headers, body: method === 'GET' ? undefined : raw });
+        const res = await suiteFetch(`${BASE}${p}`, { method, headers, body: method === 'GET' ? undefined : raw });
         const text = await res.text();
         let parsed: any = text;
         try { parsed = JSON.parse(text); } catch { /* empty */ }
@@ -188,7 +193,7 @@ async function main(): Promise<void> {
         const k = hostKey[origin];
         const body = JSON.stringify(n);
         const headers = await buildNodeRequestHeaders({ method: 'POST', url: 'https://a.example/api/relay/group', body, origin, keyHex: k.pk, sign: signerOf(k.seed) });
-        const res = await fetch(`${BASE}/api/relay/group`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers, connection: 'close' }, body });
+        const res = await suiteFetch(`${BASE}/api/relay/group`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body });
         let parsed: any = null;
         try { parsed = await res.json(); } catch { /* none */ }
         return { status: res.status, body: parsed };
@@ -235,22 +240,16 @@ async function main(): Promise<void> {
         process.exit(1);
     }
 
-    // ── 0. The suite's own calls ────────────────────────────────────────────────────────────
-    console.log('\n0. The suite\'s own calls: a call after this process\'s loop was held past the server\'s keep-alive still reaches it');
-    // CI run 43759989771 (shard server-1): section 9 calls the engine thousands of times without a turn, holding this
-    // process's loop, the server's with it, for seconds. The next call went out on the pooled socket the server's 5 s
-    // keep-alive (and Node's 1 s buffer) was closing, and read ECONNRESET. So no call here leaves a socket waiting in a pool
-    // (Connection: close, as test-backup-owner-gate and test-moderation-notifications). The hold below is that, made sure:
-    // Atomics.wait stops the loop without using the CPU, inside a timer, so the next call is written before the server's
-    // keep-alive timer, which ran out during the hold, fires in the same turn (on CI the order fell that way by chance).
-    const KEEP_ALIVE_HOLD_MS = 5000 + 1000 + 500;
-    const before0 = await call('GET', gus, `/api/mail/group?device=${device()}`);
-    const after0 = await new Promise<Res | string>((resolve) => setTimeout(() => {
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, KEEP_ALIVE_HOLD_MS);
-        call('GET', gus, `/api/mail/group?device=${device()}`).then(resolve, (e: any) => resolve(String(e?.cause?.code ?? e?.message ?? e)));
-    }, 1));
-    assert(before0.status === 200 && typeof after0 !== 'string' && after0.status === 200,
-        `0. the loop held ${KEEP_ALIVE_HOLD_MS} ms between two calls: both reach the server on port ${PORT} (got ${before0.status}, then ${typeof after0 === 'string' ? after0 : after0.status})`);
+    // ── 0. The suite's own requests ─────────────────────────────────────────────────────────
+    console.log('\n0. The suite\'s own requests: the server on the port the system picked, and no socket left in a pool');
+    // A hold of the loop past the keep-alive does not reset the next call on Node 26 (this Mac, measured both ways), only on
+    // CI's Node 22 now and then, so this pins the remedy itself: every request goes through suiteFetch, which says
+    // Connection: close.
+    const ownSrc = fs.readFileSync(new URL(import.meta.url).pathname, 'utf8').split('\n').filter((l) => !/^\s*(\/\/|\*)/.test(l));
+    const fetchLines = ownSrc.filter((l) => /(?<![A-Za-z])fetch\(/.test(l));
+    const suiteFetchLine = ownSrc.find((l) => /const suiteFetch = /.test(l)) ?? '';
+    assert(PORT > 0 && fetchLines.length === 1 && fetchLines[0] === suiteFetchLine && /connection: 'close'/.test(suiteFetchLine),
+        `0. port ${PORT} picked by the system; the suite's one fetch is suiteFetch's, which says Connection: close (other fetches: ${fetchLines.filter((l) => l !== suiteFetchLine).length})`);
 
     // ── 1. Every notice x where the guest stands ────────────────────────────────────────────
     console.log('\n1. Close the class: every notice a host brings x where the guest stands -> held or dropped, answered alike');
@@ -567,7 +566,7 @@ async function main(): Promise<void> {
     setNodeRole('primary');
     assert(sbRetry === 0 && db.prepare('SELECT COUNT(*) FROM group_guest_links').pluck().get() === linksBefore && sentCount() === sentBefore8,
         '8c. a standby\'s timer sends nothing and writes no link');
-    const unsigned = await fetch(`${BASE}/api/relay/group`, { method: 'POST', headers: { 'Content-Type': 'application/json', connection: 'close' }, body: JSON.stringify(noticeOf('line', 'b.example', 'g8', [gus.pk])) });
+    const unsigned = await suiteFetch(`${BASE}/api/relay/group`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(noticeOf('line', 'b.example', 'g8', [gus.pk])) });
     const asMember = await call('POST', gus, '/api/relay/group', noticeOf('line', 'b.example', 'g8', [gus.pk]));
     assert(unsigned.status >= 400 && unsigned.status < 500 && asMember.status >= 400 && asMember.status < 500 && heldCount(gus, 'b.example', 'g8') === 0,
         `8d. the door: unsigned, or a member's signature, at /api/relay/group is refused (got ${unsigned.status}, ${asMember.status})`);

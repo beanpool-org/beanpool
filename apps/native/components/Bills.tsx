@@ -48,7 +48,7 @@ function useBillStyles() {
         none: { color: colors.text.secondary, fontSize: 14, textAlign: 'center', paddingVertical: 24 },
         row: { minHeight: 48, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, gap: 8 },
         rowShown: { borderWidth: 2, borderColor: colors.text.body },
-        waitRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+        waitRow: { gap: 8 },
         rowAccent: { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border },
         rowText: { color: colors.text.body, fontSize: 14, fontWeight: '700', lineHeight: 20 },
         rowPlain: { color: colors.text.body, fontSize: 14, lineHeight: 20 },
@@ -193,7 +193,7 @@ export function BillsPanel({ me, openBillId, onBillOpened, onMessage, onOpenPost
             {failed && (
                 <View style={s.waitRow}>
                     <Text style={s.refusal} testID="bills-failed" accessibilityRole="alert">{billLines.readFailed()}</Text>
-                    <Button label={billLines.tryAgain()} testID="bills-retry" onPress={() => { void read(); }} />
+                    <View style={s.buttons}><Button label={billLines.tryAgain()} testID="bills-retry" onPress={() => { void read(); }} /></View>
                 </View>
             )}
             {side === 'to-pay' && !!bills && (toPay.length === 0
@@ -305,7 +305,7 @@ export function BillSheet({ bill, me, onDone, onRefused, onClose, onMessage, onO
                 <View style={s.waitRow}>
                     <Text style={sheet.balanceRetry ? s.refusal : s.body} testID="bill-balance-wait"
                         accessibilityRole={sheet.balanceRetry ? 'alert' : undefined} accessibilityLiveRegion="polite">{sheet.balanceWait}</Text>
-                    {!!sheet.balanceRetry && <Button label={sheet.balanceRetry} testID="bill-balance-retry" onPress={() => setReadNo((n) => n + 1)} />}
+                    {!!sheet.balanceRetry && <View style={s.buttons}><Button label={sheet.balanceRetry} testID="bill-balance-retry" onPress={() => setReadNo((n) => n + 1)} /></View>}
                 </View>
             )}
             {!!sheet.postOffer && !!onPostOffer && (

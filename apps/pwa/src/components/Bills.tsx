@@ -119,7 +119,7 @@ export function BillsPanel({ me, openBillId, onBillOpened, onMessage, onOpenPost
             </div>
             {said && <p data-testid="bills-said" role="status" className="text-sm font-bold text-nature-900 dark:text-white break-words">{said}</p>}
             {failed && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-col items-start gap-2">
                     <p data-testid="bills-failed" role="alert" className={REFUSAL}>{billLines.readFailed()}</p>
                     <button type="button" data-testid="bills-retry" className={`${QUIET} flex-none px-4`} onClick={() => { void read(); }}>{billLines.tryAgain()}</button>
                 </div>
@@ -138,8 +138,8 @@ export function BillsPanel({ me, openBillId, onBillOpened, onMessage, onOpenPost
                 ? <p className="text-sm text-nature-600 dark:text-nature-300 text-center py-8">{billLines.noneSent()}</p>
                 : sent.map((r) => (
                     <div key={r.billId} data-testid={`bill-sent-${r.billId}`} aria-current={shown === r.billId ? 'true' : undefined}
-                        className={`rounded-2xl p-4 border bg-white dark:bg-nature-900 flex flex-col gap-2 ${shown === r.billId
-                            ? 'border-2 border-nature-900 dark:border-white' : 'border-nature-200 dark:border-nature-700'}`}>
+                        className={`rounded-2xl p-4 bg-white dark:bg-nature-900 flex flex-col gap-2 ${shown === r.billId
+                            ? 'border-2 border-nature-900 dark:border-white' : 'border border-nature-200 dark:border-nature-700'}`}>
                         <p className="text-sm text-nature-900 dark:text-white break-words">{r.line}</p>
                         {rowError?.id === r.billId && <p role="alert" className={REFUSAL}>{rowError.line}</p>}
                         {r.withdraw && (
@@ -231,7 +231,7 @@ export function BillSheet({ bill, me, onDone, onRefused, onClose, onMessage, onO
             )}
             {s.money && <p data-testid="bill-money" className="text-sm text-nature-700 dark:text-nature-300 break-words">{s.money.line}</p>}
             {s.balanceWait && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-col items-start gap-2">
                     <p data-testid="bill-balance-wait" role={s.balanceRetry ? 'alert' : 'status'}
                         className={s.balanceRetry ? REFUSAL : 'text-sm text-nature-700 dark:text-nature-300 break-words'}>{s.balanceWait}</p>
                     {s.balanceRetry && (

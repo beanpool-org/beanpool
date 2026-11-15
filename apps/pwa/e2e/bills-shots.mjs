@@ -32,6 +32,9 @@ const CASES = [
     ['sheet-stranger', []],
     ['sheet-lost', ['bill-pay', 'bill-confirm-pay']],
     ['sent-list', ['bills-side-sent']],
+    // Round 2 of #3210: a balance read that failed (the line and Try again), and a paid bill's door to its sender (Sent, marked).
+    ['sheet-balance-failed', []],
+    ['sent-door', []],
 ];
 
 const server = await createServer({ configFile: path.join(PWA_DIR, 'vite.config.ts'), root: PWA_DIR, server: { port: 0 }, logLevel: 'error' });

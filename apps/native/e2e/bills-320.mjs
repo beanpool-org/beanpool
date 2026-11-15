@@ -70,10 +70,16 @@ const DB_STUB = `
             bill('sent', { id: 'bill-0003', payerName: 'Sam', whatFor: 'Water, October', amount_c: 2500, state: 'paid', paidAt: '2026-11-14T09:00:00.000Z' }),
             bill('sent', { id: 'bill-0004', payerName: 'Alexandria-Rose', whatFor: 'Garden tools, borrowed and broken', amount_c: 199999, state: 'expired' }),
         ] },
+        'sheet-balance-failed': { me: KIM, toPay: [bill('to-pay')], sent: [], balance_c: 8500, open: 'bill-0001', balanceFails: true },
+        'sent-door': { me: ROB, toPay: [], balance_c: 0, open: 'bill-0003', sent: [
+            bill('sent'),
+            bill('sent', { id: 'bill-0003', payerName: 'Sam', whatFor: 'Water, October', amount_c: 2500, state: 'paid', paidAt: '2026-11-14T09:00:00.000Z' }),
+        ] },
     };
     const c = CASES[q.get('case') || 'to-pay-list'];
     export const getBills = async () => ({ toPay: c.toPay, sent: c.sent });
-    export const getBalance = async () => ({ balance_c: c.balance_c, floor_c: -100000, usableFloor_c: -100000, liveOffers: 1 });
+    // The node's balance read the sheet goes by (refreshBalanceFromServer answers null when the node couldn't be read).
+    export const refreshBalanceFromServer = async () => (c.balanceFails ? null : { balance_c: c.balance_c, floor_c: -100000, usableFloor_c: -100000, liveOffers: 1 });
     export const payBill = async () => { if (c.lost) throw new Error('Network request failed'); return { success: true }; };
     export const declineBill = async () => ({ success: true });
     export const withdrawBill = async () => ({ success: true });
@@ -174,6 +180,9 @@ const CASES = [
     ['sheet-stranger', []],
     ['sheet-lost', ['bill-pay', 'bill-confirm-pay']],
     ['sent-list', ['bills-side-sent']],
+    // Round 2 of #3210: a balance read that failed (the line and Try again), and a paid bill's door to its sender (Sent, marked).
+    ['sheet-balance-failed', []],
+    ['sent-door', []],
 ];
 // The phone's looks: Light, Classic (the set 'dark') and Dark (the set 'night').
 const LOOKS = [['light', 'light'], ['classic', 'dark'], ['dark', 'night']];

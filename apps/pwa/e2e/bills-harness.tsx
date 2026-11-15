@@ -21,7 +21,7 @@ const bill = (role: 'to-pay' | 'sent', o: Partial<BillView> = {}): BillView => (
 });
 const STRANGER = bill('to-pay', { id: 'bill-0002', billerPublicKey: ZED, billerName: 'Zed', whatFor: 'Bike repair, back wheel and brakes', amount_c: 30000, postId: null, postTitle: null, known: false });
 
-const CASES: Record<string, { me: string; toPay: BillView[]; sent: BillView[]; balance_c: number; open?: string; lost?: boolean }> = {
+const CASES: Record<string, { me: string; toPay: BillView[]; sent: BillView[]; balance_c: number; open?: string; lost?: boolean; balanceFails?: boolean }> = {
     'to-pay-list': { me: KIM, toPay: [bill('to-pay'), STRANGER], sent: [], balance_c: 8500 },
     'sheet-known': { me: KIM, toPay: [bill('to-pay')], sent: [], balance_c: 8500, open: 'bill-0001' },
     'sheet-confirm': { me: KIM, toPay: [bill('to-pay')], sent: [], balance_c: 8500, open: 'bill-0001' },
@@ -34,6 +34,14 @@ const CASES: Record<string, { me: string; toPay: BillView[]; sent: BillView[]; b
             bill('sent', { id: 'bill-0004', payerName: 'Alexandria-Rose', whatFor: 'Garden tools, borrowed and broken', amount_c: 199_999, state: 'expired' }),
         ],
     },
+    // Round 2 of #3210: a balance read that failed, and a paid bill's door to its sender (Sent, its row marked).
+    'sheet-balance-failed': { me: KIM, toPay: [bill('to-pay')], sent: [], balance_c: 8500, open: 'bill-0001', balanceFails: true },
+    'sent-door': {
+        me: ROB, toPay: [], balance_c: 0, open: 'bill-0003', sent: [
+            bill('sent'),
+            bill('sent', { id: 'bill-0003', payerName: 'Sam', whatFor: 'Water, October', amount_c: 2500, state: 'paid', paidAt: '2026-11-14T09:00:00.000Z' }),
+        ],
+    },
 };
 const name = new URLSearchParams(location.search).get('case') || 'to-pay-list';
 const c = CASES[name];
@@ -43,6 +51,7 @@ window.fetch = ((input: RequestInfo | URL) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes('/api/bills/') && url.endsWith('/pay')) return c.lost ? Promise.reject(new TypeError('Failed to fetch')) : answer({ success: true });
     if (url.includes('/api/bills')) return answer({ toPay: c.toPay, sent: c.sent });
+    if (url.includes('/api/ledger/balance') && c.balanceFails) return Promise.reject(new TypeError('Failed to fetch'));
     if (url.includes('/api/ledger/balance')) return answer({ balance_c: c.balance_c, floor_c: -100000, usableFloor_c: -100000, liveOffers: 1 });
     return Promise.reject(new TypeError('Failed to fetch'));
 }) as typeof fetch;

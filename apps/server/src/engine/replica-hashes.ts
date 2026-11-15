@@ -7,10 +7,16 @@
  *
  * Only what the manifest says is copied today: a column main drops (an `except` with a gap) differs on every standby until
  * its fix PR moves it into `columns`, and would make every copy read as wrong. That PR's move brings it in here too.
+ *
+ * Nothing here is edited for a new table, column, row rule or boot stamp (DECISION-table-hashes-version, 15 Nov 2026): each
+ * table's hash carries the fingerprint of how it was made (`d`), and each payload the fingerprint of the definitions it was
+ * made from (`def`), and compareTableHashes reads them. Both take the fingerprint of this code's way of hashing any table
+ * (hasherFingerprint, `how`), so a change to that code moves them by construction. What an older importer drops of a new
+ * table is said in its manifest entry (engine/replication-manifest.ts), beside the REPLICA_FORMAT reasoning it belongs to.
  */
 
 import crypto from 'node:crypto';
-import type Database from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import { db } from '../db/db.js';
 import { TABLES, BOOT_STAMPED, travellingRows } from './replication-manifest.js';
 import { afterRow, rowBytes, rowTiebreak, sqlColumn } from './keyset.js';
@@ -19,257 +25,37 @@ export interface TableHash {
     rows: number;
     /** sha256, hex, of the table's rows in its copied columns, in key order. */
     hash: string;
+    /**
+     * The fingerprint of how this table was hashed on the server that hashed it (16 hex of sha256): the table, the select
+     * list with its boot-stamp cases, the row rule and the order, as tableHasher runs them on that database, and how that
+     * server's code hashes any table (hasherFingerprint). Equal on two servers, they hashed the table the same way, by
+     * construction, so its count and hash are compared.
+     */
+    d: string;
 }
+
+/**
+ * How the hashes are made, as a payload names it. A table, a column, a row rule or a boot stamp changes no `v`: each table
+ * carries its own recipe's fingerprint (`d`), and the payload the fingerprint of the definitions it was made from (`def`).
+ * Raise it ('d2', …) on any change to the bytes a table hashes to or to how its `d` or `def` is made, apart from the
+ * manifest inputs `def` covers: the payload's shape; rowLine's bytes; selectOf's boot-stamp CASE and its placeholder; the
+ * order rule; how the row rule and the columns left out are applied; what `d` or `def` takes; tableHasher's handling of
+ * the photos and members values left out. Each of those but what `def` takes also moves hasherFingerprint, and with it
+ * every table's `d` and the payload's `def`, by construction: two releases that differ there read each other as another
+ * release (not compared), never as drift or as a table that differs. test-replica-hashes pins, for each `v`,
+ * hasherFingerprint, golden rows, and a made-up manifest's `d`, hash and `def`, so any of those changes turns the suite red
+ * until `v` is raised and its line added. A release that reads another `v` (a number, before this one) reads none of the
+ * hashes, and gives no content verdict; no conversion code reads the old shape.
+ */
+export const TABLE_HASHES_VERSION = 'd1';
 
 /** What the main server sends with a whole copy (SyncPayload `tableHashes`). */
 export interface TableHashes {
-    /** How the hashes are made: raise it when that changes, and a standby compares none it doesn't make the same way. */
-    v: number;
+    v: typeof TABLE_HASHES_VERSION;
+    /** The definitions the hashes were made from, as that server's code holds them (definitionFingerprint). */
+    def: string;
     tables: Record<string, TableHash>;
 }
-
-/**
- * 2: members' photos out of their rows (schema.sql member_photos): `members` is hashed with avatar_ref and avatar_bytes
- * where it had avatar_url, and member_photos is hashed too. A server on either side of that hashes `members` with other
- * columns, so their hashes would differ on every copy and a standby would force-resync over and over; with the version
- * raised, a standby and a main server on either side of it compare row counts only until both are updated.
- */
-/**
- * 3: groups' own pictures out of their rows (schema.sql group_pictures, #1486): `groups` is hashed with avatar_ref and
- * avatar_bytes where it had avatar_url, and group_pictures is hashed too. Raised for the same reason as 2.
- */
-/**
- * 4: posts gains the five event-times columns (event_start_local, event_end_local, event_tz, event_online, event_link;
- * REPLICA_FORMAT 10). A main server refuses a copy to an older standby (OLDEST_STANDBY_FORMAT), but a standby updated
- * before its main server hashes `posts` over five more columns, so it would read every copy as "posts not exact" and
- * force-resync until the main server is updated; with the version raised, the two compare row counts only until then.
- */
-/**
- * 5: posts gains event_host_lets_in, and event_rsvps let_in_at and let_in_by (the host lets people in; REPLICA_FORMAT 11).
- * Raised for the same reason as 4: a standby updated before its main server hashes both tables over more columns.
- */
-/**
- * 6: posts gains the three repeating-event columns, event_rsvps occurrence_at, and event_reminders_sent is keyed on the
- * date (REPLICA_FORMAT 12). Raised for the same reason as 4.
- */
-/**
- * 7: shops gains photo_ref, and shop_photos holds each shop's banner (DESIGN-shops-round3-enterprise-shopfront-fable.md §0
- * row 4). Raised for the same reason as 4: a standby updated before its main server hashes `shops` over one more column,
- * and `shop_photos` too.
- */
-/**
- * 8: posts gains tags (DESIGN-owner-seeding-tags-fable.md §4.5, slice T2). Raised for the same reason as 4: a standby
- * updated before its main server hashes `posts` over one more column, so it would read every copy as "posts not exact"
- * and force-resync until the main server is updated; with the version raised, the two compare row counts only until then.
- */
-/**
- * 9: posts gains free_tags (DESIGN-tags-free-entry-fable.md §2, slice F1). Raised for the same reason as 8.
- */
-/**
- * 10: posts gains shown_from_host and shown_from_post_id (DESIGN-list-on-global-fable.md §3, slice G2′). Raised for the same
- * reason as 8.
- */
-/**
- * 11: posts gains shown_price (DESIGN-reaching-across-fable.md §1 row 4, slice G1′). Raised for the same reason as 8.
- */
-/**
- * 13: poll_votes gains other_answer_id, and a poll's answers are hashed too (a typed Other, REPLICA_FORMAT 13). Raised for
- * the same reason as 4.
- */
-/**
- * 12: confirmations gains stepped_back_owing (the balance rule, S1). Raised for the same reason as 4: a standby updated before
- * its main server hashes `confirmations` over one more column. Every community with a known floor has rows there.
- */
-/**
- * 14: posts gains shown_takes_questions (DESIGN-reaching-across-fable.md §1 row 5, slice GD). Raised for the same reason as 8.
- */
-/**
- * 15: posts gains pinned_until and pinned_at (DESIGN-pinning-fable.md §4, slice 1). Raised for the same reason as 8. REPLICA_FORMAT
- * stays: what an older importer drops is a pin, a week at most, and it ages out by itself, so it is worth no re-seed.
- */
-/**
- * 16: invite_codes gains vouch_level (a quick vouch on an invite). Raised for the same reason as 8: a standby updated before
- * its main server hashes `invite_codes` over one more column. REPLICA_FORMAT stays: what an older importer drops is the vouch
- * on an invite nobody has used yet, and after a takeover from such a copy that person still joins, with no vouch.
- */
-/**
- * 17: a new table, invite_asks (a member asks an admin to invite someone). Raised for the same reason as 8: a standby updated
- * before its main server hashes one more table. REPLICA_FORMAT stays: what an older importer drops is an ask still waiting,
- * which its member can see is unanswered and ask again.
- */
-/**
- * 18: message_attachments becomes a copied table (chat photos, gap G4: REPLICA_FORMAT 14), with three new columns (sha256,
- * bytes, updated_at). Raised for the same reason as 8: a standby updated before its main server hashes one more table.
- */
-/**
- * 19: a new table, decision_jury_pools (the pool a removal jury was drawn from, DESIGN-removal-jury-fable.md slice J1). Raised
- * for the same reason as 8: a standby updated before its main server hashes one more table. REPLICA_FORMAT stays: no
- * community has a jury until its owners choose one, and a vote's pool comes with it once both sides run this release.
- */
-/**
- * 20: decision_electors gains answered_at and reminded_at (a removal juror's Serve and the last reminder sent,
- * DESIGN-removal-jury-j2-calls-fable.md slice J2b). Raised for the same reason as 8: a standby updated before its main
- * server hashes `decision_electors` over two more columns. REPLICA_FORMAT stays: an older importer drops only a juror's
- * Serve and a reminder's time, and no community has a jury until its owners choose one.
- */
-/**
- * 21: the vouching reset (R0, db/vouch-reset.ts): members loses elder_vouched_by, can_vouch and vouch_credit, and
- * invite_codes loses vouch_level. Raised for the same reason as 8, the other way: a standby updated before its main
- * server hashes `members` and `invite_codes` over fewer columns, so it would read every copy as not exact and force-resync
- * until the main server is updated; with the version raised, the two compare row counts only until then. REPLICA_FORMAT
- * stays: each side's import writes only the columns its own table has (engine/sync.ts writeMemberStanding,
- * engine/plain-tables.ts importTable), so neither refuses the other's rows, and each server's own first boot resets its
- * own copy the same way.
- */
-/**
- * 22: vouchers (V1, engine/vouchers.ts): members gains credit_committee, invite_codes vouch_amount, and three new plain
- * tables (vouchers, voucher_allocations, room_gifts). Raised for the same reason as 4: a standby updated before its main
- * server hashes `members` and `invite_codes` over one more column each, and the new tables too. REPLICA_FORMAT stays:
- * each side's import writes only the columns and tables its own database has.
- */
-/**
- * 23: invite_codes gains voucher_level and voucher_outcome (a names-bound invite that makes its joiner a voucher,
- * DESIGN-invites-and-names-list-amend3-fable.md slice A1). Raised for the same reason as 8: a standby updated before its
- * main server hashes `invite_codes` over two more columns. REPLICA_FORMAT stays: what an older importer drops is the promise
- * on an invite nobody has used yet (after a takeover from such a copy that person still joins, confirmed, and the committee
- * can make them a voucher from the list), and the outcome line on a used one.
- */
-/**
- * 24: standing deals (engine/standing-deals.ts, DESIGN-standing-deals-fable.md slice S1): a new plain table, standing_deals,
- * and marketplace_transactions gains standing_id and period_no. Raised for the same reason as 4: a standby updated before its
- * main server hashes `marketplace_transactions` over two more columns, and the new table too. REPLICA_FORMAT stays, as for
- * 22: each side's import writes only the columns and tables its own database has. What an older importer drops (a main
- * server updated first may hold standing deals its standby doesn't keep yet) is the arrangement: after a takeover from such
- * a copy each period still held is a plain held deal its two members settle, and nothing more is held, since no hold is made
- * without the signed authorisation the dropped row keeps.
- */
-/**
- * 25: recovery_shares gains sso_find_hash (a restore finds the account from the sign-in alone, DESIGN-recovery-no-callsign-
- * fable.md §3, slice S0). Raised for the same reason as 8: a standby updated before its main server hashes
- * `recovery_shares` over one more column. REPLICA_FORMAT stays: what an older importer drops is an index, not a copy;
- * after a take-over from such a copy each member's copy is found by the scan of copies with no find hash, and made
- * findable, at their first restore (engine/recovery-find.ts).
- */
-/**
- * 26: join_requests gains via_post_id and via_sharer_pubkey (where a request to join came from, shared-listing door A3,
- * DESIGN-shared-listing-door-fable.md §2.2). Raised for the same reason as 8: a standby updated before its main server hashes
- * `join_requests` over two more columns. REPLICA_FORMAT stays: what an older importer drops is the provenance line answerers
- * read; the request itself is copied whole, and after a take-over from such a copy it simply shows no "After reading" line.
- */
-/**
- * 27: standing deals are paid at the start of each period (DESIGN-standing-deals-upfront-fable.md, slice U1): standing_deals
- * loses held_back_reason and its phase CHECK becomes ('paid', 'short', 'ended'). Raised for the same reason as 21: a standby
- * updated before its main server hashes `standing_deals` over one column fewer. REPLICA_FORMAT stays: each side's import
- * writes only the columns its own table has; the rows communities hold are ended ones, which both CHECKs take.
- * 28: members gains inviter_shown (a member's "Show who invited me to other members", DESIGN-invites-vouching-review-
- * fable.md slice I3). Raised for the same reason as 8: a standby updated before its main server hashes `members` over one
- * more column. REPLICA_FORMAT stays: each side's import writes only the columns its own table has (engine/sync.ts
- * writeMemberStanding); what an older importer drops is a member's switch, and after a take-over from such a copy their
- * inviter shows again until they switch it off again.
- */
-/**
- * 29: money is whole hundredths (DESIGN-atomic-beans-fable.md): every money column is INTEGER and named *_c (accounts.balance_c,
- * transactions.amount_c and fee_c, posts.price_c, marketplace_transactions.amount_c, ...), and members loses
- * legacy_credit_floor. Raised because every hashed money column changed name and type; REPLICA_FORMAT is 15 with it, so a
- * copy never crosses the change.
- */
-/**
- * 30: a new table, standing_period_changes (a standing deal's period lowered, an ask and its answer, DESIGN-getting-paid-
- * fable.md slice L1). Raised for the same reason as 8: a standby updated before its main server hashes one more table.
- * REPLICA_FORMAT stays: each side's import writes only the tables its own database has. What an older importer drops is a
- * lowering: after a take-over from such a copy a lowered period is paid at the price its payer signed, never more, and the
- * two can lower it again.
- */
-/**
- * 31: posts gains seven knowledge_* columns (Local knowledge, DESIGN-local-knowledge-fable.md §4.1, slice K1). Raised for the
- * same reason as 8. REPLICA_FORMAT stays: each side's import writes only the columns its own table has; what an older
- * importer drops is a knowledge post's sources, place, language, checked date, mark and count, and after a take-over from
- * such a copy the page still shows its title and words, "Checked" reading the day it was made.
- */
-/**
- * 32: a new table, contact_copies (each member's locked contacts list, DESIGN-private-contacts-fable.md slice C1). Raised for
- * the same reason as 8: a standby updated before its main server hashes one more table. REPLICA_FORMAT stays: what an older
- * importer drops is a locked copy no server can open, and after a take-over from such a copy the member's phone, which keeps
- * the list itself, sees no copy there and brings it level again in its rounds (contacts design §4.4, §4.5).
- */
-/**
- * 33: bills (engine/bills.ts, DESIGN-getting-paid-fable.md slice B1): a new plain table, bills. Raised for the same reason as
- * 22: a standby updated before its main server hashes the new table too. REPLICA_FORMAT stays: each side's import writes only
- * the tables its own database has. What an older importer drops is the bills themselves (a request to pay, holding no
- * Beans): after a takeover from such a copy the bills out are gone and their senders send them again; a paid one's ledger
- * row is copied with the ledger whatever the importer.
- */
-/**
- * 34: Local knowledge's waiting list (engine/knowledge-drafts.ts, DESIGN-local-knowledge-fable.md §4.1, slice K3): three new
- * plain tables, knowledge_drafts, knowledge_draft_photos and knowledge_helped. Raised for the same reason as 8: a standby
- * updated before its main server hashes three more tables. REPLICA_FORMAT stays: each side's import writes only the tables
- * its own database has. What an older importer drops is the suggestions still waiting (and their photos, and "This
- * helped" taps, K5): after a take-over from such a copy their members see none waiting and send them again; a page
- * already approved is a post, copied whatever the importer.
- */
-/**
- * 35: per-item prices (DESIGN-per-item-price-fable.md §3, slice P0): posts gains units_left, lot_price_c and lot_units, and
- * marketplace_transactions gains item_option. Raised for the same reason as 8: a standby updated before its main server hashes
- * both tables over more columns. REPLICA_FORMAT stays, as for the knowledge columns (31): all four are NULL on every row until
- * a seller prices a listing for each one, which no app offers until every slice is in (config/node-profile.ts `perItem`).
- */
-/**
- * 36: the log of credit looks (engine/credit-looks.ts, DESIGN-credit-list-amend-fable.md §5.2, slice C1): a new plain table,
- * credit_look_log. Raised for the same reason as 8: a standby updated before its main server hashes one more table.
- * REPLICA_FORMAT stays: each side's import writes only the tables its own database has. What an older importer drops is
- * who looked at whose credit: after a take-over from such a copy the owners and admins read no looks from before it; no
- * balance or Bean is in it.
- */
-/**
- * 37: tier badges (engine/badges.ts; Marty, 12 Nov 2026: "tiers badge only"): a new plain table, member_badges. Raised for the
- * same reason as 22: a standby updated before its main server hashes the new table too. REPLICA_FORMAT stays: each side's
- * import writes only the tables its own database has. What an older importer drops is the badges (recognition, no credit):
- * after a take-over from such a copy a badged member shows the tier their own record reads until an admin gives it again.
- */
-/**
- * 38: retired empty duplicates (engine/retire-duplicate.ts; Marty, 14 Nov 2026): a new plain table, retired_accounts. Raised
- * for the same reason as 22: a standby updated before its main server hashes the new table too. REPLICA_FORMAT stays: each
- * side's import writes only the tables its own database has. What an older importer drops is the mark: after a take-over
- * from such a copy the account stays 'disabled' (its members row), acting as nothing, and shows as suspended until an
- * owner lifts it.
- */
-/**
- * 39: the forum (engine/forum.ts, DESIGN-forums-fable.md §3, slice F1): six new plain tables, forum_sections, forum_topics,
- * forum_posts, forum_post_photos, forum_post_edits and forum_members. Raised for the same reason as 8: a standby updated before
- * its main server hashes six more tables. REPLICA_FORMAT stays: each side's import writes only the tables its own database
- * has. What an older importer drops is the forum: after a take-over from such a copy its sections are made again as at the
- * start and its topics are gone; no Bean is in it.
- */
-/**
- * 40: the forum's moderation (engine/forum-moderation.ts, engine/forum-first-look.ts; slice F2): two new plain tables,
- * forum_waiting and forum_waiting_photos, and new columns abuse_reports.target_forum_post_id and target_home,
- * forum_posts.hidden_by_reports_at and forum_members.known_at. Raised for the same reason as 8: a standby updated before its
- * main server hashes more columns and tables. REPLICA_FORMAT stays: each side's import writes only the columns and tables its
- * own database has. What an older importer drops is the forum's moderation: after a take-over from such a copy a first topic
- * waiting is gone (its writer starts it again), a hidden forum post shows until it is reported again, and a report of a forum
- * post reads as a report of its writer; no Bean is in it.
- */
-/**
- * 41: directory_cache gains listings_from_here (a community's name on its members' listings on the global community,
- * DESIGN-list-on-global-fable.md §11 G5). Raised for the same reason as 8: a standby updated before its main server hashes the
- * table over one more column. REPLICA_FORMAT stays: each side's import writes only the columns its own table has. What an
- * older importer drops is a community's false: after a take-over from such a copy its name shows beside its members' copies
- * until the new main server's first mirror run, 10 seconds after it starts, reads the registry again.
- */
-/**
- * 42: owners' and admins' rules on typed tags (engine/free-tags.ts, DESIGN-tags-free-entry-fable.md §5, slice F3): a new plain
- * table, free_tag_rules. Raised for the same reason as 22: a standby updated before its main server hashes the new table too.
- * REPLICA_FORMAT stays: each side's import writes only the tables its own database has. What an older importer drops is the
- * rules: after a take-over from such a copy a hidden tag may be offered again and a merged one offered as typed, until an
- * owner or admin sets the rule again; no listing and no Bean is in it.
- */
-/**
- * 43: the forum's notices (engine/forum-notices.ts, slice F5): a new plain table, forum_follows. Raised for the same reason
- * as 8: a standby updated before its main server hashes one more table. REPLICA_FORMAT stays: each side's import writes only
- * the tables its own database has. What an older importer drops is who follows a topic: after a take-over from such a copy
- * nobody is told of replies until they reply or follow again, and every topic reads as read; no Bean is in it.
- */
-export const TABLE_HASHES_VERSION = 43;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts
@@ -292,6 +78,48 @@ export const COLUMNS_NOT_HASHED: Record<string, Record<string, string>> = {
 };
 
 const q = (n: string) => `"${n.replace(/"/g, '""')}"`;
+/** 16 hex of sha256 over a value's JSON: a recipe's `d`, the definitions' `def`. */
+const fingerprint = (v: unknown) => crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex').slice(0, 16);
+const FINGERPRINT = /^[0-9a-f]{16}$/;
+const TABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** What the hasher reads of its definitions: the manifest's (manifestDefinitions), or the probe's (hasherFingerprint). */
+interface HashDefinitions {
+    /** Each table hashed: its columns in their order, its key when the manifest names one, its row rule's condition. */
+    tables: Record<string, { columns: readonly string[]; key?: readonly string[]; where: string | null }>;
+    /** Columns every server writes again at its own boot, and on which rows (the manifest's BOOT_STAMPED). */
+    stamps: readonly { table: string; column: string; where: string }[];
+    /** Columns left out, per table (COLUMNS_NOT_HASHED). */
+    columnsLeftOut: Readonly<Record<string, Readonly<Record<string, string>>>>;
+}
+
+/** This code's definitions, as the manifest holds them now: every copied table but those NOT_HASHED. */
+function manifestDefinitions(): HashDefinitions {
+    const tables: HashDefinitions['tables'] = {};
+    for (const [table, entry] of Object.entries(TABLES)) {
+        if ((entry.kind !== 'replicated' && entry.kind !== 'replicated-except') || NOT_HASHED[table]) continue;
+        tables[table] = { columns: entry.columns, ...(entry.key ? { key: entry.key } : {}), where: travellingRows(table) };
+    }
+    return { tables, stamps: BOOT_STAMPED, columnsLeftOut: COLUMNS_NOT_HASHED };
+}
+
+/**
+ * The definitions every table's hash is made from, as this server's code holds them: each hashed table's manifest columns,
+ * key, row rule and boot stamps, the tables and columns left out (NOT_HASHED, COLUMNS_NOT_HASHED), and how this code
+ * hashes any table (hasherFingerprint). From code alone, never this server's database: two servers with equal ones run the
+ * same definitions the same way, so a table one of them hashes another way, or alone, is that server's schema
+ * (compareTableHashes: drift).
+ */
+export function definitionFingerprint(): string {
+    const defs = manifestDefinitions();
+    const tables = Object.keys(defs.tables).sort().map((table) => {
+        const { columns, key, where } = defs.tables[table];
+        const stamps = defs.stamps.filter((b) => b.table === table).map((b) => [b.column, b.where]);
+        return [table, columns, key ?? null, where, stamps];
+    });
+    const columnsLeftOut = Object.keys(COLUMNS_NOT_HASHED).sort().map((t) => [t, Object.keys(COLUMNS_NOT_HASHED[t]).sort()]);
+    return fingerprint([hasherFingerprint(), tables, Object.keys(NOT_HASHED).sort(), columnsLeftOut]);
+}
 
 export interface HashOptions {
     /** Only these tables. */
@@ -312,45 +140,65 @@ export interface HashOptions {
 }
 
 /**
- * Every copied table this server has, with the columns hashed, the order its rows are hashed in, and the condition on the
- * rows that travel when not all do (the manifest's RowRule): the rest are hashed on neither server.
+ * The columns selected for one table's hash: a boot-stamped row's stamp (the manifest's BOOT_STAMPED: every server writes it
+ * again at its own boot) as a placeholder, every other column as it is.
  */
-export function hashedTables(conn: Database.Database): { table: string; columns: string[]; order: string[]; where: string | null }[] {
-    const out: { table: string; columns: string[]; order: string[]; where: string | null }[] = [];
-    for (const [table, entry] of Object.entries(TABLES)) {
-        if ((entry.kind !== 'replicated' && entry.kind !== 'replicated-except') || NOT_HASHED[table]) continue;
+function selectOf(table: string, columns: readonly string[], stamps: HashDefinitions['stamps']): string {
+    return columns.map((c) => {
+        const stamped = stamps.filter((b) => b.table === table && b.column === c);
+        return stamped.length === 0 ? q(c)
+            : `CASE WHEN ${stamped.map((b) => `(${b.where})`).join(' OR ')} THEN '<stamped at boot>' ELSE ${q(c)} END`;
+    }).join(', ');
+}
+
+/** How one table is hashed on one database (hashedTables). */
+export interface TableRecipe { table: string; columns: string[]; order: string[]; where: string | null; select: string; d: string }
+
+/**
+ * Every table of `defs` that `conn` has, with the columns hashed, the order its rows are hashed in, the condition on the
+ * rows that travel when not all do (the manifest's RowRule): the rest are hashed on neither server, the select list, and
+ * the fingerprint of all four with the table's name and `how` (TableHash `d`).
+ */
+function recipesOf(conn: Database.Database, defs: HashDefinitions, how: string): TableRecipe[] {
+    const out: TableRecipe[] = [];
+    for (const [table, entry] of Object.entries(defs.tables)) {
         const info = conn.prepare('SELECT name, pk FROM pragma_table_info(?)').all(table) as { name: string; pk: number }[];
         if (info.length === 0) continue;
         const have = new Set(info.map((c) => c.name));
-        const columns = entry.columns.filter((c) => have.has(c) && !COLUMNS_NOT_HASHED[table]?.[c]);
+        const columns = entry.columns.filter((c) => have.has(c) && !defs.columnsLeftOut[table]?.[c]);
         const key = entry.key ?? info.filter((c) => c.pk > 0).sort((x, y) => x.pk - y.pk).map((c) => c.name);
         // By its key when the key is among the columns hashed (a total order); otherwise by every column hashed, so two
         // servers' rows come in the same order whatever local ids they carry.
-        const order = key.length > 0 && key.every((c) => columns.includes(c)) ? key : columns;
-        out.push({ table, columns, order, where: travellingRows(table) });
+        const order = key.length > 0 && key.every((c) => columns.includes(c)) ? [...key] : columns;
+        const where = entry.where;
+        const select = selectOf(table, columns, defs.stamps);
+        out.push({ table, columns, order, where, select, d: fingerprint([how, table, select, where, order]) });
     }
     return out;
 }
 
+/** Every copied table this server has (the manifest's, but those NOT_HASHED), each with how it is hashed on `conn`. */
+export function hashedTables(conn: Database.Database): TableRecipe[] {
+    return recipesOf(conn, manifestDefinitions(), hasherFingerprint());
+}
+
 /**
- * How one table's rows are hashed: the columns selected (a boot-stamped row's stamp, the manifest's BOOT_STAMPED: every
- * server writes it again at its own boot, as a placeholder), what is done with each row, and the table's count and hash
- * once every row went in, in its order.
+ * One row as its table's hash takes it: its values as JSON, a blob as x'<hex>' and a bigint as its digits, and a newline.
+ * Part of TABLE_HASHES_VERSION: a change here is a new `v`, and test-replica-hashes's golden rows say so.
  */
-function tableHasher(table: string, columns: string[], opts: HashOptions): { select: string; add: (row: unknown[]) => void; done: () => TableHash } {
+export function rowLine(row: readonly unknown[]): string {
+    return `${JSON.stringify(row.map((v) => (Buffer.isBuffer(v) ? `x'${v.toString('hex')}'` : typeof v === 'bigint' ? v.toString() : v)))}\n`;
+}
+
+/** How one table's rows are hashed: what is done with each row, and the table's count and hash once every row went in, in its order. */
+function tableHasher(table: string, columns: string[], d: string, opts: HashOptions): { add: (row: unknown[]) => void; done: () => TableHash } {
     const leftOut = table === 'post_photos' && opts.photosLeftOut && opts.photosLeftOut.size > 0 ? opts.photosLeftOut : null;
     const [postAt, orderAt] = [columns.indexOf('post_id'), columns.indexOf('order_num')];
     const asCopied = table === 'members' && opts.membersLeftOut && opts.membersLeftOut.size > 0 ? opts.membersLeftOut : null;
     const keyAt = columns.indexOf('public_key');
-    const select = columns.map((c) => {
-        const stamped = BOOT_STAMPED.filter((b) => b.table === table && b.column === c);
-        return stamped.length === 0 ? q(c)
-            : `CASE WHEN ${stamped.map((b) => `(${b.where})`).join(' OR ')} THEN '<stamped at boot>' ELSE ${q(c)} END`;
-    }).join(', ');
     const h = crypto.createHash('sha256');
     let rows = 0;
     return {
-        select,
         add: (row) => {
             if (leftOut && postAt >= 0 && orderAt >= 0 && leftOut.has(`${row[postAt]}|${row[orderAt]}`)) return;
             const copied = asCopied && keyAt >= 0 ? asCopied.get(row[keyAt] as string) : undefined;
@@ -360,12 +208,78 @@ function tableHasher(table: string, columns: string[], opts: HashOptions): { sel
                     if (at >= 0) row[at] = v;
                 }
             }
-            h.update(JSON.stringify(row.map((v) => (Buffer.isBuffer(v) ? `x'${v.toString('hex')}'` : typeof v === 'bigint' ? v.toString() : v))));
-            h.update('\n');
+            h.update(rowLine(row));
             rows++;
         },
-        done: () => ({ rows, hash: h.digest('hex') }),
+        done: () => ({ rows, hash: h.digest('hex'), d }),
     };
+}
+
+/** One table's count and hash on `conn`, as its recipe says, in one read. */
+function hashTable(conn: Database.Database, r: TableRecipe, opts: HashOptions): TableHash {
+    const hasher = tableHasher(r.table, r.columns, r.d, opts);
+    const held = r.where ? ` WHERE (${r.where})` : '';
+    for (const row of conn.prepare(`SELECT ${r.select} FROM ${q(r.table)}${held} ORDER BY ${r.order.map(q).join(', ')}`).raw().iterate() as Iterable<unknown[]>) {
+        hasher.add(row);
+    }
+    return hasher.done();
+}
+
+/**
+ * Made-up definitions and rows that take every path from a table's definitions to its `d` and hash: a column with two
+ * boot stamps (the CASE, its OR and its placeholder) and one with one; a row rule; a column left out, and a column the
+ * database lacks; a table with no key (ordered by every column), one keyed in its database alone (its primary key), one
+ * whose key is not among the columns hashed; the photos and the members values a copy left out; every kind of value a
+ * row holds. Nothing in it is the manifest's: a real table's change moves `def`, never hasherFingerprint.
+ */
+const PROBE = {
+    defs: {
+        tables: {
+            probe_rows: { columns: ['a', 'b', 'c', 'e', 'f', 'g'], where: "a <> 'not travelling'" },
+            probe_keyed: { columns: ['n', 'm', 'absent'], key: ['id'], where: null },
+            post_photos: { columns: ['post_id', 'order_num', 'ref'], where: null },
+            members: { columns: ['public_key', 'standing'], key: ['public_key'], where: null },
+        },
+        stamps: [
+            { table: 'probe_rows', column: 'b', where: "a = 'x'" },
+            { table: 'probe_rows', column: 'b', where: "a = 'y'" },
+            { table: 'probe_rows', column: 'c', where: "a = 'y'" },
+        ],
+        columnsLeftOut: { probe_rows: { f: 'a column left out' } },
+    } satisfies HashDefinitions,
+    schema: `CREATE TABLE probe_rows (a, b, c, e, f, g);
+        INSERT INTO probe_rows VALUES ('y', 'stamped', 'stamped', 1.5, 'left out', x'00ff'), ('x', 'stamped', 'kept', NULL, 'left out', ''),
+            ('not travelling', 'b', 'c', 7, 'f', 'g'), ('w', 'b', NULL, -9007199254740991, 'f', 'naïve "quoted"');
+        CREATE TABLE probe_keyed (id INTEGER PRIMARY KEY, n, m);
+        INSERT INTO probe_keyed VALUES (1, 'z', 2), (2, 'a', 1);
+        CREATE TABLE post_photos (post_id, order_num, ref, PRIMARY KEY (post_id, order_num));
+        INSERT INTO post_photos VALUES ('p', 2, 'two'), ('p', 1, 'one'), ('q', 1, 'left out by the copy');
+        CREATE TABLE members (public_key PRIMARY KEY, standing, local);
+        INSERT INTO members VALUES ('k2', 'its own', 'x'), ('k1', 'refused here', 'y');`,
+    opts: { photosLeftOut: new Set(['q|1']), membersLeftOut: new Map([['k1', { standing: "the copy's" }]]) } satisfies HashOptions,
+    /** A row no database gives back (a bigint), through rowLine alone. */
+    row: [null, 0, -42, 1n << 62n, 1.5, 'text', Buffer.from([0, 1, 254, 255]), Buffer.alloc(0), ''] as unknown[],
+};
+let hasherMemo: string | null = null;
+
+/**
+ * How this code hashes any table (16 hex of sha256): what it makes of PROBE, each probe table's `d` (made with no
+ * fingerprint of its own), count and hash, and rowLine's bytes of a row no database gives back. Part of every table's `d`
+ * and of `def`, so a change to any path from a table's definitions to its `d` or hash (TABLE_HASHES_VERSION says which)
+ * moves both on the release that makes it, and two releases that hash another way read each other as another release:
+ * never as drift, nor as a table that differs. Made once per process, in a database of its own.
+ */
+export function hasherFingerprint(): string {
+    if (hasherMemo !== null) return hasherMemo;
+    const conn = new Database(':memory:');
+    try {
+        conn.exec(PROBE.schema);
+        const probed = recipesOf(conn, PROBE.defs, '').map((r) => [r.table, hashTable(conn, r, PROBE.opts)]);
+        hasherMemo = fingerprint([probed, rowLine(PROBE.row)]);
+    } finally {
+        conn.close();
+    }
+    return hasherMemo;
 }
 
 /**
@@ -374,16 +288,11 @@ function tableHasher(table: string, columns: string[], opts: HashOptions): { sel
  */
 export function tableContentHashes(opts: HashOptions = {}, conn: Database.Database = db): TableHashes {
     const tables: Record<string, TableHash> = {};
-    for (const { table, columns, order, where } of hashedTables(conn)) {
-        if (opts.only && !opts.only.includes(table)) continue;
-        const hasher = tableHasher(table, columns, opts);
-        const held = where ? ` WHERE (${where})` : '';
-        for (const row of conn.prepare(`SELECT ${hasher.select} FROM ${q(table)}${held} ORDER BY ${order.map(q).join(', ')}`).raw().iterate() as Iterable<unknown[]>) {
-            hasher.add(row);
-        }
-        tables[table] = hasher.done();
+    for (const r of hashedTables(conn)) {
+        if (opts.only && !opts.only.includes(r.table)) continue;
+        tables[r.table] = hashTable(conn, r, opts);
     }
-    return { v: TABLE_HASHES_VERSION, tables };
+    return { v: TABLE_HASHES_VERSION, def: definitionFingerprint(), tables };
 }
 
 /**
@@ -394,7 +303,8 @@ export function tableContentHashes(opts: HashOptions = {}, conn: Database.Databa
  * A slice ends at `sliceRows` rows or once its rows add up to `sliceBytes` (keyset.ts rowBytes), whichever first, and never
  * before its first row: rows are read one at a time and hashed as they are read, so a slice of wide rows holds one row in
  * memory and the event loop for about `sliceBytes` of hashing. `except`: tables left for later. Throws what a read
- * throws, and stops when `stopped()` says so.
+ * throws, and stops when `stopped()` says so. The rowid it walks by is no part of a table's `d`: it orders nothing the
+ * hash can tell apart.
  */
 export async function tableContentHashesInSlices(
     conn: Database.Database,
@@ -402,9 +312,9 @@ export async function tableContentHashesInSlices(
     pace: { sliceRows: number; sliceBytes: number; pause: () => Promise<void>; stopped: () => boolean },
 ): Promise<TableHashes> {
     const tables: Record<string, TableHash> = {};
-    for (const { table, columns, order, where } of hashedTables(conn)) {
+    for (const { table, columns, order, where, select, d } of hashedTables(conn)) {
         if ((opts.only && !opts.only.includes(table)) || opts.except?.includes(table)) continue;
-        const hasher = tableHasher(table, columns, opts);
+        const hasher = tableHasher(table, columns, d, opts);
         const walk = [...order, ...rowTiebreak(conn, table, order)];
         const extra = walk.map((c) => sqlColumn(c)).join(', ');
         let last: unknown[] | null = null;
@@ -412,7 +322,7 @@ export async function tableContentHashesInSlices(
             if (pace.stopped()) throw new Error('stopped');
             const after = last ? afterRow(walk, last) : null;
             const conditions = [where ? `(${where})` : null, after?.sql ?? null].filter((c): c is string => c !== null);
-            const read = conn.prepare(`SELECT ${hasher.select}, ${extra} FROM ${q(table)}${conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''}`
+            const read = conn.prepare(`SELECT ${select}, ${extra} FROM ${q(table)}${conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''}`
                 + ` ORDER BY ${walk.map((c) => sqlColumn(c)).join(', ')} LIMIT ?`).raw().iterate(...(after?.params ?? []), pace.sliceRows) as Iterable<unknown[]>;
             let [rows, bytes, cut] = [0, 0, false];
             for (const row of read) {
@@ -428,40 +338,71 @@ export async function tableContentHashesInSlices(
         }
         tables[table] = hasher.done();
     }
-    return { v: TABLE_HASHES_VERSION, tables };
-}
-
-/** A main server's `tableHashes` as this server can use them, or null: made another way, or not the shape they have. */
-export function readTableHashes(raw: unknown): Record<string, TableHash> | null {
-    if (!raw || typeof raw !== 'object') return null;
-    const r = raw as { v?: unknown; tables?: unknown };
-    if (r.v !== TABLE_HASHES_VERSION || !r.tables || typeof r.tables !== 'object') return null;
-    const out: Record<string, TableHash> = {};
-    for (const [table, th] of Object.entries(r.tables as Record<string, unknown>)) {
-        const t = th as { rows?: unknown; hash?: unknown } | null;
-        if (!t || !Number.isInteger(t.rows) || typeof t.hash !== 'string' || !/^[0-9a-f]{64}$/.test(t.hash)) return null;
-        out[table] = { rows: t.rows as number, hash: t.hash };
-    }
-    return out;
+    return { v: TABLE_HASHES_VERSION, def: definitionFingerprint(), tables };
 }
 
 /**
- * This server's copied tables against the main server's: the tables both hash, and those whose count or hash differs.
- * A table only one side hashes (another version's manifest) is not compared. `photosLeftOut`: the photos the main server
- * left out of its hash (the copy's `photosOmitted`), left out of this server's too. `membersLeftOut`: the members values
- * this server's import left out, hashed as the copy's.
+ * A main server's `tableHashes` as this server can use them, or null: made another way (another `v`: an older release's
+ * number, with no `d`), or not the shape they have.
  */
-export function compareTableHashes(
-    theirs: Record<string, TableHash>, opts: Pick<HashOptions, 'photosLeftOut' | 'membersLeftOut'> = {},
-): { compared: string[]; differing: { table: string; rows: number; theirRows: number }[] } {
-    const mine = tableContentHashes({ photosLeftOut: opts.photosLeftOut, membersLeftOut: opts.membersLeftOut }).tables;
-    const compared: string[] = [];
-    const differing: { table: string; rows: number; theirRows: number }[] = [];
-    for (const [table, t] of Object.entries(theirs)) {
-        const m = mine[table];
-        if (!m) continue;
-        compared.push(table);
-        if (m.rows !== t.rows || m.hash !== t.hash) differing.push({ table, rows: m.rows, theirRows: t.rows });
+export function readTableHashes(raw: unknown): TableHashes | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const r = raw as { v?: unknown; def?: unknown; tables?: unknown };
+    if (r.v !== TABLE_HASHES_VERSION || typeof r.def !== 'string' || !FINGERPRINT.test(r.def)) return null;
+    if (!r.tables || typeof r.tables !== 'object' || Array.isArray(r.tables)) return null;
+    const tables: Record<string, TableHash> = {};
+    for (const [table, th] of Object.entries(r.tables as Record<string, unknown>)) {
+        const t = th as { rows?: unknown; hash?: unknown; d?: unknown } | null;
+        if (!TABLE_NAME.test(table) || !t || !Number.isInteger(t.rows) || typeof t.hash !== 'string' || !/^[0-9a-f]{64}$/.test(t.hash)
+            || typeof t.d !== 'string' || !FINGERPRINT.test(t.d)) return null;
+        tables[table] = { rows: t.rows as number, hash: t.hash, d: t.d };
     }
-    return { compared: compared.sort(), differing };
+    return { v: TABLE_HASHES_VERSION, def: r.def, tables };
+}
+
+/** What compareTableHashes found, table by table: each table either server hashes is in exactly one of the first, third and fourth lists. */
+export interface HashComparison {
+    /** Hashed the same way on both servers (equal `d`), so compared, row for row. */
+    compared: string[];
+    /** Of those, each whose count or content differs: a copy gone wrong, which the held force-resync mends. */
+    differing: { table: string; rows: number; theirRows: number }[];
+    /**
+     * The same definitions on both (equal `def`), and the table hashed another way on one, or on one alone: one server's
+     * schema isn't its code's (a migration that failed). Not exact, named, and no force-resync: a copy brings rows, never a
+     * schema.
+     */
+    drift: string[];
+    /** Other definitions (another release on one side), and the table hashed another way, or on one alone: not compared. */
+    otherRelease: string[];
+    /** Every table either server hashes was compared, and is equal. */
+    exact: boolean;
+}
+
+/**
+ * The main server's table hashes against this server's (`mine`, made over the same rows: the photos the copy left out, and
+ * the members values this server's import left out, as the copy's): the one reading of them, for every check that reads
+ * them (services/backup-puller.ts checkWholeCopy and leftOutTablesCurrent, services/stager.ts's closing check). `only`:
+ * just these tables, on both sides.
+ *
+ *   per table                                  same `def`                     other `def` (a rollout)
+ *   `d` equal, rows and hash equal             compared                       compared
+ *   `d` equal, rows or hash differ             differing (force-resync)       differing (force-resync)
+ *   `d` differs, or on one side alone          drift (no force-resync)        otherRelease (not compared)
+ */
+export function compareTableHashes(theirs: TableHashes, mine: TableHashes, only?: readonly string[]): HashComparison {
+    const sameDefinitions = theirs.def === mine.def;
+    const out: HashComparison = { compared: [], differing: [], drift: [], otherRelease: [], exact: false };
+    const names = new Set([...Object.keys(theirs.tables), ...Object.keys(mine.tables)]);
+    for (const table of [...names].filter((t) => !only || only.includes(t)).sort()) {
+        const t = Object.hasOwn(theirs.tables, table) ? theirs.tables[table] : undefined;
+        const m = Object.hasOwn(mine.tables, table) ? mine.tables[table] : undefined;
+        if (t && m && t.d === m.d) {
+            out.compared.push(table);
+            if (m.rows !== t.rows || m.hash !== t.hash) out.differing.push({ table, rows: m.rows, theirRows: t.rows });
+        } else {
+            (sameDefinitions ? out.drift : out.otherRelease).push(table);
+        }
+    }
+    out.exact = out.differing.length === 0 && out.drift.length === 0 && out.otherRelease.length === 0;
+    return out;
 }

@@ -13,6 +13,7 @@ import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedView
 import { letGoOfWebPushAt, stopEveryTellMeAtHome, turnOffWebPush, webPushOrigin } from '../lib/web-push';
 import { WebPushRow } from '../components/WebPushRow';
 import { clearAccountStorage } from '../lib/device-prefs';
+import { forgetThisBrowserAtSignOut } from '../lib/outside-mail';
 import { clearHomeCache } from '../lib/home-cache';
 import {
     WEB_DELETE_CARD_LINE, WEB_DELETE_CHECKING_LINE, hostOf, leaveThisCommunity, planWebDelete, purgeHere, webDeleteFailedLine,
@@ -372,13 +373,16 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     /**
      * Sign-out and delete-everything: this community lets go of this browser while the key is still here (web push W2). Where
      * the key leaves this browser (`keyGoes`), so does every community asked from Home and told to tell it (Tell me, global
-     * yes Y2), and their registrations end: nothing for the account that has gone can arrive here.
+     * yes Y2), and their registrations end: nothing for the account that has gone can arrive here. With the key, this
+     * browser's mail from other communities goes too (X2b): its mail id is read before the store is cleared, and this
+     * community is asked to forget it, 4 s at most, alongside the rest (lib/outside-mail.ts forgetThisBrowserForMail).
      */
     const stopWebPushHere = async (keyGoes: boolean) => {
         const origin = webPushOrigin(getNodeApiUrl());
         await Promise.all([
             origin ? turnOffWebPush(origin, identity).catch(() => {}) : undefined,
             keyGoes ? stopEveryTellMeAtHome(identity, origin).catch(() => {}) : undefined,
+            keyGoes ? forgetThisBrowserAtSignOut(identity).then(({ done }) => done).catch(() => {}) : undefined,
         ]);
     };
 

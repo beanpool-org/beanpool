@@ -116,6 +116,8 @@ const NOT_ACTIVITY: Record<string, string> = {
     'withheld_conversations.other_pubkey': "the member who blocked a sender: not its act (the sender's is `messages`)",
     'dm_requests.to_pubkey': 'someone asked to message it: not its act (answering is `messages`)',
     'contact_copies.owner_pubkey': 'its own locked contacts list: its own setting',
+    'contact_copies_former.owner_pubkey': 'its own old contacts list, kept a year after a re-key: its own setting',
+    'contact_copies_former.former_pubkey': 'the key that old list is locked with: a key it held before a re-key, no act',
     'health_access_log.subject_pubkey': 'an admin looked at it: not its act',
     'credit_look_log.subject_pubkey': 'a giver looked at its credit: not its act',
     'names_access_log.subject_pubkey': 'an admin acted on its names-list entry: not its act (a confirmation is `names_list`)',
@@ -139,6 +141,8 @@ const NOT_ACTIVITY: Record<string, string> = {
     'relay_mail.recipient': 'mail from another community waiting for it: done to it, not its act',
     'relay_mail.sender_key': "the sender, in another community, of mail waiting here: their key, no act of anyone's here",
     'relay_mail_seen.sender_key': "the sender, in another community, of an item that came here: their key, no act of anyone's here",
+    'relay_mail_devices.member': 'its own devices fetching mail from other communities: its own reading, no act (X2b)',
+    'relay_mail_got.recipient': 'which of its devices has which item waiting for it: its own reading, no act (X2b)',
     'relay_outbox.recipient': 'the person in another community its mail went to (or a receipt went back to): the sending is relay_outbox.sender_key',
     'invalidated_keys.public_key': "a key closed or replaced: the key's state, no act",
     // The forum (engine/forum.ts). A topic it started or a post or reply it wrote is forum_topics/forum_posts.writer_pubkey (`posts`).

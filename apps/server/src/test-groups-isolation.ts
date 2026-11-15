@@ -6,7 +6,6 @@
  * 2. Map pins isolation
  * 3. Search isolation (posts_fts, getPosts({ query }))
  * 4. Peer/federation sync isolation (listingsForPeer in federation-listings.ts)
- * 5. Daily Pulse gate isolation (daily-pulse active member listing count)
  * 6. Activity feed isolation (activity_feed table entries)
  * 7. WebSocket broadcast isolation (scoped recipient delivery)
  * 8. Public info counters isolation (getActivePostCount & getCommunityInfo().postCount)
@@ -212,33 +211,6 @@ async function runTests() {
         assert(peerIds.includes(pubFedPost!.id), '4b. Public post with reach=everywhere is served to peer');
         assert(!peerIds.includes(grpFedPost!.id), '4c. Group post is NEVER served to peer node despite reach=everywhere');
         assert(!peerIds.includes(dirFedPost!.id), '4d. Direct post is NEVER served to peer node despite reach=everywhere');
-    }
-
-    console.log('\n─── CONSUMER 5: Daily Pulse Suppression Gate Isolation ───');
-    {
-        // Check Pulse listing counting query in SQLite
-        const getPulseListingCount = (pubkey: string) => {
-            const row = db.prepare(`
-                SELECT COUNT(*) as c FROM posts
-                WHERE author_pubkey != ? AND active = 1 AND status = 'active' AND type != 'poll'
-                AND (audience_scope IS NULL OR audience_scope = 'public')
-            `).get(pubkey) as any;
-            return row?.c || 0;
-        };
-
-        const beforeCount = getPulseListingCount('some_pulse_pubkey');
-
-        // Create a group post and a direct post
-        createPost('offer', 'tools', 'Garden Post Count Test', 'Desc', 500, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
-        createPost('offer', 'tools', 'Direct Post Count Test', 'Desc', 500, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: carol.pubKeyHex });
-
-        const afterPrivateCount = getPulseListingCount('some_pulse_pubkey');
-        assert(afterPrivateCount === beforeCount, `5a. Daily pulse active listings count is unchanged after group/direct posts (was ${beforeCount}, now ${afterPrivateCount})`);
-
-        // Create a public post
-        createPost('offer', 'tools', 'Public Post Count Test', 'Desc', 500, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'public' });
-        const afterPublicCount = getPulseListingCount('some_pulse_pubkey');
-        assert(afterPublicCount === beforeCount + 1, `5b. Daily pulse count increments ONLY for public posts (now ${afterPublicCount})`);
     }
 
     console.log('\n─── CONSUMER 6: Activity Feed Isolation ───');

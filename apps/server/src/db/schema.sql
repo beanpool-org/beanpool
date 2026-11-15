@@ -2111,6 +2111,32 @@ CREATE TABLE IF NOT EXISTS contact_copies (
     updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- A re-keyed member's old locked contacts list (scratch/fable-design/DESIGN-private-contacts-fable.md §6.2, slice C6):
+-- locked under the key the member had before an admin re-keyed them, so neither the new key nor this server can open it;
+-- only that key's old 12 words can, on the member's phone. Kept a year beside the new key in case those words turn up
+-- (engine/contact-copies.ts), at most one per member, read and deleted only by the member's key now (routes/contacts.ts
+-- GET/DELETE /api/contacts/former). Written only by a re-key (engine/key-move.ts), as the old key's row was sent; deleted
+-- with a tombstone after `kept_until`, on the member's DELETE, when they stop being a member here, or when the owners
+-- switch the community's copies off. Born empty: no existing row is read or moved.
+CREATE TABLE IF NOT EXISTS contact_copies_former (
+    owner_pubkey   TEXT PRIMARY KEY,
+    -- The key the copy is locked under and signed by: the one its header names.
+    former_pubkey  TEXT NOT NULL,
+    seq            INTEGER NOT NULL CHECK (seq >= 1),
+    padded_size    INTEGER NOT NULL CHECK (padded_size >= 16384 AND padded_size <= 524288 AND padded_size % 16384 = 0),
+    saved_at       TEXT NOT NULL,
+    nonce          TEXT NOT NULL,
+    sealed         TEXT NOT NULL,
+    digest         TEXT NOT NULL,
+    header         TEXT NOT NULL,
+    signature      TEXT NOT NULL,
+    -- A year after the re-key that kept it (ISO 8601): no longer served after it, then deleted.
+    kept_until     TEXT NOT NULL,
+    created_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- A holder of a key who stopped being an owner or admin (engine/names-list.ts reconcileHolders): marked once, logged
 -- once, and no longer counted as holding it. While a holder of the current key is marked, nothing is written until an
 -- admin who holds it makes a new generation (the write freeze, 409 `new_key_first`).
@@ -3342,6 +3368,62 @@ CREATE TABLE IF NOT EXISTS forum_waiting_photos (
     updated_at TEXT,
     PRIMARY KEY (waiting_id, order_num)
 );
+-- The forum's search (slice F6, engine/forum-search.ts; design §3 "a search index", §8, §16): one row per post, keyed by the
+-- post's rowid, holding its words and, on an opening post (number 1), its topic's title and place. This server's own, never
+-- copied (engine/replication-manifest.ts 'local'): each server keeps it from the posts and topics it holds, by the triggers
+-- below, so a standby's import writes it too. A waiting first topic is never a post, so never here. `secure-delete`: a
+-- post's old words leave the index's own bytes the moment its row changes or goes (a removal blanks them; FTS5 otherwise
+-- keeps them until a merge), so a removed or deleted account's words are in no search and no page of the file.
+CREATE VIRTUAL TABLE IF NOT EXISTS forum_search USING fts5(title, place, words);
+-- Set once, when the index is made: each time FTS5 is told a setting it counts one more change in the index's own header
+-- (the cookie at the head of forum_search_data's row 10), even when the value is the one it has. Told at every boot, it
+-- would change the file with nothing in it changed (test-contact-copies 8, test-forum-search 7).
+INSERT INTO forum_search(forum_search, rank)
+SELECT 'secure-delete', 1 WHERE NOT EXISTS (SELECT 1 FROM forum_search_config WHERE k = 'secure-delete' AND v = 1);
+-- Each trigger rewrites the whole row from the post and its topic as they stand, so the order two of them fire in, a
+-- standby's import order included (topics before posts, or a whole copy's deletes), never leaves a stale title. The UPDATE
+-- triggers fire only when an indexed value changed: a touch trigger's nested stamp (forum_posts_touch_updated_at) never
+-- rewrites the row, the same WHEN rule as posts_au (#878).
+CREATE TRIGGER IF NOT EXISTS forum_search_post_ai AFTER INSERT ON forum_posts BEGIN
+    INSERT INTO forum_search(rowid, title, place, words)
+    VALUES (new.rowid,
+        CASE WHEN new.number = 1 THEN (SELECT title FROM forum_topics WHERE id = new.topic_id) END,
+        CASE WHEN new.number = 1 THEN (SELECT place FROM forum_topics WHERE id = new.topic_id) END,
+        new.words);
+END;
+CREATE TRIGGER IF NOT EXISTS forum_search_post_au AFTER UPDATE ON forum_posts
+WHEN OLD.words IS NOT NEW.words OR OLD.number IS NOT NEW.number OR OLD.topic_id IS NOT NEW.topic_id
+BEGIN
+    DELETE FROM forum_search WHERE rowid = old.rowid;
+    INSERT INTO forum_search(rowid, title, place, words)
+    VALUES (new.rowid,
+        CASE WHEN new.number = 1 THEN (SELECT title FROM forum_topics WHERE id = new.topic_id) END,
+        CASE WHEN new.number = 1 THEN (SELECT place FROM forum_topics WHERE id = new.topic_id) END,
+        new.words);
+END;
+CREATE TRIGGER IF NOT EXISTS forum_search_post_ad AFTER DELETE ON forum_posts BEGIN
+    DELETE FROM forum_search WHERE rowid = old.rowid;
+END;
+-- A topic made, retitled, its place changed, or gone: its opening post's row again, with the title and place it now has.
+CREATE TRIGGER IF NOT EXISTS forum_search_topic_ai AFTER INSERT ON forum_topics BEGIN
+    DELETE FROM forum_search WHERE rowid IN (SELECT rowid FROM forum_posts WHERE topic_id = new.id AND number = 1);
+    INSERT INTO forum_search(rowid, title, place, words)
+    SELECT rowid, new.title, new.place, words FROM forum_posts WHERE topic_id = new.id AND number = 1;
+END;
+CREATE TRIGGER IF NOT EXISTS forum_search_topic_au AFTER UPDATE ON forum_topics
+WHEN OLD.title IS NOT NEW.title OR OLD.place IS NOT NEW.place
+BEGIN
+    DELETE FROM forum_search WHERE rowid IN (SELECT rowid FROM forum_posts WHERE topic_id = new.id AND number = 1);
+    INSERT INTO forum_search(rowid, title, place, words)
+    SELECT rowid, new.title, new.place, words FROM forum_posts WHERE topic_id = new.id AND number = 1;
+END;
+CREATE TRIGGER IF NOT EXISTS forum_search_topic_ad AFTER DELETE ON forum_topics BEGIN
+    DELETE FROM forum_search WHERE rowid IN (SELECT rowid FROM forum_posts WHERE topic_id = old.id AND number = 1);
+    INSERT INTO forum_search(rowid, title, place, words)
+    SELECT rowid, NULL, NULL, words FROM forum_posts WHERE topic_id = old.id AND number = 1;
+END;
+-- Newest first, for a search's answer and for the newest 20,000 posts the no-spaces fallback reads (engine/forum-search.ts).
+CREATE INDEX IF NOT EXISTS idx_forum_posts_created ON forum_posts (created_at);
 
 -- 25b. A group's chat, mutes and convenor succession (groups redesign slice 1, 2026-09-19).
 -- Every group owns one node-readable conversation: conversations.id = groups.id, type 'group_thread'. Its
@@ -3815,13 +3897,13 @@ CREATE INDEX IF NOT EXISTS idx_peek_tickets_sharer ON peek_tickets(sharer_pubkey
 CREATE INDEX IF NOT EXISTS idx_peek_tickets_expires ON peek_tickets(expires_at);
 
 -- 32. The mailbox between communities (messages across communities X2: scratch/fable-design/DESIGN-cross-chat-voice-fable.md
--- §3.2, §3.3, §7, §11 row X2; engine/relay-mail.ts, engine/relay-outbox.ts, routes/relay.ts). All three tables are this
--- server's own: never copied to a standby (engine/replication-manifest.ts, `local`), emptied in every snapshot and backup
+-- §3.2, §3.3, §7, §11 rows X2 and X2b; engine/relay-mail.ts, engine/relay-outbox.ts, routes/relay.ts). All five tables are
+-- this server's own: never copied to a standby (engine/replication-manifest.ts, `local`), emptied in every snapshot and backup
 -- file (services/address-retention.ts forgetAddressesInCopy), and a promoted standby starts with an empty mailbox: what was
 -- waiting is gone, and the sender sees "Not delivered" and can send again. Day zero: new tables, nothing converted.
 --
--- relay_mail: an item another community's server brought for a member here, held sealed until the member's device confirms
--- it has it, then deleted; 30 days at most. `envelope` is the sender's signed relay envelope as it came (@beanpool/core
+-- relay_mail: an item another community's server brought for a member here, held sealed until the member's devices confirm
+-- they have it (relay_mail_got), then deleted; 30 days at most. `envelope` is the sender's signed relay envelope as it came (@beanpool/core
 -- relay-envelope.ts); `payload` the sealed line or delete as it came. A blob's sealed bytes are a file of their own under
 -- <data>/relay-mail/in/ (never in the image store, so never in a backup's objects), `payload` NULL. `bytes` counts the
 -- payload either way, for the caps.
@@ -3839,6 +3921,26 @@ CREATE TABLE IF NOT EXISTS relay_mail (
 );
 CREATE INDEX IF NOT EXISTS idx_relay_mail_recipient ON relay_mail(recipient, received_at);
 CREATE INDEX IF NOT EXISTS idx_relay_mail_received ON relay_mail(received_at);
+
+-- relay_mail_devices: each device that fetches a member's mail (X2b, scratch/fable-design/decisions/DECISION-outside-door.md),
+-- by the random id its app made (@beanpool/core outside-devices.ts; gone from the app at Sign Out), and when it last asked.
+-- At most 5 a member, the one unseen longest going past that; one forgotten at Sign Out (POST /api/mail/device/forget) or
+-- unseen for 7 days is no longer listed, and comes back as new. relay_mail_got: which device has confirmed which item held
+-- for its member. An item goes once a device has confirmed it and every device listed has; a member's caps count only the
+-- items no device has confirmed. Both go with the member (the sweep) and with each item.
+CREATE TABLE IF NOT EXISTS relay_mail_devices (
+    member  TEXT NOT NULL CHECK (length(member) = 64),
+    device  TEXT NOT NULL CHECK (length(device) = 32),
+    seen_at INTEGER NOT NULL,
+    PRIMARY KEY (member, device)
+);
+CREATE INDEX IF NOT EXISTS idx_relay_mail_devices_seen ON relay_mail_devices(seen_at);
+CREATE TABLE IF NOT EXISTS relay_mail_got (
+    recipient TEXT NOT NULL CHECK (length(recipient) = 64),
+    item_id   TEXT NOT NULL CHECK (length(item_id) BETWEEN 8 AND 64),
+    device    TEXT NOT NULL CHECK (length(device) = 32),
+    PRIMARY KEY (recipient, item_id, device)
+);
 
 -- relay_mail_seen: every item another server brought here that passed its envelope's checks, held or dropped alike, by its
 -- sender and id, for 7 days: a replay is dropped, and the caps on a sending server and on this server count from it, so

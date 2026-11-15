@@ -45,7 +45,6 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { setNodeRole } from './config/node-role.js';
 import { TABLES } from './engine/replication-manifest.js';
-import { TABLE_HASHES_VERSION } from './engine/replica-hashes.js';
 import { budgetOf, returnLapsedHolds } from './engine/vouchers.js';
 import { listKeptNotices } from './engine/kept-notices.js';
 import { issueAutomationToken } from './automation-tokens.js';
@@ -410,9 +409,9 @@ async function main(): Promise<void> {
 
     // ── 12. Replication ──────────────────────────────────────────────────────────────────────────────────────────
     const cols = JSON.stringify(TABLES.invite_codes);
-    // 23 raised the version for these two columns; a later raise (24: standing deals) still hashes them. Which columns each
-    // version hashes is pinned exactly in test-replica-hashes (COLUMNS_OF_VERSION), as test-vouch-reset reads "21 or later".
-    assert(cols.includes('voucher_level_c') && cols.includes('voucher_outcome') && TABLE_HASHES_VERSION >= 23, `12. the manifest carries both columns as plain, hashes version 23 or later (${TABLE_HASHES_VERSION})`);
+    // Copied, so hashed too: each table's hash carries its own recipe's fingerprint (engine/replica-hashes.ts `d`), and
+    // test-replica-hashes holds that a column added or dropped moves it.
+    assert(cols.includes('voucher_level_c') && cols.includes('voucher_outcome'), '12. the manifest carries both columns as plain');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

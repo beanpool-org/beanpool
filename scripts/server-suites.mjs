@@ -66,8 +66,7 @@ export const SUITES = [
     'test-recovery-copies',
     'test-sso',
     'test-sso-unavailable',
-    'test-daily-pulse',
-    'test-daily-pulse-route',
+    'test-daily-pulse-cleanup',
     'test-pairing-relay',
     'test-pairing-routes',
     'test-pairing-to-phone',
@@ -310,6 +309,7 @@ export const SUITES = [
     'test-standby-listings-verbatim',
     'test-standby-standing',
     'test-standby-health',
+    'test-standby-schema-drift',
     'test-address-retention',
     'test-standby-in-flight',
     'test-standby-devices',
@@ -624,6 +624,9 @@ export const SUITES = [
     'test-forum-moderation',
     // The forum's notices (slice F5): follows, bell rows that fold, the four push kinds, the Forum switch, doorbells.
     'test-forum-notices',
+    // The forum's search (slice F6): every word, Thai and Chinese inside a run, every way a post stops being readable in no
+    // answer, the index's own bytes forget, 100 a day, a standby's import builds the same index and answers the same.
+    'test-forum-search',
     'test-mcp-knowledge',
     'test-names-copy',
     'test-contact-copies',
@@ -678,6 +681,7 @@ export const SUITES = [
     'test-federation-hardening',
     'test-node-signature',
     'test-relay-mail',
+    'test-relay-complaint',
     'test-dm-standby-order',
     'test-keeper-read-cursor',
     'test-groups-chat-sync',

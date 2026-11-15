@@ -408,7 +408,8 @@ run_check "fail_summary" bash scripts/test-failing-tests-summary.sh
 # A Mac's run rests on this script's green record, scripts/test-all-merge-check.sh and scripts/test-all-pr.sh, and
 # on check-deps-installed.mjs telling a stale install from broken code. This runs all four against a throwaway
 # repository with a stub `gh` (no GitHub, no network). A few seconds.
-run_check "merge_gate" bash scripts/test-merge-gate.sh
+# scripts/sync-pr.test.mjs: scripts/sync-pr.sh and the word-catalog merge driver against a throwaway origin and a stub gh.
+run_check "merge_gate" bash -c 'bash scripts/test-merge-gate.sh && node --test scripts/sync-pr.test.mjs'
 
 # Undeclared imports & dependency boundary guard. Ensures every bare module import in each package the
 # Dockerfile builds — core, engine, PWA, manager and the server (its src/test-*.ts included, because the
@@ -429,6 +430,13 @@ run_check "balance_writes" node scripts/check-balance-writes.mjs
 # address lives in core's beanpool-defaults.ts alone. The test shows the check can fail. Instant.
 run_check "no_node_names" bash -c 'node scripts/check-no-node-names.mjs && node --test scripts/check-no-node-names.test.mjs'
 
+# Known flaky test shapes do not land (Marty, 15 Nov 2026: "stop the known flaky test shapes landing"): a focus read straight
+# after an await that is not act(), outside waitFor (#3161); a time the test measured held under fixed milliseconds (#3166:
+# hold it to a baseline measured in the same run); rows that each read the clock for a field the product sorts by (the
+# notice bell, 15 Nov). Today's hits are a per-file ceiling (scripts/flake-patterns-ceiling.json) that only falls; a new hit
+# that is not the shape takes `// flake-ok(<rule>): <why>`. The test plants a bad and a good sample for each rule. Seconds.
+run_check "flake_patterns" bash -c 'node scripts/flake-patterns.mjs && node --test scripts/flake-patterns.test.mjs'
+
 # A migration file that is on origin/main has run on the live registrar and will never run there again, so an edit
 # to it reaches only new databases. New numbered files only. Instant; with no origin/main it reports as skipped, not as a
 # pass, and CI's shard fetches origin/main for it (.github/workflows/ci.yml, "Fetch origin/main").
@@ -445,8 +453,11 @@ run_check "directory_register" bash scripts/test-directory-register.sh
 # the repository's workflows and each edit the check exists to catch. check-ci-shards.test.mjs: every check here runs in
 # exactly one of CI's shards (.github/workflows/ci.yml), the required check's name is on the aggregate job alone, and the
 # merge queue's ruleset and trigger are what the gate rests on. scripts/merge-queue: the board, requeue, tripwire and self-test
-# against a stand-in gh and a throwaway origin; selftest.test.mjs is the test the self-test's throwaway PRs make fail. Seconds.
-run_check "workflows" node --test scripts/check-workflows.test.mjs scripts/check-ci-shards.test.mjs scripts/merge-queue/merge-queue.test.mjs scripts/merge-queue/selftest.test.mjs
+# against a stand-in gh and a throwaway origin; selftest.test.mjs is the test the self-test's throwaway PRs make fail.
+# scripts/lanes/preflight.test.mjs: a lane's pre-PR run reads the checks shard from ci.yml, the steps a diff calls for, and
+# the runner failing on a red step and only ever waiting for the heavy-test lock. Seconds.
+# scripts/lanes/test/pr-state.test.mjs: the director's read-only PR state against recorded GitHub answers. Seconds.
+run_check "workflows" node --test scripts/check-workflows.test.mjs scripts/check-ci-shards.test.mjs scripts/merge-queue/merge-queue.test.mjs scripts/merge-queue/selftest.test.mjs scripts/lanes/preflight.test.mjs scripts/lanes/test/pr-state.test.mjs
 
 # No page in apps/ asks Google for a font: the web app, Settings, the website and its guide serve their own files
 # (with their licences), and the node's document policies allow fonts from the node only. Instant.
@@ -534,6 +545,11 @@ run_check "token_scripts" node --test scripts/automation-token.test.mjs scripts/
 # The team's Reddit inbox fetch (scripts/reddit-inbox.mjs, apps/reddit-watcher/TRIAGE.md) against a stand-in ntfy on
 # localhost: one read a run, each item kept once, the topic file kept private and never printed. A second.
 run_check "reddit_inbox" node --test scripts/reddit-inbox.test.mjs
+
+# The flake tools (scripts/flakes/): record.mjs reads captured CI job logs onto the flake ledger and says SECOND-HIT, through
+# a fake gh that serves them; stress.sh picks main's changed tests and runs them under its lock, clock and budget rules,
+# with a fake runner and `sleep` as the load. A mutant per rule. About 75 s, mostly waiting.
+run_check "flake_tools" node --test scripts/flakes/record.test.mjs scripts/flakes/stress.test.mjs
 
 # The words layer (translation, DESIGN-translation-fable.md S0): every t()/tn() call is a whole sentence written as a
 # literal, every catalog keeps the English placeholders and its language's plural forms, and the English a member reads

@@ -161,6 +161,7 @@ import { createNodeKeyRoutes } from './routes/node-key.js';
 import { createRelayRoutes } from './routes/relay.js';
 import { sweepRelayMail } from './engine/relay-mail.js';
 import { retryRelayOutbox, sweepRelayOutbox } from './engine/relay-outbox.js';
+import { retryComplaints } from './engine/relay-complaint.js';
 import { isNodeSignedPath, pruneNodeRequestNonces, requireNodeSignature } from './engine/node-signature.js';
 import { createInviteAskRoutes } from './routes/invite-asks.js';
 import { createKnowledgeRoutes } from './routes/knowledge.js';
@@ -176,6 +177,7 @@ import { startTidyingInviteAsks } from './engine/invite-asks.js';
 import { startTidyingKnowledgeDrafts } from './engine/knowledge-drafts.js';
 import { startTidyingForumEdits } from './engine/forum.js';
 import { startTidyingFirstLooks } from './engine/forum-first-look.js';
+import { startForgettingFormerCopies } from './engine/contact-copies.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { startForgettingOldAddresses } from './services/address-retention.js';
 import { createChannelRoutes } from './routes/channels.js';
@@ -385,7 +387,6 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/member/re-enroll/status',  // a replacement phone's poll of its re-key ask: signed by a key that is no member yet, the route asks for the signature (routes/community.ts)
     '/api/channels/options',         // the platform/category vocabulary the channel form renders
     '/api/pulse/feed',               // members only (MEMBERS_ONLY_READS_EXACT)
-    '/api/pulse/daily',              // members only (MEMBERS_ONLY_READS_EXACT)
     '/api/pulse/oauth/config',       // public platform OAuth availability configuration (The Pulse, Phase 5)
     '/api/node/info',                // federation discovery: name + counts + peer URLs, read cross-origin by peers' PWAs, which cannot sign there
     '/api/federation/links',         // members only (MEMBERS_ONLY_READS_EXACT): link cards carry each link's Beans balance (FED-10)
@@ -449,7 +450,6 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
 export const MEMBERS_ONLY_READS_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/commons/decisions',
     '/api/pulse/feed',
-    '/api/pulse/daily',
     // The link cards (#143): each link enterprise's Beans balance with a peer community. Public by design until the
     // 2026-09-28 decision that balances are members' business (FED-10); no app reads it, and a member still does.
     '/api/federation/links',
@@ -1606,6 +1606,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         // The mailbox between communities: due forwards tried again, old mail, ids and outbox rows settled or gone.
         try { sweepRelayMail(now); sweepRelayOutbox(now); } catch (e: any) { console.warn('[Mail] The mailbox sweep failed:', e?.message || e); }
         retryRelayOutbox(now).catch((e: any) => console.warn('[Mail] Forwarding the waiting mail failed:', e?.message || e));
+        retryComplaints(now).catch((e: any) => console.warn('[Mail] Telling other communities of reports failed:', e?.message || e));
     }, 60 * 1000);
     if (rateLimitCleaner.unref) rateLimitCleaner.unref();
     // The open door's sign-up limiter keeps hashed addresses in the database, not in memory: they are cleared once
@@ -1628,6 +1629,8 @@ export async function startHttpsServer(port: number): Promise<number> {
     startTidyingForumEdits();
     // First topics nobody looked at in 30 days go back to their writers; answered ones go 30 days after (engine/forum-first-look.ts).
     startTidyingFirstLooks(moderationNoticesCb());
+    // A re-keyed member's old locked contacts list, a year after the re-key, on the main server (engine/contact-copies.ts).
+    startForgettingFormerCopies();
 
     // The split-brain guard (services/identity-epoch.ts): once this server has seen that another took over its
     // identity, members' writes are refused here, before a body is read. The admin control plane stays open.

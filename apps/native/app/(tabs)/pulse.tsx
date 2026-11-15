@@ -11,8 +11,11 @@
  *   other platform opens its own app. This screen owns only one part of that: a video scrolled out
  *   of sight stops, which needs the list's viewability and so cannot live in the card.
  * - Prioritizes creator attribution: "my neighbour made this".
- * - Honest empty states. A quiet week asks nothing: two plain sentences, the one add button in the middle, and the Learn
- *   lane (DESIGN-pulse-home-fable.md §3.4).
+ * - Honest empty states. A quiet week asks nothing: two plain sentences, the one add button in the middle, and the How it
+ *   works lane (DESIGN-pulse-home-fable.md §3.4; the lane was "Learn" until Learn became the Local knowledge place).
+ * - Local knowledge's card (slice KP, DESIGN-local-knowledge-amend-fable.md §2.12, §3.8): the feed is read with
+ *   `with=knowledge`, the list draws components/PulseKnowledgeCard for `source === 'knowledge'` before anything else, and
+ *   pages are merged by id so a day's card is never drawn twice (utils/pulse mergePulsePage).
  * - One add button, Add to Pulse, bottom right as the Market's ADD POST; none on the worldwide community until adding
  *   there has rules for new people (§3.2, §3.8; core pulseAddsHere).
  * - Responsive at 320dp and 1.3x font scale with pull-to-refresh & infinite cursor scroll.
@@ -34,17 +37,19 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { CATEGORIES, PULSE_PAGE_WORDS, formatNumber, pulseAddsHere, t, tn, word, type ChannelCategory, type WordKey } from '@beanpool/core';
+import { CATEGORIES, PULSE_PAGE_WORDS, formatNumber, isPulseKnowledgeCard, pulseAddsHere, t, tn, word, type ChannelCategory, type WordKey } from '@beanpool/core';
 import { useIdentity } from '../IdentityContext';
 import { useTheme, useStyles } from '../ThemeContext';
 import {
     fetchPulseFeed,
     isOfficialSource,
+    mergePulsePage,
     mutePulseItem,
     reportPulseItem,
     type PulseFeedItem,
 } from '../../utils/pulse';
 import { PulseFeedCard } from '../../components/PulseFeedCard';
+import { PulseKnowledgeCard } from '../../components/PulseKnowledgeCard';
 import { pulseLineWords } from '../../components/pulse-lines';
 import { pulseVideoViewabilityChanged } from '../../utils/pulse-video-player';
 import { anchorUrl } from '../../utils/node-post';
@@ -55,11 +60,15 @@ import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 
 type LaneId = 'neighbours' | 'local' | 'learn';
 
-/** Each lane's name on the switch, shown through t(). */
+/**
+ * Each lane's name on the switch, shown through t(). The `learn` lane (BeanPool's how-to videos, `category=learn`) is called
+ * How it works, the name the web gives the same videos, so "Learn" means one thing: the Local knowledge place
+ * (DESIGN-local-knowledge-amend-fable.md §2.1, Marty's Question 3).
+ */
 const LANE_NAMES: Record<LaneId, WordKey> = {
     neighbours: word('Neighbours'),
     local: word('Local'),
-    learn: word('Learn'),
+    learn: word('How it works'),
 };
 
 /** What a screen reader says for a lane: its name, and how many items it holds when it holds any. Whole sentences. */
@@ -67,7 +76,7 @@ function laneSpoken(id: LaneId, count: number): string {
     switch (id) {
         case 'neighbours': return count > 0 ? tn(count, 'Neighbours feed, {n} item', 'Neighbours feed, {n} items') : t('Neighbours feed');
         case 'local': return count > 0 ? tn(count, 'Local feed, {n} item', 'Local feed, {n} items') : t('Local feed');
-        case 'learn': return count > 0 ? tn(count, 'Learn feed, {n} item', 'Learn feed, {n} items') : t('Learn feed');
+        case 'learn': return count > 0 ? tn(count, 'How it works feed, {n} item', 'How it works feed, {n} items') : t('How it works feed');
     }
 }
 
@@ -205,11 +214,8 @@ export default function PulseScreen() {
 
             if (activeCategoryRef.current !== selectedCategory || activeLaneRef.current !== lane) return;
 
-            setItems(prev => {
-                const existingIds = new Set(prev.map(i => i.id));
-                const newItems = res.items.filter(i => !existingIds.has(i.id));
-                return [...prev, ...newItems];
-            });
+            // Keyed by id: a Local knowledge card that comes again on a later page is one card, the newest copy (mergePulsePage).
+            setItems(prev => mergePulsePage(prev, res.items));
             setNextCursor(res.nextCursor);
         } catch (e: any) {
             console.warn('[PulseScreen] Failed to load more items:', e);
@@ -268,9 +274,9 @@ export default function PulseScreen() {
             return (
                 <View style={styles.emptyContainer}>
                     <Text style={styles.emptyIcon}>📚</Text>
-                    <Text style={styles.emptyTitle}>{t('No learning guides yet')}</Text>
+                    <Text style={styles.emptyTitle}>{t('No videos here yet')}</Text>
                     <Text style={styles.emptyBody}>
-                        {t('Curated guides and reflections will appear here.')}
+                        {t('Short videos on how BeanPool works will appear here.')}
                     </Text>
                 </View>
             );
@@ -297,7 +303,8 @@ export default function PulseScreen() {
         }
 
         // A quiet week (§3.4): what there is to do, said plainly, and nothing asked. The add button steps into the middle so
-        // there is still only one; on the worldwide community there is none yet and the Learn lane leads.
+        // there is still only one; on the worldwide community there is none yet and the How it works lane leads. The line
+        // names the lane as its tab reads ({chip}), the web's own sentence for its How it works chip.
         if (!quiet) return null;
         return (
             <View style={styles.emptyContainer}>
@@ -318,7 +325,11 @@ export default function PulseScreen() {
                     </>
                 ) : null}
                 <Pressable onPress={() => setLane('learn')} accessibilityRole="link" style={styles.learnLink}>
-                    <Text style={styles.learnLinkText}>{addsHere ? t(PULSE_PAGE_WORDS.learnLine) : t(PULSE_PAGE_WORDS.learnGlobal)}</Text>
+                    <Text style={styles.learnLinkText}>
+                        {addsHere
+                            ? t(PULSE_PAGE_WORDS.learnLineWeb, { chip: t(LANE_NAMES.learn) })
+                            : t(PULSE_PAGE_WORDS.learnGlobalWeb, { chip: t(LANE_NAMES.learn) })}
+                    </Text>
                 </Pressable>
             </View>
         );
@@ -392,7 +403,7 @@ export default function PulseScreen() {
                     <View style={[styles.titleRow, !router.canGoBack() && { marginTop: 0 }]}>
                         <Text style={styles.subtitle}>
                             {activeLane === 'learn'
-                                ? t('How BeanPool works and daily reflections')
+                                ? t('Short videos on how BeanPool works')
                                 : activeLane === 'local'
                                 ? t('News and notices from around the shire')
                                 : t('What your neighbours are creating and sharing')}
@@ -425,13 +436,14 @@ export default function PulseScreen() {
                             >
                                 {/* A third of the bar each: a longer name in another language shrinks to fit rather than
                                     being cut. On a narrow, text-scaled screen the icon gives the name its room, as the
-                                    card's category pill does. */}
+                                    card's category pill does. "How it works" is the longest English name, and longer
+                                    in most languages: it may shrink to 0.4 so it still fits its third at 320 dp. */}
                                 <Text
                                     style={[styles.laneTabText, active && styles.laneTabTextActive]}
                                     numberOfLines={1}
                                     ellipsizeMode="tail"
                                     adjustsFontSizeToFit
-                                    minimumFontScale={0.5}
+                                    minimumFontScale={0.4}
                                 >
                                     {compactLanes ? name : `${l.icon}  ${name}`}
                                 </Text>
@@ -520,7 +532,11 @@ export default function PulseScreen() {
                     {...qr.listProps}
                     data={visibleItems}
                     keyExtractor={(item: any) => item.id}
-                    renderItem={({ item }: { item: PulseFeedItem }) => (
+                    renderItem={({ item }: { item: PulseFeedItem }) => isPulseKnowledgeCard(item) ? (
+                        // Local knowledge's card first, before anything else reads the item (amended §3.8): it has no owner,
+                        // no link and nothing to hide or report, so the creator's card must never draw it.
+                        <PulseKnowledgeCard item={item} />
+                    ) : (
                         <PulseFeedCard
                             item={item}
                             currentPubkey={identity?.publicKey}

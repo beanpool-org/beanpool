@@ -122,7 +122,6 @@ import {
     type PutBackResult, type PutBackScope, type TakeDownInput, type TakeDownResult,
 } from './engine/agent-takedowns.js';
 import { seedPulseCurated, getBeanPoolPubkey } from './engine/pulse-seed.js';
-import { getPulseTreasuryPubkey } from './daily-pulse.js';
 import {
     nodeRoleOf,
     heldNodeRoleOf,
@@ -674,6 +673,17 @@ export interface AbuseReport {
      * hidden while the moderators look or already removed. Null when the report names no forum post.
      */
     forumPost?: ReportedForumPost | null;
+    /**
+     * A report of a line from another community (messages across communities X5, engine/relay-complaint.ts): the sender's
+     * community, `host[:port]`. The moderators open the line as a direct message's (directMessage), with whether that
+     * community has the complaint. Null for every other report.
+     */
+    targetHome?: string | null;
+    /**
+     * A complaint from another community's server about a member here: which community. Its reporter is that community
+     * (reporterPubkey `community:<home>`), never a person; its words are opened with the message, as a line's are.
+     */
+    fromAnotherCommunity?: { from: string } | null;
 }
 
 export type { FriendEntry };
@@ -838,8 +848,8 @@ export function initStateEngine(): void {
     setMoneyGuardHook(() => assertBeansOn());
     // The BeanPool enterprise and its learn channel, on a main server only. A standby holds its main server's, copied
     // (G9): one of its own, made under its own key at every boot, met the main server's on the callsign index and refused
-    // a new standby's first copy, and at a later boot renamed the copied one and put the channel under its own. The Daily
-    // Pulse skips a standby the same way (daily-pulse.ts scheduleDailyPulse). A take-over's restart runs as a main server.
+    // a new standby's first copy, and at a later boot renamed the copied one and put the channel under its own. A
+    // take-over's restart runs as a main server.
     if (getNodeRole() !== 'backup') seedPulseCurated();
     
     // Seed SYSTEM user securely
@@ -1667,8 +1677,8 @@ let listingDoorbellsDue: Set<ListingDoorbell> | null = null;
 /**
  * The listings changed with no post event to say so, and every socket that gets public doorbells must hear it: a member
  * removed (their posts cancelled), an enterprise paused or winding up (the board leaves its posts out) or back, a member
- * on holiday or back, a report's suspension (their posts paused), a trade that took a listing or put it back, the
- * Daily Pulse listing, a peer's listings. Its member-feed sockets get that change's own events (profile_updated,
+ * on holiday or back, a report's suspension (their posts paused), a trade that took a listing or put it back, a peer's
+ * listings. Its member-feed sockets get that change's own events (profile_updated,
  * user_pruned, a trade's) as before, and the open feed gets every event; every other socket has had none of those, and
  * its app kept the listings as they were: a bare `post_removed` (the listings went) or `post_updated` (they came back,
  * or changed) is a doorbell each app reads the listings again on (@beanpool/core livePostChange takes one with no id or
@@ -2262,16 +2272,17 @@ export type { InviteCheckResult, InviteTreeNode };
 // ===================== PROFILES =====================
 
 /**
- * The node's own accounts: BeanPool, which owns the curated learn channel and every channel an admin adds
- * (engine/pulse-seed.ts), and Daily Pulse (daily-pulse.ts). They are treasury rows, so the People directory leaves them
- * out, but neither is an enterprise or a project (no keepers, no purpose): their profile and trust profile carry no
- * `isTreasury`, so both apps open the profile, with its channels, and not an empty enterprise page (review of #2367).
- * Found by the same lookups their owners use, and never created here. Not `createTreasury`'s `systemCreated`: a
+ * The node's own account: BeanPool, which owns the curated learn channel and every channel an admin adds
+ * (engine/pulse-seed.ts). It is a treasury row, so the People directory leaves it out, but it is no enterprise or project
+ * (no keepers, no purpose): its profile and trust profile carry no `isTreasury`, so both apps open the profile, with its
+ * channels, and not an empty enterprise page (review of #2367). Found by the same lookup its owner uses, and never
+ * created here. Not `createTreasury`'s `systemCreated`: a
  * member's enterprise made without a photo passes it too (routes/treasury.ts), and so does a federation link.
  */
 function nodeOwnAccountKeys(): Set<string> {
     const keys = new Set<string>();
-    for (const pk of [getBeanPoolPubkey(), getPulseTreasuryPubkey()]) if (pk) keys.add(pk);
+    const beanpool = getBeanPoolPubkey();
+    if (beanpool) keys.add(beanpool);
     return keys;
 }
 
@@ -2696,7 +2707,7 @@ export interface ViewerTrustProfile {
     /**
      * Present, and true, only for an enterprise's or a project's key: the phone's profile screen reads this trust profile
      * and replaces itself with the enterprise page on it (MemberProfile.isTreasury, slice E0). A member's has no such key,
-     * nor has the node's own BeanPool or Daily Pulse account (nodeOwnAccountKeys).
+     * nor has the node's own BeanPool account (nodeOwnAccountKeys).
      */
     isTreasury?: true;
 }
@@ -5816,7 +5827,7 @@ export function createPost(
         tags?: unknown;
         /** The tags its author typed (engine/post-fields.ts assertFreeTags). */
         freeTags?: unknown;
-        /** Allowed only for system-created internal posts like Daily Pulse. */
+        /** No photo needed: for the server's own callers only (tests); no route passes it. */
         allowNoPhoto?: boolean;
         shownCopy?: CopyColumns | null;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
@@ -7813,6 +7824,10 @@ export function getReportablePulseItemOwner(itemId: string): string | null {
 
 /** How a DM line report's disclosure begins, as submitDmLineReport writes it: {"kind":"dm-line" then , or }. */
 const DM_LINE_DISCLOSURE_HEAD = JSON.stringify({ kind: DM_LINE_DISCLOSURE_KIND }).slice(0, -1);
+// A line from another community (engine/relay-complaint.ts submitOutsideLineReport), read from its disclosure's first
+// characters as a direct line's is; a complaint from another community by its reporter, `community:<home>` (receiveComplaint).
+const OUTSIDE_LINE_HEAD = '{"kind":"outside-line",';
+const COMPLAINT_REPORTER = 'community:';
 
 export function getReports(statusFilter?: string, limit?: number, offset?: number): { reports: AbuseReport[]; total: number; pendingCount: number } {
     // Open child-safety reports first, read as the alerts read them, in SQL so a page of the queue holds the right ones
@@ -7854,7 +7869,9 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                pi.deleted_at as pulse_deleted_at, pi.owner_pubkey as pulse_owner_pubkey, mpi.callsign as pulse_owner_callsign,
                gm.conversation_id as gm_group_id, gm.type as gm_type, gg.name as gm_group_name,
                CASE WHEN substr(ar.disclosure, 1, ${DM_LINE_DISCLOSURE_HEAD.length + 1}) IN ('${DM_LINE_DISCLOSURE_HEAD},', '${DM_LINE_DISCLOSURE_HEAD}}')
-                    THEN '${DM_LINE_DISCLOSURE_KIND}' END as disclosure_kind
+                    THEN '${DM_LINE_DISCLOSURE_KIND}'
+                    WHEN substr(ar.disclosure, 1, ${OUTSIDE_LINE_HEAD.length}) = '${OUTSIDE_LINE_HEAD}' THEN 'outside-line' END as disclosure_kind,
+               ar.target_home
         FROM abuse_reports ar
         LEFT JOIN members mr ON ar.reporter_pubkey = mr.public_key
         LEFT JOIN members mt ON ar.target_pubkey = mt.public_key
@@ -7886,7 +7903,11 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
     // bill it was filed on was for, and how much, after it. Marked and sorted on the reason kept, the reporter's, never on a
     // bill's words (engine/bills.ts billReportReason).
     const billsOf = billsReportedIn(rows.map((r) => r.id));
-    const reports = rows.map(r => ({
+    const reports = rows.map(r => {
+        const outside = r.disclosure_kind === 'outside-line';
+        const complaint = typeof r.reporter_pubkey === 'string' && r.reporter_pubkey.startsWith(COMPLAINT_REPORTER)
+            ? { from: r.reporter_pubkey.slice(COMPLAINT_REPORTER.length) } : null;
+        return {
         // Who the report is about (reportSubjectOf, what actionReport acts on): on a Pulse item its owner, read from the
         // item, whatever post id the row carries; on a post its author, read from the post, never the key the reporter
         // wrote beside it. So every screen that names or freezes the target names the right member.
@@ -7898,7 +7919,9 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         childSafety: reportKind(r.reason) === 'child safety',
         status: r.status || 'pending',
         outcome: (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open') as AbuseReport['outcome'],
-        reporterCallsign: r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),
+        // A complaint from another community names that community, never a person: its reporter is that community.
+        reporterCallsign: complaint ? complaint.from
+            : r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),
         targetCallsign: r.target_pulse_item_id && r.pulse_owner_pubkey
             ? (r.pulse_owner_callsign || `@${r.pulse_owner_pubkey.substring(0, 8)}`)
             : r.post_row_id
@@ -7935,11 +7958,15 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         targetMessageId: r.target_message_id || undefined,
         directMessage: r.disclosure_kind === DM_LINE_DISCLOSURE_KIND
             ? { photo: r.gm_type === 'image', voice: r.gm_type === 'voice', removed: !r.gm_type || r.gm_type === 'removed' }
+            // A line from another community: no server keeps it, and what was handed over opens as a direct message's.
+            : outside ? { photo: false, voice: false, removed: false }
             : null,
+        targetHome: outside ? (r.target_home || null) : null,
+        fromAnotherCommunity: complaint,
         // A forum post's report (slice F2): the post with its topic's title, for Settings' list beside reported listings.
         ...(r.target_forum_post_id ? { targetForumPostId: r.target_forum_post_id as string } : {}),
         forumPost: r.target_forum_post_id ? reportedForumPost(r.target_forum_post_id) : null,
-        groupMessage: r.target_message_id && r.disclosure_kind !== DM_LINE_DISCLOSURE_KIND
+        groupMessage: r.target_message_id && !r.disclosure_kind && !complaint
             ? {
                 groupId: r.gm_group_id ?? null,
                 groupName: r.gm_group_name ?? null,
@@ -7948,7 +7975,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                 removed: !r.gm_type || r.gm_type === 'removed',
             }
             : null,
-    }));
+        };
+    });
 
     return { reports, total, pendingCount };
 }

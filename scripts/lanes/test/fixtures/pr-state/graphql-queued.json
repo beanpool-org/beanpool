@@ -1,0 +1,22 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 3171,
+        "title": "Tags: \"Did you mean …?\" finds a Turkish tag typed in any case (incir, İNCİR, ıspanak, BALIK)",
+        "state": "OPEN",
+        "isDraft": false,
+        "headRefOid": "b0b8890ee8bfecdcfff26048ce712fd49776d16e",
+        "headRefName": "fix/tags-turkish-case",
+        "baseRefName": "main",
+        "mergeable": "UNKNOWN",
+        "mergeStateStatus": "UNKNOWN",
+        "isInMergeQueue": true,
+        "mergeQueueEntry": {
+          "state": "AWAITING_CHECKS",
+          "position": 2
+        }
+      }
+    }
+  }
+}

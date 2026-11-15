@@ -50,7 +50,7 @@ import { ssrfSafeFetch } from './pulse-resolver.js';
 import { logger } from '../logger.js';
 
 /** The paths only another community's server may call, each with its node signature (routes/node-key.ts, routes/relay.ts). */
-export const NODE_SIGNED_PATHS: ReadonlySet<string> = new Set<string>(['/api/node/check', '/api/relay/mail']);
+export const NODE_SIGNED_PATHS: ReadonlySet<string> = new Set<string>(['/api/node/check', '/api/relay/mail', '/api/relay/complaint']);
 
 /**
  * Whether `path` is one of NODE_SIGNED_PATHS, matched ignoring case and one trailing slash, as the router dispatches it:
@@ -183,6 +183,16 @@ function askFor(origin: string, now: number): Promise<NodeKeyDocument | null> | 
     })();
     fetching.set(origin, ask);
     return ask;
+}
+
+/**
+ * Whether a document of `origin`'s came and is still trusted at `now`. After {@link originKeyStanding} answered 'unknown',
+ * this tells a document that names another key (the origin answered: not that key) from one that could not be had (ask again
+ * later). Reads only: it asks nobody.
+ */
+export function keptNodeKeyDocument(origin: string, now = Date.now()): boolean {
+    const have = kept.get(origin);
+    return !!have && now < have.trustUntil;
 }
 
 export type OriginKeyStanding = 'current' | 'previous' | 'expired' | 'unknown' | 'busy';

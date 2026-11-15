@@ -720,7 +720,7 @@ async function main(): Promise<void> {
         const probe = await call('GET', id, `/api/community/membership/${alice.pk}`);
         assert(probe.status === (id ? 403 : 401) && !('isMember' in (probe.body ?? {})) && !probe.text.includes('SentinelAlice'),
             `${who}: the membership probe is refused, and says nothing of Alice's key (got ${probe.status} ${JSON.stringify(probe.body)})`);
-        for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/commons/balance', '/api/pulse/feed', '/api/pulse/daily']) {
+        for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/commons/balance', '/api/pulse/feed']) {
             const gated = await call('GET', id, p);
             assert(gated.status === (id ? 403 : 401), `${who}: ${p} is for members only (got ${gated.status})`);
             // The router answers a path with one trailing slash as the path itself, so the gate must hold there too.
@@ -730,7 +730,7 @@ async function main(): Promise<void> {
     }
     await prunedRefused('the listings in every shape, the membership probe and the members-only reads', [
         `${POSTS}?${ALL_TYPES}`, `${POSTS}?${ALL_TYPES}&sync=true`, `${POSTS}?author=${alice.pk}`, `/api/community/membership/${alice.pk}`,
-        `/api/community/membership/${pruned.pk}`, '/api/commons/decisions', '/api/commons/balance', '/api/pulse/feed', '/api/pulse/daily',
+        `/api/community/membership/${pruned.pk}`, '/api/commons/decisions', '/api/commons/balance', '/api/pulse/feed',
     ]);
     {
         const own = await call('GET', alice, `/api/community/membership/${alice.pk}`);
@@ -738,7 +738,7 @@ async function main(): Promise<void> {
         const other = await call('GET', bob, `/api/community/membership/${alice.pk}`);
         assert(other.status === 403 && !('isMember' in (other.body ?? {})) && !other.text.includes('SentinelAlice'),
             `signed by another member, it is refused and names nobody either (got ${other.status} ${other.text.slice(0, 80)})`);
-        for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/commons/balance', '/api/pulse/feed', '/api/pulse/daily']) {
+        for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/commons/balance', '/api/pulse/feed']) {
             const r = await call('GET', bob, p);
             assert(r.status === 200, `a member reads ${p} (got ${r.status})`);
             const slashed = await call('GET', bob, `${p}/`);
@@ -1373,6 +1373,8 @@ async function main(): Promise<void> {
             'POST /api/forum/first-looks/:id/ok', 'POST /api/forum/first-looks/:id/no', 'POST /api/forum/first-looks/:id/withdraw',
             // Notices (slice F5): a topic's bell (follow, mute, neither) and how far its reader read; both signed.
             'POST /api/forum/topics/:id/follow', 'POST /api/forum/topics/:id/read',
+            // Search (slice F6): a member's, signed, counted against their day's searches.
+            'GET /api/forum/search',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',
@@ -1484,6 +1486,8 @@ async function main(): Promise<void> {
             'POST /api/messages/send',
             // A member's locked contacts list (routes/contacts.ts): the signer's own copy only.
             'GET /api/contacts/copy', 'PUT /api/contacts/copy', 'DELETE /api/contacts/copy',
+            // A re-keyed member's old contacts list (routes/contacts.ts, contacts C6): the signer's own only.
+            'GET /api/contacts/former', 'DELETE /api/contacts/former',
             'GET /api/names/copy', 'PUT /api/names/copy', 'POST /api/names/confirmations', 'POST /api/names/confirmations/:id/revoke', 'POST /api/names/confirmations/:id/second',
             'GET /api/names/entries', 'POST /api/names/entries', 'DELETE /api/names/entries/:id', 'PUT /api/names/entries/:id',
             'POST /api/names/entries/:id/invite', 'DELETE /api/names/entries/:id/invite', 'GET /api/names/invites',
@@ -1500,6 +1504,7 @@ async function main(): Promise<void> {
             'POST /api/node/check', 'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'GET /api/node/key',
             // The mailbox between communities (routes/relay.ts): another server's signed request, and a member's own mail.
             'POST /api/relay/mail', 'POST /api/mail/send', 'GET /api/mail', 'GET /api/mail/blob/:itemId', 'POST /api/mail/confirm',
+            'POST /api/mail/device/forget', 'POST /api/mail/report', 'POST /api/relay/complaint',
             'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',
             'POST /api/node/owner/lights-out', 'GET /api/local/admin/lights-out', 'POST /api/local/admin/lights-out',
@@ -1512,7 +1517,7 @@ async function main(): Promise<void> {
             'POST /api/pricing-guide/admin/reset', 'POST /api/pricing-guide/report', 'GET /api/pricing-guide/reports',
             'POST /api/pricing-guide/reports/:id/status',
             'GET /api/profile/:publicKey', 'POST /api/profile/update', 'GET /api/profile/privacy', 'PUT /api/profile/privacy',
-            'GET /api/pulse/daily', 'GET /api/pulse/feed', 'GET /api/pulse/items/:id/thumbnail', 'GET /api/pulse/oauth/config',
+            'GET /api/pulse/feed', 'GET /api/pulse/items/:id/thumbnail', 'GET /api/pulse/oauth/config',
             'DELETE /api/push-tokens', 'POST /api/push-tokens', 'POST /api/push-tokens/leave/:publicKey',
             'POST /api/ratings', 'GET /api/ratings/:publicKey',
             'POST /api/recovery/collect', 'POST /api/recovery/collect/cancel', 'POST /api/recovery/collect/fragments',

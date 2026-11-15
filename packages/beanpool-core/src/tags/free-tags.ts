@@ -144,7 +144,8 @@ export function storedFreeTags(tags: readonly string[]): string {
  * The tags a copy says a listing carries (a main server's row on a standby, a peer's listing), held to the same rule as
  * this node keeps them: each in its stored form, once, in its order, at most FREE_TAGS_MAX in FREE_TAGS_CHARS. Nothing is
  * refused: a tag the rule does not pass is left out and the rest stay, and anything that is not a list is none. A
- * rule made stricter later would leave a standby short of its main server's tags: raise TABLE_HASHES_VERSION with it.
+ * rule made stricter later leaves a standby that runs it short of the tags its main server keeps, and that standby's
+ * whole-copy check reads `posts` as differing until both servers run the same rule.
  */
 export function copiedFreeTags(raw: unknown): string[] {
     if (!Array.isArray(raw)) return [];

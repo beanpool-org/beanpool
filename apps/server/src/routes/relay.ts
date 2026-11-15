@@ -5,14 +5,26 @@
  *   POST /api/relay/mail            another community's server's signed request only (engine/node-signature.ts)
  *                                   { items: RelayItem[] } → 202 { items: [{ itemId, received: true } | { itemId, refused }] }
  *   POST /api/mail/send             a member here       { items: RelayItem[] } → { items: [{ itemId, state }] }
- *   GET  /api/mail?since=<ms>&sinceId=<itemId>
+ *   GET  /api/mail?device=<id>&since=<ms>&sinceId=<itemId>
  *                                   a member here       → { items: HeldItem[], more, outbox: [{ itemId, kind, recipient,
- *                                                          recipientHome, state, at }], outboxMore }: the ticks after the
- *                                                          last one the device has (its `at` and `itemId`), 200 a page
+ *                                                          recipientHome, state, at }], outboxMore }: what waits that THIS
+ *                                                          device has not confirmed (X2b), and the ticks after the last
+ *                                                          one the device has (its `at` and `itemId`), 200 a page. `device`
+ *                                                          is required (400 bad_device without it), and lists the device
  *   GET  /api/mail/blob/:itemId     a member here       → { itemId, payload } (a blob held for them)
- *   POST /api/mail/confirm          a member here       { ids: string[] } → { confirmed }
+ *   POST /api/mail/confirm          a member here       { ids: string[], device } → { confirmed }: this device has them;
+ *                                                          an item goes once every device listed has it
+ *   POST /api/mail/device/forget    a member here       { device } → { forgotten }: at Sign Out, this device is listed no more
+ *   POST /api/mail/report           a member here       { item: { envelope, payload }, reason, words } → { success, report }:
+ *                                                          a line from another community reported, its sender blocked for
+ *                                                          them, and their home told (engine/relay-complaint.ts)
+ *   POST /api/relay/complaint       another community's server's signed request only
+ *                                   { complaint } → 202 { received: true } (filed, or on file already); every drop
+ *                                                          422 not_taken alike; 503 while the name its line went to
+ *                                                          can't be confirmed as the signer's yet
  *
- * The member routes are for a member who reads as one (engine/members.ts readsAsMember): a visitor's row, a key that is no
+ * `device` is the random id the member's app keeps for this device (@beanpool/core OUTSIDE_DEVICE_ID; engine/relay-mail.ts
+ * explains what each device holds). The member routes are for a member who reads as one (engine/members.ts readsAsMember): a visitor's row, a key that is no
  * member here, a suspended member is refused (403 not_a_member). Every answer is `no-store`: a member's mail is theirs.
  */
 import Router from '@koa/router';
@@ -21,8 +33,15 @@ import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { MutedError, assertNotMuted } from '../engine/auto-moderation.js';
 import { StorageNearlyFullError } from '../engine/photo-upload-budget.js';
 import type { NodeOrigin } from '../engine/node-signature.js';
-import { MAIL_FETCH_PAGE, confirmMail, heldBlobFor, heldMailFor, receiveRelayItems } from '../engine/relay-mail.js';
+import {
+    MAIL_FETCH_PAGE, confirmMail, forgetMailDevice, heldBlobFor, heldMailFor, isMailDevice, noteMailDevice, receiveRelayItems,
+} from '../engine/relay-mail.js';
 import { OutboxError, outboxStatesFor, sendRelayItems } from '../engine/relay-outbox.js';
+import { COMPLAINT_REPORTER_PREFIX, checkOutsideLineReport, readComplaintBody, receiveComplaint, submitOutsideLineReport, tellHomeOf } from '../engine/relay-complaint.js';
+import { noteNewReport } from '../services/alerts.js';
+import { logger } from '../logger.js';
+import { GroupLineReportError } from '../engine/group-chat-report.js';
+import { fileMessageReport } from './message-report.js';
 
 /** The verified signer, when they are a member here who reads as one; else the route has answered 403. */
 function memberHere(ctx: any): string | null {
@@ -30,6 +49,14 @@ function memberHere(ctx: any): string | null {
     if (actor && isNodeMember(actor) && readsAsMember(actor)) return actor;
     ctx.status = 403;
     ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
+    return null;
+}
+
+/** The device a member's request names, when it is one; else the route has answered 400. */
+function deviceOf(ctx: any, device: unknown): string | null {
+    if (isMailDevice(device)) return device;
+    ctx.status = 400;
+    ctx.body = { error: "device is this device's mail id: 32 lowercase hex characters, made by the app.", code: 'bad_device' };
     return null;
 }
 
@@ -77,9 +104,12 @@ export function createRelayRoutes(): Router {
         ctx.set('Cache-Control', 'no-store');
         const member = memberHere(ctx);
         if (!member) return;
+        const device = deviceOf(ctx, ctx.query.device);
+        if (!device) return;
         const since = Number(ctx.query.since ?? 0);
         const sinceId = typeof ctx.query.sinceId === 'string' ? ctx.query.sinceId.slice(0, 64) : '';
-        const held = heldMailFor(member);
+        noteMailDevice(member, device);
+        const held = heldMailFor(member, device);
         const ticks = outboxStatesFor(member, Number.isSafeInteger(since) && since > 0 ? since : 0, sinceId);
         ctx.body = { ...held, page: MAIL_FETCH_PAGE, outbox: ticks.ticks, outboxMore: ticks.more };
     });
@@ -101,13 +131,68 @@ export function createRelayRoutes(): Router {
         ctx.set('Cache-Control', 'no-store');
         const member = memberHere(ctx);
         if (!member) return;
-        const ids = ((ctx.request as any).body as { ids?: unknown } | undefined)?.ids;
+        const body = (ctx.request as any).body as { ids?: unknown; device?: unknown } | undefined;
+        const ids = body?.ids;
         if (!Array.isArray(ids) || ids.length === 0 || ids.length > MAIL_FETCH_PAGE || !ids.every((id) => typeof id === 'string')) {
             ctx.status = 400;
             ctx.body = { error: `ids is a list of 1 to ${MAIL_FETCH_PAGE} item ids.`, code: 'bad_ids' };
             return;
         }
-        ctx.body = { confirmed: confirmMail(member, ids as string[]) };
+        const device = deviceOf(ctx, body?.device);
+        if (!device) return;
+        ctx.body = { confirmed: confirmMail(member, device, ids as string[]) };
+    });
+
+    router.post('/api/mail/device/forget', async (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        const member = memberHere(ctx);
+        if (!member) return;
+        const device = deviceOf(ctx, ((ctx.request as any).body as { device?: unknown } | undefined)?.device);
+        if (!device) return;
+        ctx.body = { forgotten: forgetMailDevice(member, device) };
+    });
+
+    router.post('/api/mail/report', async (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        const member = memberHere(ctx);
+        if (!member) return;
+        let checked;
+        try {
+            checked = checkOutsideLineReport(member, (ctx.request as any).body);
+        } catch (e) {
+            if (!(e instanceof GroupLineReportError)) throw e;
+            ctx.status = e.status;
+            ctx.body = { error: e.message, code: e.code };
+            return;
+        }
+        let filed: string | null = null;
+        fileMessageReport(ctx, member, checked.envelope.itemId, checked.reason, () => {
+            const report = submitOutsideLineReport(member, checked);
+            filed = report?.id ?? null;
+            return report;
+        });
+        // Told after the answer is decided, before it goes: a member's send waits for its forward the same way.
+        if (filed) await tellHomeOf(filed);
+    });
+
+    router.post('/api/relay/complaint', async (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        const from = ctx.state.nodeOrigin as NodeOrigin | undefined;
+        if (!from) {
+            ctx.status = 401;
+            ctx.body = { error: 'This path takes only requests signed by a community\'s server.', code: 'node_signature_missing' };
+            return;
+        }
+        const answer = await receiveComplaint(from, (ctx.request as any).body);
+        ctx.status = answer.status;
+        if ('retryAfterSec' in answer && answer.retryAfterSec) ctx.set('Retry-After', String(answer.retryAfterSec));
+        ctx.body = answer.body;
+        // The owners and admins hear of it as of any report, by kind and count, never who or what (services/alerts.ts).
+        if (answer.filed) {
+            const reason = readComplaintBody((ctx.request as any).body)?.reason ?? 'other';
+            noteNewReport(reason === 'child safety' ? 'Child safety' : reason, `${COMPLAINT_REPORTER_PREFIX}${from.origin}`)
+                .catch((e) => logger.warn('SYS', `[Alerts] A complaint from another community could not be told: ${e instanceof Error ? e.message : String(e)}`));
+        }
     });
 
     return router;

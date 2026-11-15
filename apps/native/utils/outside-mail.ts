@@ -8,11 +8,20 @@
  * posted: `POST /api/mail/send`. The server forwards it to the peer's home and answers its state; a line the server never
  * answered is posted again at the next sync, the same item (the server keeps one row per id), while it is still fresh.
  *
- * **Fetch, write, then confirm** ({@link syncOutsideMail}). `GET /api/mail` gives what waits, oldest first. Each item is
- * checked here again (the envelope is the sender's and is to me; a line opens as the envelope's), passed through the request
- * gate (outside-chat-store.ts gateIncoming), and written. Only then is it confirmed (`POST /api/mail/confirm`), which deletes
- * it at the server: an item whose write failed is never confirmed, so it is fetched again, never lost. An item the gate
- * drops, or that doesn't check out, is confirmed too (it can never be shown, and an unconfirmed one would hold the page).
+ * **Fetch, write, then confirm** ({@link syncOutsideMail}). `GET /api/mail?device=` gives what waits that this phone has not
+ * confirmed, oldest first. Each item is checked here again (the envelope is the sender's and is to me; a line opens as the
+ * envelope's), passed through the request gate (outside-chat-store.ts gateIncoming), and written. Only then is it confirmed
+ * (`POST /api/mail/confirm { ids, device }`): an item whose write failed is never confirmed, so it is fetched again, never
+ * lost. An item the gate drops, or that doesn't check out, is confirmed too (it can never be shown here, and an unconfirmed
+ * one would hold the page).
+ *
+ * **Each device for itself** (X2b: scratch/fable-design/decisions/DECISION-outside-door.md). This phone names itself to its
+ * server by a random id kept in its outside-chat store ({@link mailDevice}; @beanpool/core newOutsideDeviceId), gone at Sign
+ * Out with the store, after the server is told to forget it ({@link forgetMailDevice}). The server deletes an item once
+ * every device of the account has confirmed it, so a confirm here, of a line written or of one dropped (this phone's door
+ * closed, say), never takes it from another phone or browser whose door is open. The door, Accept and Decline are this
+ * phone's own; a block is the account's: no way a chat can change here (their line, a tick of mine from any device, their
+ * card) makes, reopens or lists a chat with someone blocked ({@link chatsShown}, {@link openChatFromCard}).
  *
  * **Receipts.** Each line written is receipted to its sender's home (kind `receipt`): their phone shows Delivered. The
  * receipt is owed on the phone (outside_receipts) before its line is confirmed, and owed until my server takes it: a round
@@ -22,26 +31,30 @@
  * delivered" for a line that was. A receipt posted twice (taken, its answer lost) does no harm: a line delivered stays so.
  *
  * **Ticks.** The same fetch carries what became of my own items (the outbox's states, paged by time and id from the cursor
- * kept here). A tick for a line this phone doesn't have (a phone restored from 12 words) brings its chat back empty and
- * marked restored, so the chat opens with the reason it is empty.
+ * kept here). They are applied before any held item is gated, every page of them: a chat I wrote to opens here first, so its
+ * lines are never judged as a stranger's. A tick for a line this phone doesn't have (a phone restored from 12 words, or a line
+ * I wrote on another device) opens that chat here: brought back empty and marked restored when this phone has none, and
+ * opened from a request or a decline when it has one; never one with someone the account blocked.
  *
  * **A deadline.** Every request a round or a send makes carries the context's `signal` (React Native's fetch never gives up
  * by itself), so the caller's deadline (outside-chat-live.ts) ends a stalled request, and the round with it.
  */
 import {
-    ADDRESS_CARD_NAME_MAX, addressCardName, newDmMessageId, openOutsideLine, outsideReceiptPayload, readRelayEnvelope,
-    relayConversationId, relayEnvelopeVerifies, relayPayloadHash, sealOutsideLine, nodeHomeOf, audienceOf, t,
+    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, newDmMessageId, newOutsideDeviceId, openOutsideLine, outsideReceiptPayload,
+    readRelayEnvelope, relayConversationId, relayEnvelopeVerifies, relayPayloadHash, sealOutsideLine, nodeHomeOf, audienceOf, t,
     type AddressCard, type RelayEnvelope, type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
 import { signAddressCardStatement, signRelayEnvelopeStatement } from './member-statements';
 import { signedGet, signedPost } from './node-post';
-import { gateIncoming, type OutsideChatStore, type OutsideLineState } from './outside-chat-store';
+import { gateIncoming, type OutsideChat, type OutsideChatStore, type OutsideLineState } from './outside-chat-store';
 import type { BeanPoolIdentity } from './identity';
 
 /** The member's door (design §3.5): opened by showing their card here the first time, closed in Settings → Privacy. */
 export const DOOR_META = 'door';
 /** The outbox cursor: the last tick this phone has, `<at>:<itemId>`. */
 export const CURSOR_META = 'outbox-cursor';
+/** This phone's mail id (X2b): made at its first round, kept with the chats, gone with them at Sign Out. */
+export const DEVICE_META = 'device';
 const HOME_META = 'home';
 /** How long the home read from the community is used before it is read again. */
 const HOME_FRESH_MS = 60 * 60_000;
@@ -92,30 +105,63 @@ function refusalWords(e: OutsideMailError): string {
     return e.message && !/^HTTP \d+$/.test(e.message) ? e.message : t('Your community refused this message.');
 }
 
+/** A server's code, not words: one lower-case token (`rate_limited`, `not_a_member`). */
+const CODE_ONLY = /^[a-z0-9_]+$/;
+
 async function answerOf(res: Response): Promise<any> {
     const body = await res.json().catch(() => null);
-    if (!res.ok) throw new OutsideMailError(res.status, typeof body?.error === 'string' ? body.error : `HTTP ${res.status}`, body?.code);
+    if (!res.ok) {
+        // The server's sentence: `message` when it sent one beside a code in `error` (a report's 429: { error: 'rate_limited',
+        // message }), as utils/db.ts reportRefusal reads it; else `error`, its words beside `code`. Never a bare code
+        // (`rate_limited`): that reads as `HTTP <n>`, which every screen shows as its own sentence.
+        const said = typeof body?.message === 'string' && body.message ? body.message : null;
+        const error = typeof body?.error === 'string' && body.error ? body.error : null;
+        const errorIsCode = !!error && CODE_ONLY.test(error);
+        const code = typeof body?.code === 'string' ? body.code : error && (errorIsCode || said) ? error : undefined;
+        throw new OutsideMailError(res.status, said ?? (error && !errorIsCode ? error : `HTTP ${res.status}`), code);
+    }
     return body;
 }
 
+/** Why my home can't be read now and none was read before: no answer at all (no signal, the server down, the deadline). */
+export const HOME_UNREACHED = 'unreached';
+/** Why my home can't be read now and none was read before: my server answered, but not with its info (an error, a proxy's page). */
+export const HOME_UNANSWERED = 'home_unanswered';
+
 /**
  * This community's home as other servers name it: its primary address (GET /api/community/info), on the port this phone
- * reaches it at when the two hosts agree. Kept once read. Null while the community knows none of its names.
+ * reaches it at when the two hosts agree. Kept once read. Null only when my server answered and knows none of its names.
+ * With none kept and no answer now, it throws an OutsideMailError saying the true reason: no answer at all
+ * ({@link HOME_UNREACHED}: offline, the server down, the caller's deadline), or an answer that was not the info
+ * ({@link HOME_UNANSWERED}). Never "knows none of its names" for a phone that couldn't ask.
  */
 export async function myHome(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'store' | 'signal'>, now = Date.now()): Promise<string | null> {
     // Kept as `<home> <when read>`, and read again after HOME_FRESH_MS: a community that moves to a new address signs its
     // requests as the new home, and an envelope naming the old one would be refused (relay-outbox.ts itemProblem).
     const kept = (await ctx.store.getMeta(HOME_META))?.split(' ');
     if (kept?.[0] && now - Number(kept[1]) < HOME_FRESH_MS) return kept[0];
-    let primary: string | null = null;
+    let info: any = null;
+    let unread: typeof HOME_UNREACHED | typeof HOME_UNANSWERED | null = null;
     try {
         const res = await fetch(`${ctx.nodeUrl.replace(/\/+$/, '')}/api/community/info`, ctx.signal ? { signal: ctx.signal } : undefined);
-        const info: any = res.ok ? await res.json().catch(() => null) : null;
-        primary = typeof info?.primaryAddress === 'string' ? info.primaryAddress : null;
+        info = res.ok ? await res.json().catch(() => null) : null;
+        if (!info || typeof info !== 'object') unread = HOME_UNANSWERED;
     } catch {
-        primary = null;
+        unread = HOME_UNREACHED;
     }
-    if (!primary) return kept?.[0] || null;   // unreachable now: the home read before, if any
+    // A body cut off by the deadline is no answer either.
+    if (unread && ctx.signal?.aborted) unread = HOME_UNREACHED;
+    const primary = typeof info?.primaryAddress === 'string' ? info.primaryAddress : null;
+    if (!primary) {
+        if (kept?.[0]) return kept[0];   // can't be read now, or says none: the home read before
+        if (unread === HOME_UNREACHED) {
+            throw new OutsideMailError(0, t("This phone can't reach your community's server just now: no signal, or the server is down. Try again in a while."), HOME_UNREACHED);
+        }
+        if (unread === HOME_UNANSWERED) {
+            throw new OutsideMailError(503, t("Your community's server had a problem just now. Try again in a while."), HOME_UNANSWERED);
+        }
+        return null;   // my server answered: it knows none of its names
+    }
     const reached = nodeHomeOf(ctx.nodeUrl);
     const home = reached && audienceOf(reached) === audienceOf(primary) ? reached : nodeHomeOf(primary);
     if (home) await ctx.store.setMeta(HOME_META, `${home} ${now}`);
@@ -128,6 +174,81 @@ export async function myAddressCard(ctx: OutsideMailContext): Promise<AddressCar
     if (!home) return null;
     const name = addressCardName(String(ctx.identity.callsign ?? '').replace(/\s+/g, ' ').trim().slice(0, ADDRESS_CARD_NAME_MAX)) ?? '…';
     return signAddressCardStatement({ key: ctx.identity.publicKey, home, name }, ctx.identity.privateKey);
+}
+
+/** This phone's mail id, made and kept the first time it is asked for. Every fetch and confirm names it. */
+export async function mailDevice(store: OutsideChatStore): Promise<string> {
+    const kept = await mailDeviceIfAny(store);
+    if (kept) return kept;
+    const made = newOutsideDeviceId();
+    await store.setMeta(DEVICE_META, made);
+    return made;
+}
+
+/** This phone's mail id when it has one (it has run a round), else null. Never makes one. */
+export async function mailDeviceIfAny(store: OutsideChatStore): Promise<string | null> {
+    const kept = await store.getMeta(DEVICE_META);
+    return kept && OUTSIDE_DEVICE_ID.test(kept) ? kept : null;
+}
+
+/**
+ * My server forgets `device`, this phone's mail id (`POST /api/mail/device/forget`): it holds no more mail for it, and what
+ * every other device of the account has goes there. For Sign Out, with the id read before the store goes
+ * ({@link forgetThisPhoneForMail}). Throws as any request here does.
+ */
+export async function forgetMailDevice(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'identity' | 'signal'>, device: string): Promise<void> {
+    await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/device/forget', { device }, ctx.identity as BeanPoolIdentity, ctx.signal));
+}
+
+/** How long Sign Out lets its community take this phone's forget: as long as it lets each push unregister take (4 s). */
+export const FORGET_DEVICE_MS = 4_000;
+
+/**
+ * At Sign Out (account-leaves-phone.ts signOutOfThisPhone), before the account's tables leave this phone: this phone's mail
+ * id is read now, while `store` still holds it, and my server is asked to forget it ({@link forgetMailDevice}), signed with
+ * the key in memory. The request runs while the rest of the leave does: `done` settles when it has, or at `budgetMs` (the
+ * request aborted then), whichever is first, even if a fetch never gives up. Never throws, never rejects: a community that
+ * doesn't answer lets this phone lapse after 7 days unseen.
+ */
+export async function forgetThisPhoneForMail(
+    ctx: { nodeUrl: string; identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>; store: OutsideChatStore }, budgetMs = FORGET_DEVICE_MS,
+): Promise<{ done: Promise<void> }> {
+    const warn = (e: unknown) => console.warn('[OutsideMail] This phone was not forgotten at Sign Out; it lapses after 7 days:', (e as Error)?.message ?? e);
+    try {
+        const device = await mailDeviceIfAny(ctx.store);
+        if (!device) return { done: Promise.resolve() };
+        const controller = new AbortController();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const budget = new Promise<void>((resolve) => { timer = setTimeout(() => { controller.abort(); resolve(); }, budgetMs); });
+        const asked = forgetMailDevice({ nodeUrl: ctx.nodeUrl, identity: ctx.identity as OutsideMailContext['identity'], signal: controller.signal }, device)
+            .catch(warn);
+        return { done: Promise.race([asked, budget]).finally(() => clearTimeout(timer)) };
+    } catch (e) {
+        warn(e);
+        return { done: Promise.resolve() };
+    }
+}
+
+/**
+ * The chats the Chats tab may list (app/(tabs)/chats.tsx: its open rows and its requests row): none with someone the account
+ * blocked, whatever state their chat is in here (blocked from another screen, or before this phone had the chat). Their chat
+ * stays as it is in the store: unblocked, it shows again.
+ */
+export async function chatsShown(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked'>): Promise<OutsideChat[]> {
+    const shown: OutsideChat[] = [];
+    for (const c of await ctx.store.chats(ctx.identity.publicKey)) if (!(await ctx.isBlocked(c.peerKey))) shown.push(c);
+    return shown;
+}
+
+/**
+ * A chat begun from someone's card (app/address-card.tsx): opened here, a declined one too, and its id. Null, with nothing
+ * changed, when the account blocked them.
+ */
+export async function openChatFromCard(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked'>, card: Pick<AddressCard, 'key' | 'home' | 'name'>): Promise<string | null> {
+    if (await ctx.isBlocked(card.key)) return null;
+    const chatId = relayConversationId(ctx.identity.publicKey, card.key);
+    await ctx.store.openChat(ctx.identity.publicKey, chatId, { key: card.key, home: card.home, name: card.name });
+    return chatId;
 }
 
 export async function doorOpen(store: OutsideChatStore): Promise<boolean> {
@@ -148,6 +269,20 @@ async function envelopeFor(ctx: OutsideMailContext, fields: Omit<RelayEnvelopeFi
 async function postItems(ctx: OutsideMailContext, items: RelayItem[]): Promise<Array<{ itemId: string; state: string }>> {
     const answer = await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/send', { items }, ctx.identity as BeanPoolIdentity, ctx.signal));
     return Array.isArray(answer?.items) ? answer.items : [];
+}
+
+/**
+ * Report a line from another community (X5): the item as it came, kept on this phone (its sender's signed envelope and the
+ * sealed line inside), and the words it opened to, to my own community's server. That server checks the sender's signatures,
+ * blocks them for me, and tells their community, never naming me (server: engine/relay-complaint.ts). Throws
+ * OutsideMailError with my server's words when it refuses.
+ */
+export async function reportOutsideLine(ctx: Pick<OutsideMailContext, 'nodeUrl' | 'identity' | 'store' | 'signal'>, lineId: string, reason: string): Promise<void> {
+    const kept = await ctx.store.kept(lineId);
+    let item: unknown = null;
+    try { item = kept ? JSON.parse(kept.sealed) : null; } catch { /* not kept as it came */ }
+    if (!kept || !item) throw new OutsideMailError(404, t('That did not go through. Please try again.'), 'not_kept');
+    await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/report', { item, reason, words: kept.text }, ctx.identity as BeanPoolIdentity, ctx.signal));
 }
 
 /**
@@ -182,8 +317,9 @@ export async function sendOutsideLine(ctx: OutsideMailContext, chatId: string, t
 /**
  * A line sent from a box on screen (the chat's box, the card's first line), with the typed words never lost: `onKept`
  * empties the box once the line is kept on this phone (shown at once as Sending…, or Not delivered with my server's words
- * why), and never before. A send that fails before that (my community knows none of its names here and can't be read now,
- * the deadline cut that read, the request not accepted yet) leaves the words in the box, to send again. The send has its
+ * why), and never before. A send that fails before that (my home never read here and my server not reached now, or the
+ * deadline cut that read: "can't reach"; my server answered and knows none of its names; the request not accepted yet)
+ * leaves the words in the box, to send again, with the true reason (myHome). The send has its
  * own deadline, `budgetMs`: a kept line my server hasn't answered by then stays `sending`, and goes at the next round.
  */
 export async function sendFromBox(ctx: OutsideMailContext, chatId: string, words: string, budgetMs: number, onKept: () => void): Promise<{ kept: boolean; error: unknown }> {
@@ -266,14 +402,16 @@ export interface SyncOutcome {
 }
 
 /**
- * One round: unsent lines sent again, then what waits fetched, checked, gated, written, confirmed and receipted, then my
- * items' ticks applied. Throws only when the server can't be read at all; a write that fails leaves its item unconfirmed.
+ * One round: unsent lines sent again, then my items' ticks applied (every page of them first), then what waits for this phone
+ * fetched, checked, gated, written, confirmed and receipted. Throws only when the server can't be read at all; a write that
+ * fails leaves its item unconfirmed.
  */
 export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now()): Promise<SyncOutcome> {
     const out: SyncOutcome = { written: 0, requests: 0, dropped: 0, confirmed: 0, ticks: 0 };
     const me = ctx.identity.publicKey;
     await resendUnsent(ctx, now).catch((e) => console.warn('[OutsideMail] Unsent lines wait for the next round:', e?.message ?? e));
     const open = await doorOpen(ctx.store);
+    const device = await mailDevice(ctx.store);
     /** Owed receipts this round tried and my server didn't take: tried again at the next round, not this one. */
     const tried = new Set<string>();
     /** A line of theirs written here: its receipt owed before the line is confirmed. */
@@ -285,7 +423,14 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
         if (ctx.signal?.aborted) throw Object.assign(new Error('This round ran out of time.'), { name: 'AbortError' });
         const cursor = (await ctx.store.getMeta(CURSOR_META)) ?? '0:';
         const [since, sinceId] = [cursor.slice(0, cursor.indexOf(':')), cursor.slice(cursor.indexOf(':') + 1)];
-        const answer = await answerOf(await signedGet(ctx.nodeUrl, `/api/mail?since=${encodeURIComponent(since)}&sinceId=${encodeURIComponent(sinceId)}`, ctx.identity as BeanPoolIdentity, ctx.signal));
+        const answer = await answerOf(await signedGet(ctx.nodeUrl,
+            `/api/mail?device=${encodeURIComponent(device)}&since=${encodeURIComponent(since)}&sinceId=${encodeURIComponent(sinceId)}`,
+            ctx.identity as BeanPoolIdentity, ctx.signal));
+        // My own items' ticks before any held item is judged: a chat I wrote to (from this phone before a restore, or from
+        // another device) opens here first. While more ticks wait, this page's items are left: unconfirmed, they come again
+        // with the next page, and are judged once every tick is in.
+        out.ticks += await applyTicks(ctx, Array.isArray(answer?.outbox) ? answer.outbox : [], now);
+        if (answer?.outboxMore) continue;
         const held: any[] = Array.isArray(answer?.items) ? answer.items : [];
         const done: string[] = [];
         let writeFailed = false;
@@ -335,13 +480,12 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
             }
         }
         if (done.length) {
-            const confirmed = await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/confirm', { ids: done }, ctx.identity as BeanPoolIdentity, ctx.signal));
+            const confirmed = await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/confirm', { ids: done, device }, ctx.identity as BeanPoolIdentity, ctx.signal));
             out.confirmed += Number(confirmed?.confirmed) || 0;
         }
         // This page's receipts, and any an earlier round didn't get to post.
         await flushReceipts(ctx, now, tried);
-        out.ticks += await applyTicks(ctx, Array.isArray(answer?.outbox) ? answer.outbox : [], now);
-        if (writeFailed || (!answer?.more && !answer?.outboxMore)) break;
+        if (writeFailed || !answer?.more) break;
     }
     return out;
 }
@@ -381,7 +525,11 @@ async function flushReceipts(ctx: OutsideMailContext, now: number, tried: Set<st
     }
 }
 
-/** My items' ticks: each line's state, a chat this phone lacks brought back empty, the cursor moved past them. */
+/**
+ * My items' ticks: each line's state; for a line this phone lacks, its chat opened here (brought back empty, or from a request
+ * or a decline: outside-chat-store.ts noteRestored), unless the account blocked them; the cursor moved past them. Counts what
+ * changed here.
+ */
 async function applyTicks(ctx: OutsideMailContext, ticks: any[], now: number): Promise<number> {
     const me = ctx.identity.publicKey;
     let applied = 0;
@@ -393,8 +541,10 @@ async function applyTicks(ctx: OutsideMailContext, ticks: any[], now: number): P
         if (await ctx.store.hasLine(t.itemId)) {
             await ctx.store.setMineState(t.itemId, t.state);
             applied++;
-        } else if (typeof t.recipient === 'string' && /^[0-9a-f]{64}$/.test(t.recipient) && t.recipient !== me && typeof t.recipientHome === 'string') {
-            await ctx.store.noteRestored(me, relayConversationId(me, t.recipient), { key: t.recipient, home: t.recipientHome }, now);
+        } else if (typeof t.recipient === 'string' && /^[0-9a-f]{64}$/.test(t.recipient) && t.recipient !== me && typeof t.recipientHome === 'string'
+            // A block is the account's: a line I wrote them before it (on any device) never makes, nor reopens, their chat here.
+            && !(await ctx.isBlocked(t.recipient))) {
+            if (await ctx.store.noteRestored(me, relayConversationId(me, t.recipient), { key: t.recipient, home: t.recipientHome }, now)) applied++;
         }
     }
     if (last) await ctx.store.setMeta(CURSOR_META, `${last.at}:${last.itemId}`);

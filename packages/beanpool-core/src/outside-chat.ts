@@ -125,6 +125,34 @@ export function addressCardFromText(text: unknown): AddressCard | null {
     return { v: 1, key: c.key, home: c.home, name: c.name, sig: c.sig };
 }
 
+// ─── A home, short enough for a list's line ─────────────────────────────────────────────────
+
+/**
+ * The most of a home a list's line shows ({@link homeTail}). Measured on Android API 26 at 320 dp with text at 1.3× (the
+ * Chats row's community line, 178 dp wide): an everyday 48 (letters, hyphens, dots) takes 3 lines; one of only wide letters
+ * (w, m) takes a 4th, which wraps, since the line has no limit to cut it at.
+ */
+export const HOME_LINE_MAX = 48;
+
+/**
+ * A home as a list's line shows it: whole when it fits `max` characters; else cut at its head, in this code and not by the
+ * platform (Android draws no head ellipsis past a line limit: it would cut the tail and mark nothing). The cut drops whole
+ * labels from the front only, marked "…", so the end, which names the real domain, always shows, and nothing after the "…"
+ * is half a label (`evil-mybank.example` never shows as `…mybank.example`). The last three labels always stay, however
+ * long (a domain under a two-label suffix, `riverside.co.uk`): a home of three labels or fewer is never cut, and wraps.
+ */
+export function homeTail(home: string, max: number = HOME_LINE_MAX): string {
+    if (home.length <= max) return home;
+    const labels = home.split('.');
+    let kept = labels.slice(-3).join('.');
+    for (let i = labels.length - 4; i >= 0; i--) {
+        const more = `${labels[i]}.${kept}`;
+        if (more.length + 1 > max) break;
+        kept = more;
+    }
+    return kept.length < home.length ? `…${kept}` : home;
+}
+
 // ─── A line across communities ──────────────────────────────────────────────────────────────
 
 /** The longest words one line carries, in characters (a direct line's own limit keeps the sealed payload under the relay's). */
@@ -210,8 +238,8 @@ export type OutsideChatState = 'request' | 'open' | 'declined';
 export type OutsideGateVerdict = 'line' | 'request' | 'drop';
 
 /**
- * The request gate, as one pure rule (design §3.5; the phone's utils/outside-chat-store.ts and the web's
- * lib/outside-chat-store.ts both take it from here): what becomes of an item of `kind` from a sender, given the chat this
+ * The request gate, as one pure rule (design §3.5; the phone's utils/outside-mail.ts, through outside-chat-store.ts
+ * gateIncoming, and the web's lib/outside-mail.ts both take it from here): what becomes of an item of `kind` from a sender, given the chat this
  * device has with them (null: none), whether that chat already holds a line of theirs, the member's door, and their blocks.
  * A block always wins; an open chat takes lines only; a stranger gets one line of words, only through an open door, and
  * nothing at all once declined.

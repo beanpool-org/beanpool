@@ -10,6 +10,7 @@
  *   through the last post the member had drawn, never only the first 30, and after Send on through their own reply.
  * - **Gone.** When the node says the topic isn't there for this member any more (`not_found`: its opening post removed with
  *   no reply, or its writer blocked), the kept copy is dropped and the member is back on the list with one line saying so.
+ * - **Opened from a search** (`at`, slice F6): read on through the post found, and scrolled to it once it is drawn.
  * - **The sheet** on a public forum: the page holds the told stamp (`onTold`), so it shows once, not again on the next reply.
  */
 import { useEffect, useRef, useState } from 'react';
@@ -73,8 +74,8 @@ const lastOf = (p: ForumTopicPage | null) => (p?.posts.length ? p.posts[p.posts.
  * `onGone`: the topic isn't there for them any more; the page goes back to its list and says `words`.
  * `onOpenProfile`: a writer's name opens their profile by key, only through this (App.tsx's one profile overlay).
  */
-export function ForumTopicView({ topicId, front, me, onBack, onTold, onGone, onOpenProfile }: {
-    topicId: string; front: ForumFront | null; me: string; onBack: () => void; onTold: () => void; onGone: (words: string) => void;
+export function ForumTopicView({ topicId, at, front, me, onBack, onTold, onGone, onOpenProfile }: {
+    topicId: string; at?: number; front: ForumFront | null; me: string; onBack: () => void; onTold: () => void; onGone: (words: string) => void;
     onOpenProfile?: (pubkey: string) => void;
 }) {
     const [page, setPage] = useState<ForumTopicPage | null>(() => keptTopic(topicId));
@@ -124,9 +125,16 @@ export function ForumTopicView({ topicId, front, me, onBack, onTold, onGone, onO
     }
     useEffect(() => {
         shown.current = true;
-        void readThrough(0, lastOf(keptTopic(topicId)));
+        void readThrough(0, Math.max(lastOf(keptTopic(topicId)), at ?? 0));
         return () => { shown.current = false; };
     }, [topicId]);
+    // A search's hit: once its post is drawn, bring it into view, once.
+    const scrolledTo = useRef(false);
+    useEffect(() => {
+        if (!at || scrolledTo.current || !page?.posts.some((p) => p.number === at)) return;
+        scrolledTo.current = true;
+        document.querySelector(`[data-testid="forum-post-${at}"]`)?.scrollIntoView?.({ block: 'center' });
+    }, [page, at]);
 
     const topic = page?.topic;
     const opening = page?.posts.find((p) => p.number === 1) ?? null;

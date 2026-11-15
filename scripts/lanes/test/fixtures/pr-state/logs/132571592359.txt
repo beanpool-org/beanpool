@@ -1,0 +1,40 @@
+﻿2026-11-14T20:05:28.6944276Z Current runner version: '2.338.2'
+2026-11-14T20:05:28.6973918Z ##[group]Runner Image Provisioner
+2026-11-14T20:05:28.6974930Z Hosted Compute Agent
+2026-11-14T20:05:28.6975876Z Version: 20261103.629
+2026-11-14T20:05:28.6976680Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+2026-11-14T20:05:28.6977699Z Build Date: 2026-11-03T17:26:59Z
+2026-11-14T20:05:28.6978596Z Worker ID: {ce2cc1df-3f26-447c-9ce3-98e0c9580867}
+2026-11-14T20:05:28.6979464Z Region: eastus2
+2026-11-14T20:05:28.6980276Z Cloud: Azure
+2026-11-14T20:05:28.6981007Z ##[endgroup]
+2026-11-14T20:05:28.6982826Z ##[group]Operating System
+2026-11-14T20:05:28.6983643Z Ubuntu
+2026-11-14T20:05:28.6984267Z 26.04.1
+2026-11-14T20:05:28.6985152Z LTS
+2026-11-14T20:05:28.6985804Z ##[endgroup]
+2026-11-14T20:05:28.6986547Z ##[group]Runner Image
+2026-11-14T20:05:28.6987362Z Image: ubuntu-26.04
+2026-11-14T20:05:28.6988059Z Version: 20261111.196.1
+2026-11-14T20:05:28.6989723Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261111.196/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-14T20:05:28.6991760Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261111.196
+2026-11-14T20:05:28.6993086Z ##[endgroup]
+2026-11-14T20:05:28.6994578Z ##[group]GITHUB_TOKEN Permissions
+2026-11-14T20:05:28.6997313Z Contents: read
+2026-11-14T20:05:28.6998114Z Metadata: read
+2026-11-14T20:05:28.6998912Z ##[endgroup]
+2026-11-14T20:05:28.7001406Z Secret source: Actions
+2026-11-14T20:05:28.7002621Z Cache mode: write
+2026-11-14T20:05:28.7003480Z Prepare workflow directory
+2026-11-14T20:05:28.7391543Z Prepare all required actions
+2026-11-14T20:05:28.7512594Z Complete job name: Run BeanPool Test-All Pipeline
+2026-11-14T20:05:28.8487731Z ##[group]Run echo "Shards: $SHARDS"
+2026-11-14T20:05:28.8488309Z [36;1mecho "Shards: $SHARDS"[0m
+2026-11-14T20:05:28.8488767Z [36;1m[ "$SHARDS" = success ][0m
+2026-11-14T20:05:28.9138181Z shell: /usr/bin/bash -e {0}
+2026-11-14T20:05:28.9138864Z env:
+2026-11-14T20:05:28.9139243Z   SHARDS: failure
+2026-11-14T20:05:28.9139653Z ##[endgroup]
+2026-11-14T20:05:28.9316164Z Shards: failure
+2026-11-14T20:05:28.9334537Z ##[error]Process completed with exit code 1.
+2026-11-14T20:05:28.9469564Z Cleaning up orphan processes

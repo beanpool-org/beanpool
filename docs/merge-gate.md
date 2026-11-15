@@ -54,7 +54,7 @@ It checks what the Mac queue checked: tier-A labels and the money list (`MONEY_P
 
 It reads a PR's changes from GitHub's files API, because `gh pr diff` is refused over 300 files, and most guide publishes are. Every PR rides alone either way, so the money list only sets the order.
 
-A conflict with main leaves the PR out with a line. `scripts/words-merge-3way.mjs` still merges word catalogs by key, by hand, on the branch: the queue cannot.
+A conflict with main leaves the PR out with a line. When the conflict is only in word catalogs, `scripts/sync-pr.sh <PR>` merges main into the branch with the catalogs merged per key (the `beanpool-words` merge driver, `.gitattributes`), runs the words check and pushes; it stops, pushing nothing, on any other conflict. The queue cannot do this itself: GitHub's merges never run a custom merge driver.
 
 A queue entry's guide and words checks compare with its first parent, what it lands on, not with main under every entry. A guide publish behind a page edit is stale, so the queue takes it out, and `pnpm guide:publish --merge` closes it and publishes again from the new main. If the publish stops for any other reason, run it again: that replaces the PR and branch it left.
 

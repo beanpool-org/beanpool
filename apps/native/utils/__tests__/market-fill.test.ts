@@ -21,11 +21,11 @@ describe('fillWanted', () => {
         expect(fillWanted({ ...base, shownNear: 7 })).toBe(true);
     });
 
-    it('7 real near listings + a pulse: the fill still shows', () => {
-        const pulse = { author_callsign: 'Daily Pulse' };
+    it('7 near + one by an author named "Daily Pulse": that one counts like any listing, so 8 and no fill', () => {
+        // The Daily Pulse is gone (Marty, 15 Nov 2026): a post by that name is a member's own and is counted.
         const real = Array.from({ length: 7 }, (_, i) => ({ id: `p${i}` }));
-        expect(fillWanted({ ...base, shownNear: [...real, pulse] })).toBe(true);
-        expect(fillWanted({ ...base, shownNear: [...real, { authorCallsign: 'Daily Pulse' }] })).toBe(true);
+        expect(fillWanted({ ...base, shownNear: [...real, { author_callsign: 'Daily Pulse' }] })).toBe(false);
+        expect(fillWanted({ ...base, shownNear: [...real, { authorCallsign: 'Daily Pulse' }] })).toBe(false);
     });
 
     it('nullish shownNear is guarded and treated as 0', () => {

@@ -2,11 +2,24 @@
  * Chats with people in other communities, kept in this browser only (messages across communities X4, the web side of the
  * phone's X3: scratch/fable-design/DESIGN-cross-chat-voice-fable.md §3.2, §3.4, §3.5; the phone's utils/outside-chat-store.ts).
  *
- * Nobody else keeps these lines: the other community's server held each one sealed until a device of this member's had it,
- * then deleted it (the mailbox, X2). So this is not a copy of the node's. Its own database (`beanpool-outside-chats`), one
- * per web address as every store of this app is, documents per account (`<my key>/…`), so another account in this browser
- * starts on its own. Sign Out and the delete at the last community clear it (lib/device-prefs.ts clearAccountStorage). A
- * browser newly signed in has none of it: a chat it learns of from the outbox comes back empty and `restored`, and says why.
+ * Nobody else keeps these lines: the member's community held each one sealed until every device of theirs had it, then
+ * deleted it (the mailbox, X2; each device for itself, X2b). Their lines reach each phone and browser signed in when they
+ * came; what I write shows only where I wrote it. So this is not a copy of the node's. Its own database
+ * (`beanpool-outside-chats`), one per web address as every store of this app is, documents per community AND per account
+ * (`<community> <my key>/…`: the chats, their lines, the receipts owed, and the meta, this browser's mail id and its kept
+ * home among it). A store is for one community ({@link outsideChatStore}), as the phone keeps these tables in each
+ * community's own file: pointed at another community (Settings' node address), the web app starts on that community's own
+ * documents, with its own mail id and home, and never signs as the old one; pointed back, the old ones are there again.
+ * Another account in this browser starts on its own. Sign Out and the delete at the last community clear every one of
+ * them (lib/device-prefs.ts clearAccountStorage); the delete at a community the web app was pointed at that keeps the key
+ * clears that community's ({@link clearOutsideChatsAt}, lib/delete-here.ts leaveThisCommunity). A browser newly signed in
+ * has none of it: a chat it learns of from the outbox comes back empty and `restored`, and says why.
+ *
+ * A store may be given `holds` (lib/outside-mail.ts outsideContext: the account epoch it was opened under, and the
+ * community the web app talks to). Once it answers false, the store opens nothing, starts no transaction and puts nothing in
+ * one already begun (asked again just before its writes, as the browser may run it after a clear): a round still
+ * running when Sign Out, a move to another community or the delete here clears this browser writes nothing back, into the
+ * old documents or a fresh database.
  *
  * Every write is ONE transaction and resolves only once written; a write that fails THROWS, and so does a read that can't
  * be done: the mail round confirms an item (which deletes it at the server) only after its write here resolved.
@@ -84,9 +97,14 @@ function openDb(): Promise<IDBDatabase> {
     return p;
 }
 
-/** `keys`, read in one transaction; throws when they can't be. */
-async function read(keys: string[]): Promise<unknown[]> {
+/** Thrown, with nothing opened or started, once a store's `holds` says it no longer acts for its account and community. */
+const leftHere = () => Object.assign(new Error('This browser no longer holds these chats for this account here.'), { name: 'AbortError' });
+
+/** `keys`, read in one transaction; throws when they can't be, or once `holds` answers false. */
+async function readDocs(keys: string[], holds: () => boolean): Promise<unknown[]> {
+    if (!holds()) throw leftHere();
     const db = await openDb();
+    if (!holds()) throw leftHere();
     return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE, 'readonly');
         const store = tx.objectStore(STORE);
@@ -106,8 +124,10 @@ async function read(keys: string[]): Promise<unknown[]> {
  * once written; throws, with nothing written, when the transaction fails (a full disk aborts it) or `next` throws.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- each caller names its documents' types as a tuple
-async function change(keys: string[], next: (values: any) => unknown[]): Promise<void> {
+async function changeDocs(keys: string[], next: (values: any) => unknown[], holds: () => boolean): Promise<void> {
+    if (!holds()) throw leftHere();
     const db = await openDb();
+    if (!holds()) throw leftHere();
     return new Promise((resolve, reject) => {
         let tx: IDBTransaction;
         try { tx = db.transaction(STORE, 'readwrite'); } catch (e) { reject(e); return; }
@@ -119,6 +139,8 @@ async function change(keys: string[], next: (values: any) => unknown[]): Promise
             r.onsuccess = () => {
                 values[i] = r.result;
                 if (--left > 0) return;
+                // Checked again inside the transaction: once `holds` answers false, nothing is put, whenever it was begun.
+                if (!holds()) { tx.abort(); reject(leftHere()); return; }
                 let out: unknown[];
                 try { out = next(values); } catch (e) { tx.abort(); reject(e); return; }
                 out.forEach((v, j) => { if (v !== undefined) store.put(v, keys[j]); });
@@ -130,10 +152,18 @@ async function change(keys: string[], next: (values: any) => unknown[]): Promise
     });
 }
 
-const chatsKey = (me: string) => `${me}/chats`;
-const linesKey = (me: string, chatId: string) => `${me}/lines/${chatId}`;
-const metaKey = (me: string) => `${me}/meta`;
-const receiptsKey = (me: string) => `${me}/receipts`;
+/**
+ * The community a store is for, however its address is typed (case, the default port, a trailing /): its origin, as the
+ * web app compares communities elsewhere (lib/web-push.ts webPushOrigin, lib/delete-here.ts). An address that isn't a URL is
+ * kept as written, lower-cased.
+ */
+export function outsideCommunityOf(nodeUrl: string): string {
+    const raw = String(nodeUrl ?? '').trim().replace(/\/+$/, '');
+    try { return new URL(raw).origin; } catch { return raw.toLowerCase(); }
+}
+
+/** Every document of `community` starts with this; no origin holds a space, so one community's never runs into another's. */
+const communityPrefix = (community: string) => `${outsideCommunityOf(community)} `;
 const byTime = (a: OutsideLine, b: OutsideLine) => a.at - b.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 /** A chat's row with `line` as its newest, when it is. */
@@ -142,9 +172,23 @@ function withLast(chat: OutsideChat, line: OutsideLine, now: number): OutsideCha
     return { ...chat, updatedAt: now, ...(newer ? { lastText: line.text, lastAt: line.at } : {}) };
 }
 
-/** The store, for this browser's web address. Every read and write is for the account `me` alone. */
-export function outsideChatStore() {
+/**
+ * The store of `community` (the address the web app talks to: lib/outside-mail.ts ctx.nodeUrl), in this browser's web
+ * address. Every read and write is for the account `me` alone, at that community alone. With `holds`, nothing is opened or
+ * started once it answers false.
+ */
+export function outsideChatStore(community: string, holds: () => boolean = () => true) {
+    const at = communityPrefix(community);
+    const chatsKey = (me: string) => `${at}${me}/chats`;
+    const linesKey = (me: string, chatId: string) => `${at}${me}/lines/${chatId}`;
+    const metaKey = (me: string) => `${at}${me}/meta`;
+    const receiptsKey = (me: string) => `${at}${me}/receipts`;
+    const read = (keys: string[]) => readDocs(keys, holds);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- each caller names its documents' types as a tuple
+    const change = (keys: string[], next: (values: any) => unknown[]) => changeDocs(keys, next, holds);
     return {
+        /** The community this store is for, as its documents name it. */
+        community: outsideCommunityOf(community),
         async chats(me: string, state?: OutsideChatState): Promise<OutsideChat[]> {
             const [chats] = await read([chatsKey(me)]) as [Chats | undefined];
             return Object.values(chats ?? {}).filter((c) => !state || c.state === state).sort((a, b) => b.updatedAt - a.updatedAt);
@@ -173,11 +217,25 @@ export function outsideChatStore() {
                 return [{ ...chats, [id]: chat }];
             });
         },
-        /** A chat this account wrote to before this browser had it (the outbox says so): open and `restored`. Nothing changes for one it has. */
-        async noteRestored(me: string, id: string, peer: { key: string; home: string }, now = Date.now()): Promise<void> {
-            await change([chatsKey(me)], ([chats]: [Chats | undefined]) => (chats?.[id] ? [undefined] : [{
-                ...chats, [id]: { id, peerKey: peer.key, peerHome: peer.home, peerName: null, state: 'open', restored: true, updatedAt: now, lastText: null, lastAt: null },
-            }]));
+        /**
+         * A chat this account wrote to that this browser lacks the line of (the outbox says so): a browser newly signed in, or
+         * a line written on another phone or browser (X2b). None here: made open and `restored`, so it says why it is empty. A
+         * request or a decline here: opened, since I wrote to them (DECISION-outside-door.md). An open chat stays as it is.
+         * True when this changed anything. The phone's noteRestored, the same rule.
+         */
+        async noteRestored(me: string, id: string, peer: { key: string; home: string }, now = Date.now()): Promise<boolean> {
+            let changed = false;
+            await change([chatsKey(me)], ([chats]: [Chats | undefined]) => {
+                const was = chats?.[id];
+                if (!was) {
+                    changed = true;
+                    return [{ ...chats, [id]: { id, peerKey: peer.key, peerHome: peer.home, peerName: null, state: 'open', restored: true, updatedAt: now, lastText: null, lastAt: null } }];
+                }
+                if (was.state !== 'request' && was.state !== 'declined') return [undefined];
+                changed = true;
+                return [{ ...chats, [id]: { ...was, state: 'open', updatedAt: now } }];
+            });
+            return changed;
         },
         /** A line from the peer, past the gate: written with its chat (made a request, or moved on), in one transaction. Idempotent by id. */
         async writeTheirs(me: string, line: { id: string; chatId: string; author: string; text: string; replyTo: string | null; at: number },
@@ -257,12 +315,56 @@ export function outsideChatStore() {
         async setMeta(me: string, k: string, v: string): Promise<void> {
             await change([metaKey(me)], ([meta]: [Record<string, string> | undefined]) => [{ ...meta, [k]: v }]);
         },
+        /**
+         * `k`'s value when it has one `fit` takes, else `make()`'s, kept as it: read and written in ONE transaction, so two tabs
+         * asking at once get the same value (the browser runs one readwrite transaction on a store at a time).
+         */
+        async metaOrMake(me: string, k: string, fit: (v: string) => boolean, make: () => string): Promise<string> {
+            let value = '';
+            await change([metaKey(me)], ([meta]: [Record<string, string> | undefined]) => {
+                const kept = meta?.[k];
+                if (kept && fit(kept)) { value = kept; return [undefined]; }
+                value = make();
+                return [{ ...meta, [k]: value }];
+            });
+            return value;
+        },
     };
 }
 
 export type OutsideChatStore = ReturnType<typeof outsideChatStore>;
 
-/** Sign Out, and the delete at the last community: every account's outside chats in this browser go. Never throws. */
+type KeyRangeMaker = { bound(lower: string, upper: string, lowerOpen?: boolean, upperOpen?: boolean): unknown };
+
+/**
+ * The delete at a community the web app was pointed at that keeps the key (lib/delete-here.ts leaveThisCommunity): every
+ * document of `community` goes, for every account, in one transaction; every other community's stays. Never throws; false
+ * when they could not be cleared.
+ */
+export async function clearOutsideChatsAt(community: string): Promise<boolean> {
+    const prefix = communityPrefix(community);
+    const KeyRange: KeyRangeMaker | undefined = typeof IDBKeyRange !== 'undefined'
+        ? IDBKeyRange : (globalThis as unknown as { IDBKeyRange?: KeyRangeMaker }).IDBKeyRange;
+    if (!KeyRange || prefix === ' ') return false;
+    try {
+        const db = await openDb();
+        return await new Promise<boolean>((resolve) => {
+            try {
+                const tx = db.transaction(STORE, 'readwrite');
+                (tx.objectStore(STORE) as unknown as { delete(r: unknown): unknown }).delete(KeyRange.bound(prefix, `${prefix}\uffff`));
+                tx.oncomplete = () => resolve(true);
+                tx.onabort = () => resolve(false);
+                tx.onerror = () => resolve(false);
+            } catch {
+                resolve(false);
+            }
+        });
+    } catch {
+        return false;
+    }
+}
+
+/** Sign Out, and the delete at the last community: every account's outside chats in this browser, at every community, go. Never throws. */
 export async function clearOutsideChats(): Promise<void> {
     const open = dbPromise;
     dbPromise = null;

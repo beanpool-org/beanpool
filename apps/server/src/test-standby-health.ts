@@ -62,6 +62,7 @@ import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './t
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { TABLES } from './engine/replication-manifest.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -484,58 +485,14 @@ async function main(): Promise<void> {
 
         const snap = await fetch(`${main.base}/api/local/admin/sync-snapshot`, { headers: { 'X-Replication-Token': replicationToken } }).then((r) => r.json());
         const hashed = snap?.tableHashes?.tables ?? {};
-        // Version 2: members hashed with the photo's reference and size, and member_photos (engine/replica-hashes.ts).
-        // Version 3: groups hashed with their picture's reference and size, and group_pictures (#1486).
-        // Version 4: posts hashed with the five event-times columns (#1937).
-        // Version 5: posts with event_host_lets_in, event_rsvps with let_in_at and let_in_by (#1953).
-        // Version 6: posts with the three repeating-event columns, event_rsvps with occurrence_at (event times slice 4).
-        // Version 7: shops with photo_ref, and shop_photos (a shop's banner).
-        // Version 9: posts with free_tags (tags slice F1).
-        // Version 10: posts with shown_from_host and shown_from_post_id (a member's copy of an event, slice G2′).
-        // Version 11: posts with shown_price (a copy's price at home, in words, slice G1′).
-        // Version 12: confirmations with stepped_back_owing (the balance rule, S1).
-        // Version 14: posts with shown_takes_questions (the door on a copy, slice GD), on top of 13.
-        // Version 17: a new table, invite_asks (a member asks an admin to invite someone), on top of 16 (invite_codes' old vouch column).
-        // Version 18: message_attachments becomes a copied table (chat photos, slice G4), with sha256, bytes and updated_at.
-        // Version 19: a new table, decision_jury_pools (the pool a removal jury was drawn from, slice J1).
-        // Version 20: decision_electors with answered_at and reminded_at (a removal juror's Serve and reminders, slice J2b).
-        // Version 21: the vouching reset (R0): members and invite_codes without the four old vouch columns.
-        // Version 22: vouchers (V1): members with credit_committee, invite_codes with vouch_amount, and three new tables,
-        // vouchers, voucher_allocations and room_gifts (engine/vouchers.ts), each hashed in the whole copy a standby checks.
-        // Version 23: invite_codes with voucher_level and voucher_outcome (a names-bound invite that makes a voucher, amend3 A1).
-        // Version 24: a new table, standing_deals, and marketplace_transactions with standing_id and period_no (standing deals, S1).
-        // Version 25: recovery_shares with sso_find_hash (a restore finds the account from the sign-in alone, S0).
-        // Version 26: join_requests with via_post_id and via_sharer_pubkey (where a request to join came from, door A3).
-        // Version 27: standing_deals without held_back_reason (standing deals paid at the start of each period, U1).
-        // Version 28: members with inviter_shown (a member's "Show who invited me to other members", slice I3).
-        // Version 29: money in whole hundredths: every money column INTEGER and named *_c, members without legacy_credit_floor.
-        // Version 30: a new table, standing_period_changes (a standing deal's period lowered, getting-paid L1).
-        // Version 31: posts with seven knowledge_* columns (Local knowledge, slice K1), copied with the row; no new table.
-        // Version 32: a new table, contact_copies (each member's locked contacts list, private contacts C1).
-        // Version 33: a new table, bills (a request to pay, engine/bills.ts; DESIGN-getting-paid-fable slice B1).
-        // Version 34: three new tables, Local knowledge's waiting list (knowledge_drafts, knowledge_draft_photos,
-        // knowledge_helped; engine/knowledge-drafts.ts, slice K3).
-        // Version 35: posts with units_left, lot_price_c and lot_units, and marketplace_transactions with item_option (per-item
-        // prices, slice P0); no new table.
-        // Version 36: a new table, credit_look_log (who looked at whose credit; engine/credit-looks.ts, credit sight C1).
-        // Version 37: a new table, member_badges (a tier badge an owner or admin gave: recognition only, engine/badges.ts).
-        // Version 38: a new table, retired_accounts (an empty duplicate an owner retired, engine/retire-duplicate.ts).
-        // Version 39: six new tables, the forum (forum_sections, forum_topics, forum_posts, forum_post_photos, forum_post_edits,
-        // forum_members; engine/forum.ts, slice F1).
-        // Version 40: two new tables, a new member's first topic waiting for a moderator's look (forum_waiting,
-        // forum_waiting_photos; engine/forum-first-look.ts, slice F2). The burst undo's forum posts stay on each server.
-        // Version 41: directory_cache with listings_from_here (a community's name on its members' listings on the global
-        // community, list-on-global G5); no new table.
-        // Version 42: a new table, free_tag_rules (an owner's or admin's hide or merge of a typed tag, engine/free-tags.ts).
-        // Version 43: a new table, forum_follows (who follows or muted a topic and how far they read; engine/forum-notices.ts,
-        // slice F5).
-        assert(snap?.tableHashes?.v === 43 &&['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'marketplace_transactions', 'messages', 'poll_answers',
-            'vouchers', 'voucher_allocations', 'room_gifts', 'standing_deals', 'standing_period_changes', 'recovery_shares', 'join_requests', 'contact_copies', 'bills',
-            'knowledge_drafts', 'knowledge_draft_photos', 'knowledge_helped', 'credit_look_log', 'member_badges', 'retired_accounts',
-            'forum_sections', 'forum_topics', 'forum_posts', 'forum_post_photos', 'forum_post_edits', 'forum_members',
-            'forum_waiting', 'forum_waiting_photos', 'directory_cache', 'free_tag_rules', 'forum_follows'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
-            && !('tombstones' in hashed) && !('burst_action_forum_posts' in hashed) && typeof snap.signature === 'string',
-            `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
+        // Every table the manifest copies but the tombstones (engine/replica-hashes.ts NOT_HASHED), read from the manifest
+        // itself, each with its recipe's fingerprint: a new table is hashed with nothing edited here or there.
+        const copied = Object.entries(TABLES).filter(([t, e]) => (e.kind === 'replicated' || e.kind === 'replicated-except') && t !== 'tombstones').map(([t]) => t).sort();
+        assert(snap?.tableHashes?.v === 'd1' && /^[0-9a-f]{16}$/.test(snap.tableHashes.def ?? '') && copied.length > 100
+            && JSON.stringify(Object.keys(hashed).sort()) === JSON.stringify(copied)
+            && copied.every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? '') && /^[0-9a-f]{16}$/.test(hashed[t]?.d ?? ''))
+            && typeof snap.signature === 'string',
+            `M's whole copy carries the hashes of every table the manifest copies (${copied.length}), each with its recipe's fingerprint, signed with the rest, tombstones left out (${brief(Object.keys(hashed).filter((t) => !copied.includes(t)))} extra, ${brief(copied.filter((t) => !(t in hashed)))} missing)`);
         let rec = await standby.send('record');
         assert(rec?.lastWhole?.exact === true && rec.lastWhole.hashed === true && rec.lastWhole.differs.length === 0 && rec.lastOutcome === 'ok',
             `S's whole-copy check found every table's rows and every account equal, hashes compared (${brief(rec?.lastWhole)})`);

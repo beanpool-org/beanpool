@@ -10,7 +10,7 @@
  *   1. An enterprise's profile says so: getProfile, GET /api/profile/:key and the trust profile the phone reads
  *      (POST /api/trust/profile) each carry `isTreasury: true`; a project's too.
  *   2. A member's profile is unchanged: no `isTreasury` key on either read, every field as it was.
- *   3. The node's own accounts, BeanPool and Daily Pulse, are treasury rows but not enterprises: no `isTreasury` on
+ *   3. The node's own account, BeanPool, is a treasury row but not an enterprise: no `isTreasury` on
  *      either read, so the Pulse card's author door opens BeanPool's profile with its channels. A real enterprise,
  *      one made without a photo included, still says `isTreasury`.
  *
@@ -132,20 +132,17 @@ async function main() {
     const rosaTrust = getTrustProfileForViewer(kofi.pubKeyHex, rosa.pubKeyHex) as Record<string, unknown> | null;
     assert(!!rosaTrust && !('isTreasury' in rosaTrust), "a member's trust profile carries no isTreasury key");
 
-    // ── 3. The node's own accounts are not enterprises ──
-    // BeanPool owns the curated learn channel (seeded at every boot) and every channel an admin adds; Daily Pulse posts
-    // the day's entry. Both are treasury rows, so the People directory leaves them out, but neither has keepers or a
-    // purpose: the Pulse card's author door opened an empty "BeanPool" enterprise page instead of its profile with its
+    // ── 3. The node's own account is not an enterprise ──
+    // BeanPool owns the curated learn channel (seeded at every boot) and every channel an admin adds. It is a treasury
+    // row, so the People directory leaves it out, but it has no keepers or purpose: the Pulse card's author door opened an empty "BeanPool" enterprise page instead of its profile with its
     // channels (deciding review of #2367).
     console.log('── 3. the node\'s own accounts are not enterprises ──');
     const { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } = await import('./engine/pulse-seed.js');
-    const { ensurePulseTreasury } = await import('./daily-pulse.js');
     const { getAllProfiles } = await import('./state-engine.js');
     const beanpool = ensureBeanPoolIdentity(); // seeded by initStateEngine: this only reads it
-    const dailyPulse = ensurePulseTreasury();
     const isTreasuryRow = (pk: string) => (db.prepare('SELECT is_treasury FROM members WHERE public_key = ?').get(pk) as { is_treasury: number } | undefined)?.is_treasury;
-    assert(isTreasuryRow(beanpool) === 1 && isTreasuryRow(dailyPulse) === 1, 'BeanPool and Daily Pulse are still treasury rows (out of the People directory)');
-    for (const [name, pk] of [['BeanPool', beanpool], ['Daily Pulse', dailyPulse]] as const) {
+    assert(isTreasuryRow(beanpool) === 1, 'BeanPool is still a treasury row (out of the People directory)');
+    for (const [name, pk] of [['BeanPool', beanpool]] as const) {
         const p = getProfile(pk, kofi.pubKeyHex) as Record<string, unknown> | null;
         assert(!!p && p.callsign === name && !('isTreasury' in p), `${name}'s profile carries no isTreasury key (got ${JSON.stringify(p?.isTreasury)})`);
         const http = await get(`/api/profile/${pk}`, kofi);
@@ -166,8 +163,7 @@ async function main() {
         `and BeanPool's profile lists its learn channel (got ${chips.status}, ${JSON.stringify((chips.body?.channels ?? []).map((c: any) => c.id))})`);
     // The admins' members list reads the same rule.
     const listed = new Map(getAllProfiles(kofi.pubKeyHex).map(p => [p.publicKey, p]));
-    assert(!!listed.get(beanpool) && !('isTreasury' in listed.get(beanpool)!) && !('isTreasury' in (listed.get(dailyPulse) ?? { isTreasury: 1 })),
-        'getAllProfiles: BeanPool and Daily Pulse carry no isTreasury');
+    assert(!!listed.get(beanpool) && !('isTreasury' in listed.get(beanpool)!), 'getAllProfiles: BeanPool carries no isTreasury');
     assert(listed.get(enterprise)?.isTreasury === true, 'getAllProfiles: an enterprise still says isTreasury');
     // A real enterprise still opens as one, including one made without a photo: POST /api/enterprise passes
     // `systemCreated: !photoUrl` (routes/treasury.ts), which is why that option is no sign of the node's own account.

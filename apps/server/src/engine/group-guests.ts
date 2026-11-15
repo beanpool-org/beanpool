@@ -321,16 +321,23 @@ export function takeGuestItem(item: RelayItem, now = Date.now()): GuestItemRefus
 type NoticeKind = 'invite' | 'roster' | 'line' | 'epoch' | 'removed';
 
 /**
- * One request's body to one home: what it is, the group here, and the guests there it is for. A roster replaces one still
- * waiting for that home (only the latest names count; a send in flight that the delete catches is a no-op when it ends).
+ * One request's body to one home: what it is, the group here, and the guests there it is for. It goes at the back of that
+ * home's queue (its created_at is past every row the home has waiting, whatever the clock did), and it is due at once, so
+ * it costs its home at most one try: that try sends the home's queue from its OLDEST row (sendToHome), never this row ahead
+ * of one waiting, in backoff or not. A roster withdraws one still waiting for that home in the same group (only the latest
+ * names count; a send in flight that the delete catches is a no-op when it ends) and goes as the newest row, so nothing it
+ * says arrives before an older notice. Never on a standby: its copy of a change came from the main server, which queued and
+ * sends it, and rows queued on a standby would go out stale after a promotion.
  */
-function queueToHome(groupId: string, home: string, guests: string[], kind: NoticeKind, data: unknown, now = Date.now()): void {
+function queueToHome(groupId: string, home: string, guests: string[], kind: NoticeKind, data: unknown): void {
     const host = ownNodeHome();
-    if (!host || !guests.length) return;
+    if (!host || !guests.length || getNodeRole() === 'backup') return;
     const body = JSON.stringify({ v: 1, kind, group: groupId, host, guests: [...guests].sort(), data });
     if (kind === 'roster') db.prepare("DELETE FROM group_guest_outbox WHERE group_id = ? AND home = ? AND kind = 'roster'").run(groupId, home);
+    const now = Date.now();
+    const last = db.prepare('SELECT MAX(created_at) FROM group_guest_outbox WHERE home = ?').pluck().get(home) as number | null;
     db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)')
-        .run(crypto.randomUUID(), groupId, home, kind, body, now, now);
+        .run(crypto.randomUUID(), groupId, home, kind, body, now, last !== null && last >= now ? last + 1 : now);
 }
 
 /** The guests in a group by home: one request per community. `except` (a line's guest author) is named in none. */
@@ -446,12 +453,12 @@ interface OutboxRow { id: string; kind: NoticeKind; body: string; attempts: numb
 const sendingTo = new Map<string, Promise<number>>();
 
 /**
- * The outbox's due rows, each one signed request to its home's GROUP_GUEST_PATH. Each home on its own and all at once (as
- * the mailbox's forwards go, engine/relay-outbox.ts forwardRows), its rows oldest first: a home that doesn't answer costs
- * its own rows one wait (FORWARD_TIMEOUT_MS) and holds up no other home's. A home already being sent to is joined, never
- * sent to twice at once; its send takes every row that came due while it ran before it ends, so a row queued meanwhile
- * goes then, not at the next minute. Resolves when every home it started or joined is done; answers how many rows the
- * homes it started handled. Never on a standby (closeGuestsIfSwitchedOff says why).
+ * Each home with a row due, sent to: one signed request a row, to its home's GROUP_GUEST_PATH. Each home on its own and all
+ * at once (as the mailbox's forwards go, engine/relay-outbox.ts forwardRows): a home that doesn't answer costs its own rows
+ * one wait (FORWARD_TIMEOUT_MS) and holds up no other home's. A home already being sent to is joined, never sent to twice
+ * at once; its send takes every row queued while it ran before it ends, so a row queued meanwhile goes then, not at the
+ * next minute. Resolves when every home it started or joined is done; answers how many rows the homes it started handled.
+ * Never on a standby (closeGuestsIfSwitchedOff says why).
  */
 export async function flushGuestOutbox(now = Date.now()): Promise<number> {
     if (getNodeRole() === 'backup') return 0;
@@ -459,7 +466,7 @@ export async function flushGuestOutbox(now = Date.now()): Promise<number> {
     const counts = await Promise.all(homes.map((home) => {
         const running = sendingTo.get(home);
         if (running) return running.then(() => 0);
-        const send = sendToHome(home, now).finally(() => sendingTo.delete(home));
+        const send = sendToHome(home).finally(() => sendingTo.delete(home));
         sendingTo.set(home, send);
         return send;
     }));
@@ -467,20 +474,26 @@ export async function flushGuestOutbox(now = Date.now()): Promise<number> {
 }
 
 /**
- * One home's due rows, oldest first, until none is left: a 2xx, or an answer that says it will never be taken (400, 404,
- * 413), and the row goes; anything else and this row waits its backoff, the home's other rows with it (one wait for the
- * home, not one each), until GUEST_FANOUT_QUEUE_MS, then a row goes. With guests switched off, only removals go.
+ * One home's queue, OLDEST FIRST, every row of it, until none is left: for each home, rows go out strictly in the order
+ * they were queued, always. A row due starts the send, and the send takes the home's rows from the oldest, due or not: a
+ * new row never leaves before an older one waiting, and once the home takes one, every row behind it goes in the same
+ * send, so none waits out a backoff its home has ended. A 2xx, or an answer that says it will never be taken (400, 404,
+ * 413), and the row goes; anything else and ALL the home's rows wait one backoff (set by the try that failed, the oldest
+ * row's), until GUEST_FANOUT_QUEUE_MS, then a row goes. With guests switched off, only removals go.
  */
-async function sendToHome(home: string, now: number): Promise<number> {
+async function sendToHome(home: string): Promise<number> {
     let handled = 0;
     const url = `https://${home}${GROUP_GUEST_PATH}`;
     const drop = db.prepare('DELETE FROM group_guest_outbox WHERE id = ?');
     for (;;) {
-        const due = db.prepare('SELECT id, kind, body, attempts, created_at FROM group_guest_outbox WHERE home = ? AND next_try_at <= ? ORDER BY created_at, rowid LIMIT 64')
-            .all(home, Math.max(now, Date.now())) as OutboxRow[];
-        if (!due.length) return handled;
+        const queue = db.prepare('SELECT id, kind, body, attempts, created_at FROM group_guest_outbox WHERE home = ? ORDER BY created_at, rowid LIMIT 64')
+            .all(home) as OutboxRow[];
+        if (!queue.length) return handled;
         const on = groupGuestsOn();
-        for (const r of due) {
+        const still = db.prepare('SELECT 1 FROM group_guest_outbox WHERE id = ?');
+        for (const r of queue) {
+            // A row withdrawn while this send ran (a newer roster replaced it, or it aged out) never goes.
+            if (!still.get(r.id)) continue;
             handled++;
             if (!on && r.kind !== 'removed') { drop.run(r.id); continue; }
             const status = await forwardSigned(url, r.body);
@@ -492,9 +505,11 @@ async function sendToHome(home: string, now: number): Promise<number> {
                 continue;
             }
             const wait = GUEST_FANOUT_BACKOFF_MS[Math.min(r.attempts, GUEST_FANOUT_BACKOFF_MS.length - 1)];
-            db.prepare('UPDATE group_guest_outbox SET attempts = attempts + 1, next_try_at = ? WHERE id = ?').run(at + wait, r.id);
-            db.prepare('DELETE FROM group_guest_outbox WHERE home = ? AND created_at <= ?').run(home, at - GUEST_FANOUT_QUEUE_MS);
-            db.prepare('UPDATE group_guest_outbox SET next_try_at = ? WHERE home = ? AND next_try_at < ?').run(at + wait, home, at + wait);
+            db.transaction(() => {
+                db.prepare('UPDATE group_guest_outbox SET attempts = attempts + 1 WHERE id = ?').run(r.id);
+                db.prepare('DELETE FROM group_guest_outbox WHERE home = ? AND created_at <= ?').run(home, at - GUEST_FANOUT_QUEUE_MS);
+                db.prepare('UPDATE group_guest_outbox SET next_try_at = ? WHERE home = ?').run(at + wait, home);
+            })();
             return handled;
         }
     }

@@ -80,7 +80,8 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
 
     const { initTls } = await import('./services/tls.js');
-    const { initStateEngine, seedGenesisMember, createGroup, exportSyncState, removeGroupMemberByVote, purgeMemberSelf } = await import('./state-engine.js');
+    const { initStateEngine, seedGenesisMember, createGroup, exportSyncState, removeGroupMemberByVote, purgeMemberSelf, setUserStatusRow, adminPruneUser, COMMUNITY_DECISION_ACTOR } = await import('./state-engine.js');
+    const { issueRekeyCode, cancelRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
     const { setNodeRole } = await import('./config/node-role.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
@@ -538,7 +539,9 @@ async function main(): Promise<void> {
     // Each kind of roster change once. A member's: joining (with no epoch, and with her own), leaving, removed by a convenor,
     // removed by a vote, deleting their account. A guest's: invited (no change of the names in the chat: the invitation alone
     // goes, and the roster follows their yes, design §4.2 "Joining"), in, left, removed.
-    const rosterRows: Array<{ change: string; act: () => Promise<unknown>; names: (d: any) => boolean; invites?: Id }> = [
+    const quin = addLocal('Quin'), quin2 = newId('Quin');
+    let rekeyCode = '';
+    const rosterRows: Array<{ change: string; act: () => Promise<unknown>; names: (d: any) => boolean; invites?: Id; none?: string; standby?: true }> = [
         { change: 'a member joins (an app that sends no epoch)', act: () => call('POST', hugo, `/api/groups/${S}/join`, {}),
             names: (d) => d.members.some((m: any) => m.key === hugo.pk && m.name === 'Hugo') },
         { change: 'a member joins with her own epoch', act: async () => {
@@ -556,24 +559,79 @@ async function main(): Promise<void> {
             names: (d) => d.guests.some((g: any) => g.key === kit.pk && g.home === 'a.example' && g.name === 'Kit') },
         { change: 'a guest leaves', act: async () => bring([await item(kit, 'a.example', shedTo, 'group-leave', JSON.stringify({ v: 1 }))]), names: (d) => !d.guests.some((g: any) => g.key === kit.pk) },
         { change: 'a convenor removes a guest', act: () => call('DELETE', ana, `/api/groups/${S}/guests/${lu.pk}`), names: (d) => !d.guests.some((g: any) => g.key === lu.pk) },
+        // A member's key through a re-key, a pause, a removal from the community and a reinstate vote (Quin; Quin2 is the key
+        // the re-key moves him to). Quin convenes a group of his own with a guest he invited, for the re-key's move of it.
+        { change: 'a convenor invites a member (no key joins until they say yes)', none: 'an invited row is no key in the chat',
+            act: () => call('POST', ana, `/api/groups/${S}/members`, { targetPubkey: quin.pk }), names: () => true },
+        { change: 'the member says yes to the invitation', act: () => call('POST', quin, `/api/groups/${S}/join`, {}),
+            names: (d) => d.members.some((m: any) => m.key === quin.pk && m.name === 'Quin') },
+        { change: 'a re-key starts (the old key is held)', act: async () => issueRekeyCode(quin.pk, olive.pk),
+            names: (d) => !d.members.some((m: any) => m.key === quin.pk) },
+        { change: 'the re-key is cancelled (the old key is back)', act: async () => cancelRekeyCode(quin.pk, olive.pk),
+            names: (d) => d.members.some((m: any) => m.key === quin.pk) },
+        { change: 'a re-key starts again', act: async () => { rekeyCode = issueRekeyCode(quin.pk, olive.pk).code; },
+            names: (d) => !d.members.some((m: any) => m.key === quin.pk) },
+        { change: 'the re-key completes (the new key joins)', act: async () => completeRekey(quin.pk, quin2.pk, rekeyCode, olive.pk),
+            names: (d) => d.members.some((m: any) => m.key === quin2.pk && m.name === 'Quin') && !d.members.some((m: any) => m.key === quin.pk) },
+        { change: 'an admin pauses the member', none: "a pause keeps every membership and the key (isNodeMember holds while it lasts)",
+            act: async () => setUserStatusRow(quin2.pk, 'disabled'), names: () => true },
+        { change: 'the pause is lifted', none: 'the key never left', act: async () => setUserStatusRow(quin2.pk, 'active'), names: () => true },
+        { change: 'the community votes the member out (removed from the community)', act: async () => adminPruneUser(quin2.pk, COMMUNITY_DECISION_ACTOR),
+            names: (d) => !d.members.some((m: any) => m.key === quin2.pk) },
+        { change: 'a vote reinstates them (their group rows stayed)', act: async () => setUserStatusRow(quin2.pk, 'active'),
+            names: (d) => d.members.some((m: any) => m.key === quin2.pk) },
+        { change: 'a standby makes a change (its copy came from the main server, which sent the roster)', standby: true,
+            none: 'a standby never queues: its copy came from the main server, which sends it, and its rows would go out stale after a promotion',
+            act: async () => {
+                setNodeRole('backup');
+                try { db.transaction(() => removeGroupMemberByVote(S, quin2.pk))(); } finally { setNodeRole('primary'); }
+            }, names: () => true },
     ];
+    const quinGroup = createGroup({ name: 'Repair Cafe', joinPolicy: 'open', createdBy: quin.pk }).id;
+    const tam = newId('Tam');
+    const tamInvited = await call('POST', quin, `/api/groups/${quinGroup}/guests`, { card: await cardOf(tam, 'c.example') });
     for (const row of rosterRows) {
         const before = Date.now();
+        const k0 = await shedKeys();
         const res: any = await row.act();
         await settle();
         const rosters = outsOf('roster', before).filter((o) => o.body.group === S);
-        const want = row.invites ? [] : homesIn();
-        const roster = (await shedKeys()).roster;
+        const want = row.invites || row.none ? [] : homesIn();
+        const k1 = await shedKeys();
+        const roster = k1.roster;
         const once = want.every((h) => {
             const to = rosters.filter((o) => o.home === h);
             return to.length === 1 && JSON.stringify(to[0].body.guests) === JSON.stringify(homeGuests(h));
         });
         const right = rosters.every((o) => o.signed && row.names(o.body.data) && JSON.stringify(keysOfRoster(o.body.data)) === JSON.stringify(roster));
         const invited = !row.invites || outsOf('invite', before).filter((o) => o.body.group === S && o.home === 'a.example' && JSON.stringify(o.body.guests) === JSON.stringify([row.invites!.pk])).length === 1;
+        // A change of the roster leaves the chat's epoch stale, or stores a new one over it; a row that changes nothing
+        // leaves the roster as it was.
+        const epochHeld = (row.invites || row.none) && !row.standby
+            ? JSON.stringify(k1.roster) === JSON.stringify(k0.roster)
+            : JSON.stringify(k1.roster) !== JSON.stringify(k0.roster) && (k1.stale === true || k1.current > k0.current);
         const status = res && typeof res === 'object' && 'status' in res ? res.status : 'ok';
-        assert(rosters.length === want.length && once && right && invited,
-            `12. ${row.change} (${status}): the roster goes once to each community with guests in (${want.join(', ') || 'none'}), naming its guests, with exactly the chat's keys (got ${rosters.map((o) => o.home).join(', ') || 'none'})`);
+        assert(rosters.length === want.length && once && right && invited && epochHeld,
+            `12. ${row.change} (${status}): ${row.none ? `no roster (${row.none})` : row.invites ? 'only the invitation' : `the epoch goes stale or moves on, and the roster goes once to each community with guests in (${want.join(', ')}), naming its guests, with exactly the chat's keys`} (got ${rosters.map((o) => o.home).join(', ') || 'none'}; stale ${k0.stale}→${k1.stale}, epoch ${k0.current}→${k1.current})`);
     }
+    // The re-key moved what Quin convenes too: the guest he invited is invited by his new key.
+    const tamBy = (db.prepare('SELECT invited_by FROM group_guests WHERE group_id = ? AND guest_key = ?').get(quinGroup, tam.pk) as { invited_by: string } | undefined)?.invited_by;
+    assert(tamInvited.status === 201 && tamBy === quin2.pk, `12y. after Quin's re-key, the guest he invited is invited by his new key (got ${tamInvited.status}, ${tamBy === quin.pk ? 'the old key' : tamBy === quin2.pk ? 'the new key' : String(tamBy)})`);
+    // Every way the chat's key roster can change has its row: here, or the switch's own section (16).
+    const rosterPaths: Record<string, string> = {
+        'member joins': 'a member joins (an app that sends no epoch)', 'member joins with an epoch': 'a member joins with her own epoch',
+        'member invited, then yes': 'the member says yes to the invitation', 'member leaves': 'a member leaves',
+        'member removed by a convenor': 'a convenor removes a member', 'member removed by a vote': 'a member is removed by a vote',
+        'account deleted': 'a member deletes their account', 'account paused': 'an admin pauses the member', 'pause lifted': 'the pause is lifted',
+        'removed from the community (prune)': 'the community votes the member out (removed from the community)', 'reinstated': 'a vote reinstates them (their group rows stayed)',
+        're-key starts': 'a re-key starts (the old key is held)', 're-key cancelled': 'the re-key is cancelled (the old key is back)',
+        're-key completes': 'the re-key completes (the new key joins)', 'guest invited': 'a guest is invited', 'guest in': 'a guest says yes',
+        'guest leaves': 'a guest leaves', 'guest removed': 'a convenor removes a guest',
+        'a standby copy': 'a standby makes a change (its copy came from the main server, which sent the roster)',
+    };
+    const rowNames = new Set(rosterRows.map((r) => r.change));
+    const missing = Object.entries(rosterPaths).filter(([, row]) => !rowNames.has(row)).map(([p]) => p);
+    assert(missing.length === 0, `12z. every way the chat's key roster changes has its row; the owners' switch off is section 16 (missing: ${missing.join(', ') || 'none'})`);
 
     // ── 13. Back from epoch-stale ───────────────────────────────────────────────────────────
     console.log('\n13. A guest who hears epoch-stale is sent what they need to get back in');
@@ -737,11 +795,101 @@ async function main(): Promise<void> {
     const t16 = Date.now();
     await jobs16.flushGuestOutbox();
     const told16 = outsOf('removed', t16).filter((o) => o.body.group === S);
+    const rosters16 = outsOf('roster', t16).filter((o) => o.body.group === S);
     assert(waitingA16 >= 1 && inBefore16 > 0 && closed16 >= inBefore16 && told16.length === 2 && told16.every((o) => o.body.data.why === 'closed')
-        && (db.prepare('SELECT COUNT(*) AS n FROM group_guest_outbox').get() as { n: number }).n === 0,
-        `16. main server, closeGuestsIfSwitchedOff then flushGuestOutbox: the guests go, each home is told once, the waiting line is dropped (got ${closed16}, ${told16.map((o) => o.home)})`);
+        && rosters16.length === 0 && (db.prepare('SELECT COUNT(*) AS n FROM group_guest_outbox').get() as { n: number }).n === 0,
+        `16. main server, closeGuestsIfSwitchedOff then flushGuestOutbox: the guests go, each home is told once (a removal; no roster, no guest is left in), the waiting line is dropped (got ${closed16}, ${told16.map((o) => o.home)}, ${rosters16.length} roster(s))`);
     assert(timerJobs.length === 2 && timerJobs.every((n) => n in jobs16), `16z. the table covers every job https-server.ts's timer runs from group-guests (${timerJobs.join(', ')})`);
     db.prepare('DELETE FROM node_config WHERE key = ?').run(offKey);
+
+    // ── 17. Close the class: each home's rows go strictly oldest first, and none waits once it answers ──
+    console.log('\n17. For each community, what goes there goes in the order it was queued, and nothing waits once it answers');
+    const B = createGroup({ name: 'Bike Coop', joinPolicy: 'open', createdBy: ana.pk }).id;
+    const rue = newId('Rue');   // at a.example, in
+    await call('POST', ana, `/api/groups/${B}/guests`, { card: await cardOf(rue, 'a.example') });
+    await bring([await item(rue, 'a.example', `group:${B}`, 'group-invite', yes)]);
+    const b1 = epochBy(ana, B, 1, 'start', [ana, rue]);
+    await call('POST', ana, `/api/groups/${B}/keys/epoch`, { epoch: b1.record });
+    await settle();
+    const AH = 'a.example';
+    const queuedA = () => (db.prepare('SELECT COUNT(*) AS n FROM group_guest_outbox WHERE home = ?').get(AH) as { n: number }).n;
+    const waitsA = () => db.prepare('SELECT DISTINCT next_try_at FROM group_guest_outbox WHERE home = ?').pluck().all(AH) as number[];
+    const labelOf = (o: Out) => o.body.kind === 'line' ? `line:${o.body.data.id}` : `${o.body.kind}:${o.body.guests.join('+')}`;
+    const backoffOver = Math.max(...(guests?.GUEST_FANOUT_BACKOFF_MS ?? [0])) + 60_000;
+    assert(stateOf(B, rue) === 'in' && queuedA() === 0, `17a. Bike Coop: Rue from a.example is in, and nothing waits for a.example (got ${stateOf(B, rue)}, ${queuedA()})`);
+    // (a.example answers / fails and stays failing / fails and then answers) x (the case's rows queued before the failure,
+    // while its send is in flight, or after it) x (one flush, or many: on every row and on top of each other). Each case:
+    // the head row's send hangs (an invitation), the case's rows are queued at their moment, the head's send is answered
+    // (or refused: the failure), then the trigger, the backoff ending (one) or a new row with flushes on top (many).
+    let pn = 0;
+    for (const home of ['ok', 'failing', 'failing-then-ok'] as const) for (const when of ['before', 'during', 'after'] as const) for (const flushes of ['one', 'many'] as const) {
+        const label = `a.example ${home}, rows queued ${when} the failure, ${flushes} flush${flushes === 'many' ? 'es' : ''}`;
+        const start = outs.length;
+        const expected: string[] = [];
+        const p = newId(`P${++pn}`);
+        const pending: Array<Promise<unknown>> = [];
+        const flush = () => { if (flushes === 'many') pending.push(guests?.flushGuestOutbox(), guests?.flushGuestOutbox()); };
+        const line = async () => {
+            const l = lineIn(ana, B, b1.groupKey, 1);
+            const r = await call('POST', ana, `/api/groups/${B}/chat/message`, l);
+            if (r.status === 201) expected.push(`line:${l.clientId}`);
+            flush();
+        };
+        const caseRows = async () => {
+            await line();
+            const r = await call('DELETE', ana, `/api/groups/${B}/guests/${p.pk}`);
+            if (r.status === 200) expected.push(`removed:${p.pk}`);
+            flush();
+            await line();
+        };
+        let open: () => void = () => {};
+        gates.set(AH, new Promise<void>((r) => { open = r; }));
+        const inv = await call('POST', ana, `/api/groups/${B}/guests`, { card: await cardOf(p, AH) });   // the head row: its send hangs
+        if (inv.status === 201) expected.push(`invite:${p.pk}`);
+        flush();
+        await sleep(20);
+        if (when === 'before') await caseRows();
+        if (home !== 'ok') refusing.add(AH);                  // the failure begins
+        if (when === 'during') await caseRows();
+        open();
+        gates.delete(AH);
+        await sleep(20);
+        await guests?.flushGuestOutbox();                     // joins the head's send if it is still running
+        await Promise.all(pending.splice(0));
+        if (home === 'failing-then-ok') refusing.delete(AH);  // it answers again; its rows are still in their backoff
+        const triesAfter = tries.get(AH) ?? 0;
+        if (when === 'after') await caseRows();
+        await Promise.all(pending.splice(0));
+        await sleep(20);
+        // A row queued after its home answers again takes the whole queue with it: nothing is left waiting.
+        const leftAfterRows = queuedA();
+        const costAfter = (tries.get(AH) ?? 0) - triesAfter;
+        if (flushes === 'one') await guests?.flushGuestOutbox(Date.now() + backoffOver);
+        else {
+            await line();
+            await Promise.all([guests?.flushGuestOutbox(), guests?.flushGuestOutbox(), guests?.flushGuestOutbox(), ...pending.splice(0)]);
+        }
+        await sleep(20);
+        const leftAfterTrigger = queuedA();
+        const sentBefore = outs.slice(start).filter((o) => o.home === AH && o.body.group === B).map(labelOf);
+        const waits = waitsA();
+        if (home === 'failing') {
+            refusing.delete(AH);
+            await guests?.flushGuestOutbox(Date.now() + backoffOver);
+        }
+        const sent = outs.slice(start).filter((o) => o.home === AH && o.body.group === B).map(labelOf);
+        const inOrder = expected.length === (flushes === 'many' ? 5 : 4) && JSON.stringify(sent) === JSON.stringify(expected);
+        const waitedNone = home === 'failing'
+            ? sentBefore.length === 0 && leftAfterTrigger === expected.length && waits.length === 1 && waits[0] > Date.now() && queuedA() === 0
+            : leftAfterTrigger === 0 && (when !== 'after' || leftAfterRows === 0);
+        // A new row costs a home that is failing at most one try (its three rows: three at most, however many flushes).
+        const cheap = home !== 'failing' || when !== 'after' || costAfter <= 3;
+        assert(inOrder && waitedNone && cheap,
+            `17. ${label}: a.example gets each row once, in the order queued; ${home === 'failing' ? 'while it fails nothing goes and every row waits one wait' : 'none waits once it answers'} (sent ${JSON.stringify(sent.map((s) => s.split(':')[0]))} of ${expected.length}; in order ${inOrder}; left ${leftAfterRows}/${leftAfterTrigger}; ${costAfter} tries for the rows after)`);
+        // The next case starts from an empty queue, whatever this one left.
+        refusing.delete(AH);
+        await guests?.flushGuestOutbox(Date.now() + backoffOver);
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

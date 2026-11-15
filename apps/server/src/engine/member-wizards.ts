@@ -44,6 +44,9 @@ import {
     removalInGraceOf,
     COMMUNITY_DECISION_ACTOR,
     REMOVAL_IS_THE_VOTE_CODE,
+    // Through state-engine, which imports group-keys: importing it from here starts group-keys before group-thread, which
+    // reads one of its words as it loads.
+    markGroupEpochsStaleFor,
 } from '../state-engine.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { announceDecisionUpdated, closeRemovalSettledEarly } from '../decisions-engine.js';
@@ -272,6 +275,10 @@ export function issueRekeyCode(
             VALUES (?, 'rekey_pending', ?)
             ON CONFLICT(public_key) DO UPDATE SET reason = 'rekey_pending', invalidated_at = excluded.invalidated_at
         `).run(cleanOld, nowIso);
+        // The held key leaves each of their groups' chat roster (group-keys.ts groupKeyRoster reads isNodeMember): the
+        // chat's epoch goes stale and the roster goes to the guests' homes, as at any roster change. A key an earlier
+        // code still holds is out already: nothing changes.
+        if (!stillHeld) markGroupEpochsStaleFor(cleanOld);
 
         // Suspend member row so assertMemberActive rejects operations from old device. A member already
         // suspended by an admin or the community (status 'disabled') stays 'disabled': the invalidated key
@@ -435,6 +442,9 @@ export function completeRekey(
         // 2. Enumerate and transfer ALL 32 consumers of members.public_key (engine/key-move.ts, which a standby's copy
         // follows with too), each row but a copy of an event stamped so the standby's next copy carries the move.
         moveMemberKeyRows(cleanOld, cleanNew, nowIso, { keepStamps: false });
+        // The new key joins each of their groups' chat roster: stale, and the roster to the guests' homes. Here, never in
+        // moveMemberKeyRows, which a standby's follow runs too, and a standby queues nothing (group-guests.ts queueToHome).
+        markGroupEpochsStaleFor(cleanNew);
         if (keepSuspended) db.prepare("UPDATE members SET status = 'suspended', updated_at = ? WHERE public_key = ?").run(nowIso, cleanNew);
 
         // What the main server moves by rules of its own, each stamped so the move replicates.
@@ -648,6 +658,8 @@ export function cancelRekeyCode(
         // A standby only adds replaced keys, so the hold's delete reaches it as a tombstone (engine/sync.ts
         // applyTombstoneLocally), and a server that takes over lets the key in, as this one now does.
         writeTombstone('invalidated_keys', cleanOld);
+        // The key is back in each of their groups' chat roster: stale, and the roster to the guests' homes.
+        markGroupEpochsStaleFor(cleanOld);
         // issueRekeyCode wrote 'suspended' unless the member was 'disabled'; only that 'suspended' is put back. A report's
         // suspension wrote the same 'suspended' before it was a pause, and recorded it on a waiting code's prior_status,
         // so the recorded status is the answer: a report's action that suspended nobody changes nothing. Any other

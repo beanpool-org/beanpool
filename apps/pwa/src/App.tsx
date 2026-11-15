@@ -61,7 +61,7 @@ import { PulsePage } from './pages/PulsePage';
 import { LearnPage, type LearnTarget } from './pages/LearnPage';
 import { HomePage } from './pages/HomePage';
 import { MobileHeader, SidebarStatus } from './components/AppHeader';
-import { KNOWLEDGE_NAMES, dealsNeedingMe, forumTopicOfSearch, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type Guide, type HomeSearchSettings, type WordKey } from '@beanpool/core';
+import { KNOWLEDGE_NAMES, dealsNeedingMe, forumDoorOfSearch, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type Guide, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { takeKeptLinkedTopic } from './lib/forum-public';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
@@ -702,28 +702,31 @@ export function App() {
     useEffect(() => { if (identity) forgetKeptPeek(); }, [identity]);
     const clearLinkedPost = useCallback(() => setLinkedPost(null), []);
 
-    // `/?topic=<id>`, a door to one forum topic (slice F7; core forumTopicDoor): a visitor reads it in the lobby's Forum tab, a
-    // member in the Chat tab's Forum, as does a visitor who joined from its Join to reply (kept in this tab).
-    const [linkedTopic, setLinkedTopic] = useState<string | null>(() => (typeof window !== 'undefined' ? forumTopicOfSearch(window.location.search) : null));
+    // `/app?forumTopic=<id>` or `/app?forum=1`, the forum's public pages' Join to reply (slice F7; core forumDoorOfSearch): a
+    // visitor reads it in the lobby's Forum tab, a member in the Chat tab's Forum, as does a visitor who joined from the lobby's
+    // own Join to reply (the topic kept in this tab).
+    const [linkedForum, setLinkedForum] = useState<{ topic: string | null } | null>(() => (typeof window !== 'undefined' ? forumDoorOfSearch(window.location.search) : null));
     useEffect(() => {
-        if (!linkedTopic) return;
+        if (!linkedForum) return;
         try {
             const params = new URLSearchParams(window.location.search);
-            params.delete('topic');
+            params.delete('forumTopic');
+            params.delete('forum');
             const qs = params.toString();
             window.history.replaceState(window.history.state, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`);
         } catch { /* the topic still opens; the parameter stays in the address bar */ }
     }, []); // once, at load
-    const clearLinkedTopic = useCallback(() => setLinkedTopic(null), []);
+    const clearLinkedForum = useCallback(() => setLinkedForum(null), []);
     useEffect(() => {
         if (!identity) return;
-        const id = linkedTopic ?? takeKeptLinkedTopic();
-        if (!id) return;
-        setLinkedTopic(null);
+        const kept = takeKeptLinkedTopic();
+        const door = linkedForum ?? (kept ? { topic: kept } : null);
+        if (!door) return;
+        setLinkedForum(null);
         setActiveTab('messages');
         setOpenChatForum(true);
-        setOpenForumTopic(id);
-    }, [identity, linkedTopic]);
+        setOpenForumTopic(door.topic);
+    }, [identity, linkedForum]);
 
     // `/?ask=<host>`, from a local community's card (front doors S15): the lobby keeps it in this tab for after the
     // join, as it keeps a shared listing; a member lands on Home with the Find card on that community (above the cards
@@ -1205,7 +1208,7 @@ export function App() {
             );
         }
         if (visitorView.kind === 'lobby') {
-            return <GuestLobby info={visitorView.info} health={communityHealth} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} askedCommunity={askParam} linkedTopicId={linkedTopic} onLinkedTopicTaken={clearLinkedTopic} />;
+            return <GuestLobby info={visitorView.info} health={communityHealth} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} askedCommunity={askParam} linkedForum={linkedForum} onLinkedForumTaken={clearLinkedForum} />;
         }
         // A stranger with a link a member shared outside: that one post first, then this community's doors. Its invite
         // form and its ways back are the welcome page's, which reads where to start from `?door=` (lib/community-card.ts).

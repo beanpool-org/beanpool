@@ -73,12 +73,12 @@ interface Props {
     onLinkedPostTaken?: () => void;
     /** `/?ask=<host>`, from a local community's card (front doors S15): kept for after the join, when Home's Find card opens on it. */
     askedCommunity?: string | null;
-    /** `/?topic=<id>`, a door to one forum topic (slice F7): opened read only in the Forum tab. */
-    linkedTopicId?: string | null;
-    onLinkedTopicTaken?: () => void;
+    /** `/app?forumTopic=<id>` or `?forum=1`, a public page's Join to reply (slice F7): the Forum tab, on that topic, read only. */
+    linkedForum?: { topic: string | null } | null;
+    onLinkedForumTaken?: () => void;
 }
 
-export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLinkedPostTaken, askedCommunity = null, linkedTopicId = null, onLinkedTopicTaken }: Props) {
+export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLinkedPostTaken, askedCommunity = null, linkedForum = null, onLinkedForumTaken }: Props) {
     const [tab, setTab] = useState<LobbyTab>('home');
     const forumTab = forumPublicOn(info.features);
     const tabs = [...TABS, ...(forumTab ? [FORUM_TAB] : []), ...(modeFor('beans', info) === 'preview' ? [LEDGER_TAB] : [])];
@@ -129,12 +129,12 @@ export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLi
         onLinkedPostTaken?.();
     }, [linkedPostId, onLinkedPostTaken]);
 
-    // A door to one forum topic: opened read only in the Forum tab (where the forum is public; elsewhere Home, as before).
+    // A door to the forum or one topic: opened read only in the Forum tab (where the forum is public; elsewhere Home, as before).
     useEffect(() => {
-        if (!linkedTopicId) return;
-        if (forumTab) { setTab('forum'); setTopic(linkedTopicId); }
-        onLinkedTopicTaken?.();
-    }, [linkedTopicId, onLinkedTopicTaken, forumTab]);
+        if (!linkedForum) return;
+        if (forumTab) { setTab('forum'); setTopic(linkedForum.topic); }
+        onLinkedForumTaken?.();
+    }, [linkedForum, onLinkedForumTaken, forumTab]);
 
     // A community the visitor came to ask to join: kept in this tab, as the shared listing is, so a join by a sign-in
     // that leaves the page still lands on the Find card on that community (App takes it when the identity is set).

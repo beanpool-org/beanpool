@@ -107,13 +107,28 @@ export function firstLineOf(words: string | null | undefined, max = 120): string
     return `${(space > max / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
-/** The web app's door to one topic (`/?topic=<id>`): the lobby opens it read only; a member's app opens it in the Forum. */
+/**
+ * The web app's doors to the forum, as the server's public pages link them (forum-public-pages.ts forumPageDoors): Join to
+ * reply on a topic is `/app?forumTopic=<id>`, on a list `/app?forum=1`. The lobby opens them read only, in its Forum tab; a
+ * member's app in the Chat tab's Forum (a visitor who joined from one lands there too).
+ */
 export function forumTopicDoor(id: string): string {
-    return `/?topic=${encodeURIComponent(id)}`;
+    return `/app?forumTopic=${encodeURIComponent(id)}`;
 }
 
-/** The topic a web address names (`?topic=<id>`), or null. Ids are the node's own: letters, digits, `-` and `_`, at most 64. */
-export function forumTopicOfSearch(search: string | null | undefined): string | null {
-    const raw = new URLSearchParams(search ?? '').get('topic');
-    return raw && /^[A-Za-z0-9_-]{1,64}$/.test(raw) ? raw : null;
+/** Ids are the node's own (`ft-` and hex): letters, digits, `-` and `_`, at most 64. Anything else opens nothing. */
+const TOPIC_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * The forum door a web address names: `{ topic }` for `?forumTopic=<id>`, `{ topic: null }` for `?forum=1` (the list), or
+ * null for none (and for a topic id that isn't one).
+ */
+export function forumDoorOfSearch(search: string | null | undefined): { topic: string | null } | null {
+    const q = new URLSearchParams(search ?? '');
+    const raw = q.get('forumTopic');
+    if (raw !== null) return TOPIC_ID.test(raw) ? { topic: raw } : null;
+    return q.get('forum') === '1' ? { topic: null } : null;
 }
+
+/** Whether a topic id is one the node could have made (a phone link's `topic`). */
+export const isForumTopicId = (id: unknown): id is string => typeof id === 'string' && TOPIC_ID.test(id);

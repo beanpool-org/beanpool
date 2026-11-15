@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { forumTopicDoor, forumTopicOfSearch, visitorForumShows, type ForumPublicAnswer } from '@beanpool/core';
+import { forumDoorOfSearch, forumTopicDoor, visitorForumShows, type ForumPublicAnswer } from '@beanpool/core';
 import { shownFrame, type HomeAnswer } from '../lib/home-cards';
 import { ForumVisitorHome } from '../components/forum/ForumVisitorHome';
 import { ForumVisitorPage } from './ForumVisitorPage';
@@ -195,18 +195,22 @@ describe('the lobby: the tab where the forum is public, and the door that lands 
         expect(screen.getByTestId('lobby-bottom-nav')).not.toHaveTextContent('Forum');
     });
 
-    it('/?topic=<id>: the Forum tab opens on that topic, read only, with the door', async () => {
+    it("a public page's Join to reply (/app?forumTopic=<id>): the Forum tab opens on that topic, read only, with the door", async () => {
         stubForum('topics');
-        expect(forumTopicOfSearch(forumTopicDoor('ft-3').slice(1))).toBe('ft-3');
+        expect(forumDoorOfSearch(forumTopicDoor('ft-3').split('?')[1])).toEqual({ topic: 'ft-3' });
         const taken = vi.fn();
-        render(<GuestLobby info={info(GLOBAL)} onComplete={vi.fn()} linkedTopicId="ft-3" onLinkedTopicTaken={taken} />);
+        render(<GuestLobby info={info(GLOBAL)} onComplete={vi.fn()} linkedForum={{ topic: 'ft-3' }} onLinkedForumTaken={taken} />);
         expect(await screen.findByTestId('forum-visitor-title')).toHaveTextContent('Seed swap ideas');
         expect(screen.getByTestId('forum-visitor-join')).toHaveTextContent('Join to reply');
         await waitFor(() => expect(taken).toHaveBeenCalled());
     });
 
-    it('a door address that is not a topic id opens nothing', () => {
-        expect(forumTopicOfSearch('?topic=../api/me')).toBeNull();
-        expect(forumTopicOfSearch('?post=ft-1')).toBeNull();
+    it('/app?forum=1 opens the list; a door address that is not a topic id opens nothing', async () => {
+        expect(forumDoorOfSearch('?forum=1')).toEqual({ topic: null });
+        expect(forumDoorOfSearch('?forumTopic=../api/me')).toBeNull();
+        expect(forumDoorOfSearch('?post=ft-1')).toBeNull();
+        stubForum('topics');
+        render(<GuestLobby info={info(GLOBAL)} onComplete={vi.fn()} linkedForum={{ topic: null }} />);
+        expect(await screen.findAllByTestId('forum-visitor-topic-row')).toHaveLength(4);
     });
 });

@@ -286,7 +286,8 @@ describe('an open sheet stays bound to what it was opened for, or closes and sta
         document.body.appendChild(host);
         const root = createRoot(host);
         const draw = (tx: StandingDealRow) => act(async () => {
-            root.render(createElement(StandingPanel, { tx, actingAs: side, busy: false, onStop: vi.fn(), onMessage: vi.fn(), messageLabel: 'Message Kim', onLower }));
+            const node = createElement(StandingPanel, { tx, actingAs: side, busy: false, onStop: vi.fn(), onMessage: vi.fn(), messageLabel: 'Message Kim', onLower });
+            root.render(node as unknown as Parameters<Root['render']>[0]);
         });
         await draw(first);
         return draw;

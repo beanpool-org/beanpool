@@ -132,7 +132,6 @@ async function search(id: Id, q: string): Promise<Res> {
 /** A mark no key, id or other word holds: z and q are not hex, and each is a run of letters the index reads as one word. */
 const mark = () => `zq${crypto.randomBytes(4).toString('hex').replace(/[0-9]/g, (d) => 'ghijklmnop'[Number(d)])}`;
 const FORUM_TABLES = Object.keys(TABLES).filter((t) => t.startsWith('forum_') && t !== 'forum_search');
-const hasTable = (name: string) => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name);
 
 /** A poll for everyone here, by the server's own door (createPost), as a member's app makes one. */
 function communityPoll(author: Id): { ok: boolean; error: string } {
@@ -158,7 +157,8 @@ async function main(): Promise<void> {
     grantNodeRole(mo.pk, 'moderator', owner.pk);
     const [cora, gil, obi, lea, pat, rex, ian, nel] = ['Cora', 'Gil', 'Obi', 'Lea', 'Pat', 'Rex', 'Ian', 'Nel'].map((n) => member(n));
     const vic = member('Vic', true);
-    // A guest from another community: a key with no row here. Where group guests exist (slice G1), one who is IN the group.
+    // A guest from another community (slice G1, engine/group-guests.ts), IN the group's chat: a group_guests row, never a
+    // members or group_members row, so the community's door turns them away before any section is read.
     const gwen = newId('Gwen');
 
     const GROUP = 'grp-workers-f8';
@@ -176,10 +176,11 @@ async function main(): Promise<void> {
     addMember(GROUP, rex, 'member', 'removed');
     addMember(OTHER_GROUP, nel, 'convenor', 'active');
     addMember(OTHER_GROUP, gil, 'member', 'active');
-    if (hasTable('group_guests')) {
-        db.prepare(`INSERT INTO group_guests (group_id, guest_key, home, name, state, invited_by, invited_at, state_at) VALUES (?, ?, 'riverside.example', 'Gwen', 'in', ?, ?, ?)`)
-            .run(GROUP, gwen.pk, cora.pk, new Date().toISOString(), new Date().toISOString());
-    }
+    const guestAt = new Date().toISOString();
+    db.prepare(`INSERT INTO group_guests (group_id, guest_key, home, name, state, invited_by, invited_at, state_at) VALUES (?, ?, 'riverside.example', 'Gwen', 'in', ?, ?, ?)`)
+        .run(GROUP, gwen.pk, cora.pk, guestAt, guestAt);
+    require_(!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(gwen.pk) && !db.prepare('SELECT 1 FROM group_members WHERE member_pubkey = ?').get(gwen.pk),
+        'the guest is a group_guests row in the group, and no member here nor a group_members row');
 
     // ── 1. Sections ─────────────────────────────────────────────────────────────────────────────
     console.log('── 1. sections ──');

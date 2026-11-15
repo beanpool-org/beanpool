@@ -87,12 +87,8 @@ export interface StoredKeeperShare extends KeeperShareInput {
 }
 
 /**
- * What the restore screen is allowed to know before anyone has proven anything.
- *
- * Types and a count, never identities: `GET /api/recovery/keepers/:callsign` is public, and
- * answering it with keeper pubkeys would turn a callsign into a map of who trusts whom — a
- * social graph handed out to anyone who asks, on an endpoint that exists so a frightened user
- * can see how to get back in.
+ * Types and a count, never identities: a member's own view of how their account is protected. No public read answers
+ * it for a name (the public keeper summary by callsign went with keeper recovery, and S3 deleted the lookup by name).
  */
 export interface KeeperSummary {
     holderType: KeeperType;

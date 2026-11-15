@@ -10,11 +10,14 @@
  * SAME predicate, and getting it wrong fails twice over:
  *
  *   1. WRONG ANSWER. `status != 'migrated'` still matches pruned members, so a name the
- *      index will happily let you take reads as taken, and a member the node has let go
- *      still shows up as a live recovery target.
+ *      index will happily let you take reads as taken.
  *   2. WRONG PLAN. SQLite can only use a partial index when the query's predicate provably
  *      implies the index's. A mismatched one silently degrades to a full table SCAN — on
- *      `/api/recovery/lookup`, which is public and unauthenticated.
+ *      `/api/members/callsign-available`, which is public and unauthenticated.
+ *
+ * (The public recovery lookup by name, which this test pinned beside the name check, was deleted with the restore by
+ * name, S3: a restore finds its account from a verified sign-in. test-recovery-find pins that the find never offers a
+ * member who left or moved to a new key.)
  *
  * This test pins both, because #1 is invisible in a small test DB and #2 is invisible in a
  * correctness assertion. It exists because two sites were missed the first time round.
@@ -24,9 +27,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTreasury, findRecoveryCandidates, initStateEngine } from './state-engine.js';
+import { createTreasury, initStateEngine, isCallsignAvailable } from './state-engine.js';
 import { db } from './db/db.js';
-import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -45,21 +47,14 @@ function throws(fn: () => void, needle: string, msg: string): void {
     }
 }
 
-function seedMember(pk: string, callsign: string, status: string, hasSso = true) {
+function seedMember(pk: string, callsign: string, status: string) {
     db.prepare(
         `INSERT OR REPLACE INTO members (public_key, callsign, status, joined_at)
          VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pk, callsign, status);
-    setMemberPhoto(db, pk, 'a.png');
-    if (hasSso) {
-        db.prepare(
-            `INSERT OR REPLACE INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, generation)
-             VALUES (?, 'sso', 'google', 1, 'x', 'y', 'z', 1)`
-        ).run(pk);
-    }
 }
 
-/** The lookups compare callsign_fold (db.ts migrateCallsignFold, #1956), answered from its own partial index. */
+/** The name check compares callsign_fold (db.ts migrateCallsignFold, #1956), answered from its own partial index. */
 function usesCallsignIndex(sql: string, param: string): boolean {
     const plan = db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(param) as { detail: string }[];
     return plan.some(r => r.detail.includes('idx_members_callsign_fold'));
@@ -76,62 +71,27 @@ function main() {
     seedMember('prunedPK', 'ripple', 'pruned');
     seedMember('goneOnlyPK', 'driftwood', 'pruned');
 
-    // ── 1. Recovery lookup returns the living only ──
-    // Calls the real function the route calls. An earlier draft of this test pasted the SQL
-    // in and proved nothing: it passed against the buggy route, because it was querying its
-    // own copy of the fixed predicate.
-    const hits = findRecoveryCandidates('ripple');
-    assert(hits.length === 1, 'recovery lookup returns exactly one member for a shared callsign');
-    assert(hits[0]?.publicKey === 'activePK', '...and it is the active one');
+    // ── 1. The name check counts the living only ──
+    // Calls the real function the route calls (isCallsignAvailable, behind /api/members/callsign-available). An earlier
+    // draft of this test pasted the SQL in and proved nothing: it passed against the buggy route, because it was querying
+    // its own copy of the fixed predicate.
+    assert(!isCallsignAvailable('ripple'), 'a name a live member holds is taken, though a migrated and a pruned member share it');
+    assert(!isCallsignAvailable('RIPPLE'), '...case-insensitively');
+    assert(isCallsignAvailable('driftwood'), 'a name held only by a pruned member is free again');
+    assert(isCallsignAvailable('ripple', 'activePK'), 'the live holder re-saving their own name is no collision');
 
-    const keys = hits.map(h => h.publicKey);
-    assert(!keys.includes('prunedPK'), 'a PRUNED member is not offered as a recovery target');
-    assert(!keys.includes('migratedPK'), 'a migrated member is not offered as a recovery target');
-
-    assert(findRecoveryCandidates('driftwood').length === 0, 'a callsign held only by a pruned member resolves to nobody');
-    assert(findRecoveryCandidates('RIPPLE').length === 1, 'the lookup is case-insensitive');
-
-    // Prefix matching is the whole point of the change: a member given `paul12` because `paul` was
-    // taken will type `paul` months later, and an exact match answers "nobody", which reads as
-    // "your account is gone" rather than "try harder".
-    assert(findRecoveryCandidates('ripp').length >= 1, 'a prefix finds the account whose full callsign the member has forgotten');
-    assert(findRecoveryCandidates('rippleX').length === 0, 'a prefix that matches nobody still returns nobody');
-
-    // A LIKE wildcard bound straight in would let an unauthenticated caller enumerate the node,
-    // which is exactly what the rate limit on this route exists to bound.
-    assert(findRecoveryCandidates('%').length === 0, 'a bare % is a literal, not a wildcard');
-    assert(findRecoveryCandidates('_').length === 0, 'a bare _ is a literal, not a wildcard');
-    assert(findRecoveryCandidates('rip%').length === 0, 'a trailing % does not widen the match');
-
-    // The response must stay public-safe: this endpoint is unauthenticated.
-    //
-    // Widened deliberately to six. The two additions are BOOLEANS — whether guardian recovery and
-    // whether sign-in recovery are possible — and they exist so the picker can offer only the
-    // routes that will actually work; a member who taps a provider they never enrolled gets a dead
-    // end and reads it as their account being gone.
-    //
-    // What must NOT appear here is which provider. That an account is recoverable is a far weaker
-    // fact than that a named person uses Google, and this endpoint hands its answer to anyone who
-    // can guess a callsign. Note also that the old shape already leaked the guardian fact by
-    // presence — an account only appeared at all once it had enough guardians.
-    assert(
-        Object.keys(hits[0] ?? {}).sort().join(',')
-            === 'avatarUrl,callsign,canRecoverByGuardians,canRecoverBySso,joinedAt,publicKey',
-        'the candidate exposes exactly the six public fields and nothing else',
-    );
-
-    // ── 2. The lookup can still use the partial index ──
+    // ── 2. The name check can still use the partial index ──
     // The correctness assertions above pass on a mismatched predicate too — this is the one
     // that catches the public endpoint quietly degrading to a full scan.
-    // The copy below is the real one: the source of findRecoveryCandidates and isCallsignAvailable is read for it.
+    // The copy below is the real one: the source of isCallsignAvailable is read for it.
     const membersSource = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'engine/members.ts'), 'utf8');
-    assert(membersSource.includes("'m.callsign_fold = ?'") && membersSource.includes("WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')"),
-        'the lookup and the name check compare callsign_fold with the status predicate below (engine/members.ts)');
-    const LOOKUP_SQL = `
+    assert(membersSource.includes("WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')"),
+        'the name check compares callsign_fold with the status predicate below (engine/members.ts)');
+    const NAME_CHECK_SQL = `
         SELECT public_key FROM members
         WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')`;
     assert(
-        usesCallsignIndex(LOOKUP_SQL, 'ripple'),
+        usesCallsignIndex(NAME_CHECK_SQL, 'ripple'),
         'that status predicate reaches members through idx_members_callsign_fold, not a table scan',
     );
     assert(

@@ -5,11 +5,11 @@
  * "Олег", "Émile" or "İpek", typed exactly as stored, was found by nothing, and the same name in another case read as
  * free. For each name, through the real middleware:
  *   1. joining by an invite keeps the name;
- *   2. the public recovery lookup finds the member typed as stored, in small letters and in capitals;
- *   3. the name check says it is taken, in either case;
- *   4. a recovery collect by the name in small letters opens a session for that member;
- *   5. a second join with the name in another case, and with the exact name, gets a numbered name, never the same one.
- * Plus the fold's own cases (İ/ı/I, final sigma, ß and capital ẞ, a combining accent, fullwidth letters).
+ *   2. the name check says it is taken, in either case;
+ *   3. a second join with the name in another case, and with the exact name, gets a numbered name, never the same one.
+ * Plus the fold's own cases (İ/ı/I, final sigma, ß and capital ẞ, a combining accent, fullwidth letters). (The public
+ * recovery lookup by name and the collect by name, which this suite also read, were deleted in S3: a restore finds its
+ * account from a verified sign-in.)
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-callsign-any-alphabet.ts
  */
@@ -76,7 +76,6 @@ async function join(callsign: string): Promise<{ id: Id; res: Res; stored: strin
     return { id, res, stored };
 }
 
-const lookup = async (name: string) => call('GET', null, `/api/recovery/lookup/${encodeURIComponent(name)}`);
 const available = async (name: string) => call('GET', null, `/api/members/callsign-available/${encodeURIComponent(name)}`);
 
 async function main(): Promise<void> {
@@ -98,24 +97,10 @@ async function main(): Promise<void> {
         console.log(`\n— ${name} —`);
         const first = await join(name);
         assert(first.res.status === 200 && first.stored === name, `${name}: joining by an invite keeps the name (got ${first.res.status}, "${first.stored}")`);
-        // The lookup lists a member who can come back with a sign-in, as test-keeper-http seeds one.
-        db.prepare(`INSERT INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, generation)
-                    VALUES (?, 'sso', 'google', 1, 'x', 'y', 'z', 1)`).run(first.id.pk);
-
-        for (const typed of [name, small, capitals]) {
-            const r = await lookup(typed);
-            const keys = Array.isArray(r.body) ? r.body.map((c: any) => c.publicKey) : [];
-            assert(r.status === 200 && keys.length === 1 && keys[0] === first.id.pk,
-                `${name}: the recovery lookup for "${typed}" finds the member (got ${r.status}, ${keys.length} found)`);
-        }
         for (const typed of [small, capitals]) {
             const r = await available(typed);
             assert(r.status === 200 && r.body?.available === false, `${name}: the name check says "${typed}" is taken (got available=${r.body?.available})`);
         }
-        const device = keypair();
-        const collect = await call('POST', device, '/api/recovery/collect', { callsign: small });
-        assert(collect.status === 200 && typeof collect.body?.collectionId === 'string',
-            `${name}: a recovery collect for "${small}" opens a session (got ${collect.status} ${JSON.stringify(collect.body?.error ?? '')})`);
 
         const second = await join(other);
         assert(second.res.status === 200 && second.stored === `${other}2`,
@@ -141,12 +126,10 @@ async function main(): Promise<void> {
     const capital = await available('STRAẞE');
     assert(capital.body?.available === false, `capital ẞ: "STRAẞE" is taken beside "Straße" (got available=${capital.body?.available})`);
     const gross = await join('GROẞ');
-    db.prepare(`INSERT INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, generation)
-                VALUES (?, 'sso', 'google', 1, 'x', 'y', 'z', 1)`).run(gross.id.pk);
-    for (const typed of ['GROẞ', 'groß', 'GROSS']) {
-        const r = await lookup(typed);
-        const keys = Array.isArray(r.body) ? r.body.map((c: any) => c.publicKey) : [];
-        assert(keys.length === 1 && keys[0] === gross.id.pk, `capital ẞ: the lookup for "${typed}" finds "GROẞ" (${keys.length} found)`);
+    for (const typed of ['groß', 'GROSS']) {
+        const r = await available(typed);
+        assert(gross.res.status === 200 && gross.stored === 'GROẞ' && r.body?.available === false,
+            `capital ẞ: "${typed}" is taken beside "GROẞ" (got ${gross.res.status} "${gross.stored}", available=${r.body?.available})`);
     }
     const differs = await available('Emile');
     assert(differs.body?.available === true, 'accents are kept: "Emile" is free beside "Émile"');

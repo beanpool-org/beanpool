@@ -66,6 +66,7 @@ import { forumNewness, inNewAccountDays, isForumModerator, knownWriters, type Fo
 import { dropForumFollowsOf, followForumTopic, forumFollowOf, markForumTopicRead, setForumFollow, type ForumNoticeCallbacks } from './forum-notices.js';
 import { forumSectionOpenPolls, sectionAccess, sectionReadSql, type SectionAccess } from './forum-sections.js';
 import { postOutOfSight } from './post-sight.js';
+import { getDecision, titleForMembers } from '../decisions-engine.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -212,11 +213,34 @@ function pollFor(r: { poll_post_id: string | null }, reader: string): string | n
         { author_pubkey: string; audience_scope: string | null; target_group_id: string | null; target_pubkey: string | null; assigned_to: string | null } | undefined;
     return row && !postOutOfSight(row, reader) ? r.poll_post_id : null;
 }
-/** The community Decision a topic links (forum_links), as its chip reads it; null for none, or one no longer there. */
+/**
+ * The Decision chip's rows: the community's Decisions alone, as every member may open them (routes/commons.ts). A scoped one,
+ * a group's or an enterprise's, is its roll's only (getGroupDecision, getScopedDecision): never linked, never shown, whoever reads.
+ */
+interface ChipRow { id: string; title: string; status: string; case_hidden_at: string | null }
+const CHIP_COLUMNS = 'd.id, d.title, d.status, d.case_hidden_at';
+const COMMUNITY_DECISION = "d.scope_kind = 'community'";
+/** A chip as members read it: the title through titleForMembers, so a removal whose case an admin hid shows the node's title, not the member's own. */
+const chipOut = (r: ChipRow): NonNullable<ForumTopic['decision']> => {
+    const decision = r.case_hidden_at ? getDecision(r.id) : null;
+    return { id: r.id, title: decision ? titleForMembers(decision) : r.title, status: r.status };
+};
+/** One of the community's Decisions, as its chip shows it; null for an id nobody has, or one only its roll may open. */
+function communityDecision(id: string): ForumTopic['decision'] {
+    const row = db.prepare(`SELECT ${CHIP_COLUMNS} FROM decisions d WHERE d.id = ? AND ${COMMUNITY_DECISION}`).get(id) as ChipRow | undefined;
+    return row ? chipOut(row) : null;
+}
+/** The community Decision a topic links (forum_links), as its chip reads it; null for none, one no longer there, or a scoped one. */
 function decisionOf(topicId: string): ForumTopic['decision'] {
-    const row = db.prepare(`SELECT d.id, d.title, d.status FROM forum_links l JOIN decisions d ON d.id = l.target_id
-        WHERE l.topic_id = ? AND l.kind = 'decision' ORDER BY l.created_at LIMIT 1`).get(topicId) as { id: string; title: string; status: string } | undefined;
-    return row ?? null;
+    const row = db.prepare(`SELECT ${CHIP_COLUMNS} FROM forum_links l JOIN decisions d ON d.id = l.target_id
+        WHERE l.topic_id = ? AND l.kind = 'decision' AND ${COMMUNITY_DECISION} ORDER BY l.created_at LIMIT 1`).get(topicId) as ChipRow | undefined;
+    return row ? chipOut(row) : null;
+}
+/** Every chip the topics show, as shown (forumListTag): a state, a title as members read it, one gone or out of sight, each moves the tag. */
+function chipsShown(): string {
+    const rows = db.prepare(`SELECT ${CHIP_COLUMNS} FROM decisions d WHERE ${COMMUNITY_DECISION}
+        AND d.id IN (SELECT target_id FROM forum_links WHERE kind = 'decision') ORDER BY d.id`).all() as ChipRow[];
+    return crypto.createHash('sha256').update(JSON.stringify(rows.map(chipOut))).digest('hex').slice(0, 16);
 }
 /** A topic row as the reader reads it; `follow_state`, `last_read` and `last_number` are theirs (READER_FOLLOW). */
 type TopicRowRead = TopicRow & { opening_removed?: number; opening_hidden?: number; follow_state?: ForumFollow | null; last_read?: number | null; last_number?: number | null };
@@ -311,9 +335,10 @@ export function forumListTag(reader: string): string {
         stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM forum_follows WHERE member_pubkey = ?', reader),
         // The groups the reader is in (slice F8): joining, leaving or a role moved changes which sections' topics they read.
         stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM group_members WHERE member_pubkey = ?', reader),
-        // The Decisions topics link and the polls they hold (slice F8): a row's chip and pollId.
+        // The Decisions topics link and the polls they hold (slice F8): a row's chip and pollId. The chips as shown, not a
+        // stamp of the rows: the title a member reads changes when an admin hides a removal's case.
         stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM forum_links'),
-        stamp("SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM decisions WHERE id IN (SELECT target_id FROM forum_links WHERE kind = 'decision')"),
+        chipsShown(),
         getMembersVersion(),
         // What the reader's role shows: archived sections (owners, admins) and hidden topics (moderators).
         nodeRoleOf(reader) ?? 'member',
@@ -828,7 +853,8 @@ export function addForumPoll(member: string, topicId: string, question: unknown,
 /**
  * The Decision chip (design §10.1): the topic's writer, or an owner or admin, links one of the community's Decisions to a topic
  * they may read, or takes it off (`decisionId` null). One a topic, kept in forum_links; where Decisions are switched off
- * (the global community), none. A Decision is every member's to read, so the chip shows nothing its readers could not see.
+ * (the global community), none. Only the community's own Decisions, which every member may open, so the chip shows nothing
+ * its readers could not see: a group's or an enterprise's vote is refused exactly as an id nobody has (no existence leak).
  */
 export function linkForumDecision(member: string, topicId: string, decisionId: unknown, now = Date.now()): ForumTopic {
     writable(member, now);
@@ -836,7 +862,7 @@ export function linkForumDecision(member: string, topicId: string, decisionId: u
     if (!getProfileSwitches().decisions) throw new ForumRefusal(404, 'decisions_off', FORUM_WORDS.decisionsOff);
     const topic = visibleTopic(member, topicId);
     if (topic.writer_pubkey !== member && !isStaff(member)) throw new ForumRefusal(403, 'not_yours', FORUM_WORDS.decisionNotYours);
-    if (decisionId !== null && (typeof decisionId !== 'string' || !db.prepare('SELECT 1 FROM decisions WHERE id = ?').get(decisionId))) {
+    if (decisionId !== null && (typeof decisionId !== 'string' || !communityDecision(decisionId))) {
         throw new ForumRefusal(404, 'decision_not_found', FORUM_WORDS.decisionNotFound);
     }
     db.transaction(() => {

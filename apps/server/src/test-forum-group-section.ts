@@ -19,11 +19,18 @@
  *  5. The polls' pool: three open a section, still one open a member, and the community's five untouched (topic polls are
  *     not counted there, nor in the one community poll a week).
  *  6. The Decision chip: the topic's writer or an owner or admin links one of the community's Decisions; anyone who may read
- *     the topic sees its title and state; an unknown Decision is refused; switched off where Decisions are off.
+ *     the topic sees its title and state; an unknown Decision is refused; switched off where Decisions are off. Close the
+ *     class: one table over every way a Decision reaches the forum (link, a topic, the list, a search hit, a bell row) x
+ *     (the community's, a group's read by its member and by someone outside, an enterprise's, a removal whose case an admin
+ *     hid, one deleted): a chip only for the community's, with the title members read (the list's tag moves with it); a
+ *     scoped or deleted one is refused exactly as an id nobody has and never shown, a row linked before included.
  *  7. A topic never moves into or out of a group's section; a writer who left may still remove their own words, not edit
  *     them; a first topic waiting in a group's section is answered `section_gone` once its writer cannot write there.
  *  8. A standby answers the same: every read of the table answers on it as on the main server, from an import of the copy
  *     (the new table and columns in it), and every write answers 503 `standby`.
+ *  9. Close the class: every forum write that makes something new (a topic, a reply, a poll) x (probation off, on with posts
+ *     left, on with them used) x (the day's posts reached or not): the poll, a post as the Market's, is refused exactly as the
+ *     Market refuses the same poll; topics and replies keep the forum's own day limits.
  *
  * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-forum-group-section" node ../../scripts/run-server-suites.mjs
  */
@@ -46,6 +53,10 @@ import { resetForumDoorbellsForTests, tellForumReply, tellForumTopic, type Forum
 import { importPlainTables } from './engine/plain-tables.js';
 import { TABLES } from './engine/replication-manifest.js';
 import { nextPollStartAt } from './engine/poll-week.js';
+import { adminHideCase } from './decisions-engine.js';
+import { setSwitchOverride } from './config/node-profile.js';
+import { WRITER_LIMITS } from './config/writer-limits.js';
+import { PROBATION } from './engine/probation.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 import { TEST_PHOTO } from './post-test-helper.js';
 import { FORUM_LIMITS } from '@beanpool/core';
@@ -83,11 +94,11 @@ function member(name: string, visitor = false): Id {
 }
 
 interface Res { status: number; body: any; text: string; headers: Headers }
-async function call(id: Id | null, method: 'GET' | 'POST', urlPath: string, body?: unknown): Promise<Res> {
+async function call(id: Id | null, method: 'GET' | 'POST', urlPath: string, body?: unknown, extra: Record<string, string> = {}): Promise<Res> {
     pruneAuthAttempts(Date.now() + 120_000);
     resetGatewayRateLimit();
     const raw = method === 'GET' ? '' : JSON.stringify(body ?? {});
-    const h: Record<string, string> = {};
+    const h: Record<string, string> = { ...extra };
     if (method !== 'GET') h['Content-Type'] = 'application/json';
     if (id) {
         const ts = Date.now();
@@ -480,6 +491,111 @@ async function main(): Promise<void> {
     const linkRows = db.prepare("SELECT COUNT(*) FROM forum_links WHERE topic_id = ? AND kind = 'decision'").pluck().get(T) as number;
     assert(linkRows === 0, '6. taken off, its row is gone');
 
+    // ── 6, close the class: every way a Decision reaches the forum x every kind of Decision ─────
+    // The chip is the community's: only one of its Decisions, which every member may open, with its title as members read it.
+    // A group's vote (to everyone, its own members too: the chip shows in a section anyone reads), an enterprise's and one
+    // deleted show nothing, and linking one answers exactly as an id nobody has; a removal whose case an admin hid shows the
+    // node's title. Search hits and bell rows carry no chip at all. Rows linked before (as by a build that took any row) too.
+    console.log('── 6. the chip: every way in x every kind of Decision ──');
+    const wren = member('Wren');
+    const closes = new Date(Date.now() + 7 * DAY).toISOString();
+    const SECRET_GROUP = `Workers private vote ${mark()}`;
+    const SECRET_ENTERPRISE = `Keepers private vote ${mark()}`;
+    const OWN_TITLE = `Remove Bob he took my bike ${mark()}`;
+    const SECRETS = [SECRET_GROUP, SECRET_ENTERPRISE, OWN_TITLE];
+    const addDecision = db.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params, franchise, closes_at, scope_kind, scope_id)
+        VALUES (@id, @author, @title, 'Say which.', @touches, @effect, @subject, @params, '1m1v', @closes, @kind, @scopeId)`);
+    type Kind = 'community' | 'group' | 'enterprise' | 'removal' | 'deleted';
+    // One author each: a member has one open Decision in each scope.
+    const KINDS: Record<Kind, { id: string; author: Id; title: string; touches: string; effect: string; subject: string | null; params: string | null; kind: string; scopeId: string | null }> = {
+        community: { id: 'dec-f8c-community', author: cora, title: 'Mend the common fence', touches: 'pool', effect: 'spend', subject: null, params: null, kind: 'community', scopeId: null },
+        group: { id: 'dec-f8c-group', author: gil, title: SECRET_GROUP, touches: 'scope', effect: 'spend', subject: null, params: null, kind: 'group', scopeId: GROUP },
+        enterprise: { id: 'dec-f8c-enterprise', author: obi, title: SECRET_ENTERPRISE, touches: 'scope', effect: 'spend', subject: null, params: null, kind: 'enterprise', scopeId: newId('Shop').pk },
+        removal: { id: 'dec-f8c-removal', author: mo, title: OWN_TITLE, touches: 'member', effect: 'remove_member', subject: rex.pk, params: JSON.stringify({ memberName: 'Bob' }), kind: 'community', scopeId: null },
+        deleted: { id: 'dec-f8c-deleted', author: nel, title: 'Paint the hall', touches: 'pool', effect: 'spend', subject: null, params: null, kind: 'community', scopeId: null },
+    };
+    const kinds = Object.keys(KINDS) as Kind[];
+    for (const d of Object.values(KINDS)) addDecision.run({ ...d, author: d.author.pk, closes });
+    const CHIP_MARK = mark();
+    const chipTopic: Record<string, string> = {};
+    for (const k of kinds) {
+        const r = await start(wren, { sectionId: general, title: `Chip ${k} ${CHIP_MARK}`, words: `About the ${k} vote, ${CHIP_MARK}.` });
+        require_(r.status === 201, `Wren starts the ${k} row's topic (${show(r)})`);
+        chipTopic[k] = r.body.topic.id;
+    }
+    // The community's three by the route; a group's and an enterprise's as a row linked before (the route refuses them now).
+    for (const k of ['community', 'removal', 'deleted'] as Kind[]) require_((await linkBy(wren, chipTopic[k], KINDS[k].id)).status === 200, `Wren links the ${k} Decision`);
+    const linkedBefore = db.prepare("INSERT INTO forum_links (topic_id, kind, target_id, created_at) VALUES (?, 'decision', ?, ?)");
+    for (const k of ['group', 'enterprise'] as Kind[]) linkedBefore.run(chipTopic[k], KINDS[k].id, new Date().toISOString());
+    /** A topic's chip as one answer shows it: `chip:{title}|{status}`, none, or LEAK where a title only its roll may read is anywhere in the text. */
+    const chipIn = (r: Res, d: any): string => (SECRETS.some((s) => r.text.includes(s)) ? 'LEAK' : d ? `chip:${d.title}|${d.status}` : 'none');
+    const listOf = (r: Res, t: string) => (r.body?.topics ?? []).find((x: any) => x.id === t);
+
+    // The list's tag moves when the title a member reads moves: an admin hides the removal's case.
+    const listBefore = await call(nel, 'GET', `/api/forum/topics?section=${general}`);
+    const tagBefore = listBefore.headers.get('etag') ?? '';
+    const ownBefore = listOf(listBefore, chipTopic.removal)?.decision?.title;
+    const hid = adminHideCase(KINDS.removal.id, owner.pk, 'Shown to be false by the admins.');
+    require_(hid.success, `an admin hides the removal's case (${JSON.stringify(hid)})`);
+    const listAfter = await call(nel, 'GET', `/api/forum/topics?section=${general}`, undefined, { 'If-None-Match': tagBefore });
+    assert(ownBefore === OWN_TITLE && tagBefore !== '' && listAfter.status === 200 && listOf(listAfter, chipTopic.removal)?.decision?.title === 'Remove Bob?'
+        && listAfter.headers.get('etag') !== tagBefore,
+        `6. hiding a removal's case changes its chip's title and the list's tag, so the list answers anew, never 304 (${ownBefore === OWN_TITLE ? 'own title before' : ownBefore} | ${listAfter.status} ${listOf(listAfter, chipTopic.removal)?.decision?.title})`);
+    db.prepare('DELETE FROM decisions WHERE id = ?').run(KINDS.deleted.id);
+
+    // Link: the group's own member (Gil) and a member outside it (Nel), each on a topic of their own.
+    const linkers: { id: Id; label: string; topic: string }[] = [];
+    for (const [id, label] of [[gil, 'group member'], [nel, 'outside the group']] as [Id, string][]) {
+        const r = await start(id, { sectionId: general, title: `Linking ${label}`, words: 'Words.' });
+        require_(r.status === 201, `${id.name} starts a topic to link from (${show(r)})`);
+        linkers.push({ id, label, topic: r.body.topic.id });
+    }
+    const WANT_CHIP: Record<Kind, string> = { community: 'chip:Mend the common fence|open', group: 'none', enterprise: 'none', removal: 'chip:Remove Bob?|open', deleted: 'none' };
+    const linkMiss: string[] = [];
+    for (const l of linkers) {
+        const nobody = await linkBy(l.id, l.topic, 'dec-f8c-nobody');
+        require_(nobody.status === 404 && nobody.body?.code === 'decision_not_found', `an id nobody has is refused (${show(nobody)})`);
+        for (const k of kinds) {
+            const r = await linkBy(l.id, l.topic, KINDS[k].id);
+            const got = r.status === 200 ? chipIn(r, r.body?.topic?.decision) : r.status === nobody.status && r.text === nobody.text ? 'as nobody' : `${r.status} ${r.text.slice(0, 120)}`;
+            const want = WANT_CHIP[k] === 'none' ? 'as nobody' : WANT_CHIP[k];
+            if (got !== want) linkMiss.push(`link ${k} by ${l.label}: ${got}, want ${want}`);
+        }
+    }
+    assert(linkMiss.length === 0, `6. link x every kind x (group member, outside): the community's link with the title members read; a scoped or deleted one answers as an id nobody has, same status and body${linkMiss.length ? ` (${linkMiss.join(' | ')})` : ''}`);
+
+    // Read: a topic, the list, a search hit and a bell row, for the group's member and a member outside it.
+    const readMiss: string[] = [];
+    let readCells = 0;
+    for (const l of linkers) {
+        for (const k of kinds) {
+            db.prepare(`INSERT INTO push_notices (id, recipient, kind, title, body, data, sent_at) VALUES (?, ?, 'forum.reply', ?, ?, ?, ?)`)
+                .run(crypto.randomBytes(16).toString('hex'), l.id.pk, `Chip ${k} ${CHIP_MARK}`, 'There is 1 new reply in a topic you follow.',
+                    JSON.stringify({ screen: 'forum_topic', topicId: chipTopic[k], count: 1 }), Math.floor(Date.now() / 1000));
+        }
+        const list = await call(l.id, 'GET', `/api/forum/topics?section=${general}`);
+        const found = await search(l.id, CHIP_MARK);
+        const bell = await call(l.id, 'GET', '/api/notices/push');
+        for (const k of kinds) {
+            const topic = await call(l.id, 'GET', `/api/forum/topics/${chipTopic[k]}`);
+            const hit = (found.body?.hits ?? []).find((h: any) => h.topicId === chipTopic[k]);
+            const row = (bell.body?.notices ?? []).find((n: any) => n.data?.topicId === chipTopic[k]);
+            const got = {
+                topic: topic.status === 200 ? chipIn(topic, topic.body?.topic?.decision) : `${topic.status}`,
+                list: listOf(list, chipTopic[k]) ? chipIn(list, listOf(list, chipTopic[k]).decision) : 'no row',
+                search: hit ? chipIn(found, hit.decision ?? hit.topic?.decision) : 'no hit',
+                bell: row ? chipIn(bell, row.decision ?? row.data?.decision) : 'no row',
+            };
+            const want = { topic: WANT_CHIP[k], list: WANT_CHIP[k], search: 'none', bell: 'none' };
+            for (const way of Object.keys(want) as (keyof typeof want)[]) {
+                readCells++;
+                if (got[way] !== want[way]) readMiss.push(`${way} of ${k} by ${l.label}: ${got[way]}, want ${want[way]}`);
+            }
+        }
+    }
+    assert(readMiss.length === 0 && readCells === 2 * kinds.length * 4,
+        `6. read (topic, list, search hit, bell row) x every kind x (group member, outside): a chip only for the community's, the removal's with the node's title, no title only a roll may read anywhere (${readCells} cells${readMiss.length ? `: ${readMiss.join(' | ')}` : ''})`);
+
     // ── 7. Moves, a writer who left, a first topic waiting ──────────────────────────────────────
     console.log('── 7. moves, a writer who left, a first look ──');
     const outOf = await call(owner, 'POST', `/api/forum/topics/${T}/move`, { sectionId: general });
@@ -532,6 +648,69 @@ async function main(): Promise<void> {
     const off = await call(gil, 'POST', `/api/forum/topics/${T}/decision`, { decisionId: DECISION });
     assert(off.status === 404 && off.body?.code === 'decisions_off', `6. where Decisions are off, no chip (${show(off)})`);
     delete process.env.NODE_PROFILE;
+
+    // ── 9. Close the class: every forum write that makes a post x probation x the day's posts ───
+    // A topic's poll is the one forum write that makes a post (a posts row, as the Market's), so it takes the Market's two
+    // limits and is refused in the Market's own words: the same poll sent to the Market in the same state answers the same.
+    // A topic and a reply are the forum's own rows, under the forum's own day limits (FORUM_DAY_LIMITS, design §1 "two new
+    // numbers", test-forum): the Market's limits neither count nor refuse them. A first look's OK makes the topic its writer
+    // asked for, counted when asked, so it makes nothing new.
+    console.log('── 9. every forum write that makes a post x probation x the day\'s posts ──');
+    // Room in every poll pool, the community's five included, so a refusal is the limit's alone.
+    db.prepare("UPDATE posts SET status = 'completed' WHERE type = 'poll' AND status = 'active'").run();
+    const HOUR = 60 * 60 * 1000;
+    const earlierPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey, created_at) VALUES (?, 'need', 'other', 'Earlier', 'Earlier today.', ?, ?)`);
+    const STATES: { label: string; probation: boolean; earlier: number }[] = [
+        { label: 'probation off, the day not reached', probation: false, earlier: 0 },
+        { label: 'probation off, the day reached', probation: false, earlier: WRITER_LIMITS.postsPerDay },
+        { label: 'on probation, posts left', probation: true, earlier: 0 },
+        { label: 'on probation, its posts used', probation: true, earlier: PROBATION.posts },
+        { label: 'on probation, the day reached', probation: true, earlier: WRITER_LIMITS.postsPerDay },
+    ];
+    const uma = member('Uma');
+    const host = await start(uma, { sectionId: general, title: 'Replies welcome', words: 'Write here.' });
+    require_(host.status === 201, `a topic to reply in (${show(host)})`);
+    const OPTIONS = [{ id: 'a', text: 'Monday' }, { id: 'b', text: 'Tuesday' }];
+    const marketPoll = (id: Id) => call(id, 'POST', '/api/marketplace/posts',
+        { type: 'poll', category: 'community', title: 'Which day suits?', description: '', authorPublicKey: id.pk, pollOptions: OPTIONS, durationDays: 7 });
+    const PATHS = ['topic', 'reply', 'poll'] as const;
+    const limitMiss: string[] = [];
+    let newcomers = 0;
+    for (const st of STATES) {
+        setSwitchOverride('probation', st.probation);
+        for (const path of PATHS) {
+            // A new account, an hour old: on probation wherever the switch is on.
+            const who = member(`Newcomer${++newcomers}`);
+            db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(ago(HOUR), who.pk);
+            let own = '';
+            if (path === 'poll') {
+                const t = await start(who, { sectionId: general, title: `Poll topic ${newcomers}`, words: 'Which day?' });
+                require_(t.status === 201, `the poll's topic (${show(t)})`);
+                own = t.body.topic.id;
+            }
+            for (let i = 0; i < st.earlier; i++) earlierPost.run(`p-f8-earlier-${crypto.randomBytes(8).toString('hex')}`, who.pk, ago(HOUR / 2));
+            const r = path === 'topic' ? await start(who, { sectionId: general, title: `New topic ${newcomers}`, words: 'Words.' })
+                : path === 'reply' ? await reply(who, host.body.topic.id, { words: `A reply ${newcomers}.` })
+                : await addPoll(who, own, { pollOptions: OPTIONS });
+            const marketRefuses = path === 'poll' && st.earlier >= (st.probation ? PROBATION.posts : WRITER_LIMITS.postsPerDay);
+            let got: string, want: string;
+            if (marketRefuses) {
+                const m = await marketPoll(who);
+                const code = st.probation ? 'probation_limit' : 'posts_per_day';
+                want = m.body?.code === code ? `${m.status} ${m.body.code} ${m.body.error}` : `the Market answered ${show(m)}, not ${code}`;
+                got = `${r.status} ${r.body?.code} ${r.body?.error}`;
+            } else {
+                want = 'allowed';
+                got = r.status >= 200 && r.status < 300 ? 'allowed' : show(r);
+            }
+            if (got !== want) limitMiss.push(`${path}, ${st.label}: ${got} -- want ${want}`);
+            // An allowed poll is closed again, so the next cell has room in the pools.
+            if (path === 'poll' && r.status === 201) db.prepare("UPDATE posts SET status = 'completed' WHERE id = ?").run(r.body.pollId);
+        }
+    }
+    setSwitchOverride('probation', false);
+    assert(limitMiss.length === 0,
+        `9. (topic, reply, poll) x (probation off / on with posts left / on with them used) x (the day reached / not): the poll refused exactly as the Market refuses the same poll, topics and replies under the forum's own limits (${STATES.length * PATHS.length} cells${limitMiss.length ? `: ${limitMiss.join(' | ')}` : ''})`);
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exit(1);

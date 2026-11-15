@@ -71,6 +71,8 @@ import crypto from 'node:crypto';
 import Router from '@koa/router';
 import { isNodeMember, readsAsMember, assertMemberActive, getNodeRole, moderationNoticesCb, forumNoticeCb, createPost } from '../state-engine.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
+import { assertMayPost } from '../engine/probation.js';
+import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { memberErrorText } from './member-error-text.js';
 import { parseDataUrl } from '../storage/image-columns.js';
 import {
@@ -142,14 +144,17 @@ function refused(ctx: any, e: unknown): void {
 /**
  * A topic's poll as the ordinary poll's own door makes it (state-engine createPost: its answers, lengths, ballot and Other, the
  * one open a member, the section's pool), from the body the Market's poll form sends (routes/marketplace.ts), so both apps'
- * poll forms serve here as they are.
+ * poll forms serve here as they are. It is a new post, so it takes the two limits the Market's route puts around createPost
+ * (routes/marketplace.ts), in the same order and words: a new account's probation (assertMayPost, a poll keeps no photos),
+ * then the day's posts (assertMayPostToday, once every refusal of the poll itself has passed).
  */
 function makeForumPoll(author: string, body: any): MakeForumPoll {
     return ({ audienceScope, targetGroupId, forumSectionId, question }) => {
+        assertMayPost(author, 0);
         const post = createPost('poll', 'community', question, typeof body.description === 'string' ? body.description : '', 0, 'fixed', author,
             undefined, undefined, [], false, undefined, false, {
                 pollOptions: body.pollOptions, durationDays: body.durationDays, pollOpenVote: body.pollOpenVote, pollOther: body.pollOther,
-                audienceScope, targetGroupId, forumSectionId,
+                audienceScope, targetGroupId, forumSectionId, beforeWrite: () => assertMayPostToday(author),
             });
         if (!post) throw new ForumRefusal(403, 'not_member', ONLY_MEMBERS);
         return post.id;

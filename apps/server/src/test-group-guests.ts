@@ -586,11 +586,14 @@ async function main(): Promise<void> {
         && JSON.stringify(back13[0].body.guests) === JSON.stringify(homeGuests('a.example')) && back13[0].body.data.epoch?.stale === true
         && back13[0].body.data.epoch?.current === k13.current && JSON.stringify(keysOfRoster(back13[0].body.data)) === JSON.stringify(k13.roster),
         `13a. Gwen's epoch over a roster that is gone: epoch-stale, and the roster follows to her home alone, the epoch marked stale (got ${JSON.stringify(r13.body)}, ${back13.map((o) => o.home)})`);
-    const right13 = makeGroupEpochRecord({ myEdPrivHex: gwen.seedHex, groupId: S, epoch: (back13[0]?.body.data.epoch?.current ?? 0) + 1, reason: 'rotate', subject: null,
-        createdAt: new Date().toISOString(), recipients: keysOfRoster(back13[0]?.body.data) });
+    // From the roster she was sent (a server without the recovery sends none: the GET stands in, so the suite goes on and
+    // reports each check rather than stopping here; 13b itself still asks that the roster came).
+    const sent13 = back13[0]?.body.data;
+    const right13 = makeGroupEpochRecord({ myEdPrivHex: gwen.seedHex, groupId: S, epoch: (sent13?.epoch?.current ?? k13.current) + 1, reason: 'rotate', subject: null,
+        createdAt: new Date().toISOString(), recipients: sent13 ? keysOfRoster(sent13) : k13.roster });
     const r13b = await bring([await item(gwen, 'a.example', shedTo, 'group-epoch', JSON.stringify({ epoch: right13.record }))]);
     const k13b = await shedKeys();
-    assert(r13b.body?.items?.[0]?.received === true && k13b.current === right13.record.epoch && k13b.stale === false,
+    assert(!!sent13 && r13b.body?.items?.[0]?.received === true && k13b.current === right13.record.epoch && k13b.stale === false,
         `13b. the epoch she makes over exactly the keys she was sent goes in (got ${JSON.stringify(r13b.body)}, current ${k13b.current})`);
     // Ana rotates; Gwen's phone missed it and writes under the epoch before.
     const s4 = epochBy(ana, S, k13b.current + 1, 'rotate', [ana, jo, gwen, cy]);

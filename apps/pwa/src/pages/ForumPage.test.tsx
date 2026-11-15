@@ -510,3 +510,39 @@ describe('search (slice F6)', () => {
         expect(screen.queryByRole('button', { name: 'Show more results' })).toBeNull();
     });
 });
+
+/**
+ * Chat chosen in the menu while the Forum shows (ChatTabPage's homeNonce; Marty, 16 Nov: "clicking on chat in menu should take
+ * you back to the main chat menu - not just need the tiny back arrow"): from a topic, a new topic or the first looks, the topic
+ * list; a reply typed and not sent is in the box when the topic opens again.
+ */
+describe('Chat chosen in the menu while the Forum shows', () => {
+    it('from a topic: the topic list, and the reply typed is kept for the topic', async () => {
+        const view = render(<ForumPage me={ME} homeNonce={0} />);
+        fireEvent.click(await screen.findByText('Seed swap ideas'));
+        await screen.findByTestId('forum-topic-title');
+        fireEvent.change(await screen.findByTestId('forum-reply-box'), { target: { value: 'I can bring a few' } });
+        view.rerender(<ForumPage me={ME} homeNonce={1} />);
+        expect(await screen.findAllByTestId('forum-topic-row')).toHaveLength(2);
+        expect(screen.queryByTestId('forum-topic-title')).toBeNull();
+        fireEvent.click(await screen.findByText('Seed swap ideas'));
+        await screen.findByTestId('forum-topic-title');
+        expect(await screen.findByTestId('forum-reply-box')).toHaveValue('I can bring a few');
+    });
+
+    it('from a new topic: the topic list', async () => {
+        const view = render(<ForumPage me={ME} homeNonce={0} />);
+        await screen.findAllByTestId('forum-topic-row');
+        fireEvent.click(screen.getByRole('button', { name: '＋ New topic' }));
+        await waitFor(() => expect(screen.queryByTestId('forum-topic-row')).toBeNull());
+        view.rerender(<ForumPage me={ME} homeNonce={1} />);
+        expect(await screen.findAllByTestId('forum-topic-row')).toHaveLength(2);
+    });
+
+    it('on the topic list: it stays', async () => {
+        const view = render(<ForumPage me={ME} homeNonce={0} />);
+        await screen.findAllByTestId('forum-topic-row');
+        view.rerender(<ForumPage me={ME} homeNonce={1} />);
+        expect(await screen.findAllByTestId('forum-topic-row')).toHaveLength(2);
+    });
+});

@@ -190,7 +190,7 @@ async function main() {
             const mine = (await groupsOf(ana.publicKey)).map((r) => r.name);
             check(JSON.stringify(mine) === JSON.stringify(['Garden group', 'Street choir']), `the node has Ana in both groups (${JSON.stringify(mine)})`);
 
-            await page.getByRole('button', { name: 'Back to messages' }).click();
+            await page.getByRole('button', { name: 'Back to chats' }).click();
             await chips(page).getByRole('button', { name: /^Groups/ }).click();
             await page.getByText('Street choir', { exact: true }).first().waitFor({ timeout: 30_000 });
             check(await page.getByText('Garden group', { exact: true }).first().isVisible(), 'back on Groups, both her groups are listed');

@@ -740,7 +740,7 @@ describe('a request card', () => {
         await within(list).findByText('Cy here');
         fireEvent.click(await within(list).findByText('Hello'));
         await screen.findByTestId('request-mode');
-        fireEvent.click(screen.getByRole('button', { name: 'Back to messages' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to chats' }));
         const again = await screen.findByTestId('message-requests');
         expect(within(again).getByText('Cy here')).toBeInTheDocument();
         expect(within(again).getByText('Hello')).toBeInTheDocument();

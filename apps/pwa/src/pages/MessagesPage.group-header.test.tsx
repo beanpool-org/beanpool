@@ -149,7 +149,7 @@ describe("a group chat's header opens the group", () => {
 
     it('the back button and the search toggle keep their size beside it', async () => {
         await openChat();
-        const back = screen.getByRole('button', { name: 'Back to messages' });
+        const back = screen.getByRole('button', { name: 'Back to chats' });
         expect(back.style.flexShrink).toBe('0');
         expect(back.style.minWidth).toBe('44px');
         const search = screen.getByTestId('group-chat-search-toggle');
@@ -169,7 +169,7 @@ describe("a group chat's header opens the group", () => {
     it('a DM header stays as it was: no button to an owner', async () => {
         nodeType = 'dm';
         render(<MessagesPage identity={me} openConversationId={G} onNavigate={onNavigate} />);
-        await screen.findByRole('button', { name: 'Back to messages' }, { timeout: 5000 });
+        await screen.findByRole('button', { name: 'Back to chats' }, { timeout: 5000 });
         expect(screen.queryByTestId('chat-owner-header')).toBeNull();
         expect(screen.queryByRole('button', { name: /group info|enterprise page/ })).toBeNull();
     });

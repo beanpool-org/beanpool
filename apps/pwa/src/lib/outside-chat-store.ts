@@ -4,8 +4,9 @@
  *
  * Nobody else keeps these lines: the member's community held each one sealed until every device of theirs had it, then
  * deleted it (the mailbox, X2; each device for itself, X2b). Their lines reach each phone and browser signed in when they
- * came; what I write shows only where I wrote it. So this is not a copy of the node's. Its own database (`beanpool-outside-chats`), one
- * per web address as every store of this app is, documents per account (`<my key>/…`), so another account in this browser
+ * came; what I write shows only where I wrote it. So this is not a copy of the node's. Its own database
+ * (`beanpool-outside-chats`), one per web address as every store of this app is, documents per account (`<my key>/…`: the
+ * chats, their lines, the receipts owed, and the meta, this browser's mail id among it), so another account in this browser
  * starts on its own. Sign Out and the delete at the last community clear it (lib/device-prefs.ts clearAccountStorage). A
  * browser newly signed in has none of it: a chat it learns of from the outbox comes back empty and `restored`, and says why.
  *

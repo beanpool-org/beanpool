@@ -459,7 +459,7 @@ async function main(): Promise<void> {
     type MRow = { what: string; kinds: string[]; stand?: 'invited' | 'in'; build: (g: string) => Promise<Array<{ envelope: any; payload: string }>>; want: string };
     const M_ROWS: MRow[] = [
         { what: 'his leave, in', kinds: ['group-leave'], stand: 'in', build: async (g) => [await groupIt('leave', g)], want: 'left' },
-        { what: 'his leave, invited (joining)', kinds: ['group-leave'], stand: 'invited', build: async (g) => [await groupIt('leave', g)], want: 'left' },
+        { what: 'his leave, invited', kinds: ['group-leave'], stand: 'invited', build: async (g) => [await groupIt('leave', g)], want: 'left' },
         { what: 'his no to an invitation', kinds: ['group-invite'], stand: 'invited', build: async (g) => [await groupIt('no', g)], want: 'declined' },
         { what: 'his yes to an invitation (it lets him speak there)', kinds: ['group-invite'], stand: 'invited', build: async (g) => [await groupIt('yes', g)], want: 'muted' },
         { what: 'a line', kinds: ['group-line'], stand: 'in', build: async (g) => [await groupIt('line', g)], want: 'muted' },

@@ -39,7 +39,8 @@ export function ChatMemoryCard({ communities, onReset }: { communities: ChatMemo
                     {asking === c.url ? (
                         <View style={styles.confirmBox}>
                             <Text style={styles.confirmTitle} accessibilityRole="header">{chatMemoryConfirmTitle(c.name)}</Text>
-                            <Text style={styles.confirmText}>{t(CHAT_MEMORY_COPY.confirm)} {t(CHAT_MEMORY_COPY.verifiedGo)}</Text>
+                            <Text style={styles.confirmText}>{t(CHAT_MEMORY_COPY.confirm)}</Text>
+                            <Text style={styles.confirmText}>{t(CHAT_MEMORY_COPY.verifiedGo)}</Text>
                             <Pressable style={styles.confirmBtn} onPress={() => { void reset(c.url); }} disabled={busy} accessibilityRole="button" accessibilityLabel={chatMemoryResetLabel(c.name)}>
                                 <Text style={styles.confirmBtnText}>{t(CHAT_MEMORY_COPY.reset)}</Text>
                             </Pressable>

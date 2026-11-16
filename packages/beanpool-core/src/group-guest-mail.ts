@@ -175,9 +175,11 @@ function lineRefused(e: unknown): boolean {
  * where they could see it: it goes until the host has it. Only `not_in_group` stops it (`final`, kept `refused`): my server
  * holds me out of that group (its list says so at the next round) or a leave of mine from another device already waits
  * there (applyLeaveTick makes mine due again if that one fails). A 400 or 413 is about the item itself (its time too far
- * from my server's clock, a home since renamed): a `new` one is signed. Every other answer passes (a mute that ends, guests
- * switched on again, a rate window, a standby made main, a clock put right, a signature): the kept one goes `again` at the
- * next round. Every answer POST /api/mail/send gives, and which way it goes: group-guest-mail.test.ts, REFUSALS.
+ * from my server's clock, a home since renamed): a `new` one is signed. Every other answer passes (guests switched on again,
+ * a rate window, a standby made main, a clock put right, a signature): the kept one goes `again` at the next round. A mute
+ * never refuses it: a mute stops a member speaking, never stepping away, so my server takes a muted member's leave (the
+ * server's routes/relay.ts speaksIn). Every answer POST /api/mail/send gives, and which way it goes: group-guest-mail.test.ts,
+ * REFUSALS.
  */
 function leaveRefusal(e: unknown): 'final' | 'new' | 'again' {
     const { status, code } = answerOfError(e);

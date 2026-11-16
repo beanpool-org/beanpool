@@ -813,6 +813,8 @@ describe('REFUSALS (part 2 fix round): every answer short of a 2xx my server giv
         { what: 'another server took over (read-only)', status: 503, leave: 'again', line: 'waits' },
         { what: 'private preview', status: 403, code: 'private_preview', leave: 'again', line: 'fails' },
         { what: 'no member here (suspended)', status: 403, code: 'not_a_member', leave: 'again', line: 'fails' },
+        // A mute never refuses a leave at my server (the server's routes/relay.ts speaksIn): only a line meets it there. The
+        // leave's column is the rule for any 403 that passes, kept so no answer goes without a row.
         { what: 'muted', status: 403, code: 'moderation_muted', leave: 'again', line: 'fails' },
         { what: 'guests or outside messages off here', status: 403, code: 'guests_off', leave: 'again', line: 'fails' },
         { what: 'a standby', status: 503, code: 'standby', leave: 'again', line: 'waits' },

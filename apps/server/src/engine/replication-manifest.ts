@@ -386,7 +386,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     join_requests: {
         kind: 'replicated-except', payload: 'joinRequests', watermark: 'updated_at',
-        columns: cols('id pubkey callsign message avatar from_node status created_at decided_by invite_code decided_at updated_at via_post_id via_sharer_pubkey'),
+        columns: cols('id pubkey callsign message avatar from_node status created_at decided_by invite_code decided_at updated_at via_post_id via_sharer_pubkey forum_posts'),
         except: { ip_hash: { reason: "the knock limiter's, for a day; never sent (engine/knocks.ts)" } },
     },
     moderation_notices: {
@@ -604,7 +604,7 @@ export const TABLES: Record<string, TableEntry> = {
     forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at hidden_by_reports_at'),
     forum_post_photos: plain('post_id order_num photo_data bytes updated_at'),
     forum_post_edits: plain('post_id edited_at words title updated_at', { agedOut: { column: 'edited_at', days: 30 } }),
-    forum_members: plain('member_pubkey told_public_at updated_at known_at'),
+    forum_members: plain('member_pubkey told_public_at updated_at known_at proof_secret'),
     // What a member shows beside their name on a public forum (engine/membership-note.ts, slice F10): a standby draws the same
     // label, and "Don't show" goes with a tombstone, so it leaves the standby too. The note is never kept, so nothing of it
     // travels. An older importer drops it: after a take-over from its copy every label is gone until its member sets it again.

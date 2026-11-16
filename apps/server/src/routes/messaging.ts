@@ -10,7 +10,7 @@ import {
     getConversationsByMember, toggleMessageReaction,
     getConversationMessages, getConversation,
     markConversationRead, getListedUnreadCounts, getUnreadCounts, getUnreadAnswer,
-    getMember, isNodeMember, isLiveVisitor, getNodeRole, passesReadGate, weighRequestReports,
+    isNodeMember, isLiveVisitor, getNodeRole, passesReadGate, weighRequestReports,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
 import { canReadEventThread, withEventChatReaders, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatListedFor, waitingForHost, EVENT_CHAT_GONE, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
@@ -20,10 +20,6 @@ import { isKeeperOfEnterprise, markKeeperThreadRead, isEnterpriseThreadGone, ent
 import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
 import { accountsDeletedAmong } from '../engine/message-tombstone.js';
 import { withDmFormerKeys } from '../engine/key-succession.js';
-import { getLocalConfig } from '../config/local-config.js';
-import { getConnectorByPublicUrl } from '../connector-manager.js';
-import { relayLineToPeer } from '../federation-protocol.js';
-import { getP2PNode } from '../p2p.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { assertDmLineFits, assertMayReachNewPeople } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -34,7 +30,7 @@ import { READER_CACHE_CONTROL } from '../guest-cache.js';
 import type { RouteDeps } from './types.js';
 import { isNameableAccount, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import {
-    withheldConversationOwnedBy, withheldConversationById, withheldConversationView, withheldLine, pageWithOwnWithheld, listWithOwnWithheld, markWithheldConversationRead,
+    withheldConversationOwnedBy, withheldConversationById, withheldConversationView, pageWithOwnWithheld, listWithOwnWithheld, markWithheldConversationRead,
 } from '../engine/withheld-lines.js';
 import { withRequestFor, sortRequestsOut, decideRequest, ignoreAllRequests, RequestDecisionError } from '../engine/dm-requests.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
@@ -268,52 +264,6 @@ router.post('/api/messages/send', async (ctx) => {
         ctx.body = { error: SEND_NOT_FOUND.error };
         return;
     }
-
-    // --- FEDERATION RELAY ---
-    try {
-        // Use the RESOLVED conversation id the message was actually stored under
-        // (sendMessage may remap a legacy/consolidated conversationId to the active
-        // DM). Looking up the raw request `conversationId` here would miss the
-        // participants of a consolidated thread and silently skip cross-node relay.
-        // A line kept for its sender alone (engine/withheld-lines.ts) goes nowhere.
-        const conv = withheldLine(msg.id) ? undefined : getConversation(msg.conversationId);
-        if (conv && conv.type === 'dm') {
-            const otherPubkey = conv.participants.find(p => p !== authorPubkey);
-            if (otherPubkey) {
-                const otherMember = getMember(otherPubkey);
-
-                // If the other member has a homeNodeUrl, they are a visitor from a remote node
-                if (otherMember && otherMember.homeNodeUrl) {
-                    const p2pNode = getP2PNode();
-                    if (p2pNode) {
-                        const targetConnector = getConnectorByPublicUrl(otherMember.homeNodeUrl);
-                        if (targetConnector && targetConnector.peerId) {
-                            const localMember = getMember(authorPubkey);
-                            const localConfig = getLocalConfig();
-                            const hostname = process.env.CF_RECORD_NAME || (localConfig.communityName ? localConfig.communityName.toLowerCase().replace(/\s+/g, '') + '.beanpool.org' : undefined);
-                            const localUrl = hostname ? `https://${hostname}` : undefined;
-
-                            // Fire-and-forget over secure Libp2p mesh; a refusal or a failure is logged, never thrown here.
-                            void relayLineToPeer(p2pNode, targetConnector.peerId, targetConnector.callsign || null, {
-                                // The line's id, carried verbatim: the line is sealed to it (relayedMessageId).
-                                id: msg.id,
-                                senderPublicKey: authorPubkey,
-                                senderCallsign: localMember?.callsign,
-                                senderNodeUrl: localUrl,
-                                recipientPublicKey: otherPubkey,
-                                ciphertext,
-                                nonce,
-                                metadata
-                            });
-                        }
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        console.error('[Federation] Error during message relay:', e);
-    }
-    // -----------------------
 
     ctx.body = { success: true, message: msg };
 });

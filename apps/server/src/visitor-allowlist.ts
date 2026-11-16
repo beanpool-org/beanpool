@@ -19,9 +19,9 @@
  * holds no role (engine/node-roles.ts NODE_ROLE_ACTS).
  *
  * Federation needs nothing here. Its paths reach a federation visitor's row through the peer protocol and engine calls,
- * never a request that row signs on this node: the relayed DM (federation-protocol.ts relay_message: registerVisitor,
- * then createConversation and sendMessage as the visitor), the settlement exchange (handleReserve: registerVisitor), the
- * listing pull (registerVisitor and a posts insert) and the handshake (registerVisitor). The cross-community purchase
+ * never a request that row signs on this node: the settlement exchange (handleReserve: registerVisitor), the listing pull
+ * (registerVisitor and a posts insert) and the handshake (registerVisitor). The relayed DM (relay_message) is deleted
+ * (X7): mail from another community makes no row here at all (engine/relay-mail.ts). The cross-community purchase
  * and commission (/api/federation/purchase, /api/federation/commission) are the buyer's own node's routes, signed by a
  * member there; a visitor's row signing one here gets this refusal where it had the route's ("buy from home").
  */

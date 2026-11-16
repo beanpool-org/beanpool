@@ -39,7 +39,7 @@ import {
     type TrustLevel,
 } from './connector-manager.js';
 import { federationCors, mountFederationRoutes } from './federation-api.js';
-import { federatedRelayMessage, federatedVerifyMember } from './federation-protocol.js';
+import { federatedVerifyMember } from './federation-protocol.js';
 import { getP2PNode } from './p2p.js';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { IncomingMessage } from 'node:http';

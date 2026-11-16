@@ -209,24 +209,37 @@ beforeEach(async () => {
             for (let hop = 0; hop < 8 && net.rekeyedTo.get(community)?.has(at); hop++) at = net.rekeyedTo.get(community)!.get(at)!;
             return at;
         };
+        // A node from before former keys were named (null) names none, and no person, in any answer.
+        const named = net.formerKeys.get(community);
+        // Every key a person is known by, the key they hold now first (key-succession.ts personKeysOf).
+        const personOf = (key: string) => {
+            const now = heldNow(key);
+            return [now, ...(named?.get(now) ?? [])];
+        };
+        // Every answer: the list, and for each key on it a re-key put in place of others, those others.
+        const listed = () => ({
+            ...(named === null ? {} : { formerKeys: Object.fromEntries([...(named ?? new Map()).entries()].filter(([k]) => list.has(k))) }),
+            blocked: [...list].map((publicKey) => ({ publicKey, blockedAt: 'x' })),
+            max: 500,
+        });
+        // One row per person (member-blocks.ts): a block leaves only their key now, an unblock takes off every key of theirs.
         let extra: Record<string, unknown>;
         if (path === '/api/blocks' && typeof body.targetPubkey === 'string') {
-            const key = heldNow(body.targetPubkey);
-            extra = { added: list.has(key) ? [] : [key] };
+            const [key, ...formers] = personOf(body.targetPubkey);
+            formers.forEach((k) => list.delete(k));
+            extra = { added: list.has(key) ? [] : [key], ...(named === null ? {} : { person: [key, ...formers] }) };
             list.add(key);
         } else if (path === '/api/blocks' && Array.isArray(body.targetPubkeys)) {
             const keys = [...new Set<string>(body.targetPubkeys.map(heldNow))];
             const here = keys.filter((k: string) => net.known.has(k));
             extra = { added: here.filter((k: string) => !list.has(k)), skipped: keys.length - here.length };
-            here.forEach((k: string) => list.add(k));
+            here.forEach((k: string) => { personOf(k).slice(1).forEach((f) => list.delete(f)); list.add(k); });
         } else if (path === '/api/blocks/remove') {
-            const gone = [...new Set<string>([body.targetPubkey, heldNow(body.targetPubkey)])].map((k) => list.delete(k));
-            extra = { removed: gone.some(Boolean) };
+            const person = personOf(body.targetPubkey);
+            const gone = [...new Set<string>([body.targetPubkey, ...person])].map((k) => list.delete(k));
+            extra = { removed: gone.some(Boolean), ...(named === null ? {} : { person }) };
         } else if (path === '/api/blocks' && init?.method === 'GET') {
-            // The read: the list, and for each key on it a re-key put in place of others, those others.
-            const named = net.formerKeys.get(community);
-            const formerKeys = named === null ? undefined : Object.fromEntries([...(named ?? new Map()).entries()].filter(([k]) => list.has(k)));
-            return reply(200, { ...(formerKeys ? { formerKeys } : {}), blocked: [...list].map((publicKey) => ({ publicKey, blockedAt: 'x' })), max: 500 });
+            return reply(200, listed());
         } else {
             return reply(404, null, 'Not Found');
         }
@@ -243,7 +256,7 @@ beforeEach(async () => {
             });
             return { ok: true, status: 200, json: never, text: never } as unknown as Response;
         }
-        return reply(200, { success: true, ...extra, blocked: [...list].map((publicKey) => ({ publicKey, blockedAt: 'x' })), max: 500 });
+        return reply(200, { success: true, ...extra, ...listed() });
     }));
     const { draftIdentity } = await import('../identity');
     ana = await draftIdentity('Ana');
@@ -1022,6 +1035,9 @@ describe("a block of someone since re-keyed follows them to their new key (follo
         const named = net.formerKeys.get(community) ?? new Map<string, string[]>();
         named.set(to, [from]);
         net.formerKeys.set(community, named);
+        const moved = net.rekeyedTo.get(community) ?? new Map<string, string>();
+        moved.set(from, to);
+        net.rekeyedTo.set(community, moved);
     }
     const HARASSER_NEW = 'ef'.repeat(32);
     const reads = () => net.sent.filter((s) => s.url === `${NODE}/api/blocks` && Object.keys(s.body).length === 0);
@@ -1204,4 +1220,247 @@ describe('a block is of a person: any order of block, unblock, re-key, follow an
         expect(disagreements.slice(0, 12)).toEqual([]);
         expect(disagreements).toHaveLength(0);
     }, 180_000);
+});
+
+describe('a block is of a person, from every screen that blocks or unblocks (a table generated from the app code; review of #3268, round 4)', () => {
+    const OLD = 'b1'.repeat(32);
+    const NEW = 'b2'.repeat(32);
+    const NEWER = 'b3'.repeat(32);
+    const NAMES: Record<string, string> = { [OLD]: 'old', [NEW]: 'new', [NEWER]: 'newer' };
+    type Offer = 'block' | 'unblock' | 'unblock row' | 'unblock all';
+    /**
+     * What each place in the app that calls blockUser, unblockUser or clearBlocklist offers. A call site the scan finds and
+     * this table doesn't name fails the first test, so a new screen can't skip the table. Every Block is offered where the
+     * screen shows the person unblocked (isUserBlocked of the key it holds is false), an Unblock where it shows them
+     * blocked, Settings' rows once each (getBlockedPeople), and Unblock All while Settings lists anyone.
+     */
+    const ENTRIES: Record<string, Offer> = {
+        'app/public-profile.tsx blockUser': 'block',
+        'app/public-profile.tsx unblockUser': 'unblock',
+        'app/contacts.tsx unblockUser': 'unblock',
+        'app/(tabs)/settings.tsx unblockUser': 'unblock row',
+        'app/(tabs)/settings.tsx clearBlocklist': 'unblock all',
+        'app/treasury-detail.tsx blockUser': 'block',
+        'app/post/[id].tsx blockUser': 'block',
+        'app/forum/[id].tsx blockUser': 'block',
+        'app/outside-chat/[id].tsx blockUser': 'block',
+        'components/Bills.tsx blockUser': 'block',
+        'utils/request-report.ts blockUser': 'block',
+    };
+
+    /** Each file and function that blocks or unblocks, read from the app's own code (screens, components, utils). */
+    async function callSites(): Promise<string[]> {
+        const { readdirSync, readFileSync, statSync } = await import('node:fs');
+        const { join, relative } = await import('node:path');
+        const root = join(__dirname, '..', '..');
+        const found = new Set<string>();
+        const walk = (dir: string) => {
+            for (const name of readdirSync(dir)) {
+                const at = join(dir, name);
+                if (name === '__tests__' || name === 'node_modules') continue;
+                if (statSync(at).isDirectory()) {
+                    walk(at);
+                    continue;
+                }
+                const rel = relative(root, at).split('\\').join('/');
+                if (!/\.tsx?$/.test(name) || rel === 'utils/blocklist.ts') continue;
+                const code = readFileSync(at, 'utf8').split('\n').filter((line) => !/^\s*import\b/.test(line)).join('\n');
+                for (const m of code.matchAll(/\b(blockUser|unblockUser|clearBlocklist)\s*\(/g)) found.add(`${rel} ${m[1]}`);
+            }
+        };
+        for (const dir of ['app', 'components', 'utils']) walk(join(root, dir));
+        return [...found].sort();
+    }
+
+    it('names every place in the app that blocks or unblocks', async () => {
+        expect(await callSites()).toEqual(Object.keys(ENTRIES).sort());
+    });
+
+    it('every state any order of up to 6 steps reaches, then the app back online (follow + sync): the phone list, each key, both DM shapes, Settings, the community and the web say the same', async () => {
+        const { dmPeerKeys, isDmBlocked } = await import('../dm-blocked');
+        const app = await startApp();
+        net.known = new Set([...net.known, OLD, NEW, NEWER]);
+        vi.useFakeTimers({ toFake: ['Date'] });
+        let clock = Date.now();
+        mem.async.set('beanpool_blocked_users_moved', '1');
+        mem.secure.clear();
+        await app.identity.importIdentity(ana);
+
+        interface World { async: [string, string][]; lists: [string, string[]][]; rekeyedTo: [string, string][]; formerKeys: [string, string[]][]; up: boolean; chain: string[]; blocked: boolean }
+        let chain: string[] = [OLD];
+        let blocked = false;
+        const save = (): World => ({
+            async: [...mem.async.entries()],
+            lists: [...net.lists.entries()].map(([k, v]) => [k, [...v]]),
+            rekeyedTo: [...(net.rekeyedTo.get(NODE) ?? new Map<string, string>()).entries()],
+            formerKeys: [...(net.formerKeys.get(NODE) ?? new Map<string, string[]>()).entries()].map(([k, v]) => [k, [...v]]),
+            up: net.up,
+            chain: [...chain],
+            blocked,
+        });
+        // The module's list in memory goes with a change of account: one there and back makes it read the world restored.
+        const restore = async (w: World) => {
+            mem.async.clear();
+            w.async.forEach(([k, v]) => mem.async.set(k, v));
+            net.lists.clear();
+            w.lists.forEach(([k, v]) => net.lists.set(k, new Set(v)));
+            net.rekeyedTo.set(NODE, new Map(w.rekeyedTo));
+            net.formerKeys.set(NODE, new Map(w.formerKeys.map(([k, v]) => [k, [...v]])));
+            net.up = w.up;
+            chain = [...w.chain];
+            blocked = w.blocked;
+            net.sent = [];
+            // Two minutes on each time: never short of room in the 30 requests a minute.
+            clock += 2 * 60 * 1000;
+            vi.setSystemTime(clock);
+            for (const account of [ben, ana]) {
+                mem.secure.clear();
+                await app.identity.importIdentity(account);
+                await app.getBlockedUsers();
+            }
+        };
+        /** Each change's place in the order as its rank, so two orders that leave the same changes meet as one state. */
+        const ranked = (v: string) => {
+            try {
+                const parsed = JSON.parse(v);
+                return Object.entries((parsed?.of ?? {}) as Record<string, { blocked: boolean; n: number }>)
+                    .sort((a, b) => a[1].n - b[1].n).map(([k, c]) => [k, c.blocked]);
+            } catch {
+                return v;
+            }
+        };
+        /** What decides what happens next: the phone's block stores and what the community holds. */
+        const stateKey = (w: World) => JSON.stringify([
+            w.async.filter(([k]) => /block/.test(k)).map(([k, v]) => [k, /changes/.test(k) ? ranked(v) : v]).sort(),
+            w.lists.filter(([, v]) => v.length > 0).sort(), w.rekeyedTo, w.formerKeys, w.up, w.chain, w.blocked,
+        ]);
+        const rekey = (from: string, to: string) => {
+            for (const [k, list] of net.lists) if (k.startsWith(`${NODE}|`) && list.delete(from)) list.add(to);
+            net.rekeyedTo.get(NODE)!.set(from, to);
+            const named = net.formerKeys.get(NODE)!;
+            named.set(to, [from, ...(named.get(from) ?? [])]);
+            chain.push(to);
+        };
+
+        const offers = new Set(Object.values(ENTRIES));
+        /** `shown`: what the screens must show the moment the step returns, before any answer (the pending state). */
+        interface Step { name: string; offered: () => Promise<boolean>; run: () => Promise<void>; shown?: () => Promise<boolean> }
+        let lastUnblocked = '';
+        const steps: Step[] = [];
+        for (const key of [OLD, NEW, NEWER]) {
+            if (offers.has('block')) {
+                steps.push({
+                    name: `block ${NAMES[key]}`,
+                    offered: async () => chain.includes(key) && !(await app.isUserBlocked(key)),
+                    run: async () => { await app.blockUser(key); blocked = true; },
+                    shown: async () => app.isUserBlocked(key),
+                });
+            }
+            if (offers.has('unblock')) {
+                steps.push({
+                    name: `unblock ${NAMES[key]}`,
+                    offered: async () => chain.includes(key) && (await app.isUserBlocked(key)),
+                    run: async () => { await app.unblockUser(key); blocked = false; },
+                    shown: async () => !(await app.isUserBlocked(key)),
+                });
+            }
+        }
+        for (const row of offers.has('unblock row') ? [0, 1, 2] : []) {
+            steps.push({
+                name: `unblock Settings row ${row + 1}`,
+                offered: async () => (await app.getBlockedPeople()).length > row,
+                run: async () => {
+                    lastUnblocked = (await app.getBlockedPeople())[row];
+                    await app.unblockUser(lastUnblocked);
+                    blocked = false;
+                },
+                shown: async () => !(await app.isUserBlocked(lastUnblocked)),
+            });
+        }
+        if (offers.has('unblock all')) {
+            steps.push({
+                name: 'unblock all',
+                offered: async () => (await app.getBlockedPeople()).length > 0,
+                run: async () => { await app.clearBlocklist(); blocked = false; },
+                shown: async () => (await app.getBlockedUsers()).length === 0 && (await app.getBlockedPeople()).length === 0,
+            });
+        }
+        steps.push(
+            { name: 're-key old→new', offered: async () => chain[chain.length - 1] === OLD, run: async () => rekey(OLD, NEW) },
+            { name: 're-key new→newer', offered: async () => chain[chain.length - 1] === NEW, run: async () => rekey(NEW, NEWER) },
+            { name: 'follow', offered: async () => true, run: async () => { await app.followRekeyedBlocks(); } },
+            { name: 'sync', offered: async () => true, run: async () => { await app.syncBlocks(); } },
+            { name: 'offline', offered: async () => net.up, run: async () => { net.up = false; } },
+            { name: 'online', offered: async () => !net.up, run: async () => { net.up = true; } },
+        );
+
+        /** The app back online (app/_layout.tsx: the follow, then the sync), and every view held to the member's last word. */
+        const disagreement = async (): Promise<string | null> => {
+            net.up = true;
+            await app.followRekeyedBlocks();
+            await app.syncBlocks();
+            await app.blockSyncsEndedForTests();
+            const now = chain[chain.length - 1];
+            const list = await app.getBlockedUsers();
+            const community = [...listAt(NODE, ana.publicKey)];
+            const said: Record<string, boolean> = {
+                dmBothRows: isDmBlocked(dmPeerKeys(chain.join(','), { peer: now, former: chain.slice(0, -1) }), list),
+                dmNewRow: isDmBlocked(dmPeerKeys([now], { peer: now, former: chain.slice(0, -1) }), list),
+                dmOldRow: isDmBlocked(dmPeerKeys([OLD], null), list),
+                ...Object.fromEntries(await Promise.all(chain.map(async (k) => [`isUserBlocked(${NAMES[k]})`, await app.isUserBlocked(k)] as const))),
+                community: community.length === 1 && community[0] === now,
+                web: community.includes(now),
+                settingsOneRow: (await app.getBlockedPeople()).length === 1,
+            };
+            const wrong = Object.entries(said).filter(([, v]) => v !== blocked).map(([k]) => k);
+            const named = (keys: string[]) => keys.map((k) => NAMES[k] ?? k.slice(0, 6)).join('+') || 'nothing';
+            if (community.some((k) => k !== now)) wrong.push(`community holds ${named(community)}`);
+            if (list.some((k) => !chain.includes(k)) || (blocked && list.length !== chain.length) || (!blocked && list.length > 0)) {
+                wrong.push(`phone list ${named(list)}`);
+            }
+            return wrong.length > 0 ? `→ ${blocked ? 'blocked' : 'unblocked'}, but: ${wrong.join(' ')}` : null;
+        };
+
+        net.formerKeys.set(NODE, new Map());
+        net.rekeyedTo.set(NODE, new Map());
+        let frontier: { world: World; path: string[] }[] = [{ world: save(), path: [] }];
+        const seen = new Set<string>([stateKey(frontier[0].world)]);
+        const disagreements: string[] = [];
+        let checked = 0;
+        let stepsRun = 0;
+        const perDepth: number[] = [];
+        for (let depth = 0; depth <= 6; depth++) {
+            perDepth.push(frontier.length);
+            const next: typeof frontier = [];
+            for (const { world, path } of frontier) {
+                // Its next steps first, then the check (which brings the app back online and so changes the world).
+                for (const step of depth < 6 ? steps : []) {
+                    await restore(world);
+                    if (!(await step.offered())) continue;
+                    stepsRun += 1;
+                    // The block and unblock syncs run behind the step; what the screens show must not wait for them.
+                    await step.run();
+                    if (step.shown && !(await step.shown())) disagreements.push(`${[...path, step.name].join(', ')} → not shown at once`);
+                    await app.blockSyncsEndedForTests();
+                    const child = save();
+                    const key = stateKey(child);
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    next.push({ world: child, path: [...path, step.name] });
+                }
+                await restore(world);
+                const wrong = await disagreement();
+                checked += 1;
+                if (wrong) disagreements.push(`${path.join(', ') || '(nothing)'} ${wrong}`);
+            }
+            frontier = next;
+            vi.clearAllMocks();
+        }
+        console.log(`[table] ${steps.length} steps (${steps.map((s) => s.name).join(' | ')}); ${stepsRun} steps run; ${checked} states checked (new at each depth 0-6: ${perDepth.join(', ')}); ${disagreements.length} disagree`);
+        expect(disagreements.slice(0, 12)).toEqual([]);
+        expect(disagreements).toHaveLength(0);
+        // Every depth reached something new: the walk went the whole 6 steps.
+        expect(perDepth.every((n) => n > 0)).toBe(true);
+        expect(checked).toBeGreaterThan(300);
+    }, 600_000);
 });

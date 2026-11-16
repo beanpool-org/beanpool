@@ -42,6 +42,7 @@ const STORES: Record<string, Kind> = {
     PENDING_ABUSE_REPORTS_STORE_KEY: PHONE,
     blockedUsersStoreKey: PHONE,
     blockedKeyChainsStoreKey: PHONE,
+    blockChangesStoreKey: PHONE,
     MESSAGE_REQUESTS_STORE_PREFIX: PHONE,
     PUSH_TOKEN_STORE_KEY: PHONE,
     PUSH_STAMP_STORE_KEY: PHONE,

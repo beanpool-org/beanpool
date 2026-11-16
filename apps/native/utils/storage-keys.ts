@@ -121,6 +121,16 @@ export function blockedKeyChainsStoreKey(publicKey: string): string {
     return `beanpool_blocked_key_chains:${publicKey.toLowerCase()}`;
 }
 
+/**
+ * The blocks and unblocks one account made on this phone, in the order it made them (utils/blocklist.ts): an object,
+ * `{ next, of }`, each key the member blocked or unblocked → its latest change and that change's place in the order. The
+ * list {@link blockedUsersStoreKey} is what these say, person by person, as the community names their keys. Kept with
+ * that list when the account leaves the phone; never read for another account.
+ */
+export function blockChangesStoreKey(publicKey: string): string {
+    return `beanpool_block_changes:${publicKey.toLowerCase()}`;
+}
+
 /** Every {@link messageRequestsStoreKey} key starts with this. */
 export const MESSAGE_REQUESTS_STORE_PREFIX = 'beanpool_message_requests:';
 

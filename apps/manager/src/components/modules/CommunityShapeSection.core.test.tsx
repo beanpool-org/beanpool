@@ -118,6 +118,38 @@ describe('Core settings — locked: Unlock to change', () => {
         expect(screen.queryByTestId('core-unconfirmed-banner')).toBeNull();
     });
 
+    it('the Forum and Learn rows are no Core settings: locked or not, an owner opens them with the chevron and saves with no proof (#3248 review)', async () => {
+        const lockedWithBoth = () => shapeWith({
+            core: { settings: [...CORE_SETTINGS], lock: LOCK, place: { needed: true, set: true } },
+            settings: {
+                forum: { value: true, configured: true, source: 'default', lock: null },
+                knowledge: { value: true, configured: true, source: 'default', lock: null },
+            } as Partial<ShapeSettings>,
+        });
+        const { sent } = mockApi(lockedWithBoth(), [{ ok: true, status: 200, body: { shape: lockedWithBoth(), told: 'members' } }]);
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await screen.findByText('🧭');
+        for (const id of ['forum', 'knowledge']) {
+            const row = screen.getByTestId(`shape-row-${id}`);
+            // No lock line and no Unlock button: the row's header is its own button, with the chevron.
+            expect(screen.queryByTestId(`shape-core-lock-${id}`)).toBeNull();
+            expect(within(row).queryByRole('button', { name: 'Unlock to change' })).toBeNull();
+            expect(within(row).getByText('›')).toBeInTheDocument();
+        }
+        // A Core row beside them is still locked.
+        expect(within(screen.getByTestId('shape-row-decisions')).getByRole('button', { name: 'Unlock to change' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByTestId('shape-expand-knowledge'));
+        fireEvent.click(screen.getByRole('checkbox', { name: /Learn on/ }));
+        // No typed word and no proof box: nothing here asks for the owner's proof.
+        expect(screen.queryByTestId('fresh-proof-step-up')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
+        expect(sent).toHaveLength(1);
+        expect(sent[0].body.changes).toEqual({ knowledge: false });
+        expect(sent[0].body.code).toBeUndefined();
+    });
+
     it('an admin reads the lock line and has no Unlock button', async () => {
         mockApi(locked());
         render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);

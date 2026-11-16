@@ -278,8 +278,12 @@ export function CommunityShapeSection({
                     ? t('Locked. Only an owner unlocks it; you can advise them below.')
                     : t('Locked. Only an owner unlocks it.');
 
+    // The lock holds only the Core settings (CORE_SETTINGS, as the server's): the Forum and Learn rows share the card but no
+    // lock, so they keep the plain chevron and save with no proof, as their guide pages say (#3248 review).
+    const heldByLock = (key: keyof ShapeSettings) => locked && isCoreSetting(key);
+
     const unlockButton = (key: keyof ShapeSettings, current: unknown) => {
-        if (!locked || !canEdit || settings[key]?.lock) return undefined;
+        if (!heldByLock(key) || !canEdit || settings[key]?.lock) return undefined;
         // Open, the row has its own Save and Cancel: a second Cancel here would say the same thing twice.
         if (openSetting === key) return undefined;
         return (
@@ -312,9 +316,9 @@ export function CommunityShapeSection({
         );
     };
 
-    /** The same controls for every Core row: after the lock, the typed word for a one-way change and the proof box. */
+    /** The same controls for every row: after the lock, a Core row's typed word for a one-way change and the proof box. */
     const controls = (key: keyof ShapeSettings, saveDisabled: boolean) => {
-        const word = locked ? typedWordFor(key, draftValue) : null;
+        const word = heldByLock(key) ? typedWordFor(key, draftValue) : null;
         return (
             <RowControls
                 onSave={() => handleSave(key)}
@@ -328,7 +332,7 @@ export function CommunityShapeSection({
                 typedWord={word}
                 typed={typed}
                 onTypedChange={setTyped}
-                below={locked ? <FreshProofBox proof={proof} /> : undefined}
+                below={heldByLock(key) ? <FreshProofBox proof={proof} /> : undefined}
             />
         );
     };
@@ -345,12 +349,12 @@ export function CommunityShapeSection({
         </label>
     );
 
-    /** The row's shared props: a locked group has no chevron; an owner opens a row with its Unlock button. */
+    /** The row's shared props: a locked Core row has no chevron, and an owner opens it with its Unlock button. */
     const rowProps = (key: keyof ShapeSettings, current: unknown) => ({
-        isOwner: canEdit && !locked,
+        isOwner: canEdit && !heldByLock(key),
         isOpen: openSetting === key,
         onToggle: () => handleOpenRow(key, current),
-        coreLockLine: locked ? lockLine : undefined,
+        coreLockLine: heldByLock(key) ? lockLine : undefined,
         coreAction: unlockButton(key, current) ?? adviseButton(key),
     });
 

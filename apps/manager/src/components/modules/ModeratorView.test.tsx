@@ -245,7 +245,7 @@ describe('ModeratorView report actions', () => {
     it('names a reported forum post by its topic, removes it with a reason, and restores it while hidden (the forum\'s slice F2)', async () => {
         const forum: ListedReport = {
             id: 'r-forum', reason: 'Spam or a scam', createdAt: '2026-11-14T09:00:00Z', outcome: 'open', reporterCallsign: 'Rita',
-            postId: null, pulseItem: null, targetForumPostId: 'fp-1',
+            postId: null, pulseItem: null, targetForumPostId: 'fp-1', restorable: true,
             forumPost: { id: 'fp-1', topicId: 'ft-1', topicTitle: 'Seed swap ideas', number: 2, words: 'Buy my seeds at a link', writerName: 'Oscar', hidden: true, removed: false },
         };
         REPORTS.push(forum);
@@ -274,7 +274,7 @@ describe('ModeratorView report actions', () => {
     it('says a forum post on hold is on hold, not hidden while moderators look, and that dismissing does not bring it back', async () => {
         const held: ListedReport = {
             id: 'r-forum-held', reason: 'Child safety', createdAt: '2026-11-14T09:00:00Z', outcome: 'open', reporterCallsign: 'Rita',
-            postId: null, pulseItem: null, targetForumPostId: 'fp-2', postOnHold: true,
+            postId: null, pulseItem: null, targetForumPostId: 'fp-2', postOnHold: true, restorable: false,
             forumPost: { id: 'fp-2', topicId: 'ft-2', topicTitle: 'Taken down by an assistant', number: 1, words: 'Words', writerName: 'Oscar', hidden: true, removed: false, onHold: true },
         };
         REPORTS.push(held);
@@ -289,8 +289,32 @@ describe('ModeratorView report actions', () => {
             expect(within(card).queryByText(/hidden while moderators look/)).toBeNull();
             expect(within(card).getByTestId('post-on-hold')).toHaveTextContent(POST_ON_HOLD_WORDS);
             expect(within(card).queryByRole('button', { name: /keep the post/ })).toBeNull();
+            // "Only an owner or admin can put it back" is true here: the node refuses a moderator's restore (restorable false), so no Restore.
+            expect(within(card).queryByRole('button', { name: /Restore/ })).toBeNull();
         } finally {
             REPORTS.splice(-1, 1);
+        }
+    });
+
+    it('draws Restore exactly when the node says this moderator may restore the post, whatever else the post says (#3239 round 3)', async () => {
+        // The node decides who may restore once (server: routes/admin.ts restoreAnswer, its table in test-mcp-takedown.ts); the card only follows it.
+        const cell = (id: string, number: number, restorable: boolean | undefined, onHold: boolean): ListedReport => ({
+            id: `r-${id}`, reason: 'Spam or a scam', createdAt: '2026-11-16T09:00:00Z', outcome: 'open', reporterCallsign: 'Rita',
+            postId: null, pulseItem: null, targetForumPostId: id, postOnHold: onHold, ...(restorable === undefined ? {} : { restorable }),
+            forumPost: { id, topicId: `t-${id}`, topicTitle: `Topic ${id}`, number, words: 'Words', writerName: 'Oscar', hidden: true, removed: false, onHold },
+        });
+        const cells = [cell('fp-a', 1, true, false), cell('fp-b', 2, true, false), cell('fp-c', 1, false, true), cell('fp-d', 2, false, true), cell('fp-e', 2, undefined, false)];
+        REPORTS.push(...cells);
+        try {
+            mockNode();
+            await act(async () => {
+                render(<ModeratorView nodeUrl="https://riverside.example.org" communityName="Riverside" onLogout={() => {}} />);
+            });
+            await waitFor(() => expect(screen.getAllByTestId('moderator-report')).toHaveLength(3 + cells.length));
+            const shown = screen.getAllByTestId('moderator-report').slice(3).map((c) => !!within(c).queryByRole('button', { name: 'Restore (show it again)' }));
+            expect(shown).toEqual(cells.map((c) => c.restorable === true));
+        } finally {
+            REPORTS.splice(-cells.length, cells.length);
         }
     });
 

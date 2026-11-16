@@ -232,6 +232,11 @@ export interface NodeReport {
     postRemoved?: boolean | null;
     /** The reported post is an assistant's takedown on hold: dismissing the report doesn't keep it. */
     postOnHold?: boolean | null;
+    /**
+     * Whether this person's restore of the reported post (a listing's or a forum post's) would work, as the node decides it for both
+     * restore routes: a post on hold is an owner's or an admin's to put back, never a moderator's. A card draws Restore only on this.
+     */
+    restorable?: boolean;
     /** The reported post was made by an owner's AI assistant (the server's posts.created_via). */
     postMadeByAssistant?: boolean | null;
     targetPulseItemId?: string;

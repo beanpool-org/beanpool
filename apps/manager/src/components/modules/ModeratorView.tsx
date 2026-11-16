@@ -216,10 +216,11 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
     const isOpen = report.outcome === 'open';
     const hasPost = !!report.postId;
     const pulse = report.pulseItem ?? null;
-    // A forum post's report (the forum's slice F2): removed through the report as a listing is, restored on its own.
+    // A forum post's report (the forum's slice F2): removed through the report as a listing is, restored on its own. Restore is
+    // drawn from the node's answer for this moderator (`restorable`): never on a post on hold, which only an owner or admin puts back.
     const forum = report.forumPost ?? null;
     const canRemovePost = isOpen && ((hasPost && !report.postRemoved) || (!!forum && !forum.removed));
-    const canRestoreForum = !!forum && forum.hidden && !forum.removed;
+    const canRestoreForum = !!forum && report.restorable === true;
     const canRemovePulse = isOpen && !!pulse && !pulse.removed;
 
     const run = async (label: string, fn: () => Promise<unknown>) => {

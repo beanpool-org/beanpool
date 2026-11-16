@@ -1572,6 +1572,61 @@ async function main(): Promise<void> {
         const nextForumTally = forumHideTally(nextForum.opening);
         assert(nextForumTally.circles.length === 1 && noticesOf(overruledInForum.pub).filter(n => n.body === reportedPostGoneBody()).length === 3,
             `a forum post on hold isn't a post kept: three dismissed, each "no longer up", and the reporter still counts (${JSON.stringify(nextForumTally.circles.length)})`);
+
+        // Who may put back a held post is decided by the server once (routes/admin.ts restoreAnswer), for listings and forum posts
+        // alike, and every card follows that answer (#3239 round 3): role × state × kind, the restore route's answer, and the answer
+        // Settings' list hands that person's card (`restorable`, from which a forum card draws Restore: ModeratorView.test.tsx and
+        // PeopleSafetySection.test.tsx; no listing card offers Restore). A post on hold is an owner's or an admin's to put back, as
+        // the moderators' card says; one merely hidden by reports stays a moderator's; a removed one has nothing to restore; and an
+        // assistant reaches neither the route nor the list.
+        {
+            type Role = 'moderator' | 'admin' | 'owner' | 'assistant';
+            const ROLES: Role[] = ['moderator', 'admin', 'owner', 'assistant'];
+            const RSTATES: State[] = ['hidden', 'held', 'removed'];
+            const RKINDS: Kind[] = ['listing', 'forumTopic', 'forumReply'];
+            const headersOf: Record<Role, Record<string, string>> = {
+                moderator: modS, admin: ownerSessionHeaders(admin.pub), owner: session, assistant: bearer(tokenOf.ownerTicked),
+            };
+            const mayRestore = (r: Role, st: State) => st === 'hidden' ? r !== 'assistant' : st === 'held' ? r === 'admin' || r === 'owner' : false;
+            const rmisses: string[] = [];
+            let rcells = 0;
+            for (const k of RKINDS) {
+                for (const st of RSTATES) {
+                    for (const r of ROLES) {
+                        rcells++;
+                        const cell = `${r} × ${st} × ${k}`;
+                        resetAgentLimits();
+                        try {
+                            const c = await setUp(k, st);
+                            const listed = await call('GET', '/api/local/admin/reports?status=open&limit=500', { headers: headersOf[r] });
+                            const entry = listed.status === 200 ? listed.body?.reports?.find((x: any) => x.id === c.reportId) : null;
+                            if (listed.status === 200 && !entry) { rmisses.push(`${cell}: the report is not in the list`); continue; }
+                            const card = entry?.restorable === true;
+                            const path = k === 'listing' ? `/api/local/admin/posts/${c.postId}/restore` : `/api/local/admin/forum/posts/${c.postId}/restore`;
+                            const res = await call('POST', path, { headers: headersOf[r], body: {} });
+                            const allowed = res.status === 200;
+                            const want = mayRestore(r, st);
+                            const wrong: string[] = [];
+                            if (allowed !== want) wrong.push(`restore ${allowed ? 'allowed' : 'refused'} (${res.status}), not ${want ? 'allowed' : 'refused'}`);
+                            if (card !== allowed) wrong.push(`the card ${card ? 'offers' : 'offers no'} Restore, the route ${allowed ? 'allows' : 'refuses'} it`);
+                            if (r === 'assistant' && (listed.status === 200 || ![401, 403].includes(res.status))) wrong.push(`the assistant's token reached the list (${listed.status}) or the route (${res.status})`);
+                            const after = stateOf(k, c.postId);
+                            if (allowed && after !== 'live') wrong.push(`restored, the post is ${after}`);
+                            if (!allowed && after !== st) wrong.push(`refused, the post is ${after}, not ${st}`);
+                            // The refusal a moderator reads on a post on hold says what their card says: only an owner or admin puts it back.
+                            if (st === 'held' && r === 'moderator' && !(res.status === 403 && /only an owner or admin can put it back/.test(res.body?.error ?? '') && res.body?.code === 'on_hold_owner_or_admin')) {
+                                wrong.push(`a moderator's refusal on hold reads ${show(res)}`);
+                            }
+                            if (wrong.length) rmisses.push(`${cell}: ${wrong.join(', ')}`);
+                        } catch (e: any) {
+                            rmisses.push(`${cell}: threw ${e?.message}`);
+                        }
+                    }
+                }
+            }
+            assert(rcells === 36 && rmisses.length === 0,
+                `who may restore, every role × every state × every kind: ${rcells} cells (4 roles × hidden, held, removed × a listing, a forum topic, a forum reply), the route and the card agree, and a post on hold is an owner's or an admin's${rmisses.length ? ` (${rmisses.length} wrong: ${rmisses.slice(0, 6).join(' | ')})` : ''}`);
+        }
         setAgentPostsPerDay(100);
         }
         }

@@ -966,6 +966,12 @@ export const NODE_CONFIG_BLOB_FIELDS: Record<string, SettingEntry> = {
             + 'envelope so a promoted server numbers its first list after it',
         differsByDesign: "a take-over raises the list's epoch: the promoted server's first list is signed at the bundle's epoch + 1",
     },
+    addressListFloorOwed: {
+        kind: 'per-server',
+        reason: "the mark a restore onto a new machine leaves when this server's own clock was behind the list's number (services/address-list.ts "
+            + 'renumberAddressListAfterSwap): about this machine\'s clock alone; a promoted standby needs none, as it signs its first list at a higher '
+            + 'take-over count, which outranks any number before it whatever its clock says',
+    },
 };
 
 /** The entry for a node_config key, exact match first, then the longest prefix. */

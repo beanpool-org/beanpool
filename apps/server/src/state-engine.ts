@@ -787,8 +787,9 @@ export interface NodeConfig {
     addressList?: AddressListFields;
     /**
      * Set when a restore onto a new machine numbered the list by one with this server's clock behind it
-     * (services/address-list.ts renumberAddressListAfterSwap): the seq it fell back to. Once the clock's floor passes it, the
-     * next look numbers the list from the floor, content unchanged, and clears this.
+     * (services/address-list.ts renumberAddressListAfterSwap): the seq it fell back to. While it is set, the list is numbered
+     * from the clock's floor every 10 minutes of it, content unchanged; it goes when the floor is 30 days past it (listNow).
+     * This server's own: it is about this machine's clock, and a promoted standby signs at a higher take-over count anyway.
      */
     addressListFloorOwed?: number;
 }

@@ -43,10 +43,10 @@ vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 import { lightColors, darkColors } from '../../constants/colors';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { DmKeyChangedNotice } from '../../components/chat/DmKeyChangedNotice';
-import { dmKeyChangedNoticeText, dmKeyCodeCopy } from '../dm-key-change';
+import { dmKeyChangedNoticeText, dmKeyCodeCopy, dmKeyCodeState, dmKeyCodeShowsVerified } from '../dm-key-change';
 import { CHAT_MEMORY_RESET_WORDS } from '../dm-guard-list';
 import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
-import { dmKeyChangeStyleSpec, DM_KEY_CHANGE_TEXT_ON, DM_KEY_CHANGE_TOUCH_TARGETS, dmKeyChangeCopy, rekeyedOnText, DM_FIRST_SIGHT_LEAD, DM_RESET_LEAD, dmKeyBannerMaxHeight, dmThreadFloor, DM_KEY_BANNER_FLOOR } from '../dm-key-change';
+import { dmKeyChangeStyleSpec, DM_KEY_CHANGE_TEXT_ON, DM_KEY_CHANGE_TOUCH_TARGETS, dmKeyChangeCopy, rekeyedOnText, dmKeyBannerMaxHeight, dmThreadFloor, DM_KEY_BANNER_FLOOR } from '../dm-key-change';
 import { keyCodeOf, keyCodeSpoken } from '../key-code';
 
 const CODE = /^\d{4} \d{4} \d{4} \d{4} \d{4}$/;
@@ -122,14 +122,15 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the key-
         expect(host.textContent).toContain("This community doesn't list a single key for Ben in this chat, so there is no key to continue with.");
     });
 
-    it('rule 5 with one listed key (15 Oct words design, D1): the listed key\'s code, the tick, Continue only after it, and its own body', async () => {
-        const onContinue = vi.fn();
-        render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: newKey, firstSight: true, unplaced: true }, onContinue, onNotNow: vi.fn() }));
-        expect(host.querySelector('[aria-label^="Key code:"]')).not.toBeNull();
-        expect(host.textContent).toContain("This phone can't match this chat to one key. What you can read here may not be from Ben, and the messages it couldn't open stay that way.");
-        expect(host.textContent).not.toContain(DM_FIRST_SIGHT_LEAD);
-        expect(host.querySelector('[role="checkbox"]')).not.toBeNull();
-        expect(button('Continue with the new key')).not.toBeNull();
+    // Signal's model, S2 (DESIGN-dm-key-signal-model §4, §7): first sight, the reset's re-seed and rule 5 take a single listed
+    // key by themselves, so no card of theirs names a key, and their opening sentences ("checking this chat from the start",
+    // the reset's, and rule 5's body with a code) are gone. A card with a code is a verified person's, whatever else it says.
+    it('a card with a code says only the verified person\'s words: the first-sight, reset and rule-5 bodies are gone (S2)', () => {
+        render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: newKey, firstSight: true, unplaced: true, verified: true }, onContinue: vi.fn(), onNotNow: vi.fn() }));
+        expect(host.textContent).toContain('You marked Ben as verified, so this phone is asking before it sends to a new key. Anything you send now would go to the new key.');
+        expect(host.textContent).not.toContain('checking this chat from the start');
+        expect(host.textContent).not.toContain("can't match this chat to one key");
+        expect(host.textContent).not.toContain('The earlier messages here came from');
     });
 
     it('rule 5 with no single key listed: no code, no tick, no Continue; only "Not now"', () => {
@@ -141,11 +142,9 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the key-
         expect(host.textContent).toContain("This community doesn't list a single key for the other person in this chat, so there is no key to continue with.");
     });
 
-    it('the node\'s re-key date is a line of words only when it gives one; the first-sight case opens with the amendment\'s sentence, true after a restore or an update', () => {
-        render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: newKey, firstSight: true, rekeyedAt: '2026-10-03T09:00:00.000Z' }, onContinue: vi.fn(), onNotNow: vi.fn() }));
+    it('the node\'s re-key date is a line of words only when it gives one', () => {
+        render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: newKey, firstSight: false, verified: true, rekeyedAt: '2026-10-03T09:00:00.000Z' }, onContinue: vi.fn(), onNotNow: vi.fn() }));
         expect(host.textContent).toContain('This community says the account was re-keyed on 3 Oct 2026.');
-        expect(host.textContent).toContain(`${DM_FIRST_SIGHT_LEAD} The earlier messages here came from a different key than the one this community now gives for Ben.`);
-        expect(DM_FIRST_SIGHT_LEAD).toBe('This phone is checking this chat from the start, as it does after you restore it or update the app.');
         expect(rekeyedOnText('not a date')).toBeNull();
     });
 
@@ -170,17 +169,9 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the key-
         }
     });
 
-    it('a first-sight pause the re-seed made after the member\'s reset opens with the reset\'s sentence in the restored-phone sentence\'s place (§3.4 amendment 7 §1)', () => {
-        render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: newKey, firstSight: true, afterReset: true }, onContinue: vi.fn(), onNotNow: vi.fn() }));
-        expect(host.textContent).toContain("This community's chat memory was reset, so this phone is checking this chat from the start. The earlier messages here came from a different key than the one this community now gives for Ben.");
-        expect(host.textContent).not.toContain(DM_FIRST_SIGHT_LEAD);
-        expect(DM_RESET_LEAD).toBe("This community's chat memory was reset, so this phone is checking this chat from the start.");
-    });
-
-    it('a change after a sync (not first sight) never says the phone is checking from the start', () => {
+    it('a change after a sync never says the phone is checking from the start, and no date line without a date', () => {
         render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: newKey, firstSight: false }, onContinue: vi.fn(), onNotNow: vi.fn() }));
-        expect(host.textContent).not.toContain(DM_FIRST_SIGHT_LEAD);
-        expect(host.textContent).not.toContain(DM_RESET_LEAD);
+        expect(host.textContent).not.toContain('checking this chat from the start');
         expect(host.textContent).not.toContain('This community says');
     });
 
@@ -227,41 +218,31 @@ describe('the banner\'s words', () => {
     const CODE = '1111 2222 3333 4444 5555';
     it('with no name for the key (the directory has none), a whole sentence for each: never the conversation id (#1873 review, finding 2), never an English "this person" pasted into a translated one (15 Oct words design, D4)', () => {
         for (const peerName of [null, undefined, '', '  ', 'Loading...']) {
-            const plain = dmKeyChangeCopy({ peerName, code: CODE, firstSight: false });
+            const plain = dmKeyChangeCopy({ peerName, code: CODE });
             expect(plain.title).toBe('The key behind this chat changed.');
             expect(plain.body).toBe('Anything you send now would go to the new key. If the other person got a new phone and re-keyed, check with them first, in person or on a call: their key code should be');
             expect(plain.confirm).toBe('I checked with them: the key code in their Settings matches this one.');
-            expect(dmKeyChangeCopy({ peerName, code: CODE, firstSight: true }).body).toBe(`${DM_FIRST_SIGHT_LEAD} The earlier messages here came from a different key than the one this community now gives for the other person. Anything you send now would go to the new key. Check with them first, in person or on a call: their key code should be`);
-            expect(dmKeyChangeCopy({ peerName, code: null, firstSight: false }).body).toBe("This community doesn't list a single key for the other person in this chat, so there is no key to continue with. Nothing will be sent here. Check with them in person or on a call.");
-            expect(dmKeyChangeCopy({ peerName, code: CODE, firstSight: true, unplaced: true }).body).toBe("This phone can't match this chat to one key. What you can read here may not be from the other person, and the messages it couldn't open stay that way. Anything you send now would go to the key this community lists for them. Check with them first, in person or on a call: their key code should be");
-            for (const copy of [plain, dmKeyChangeCopy({ peerName, code: null, firstSight: true }), dmKeyChangeCopy({ peerName, code: CODE, firstSight: true, afterReset: true, unplaced: true })]) {
+            expect(dmKeyChangeCopy({ peerName, code: null }).body).toBe("This community doesn't list a single key for the other person in this chat, so there is no key to continue with. Nothing will be sent here. Check with them in person or on a call.");
+            for (const copy of [plain, dmKeyChangeCopy({ peerName, code: null })]) {
                 expect(JSON.stringify(copy)).not.toMatch(/this person|Loading/);
             }
         }
     });
     it('with a name, the same sentences say it', () => {
-        const ben = dmKeyChangeCopy({ peerName: 'Ben', code: CODE, firstSight: false });
+        const ben = dmKeyChangeCopy({ peerName: 'Ben', code: CODE });
         expect(ben.title).toBe('The key behind "Ben" changed.');
         expect(ben.confirm).toBe('I checked with Ben: the key code in their Settings matches this one.');
-        expect(dmKeyChangeCopy({ peerName: 'Ben', code: null, firstSight: true }).body).toBe("This community doesn't list a single key for Ben in this chat, so there is no key to continue with. Nothing will be sent here. Check with Ben in person or on a call.");
-    });
-    it('rule 5 with one listed key (D1 (b)): its own body, no lead, the code, the tick and Continue; what didn\'t open stays that way', () => {
-        for (const afterReset of [false, true]) {
-            const copy = dmKeyChangeCopy({ peerName: 'Ben', code: CODE, firstSight: true, afterReset, unplaced: true });
-            expect(copy.body).toBe("This phone can't match this chat to one key. What you can read here may not be from Ben, and the messages it couldn't open stay that way. Anything you send now would go to the key this community lists for Ben. Check with Ben first, in person or on a call: their key code should be");
-            expect(copy.confirm).toBe('I checked with Ben: the key code in their Settings matches this one.');
-            expect(copy.continueLabel).toBe('Continue with the new key');
-        }
+        expect(dmKeyChangeCopy({ peerName: 'Ben', code: null }).body).toBe("This community doesn't list a single key for Ben in this chat, so there is no key to continue with. Nothing will be sent here. Check with Ben in person or on a call.");
     });
     it('no single key (a pause of several, or rule 5 with none: D2 (c)): Not now only, and never "start a new chat", which opens this same chat', () => {
-        for (const unplaced of [false, true]) {
-            const copy = dmKeyChangeCopy({ peerName: 'Ben', code: null, firstSight: true, unplaced });
+        for (const verified of [false, true]) {
+            const copy = dmKeyChangeCopy({ peerName: 'Ben', code: null, verified });
             expect(copy.body).toBe("This community doesn't list a single key for Ben in this chat, so there is no key to continue with. Nothing will be sent here. Check with Ben in person or on a call.");
             expect([copy.confirm, copy.continueLabel]).toEqual([null, null]);
             expect(copy.notNowLabel).toBe('Not now');
         }
-        for (const peerName of ['Ben', null]) for (const code of [CODE, null]) for (const firstSight of [false, true]) for (const unplaced of [false, true]) {
-            expect(JSON.stringify(dmKeyChangeCopy({ peerName, code, firstSight, unplaced }))).not.toMatch(/new chat/i);
+        for (const peerName of ['Ben', null]) for (const code of [CODE, null]) for (const verified of [false, true]) {
+            expect(JSON.stringify(dmKeyChangeCopy({ peerName, code, verified }))).not.toMatch(/new chat/i);
         }
     });
 });
@@ -293,13 +274,14 @@ describe('the banner on the DM screen is keyed on the offered key', () => {
 // Slice 1's handover (d) and the #1873 review's findings 2 and 3, on the DM screen (a source pin: the screen itself
 // needs a device). Rule 5 is asked only after the key change, whose check judges first sight first.
 describe('the DM screen: the rule-5 line, the banner\'s name and its height', () => {
-    it('[id].tsx shows rule 5 through the banner (getDmKeyChange\'s unplaced change, 15 Oct words design D1), disables the box with DM_UNPLACED_LINE, and sends nothing until Continue', async () => {
+    it('[id].tsx shows rule 5 through the banner (getDmKeyChange\'s unplaced change, 15 Oct words design D2), disables the box with DM_UNPLACED_LINE, and sends nothing while it lasts', async () => {
         const { readFileSync } = await import('node:fs');
         const { join } = await import('node:path');
         const src = readFileSync(join(process.cwd(), 'app', 'chat', '[id].tsx'), 'utf8');
         // The key check runs BEFORE the thread is read (DESIGN-dm-key-signal-model §7 S1): its resting rule moves a person not
         // marked verified to the new key first, so no frame shows the paused box or the fixed line for them.
-        expect(src).toMatch(/const change = await getDmKeyChange\(id as string\)\.catch\(\(\) => undefined\);\s*let data: any\[\];\s*try \{\s*data = await getMessages\(id as string, \{ limit: msgLimitRef\.current, notices: true \}\);/);
+        // S2: the header's "Verified ✓" reads the pins between the two (getDmKeyCodeInfo reads only), still before the thread.
+        expect(src).toMatch(/const change = await getDmKeyChange\(id as string\)\.catch\(\(\) => undefined\);\s*(?:\/\/[^\n]*\n\s*)*const codeInfo = await getDmKeyCodeInfo\(id as string\)\.catch\(\(\) => undefined\);\s*let data: any\[\];\s*try \{\s*data = await getMessages\(id as string, \{ limit: msgLimitRef\.current, notices: true \}\);/);
         expect(src).toMatch(/if \(change !== undefined\) setKeyChange\(change\);/);
         expect(src).not.toMatch(/getDmKeyChange\(id as string\)\.then\(setKeyChange/);
         expect(src).toMatch(/const keyChangePending = !!keyChange;\s*const unplaced = !!keyChange\?\.unplaced;/);
@@ -431,13 +413,13 @@ describe('Signal\'s model: the verified card, the thread notice and the key code
     const newKey = 'ab'.repeat(32);
 
     it('the verified card opens with "You marked … as verified"; an ordinary card never says it; one sentence each, with its unknown-name twin', () => {
-        const ben = dmKeyChangeCopy({ peerName: 'Ben', code: '1111 2222 3333 4444 5555', firstSight: false, verified: true });
+        const ben = dmKeyChangeCopy({ peerName: 'Ben', code: '1111 2222 3333 4444 5555', verified: true });
         expect(ben.body).toBe('You marked Ben as verified, so this phone is asking before it sends to a new key. Anything you send now would go to the new key. If Ben got a new phone and re-keyed, check with them first, in person or on a call: their key code should be');
-        const nobody = dmKeyChangeCopy({ peerName: null, code: '1111 2222 3333 4444 5555', firstSight: false, verified: true });
+        const nobody = dmKeyChangeCopy({ peerName: null, code: '1111 2222 3333 4444 5555', verified: true });
         expect(nobody.body.startsWith('You marked this person as verified, so this phone is asking before it sends to a new key. ')).toBe(true);
-        expect(dmKeyChangeCopy({ peerName: 'Ben', code: '1111 2222 3333 4444 5555', firstSight: false }).body).not.toContain('You marked');
+        expect(dmKeyChangeCopy({ peerName: 'Ben', code: '1111 2222 3333 4444 5555' }).body).not.toContain('You marked');
         // No single key listed: the same card for everyone, verified or not (T3).
-        expect(dmKeyChangeCopy({ peerName: 'Ben', code: null, firstSight: false, verified: true }).body).not.toContain('You marked');
+        expect(dmKeyChangeCopy({ peerName: 'Ben', code: null, verified: true }).body).not.toContain('You marked');
         render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: newKey, firstSight: false, verified: true }, onContinue: vi.fn(), onNotNow: vi.fn() }));
         expect(host.textContent).toContain('You marked Ben as verified, so this phone is asking before it sends to a new key.');
         expect(host.querySelector('[role="checkbox"]')).not.toBeNull();
@@ -502,6 +484,46 @@ describe('Signal\'s model: the verified card, the thread notice and the key code
         expect(dmKeyCodeCopy(null, true).removeConfirmBody).toBe("This chat will carry on with the other person's new key, without the check.");
         expect(JSON.stringify(dmKeyCodeCopy('Ben'))).not.toMatch(/safety number/i);
         expect(CHAT_MEMORY_RESET_WORDS.verifiedGo).toBe('People you marked as verified in this community go back to not verified.');
+        // S2: why sending waits while no single key is listed (the S1 deciding review's note), whole with its twin.
+        expect(ben.waiting).toBe("This community doesn't list a single key for Ben in this chat, so sending waits.");
+        expect(nobody.waiting).toBe("This community doesn't list a single key for the other person in this chat, so sending waits.");
+    });
+
+    // S2 (#3263's deciding review, note 1): a verified person with no single key listed was 'waiting' with only "Remove
+    // verification" under the code. One table for the screen's state and for "Verified ✓", which the chat's header reads too.
+    it('the key code screen\'s one state and its "Verified ✓", for every flag the pins can give (S2)', () => {
+        const CODE = '1111 2222 3333 4444 5555';
+        const rows: Array<[string, { verified: boolean; paused: boolean; offersKey: boolean } | null, string | null, string, boolean]> = [
+            ['nothing read', null, null, 'none', false],
+            ['no pin (a rule-5 record)', { verified: false, paused: true, offersKey: false }, null, 'none', false],
+            ['an ordinary pin', { verified: false, paused: false, offersKey: false }, CODE, 'not-verified', false],
+            ['verified', { verified: true, paused: false, offersKey: false }, CODE, 'verified', true],
+            ['verified, a new key waits (the card)', { verified: true, paused: true, offersKey: true }, CODE, 'paused', false],
+            ['verified, no single key listed', { verified: true, paused: true, offersKey: false }, CODE, 'waiting', true],
+            ['not verified, no single key listed', { verified: false, paused: true, offersKey: false }, CODE, 'waiting', false],
+        ];
+        for (const [what, info, code, state, shows] of rows) {
+            expect(dmKeyCodeState(info, code), what).toBe(state);
+            expect(dmKeyCodeShowsVerified(info, code), what).toBe(shows);
+        }
+    });
+
+    it('the wiring, S2: the screen says why sending waits and shows "Verified ✓" by the one rule; the chat\'s header shows it beside "🔒 End-to-end encrypted"', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { join } = await import('node:path');
+        const screen = readFileSync(join(process.cwd(), 'app', 'chat', 'key-code.tsx'), 'utf8');
+        expect(screen).toMatch(/const state = dmKeyCodeState\(info, code\);/);
+        expect(screen).toMatch(/const showsVerified = dmKeyCodeShowsVerified\(info, code\);/);
+        expect(screen).toMatch(/\{showsVerified && <Text style=\{styles\.verifiedText\}>\{copy\.verified\}<\/Text>\}/);
+        expect(screen).toMatch(/\{state === 'waiting' && <Text style=\{styles\.keyCodeBody\}>\{copy\.waiting\}<\/Text>\}/);
+        const chatSrc = readFileSync(join(process.cwd(), 'app', 'chat', '[id].tsx'), 'utf8');
+        // Read after the key check, so it sees the pin as the resting rule left it; the same rule as the screen's.
+        expect(chatSrc).toMatch(/const change = await getDmKeyChange\(id as string\)\.catch\(\(\) => undefined\);\s*\/\/[^\n]*\n\s*const codeInfo = await getDmKeyCodeInfo\(id as string\)\.catch\(\(\) => undefined\);/);
+        expect(chatSrc).toMatch(/setPeerVerified\(dmKeyCodeShowsVerified\(codeInfo, keyCodeOf\(codeInfo\?\.peer\)\)\)/);
+        expect(chatSrc).toMatch(/\{isEncrypted \? t\('🔒 End-to-end encrypted'\) : t\('Connected via your community'\)\}\s*<\/Text>\s*\{isEncrypted && peerVerified && \(\s*<Text style=\{\[styles\.headerSubtitle, styles\.headerVerified\]\} numberOfLines=\{1\}>\{t\('Verified ✓'\)\}<\/Text>/);
+        // "Verified ✓" never gives way at 320 dp; "🔒 End-to-end encrypted" does.
+        expect(chatSrc).toMatch(/headerSubtitleText: \{ flexShrink: 1 \}/);
+        expect(chatSrc).toMatch(/headerVerified: \{ flexShrink: 0, marginLeft: 6 \}/);
     });
 
     it('the wiring: the ⋯ menu\'s Key code (DMs only), the notice in the thread, and a plain key code screen that marks only the key it showed', async () => {

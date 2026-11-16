@@ -52,6 +52,8 @@ export interface DmKeyChangeCopyInput {
      * and Continue keeps the lines that didn't open as they are, so the body says so.
      */
     unplaced?: boolean;
+    /** The member marked this person verified (DESIGN-dm-key-signal-model §4): the card opens with "You marked … as verified". */
+    verified?: boolean;
 }
 
 export interface DmKeyChangeCopy {
@@ -74,7 +76,7 @@ export const DM_RESET_LEAD = word("This community's chat memory was reset, so th
 const LEADS = { firstSight: DM_FIRST_SIGHT_LEAD, reset: DM_RESET_LEAD } as const;
 
 /** The banner's words. Every sentence is whole, with a twin for when the name is unknown (D4). */
-export function dmKeyChangeCopy({ peerName, code, firstSight, afterReset, rekeyedAt, unplaced }: DmKeyChangeCopyInput): DmKeyChangeCopy {
+export function dmKeyChangeCopy({ peerName, code, firstSight, afterReset, rekeyedAt, unplaced, verified }: DmKeyChangeCopyInput): DmKeyChangeCopy {
     const name = nameOf(peerName);
     const title = name ? t('The key behind "{name}" changed.', { name }) : t('The key behind this chat changed.');
     const on = rekeyedOnText(rekeyedAt);
@@ -105,6 +107,12 @@ export function dmKeyChangeCopy({ peerName, code, firstSight, afterReset, rekeye
             ? t('The earlier messages here came from a different key than the one this community now gives for {name}. Anything you send now would go to the new key. Check with {name} first, in person or on a call: their key code should be', { name })
             : t('The earlier messages here came from a different key than the one this community now gives for the other person. Anything you send now would go to the new key. Check with them first, in person or on a call: their key code should be'));
     } else {
+        // A person the member marked verified (Signal's model): the only ordinary change that still stops, and the card says why.
+        if (verified) {
+            said.push(name
+                ? t('You marked {name} as verified, so this phone is asking before it sends to a new key.', { name })
+                : t('You marked this person as verified, so this phone is asking before it sends to a new key.'));
+        }
         said.push(name
             ? t('Anything you send now would go to the new key. If {name} got a new phone and re-keyed, check with them first, in person or on a call: their key code should be', { name })
             : t('Anything you send now would go to the new key. If the other person got a new phone and re-keyed, check with them first, in person or on a call: their key code should be'));
@@ -119,6 +127,71 @@ export function dmKeyChangeCopy({ peerName, code, firstSight, afterReset, rekeye
     };
 }
 
+/**
+ * The thread's notice that the key behind a chat changed (DESIGN-dm-key-signal-model §4): a person not marked verified,
+ * so the chat carried on with the new key. Information, never a warning; tapping it opens the key code screen.
+ */
+export function dmKeyChangedNoticeText(peerName?: string | null): string {
+    const name = nameOf(peerName);
+    return name
+        ? t("{name}'s key changed. This usually means they got back into their account on a new phone. Tap to see their key code.", { name })
+        : t("This chat's key changed. This usually means the other person got back into their account on a new phone. Tap to see their key code.");
+}
+
+/** The chat's ⋯ menu item that opens the key code screen (§3). */
+export const DM_KEY_CODE_MENU_LABEL = word('Key code');
+
+/** What the key code screen is showing (§3): exactly one of these under the code. */
+export type DmKeyCodeState = 'not-verified' | 'verified' | 'paused' | 'none';
+
+export interface DmKeyCodeCopy {
+    title: string;
+    heading: string;
+    howTo: string;
+    /** The one state line or button under the code. */
+    mark: string;
+    markNote: string;
+    verified: string;
+    verifiedNote: string;
+    remove: string;
+    paused: string;
+    none: string;
+    moved: string;
+    removeConfirmTitle: string;
+    /** The confirmation's body: `whilePaused` when removing it ends a pause (the chat carries on with the new key). */
+    removeConfirmBody: string;
+    cancel: string;
+}
+
+/** The key code screen's words (§4), each sentence whole with its unknown-name twin (D4). */
+export function dmKeyCodeCopy(peerName: string | null | undefined, whilePaused = false): DmKeyCodeCopy {
+    const name = nameOf(peerName);
+    return {
+        title: t('Key code'),
+        heading: name ? t("{name}'s key code", { name }) : t("This chat's key code"),
+        howTo: name
+            ? t('Ask {name} to open Settings, then Account Protection, and read you My key code. Do it in person or on a call. If every digit matches, this chat is really with {name}.', { name })
+            : t('Ask the other person to open Settings, then Account Protection, and read you My key code. Do it in person or on a call. If every digit matches, this chat is really with them.'),
+        mark: t('Mark as verified'),
+        markNote: name
+            ? t('After that, this phone asks you before it sends to a new key for {name}. Kept on this phone only.', { name })
+            : t('After that, this phone asks you before it sends to a new key for this person. Kept on this phone only.'),
+        verified: t('Verified ✓'),
+        verifiedNote: name
+            ? t('This phone asks you before it sends to a new key for {name}. Kept on this phone only.', { name })
+            : t('This phone asks you before it sends to a new key for this person. Kept on this phone only.'),
+        remove: t('Remove verification'),
+        paused: name ? t("{name}'s key changed. The new code is at the top of the chat.", { name }) : t("This chat's key changed. The new code is at the top of the chat."),
+        none: t('There is no key code to show for this chat yet.'),
+        moved: t("This chat's key changed while you were checking. Look at the new code and check it again."),
+        removeConfirmTitle: t('Remove verification?'),
+        removeConfirmBody: whilePaused
+            ? (name ? t("This chat will carry on with {name}'s new key, without the check.", { name }) : t("This chat will carry on with the other person's new key, without the check."))
+            : (name ? t('This phone will stop asking before it sends to a new key for {name}.', { name }) : t('This phone will stop asking before it sends to a new key for this person.')),
+        cancel: t('Cancel'),
+    };
+}
+
 /** Settings → "My key code": what the member reads next to their own code. */
 export const MY_KEY_CODE_COPY = {
     title: word('My key code'),
@@ -127,7 +200,7 @@ export const MY_KEY_CODE_COPY = {
 } as const;
 
 /** What you press. Each has minHeight ≥ 48. */
-export const DM_KEY_CHANGE_TOUCH_TARGETS = ['continueBtn', 'notNowBtn', 'confirmRow'] as const;
+export const DM_KEY_CHANGE_TOUCH_TARGETS = ['continueBtn', 'notNowBtn', 'confirmRow', 'notice', 'markBtn', 'removeBtn'] as const;
 
 /** Text entries and the background each sits on, for the contrast check. */
 export const DM_KEY_CHANGE_TEXT_ON = {
@@ -142,6 +215,12 @@ export const DM_KEY_CHANGE_TEXT_ON = {
     myCodeTitle: 'myCodeCard',
     myCode: 'codeBox',
     myCodeBody: 'myCodeCard',
+    noticeText: 'notice',
+    keyCodeHeading: 'keyCodeScreen',
+    keyCodeBody: 'keyCodeScreen',
+    markText: 'markBtn',
+    removeText: 'removeBtn',
+    verifiedText: 'keyCodeScreen',
 } as const;
 
 /** The banner's and the key code card's styles, for StyleSheet.create inside useStyles (the theme switch restyles them). */
@@ -171,6 +250,19 @@ export function dmKeyChangeStyleSpec(colors: AppColors) {
         myCodeTitle: { color: colors.text.heading, fontSize: 16, fontWeight: '700' as const },
         myCode: { color: colors.text.heading, fontSize: 18, fontWeight: '700' as const, letterSpacing: 1, fontVariant: ['tabular-nums'] as ('tabular-nums')[] },
         myCodeBody: { color: colors.text.secondary, fontSize: 14, lineHeight: 20 },
+        // The thread's notice (DESIGN-dm-key-signal-model §4): neutral, never the warning yellow (hex roles, so the contrast check reads them).
+        // A button 48 dp high at least, wrapping freely (no line limit) at 320 dp and 1.3× text.
+        notice: { backgroundColor: colors.surface.subtle, borderColor: colors.border.default, borderWidth: 1, borderRadius: 12, minHeight: 48, paddingHorizontal: 12, paddingVertical: 10, marginVertical: 12, marginHorizontal: 24, alignSelf: 'center' as const, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8 },
+        noticeText: { color: colors.text.heading, fontSize: 13, lineHeight: 18, fontWeight: '500' as const, flexShrink: 1 },
+        // The key code screen (§3): a plain scrolling screen; the code reuses the banner's code box.
+        keyCodeScreen: { backgroundColor: colors.surface.app, padding: 16, gap: 12 },
+        keyCodeHeading: { color: colors.text.heading, fontSize: 18, fontWeight: '700' as const },
+        keyCodeBody: { color: colors.text.heading, fontSize: 14, lineHeight: 20 },
+        verifiedText: { color: colors.text.heading, fontSize: 16, fontWeight: '700' as const },
+        markBtn: { backgroundColor: colors.brand.fill, borderRadius: 10, minHeight: 48, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center' as const, justifyContent: 'center' as const },
+        markText: { color: colors.text.onBrand, fontSize: 15, fontWeight: '700' as const, textAlign: 'center' as const },
+        removeBtn: { backgroundColor: colors.surface.card, borderColor: colors.border.strong, borderWidth: 1, borderRadius: 10, minHeight: 48, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center' as const, justifyContent: 'center' as const },
+        removeText: { color: colors.text.heading, fontSize: 15, fontWeight: '600' as const, textAlign: 'center' as const },
     };
 }
 

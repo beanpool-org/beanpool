@@ -56,8 +56,8 @@
         "sourceHash": "f7a403c6cdf31e72"
       },
       "summary": {
-        "text": "Komşularınızın paylaştıkları, Öğren videoları ve kendi kanallarınızı ekleme.",
-        "sourceHash": "9ab06ad52ef86462"
+        "text": "Komşularınızın paylaştıkları, Nasıl çalışır videoları ve kendi kanallarınızı ekleme.",
+        "sourceHash": "29429fdc78b1185c"
       }
     },
     "commons": {
@@ -66,8 +66,8 @@
         "sourceHash": "6aa9f1a43424d37b"
       },
       "summary": {
-        "text": "Kararlar ve oylama, ortak fasulyeler, gruplarınız, girişimler ve sorumlular. Anketler ve etkinlikler de buradadır; onları Pazar'da bulabilirsiniz.",
-        "sourceHash": "bd9454f4374e35ae"
+        "text": "Kararlar ve oylama, ortak fasulyeler, gruplarınız, girişimler ve sorumlular, ve Öğren'deki Yerel bilgi. Anketler ve etkinlikler de buradadır; onları Pazar'da bulabilirsiniz.",
+        "sourceHash": "a3c8efef442da129"
       }
     },
     "ledger": {
@@ -450,8 +450,8 @@
     },
     "learn": {
       "title": {
-        "text": "Öğren bölümü",
-        "sourceHash": "498e66e5947ca0c3"
+        "text": "Nasıl çalışır videoları",
+        "sourceHash": "1f36f957425f7090"
       },
       "summary": {
         "text": "BeanPool hakkında kısa videolar ve bunlara eşlik eden kılavuz sayfaları.",
@@ -814,6 +814,16 @@
       "summary": {
         "text": "Birinden size bir şey karşılığında fasulye ödemesini istemek. Ödeme isteği kendiliğinden ödenmez; ödeyip ödemeyeceğine karşı taraf karar verir. Şimdilik bir ödeme isteği bir davetle birlikte gidebilir.",
         "sourceHash": "18291f51ed018672"
+      }
+    },
+    "local-knowledge": {
+      "title": {
+        "text": "Yerel bilgi",
+        "sourceHash": "6157fb64436aa56a"
+      },
+      "summary": {
+        "text": "Öğren, topluluğunuzun bilmeye değer şeyler rafı: bir sayfayı bulmak, bir sayfa önermek, doğru tutmak ve bir sahibin ya da yöneticinin her birini nasıl kontrol ettiği.",
+        "sourceHash": "dac9ca5ca0ffb474"
       }
     }
   }

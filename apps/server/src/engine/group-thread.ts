@@ -37,7 +37,7 @@ import { withheldLine } from './withheld-lines.js';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
 import { storeAttachmentColumns, type AttachmentColumns } from '../storage/image-columns.js';
 import { GROUP_PHOTO_MAX_BYTES } from '../config/writer-limits.js';
-import { fanOutGroupLine } from './group-guests.js';
+import { fanOutGroupLine, fanOutGroupLineChange } from './group-guests.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
 const { t: tr } = wordsFor('en');
@@ -718,6 +718,9 @@ export function broadcastGroupChatUpdate(cb: MessagingCallbacks, groupId: string
     if (!row) return null;
     const msg = groupChatMessageOf(row, groupId);
     broadcastToChat(cb, groupId, msg, action);
+    // To each community with guests in this chat, as members hear it (engine/group-guests.ts): one request each.
+    try { fanOutGroupLineChange(groupId, messageId); }
+    catch (e: any) { console.warn('[Guests] A changed group line could not be sent to its guests:', e?.message ?? e); }
     return msg;
 }
 

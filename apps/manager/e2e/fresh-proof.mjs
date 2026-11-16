@@ -86,6 +86,8 @@ const FLOWS = [
             const submit = claim.locator('button[type="submit"]').first();
             await submit.scrollIntoViewIfNeeded();
             await submit.click();
+            // Add an address asks first (several addresses S6, design §7, §8): yes, add it.
+            await page.getByTestId('in-page-confirm').getByRole('button', { name: 'Add it' }).click();
         } },
     { name: 'Connector add', screen: { tab: 'appliance', sub: 'gateway' }, testId: 'connector-proof',
         refuses: (p, m) => m === 'POST' && p === '/api/local/connectors',

@@ -32,7 +32,7 @@ import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLev
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
-import { useMembersOnDemand, useMemberSearch, getMembersWhole, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
+import { useMembersOnDemand, useMemberSearch, getMembersWhole, membersByKeys, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN } from '../lib/credit-line-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleLedger, type LedgerRowView } from '../components/ShowcasePreviews';
@@ -58,6 +58,14 @@ interface Props extends LocalCommunityWays {
     waitCapMs?: number;
     /** The member's own deals, as the app already holds them (App.tsx `myTransactions`): what is held in trust, and which deal a hold is. */
     deals?: MarketplaceTransaction[];
+    /**
+     * Send opened by another page of this app (Learn's "🫘 Thank {name}", K8; DESIGN-local-knowledge-fable.md §3.7): the
+     * recipient's key and a note, each changeable in the form, held in App's state (never read from the address: a link from
+     * outside can fill that; review of #3243). No name: the form names the recipient from this community's member list, by key.
+     * Taken once the member's figures are read (`onSendStartTaken`).
+     */
+    sendStart?: { to: string; note: string } | null;
+    onSendStartTaken?: () => void;
 }
 
 const ESCROW_ACCOUNT = 'escrow_';
@@ -117,7 +125,7 @@ function valueForEarned(target: number): number {
     return Math.ceil((TRUST_CURVE_K * target) / (CREDIT_MAX_EARNED - target));
 }
 
-export function LedgerPage({ identity, onNavigate, isMember, preview = false, waitCapMs, deals, ...ways }: Props) {
+export function LedgerPage({ identity, onNavigate, isMember, preview = false, waitCapMs, deals, sendStart, onSendStartTaken, ...ways }: Props) {
     const viewerIsMember = isMember !== false && identity !== null;
     const myKey = identity?.publicKey ?? '';
     // Drawn from, never stored: a preview that turns live while the page is open never shows the sample as the member's own.
@@ -446,6 +454,35 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
             setSending(false);
         }
     }
+
+    // Send opened by another page with a recipient and a note (K8): the Beans tab with both filled in, once the member's own
+    // figures are read. The recipient is named only as this community's member list names them, by key (the list this page
+    // holds, else their card read from the node by key): a key the list doesn't hold opens no form. A member who can't send
+    // Beans yet reads today's words there (the locked line), the recipient kept. Nothing else about sending changes.
+    useEffect(() => {
+        if (!sendStart) return;
+        if (preview || !viewerIsMember) { onSendStartTaken?.(); return; }
+        if (!ownBalanceInfo) return;
+        onSendStartTaken?.();
+        const ask = sendStart;
+        if (!ask.to || ask.to === myKey) return;
+        const listed = members.find(m => m.publicKey === ask.to);
+        const named: Promise<Array<{ publicKey: string; callsign: string }>> = listed ? Promise.resolve([listed]) : membersByKeys([ask.to]);
+        named
+            .then((cards) => {
+                const card = cards.find(c => c.publicKey === ask.to);
+                if (!card || !isMountedRef.current) return;
+                setSendTo(card.publicKey);
+                setPickedCard({ publicKey: card.publicKey, callsign: card.callsign });
+                setSendMemo(ask.note);
+                setSendAmount('');
+                setActiveTab('financials');
+                setSendKind('beans');
+                setGiftNote(null);
+                setShowSend(true);
+            })
+            .catch(() => { /* not read: no form, as for a key the list doesn't hold */ });
+    }, [sendStart, ownBalanceInfo, preview, viewerIsMember]);
 
     /** Opens Send: on Beans when they can go, else on the Credit line tab; the node's offer read again as it opens. */
     function openSend() {

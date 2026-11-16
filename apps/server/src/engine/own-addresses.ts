@@ -66,6 +66,8 @@ import { getNodeConfig, resolvePublicNodeUrl, updateNodeConfig, PUBLIC_URL_RULES
 import { HOLDING_STATUSES, registrarNames, registrarNamesVersion } from './registrar-names.js';
 import { isCertifiableHost, isIpLiteral, isLocalNetworkHost, isLoopbackHost, normalizeAddress, preferredAddress, reachableFromInternet } from './host-kinds.js';
 import { logger } from '../logger.js';
+// A type alone: services/registrar-name-watch.ts imports this module, so nothing of it is loaded from here.
+import type { NameStanding } from '../services/registrar-name-watch.js';
 
 // The shapes of a host live in host-kinds.ts (pure, so `beanpool claim` reads them too); here as they always were.
 export { BEANPOOL_ZONE, isBeanPoolName, isCertifiableHost, isLocalNetworkHost, isLoopbackHost, normalizeAddress } from './host-kinds.js';
@@ -268,19 +270,37 @@ function notMainNow(host: string, reachable: readonly string[]): string | null {
 }
 
 /**
- * Why `host` can't be made main now, in words for the owner, or null when it can (routes/app-addresses.ts /main). Any
- * published address with a route that answers from outside may be: a beanpool.org name, an own domain, a hand-set name,
- * and a bare number while the community has no name. A home-network address only while the community has nothing the
- * Internet can reach (lights-out refuses /main itself). Never a former, lost or loopback name (none is published), nor a
- * name still waiting for approval.
+ * Why `host` can't be made main now, in words for the owner, or null when it can (routes/app-addresses.ts: /main answers
+ * with it, and Settings' report says it of each row, so the two never disagree). Any published address with a route that
+ * answers from outside may be: a beanpool.org name, an own domain, a hand-set name, and a bare number while the community
+ * has no name. A home-network address only while the community has nothing the Internet can reach (lights-out refuses
+ * /main itself). Never a former, lost or loopback name (none is published), nor a name still waiting for approval.
+ *
+ * Nor a beanpool.org name the address service doesn't simply give this community, whatever the record says (`standings`:
+ * services/registrar-name-watch.ts nameStandings, passed in because that module imports this one). The record keeps a name
+ * `live` until the watch marks it lost, 10 minutes to a day after the address service first names another key as its
+ * holder, and in that time the name may lead to that community's server: made main, it would send new members, invites,
+ * the directory and search engines there (several-addresses S6, #3240's deciding review). Only choosing it is refused on
+ * the address service's word: a name already main stays main, and keeps being accepted, until the watch's proof marks it
+ * lost (never on that word alone, Marty 2026-09-28).
  */
-export function mainAddressRefusal(host: string): string | null {
+export function mainAddressRefusal(host: string, standings: ReadonlyMap<string, Pick<NameStanding, 'registrarSays'>>): string | null {
     if (!publishedAddresses().includes(host)) {
         return configuredAddresses().some((a) => a.address === host)
             ? `${host} is not an address this community sends people to (a former or lost name), so it can't be the main one.`
             : `${host} is not one of this community's addresses. Add it first, then make it the main one.`;
     }
-    return notMainNow(host, reachableAddresses());
+    const notNow = notMainNow(host, reachableAddresses());
+    if (notNow) return notNow;
+    const says = standings.get(host)?.registrarSays ?? null;
+    if (says === 'other') {
+        return `The address service says another community holds ${host}, so it can't be the main address: new members and invites sent there could reach that community instead.`;
+    }
+    if (says === 'free') {
+        return `The address service says no community holds ${host}, so it can't be the main address until the address service gives it to this community again.`;
+    }
+    if (says) return `The address service doesn't say ${host} is this community's now, so it can't be the main address.`;
+    return null;
 }
 
 /**

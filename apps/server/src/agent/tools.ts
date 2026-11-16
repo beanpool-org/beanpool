@@ -57,6 +57,7 @@ import { assistantPostsToday, OWNER_POST_TOOLS, photoRoomWords } from './owner-p
 import { PHOTO_UPLOAD_PATH, PHOTO_WAYS } from './owner-photos.js';
 import { OWNER_READ_TOOLS } from './owner-reads.js';
 import { OWNER_TAKEDOWN_TOOLS, takedownsSummary } from './owner-takedowns.js';
+import { FORUM_TAKEDOWN_TOOLS } from './forum-takedowns.js';
 import { OWNER_SEED_TOOLS } from './owner-seeds.js';
 import { KNOWLEDGE_TOOLS, knowledgeOn, knowledgeSummary } from './knowledge.js';
 import { serverAddresses, NOT_CHECKED_STEP, SERVER_ADDRESS_KINDS, SERVER_ADDRESS_STANDINGS } from './server-addresses.js';
@@ -195,9 +196,11 @@ function iso(value: unknown): string | null {
     return null;
 }
 
-function targetKind(r: AbuseReport): 'post' | 'pulse_item' | 'group_message' | 'direct_message' | 'outside_message' | 'member' {
+function targetKind(r: AbuseReport): 'post' | 'forum_post' | 'pulse_item' | 'group_message' | 'direct_message' | 'outside_message' | 'member' {
     if (r.targetPulseItemId) return 'pulse_item';
     if (r.targetPostId || r.postId) return 'post';
+    // A forum post's report (slice F2): forum_take_down takes it by its report_id (slice F2b, agent/forum-takedowns.ts).
+    if (r.targetForumPostId) return 'forum_post';
     // A complaint from another community's server (engine/relay-complaint.ts): about a line a member here sent there. Before
     // the group line below, as it names a message too and no group: never read as a group chat message.
     if (r.fromAnotherCommunity) return 'outside_message';
@@ -223,8 +226,8 @@ function reportView(r: AbuseReport, withText: boolean, boundary: string): Record
         targetKind: targetKind(r),
         // A complaint another community's server sent: that a community did, never which one (it is the report's reporter).
         fromAnotherCommunity: !!r.fromAnotherCommunity,
-        postRemoved: r.postRemoved === true || r.pulseItem?.removed === true,
-        hiddenByReports: r.postHiddenByReports === true,
+        postRemoved: r.postRemoved === true || r.pulseItem?.removed === true || r.forumPost?.removed === true,
+        hiddenByReports: r.postHiddenByReports === true || r.forumPost?.hidden === true,
         pulsePlatform: r.pulseItem ? cleanMemberText(r.pulseItem.platform, 40) || null : null,
         settingsPath: reportSettingsPath(r.id),
     };
@@ -234,10 +237,13 @@ function reportView(r: AbuseReport, withText: boolean, boundary: string): Record
     view.reason = fence(boundary, what('reason'), r.reason);
     view.postTitle = kind === 'pulse_item'
         ? fence(boundary, what('reported Pulse item title'), r.pulseItem?.title)
-        : fence(boundary, what('reported post title'), r.postTitle);
-    view.postDescription = kind === 'post' ? fence(boundary, what('reported post description'), r.postDescription) : null;
+        : kind === 'forum_post' ? fence(boundary, what("reported forum post's topic title"), r.forumPost?.topicTitle)
+            : fence(boundary, what('reported post title'), r.postTitle);
+    view.postDescription = kind === 'post' ? fence(boundary, what('reported post description'), r.postDescription)
+        : kind === 'forum_post' ? fence(boundary, what('reported forum post words'), r.forumPost?.words) : null;
     view.authorCallsign = kind === 'post'
         ? fence(boundary, what("reported post author's name"), r.postAuthorCallsign)
+        : kind === 'forum_post' ? fence(boundary, what("reported forum post writer's name"), r.forumPost?.writerName)
         : kind === 'member' ? fence(boundary, what("reported member's name"), r.targetCallsign)
             : kind === 'group_message' || kind === 'direct_message' || kind === 'outside_message'
                 ? fence(boundary, what("reported message author's name"), r.targetCallsign) : null;
@@ -307,6 +313,8 @@ export function agentCannot(canModerate: boolean, role: 'owner' | 'admin' = 'own
     if (!canModerate) return AGENT_CANNOT;
     const lines = AGENT_CANNOT.map((line) => (line === AGENT_CANNOT[3]
         ? 'approve a suggestion, dismiss a report, put a post back or lift a mute (the admin does, on their phone or in Settings)' : line));
+    // The forum (slice F2b, agent/forum-takedowns.ts): it reads the waiting list, and a person answers each first look in the app.
+    lines.push('OK a first look in the forum, or say no to one (a moderator does, in the app)');
     // An admin's assistant takes one post a call (MCP-MODERATION S3), as an admin deletes one at a time in Settings.
     return role === 'owner' ? lines : [...lines, "take more than one post down in a call (an owner's assistant can)"];
 }
@@ -727,6 +735,11 @@ AGENT_TOOLS.push({
         if (kind === 'remove_reported' && kindOf === 'outside_message') {
             return { ok: false, error: 'That report is a complaint from another community about a message a member here sent there, not a post: there is nothing to remove.' };
         }
+        // A forum post's report (slice F2b): a dismissal and a removal each have their card's Approve (agent/suggestions.ts approveCall);
+        // a restore is a moderator's own act in the forum, which no assistant's word reaches (DESIGN-forums-fable.md §6).
+        if (kind === 'restore_post' && kindOf === 'forum_post') {
+            return { ok: false, error: 'That report is about a forum post: bringing one back is a moderator\'s own act in the app, and no suggestion can ask for it. Tell the member if you think it should come back.' };
+        }
         if (kind !== 'restore_post' && (r.status === 'reviewed' || r.status === 'actioned')) {
             return { ok: false, error: 'That report is already closed: there is nothing to suggest about it.' };
         }
@@ -752,7 +765,7 @@ AGENT_TOOLS.push({
 // reads for seeding, and its own undo: my_posts, update_post, remove_post, remove_all_i_made (agent/owner-reads.ts).
 // Slice S3: groups, a group's post and enterprises, content only (agent/owner-seeds.ts). MCP-MODERATION S1: its takedowns
 // (agent/owner-takedowns.ts).
-AGENT_TOOLS.push(...OWNER_POST_TOOLS, ...OWNER_SEED_TOOLS, ...OWNER_READ_TOOLS, ...OWNER_TAKEDOWN_TOOLS);
+AGENT_TOOLS.push(...OWNER_POST_TOOLS, ...OWNER_SEED_TOOLS, ...OWNER_READ_TOOLS, ...OWNER_TAKEDOWN_TOOLS, ...FORUM_TAKEDOWN_TOOLS);
 // Local knowledge K6: drafts and reads, every owner's and admin's grant while Learn is on (agent/knowledge.ts).
 AGENT_TOOLS.push(...KNOWLEDGE_TOOLS);
 

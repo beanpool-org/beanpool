@@ -6,7 +6,8 @@
  *     `ids=` read get none; with `types=…,knowledge` or `type=knowledge` a member gets it, with its knowledge fields.
  *  2. Never to a visitor: a signed non-member gets none, and a visitor's copy of a post drops the field.
  *  3. Never a deal, an RSVP, a vote or a pin: each refused, nothing written.
- *  4. Never a listing: the active listings count doesn't move; no map pin (no place).
+ *  4. Never a listing: the active listings count doesn't move; no map pin (no place). 4b: Settings' posts list (the owner
+ *     console, both reads) holds every page, where an owner or admin finds one to take it down (slice K9).
  *  5. GET /api/knowledge/front: grouped by topic in the fixed order, three rows a topic with its count; Learn's order inside
  *     a topic (out of date last, then most helped, then A to Z), never by date; a row never carries the body.
  *  6. `topic=`: every row of one topic, paged; `q=`: best match first (title, then place, then words), the topic's words
@@ -200,6 +201,24 @@ async function main(): Promise<void> {
     assert(placed.n === 0, '4. no page has a place, so no map and no distance ever meets one');
     const near = await call(mel, 'GET', '/api/marketplace/posts?lat=-28.55&lng=153.5&radiusKm=50&types=offer,need,poll,event,knowledge');
     assert(!kinds(near).includes('knowledge'), '4. a read within a radius meets none, even naming it');
+
+    // ── 4b. Settings' posts list holds the pages (slice K9) ───────────────────────────────────────
+    // The owner console is where an owner or admin takes a page down (its Type Filter has "Local knowledge"): both of its
+    // reads, the whole answer and the paged one, carry every page beside the Offer. Only the owners' and admins' session.
+    console.log("── 4b. Settings' posts list ──");
+    const owner = ownerPhoneSessionHeaders(owen.pk);
+    const whole = await call(null, 'POST', '/api/local/admin/data', {}, owner);
+    const wholeKinds = Array.isArray(whole.body?.posts) ? whole.body.posts.map((p: { type: string }) => p.type) : [];
+    assert(whole.status === 200 && wholeKinds.filter((x: string) => x === 'knowledge').length === 5 && wholeKinds.includes('offer'),
+        `4b. the owner console's whole answer: all five pages and the Offer (${whole.status}, ${wholeKinds.join(',')})`);
+    const paged = await call(null, 'POST', '/api/local/admin/data/posts', { limit: 50 }, owner);
+    const pagedKinds = Array.isArray(paged.body?.posts) ? paged.body.posts.map((p: { type: string }) => p.type) : [];
+    const tipRow = (paged.body?.posts ?? []).find((p: { id: string }) => p.id === kTip);
+    assert(paged.status === 200 && pagedKinds.filter((x: string) => x === 'knowledge').length === 5 && pagedKinds.includes('offer')
+        && tipRow?.category === 'local-services' && tipRow?.knowledge?.place === 'The tip on Manse Road',
+        `4b. the paged read: all five pages, each with its topic and knowledge fields (${paged.status}, ${pagedKinds.join(',')})`);
+    const memberAsks = await call(mel, 'POST', '/api/local/admin/data/posts', { limit: 50 });
+    assert(memberAsks.status === 401 || memberAsks.status === 403, `4b. a member's signed key reads neither (${memberAsks.status})`);
 
     // ── 5. Learn's front ─────────────────────────────────────────────────────────────────────────
     console.log("── 5. Learn's front ──");

@@ -53,8 +53,10 @@ export const CLAIM_USAGE = `Usage: beanpool claim [--ip <IPv4> | --name <label> 
        beanpool claim --key <64-hex public key> --callsign <name>
 
 The last step of an install: gives this community its address, then shows the one-time claim code and a QR code.
-On your phone, scan the QR code, or open BeanPool and tap "Installed BeanPool on a server? Claim it": that phone becomes
-the owner, and the claim makes its BeanPool account if it has none.
+On your phone, scan the QR code. Or open BeanPool, tap "I'm New Here" on its first screen, then
+"Installed BeanPool on a server? Claim it"; with an account already, tap the bean at the top, then
+"Set up a new community server". That phone becomes the owner, and the claim makes its BeanPool
+account if it has none.
 
   --ip <IPv4>         this server's public IP address, on a rented server with ports 80 and 443 open: it gets its own
                       certificate, and phones reach it at https://<IP>. A name survives a change of server; a number

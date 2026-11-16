@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AssistantTakedownsPanel } from './AssistantTakedownsPanel';
 import { CHILD_SAFETY_OPEN } from '../../lib/takedown-words';
-import { PostModerationPanel, heldTakedowns, takenDownWords, putBackWords, chipClassFor, isCopy, type PostModerationItem } from './PostModerationPanel';
+import { PostModerationPanel, heldTakedowns, takenDownWords, putBackWords, chipClassFor, categoryLabelFor, isCopy, type PostModerationItem } from './PostModerationPanel';
 
 /**
  * The posts screen's Type Filter, its chips and its "taken down" line (MCP-MODERATION S4,
@@ -56,12 +56,43 @@ const row = (title: string) => screen.getByText(title).closest('[class*="flex-co
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('Type Filter (pick 7: Events, Polls, Shown from another community)', () => {
-    it('lists All, Offers, Needs, Events, Polls and Shown from another community', () => {
+    it('lists All, Offers, Needs, Events, Polls, Local knowledge and Shown from another community', () => {
         render(<PostModerationPanel posts={POSTS} activeNode={NODE} onRefresh={vi.fn()} />);
         const options = within(screen.getByLabelText(/Type Filter/i)).getAllByRole('option').map((o) => [(o as HTMLOptionElement).value, o.textContent]);
         expect(options).toEqual([
-            ['all', 'All Types'], ['offer', 'Offers'], ['need', 'Needs'], ['event', 'Events'], ['poll', 'Polls'], ['copy', 'Shown from another community'],
+            ['all', 'All Types'], ['offer', 'Offers'], ['need', 'Needs'], ['event', 'Events'], ['poll', 'Polls'], ['knowledge', 'Local knowledge'],
+            ['copy', 'Shown from another community'],
         ]);
+    });
+
+    // Learn K9 (DESIGN-local-knowledge-fable.md §8): Settings' posts list is where an owner or admin takes a page of Local knowledge
+    // down, so the filter picks the pages, each in Learn's teal and named by its topic, never its stored id.
+    it('Local knowledge picks the pages alone, in Learn\'s teal, each with its topic\'s name', async () => {
+        const pages: PostModerationItem[] = [
+            ...POSTS,
+            { id: 'k-tip', type: 'knowledge', category: 'local-services', title: 'How recycling works at the tip', authorCallsign: 'Olive', price_c: 0 },
+            { id: 'k-flood', type: 'knowledge', category: 'emergencies', title: 'Who to call in a flood', authorCallsign: 'Owen' },
+        ];
+        render(<PostModerationPanel posts={pages} activeNode={NODE} onRefresh={vi.fn()} />);
+        await userEvent.selectOptions(screen.getByLabelText(/Type Filter/i), 'knowledge');
+        expect(screen.getByText('2 of 9 posts')).toBeInTheDocument();
+        expect(screen.queryByText('Sourdough')).not.toBeInTheDocument();
+        const tip = row('How recycling works at the tip');
+        expect(within(tip).getByTestId('post-type-chip').className).toContain('bg-bp-chip-learn-tint text-bp-chip-learn-ink');
+        expect(within(tip).getByText('🚰 Local services')).toBeInTheDocument();
+        expect(within(tip).queryByText('local-services')).not.toBeInTheDocument();
+        expect(within(row('Who to call in a flood')).getByText('🚨 Emergencies')).toBeInTheDocument();
+        expect(within(tip).getByRole('button', { name: /Delete post How recycling works at the tip/ })).toBeInTheDocument();
+        // The kind's name on its chip, never the stored word alone; a page has no price.
+        expect(within(tip).getByTestId('post-type-chip')).toHaveTextContent('Local knowledge');
+        expect(within(tip).queryByText(/🫘/)).toBeNull();
+    });
+
+    it('a category is only read as a topic on a page of Local knowledge', () => {
+        expect(categoryLabelFor('knowledge', 'growing-animals')).toBe('🌿 Growing and animals');
+        expect(categoryLabelFor('offer', 'emergencies')).toBe('emergencies');
+        expect(categoryLabelFor('knowledge', 'a-topic-from-later')).toBe('a-topic-from-later');
+        expect(categoryLabelFor('knowledge', undefined)).toBe('');
     });
 
     it('Events picks every event, a copy of one included; Polls picks the poll', async () => {
@@ -109,6 +140,7 @@ describe('Chips: one per type, from the central brand colours', () => {
         expect(classes[2]).toContain('bg-bp-tile-event-tint text-bp-tile-event-ink');
         expect(classes[3]).toContain('bg-bp-chip-accent-tint text-bp-chip-accent-ink');
         expect(new Set(classes).size).toBe(4);
+        expect(chipClassFor('knowledge')).toContain('bg-bp-chip-learn-tint text-bp-chip-learn-ink');
         for (const c of [...classes, chipClassFor(undefined), chipClassFor(99)]) expect(c).not.toMatch(/\b(?:sky|emerald|orange|red|amber|violet)-\d/);
     });
 

@@ -13,7 +13,7 @@ import { addressCardDigest, addressCardName, addressCardVerifies, signAddressCar
 import { toBase64 } from '../request-signing.js';
 
 /** What shows nothing, read by Unicode's own property (Node knows it): Cf, the combining grapheme joiner, the Hangul fillers. */
-const INVISIBLE = /[\p{Cf}͏ᅟᅠㅤﾠ]/u;
+const INVISIBLE = /[\p{Cf}\u034F\u115F\u1160\u3164\uFFA0]/u;
 
 describe('cleanName', () => {
     it('takes out every format character Unicode names (\\p{Cf}), however the written-out list in name-line.ts was made', () => {
@@ -31,14 +31,14 @@ describe('cleanName', () => {
     it.each([
         ['Ana', 'Ana'],
         ['  Ana  Ríos ', 'Ana Ríos'],
-        ['Ana 　 Ríos', 'Ana Ríos'],
-        [`Ana${'​'.repeat(56)}`, 'Ana'],
-        ['‮Ana‬', 'Ana'],
-        ['‮anA', 'anA'],
-        ['⁦Ana⁩﻿­', 'Ana'],
-        ['Aㅤnﾠaᅟᅠ͏', 'Ana'],
+        ['Ana\u00A0\u3000 Ríos', 'Ana Ríos'],
+        [`Ana${'\u200B'.repeat(56)}`, 'Ana'],
+        ['\u202EAna\u202C', 'Ana'],
+        ['\u202EanA', 'anA'],
+        ['\u2066Ana\u2069\uFEFF\u00AD', 'Ana'],
+        ['A\u3164n\uFFA0a\u115F\u1160\u034F', 'Ana'],
         ['Ana\u{E0041}\u{E007F}', 'Ana'],
-        ['​‍', ''],
+        ['\u200B\u200D', ''],
     ])('%j reads %j', (raw, clean) => {
         expect(cleanName(raw)).toBe(clean);
         expect(INVISIBLE.test(cleanName(raw))).toBe(false);
@@ -69,7 +69,7 @@ describe('clipName', () => {
         // Whole code points: the emoji is kept whole or dropped whole.
         ['Ana🙂🙂🙂', 5, 'Ana🙂…'],
         // Read clean first: padding doesn't count, and doesn't push the name past the cut.
-        [`Ana${'​'.repeat(56)}`, 4, 'Ana'],
+        [`Ana${'\u200B'.repeat(56)}`, 4, 'Ana'],
     ])('%j in %d reads %j', (raw, max, want) => {
         expect(clipName(raw, max)).toBe(want);
     });
@@ -88,9 +88,9 @@ describe('guestNameLine: the card name is cut, never " · <home> · guest"', () 
     const HOMES = ['a.example', 'the-long-name-of-a-community-garden-and-its-shed.green.hills.example:8443', LONGEST_HOME];
     const NAMES: Array<[string, string]> = [
         ...[1, 40, 41, 58, 59, 60].map((n): [string, string] => [NAME60.slice(0, n), NAME60.slice(0, n)]),
-        [`Ana${'​'.repeat(56)}`, 'Ana'],
-        ['‮Ana‬', 'Ana'],
-        [`${NAME60.slice(0, 30)}​‮${NAME60.slice(30, 60)}⁩`, NAME60.slice(0, 60)],
+        [`Ana${'\u200B'.repeat(56)}`, 'Ana'],
+        ['\u202EAna\u202C', 'Ana'],
+        [`${NAME60.slice(0, 30)}\u200B\u202E${NAME60.slice(30, 60)}\u2069`, NAME60.slice(0, 60)],
     ];
 
     it('the longest home a server has is 259 characters', () => {
@@ -120,8 +120,8 @@ describe('guestNameLine: the card name is cut, never " · <home> · guest"', () 
 
     it('with no `max` (the apps), the whole card name, read clean', () => {
         expect(guestNameLine(NAME60, 'a.example')).toBe(`${NAME60} · a.example · guest`);
-        expect(guestNameLine(`Ana${'​'.repeat(56)}`, 'a.example')).toBe('Ana · a.example · guest');
-        expect(guestNameLine('​​', 'a.example')).toBe('… · a.example · guest');
+        expect(guestNameLine(`Ana${'\u200B'.repeat(56)}`, 'a.example')).toBe('Ana · a.example · guest');
+        expect(guestNameLine('\u200B\u200B', 'a.example')).toBe('… · a.example · guest');
     });
 });
 
@@ -131,20 +131,20 @@ describe('addressCardName and the card: only a clean name gets in', () => {
     const sign = (b: Uint8Array) => ed25519.sign(b, seed);
 
     it.each([
-        [`Ana${'​'.repeat(56)}`, 'Ana'],
-        ['‮Ana‬', 'Ana'],
-        ['Ana   Ríos', 'Ana Ríos'],
+        [`Ana${'\u200B'.repeat(56)}`, 'Ana'],
+        ['\u202EAna\u202C', 'Ana'],
+        ['Ana  \u00A0Ríos', 'Ana Ríos'],
         ['  Ana Ríos ', 'Ana Ríos'],
     ])('%j is the name %j', (raw, clean) => {
         expect(addressCardName(raw)).toBe(clean);
     });
 
-    it.each([['Ana\nRíos'], ['Ana Ríos'], ['Ana\u0007'], ['​​'], ['x'.repeat(61)]])('%j is no name', (raw) => {
+    it.each([['Ana\nRíos'], ['Ana\u2028Ríos'], ['Ana\u0007'], ['\u200B\u200B'], ['x'.repeat(61)]])('%j is no name', (raw) => {
         expect(addressCardName(raw)).toBeNull();
     });
 
     it('a phone signs the clean name; a card signed over a padded one is no card', async () => {
-        const padded = `Ana${'​'.repeat(56)}`;
+        const padded = `Ana${'\u200B'.repeat(56)}`;
         const card = await signAddressCard({ key, home: 'a.example', name: padded }, sign);
         expect(card.name).toBe('Ana');
         expect(addressCardVerifies(card)).toBe(true);

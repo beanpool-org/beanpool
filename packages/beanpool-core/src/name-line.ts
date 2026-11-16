@@ -38,7 +38,7 @@ const NAME_LINE_WORDS = Object.freeze({
  * those throw (search-terms.ts). A test checks the list against \p{Cf} as Node knows it (name-line.test.ts).
  */
 // eslint-disable-next-line no-misleading-character-class -- these characters are what it removes
-const INVISIBLE = /[­͏؀-؅؜۝܏࢐࢑࣢ᅟᅠ឴឵᠎​-‏‪-‮⁠-⁤⁦-⁯ㅤ﻿ﾠ￹-￻\u{110BD}\u{110CD}\u{13430}-\u{1343F}\u{1BCA0}-\u{1BCA3}\u{1D173}-\u{1D17A}\u{E0001}\u{E0020}-\u{E007F}]/gu;
+const INVISIBLE = /[\u00AD\u034F\u0600-\u0605\u061C\u06DD\u070F\u0890\u0891\u08E2\u115F\u1160\u17B4\u17B5\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\u3164\uFEFF\uFFA0\uFFF9-\uFFFB\u{110BD}\u{110CD}\u{13430}-\u{1343F}\u{1BCA0}-\u{1BCA3}\u{1D173}-\u{1D17A}\u{E0001}\u{E0020}-\u{E007F}]/gu;
 
 /**
  * A person's name as it is read and shown: the characters that show nothing taken out (above), each run of spaces made

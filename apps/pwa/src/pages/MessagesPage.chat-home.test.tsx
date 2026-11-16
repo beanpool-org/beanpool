@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { MessagesPage } from './MessagesPage';
 import { draftKey, forgetDraftsForTests, keepDraft, keptDraft } from '../lib/chat-drafts';
+import { resetChatListSendsForTest } from '../lib/chat-list-order';
 import { consumeChatPrefill } from '../lib/archetypes';
 import { postEventChatMessage } from '../lib/api';
 import { sendRouteOf } from '../lib/group-hold';
@@ -344,6 +345,58 @@ describe('the event chat: a send that lands after the member left', () => {
                 expect(vi.mocked(postEventChatMessage).mock.calls.length).toBe(outcome === 'refused' ? 0 : 1);
             });
         }
+    }
+});
+
+/**
+ * One send, both rules (#3223's kept drafts beside #3225's chat list order): an event chat's line the node takes after the
+ * member went back to the list moves that chat to the top of the list AND leaves its box empty when it opens again; one that
+ * fails does neither (the list as it was, the words still in the box).
+ */
+describe('the event chat: a line that lands after Back both lifts its chat and lets go of its words', () => {
+    const SENT = 'Bringing gloves';
+    const NAMES = ['Sol', 'Kofi', 'Garden crew', 'Working bee'];
+    /** The rows' names in the order the list draws them. */
+    const rowNames = () => {
+        const list = screen.getByTestId('chat-list');
+        const at = (name: string) => within(list).queryByText(name);
+        return NAMES.filter((n) => at(n)).sort((a, b) => (at(a)!.compareDocumentPosition(at(b)!) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+    };
+    beforeEach(() => { nonce = 0; resetChatListSendsForTest(); });
+    afterEach(() => { resetChatListSendsForTest(); });
+
+    for (const outcome of ['taken', 'failed'] as const) {
+        it(`${outcome}`, async () => {
+            let land: () => void = () => {};
+            vi.mocked(postEventChatMessage).mockImplementationOnce(() => new Promise((resolve, reject) => {
+                land = () => (outcome === 'taken' ? resolve({} as never) : reject(new Error('offline')));
+            }));
+            await show({ open: null, home: 0 });
+            await screen.findByTestId('chat-list');
+            const before = await waitFor(() => {
+                const names = rowNames();
+                expect(names).toHaveLength(NAMES.length);
+                return names;
+            });
+            // The chat with another community has the newest line; the event chat, none yet, is below it.
+            expect(before[0]).toBe('Sol');
+            expect(before.indexOf('Working bee')).toBeGreaterThan(0);
+
+            await show({ open: EVENT_ID, home: 0 });
+            await type(SENT);
+            fireEvent.click(within(screen.getByTestId('event-chat')).getByRole('button', { name: 'Send' }));
+            await waitFor(() => expect(postEventChatMessage).toHaveBeenCalledWith(EVENT_ID, SENT));
+            fireEvent.click(await screen.findByTestId('chat-back'));
+            await onTheList('back arrow');
+            await act(async () => { land(); await new Promise((r) => setTimeout(r, 20)); });
+
+            if (outcome === 'taken') await waitFor(() => expect(rowNames()[0], 'the event chat, at the top at once').toBe('Working bee'));
+            else expect(rowNames(), 'a line that did not go moves nothing').toEqual(before);
+
+            await show({ open: null, home: 0 });
+            await show({ open: EVENT_ID, home: 0 });
+            expect((await waitFor(box)).value, 'the event chat opened again').toBe(outcome === 'taken' ? '' : SENT);
+        });
     }
 });
 

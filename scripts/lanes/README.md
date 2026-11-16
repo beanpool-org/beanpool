@@ -65,8 +65,9 @@ function describes its contract.
 A stage goes CI first (Marty, 16 Nov 2026: the Mac was overloaded). The FIX, FIX-CI and CONTINUE briefs carry `LANE_ONE_PUSH`,
 which takes precedence over the one-push line in both rule files. Locally a stage runs only the one test file or suite it is
 working on; a whole-app check it cannot avoid goes through `tsc-slot.sh`. It pushes, opens the PR as a draft if there is none,
-and waits with `ci-wait.sh <PR> $(git rev-parse HEAD)`, always with the sha it just pushed. Each red it caused gets a fix, that one test, and a push, at most 3 pushes for CI a round,
-because each push cancels and restarts GitHub's run. A red it cannot reach is named in the PR body as "red not caused here".
+and waits with `ci-wait.sh <PR> $(git rev-parse HEAD)`, always with the sha it just pushed. Each red it caused gets a fix, that
+one test, and a push, at most 3 pushes for CI a round, because each push cancels and restarts GitHub's run. A red it cannot
+reach is named in the PR body as "red not caused here".
 Once green it runs `preflight.sh`, then `gh pr ready`. Both scripts are named from the library's own directory, so a fix round
 on a branch cut before they existed still finds them. A branch with no PR starts no run, so a long first build may still push
 early, and a run about to end must push what it has. The default deciding brief says the same from the other side: GitHub CI
@@ -162,10 +163,9 @@ Every setting is an env var with a default derived from the checkout (see the to
 `$TMPDIR`), `LANE_GH_REPO`, `LANE_AGY_BIN`, `LANE_CLAUDE_BIN`, `LANE_BUILD_TIMEOUT` (60m), `LANE_REVIEW_TIMEOUT`
 (40m), `LANE_HEADER_FILE`, `LANE_CI_CHECK`, `LANE_CI_WORKFLOW`, and the timing knobs (`LANE_IDLE_OUTPUT_SECS`,
 `LANE_IDLE_WT_SECS`, `LANE_WAIT_SECS`, `LANE_GREEN_TRIES`, `LANE_GREEN_NONE_TRIES`, `LANE_GREEN_SECS`, …).
-`ci-wait.sh` reads `LANE_GH_REPO`, `LANE_CI_WAIT_SECS` (530), `LANE_CI_WAIT_POLL_SECS` (45) and `LANE_CI_WAIT_HEAD_POLL_SECS` (10, while
-GitHub has not shown the sha yet). `tsc-slot.sh` reads `BP_SLOTS`
-(3), `BP_SLOT_BASE` (keep the default: every copy on the machine must count the same slots), `BP_SLOT_WAIT_SECS` (2700) and
-`BP_SLOT_POLL_SECS` (15).
+`ci-wait.sh` reads `LANE_GH_REPO`, `LANE_CI_WAIT_SECS` (530), `LANE_CI_WAIT_POLL_SECS` (45) and `LANE_CI_WAIT_HEAD_POLL_SECS`
+(10, while GitHub has not shown the sha yet). `tsc-slot.sh` reads `BP_SLOTS` (3), `BP_SLOT_BASE` (keep the default: every
+copy on the machine must count the same slots), `BP_SLOT_WAIT_SECS` (2700) and `BP_SLOT_POLL_SECS` (15).
 
 ## zsh gotchas (each one has broken a lane script)
 

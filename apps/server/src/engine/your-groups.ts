@@ -15,7 +15,7 @@ import {
     ensureKeeperReadCursor, getKeeperReadCursor,
 } from './enterprise-thread.js';
 import {
-    canReadEventThread, loadEventForThread, isEventThreadExpired, eventThreadReadOnlyReason, EVENT_THREAD_REMOVED_TEXT,
+    canReadEventThread, loadEventForThread, isEventThreadExpired, eventThreadReadOnlyReason, eventChatHasPostedLine, EVENT_THREAD_REMOVED_TEXT,
 } from './event-thread.js';
 import { blankedWithAccount } from './message-tombstone.js';
 import { getChatMutesFor, type ChatMute } from './chat-mutes.js';
@@ -229,7 +229,8 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
         }, 'removed by a keeper', e.joined_at);
     }
 
-    // Events the member hosts or is Going to, while their chat is still readable (30 days after the end).
+    // Events the member hosts or is Going to, while their chat is still readable (30 days after the end), and only once
+    // someone has posted in it (event-thread.ts chatListedFor; Marty, 16 Nov 2026): an empty event chat stays on the event.
     const events = preparedShape(db, `
         SELECT c.id FROM conversation_participants cp JOIN conversations c ON c.id = cp.conversation_id
         WHERE cp.public_key = ? AND c.type = 'event_thread'
@@ -237,7 +238,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
     for (const { id } of events) {
         let row: ReturnType<typeof loadEventForThread>;
         try { row = loadEventForThread(id); } catch { continue; }
-        if (isEventThreadExpired(row) || !canReadEventThread(row, pubkey)) continue;
+        if (isEventThreadExpired(row) || !canReadEventThread(row, pubkey) || !eventChatHasPostedLine(id)) continue;
         const host = isEventHost(db, row, pubkey);
         // Bolt: loadEventForThread selects event_start_at directly, avoiding an N+1 query per event.
         finish({

@@ -106,7 +106,7 @@ import { readMemberArea } from '../engine/member-area.js';
 import { getInterestsUpdatedAt, getTourRecord, hasKeptWords, hasSawLedger } from '../engine/home-preferences.js';
 import { invitedByOf, wayBackOf, type InvitedBy, type WayBack } from '../engine/way-back.js';
 import { standbyWritesNothing } from '../config/node-role.js';
-import { canReadEventThread, chatHiddenFrom, getEventThreadMessages, loadEventForThread } from '../engine/event-thread.js';
+import { canReadEventThread, chatHiddenFrom, getEventThreadMessages, isEventThreadExpired, loadEventForThread } from '../engine/event-thread.js';
 import { pendingGroupInvites } from '../engine/group-invites.js';
 import { publicRepeatPattern } from '../engine/event-series-roll.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
@@ -1433,6 +1433,15 @@ function pinnedChat(c: Ctx, id: string): HomeChatCard {
         return { kind: mine.kind, name: clip(mine.name, NAME_CHARS), unread: mine.unreadCount, muted: muted(mine.mute, c.now), lines: chatLinesOf(rows) };
     }
     const conv = getConversation(id);
+    // An event's chat nobody has posted in yet is not in their list (engine/event-thread.ts chatListedFor; Marty, 16 Nov
+    // 2026), but its reader still has it where they pinned it: its card, with no lines (never 'left', which they haven't).
+    if (conv?.type === 'event_thread') {
+        let row: ReturnType<typeof loadEventForThread> | null = null;
+        try { row = loadEventForThread(id); } catch { /* no such event: answered below */ }
+        if (row && canReadEventThread(row, me) && !chatHiddenFrom(conv, me) && !isEventThreadExpired(row)) {
+            return { kind: 'event', name: clip(row.title, NAME_CHARS), unread: 0, muted: muted(getChatMutesFor(me).get(id), c.now), lines: chatLinesOf(getEventThreadMessages(id, CHAT_LINES, 0)) };
+        }
+    }
     if (!conv) {
         const kept = withheldConversationOwnedBy(id, me);
         return kept ? directChat(c, id, kept.other_pubkey, pageWithOwnWithheld(id, me, CHAT_LINES, 0, () => []), 0) : { gone: 'left' };

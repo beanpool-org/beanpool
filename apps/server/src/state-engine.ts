@@ -497,7 +497,7 @@ import {
     getEventThread as getEventThreadEngine,
     postEventThreadMessage as postEventThreadMessageEngine,
     removeEventThreadMessage as removeEventThreadMessageEngine,
-    chatHiddenFrom,
+    chatListedFor,
     type EventThreadMessage,
     type EventThreadView
 } from './engine/event-thread.js';
@@ -7508,9 +7508,10 @@ export function getUnreadCounts(pubkey: string): Record<string, number> {
 }
 
 /**
- * A member's unread counts over the chats their conversation list shows: an event's chat is left out while the event
- * is hidden from them by reports (G3, chatHiddenFrom). GET /api/messages/conversations and the badge every push
- * carries both read this, so the number on the app icon is always one the member can open and clear.
+ * A member's unread counts over the chats their conversation list shows (engine/event-thread.ts chatListedFor): an event's
+ * chat is left out while the event is hidden from them by reports (G3), while nobody has posted in it, and when they are
+ * not one of its readers (Marty, 16 Nov 2026). GET /api/messages/conversations and the badge every push carries both read
+ * this, so the number on the app icon is always one the member can open and clear.
  */
 export function getListedUnreadCounts(pubkey: string): Record<string, number> {
     return Object.fromEntries(listedUnreadChats(pubkey).map(c => [c.id, c.unread]));
@@ -7525,7 +7526,7 @@ function listedUnreadChats(pubkey: string): { id: string; type: string; unread: 
     for (const [id, unread] of Object.entries(getUnreadCounts(pubkey))) {
         if (held.has(id)) continue;
         const type = (typeOf.get(id) as { type: string } | undefined)?.type ?? '';
-        if (!chatHiddenFrom({ id, type }, pubkey)) chats.push({ id, type, unread });
+        if (chatListedFor({ id, type }, pubkey)) chats.push({ id, type, unread });
     }
     return chats;
 }

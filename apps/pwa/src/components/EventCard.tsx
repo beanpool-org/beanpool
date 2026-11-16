@@ -24,12 +24,14 @@
 
 import { Fragment, useEffect, useState } from 'react';
 import { copyCardLine, copyFromLine, eventCopyOf, pinLive, t, upperCase, word, placeShownRoughly, PLACE_WORDS, type WordKey } from '@beanpool/core';
-import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
+import { getConversations, getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
+import { onConversationRead } from '../lib/conversation-read';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
     CLIENT_POST_TYPES, eventEditBlockedReason, eventRepeatCaption, eventRowWhen, eventRowWhenPieces, eventTileWhenFor, eventWhenParts, formatDistance, formatEventWhen,
     isEventHostView, isEventOpen,
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
+    eventChatEntryLabel, eventChatNewLines,
 } from '../lib/events';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { EventNextDates } from './EventNextDates';
@@ -47,7 +49,7 @@ import {
     BOX_LABEL, CARD_INK, COMPACT_EVENT_BODY, COMPACT_EVENT_HEAD, COMPACT_EVENT_MARK, COMPACT_EVENT_TEXT, COMPACT_LEAD, COMPACT_LINES, COMPACT_MARK,
     COMPACT_MARK_GIVES, COMPACT_PIECE, COMPACT_PICTURE, COMPACT_ROW, COMPACT_TITLE_GIVES, COMPACT_WORD,
     EVENT_ANSWER, GRID_PHOTO, GRID_PHOTO_CROP, GRID_ROW, GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE,
-    GRID_TIME_ROW, GRID_TYPE, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK, PAGE_TYPE,
+    GRID_TIME_ROW, GRID_TYPE, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_CHAT_LABEL, PAGE_CHAT_NEW, PAGE_INK, PAGE_TYPE,
     POP_UP_CLOSE_ROOM, chip, gridTile, listCard,
 } from './market-card-shell';
 
@@ -764,6 +766,29 @@ interface EventDetailProps {
     onChangeThisDateOnly?: (post: MarketplacePost, date: string) => void;
 }
 
+/**
+ * The lines in an event's chat its reader hasn't read: its unread count in their chat list (GET /api/messages/conversations,
+ * where an event's chat is once someone has posted in it: the server's chatListedFor). 0 for no key (not a reader), until the
+ * list answers, or when it fails; back to 0 once the chat is read here (lib/conversation-read.ts).
+ */
+function useEventChatNew(publicKey: string | null | undefined, postId: string): number {
+    const [n, setN] = useState(0);
+    useEffect(() => {
+        setN(0);
+        if (!publicKey) return;
+        let live = true;
+        getConversations(publicKey)
+            .then((answer) => {
+                const chat = (answer?.conversations ?? []).find((c) => c.id === postId && c.type === 'event_thread');
+                if (live) setN(Math.max(0, chat?.unreadCount ?? 0));
+            })
+            .catch(() => { /* offline: no count */ });
+        const stop = onConversationRead((id) => { if (live && (!id || id === postId)) setN(0); });
+        return () => { live = false; stop(); };
+    }, [publicKey, postId]);
+    return n;
+}
+
 export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenProfile, onOpenTag, onOpenFreeTag, onChange, onCancelled, onEdit, onOpenChat, onCopyToNewDate, onChangeThisDateOnly }: EventDetailProps) {
     const rsvp = useEventRsvp(post, identity, onChange);
     const p = rsvp.livePost;
@@ -842,6 +867,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
     const canReport = !!identity && !isHost && p.authorPublicKey !== identity.publicKey;
     const chatWaiting = !!onOpenChat && !copy && letInState === 'waiting';
     const chatOpen = !!onOpenChat && !copy && (isHost || (p.myRsvp === 'going' && letInState !== 'waiting'));
+    const chatNew = useEventChatNew(chatOpen ? identity?.publicKey : null, p.id);
 
     // The page is one column, the parts in DESIGN-detail-pages-fable.md §2.1's order as DESIGN-detail-pages-frame-fable.md §1.6
     // amends it, drawn from the style box (components/market-card-shell.ts), as the phone's page is: the chips, the loud lines
@@ -1002,9 +1028,12 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 type="button"
                                 data-testid="event-open-chat"
                                 onClick={() => onOpenChat!(p)}
-                                className={`basis-full text-left break-words ${PAGE_BUTTON.quiet}`}
+                                aria-label={chatNew > 0 ? `${eventChatEntryLabel()}, ${eventChatNewLines(chatNew)}` : eventChatEntryLabel()}
+                                className={`basis-full flex items-center gap-3 text-left ${PAGE_BUTTON.chat}`}
                             >
-                                <span aria-hidden="true">💬</span> {t('Open event chat')}
+                                <span aria-hidden="true" className="shrink-0 text-lg leading-none">💬</span>
+                                <span className={`min-w-0 break-words ${PAGE_CHAT_LABEL}`}>{eventChatEntryLabel()}</span>
+                                {chatNew > 0 && <span aria-hidden="true" data-testid="event-chat-new" className={`ml-auto ${PAGE_CHAT_NEW}`}>{eventChatNewLines(chatNew)}</span>}
                             </button>
                         )
                     ) : undefined}

@@ -42,6 +42,7 @@ import { PostTagChips } from './PostTagChips';
 import { CategoryTile } from './CategoryTile';
 import { CardChip, useCardShell } from './market-card-shell';
 import { NewEventModal } from './NewEventModal';
+import { useYourGroups } from './useYourGroups';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { EventNextDates } from './EventNextDates';
 import { EventCopyDoor } from './EventCopyDoor';
@@ -53,7 +54,7 @@ import { reportedAlertBody } from '../utils/reportReasons';
 import { isHiddenAuthor } from '../utils/posts-view';
 import {
     formatEventWhenFor, eventWhen, eventRepeatCaption, withMovedFromLine, eventHostLine, eventPlaceLine, eventLinkWaitWords, isOnlineEvent, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
-    canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
+    canOpenEventChat, eventChatEntryLabel, eventChatNewLines, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
     type EventRsvpStatus, type RsvpCounts, type EventCopy, type EventEditValues,
 } from '../utils/events';
@@ -312,24 +313,36 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
 
     const goBack = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); };
 
+    // The chat's lines this reader hasn't read: its unread count in their "Your groups" list (the node lists an event's chat
+    // once someone has posted in it, chatListedFor), asked for only while the chat is offered. The web's EventCard reads the same.
+    const chatOffered = letInState !== 'waiting' && !copy && canOpenEventChat({ ...p, type: 'event', myRsvp: counts.mine, eventRsvps: rsvps });
+    const yourChats = useYourGroups(chatOffered ? identity?.publicKey : null);
+    const chatNew = chatOffered ? Math.max(0, yourChats.items?.find(c => c.conversationId === post.id)?.unreadCount ?? 0) : 0;
+    const chatLabel = eventChatEntryLabel({ ...p, goingCount: counts.going });
+
     // The quiet row's first button, the event chat: for the host and anyone Going, or its waiting form while the host has not
     // let the member in. Its words are a sentence, so it takes the row's first line whole; Share and Add to calendar share the next.
+    // In the brand ink, a step up in size, room between the icon and the words, and a count of new lines (Marty, 16 Nov 2026).
     const chatItem = letInState === 'waiting' ? (
         <View style={[shell.pageButton, styles.chatBtn, styles.chatBtnDisabled]} accessibilityRole="button" accessibilityState={{ disabled: true }}
             accessibilityLabel={eventChatWaitingText()} testID="event-chat-waiting">
             <Text style={styles.chatBtnWaitingText} numberOfLines={2}>💬 {eventChatWaitingText()}</Text>
         </View>
-    ) : !copy && canOpenEventChat({ ...p, type: 'event', myRsvp: counts.mine, eventRsvps: rsvps }) ? (
+    ) : chatOffered ? (
         <Pressable
             onPress={() => router.push({ pathname: `/chat/${post.id}`, params: { event: '1' } })}
             style={[shell.pageButton, styles.chatBtn]}
             accessibilityRole="button"
-            accessibilityLabel={eventChatEntryLabel({ ...p, goingCount: counts.going })}
+            accessibilityLabel={chatNew > 0 ? `${chatLabel}, ${eventChatNewLines(chatNew)}` : chatLabel}
             testID="event-chat-open"
         >
-            <Text style={[shell.pageButtonText, styles.chatBtnText]} numberOfLines={1}>
-                💬 {eventChatEntryLabel({ ...p, goingCount: counts.going })}
-            </Text>
+            <Text style={styles.chatBtnIcon} accessibilityElementsHidden importantForAccessibility="no">💬</Text>
+            <Text style={[shell.pageButtonText, styles.chatBtnText]} numberOfLines={2}>{chatLabel}</Text>
+            {chatNew > 0 && (
+                <View style={styles.chatBtnNew} testID="event-chat-new" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                    <Text style={styles.chatBtnNewText}>{eventChatNewLines(chatNew)}</Text>
+                </View>
+            )}
         </Pressable>
     ) : null;
 
@@ -763,12 +776,18 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         letInLine: { fontSize: 14, color: colors.text.body, lineHeight: 20, marginTop: 6 },
         // The quiet row: the chat, then EventShareAndCalendar's Share and Add to calendar, wrapping by whole buttons, never cut.
         quietRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-start' },
-        // Its chat: the neutral outline, its own line in the row (a sentence's words, never cut beside Share).
+        // Its chat: its own line in the row (a sentence's words, never cut beside Share), in the brand ink's outline and words on
+        // the card (Marty, 16 Nov 2026: "a slightly more obvious colour"), the icon 12 from the words, the new lines' count at the end.
         chatBtn: {
-            flexGrow: 1, flexBasis: '100%', paddingHorizontal: 12, alignItems: 'flex-start',
-            borderWidth: 1.5, borderColor: colors.border.strong, backgroundColor: colors.surface.card,
+            flexGrow: 1, flexBasis: '100%', paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center',
+            justifyContent: 'flex-start', gap: 12,
+            borderWidth: 1.5, borderColor: colors.brand.primary, backgroundColor: colors.surface.card,
         },
-        chatBtnText: { color: colors.text.body },
+        chatBtnIcon: { fontSize: 18, lineHeight: 22 },
+        // A step up from the page button's 15 ("or increase the font size?").
+        chatBtnText: { color: colors.brand.primary, fontSize: 16, lineHeight: 21, flexShrink: 1 },
+        chatBtnNew: { marginLeft: 'auto', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: colors.brand.fill },
+        chatBtnNewText: { color: colors.text.onBrand, fontSize: 12, fontWeight: '800', lineHeight: 16 },
         chatBtnDisabled: { borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.subtle, paddingVertical: 8 },
         chatBtnWaitingText: { fontSize: 14, fontWeight: '600', color: colors.text.secondary, lineHeight: 19 },
         // A page box's place in the column; the box itself is the style box's.

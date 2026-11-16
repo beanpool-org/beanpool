@@ -1010,6 +1010,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 const locked = await lockedGroupsOrNull(identity.publicKey);
                 const held = (result.conversations || []).map((c: Conversation) => holdConversation(c, locked));
                 let conv = held.find((c: Conversation) => c.id === openConversationId);
+                let unlistedEventWithLines = false;
                 // A request waiting for this member, opened by its id (its push): in request mode, never asked for again,
                 // which would accept it (lib/dm-requests.ts).
                 if (!conv) conv = (result.requests?.conversations || []).map((c: Conversation) => holdConversation(c, locked))
@@ -1059,6 +1060,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             createdBy: '',
                             createdAt: new Date().toISOString(),
                         };
+                        // Not in the list (nobody has written in it yet: the server's chatListedFor), so its unread count
+                        // isn't known here and the open would not mark it read. A line it holds (the node's "opened to
+                        // everyone going") would stay unread, and the first line someone writes would count "2 new" where
+                        // the phone, which marks an event chat read each time it opens (EventChatView), counts "1 new".
+                        unlistedEventWithLines = chat.messages.length > 0;
                     } catch { /* not an event chat this member may open */ }
                 }
                 if (conv && homeCountRef.current === homeAtStart) {
@@ -1068,6 +1074,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     const key = chatBoxKey(conv);
                     if (prefill && key) keepDraft(key, prefill);
                     setActiveConv(conv);
+                    // Its count isn't known (above): marked read as if a line waits, once it is the chat that opens.
+                    if (unlistedEventWithLines) void markReadIfNeeded(conv.id, 1);
                     if (prefill) {
                         setDraft(prefill);
                         setTimeout(() => draftRef.current?.focus(), 100);

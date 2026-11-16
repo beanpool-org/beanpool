@@ -268,7 +268,7 @@ async function main(): Promise<void> {
             const asked = await standby.send('prove', { address: spare, nonce });
             const verdict = asked.status === 200 ? core.verifyAddressProof(asked.body, { peerId: pl.peerId, for: spare, nonce }) : null;
             const offered = core.chooseAddressList(promoted.body, { peerId: pl.peerId, kept: heldList.body });
-            const taken = !!verdict?.ok && offered.action === 'replace' && core.takeSpare({
+            const taken = verdict?.ok === true && offered.action === 'replace' && core.takeSpare({
                 listedAnswers: false, epoch: heldList.body.list.epoch, spare,
                 answer: { proof: { kind: 'proved', epoch: verdict.epoch, seq: verdict.seq }, list: offered.signed.list },
             });

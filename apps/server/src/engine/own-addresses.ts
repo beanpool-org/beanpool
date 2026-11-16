@@ -129,7 +129,14 @@ export const MAX_OWNER_ADDRESSES = 20;
 
 /** The owner-confirmed addresses as stored in node_config (3): the host of each, the form a signature names. */
 export function ownerConfirmedAddresses(): string[] {
-    return ownerAddressEntries().map((a) => normalizeAddress(a)!);
+    const stored = (getNodeConfig() as any).ownerAddresses;
+    if (!Array.isArray(stored)) return [];
+    const out: string[] = [];
+    for (const a of stored) {
+        const host = normalizeAddress(a);
+        if (host && !out.includes(host)) out.push(host);
+    }
+    return out;
 }
 
 /**
@@ -400,8 +407,9 @@ function portedUrls(): Map<string, string> {
         ...ownerAddressEntries(),
     ];
     for (const entry of entries) {
+        // By the host as the names above read it from the same entry (normalizeAddress), so spell() finds it.
         const spelled = portedSpelling(entry);
-        const host = spelled ? normalizeAddress(spelled) : null;
+        const host = spelled ? normalizeAddress(entry) : null;
         if (spelled && host && !ported.has(host)) ported.set(host, `https://${spelled}`);
     }
     return ported;

@@ -173,7 +173,7 @@ async function main(): Promise<void> {
             const spare = held.list.spares[0];
             const p = await proveAt(spare);
             const choice = chooseAddressList(promoted, { peerId: PEER, kept: held });
-            const taken = !!p.verdict?.ok && choice.action === 'replace' && takeSpare({
+            const taken = p.verdict?.ok === true && choice.action === 'replace' && takeSpare({
                 listedAnswers: false, epoch: held.list.epoch, spare,
                 answer: { proof: { kind: 'proved', epoch: p.verdict.epoch, seq: p.verdict.seq }, list: choice.signed.list },
             });

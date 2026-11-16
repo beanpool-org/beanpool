@@ -521,7 +521,7 @@ describe('the tab strip: Home · Market · Map · Chat · Commons · Ledger', ()
     it('six labelled tabs in the design\'s order; Pulse, People and Settings are routes off the strip', () => {
         expect(onStrip.map(x => x.name)).toEqual(['index', 'market', 'map', 'chats', 'projects', 'ledger']);
         // A visitor on the global community: still six at most, the Forum (read only) where Chat was (slice F7).
-        expect(stripFor(true).map(x => x.name)).toEqual(['index', 'market', 'map', 'forum', 'projects', 'ledger']);
+        expect(stripFor(true).map(x => x.name)).toEqual(['index', 'market', 'map', 'visitor-forum', 'projects', 'ledger']);
         expect(screens.find(x => x.name === 'pulse')!.body).toMatch(/href: null/);
         expect(screens.find(x => x.name === 'people')!.body).toMatch(/href: null/);
         expect(screens.find(x => x.name === 'settings')!.body).toMatch(/href: null/);
@@ -545,7 +545,7 @@ describe('the tab strip: Home · Market · Map · Chat · Commons · Ledger', ()
         const labels = onStrip.map(x => labelOf(x.body));
         expect(labels).toEqual(['Home', 'Market', 'Map', 'Chat', 'Commons', 'Ledger']);
         // The visitors' Forum tab draws the forum's own word (core FORUM_HOME_WORDS.name, "Forum").
-        expect(screens.find(x => x.name === 'forum')!.body).toMatch(/<TabItem label=\{t\(FORUM_HOME_WORDS\.name\)\}/);
+        expect(screens.find(x => x.name === 'visitor-forum')!.body).toMatch(/<TabItem label=\{t\(FORUM_HOME_WORDS\.name\)\}/);
         for (const l of [...labels, 'Forum']) expect(textWidth(l!, 10, { scale: 1.1 })).toBeLessThanOrEqual(textWidth('Commons', 10, { scale: 1.1 }));
     });
 });

@@ -66,7 +66,7 @@ export function ForumVisitorHomeBody({ colors, features, turn, frame }: {
                     );
                 })}
                 <HomeLink id="forum:visitor-open" colors={colors} text={t(FORUM_HOME_WORDS.open)} a11y={t(FORUM_HOME_WORDS.open)}
-                    onPress={() => router.navigate('/(tabs)/forum')} testID="home-forum-visitor-open" />
+                    onPress={() => router.navigate('/(tabs)/visitor-forum')} testID="home-forum-visitor-open" />
             </>,
         );
     }

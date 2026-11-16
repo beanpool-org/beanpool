@@ -3,6 +3,10 @@
  * the Chat tab's place for a visitor on the global community (Talk is an account's), so the bar stays at six. The forum, read
  * only, with Join to reply as its door (components/forum/ForumVisitorPane.tsx). A member, or a community whose forum is for
  * its members, never has it in the bar ((tabs)/_layout.tsx); a member who lands here anyway goes to the Chat tab's Forum.
+ *
+ * At /visitor-forum, not /forum: that path is the members' forum's (app/forum/), and no route may share it. A public page's
+ * "Open in the app" (`beanpool://forum?node=…`) never reaches a screen by its path: app/+native-intent.ts reads it
+ * (utils/forum-link.ts) and opens this tab only for a visitor on the community the link names.
  */
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';

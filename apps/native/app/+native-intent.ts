@@ -13,6 +13,7 @@ import { globalLinkRoute, isGlobalLink, isGlobalPath, type PhoneAtLink } from '.
 import { doorLinkFromSystemPath, doorLinkRoute, type DoorLink } from '../utils/open-door';
 import { cardRouteFromSystemPath, isCommunityCardPath } from '../utils/community-card-link';
 import { isPeekPath, peekRouteFromSystemPath } from '../utils/peek-link';
+import { forumLinkFromSystemPath, forumLinkRoute, isForumPath, type ForumPhone } from '../utils/forum-link';
 
 /**
  * What the global community's link needs to know about the phone: whether it keeps a key, whether a join wizard was left
@@ -69,6 +70,44 @@ export async function routeDoorLink(
         return initial ? '/' : null;
     }
     return doorLinkRoute(link, phone, initial, nowMs());
+}
+
+/**
+ * What a forum link needs to know about the phone (utils/forum-link.ts): the community in use, and whether the phone reads it
+ * as a visitor (a guest there whose forum anyone may read: utils/forum-public.ts visitorForumHere) or as a member (a key, and
+ * not a guest there). Read from the phone only, when such a link arrives; the modules load then, not with the router.
+ */
+async function phoneAtForumLink(): Promise<ForumPhone> {
+    const [{ anchorUrl }, { isGuestNode }, { loadIdentity }, { visitorForumHere }] = await Promise.all([
+        import('../utils/node-post'),
+        import('../utils/nodes'),
+        import('../utils/identity'),
+        import('../utils/forum-public'),
+    ]);
+    const anchor = await anchorUrl();
+    if (!anchor) return { anchor: null, reader: 'elsewhere' };
+    if (await isGuestNode(anchor)) return { anchor, reader: (await visitorForumHere()) ? 'visitor' : 'elsewhere' };
+    return { anchor, reader: (await loadIdentity().catch(() => null)) ? 'member' : 'elsewhere' };
+}
+
+/**
+ * A forum link, or any other path into a forum screen (utils/forum-link.ts): the named community's forum when it is the one in
+ * use, else nothing new. Read as {@link routeGlobalLink} reads the phone: one that can't be read opens nothing new either.
+ */
+export async function routeForumLink(
+    path: string, initial: boolean, readPhone: () => Promise<ForumPhone> = phoneAtForumLink,
+): Promise<string | null> {
+    const link = forumLinkFromSystemPath(path);
+    if (!link) return initial ? '/' : null;
+    let phone: ForumPhone;
+    try {
+        phone = await readPhone();
+    } catch {
+        return initial ? '/' : null;
+    }
+    const route = forumLinkRoute(link, phone, initial);
+    if (initial && route && route !== '/') holdStartUpLinkRoute();
+    return route;
 }
 
 /**
@@ -141,6 +180,12 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
     // (`from=link`), never with any other param a link carried.
     const doorLink = doorLinkFromSystemPath(path);
     if (doorLink) return routeDoorLink(doorLink, initial);
+
+    // The forum's public pages' "Open in the app", `beanpool://forum?node=…[&topic=…]` (utils/forum-link.ts, slice F7), and any
+    // other path into a forum screen: never handed on, where it would open whatever sits at that path on the community in use.
+    // The named community's forum when it is the one in use (a visitor's topic or tab, a member's topic or list); else nothing
+    // new. Before the sign-in checks: a forum link is never a provider's return.
+    if (isForumPath(path)) return routeForumLink(path, initial);
 
     const isAuthCallback =
         path.includes('auth/facebook') ||

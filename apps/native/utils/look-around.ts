@@ -38,7 +38,7 @@ export const LOOK_LANDING = '/(tabs)/market' as const;
  * visitors' Forum tab and one topic, app/forum-public/[id].tsx, from the node's public answer). Talk, People, Pulse and Settings
  * are an account's, as is every other screen.
  */
-const LOOK_TABS: ReadonlySet<string> = new Set(['index', 'market', 'map', 'ledger', 'projects', 'forum']);
+const LOOK_TABS: ReadonlySet<string> = new Set(['index', 'market', 'map', 'ledger', 'projects', 'visitor-forum']);
 const LOOK_ROOTS: ReadonlySet<string> = new Set(['post', 'guide', 'beanpool', 'start-community', 'new-listing', 'forum-public']);
 
 /** Whether `segments` (expo-router's useSegments) is a screen a visitor with no key may stay on. */

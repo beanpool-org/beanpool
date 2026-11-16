@@ -450,7 +450,7 @@ export default function TabLayout() {
                 />
                 {/* The visitors' Forum (slice F7): in the bar only for a visitor on the global community, in Chat's place. */}
                 <Tabs.Screen
-                    name="forum"
+                    name="visitor-forum"
                     options={{
                         ...(visitorForum ? {} : { href: null }),
                         title: t(FORUM_HOME_WORDS.name),

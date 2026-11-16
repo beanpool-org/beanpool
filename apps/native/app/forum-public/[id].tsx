@@ -3,8 +3,9 @@
  * node's public answer, unsigned (utils/forum-public.ts), read only. Each post's writer (their name, and their community where
  * they switched the label on) and words; no pictures, no profile. Where the reply box would be, the door: Join to reply.
  *
- * Opened from the visitors' Forum tab and the Home card "From the forum" (a public page's link to the app, beanpool://forum, is
- * the next slice's).
+ * Opened from the visitors' Forum tab, the Home card "From the forum", and a public topic page's "Open in the app"
+ * (`beanpool://forum?node=…&topic=…`, read by app/+native-intent.ts through utils/forum-link.ts: only for a visitor on the
+ * community the link names, so the community in use this screen reads is always that one).
  * A screen a phone with no account may stay on while it looks around (utils/look-around.ts).
  */
 import React, { useCallback, useEffect, useState } from 'react';
@@ -43,7 +44,7 @@ export default function ForumPublicTopicScreen() {
         <SafeAreaView style={styles.page} edges={['top']} testID="forum-visitor-topic">
             <View style={styles.head}>
                 <Pressable accessibilityRole="button" accessibilityLabel={t(TOPIC_WORDS.back)} testID="forum-visitor-back"
-                    onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/forum'))} style={styles.iconBtn}>
+                    onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/visitor-forum'))} style={styles.iconBtn}>
                     <Text style={styles.heading}>‹</Text>
                 </Pressable>
                 <Text style={styles.headWords} numberOfLines={1}>{page?.section ? forumSectionName(page.section) : ''}</Text>

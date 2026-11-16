@@ -177,9 +177,9 @@ describe("who sees the visitors' forum: the table (card + tab)", () => {
         const src = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/_layout.tsx'), 'utf-8');
         const chats = src.slice(src.indexOf('name="chats"'), src.indexOf('name="chats"') + 200);
         expect(chats).toMatch(/\.\.\.\(visitorForum \? \{ href: null \} : \{\}\)/);
-        const forum = src.slice(src.indexOf('name="forum"'), src.indexOf('name="forum"') + 200);
+        const forum = src.slice(src.indexOf('name="visitor-forum"'), src.indexOf('name="visitor-forum"') + 200);
         expect(forum).toMatch(/\.\.\.\(visitorForum \? \{\} : \{ href: null \}\)/);
-        expect(isLookRoute(['(tabs)', 'forum'])).toBe(true);
+        expect(isLookRoute(['(tabs)', 'visitor-forum'])).toBe(true);
         expect(isLookRoute(['forum-public', '[id]'])).toBe(true);
         // The members' forum stays an account's.
         expect(isLookRoute(['forum', '[id]'])).toBe(false);
@@ -198,7 +198,7 @@ describe('the Home card "From the forum"', () => {
             await act(async () => { rows[1].click(); });
             expect(nav.pushed).toContainEqual({ pathname: '/forum-public/[id]', params: { id: 'ft-3' } });
             await act(async () => { one(host, 'home-forum-visitor-open')!.click(); });
-            expect(nav.pushed).toContainEqual('/(tabs)/forum');
+            expect(nav.pushed).toContainEqual('/(tabs)/visitor-forum');
             expectReadableAndHeld(one(host, 'card-frame')!.parentElement as HTMLElement);
         });
     }

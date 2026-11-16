@@ -1232,6 +1232,118 @@ async function main(): Promise<void> {
             `19e. ${es}: only the newest words go: ${WORDS19[es]} (got ${got}; waiting here after the edit: ${waiting})`);
     }
 
+    // ── 19c. The copy rule (#3233 round 3): a takedown x this server's copy state ────────────
+    // group_guest_outbox is this server's own (`local`): a standby keeps it through every copy, while a takedown runs on the
+    // server that took over and reaches this one only as its copy's rows (the tombstone, the guests' states). A queued copy
+    // of a line goes only if, as its turn comes, the line still stands here and this server is main.
+    console.log('\n19c. Close the class: every takedown x this server\'s copy state -> no words or photo go, none is kept here');
+    const QUEUE_MS = (guests?.GUEST_FANOUT_QUEUE_MS ?? 24 * 60 * 60_000) as number;
+    const COPY19 = ['stays main', 'a standby at the takedown, then promoted', 'a standby at the takedown, promoted a day later'] as const;
+    const rowsOf19 = (g: string) => db.prepare('SELECT * FROM group_guest_outbox WHERE group_id = ?').all(g) as Array<Record<string, any>>;
+    /** This server's own queue as it kept it through the copy (the other server's never comes in one), `age` ms older. */
+    const keptThroughCopy = (g: string, rows: Array<Record<string, any>>, age: number) => {
+        db.prepare('DELETE FROM group_guest_outbox WHERE group_id = ?').run(g);
+        const put = db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)');
+        for (const r of rows) put.run(r.id, r.group_id, r.home, r.kind, r.body, r.created_at - age, r.created_at - age);
+    };
+    /** As this server goes standby and is promoted again: what a standby's flush sent (nothing, ever), then the promoted flush. */
+    async function standbyThenPromoted(): Promise<number> {
+        setNodeRole('backup');
+        let sent = 0;
+        try {
+            refusing.delete('a.example');
+            const before = outs.length;
+            sent = (await guests.flushGuestOutbox(Date.now() + 10 * 60_000)) + outs.length - before;
+        } finally { setNodeRole('primary'); }
+        return sent;
+    }
+    let c19 = 0;
+    for (const tk of TK19) for (const cp of COPY19) {
+        const n = ++c19;
+        const { g, m, key, ok } = await row19(`Copy ${n}`);
+        const id = crypto.randomUUID();
+        const base = { myEdPrivHex: m.seedHex, groupKey: key, groupId: g, epoch: 1, messageId: id };
+        const words = sealGroupLine(`copy row ${n}'s caption`, base);
+        const photo = sealGroupLine(`data:image/jpeg;base64,${crypto.randomBytes(2000).toString('base64')}`, { ...base, part: 'attachment' });
+        const edited = sealGroupLine(`copy row ${n}'s caption, edited`, base);
+        const photoMark = photo.ciphertext.slice(0, 64);
+        const carries = (s: string) => [words.ciphertext, photoMark, edited.ciphertext].some((k) => s.includes(k));
+        const t0 = Date.now();
+        refusing.add('a.example');
+        const posted = await call('POST', m, `/api/groups/${g}/chat/message`, {
+            type: 'image', ...words, metadata: { epoch: 1 }, attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' }, clientId: id,
+        });
+        await settle();
+        const queued = rowsOf19(g);
+        const setupOk = ok && posted.status === 201 && queued.some((r) => r.kind === 'line' && String(r.body).includes(photoMark));
+        // The takedown: here, while this server stays main; otherwise on the server that took over, whose rows this server's
+        // copy then carries verbatim, while its own queue keeps what it had (keptThroughCopy).
+        if (tk === 'edited, then author delete') { await call('POST', m, '/api/messages/edit', { messageId: id, ...edited, metadata: { epoch: 1 } }); await settle(); }
+        if (tk === 'author delete' || tk === 'edited, then author delete') await call('POST', m, '/api/messages/delete', { messageId: id });
+        if (tk === 'convenor removal') await call('POST', ana, `/api/groups/${g}/chat/remove`, { messageId: id });
+        if (tk === 'account deleted') purgeMemberSelf(m.pk);
+        if (tk === 'group closed') closeGroupByVote(g, `test-close-19c-${n}`);
+        await settle();
+        let standbySent = 0;
+        if (cp !== 'stays main') {
+            keptThroughCopy(g, queued, cp.endsWith('a day later') ? QUEUE_MS + 60_000 : 0);
+            standbySent = await standbyThenPromoted();
+        }
+        refusing.delete('a.example');
+        await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+        await settle();
+        const wordsOut = outs.filter((o) => o.home === 'a.example' && o.body?.group === g && o.at >= t0 && carries(JSON.stringify(o.body))).length;
+        const kept = rowsOf19(g).filter((r) => carries(String(r.body))).length;
+        assert(setupOk && standbySent === 0 && wordsOut === 0 && kept === 0,
+            `19c. ${tk} x ${cp}: no words or photo go (${wordsOut}${cp === 'stays main' ? '' : `; from the standby ${standbySent}`}), none kept here (${kept})${setupOk ? '' : ', setup failed'}`);
+    }
+    assert(c19 === TK19.length * COPY19.length, `19cz. the table has a row for every takedown and every copy state (${c19} rows)`);
+    // No over-blocking: a line that still stands, queued before a take-over and a take-back, goes once, words and photo.
+    {
+        const { g, m, key, ok } = await row19('Copy standing');
+        const id = crypto.randomUUID();
+        const base = { myEdPrivHex: m.seedHex, groupKey: key, groupId: g, epoch: 1, messageId: id };
+        const words = sealGroupLine('a line that still stands', base);
+        const photo = sealGroupLine(`data:image/jpeg;base64,${crypto.randomBytes(2000).toString('base64')}`, { ...base, part: 'attachment' });
+        const t0 = Date.now();
+        refusing.add('a.example');
+        await call('POST', m, `/api/groups/${g}/chat/message`, {
+            type: 'image', ...words, metadata: { epoch: 1 }, attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' }, clientId: id,
+        });
+        await settle();
+        const queued = rowsOf19(g);
+        keptThroughCopy(g, queued, 0);
+        const fromStandby = await standbyThenPromoted();
+        await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+        await settle();
+        const went = outs.filter((o) => o.home === 'a.example' && o.body?.group === g && o.at >= t0 && o.body.kind === 'line' && o.body.data?.id === id
+            && o.body.data.ciphertext === words.ciphertext && JSON.stringify(o.body).includes(photo.ciphertext.slice(0, 64))).length;
+        assert(ok && queued.length === 1 && fromStandby === 0 && went === 1,
+            `19c. no over-blocking: a line that still stands, queued before a take-over and a take-back, goes once with its words and photo (${went}; from the standby ${fromStandby})`);
+    }
+    // A row past GUEST_FANOUT_QUEUE_MS goes unsent, a line that still stands included; a takedown that old still goes.
+    {
+        const { g, m, key, ok } = await row19('Copy aged');
+        const line1 = lineIn(m, g, key, 1), line2 = lineIn(m, g, key, 1);
+        const t0 = Date.now();
+        refusing.add('a.example');
+        await call('POST', m, `/api/groups/${g}/chat/message`, line1);
+        await call('POST', m, `/api/groups/${g}/chat/message`, line2);
+        await settle();
+        await call('POST', m, '/api/messages/delete', { messageId: line2.clientId });
+        await settle();
+        const queued = rowsOf19(g);
+        db.prepare('UPDATE group_guest_outbox SET created_at = created_at - ?, next_try_at = ? WHERE group_id = ?').run(QUEUE_MS + 60_000, Date.now(), g);
+        refusing.delete('a.example');
+        await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+        await settle();
+        const toA = outs.filter((o) => o.home === 'a.example' && o.body?.group === g && o.at >= t0);
+        const lines = toA.filter((o) => o.body.kind === 'line').length;
+        const tombs = toA.filter((o) => o.body.kind === 'edit' && o.body.data?.id === line2.clientId && o.body.data.action === 'removed').length;
+        assert(ok && queued.length === 2 && lines === 0 && tombs === 1 && rowsOf19(g).length === 0,
+            `19c. a day in the queue: the line that still stands goes unsent (${lines}), the takedown still goes (${tombs}), nothing is left (${rowsOf19(g).length})`);
+    }
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ A guest from another community reads and writes one group\'s chat, through their own server, and nothing else.');

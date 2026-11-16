@@ -629,7 +629,30 @@ function flushSoon(): void {
     });
 }
 
-interface OutboxRow { id: string; kind: NoticeKind; attempts: number; next_try_at: number; created_at: number }
+interface OutboxRow { id: string; group_id: string; kind: NoticeKind; attempts: number; next_try_at: number; created_at: number }
+
+/**
+ * THE COPY RULE (#3233 round 3), checked as each row's turn comes, after whatever happened while it waited: a takedown on
+ * the other server while this one was a standby, a take-over and a take-back, a restore, or days in the queue. A copy of a
+ * line (a `line` row, or an `edit` with its new words) goes only while the line still stands in this server's own chat
+ * (a standby's copy carries the tombstone the main server wrote) and a guest it names is still in the group (one who left,
+ * was removed, or whose group closed, there, is not), and no row goes once GUEST_FANOUT_QUEUE_MS old, so a server
+ * promoted days later sends nothing stale, its old rosters included. A line's takedown (`edit`, `action: 'removed'`) is
+ * the one row that keeps its last try past that age: it only takes away, and a line once down stays down.
+ */
+function rowStillGoes(r: OutboxRow, body: string, at: number): boolean {
+    let notice: { guests?: unknown; data?: Record<string, unknown> };
+    try { notice = JSON.parse(body) as typeof notice; } catch { return false; }
+    const data = notice.data ?? {};
+    if (r.kind === 'edit' && data.action === 'removed') return true;
+    if (at - r.created_at >= GUEST_FANOUT_QUEUE_MS) return false;
+    if (r.kind !== 'line' && r.kind !== 'edit') return true;
+    const type = db.prepare('SELECT type FROM messages WHERE id = ? AND conversation_id = ?').pluck().get(data.id, r.group_id) as string | undefined;
+    if (type === undefined || type === 'removed') return false;
+    const named = Array.isArray(notice.guests) ? notice.guests.filter((k): k is string => typeof k === 'string') : [];
+    const stillIn = db.prepare("SELECT 1 FROM group_guests WHERE group_id = ? AND guest_key = ? AND state = 'in'");
+    return named.some((k) => stillIn.get(r.group_id, k));
+}
 
 /** Each home being sent to now, and that send: one at a time for a home, every home on its own. */
 const sendingTo = new Map<string, Promise<number>>();
@@ -662,27 +685,30 @@ export async function flushGuestOutbox(now = Date.now()): Promise<number> {
  * send, so none waits out a backoff its home has ended. A 2xx, or an answer that says it will never be taken (400, 404,
  * 413), and the row goes; anything else and ALL the home's rows wait one backoff, by time (nextFanoutTry: the step moves on
  * only when the oldest row's wait has passed), until GUEST_FANOUT_QUEUE_MS, then a row goes. A 2xx starts the steps over.
- * With guests switched off, only removals go; to a home the owners blocked, nothing goes.
+ * With guests switched off, only removals go; to a home the owners blocked, nothing goes; a row the copy rule stops
+ * (rowStillGoes: its line down, or the row past GUEST_FANOUT_QUEUE_MS) goes unsent; made a standby meanwhile, the send stops.
  */
 async function sendToHome(home: string): Promise<number> {
     let handled = 0;
     const url = `https://${home}${GROUP_GUEST_PATH}`;
     const drop = db.prepare('DELETE FROM group_guest_outbox WHERE id = ?');
     for (;;) {
-        const queue = db.prepare('SELECT id, kind, attempts, next_try_at, created_at FROM group_guest_outbox WHERE home = ? ORDER BY created_at, rowid LIMIT 64')
+        const queue = db.prepare('SELECT id, group_id, kind, attempts, next_try_at, created_at FROM group_guest_outbox WHERE home = ? ORDER BY created_at, rowid LIMIT 64')
             .all(home) as OutboxRow[];
         if (!queue.length) return handled;
         const on = groupGuestsOn();
         const blocked = isServerBlocked(home);
         const bodyNow = db.prepare('SELECT body FROM group_guest_outbox WHERE id = ?').pluck();
         for (const r of queue) {
+            // Made a standby while this send ran: nothing more goes from here (its rows wait, and a promotion checks them again).
+            if (getNodeRole() === 'backup') return handled;
             // Each row as it reads when its turn comes: one withdrawn while this send ran (a newer roster replaced it, a
             // takedown withdrew it, it aged out) never goes, and one an edit rewrote goes with the newest words (queueLineChange).
             const body = bodyNow.get(r.id) as string | undefined;
             if (body === undefined) continue;
             handled++;
-            // A home the owners blocked since its rows were queued gets none of them.
-            if (blocked || (!on && r.kind !== 'removed')) { drop.run(r.id); continue; }
+            // A home the owners blocked since its rows were queued gets none of them; a row the copy rule stops goes unsent.
+            if (blocked || (!on && r.kind !== 'removed') || !rowStillGoes(r, body, fanoutNow())) { drop.run(r.id); continue; }
             const status = await forwardSigned(url, body);
             const at = fanoutNow();
             const taken = status >= 200 && status < 300;

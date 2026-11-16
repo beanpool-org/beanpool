@@ -70,7 +70,7 @@
 import crypto from 'node:crypto';
 import { readRelayEnvelope, relayEnvelopeVerifies, relayPayloadHash, word, type RelayEnvelope } from '@beanpool/core';
 import { db } from '../db/db.js';
-import { assertPlainTablesWritable, getNodeRole, STANDBY_WRITE_MESSAGE, standbyWritesNothing } from '../config/node-role.js';
+import { assertPlainTablesWritable, getNodeRole, onNodeRoleChange, STANDBY_WRITE_MESSAGE, standbyWritesNothing } from '../config/node-role.js';
 import { isServerBlocked } from '../connector-manager.js';
 import { isNodeMember, readsAsMember } from '../state-engine.js';
 import { hasBlocked } from './member-blocks.js';
@@ -231,6 +231,12 @@ function applyToHeldCopies(member: string, n: Notice, taking: boolean): void {
     else if (n.data.action === 'edited' && taking) replaceHeldWords(member, n.host, n.group, id, n.data);
 }
 
+/** The edits of line `id` held for `member` (`edited` ones only): what a newer edit, once held, replaces. */
+function heldEditsOf(member: string, host: string, groupId: string, id: string): string[] {
+    return db.prepare(`SELECT id FROM group_guest_mail WHERE member = ? AND host = ? AND group_id = ? AND kind = 'edit'
+                       AND json_extract(body, '$.id') = ? AND json_extract(body, '$.action') = 'edited'`).pluck().all(member, host, groupId, id) as string[];
+}
+
 /** `member`'s held copies of `host`'s lines in that group (each line and its edits, or line `id`'s only): dropped. How many. */
 function dropHeldLines(member: string, host: string, groupId: string, id?: string): number {
     const ids = db.prepare(`SELECT id FROM group_guest_mail WHERE member = ? AND host = ? AND group_id = ? AND kind IN ('line', 'edit')
@@ -238,11 +244,14 @@ function dropHeldLines(member: string, host: string, groupId: string, id?: strin
     return dropNotices(member, ids);
 }
 
-/** An edit of line `id`: the held line takes its words (and the edit's time), and an older edit held for it goes. */
+/**
+ * An edit of line `id`: the held line takes its words (and the edit's time). An older edit held for it goes only once this
+ * one is held (takeNoticeFor): refused (the host's allowance full), a device that has the line but not the older edit
+ * keeps that edit's words, not the first ones (#3233 round 3).
+ */
 function replaceHeldWords(member: string, host: string, groupId: string, id: string, edit: Record<string, unknown>): void {
     if (typeof edit.ciphertext !== 'string' || typeof edit.nonce !== 'string') return;
     const of = `FROM group_guest_mail WHERE member = ? AND host = ? AND group_id = ? AND json_extract(body, '$.id') = ?`;
-    dropNotices(member, db.prepare(`SELECT id ${of} AND kind = 'edit' AND json_extract(body, '$.action') = 'edited'`).pluck().all(member, host, groupId, id) as string[]);
     const rewrite = db.prepare('UPDATE group_guest_mail SET body = ?, bytes = ? WHERE id = ?');
     for (const r of db.prepare(`SELECT id, body ${of} AND kind = 'line'`).all(member, host, groupId, id) as Array<{ id: string; body: string }>) {
         const body = JSON.stringify({ ...JSON.parse(r.body), ciphertext: edit.ciphertext, nonce: edit.nonce, metadata: edit.metadata ?? null, editedAt: edit.editedAt ?? null });
@@ -289,8 +298,15 @@ function takeNoticeFor(member: string, n: Notice, now: number): boolean {
             setLink(member, n.host, n.group, state!, now, { body });
             if (!mayHold(member, n.host, true, body.length)) return true;
             break;
+        case 'edit': {
+            if (!answered) return false;
+            // An edit's new words: the older edit held for that line goes once this one is held, never before (replaceHeldWords).
+            const older = n.data.action === 'edited' && typeof n.data.id === 'string' ? heldEditsOf(member, n.host, n.group, n.data.id) : [];
+            if (!mayHold(member, n.host, true, body.length, older)) return false;
+            dropNotices(member, older);
+            break;
+        }
         case 'line':
-        case 'edit':
         case 'epoch':
             if (!answered || !mayHold(member, n.host, true, body.length)) return false;
             break;
@@ -303,16 +319,18 @@ function takeNoticeFor(member: string, n: Notice, now: number): boolean {
 /**
  * Whether one more notice of `bytes` from `host` may wait for `member`, against its own allowance only (the file's header):
  * unanswered, every one held counts, from that host and in all (each at most GROUP_INVITE_MAX_CHARS); answered, that
- * host's that no device has. Another host's notices never count against a host's allowance, nor push one out.
+ * host's that no device has. Another host's notices never count against a host's allowance, nor push one out. `replacing`
+ * (the older edits a new edit replaces once held) counts as gone.
  */
-function mayHold(member: string, host: string, answered: boolean, bytes: number): boolean {
+function mayHold(member: string, host: string, answered: boolean, bytes: number, replacing: readonly string[] = []): boolean {
     if (!answered) {
         return sum('SELECT COUNT(*) AS n FROM group_guest_mail WHERE member = ? AND host = ? AND answered = 0', member, host) < GROUP_INVITES_WAITING_PER_HOST
             && sum('SELECT COUNT(*) AS n FROM group_guest_mail WHERE member = ? AND answered = 0', member) < GROUP_INVITES_WAITING;
     }
-    const of = `FROM group_guest_mail WHERE member = ? AND host = ? AND answered = 1 AND ${NO_DEVICE_HAS}`;
-    return sum(`SELECT COUNT(*) AS n ${of}`, member, host) < GROUP_MAIL_PER_HOST_ITEMS
-        && sum(`SELECT COALESCE(SUM(bytes), 0) AS n ${of}`, member, host) + bytes <= GROUP_MAIL_PER_HOST_BYTES;
+    const except = replacing.length ? ` AND id NOT IN (${replacing.map(() => '?').join(', ')})` : '';
+    const of = `FROM group_guest_mail WHERE member = ? AND host = ? AND answered = 1 AND ${NO_DEVICE_HAS}${except}`;
+    return sum(`SELECT COUNT(*) AS n ${of}`, member, host, ...replacing) < GROUP_MAIL_PER_HOST_ITEMS
+        && sum(`SELECT COALESCE(SUM(bytes), 0) AS n ${of}`, member, host, ...replacing) + bytes <= GROUP_MAIL_PER_HOST_BYTES;
 }
 
 // ── The member's devices: fetch and confirm ─────────────────────────────────────────────────
@@ -329,8 +347,10 @@ export interface GroupSentTick { itemId: string; kind: string; host: string; gro
 export function heldGroupMailFor(member: string, device: string, since = 0, sinceId = ''): {
     items: HeldGroupNotice[]; more: boolean; groups: GroupLinkView[]; sent: GroupSentTick[]; sentMore: boolean;
 } {
+    // A standby serves no copy of a line (the copy rule, heldLinesStale): what it holds can't be kept up to date there.
     const rows = db.prepare(`SELECT id, host, group_id, kind, body, received_at FROM group_guest_mail m WHERE member = ?
                                AND NOT EXISTS (SELECT 1 FROM group_guest_mail_got g WHERE g.member = m.member AND g.mail_id = m.id AND g.device = ?)
+                               ${getNodeRole() === 'backup' ? "AND kind NOT IN ('line', 'edit')" : ''}
                              ORDER BY received_at, rowid LIMIT ?`).all(member, device, MAIL_FETCH_PAGE + 1) as Array<{
         id: string; host: string; group_id: string; kind: GroupNoticeKind; body: string; received_at: number;
     }>;
@@ -387,6 +407,33 @@ function dropNotices(member: string, ids: string[]): number {
     db.transaction(() => { for (const id of ids) { del.run(member, id); delGot.run(member, id); } })();
     return ids.length;
 }
+
+/**
+ * THE COPY RULE at the home (#3233 round 3): a held copy of a host's line (`line`, `edit`) is served only while this server
+ * has been the main one since it was held. On a standby, the host's takedowns go to the server that took over (and one that
+ * reaches a standby is answered and dropped, receiveGroupNotice), so a copy held here before can no longer be kept up to
+ * date: every held line and edit, for every member, goes at each role change (demoted, or promoted again: everything a
+ * standby holds is from before its demotion), at a standby's sweep (one that started as a standby changed no role in this
+ * process), and a standby's fetch serves none meanwhile. A device misses the lines it never fetched, as it does after a
+ * take-over (the promoted server starts with none held). Invitations, rosters, epochs and removals stay. How many went.
+ */
+function heldLinesStale(): number {
+    const rows = db.prepare("SELECT member, id FROM group_guest_mail WHERE kind IN ('line', 'edit')").all() as Array<{ member: string; id: string }>;
+    const byMember = new Map<string, string[]>();
+    for (const r of rows) byMember.set(r.member, [...(byMember.get(r.member) ?? []), r.id]);
+    let gone = 0;
+    for (const [member, ids] of byMember) gone += dropNotices(member, ids);
+    return gone;
+}
+
+onNodeRoleChange(() => {
+    try {
+        const gone = heldLinesStale();
+        if (gone) logger.warn('SYS', `Group guests: this server's role changed; ${gone} line(s) held for members' devices went, as they can no longer be kept up to date.`);
+    } catch (e) {
+        logger.warn('SYS', `Group guests: the lines held for members' devices could not be dropped at a role change (${e instanceof Error ? e.message.slice(0, 120) : String(e)}).`);
+    }
+});
 
 /** `device` of `member`'s has these notices (written or dropped); each one every listed device has goes. How many were new to it. */
 export function confirmGroupMail(member: string, device: string, ids: string[], now = Date.now()): number {
@@ -623,11 +670,12 @@ export async function retryGroupSent(now = Date.now()): Promise<number> {
 /**
  * The sweep (the minute timer): notices held past MAIL_HELD_DAYS or for a key that is no longer a member here go, and what a
  * device confirmed of a notice gone or by a device no longer listed; items queued past GROUP_SENT_QUEUE_MS fail, and settled
- * rows go GROUP_SENT_KEPT_MS after their last change. All of it this server's own tables, a standby's too: there an item
- * failing moves no link (moveLinkOn), so nothing here writes a copied row.
+ * rows go GROUP_SENT_KEPT_MS after their last change. On a standby, every held line and edit goes too (heldLinesStale). All
+ * of it this server's own tables, a standby's too: there an item failing moves no link (moveLinkOn), so nothing here writes
+ * a copied row.
  */
 export function sweepGroupGuestMail(now = Date.now()): { gone: number; failed: number } {
-    let gone = 0;
+    let gone = getNodeRole() === 'backup' ? heldLinesStale() : 0;
     for (const r of db.prepare('SELECT DISTINCT member FROM group_guest_mail').pluck().all() as string[]) {
         const ids = isNodeMember(r)
             ? db.prepare('SELECT id FROM group_guest_mail WHERE member = ? AND received_at < ?').pluck().all(r, now - MAIL_HELD_DAYS * DAY_MS) as string[]

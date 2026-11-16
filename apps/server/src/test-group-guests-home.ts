@@ -513,8 +513,9 @@ async function main(): Promise<void> {
                 const rowAt = (i: number) => (i === 0 ? t0 : t0 + Math.floor(i * outage * MIN / n) + 30_000);
                 const queue = (i: number, t: number) => {
                     if (side === 'host fan-out') {
+                        // An epoch notice: a `line` row goes only while its line stands in the chat here (the copy rule, #3233 round 3).
                         db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)')
-                            .run(crypto.randomUUID(), 'g7', far, 'line', JSON.stringify({ v: 1, kind: 'line', group: 'g7', host: 'a.example', guests: [gus.pk], data: { i } }), t, t);
+                            .run(crypto.randomUUID(), 'g7', far, 'epoch', JSON.stringify({ v: 1, kind: 'epoch', group: 'g7', host: 'a.example', guests: [gus.pk], data: { i } }), t, t);
                     } else {
                         db.prepare(`INSERT INTO group_guest_sent (sender_key, item_id, kind, host, group_id, state, item, attempts, next_try_at, created_at, updated_at)
                                     VALUES (?, ?, 'group-line', ?, 'g7', 'queued', ?, 0, ?, ?, ?)`)
@@ -767,8 +768,9 @@ async function main(): Promise<void> {
             const t = simNow;
             const queue11 = (h: string, i: number, attempts: number, nextTry: number, created: number) => {
                 if (side === 'host fan-out') {
+                    // An epoch notice: a `line` row goes only while its line stands in the chat here (the copy rule, #3233 round 3).
                     db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-                        .run(crypto.randomUUID(), 'g11', h, 'line', JSON.stringify({ v: 1, kind: 'line', group: 'g11', host: 'a.example', guests: [gus.pk], data: { i } }), attempts, nextTry, created);
+                        .run(crypto.randomUUID(), 'g11', h, 'epoch', JSON.stringify({ v: 1, kind: 'epoch', group: 'g11', host: 'a.example', guests: [gus.pk], data: { i } }), attempts, nextTry, created);
                 } else {
                     const id = `c11-${row11}-${h[0]}-${String(i).padStart(3, '0')}`;
                     // Each row larger than half a request, so each goes in a request of its own.
@@ -975,8 +977,9 @@ async function main(): Promise<void> {
         flushGuestOutbox: {
             seed: async () => {
                 const id = crypto.randomUUID(), g = `g13-flush-${++n13}`, t = Date.now();
+                // An epoch notice: a `line` row goes only while its line stands in the chat here (the copy rule, #3233 round 3).
                 db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)')
-                    .run(id, g, 'q.example', 'line', JSON.stringify({ v: 1, kind: 'line', group: g, host: 'a.example', guests: [gus.pk], data: {} }), t, t);
+                    .run(id, g, 'q.example', 'epoch', JSON.stringify({ v: 1, kind: 'epoch', group: g, host: 'a.example', guests: [gus.pk], data: {} }), t, t);
                 return { who: gus, g, extra: id };
             },
             run: (t) => hostSide.flushGuestOutbox(t),
@@ -1210,6 +1213,88 @@ async function main(): Promise<void> {
     removeConnector('b.example:4001');
     assert(hb.ok && blockedKept === 0 && blockedHeld === 0,
         `15v. a host blocked since its line was held: its takedown drops the line, and holds nothing (kept ${blockedKept}, held ${blockedHeld})`);
+
+    // ── 15c. The copy rule (#3233 round 3): a takedown x the copy state of this server ───────
+    // group_guest_mail is this server's own (`local`): a standby keeps it through every copy, and the host's takedowns go to
+    // the server that took over, or reach a standby that answers 202 and takes nothing. A held line is served only while this
+    // server has been main since it was held: nothing of it is served or kept after a take-over and a take-back.
+    console.log('\n15c. Close the class: every takedown x this server\'s copy state -> no words or photo served or kept');
+    const COPY15 = ['stays main', 'a standby when the takedown came, then promoted', 'started as a standby (no role change here), its sweep ran, then promoted'] as const;
+    const heldRows15 = (who: Id) => db.prepare('SELECT * FROM group_guest_mail WHERE member = ?').all(who.pk) as Array<Record<string, unknown>>;
+    const putBack15 = (rows: Array<Record<string, unknown>>) => {
+        for (const r of rows) {
+            db.prepare(`INSERT OR IGNORE INTO group_guest_mail (${Object.keys(r).join(', ')}) VALUES (${Object.keys(r).map(() => '?').join(', ')})`).run(...Object.values(r));
+        }
+    };
+    let c15 = 0;
+    for (const tk of TK15) for (const cp of COPY15) {
+        const n = ++c15;
+        const h = await held15(`c15-${n}`);
+        await h.confirm(h.phone);
+        const carries = (s: string) => [h.marks.words, h.marks.photo, h.marks.edited].some((k) => s.includes(k));
+        const takedown = async () => {
+            if (tk === 'edited, then author delete') await h.tell('edit', h.editOf(h.marks.edited));
+            if (tk === 'group closed') return h.tell('removed', { why: 'group-closed' });
+            return h.tell('edit', { id: h.id, action: 'removed', by: tk === 'convenor removal' ? 'convenor' : 'author' });
+        };
+        let servedOnStandby = 0, keptAfterSweep = 0, answer = 0;
+        if (cp === 'stays main') {
+            answer = (await takedown()).status;
+        } else if (cp === 'a standby when the takedown came, then promoted') {
+            setNodeRole('backup');
+            try { answer = (await takedown()).status; } finally { setNodeRole('primary'); }
+        } else {
+            // A server that started as a standby with these held (its own table, kept through the copy): no role change in
+            // this process, so the rows are put back as the standby's start finds them.
+            const rows = heldRows15(h.who);
+            setNodeRole('backup');
+            try {
+                putBack15(rows);
+                answer = 202;     // the takedown went to the server that took over
+                servedOnStandby = (await h.itemsOn(h.tablet)).filter((i: any) => carries(JSON.stringify(i.data))).length;
+                home.sweepGroupGuestMail(Date.now());
+                keptAfterSweep = h.bodies().filter(carries).length;
+            } finally { setNodeRole('primary'); }
+        }
+        const kept = h.bodies().filter(carries).length;
+        const served = (await h.itemsOn(h.tablet)).filter((i: any) => carries(JSON.stringify(i.data))).length;
+        assert(h.ok && answer === 202 && served === 0 && kept === 0 && servedOnStandby === 0 && keptAfterSweep === 0,
+            `15c. ${tk} x ${cp}: no words or photo served to the device that hadn't fetched it (${served}${cp.startsWith('started') ? `; on the standby ${servedOnStandby}` : ''}) or kept (${kept}${cp.startsWith('started') ? `; after the standby's sweep ${keptAfterSweep}` : ''})${h.ok ? '' : ', setup failed'}`);
+    }
+    assert(c15 === TK15.length * COPY15.length, `15cz. the table has a row for every takedown and every copy state (${c15} rows)`);
+    // No over-blocking: a line held after the promotion is served; a standby round trip keeps the invitations, rosters, epochs.
+    const p15 = await held15('c15-promoted');
+    setNodeRole('backup');
+    setNodeRole('primary');
+    const line15c = { id: crypto.randomUUID(), author: ana.pk, ciphertext: `after-promotion-${crypto.randomBytes(6).toString('hex')}`, nonce: 'group-xc20p-v1:n', type: 'text', metadata: { epoch: 1 }, timestamp: new Date().toISOString() };
+    const tookAfter = await p15.tell('line', line15c);
+    const servedAfter = (await p15.itemsOn(p15.tablet)).filter((i: any) => i.kind === 'line' && i.data?.ciphertext === line15c.ciphertext).length;
+    const epochKept = await (async () => {
+        const who = addLocal('c15-epoch'), g = 'g15-c15-epoch';
+        setLink(who, 'b.example', g, 'in');
+        await notice('b.example', { v: 1, kind: 'epoch', group: g, host: 'b.example', guests: [who.pk], data: DATA.epoch });
+        setNodeRole('backup');
+        home.sweepGroupGuestMail(Date.now());
+        setNodeRole('primary');
+        return heldCount(who, 'b.example', g);
+    })();
+    assert(p15.ok && tookAfter.status === 202 && servedAfter === 1 && epochKept === 1,
+        `15c. no over-blocking: a line held after a take-back is served (${servedAfter}), and an epoch held before it is kept (${epochKept})`);
+
+    // An edit refused (the host's allowance full): the older edit held stays, so a device that has the line keeps its words.
+    const f15 = await held15('c15-full');
+    await f15.confirm(f15.phone);
+    await f15.confirm(f15.tablet);
+    await f15.tell('edit', f15.editOf(f15.marks.edited));
+    await f15.confirm(f15.phone);
+    const later = Date.now() + 24 * 60 * MIN;
+    const fill = db.prepare('INSERT INTO group_guest_mail (id, member, host, group_id, kind, body, bytes, answered, received_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)');
+    db.transaction(() => { for (let i = 0; i < HOST_ITEMS; i++) fill.run(crypto.randomUUID(), f15.who.pk, 'b.example', 'g15-c15-filler', 'epoch', '{}', 2, later + i); })();
+    const refusedEdit = await f15.tell('edit', f15.editOf(f15.marks.edited2));
+    const onTablet15 = (await f15.itemsOn(f15.tablet)).map((i: any) => `${i.kind}(${i.data?.ciphertext === f15.marks.edited ? 'older edit' : i.data?.ciphertext === f15.marks.edited2 ? 'newest' : 'other'})`).join(' ');
+    db.prepare("DELETE FROM group_guest_mail WHERE member = ? AND group_id = 'g15-c15-filler'").run(f15.who.pk);
+    assert(f15.ok && refusedEdit.status === 202 && onTablet15 === 'edit(older edit)',
+        `15c. an edit not held (the host's allowance full): the tablet, which has the line, is served the older edit's words, not left on the first (got ${onTablet15 || 'nothing'})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

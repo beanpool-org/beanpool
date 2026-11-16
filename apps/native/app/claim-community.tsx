@@ -22,6 +22,7 @@ import { Alert } from '../utils/keyboard-alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
+import { leaveScreen } from '../utils/leave-screen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { NAME_BOX_WORDS, notANameIn, t, tn, upperCase } from '@beanpool/core';
 import { claimOutcomeWords, keyLineWords } from '../components/key-lines';
@@ -421,8 +422,7 @@ export default function ClaimCommunityScreen() {
             heldKey.current = null;
             // The app loaded that key at its start (a restart while the claim was out): it holds no account now.
             if (removed && identity && key && identity.publicKey === key.identity.publicKey) setIdentity(null);
-            if (router.canGoBack()) router.back();
-            else router.replace(account ? '/(tabs)' : '/welcome');
+            leaveScreen(router, 'claim-community', account ? {} : { fallback: '/welcome' });
         })();
     };
     // Android's back button too: the same way out, so a key the claim made never stays behind by another door.

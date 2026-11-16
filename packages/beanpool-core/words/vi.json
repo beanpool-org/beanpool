@@ -2598,6 +2598,9 @@
   "Refresh your {provider} copy": "Làm mới bản sao {provider} của bạn",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "Đã làm mới {provider}. Đăng nhập bằng nó sẽ khôi phục tài khoản này mà không cần nhập gì.",
   "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "Không thể làm mới {provider}, nên không có gì thay đổi. Hãy thử lại sau một phút.",
+  "From the forum": "Từ diễn đàn",
+  "Join to reply": "Tham gia để trả lời",
+  "No topics here yet. Join to start the first one.": "Chưa có chủ đề nào ở đây. Tham gia để bắt đầu chủ đề đầu tiên.",
   "Type a tag": "Nhập một thẻ",
   "Tags help people find this page in Learn. Everyone can see them.": "Thẻ giúp mọi người tìm thấy trang này trong Tìm hiểu. Ai cũng xem được.",
   "Search Learn for {tag}": "Tìm {tag} trong Tìm hiểu"

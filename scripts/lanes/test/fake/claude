@@ -46,7 +46,7 @@ case "${FAKE_CLAUDE_MODE:-success}" in
     if (( n == 1 )); then result error_during_execution true "Claude AI usage limit reached"; exit 1; fi
     sleep 1; result success false "All done.";;
   fail_fable)
-    if [ "$model" = claude-fable-5-1 ]; then print -u2 "API Error: 500 internal"; exit 1; fi
+    if [ "$model" = claude-opus-5-5 ]; then print -u2 "API Error: 500 internal"; exit 1; fi
     sleep 1; result success false "No new defects.";;
   hang) sleep 600 & wait;;   # never answers: the idle watchdog has to kill it
   empty) ;;                  # exits 0 with no result at all

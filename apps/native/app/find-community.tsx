@@ -4,6 +4,7 @@ import { Alert } from '../utils/keyboard-alert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, ErrorBoundary, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { leaveScreen } from '../utils/leave-screen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -644,7 +645,7 @@ export default function FindCommunityScreen() {
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <StatusBar style="light" />
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
+                <Pressable onPress={() => leaveScreen(router, 'find-community')} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
                     <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.inverse} />
                 </Pressable>
                 <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} accessibilityRole="header">{t('FIND A COMMUNITY')}</Text>

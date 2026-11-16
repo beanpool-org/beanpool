@@ -2598,6 +2598,9 @@
   "Refresh your {provider} copy": "重新整理你的 {provider} 副本",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider} 已重新整理。用它登入即可找回這個帳號，無需輸入任何內容。",
   "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "無法重新整理 {provider}，因此沒有任何變更。請一分鐘後再試。",
+  "From the forum": "來自論壇",
+  "Join to reply": "加入後回覆",
+  "No topics here yet. Join to start the first one.": "這裡還沒有主題。加入後發起第一個吧。",
   "Type a tag": "輸入標籤",
   "Tags help people find this page in Learn. Everyone can see them.": "標籤能幫助大家在學習中找到此頁面。所有人都看得到。",
   "Search Learn for {tag}": "在學習中搜尋 {tag}"

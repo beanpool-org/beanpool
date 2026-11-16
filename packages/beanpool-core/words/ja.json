@@ -2598,6 +2598,9 @@
   "Refresh your {provider} copy": "{provider}のコピーを更新",
   "{provider} is refreshed. Signing in with it brings this account back, with nothing to type.": "{provider}を更新しました。これでサインインすると、何も入力せずにこのアカウントが戻ります。",
   "Couldn't refresh {provider}, so nothing changed. Try again in a minute.": "{provider}を更新できなかったため、何も変わっていません。しばらくしてからもう一度お試しください。",
+  "From the forum": "フォーラムから",
+  "Join to reply": "参加して返信",
+  "No topics here yet. Join to start the first one.": "まだトピックはありません。参加して最初のトピックを始めましょう。",
   "Type a tag": "タグを入力",
   "Tags help people find this page in Learn. Everyone can see them.": "タグがあると、学びでこのページが見つけやすくなります。タグは誰でも見られます。",
   "Search Learn for {tag}": "学びで{tag}を検索"

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, ErrorBoundary, useLocalSearchParams } from 'expo-router';
+import { leaveScreen } from '../utils/leave-screen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { Image } from 'expo-image';
@@ -84,7 +85,7 @@ export default function PeekScreen() {
         return () => { alive = false; };
     }, [peek?.origin, peek?.postId, peek?.ticket, attempt]);
 
-    const leave = () => (router.canGoBack() ? router.back() : router.replace('/'));
+    const leave = () => leaveScreen(router, 'peek');
     const name = community ?? peek?.origin.replace(/^https:\/\//, '') ?? '';
 
     const askDoor = peek && (

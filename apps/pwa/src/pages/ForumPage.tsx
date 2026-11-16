@@ -47,11 +47,18 @@ export const FORUM_WORDS = {
 /** `at`: a search's hit opens the topic at that post. */
 type View = { kind: 'list' } | { kind: 'topic'; id: string; at?: number } | { kind: 'new' } | { kind: 'firstLooks' };
 
-/** `homeNonce`: changes each time the member chooses Chat in the menu while the Forum shows (ChatTabPage): its topic list. */
-export function ForumPage({ me, onOpenProfile, homeNonce }: { me: string; onOpenProfile?: (pubkey: string) => void; homeNonce?: number }) {
+/**
+ * `topicId`: the topic it opens on (a door to one topic, slice F7). `homeNonce`: changes each time the member chooses Chat in the
+ * menu while the Forum shows (ChatTabPage): its topic list, even when a door opened it on a topic.
+ */
+export function ForumPage({ me, onOpenProfile, topicId = null, homeNonce }: {
+    me: string; onOpenProfile?: (pubkey: string) => void; topicId?: string | null; homeNonce?: number;
+}) {
     // Before any kept copy is read: another account in this tab never sees the last one's forum, not even for a moment.
     keepForumFor(me);
-    const [view, setView] = useState<View>({ kind: 'list' });
+    const [view, setView] = useState<View>(() => (topicId ? { kind: 'topic', id: topicId } : { kind: 'list' }));
+    // A door to one topic (slice F7) while the Forum is already open: that topic.
+    useEffect(() => { if (topicId) setView({ kind: 'topic', id: topicId }); }, [topicId]);
     const [front, setFront] = useState<ForumFront | null>(() => keptFront());
     const [section, setSection] = useState<string | null>(null);
     const [list, setList] = useState(() => keptList(null));

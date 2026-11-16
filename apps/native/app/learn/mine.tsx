@@ -8,6 +8,7 @@
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { leaveScreen } from '../../utils/leave-screen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t, type KnowledgeDraftMine } from '@beanpool/core';
 import { useStyles, useTheme } from '../ThemeContext';
@@ -72,7 +73,7 @@ export default function MySuggestionsScreen() {
         ]);
     };
 
-    const leave = () => { if (router.canGoBack()) router.back(); else router.replace('/learn'); };
+    const leave = () => leaveScreen(router, 'learn/mine');
     const row = (d: KnowledgeDraftMine) => {
         const added = d.state === 'approved' && !!d.postId;
         const kind = t(LEARN_WRITE.kindStatus, { kind: d.kind === 'fix' ? t(LEARN_WRITE.kindFix) : t(LEARN_WRITE.kindNew), status: mineRowStatus(d) });

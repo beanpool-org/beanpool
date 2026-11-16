@@ -545,4 +545,16 @@ describe('Chat chosen in the menu while the Forum shows', () => {
         view.rerender(<ForumPage me={ME} homeNonce={1} />);
         expect(await screen.findAllByTestId('forum-topic-row')).toHaveLength(2);
     });
+
+    it("opened by a door on one topic (slice F7): the topic, whatever count it is born with; a new count, the list, and the door's topic stays shut", async () => {
+        const view = render(<ForumPage me={ME} topicId="ft-1" homeNonce={3} />);
+        expect(await screen.findByTestId('forum-topic-title')).toHaveTextContent('Seed swap ideas');
+        view.rerender(<ForumPage me={ME} topicId="ft-1" homeNonce={4} />);
+        expect(await screen.findAllByTestId('forum-topic-row')).toHaveLength(2);
+        expect(screen.queryByTestId('forum-topic-title')).toBeNull();
+        // Drawn again with the same door (App keeps the topic while the tab shows): still the list.
+        view.rerender(<ForumPage me={ME} topicId="ft-1" homeNonce={4} />);
+        expect(screen.queryByTestId('forum-topic-title')).toBeNull();
+        expect(screen.getAllByTestId('forum-topic-row')).toHaveLength(2);
+    });
 });

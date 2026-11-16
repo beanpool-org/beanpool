@@ -12,6 +12,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ErrorBoundary, router, useLocalSearchParams } from 'expo-router';
+import { leaveScreen } from '../utils/leave-screen';
 import { t } from '@beanpool/core';
 import { useStyles } from './ThemeContext';
 import { enterHall, hallAddressOf, hallDepsWith, hallRefusalText, parseHallLink, type HallLink } from '../utils/hall';
@@ -117,7 +118,7 @@ export default function HallScreen() {
                         ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><ActivityIndicator color={s.buttonText.color} /><Text style={s.buttonText}>{t('Checking the laptop…')}</Text></View>
                         : <Text style={s.buttonText}>{t('Join the hall laptop')}</Text>}
                 </Pressable>
-                <Pressable accessibilityRole="button" onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}>
+                <Pressable accessibilityRole="button" onPress={() => leaveScreen(router, 'hall')}>
                     <Text style={s.link}>{t('Not now')}</Text>
                 </Pressable>
             </ScrollView>

@@ -241,19 +241,23 @@ export default function FindCommunityScreen() {
     // community once per row key while the screen is open, never by a record alone. Until it answers, the row knocks.
     const [memberAt, setMemberAt] = useState<Record<string, boolean>>({});
     const memberAsked = useRef(new Set<string>());
-    // Another account on the phone: every row is asked again.
-    useEffect(() => { memberAsked.current.clear(); setMemberAt({}); }, [pubkey]);
+    // Which account the asks are for: an answer is kept while the phone shows the account it was asked for, whatever list
+    // run asked it (a search, the place arriving or Try again reloads the list while an ask is out: #3251 review, its key
+    // stayed asked and the member's own row knocked for the rest of the visit). Another account: every row is asked again,
+    // and an earlier account's answer never lands.
+    const memberAccount = useRef(0);
+    useEffect(() => { memberAccount.current += 1; memberAsked.current.clear(); setMemberAt({}); }, [pubkey]);
+    useEffect(() => () => { memberAccount.current += 1; }, []);
     useEffect(() => {
         if (anchorNow === undefined || !communities) return;
-        let alive = true;
+        const account = memberAccount.current;
         for (const c of communities) {
             const record = communityRecordByKey(c.key);
             if (!record || memberAsked.current.has(c.key)) continue;
             memberAsked.current.add(c.key);
             void askMemberHere({ using: record.using, addresses: recordAddresses(record) }, identity)
-                .then((member) => { if (alive) setMemberAt((m) => ({ ...m, [c.key]: member })); });
+                .then((member) => { if (account === memberAccount.current) setMemberAt((m) => ({ ...m, [c.key]: member })); });
         }
-        return () => { alive = false; };
     }, [communities, anchorNow, identity]);
     const [opening, setOpening] = useState<string | null>(null);
     /** Open a community the phone is a member of from its row: the one switch to the address it uses, then the newest list asked. */

@@ -7,7 +7,10 @@
  * case to e2e/shots/.
  *
  * Nothing here touches a BeanPool node: /api/community/info is answered by the page route with a fixture naming this
- * page's own host (localhost) as a former address, and any other /api or /ws request is aborted and counted.
+ * page's own host (localhost) as a former address, and any other /api or /ws request is aborted and counted. The banner
+ * names the main address only once the main has proved itself (several addresses S6, lib/main-address-proof.ts), so the
+ * route also answers this server's signed list, and the main address's own list and proof, signed with core's shared test
+ * keys (packages/beanpool-core/vectors/address-list.json). A last case has the main answer with another key: no banner.
  *
  *   node e2e/former-address-check.mjs     # exits non-zero on any problem
  *
@@ -20,6 +23,7 @@ import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
+import { ed25519Signer, signAddressList, signAddressProof } from '@beanpool/core';
 
 const PWA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(PWA_DIR);
@@ -32,6 +36,21 @@ const INFO = {
     // Opened at the current address: this page's host is the primary one.
     current: { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, addresses: ['localhost'], primaryAddress: 'localhost', formerAddresses: ['oldname.beanpool.org'] },
 };
+
+// The signed list and the proof (several addresses S6): this server's list names the new address main, and the main serves
+// its own and proves each question, by the community's key; in `forged`, the main answers with another key.
+const VECTORS = JSON.parse(fs.readFileSync(path.join(PWA_DIR, '../../packages/beanpool-core/vectors/address-list.json'), 'utf8'));
+const hex = (h) => Uint8Array.from(h.match(/../g).map((b) => parseInt(b, 16)));
+const KEYS = Object.fromEntries(['community', 'other'].map((k) => [k, { peerId: VECTORS.keys[k].peerId, sign: ed25519Signer(hex(VECTORS.keys[k].seedHex)) }]));
+const FIELDS = (key) => ({ peerId: KEYS[key].peerId, communityId: 'riverside', epoch: 1, seq: 7, main: NEW_HOST, addresses: [NEW_HOST], spares: [] });
+const LISTS = { community: await signAddressList(FIELDS('community'), KEYS.community.sign), other: await signAddressList(FIELDS('other'), KEYS.other.sign) };
+const CORS = { 'Access-Control-Allow-Origin': '*' };
+/** The main address's answers, by the key it answers with. */
+async function mainAnswer(url, key) {
+    if (url.pathname === '/api/node/addresses') return LISTS[key];
+    const q = { for: url.searchParams.get('for'), nonce: url.searchParams.get('nonce') };
+    return signAddressProof({ list: { v: 1, ...FIELDS(key) }, ...q }, KEYS[key].sign);
+}
 
 const CASES = [
     { name: 'phone-320-130pc', width: 320, height: 900, fontScale: 1.3 },
@@ -54,12 +73,13 @@ const MEASURE = () => {
         pageScrollsSideways: document.documentElement.scrollWidth > vw,
         banners: banners.map((b) => {
             const a = b.querySelector('a');
-            const strong = b.querySelector('strong');
+            // The sentence that names the address (a plain <p> since #2339 dropped the <strong> this read before).
+            const said = b.querySelector('p');
             const ar = a?.getBoundingClientRect();
-            const sr = strong?.getBoundingClientRect();
+            const sr = said?.getBoundingClientRect();
             return {
                 text: b.textContent,
-                address: strong?.textContent ?? null,
+                address: said?.textContent?.match(/moved to (.+)\.$/)?.[1] ?? null,
                 addressInside: !!sr && sr.left >= -0.5 && sr.right <= vw + 0.5,
                 href: a?.getAttribute('href') ?? null,
                 rel: a?.getAttribute('rel') ?? null,
@@ -81,13 +101,18 @@ const failures = [];
 let blocked = 0;
 
 try {
-    for (const which of ['moved', 'current']) {
+    for (const which of ['moved', 'current', 'forged']) {
         for (const theme of ['light', 'dark']) {
             for (const c of CASES) {
                 const context = await browser.newContext({ viewport: { width: c.width, height: c.height }, colorScheme: theme });
-                await context.route('**/*', (route) => {
+                await context.route('**/*', async (route) => {
                     const url = route.request().url();
-                    if (url.includes('/api/community/info')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(INFO[which]) });
+                    if (url.includes('/api/community/info')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(INFO[which === 'current' ? 'current' : 'moved']) });
+                    const u = new URL(url);
+                    if (u.host === new URL(base).host && u.pathname === '/api/node/addresses') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(LISTS.community) });
+                    if (u.host === NEW_HOST && /^\/api\/node\/(addresses|proof)$/.test(u.pathname)) {
+                        return route.fulfill({ status: 200, contentType: 'application/json', headers: CORS, body: JSON.stringify(await mainAnswer(u, which === 'forged' ? 'other' : 'community')) });
+                    }
                     if (url.includes('/api/') || url.startsWith('ws')) { blocked++; return route.abort(); }
                     return route.continue();
                 });
@@ -102,7 +127,7 @@ try {
                     document.documentElement.style.fontSize = `${scale * 100}%`;
                 }, [theme, c.fontScale]);
                 if (which === 'moved') await page.waitForSelector('[data-testid="former-address-banner"]');
-                else await page.waitForTimeout(500);
+                else await page.waitForTimeout(which === 'forged' ? 2000 : 500);
                 await page.evaluate(() => document.fonts.ready);
 
                 const shot = `former-address-${which}-${c.name}-${theme}.png`;
@@ -123,7 +148,7 @@ try {
                     if (m.banners[0] && !/sign in there again/.test(m.banners[0].text)) failures.push(`${shot}: the member's banner doesn't say they sign in there again`);
                     if (m.banners[1] && /sign in/.test(m.banners[1].text)) failures.push(`${shot}: the visitor's banner talks about signing in`);
                 } else if (m.banners.length !== 0) {
-                    failures.push(`${shot}: ${m.banners.length} banners at the current address, expected none`);
+                    failures.push(`${shot}: ${m.banners.length} banners ${which === 'forged' ? 'when the main answers with another key' : 'at the current address'}, expected none`);
                 }
                 if (m.pageScrollsSideways) failures.push(`${shot}: the page scrolls sideways`);
                 for (const o of m.overflow) failures.push(`${shot}: ${o}`);
@@ -143,4 +168,4 @@ if (failures.length) {
     console.error(`\n✗ ${failures.length} problem(s):\n  ${failures.join('\n  ')}`);
     process.exit(1);
 }
-console.log('\n✓ at a former address: the whole new address, a plain 44px link, nothing past the viewport; at the current one: nothing');
+console.log('\n✓ at a former address: the whole new address, a plain 44px link, nothing past the viewport; at the current one, and when the main answers with another key: nothing');

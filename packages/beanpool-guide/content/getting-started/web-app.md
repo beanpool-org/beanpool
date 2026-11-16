@@ -108,7 +108,7 @@ If you joined the global community with 12 words, they are your only way back. A
 ## What the web app does not have
 
 - Getting your account back with a sign-in on a community other than the global one. There, your 12 words bring it back, or linking from the phone app if your account is on your phone too.
-- The Pulse's **Learn** lane.
+- A lane of its own for the Pulse's **How it works** videos: in the web app they are in the feed, and the **How it works** chip shows only them.
 - The phone's app lock.
 - Signing in to your community's Settings with your own key, for owners and admins. The web app's **Manage** link opens Settings, but a browser has no unlock of its own. On the computer, choose **Sign in with your phone** in Settings and scan the code with the phone app (**Settings**, then **Manage this community from a computer**; older apps: **Sign in on a computer**).
 

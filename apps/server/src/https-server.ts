@@ -160,6 +160,7 @@ import { createWebPushRoutes } from './routes/web-push.js';
 import { createNodeKeyRoutes } from './routes/node-key.js';
 import { createAddressListRoutes } from './routes/address-list.js';
 import { createRelayRoutes } from './routes/relay.js';
+import { createFindByNameRoutes } from './routes/find-by-name.js';
 import { sweepRelayMail } from './engine/relay-mail.js';
 import { retryRelayOutbox, sweepRelayOutbox } from './engine/relay-outbox.js';
 import { closeGuestsIfSwitchedOff, flushGuestOutbox } from './engine/group-guests.js';
@@ -2167,6 +2168,8 @@ export async function startHttpsServer(port: number): Promise<number> {
         // The community's signed address list and the proof for one address (several addresses S2, routes/address-list.ts).
         createAddressListRoutes(),
         createRelayRoutes(),
+        // Finding someone in another community by their exact name, when they said yes (N1, routes/find-by-name.ts).
+        createFindByNameRoutes(),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),
         createNamesListRoutes(deps),

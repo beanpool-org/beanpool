@@ -1,17 +1,12 @@
 /**
- * Following a community to where it lives now (utils/address-follow.ts; scratch/global-node/DESIGN-https-anywhere-fable.md
- * §3, D4, slice S3). Before S3, nothing in the app read `primaryAddress` from /api/community/info: a community that moved
- * from its server's number to a name (or to a new name) told its members "Open the app to follow it", and the app had
- * nothing to follow with.
+ * Who a community is, by its signed statement, and what the phone first verified at each address (utils/address-follow.ts).
+ * The follow card these tests also pinned went in addresses S4 (scratch/fable-design/DESIGN-several-addresses-fable.md §9):
+ * the phone follows by itself, by the signed list and a fresh proof (utils/__tests__/address-verify.test.ts).
  *
- * What is pinned here, through the module's own functions with real Ed25519 node keys and statements signed in the
- * server's own bytes (apps/server services/identity-epoch.ts):
- *   - offered only when the new address is the same community: the same PeerId and community id, signed by the key the
- *     PeerId names, not an older server of it; checked against who the phone first knew at its address, kept from its
- *     first read of its community there, before any move is on offer;
- *   - never silent: asking for the offer writes no community address and switches nothing;
- *   - "Not now" asks again in 7 days, for that same new address;
- *   - the move goes through utils/reconnect.ts switchPhoneTo, which writes the address and says communitySwitched().
+ * What is pinned here, with real Ed25519 node keys and statements signed in the server's own bytes (apps/server
+ * services/identity-epoch.ts): the statement is read only when signed by the key its PeerId names; who the community is
+ * at an address is kept from the phone's first read there, once, and never replaced by whoever answers later; the
+ * owner's number nudge and the registrar name.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
@@ -47,12 +42,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import {
-    acceptAddressFollow, addressFollowOffer, followCandidate, fetchIdentityStatement, forgetFollowChecks, keepCommunityIdentity, numberOnlyAddress,
-    registrarNameOf, readIdentityStatement, sameCommunity, snoozeAddressFollow, COMMUNITY_IDENTITY_KEY, FOLLOW_SNOOZE_KEY, FOLLOW_SNOOZE_MS,
-    IDENTITY_STATEMENT_PATH, type AddressFollowDeps, type AddressFollowOffer,
+    fetchIdentityStatement, forgetFollowChecks, keepCommunityIdentity, numberOnlyAddress, registrarNameOf, readIdentityStatement, sameCommunity,
+    COMMUNITY_IDENTITY_KEY, IDENTITY_STATEMENT_PATH,
 } from '../address-follow';
-import { communitySwitched } from '../community-switch';
-import { carryCommunityCopy } from '../community-copy-carry';
 import { GLOBAL_NODE_URL } from '../global-node-url';
 import type { NodeProfile } from '../node-profile';
 import type { SavedNode } from '../nodes';
@@ -101,7 +93,7 @@ function world(opts: { anchor?: string | null; prof?: NodeProfile | null; answer
         guest: [...(opts.guest ?? [])],
         asked: [] as string[],
     };
-    const deps: AddressFollowDeps = {
+    const deps = {
         anchor: vi.fn(async () => state.anchor),
         profile: vi.fn(async () => state.prof),
         statement: vi.fn(async (origin: string) => { state.asked.push(origin); return readIdentityStatement(state.answers[origin]); }),
@@ -179,197 +171,14 @@ describe('the statement: who a node says it is, signed with its node key', () =>
     });
 });
 
-describe('what may be followed (followCandidate)', () => {
-    it('a number to its name, or a name to a new name', () => {
-        expect(followCandidate(IP, profile())).toEqual({ from: IP, to: NAME, host: 'beans.example.org' });
-        expect(followCandidate(`${IP}/`, profile())).toEqual({ from: IP, to: NAME, host: 'beans.example.org' });
-        expect(followCandidate('https://old.example.org', profile({ addresses: ['new.example.org'], primaryAddress: 'new.example.org' })))
-            .toEqual({ from: 'https://old.example.org', to: 'https://new.example.org', host: 'new.example.org' });
-        expect(followCandidate(IP, profile({ addresses: ['beans.example.org:8443'], primaryAddress: 'beans.example.org:8443' })))
-            .toEqual({ from: IP, to: 'https://beans.example.org:8443', host: 'beans.example.org:8443' });
-    });
-
-    it('nothing when the phone is already there, the primary is not one of its addresses, or none is said', () => {
-        expect(followCandidate(NAME, profile())).toBeNull();
-        expect(followCandidate('https://beans.example.org:8443', profile())).toBeNull(); // the same host: signatures name the host only
-        expect(followCandidate(IP, profile({ addresses: ['203.0.113.5'] }))).toBeNull();
-        expect(followCandidate(IP, profile({ primaryAddress: undefined }))).toBeNull();
-        expect(followCandidate(IP, profile({ addresses: undefined }))).toBeNull();
-        expect(followCandidate(IP, null)).toBeNull();
-        expect(followCandidate(null, profile())).toBeNull();
-    });
-
-    it('never from cleartext, never from the worldwide community, never from a name to a number', () => {
-        expect(followCandidate('http://192.168.1.10:8080', profile())).toBeNull();
-        expect(followCandidate('http://203.0.113.5', profile())).toBeNull();
-        expect(followCandidate(GLOBAL_NODE_URL, profile())).toBeNull();
-        expect(followCandidate(NAME, profile({ addresses: ['beans.example.org', '198.51.100.7'], primaryAddress: '198.51.100.7' }))).toBeNull();
-        // A number to another number is the same kind of address: offered (the server moved, with the phone told).
-        expect(followCandidate(IP, profile({ addresses: ['198.51.100.7'], primaryAddress: '198.51.100.7' })))
-            .toEqual({ from: IP, to: 'https://198.51.100.7', host: '198.51.100.7' });
-    });
-
-    it('never to an address the phone would not use as a community\'s', () => {
-        for (const bad of ['10.0.0.5', '192.168.1.20', '127.0.0.1', 'intranet', 'global.beanpool.org', '0.0.0.0', 'localhost']) {
-            expect(followCandidate(IP, profile({ addresses: [bad], primaryAddress: bad })), bad).toBeNull();
-        }
-    });
-});
-
-describe('offered only when the new address is the same community', () => {
-    const node = nodeKey();
-    const same = () => ({ [IP]: statement(node, COMMUNITY), [NAME]: statement(node, COMMUNITY) });
-
-    it('the same key and community at both: offered', async () => {
-        const { deps } = world({ answers: same() });
-        expect(await addressFollowOffer(deps)).toEqual({ from: IP, to: NAME, host: 'beans.example.org' });
-    });
-
-    it('another server at the new address, another community, a forged statement, or no answer: nothing', async () => {
-        const other = nodeKey();
-        const cases: Record<string, Record<string, unknown>> = {
-            'another node key': { [IP]: statement(node, COMMUNITY), [NAME]: statement(other, COMMUNITY) },
-            'another community': { [IP]: statement(node, COMMUNITY), [NAME]: statement(node, 'deadbeef') },
-            'not signed by the key it names': { [IP]: statement(node, COMMUNITY), [NAME]: statement(node, COMMUNITY, 0, null, other.seed) },
-            'no answer at the new address': { [IP]: statement(node, COMMUNITY) },
-            'not a statement': { [IP]: statement(node, COMMUNITY), [NAME]: { peerId: node.peerId, communityId: COMMUNITY } },
-        };
-        for (const [why, answers] of Object.entries(cases)) {
-            forgetFollowChecks();
-            store.clear();
-            const { deps } = world({ answers });
-            expect(await addressFollowOffer(deps), why).toBeNull();
-        }
-    });
-
-    it('an older server of the same community (fewer take-overs) is not followed; a newer one is', async () => {
-        const older = world({ answers: { [IP]: statement(node, COMMUNITY, 2), [NAME]: statement(node, COMMUNITY, 1) } });
-        expect(await addressFollowOffer(older.deps)).toBeNull();
-        forgetFollowChecks();
-        store.clear();
-        const newer = world({ answers: { [IP]: statement(node, COMMUNITY, 1), [NAME]: statement(node, COMMUNITY, 2) } });
-        expect(await addressFollowOffer(newer.deps)).not.toBeNull();
-    });
-
-    it('checked against who the phone first knew at its address: a number that later answers as another community offers nothing', async () => {
-        // The first check of a move keeps who the phone's community is (here the new name didn't answer yet).
-        const first = world({ answers: { [IP]: statement(node, COMMUNITY) } });
-        expect(await addressFollowOffer(first.deps)).toBeNull();
-        expect(JSON.parse(store.get(COMMUNITY_IDENTITY_KEY)!)[IP]).toEqual({ peerId: node.peerId, communityId: COMMUNITY, epoch: 0 });
-        // Later the number is someone else's server, naming a name of its own, and both say so of themselves consistently.
-        forgetFollowChecks();
-        const stranger = nodeKey();
-        const later = world({ answers: { [IP]: statement(stranger, 'f00d'), [NAME]: statement(stranger, 'f00d') } });
-        expect(await addressFollowOffer(later.deps)).toBeNull();
-        expect(await acceptAddressFollow({ from: IP, to: NAME, host: 'beans.example.org' }, later.deps)).toBe('not-same');
-        expect(later.deps.switchTo).not.toHaveBeenCalled();
-        // What was kept is not overwritten by the stranger.
-        expect(JSON.parse(store.get(COMMUNITY_IDENTITY_KEY)!)[IP]).toEqual({ peerId: node.peerId, communityId: COMMUNITY, epoch: 0 });
-    });
-
-    it('a take-over at the same address raises the kept count, so its replaced server is never followed', async () => {
-        const w = world({ answers: { [IP]: statement(node, COMMUNITY, 0) } });
-        await addressFollowOffer(w.deps);
-        forgetFollowChecks();
-        w.state.answers[IP] = statement(node, COMMUNITY, 1);
-        w.state.answers[NAME] = statement(node, COMMUNITY, 0);
-        expect(await addressFollowOffer(w.deps)).toBeNull();
-        expect(JSON.parse(store.get(COMMUNITY_IDENTITY_KEY)!)[IP].epoch).toBe(1);
-    });
-
-    it('with nothing to follow, Home asks nobody: no statement read, no profile read beyond the phone\'s own copy', async () => {
-        const w = world({ prof: profile({ addresses: ['203.0.113.5'], primaryAddress: '203.0.113.5' }), answers: { [IP]: statement(node, COMMUNITY) } });
-        expect(await addressFollowOffer(w.deps)).toBeNull();
-        expect(w.state.asked).toEqual([]);
-        expect(vi.mocked(AsyncStorage.setItem)).not.toHaveBeenCalled();
-    });
-
-    it('a number that stopped answering can still be followed to a name the phone heard of, checked against what it kept', async () => {
-        store.set(COMMUNITY_IDENTITY_KEY, JSON.stringify({ [IP]: { peerId: node.peerId, communityId: COMMUNITY, epoch: 0 } }));
-        const dead = world({ answers: { [NAME]: statement(node, COMMUNITY) } });
-        expect(await addressFollowOffer(dead.deps)).toEqual({ from: IP, to: NAME, host: 'beans.example.org' });
-        forgetFollowChecks();
-        const elsewhere = world({ answers: { [NAME]: statement(nodeKey(), COMMUNITY) } });
-        expect(await addressFollowOffer(elsewhere.deps)).toBeNull();
-    });
-
-    it('a number that stopped answering, with nothing kept, offers nothing (the member types the new address)', async () => {
-        const { deps } = world({ answers: { [NAME]: statement(node, COMMUNITY) } });
-        expect(await addressFollowOffer(deps)).toBeNull();
-    });
-
-    it('asks the two servers once an hour at most for the same offer, and again five minutes after no answer', async () => {
-        const w = world({ answers: { [IP]: statement(node, COMMUNITY) } });
-        expect(await addressFollowOffer(w.deps)).toBeNull();
-        expect(w.state.asked).toEqual([IP, NAME]);
-        // The name answers now; Home comes back into view a minute later: not asked again yet.
-        w.state.answers[NAME] = statement(node, COMMUNITY);
-        w.state.now += 60 * 1000;
-        expect(await addressFollowOffer(w.deps)).toBeNull();
-        expect(w.state.asked).toHaveLength(2);
-        w.state.now += 5 * 60 * 1000;
-        expect(await addressFollowOffer(w.deps)).not.toBeNull();
-        expect(w.state.asked).toHaveLength(4);
-        w.state.now += 30 * 60 * 1000;
-        expect(await addressFollowOffer(w.deps)).not.toBeNull();
-        expect(w.state.asked).toHaveLength(4);
-        w.state.now += 31 * 60 * 1000;
-        await addressFollowOffer(w.deps);
-        expect(w.state.asked).toHaveLength(6);
-    });
-
-    it('the fallback card\'s ask (sameSince, sameWithin): a "same" from before, or as old as it allows, is checked again; the card\'s own ask keeps the hour', async () => {
-        const MIN = 60 * 1000;
-        const offer = { from: IP, to: NAME, host: 'beans.example.org' };
-        const w = world({ answers: same() });
-        const checkedAt = w.state.now;
-        expect(await addressFollowOffer(w.deps)).toEqual(offer);
-        expect(w.state.asked).toHaveLength(2);
-        // Ten minutes on the new address has stopped answering. The follow card's own ask still reuses its 'same'...
-        w.state.now += 10 * MIN;
-        w.state.answers[NAME] = undefined;
-        expect(await addressFollowOffer(w.deps)).toEqual(offer);
-        // ...and so does an ask that takes one checked since then, or up to fifteen minutes old: nobody asked.
-        expect(await addressFollowOffer(w.deps, { sameSince: checkedAt })).toEqual(offer);
-        expect(await addressFollowOffer(w.deps, { sameWithin: 15 * MIN })).toEqual(offer);
-        expect(w.state.asked).toHaveLength(2);
-        // One that takes it only from a moment after it was made asks again, and finds no answer.
-        expect(await addressFollowOffer(w.deps, { sameSince: checkedAt + 1 })).toBeNull();
-        expect(w.state.asked).toHaveLength(4);
-        // That check stands for every ask now: the follow card's own finds nothing to offer.
-        expect(await addressFollowOffer(w.deps)).toBeNull();
-        // It never shortens a check that offered nothing: no answer is asked again after its own five minutes, not sooner.
-        w.state.now += MIN;
-        expect(await addressFollowOffer(w.deps, { sameSince: w.state.now, sameWithin: 0 })).toBeNull();
-        expect(w.state.asked).toHaveLength(4);
-        // The new address answers again: 'same' once more. An ask that takes it under five minutes old asks at five.
-        forgetFollowChecks();
-        w.state.answers[NAME] = statement(node, COMMUNITY);
-        expect(await addressFollowOffer(w.deps)).toEqual(offer);
-        w.state.answers[NAME] = undefined;
-        w.state.now += 5 * MIN - 1;
-        expect(await addressFollowOffer(w.deps, { sameWithin: 5 * MIN })).toEqual(offer);
-        expect(w.state.asked).toHaveLength(6);
-        w.state.now += 1;
-        expect(await addressFollowOffer(w.deps, { sameWithin: 5 * MIN })).toBeNull();
-        expect(w.state.asked).toHaveLength(8);
-    });
-});
-
-// Review of #2138: kept only by a check of a move, the identity came too late for the case it is there for. A community
-// at its number with no name yet has nothing to follow, so nothing was kept, and the first identity the phone recorded
-// was whoever answered at the number on the day a move first appeared. Kept now from the phone's first read there.
 describe('who the community is, kept from the phone\'s first read of it at its address', () => {
     const node = nodeKey();
     const Y = 'https://y.example.org';
     const keptAt = (origin: string) => JSON.parse(store.get(COMMUNITY_IDENTITY_KEY) ?? '{}')[origin];
     const x = () => ({ peerId: node.peerId, communityId: COMMUNITY, epoch: 0 });
 
-    it('at a number with no name yet; the number given to another community later offers nothing (the review\'s case)', async () => {
-        // The phone at the number, nothing to follow: no move on offer, so no check of one ever runs.
+    it('at a number with no name yet; the number given to another community later keeps the first (the review\'s case)', async () => {
         const first = world({ prof: profile({ addresses: ['203.0.113.5'], primaryAddress: undefined }), answers: { [IP]: statement(node, COMMUNITY) } });
-        expect(await addressFollowOffer(first.deps)).toBeNull();
-        expect(first.state.asked).toEqual([]);
         await keepCommunityIdentity(IP, first.deps);
         expect(first.state.asked).toEqual([IP]);
         expect(keptAt(IP)).toEqual(x());
@@ -382,14 +191,11 @@ describe('who the community is, kept from the phone\'s first read of it at its a
         // The next app start's read asks nothing and keeps what it had.
         await keepCommunityIdentity(IP, later.deps);
         expect(later.state.asked).toEqual([]);
-        expect(await addressFollowOffer(later.deps)).toBeNull();
-        expect(await acceptAddressFollow({ from: IP, to: Y, host: 'y.example.org' }, later.deps)).toBe('not-same');
-        expect(later.deps.switchTo).not.toHaveBeenCalled();
         expect(anchorWrites()).toEqual([]);
         expect(keptAt(IP)).toEqual(x());
     });
 
-    it('a name granted again to someone else, who then names an address of its own, offers nothing', async () => {
+    it('a name granted again to someone else keeps what the phone first read there', async () => {
         const first = world({ anchor: NAME, prof: profile({ addresses: ['beans.example.org'], primaryAddress: 'beans.example.org' }), answers: { [NAME]: statement(node, COMMUNITY) } });
         await keepCommunityIdentity(NAME, first.deps);
         expect(keptAt(NAME)).toEqual(x());
@@ -398,16 +204,9 @@ describe('who the community is, kept from the phone\'s first read of it at its a
             anchor: NAME, prof: profile({ addresses: ['beans.example.org', 'y.example.org'], primaryAddress: 'y.example.org' }),
             answers: { [NAME]: statement(y, 'f00d'), [Y]: statement(y, 'f00d') },
         });
-        expect(await addressFollowOffer(later.deps)).toBeNull();
+        await keepCommunityIdentity(NAME, later.deps);
+        expect(later.state.asked).toEqual([]);
         expect(keptAt(NAME)).toEqual(x());
-    });
-
-    it('the community itself moving on is still followed, checked against what was kept', async () => {
-        const w = world({ prof: profile({ addresses: ['203.0.113.5'], primaryAddress: undefined }), answers: { [IP]: statement(node, COMMUNITY) } });
-        await keepCommunityIdentity(IP, w.deps);
-        w.state.prof = profile();
-        w.state.answers[NAME] = statement(node, COMMUNITY);
-        expect(await addressFollowOffer(w.deps)).toEqual({ from: IP, to: NAME, host: 'beans.example.org' });
     });
 
     it('one read per address: none once kept, and none for five minutes after no answer', async () => {
@@ -435,7 +234,7 @@ describe('who the community is, kept from the phone\'s first read of it at its a
         expect(store.has(COMMUNITY_IDENTITY_KEY)).toBe(false);
     });
 
-    it('only where a move may start from: never over http, at the worldwide community, or with no address', async () => {
+    it('only where an address may be followed: never over http, at the worldwide community, or with no address', async () => {
         const w = world({ answers: { [IP]: statement(node, COMMUNITY) } });
         for (const url of ['http://203.0.113.5', 'http://192.168.1.10:8443', GLOBAL_NODE_URL, '', null, undefined, 'https://user@beans.example.org']) {
             await keepCommunityIdentity(url, w.deps);
@@ -453,126 +252,6 @@ describe('who the community is, kept from the phone\'s first read of it at its a
         expect(end).toBeGreaterThan(start);
         expect(src.slice(start, end)).toMatch(/if \(fresh\) keepCommunityIdentity\(url\)\.catch\(\(\) => \{\}\);/);
         expect(src.slice(start, end)).not.toMatch(/await keepCommunityIdentity/);
-    });
-});
-
-describe('never silent', () => {
-    const node = nodeKey();
-
-    it('asking for the offer switches nothing and writes no community address: only who the community is', async () => {
-        const { deps, state } = world({ answers: { [IP]: statement(node, COMMUNITY), [NAME]: statement(node, COMMUNITY) } });
-        expect(await addressFollowOffer(deps)).not.toBeNull();
-        expect(deps.switchTo).not.toHaveBeenCalled();
-        expect(deps.addSavedNode).not.toHaveBeenCalled();
-        expect(deps.removeSavedNode).not.toHaveBeenCalled();
-        expect(deps.markGuestNode).not.toHaveBeenCalled();
-        expect(anchorWrites()).toEqual([]);
-        expect(vi.mocked(AsyncStorage.setItem).mock.calls.map(([k]) => k)).toEqual([COMMUNITY_IDENTITY_KEY]);
-        expect(state.anchor).toBe(IP);
-        expect(communitySwitched).not.toHaveBeenCalled();
-    });
-});
-
-describe('"Not now" asks again in 7 days', () => {
-    const node = nodeKey();
-
-    it('the same offer is not made for 7 days, then is', async () => {
-        const w = world({ answers: { [IP]: statement(node, COMMUNITY), [NAME]: statement(node, COMMUNITY) } });
-        const offer = (await addressFollowOffer(w.deps))!;
-        await snoozeAddressFollow(offer, w.deps);
-        expect(JSON.parse(store.get(FOLLOW_SNOOZE_KEY)!)).toEqual({ [IP]: { to: NAME, until: w.state.now + FOLLOW_SNOOZE_MS } });
-        expect(FOLLOW_SNOOZE_MS).toBe(7 * DAY);
-        const start = w.state.now;
-        w.state.now = start + DAY;
-        expect(await addressFollowOffer(w.deps)).toBeNull();
-        w.state.now = start + 7 * DAY - 1;
-        expect(await addressFollowOffer(w.deps)).toBeNull();
-        w.state.now = start + 7 * DAY + 1;
-        expect(await addressFollowOffer(w.deps)).toEqual(offer);
-        expect(w.deps.switchTo).not.toHaveBeenCalled();
-    });
-
-    it('a different new address is a new offer, snoozed or not', async () => {
-        const w = world({ answers: { [IP]: statement(node, COMMUNITY), [NAME]: statement(node, COMMUNITY), 'https://other.example.org': statement(node, COMMUNITY) } });
-        await snoozeAddressFollow((await addressFollowOffer(w.deps))!, w.deps);
-        w.state.prof = profile({ addresses: ['other.example.org'], primaryAddress: 'other.example.org' });
-        expect(await addressFollowOffer(w.deps)).toEqual({ from: IP, to: 'https://other.example.org', host: 'other.example.org' });
-    });
-});
-
-describe('"Use the new address": the move', () => {
-    const node = nodeKey();
-    const answers = () => ({ [IP]: statement(node, COMMUNITY), [NAME]: statement(node, COMMUNITY) });
-
-    it('checks again, switches through the switch, moves the saved row with its name, and forgets "Not now"', async () => {
-        const w = world({ answers: answers() });
-        const offer = (await addressFollowOffer(w.deps))!;
-        await snoozeAddressFollow(offer, w.deps);
-        expect(await acceptAddressFollow(offer, w.deps)).toBe('moved');
-        expect(w.deps.switchTo).toHaveBeenCalledTimes(1);
-        expect(w.deps.switchTo).toHaveBeenCalledWith(NAME, IP);
-        expect(w.state.anchor).toBe(NAME);
-        expect(w.state.saved).toEqual([{ url: NAME, alias: 'Beans Town', currencyType: 'image', currencyValue: 'bean' }]);
-        expect(JSON.parse(store.get(FOLLOW_SNOOZE_KEY)!)).toEqual({});
-        // Nothing to follow from the new address: no card.
-        w.state.prof = profile();
-        expect(await addressFollowOffer(w.deps)).toBeNull();
-    });
-
-    it('a profile change waiting to reach the community goes with it to the new address (pending-profile-sync.ts)', async () => {
-        const waiting = JSON.stringify({ publicKey: 'ab'.repeat(32), callsign: 'Renamed offline', avatar: 'bundled://koala' });
-        store.set(`beanpool_pending_profile:${IP}`, waiting);
-        const w = world({ answers: answers() });
-        expect(await acceptAddressFollow((await addressFollowOffer(w.deps))!, w.deps)).toBe('moved');
-        expect(store.get(`beanpool_pending_profile:${NAME}`)).toBe(waiting);
-        expect(store.has(`beanpool_pending_profile:${IP}`)).toBe(false);
-    });
-
-    it('a guest visit stays a guest visit at the new address', async () => {
-        const w = world({ answers: answers(), guest: [IP] });
-        expect(await acceptAddressFollow((await addressFollowOffer(w.deps))!, w.deps)).toBe('moved');
-        expect(w.state.guest).toContain(NAME);
-        const marked = vi.mocked(w.deps.markGuestNode).mock.invocationCallOrder[0];
-        expect(marked).toBeLessThan(vi.mocked(w.deps.switchTo).mock.invocationCallOrder[0]);
-    });
-
-    it('the new address changed since the card was drawn: nothing moves', async () => {
-        const w = world({ answers: answers() });
-        const offer = (await addressFollowOffer(w.deps))!;
-        w.state.answers[NAME] = statement(nodeKey(), COMMUNITY);
-        expect(await acceptAddressFollow(offer, w.deps)).toBe('not-same');
-        w.state.answers[NAME] = undefined;
-        expect(await acceptAddressFollow(offer, w.deps)).toBe('unreachable');
-        expect(w.deps.switchTo).not.toHaveBeenCalled();
-        expect(w.state.anchor).toBe(IP);
-    });
-
-    it('the phone switched community meanwhile, or the card was handed a move the rules refuse: nothing moves', async () => {
-        const w = world({ answers: answers() });
-        const offer = (await addressFollowOffer(w.deps))!;
-        w.state.anchor = 'https://elsewhere.example.org';
-        expect(await acceptAddressFollow(offer, w.deps)).toBe('gone');
-        w.state.anchor = IP;
-        const forged: AddressFollowOffer = { from: IP, to: 'https://evil.example.org', host: 'beans.example.org' };
-        expect(await acceptAddressFollow(forged, w.deps)).toBe('not-same');
-        const toPrivate: AddressFollowOffer = { from: IP, to: 'https://10.0.0.5', host: '10.0.0.5' };
-        expect(await acceptAddressFollow(toPrivate, w.deps)).toBe('not-same');
-        expect(w.deps.switchTo).not.toHaveBeenCalled();
-    });
-
-    it('the write is switchPhoneTo\'s: the database swapped, the address written, then communitySwitched()', async () => {
-        const w = world({ answers: answers() });
-        const offer = (await addressFollowOffer(w.deps))!;
-        const { switchTo: _ownSwitch, ...rest } = w.deps;
-        // Every dependency the test's own but the switch: the app's (utils/reconnect.ts switchPhoneTo).
-        expect(await acceptAddressFollow(offer, rest)).toBe('moved');
-        expect(anchorWrites()).toEqual([['beanpool_anchor_url', NAME]]);
-        expect(switched).toEqual({ dbClosed: 1, dbOpened: 1, announced: 1, carried: [[IP, NAME]] });
-        const setItem = vi.mocked(AsyncStorage.setItem).mock;
-        const anchorWrite = setItem.invocationCallOrder[setItem.calls.findIndex(([k]) => k === 'beanpool_anchor_url')];
-        expect(vi.mocked(communitySwitched).mock.invocationCallOrder.at(-1)).toBeGreaterThan(anchorWrite);
-        // The community's copy is carried before the address is written (review of #2138).
-        expect(vi.mocked(carryCommunityCopy).mock.invocationCallOrder[0]).toBeLessThan(anchorWrite);
     });
 });
 

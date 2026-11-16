@@ -1,6 +1,6 @@
 /**
  * One community, one record (scratch/fable-design/DESIGN-several-addresses-fable.md §3.1, slice S3): "which community is
- * this address?", answered from the records this phone keeps, with no import, so storage-keys.ts and every store can ask
+ * this address?", answered from the records this phone keeps, with no import at run time, so storage-keys.ts and every store can ask
  * it without loading React Native. The records themselves are read and written by utils/community-record.ts, which loads
  * them here before any community's copy is opened (cache-file-migration.ts communityCachesRenamed).
  *
@@ -13,6 +13,9 @@
  * exactly as before, in the spelling it is asked with. Only an address a record has PROVED as another of its own (S4) is
  * keyed by that record's id. In this slice nothing proves another address: every key is what it was.
  */
+
+import type { SignedAddressList } from '@beanpool/core';
+import type { AddressLineKind } from './address-decide';
 
 /** One community on this phone. */
 export interface CommunityRecord {
@@ -29,6 +32,14 @@ export interface CommunityRecord {
     proved: Record<string, { at: number; epoch?: number }>;
     /** Addresses on the community's list that answered as something else (S4): never used. */
     refused: Record<string, { at: number; why: string }>;
+    /** The newest valid signed list seen (S4, @beanpool/core address-list.ts), whole. */
+    list?: SignedAddressList;
+    /** The main address this phone last followed or stood on (utils/address-decide.ts: another one is new to it). */
+    mainSeen?: string;
+    /** The address in use not answering (utils/address-verify.ts): when the run of failed tries began, the latest, due now. */
+    silent?: { since: number; last: number; due?: true };
+    /** The one line Home shows after a move, until Home shows it (components/AddressLine.tsx). */
+    line?: { kind: AddressLineKind; from: string; to: string; at: number };
 }
 
 /** One spelling of an address for the index: trimmed, no trailing slash, lower case. */
@@ -83,6 +94,19 @@ export function usingOf(key: string): string {
 export function communityRecordOf(address: string): CommunityRecord | null {
     const spelling = addressSpelling(address);
     return byOwn.get(spelling) ?? byProved.get(spelling) ?? null;
+}
+
+/** Whether two addresses are one community on this phone: one record holds both (its id, `using` or a proved address). */
+export function sameCommunityRecord(a: unknown, b: unknown): boolean {
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
+    const r = communityRecordOf(a);
+    return !!r && r === communityRecordOf(b);
+}
+
+/** Whether `record` holds `address`: as its id, its `using` or an address it proved. */
+export function recordHolds(record: CommunityRecord, address: string): boolean {
+    const spelling = addressSpelling(address);
+    return [record.id, record.using, ...Object.keys(record.proved)].some((a) => addressSpelling(a) === spelling);
 }
 
 /**

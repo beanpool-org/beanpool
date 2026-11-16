@@ -1,29 +1,28 @@
 ---
 slug: learn
-title: La sección Aprender
+title: Videos de Cómo funciona
 summary: Videos breves sobre BeanPool y las páginas de la guía que los acompañan.
-related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: 166271998bd0833a
+related: the-pulse, the-bean, how-it-works, your-channels, local-knowledge
+source-hash: 82b7f80c056f15e8
 ---
 
 ## Qué contiene
 
-En el teléfono, abre el **Pulso** y toca **Aprender**. En la app web, abre el Pulso y toca **Cómo funciona** en la parte superior. Contiene:
+Abre el **Pulso** y toca **Cómo funciona** en la parte superior, en el teléfono y en la app web. Contiene videos de BeanPool sobre cómo funciona.
 
-- videos de BeanPool sobre cómo funciona;
-- la **Reflexión diaria**, un pensamiento breve que cambia cada mañana. Tócalo para abrir la reflexión del día.
+Esto no es **Aprender**, las páginas propias de tu comunidad con lo que vale la pena saber del lugar donde vives: consulta "Conocimiento local".
 
-Los miembros también pueden añadir sus propios canales instructivos a Aprender, eligiendo el tema **Cómo funciona** cuando añaden un canal. Esos videos son propios de los miembros, no de BeanPool: comprueba quién publicó un video antes de seguir sus consejos.
+Los miembros también pueden añadir aquí sus propios canales instructivos, eligiendo el tema **Cómo funciona** cuando añaden un canal. Esos videos son propios de los miembros, no de BeanPool: comprueba quién publicó un video antes de seguir sus consejos.
 
 ## Los videos son un extra
 
 Todo lo que necesitas está escrito en esta guía. Los videos están ahí si prefieres verlos.
 
-En el teléfono, en la sección Aprender, toca la imagen de un video y se reproduce ahí en la tarjeta. No se carga nada desde YouTube hasta que toques. En la app web, tocar un video lo abre en YouTube en una pestaña nueva. Consulta "El Pulso".
+En el teléfono, en **Cómo funciona**, toca la imagen de un video y se reproduce ahí en la tarjeta. No se carga nada desde YouTube hasta que toques. En la app web, tocar un video lo abre en YouTube en una pestaña nueva. Consulta "El Pulso".
 
-Cuando BeanPool ha creado un video para una página de la guía, y está en la sección Aprender de tu comunidad, la página muestra **Ver:** y el nombre del video en la parte superior. Tócalo para abrir el video en YouTube. Si no hay video para esa página, o no tienes conexión, el enlace simplemente no aparece.
+Cuando BeanPool ha creado un video para una página de la guía, y está en el Pulso de tu comunidad bajo **Cómo funciona**, la página muestra **Ver:** y el nombre del video en la parte superior. Tócalo para abrir el video en YouTube. Si no hay video para esa página, o no tienes conexión, el enlace simplemente no aparece.
 
-Solo los videos propios de BeanPool aparecen alguna vez en una página de la guía. Un video que un miembro añade a Aprender nunca se muestra allí, sin importar cómo se llame.
+Solo los videos propios de BeanPool aparecen alguna vez en una página de la guía. Un video que un miembro añade bajo **Cómo funciona** nunca se muestra allí, sin importar cómo se llame.
 
 ## Por qué un video podría no aparecer
 

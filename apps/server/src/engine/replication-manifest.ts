@@ -601,7 +601,9 @@ export const TABLES: Record<string, TableEntry> = {
     // (engine/sync.ts OLDEST_STANDBY_FORMAT, the 426 the operators' manual names).
     forum_sections: plain('id starter name about position starts listed archived_at created_at updated_at group_id'),
     forum_topics: plain('id section_id title writer_pubkey place lang reply_count last_activity_at pinned_at closed_at closed_by created_at updated_at poll_post_id never_listed'),
-    forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at hidden_by_reports_at'),
+    // An assistant's takedown on hold (slice F2b) travels with its post, so a standby that took over keeps it hidden and on hold. An
+    // older importer drops the column: there the post stays hidden, by its hide, as any hidden post.
+    forum_posts: plain('id topic_id number writer_pubkey words quotes lang public_from created_at edited_at removed_at removed_by updated_at hidden_by_reports_at taken_down_at'),
     forum_post_photos: plain('post_id order_num photo_data bytes updated_at'),
     forum_post_edits: plain('post_id edited_at words title updated_at', { agedOut: { column: 'edited_at', days: 30 } }),
     forum_members: plain('member_pubkey told_public_at updated_at known_at proof_secret'),
@@ -706,6 +708,7 @@ export const TABLES: Record<string, TableEntry> = {
     // assistant's suggestion to restore it, approved: no screen does that by itself.
     agent_takedowns: { kind: 'local', reason: "this server's record of what its owners' AI assistants took down, for Put back and the 7-day sweep: the posts travel hidden in posts, and after a take-over a person restores them (engine/agent-takedowns.ts)" },
     agent_takedown_posts: { kind: 'local', reason: "the posts each assistant's takedown hid, for Put back and the sweep on this server (engine/agent-takedowns.ts)" },
+    agent_forum_takedowns: { kind: 'local', reason: "this server's record of the forum posts its owners' and admins' AI assistants took down, for Put back and the 7-day sweep: the hold travels in forum_posts.taken_down_at (engine/forum-takedowns.ts)" },
     // The note on Beans sent to someone who had blocked its sender, kept for the sender alone; the ledger row, which is
     // copied, stores none (engine/withheld-notes.ts).
     withheld_notes: { kind: 'local', reason: 'the note on Beans sent to someone who had blocked its sender, kept for the sender alone: never in a copy, so no standby can show it to them (engine/withheld-notes.ts)' },
@@ -965,6 +968,12 @@ export const NODE_CONFIG_BLOB_FIELDS: Record<string, SettingEntry> = {
         reason: 'the address list this server last signed, content and number (services/address-list.ts), carried in the take-over '
             + 'envelope so a promoted server numbers its first list after it',
         differsByDesign: "a take-over raises the list's epoch: the promoted server's first list is signed at the bundle's epoch + 1",
+    },
+    addressListFloorOwed: {
+        kind: 'per-server',
+        reason: "the mark a restore onto a new machine leaves when this server's own clock was behind the list's number (services/address-list.ts "
+            + 'renumberAddressListAfterSwap): about this machine\'s clock alone; a promoted standby needs none, as it signs its first list at a higher '
+            + 'take-over count, which outranks any number before it whatever its clock says',
     },
 };
 

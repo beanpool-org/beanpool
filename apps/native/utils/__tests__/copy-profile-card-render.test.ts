@@ -78,6 +78,7 @@ vi.mock('../db', () => ({ getMemberProfile: vi.fn(async () => dbRow.row) }));
 import { CopyProfileCard } from '../../components/CopyProfileCard';
 import { lightColors, darkColors } from '../../constants/colors';
 import { PENDING_PROFILE_STORE_PREFIX } from '../storage-keys';
+import { loadCommunityRecords, resetCommunityRecordsForTests } from '../community-record';
 
 const KEY = 'a'.repeat(64);
 const FIRST = 'https://first.example.test';
@@ -91,7 +92,7 @@ let host: HTMLElement | null = null;
 let root: Root | null = null;
 let fetched: string[] = [];
 
-beforeEach(() => {
+beforeEach(async () => {
     mem.store.clear();
     mem.writes = [];
     mem.gate.guestMarks = null;
@@ -106,6 +107,11 @@ beforeEach(() => {
     dbRow.row = { public_key: KEY, callsign: 'Rosa', avatar_url: DATA };
     scheme.theme = 'light';
     fetched = [];
+    // The phone has started: its community records were made then (community-record.ts, once per app start, before any
+    // card can open), so the tap below writes only what was copied. Without this the first tap of the run made them.
+    resetCommunityRecordsForTests();
+    await loadCommunityRecords();
+    mem.writes = [];
     (globalThis as any).fetch = vi.fn(async (url: string) => {
         fetched.push(url);
         return {

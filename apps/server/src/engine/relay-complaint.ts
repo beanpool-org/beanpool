@@ -25,11 +25,19 @@
  * once is tried again by the minute timer with the outbox's backoff for a day, and one it answers it will not take (422)
  * or refuses as not one (400, 413) is `failed`, its state kept beside the report (`told`).
  *
+ * **A guest's line in a group hosted here** (engine/group-chat-report.ts, cross-chat design §4.2 "Reports"): a member's
+ * report of it goes to this server's moderators with the line's key, and is filed with the guest's home as `target_home`
+ * and a `told`, so the same complaint goes to that home: the guest, the line's id (stored under its item's id,
+ * engine/group-guests.ts takeGuestItem), when this server stored it, the report's kind, and the line's words as the key
+ * opens them, signed by the guest (guestLineComplaint). Still never the reporter.
+ *
  * **At the sender's home** a complaint lands in Settings → Moderation beside the community's own reports, marked "from
  * another community": abuse_reports with `community:<home>` as its reporter (a community, never a person), the member,
  * the line's id, and `{"kind":"relay-complaint","from":<home>,...}` as its disclosure, which the reports queue never reads:
  * the moderators open its words with the message (GET /api/local/admin/reports/:id/message, {@link openReportedComplaint}).
- * The line is found by its sender and id (relay_outbox's own key), and it must have gone to the signing server: to its home
+ * The line is found by its sender and id (relay_outbox's own key; a guest's group line by its item in group_guest_sent,
+ * engine/group-guest-home.ts, that the group's host took, kept 30 days after it was), and it must have gone to the signing
+ * server: to its home
  * as signed, or to a name whose key document (engine/node-signature.ts, fetched as for the door) names the key that signed
  * the complaint, so a former name or an alias of the reporting server is one of its names here too, and no other server's.
  * Answered 202 `{received:true}` when filed or on file already from that community: that member's line by that id, filed
@@ -55,8 +63,9 @@ import { db } from '../db/db.js';
 import { getNodeRole, isNodeMember, readsAsMember } from '../state-engine.js';
 import { addBlocks, BlockRefusal, hasBlocked } from './member-blocks.js';
 import { isOwnNodeHome } from './node-key.js';
+import { isServerBlocked } from '../connector-manager.js';
 import { NODE_BUSY_RETRY_AFTER_SEC, keptNodeKeyDocument, originKeyStanding, type NodeOrigin } from './node-signature.js';
-import { GroupLineReportError, type GroupLineReport } from './group-chat-report.js';
+import { GroupLineReportError, guestLineComplaint, type GroupLineReport } from './group-chat-report.js';
 import { outsideMessagesOn, RELAY_LINE_MAX_CHARS } from './relay-mail.js';
 import { RETRY_BACKOFF_MS, OUTBOX_QUEUE_MS, forwardSigned } from './relay-outbox.js';
 import { logger } from '../logger.js';
@@ -172,10 +181,18 @@ export function submitOutsideLineReport(reporter: string, checked: CheckedOutsid
 
 interface QueuedRow { id: string; target_pubkey: string; target_home: string; reason: string; disclosure: string }
 
-/** The complaint a report of an outside line sends: what {@link ComplaintBody} says, and nothing else. */
+/** The reports that tell a home: an outside line's, and a guest's group line's (a group line's key, with a home). */
+const TELLS_HOME = `target_home IS NOT NULL AND (json_extract(disclosure, '$.kind') = '${OUTSIDE_LINE_DISCLOSURE_KIND}' OR json_type(disclosure, '$.epoch') = 'integer')`;
+
+/** The complaint a report of an outside line, or of a guest's group line, sends: what {@link ComplaintBody} says, and nothing else. */
 function complaintOf(row: QueuedRow, told: Told): ComplaintBody | null {
-    let d: { envelope?: RelayEnvelope; words?: unknown };
+    let d: { envelope?: RelayEnvelope; words?: unknown; epoch?: unknown };
     try { d = JSON.parse(row.disclosure); } catch { return null; }
+    if (typeof d.epoch === 'number') {
+        const line = guestLineComplaint(row.id);
+        if (!line) return null;
+        return { v: 1, id: told.id, member: row.target_pubkey, itemId: line.itemId, at: line.at, reason: reportKind(row.reason), words: line.words.slice(0, OUTSIDE_LINE_TEXT_MAX) };
+    }
     const env = readRelayEnvelope(d.envelope);
     if (!env || typeof d.words !== 'string') return null;
     return { v: 1, id: told.id, member: row.target_pubkey, itemId: env.itemId, at: env.at, reason: reportKind(row.reason), words: d.words };
@@ -208,9 +225,12 @@ export function toldAfter(status: number, sinceCreated: number): ToldState {
     return 'queued';
 }
 
-/** One complaint to its home, and its state after ({@link toldAfter}). */
+/**
+ * One complaint to its home, and its state after ({@link toldAfter}). Never to a server the owners blocked (the connector's
+ * `blocked` level): nothing goes there, so the complaint is `failed`, and the report stays with the moderators here.
+ */
 async function tell(row: QueuedRow, told: Told, createdAt: number): Promise<Told['state']> {
-    const complaint = complaintOf(row, told);
+    const complaint = isServerBlocked(row.target_home) ? null : complaintOf(row, told);
     if (!complaint) {
         setTold(row.id, { ...told, state: 'failed', next: null });
         return 'failed';
@@ -224,9 +244,13 @@ async function tell(row: QueuedRow, told: Told, createdAt: number): Promise<Told
     return state;
 }
 
-/** Tell the sender's home of one report now (the report route, after filing). */
+/**
+ * Tell the sender's home of one report now (the report route, after filing). Never from a standby, as retryComplaints
+ * never is: a report it filed stays `queued`, told by its own minute timer once it is promoted.
+ */
 export async function tellHomeOf(reportId: string): Promise<void> {
-    const row = db.prepare('SELECT id, target_pubkey, target_home, reason, disclosure, created_at FROM abuse_reports WHERE id = ? AND target_home IS NOT NULL')
+    if (getNodeRole() === 'backup') return;
+    const row = db.prepare(`SELECT id, target_pubkey, target_home, reason, disclosure, created_at FROM abuse_reports WHERE id = ? AND ${TELLS_HOME}`)
         .get(reportId) as (QueuedRow & { created_at: string }) | undefined;
     const told = row ? toldOf(row.disclosure) : null;
     if (!row || told?.state !== 'queued' || !outsideMessagesOn()) return;
@@ -245,9 +269,9 @@ export async function retryComplaints(now = Date.now()): Promise<number> {
     telling = true;
     try {
         const rows = db.prepare(`SELECT id, target_pubkey, target_home, reason, disclosure, created_at FROM abuse_reports
-                                 WHERE target_home IS NOT NULL AND json_extract(disclosure, '$.kind') = ? AND json_extract(disclosure, '$.told.state') = 'queued'
+                                 WHERE ${TELLS_HOME} AND json_extract(disclosure, '$.told.state') = 'queued'
                                    AND json_extract(disclosure, '$.told.next') <= ? ORDER BY created_at LIMIT 32`)
-            .all(OUTSIDE_LINE_DISCLOSURE_KIND, now) as Array<QueuedRow & { created_at: string }>;
+            .all(now) as Array<QueuedRow & { created_at: string }>;
         const states = { sent: 0, queued: 0, failed: 0 };
         for (const row of rows) {
             const told = toldOf(row.disclosure);
@@ -340,9 +364,11 @@ export async function receiveComplaint(from: NodeOrigin, body: unknown, now = Da
     if (fromOrigin >= COMPLAINTS_PER_ORIGIN_DAY) {
         return { status: 429, body: { error: word("This community isn't taking more complaints from there today."), code: 'rate_limited' }, retryAfterSec: 3_600 };
     }
-    // A real line: this member sent an item by that id (one row: the outbox's own key), and it went to the signing server.
-    const sent = db.prepare("SELECT recipient_home FROM relay_outbox WHERE sender_key = ? AND item_id = ? AND kind = 'dm-line'")
-        .get(c.member, c.itemId) as { recipient_home: string } | undefined;
+    // A real line: this member sent an item by that id (one row: the outbox's own key), and it went to the signing server;
+    // or a group line of theirs, as a guest, that the group's host took (group_guest_sent's own key, `sent`).
+    const sent = (db.prepare("SELECT recipient_home FROM relay_outbox WHERE sender_key = ? AND item_id = ? AND kind = 'dm-line'")
+        .get(c.member, c.itemId) ?? db.prepare("SELECT host AS recipient_home FROM group_guest_sent WHERE sender_key = ? AND item_id = ? AND kind = 'group-line' AND state = 'sent'")
+        .get(c.member, c.itemId)) as { recipient_home: string } | undefined;
     if (!sent || !isNodeMember(c.member)) return notTaken;
     const toSigner = await wentToSigner(sent.recipient_home, from, now);
     if (toSigner === 'busy') {

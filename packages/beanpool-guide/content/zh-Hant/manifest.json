@@ -56,8 +56,8 @@
         "sourceHash": "f7a403c6cdf31e72"
       },
       "summary": {
-        "text": "鄰居分享的內容、「學習」影片以及新增你自己的頻道。",
-        "sourceHash": "9ab06ad52ef86462"
+        "text": "鄰居分享的內容、「運作方式」影片以及新增你自己的頻道。",
+        "sourceHash": "29429fdc78b1185c"
       }
     },
     "commons": {
@@ -66,8 +66,8 @@
         "sourceHash": "6aa9f1a43424d37b"
       },
       "summary": {
-        "text": "決策與投票、共享豆子、群組、事業與管理人。投票與活動也在其中；你也可以在市集中找到它們。",
-        "sourceHash": "bd9454f4374e35ae"
+        "text": "決策與投票、共享豆子、群組、事業與管理人，以及「學習」裡的在地知識。投票與活動也在其中；你也可以在市集中找到它們。",
+        "sourceHash": "a3c8efef442da129"
       }
     },
     "ledger": {
@@ -450,8 +450,8 @@
     },
     "learn": {
       "title": {
-        "text": "「學習」專區",
-        "sourceHash": "498e66e5947ca0c3"
+        "text": "運作方式影片",
+        "sourceHash": "1f36f957425f7090"
       },
       "summary": {
         "text": "關於 BeanPool 的短片以及對應的指南頁面。",
@@ -814,6 +814,16 @@
       "summary": {
         "text": "請某人為某件事向你支付豆子。付款請求不會自動支付，是否支付由對方決定。目前，付款請求可以隨邀請一起發出。",
         "sourceHash": "18291f51ed018672"
+      }
+    },
+    "local-knowledge": {
+      "title": {
+        "text": "在地知識",
+        "sourceHash": "6157fb64436aa56a"
+      },
+      "summary": {
+        "text": "「學習」是你的社群裡值得了解的事的小書架：怎麼找到一頁、怎麼建議一頁、怎麼保持正確，以及擁有者或管理員如何逐頁查核。",
+        "sourceHash": "dac9ca5ca0ffb474"
       }
     }
   }

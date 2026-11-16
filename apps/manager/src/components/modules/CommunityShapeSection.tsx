@@ -684,6 +684,24 @@ export function CommunityShapeSection({
                         </ShapeRow>
                     )}
 
+                    {/* knowledge (server engine/knowledge.ts, Local knowledge in Learn), on a server that has the setting */}
+                    {settings.knowledge !== undefined && (
+                        <ShapeRow
+                            id="knowledge"
+                            icon="📖"
+                            name={t('Local knowledge (Learn)')}
+                            summary={t('Pages of things worth knowing about this place, suggested by members and checked by an owner or admin, in both apps.')}
+                            displayValue={settings.knowledge.value ? t('On') : t('Off')}
+                            lock={settings.knowledge.lock}
+                            {...rowProps('knowledge', settings.knowledge.value)}
+                        >
+                            <div className="space-y-3 pt-2">
+                                {checkbox(t('Learn on'))}
+                                {controls('knowledge', draftValue === settings.knowledge.value)}
+                            </div>
+                        </ShapeRow>
+                    )}
+
                     {/* shareOutside (front doors S6), on a server that has it */}
                     {settings.shareOutside !== undefined && (
                         <ShapeRow

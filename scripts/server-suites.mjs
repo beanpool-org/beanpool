@@ -711,6 +711,7 @@ export const SUITES = [
     'test-node-signature',
     'test-relay-mail',
     'test-relay-complaint',
+    'test-find-by-name',
     'test-group-guests',
     'test-group-guests-home',
     'test-dm-standby-order',

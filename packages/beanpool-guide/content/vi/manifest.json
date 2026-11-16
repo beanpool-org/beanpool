@@ -56,8 +56,8 @@
         "sourceHash": "f7a403c6cdf31e72"
       },
       "summary": {
-        "text": "Những gì hàng xóm chia sẻ, video Tìm hiểu và thêm các kênh của riêng bạn.",
-        "sourceHash": "9ab06ad52ef86462"
+        "text": "Những gì hàng xóm chia sẻ, các video Cách thức hoạt động và thêm các kênh của riêng bạn.",
+        "sourceHash": "29429fdc78b1185c"
       }
     },
     "commons": {
@@ -66,8 +66,8 @@
         "sourceHash": "6aa9f1a43424d37b"
       },
       "summary": {
-        "text": "Quyết định và bỏ phiếu, đậu chung, các nhóm, dự án cộng đồng và người quản lý. Thăm dò và sự kiện cũng có ở đây; bạn tìm thấy chúng trong Chợ.",
-        "sourceHash": "bd9454f4374e35ae"
+        "text": "Quyết định và bỏ phiếu, đậu chung, các nhóm, dự án cộng đồng và người quản lý, cùng Tri thức địa phương trong Tìm hiểu. Thăm dò và sự kiện cũng có ở đây; bạn tìm thấy chúng trong Chợ.",
+        "sourceHash": "a3c8efef442da129"
       }
     },
     "ledger": {
@@ -450,8 +450,8 @@
     },
     "learn": {
       "title": {
-        "text": "Mục Tìm hiểu",
-        "sourceHash": "498e66e5947ca0c3"
+        "text": "Video cách thức hoạt động",
+        "sourceHash": "1f36f957425f7090"
       },
       "summary": {
         "text": "Các video ngắn về BeanPool và các trang hướng dẫn đi kèm.",
@@ -814,6 +814,16 @@
       "summary": {
         "text": "Nhờ ai đó trả đậu cho bạn vì một việc gì đó. Hóa đơn không tự trả; người nhận tự quyết định có trả hay không. Hiện tại, hóa đơn có thể đi kèm một lời mời.",
         "sourceHash": "18291f51ed018672"
+      }
+    },
+    "local-knowledge": {
+      "title": {
+        "text": "Tri thức địa phương",
+        "sourceHash": "6157fb64436aa56a"
+      },
+      "summary": {
+        "text": "Tìm hiểu, kệ sách của cộng đồng bạn về những điều đáng biết: tìm một trang, đề xuất một trang, giữ cho trang luôn đúng, và cách chủ sở hữu hoặc quản trị viên kiểm tra từng trang.",
+        "sourceHash": "dac9ca5ca0ffb474"
       }
     }
   }

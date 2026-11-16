@@ -1339,6 +1339,34 @@ describe('told from another origin on the waiting row (global yes Y2)', () => {
         }
     });
 
+    it('a card drawn above the row after the landing (App\'s "Your account is new") can\'t leave it off the screen: it is brought back into view (walk of 16 Nov 2026; fails before: scrolled once)', async () => {
+        await askedOf(HILLSIDE, RIVERSIDE);
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === RIVERSIDE.url
+            ? { ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } }
+            : { ok: true, value: { status: 'pending' } }));
+        const scrolled: string[] = [];
+        const ROW = `home-find-invited-${RIVERSIDE.url}`;
+        let rowTop = 900;
+        const was = Element.prototype.scrollIntoView;
+        const wasRect = Element.prototype.getBoundingClientRect;
+        Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this.getAttribute('data-testid') ?? ''); if (this.getAttribute('data-testid') === ROW) rowTop = 200; };
+        Element.prototype.getBoundingClientRect = function (this: Element) {
+            return this.getAttribute('data-testid') === ROW ? ({ top: rowTop, bottom: rowTop + 370, left: 0, right: 320, width: 320, height: 370, x: 0, y: rowTop, toJSON: () => ({}) } as DOMRect) : wasRect.call(this);
+        };
+        const seen = vi.fn();
+        try {
+            render(<HomePage identity={ME} onNavigate={vi.fn()} knockRow={RIVERSIDE.url} onKnockRowSeen={seen} />);
+            await waitFor(() => expect(seen).toHaveBeenCalledTimes(1));
+            expect(scrolled).toEqual([ROW]);
+            rowTop = 960; // the card above arrives: the row is pushed below a 320 px screen, Join still in focus
+            await waitFor(() => expect(scrolled).toEqual([ROW, ROW]));
+            await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId(`home-find-invited-join-${RIVERSIDE.url}`)));
+        } finally {
+            Element.prototype.scrollIntoView = was;
+            Element.prototype.getBoundingClientRect = wasRect;
+        }
+    });
+
     it('a landing for a community this browser never asked brings nothing into view and focuses nothing', async () => {
         await askedOf(RIVERSIDE);
         vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } });

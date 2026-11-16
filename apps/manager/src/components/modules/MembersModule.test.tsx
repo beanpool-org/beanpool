@@ -214,6 +214,27 @@ describe('MembersModule Component', () => {
         expect(screen.queryByText(/Grant Admin/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/Grant Moderator/i)).not.toBeInTheDocument();
     });
+
+    // Learn K9: the posts list now holds the pages of Local knowledge (routes/admin.ts reads it withKnowledge), so one can be
+    // taken down from Settings. A page is never a listing, so Active Listings counts the rest.
+    it('Active Listings leaves out pages of Local knowledge', () => {
+        render(
+            <MembersModule
+                nodeData={{
+                    ...mockNodeData,
+                    posts: [
+                        { id: 'p1', type: 'offer', title: 'Split firewood' },
+                        { id: 'p2', type: 'need', title: 'A hand moving a fridge' },
+                        { id: 'k1', type: 'knowledge', title: 'How recycling works at the tip' },
+                    ],
+                }}
+                nodeDataLoading={false}
+                onRefresh={vi.fn()}
+            />
+        );
+        const figure = screen.getByText('Active Listings').nextElementSibling;
+        expect(figure).toHaveTextContent(/^2$/);
+    });
 });
 
 describe('MembersModule seed offer', () => {

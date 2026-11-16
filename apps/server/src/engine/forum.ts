@@ -794,6 +794,8 @@ export function removeForumPostAsModerator(postId: string, now = Date.now()): bo
     if (!topic) return false;
     const at = iso(now);
     blankPost(post.id, 'moderator', at);
+    // An assistant's takedown on hold ends here, whoever removed it (engine/forum-takedowns.ts): nothing waits on it now.
+    db.prepare('UPDATE agent_forum_takedowns SET final_at = ? WHERE forum_post_id = ? AND put_back_at IS NULL AND final_at IS NULL').run(at, post.id);
     if (post.number === 1) {
         blankTopic(topic, at, 'moderator');
         if (db.prepare('SELECT closed_by FROM forum_topics WHERE id = ?').pluck().get(topic.id) === 'removed') {

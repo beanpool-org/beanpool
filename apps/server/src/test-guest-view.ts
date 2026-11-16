@@ -1521,6 +1521,8 @@ async function main(): Promise<void> {
             'POST /api/mail/device/forget', 'POST /api/mail/report', 'POST /api/relay/complaint',
             // Group guests at the guest's own community (engine/group-guest-home.ts, G1b): the host's signed notice, a member's own.
             'POST /api/relay/group', 'GET /api/mail/group', 'POST /api/mail/group/confirm',
+            // Finding someone in another community by name (routes/find-by-name.ts, N1): a member's own, and another server's signed look-up.
+            'GET /api/find/me', 'POST /api/find/me', 'POST /api/find/name', 'POST /api/relay/find',
             'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',
             'POST /api/node/owner/lights-out', 'GET /api/local/admin/lights-out', 'POST /api/local/admin/lights-out',

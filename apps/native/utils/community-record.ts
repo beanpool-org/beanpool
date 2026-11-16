@@ -145,15 +145,17 @@ export async function forgetCommunityRecord(address: string, storage: RecordStor
 
 /**
  * The records changed by `change` (utils/address-verify.ts, slice S4), read fresh and written in turn with every other
- * write, then indexed. `change` answers the records to keep, or null to write nothing. Throws when they can't be read or
- * written: the caller must not move the phone on a record that wasn't kept.
+ * write, then indexed. `change` answers the records to keep, or null to write nothing; it may first read what it must
+ * read immediately before the write (the anchor, as forgetCommunityRecord does), but never write records itself. Throws
+ * when they can't be read or written: the caller must not move the phone on a record that wasn't kept.
  */
 export async function changeCommunityRecords(
-    change: (records: CommunityRecord[]) => CommunityRecord[] | null, storage: RecordStorage = AsyncStorage,
+    change: (records: CommunityRecord[]) => CommunityRecord[] | null | Promise<CommunityRecord[] | null>,
+    storage: RecordStorage = AsyncStorage,
 ): Promise<void> {
     await communityRecordsReady();
     await serially(async () => {
-        const next = change(parseCommunityRecords(await storage.getItem(COMMUNITY_RECORDS_STORE_KEY)));
+        const next = await change(parseCommunityRecords(await storage.getItem(COMMUNITY_RECORDS_STORE_KEY)));
         if (next) await write(next, storage);
     });
 }

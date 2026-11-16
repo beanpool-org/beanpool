@@ -269,7 +269,8 @@ const deps = (): VerifyDeps => ({
     inHall: async () => false,
     moveTo: async (from, to) => { moves.push([from, to]); mem.set(ANCHOR, to); },
     followRow: async () => {},
-    forgetDuplicate: async () => {},
+    removeCopy: async () => {},
+    takeOffSavedList: async () => {},
 });
 const records = (): CommunityRecord[] => parseCommunityRecords(mem.get(COMMUNITY_RECORDS_STORE_KEY) ?? null);
 const origin = (a: string) => `https://${a}`;

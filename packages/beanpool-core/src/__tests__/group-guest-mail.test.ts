@@ -30,7 +30,8 @@ function fake() {
     const confirmed: string[] = [];
     // As the real home keeps group_guest_sent: one row per item id, and an id it has is answered with that row, never sent
     // again (engine/group-guest-home.ts sendGroupItems); each change of a row is a tick after the device's cursor.
-    const rows = new Map<string, Answer & { kind: string; at: number }>();
+    // Each row keeps the group its item went to (a tick names it), so a test with two chats hears each chat's own ticks.
+    const rows = new Map<string, Answer & { kind: string; at: number; host?: string; group?: string }>();
     let clock = 1;
     let answer: (item: RelayItem) => Answer = () => ({ state: 'sent' });
     let saves = 0;
@@ -51,7 +52,7 @@ function fake() {
             const sent = [...rows.entries()]
                 .filter(([id, r]) => r.at > since || (r.at === since && id > sinceId))
                 .sort(([a, x], [b, y]) => x.at - y.at || (a < b ? -1 : 1))
-                .map(([itemId, r]) => ({ itemId, kind: r.kind, host: HOST, group: GROUP, state: r.state, refused: r.refused ?? null, at: r.at }));
+                .map(([itemId, r]) => ({ itemId, kind: r.kind, host: r.host ?? HOST, group: r.group ?? GROUP, state: r.state, refused: r.refused ?? null, at: r.at }));
             // Where I stand, as the real home lists it: a group set here by the test, else the link an invitation made
             // (`invited`; `in` once the host took my yes; not listed once it took my no).
             const listed = [...groups] as Array<{ host: string; group: string }>;
@@ -75,7 +76,7 @@ function fake() {
                     const id = i.envelope.itemId;
                     if (!rows.has(id)) {
                         posted.push(i);
-                        rows.set(id, { kind: i.envelope.kind, ...answer(i), at: ++clock });
+                        rows.set(id, { kind: i.envelope.kind, host: i.envelope.recipientHome, group: i.envelope.recipient.replace(/^group:/, ''), ...answer(i), at: ++clock });
                     }
                     const r = rows.get(id)!;
                     return r.refused ? { itemId: id, state: r.state, refused: r.refused } : { itemId: id, state: r.state };
@@ -116,8 +117,8 @@ async function guestIn(epoch: unknown = { current: 1, stale: true }) {
 }
 
 /** An epoch Ana made over Ana and Gus, as a roster carries it (Gus's wrap only). */
-function anasEpoch(epoch: number) {
-    const made = makeGroupEpochRecord({ myEdPrivHex: ana.seedHex, groupId: GROUP, epoch, reason: 'rotate', subject: null, createdAt: '2026-11-16T09:00:00.000Z', recipients: [ana.pk, gus.pk] });
+function anasEpoch(epoch: number, group = GROUP) {
+    const made = makeGroupEpochRecord({ myEdPrivHex: ana.seedHex, groupId: group, epoch, reason: 'rotate', subject: null, createdAt: '2026-11-16T09:00:00.000Z', recipients: [ana.pk, gus.pk] });
     const { groupId: _g, wraps, ...record } = made.record;
     return { key: made.groupKey, roster: { current: epoch, stale: false, record, wraps: wraps!.filter((w) => w.recipient === gus.pk).map((w) => ({ ...w, wrapper: ana.pk })) } };
 }
@@ -968,9 +969,11 @@ describe('REFUSALS (part 2 fix round): every answer short of a 2xx my server giv
         }
     });
 
-    // My join epoch: never kept past a refusal (another is made at the next round), so a line waiting for its key waits,
-    // never fails, and goes once an epoch is taken.
-    it.each(REFUSALS.map((row) => [named(row), row] as const))('epoch, %s: my line waits for its key; once it passes, an epoch is taken and the line goes', async (_name, row) => {
+    // My join epoch: never kept past a refusal (another is made at the next round, so I get in once it passes). A line waiting
+    // for its key goes as the line itself would at my server's answer (WALK nov17b finding (c), the line column): it fails
+    // with my server's words where my server said no for good (a mute: it could otherwise go long after, out of its place),
+    // or waits and goes once an epoch is taken. Before the walk this row said "waits" for every answer: that was the bug.
+    it.each(REFUSALS.map((row) => [named(row), row] as const))('epoch, %s: my line waiting for its key fails with my server\'s words or waits, as the line would; once it passes, an epoch is taken', async (_name, row) => {
         const f = await guestIn();
         const r = refusing(f, row);
         await quietly(syncGuestMail(f.io));
@@ -979,13 +982,82 @@ describe('REFUSALS (part 2 fix round): every answer short of a 2xx my server giv
         await quietly(syncGuestMail(f.io));
         await quietly(syncGuestMail(f.io));
         expect(f.chats[ID]).toMatchObject({ state: 'in', ownEpoch: null, keys: {} });
-        expect(f.chats[ID].lines[0]).toMatchObject({ text: 'hello', state: 'waiting' });
+        if (row.line === 'fails') expect(f.chats[ID].lines[0]).toMatchObject({ text: 'hello', state: 'failed', item: null, note: row.what });
+        else expect(f.chats[ID].lines[0]).toMatchObject({ text: 'hello', state: 'waiting' });
         r.clear();
         await syncGuestMail(f.io);
         await syncGuestMail(f.io);
         expect(f.posted.filter((p) => p.envelope.kind === 'group-epoch')).toHaveLength(1);
-        expect(f.chats[ID].lines[0]).toMatchObject({ text: 'hello', state: 'sent' });
-        expect(lines(f)).toHaveLength(1);
+        expect(f.chats[ID].lines[0]).toMatchObject({ text: 'hello', state: row.line === 'fails' ? 'failed' : 'sent' });
+        expect(lines(f)).toHaveLength(row.line === 'fails' ? 0 : 1);
+    });
+
+    // WALK nov17b finding (c), measured on the emulator: a guest muted at their home, in a chat whose epoch went stale (a
+    // fellow guest was removed), wrote a line. The epoch it needs was refused, so the line read "Waiting for the group" for
+    // good, and every round stopped there ("This round did not finish"), the chats after it never tried. Here two chats
+    // (A, then B), each with epoch 1's key and a roster saying it is stale; a line of Gus's waits in each (written offline);
+    // Ana's line in A waits at my server. Every answer my server can give -> my lines fail with its words (both chats, in
+    // ONE round: the round goes on past A) or wait; Ana's line arrives whatever the answer; once failed nothing more is tried
+    // while it holds; once it passes, a new line makes the epoch and goes.
+    const GROUP_B = 'grp-seeds';
+    const ID_B = guestChatId(HOST, GROUP_B);
+    async function twoChatsStale() {
+        const f = fake();
+        f.held.push(inviteNotice('n-invite-a'), { ...inviteNotice('n-invite-b'), group: GROUP_B });
+        await syncGuestMail(f.io);
+        await answerGuestInvitation(f.io, ID, 'yes');
+        await answerGuestInvitation(f.io, ID_B, 'yes');
+        const a = anasEpoch(1), b = anasEpoch(1, GROUP_B);
+        const listed = (ra: unknown, rb: unknown) => {
+            f.groups.length = 0;
+            f.groups.push({ host: HOST, group: GROUP, state: 'in', rosterAt: 2, roster: rosterOf(ra) }, { host: HOST, group: GROUP_B, state: 'in', rosterAt: 2, roster: rosterOf(rb) });
+        };
+        listed(a.roster, b.roster);
+        await syncGuestMail(f.io);
+        expect([Object.keys(f.chats[ID].keys), Object.keys(f.chats[ID_B].keys)]).toEqual([['1'], ['1']]);
+        listed({ current: 1, stale: true }, { current: 1, stale: true });
+        await syncGuestMail(f.io);
+        const off = refusing(f, REFUSALS[0]);
+        await quietly(sendGuestLine(f.io, ID, 'from Gus in A'));
+        await quietly(sendGuestLine(f.io, ID_B, 'from Gus in B'));
+        off.undo();
+        const lineId = '00000000-0000-4000-8000-00000000a7a7';
+        const sealed = sealGroupLine('Ana here', { myEdPrivHex: ana.seedHex, groupKey: a.key, groupId: GROUP, epoch: 1, messageId: lineId });
+        f.held.push({ id: 'n-line-ana', host: HOST, group: GROUP, kind: 'line', receivedAt: 3, data: {
+            id: lineId, author: ana.pk, ciphertext: sealed.ciphertext, nonce: sealed.nonce, type: 'text', metadata: { epoch: 1, sender: ana.pk }, timestamp: '2026-11-16T09:59:00.000Z',
+        } });
+        return f;
+    }
+    it.each(REFUSALS.map((row) => [named(row), row] as const))('a stale epoch, %s: my waiting lines fail with my server\'s words in every chat in one round, or wait; lines to me still arrive', async (_name, row) => {
+        const f = await twoChatsStale();
+        const mine = (id: string) => f.chats[id].lines.find((l) => l.author === gus.pk)!;
+        expect([mine(ID).state, mine(ID_B).state]).toEqual(['waiting', 'waiting']);
+        const r = refusing(f, row);
+        const round = () => syncGuestMail(f.io).then(() => 'finished', () => 'stopped');
+        const fails = row.line === 'fails';
+        expect(await round()).toBe(fails ? 'finished' : 'stopped');
+        expect(f.chats[ID].lines.find((l) => l.author === ana.pk)?.text).toBe('Ana here');
+        for (const id of [ID, ID_B]) {
+            if (fails) expect(mine(id)).toMatchObject({ state: 'failed', note: row.what, item: null });
+            else expect(mine(id).state).toBe('waiting');
+        }
+        // Two rounds more while it holds: once failed, nothing more is tried (a chat with keys and no line waiting needs no epoch).
+        const tries = r.s.tried.length;
+        expect([await round(), await round()]).toEqual(fails ? ['finished', 'finished'] : ['stopped', 'stopped']);
+        if (fails) expect(r.s.tried.length).toBe(tries);
+        r.clear();
+        await syncGuestMail(f.io);
+        await syncGuestMail(f.io);
+        if (fails) {
+            expect([mine(ID).state, mine(ID_B).state]).toEqual(['failed', 'failed']);
+            expect(lines(f)).toHaveLength(0);
+            // Written again once it passes: the epoch is made, taken, and the line goes under it.
+            expect(await sendGuestLine(f.io, ID, 'from Gus again')).toMatchObject({ state: 'sent' });
+            expect(lines(f)).toHaveLength(1);
+        } else {
+            expect([mine(ID).state, mine(ID_B).state]).toEqual(['sent', 'sent']);
+            expect(lines(f)).toHaveLength(2);
+        }
     });
 
     it.each(REFUSALS.map((row) => [named(row), row] as const))('yes, %s: never kept, the invitation still waits, and the yes after it passes goes', async (_name, row) => {

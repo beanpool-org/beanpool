@@ -73,6 +73,14 @@
  *     server says the host took it, the round posts it again, and my server still listing me in never opens the chat again.
  *     A refusal that passes (a mute, guests switched off a while) never stops it: only `not_in_group` does (group-guest-mail.ts
  *     leaveRefusal). A removal listed after I left keeps the chat left, in my own words.
+ *
+ * One more since the emulator walk of 17 Nov (finding a; the members' twin is #3273/#3275, group-guest-names.ts):
+ *   - **Names**: a line's author is named by the newest row this device has for that key, in any state
+ *     ({@link guestChatAuthorName}). The host's roster names who is in the chat and, in `former`, everyone out of it now
+ *     whose lines this chat's guests may have (a member who left, a guest who left or was removed); each roster's names
+ *     are kept on the chat ({@link GuestChat.names}), so a name seen once stays on that person's lines after they go,
+ *     even once the host names them no more. A fellow guest who came and went between two of my rounds is named by the
+ *     roster's `former`. Only `members` and `guests` are keys an epoch wraps to; a kept name is never one.
  */
 import {
     openGroupLine, openMyGroupKey, sealGroupLine, type GroupEpochRecord, type GroupServedWrap,
@@ -180,8 +188,23 @@ export interface GuestChat {
     inviteId?: string;
     /** My leave on its way ({@link GuestLeave}), while the chat is `left` here and the host hasn't taken it yet; absent or null when none is. */
     leave?: GuestLeave | null;
+    /**
+     * The newest name this device has for each key a roster named, in the chat or out of it ({@link GuestNameKept}; the
+     * file's header, "Names"); absent or null before a roster came.
+     */
+    names?: Record<string, GuestNameKept> | null;
     updatedAt: number;
 }
+
+/**
+ * A name a roster gave a key, as this device keeps it: the name, the guest's community (null for a member of the group),
+ * where they stand (`in`; `out` for a member no longer in, or no longer named at all; a guest out says the host's word:
+ * `left`, `removed`, `invited`), and when this device last saw it change.
+ */
+export interface GuestNameKept { name: string; home: string | null; state: string; at: number }
+
+/** Names one chat keeps; past it, the ones that changed longest ago go. */
+export const GUEST_CHAT_NAMES_KEPT = 200;
 
 /**
  * My leave (`group-leave`), from the moment I leave until my server says the host took it, or lists me no more (the file's
@@ -503,9 +526,37 @@ function openWhatCan(chat: GuestChat): void {
     if (chat.lines.length > GUEST_LINES_KEPT) chat.lines = chat.lines.slice(-GUEST_LINES_KEPT);
 }
 
-/** Takes a roster: kept, and the current epoch's key opened from my wrap when it is not stale. */
+/**
+ * The names a roster gives, kept on the chat (the file's header, "Names"): each key it names, in the chat (members and
+ * guests) or out of it (`former`), takes the newest row; a key kept as in that it no longer names at all is out. A row's
+ * time moves only when it changed, so the same roster again keeps nothing new; past GUEST_CHAT_NAMES_KEPT, the rows that
+ * changed longest ago go.
+ */
+function keepNames(chat: GuestChat, roster: GuestRoster, now: number): void {
+    const kept: Record<string, GuestNameKept> = {};
+    for (const [key, k] of Object.entries(chat.names ?? {})) {
+        if (KEY_HEX.test(key) && isObject(k) && typeof k.name === 'string' && typeof k.state === 'string' && Number.isFinite(k.at)) kept[key] = k;
+    }
+    const named = new Set<string>();
+    const put = (key: string, name: string, home: string | null, state: string) => {
+        named.add(key);
+        const was = kept[key];
+        if (!was || was.name !== name || (was.home ?? null) !== home || was.state !== state) kept[key] = { name, home, state, at: now };
+    };
+    for (const m of roster.members) put(m.key, m.name, null, 'in');
+    for (const g of roster.guests) put(g.key, g.name, g.home, 'in');
+    for (const m of roster.former?.members ?? []) if (!named.has(m.key)) put(m.key, m.name, null, 'out');
+    for (const g of roster.former?.guests ?? []) if (!named.has(g.key)) put(g.key, g.name, g.home, g.state);
+    for (const [key, k] of Object.entries(kept)) if (!named.has(key) && k.state === 'in') kept[key] = { ...k, state: 'out', at: now };
+    // Past the cap, a name this roster gives is never the one that goes.
+    const order = ([a, x]: [string, GuestNameKept], [b, y]: [string, GuestNameKept]) => Number(named.has(b)) - Number(named.has(a)) || y.at - x.at || (a < b ? -1 : 1);
+    chat.names = Object.fromEntries(Object.entries(kept).sort(order).slice(0, GUEST_CHAT_NAMES_KEPT));
+}
+
+/** Takes a roster: kept, its names kept (keepNames), and the current epoch's key opened from my wrap when it is not stale. */
 function takeRoster(chat: GuestChat, roster: GuestRoster, ctx: GuestMailContext): void {
     chat.roster = roster;
+    keepNames(chat, roster, ctx.now);
     if (roster.name) chat.name = roster.name;
     const step = guestEpochStep(roster, ctx.me);
     if (step.send === 'group-line') {
@@ -983,12 +1034,22 @@ export function guestNameLine(name: string, home: string, max?: number): string 
     return line(clipName(clean, max - around));
 }
 
-/** The name a line's author goes by in a guest's chat: a member by their name, a guest by the guest line, else a short key. */
-export function guestChatAuthorName(chat: Pick<GuestChat, 'roster'>, key: string): string {
+/**
+ * The name a line's author goes by in a guest's chat (the file's header, "Names"): the newest row this device has for that
+ * key, in any state. The latest roster first (a member by their name, a guest by the guest line, then someone it names as
+ * no longer in the chat), then the name kept from an earlier roster; a key no roster ever named, a short key.
+ */
+export function guestChatAuthorName(chat: Pick<GuestChat, 'roster'> & Partial<Pick<GuestChat, 'names'>>, key: string): string {
     const r = chat.roster;
     const m = r?.members.find((x) => x.key === key);
     if (m) return m.name;
     const g = r?.guests.find((x) => x.key === key);
     if (g) return guestNameLine(g.name, g.home);
+    const fm = r?.former?.members.find((x) => x.key === key);
+    if (fm) return fm.name;
+    const fg = r?.former?.guests.find((x) => x.key === key);
+    if (fg) return guestNameLine(fg.name, fg.home);
+    const kept = chat.names?.[key];
+    if (isObject(kept) && typeof kept.name === 'string') return typeof kept.home === 'string' ? guestNameLine(kept.name, kept.home) : kept.name;
     return key.slice(0, 8);
 }

@@ -758,3 +758,79 @@ describe("GUARD (round 4): every kind, change and why the host's code sends is o
         }
     });
 });
+
+describe('NAMES (emulator walk 17 Nov, finding a): every author x how this device last heard of them -> the name on their lines', () => {
+    // On a guest's phone a fellow guest who left or was removed was named by an 8-character key: the phone named an author
+    // from the latest roster only, and the host's roster named only who is in. The host now names, in `former`, everyone out
+    // of the chat whose lines its guests may have (engine/group-guests.ts formerInChat), and the phone keeps every name a
+    // roster gave (GuestChat.names): a line is named by the newest row this device has for its key, in any state.
+    const cy = person('Cy'), dee = person('Dee'), eve = person('Eve'), fay = person('Fay');
+    const EAST = 'eastside.example';
+    const asGuest = (p: { pk: string; name: string }, home = EAST) => ({ key: p.pk, home, name: p.name });
+    const asMember = (p: { pk: string; name: string }) => ({ key: p.pk, name: p.name });
+    // The first roster this device took: Ana, Ben and Eve members; Gus (me), Cy and Fay guests.
+    const first = { name: 'Seed Library', members: [ana, ben, eve].map(asMember), guests: [asGuest(gus, 'hillside.example'), asGuest(cy), asGuest(fay)], epoch: { current: 1, stale: true } };
+    // The next: Ben left and Cy was removed (both named in `former`); Dee came and went between two of my rounds (never in a
+    // roster here, named only in `former`); Eve and Fay are named no more (past the host's cap or window): their kept names stay.
+    const next = {
+        name: 'Seed Library', members: [asMember(ana)], guests: [asGuest(gus, 'hillside.example')], epoch: { current: 1, stale: true },
+        former: {
+            members: [asMember(ben), { key: 'not-a-key', name: 'Nobody' }],
+            guests: [{ ...asGuest(cy), state: 'removed' }, { ...asGuest(dee), state: 'left' }, { key: stray.pk, home: EAST }],
+        },
+    };
+    type Path = 'a roster notice' | "my server's link";
+    const take = (chats: GuestChats, roster: unknown, path: Path, at: number): GuestChats => (path === 'a roster notice'
+        ? applyGuestMail(chats, { items: [notice('roster', roster)] }, { ...ctx(), now: at }).chats
+        : applyGuestMail(chats, { groups: [{ host: HOST, group: GROUP, state: 'in', roster, rosterAt: at }] }, { ...ctx(), now: at }).chats);
+    // [who wrote, the name on their lines, their key, the state kept for them]
+    const ROWS: Array<[string, string, { pk: string }, string | null]> = [
+        ['a member in now', 'Ana', ana, 'in'],
+        ['me, a guest in now', 'Gus · hillside.example · guest', gus, 'in'],
+        ['a member who left, named in former', 'Ben', ben, 'out'],
+        ['a guest removed, named in former', 'Cy · eastside.example · guest', cy, 'removed'],
+        ['a guest who came and went between my rounds, named only in former', 'Dee · eastside.example · guest', dee, 'left'],
+        ['a member a roster named before, named no more', 'Eve', eve, 'out'],
+        ['a guest a roster named before, named no more', 'Fay · eastside.example · guest', fay, 'out'],
+        ['a key no roster named (its former row has no name)', stray.pk.slice(0, 8), stray, null],
+    ];
+    const PATHS: Path[] = ['a roster notice', "my server's link"];
+    it.each(PATHS.flatMap((path) => ROWS.map((row) => [path, ...row] as const)))('%s, %s -> "%s"', (path, _what, name, who, state) => {
+        const chats = take(take(chatWith('in'), first, path, NOW), next, path, NOW + 1000);
+        expect(guestChatAuthorName(chats[ID], who.pk)).toBe(name);
+        expect(chats[ID].names?.[who.pk]?.state ?? null).toBe(state);
+    });
+    it('the names kept stay through a roster that names nobody gone, and the same roster again changes nothing kept', () => {
+        let chats = take(take(chatWith('in'), first, 'a roster notice', NOW), next, 'a roster notice', NOW + 1000);
+        const kept = JSON.stringify(chats[ID].names);
+        chats = take(chats, next, 'a roster notice', NOW + 2000);
+        expect(JSON.stringify(chats[ID].names)).toBe(kept);
+        chats = take(chats, { ...next, former: undefined }, 'a roster notice', NOW + 3000);
+        for (const [, name, who] of ROWS) expect(guestChatAuthorName(chats[ID], who.pk)).toBe(name);
+    });
+    it('a name in former is never a key: the next epoch is made over exactly the members and guests in the chat', () => {
+        const chats = take(take(chatWith('in'), first, 'a roster notice', NOW), next, 'a roster notice', NOW + 1000);
+        chats[ID].lines.push({ id: uuid(70), author: gus.pk, text: 'waiting', at: NOW, state: 'waiting' });
+        const due = guestEpochDue(chats[ID], gus.pk);
+        expect(due?.recipients).toEqual([ana.pk, gus.pk].sort());
+    });
+    it('a roster with no former (or one that is no list) is taken as before, and a bad name never costs the roster', () => {
+        const plain = take(chatWith('in'), first, 'a roster notice', NOW);
+        expect(plain[ID].roster?.former).toBeUndefined();
+        const odd = take(chatWith('in'), { ...first, former: 'nonsense' }, 'a roster notice', NOW);
+        expect(odd[ID].roster?.former).toEqual({ members: [], guests: [] });
+        const withBad = take(chatWith('in'), next, 'a roster notice', NOW);
+        expect(withBad[ID].roster?.former).toEqual({ members: [asMember(ben)], guests: [{ ...asGuest(cy), state: 'removed' }, { ...asGuest(dee), state: 'left' }] });
+    });
+    it(`a chat keeps at most ${core.GUEST_CHAT_NAMES_KEPT} names: the ones that changed longest ago go, never one the latest roster gives`, () => {
+        let chats = chatWith('in');
+        const many = Array.from({ length: core.GUEST_CHAT_NAMES_KEPT + 5 }, (_, i) => person(`Many ${i}`));
+        many.forEach((p, i) => { chats = take(chats, { ...first, members: [asMember(ana), asMember(p)] }, 'a roster notice', NOW + 1 + i); });
+        const names = chats[ID].names ?? {};
+        expect(Object.keys(names)).toHaveLength(core.GUEST_CHAT_NAMES_KEPT);
+        // Ana, Gus, Cy and Fay were named first (the oldest rows) and are in the latest roster: kept.
+        for (const p of [ana, gus, cy, fay]) expect(names[p.pk]?.state).toBe('in');
+        expect(guestChatAuthorName(chats[ID], many[many.length - 1].pk)).toBe(many[many.length - 1].name);
+        expect(guestChatAuthorName(chats[ID], many[0].pk)).toBe(many[0].pk.slice(0, 8));
+    });
+});

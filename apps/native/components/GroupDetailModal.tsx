@@ -28,6 +28,7 @@ import {
 import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, groupClosedShown, groupDescriptionShown, groupNameShown, inCapitalsOf, t, word, bundledGroupEmblem, type GroupPerson, type WordKey } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
 import { PlaceCircleCard } from './PlaceCircleCard';
+import { ForumLinkedTopics } from './forum/ForumLinks';
 import { MemberAvatar } from './MemberAvatar';
 import { AvatarPickerSheet } from './AvatarPickerSheet';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
@@ -797,6 +798,8 @@ export function GroupDetailModal({
                                 <Text style={styles.infoNoticeText} testID="group-closed-note">{groupClosedShown(groupData, t(LINES.closed))}</Text>
                             </View>
                         )}
+                        {/* The forum's topics about this group (forum slice F9): only those this member may read; nothing when none. */}
+                        <ForumLinkedTopics kind="group" id={groupData.id} onLeave={onClose} />
 
                         {/* The group's votes, high on the sheet: a vote's push and Home's line land here. It draws
                             nothing for someone the node doesn't answer, or when there is no vote and none can open. */}

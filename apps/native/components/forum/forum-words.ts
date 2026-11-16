@@ -105,3 +105,40 @@ export const TOLD_WORDS = {
     post: word('Post'),
     notNow: word('Not now'),
 };
+
+/**
+ * What a topic links (slice F9 part 3, the phone; design §10.2, §10.4, §14 "[ Linked: a group ]"): the ⋯ items, the Link
+ * picker, the chips under the opening words and the rows that list the topics linking one thing.
+ */
+export const LINK_WORDS = {
+    link: word('Link a group, listing or event'),
+    makeNeed: word('Make this a Need'),
+    needNotLinked: word('Your Need is up, but it couldn’t be linked to the topic.'),
+    pickKind: word('What to link'),
+    groups: word('One of your groups'),
+    listings: word('One of your listings'),
+    events: word('An event'),
+    none: word('Nothing of yours to link here yet.'),
+    failed: word('Couldn’t load these. Check your connection and try again.'),
+    linked: word('Linked: tap to take it off'),
+    back: word('Back'),
+    /** A link its reader can't see: its kind alone, never more. */
+    hidden: {
+        group: word('Linked: a group'),
+        listing: word('Linked: a listing'),
+        event: word('Linked: an event'),
+        learn: word('Linked: a Learn page'),
+    },
+    aGroup: word('A group ›'),
+    anOffer: word('An Offer ›'),
+    aNeed: word('A Need ›'),
+    postedAsNeed: word('Posted as a Need ›'),
+    anEvent: word('An event ›'),
+    aLearnPage: word('A Learn page ›'),
+    /** Over the topics that link one thing: on a listing, in a group's sheet, on a Learn page. */
+    about: {
+        listing: word('Talked about in the forum'),
+        group: word('Topics about this group'),
+        learn: word('From the forum'),
+    },
+};

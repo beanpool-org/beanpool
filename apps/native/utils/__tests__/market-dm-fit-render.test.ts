@@ -41,7 +41,6 @@ vi.mock('react-native', async () => {
         const id = String(props.testID);
         useImperativeHandle(ref, () => ({ flashScrollIndicators: () => { pages.flashed[id] = (pages.flashed[id] ?? 0) + 1; } }));
         pages.onSize[id] = props.onContentSizeChange;
-        pages.onLayout[id] = props.onLayout;
         pages.persistTaps[id] = props.keyboardShouldPersistTaps;
         return h('div', {
             'data-testid': props.testID, 'data-style': JSON.stringify({ ...flat(props.style), overflow: 'scroll' }),
@@ -54,7 +53,6 @@ vi.mock('react-native', async () => {
 const pages = vi.hoisted(() => ({
     flashed: {} as Record<string, number>,
     onSize: {} as Record<string, undefined | ((w: number, h: number) => void)>,
-    onLayout: {} as Record<string, undefined | ((e: { nativeEvent: { layout: { height: number } } }) => void)>,
     persistTaps: {} as Record<string, unknown>,
 }));
 vi.mock('react-native-keyboard-controller', () => ({
@@ -145,13 +143,14 @@ function columnTree(o: { column: number; row: Row; fontScale: 1 | 1.3; kb: numbe
 
 /**
  * Renders the column the way the phone settles it: lay out, hand the screen its measures (the column, the box measured whole,
- * the banners' page as drawn), work out the rooms again, until nothing moves.
+ * the composer alone), work out the rooms again, until nothing moves.
  */
 function settle(p: (typeof PHONES)[number], fontScale: 1 | 1.3, row: Row, kbUp: boolean) {
     const kb = kbUp ? p.keyboard : 0;
     const composer = composerHeight(fontScale, kbUp, row.draftLines ?? 1, !!row.notice);
     if (row.about) chatAboutDrafts.set(CONVERSATION, { postId: 'post-twine-1', kind: 'offer', title: 'Garden twine, two rolls', price: '0.05 Beans' } as any);
-    const measure = { column: 0, box: 0, banners: 0 };
+    // What the screen's onLayouts hand it, rounded as they do: the column, the box measured whole, the composer alone.
+    const measure = { column: 0, box: 0, input: 0 };
     let fit = chatColumnFit({ column: 0, box: 0, input: 0, windowHeight: p.column + 144, keyboard: kb, paused: false });
     const q = (id: string) => host.querySelector(`[data-testid="${id}"]`)!;
     let layout!: ReturnType<typeof layOut>;
@@ -162,10 +161,10 @@ function settle(p: (typeof PHONES)[number], fontScale: 1 | 1.3, row: Row, kbUp: 
         act(() => {
             for (const id of ['chat-bars-page', 'chat-box-banners']) if (host.querySelector(`[data-testid="${id}"]`)) pages.onSize[id]?.(p.width, layout.height(q(`${id}-content`)));
         });
-        const next = { column: p.column, box: layout.height(q('box')), banners: layout.height(q('chat-box-banners')) };
-        const same = next.column === measure.column && next.box === measure.box && next.banners === measure.banners;
+        const next = { column: p.column, box: Math.round(layout.height(q('box'))), input: Math.round(layout.height(q('composer'))) };
+        const same = next.column === measure.column && next.box === measure.box && next.input === measure.input;
         Object.assign(measure, next);
-        fit = chatColumnFit({ column: measure.column, box: measure.box, input: Math.max(0, measure.box - measure.banners), windowHeight: p.column + 144, keyboard: kb, paused: false });
+        fit = chatColumnFit({ column: measure.column, box: measure.box, input: measure.input, windowHeight: p.column + 144, keyboard: kb, paused: false });
         if (same && pass > 0) break;
     }
     const top = (el: Element) => { let y = 0; for (let e: Element | null = el; e && e !== q('column'); e = e.parentElement) y += layout.box(e).top; return y; };
@@ -197,7 +196,8 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the mark
             expect(r.send.bottom).toBeLessThanOrEqual(above);
             expect(r.box.top).toBeGreaterThanOrEqual(r.thread.top + r.thread.height);
             // The thread keeps one line, or everything left once the composer is in.
-            expect(r.thread.height, 'one line of the thread').toBeGreaterThanOrEqual(Math.min(CHAT_THREAD_LINE, above - r.composer));
+            // (Within half a dp: the screen rounds what its onLayouts read, and Yoga's text heights are fractions.)
+            expect(r.thread.height, 'one line of the thread').toBeGreaterThanOrEqual(Math.min(CHAT_THREAD_LINE, above - r.composer) - 0.5);
             // Nothing overlaps: the bars' page, the thread, the banners' page and the composer stack down the column.
             expect(r.bars.top).toBe(0);
             expect(r.thread.top).toBe(r.bars.height);
@@ -226,7 +226,7 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the mark
             for (const b of r.barTops) { expect(b.top).toBe(below); below += b.height; }
             expect(below).toBe(r.bars.content);
             // While the keyboard is down every phone shows the thread more than its one line: the bars give way before it.
-            if (!kbUp) expect(r.thread.height).toBeGreaterThanOrEqual(CHAT_THREAD_LINE);
+            if (!kbUp) expect(r.thread.height).toBeGreaterThanOrEqual(CHAT_THREAD_LINE - 0.5);
             // A tall phone keeps everything whole while the keyboard is down, as before.
             if (p.tall && !kbUp) {
                 expect(r.bars.height).toBe(r.bars.content);
@@ -244,14 +244,14 @@ describe('the walk\'s case on the walk\'s phone (320 × 569, 1.3×), the numbers
         // 137 + 75 + 160 dp of bars stood in a 425-dp column above a 128-dp box: the box went under the navigation bar.
         expect(r.bars.content).toBe(372);
         expect(r.bars.content + r.box.height).toBeGreaterThan(PHONES[0].column);
-        expect(r.bars.height).toBe(PHONES[0].column - r.box.height - CHAT_THREAD_LINE);
+        expect(r.bars.height).toBe(PHONES[0].column - Math.round(r.box.height) - CHAT_THREAD_LINE);
         expect(r.banners.height).toBe(r.banners.content);
     });
     it('keyboard up: the bars fold away, the About chip and the composer are whole on the keyboard, the thread has the rest', () => {
         const r = settle(PHONES[0], 1.3, walk, true);
         expect(r.bars.height).toBe(0);
         expect(r.banners.height).toBe(r.banners.content);
-        expect(r.thread.height).toBeGreaterThanOrEqual(CHAT_THREAD_LINE);
+        expect(r.thread.height).toBeGreaterThanOrEqual(CHAT_THREAD_LINE - 0.5);
         expect(r.composerBox.bottom).toBe(PHONES[0].column - PHONES[0].keyboard);
     });
     it('without the rooms (main before this change) the same column cut the box: the check can fail', () => {
@@ -280,14 +280,14 @@ describe('the walk\'s case on the walk\'s phone (320 × 569, 1.3×), the numbers
 describe('app/chat/[id].tsx gives the bars and the banners over the composer their rooms (chatColumnFit)', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'chat', '[id].tsx'), 'utf8');
     it('the fit is worked out from the column, the box measured whole, the composer alone and the keyboard; paused while the key card is up', () => {
-        expect(src).toMatch(/const fit = chatColumnFit\(\{\s*column: column\.column, box: column\.composer, input: Math\.max\(0, column\.composer - bannersShown\),\s*windowHeight, keyboard: keyboardHeight, paused: keyChangePending,\s*\}\);/);
+        expect(src).toMatch(/const fit = chatColumnFit\(\{\s*column: column\.column, box: column\.composer, input: inputHeight,\s*windowHeight, keyboard: keyboardHeight, paused: keyChangePending,\s*\}\);/);
     });
     it('the pane takes the bars\' room beside the card\'s', () => {
         expect(src).toMatch(/maxHeight=\{dmKeyBannerMaxHeight\(\{ \.\.\.column, windowHeight, keyboard: keyboardHeight \}\)\}\s*barsRoom=\{fit\.bars\}\s*>/);
     });
-    it('the banners over the composer are one page inside the box measured whole, measured as drawn, before the composer', () => {
+    it('the banners over the composer are one page inside the box measured whole, before the composer, which is measured alone', () => {
         const box = src.indexOf("<View onLayout={measured('composer')}>");
-        const page = src.indexOf('<ChatScrollPage testID="chat-box-banners" maxHeight={fit.banners} onLayout={(e) => setBannersShown(Math.round(e.nativeEvent.layout.height))}>', box);
+        const page = src.indexOf('<ChatScrollPage testID="chat-box-banners" maxHeight={fit.banners}>', box);
         const end = src.indexOf('</ChatScrollPage>', page);
         expect(box).toBeGreaterThan(-1);
         expect(page).toBeGreaterThan(box);
@@ -297,6 +297,11 @@ describe('app/chat/[id].tsx gives the bars and the banners over the composer the
             expect(at, banner).toBeGreaterThan(page);
             expect(at, banner).toBeLessThan(end);
         }
-        expect(src.indexOf('{isPeerBlocked ? (', box)).toBeGreaterThan(end);
+        const input = src.indexOf('<View onLayout={(e) => setInputHeight(Math.round(e.nativeEvent.layout.height))}>', end);
+        expect(input).toBeGreaterThan(end);
+        expect(src.slice(end + '</ChatScrollPage>'.length, input)).toMatch(/^\s*\{\/\*[^*]*\*\/\}\s*$/);
+        expect(src.slice(input + '<View onLayout={(e) => setInputHeight(Math.round(e.nativeEvent.layout.height))}>'.length)).toMatch(/^\s*\{isPeerBlocked \? \(/);
+        // The composer's View closes, then the box's, then the keyboard view: nothing else under the composer.
+        expect(src).toMatch(/<ChatComposer[\s\S]*?\/>\s*\)\}\s*<\/View>\s*<\/View>\s*<\/KeyboardAvoidingView>/);
     });
 });

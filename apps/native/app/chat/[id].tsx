@@ -245,10 +245,10 @@ function ChatScreen({ id }: { id: string }) {
     // Without the card, the column shares its room in an order (utils/chat-column-fit): the composer whole, one line of the
     // thread, the banners over the composer, then the bars, which scroll as a page or fold away while typing on a small
     // phone (walk of 17 Nov: a market DM at 320 dp and 1.3× left the thread 0 dp and the box under the keyboard). The
-    // banners' page is measured as drawn, so the composer alone is the box less it.
-    const [bannersShown, setBannersShown] = useState(0);
+    // composer is measured on its own, so the banners' room never waits on the banners' own height.
+    const [inputHeight, setInputHeight] = useState(0);
     const fit = chatColumnFit({
-        column: column.column, box: column.composer, input: Math.max(0, column.composer - bannersShown),
+        column: column.column, box: column.composer, input: inputHeight,
         windowHeight, keyboard: keyboardHeight, paused: keyChangePending,
     });
     // Modals get their own native window, and keyboard-controller only hears keyboard
@@ -1814,7 +1814,7 @@ function ChatScreen({ id }: { id: string }) {
                     banners (Editing, About, Replying to) are one page in what the composer and one line of the thread leave
                     (chatColumnFit): they stand whole while they fit and scroll past it, so the composer is never cut. */}
                 <View onLayout={measured('composer')}>
-                <ChatScrollPage testID="chat-box-banners" maxHeight={fit.banners} onLayout={(e) => setBannersShown(Math.round(e.nativeEvent.layout.height))}>
+                <ChatScrollPage testID="chat-box-banners" maxHeight={fit.banners}>
                 {editingMessage && (
                     <ChatEditBanner
                         styles={chat}
@@ -1832,6 +1832,8 @@ function ChatScreen({ id }: { id: string }) {
                 })()}
                 </ChatScrollPage>
 
+                {/* The composer (or a request's panel) alone, measured for the banners' room. */}
+                <View onLayout={(e) => setInputHeight(Math.round(e.nativeEvent.layout.height))}>
                 {isPeerBlocked ? (
                     <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.blockedNotice, { marginBottom: Math.max(insets.bottom, 12) }]}>
                         <Text style={styles.blockedNoticeText}>
@@ -1948,6 +1950,7 @@ function ChatScreen({ id }: { id: string }) {
                         }
                     />
                 )}
+                </View>
                 </View>
             </KeyboardAvoidingView>
 

@@ -15,12 +15,10 @@ export interface ChatScrollPageProps {
     testID: string;
     /** The page's room: it stands whole up to this, and scrolls past it. */
     maxHeight: number;
-    /** The page's height as drawn (its room or its content, whichever is less). */
-    onLayout?: (e: { nativeEvent: { layout: { height: number } } }) => void;
     children?: React.ReactNode;
 }
 
-export function ChatScrollPage({ testID, maxHeight, onLayout, children }: ChatScrollPageProps) {
+export function ChatScrollPage({ testID, maxHeight, children }: ChatScrollPageProps) {
     const scrollRef = useRef<ScrollView>(null);
     const flashed = useRef(false);
     const content = useRef(0);
@@ -39,7 +37,6 @@ export function ChatScrollPage({ testID, maxHeight, onLayout, children }: ChatSc
             keyboardShouldPersistTaps="handled"
             persistentScrollbar
             fadingEdgeLength={CHAT_PAGE_FADE}
-            onLayout={onLayout}
             onContentSizeChange={(_w, h) => { content.current = h; flash(); }}
         >
             {children}

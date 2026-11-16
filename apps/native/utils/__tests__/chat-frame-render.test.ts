@@ -851,7 +851,8 @@ describe('a chat with someone in another community, in the Chats list at 320 dp 
  * A chat with someone in another community (app/outside-chat/[id].tsx), its changes to lines (X6), on a phone 320 dp wide with
  * text at 1.3x: an edit reads "edited", a deleted line "This message was deleted", reactions under the line; a tap on a line
  * offers the chat's seven reactions and, on a line of mine only, Edit message and Delete message; Edit fills the box and its
- * button reads Save; Delete asks first.
+ * button reads Save; Delete asks first. Report message (X6 round 3): on every line of theirs not deleted, in every state of the
+ * chat, a request's included; the table of chat states x lines says what a tap offers (core outsideLineActions, the web's too).
  */
 describe('an outside chat: changes to lines (X6)', () => {
     const CHAT = 'aaaaaaaa-0000-4000-8000-000000000001';

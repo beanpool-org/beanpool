@@ -61,6 +61,11 @@ export interface OutsideLine {
     state: OutsideLineState | null;
     /** A line of mine my server hasn't taken: its signed item, to send again. */
     item: string | null;
+    /**
+     * A line of theirs as it came (its sender's signed envelope and the sealed line inside, `{ envelope, payload }` as JSON):
+     * what a report hands over (lib/outside-mail.ts reportOutsideLine), as the phone keeps it. Null on a line of mine.
+     */
+    sealed: string | null;
     /** Why a line of mine failed, in my server's words; null otherwise. */
     note: string | null;
 }
@@ -245,6 +250,14 @@ export function outsideChatStore(community: string, holds: () => boolean = () =>
             const [lines] = await read([linesKey(me, chatId)]) as [OutsideLine[] | undefined];
             return lines ?? [];
         },
+        /**
+         * A line of theirs in chat `chatId` as it came (its sender's signed envelope and sealed line), its first words and its
+         * writer: what a report hands over, with the words it shows (outside-mail.ts reportOutsideLine). The phone's kept.
+         */
+        async kept(me: string, chatId: string, id: string): Promise<{ sealed: string; text: string; author: string } | null> {
+            const line = (await this.lines(me, chatId)).find((l) => l.id === id);
+            return line?.sealed ? { sealed: line.sealed, text: line.text, author: line.author } : null;
+        },
         async hasLine(me: string, chatId: string, id: string): Promise<boolean> {
             return (await this.lines(me, chatId)).some((l) => l.id === id);
         },
@@ -282,7 +295,7 @@ export function outsideChatStore(community: string, holds: () => boolean = () =>
             return changed;
         },
         /** A line from the peer, past the gate: written with its chat (made a request, or moved on), in one transaction. Idempotent by id. */
-        async writeTheirs(me: string, line: { id: string; chatId: string; author: string; text: string; replyTo: string | null; at: number },
+        async writeTheirs(me: string, line: { id: string; chatId: string; author: string; text: string; replyTo: string | null; at: number; sealed: string },
             peer: { home: string; name: string | null }, verdict: 'line' | 'request', now = Date.now()): Promise<void> {
             await change([chatsKey(me), linesKey(me, line.chatId)], ([chats, lines]: [Chats | undefined, OutsideLine[] | undefined]) => {
                 const row: OutsideLine = { ...line, state: null, item: null, note: null };
@@ -299,7 +312,7 @@ export function outsideChatStore(community: string, holds: () => boolean = () =>
             await change([chatsKey(me), linesKey(me, line.chatId)], ([chats, lines]: [Chats | undefined, OutsideLine[] | undefined]) => {
                 const chat = chats?.[line.chatId];
                 if (!chat) throw new Error('No such chat in this browser.');
-                const row: OutsideLine = { ...line, state: 'sending', note: null };
+                const row: OutsideLine = { ...line, state: 'sending', note: null, sealed: null };
                 if ((lines ?? []).some((l) => l.id === line.id)) return [undefined, undefined];
                 return [{ ...chats, [line.chatId]: withLast(chat, row, now) }, [...(lines ?? []), row].sort(byTime)];
             });

@@ -43,7 +43,7 @@
  */
 import {
     ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, addressCardVerifies, audienceOf, gateOutsideItem, isOutsideChangeKind, newDmMessageId, newOutsideDeviceId,
-    nodeHomeOf, openOutsideChange, openOutsideLine, outsideChangeVerdict, outsideLineShown, outsideReceiptPayload, readRelayEnvelope, relayConversationId,
+    nodeHomeOf, openOutsideChange, openOutsideLine, outsideChangeVerdict, outsideLineReportedWords, outsideLineShown, outsideReceiptPayload, readRelayEnvelope, relayConversationId,
     relayEnvelopeVerifies, relayPayloadHash, sealOutsideChange, sealOutsideLine, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope,
     type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
@@ -105,7 +105,13 @@ function refusalWords(e: OutsideMailError): string {
 
 async function answerOf(res: Response): Promise<any> {
     const body = await res.json().catch(() => null);
-    if (!res.ok) throw new OutsideMailError(res.status, typeof body?.error === 'string' ? body.error : `HTTP ${res.status}`, body?.code);
+    if (!res.ok) {
+        // The server's sentence: `message` when it sent one beside a code in `error` (a report's 429: { error: 'rate_limited',
+        // message }), as the phone's answerOf reads it, the code kept; else `error`, its words beside `code`.
+        const said = typeof body?.message === 'string' && body.message ? body.message : null;
+        const error = typeof body?.error === 'string' ? body.error : null;
+        throw new OutsideMailError(res.status, said ?? error ?? `HTTP ${res.status}`, typeof body?.code === 'string' ? body.code : said && error ? error : undefined);
+    }
     return body;
 }
 
@@ -326,6 +332,23 @@ async function postItems(ctx: OutsideMailContext, items: RelayItem[]): Promise<A
 }
 
 /**
+ * Report a line from another community in chat `chatId` (X5; the phone's reportOutsideLine): the item as it came, kept in this
+ * browser (its sender's signed envelope and the sealed line inside), and the words it showed, to my own community's server.
+ * That server checks the sender's signatures, blocks them for me, and tells their community, never naming me (server:
+ * engine/relay-complaint.ts). Throws OutsideMailError with my server's words when it refuses.
+ */
+export async function reportOutsideLine(ctx: OutsideMailContext, chatId: string, lineId: string, reason: string): Promise<void> {
+    const me = ctx.identity.publicKey;
+    const kept = await ctx.store.kept(me, chatId, lineId);
+    let item: unknown = null;
+    try { item = kept ? JSON.parse(kept.sealed) : null; } catch { /* not kept as it came */ }
+    if (!kept || !item) throw new OutsideMailError(404, t('That did not go through. Please try again.'), 'not_kept');
+    // The words the member saw (core's one rule, the bubble's): its writer's newest edit, never only the first words (X6).
+    const words = outsideLineReportedWords({ id: lineId, author: kept.author, text: kept.text }, await ctx.store.changes(me, chatId), me);
+    await post(ctx, '/api/mail/report', { item, reason, words });
+}
+
+/**
  * Send `text` in open chat `chatId`: written first as `sending` (then `onKept`), then the state my server answers. Throws
  * OutsideMailError with my server's words when it refuses (the line is then `failed`). A throw before `onKept`: nothing kept.
  */
@@ -527,8 +550,10 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                 } catch {
                     done.push(env.itemId); out.dropped++; continue;
                 }
-                await ctx.store.writeTheirs(me, { id: env.itemId, chatId, author: env.senderKey, text: opened.text, replyTo: opened.replyToId, at: env.at },
-                    { home: env.senderHome, name: opened.name }, verdict, now);
+                await ctx.store.writeTheirs(me, {
+                    id: env.itemId, chatId, author: env.senderKey, text: opened.text, replyTo: opened.replyToId, at: env.at,
+                    sealed: JSON.stringify({ envelope: env, payload: h.payload }),
+                }, { home: env.senderHome, name: opened.name }, verdict, now);
                 await owe(env);   // past the gate only a line is written: its receipt owed before it is confirmed
                 done.push(env.itemId);
                 if (verdict === 'request') out.requests++; else out.written++;

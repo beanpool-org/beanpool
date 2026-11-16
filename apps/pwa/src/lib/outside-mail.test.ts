@@ -77,6 +77,9 @@ const server = vi.hoisted(() => ({
     forgetAnswer: null as null | ((signal: AbortSignal | undefined) => Promise<Response>),
     /** Every request a server took, in order: asked with a signal not yet aborted (an aborted fetch never leaves a browser). */
     served: [] as string[],
+    /** X5: each report my server took (`POST /api/mail/report`), and how it answers one when set (a refusal). */
+    reports: [] as any[],
+    reportAnswer: null as null | { status: number; body: unknown },
 }));
 const MAIL_DEVICE = /^[0-9a-f]{32}$/;
 const badDevice = () => new Response(JSON.stringify({ error: "device is this device's mail id: 32 lowercase hex characters, made by the app.", code: 'bad_device' }), { status: 400 });
@@ -140,6 +143,11 @@ vi.mock('./api', async (importOriginal) => {
                 settleHeld();
                 return new Response(JSON.stringify({ forgotten: true }), { status: 200 });
             }
+            if (path === '/api/mail/report') {
+                if (server.reportAnswer) return new Response(server.reportAnswer.body === null ? '' : JSON.stringify(server.reportAnswer.body), { status: server.reportAnswer.status });
+                server.reports.push(body);
+                return new Response(JSON.stringify({ success: true, report: { id: uuid() } }), { status: 200 });
+            }
             const isReceipt = path === '/api/mail/send' && body.items?.[0]?.envelope?.kind === 'receipt';
             if (isReceipt) server.receiptTries.push({ to: `${body.items[0].envelope.recipient}@${body.items[0].envelope.recipientHome}`, ids: JSON.parse(body.items[0].payload).items });
             const at = path === '/api/mail/confirm' ? 'confirm' : isReceipt ? 'receipt' : null;
@@ -199,8 +207,8 @@ vi.mock('./outside-chat-store', async (importOriginal) => {
 
 import { clearOutsideChats, outsideChatStore } from './outside-chat-store';
 import {
-    FORGET_DEVICE_MS, chatsShown, doorOpen, failUnsent, forgetThisBrowserForMail, mailDevice, myAddressCard, myHome, openChatFromCard, sendFromBox,
-    sendOutsideChange, sendOutsideLine, setDoor, syncOutsideMail, OutsideMailError, type OutsideMailContext,
+    FORGET_DEVICE_MS, chatsShown, doorOpen, failUnsent, forgetThisBrowserForMail, mailDevice, myAddressCard, myHome, openChatFromCard, reportOutsideLine,
+    sendFromBox, sendOutsideChange, sendOutsideLine, setDoor, syncOutsideMail, OutsideMailError, type OutsideMailContext,
 } from './outside-mail';
 import { setNodeApiUrl } from './api';
 import { resetAccountEpochForTest } from './account-epoch';
@@ -223,7 +231,7 @@ beforeEach(async () => {
     Object.assign(server, {
         held: [], outbox: [], calls: [], sent: [], confirmed: [], batches: [], sendState: 'sent', sendFails: false, refuse: null, signals: [],
         stallGet: false, stop: null, seen: { confirm: 0, receipt: 0 }, stopped: false, deadline: null, receiptTries: [], point: null,
-        named: [], listed: new Set(), got: new Map(), forgot: [], outboxPages: null, forgetAnswer: null, served: [],
+        named: [], listed: new Set(), got: new Map(), forgot: [], outboxPages: null, forgetAnswer: null, served: [], reports: [], reportAnswer: null,
     });
     blocks.loaded = true;
     idb = memoryIndexedDB();
@@ -314,7 +322,7 @@ describe('2  a write that fails is never confirmed', () => {
     it('a line written but never confirmed is confirmed and receipted again, and written once', async () => {
         await openWith(ANA.key);
         const item = await heldLine(ANA, 'Once');
-        await ctx.store.writeTheirs(BEN.key, { id: item.envelope.itemId, chatId: chatWith(ANA.key), author: ANA.key, text: 'Once', replyTo: null, at: item.envelope.at }, { home: ANA_HOME, name: null }, 'line');
+        await ctx.store.writeTheirs(BEN.key, { id: item.envelope.itemId, chatId: chatWith(ANA.key), author: ANA.key, text: 'Once', replyTo: null, at: item.envelope.at, sealed: JSON.stringify({ envelope: item.envelope, payload: item.payload }) }, { home: ANA_HOME, name: null }, 'line');
         await syncOutsideMail(ctx);
         expect(await textsWith(ANA.key)).toEqual(['Once']);
         expect(server.confirmed).toEqual([[item.envelope.itemId]]);
@@ -1089,7 +1097,7 @@ describe('11  each device for itself: the gate table through a round, a second d
     };
     async function chatHere(chat: NonNullable<typeof chats[number]>) {
         const chatId = chatWith(SOL.key);
-        const earlier = (i: number) => ({ id: uuid(), chatId, author: SOL.key, text: `Earlier ${i}`, replyTo: null, at: Date.now() - 10_000 + i });
+        const earlier = (i: number) => ({ id: uuid(), chatId, author: SOL.key, text: `Earlier ${i}`, replyTo: null, at: Date.now() - 10_000 + i, sealed: '{}' });
         if (chat.state === 'open') {
             await ctx.store.openChat(BEN.key, chatId, { key: SOL.key, home: ANA_HOME, name: 'Sol' });
             for (let i = 0; i < chat.theirLines; i++) await ctx.store.writeTheirs(BEN.key, earlier(i), { home: ANA_HOME, name: null }, 'line');
@@ -1168,6 +1176,70 @@ describe('12  a blocked person\'s chat is never listed nor opened from their car
         await expect(chatsShown(ctx)).rejects.toThrow('could not be read');
         await expect(openChatFromCard(ctx, sol)).rejects.toThrow('could not be read');
     });
+});
+
+describe('X5  report a line from another community (the phone\'s reportOutsideLine; X6 round 3: the web had none)', () => {
+    it('a line of theirs is kept as it came; a report hands my server that item, the words it showed and the reason, and nothing else', async () => {
+        await openWith(ANA.key);
+        const item = await heldLine(ANA, 'Buy my miracle seeds');
+        await syncOutsideMail(ctx);
+        await reportOutsideLine(ctx, chatWith(ANA.key), item.envelope.itemId, 'Spam or scam');
+        expect(server.reports).toHaveLength(1);
+        const sent = server.reports[0];
+        expect(Object.keys(sent).sort()).toEqual(['item', 'reason', 'words']);
+        expect(sent.item).toEqual({ envelope: item.envelope, payload: item.payload });
+        expect(sent).toMatchObject({ reason: 'Spam or scam', words: 'Buy my miracle seeds' });
+    });
+
+    it('a request\'s line can be reported too: it is kept as it came', async () => {
+        await setDoor(ctx, true);
+        const item = await heldLine(ANA, 'Hello, seeds?');
+        expect(await syncOutsideMail(ctx)).toMatchObject({ requests: 1 });
+        expect((await ctx.store.chat(BEN.key, chatWith(ANA.key)))?.state).toBe('request');
+        await reportOutsideLine(ctx, chatWith(ANA.key), item.envelope.itemId, 'Other');
+        expect(server.reports.map((r) => r.item.envelope.itemId)).toEqual([item.envelope.itemId]);
+    });
+
+    it('an edited line: the words the member saw, never only the first ones', async () => {
+        await openWith(ANA.key);
+        const item = await heldLine(ANA, 'hi');
+        await syncOutsideMail(ctx);
+        await ctx.store.putChange(BEN.key, chatWith(ANA.key), { kind: 'dm-edit', itemId: uuid(), lineId: item.envelope.itemId, author: ANA.key, at: Date.now(), text: 'Something else' });
+        await reportOutsideLine(ctx, chatWith(ANA.key), item.envelope.itemId, 'Offensive content');
+        expect(server.reports[0].words).toBe('Something else');
+    });
+
+    it('a line of mine, or one not in this browser, is never sent as a report', async () => {
+        await openWith(ANA.key);
+        await sendOutsideLine(ctx, chatWith(ANA.key), 'Mine');
+        const mine = (await ctx.store.lines(BEN.key, chatWith(ANA.key))).find((l) => l.text === 'Mine')!;
+        expect(mine.sealed).toBeNull();
+        await expect(reportOutsideLine(ctx, chatWith(ANA.key), mine.id, 'Other')).rejects.toBeInstanceOf(OutsideMailError);
+        await expect(reportOutsideLine(ctx, chatWith(ANA.key), uuid(), 'Other')).rejects.toBeInstanceOf(OutsideMailError);
+        expect(server.reports).toHaveLength(0);
+    });
+
+    // The report's refusals as my server sends them (routes/message-report.ts, relay.ts): the words a screen shows are the
+    // server's sentence or `HTTP <n>` (which the screen turns into its own sentence); a 429's code in `error` is never the words.
+    const RATE = 'You have sent a lot of reports recently. Please try again in an hour.';
+    const shapes: Array<[string, number, unknown, string, string | undefined]> = [
+        ['a 429: a code in error, its words in message', 429, { error: 'rate_limited', message: RATE }, RATE, 'rate_limited'],
+        ['words in error beside a code', 422, { error: 'That message was not taken.', code: 'not_taken' }, 'That message was not taken.', 'not_taken'],
+        ['no body', 503, null, 'HTTP 503', undefined],
+    ];
+    for (const [what, status, body, says, code] of shapes) {
+        it(`a refusal, ${what}: reads "${says}"`, async () => {
+            await openWith(ANA.key);
+            const item = await heldLine(ANA, 'Buy my miracle seeds');
+            await syncOutsideMail(ctx);
+            server.reportAnswer = { status, body };
+            const e = await reportOutsideLine(ctx, chatWith(ANA.key), item.envelope.itemId, 'Spam or scam').catch((x) => x);
+            expect(e).toBeInstanceOf(OutsideMailError);
+            expect(e.message).toBe(says);
+            expect(e.code).toBe(code);
+            expect(server.reports).toHaveLength(0);
+        });
+    }
 });
 
 describe('X6  changes to lines across communities', () => {

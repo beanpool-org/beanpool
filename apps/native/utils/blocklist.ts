@@ -31,7 +31,7 @@ import * as SecureStore from 'expo-secure-store';
 import { DeviceEventEmitter } from 'react-native';
 import { onAccountOnPhone } from './account-on-phone';
 import { loadIdentity } from './identity';
-import { signedPost } from './node-post';
+import { signedGet, signedPost } from './node-post';
 import { isGuestNode } from './nodes';
 import { blockedUsersStoreKey, communityBlocksStoreKey, PENDING_ABUSE_REPORTS_STORE_KEY, pendingAbuseReportsStoreKey } from './storage-keys';
 
@@ -511,6 +511,107 @@ async function syncBlocksOnce(): Promise<void> {
         }
     } catch (e) {
         console.warn('[blocklist] Could not bring the community\'s block list in line with this phone\'s; tried again at the next sync', e);
+    }
+}
+
+/**
+ * A re-key of someone the member blocked (an admin helping them back into their account after a lost phone): the community
+ * moved its copy of the block to their new key (apps/server engine/member-blocks.ts moveBlocks), and its read of the list
+ * names, for each key on it, the keys a re-key replaced with it (GET /api/blocks `formerKeys`). This phone's own list
+ * follows: a key the community holds in place of one this phone blocks is blocked here too, so every screen that reads the
+ * list (the DM's thread and Talk, a profile, the market, the forum) holds the block under the new key (review of #3268,
+ * finding 2; the DM screens also hold it before this runs, utils/dm-blocked.ts). A key that replaced one this phone put
+ * there and has since unblocked is marked as this phone's on the community's list, so the next sync takes it off there
+ * too. Nothing is reported (it is the same block) and nothing is sent but the one read.
+ *
+ * Only while the account has a block here or on the community's list from this phone, only for the account on the phone
+ * at the community it is set to, never on a guest visit, and one at a time with every sync ({@link syncBlocks}). It runs
+ * at start, on each return and every 5 minutes (app/_layout.tsx), just before the sync.
+ */
+export function followRekeyedBlocks(): Promise<void> {
+    const run = syncing.then(followRekeysOnce, followRekeysOnce);
+    syncing = run;
+    return run;
+}
+
+async function followRekeysOnce(): Promise<void> {
+    try {
+        const owner = await accountOnPhone();
+        if (!owner) return;
+        const anchor = await AsyncStorage.getItem(ANCHOR_STORE_KEY);
+        const community = anchor?.replace(/\/+$/, '');
+        if (!anchor || !community) return;
+        for (const url of new Set([anchor, community, `${community}/`])) {
+            if (await isGuestNode(url)) return;
+        }
+        const generation = accountGeneration;
+        const list = await listOf(owner);
+        const storeKey = communityBlocksStoreKey(owner);
+        const record = parseCommunityBlocks(await AsyncStorage.getItem(storeKey));
+        const at: BlocksAt = record[community] ?? { on: [], sent: [] };
+        const mine = new Set([...list, ...at.on, ...at.sent]);
+        if (mine.size === 0) return;
+        if (at.waitUntil !== undefined && Date.now() < at.waitUntil) return;
+        const moves = await readRekeyMoves(owner, community);
+        if (!moves || generation !== accountGeneration) return;
+        const follow: string[] = [];
+        let marked = false;
+        for (const [key, formers] of moves) {
+            if (key === owner || !formers.some(f => mine.has(f))) continue;
+            if (!at.on.includes(key)) {
+                at.on = [...at.on, key];
+                marked = true;
+            }
+            if (!list.includes(key) && formers.some(f => list.includes(f))) follow.push(key);
+        }
+        if (marked) {
+            record[community] = at;
+            await AsyncStorage.setItem(storeKey, JSON.stringify(record));
+        }
+        if (follow.length === 0) return;
+        const now = await listOf(owner);
+        const next = [...new Set([...now, ...follow])];
+        await AsyncStorage.setItem(blockedUsersStoreKey(owner), JSON.stringify(next));
+        if (generation === accountGeneration) {
+            cached = { owner, list: next };
+            DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, next);
+        }
+    } catch (e) {
+        console.warn('[blocklist] Could not follow a re-key on the community\'s block list; tried again at the next sync', e);
+    }
+}
+
+/**
+ * The community's read of `owner`'s list: each key on it that a re-key put in place of others, with those others
+ * (`formerKeys`). Null when it couldn't be read, or isn't the node's answer (a node from before it names none: nothing
+ * follows there). Counted with the block requests ({@link roomForARequest}).
+ */
+async function readRekeyMoves(owner: string, community: string): Promise<[string, string[]][] | null> {
+    const signer = await loadIdentity();
+    if (!signer?.privateKey || signer.publicKey !== owner) return null;
+    if (!roomForARequest()) return null;
+    const controller = new AbortController();
+    try {
+        const { res, text } = await withTimeout((async () => {
+            const answer = await signedGet(community, BLOCKS_PATH, signer, controller.signal);
+            return { res: answer, text: await answer.text() };
+        })(), REPORT_TIMEOUT_MS);
+        if (!res.ok) return null;
+        const parsed = JSON.parse(text);
+        const formerKeys = parsed?.formerKeys;
+        if (!Array.isArray(parsed?.blocked) || !formerKeys || typeof formerKeys !== 'object' || Array.isArray(formerKeys)) return null;
+        const onList = new Set(parsed.blocked.map((b: { publicKey?: unknown } | null) => b?.publicKey).filter((k: unknown): k is string => typeof k === 'string'));
+        const moves: [string, string[]][] = [];
+        for (const [key, formers] of Object.entries(formerKeys as Record<string, unknown>)) {
+            if (!MEMBER_KEY.test(key) || !onList.has(key) || !Array.isArray(formers)) continue;
+            const keys = formers.filter((f): f is string => typeof f === 'string' && MEMBER_KEY.test(f));
+            if (keys.length > 0) moves.push([key, keys]);
+        }
+        return moves;
+    } catch {
+        // Not left running behind the next sync.
+        controller.abort();
+        return null;
     }
 }
 

@@ -26,7 +26,8 @@ import { keyCodeOf } from '../../utils/key-code';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
 import { routeChat, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
-import { isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
+import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
+import { dmPeerName, isDmBlocked } from '../../utils/dm-blocked';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { ReviewModal } from '../../components/ReviewModal';
 import { MemberAvatar } from '../../components/MemberAvatar';
@@ -78,6 +79,11 @@ const MESSAGE_PAGE_SIZE = 50;
 // insertMessage left the send button silently dead until an app restart
 // (field report 2026-07-18). The underlying work isn't cancelled; the caller's
 // catch/finally run and the UI stays usable.
+/** The same keys as before keeps the same array, so a reload that changed nothing never re-reads the block list. */
+function keepKeys(prev: string[], next: string[]): string[] {
+    return prev.length === next.length && prev.every((k, i) => k === next[i]) ? prev : next;
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number, tooLong: string): Promise<T> {
     return Promise.race([
         promise,
@@ -138,6 +144,8 @@ function ChatScreen({ id }: { id: string }) {
     const [pickerPosition, setPickerPosition] = useState<'top' | 'bottom'>('top');
     const [peerName, setPeerName] = useState(() => t('Loading...'));
     const [peerPubkey, setPeerPubkey] = useState<string | null>(null);
+    /** Every key the other person is known by here (utils/db.ts getConversation peerKeys): a block of any holds the thread. */
+    const [peerKeys, setPeerKeys] = useState<string[]>([]);
     // `blocks`: Report on a request, and the sender it blocks. `item` is then the request's line, or null with none left.
     const [reportingLine, setReportingLine] = useState<{ item: any; blocks: string | null } | null>(null);
     const [isPeerBlocked, setIsPeerBlocked] = useState(false);
@@ -452,29 +460,38 @@ function ChatScreen({ id }: { id: string }) {
         }
     }, [identity?.publicKey]);
 
+    // Blocked when any key the other person is known by here is on the block list (utils/dm-blocked.ts): the name order
+    // may pick their new key after a re-key, and the member blocked the old one (review of #3268, finding 2).
+    const peerKeysKey = (peerKeys.length > 0 ? peerKeys : (peerPubkey ? [peerPubkey] : [])).join(',');
     useEffect(() => {
-        if (!peerPubkey) return;
+        const keys = peerKeysKey ? peerKeysKey.split(',') : [];
+        if (keys.length === 0) return;
         let isMounted = true;
-        isUserBlocked(peerPubkey).then(blocked => {
-            if (isMounted) setIsPeerBlocked(blocked);
-        });
-        const sub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, async () => {
-            const blocked = await isUserBlocked(peerPubkey);
-            if (isMounted) setIsPeerBlocked(blocked);
-        });
+        const read = async () => {
+            try {
+                const blocked = isDmBlocked(keys, await getBlockedUsers());
+                if (isMounted) setIsPeerBlocked(blocked);
+            } catch {
+                // A list that can't be read changes nothing shown: getBlockedUsers answers [] itself when storage fails.
+            }
+        };
+        void read();
+        const sub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => { void read(); });
         return () => {
             isMounted = false;
             sub.remove();
         };
-    }, [peerPubkey]);
+    }, [peerKeysKey]);
 
     const loadConversationData = useCallback(async () => {
         if (id && identity?.publicKey) {
             const res = await getConversation(id as string, identity.publicKey);
             if (res) {
                 setConvRow(res);
-                setPeerName(res.name || res.otherCallsign || String(id).slice(0, 8));
+                // Talk's list and Needs you name it by the same rule (utils/dm-blocked.ts dmPeerName): never the conversation's id.
+                setPeerName(dmPeerName(res));
                 if (res.otherPubkey) setPeerPubkey(res.otherPubkey);
+                setPeerKeys(prev => keepKeys(prev, Array.isArray(res.peerKeys) ? res.peerKeys : []));
                 setIsEncrypted(res.type === 'dm' && !!res.otherPubkey);
                 setPeerAvatar(res.otherAvatar || null);
                 if (res.postId) {
@@ -501,7 +518,7 @@ function ChatScreen({ id }: { id: string }) {
                                 setPromptReviewForTx({
                                     txId: txRow.id,
                                     targetPubkey,
-                                    targetCallsign: res.name || res.otherCallsign || String(id).slice(0, 8)
+                                    targetCallsign: dmPeerName(res)
                                 });
                             }
                         } catch (e) {

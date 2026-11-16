@@ -133,8 +133,10 @@ describe("a DM after the other person's re-key: every reader names it by the sam
                 expect({ otherCallsign: header?.otherCallsign ?? null, otherPubkey: header?.otherPubkey, otherAvatar: header?.otherAvatar ?? null })
                     .toEqual({ otherCallsign: fallback, otherPubkey: key, otherAvatar: state.face });
 
+                // Needs you names it by the same rule as the list (dm-blocked.ts dmPeerName): with no card, the start of the
+                // key, never the conversation's id (review of #3268; this row pinned the id before).
                 const needsYou = (await getUnreadByConversation(ME)).find(r => r.id === CONV);
-                expect(needsYou?.peer).toBe(fallback ?? CONV.slice(0, 8));
+                expect(needsYou?.peer).toBe(fallback ?? key.slice(0, 8));
             });
         }
     }

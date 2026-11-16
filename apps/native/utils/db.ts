@@ -16,8 +16,9 @@ import {
     createDmPinBook, dmPinFor, dmSightFor, dmPinId, pinKeyOf, pinAtFirstSight, applyDmListings, applySightVerdict, applyResetVerdict, judgeFirstSight,
     settleFirstSight, isUnplacedSight, isHeldLostSight, markHeldLost, isDmPinStoreError, isDmPinsFullError, DmPinsFullError, isPinnableId,
     noRoomForFirstSight, rekeyDateOf, DM_PINS_WORDS, acceptOffer, restDmEntry, dmEntryRestless, dmEntryWaitsForMember, isVerifiedPin,
-    markVerified, removeVerified, type DmPeerPins, type DmPinEntry, type DmHeard, type SightVerdict, type DmPinsReset, type DmPeerOffer,
+    markVerified, removeVerified, type DmPeerPins, type DmPeerPin, type DmPinEntry, type DmHeard, type SightVerdict, type DmPinsReset, type DmPeerOffer,
 } from './dm-peer-pins';
+import { dmPeerKeys, dmPeerName, isDmType } from './dm-blocked';
 import { dmLinesAtUpdateStoreKey, messageRequestsStoreKey } from './storage-keys';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError } from './dm-guard-list';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, type ReportWordsLeftOut } from './reportReasons';
@@ -1301,6 +1302,13 @@ const otherParticipantSql = (column: 'callsign' | 'avatar_url' | 'profile_update
          WHERE cp.conversation_id = ${conversation} AND cp.public_key != ?
          ORDER BY (memb.public_key IS NULL), memb.profile_updated_at DESC, cp.public_key LIMIT 1)`;
 
+/**
+ * Every other participant's key in a conversation, comma-joined (dm-blocked.ts dmPeerKeys reads it): a DM is blocked when
+ * any key its other person is known by is on the block list, not only the one the name order picks. Its one `?` is my key.
+ */
+const otherKeysSql = (conversation = 'c.id') =>
+    `(SELECT group_concat(cpk.public_key) FROM conversation_participants cpk WHERE cpk.conversation_id = ${conversation} AND cpk.public_key != ?)`;
+
 export async function getConversations(myPubkey: string) {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
@@ -1326,6 +1334,7 @@ export async function getConversations(myPubkey: string) {
         ${otherParticipantSql('avatar_url')} as otherAvatar,
         ${otherParticipantSql('profile_updated_at')} as otherProfileUpdatedAt,
         ${otherParticipantSql('public_key')} as otherPubkey,
+        ${otherKeysSql()} as otherKeys,
         (SELECT COUNT(msg.id) FROM messages msg 
          WHERE msg.conversation_id = c.id 
          AND msg.author_pubkey != ?
@@ -1367,7 +1376,7 @@ export async function getConversations(myPubkey: string) {
           AND (c.type IS NULL OR c.type != 'enterprise_thread')
         GROUP BY c.id
         ORDER BY timestamp DESC
-    `, [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
+    `, [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
     
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
     // Pre-load identity so encrypted DM previews can be decrypted below.
@@ -1376,6 +1385,9 @@ export async function getConversations(myPubkey: string) {
     // under a key the node listed in its place. Unreadable pins: nothing opens (fail closed).
     let previewPins: DmPeerPins | null = null;
     try { previewPins = previewIdentity?.publicKey ? await dmPins.read(previewIdentity.publicKey, database) : null; } catch { previewPins = null; }
+    // The keys each DM's other person is known by (peerKeys, below) come from this member's pins, read once.
+    let keyPins: DmPeerPins | null = previewPins;
+    if (!keyPins) { try { keyPins = await dmPins.read(myPubkey, database); } catch { keyPins = null; } }
 
     // A request for this member they haven't accepted is no chat of theirs: the node lists it under Requests, or nowhere
     // once ignored or lapsed (sortRequestsOut). Its row is here for its card's preview and its own screen only.
@@ -1464,11 +1476,17 @@ export async function getConversations(myPubkey: string) {
             postPhoto,
             type: row.convType || 'dm',
             // No card held for the other member (a community that says `membersOnDemand`, before the cycle that fetches
-            // it by key): the key's first 8 characters, never the conversation's (DESIGN-global-members-by-area §2.4).
-            peer: row.name || row.otherCallsign || (row.otherPubkey ? String(row.otherPubkey).slice(0, 8) : row.id.slice(0, 8)),
+            // it by key): the key's first 8 characters, never the conversation's (DESIGN-global-members-by-area §2.4), by the
+            // one rule the thread's header and Needs you name it by (dm-blocked.ts dmPeerName).
+            peer: dmPeerName(row),
             peerAvatar: row.otherAvatar || null,
             peerUpdatedAt: row.otherProfileUpdatedAt || null,
             peerPubkey: row.otherPubkey || null,
+            // Every key a DM's other person is known by here (its participants, its pin's key and former keys): Talk hides
+            // the chat when any is blocked (dm-blocked.ts talkShowsChat), so a block holds across their re-key.
+            peerKeys: isDmType(row.convType)
+                ? dmPeerKeys(row.otherKeys, keyPins ? dmPinFor(keyPins, row.id) : null)
+                : (row.otherPubkey ? [String(row.otherPubkey)] : []),
             // The "key changed" tag: only while the chat waits for the member (DESIGN-dm-key-signal-model §4): a verified
             // person's change, or no single key listed. An ordinary change shows none: the chat carries on with a notice in
             // the thread (from the same one read as the preview; unreadable pins, no tag: the chat itself says why).
@@ -1618,7 +1636,8 @@ export async function getUnreadByConversation(myPubkey: string): Promise<{ id: s
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
         SELECT c.id, c.type, c.name, COUNT(m.id) as unread,
-               ${otherParticipantSql('callsign')} as otherCallsign
+               ${otherParticipantSql('callsign')} as otherCallsign,
+               ${otherParticipantSql('public_key')} as otherPubkey
         FROM conversation_participants cp
         JOIN conversations c ON c.id = cp.conversation_id
         JOIN messages m ON m.conversation_id = c.id
@@ -1629,12 +1648,13 @@ export async function getUnreadByConversation(myPubkey: string): Promise<{ id: s
         AND ${NOT_A_REQUEST_FOR_ME('c.request')}
         AND ${COUNTS_AS_UNREAD_SQL}
         GROUP BY c.id
-    `, [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
+    `, [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
     return rows.map(r => ({
         id: r.id,
         type: r.type || 'dm',
         unread: r.unread || 0,
-        peer: r.name || r.otherCallsign || String(r.id).slice(0, 8),
+        // As Talk's list and the thread's header name it (dm-blocked.ts dmPeerName): never the conversation's id.
+        peer: dmPeerName(r),
     }));
 }
 
@@ -5701,6 +5721,7 @@ export async function getConversation(id: string, myPubkey?: string) {
             ${otherParticipantSql('callsign')} as otherCallsign,
             ${otherParticipantSql('public_key')} as otherPubkey,
             ${otherParticipantSql('avatar_url')} as otherAvatar,
+            ${otherKeysSql()} as otherKeys,
             mt.id as pendingTxId,
             mt.amount_c as pendingAmount_c,
             mt.buyer_pubkey as txBuyerPubkey,
@@ -5710,7 +5731,15 @@ export async function getConversation(id: string, myPubkey?: string) {
             LEFT JOIN marketplace_transactions mt ON mt.post_id = c.post_id AND mt.status = 'pending'
                 AND (mt.buyer_pubkey IN (SELECT public_key FROM conversation_participants WHERE conversation_id = c.id)
                      AND mt.seller_pubkey IN (SELECT public_key FROM conversation_participants WHERE conversation_id = c.id))
-            WHERE c.id = ?`, [myPubkey, myPubkey, myPubkey, id]);
+            WHERE c.id = ?`, [myPubkey, myPubkey, myPubkey, myPubkey, id]);
+        if (res) {
+            // Every key the DM's other person is known by here (dm-blocked.ts): the thread is blocked when any is, so a block
+            // holds across their re-key, after the pin has followed the listing to the new key too. Unreadable pins: the
+            // participants alone.
+            let pin: DmPeerPin | null = null;
+            try { pin = dmPinFor(await dmPins.read(myPubkey, database), id); } catch { pin = null; }
+            res.peerKeys = isDmType(res.type) ? dmPeerKeys(res.otherKeys, pin) : (res.otherPubkey ? [String(res.otherPubkey)] : []);
+        }
     } else {
         res = await database.getFirstAsync<any>('SELECT name, post_id as postId, request FROM conversations WHERE id = ?', [id]);
     }

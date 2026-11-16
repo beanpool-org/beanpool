@@ -230,6 +230,8 @@ function readNodeConfigField(field: 'mainAddress' | 'addressList'): unknown {
     }
 }
 
+const mainAddressOf = (stored: unknown): string | null => (typeof stored === 'string' ? stored : null);
+
 function buildBundle(files: TakeoverBundle['files']): TakeoverBundle {
     const config = getLocalConfig() as any;
     const localConfig: BundledLocalConfig = {};
@@ -245,7 +247,7 @@ function buildBundle(files: TakeoverBundle['files']): TakeoverBundle {
         publicAddress: readPublicAddress(),
         ownerAddresses: readOwnerAddresses(),
         registrarNames: readRegistrarNames(),
-        mainAddress: typeof readNodeConfigField('mainAddress') === 'string' ? readNodeConfigField('mainAddress') as string : null,
+        mainAddress: mainAddressOf(readNodeConfigField('mainAddress')),
         addressList: readNodeConfigField('addressList'),
         recoveryCode: config.recoveryCode ?? null,
         identityEpoch: Number.isSafeInteger(config.identityEpoch) && config.identityEpoch > 0 ? config.identityEpoch : 0,

@@ -11,6 +11,9 @@
  *
  * **Someone's card.** Scanned (the camera is asked for at the tap, never before) or pasted. A card its key did not sign is no
  * card. Then one line, sent as a message request: it waits behind their requests row until they accept.
+ *
+ * **By name (N1).** The member's switch "People in other communities can find me by name", and finding someone by their
+ * community and exact name, which hands their card on as a scanned one: components/FindByName.tsx.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, ScrollView, Share, Switch } from 'react-native';
@@ -24,6 +27,7 @@ import { Alert } from '../utils/keyboard-alert';
 import { useTheme, useStyles } from './ThemeContext';
 import { doorOpen, myAddressCard, myHome, openChatFromCard, sendFromBox, setDoor } from '../utils/outside-mail';
 import { OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, outsideMessagesHere } from '../utils/outside-chat-live';
+import { FindByNameStep, FindMeSwitch } from '../components/FindByName';
 
 /** Core's sentence, the web's too (@beanpool/core outside-devices.ts). */
 const LINES = { doorEachDevice: OUTSIDE_DOOR_EACH_DEVICE };
@@ -79,6 +83,11 @@ export default function AddressCardScreen() {
     const readCard = async (text: string): Promise<boolean> => {
         const card = addressCardFromText(text);
         if (!card) { setCardNote(t("That isn't an address card, or it was changed after it was made.")); return false; }
+        return takeCard(card);
+    };
+
+    /** A card read or found by name: on to the first message, unless it is mine, someone here, or someone I blocked. */
+    const takeCard = async (card: AddressCard): Promise<boolean> => {
         const ctx = await outsideContext();
         if (!ctx) return false;
         if (card.key === ctx.identity.publicKey) { setCardNote(t("That's your own card.")); return true; }
@@ -184,6 +193,7 @@ export default function AddressCardScreen() {
                                             <Text style={styles.text} testID="door-each-device">{t(LINES.doorEachDevice)}</Text>
                                         </>
                                     )}
+                                    <FindMeSwitch colors={colors} onDoorOpened={() => setOpen(true)} />
                                 </View>
                             )}
                             <View style={styles.card} testID="their-address-card">
@@ -227,6 +237,7 @@ export default function AddressCardScreen() {
                                         <Pressable style={[styles.plain, !pasted.trim() && { opacity: 0.6 }]} disabled={!pasted.trim()} accessibilityRole="button" onPress={() => void readCard(pasted)} testID="read-card">
                                             <Text style={styles.plainText}>{t('Read the card')}</Text>
                                         </Pressable>
+                                        <FindByNameStep colors={colors} onCard={takeCard} />
                                     </>
                                 )}
                                 {cardNote && <Text style={styles.note} accessibilityLiveRegion="polite">{cardNote}</Text>}

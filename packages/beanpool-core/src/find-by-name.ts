@@ -66,3 +66,18 @@ export const FIND_OWN_COMMUNITY = word("That's your own community: write to them
 export const FIND_BAD_COMMUNITY = word("That isn't a community's address.");
 /** The name typed is none a card could carry. */
 export const FIND_BAD_NAME = word('Type their name as they use it, up to 60 characters.');
+
+/** The words both apps show, as a table: each app shows `t(FIND_WORDS.nobody)`, which the words check reads as a word() key. */
+export const FIND_WORDS = {
+    meSwitch: FIND_ME_SWITCH, meHelp: FIND_ME_HELP, nobody: FIND_NOBODY, dayUsed: FIND_DAY_USED, notReached: FIND_NOT_REACHED,
+    ownCommunity: FIND_OWN_COMMUNITY, badCommunity: FIND_BAD_COMMUNITY, badName: FIND_BAD_NAME,
+} as const;
+
+const REFUSALS: Readonly<Record<string, keyof typeof FIND_WORDS>> = {
+    find_day_used: 'dayUsed', not_reached: 'notReached', own_community: 'ownCommunity', bad_home: 'badCommunity', bad_name: 'badName',
+};
+
+/** Which of FIND_WORDS says why the asker's server refused a look-up, by its code: `notReached` for any other. */
+export function findRefusal(code: unknown): keyof typeof FIND_WORDS {
+    return typeof code === 'string' && Object.prototype.hasOwnProperty.call(REFUSALS, code) ? REFUSALS[code] : 'notReached';
+}

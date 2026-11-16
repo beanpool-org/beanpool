@@ -33,6 +33,21 @@ vi.mock('expo-file-system/legacy', () => ({
     deleteAsync: vi.fn(async () => {}),
 }));
 vi.mock('../pending-profile-sync', () => ({ clearPendingProfileChange: vi.fn(async () => {}) }));
+// What Delete here and the update block's Leave load besides the saved list (as update-block-leave.test.ts mocks them).
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
+    getItemAsync: vi.fn(async () => null),
+    setItemAsync: vi.fn(async () => {}),
+    deleteItemAsync: vi.fn(async () => {}),
+}));
+vi.mock('expo-crypto', async () => {
+    const { randomBytes } = await import('node:crypto');
+    return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
+});
+vi.mock('../db', () => ({ clearDB: vi.fn(async () => {}), closeDB: vi.fn(async () => {}), initDB: vi.fn(async () => {}) }));
+vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => {}) }));
+vi.mock('../../services/pillar-sync', () => ({ resetSyncFingerprints: vi.fn() }));
 
 import { getDatabaseFilenameForNode, addSavedNode, removeSavedNode } from '../nodes';
 import {
@@ -46,6 +61,8 @@ import {
 import { COMMUNITY_RECORDS_STORE_KEY, SAVED_NODES_STORE_KEY, homeAnswerStoreKey, homeLayoutStoreKey } from '../storage-keys';
 import { communityCachesRenamed, CACHE_NAMES_DONE_KEY, resetCommunityCachesRenamedForTests } from '../cache-file-migration';
 import { communityKey as toolCommunityKey } from '../../tools/community';
+import { leaveThisCommunity } from '../delete-here';
+import { leaveFromUpdateBlock, planLeaveFromUpdateBlock } from '../update-block-escape';
 
 const RIVERSIDE = 'https://riverside.example';
 const HILLSIDE = 'https://hillside.example:8443';
@@ -135,6 +152,63 @@ describe('a record is made the same way on an updated phone and a new install', 
         await loadCommunityRecords();
         expect(communityKeyOf(RIVERSIDE)).toBe(RIVERSIDE);
         expect(recordsKept().map((r) => r.id)).toEqual([RIVERSIDE]);
+    });
+});
+
+describe('every way a community comes off the saved list takes its record (#3227 deciding review)', () => {
+    const savedKept = () => (JSON.parse(h.store.get(SAVED_NODES_STORE_KEY) ?? '[]') as Array<{ url: string }>).map((n) => n.url);
+    const recordIds = () => recordsKept().map((r) => r.id);
+
+    /** A phone on Riverside that also keeps Hillside, both met through the app (their records made then). */
+    async function onRiversideWithHillside() {
+        await addSavedNode(RIVERSIDE);
+        await addSavedNode(HILLSIDE);
+        h.store.set('beanpool_anchor_url', RIVERSIDE);
+        expect(recordIds()).toEqual([RIVERSIDE, HILLSIDE]);
+    }
+
+    it('Delete here, while another community keeps the key (delete-here.ts leaveThisCommunity)', async () => {
+        await onRiversideWithHillside();
+        await leaveThisCommunity(RIVERSIDE, HILLSIDE);
+        expect(savedKept()).toEqual([HILLSIDE]);
+        expect(recordIds()).toEqual([HILLSIDE]);
+        expect(communityRecordOf(RIVERSIDE)).toBeNull();
+        // And the next app start doesn't make it again: Riverside is neither saved nor in use.
+        coldStart();
+        await communityRecordsReady();
+        expect(recordIds()).toEqual([HILLSIDE]);
+    });
+
+    it("the update block's Leave, with another community on the phone (the phone moves there)", async () => {
+        await onRiversideWithHillside();
+        const plan = await planLeaveFromUpdateBlock();
+        expect(plan.next?.url).toBe(HILLSIDE);
+        await expect(leaveFromUpdateBlock(null, plan)).resolves.toMatchObject({ kind: 'moved' });
+        expect(h.store.get('beanpool_anchor_url')).toBe(HILLSIDE);
+        expect(savedKept()).toEqual([HILLSIDE]);
+        expect(recordIds()).toEqual([HILLSIDE]);
+        expect(communityRecordOf(RIVERSIDE)).toBeNull();
+    });
+
+    it("the update block's Leave with no account and no other community, the row saved in another spelling", async () => {
+        await addSavedNode('https://Riverside.example/');
+        h.store.set('beanpool_anchor_url', RIVERSIDE);
+        expect(recordIds()).toEqual(['https://Riverside.example/']);
+        const plan = await planLeaveFromUpdateBlock();
+        expect(plan.next).toBeNull();
+        await expect(leaveFromUpdateBlock(null, plan)).resolves.toEqual({ kind: 'forgotten' });
+        expect(h.store.has('beanpool_anchor_url')).toBe(false);
+        expect(savedKept()).toEqual([]);
+        expect(recordIds()).toEqual([]);
+        expect(communityRecordOf(RIVERSIDE)).toBeNull();
+    });
+
+    it('a row comes off with its record even when the list holds rows that are not communities', async () => {
+        await onRiversideWithHillside();
+        h.store.set(SAVED_NODES_STORE_KEY, JSON.stringify([null, 'stray', { url: RIVERSIDE }, { url: HILLSIDE }]));
+        await removeSavedNode(RIVERSIDE);
+        expect(JSON.parse(h.store.get(SAVED_NODES_STORE_KEY)!)).toEqual([null, 'stray', { url: HILLSIDE }]);
+        expect(recordIds()).toEqual([HILLSIDE]);
     });
 });
 

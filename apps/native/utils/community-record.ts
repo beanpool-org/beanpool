@@ -123,7 +123,7 @@ export async function keepCommunityRecord(address: string, storage: RecordStorag
     });
 }
 
-/** `address`'s own record goes, as its saved row does (nodes.ts removeSavedNode). Never throws. */
+/** `address`'s own record goes, with its saved row (nodes.ts takeOffSavedList, the one way a row comes off). Never throws. */
 export async function forgetCommunityRecord(address: string, storage: RecordStorage = AsyncStorage): Promise<void> {
     await communityRecordsReady();
     await serially(async () => {

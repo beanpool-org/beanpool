@@ -16,12 +16,13 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, decideMessageRequest, reportDmLine, type DmKeyChange } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { DmKeyChangedNotice } from '../../components/chat/DmKeyChangedNotice';
 import { ChatImage, dmKeyContextOf } from '../../components/chat/DmChatImage';
-import { dmKeyBannerMaxHeight } from '../../utils/dm-key-change';
+import { dmKeyBannerMaxHeight, dmKeyCodeShowsVerified } from '../../utils/dm-key-change';
+import { keyCodeOf } from '../../utils/key-code';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
 import { routeChat, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
@@ -183,6 +184,9 @@ function ChatScreen({ id }: { id: string }) {
     const [keyChange, setKeyChange] = useState<DmKeyChange | null>(null);
     const keyChangePending = !!keyChange;
     const unplaced = !!keyChange?.unplaced;
+    // "Verified ✓" beside "🔒 End-to-end encrypted" (DESIGN-dm-key-signal-model §7 S2): while the member's mark holds and no
+    // new key waits, exactly when the key code screen shows it.
+    const [peerVerified, setPeerVerified] = useState(false);
     // The banner's height comes from the column under the header as measured (utils/dm-key-change dmKeyBannerMaxHeight):
     // the paused box is never cut, edge-to-edge too, and the thread keeps one message at the text size on a 320 × 533
     // phone at 1.3× (#1873 review, findings 3 and 7). It scrolls inside that.
@@ -273,6 +277,10 @@ function ChatScreen({ id }: { id: string }) {
         headerTextContainer: { flex: 1, justifyContent: 'center' },
         headerTitle: { fontSize: 16, fontWeight: '800', color: colors.text.body, letterSpacing: 0.5 },
         headerSubtitle: { fontSize: 11, color: colors.brand.primary, fontWeight: '600', marginTop: 2 },
+        // The subtitle's row: "🔒 End-to-end encrypted" gives way first at 320 dp and 1.3× text, so "Verified ✓" stays whole.
+        headerSubtitleRow: { flexDirection: 'row', alignItems: 'center' },
+        headerSubtitleText: { flexShrink: 1 },
+        headerVerified: { flexShrink: 0, marginLeft: 6 },
         moreButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end' },
         stickyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.emerald50, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme === 'dark' ? colors.border.default : palette.emerald100 },
         stickyHeaderLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 16 },
@@ -655,6 +663,8 @@ function ChatScreen({ id }: { id: string }) {
         // "Sent from the new key" line for them. Unreadable pins: the banner stays as it was (undefined), and a send says why
         // it refused. A rule-5 record comes back as a change too (unplaced).
         const change = await getDmKeyChange(id as string).catch(() => undefined);
+        // Read after the check, so it sees the pin as the resting rule left it. Reads only; unreadable pins keep what showed.
+        const codeInfo = await getDmKeyCodeInfo(id as string).catch(() => undefined);
         let data: any[];
         try {
             data = await getMessages(id as string, { limit: msgLimitRef.current, notices: true });
@@ -669,6 +679,7 @@ function ChatScreen({ id }: { id: string }) {
         // Lines only: the key-changed notices are the phone's own and don't count toward the history window.
         messagesLenRef.current = data.filter((m: any) => !m.keyChangedNotice).length;
         if (change !== undefined) setKeyChange(change);
+        if (codeInfo !== undefined) setPeerVerified(dmKeyCodeShowsVerified(codeInfo, keyCodeOf(codeInfo?.peer)));
         if (identity?.publicKey) {
             await markConversationRead(id as string, identity.publicKey).catch(() => {});
         }
@@ -1572,9 +1583,14 @@ function ChatScreen({ id }: { id: string }) {
                     />
                     <View style={styles.headerTextContainer}>
                         <Text style={styles.headerTitle} numberOfLines={1}>{peerName}</Text>
-                        <Text style={styles.headerSubtitle} numberOfLines={1}>
-                            {isEncrypted ? t('🔒 End-to-end encrypted') : t('Connected via your community')}
-                        </Text>
+                        <View style={styles.headerSubtitleRow}>
+                            <Text style={[styles.headerSubtitle, styles.headerSubtitleText]} numberOfLines={1}>
+                                {isEncrypted ? t('🔒 End-to-end encrypted') : t('Connected via your community')}
+                            </Text>
+                            {isEncrypted && peerVerified && (
+                                <Text style={[styles.headerSubtitle, styles.headerVerified]} numberOfLines={1}>{t('Verified ✓')}</Text>
+                            )}
+                        </View>
                     </View>
                 </Pressable>
 

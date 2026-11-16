@@ -138,8 +138,36 @@ export function dmKeyChangedNoticeText(peerName?: string | null): string {
         : t("This chat's key changed. This usually means the other person got back into their account on a new phone. Tap to see their key code.");
 }
 
-/** What the key code screen is showing (§3): exactly one of these under the code. */
-export type DmKeyCodeState = 'not-verified' | 'verified' | 'paused' | 'none';
+/**
+ * What the key code screen is showing (§3): exactly one of these under the code. 'paused': a verified person's new key
+ * waits at the top of the chat; 'waiting': a pause with no single key listed (several, none, or listings that disagree),
+ * verified or not, with nothing to mark while it lasts (S2).
+ */
+export type DmKeyCodeState = 'not-verified' | 'verified' | 'paused' | 'waiting' | 'none';
+
+/** What the screen reads to pick its state: utils/db.ts DmKeyCodeInfo's flags. */
+export interface DmKeyCodeFlags {
+    verified: boolean;
+    paused: boolean;
+    offersKey: boolean;
+}
+
+/** The key code screen's one state under the code, for the code it shows (null: there is none). */
+export function dmKeyCodeState(info: DmKeyCodeFlags | null | undefined, code: string | null): DmKeyCodeState {
+    if (!code) return 'none';
+    if (info?.offersKey) return 'paused';
+    if (info?.paused) return 'waiting';
+    return info?.verified ? 'verified' : 'not-verified';
+}
+
+/**
+ * "Verified ✓", on the key code screen and beside "🔒 End-to-end encrypted" under the chat's name (§7 S2): shown exactly
+ * while the person is marked verified and no new key waits for the member, so never beside a card asking about one.
+ */
+export function dmKeyCodeShowsVerified(info: DmKeyCodeFlags | null | undefined, code: string | null): boolean {
+    const state = dmKeyCodeState(info, code);
+    return !!info?.verified && (state === 'verified' || state === 'waiting');
+}
 
 export interface DmKeyCodeCopy {
     title: string;
@@ -152,6 +180,8 @@ export interface DmKeyCodeCopy {
     verifiedNote: string;
     remove: string;
     paused: string;
+    /** Why sending waits while no single key is listed ('waiting'). */
+    waiting: string;
     none: string;
     moved: string;
     removeConfirmTitle: string;
@@ -179,6 +209,9 @@ export function dmKeyCodeCopy(peerName: string | null | undefined, whilePaused =
             : t('This phone asks you before it sends to a new key for this person. Kept on this phone only.'),
         remove: t('Remove verification'),
         paused: name ? t("{name}'s key changed. The new code is at the top of the chat.", { name }) : t("This chat's key changed. The new code is at the top of the chat."),
+        waiting: name
+            ? t("This community doesn't list a single key for {name} in this chat, so sending waits.", { name })
+            : t("This community doesn't list a single key for the other person in this chat, so sending waits."),
         none: t('There is no key code to show for this chat yet.'),
         moved: t("This chat's key changed while you were checking. Look at the new code and check it again."),
         removeConfirmTitle: t('Remove verification?'),

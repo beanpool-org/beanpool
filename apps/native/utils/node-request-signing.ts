@@ -26,7 +26,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LANGUAGE_HEADER } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import { loadIdentity } from './identity';
-import { plainOriginOf, shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from './node-url';
+import { isPlainNodeAddress, plainOriginOf, shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from './node-url';
 import { getSavedNodes } from './nodes';
 import { APP_TOO_OLD_CODE, APP_VERSION_HEADER, noteAppRefused } from './force-update';
 import { languageForNode } from './language-choice';
@@ -50,6 +50,19 @@ export function isAnchorRequest(url: string, anchorUrl: string): boolean {
     return origin ? origin === anchor : url.startsWith(anchorUrl);
 }
 
+/**
+ * Whether `url` is a request to a community server's API, on any host: a plain address whose path is under `/api/`, where
+ * every BeanPool server answers and reads `X-Language` (apps/server member-words.ts). The member's language goes on each,
+ * not only on their own community's: another community they ask to join, their community's note for the worldwide forum,
+ * mail at the community that holds it, the worldwide community's directory and copies (#3271 review 4590770483). A host
+ * that is no community's (a store page, a platform's API) has no `/api/` path among the phone's requests, and never gets it.
+ */
+export function isCommunityApiRequest(url: string): boolean {
+    if (!isPlainNodeAddress(url)) return false;
+    const path = /^[a-z]+:\/\/[^/?#]*(\/[^?#]*)?/i.exec(url)?.[1] ?? '';
+    return path === '/api' || path.startsWith('/api/');
+}
+
 /** Whether `url` goes to the community open on this phone (the anchor) or a saved one: the same origin. */
 async function isSavedCommunity(url: string): Promise<boolean> {
     const origin = plainOriginOf(url);
@@ -68,10 +81,11 @@ function hasHeader(headers: any, name: string): boolean {
 }
 
 /**
- * A header on a request to the phone's own community: the app's version (`X-BeanPool-App: 1.2.57 android`), for the
- * community's counts of who runs what (an operator reads them before raising the floor:
- * apps/server/src/app-version-counts.ts), and the language this phone writes in (`X-Language: pt`, Marty's M6: not
- * signed, not stored), so a refusal comes back in it whichever helper made the request. Added to a plain headers object
+ * A header the wrapper adds: on a request to the phone's own community, the app's version (`X-BeanPool-App: 1.2.57
+ * android`), for the community's counts of who runs what (an operator reads them before raising the floor:
+ * apps/server/src/app-version-counts.ts); on that one and on any community's API ({@link isCommunityApiRequest}), the
+ * language this phone writes in (`X-Language: pt`, Marty's M6: not signed, not stored), so a refusal comes back in it
+ * whichever helper made the request, and whichever community answered. Added to a plain headers object
  * only, never over one the caller set: a Headers instance or a Request carries its own, and adding to those here would
  * replace them.
  */
@@ -85,8 +99,9 @@ function withHeader(input: any, init: any, name: string, value: string): any {
 
 /**
  * Wrap global.fetch once so GET requests to the anchor node carry a replay-proof
- * member signature, every request to it the phone's language, and the app's version when `appVersionHeader` is given
- * (a phone build: see utils/force-update.ts appVersionHeaderValue). Call once at app startup.
+ * member signature, every request to it and to any community's API ({@link isCommunityApiRequest}) the phone's language,
+ * and the anchor the app's version when `appVersionHeader` is given (a phone build: see utils/force-update.ts
+ * appVersionHeaderValue). Call once at app startup.
  */
 export function installNodeRequestSigning(options: { appVersionHeader?: string | null } = {}): void {
     if (installed) return;
@@ -132,7 +147,7 @@ export function installNodeRequestSigning(options: { appVersionHeader?: string |
                 const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
                 toAnchor = !!anchorUrl && isAnchorRequest(url, anchorUrl);
                 if (toAnchor && appVersionHeader) init = withHeader(input, init, APP_VERSION_HEADER, appVersionHeader);
-                if (toAnchor) init = withHeader(input, init, LANGUAGE_HEADER, languageForNode());
+                if (toAnchor || isCommunityApiRequest(url)) init = withHeader(input, init, LANGUAGE_HEADER, languageForNode());
                 // Only sign requests to our own node, and never double-sign.
                 if (method === 'GET' && toAnchor && !hasHeader(init?.headers, 'X-Signature')) {
                     const identity = await loadIdentity();

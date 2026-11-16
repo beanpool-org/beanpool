@@ -458,6 +458,14 @@ async function main(): Promise<void> {
     const oldRead = await call('GET', ann, '/api/blocks');
     assert(newRead.status === 200 && sameSet(listed(newRead), [bo.pk, eve.pk]), `she reads it on her new key (${show(newRead)})`);
     assert(oldRead.status === 403 && oldRead.body?.code === 'key_invalidated', `the old key reads nothing (${show(oldRead)})`);
+    // The phone keeps its own copy of the list, under the old key: the read says which key a re-key replaced with this one
+    // (routes/blocks.ts formerKeys), so the phone's block follows (apps/native utils/blocklist.ts). Review of #3268, finding 2.
+    const boRead = await call('GET', bo, '/api/blocks');
+    assert(boRead.status === 200 && same(listed(boRead), [annNew.pk]) && same(boRead.body?.formerKeys?.[annNew.pk] ?? [], [ann.pk])
+        && Object.keys(boRead.body?.formerKeys ?? {}).length === 1,
+        `Bo's read names her old key as her new key's former one, and nothing else (${JSON.stringify(boRead.body?.formerKeys)})`);
+    assert(newRead.body?.formerKeys && Object.keys(newRead.body.formerKeys).length === 0,
+        `a list of keys no re-key replaced names no former keys (${JSON.stringify(newRead.body?.formerKeys)})`);
 
     // ── 8. replication ──────────────────────────────────────────────────────────────────────────
     console.log('\n── 8. replication: a standby holds every list ──');

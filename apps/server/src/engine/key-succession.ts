@@ -59,6 +59,41 @@ export function rekeyedFromOf(pubkey: string): { pubkey: string; at: string; att
 }
 
 /**
+ * For each of `keys`, every key a completed re-key replaced with it, followed back through earlier re-keys (attested or
+ * not: an admin's re-key of a lost phone is never attested until its member confirms it), newest first, at most
+ * KEY_SUCCESSION_MAX. GET /api/blocks names them for the keys on the signer's list: a re-key moved the community's row of
+ * a block to the new key (member-blocks.ts moveBlocks), and a phone that keeps its own copy of the list learns from this
+ * that a key it blocked is now this one, so the block holds there too. Only keys with any; one read of the re-key rows.
+ */
+export function rekeyedFromChains(keys: readonly string[]): Record<string, string[]> {
+    const out: Record<string, string[]> = {};
+    if (keys.length === 0) return out;
+    const rows = db.prepare(`SELECT public_key, rekeyed_to FROM invalidated_keys
+                             WHERE reason = 'rekeyed' AND rekeyed_to IS NOT NULL ORDER BY invalidated_at DESC`).all() as { public_key: string; rekeyed_to: string }[];
+    const bySuccessor = new Map<string, string[]>();
+    for (const r of rows) bySuccessor.set(r.rekeyed_to, [...(bySuccessor.get(r.rekeyed_to) ?? []), r.public_key]);
+    for (const key of keys) {
+        const chain: string[] = [];
+        const seen = new Set<string>([key]);
+        let frontier = [key];
+        while (frontier.length > 0 && chain.length < KEY_SUCCESSION_MAX) {
+            const next: string[] = [];
+            for (const k of frontier) {
+                for (const former of bySuccessor.get(k) ?? []) {
+                    if (seen.has(former) || chain.length >= KEY_SUCCESSION_MAX) continue;
+                    seen.add(former);
+                    chain.push(former);
+                    next.push(former);
+                }
+            }
+            frontier = next;
+        }
+        if (chain.length > 0) out[key] = chain;
+    }
+    return out;
+}
+
+/**
  * Every member's served chain of former keys, read once (a roster names many members): from each key back through
  * `rekeyed_to`, attested rows only, newest first, at most KEY_SUCCESSION_MAX. The walk stops at the first row with no
  * statement: a chain broken there could not be followed past it by any app (core walkKeySuccession).

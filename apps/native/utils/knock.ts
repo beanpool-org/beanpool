@@ -14,7 +14,10 @@
  * phone is a member there (utils/knock-address.ts `knockFromNode`); otherwise it is left out, and the members' list
  * says the request came from the BeanPool app.
  *
- *   POST <community>/api/join/knock          { message, callsign, avatar?, fromNode?, toNode }  → 201 { knock: { status: 'pending' } }
+ *   POST <community>/api/join/knock          { message, callsign, avatar?, fromNode?, toNode, forumPosts?, forumSecret? }
+ *                                            → 201 { knock: { status: 'pending' } }
+ *   (`forumPosts` and `forumSecret`: up to three of the asker's own posts on the worldwide forum, picked on the form, forums
+ *   F11b: utils/forum-ask-picks.ts and core forumAskSend.)
  *   GET  <community>/api/join/knock/status   → { status: 'none' | 'pending' } | { status: 'approved', invite, expiresAt }
  *
  * ## What the member is told
@@ -33,7 +36,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { KNOCK_ANSWERABLE_DAYS, isPeekTicket, knockStillAnswerable, notANameIn, notANameWords, t, word, retryAfterSecondsOf } from '@beanpool/core';
+import { KNOCK_ANSWERABLE_DAYS, isPeekTicket, knockStillAnswerable, notANameIn, notANameWords, t, word, retryAfterSecondsOf, type ForumAskSend } from '@beanpool/core';
 import { signedGet, signedPost } from './node-post';
 import { communityOrigin } from './community-directory';
 import { GLOBAL_NODE_URL } from './node-profile';
@@ -112,6 +115,11 @@ export interface KnockRequest {
      * community never refuses a request for one that opens nothing.
      */
     peek?: string | null;
+    /**
+     * Up to three of the asker's own posts on the worldwide forum and their secret there, as core's forumAskSend makes them
+     * from the picker (forums F11b, utils/forum-ask-picks.ts). Left out when null: the request goes plain.
+     */
+    forum?: ForumAskSend | null;
 }
 
 // ── The form ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -152,7 +160,7 @@ export function knockAvatar(value: string | null | undefined): string | undefine
  */
 export function knockBody(
     req: KnockRequest, toNode?: string, fromNode: string | null = KNOCK_FROM_NODE,
-): { message: string; callsign: string; fromNode?: string; toNode?: string; avatar?: string; peek?: string } {
+): { message: string; callsign: string; fromNode?: string; toNode?: string; avatar?: string; peek?: string } & Partial<ForumAskSend> {
     const avatar = knockAvatar(req.avatar);
     return {
         message: req.message.trim(),
@@ -161,6 +169,7 @@ export function knockBody(
         ...(toNode ? { toNode } : {}),
         ...(avatar ? { avatar } : {}),
         ...(isPeekTicket(req.peek) ? { peek: req.peek } : {}),
+        ...(req.forum ? { forumPosts: req.forum.forumPosts, forumSecret: req.forum.forumSecret } : {}),
     };
 }
 

@@ -299,9 +299,12 @@ export function CommunityShapeSection({
         );
     };
 
-    /** An admin's "Advise the owners" under a Core row; an owner has Unlock to change, and a standby takes no advice. */
+    /**
+     * An admin's "Advise the owners" under a Core row; an owner has Unlock to change, and a standby takes no advice. Never
+     * under the Forum or Learn row: the server takes advice about the core settings only (config/core-advice.ts `not_core`).
+     */
     const adviseButton = (key: keyof ShapeSettings) => {
-        if (!advising) return undefined;
+        if (!advising || !isCoreSetting(key)) return undefined;
         return (
             <AdviseTheOwners
                 setting={key}

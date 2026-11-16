@@ -637,6 +637,28 @@ describe('Core settings — an admin advises the owners (C4)', () => {
         }
     });
 
+    it('nor under the Forum or Learn row, locked or not: the server takes advice about core settings only (not_core)', async () => {
+        const withBoth = (core: Shape['core']) => shapeWith({
+            core,
+            settings: {
+                forum: { value: true, configured: true, source: 'default', lock: null },
+                knowledge: { value: true, configured: true, source: 'default', lock: null },
+            } as Partial<ShapeSettings>,
+        });
+        for (const lock of [LOCK, null]) {
+            mockApi(withBoth({ settings: [...CORE_SETTINGS], lock, place: { needed: true, set: true } }));
+            render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);
+            await screen.findByText('🧭');
+            for (const id of ['forum', 'knowledge']) {
+                const row = screen.getByTestId(`shape-row-${id}`);
+                expect(within(row).queryByRole('button', { name: 'Advise the owners' })).toBeNull();
+                expect(screen.queryByTestId(`shape-core-lock-${id}`)).toBeNull();
+            }
+            expect(within(screen.getByTestId('shape-row-decisions')).getByRole('button', { name: 'Advise the owners' })).toBeInTheDocument();
+            cleanup();
+        }
+    });
+
     it('an owner never sees it (they have Unlock to change), and nor does an admin on a standby', async () => {
         mockApi(locked());
         render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);

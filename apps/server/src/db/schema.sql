@@ -4050,6 +4050,22 @@ CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_home ON relay_mail_seen(sender_ho
 CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_stranger ON relay_mail_seen(sender_key, stranger_to, seen_at);
 CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_at ON relay_mail_seen(seen_at);
 
+-- relay_mail_refused: the refusal a guest's group item was given here (engine/group-guests.ts takeGuestItem: `epoch-stale`,
+-- `group-refused`), by its sender and id, for as long as relay_mail_seen keeps that id spent (7 days). Its home bringing the
+-- same item again (it never heard the answer) is given the same refusal, never "received": a guest's home settles a
+-- received item `sent`, and the guest's device would seal lines under an epoch this server never took (G2 round 2, #3246
+-- round 2 note). Answered only to the server that brought it the first time. This server's own (`local`), as
+-- relay_mail_seen is. Day zero: a new table, nothing converted.
+CREATE TABLE IF NOT EXISTS relay_mail_refused (
+    sender_key  TEXT NOT NULL CHECK (length(sender_key) = 64),
+    item_id     TEXT NOT NULL CHECK (length(item_id) BETWEEN 1 AND 64),
+    sender_home TEXT NOT NULL CHECK (length(sender_home) BETWEEN 1 AND 260),
+    refused     TEXT NOT NULL CHECK (length(refused) BETWEEN 1 AND 40),
+    seen_at     INTEGER NOT NULL,
+    PRIMARY KEY (sender_key, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_relay_mail_refused_at ON relay_mail_refused(seen_at);
+
 -- relay_outbox: an item a member here sent to someone in another community, and what became of it: `queued` (the other
 -- server has not taken it yet; retried with backoff for 24 hours), `sent` (it answered 2xx), `delivered` (the recipient's
 -- device confirmed it: their signed receipt came back), `failed` (24 hours and never taken), `expired` (sent, and no receipt
@@ -4122,6 +4138,27 @@ CREATE TABLE IF NOT EXISTS group_guest_outbox (
 CREATE INDEX IF NOT EXISTS idx_group_guest_outbox_due ON group_guest_outbox(next_try_at);
 CREATE INDEX IF NOT EXISTS idx_group_guest_outbox_home ON group_guest_outbox(home, next_try_at);
 
+-- group_guest_clock: the order rule's counter (slice G2, engine/group-guests.ts issueGuestSeq): for each group hosted here
+-- that has told a guest's home where its guests stand, the last counter issued. Every invitation, removal, roster and line
+-- taken down carries the counter it was queued with, and the guest's home keeps per guest the newest it took
+-- (group_guest_order there), so an older notice from either server, arriving in any order, changes nothing there. A plain
+-- table: a standby copies it, so the server that takes over issues past it. A row is never deleted. Day zero: a new table,
+-- nothing converted.
+CREATE TABLE IF NOT EXISTS group_guest_clock (
+    group_id   TEXT PRIMARY KEY CHECK (length(group_id) BETWEEN 1 AND 64),
+    seq        INTEGER NOT NULL CHECK (seq > 0),
+    updated_at TEXT
+);
+
+-- group_guest_told: the last counter THIS server issued for each group (engine/group-guests.ts retellGuestHomes). The copied
+-- counter past it means another server told the guests' homes things this server's outbox never held (a take-over, or a
+-- take-back), so this server tells them again where their guests stand. This server's own (`local`): never in a copy, so
+-- a promoted standby, which has none, tells every home again once. Day zero: a new table, nothing converted.
+CREATE TABLE IF NOT EXISTS group_guest_told (
+    group_id TEXT PRIMARY KEY CHECK (length(group_id) BETWEEN 1 AND 64),
+    seq      INTEGER NOT NULL CHECK (seq > 0)
+);
+
 -- Group guests, the guest's own community (slice G1b; engine/group-guest-home.ts). A member here who is invited into, or a
 -- guest in, a group hosted by another community's server. Day zero: new tables, nothing converted; the mailbox's own tables
 -- (relay_mail, relay_outbox) are left as they are.
@@ -4144,6 +4181,22 @@ CREATE TABLE IF NOT EXISTS group_guest_links (
     roster     TEXT CHECK (roster IS NULL OR length(roster) <= 1900000),
     roster_at  INTEGER,
     state_at   INTEGER NOT NULL,
+    updated_at TEXT,
+    PRIMARY KEY (member, host, group_id)
+);
+
+-- group_guest_order: the order rule at the guest's home (slice G2, engine/group-guest-home.ts): for each (member, host,
+-- group), the newest counter of the host's (`seq`, group_guest_clock there) in a notice that says where the member stands
+-- (an invitation, a removal, the roster) that reached here. One no newer changes nothing, whichever of the host's servers
+-- sent it and whenever it arrives. Kept when a withdrawn invitation leaves no link. A plain table: a standby copies it, so a
+-- promoted standby keeps the order. A row with no newer notice for MAIL_HELD_DAYS and two days ages out on each server (the
+-- manifest's age rule): by then no notice it is newer than can still come, since the host keeps nothing older than
+-- MAIL_HELD_DAYS and a day. Day zero: a new table, nothing converted.
+CREATE TABLE IF NOT EXISTS group_guest_order (
+    member     TEXT NOT NULL CHECK (length(member) = 64),
+    host       TEXT NOT NULL CHECK (length(host) BETWEEN 1 AND 260),
+    group_id   TEXT NOT NULL CHECK (length(group_id) BETWEEN 1 AND 64),
+    seq        INTEGER NOT NULL CHECK (seq > 0),
     updated_at TEXT,
     PRIMARY KEY (member, host, group_id)
 );

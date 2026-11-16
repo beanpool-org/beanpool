@@ -514,9 +514,9 @@ async function main(): Promise<void> {
                 const rowAt = (i: number) => (i === 0 ? t0 : t0 + Math.floor(i * outage * MIN / n) + 30_000);
                 const queue = (i: number, t: number) => {
                     if (side === 'host fan-out') {
-                        // An epoch notice: a `line` row goes only while its line stands in the chat here (the copy rule, #3233 round 3).
+                        // A line's takedown: the one kind that goes whatever this server holds (a line once down stays down: the send rule, #3233 round 5).
                         db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)')
-                            .run(crypto.randomUUID(), 'g7', far, 'epoch', JSON.stringify({ v: 1, kind: 'epoch', group: 'g7', host: 'a.example', guests: [gus.pk], data: { i } }), t, t);
+                            .run(crypto.randomUUID(), 'g7', far, 'edit', JSON.stringify({ v: 1, kind: 'edit', group: 'g7', host: 'a.example', guests: [gus.pk], data: { id: `l7-${i}`, action: 'removed', by: 'author', i } }), t, t);
                     } else {
                         db.prepare(`INSERT INTO group_guest_sent (sender_key, item_id, kind, host, group_id, state, item, attempts, next_try_at, created_at, updated_at)
                                     VALUES (?, ?, 'group-line', ?, 'g7', 'queued', ?, 0, ?, ?, ?)`)
@@ -769,9 +769,9 @@ async function main(): Promise<void> {
             const t = simNow;
             const queue11 = (h: string, i: number, attempts: number, nextTry: number, created: number) => {
                 if (side === 'host fan-out') {
-                    // An epoch notice: a `line` row goes only while its line stands in the chat here (the copy rule, #3233 round 3).
+                    // A line's takedown: the one kind that goes whatever this server holds (a line once down stays down: the send rule, #3233 round 5).
                     db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-                        .run(crypto.randomUUID(), 'g11', h, 'epoch', JSON.stringify({ v: 1, kind: 'epoch', group: 'g11', host: 'a.example', guests: [gus.pk], data: { i } }), attempts, nextTry, created);
+                        .run(crypto.randomUUID(), 'g11', h, 'edit', JSON.stringify({ v: 1, kind: 'edit', group: 'g11', host: 'a.example', guests: [gus.pk], data: { id: `l11-${i}`, action: 'removed', by: 'author', i } }), attempts, nextTry, created);
                 } else {
                     const id = `c11-${row11}-${h[0]}-${String(i).padStart(3, '0')}`;
                     // Each row larger than half a request, so each goes in a request of its own.
@@ -978,9 +978,9 @@ async function main(): Promise<void> {
         flushGuestOutbox: {
             seed: async () => {
                 const id = crypto.randomUUID(), g = `g13-flush-${++n13}`, t = Date.now();
-                // An epoch notice: a `line` row goes only while its line stands in the chat here (the copy rule, #3233 round 3).
+                // A line's takedown: the one kind that goes whatever this server holds (a line once down stays down: the send rule, #3233 round 5).
                 db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)')
-                    .run(id, g, 'q.example', 'epoch', JSON.stringify({ v: 1, kind: 'epoch', group: g, host: 'a.example', guests: [gus.pk], data: {} }), t, t);
+                    .run(id, g, 'q.example', 'edit', JSON.stringify({ v: 1, kind: 'edit', group: g, host: 'a.example', guests: [gus.pk], data: { id: `l13-${n13}`, action: 'removed', by: 'author' } }), t, t);
                 return { who: gus, g, extra: id };
             },
             run: (t) => hostSide.flushGuestOutbox(t),

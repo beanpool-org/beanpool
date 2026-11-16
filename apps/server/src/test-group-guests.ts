@@ -51,6 +51,12 @@
  *      hour, 25 hours, MAIL_HELD_DAYS - 1, MAIL_HELD_DAYS and 12 hours, MAIL_HELD_DAYS + 1 and a minute) -> the home
  *      gets every take-away when it comes back while it may still hold what it takes away; the table: each take-away kept
  *      at least MAIL_HELD_DAYS, each row that adds a day; and every row that adds goes unsent once a day old
+ *  19f close the class, the send rule (#3233 round 5): every row kind (a line, an edit's new words, a takedown, an epoch, a
+ *      roster, an invitation, a removal) x every change after it was queued, written as the server that took over writes it
+ *      (none, line removed, line edited, guest removed, guest re-invited and in, guest re-invited not yet in, guest left,
+ *      group closed, take-over, take-back, home blocked) x its age (fresh, a day, MAIL_HELD_DAYS, MAIL_HELD_DAYS and a day) -> it goes (naming only
+ *      the guests it may still name, a line with its words now) or goes unsent; rows naming two guests go narrowed; the
+ *      guard reads the kinds from the code (the send rule's list, the outbox's CHECK, every queueToHome) against the table
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests node scripts/run-server-suites.mjs
  */
@@ -1510,7 +1516,7 @@ async function main(): Promise<void> {
     const KIND19F: Record<Row19f, string> = {
         line: 'line', 'edit (new words)': 'edit', 'edit (takedown)': 'edit', epoch: 'epoch', roster: 'roster', invite: 'invite', removal: 'removed',
     };
-    const CH19F = ['none', 'line removed', 'line edited', 'guest removed', 'guest re-invited and in', 'guest left', 'group closed', 'take-over', 'take-back', 'home blocked'] as const;
+    const CH19F = ['none', 'line removed', 'line edited', 'guest removed', 'guest re-invited and in', 'guest re-invited, not yet in', 'guest left', 'group closed', 'take-over', 'take-back', 'home blocked'] as const;
     type Ch19f = (typeof CH19F)[number];
     const AGES19F: Array<[string, number]> = [
         ['fresh', 0], ['past a day', QUEUE_MS + 60_000], [`past ${HELD_DAYS19} days`, HELD19 + DAY19 / 2], [`past ${HELD_DAYS19} days and a day`, HELD19 + DAY19 + 60_000],
@@ -1521,17 +1527,19 @@ async function main(): Promise<void> {
      * A fresh row, by the change after it was queued. The line changes act on the row's own line (a line, an edit, a
      * takedown) or, for the others, on a line of the group already sent. A takedown always goes (a line once down stays down);
      * a removal goes naming only the guests not in here now; nothing waits on a standby but waits; nothing goes to a home the
-     * owners blocked, take-aways included (design §4.2).
+     * owners blocked, take-aways included (design §4.2). Invited again but not yet in, a removal still goes: on one server
+     * their new invitation is queued behind it, and their home shows an invitation only once it has them out (it holds
+     * nothing for an invitation to a guest it has in).
      */
     const FRESH19F: Record<Row19f, Record<Ch19f, string>> = {
-        //                          none line removed line edited guest removed re-invited, in guest left group closed take-over take-back home blocked
-        line:               cols19f(GO,  DROP,        NEWEST,     DROP,         GO,            DROP,      DROP,        WAIT,     GO,       DROP),
-        'edit (new words)': cols19f(GO,  DROP,        NEWEST,     DROP,         GO,            DROP,      DROP,        WAIT,     GO,       DROP),
-        'edit (takedown)':  cols19f(GO,  GO,          GO,         GO,           GO,            GO,        GO,          WAIT,     GO,       DROP),
-        epoch:              cols19f(GO,  GO,          GO,         DROP,         GO,            DROP,      DROP,        WAIT,     GO,       DROP),
-        roster:             cols19f(GO,  GO,          GO,         DROP,         GO,            DROP,      DROP,        WAIT,     GO,       DROP),
-        invite:             cols19f(GO,  GO,          GO,         DROP,         DROP,          DROP,      DROP,        WAIT,     GO,       DROP),
-        removal:            cols19f(GO,  GO,          GO,         GO,           DROP,          GO,        GO,          WAIT,     GO,       DROP),
+        //                          none line removed line edited guest removed re-invited, in re-invited, not in guest left group closed take-over take-back home blocked
+        line:               cols19f(GO,  DROP,        NEWEST,     DROP,         GO,            DROP,               DROP,      DROP,        WAIT,     GO,       DROP),
+        'edit (new words)': cols19f(GO,  DROP,        NEWEST,     DROP,         GO,            DROP,               DROP,      DROP,        WAIT,     GO,       DROP),
+        'edit (takedown)':  cols19f(GO,  GO,          GO,         GO,           GO,            GO,                 GO,        GO,          WAIT,     GO,       DROP),
+        epoch:              cols19f(GO,  GO,          GO,         DROP,         GO,            DROP,               DROP,      DROP,        WAIT,     GO,       DROP),
+        roster:             cols19f(GO,  GO,          GO,         DROP,         GO,            DROP,               DROP,      DROP,        WAIT,     GO,       DROP),
+        invite:             cols19f(GO,  GO,          GO,         DROP,         DROP,          GO,                 DROP,      DROP,        WAIT,     GO,       DROP),
+        removal:            cols19f(GO,  GO,          GO,         GO,           DROP,          GO,                 GO,        GO,          WAIT,     GO,       DROP),
     };
     /** A row that takes away is kept MAIL_HELD_DAYS and a day, one that adds a day; past it, it goes unsent (a standby keeps it). */
     const want19f = (r: Row19f, ch: Ch19f, age: number): string => {
@@ -1604,6 +1612,7 @@ async function main(): Promise<void> {
         if (ch === 'line edited') db.prepare("UPDATE messages SET ciphertext = ?, nonce = ?, edited_at = ? WHERE id = ? AND type != 'removed'").run(s.edited.ciphertext, s.edited.nonce, new Date().toISOString(), s.L.clientId);
         if (ch === 'guest removed') setX('removed');
         if (ch === 'guest re-invited and in') setX('in');
+        if (ch === 'guest re-invited, not yet in') setX('invited');
         if (ch === 'guest left') setX('left');
         if (ch === 'group closed') {
             db.prepare('INSERT INTO group_closures (group_id, decision_id, closed_at) VALUES (?, ?, ?)').run(s.g, 'test-close-19f', new Date().toISOString());

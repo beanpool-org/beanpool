@@ -63,6 +63,7 @@ import { HomePage } from './pages/HomePage';
 import { MobileHeader, SidebarStatus } from './components/AppHeader';
 import { KNOWLEDGE_NAMES, dealsNeedingMe, forumDoorOfSearch, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type Guide, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { takeKeptLinkedTopic } from './lib/forum-public';
+import type { ForumDoor } from './pages/ForumPage';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
@@ -317,7 +318,11 @@ export function App() {
     // And the topic it opens on: a door to one topic (`/app?forumTopic=<id>`, or the one a visitor kept at Join to reply; slice F7).
     // Cleared with the flag once ChatTabPage takes them, so a later forum notice opens the Forum's list (#3228 review).
     const [openForumTopic, setOpenForumTopic] = useState<string | null>(null);
-    useEffect(() => { if (activeTab !== 'messages') { setOpenChatForum(false); setOpenForumTopic(null); } }, [activeTab]);
+    // A door into the forum from elsewhere in the app (slice F9): a topic a listing, a group or a Learn page names, or the
+    // "Start a community near you" section searched for a town. A new object each time, so the same door opens twice; taken
+    // with the flag, as openForumTopic is (ChatTabPage keeps it only while that Forum stays picked).
+    const [forumDoor, setForumDoor] = useState<ForumDoor | null>(null);
+    useEffect(() => { if (activeTab !== 'messages') { setOpenChatForum(false); setOpenForumTopic(null); setForumDoor(null); } }, [activeTab]);
     // Learn's "🫘 Thank {name}" (K8): the Ledger's Send form opens with the writer and the note filled in, taken once.
     const [ledgerSend, setLedgerSend] = useState<LearnThank | null>(null);
     const clearLedgerSend = useCallback(() => setLedgerSend(null), []);
@@ -665,6 +670,19 @@ export function App() {
             setSettingsGuidePage(contextId ?? null);
             setSettingsInitialMode('guide');
             setShowSettings(true);
+            return;
+        }
+        // A forum door (slice F9): `forum-topic` + a topic's id ("Talked about in the forum", "Topics about this group", "From the
+        // forum"), `forum-section` + a section's id (a group's own Topics row), or `forum-start-community` + a town, maybe '' (a
+        // circle's card, the Find card): that section, searched for it.
+        if (tab === 'forum-topic' || tab === 'forum-section' || tab === 'forum-start-community') {
+            setOpenGroup(null);
+            closePagesOver();
+            setShowSettings(false);
+            setActiveTab('messages');
+            setChatNavNonce(n => n + 1);
+            setOpenChatForum(true);
+            setForumDoor(tab === 'forum-topic' ? { topic: contextId ?? null } : tab === 'forum-section' ? { section: contextId ?? '' } : { starter: 'start-community', q: contextId ?? '' });
             return;
         }
         // A forum notice (components/NeedsYouIcons.tsx goToNoticeTarget): the Chat tab on its Forum side.
@@ -1599,7 +1617,9 @@ export function App() {
                                     homeNonce={chatHomeNonce}
                                     openForum={openChatForum}
                                     openForumTopic={openForumTopic}
-                                    onForumOpened={() => { setOpenChatForum(false); setOpenForumTopic(null); }}
+                                    openForumDoor={forumDoor}
+                                    onComposer={openComposerFromTool}
+                                    onForumOpened={() => { setOpenChatForum(false); setOpenForumTopic(null); setForumDoor(null); }}
                                     onConversationOpened={() => setOpenConversationId(null)}
                                     onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
@@ -1649,6 +1669,7 @@ export function App() {
                             onClose={() => setOpenGroup(null)}
                             myPubkey={identity?.publicKey}
                             identity={identity}
+                            onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                         />
                     )}
                     {openGroupVotes && (

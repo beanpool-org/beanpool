@@ -23,7 +23,8 @@ import { useEffect, useState, type ComponentProps } from 'react';
 import { chatSides, chatSideShown, t, type ChatSide, type ChatSideEntry } from '@beanpool/core';
 import { useCommunityInfo } from '../lib/features';
 import { MessagesPage } from './MessagesPage';
-import { ForumPage } from './ForumPage';
+import { ForumPage, type ForumDoor } from './ForumPage';
+import type { ComposerDraft } from '../tools/builder';
 
 /** Two tabs across, as the phone's: the side shown underlined, the other in the accent's ink (4.5:1 or more in Light and
  *  Dark; --text-muted is 4.3:1 on Light's page, short for words this size at 1280 px); each a 44 px target. Long names
@@ -61,13 +62,17 @@ export function ChatFrameSwitch({ sides, side, onChange }: {
     );
 }
 
-export function ChatTabPage({ navNonce, openForum, openForumTopic = null, onForumOpened, homeNonce, ...props }: ComponentProps<typeof MessagesPage> & {
+export function ChatTabPage({ navNonce, openForum, openForumTopic = null, openForumDoor = null, onComposer, onForumOpened, homeNonce, ...props }: ComponentProps<typeof MessagesPage> & {
     /** Changes at every arrival at the tab from elsewhere (App's navigateToTab), with a conversation or without one. */
     navNonce?: number;
     /** The arrival was for the Forum (a forum notice, slice F5): the Forum side, once; {@link onForumOpened} then clears it. */
     openForum?: boolean;
     /** With it, the topic the Forum opens on (a door to one topic, slice F7): read with that arrival only, like openForum. */
     openForumTopic?: string | null;
+    /** With it, a door from elsewhere in the app (slice F9): a topic, or a section searched for words; read with that arrival only. */
+    openForumDoor?: ForumDoor | null;
+    /** Make this a Need (slice F9): the Market's form, filled from the topic. */
+    onComposer?: (draft: ComposerDraft) => void;
     onForumOpened?: () => void;
 }) {
     const features = useCommunityInfo()?.features;
@@ -77,8 +82,11 @@ export function ChatTabPage({ navNonce, openForum, openForumTopic = null, onForu
     // Forum drawn afresh later (the member went to Chats and back, or a forum notice came) opens on its list, not on the
     // door's old topic again (#3228 review).
     const [doorTopic, setDoorTopic] = useState<string | null>(null);
+    // And a door from elsewhere (slice F9), the same way: taken with its arrival, gone at Chats (round 2, #3252: the Chats side
+    // and back opened it again), and let go of once the Forum has taken it (onDoorTaken).
+    const [door, setDoor] = useState<ForumDoor | null>(null);
     const side = chatSideShown(picked, features);
-    const toChats = () => { setPicked('chats'); setDoorTopic(null); };
+    const toChats = () => { setPicked('chats'); setDoorTopic(null); setDoor(null); };
     useEffect(() => { toChats(); }, [navNonce]);
     useEffect(() => { if (props.openConversationId) toChats(); }, [props.openConversationId]);
     // After the arrival's Chats above, in the same render: the Forum wins. Taken once, so the tab's own button later (which
@@ -87,6 +95,7 @@ export function ChatTabPage({ navNonce, openForum, openForumTopic = null, onForu
         if (!openForum) return;
         setPicked('forum');
         setDoorTopic(openForumTopic);
+        setDoor(openForumDoor);
         onForumOpened?.();
     }, [openForum]);
     const pick = (next: ChatSide) => { if (next === 'forum') setPicked(next); else toChats(); };
@@ -101,7 +110,8 @@ export function ChatTabPage({ navNonce, openForum, openForumTopic = null, onForu
                 // MessagesPage's list padding and width, so the switch stays where it was.
                 <div className="p-4 md:p-6 max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full">
                     {frame}
-                    <ForumPage me={props.identity.publicKey} onOpenProfile={props.onOpenProfile} topicId={doorTopic} homeNonce={homeNonce} />
+                    <ForumPage me={props.identity.publicKey} onOpenProfile={props.onOpenProfile} topicId={doorTopic} door={door} onDoorTaken={() => setDoor(null)}
+                        homeNonce={homeNonce} onNavigate={props.onNavigate} onMakeNeed={onComposer} />
                 </div>
             )}
         </>

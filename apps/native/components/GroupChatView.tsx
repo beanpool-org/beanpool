@@ -328,6 +328,22 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const servedMissing = useRef(false);
     const lastAnswer = useRef<any>(null);
     const openThreadRef = useRef<(answer: any) => void>(() => { });
+    // The guests in the chat (G2), read once a visit beside the thread, never in its way: when they come, what is shown is
+    // opened again with their names. Loaded when needed, so the mailbox's modules stay out of the chat's own start.
+    const guestRowsRef = useRef<Array<{ memberPubkey: string; callsign: string }>>([]);
+    useEffect(() => {
+        if (kind !== 'group') return;
+        let alive = true;
+        import('../utils/guest-chat-live')
+            .then((m) => m.guestRosterRows(id))
+            .then((rows) => {
+                if (!alive || rows.length === 0) return;
+                guestRowsRef.current = rows;
+                if (lastAnswer.current) openThreadRef.current(lastAnswer.current);
+            })
+            .catch(() => { });
+        return () => { alive = false; };
+    }, [kind, id]);
     openThreadRef.current = (served: any) => {
         lastAnswer.current = served;
         // Through the DM guard: a known DM gets no keys synced here, whichever route drew this screen (#1841 review, 1).
@@ -344,8 +360,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     answer = { ...served, encryption: { current: st?.current ?? null, stale: st?.stale ?? true, fromEpoch: st?.fromEpoch ?? null } };
                 }
                 // Who this screen shows is who a key may go to (utils/group-chat-keys.ts rosterShown).
-                if (rosterRef.current.length) ring.noteShownRoster(rosterRef.current.map(r => r.memberPubkey));
-                const opened = await openGroupThread(ring, answer, rosterRef.current.map(r => ({ memberPubkey: r.memberPubkey, callsign: r.callsign, formerKeys: r.formerKeys })));
+                if (rosterRef.current.length) ring.noteShownRoster([...rosterRef.current.map(r => r.memberPubkey), ...guestRowsRef.current.map(r => r.memberPubkey)]);
+                // Guests from other communities in the chat (G2) are named by core's guest line, never as members.
+                const opened = await openGroupThread(ring, answer, [...rosterRef.current.map(r => ({ memberPubkey: r.memberPubkey, callsign: r.callsign, formerKeys: r.formerKeys })), ...guestRowsRef.current]);
                 setThread(opened);
                 if (!servedMissing.current) {
                     servedMissing.current = true;

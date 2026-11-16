@@ -17,6 +17,7 @@
  *  4. A topic in a group's section: its links reach nobody outside the group, nor do the topics that link a thing.
  *  5. The worldwide community: a Learn page cannot be linked (Learn is off there), and the public pages carry no links.
  *  6. A standby refuses a link (503 `standby`) and reads the links from its copy as the main server does.
+ *  7. The topics that link one thing are read by an index on (kind, target_id), not a scan (GET /api/forum/linked).
  *
  * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-forum-links" node ../../scripts/run-server-suites.mjs
  */
@@ -374,6 +375,13 @@ async function main(): Promise<void> {
     assert(onStandby.status === 503 && onStandby.body?.code === 'standby', `6. a standby refuses a link (${show(onStandby)})`);
     assert(readStandby.status === 200 && readStandby.body?.topic?.links?.[0]?.id === ownerOffer.id, '6. and reads the links from its copy as the main server does');
     assert(FORUM_LIMITS.topicLinks === 3, 'three things a topic (core)');
+
+    // ── 7. The topics that link one thing are found by their target ────────────────────────────
+    // "Talked about in the forum" reads GET /api/forum/linked on every listing page: by an index on (kind, target_id), never
+    // a scan of every topic's links (deciding review of #3237).
+    const plan = (db.prepare(`EXPLAIN QUERY PLAN SELECT topic_id FROM forum_links WHERE kind = ? AND target_id = ?`).all('listing', 'x') as { detail: string }[])
+        .map((r) => r.detail).join(' | ');
+    assert(/USING (COVERING )?INDEX idx_forum_links_target/.test(plan), `7. the linked topics are read by idx_forum_links_target (${plan})`);
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exit(1);

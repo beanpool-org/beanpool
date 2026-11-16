@@ -56,6 +56,8 @@ export default function OutsideChatScreen() {
     // Changes to lines (X6): each person's newest edit, reaction and delete, kept here; and a line of mine being edited.
     const [changes, setChanges] = useState<OutsideChange[]>([]);
     const [editing, setEditing] = useState<OutsideLine | null>(null);
+    // What was typed in the box when an edit began: set aside, and back in the box after Save or Cancel, never lost.
+    const [typedAside, setTypedAside] = useState('');
     const listRef = useRef<FlatList<OutsideLine>>(null);
 
     const load = useCallback(async () => {
@@ -103,13 +105,21 @@ export default function OutsideChatScreen() {
         ]);
     };
 
+    const startEditing = (line: OutsideLine, words: string) => {
+        if (!editing) setTypedAside(text);
+        setEditing(line);
+        setText(words);
+        setPicked(null);
+    };
+    const stopEditing = () => { setEditing(null); setText(typedAside); setTypedAside(''); };
+
     const send = async () => {
         const words = text.trim();
         if (!words || busy || !chat) return;
         setBusy(true);
         try {
             if (editing) {
-                if (await change({ kind: 'dm-edit', lineId: editing.id, text: words })) { setEditing(null); setText(''); }
+                if (await change({ kind: 'dm-edit', lineId: editing.id, text: words })) stopEditing();
                 return;
             }
             const ctx = await outsideContext();
@@ -281,7 +291,7 @@ export default function OutsideChatScreen() {
                                     {mine ? (
                                         <>
                                             <Pressable style={styles.reportLine} accessibilityRole="button" testID="outside-line-edit"
-                                                onPress={() => { setEditing(item); setText(shown.text); setPicked(null); }}>
+                                                onPress={() => startEditing(item, shown.text)}>
                                                 <MaterialCommunityIcons name="pencil-outline" size={16} color={colors.text.body} />
                                                 <Text style={styles.actionText}>{t('Edit message')}</Text>
                                             </Pressable>
@@ -363,7 +373,7 @@ export default function OutsideChatScreen() {
                         <View style={styles.editingBar} testID="outside-chat-editing">
                             <MaterialCommunityIcons name="pencil-outline" size={16} color={colors.text.secondary} />
                             <Text style={styles.editingText} numberOfLines={1}>{t('Edit message')}</Text>
-                            <Pressable style={styles.backBtn} onPress={() => { setEditing(null); setText(''); }} accessibilityRole="button" accessibilityLabel={t('Cancel')} testID="outside-chat-edit-cancel">
+                            <Pressable style={styles.backBtn} onPress={stopEditing} accessibilityRole="button" accessibilityLabel={t('Cancel')} testID="outside-chat-edit-cancel">
                                 <MaterialCommunityIcons name="close" size={20} color={colors.text.secondary} />
                             </Pressable>
                         </View>

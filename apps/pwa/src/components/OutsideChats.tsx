@@ -125,6 +125,8 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
     const [picked, setPicked] = useState<string | null>(null);
     const [editing, setEditing] = useState<OutsideLine | null>(null);
     const [deleting, setDeleting] = useState<OutsideLine | null>(null);
+    // What was typed in the box when an edit began: set aside, and back in the box after Save or Cancel, never lost.
+    const [typedAside, setTypedAside] = useState('');
     const alive = useRef(true);
     const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -170,7 +172,13 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
     };
 
 
-    const stopEditing = () => { setEditing(null); setText(''); };
+    const startEditing = (line: OutsideLine, words: string) => {
+        if (!editing) setTypedAside(text);
+        setEditing(line);
+        setText(words);
+        setPicked(null);
+    };
+    const stopEditing = () => { setEditing(null); setText(typedAside); setTypedAside(''); };
 
     const send = async () => {
         const words = text.trim();
@@ -311,7 +319,7 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
                                             {mine && (
                                                 <>
                                                     <button type="button" data-testid="outside-line-edit" style={{ ...button, flex: '0 0 auto' }}
-                                                        onClick={() => { setEditing(l); setText(shown.text); setPicked(null); }}>{t('Edit message')}</button>
+                                                        onClick={() => startEditing(l, shown.text)}>{t('Edit message')}</button>
                                                     <button type="button" data-testid="outside-line-delete" style={{ ...danger, flex: '0 0 auto' }} onClick={() => { setDeleting(l); setPicked(null); }}>{t('Delete message')}</button>
                                                 </>
                                             )}

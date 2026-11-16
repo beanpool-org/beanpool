@@ -1275,5 +1275,13 @@ describe('X6  changes to lines across communities', () => {
             await expect(sendOutsideChange(ctx, chatWith(ANA.key), { kind: 'dm-reaction', lineId: theirs, emoji: '👍' })).rejects.toBeInstanceOf(OutsideMailError);
             expect(outsideLineShown({ id: theirs, author: ANA.key, text: 'Theirs' }, await ctx.store.changes(BEN.key, chatWith(ANA.key)), BEN.key).reactions).toEqual([]);
         });
+
+        it('failed at once (Ana\'s community refused it inside its answer): taken back here, and says Not delivered', async () => {
+            const { mine } = await withLines();
+            server.sendState = 'failed';
+            await expect(sendOutsideChange(ctx, chatWith(ANA.key), { kind: 'dm-edit', lineId: mine, text: 'Never arrived' })).rejects.toMatchObject({ message: 'Not delivered', code: 'not_delivered' });
+            expect(outsideLineShown({ id: mine, author: BEN.key, text: 'Mine' }, await ctx.store.changes(BEN.key, chatWith(ANA.key)), BEN.key)).toMatchObject({ text: 'Mine', edited: false });
+            expect(await ctx.store.unsent(BEN.key)).toEqual([]);
+        });
     });
 });

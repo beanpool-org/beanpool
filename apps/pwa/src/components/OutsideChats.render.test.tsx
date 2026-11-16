@@ -177,6 +177,7 @@ describe('changes to lines (X6)', () => {
     it('a tap on my line: Edit message fills the box and Save sends the edit; Delete message asks first', async () => {
         const { mine } = await openWithLines();
         render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+        fireEvent.change(await screen.findByTestId('outside-chat-input'), { target: { value: 'half a thought' } });
         fireEvent.click(await screen.findByText('See you there'));
         fireEvent.click(await screen.findByTestId('outside-line-edit'));
         const box = screen.getByTestId('outside-chat-input') as HTMLTextAreaElement;
@@ -186,6 +187,8 @@ describe('changes to lines (X6)', () => {
         fireEvent.click(screen.getByTestId('outside-chat-send'));
         await waitFor(() => expect(sendOutsideChange).toHaveBeenCalledWith(here.ctx, chatId, { kind: 'dm-edit', lineId: mine, text: 'See you at 4' }));
         await waitFor(() => expect(screen.getByTestId('outside-chat-send').textContent).toBe('Send'));
+        // What was typed before the edit is back in the box, never lost.
+        expect((screen.getByTestId('outside-chat-input') as HTMLTextAreaElement).value).toBe('half a thought');
         fireEvent.click(await screen.findByText('See you there'));
         fireEvent.click(await screen.findByTestId('outside-line-delete'));
         expect(await screen.findByText('Delete for everyone?')).toBeTruthy();

@@ -321,7 +321,8 @@ export async function sendOutsideLine(ctx: OutsideMailContext, chatId: string, t
 /**
  * A change to a line of chat `chatId` (X6): an edit or a delete of a line of mine, or my reaction to any line ('' takes it
  * back). Applied here at once (kept with its signed item), then sent; one my server never answered goes again at the next
- * round. Throws OutsideMailError with my server's words when it refuses it for good: the change is then taken back here.
+ * round. Throws OutsideMailError with my server's words when it refuses it for good, or "Not delivered" when it answers
+ * the change failed at once: either way the change is then taken back here.
  */
 export async function sendOutsideChange(ctx: OutsideMailContext, chatId: string, c: { kind: OutsideChangeKind; lineId: string; text?: string; emoji?: string }): Promise<void> {
     const me = ctx.identity.publicKey;
@@ -339,6 +340,8 @@ export async function sendOutsideChange(ctx: OutsideMailContext, chatId: string,
     await ctx.store.putChange(chatId, change, JSON.stringify({ envelope, payload }));
     try {
         const state = (await postItems(ctx, [{ envelope, payload }])).find((a) => a.itemId === itemId)?.state;
+        // Failed at once (the other community refused it inside its answer): it never reached them, so it is taken back here.
+        if (state === 'failed') { await ctx.store.dropChange(itemId); throw new OutsideMailError(400, t('Not delivered'), 'not_delivered'); }
         if (state && STATES.includes(state as OutsideLineState)) await ctx.store.setMineState(itemId, state as OutsideLineState);
     } catch (e) {
         if (refusedForGood(e)) await ctx.store.dropChange(itemId);

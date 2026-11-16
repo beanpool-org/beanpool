@@ -862,7 +862,7 @@ describe('an outside chat: changes to lines (X6)', () => {
         await act(async () => { root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(OutsideChatScreen)) as any); });
         await settle();
     };
-    const byTest = (id: string) => [...host.querySelectorAll(`[data-testid="${id}"]`)] as HTMLElement[];
+    const byTest = (id: string) => Array.from(host.querySelectorAll(`[data-testid="${id}"]`)) as HTMLElement[];
     const click = async (el: Element | null | undefined) => { await act(async () => { (el as HTMLElement).click(); }); await settle(24); };
 
     it('reads its changes: edited, deleted, and reactions', async () => {
@@ -878,7 +878,7 @@ describe('an outside chat: changes to lines (X6)', () => {
     it('a tap on their line: the seven reactions and Report message, no Edit or Delete; a reaction tapped is sent, mine again takes it back', async () => {
         await draw();
         await click(byTest('outside-line-theirs')[0]);
-        const reacts = [...host.querySelectorAll('[aria-label^="React with"]')] as HTMLElement[];
+        const reacts = Array.from(host.querySelectorAll('[aria-label^="React with"]')) as HTMLElement[];
         expect(reacts.map((b) => b.textContent)).toEqual(['👍', '❤️', '😂', '😮', '😢', '🙏', '😁']);
         expect(byTest('outside-line-report')).toHaveLength(1);
         expect(byTest('outside-line-edit')).toHaveLength(0);
@@ -899,6 +899,10 @@ describe('an outside chat: changes to lines (X6)', () => {
 
     it('a tap on my line: Edit message fills the box and its button reads Save, and saving sends the edit; Delete message asks first', async () => {
         await draw();
+        const typing = byTest('outside-chat-input')[0] as HTMLInputElement;
+        const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+        await act(async () => { setValue.call(typing, 'half a thought'); typing.dispatchEvent(new Event('input', { bubbles: true })); });
+        await settle();
         await click(byTest('outside-line-mine')[0]);
         expect(byTest('outside-line-report')).toHaveLength(0);
         await click(byTest('outside-line-edit')[0]);
@@ -915,6 +919,8 @@ describe('an outside chat: changes to lines (X6)', () => {
         await click(byTest('outside-chat-send')[0]);
         expect(outside.sent).toEqual([{ chatId: CHAT, kind: 'dm-edit', lineId: MINE, text: 'See you at 4' }]);
         expect(byTest('outside-chat-send')[0].getAttribute('aria-label')).toBe('Send');
+        // What was typed before the edit is back in the box, never lost.
+        expect((byTest('outside-chat-input')[0] as HTMLInputElement).value).toBe('half a thought');
         await click(byTest('outside-line-mine')[0]);
         await click(byTest('outside-line-delete')[0]);
         expect(alerts.said).toEqual(expect.arrayContaining(['Delete for everyone?', 'It will read "This message was deleted" for both of you.', 'Cancel', 'Delete']));

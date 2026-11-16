@@ -186,9 +186,13 @@ let running: Promise<void> | null = null;
 /** The first round since the app started is at app open. */
 let opening = true;
 
+/** The communities a directory row asked the newest list of since the app started (askNewestListOnce), by their record. */
+const newestListAsked = new Set<string>();
+
 /** Tests only: forget this run's asks, mid-run (a cold start is this, then a round with `atOpen`). */
 export function forgetAddressChecks(): void {
     asked.clear();
+    newestListAsked.clear();
     running = null;
     opening = false;
 }
@@ -198,17 +202,33 @@ export function forgetAddressChecks(): void {
  * front, when the address in use is asked whatever the last ask was and no answer at all makes the switch due at once.
  * One round at a time. Never throws.
  */
-export function verifyAddressInUse(opts: { atOpen?: boolean } = {}, injected?: Partial<VerifyDeps>): Promise<void> {
+export function verifyAddressInUse(opts: { atOpen?: boolean; newestList?: boolean } = {}, injected?: Partial<VerifyDeps>): Promise<void> {
     if (running) return running;
     const atOpen = !!opts.atOpen || opening;
     opening = false;
-    running = round(atOpen, injected)
+    running = round(atOpen, injected, !!opts.newestList)
         .catch((e) => console.warn('[addresses] Could not verify the community\'s addresses; nothing changed', e))
         .finally(() => { running = null; });
     return running;
 }
 
-async function round(atOpen: boolean, injected?: Partial<VerifyDeps>): Promise<void> {
+/**
+ * A directory row named an address the kept list of `community` (the community in front, or the one a row opens) lacks
+ * (§3.6, Find a community): its own address is asked for the newest list, ONCE per community per app open, however many
+ * searches reload the rows (PR #3251 round 2). Past the hourly limit, since the row is news; never as an app-open round, so
+ * one missed answer is not made due at once. A round already out finishes first. Never throws.
+ */
+export async function askNewestListOnce(community: string, injected?: Partial<VerifyDeps>): Promise<void> {
+    await communityRecordsReady().catch(() => {});
+    const key = addressSpelling(communityRecordOf(community)?.id ?? community);
+    if (newestListAsked.has(key)) return;
+    newestListAsked.add(key);
+    if (running) await running;
+    await verifyAddressInUse({ newestList: true }, injected);
+}
+
+/** `newestList`: askNewestListOnce's round (past the hourly limit; a missed answer not due at once). */
+async function round(atOpen: boolean, injected?: Partial<VerifyDeps>, newestList = false): Promise<void> {
     const deps = await depsWith(injected);
     const anchor = await deps.anchor();
     const from = followableOrigin(anchor);
@@ -220,7 +240,7 @@ async function round(atOpen: boolean, injected?: Partial<VerifyDeps>): Promise<v
     const now = deps.now();
     const last = asked.get(usingAddress);
     const age = last ? now - last.at : -1;
-    if (!atOpen && last && age >= 0 && age < (last.silent ? MINUTE : HOUR)) return;
+    if (!atOpen && !newestList && last && age >= 0 && age < (last.silent ? MINUTE : HOUR)) return;
 
     // Who the community is: the record's key, else what the phone first verified here, else the first list (over TLS).
     let kept: SignedAddressList | null = record.list ? readAddressList(record.list) : null;

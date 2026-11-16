@@ -30,7 +30,8 @@ import { findLineWords } from '../components/find-community-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { askNotificationPermissionOnAction } from '../utils/notification-permission';
 import { DoorRuleLine } from '../components/DoorRuleLine';
-import { linkLanding } from '../utils/community-index';
+import { communityRecordNaming, linkLanding, recordAddresses } from '../utils/community-index';
+import { askMemberHere } from '../utils/member-here';
 import { communityRecordsReady } from '../utils/community-record';
 
 export { ErrorBoundary };
@@ -146,9 +147,16 @@ export default function CommunityCardScreen() {
     useEffect(() => {
         if (!origin || !identity) return;
         let alive = true;
-        // Any address of the community in front is it (addresses S5, §3.6: its signed list, kept in its record).
+        // Any address of the community in front is it (addresses S5, §3.6: its signed list, kept in its record), and the phone
+        // is a member there only when the community says this key is one (utils/member-here.ts): a guest visit's community in
+        // front keeps Ask to join and Join.
         Promise.all([AsyncStorage.getItem('beanpool_anchor_url'), communityRecordsReady()])
-            .then(([anchor]) => { if (alive) setMemberHere(linkLanding(origin, anchor).kind === 'in-use'); })
+            .then(async ([anchor]) => {
+                if (!anchor || linkLanding(origin, anchor).kind !== 'in-use') return false;
+                const record = communityRecordNaming(origin);
+                return askMemberHere(record ? { using: record.using, addresses: recordAddresses(record) } : { using: anchor, addresses: [anchor] }, identity);
+            })
+            .then((member) => { if (alive) setMemberHere(member); })
             .catch(() => {});
         // One after the other: each forgets what has aged out of the same store.
         cancelledKnocks(identity.publicKey)

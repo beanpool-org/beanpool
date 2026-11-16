@@ -107,15 +107,23 @@ describe('S5: the app is wired to it', () => {
         expect(layout).toMatch(/switchPhoneTo\(targetOrigin\)/);
     });
 
-    it('a directory row of a community the phone has: said so and opened through the one switch, never Ask to join', () => {
+    // Round 2 (PR #3251's deciding review): a row or a card is the member's only where the community says this key is a member
+    // (utils/member-here.ts; member-here.test.ts holds the viewer x row table). Round 1 pinned "any keyed record" here, which
+    // told a guest "You are already a member".
+    it('a directory row of a community the phone is a member of: said so and opened through the one switch; any other row knocks', () => {
         const find = read('../../app/find-community.tsx');
-        expect(find).toMatch(/const mine = anchorNow === undefined \? null : directoryRowCommunity\(c, anchorNow\);\s*if \(!mine\) return renderKnock\(c\.url, c\.name, c\);/);
-        expect(find).toMatch(/if \(!mine\.inFront\) await switchCommunity\(mine\.using\);/);
-        expect(find).toMatch(/if \(mine\.askList\) verifyAddressInUse\(\{ atOpen: true \}\)/);
+        expect(find).toMatch(/const door = directoryRowDoor\(anchorNow === undefined \? null : directoryRowCommunity\(c, anchorNow\), memberAt\[c\.key\]\);\s*if \(door\.kind === 'knock'\) return renderKnock\(c\.url, c\.name, c\);/);
+        expect(find).toMatch(/\{door\.kind === 'open' && \(/);
+        expect(find).toMatch(/await switchCommunity\(mine\.using\);/);
+        // The newest list, once per community per app open, never as an app-open round (address-verify.ts askNewestListOnce).
+        expect(find).toMatch(/if \(mine\.askList\) askNewestListOnce\(mine\.using\)/);
+        expect(find).not.toMatch(/verifyAddressInUse\(\{ atOpen: true \}\)/);
         expect(find).toContain('{renderMineOrKnock(c)}');
     });
 
-    it('a community card for any address of the community in front is "your community"', () => {
-        expect(read('../../app/community-card.tsx')).toMatch(/setMemberHere\(linkLanding\(origin, anchor\)\.kind === 'in-use'\)/);
+    it('a community card for any address of the community in front is "your community" only where the community says this key is a member', () => {
+        const card = read('../../app/community-card.tsx');
+        expect(card).toMatch(/if \(!anchor \|\| linkLanding\(origin, anchor\)\.kind !== 'in-use'\) return false;/);
+        expect(card).toMatch(/return askMemberHere\(/);
     });
 });

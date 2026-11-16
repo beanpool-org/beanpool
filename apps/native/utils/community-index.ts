@@ -115,6 +115,11 @@ export function communityRecordNaming(address: string): CommunityRecord | null {
     return null;
 }
 
+/** Every address a record holds: its id, the address in use and each proved one. */
+export function recordAddresses(record: CommunityRecord): string[] {
+    return [...new Set([record.id, record.using, ...Object.keys(record.proved ?? {})])];
+}
+
 /** The record of the community whose server key is `peerId` (a directory row's key, §3.6), or null. */
 export function communityRecordByKey(peerId: string | null | undefined): CommunityRecord | null {
     if (!peerId) return null;

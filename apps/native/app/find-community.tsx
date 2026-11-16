@@ -39,7 +39,8 @@ import { findLineWords, findTownSearchWords, nearWords } from '../components/fin
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { askNotificationPermissionOnAction } from '../utils/notification-permission';
 import { DoorRuleLine } from '../components/DoorRuleLine';
-import { directoryRowCommunity } from '../utils/community-index';
+import { communityRecordByKey, directoryRowCommunity, recordAddresses } from '../utils/community-index';
+import { askMemberHere, directoryRowDoor } from '../utils/member-here';
 import { communityRecordsReady } from '../utils/community-record';
 
 export { ErrorBoundary };
@@ -236,30 +237,49 @@ export default function FindCommunityScreen() {
             .catch(() => { if (alive) setAnchorNow(null); });
         return () => { alive = false; };
     }, []);
+    // Whether this phone is a member of each row's community that is one of its own (utils/member-here.ts): asked of the
+    // community once per row key while the screen is open, never by a record alone. Until it answers, the row knocks.
+    const [memberAt, setMemberAt] = useState<Record<string, boolean>>({});
+    const memberAsked = useRef(new Set<string>());
+    // Another account on the phone: every row is asked again.
+    useEffect(() => { memberAsked.current.clear(); setMemberAt({}); }, [pubkey]);
+    useEffect(() => {
+        if (anchorNow === undefined || !communities) return;
+        let alive = true;
+        for (const c of communities) {
+            const record = communityRecordByKey(c.key);
+            if (!record || memberAsked.current.has(c.key)) continue;
+            memberAsked.current.add(c.key);
+            void askMemberHere({ using: record.using, addresses: recordAddresses(record) }, identity)
+                .then((member) => { if (alive) setMemberAt((m) => ({ ...m, [c.key]: member })); });
+        }
+        return () => { alive = false; };
+    }, [communities, anchorNow, identity]);
     const [opening, setOpening] = useState<string | null>(null);
-    /** Open a community the phone has from its row: the one switch to the address the phone uses, then the newest list asked. */
-    const openMine = async (mine: NonNullable<ReturnType<typeof directoryRowCommunity>>) => {
+    /** Open a community the phone is a member of from its row: the one switch to the address it uses, then the newest list asked. */
+    const openMine = async (mine: { using: string; askList: boolean }) => {
         // Loaded at the tap: the switch and the check bring the whole sync with them, which this screen needs only then.
-        const [{ communitySwitchUnderWay, switchCommunity }, { verifyAddressInUse }] = await Promise.all([
+        const [{ communitySwitchUnderWay, switchCommunity }, { askNewestListOnce }] = await Promise.all([
             import('../utils/use-communities'), import('../utils/address-verify'),
         ]);
         if (opening || communitySwitchUnderWay()) return;
         setOpening(mine.using);
         try {
-            if (!mine.inFront) await switchCommunity(mine.using);
+            await switchCommunity(mine.using);
         } catch (e) {
             console.warn('[Find] Could not open a community this phone has', e);
         } finally {
             setOpening(null);
         }
-        // The row named an address the kept list lacks: the community's own address is asked now (a proof names a newer list).
-        if (mine.askList) verifyAddressInUse({ atOpen: true }).catch(() => {});
+        // The row named an address the kept list lacks: the community's own address is asked for the newest list, once.
+        if (mine.askList) askNewestListOnce(mine.using).catch(() => {});
     };
-    // The community in front listed at an address its kept list lacks: its own address is asked for the newest list, once.
+    // The community in front listed at an address its kept list lacks: its own address is asked for the newest list, once per
+    // community in front per app open (address-verify.ts askNewestListOnce), however many searches reload the rows.
     useEffect(() => {
-        if (anchorNow === undefined || !communities) return;
+        if (!anchorNow || !communities) return;
         if (communities.some((c) => { const m = directoryRowCommunity(c, anchorNow); return !!m && m.inFront && m.askList; })) {
-            import('../utils/address-verify').then((m) => m.verifyAddressInUse({ atOpen: true })).catch(() => {});
+            import('../utils/address-verify').then((m) => m.askNewestListOnce(anchorNow)).catch(() => {});
         }
     }, [communities, anchorNow]);
 
@@ -663,19 +683,23 @@ export default function FindCommunityScreen() {
         );
     };
 
-    /** A row of a community this phone has: said so, and opened from here, never asked to join; any other row, as before. */
+    /**
+     * A row of a community this phone is a MEMBER of (its own key, asked of the community: utils/member-here.ts): said so,
+     * and opened from here. Any other row knocks as before, a guest's, a visitor's or a removed account's included: Ask to
+     * join, the waiting request, Join.
+     */
     const renderMineOrKnock = (c: DirectoryCommunity) => {
-        const mine = anchorNow === undefined ? null : directoryRowCommunity(c, anchorNow);
-        if (!mine) return renderKnock(c.url, c.name, c);
+        const door = directoryRowDoor(anchorNow === undefined ? null : directoryRowCommunity(c, anchorNow), memberAt[c.key]);
+        if (door.kind === 'knock') return renderKnock(c.url, c.name, c);
         const name = communityLabel(c);
         return (
             <View testID={`find-mine-${c.key}`}>
                 <Text style={styles.note}>{findLineWords(KNOCK_MESSAGES.member)}</Text>
-                {!mine.inFront && (
+                {door.kind === 'open' && (
                     <View style={styles.actions}>
                         <Pressable
-                            style={[styles.primary, opening === mine.using && { opacity: 0.6 }]}
-                            onPress={() => { void openMine(mine); }}
+                            style={[styles.primary, opening === door.using && { opacity: 0.6 }]}
+                            onPress={() => { void openMine(door); }}
                             disabled={!!opening}
                             accessibilityRole="button"
                             accessibilityLabel={t('Open {name}', { name })}

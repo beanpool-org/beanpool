@@ -59,7 +59,7 @@ import { createRequire } from 'node:module';
 import {
     ADDRESS_LIST_PATH, ADDRESS_PROOF_PATH, signAddressList, signAddressProof, type AddressListFields, type SignedAddressList,
 } from '@beanpool/core';
-import { answerToProof, forgetAddressChecks, takeAddressLine, verifyAddressInUse, type VerifyDeps } from '../address-verify';
+import { answerToProof, askNewestListOnce, forgetAddressChecks, takeAddressLine, verifyAddressInUse, type VerifyDeps } from '../address-verify';
 import {
     addressSpelling, communityKeyOf, communityRecordOf, recordHolds, resetCommunityIndexForTests, type CommunityRecord,
 } from '../community-index';
@@ -643,6 +643,53 @@ describe('S5 round 2: EVERY member move against a round in flight (one writer of
         expect(mem.get(ANCHOR)).toBe(`https://${A}`);
         await moveCommunityAddress(null);
         expect(mem.has(ANCHOR)).toBe(false);
+    });
+});
+
+describe('S5 round 2: a directory row\'s newest-list ask, once per community in front per app open, never an app-open round', () => {
+    const proofsAtUsing = () => asked.filter((a) => a === `${A}${ADDRESS_PROOF_PATH}`).length;
+
+    it('N searches (each reloads the rows and runs the effect) ask the address in use ONCE, past the hourly limit', async () => {
+        await phoneAt(`https://${A}`);
+        await round(true);
+        const before = proofsAtUsing();
+        now += 5 * 60_000;
+        // Inside the hour an ordinary round asks nothing...
+        await round();
+        expect(proofsAtUsing()).toBe(before);
+        // ...and the row's ask goes past that once, however many searches follow.
+        for (let search = 0; search < 6; search++) await askNewestListOnce(`https://${A}`, deps());
+        expect(proofsAtUsing()).toBe(before + 1);
+        // Another spelling of the same community is the same community.
+        await askNewestListOnce('https://RIVERSIDE.example/', deps());
+        expect(proofsAtUsing()).toBe(before + 1);
+        // Round 1 ran an app-open round at each search: each one asked again (the defect this replaces).
+        await verifyAddressInUse({ atOpen: true }, deps());
+        await verifyAddressInUse({ atOpen: true }, deps());
+        expect(proofsAtUsing()).toBe(before + 3);
+    });
+
+    it('a missed answer to that ask is not made due at once (an app-open round makes it due, and may move the phone)', async () => {
+        await phoneAt(`https://${A}`);
+        await round(true);
+        now += 5 * 60_000;
+        servers[A].silent = true;
+        await askNewestListOnce(`https://${A}`, deps());
+        expect(recordAt(`https://${A}`).silent).toMatchObject({ since: now, last: now });
+        expect(recordAt(`https://${A}`).silent?.due).toBeUndefined();
+        expect(moves).toEqual([]);
+        expect(mem.get(ANCHOR)).toBe(`https://${A}`);
+    });
+
+    it('a new app open asks it again (a cold start forgets this run\'s asks)', async () => {
+        await phoneAt(`https://${A}`);
+        await round(true);
+        const before = proofsAtUsing();
+        now += 5 * 60_000;
+        await askNewestListOnce(`https://${A}`, deps());
+        forgetAddressChecks();
+        await askNewestListOnce(`https://${A}`, deps());
+        expect(proofsAtUsing()).toBe(before + 2);
     });
 });
 

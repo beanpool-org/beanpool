@@ -21,12 +21,14 @@ export const ASKED_COMMUNITY_WORDS = {
  * list of communities, and Ask to join it right here. Scrolled into view when it opens. `asked` says whether this browser
  * already holds an open request to an address (Home's remembered knocks), so a request is never sent twice from here.
  */
-export function AskedCommunity({ host, identity, asked, onAsked, onClose }: {
+export function AskedCommunity({ host, identity, asked, onAsked, onClose, forumPicker = false }: {
     host: string;
     identity: BeanPoolIdentity;
     asked: (url: string | null) => boolean;
     onAsked?: () => void;
     onClose: () => void;
+    /** This web app's server is the worldwide community with its forum open: the form offers the asker's posts (AskToJoin). */
+    forumPicker?: boolean;
 }) {
     const [row, setRow] = useState<HomeCommunity | null | 'loading'>('loading');
     const at = useRef<HTMLDivElement>(null);
@@ -54,7 +56,7 @@ export function AskedCommunity({ host, identity, asked, onAsked, onClose }: {
                 <p role="status" className="m-0 mt-1 pr-10 text-sm break-words text-text-primary">{t(ASKED_COMMUNITY_WORDS.notListed, { name })}</p>
             )}
             {listed && (
-                <AskToJoin community={listed} identity={identity} asked={asked(listed.url)} onAsked={onAsked} testId="home-find-asked-ask" />
+                <AskToJoin community={listed} identity={identity} asked={asked(listed.url)} onAsked={onAsked} forumPicker={forumPicker} testId="home-find-asked-ask" />
             )}
             <button type="button" onClick={onClose} aria-label={t(ASKED_COMMUNITY_WORDS.close)} data-testid="home-find-asked-close"
                 className="absolute top-1 right-1 w-11 h-11 rounded-full bg-transparent border-0 text-lg text-text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info">

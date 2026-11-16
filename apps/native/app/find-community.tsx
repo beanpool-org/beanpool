@@ -474,7 +474,9 @@ export default function FindCommunityScreen() {
         // From the global community only for a member there; otherwise the knock names no community it came from.
         const anchor = identity ? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) : null;
         const guest = anchor ? await import('../utils/nodes').then(m => m.isGuestNode(anchor)).catch(() => true) : false;
-        const r = await sendKnock(c.url, signer, { callsign, message, avatar, forum: forumPicks.sendFor(signer.publicKey) }, knockFromNode(anchor, guest));
+        // Up to three of the asker's own worldwide forum posts, only when picked (F11b): otherwise the same request as before.
+        const forum = forumPicks.sendFor(signer.publicKey);
+        const r = await sendKnock(c.url, signer, { callsign, message, avatar, ...(forum ? { forum } : {}) }, knockFromNode(anchor, guest));
         setSending(false);
         switch (r.kind) {
             case 'waiting':

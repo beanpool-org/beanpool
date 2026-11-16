@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     FORUM_ASK_POSTS,
+    forumAskPickView,
     forumAskSend,
     readForumAskNamed,
     readForumAskPosts,
@@ -105,6 +106,14 @@ describe('forumAskSend: what a request to join carries', () => {
     it('a list that names one post twice still sends it once', () => {
         const twice = { secret: SECRET, posts: [OFFERED.posts[0], { ...OFFERED.posts[0], number: 9 }] };
         expect(forumAskSend(twice, ['fp-a1'])).toEqual({ forumPosts: [named('fp-a1')], forumSecret: SECRET });
+    });
+});
+
+describe('forumAskPickView: what one row shows', () => {
+    it('the forum’s title, where the post is in its topic, and both as the row’s name', () => {
+        expect(forumAskPickView(OFFERED.posts[1])).toEqual({
+            title: 'A tool library for the hill', where: 'Post 4', label: 'A tool library for the hill. Post 4',
+        });
     });
 });
 

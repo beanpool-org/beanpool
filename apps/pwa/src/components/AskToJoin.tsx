@@ -4,6 +4,8 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import {
     KNOCK_CALLSIGN_CHARS, KNOCK_MESSAGE_CHARS, KNOCK_MESSAGES, cancelledKnocks, communityOrigin, knockFormProblem, rememberKnock, sendKnock,
 } from '../lib/knock';
+import { useForumAskPicks } from '../lib/forum-ask-picks';
+import { KnockForumPicker } from './KnockForumPicker';
 
 export interface AskableCommunity {
     key?: string | null;
@@ -18,14 +20,17 @@ export interface AskableCommunity {
  * them. Once sent, this browser remembers it and Home's card says how it fares (`onAsked`): the waiting line and Cancel my
  * request are that card's, not this block's.
  *
- * `asked`: this browser already holds an open request to it (Home's remembered knocks).
+ * `asked`: this browser already holds an open request to it (Home's remembered knocks). `forumPicker`: this web app's server
+ * is the worldwide community with its forum open to everyone (Home's answer, core forumPublicOn), so the form offers up to
+ * three of the asker's own posts there (forums F11b, components/KnockForumPicker.tsx); elsewhere nothing is asked for them.
  */
-export function AskToJoin({ community, identity, asked, onAsked, testId }: {
+export function AskToJoin({ community, identity, asked, onAsked, testId, forumPicker = false }: {
     community: AskableCommunity;
     identity: BeanPoolIdentity;
     asked: boolean;
     onAsked?: () => void;
     testId?: string;
+    forumPicker?: boolean;
 }) {
     const origin = communityOrigin(community.url);
     const label = community.name ?? (origin ? origin.replace(/^https:\/\//, '') : t('A community'));
@@ -65,6 +70,9 @@ export function AskToJoin({ community, identity, asked, onAsked, testId }: {
         return () => { alive = false; };
     }, [origin, identity.publicKey]);
 
+    // Up to three of the asker's own worldwide forum posts, when this web app's server is the worldwide community (F11b).
+    const forumPicks = useForumAskPicks(open && !!origin && forumPicker, identity);
+
     if (!origin) return <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid={`${tid}-no-address`}>{t(KNOCK_MESSAGES.noAddress)}</p>;
     if (said && !asked) return <p role="status" className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid={`${tid}-said`}>{said}</p>;
     // Cancelled within the day: no button the node would refuse, and no line either. Home's card said so for the visit the
@@ -76,7 +84,9 @@ export function AskToJoin({ community, identity, asked, onAsked, testId }: {
         if (wrong) { setProblem(wrong); return; }
         setSending(true);
         setProblem(null);
-        const r = await sendKnock(origin, identity, { callsign, message });
+        // The picks, only when there are some: a request without them is the same request as before (F11b).
+        const forum = forumPicks.sendFor(identity.publicKey);
+        const r = await sendKnock(origin, identity, { callsign, message, ...(forum ? { forum } : {}) });
         setSending(false);
         switch (r.kind) {
             case 'waiting':
@@ -144,6 +154,7 @@ export function AskToJoin({ community, identity, asked, onAsked, testId }: {
                 data-testid={`${tid}-message`}
             />
             <p className="m-0 mt-1 text-xs text-right text-nature-600 dark:text-nature-300" aria-hidden="true">{Array.from(message).length}/{KNOCK_MESSAGE_CHARS}</p>
+            <KnockForumPicker picks={forumPicks} testId={`${tid}-forum`} />
             {problem && <p role="alert" className="m-0 mt-1 text-sm text-bp-ink-danger break-words" data-testid={`${tid}-problem`}>{problem}</p>}
             <div className="flex flex-wrap gap-2 mt-2">
                 <button

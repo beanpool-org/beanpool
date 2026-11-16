@@ -157,6 +157,15 @@ export const FORUM_ASK_PICKER_WORDS = {
 } as const;
 
 /**
+ * One row of the picker, both apps: the topic's title as the worldwide forum gave it, where the post is in that topic
+ * ("Post 4": two replies in one topic read apart), and the row's accessible name, both of them.
+ */
+export function forumAskPickView(pick: ForumAskPick): { title: string; where: string; label: string } {
+    const where = t(FORUM_ASK_PICKER_WORDS.post, { number: pick.number });
+    return { title: pick.title, where, label: `${pick.title}. ${where}` };
+}
+
+/**
  * A request's `forum` as the apps read it, or null: an https address and one to three rows that read whole. Each row is the
  * post it names and its proof, nothing else: any other field in the answer (a title, words) is dropped here.
  */

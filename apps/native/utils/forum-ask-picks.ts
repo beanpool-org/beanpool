@@ -16,7 +16,6 @@ import {
     FORUM_ASK_CHECK_MS, FORUM_ASK_POSTS_PATH, forumAskSend, readForumAskPosts, toggleForumAskPick,
     type ForumAskPosts, type ForumAskSend,
 } from '@beanpool/core';
-import { signedGet } from './node-post';
 import { GLOBAL_NODE_URL } from './global-node-url';
 import { knockFromNode } from './knock-address';
 import type { BeanPoolIdentity } from './identity';
@@ -29,6 +28,9 @@ export async function readMyForumPosts(identity: BeanPoolIdentity): Promise<Foru
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = setTimeout(() => controller?.abort(), FORUM_ASK_CHECK_MS);
     try {
+        // Loaded at the read, as the forms load the knock key (utils/knock-key.ts): only a member of the worldwide community
+        // opening the form needs the signer.
+        const { signedGet } = await import('./node-post');
         const res = await signedGet(GLOBAL_NODE_URL, FORUM_ASK_POSTS_PATH, identity, controller?.signal);
         if (!res.ok) return null;
         const list = readForumAskPosts(await res.json());

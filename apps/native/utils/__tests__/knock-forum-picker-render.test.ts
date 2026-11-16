@@ -199,8 +199,8 @@ describe('the picker at 320 px and 1.3× text', () => {
         expect(first.getAttribute('aria-checked')).toBe('false');
         expect(first.getAttribute('aria-label')).toBe(`${LONG}. Post 1`);
         expect(first.getAttribute('data-minh')).toBe('48');
-        // The title wraps over up to three lines (a long title is never cut to one), and "Post 4" tells two replies apart.
-        expect(first.querySelector('[data-lines]')?.getAttribute('data-lines')).toBe('3');
+        // The title wraps, whole, as the admins' rows show it: no line cap. "Post 4" tells two replies in one topic apart.
+        expect(first.querySelector('[data-lines]')).toBeNull();
         expect(first.textContent).toBe(`${LONG}Post 1`);
         expect(rowOf('fp-a2')!.textContent).toBe(`${LONG}Post 4`);
     });
@@ -230,7 +230,7 @@ describe('the picker at 320 px and 1.3× text', () => {
             await tap('fp-a1');
             const row = rowOf('fp-a1')!;
             expect(row.getAttribute('data-bg')).toBe(colours.surface.card);
-            expect(row.querySelector('[data-lines]')?.getAttribute('data-color')).toBe(colours.text.heading);
+            expect(Array.from(row.querySelectorAll('span'), (s) => s.getAttribute('data-color'))).toEqual([colours.text.heading, colours.text.secondary]);
             expect(row.querySelector('[data-icon]')?.getAttribute('data-color')).toBe(colours.brand.fill);
             expect(rowOf('fp-a2')!.querySelector('[data-icon]')?.getAttribute('data-color')).toBe(colours.text.muted);
             act(() => root?.unmount());

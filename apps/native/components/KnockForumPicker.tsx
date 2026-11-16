@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { FORUM_ASK_PICKER_WORDS, FORUM_ASK_POSTS, t } from '@beanpool/core';
-import { useStyles, useTheme } from '../app/ThemeContext';
+import { FORUM_ASK_PICKER_WORDS, FORUM_ASK_POSTS, forumAskPickView, t } from '@beanpool/core';
+import { useStyles } from '../app/ThemeContext';
 import type { ForumAskPicks } from '../utils/forum-ask-picks';
 
 /**
@@ -13,7 +13,6 @@ import type { ForumAskPicks } from '../utils/forum-ask-picks';
  * apps/pwa/src/components/KnockForumPicker.tsx.
  */
 export function KnockForumPicker({ picks, testID = 'knock-forum-picker' }: { picks: ForumAskPicks; testID?: string }) {
-    const { colors } = useTheme();
     const styles = useStyles(({ colors: c }) => StyleSheet.create({
         box: { marginTop: 14, gap: 8 },
         heading: { fontSize: 14, fontWeight: '700', color: c.text.heading, lineHeight: 20 },
@@ -26,6 +25,9 @@ export function KnockForumPicker({ picks, testID = 'knock-forum-picker' }: { pic
         text: { flex: 1, minWidth: 0 },
         title: { fontSize: 14, fontWeight: '700', color: c.text.heading, lineHeight: 20 },
         sub: { fontSize: 13, color: c.text.secondary, lineHeight: 18, marginTop: 2 },
+        // The tick's colours (the icon takes a colour, not a style): the brand fill when picked, as Import contacts' rows.
+        tickOn: { color: c.brand.fill },
+        tickOff: { color: c.text.muted },
     }));
     const { offered, picked, toggle } = picks;
     if (!offered || offered.posts.length === 0) return null;
@@ -37,7 +39,7 @@ export function KnockForumPicker({ picks, testID = 'knock-forum-picker' }: { pic
             {offered.posts.map((p) => {
                 const on = picked.includes(p.postId);
                 const disabled = full && !on;
-                const where = t(FORUM_ASK_PICKER_WORDS.post, { number: p.number });
+                const v = forumAskPickView(p);
                 return (
                     <Pressable
                         key={p.postId}
@@ -46,14 +48,14 @@ export function KnockForumPicker({ picks, testID = 'knock-forum-picker' }: { pic
                         disabled={disabled}
                         accessibilityRole="checkbox"
                         accessibilityState={{ checked: on, disabled }}
-                        accessibilityLabel={`${p.title}. ${where}`}
+                        accessibilityLabel={v.label}
                         testID={`${testID}-${p.postId}`}
                     >
                         <MaterialCommunityIcons name={on ? 'checkbox-marked' : 'checkbox-blank-outline'} size={26}
-                            color={on ? colors.brand.fill : colors.text.muted} />
+                            color={(on ? styles.tickOn : styles.tickOff).color} />
                         <View style={styles.text}>
-                            <Text style={styles.title} numberOfLines={3}>{p.title}</Text>
-                            <Text style={styles.sub}>{where}</Text>
+                            <Text style={styles.title}>{v.title}</Text>
+                            <Text style={styles.sub}>{v.where}</Text>
                         </View>
                     </Pressable>
                 );

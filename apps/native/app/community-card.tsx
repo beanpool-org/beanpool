@@ -253,7 +253,9 @@ export default function CommunityCardScreen() {
         // community it came from.
         const anchor = identity ? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) : null;
         const guest = anchor ? await import('../utils/nodes').then(m => m.isGuestNode(anchor)).catch(() => true) : false;
-        const r = await sendKnock(origin, signer, { callsign, message, avatar, peek: peekTicket, forum: forumPicks.sendFor(signer.publicKey) }, knockFromNode(anchor, guest));
+        // Up to three of the asker's own worldwide forum posts, only when picked (F11b): otherwise the same request as before.
+        const forum = forumPicks.sendFor(signer.publicKey);
+        const r = await sendKnock(origin, signer, { callsign, message, avatar, peek: peekTicket, ...(forum ? { forum } : {}) }, knockFromNode(anchor, guest));
         setSending(false);
         if (r.kind === 'waiting' || r.kind === 'invited') {
             await rememberKnock(signer.publicKey, { url: origin, name: c.name });

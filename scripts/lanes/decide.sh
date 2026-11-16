@@ -17,11 +17,18 @@
 
 # A run script may set its own LANE_DECIDE_BRIEF before sourcing lib.sh; this default applies only when it didn't (an
 # unconditional assignment here once overwrote a director's brief without anyone noticing, 2026-09-27).
+# GitHub CI is the full run (Marty, 16 Nov 2026: the Mac was overloaded; lib.sh's LANE_ONE_PUSH is the build side): a deciding
+# pass reads CI through pr-state.mjs and runs locally only the one file that proves or disproves a finding. Both scripts are named
+# from this library's directory, as in LANE_ONE_PUSH.
 : ${LANE_DECIDE_BRIEF:="DECIDING pass — the code merges if you find nothing new. Fast-model passes have missed real authorization and
 data-leak defects that a stronger model found on first look, so do not assume any earlier pass covered them.
 Order: data loss and privacy leaks, then authorization, then money conservation, then performance on hot paths,
 then everything else. Every authorization decision must act on the same row it decided about; anything moving
 beans belongs inside conservingTransaction with SUM(balances)+COMMONS_POOL unchanged.
+GITHUB CI IS THE FULL RUN (Marty, 16 Nov 2026: the Mac was overloaded): do not re-run a whole-app tsc --noEmit, a whole
+vitest or jest run or many server suites here. Read the PR's CI with node $LANE_DIR/pr-state.mjs <PR> -R $LANE_GH_REPO
+(one read, never a polling loop). Locally run only the single test file or single suite that proves or disproves a finding,
+and anything whole-app only through $LANE_DIR/tsc-slot.sh <command>.
 Read the existing comments first and do not repeat them. Post only NEW real defects, with file and line.
 Whatever you find, ALSO post exactly one summary issue comment (gh pr comment), CLEAN or NOT CLEAN in its first line,
 saying what you verified: a pass with inline findings and no summary leaves the rest of the PR unreviewed."}

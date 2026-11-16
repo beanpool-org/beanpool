@@ -181,6 +181,25 @@ describe('the Chat tab where the forum is on', () => {
         expect(forumSeen.props.at(-1)).toMatchObject({ topicId: null });
     });
 
+    it("a door from elsewhere (slice F9) is taken once, like a door's topic (round 2, #3252): Chats and back opens the Forum on its list", () => {
+        forumSeen.props.length = 0;
+        const opened = vi.fn();
+        const door = { starter: 'start-community', q: 'Riverside' };
+        const { rerender } = render(<ChatTabPage identity={ME} navNonce={1} openForum openForumDoor={door} onForumOpened={opened} />);
+        expect(forumSeen.props.at(-1)).toMatchObject({ door });
+        // App clears the flag and the door once handed back; a door still handed is not taken again (only an arrival reads it).
+        rerender(<ChatTabPage identity={ME} navNonce={1} openForum={false} openForumDoor={door} onForumOpened={opened} />);
+        expect(forumSeen.props.at(-1)).toMatchObject({ door });
+        fireEvent.click(screen.getByRole('tab', { name: 'Chats' }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Forum' }));
+        expect(forumSeen.props.at(-1)).toMatchObject({ door: null });
+        // The Forum says it took a door: let go of at once, so nothing hands it again.
+        rerender(<ChatTabPage identity={ME} navNonce={2} openForum openForumDoor={{ section: 's-news' }} onForumOpened={opened} />);
+        expect(forumSeen.props.at(-1)).toMatchObject({ door: { section: 's-news' } });
+        act(() => { (forumSeen.props.at(-1) as { onDoorTaken?: () => void }).onDoorTaken?.(); });
+        expect(forumSeen.props.at(-1)).toMatchObject({ door: null });
+    });
+
     it('in the pseudo-locale: both names and the switch\'s spoken name came through t()', async () => {
         await act(async () => { await showIn('xx'); });
         render(<ChatTabPage identity={ME} />);

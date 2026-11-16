@@ -14,17 +14,30 @@
  *   reads "while the page is open"; nothing is written to the browser's storage).
  * - **Older nodes and errors:** the forum's routes answer `feature_off` where the owners switched it off; the page says the
  *   node's words, with Try again.
+ * - **Doors from elsewhere** (slice F9, `door`): a topic a listing, a group or a Learn page names; or a starter section (on the
+ *   worldwide community, "Start a community near you"), searched for a town where one is given.
+ * - **Every door is one-shot** (round 2, #3252): the page tells its opener it took the door (`onDoorTaken`, App lets go of it),
+ *   so the Chats side and back opens nothing again; a door's search is taken once by the box (ForumSearch). A door that opens
+ *   a section lands on it: it clears the search showing (whose hits would hide the section's topics), and its own search is
+ *   kept to that section. The member's own move first (a section picked, a topic opened) drops a door still waiting.
  */
 import { useEffect, useRef, useState } from 'react';
 import { forumSectionName, t, timeAgo, tn, word, wordn } from '@beanpool/core';
 import { myNodeRoleOnce } from '../lib/api';
 import {
-    getForumFront, getForumTopics, keepForumFor, keptFront, keptList, keptSearch, myFirstLook, withdrawFirstLook, type ForumFront, type ForumTopic, type ForumWaiting,
+    forgetForumSearch, getForumFront, getForumTopics, keepForumFor, keptFront, keptList, keptSearch, myFirstLook, withdrawFirstLook, type ForumFront, type ForumTopic, type ForumWaiting,
 } from '../lib/forum';
 import { ForumTopicView, TOPIC_WORDS } from '../components/forum/ForumTopicView';
 import { ForumNewTopic } from '../components/forum/ForumNewTopic';
 import { ForumFirstLooks } from '../components/forum/ForumFirstLooks';
-import { ForumSearch } from '../components/forum/ForumSearch';
+import { ForumSearch, type ForumSearchDoor } from '../components/forum/ForumSearch';
+import type { ComposerDraft } from '../tools/builder';
+
+/**
+ * A door into the forum from elsewhere (slice F9): a topic; a section by its id (a group's Topics row); or a starter section
+ * (a circle's card, the Find card: "Start a community near you") with words to search for in it, maybe none.
+ */
+export type ForumDoor = { topic: string | null } | { section: string } | { starter: string; q: string };
 
 export const FORUM_WORDS = {
     allSections: word('All sections'),
@@ -51,14 +64,42 @@ type View = { kind: 'list' } | { kind: 'topic'; id: string; at?: number } | { ki
  * `topicId`: the topic it opens on (a door to one topic, slice F7). `homeNonce`: changes each time the member chooses Chat in the
  * menu while the Forum shows (ChatTabPage): its topic list, even when a door opened it on a topic.
  */
-export function ForumPage({ me, onOpenProfile, topicId = null, homeNonce }: {
-    me: string; onOpenProfile?: (pubkey: string) => void; topicId?: string | null; homeNonce?: number;
+export function ForumPage({ me, onOpenProfile, topicId = null, door = null, onDoorTaken, homeNonce, onNavigate, onMakeNeed }: {
+    me: string; onOpenProfile?: (pubkey: string) => void; topicId?: string | null; door?: ForumDoor | null; onDoorTaken?: () => void;
+    homeNonce?: number; onNavigate?: (tab: string, contextId?: string) => void; onMakeNeed?: (draft: ComposerDraft) => void;
 }) {
     // Before any kept copy is read: another account in this tab never sees the last one's forum, not even for a moment.
     keepForumFor(me);
-    const [view, setView] = useState<View>(() => (topicId ? { kind: 'topic', id: topicId } : { kind: 'list' }));
+    const doorTopic = door && 'topic' in door ? door.topic : null;
+    const [view, setView] = useState<View>(() => (topicId || doorTopic ? { kind: 'topic', id: (topicId || doorTopic)! } : { kind: 'list' }));
     // A door to one topic (slice F7) while the Forum is already open: that topic.
     useEffect(() => { if (topicId) setView({ kind: 'topic', id: topicId }); }, [topicId]);
+    // A door from elsewhere (slice F9): its topic, or the list on its section (once the front names it) searched for its words.
+    const [wantStarter, setWantStarter] = useState<{ starter: string; q: string } | null>(null);
+    const [searchFor, setSearchFor] = useState<ForumSearchDoor | null>(null);
+    // Changed by a section's door: the search box starts afresh (nothing showing over the section's topics).
+    const [searchBox, setSearchBox] = useState(0);
+    // Taken once: the opener lets go of it, so this page mounted again (the Chats side and back) opens nothing again.
+    useEffect(() => { if (door || topicId) onDoorTaken?.(); }, [door, topicId]);
+    useEffect(() => {
+        if (!door) return;
+        setGone(null);
+        if ('topic' in door) {
+            if (door.topic) setView({ kind: 'topic', id: door.topic });
+            return;
+        }
+        forgetForumSearch();
+        setSearching(false);
+        setSearchBox((n) => n + 1);
+        setSearchFor(null);
+        setView({ kind: 'list' });
+        if ('section' in door) {
+            setWantStarter(null);
+            setSection(door.section || null);
+        } else {
+            setWantStarter({ starter: door.starter, q: door.q.trim() });
+        }
+    }, [door]);
     const [front, setFront] = useState<ForumFront | null>(() => keptFront());
     const [section, setSection] = useState<string | null>(null);
     const [list, setList] = useState(() => keptList(null));
@@ -104,6 +145,19 @@ export function ForumPage({ me, onOpenProfile, topicId = null, homeNonce }: {
         if (view.kind === 'list') void loadList(0);
     }, [section, view.kind]);
 
+    // A starter's door, once the front names its section: that section, and its words searched there alone. Where this
+    // community has no such section open, nothing is searched: the hits would be the whole forum's, under another name.
+    useEffect(() => {
+        if (!wantStarter || !front) return;
+        const found = front.sections.find((s) => s.starter === wantStarter.starter && !s.archived);
+        setWantStarter(null);
+        if (!found) return;
+        setSection(found.id);
+        if (wantStarter.q) setSearchFor({ q: wantStarter.q, section: found.id });
+    }, [front, wantStarter]);
+    // The member's own move comes first: a door still waiting (a front not yet read, a search not yet asked) is dropped.
+    const dropDoor = () => { setWantStarter(null); setSearchFor(null); };
+
     const toList = () => setView({ kind: 'list' });
     const homeSeen = useRef(homeNonce);
     useEffect(() => {
@@ -111,19 +165,19 @@ export function ForumPage({ me, onOpenProfile, topicId = null, homeNonce }: {
         homeSeen.current = homeNonce;
         toList();
     }, [homeNonce]);
-    const open = (next: View) => { setGone(null); setView(next); };
+    const open = (next: View) => { setGone(null); dropDoor(); setView(next); };
     // The member agreed to the public forum's sheet: this page's front says so at once, so it never asks again (design §5).
     const told = () => setFront((f) => (f ? { ...f, told: true } : f));
     if (view.kind === 'topic') {
         return (
-            <ForumTopicView topicId={view.id} at={view.at} front={front} me={me} onBack={toList} onTold={told} onOpenProfile={onOpenProfile}
-                onGone={(words) => { setGone(words); toList(); }} />
+            <ForumTopicView topicId={view.id} at={view.at} front={front} me={me} staff={staff} onBack={toList} onTold={told} onOpenProfile={onOpenProfile}
+                onGone={(words) => { setGone(words); toList(); }} onNavigate={onNavigate} onMakeNeed={onMakeNeed} />
         );
     }
     if (view.kind === 'firstLooks') return <ForumFirstLooks front={front} onBack={toList} />;
     if (view.kind === 'new' && front) {
         return (
-            <ForumNewTopic front={front} sectionId={section} usuallyWithinHours={mine?.usuallyWithinHours ?? null} staff={staff} onCancel={toList} onTold={told}
+            <ForumNewTopic front={front} me={me} sectionId={section} usuallyWithinHours={mine?.usuallyWithinHours ?? null} staff={staff} onCancel={toList} onTold={told}
                 onPosted={(out) => {
                     if ('topicId' in out) setView({ kind: 'topic', id: out.topicId });
                     else { setSent(true); toList(); }
@@ -143,7 +197,7 @@ export function ForumPage({ me, onOpenProfile, topicId = null, homeNonce }: {
     return (
         <div data-testid="forum-page" className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
-                <select value={section ?? ''} onChange={(e) => setSection(e.target.value || null)} aria-label={t(FORUM_WORDS.pickSection)} data-testid="forum-section-pick"
+                <select value={section ?? ''} onChange={(e) => { dropDoor(); setSection(e.target.value || null); }} aria-label={t(FORUM_WORDS.pickSection)} data-testid="forum-section-pick"
                     className="min-w-0 min-h-[44px] rounded-lg px-2 text-[0.95rem]" style={{ flex: '1 1 12rem', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-input)' }}>
                     <option value="">{t(FORUM_WORDS.allSections)}</option>
                     {sections.map((s) => <option key={s.id} value={s.id}>{s.archived ? t(FORUM_WORDS.archived, { name: forumSectionName(s) }) : forumSectionName(s)}</option>)}
@@ -154,7 +208,8 @@ export function ForumPage({ me, onOpenProfile, topicId = null, homeNonce }: {
                 )}
             </div>
 
-            <ForumSearch sections={sections} onShowing={setSearching} onOpen={(id, at) => open({ kind: 'topic', id, at })} />
+            <ForumSearch key={searchBox} sections={sections} searchFor={searchFor} onSearchTaken={() => setSearchFor(null)} onShowing={setSearching}
+                onOpen={(id, at) => open({ kind: 'topic', id, at })} />
 
             {failed && (
                 <div className="flex flex-col items-start gap-2">

@@ -13,12 +13,15 @@
  *   no reply, or its writer blocked), the kept copy is dropped and the member is back on the list with one line saying so.
  * - **Opened from a search** (`at`, slice F6): read on through the post found, and scrolled to it once it is drawn.
  * - **The sheet** on a public forum: the page holds the told stamp (`onTold`), so it shows once, not again on the next reply.
+ * - **Links** (slice F9, components/forum/ForumLinks.tsx): the chips under the opening words, exactly as the node answered this
+ *   reader. The ⋯ holds Link (the writer adds; the writer, an owner or an admin takes one off) and, for the writer, Make this
+ *   a Need: the Market's Need form filled with the title and words (`onMakeNeed`), linked to the topic once posted.
  */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FORUM_LIMITS, currentLanguage, forumSectionName, t, timeAgo, word } from '@beanpool/core';
 import {
-    closeForumTopic, followForumTopic, forgetForumTopic, getForumTopic, keptTopic, markForumTold, readForumTopic, removeForumPost, replyInForum,
+    closeForumTopic, followForumTopic, forgetForumTopic, getForumTopic, keptTopic, linkForumThing, markForumTold, readForumTopic, removeForumPost, replyInForum,
     reportForumPost, type ForumFront, type ForumPost, type ForumTopicPage,
 } from '../../lib/forum';
 import { blockUser } from '../../lib/blocklist';
@@ -27,6 +30,8 @@ import { useGrowingComposer } from '../../lib/use-growing-composer';
 import { draftKey, draftSent, useKeptDraft } from '../../lib/chat-drafts';
 import { ReportModal } from '../ReportModal';
 import { ForumPhotoAttach, ForumPhotos, ForumToldSheet, ForumWords } from './ForumBits';
+import { ForumLinkChips, ForumLinkSheet, LINK_WORDS, linkDoor, linksTaken, needDraftOf, type LinkPick } from './ForumLinks';
+import type { ComposerDraft } from '../../tools/builder';
 
 export const TOPIC_WORDS = {
     back: word('Back to the forum'),
@@ -75,10 +80,12 @@ const lastOf = (p: ForumTopicPage | null) => (p?.posts.length ? p.posts[p.posts.
  * `onTold`: the member agreed to the public forum's sheet (the page marks its front told, so it shows once).
  * `onGone`: the topic isn't there for them any more; the page goes back to its list and says `words`.
  * `onOpenProfile`: a writer's name opens their profile by key, only through this (App.tsx's one profile overlay).
+ * `onNavigate`: a link's chip opens its thing (App's navigateToTab). `onMakeNeed`: Make this a Need opens the Market's form.
+ * `staff`: the member is an owner or an admin, who may take a link off someone's topic.
  */
-export function ForumTopicView({ topicId, at, front, me, onBack, onTold, onGone, onOpenProfile }: {
-    topicId: string; at?: number; front: ForumFront | null; me: string; onBack: () => void; onTold: () => void; onGone: (words: string) => void;
-    onOpenProfile?: (pubkey: string) => void;
+export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, onTold, onGone, onOpenProfile, onNavigate, onMakeNeed }: {
+    topicId: string; at?: number; front: ForumFront | null; me: string; staff?: boolean; onBack: () => void; onTold: () => void; onGone: (words: string) => void;
+    onOpenProfile?: (pubkey: string) => void; onNavigate?: (tab: string, contextId?: string) => void; onMakeNeed?: (draft: ComposerDraft) => void;
 }) {
     const [page, setPage] = useState<ForumTopicPage | null>(() => keptTopic(topicId));
     const [failed, setFailed] = useState(false);
@@ -95,6 +102,7 @@ export function ForumTopicView({ topicId, at, front, me, onBack, onTold, onGone,
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [telling, setTelling] = useState(false);
+    const [linking, setLinking] = useState(false);
     const box = useRef<HTMLTextAreaElement>(null);
     useGrowingComposer(box);
     useCoversScreen(menu !== null);
@@ -148,6 +156,15 @@ export function ForumTopicView({ topicId, at, front, me, onBack, onTold, onGone,
     const replies = page?.posts.filter((p) => p.number > 1) ?? [];
     const section = front?.sections.find((s) => s.id === topic?.sectionId);
     const open = !!topic && !topic.closed;
+    const writer = !!topic && topic.writer.publicKey === me;
+    // What the node showed this member of the topic's links (a placeholder has no id, so nothing of it can be taken off).
+    const shownLinks: LinkPick[] = (topic?.links ?? []).flatMap((l) => (l.shown ? [{ kind: l.kind, id: l.id, title: l.title }] : []));
+    /** Links (or takes off) one thing; the node's answer is the topic as it now reads for this member, chips and all. */
+    async function linkThing(pick: LinkPick, on: boolean) {
+        if (!topic) return;
+        const next = await linkForumThing(topic.id, pick.kind, pick.id, on);
+        if (shown.current) setPage((p) => (p && p.topic.id === next.id ? { ...p, topic: next } : p));
+    }
     const tooLong = Array.from(words.trim()).length > FORUM_LIMITS.reply;
 
     /** `told`: they just agreed to the sheet (the front they were handed still says not). */
@@ -251,6 +268,7 @@ export function ForumTopicView({ topicId, at, front, me, onBack, onTold, onGone,
                     {topic.place && <p className="m-0 text-xs" style={{ color: 'var(--text-muted)' }}>📍 {topic.place}</p>}
                     {opening && byline(opening)}
                     {opening && postBody(opening)}
+                    {!topic.removed && <ForumLinkChips links={topic.links} onOpen={(link) => { const door = linkDoor(link); if (door) onNavigate?.(door[0], door[1]); }} />}
                 </article>
             )}
 
@@ -318,6 +336,12 @@ export function ForumTopicView({ topicId, at, front, me, onBack, onTold, onGone,
                     title={t(TOPIC_WORDS.reportTitle)} note={t(TOPIC_WORDS.reportNote)} onSubmitReason={(reason) => reportForumPost(reporting.id, reason)} />
             )}
 
+            {linking && topic && (
+                <ForumLinkSheet me={me} linked={shownLinks} room={FORUM_LIMITS.topicLinks - linksTaken(topic)} onClose={() => setLinking(false)}
+                    onPick={writer ? (pick) => linkThing(pick, true) : undefined}
+                    onTakeOff={writer || staff ? (pick) => linkThing(pick, false) : undefined} />
+            )}
+
             {telling && (
                 <ForumToldSheet busy={busy} onNotNow={() => setTelling(false)} onPost={() => {
                     setTelling(false);
@@ -338,6 +362,12 @@ export function ForumTopicView({ topicId, at, front, me, onBack, onTold, onGone,
                 () => void act(() => followForumTopic(topic.id, topic.follow === 'muted' ? null : 'muted')),
             ]];
             if (open && (topic.writer.publicKey === me || front?.moderator)) items.push([t(TOPIC_WORDS.close), () => void act(() => closeForumTopic(topic.id))]);
+            // Links (slice F9): the writer adds them; the writer, an owner or an admin takes one off. Not on a removed topic.
+            if (!topic.removed && (writer || (staff && shownLinks.length > 0))) items.push([t(LINK_WORDS.link), () => { setMenu(null); setLinking(true); }]);
+            // Make this a Need: only with room for its link (the Need is posted in the Market, then linked here).
+            if (!topic.removed && writer && onMakeNeed && linksTaken(topic) < FORUM_LIMITS.topicLinks) {
+                items.push([t(LINK_WORDS.makeNeed), () => { setMenu(null); onMakeNeed(needDraftOf(topic, opening?.words ?? '')); }]);
+            }
             items.push([t(TOPIC_WORDS.cancel), () => setMenu(null)]);
             return items;
         }

@@ -71,6 +71,8 @@
  *   - **Leaving**: my Leave closes the chat here at once ({@link leaveGuestChatHere}: `left`, its keys gone, a line of
  *     mine not yet sent never goes) with my signed `group-leave` kept on it ({@link GuestLeave}), then it goes. Until my
  *     server says the host took it, the round posts it again, and my server still listing me in never opens the chat again.
+ *     A refusal that passes (a mute, guests switched off a while) never stops it: only `not_in_group` does (group-guest-mail.ts
+ *     leaveRefusal). A removal listed after I left keeps the chat left, in my own words.
  */
 import {
     openGroupLine, openMyGroupKey, sealGroupLine, type GroupEpochRecord, type GroupServedWrap,
@@ -184,9 +186,11 @@ export interface GuestChat {
 /**
  * My leave (`group-leave`), from the moment I leave until my server says the host took it, or lists me no more (the file's
  * header, "Leaving"): `sending` (posted with no answer yet, its signed item kept and posted again under the same id; `item`
- * null when a new one is due under `itemId`: the last one failed), `queued` (my server has it, the host not reached yet),
- * or `refused` (my server said no for good: I'm not asked or in there, or a leave of mine from another device already
- * waits there; nothing more goes from here). While it is kept, my server listing me in never opens the chat again.
+ * null when a new one is due under `itemId`: the last one failed, or my server refused the item itself), `queued` (my
+ * server has it, the host not reached yet), or `refused` (my server answered `not_in_group`: I'm not asked or in there, or
+ * a leave of mine from another device already waits there; nothing more goes from here unless that other one fails). Any
+ * other refusal passes, and it goes again (group-guest-mail.ts leaveRefusal). While it is kept, my server listing me in
+ * never opens the chat again, and a removal listed never turns my leave into one.
  */
 export interface GuestLeave { itemId: string; item: string | null; state: 'sending' | 'queued' | 'refused' }
 
@@ -611,9 +615,10 @@ function applyGuestLinks(chats: GuestChats, groups: unknown, ctx: GuestMailConte
             changed = true;
         }
         // My leave on its way (GuestChat.leave): my server lists me as before until the host takes it, and the chat stays
-        // left here (the file's header, "Leaving"). A removal meanwhile ends it: nothing more of mine goes to that group.
-        if (chat.state === 'left' && chat.leave) {
-            if (state === 'removed') { chat.leave = null; changed = true; }
+        // left here (the file's header, "Leaving"). A removal listed, then or at any round after, ends the leave (nothing more
+        // of mine goes to that group) and the chat stays left in my own words: I chose to leave.
+        if (chat.state === 'left' && (chat.leave || state === 'removed')) {
+            if (state === 'removed' && chat.leave) { chat.leave = null; changed = true; }
             continue;
         }
         // My no (or leave) stands while my server still lists the invitation: the host hasn't taken it yet, and it never
@@ -737,11 +742,19 @@ function applyOwnEpochTick(chat: GuestChat, tk: GuestSentTick, now: number): boo
  * One tick for my leave (applyGuestTicks); whether it changed anything. The host took it (`sent`), or refused it (I'm not
  * asked or in there): nothing more to send. My server has it (`queued`): it waits there. It failed (a day with no answer
  * from the host): a new one is due under a new id (my server and the host each count an id once). A tick for another
- * leave of mine is old news.
+ * leave of mine is old news, but one: mine kept `refused` (a leave of mine from another device waited at my server) and
+ * that other one failed or was refused, so mine is due again under a new id (no other waits now; were I out of the group,
+ * my server's list would have ended it). Its taking needs nothing here: my server lists me no more.
  */
 function applyLeaveTick(chat: GuestChat, tk: GuestSentTick, now: number, newId: () => string): boolean {
     const leave = chat.leave ?? null;
-    if (!leave || leave.itemId !== tk.itemId || chat.state !== 'left') return false;
+    if (!leave || chat.state !== 'left') return false;
+    if (leave.itemId !== tk.itemId) {
+        if (leave.state !== 'refused' || tk.kind !== 'group-leave' || (tk.state !== 'failed' && tk.state !== 'refused')) return false;
+        chat.leave = { itemId: newId(), item: null, state: 'sending' };
+        chat.updatedAt = now;
+        return true;
+    }
     if (tk.state === 'sent' || tk.refused || tk.state === 'refused') chat.leave = null;
     else if (tk.state === 'failed') chat.leave = { itemId: newId(), item: null, state: 'sending' };
     else if (tk.state === 'queued' && leave.state !== 'queued') chat.leave = { ...leave, state: 'queued', item: null };

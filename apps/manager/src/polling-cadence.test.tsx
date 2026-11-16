@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { App } from './App';
 import { TopologyModule } from './components/modules/TopologyModule';
@@ -575,6 +575,13 @@ describe('Section timers obey the same pause', () => {
         });
         await act(async () => {
             fireEvent.submit(nameInput.closest('form')!);
+        });
+        // Add an address asks first (several addresses S6, design §7, §8): yes, add it, and the claim runs.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(0);
+        });
+        await act(async () => {
+            fireEvent.click(within(screen.getByTestId('in-page-confirm')).getByRole('button', { name: 'Add it' }));
         });
 
         await tick(IDLE_MS + 60_000);

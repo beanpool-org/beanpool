@@ -6352,4 +6352,21 @@ describe('Signal\'s model through the real sync (DESIGN-dm-key-signal-model §6 
         expect(pinOf(dm.id)).toMatchObject({ peer: k2.publicKey, by: 'listing', former: [ben.publicKey] });
         expect(await keyNotices(dm)).toHaveLength(1);
     });
+
+    it('T15 † a stored rule-5 record, no sync yet: isDmUnplaced reads it as the Inbox tag and the banner do (dmEntryWaitsForMember): one key listed waits for nobody (the screen\'s check pins it), no single key listed waits; the read writes nothing (#3267 review)', async () => {
+        await anaHoldsTheChat();
+        for (const listed of [k2.publicKey, null]) {
+            editStoredPins(ana, (pins) => { pins[dm.id.toLowerCase()] = { unplaced: true, since: '2026-11-01T00:00:00.000Z', listed }; });
+            restarted();
+            const stored = h.store.get(dmPeerPinsStoreKey(ana.publicKey, FILE_A));
+            const waits = listed === null;
+            expect({ listed: !!listed, unplaced: await isDmUnplaced(dm.id) }).toEqual({ listed: !!listed, unplaced: waits });
+            expect(h.store.get(dmPeerPinsStoreKey(ana.publicKey, FILE_A))).toBe(stored);
+            expect({ listed: !!listed, tag: await tagOf(dm.id) }).toEqual({ listed: !!listed, tag: waits });
+            // The screen's check agrees: one key listed becomes the pin on it, no card; no single key listed is rule 5's card.
+            expect({ listed: !!listed, card: !!(await getDmKeyChange(dm.id))?.unplaced }).toEqual({ listed: !!listed, card: waits });
+            expect({ listed: !!listed, after: await isDmUnplaced(dm.id) }).toEqual({ listed: !!listed, after: waits });
+            if (listed) expect(pinOf(dm.id)).toMatchObject({ peer: k2.publicKey, by: 'listing' });
+        }
+    });
 });

@@ -30,7 +30,7 @@ vi.mock('../lib/blocklist', () => ({ blockUser: vi.fn(async () => true) }));
 
 import { useState } from 'react';
 import { ForumPage, type ForumDoor } from './ForumPage';
-import { forgetForum, keptTopic, searchForum } from '../lib/forum';
+import { forgetForum, keptSearch, keptTopic, searchForum } from '../lib/forum';
 import { blockUser } from '../lib/blocklist';
 
 const ME = 'me-key';
@@ -805,5 +805,39 @@ describe('doors are one-shot and land where they name (round 2)', () => {
         await screen.findByRole('option', { name: 'General' });
         expect(pick()).toBe('');
         expect(townAsks()).toBe(0);
+    });
+
+    // #3264 review: a search still out when a group's Topics door fires answers to the box the door replaced, and ✕ while a search
+    // is out lets go of it the same way. Its answer is dropped and not kept: the topics stay, now and when the Forum is drawn again.
+    it.each(['a group\'s Topics door', '✕'] as const)('a search still out when %s lets go of it is dropped when it answers, and not kept', async (how) => {
+        let answerSearch: (a: unknown) => void = () => {};
+        const later = new Promise((r) => { answerSearch = r; });
+        node.answer = (c) => (c.path.startsWith('/api/forum/search?q=garden') ? later : standIn(c));
+        const { rerender } = render(<ForumPage me={ME} />);
+        // The member's earlier search, its hits showing (and its ✕).
+        await screen.findAllByTestId('forum-topic-row');
+        fireEvent.change(screen.getByTestId('forum-search-box'), { target: { value: 'beans' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+        expect(await screen.findAllByTestId('forum-search-hit')).toHaveLength(1);
+        fireEvent.change(screen.getByTestId('forum-search-box'), { target: { value: 'garden' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+        if (how === '✕') {
+            fireEvent.click(screen.getByRole('button', { name: 'Clear the search' }));
+        } else {
+            rerender(<ForumPage me={ME} door={{ section: 's-news' }} />);
+            await waitFor(() => expect(pick()).toBe('s-news'));
+        }
+        expect(await screen.findAllByTestId('forum-topic-row')).toHaveLength(2);
+        await act(async () => { answerSearch({ hits: [hit(3, 'garden beds')], next: null }); await later; });
+        expect({ hits: screen.queryAllByTestId('forum-search-hit').length, topics: screen.queryAllByTestId('forum-topic-row').length, kept: keptSearch() })
+            .toEqual({ hits: 0, topics: 2, kept: null });
+        expect(sent('GET', '/api/forum/search?q=garden')).toHaveLength(1);
+        // The box is free again: the member's next search asks, shows and is kept.
+        node.answer = standIn;
+        fireEvent.change(screen.getByTestId('forum-search-box'), { target: { value: 'seeds' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+        expect(await screen.findAllByTestId('forum-search-hit')).toHaveLength(1);
+        expect(screen.queryAllByTestId('forum-topic-row')).toHaveLength(0);
+        expect(keptSearch()?.q).toBe('seeds');
     });
 });

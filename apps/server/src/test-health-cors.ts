@@ -16,7 +16,8 @@
  *      allowance only where it is listed by route and method below: the three signed knock routes, the web push key and
  *      subscription an applicant's web app reads and gives (global yes Y2), a member's note from their own community (forums
  *      F10), the community's signed address list and an address's proof (several addresses S2: opened as the health read
- *      is, GET and HEAD alone, `*`, no credential), and the health read; and real unsigned GETs of
+ *      is, GET and HEAD alone, `*`, no credential), one public topic of the worldwide forum as JSON (forums F11: an admin's web
+ *      app checks the post a request to join names; opened as the health read is), and the health read; and real unsigned GETs of
  *      the health read's neighbours (info, card, version, config, known rule, Home, the node's status) carry none.
  *   5. An origin the operator lists keeps its own rule on the health read: its origin back, with credentials.
  *
@@ -126,6 +127,24 @@ async function main(): Promise<void> {
         assert(header(w, 'access-control-allow-origin') === null, `a POST to ${route} from another origin gets no allowance (${w.status})`);
     }
 
+    // ── 3c. one public topic of the worldwide forum, as JSON, opened as the health read is (forums F11) ──
+    console.log('\n── 3c. a public forum topic (forums F11) ──');
+    {
+        const route = '/api/forum/public/topics/ft-sentinel';
+        const r = await call('GET', route, { Origin: WEB });
+        assert(header(r, 'access-control-allow-origin') === '*' && header(r, 'access-control-allow-credentials') === null,
+            `GET ${route} from another origin: readable, never with credentials (${r.status}, ACAO ${header(r, 'access-control-allow-origin')})`);
+        const pr = await preflight(route, 'GET', WEB, 'x-signature, authorization');
+        const m = lower(header(pr, 'access-control-allow-methods'));
+        assert(pr.status === 204 && m.includes('get') && m.includes('head') && !m.some(x => ['post', 'put', 'patch', 'delete'].includes(x))
+            && header(pr, 'access-control-allow-headers') === null && header(pr, 'access-control-allow-credentials') === null,
+            `its preflight allows GET and HEAD alone, no request header, no credentials (ACAM ${header(pr, 'access-control-allow-methods')})`);
+        for (const other of ['/api/forum/public', '/api/forum/public/sections/fs-sentinel', '/api/forum/ask-posts', '/api/forum/public/topics/ft-sentinel/extra']) {
+            const o = await call('GET', other, { Origin: WEB });
+            assert(header(o, 'access-control-allow-origin') === null, `GET ${other} from another origin: no allowance (${o.status})`);
+        }
+    }
+
     // ── 4. nothing else is opened ──
     console.log('\n── 4. nothing else is opened ──');
     const app = https.getKoaApp();
@@ -150,6 +169,9 @@ async function main(): Promise<void> {
         // The community's signed address list and an address's proof (several addresses S2, routes/address-list.ts): the web app
         // at one of the community's addresses checks the main one. Opened as the health read is (PUBLIC_CORS_READS).
         'GET /api/node/addresses', 'GET /api/node/proof',
+        // One public topic of the worldwide forum as JSON (forums F11): an admin's web app on their own community checks the post
+        // a request to join names (@beanpool/core checkKnockForumPost). Opened as the health read is (PUBLIC_CORS_READ_PATTERNS).
+        'GET /api/forum/public/topics/sentinel',
     ];
     const opened: string[] = [];
     const unexpected: string[] = [];
@@ -160,14 +182,14 @@ async function main(): Promise<void> {
         if (!path.startsWith('/')) continue;
         const r = await preflight(path, method, WEB);
         if (header(r, 'access-control-allow-origin') === null) continue;
-        opened.push(route);
+        opened.push(`${method} ${path}`);
         if (!OPEN.includes(`${method} ${path}`)) unexpected.push(`${route} (ACAO ${header(r, 'access-control-allow-origin')})`);
     }
     assert(served.length > 400, `the sweep reaches every route the node serves (${served.length})`);
     assert(opened.includes(`GET ${HEALTH}`), `the health read is the one new opening (${opened.join(', ')})`);
     assert(unexpected.length === 0, `no other route answers an unlisted origin's preflight with an allowance${unexpected.length ? `: ${unexpected.join(', ')}` : ''}`);
     assert(JSON.stringify([...opened].sort()) === JSON.stringify([...OPEN].sort()),
-        `exactly the ten openings, by route and method: the health read, the three signed knock routes, the web push key and subscription, a member's note, the address list and its proof (${opened.join(', ')})`);
+        `exactly the eleven openings, by route and method: the health read, the three signed knock routes, the web push key and subscription, a member's note, the address list and its proof, a public forum topic (${opened.join(', ')})`);
 
     const neighbours = ['/api/community/info', '/api/community/card', '/api/community/known-rule', '/api/version', '/api/node/config', '/api/home', '/api/local/status', '/api/community/health/extra', '/api/community/healthz'];
     for (const p of neighbours) {

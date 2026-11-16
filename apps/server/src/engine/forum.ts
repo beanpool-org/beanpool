@@ -73,6 +73,7 @@ import { dropForumLabelOf, forumLabelsOf, forumLabelsTag } from './membership-no
 import { forumSectionOpenPolls, sectionAccess, sectionReadSql, type SectionAccess } from './forum-sections.js';
 import { postOutOfSight } from './post-sight.js';
 import { forumStarterNeverListed, stampForumPublicFrom } from './forum-public.js';
+import { forumProofSecret } from './forum-ask-posts.js';
 import { getDecision, titleForMembers } from '../decisions-engine.js';
 import { FORUM_LINKING_SQL, FORUM_TARGET_LINKS_WHERE, forumLinkTarget, forumLinksOf } from './forum-links.js';
 
@@ -547,6 +548,9 @@ export function markForumTold(member: string, now = Date.now()): void {
     if (toldAt(member)) return;
     db.prepare(`INSERT INTO forum_members (member_pubkey, told_public_at) VALUES (?, ?)
         ON CONFLICT(member_pubkey) DO UPDATE SET told_public_at = excluded.told_public_at`).run(member, iso(now));
+    // Their secret for the proof each public post of theirs carries (slice F11), made before any post of theirs can exist, so
+    // every post they write shows one and none tells anyone they once asked for it (engine/forum-ask-posts.ts).
+    if (getProfileSwitches().forumPublic) forumProofSecret(member, now);
 }
 
 /** On a public forum, no post until the member was told (design §5): the server holds it, so no app can skip the telling. */

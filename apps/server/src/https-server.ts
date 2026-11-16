@@ -172,6 +172,7 @@ import { createKnowledgeRoutes } from './routes/knowledge.js';
 import { createForumRoutes } from './routes/forum.js';
 import { createMembershipNoteRoutes } from './routes/membership-note.js';
 import { createForumPublicRoutes } from './routes/forum-public.js';
+import { createForumAskPostsRoutes } from './routes/forum-ask-posts.js';
 import { startStampingForumPublicFrom } from './engine/forum-public.js';
 import { createFreeTagRoutes } from './routes/free-tags.js';
 import { createNoticeRoutes } from './routes/notices.js';
@@ -573,8 +574,15 @@ const HEALTH_CORS_METHODS = 'GET, HEAD';
  * addresses checks the main one before it shows the line that names it). Each is public and names nobody.
  */
 export const PUBLIC_CORS_READS: ReadonlySet<string> = new Set([HEALTH_CORS_PATH, '/api/node/addresses', '/api/node/proof']);
+/**
+ * And one public topic of the worldwide forum, as JSON (forums F11, routes/forum-public.ts): an admin's web app on their own
+ * community reads the post a request to join names, and its proof, from here (@beanpool/core checkKnockForumPost). The same
+ * body anyone on the web reads, unsigned; a read with another website's Origin is never kept by a shared cache (guest-cache.ts).
+ */
+export const PUBLIC_CORS_READ_PATTERNS: readonly RegExp[] = Object.freeze([/^\/api\/forum\/public\/topics\/[A-Za-z0-9_-]{1,64}$/]);
 function isHealthCorsRead(ctx: { method: string; path: string }): boolean {
-    return PUBLIC_CORS_READS.has(ctx.path) && (ctx.method === 'GET' || ctx.method === 'HEAD' || ctx.method === 'OPTIONS');
+    const listed = PUBLIC_CORS_READS.has(ctx.path) || PUBLIC_CORS_READ_PATTERNS.some((re) => re.test(ctx.path));
+    return listed && (ctx.method === 'GET' || ctx.method === 'HEAD' || ctx.method === 'OPTIONS');
 }
 
 /** The refusal of a local community's listings to anyone but its members, which the apps turn into their sign-in page. */
@@ -2146,6 +2154,8 @@ export async function startHttpsServer(port: number): Promise<number> {
         createForumPublicRoutes(deps),
         // The note a member carries to the worldwide forum, and what it shows there (slice F10, routes/membership-note.ts).
         createMembershipNoteRoutes(),
+        // A member's own public posts and their secret, to add to an Ask to join (slice F11, routes/forum-ask-posts.ts).
+        createForumAskPostsRoutes(),
         createFreeTagRoutes(deps),
         createNoticeRoutes(deps),
         createBlockRoutes(deps),

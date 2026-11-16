@@ -1380,6 +1380,9 @@ async function main(): Promise<void> {
             // The community label (slice F10, routes/membership-note.ts): a member's note from their own community, and what they
             // show on a public forum; all signed, the member the signer.
             'GET /api/membership/note', 'GET /api/forum/label', 'POST /api/forum/label',
+            // Forum posts on an Ask to join (slice F11, routes/forum-ask-posts.ts): a member's own public posts and their secret,
+            // signed, the member the signer; 404 wherever the forum is not public.
+            'GET /api/forum/ask-posts',
             // The worldwide forum for anyone on the web (slice F7, routes/forum-public.ts): its public JSON, a public post's photo,
             // the plain pages, the sitemap and robots.txt; 404 wherever the forum is not public.
             'GET /api/forum/public', 'GET /api/forum/public/sections/:id', 'GET /api/forum/public/topics/:id', 'GET /api/forum/photos/:postId/:n',

@@ -60,7 +60,7 @@ import { shownPostAfterReload } from '../../utils/shown-post';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { ForumLinkedTopics } from '../../components/forum/ForumLinks';
 import { SharePostButtons } from '../../components/SharePost';
-import { useReaderFeatures } from '../../utils/use-reader-features';
+import { useReaderFeatures, useShowcaseMode } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { pollsInformal, showcaseMode } from '../../utils/node-profile';
 import { PollCard } from '../../components/PollCard';
@@ -2969,9 +2969,15 @@ export default function PostRoute() {
     const pageId = Array.isArray(id) ? id[0] : id;
     const asked = (Array.isArray(kind) ? kind[0] : kind) === 'knowledge';
     const { page, settled, isPage } = useKnowledgePage(pageId, asked);
-    if (page) return <KnowledgeDetail page={page} />;
+    if (page) return <KnowledgePageRoute page={page} />;
     if (!isPage) return <PostDetailModal />;
     return <KnowledgeMissing settled={settled} />;
+}
+
+/** A page of Local knowledge, told whether Beans are live here: its "🫘 Thank {name}" opens the Ledger's Send form (K8). */
+function KnowledgePageRoute({ page }: { page: React.ComponentProps<typeof KnowledgeDetail>['page'] }) {
+    const beansLive = useShowcaseMode('beans') === 'live';
+    return <KnowledgeDetail page={page} beansLive={beansLive} />;
 }
 
 function getTimeAgo(dateStr: string): string {

@@ -46,8 +46,11 @@ async function signedOverPath(req: Sent, publicKey: string): Promise<boolean> {
 }
 
 const knock = { id: 'k1', pubkey: 'ab'.repeat(32), callsign: 'Robin', message: 'I grow tomatoes.', avatar: null, fromNode: 'global.beanpool.org', createdAt: '2026-09-25T10:00:00.000Z' };
-/** The row as the phone keeps it: a request that came from no shared listing reads `via: null` (shared-listing door A3). */
-const kept = { ...knock, via: null };
+/**
+ * The row as the phone keeps it: a request that came from no shared listing reads `via: null` (shared-listing door A3), and
+ * one that carried no forum posts `forum: null` (forums F11).
+ */
+const kept = { ...knock, via: null, forum: null };
 
 describe('the list', () => {
     it('is a signed GET of the member’s own community, signed over the path without the query', async () => {
@@ -83,7 +86,24 @@ describe('the list', () => {
         answer = () => ({ status: 200, body: { knocks: [shared, half], total: 2 } });
         expect(await fetchJoinRequests(NODE, await member())).toEqual({
             ok: true, total: 2,
-            knocks: [{ ...shared, via: { title: 'Short-term shelter', sharer: 'Sarah' } }, { ...half, via: null }],
+            knocks: [{ ...shared, via: { title: 'Short-term shelter', sharer: 'Sarah' }, forum: null }, { ...half, via: null, forum: null }],
+        });
+    });
+
+    it('keeps the forum posts a request carried (forums F11): an https address, each post it names with its proof, nothing else; a post without a proof is left out', async () => {
+        const proof = 'ab'.repeat(32);
+        const named = { postId: 'fp-1', topicId: 'ft-1', number: 2, proof };
+        // A title or words beside a post are not the forum's: the reader drops them (the rows show only what the forum answers).
+        const post = { ...named, title: 'Ran the seed swap for two years', words: 'I organised every swap.' };
+        const withPosts = { ...knock, id: 'k5', forum: { at: 'https://forum.example', posts: [post, { ...post, postId: 'fp-2', proof: 'no' }] } };
+        const plainHttp = { ...knock, id: 'k6', forum: { at: 'http://forum.example', posts: [post] } };
+        answer = () => ({ status: 200, body: { knocks: [withPosts, plainHttp], total: 2 } });
+        expect(await fetchJoinRequests(NODE, await member())).toEqual({
+            ok: true, total: 2,
+            knocks: [
+                { ...withPosts, via: null, forum: { at: 'https://forum.example', posts: [named] } },
+                { ...plainHttp, via: null, forum: null },
+            ],
         });
     });
 

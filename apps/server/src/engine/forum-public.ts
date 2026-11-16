@@ -15,7 +15,10 @@
  * - **A topic** is public when its opening post is: so a new person's topic, a hidden or removed one, and one blanked by
  *   its writer are not found, by its address too. Its reply count and last activity are of its public posts only.
  * - **What an answer holds** is exactly @beanpool/core FORUM_PUBLIC_FIELDS: a writer is a name and the community label they
- *   switched on (slice F10), never a key, a picture, a profile, an area. No proof yet (slice F11 adds it).
+ *   switched on (slice F10), never a key, a picture, a profile, an area. A post carries its `proof` (slice F11, design §13): the
+ *   HMAC its writer's key and their secret make for it (@beanpool/core forumPostProof), so an admin of a community they ask
+ *   to join can tell the post is theirs, and nobody without the secret can test a key against it; null while the writer has
+ *   no secret (engine/forum-ask-posts.ts).
  * - **Search engines** (Q2): a topic may be listed once its opening post has been public for 2 days and it is in a listed
  *   section; any section its owners mark unlisted never; a group's section is never public at all. "Introduce yourself" never,
  *   by a mark no edit removes: the starter a section was made as, which a rename keeps (engine/forum.ts editForumSection, which
@@ -23,7 +26,7 @@
  *
  * Reads only, but for the stamp, which the main server alone writes (a standby gets it in its copy).
  */
-import { FORUM_LIMITS, FORUM_STARTER_SECTIONS, FORUM_TIMES, type ForumWriterLabel } from '@beanpool/core';
+import { FORUM_LIMITS, FORUM_STARTER_SECTIONS, FORUM_TIMES, forumPostProof, type ForumWriterLabel } from '@beanpool/core';
 import { getMember } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -94,9 +97,9 @@ export function startStampingForumPublicFrom(everyMs = HOUR_MS): void {
 // ── What anyone may read ────────────────────────────────────────────────────────────────────────────────────────
 
 /** A post (alias `p`) anyone on the web may read: stamped, still up, not hidden while moderators look. */
-const PUBLIC_POST = (p: string) => `${p}.public_from IS NOT NULL AND ${p}.removed_by IS NULL AND ${p}.hidden_by_reports_at IS NULL`;
+export const PUBLIC_POST = (p: string) => `${p}.public_from IS NOT NULL AND ${p}.removed_by IS NULL AND ${p}.hidden_by_reports_at IS NULL`;
 /** A topic (alias `t`) anyone may read: not gone, in no group's section, its opening post public. */
-const PUBLIC_TOPIC = (t: string) => `COALESCE(${t}.closed_by, '') != 'removed'
+export const PUBLIC_TOPIC = (t: string) => `COALESCE(${t}.closed_by, '') != 'removed'
     AND ${t}.section_id IN (SELECT id FROM forum_sections WHERE group_id IS NULL)
     AND EXISTS (SELECT 1 FROM forum_posts o WHERE o.topic_id = ${t}.id AND o.number = 1 AND ${PUBLIC_POST('o')})`;
 /** In a list: and its section not archived. */
@@ -123,6 +126,21 @@ export interface ForumPublicPost {
     /** How many photos it holds: each at /api/forum/photos/<id>/<0..n-1>. */
     photos: number;
     lang: string | null;
+    /** The proof its writer's key and secret make for it (slice F11), or null while they have no secret. */
+    proof: string | null;
+}
+
+/**
+ * The proof a public post carries (design §13), or null: its writer has no secret yet, or a key core can't hash (not 64
+ * lower-case hex). Made at each read, so nothing is held in memory.
+ */
+export function publicPostProof(postId: string, writerKey: string, secret: string | null): string | null {
+    if (!secret) return null;
+    try {
+        return forumPostProof({ postId, writerKey, secret });
+    } catch {
+        return null;
+    }
 }
 
 interface SectionRow { id: string; starter: string | null; name: string | null; about: string | null; position: number; listed: number; archived_at: string | null; topic_count: number }
@@ -131,7 +149,10 @@ interface TopicRow {
     closed_by: string | null; created_at: string; public_replies: number; public_last: string | null; opening_public_from: string; listed: number; archived_at: string | null;
     never_listed: number; section_starter: string | null;
 }
-interface PostRow { id: string; topic_id: string; number: number; writer_pubkey: string; words: string; public_quotes: number | null; created_at: string; edited_at: string | null; lang: string | null; photo_count: number }
+interface PostRow {
+    id: string; topic_id: string; number: number; writer_pubkey: string; words: string; public_quotes: number | null; created_at: string; edited_at: string | null;
+    lang: string | null; photo_count: number; proof_secret: string | null;
+}
 
 function writersOf(keys: readonly string[]): (pk: string) => ForumPublicWriter {
     const labels = forumLabelsOf(keys);
@@ -205,7 +226,8 @@ export function publicForumTopic(id: string, after = 0, now = Date.now()):
     const section = db.prepare(`SELECT ${SECTION_COLUMNS} FROM forum_sections s WHERE s.id = ?`).get(t.section_id) as SectionRow;
     const rows = db.prepare(`SELECT p.id, p.topic_id, p.number, p.writer_pubkey, p.words, p.created_at, p.edited_at, p.lang,
             CASE WHEN EXISTS (SELECT 1 FROM forum_posts q WHERE q.topic_id = p.topic_id AND q.number = p.quotes AND ${PUBLIC_POST('q')}) THEN p.quotes END AS public_quotes,
-            (SELECT COUNT(*) FROM forum_post_photos f WHERE f.post_id = p.id) AS photo_count
+            (SELECT COUNT(*) FROM forum_post_photos f WHERE f.post_id = p.id) AS photo_count,
+            (SELECT m.proof_secret FROM forum_members m WHERE m.member_pubkey = p.writer_pubkey) AS proof_secret
         FROM forum_posts p WHERE p.topic_id = ? AND p.number > ? AND ${PUBLIC_POST('p')} ORDER BY p.number LIMIT ?`)
         .all(id, after, FORUM_LIMITS.postsPerPage + 1) as PostRow[];
     const page = rows.slice(0, FORUM_LIMITS.postsPerPage);
@@ -216,6 +238,7 @@ export function publicForumTopic(id: string, after = 0, now = Date.now()):
         posts: page.map((p) => ({
             id: p.id, topicId: p.topic_id, number: p.number, writer: writer(p.writer_pubkey), words: p.words, quotes: p.public_quotes,
             createdAt: p.created_at, edited: p.edited_at !== null, photos: p.photo_count, lang: p.lang,
+            proof: publicPostProof(p.id, p.writer_pubkey, p.proof_secret),
         })),
         next: rows.length > FORUM_LIMITS.postsPerPage ? page[page.length - 1].number : null,
     };

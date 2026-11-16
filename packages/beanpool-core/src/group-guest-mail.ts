@@ -164,8 +164,13 @@ export async function sendGuestLine(io: GuestMailIO, id: string, text: string): 
 async function sendOwnEpoch(io: GuestMailIO, id: string, chat: GuestChat): Promise<{ chat: GuestChat | null; posted: boolean }> {
     let epochItem: RelayItem | null = null;
     const own = chat.ownEpoch ?? null;
-    if (own?.state === 'sending' && own.item) {
-        try { epochItem = JSON.parse(own.item) as RelayItem; } catch { epochItem = null; }
+    if (own?.state === 'sending') {
+        try { epochItem = JSON.parse(own.item ?? '') as RelayItem; } catch { epochItem = null; }
+        if (epochItem?.envelope?.itemId !== own.itemId) {
+            // Not kept as it went: given up here, and another may be made (never left blocking the next one).
+            const dropped = await update(io, id, (c) => (c.ownEpoch?.itemId === own.itemId ? { ...c, ownEpoch: null, epochSent: null } : null));
+            return { chat: dropped, posted: false };
+        }
     } else if (!own) {
         const step = guestEpochDue(chat, io.me);
         if (step) {

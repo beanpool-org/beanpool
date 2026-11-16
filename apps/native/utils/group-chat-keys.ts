@@ -375,7 +375,6 @@ export class GroupKeyring {
         this.shown = new Set(keys);
     }
 
-    /** Read the members list the screen shows (GET …/members, active rows): null when the node won't say. */
     /** The guests in the group's chat as every member sees them (GET …/guests, state `in`); none when the node won't say. */
     private async readGuestKeys(): Promise<string[]> {
         try {
@@ -387,6 +386,7 @@ export class GroupKeyring {
         }
     }
 
+    /** Read the members list the screen shows (GET …/members, active rows): null when the node won't say. */
     private async readShownRoster(): Promise<Set<string> | null> {
         try {
             const rows = await answerOf(await signedGet(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/members`, this.identity as BeanPoolIdentity));

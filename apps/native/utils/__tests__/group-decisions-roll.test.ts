@@ -62,6 +62,9 @@ vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => null }));
 // The quiet-lead panel is its own component with its own reads: here only whether the sheet draws it.
 vi.mock('../../components/GroupSuccessionPanel', () => ({ GroupSuccessionPanel: () => createElement('div', { 'data-testid': 'succession' }) }));
 vi.mock('../../components/PlaceCircleCard', () => ({ PlaceCircleCard: () => null }));
+// Guests from other communities (G2) is its own component with its own reads, through the phone's signed mail requests
+// (and so the key store): not this sheet's business here.
+vi.mock('../../components/GroupGuestsList', () => ({ GroupGuestsList: () => null }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: null }) }));
 const node = vi.hoisted(() => ({ decisions: null as ScopedDecisionList | null, group: null as unknown, members: [] as unknown[] }));
 vi.mock('../db', () => ({

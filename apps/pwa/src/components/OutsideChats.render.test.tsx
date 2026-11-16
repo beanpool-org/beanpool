@@ -7,6 +7,8 @@
  * browser", "Each phone or browser you use has its own switch." under it, and the chat's banner says "What you write on another
  * phone or browser shows only there." under "Kept in this browser only."; showing my card opens this browser's door and the
  * switch closes it; a blocked person's card opens no box; a request takes no reply until Accept; an open chat has its box.
+ * Changes to lines (X6): an edit reads "edited", a deleted line "This message was deleted", reactions under the line with mine
+ * marked; a tap on a line in an open chat offers the chat's reactions and, on mine only, Edit message and Delete message.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -38,11 +40,12 @@ vi.mock('../lib/outside-mail', async (importOriginal) => {
         myHome: async () => HOME,
         myAddressCard: async (ctx: any) => core.signAddressCard({ key: ctx.identity.publicKey, home: HOME, name: 'Ben' }, core.ed25519Signer(hex(ctx.identity.privateKey))),
         sendFromBox: vi.fn(async () => ({ kept: true, error: null })),
+        sendOutsideChange: vi.fn(async () => {}),
     };
 });
 
 import { outsideChatStore, clearOutsideChats } from '../lib/outside-chat-store';
-import { doorOpen } from '../lib/outside-mail';
+import { doorOpen, sendOutsideChange } from '../lib/outside-mail';
 import { AddressCardPanel } from './AddressCardPanel';
 import { OutsideChatThread, outsideRoundNow } from './OutsideChats';
 
@@ -123,6 +126,82 @@ describe('the chat (OutsideChatThread)', () => {
         expect(await screen.findByTestId('outside-chat-input')).toBeTruthy();
         expect((await here.ctx.store.chat(BEN.key, chatId))?.state).toBe('open');
         expect(onAccepted).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('changes to lines (X6)', () => {
+    async function openWithLines() {
+        await here.ctx.store.openChat(BEN.key, chatId, { key: SOL.key, home: SOL_HOME, name: 'Sol' });
+        const theirs = crypto.randomUUID(), mine = crypto.randomUUID(), gone = crypto.randomUUID();
+        const at = Date.now() - 10_000;
+        await here.ctx.store.writeTheirs(BEN.key, { id: theirs, chatId, author: SOL.key, text: 'Bikes at 3', replyTo: null, at }, { home: SOL_HOME, name: 'Sol' }, 'line');
+        await here.ctx.store.writeTheirs(BEN.key, { id: gone, chatId, author: SOL.key, text: 'Oops', replyTo: null, at: at + 1 }, { home: SOL_HOME, name: 'Sol' }, 'line');
+        await here.ctx.store.addMine(BEN.key, { id: mine, chatId, author: BEN.key, text: 'See you there', replyTo: null, at: at + 2, item: '{}' });
+        await here.ctx.store.setMineState(BEN.key, chatId, mine, 'delivered');
+        return { theirs, mine, gone, at };
+    }
+    beforeEach(() => { vi.mocked(sendOutsideChange).mockClear(); });
+
+    it('reads its changes: edited, deleted, and reactions with mine marked', async () => {
+        const { theirs, gone, at } = await openWithLines();
+        await here.ctx.store.putChange(BEN.key, chatId, { kind: 'dm-edit', itemId: crypto.randomUUID(), lineId: theirs, author: SOL.key, at: at + 5, text: 'Bikes at 4' });
+        await here.ctx.store.putChange(BEN.key, chatId, { kind: 'dm-delete', itemId: crypto.randomUUID(), lineId: gone, author: SOL.key, at: at + 6 });
+        await here.ctx.store.putChange(BEN.key, chatId, { kind: 'dm-reaction', itemId: crypto.randomUUID(), lineId: theirs, author: BEN.key, at: at + 7, emoji: '👍' });
+        await here.ctx.store.putChange(BEN.key, chatId, { kind: 'dm-reaction', itemId: crypto.randomUUID(), lineId: theirs, author: SOL.key, at: at + 8, emoji: '👍' });
+        render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+        expect(await screen.findByText('Bikes at 4')).toBeTruthy();
+        expect(screen.queryByText('Bikes at 3')).toBeNull();
+        expect(screen.getByTestId('outside-line-edited').textContent).toBe('edited');
+        expect(screen.getByTestId('outside-line-deleted').textContent).toBe('This message was deleted');
+        expect(screen.queryByText('Oops')).toBeNull();
+        expect(screen.getByTestId('outside-line-reactions').textContent).toBe('👍 2');
+    });
+
+    it('a tap on their line: the chat\'s seven reactions, no Edit or Delete; a reaction is sent, and tapped again it is taken back', async () => {
+        const { theirs } = await openWithLines();
+        render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+        fireEvent.click(await screen.findByText('Bikes at 3'));
+        const actions = await screen.findByTestId('outside-line-actions');
+        expect([...actions.querySelectorAll('button[aria-label^="React with"]')].map((b) => b.textContent)).toEqual(['👍', '❤️', '😂', '😮', '😢', '🙏', '😁']);
+        expect(screen.queryByTestId('outside-line-edit')).toBeNull();
+        expect(screen.queryByTestId('outside-line-delete')).toBeNull();
+        fireEvent.click(screen.getByLabelText('React with ❤️'));
+        await waitFor(() => expect(sendOutsideChange).toHaveBeenCalledWith(here.ctx, chatId, { kind: 'dm-reaction', lineId: theirs, emoji: '❤️' }));
+        await here.ctx.store.putChange(BEN.key, chatId, { kind: 'dm-reaction', itemId: crypto.randomUUID(), lineId: theirs, author: BEN.key, at: Date.now(), emoji: '❤️' });
+        fireEvent.click(await screen.findByText('Bikes at 3'));
+        await waitFor(() => expect(screen.getByLabelText('React with ❤️').getAttribute('aria-pressed')).toBe('true'));
+        fireEvent.click(screen.getByLabelText('React with ❤️'));
+        await waitFor(() => expect(sendOutsideChange).toHaveBeenLastCalledWith(here.ctx, chatId, { kind: 'dm-reaction', lineId: theirs, emoji: '' }));
+    });
+
+    it('a tap on my line: Edit message fills the box and Save sends the edit; Delete message asks first', async () => {
+        const { mine } = await openWithLines();
+        render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+        fireEvent.click(await screen.findByText('See you there'));
+        fireEvent.click(await screen.findByTestId('outside-line-edit'));
+        const box = screen.getByTestId('outside-chat-input') as HTMLTextAreaElement;
+        expect(box.value).toBe('See you there');
+        expect(screen.getByTestId('outside-chat-send').textContent).toBe('Save');
+        fireEvent.change(box, { target: { value: 'See you at 4' } });
+        fireEvent.click(screen.getByTestId('outside-chat-send'));
+        await waitFor(() => expect(sendOutsideChange).toHaveBeenCalledWith(here.ctx, chatId, { kind: 'dm-edit', lineId: mine, text: 'See you at 4' }));
+        await waitFor(() => expect(screen.getByTestId('outside-chat-send').textContent).toBe('Send'));
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+        fireEvent.click(await screen.findByText('See you there'));
+        fireEvent.click(await screen.findByTestId('outside-line-delete'));
+        expect(confirm).toHaveBeenCalledWith('Delete for everyone?\n\nIt will read "This message was deleted" for both of you.');
+        expect(sendOutsideChange).toHaveBeenCalledTimes(1);
+        fireEvent.click(screen.getByTestId('outside-line-delete'));
+        await waitFor(() => expect(sendOutsideChange).toHaveBeenLastCalledWith(here.ctx, chatId, { kind: 'dm-delete', lineId: mine }));
+        confirm.mockRestore();
+    });
+
+    it('a request\'s line, and a deleted one, offer nothing to tap', async () => {
+        await here.ctx.store.writeTheirs(BEN.key, { id: crypto.randomUUID(), chatId, author: SOL.key, text: 'Hello Ben', replyTo: null, at: Date.now() }, { home: SOL_HOME, name: 'Sol' }, 'request');
+        render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+        fireEvent.click(await screen.findByText('Hello Ben'));
+        expect(screen.queryByTestId('outside-line-actions')).toBeNull();
+        expect(screen.getByTestId('outside-line-theirs').getAttribute('role')).toBeNull();
     });
 });
 

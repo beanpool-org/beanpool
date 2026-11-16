@@ -488,6 +488,15 @@ check "the newest run failing is still red: its fix stage" eval '[ "$CLEAN" = 1 
 decide
 check "a finished run still never overrules the required check: red, its fix stage" eval '[ "$CLEAN" = 1 ] && logged "#42 is red on ccc1"'
 
+scenario "37c. just after gh pr ready, the newest run is the draft's fast run (ci.yml titles it \"Draft check: ...\"): its red is not the full run's"
+head_is aaa1; ci aaa1 none none success; print -l draft-failure in_progress,draft-failure > "$FAKE_STATE/run-aaa1"
+decide
+check "no full run yet is a wait, then the full run's green: no fix stage, one review" [ "$CLEAN:$(fixes):$(reviews):$(reads aaa1)" = 1:0:1:3 ]
+check "the draft's red was never read as red"    not_logged "is red on aaa1"
+: > "$LOG"; head_is bbb1; ci bbb1 none none failure; print -l draft-success in_progress,draft-success failure,draft-success > "$FAKE_STATE/run-bbb1"; print bbb2 > "$FAKE_STATE/pushes"
+decide
+check "nor its green as green: the full run's red gets its fix stage" eval '[ "$CLEAN" = 1 ] && logged "#42 is red on bbb1"'
+
 scenario "38. no run at all on a code PR → no review after the no-run limit"
 head_is aaa1; ci aaa1 none
 decide
@@ -764,7 +773,7 @@ check "the second brief's CONTINUE"              says_once "$FAKE_STATE/brief-NO
 check "a long first build may push early"        brief_has brief-NOPR-CONTINUE "first build may still push early"
 check "a run about to end pushes what it has"    brief_has brief-NOPR-CONTINUE "a run about to end must push what it has"
 check "the brief says it overrides the rules' one-push line" brief_has brief-NOPR-CONTINUE "this takes precedence over any one-push line in the rules below"
-check "locally only the one file or suite; the whole-app checks go to GitHub" eval 'brief_has brief-NOPR-CONTINUE "Locally run only the ONE test file or ONE suite" && brief_has brief-NOPR-CONTINUE "GitHub CI runs all of them on every push to a PR, drafts included"'
+check "locally only the one file or suite; the whole-app checks go to GitHub" eval 'brief_has brief-NOPR-CONTINUE "Locally run only the ONE test file or ONE suite" && brief_has brief-NOPR-CONTINUE "GitHub CI runs them on the PR: a draft gets a fast check" && brief_has brief-NOPR-CONTINUE "that starts the full run"'
 check "a draft PR when there is none, on the lane's repo and base" brief_has brief-NOPR-CONTINUE "open it as a DRAFT (gh pr create -R example/fake --draft --base main --head <branch>)"
 check "the wait names this library's ci-wait.sh, and it is there to run" eval 'brief_has brief-NOPR-CONTINUE "$LANE_DIR/ci-wait.sh <PR>" && [ -x "$LANE_DIR/ci-wait.sh" ]'
 check "... ALWAYS with the sha just pushed, \$(git rev-parse HEAD) left for the stage's shell (#3257 round 2)" eval 'brief_has brief-NOPR-CONTINUE "$LANE_DIR/ci-wait.sh <PR> \$(git rev-parse HEAD) (ALWAYS pass the sha you just pushed" && brief_has brief-NOPR-CONTINUE "push, and wait again with the new sha"'

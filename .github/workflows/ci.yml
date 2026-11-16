@@ -1,5 +1,10 @@
 name: CI Pipeline
 
+# A DRAFT pull request's run is titled "Draft check: <PR title>", so a reader of the runs can tell a draft's fast run from a full
+# one without opening it (scripts/lanes/lib.sh ci_head_state skips it). Every other run keeps GitHub's own title: a run-name
+# that is only whitespace falls back to it.
+run-name: "${{ github.event_name == 'pull_request' && github.event.pull_request.draft && format('Draft check: {0}', github.event.pull_request.title) || '' }}"
+
 on:
   workflow_dispatch:
   push:
@@ -18,7 +23,12 @@ on:
   # Every path too, Markdown included. A paths filter leaves a PR of only .md files with no run, so the
   # required check never reports and the PR could only merge with --admin. There is no --admin now
   # (docs/merge-gate.md), and such a PR is about 2% of merges (9 of main's last 400).
+  #
+  # A DRAFT gets the fast check (jobs.draft below) and nothing else; the full run starts when it is marked ready
+  # (ready_for_review, which the default types leave out) and on every push after that (Marty, 17 Nov 2026: builds waited a
+  # median 14 min, 37% of a build, on a 14.5-min run while still drafts). The merge queue's run is the full run, unchanged.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   # THE MERGE GATE (Marty, 1 Nov 2026: "drop the Mac and go GH"). A PR in GitHub's merge queue is tested here, on top of the
   # PRs ahead of it, by this same matrix: the ruleset (.github/rulesets/protect-main.json) requires the check below on the
   # queue's commit as well as the PR's, and nothing else reports it. docs/merge-gate.md has the rules.
@@ -44,6 +54,8 @@ jobs:
   # fail-fast off: a red shard does not cancel the others, so one run names every failure.
   shard:
     name: Test-All shard ${{ matrix.name }}
+    # Every event but a draft pull request: a draft runs jobs.draft instead. True on merge_group, push and workflow_dispatch.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -151,10 +163,16 @@ jobs:
   # exactly "Run BeanPool Test-All Pipeline" and matches it by name, so this job carries it and no other job may
   # (scripts/check-ci-shards.test.mjs). It passes only when every shard passed: a failed, cancelled or skipped shard fails
   # it, and a check skipped inside a shard fails that shard (test-all.sh). always(), so it reports even then.
+  #
+  # On a DRAFT it is skipped, and GitHub reports a job skipped by its `if:` as a check that a required check accepts as passing.
+  # So its name is an expression that is the required check's only when the job runs. GitHub lists a SKIPPED job under its
+  # name's expression text, unevaluated (measured on #3280's draft run), which is not the required check's exact name either: a
+  # draft's run never reports "Run BeanPool Test-All Pipeline", and the PR's required check waits for the full run that
+  # ready_for_review starts. scripts/check-ci-shards.test.mjs evaluates both.
   test-all:
-    name: Run BeanPool Test-All Pipeline
+    name: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && 'Run BeanPool Test-All Pipeline' || 'Full run waits for ready (draft)' }}
     needs: shard
-    if: always()
+    if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     steps:
       - name: Every shard passed
@@ -164,3 +182,85 @@ jobs:
           echo "Shards: $SHARDS"
           [ "$SHARDS" = success ]
 
+
+  # A DRAFT pull request's fast check (Marty, 17 Nov 2026): what builders break, in about 5 minutes, instead of the 19-job full
+  # run. Three parts side by side, each planned from the PR's diff against its base by scripts/lanes/preflight-plan.mjs --draft:
+  #   types   turbo build, lint and typecheck of the packages the diff reaches, with their dependents (every package when a root
+  #           config such as package.json, the lockfile or tsconfig.json changed), and node --check / bash -n of changed scripts
+  #   guards  the "checks" shard's guards, every one but build, lint and typecheck (no_node_names, native_dark_contrast,
+  #           no_google_fonts, words, workflows ...), and words lint + check
+  #   tests   the tests the changed files call for: the vitest files preflight picks (guards, changed tests, pins, importers),
+  #           the server suites a route or table change needs and the suites the diff changes, and changed scripts' tests,
+  #           within 200 s: the changed suites go shortest first and the rest are named as left to the full run
+  # No part plans past 300 s (preflight-plan.mjs DRAFT_PART_SECS), so PREFLIGHT_HARD_SECS below stops a step only on a runner
+  # four times slower than the estimates: a draft check is never red for its diff's size alone.
+  # It decides nothing: it is never the required check, and the full run (ready_for_review, then every push) and the merge
+  # queue's run are what a merge needs. Skipped on every other event.
+  draft:
+    name: Draft check ${{ matrix.part }}
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [types, guards, tests]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 2
+
+      # The plan diffs the PR against its base (a stacked PR's base too), and the words check compares with main: both ends
+      # 50 deep, the whole history only if that did not reach the merge base, as the shards' "Fetch origin/main".
+      - name: Fetch the base branches
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          head=$(git rev-parse HEAD)
+          refs="+refs/heads/main:refs/remotes/origin/main"
+          [ "$BASE" = main ] || refs="$refs +refs/heads/$BASE:refs/remotes/origin/$BASE"
+          git fetch --no-tags --depth=50 origin $refs "$head"
+          git merge-base "origin/$BASE" HEAD > /dev/null || git fetch --no-tags --unshallow origin $refs "$head"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 9.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: pnpm install
+
+      - name: Build core, engine, and signin
+        run: pnpm turbo run build --filter=@beanpool/core --filter=@beanpool/engine --filter=@beanpool/signin
+
+      # The vault custodian tool's terminal test needs expect (see the shards' step); only when the diff reaches vault.
+      - name: Install expect
+        if: matrix.part == 'tests'
+        env:
+          BASE: ${{ github.base_ref }}
+        run: git diff --quiet "origin/$BASE...HEAD" -- apps/vault || command -v expect || (sudo apt-get update && sudo apt-get install -y expect)
+
+      - name: Draft check (${{ matrix.part }})
+        timeout-minutes: 20
+        env:
+          BASE: ${{ github.base_ref }}
+          PREFLIGHT_HARD_SECS: '1200'
+          TEST_ALL_LOG_DIR: ${{ runner.temp }}/test-all-logs
+        run: bash scripts/lanes/preflight.sh --draft ${{ matrix.part }} --base "origin/$BASE"
+
+      # The guards part's red shows only the end of a check's log; its whole log names the failing test (#3280's first run).
+      - name: Upload the draft check's logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: draft-check-logs-${{ matrix.part }}
+          path: ${{ runner.temp }}/test-all-logs
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 14

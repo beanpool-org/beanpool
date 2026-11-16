@@ -51,6 +51,9 @@ chmodSync(GH, 0o755);
 const comments = () => json('comments-3169.json'); // [[NOT CLEAN of 5550edf6, CLEAN of 33a37470]]
 const comment = (body, at, who = 'MEMBER') => ({ id: 1, html_url: 'https://example.invalid/c', created_at: at, author_association: who, user: { login: 'someone' }, body });
 const runsOf = (head) => json(`check-runs-${head.slice(0, 8)}.json`);
+/** A completed check run in GitHub's shape, as an Actions job of run 7. */
+const fakeRun = (name, conclusion, job) => ({ id: job, name, status: 'completed', conclusion,
+  html_url: `https://github.com/example/fake/actions/runs/7/job/${job}`, output: { title: null } });
 
 let n = 0;
 /**
@@ -238,6 +241,47 @@ const SCENARIOS = {
       assert.equal(code, 4);
     },
   },
+  // A DRAFT (Marty, 17 Nov 2026): its run is ci.yml's fast check; the full jobs are skipped and the aggregate has another name.
+  // Clean and its fast check green is still no pass: the required check comes only from the full run, after ready.
+  draftFastGreen: {
+    make: () => scenario({
+      head: H.green, cs: [[comment('CLEAN: at head a8738323', '2026-11-14T20:30:00Z')]], pr: { isDraft: true },
+      runs: [{ total_count: 5, check_runs: [
+        ...['types', 'guards', 'tests'].map((p, i) => fakeRun(`Draft check ${p}`, 'success', 900 + i)),
+        fakeRun('Test-All shard ${{ matrix.name }}', 'skipped', 910), fakeRun('Full run waits for ready (draft)', 'skipped', 911)] }],
+    }),
+    expect: ({ code, out }) => {
+      assert.match(out, /OPEN \(draft\)/);
+      assert.match(out, /has NOT reported on this head \(a draft: the full run starts when it is marked ready\)/);
+      assert.match(out, /SUMMARY: PENDING \(a draft, its fast check green: the full run starts when it is marked ready, and "Run BeanPool Test-All Pipeline" with it\) {2}\[draft\]$/m);
+      assert.equal(code, 5);
+    },
+  },
+  // READY with the draft's fast-check red still listed beside a green full run: that red is the draft's run, superseded.
+  readyDraftRedSuperseded: {
+    make: () => scenario({
+      head: H.green, cs: [[comment('CLEAN: at head a8738323', '2026-11-14T20:30:00Z')]],
+      runs: runsOf(H.green).map((pg, i) => (i ? pg : { ...pg, check_runs: [...pg.check_runs, fakeRun('Draft check tests', 'failure', 920)] })),
+    }),
+    expect: ({ code, out, calls }) => {
+      assert.match(out, /1 superseded \(the draft's fast check; a ready PR is decided by the full run\)/);
+      assert.match(out, /SUPERSEDED +Draft check tests — failure/);
+      assert.ok(!calls.some((c) => c.some((x) => x.includes('/jobs/920/'))), 'no log is read for a superseded check');
+      assert.match(out, /SUMMARY: CLEAN\+GREEN$/m);
+      assert.equal(code, 0);
+    },
+  },
+  // The required check there but SKIPPED (what a ruleset counts as passing): never green here.
+  skippedRequired: {
+    make: () => scenario({
+      head: H.green, cs: [[comment('CLEAN: at head a8738323', '2026-11-14T20:30:00Z')]],
+      runs: runsOf(H.green).map((pg) => ({ ...pg, check_runs: pg.check_runs.map((c) => (c.name === 'Run BeanPool Test-All Pipeline' ? { ...c, conclusion: 'skipped' } : c)) })),
+    }),
+    expect: ({ code, out }) => {
+      assert.match(out, /SUMMARY: PENDING \(the required check "Run BeanPool Test-All Pipeline" is skipped on this head, never a pass\)$/m);
+      assert.equal(code, 5);
+    },
+  },
   // A red whose log GitHub will not give: still listed, and still red.
   noLog: {
     make: () => scenario({ head: H.two, logs: [132571592359] }),
@@ -330,6 +374,12 @@ const MUTANTS = [
   { why: 'stack frames under an assertion dropped', scenario: 'twoReds', edits: [['keep(l); frames = 2; continue;', 'keep(l); frames = 0; continue;']] },
   { why: 'every file reported untouched', scenario: 'twoReds', edits: [['return diff.some(', 'return !diff.length && diff.some(']] },
   { why: 'a head with no required check read as green', scenario: 'noRequired', edits: [['if (!required) return { line: `PENDING', 'if (false) return { line: `PENDING']] },
+  { why: 'a ready PR\'s draft fast-check red counted against the full run', scenario: 'readyDraftRedSuperseded',
+    edits: [['return isDraft ? checks : checks.map(', 'return true ? checks : checks.map(']] },
+  { why: 'a skipped required check read as green', scenario: 'skippedRequired',
+    edits: [["c.name === REQUIRED_CHECK && c.state === 'success');", 'c.name === REQUIRED_CHECK);']] },
+  { why: 'a draft with its fast check green read as green', scenario: 'draftFastGreen',
+    edits: [["c.name === REQUIRED_CHECK && c.state === 'success');", "(c.name === REQUIRED_CHECK || c.name.startsWith(FAST_CHECK)) && c.state === 'success');"]] },
   { why: 'a queued PR shown as out of the queue', scenario: 'queued', edits: [["row('merge queue', p.isInMergeQueue ?", "row('merge queue', false ?"]] },
   { why: 'a conflict with the base left out of the summary', scenario: 'conflicting', edits: [["p.mergeable === 'CONFLICTING' ?", 'false ?']] },
   { why: 'a stranger\'s verdict trusted', scenario: 'stranger', edits: [['.filter((c) => TRUSTED.has(c.who))', '.filter(() => true)']] },

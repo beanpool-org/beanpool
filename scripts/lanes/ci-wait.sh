@@ -17,6 +17,13 @@
 # pr_conflicting, #3201), so no checks there is exit 4, never a wait (#3257 round 3). UNKNOWN (still being worked out after a
 # push), MERGEABLE and no answer stay a wait, and the PENDING line says which one it saw.
 #
+# A DRAFT gets ci.yml's fast check ("Draft check <part>") and the full run waits for ready (Marty, 17 Nov 2026), so what is green
+# depends on it, read on every poll: a draft is GREEN once its checks passed and a "Draft check" (or the required check) is among
+# them; a READY PR only once the required check "Run BeanPool Test-All Pipeline" itself passed. A ready PR's "Draft check" rows
+# are the draft's run, which the full run replaces, so they are left out: neither its green nor its red speaks for the full run.
+# A ready PR whose required check has not reported and that has nothing pending is a wait (ready_for_review's run has not listed
+# its checks yet), never green: its draft run's skipped jobs would otherwise read as a pass.
+#
 # Every exit is bounded (one call, ~9 minutes) and its line says what it saw and what to do next. Exit:
 # 0 GREEN; 1 RED (failing lines printed); 2 PENDING: checks still running, no checks yet (with the PR's mergeable state), or GitHub
 # not showing the sha yet (call again with the same sha; the line says when a second one in a row means no run is coming);
@@ -34,6 +41,9 @@ PR=$1; WANT=$2
 R=${LANE_GH_REPO:-$(git -C "$HERE" remote get-url origin 2>/dev/null | sed -E 's#^(git@[^:]+:|https?://[^/]+/)##; s#\.git$##')}
 case "$R" in */*) ;; *) R=beanpool-org/beanpool;; esac
 READER=${CI_WAIT_PR_STATE:-$HERE/pr-state.mjs}
+[ -e "$READER" ] || READER=$(git -C "$HERE" rev-parse --show-toplevel 2>/dev/null)/scripts/lanes/pr-state.mjs   # a copy outside scripts/lanes
+REQ=${LANE_CI_CHECK:-Run BeanPool Test-All Pipeline}
+FAST='Draft check'
 POLL=${LANE_CI_WAIT_POLL_SECS:-45}
 HEAD_POLL=${LANE_CI_WAIT_HEAD_POLL_SECS:-10}
 END=$(( $(date +%s) + ${LANE_CI_WAIT_SECS:-530} ))
@@ -52,9 +62,16 @@ if [ -n "$WANT" ]; then
   done
 fi
 while :; do
+  # Draft or ready, read before the checks each time round. No answer reads as ready, the stricter: green needs the required check.
+  draft=$(gh pr view "$PR" -R "$R" --json isDraft --jq .isDraft 2>/dev/null)
+  [ "$draft" = true ] || draft=false
   # Buckets are gh's: pass, fail, pending, skipping, cancel. No checks yet reads as empty, which is never green: a wait, or exit 4
-  # when the PR conflicts with its base.
-  s=$(gh pr checks "$PR" -R "$R" --json bucket --jq '[.[].bucket]|group_by(.)|map("\(.[0])=\(length)")|join(" ")' 2>/dev/null)
+  # when the PR conflicts with its base. "|ok" after the counts: the check that makes it green has passed (see the header).
+  q="$draft as \$d | [.[] | select(\$d or (.name | startswith(\"$FAST\") | not))] as \$c"
+  q="$q | (\$c | map(.bucket) | group_by(.) | map(\"\\(.[0])=\\(length)\") | join(\" \")) + \"|\""
+  q="$q + (if any(\$c[]; .bucket == \"pass\" and (.name == \"$REQ\" or (\$d and (.name | startswith(\"$FAST\"))))) then \"ok\" else \"\" end)"
+  raw=$(gh pr checks "$PR" -R "$R" --json name,bucket --jq "$q" 2>/dev/null)
+  IFS='|' read -r s ok <<< "$raw"
   # No checks: read whether the PR merges with its base, and which base (no answer leaves both empty; "|" keeps an empty field
   # in its place, where a space would shift the base into the mergeable state).
   m=; base=
@@ -79,6 +96,15 @@ while :; do
     *fail*|*cancel*) echo "RED on ${head:0:8} ($s)"
        node "$READER" "$PR" -R "$R" 2>&1 | sed -n '/^checks/,/^SUMMARY/p'
        exit 1 ;;
-    *) echo "GREEN on ${head:0:8} ($s)"; exit 0 ;;
+    *) if [ "$ok" = ok ]; then
+         if [ "$draft" = true ]; then echo "GREEN on ${head:0:8} ($s; a draft: its fast check passed, the full run starts when it is marked ready)"
+         else echo "GREEN on ${head:0:8} ($s)"; fi
+         exit 0
+       fi
+       if [ "$draft" = true ]; then why="a draft, and no \"$FAST\" has reported"
+       else why="the required check \"$REQ\" has not reported: the full run starts when the PR is marked ready, and lists it last"; fi
+       [ "$(date +%s)" -ge "$END" ] && {
+         echo "PENDING on ${head:0:8} ($s; $why): $again. If the next call says this too and the PR is ready, no full run is coming: stop and say so in the PR"; exit 2; }
+       sleep "$POLL" ;;
   esac
 done

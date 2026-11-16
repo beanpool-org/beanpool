@@ -49,7 +49,8 @@ print aaa11111bbb > "$FAKE_STATE/head"; print "pass pass skipping" > "$FAKE_STAT
 LANE_CI_WAIT_SECS=30 wait_ci 42
 check "exit 0"                                    [ "$RC" = 0 ]
 check "names the head and the counts"             out_has "GREEN on aaa11111 (pass=2 skipping=1)"
-check "asked the named repo about the named PR"   grep -qxF "gh pr checks 42 -R example/fake --json bucket --jq [.[].bucket]|group_by(.)|map(\"\(.[0])=\(length)\")|join(\" \")" "$FAKE_STATE/gh.calls"
+check "asked the named repo about the named PR, by name and bucket" grep -qE '^gh pr checks 42 -R example/fake --json name,bucket --jq false as \$d' "$FAKE_STATE/gh.calls"
+check "and whether it is a draft"                 grep -qxF "gh pr view 42 -R example/fake --json isDraft --jq .isDraft" "$FAKE_STATE/gh.calls"
 
 case_ "4. pending, then green within one call → it keeps reading (gh's exit 8 while pending is not an answer), exit 0"
 print -l "pending pass" "pending pending" "pass pass" > "$FAKE_STATE/checks"
@@ -217,6 +218,33 @@ row "PR unreadable while it waits for the sha"    3 "PR unreadable (GitHub gave 
   'print $OLD > $p/head; print "1 " > $p/lands' $NEW
 row "no checks + CONFLICTING, no sha given"       4 "CONFLICTING with main on aaa11111: $conflict" 30 \
   'print none > $p/checks; print CONFLICTING > $p/mergeable' ''
+# Drafts (Marty, 17 Nov 2026): a draft's run is ci.yml's fast check, "Draft check <part>"; its full jobs are skipped, and its
+# aggregate carries another name. A ready PR is green only on the required check; its draft run's rows never speak for it.
+fast3='pass@Draft_check_types pass@Draft_check_guards pass@Draft_check_tests'
+skipped='skipping@Test-All_shard skipping@Full_run_waits_for_ready_(draft)'
+not_yet="the required check \"Run BeanPool Test-All Pipeline\" has not reported: the full run starts when the PR is marked ready, and lists it last): $again_h. If the next call says this too and the PR is ready, no full run is coming: stop and say so in the PR"
+row "a draft: its fast check passed, the full jobs skipped" 0 "GREEN on aaa11111 (pass=3 skipping=2; a draft: its fast check passed, the full run starts when it is marked ready)" 30 \
+  'print true > $p/draft; print "$fast3 $skipped" > $p/checks'
+row "a draft: its fast check still running"       2 "PENDING on aaa11111 (pass=1 pending=2 skipping=2): $again_h" 0 \
+  'print true > $p/draft; print "pass@Draft_check_types pending@Draft_check_guards pending@Draft_check_tests $skipped" > $p/checks'
+row "a draft: a part of its fast check red"       1 "RED on aaa11111 (fail=1 pass=2 skipping=2)" 30 \
+  'print true > $p/draft; print "pass@Draft_check_types fail@Draft_check_guards pass@Draft_check_tests $skipped" > $p/checks'
+row "a draft with only skipped checks (no fast check listed yet)" 2 "PENDING on aaa11111 (skipping=2; a draft, and no \"Draft check\" has reported): $again_h" 0 \
+  'print true > $p/draft; print "$skipped" > $p/checks'
+row "ready, but only its draft run is listed (ready_for_review's run not yet)" 2 "PENDING on aaa11111 (skipping=2; $not_yet" 0 \
+  'print "$fast3 $skipped" > $p/checks'
+row "ready, the same, all call: its draft run's green is never the full run's" 2 "PENDING on aaa11111 (skipping=2;" 0 \
+  'print false > $p/draft; print "$fast3 $skipped" > $p/checks'
+row "ready, every shard passed, the required check not listed yet" 2 "PENDING on aaa11111 (pass=2; $not_yet" 0 \
+  'print "pass@Test-All_shard_checks pass@Test-All_shard_server-1" > $p/checks'
+row "ready, then the full run lists its checks and passes" 0 "GREEN on aaa11111 (pass=3 skipping=2)" 30 \
+  'print -l "$fast3 $skipped" "pending@Test-All_shard_checks $skipped" "pass@Test-All_shard_checks pass@Test-All_shard_server-1 pass $skipped" > $p/checks'
+row "ready: the draft's fast check was red, the full run is green" 0 "GREEN on aaa11111 (pass=2)" 30 \
+  'print "fail@Draft_check_tests pass@Test-All_shard_checks pass" > $p/checks'
+row "ready: the full run red"                     1 "RED on aaa11111 (fail=1 pass=1)" 30 \
+  'print "pass@Draft_check_tests fail@Test-All_shard_server-3 pass" > $p/checks'
+row "ready: the required check passed beside a skipped draft row" 0 "GREEN on aaa11111 (pass=1 skipping=1)" 30 \
+  'print "skipping@Draft_check_\${{_matrix.part_}} pass skipping@Other" > $p/checks'
 
 case_ "11b. read-only: every gh call ci-wait.sh made in this file was a pr view or pr checks"
 check "calls were recorded, and none was another gh command" eval '[ -s "$T/all-calls" ] && ! grep -vqE "^gh pr (view|checks) " "$T/all-calls"'

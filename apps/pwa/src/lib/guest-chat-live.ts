@@ -48,11 +48,17 @@ export function guestIO(ctx: OutsideMailContext): GuestMailIO {
     };
 }
 
+/** Whether this community lets groups have guests (its info's `features.groupGuests`, on only with `outsideMessages`); null when its info didn't read. */
+async function groupGuestsKnownHere(): Promise<boolean | null> {
+    const info = await communityInfoOnce().catch(() => null);
+    if (!info) return null;
+    const f = (info.features ?? {}) as { groupGuests?: unknown; outsideMessages?: unknown };
+    return f.groupGuests === true && f.outsideMessages === true;
+}
+
 /** Whether this community lets groups have guests (its info's `features.groupGuests`, on only with `outsideMessages`). */
 export async function groupGuestsHere(): Promise<boolean> {
-    const info = await communityInfoOnce().catch(() => null);
-    const f = (info?.features ?? {}) as { groupGuests?: unknown; outsideMessages?: unknown };
-    return f.groupGuests === true && f.outsideMessages === true;
+    return (await groupGuestsKnownHere()) === true;
 }
 
 function ring(): void {
@@ -165,7 +171,8 @@ const NO_ROWS: GuestNameRows = { shown: [], named: [] };
  * The guests a group's chat names lines by (core group-guest-names.ts): `shown`, those in the chat by the host's list read
  * now, each by core's guest line ("Dax · hillside.example · guest"), never the card's name alone; `named`, every other guest
  * this browser kept a row for (they left, were removed, or the group's guests closed), named on their old lines with "no
- * longer in this group". Only `shown` may be given a key. Read at most once a minute; where guests are off here, nobody is in.
+ * longer in this group". Only `shown` may be given a key. Read at most once a minute; where guests are off here, nobody is in;
+ * where that or the host's list didn't read, each guest keeps the row kept here and nobody is given a key.
  */
 export function guestRosterRows(groupId: string, now = Date.now()): Promise<GuestNameRows> {
     const kept = guestRowsMemo.get(groupId);
@@ -176,7 +183,8 @@ export function guestRosterRows(groupId: string, now = Date.now()): Promise<Gues
         const me = ctx.identity.publicKey;
         const metaKey = `${GUEST_NAMES_META}:${groupId}`;
         const before = await ctx.store.getMeta(me, metaKey).catch(() => null);
-        const listed = (await groupGuestsHere()) ? await fetchGroupGuests(groupId).then((g) => g.guests, () => null) : [];
+        const on = await groupGuestsKnownHere();
+        const listed = on === null ? null : on ? await fetchGroupGuests(groupId).then((g) => g.guests, () => null) : [];
         const out = guestNameRows(before, listed, Date.now());
         if (out.json !== null) await ctx.store.setMeta(me, metaKey, out.json).catch(() => {});
         return { shown: out.shown, named: out.named };

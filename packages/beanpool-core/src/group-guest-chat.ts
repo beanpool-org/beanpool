@@ -649,7 +649,9 @@ export function applyGuestTicks(before: GuestChats, ticks: unknown, now: number,
         if (tk.kind !== 'group-line') continue;
         const line = chat.lines.find((l) => l.id === tk.itemId && l.state);
         if (!line) continue;
-        const next: GuestLineState | null = tk.refused === 'epoch-stale' ? 'waiting'
+        // Refused for its epoch in a chat that is closed since (I left, or was removed): it never goes again, so it never waits.
+        const open = chat.state === 'in' || chat.state === 'joining';
+        const next: GuestLineState | null = tk.refused === 'epoch-stale' && open ? 'waiting'
             : tk.refused || tk.state === 'refused' ? 'failed'
             : tk.state === 'queued' ? 'queued' : tk.state === 'sent' ? 'sent' : tk.state === 'failed' ? 'failed' : null;
         if (!next || next === line.state) continue;

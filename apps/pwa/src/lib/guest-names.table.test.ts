@@ -26,6 +26,8 @@ const world = vi.hoisted(() => ({
     listed: [] as Array<{ key: string; home: string; name: string; state: string }>,
     store: new Map<string, string>(),
     reads: 0,
+    /** Whether the community's own info reads (it says whether guests are on here). */
+    infoReads: true,
 }));
 
 vi.mock('./api', () => ({
@@ -36,7 +38,9 @@ vi.mock('./api', () => ({
     }),
     signRelayEnvelopeFor: vi.fn(),
 }));
-vi.mock('./visitor-lobby-gate', () => ({ communityInfoOnce: async () => ({ features: { groupGuests: true, outsideMessages: true } }) }));
+vi.mock('./visitor-lobby-gate', () => ({
+    communityInfoOnce: async () => { if (!world.infoReads) throw new Error('offline'); return { features: { groupGuests: true, outsideMessages: true } }; },
+}));
 vi.mock('./outside-mail', () => {
     class OutsideMailError extends Error { constructor(public status: number, message: string) { super(message); } }
     return {
@@ -99,7 +103,7 @@ type State = 'in' | 'left' | 'removed';
 /** What the host lists for each state: it lists only those asked or in (engine/group-guests.ts listGroupGuests). */
 const LISTED: Record<State, typeof world.listed> = { in: [SOL_IN], left: [], removed: [] };
 
-beforeEach(() => { world.listed = []; world.store.clear(); world.reads = 0; });
+beforeEach(() => { world.listed = []; world.store.clear(); world.reads = 0; world.infoReads = true; });
 afterEach(() => { vi.resetModules(); });
 
 // state x opening -> the name Sol's line shows, the hint beside it, whether a key may go to Sol, and whether the chat was read again.
@@ -149,6 +153,20 @@ describe("web: a guest's line is named by the newest row this browser has, in ev
         const guests = live.guestRowsKnown(GROUP);
         const roster: DisplayRosterRow[] = [{ memberPubkey: SOL, callsign: 'Sol the member' }, ...guests.shown, ...guests.named];
         expect(nameSigner(SOL, solsLine, { roster })).toMatchObject({ name: 'Sol the member', nameHint: null });
+    });
+
+    it("the community's info unread (offline): nobody is given a key, and each guest keeps the row kept here, unmarked", async () => {
+        world.listed = [SOL_IN];
+        await reopening(await pageLoad());
+        world.infoReads = false;
+        const got = await firstOpening(await pageLoad());
+        expect(got.keyTo).toEqual([ANA]);
+        expect(got.name).toMatchObject({ name: SOL_LINE, nameHint: null });
+        // Back online: Sol is still in, shown and named as before (nothing was marked out meanwhile).
+        world.infoReads = true;
+        const back = await firstOpening(await pageLoad());
+        expect(back.keyTo).toEqual([ANA, SOL]);
+        expect(back.name).toMatchObject({ name: SOL_LINE, nameHint: null });
     });
 
     it('the read beside the chat is once a minute: a reopening asks the host nothing more', async () => {

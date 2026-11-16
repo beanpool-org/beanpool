@@ -678,6 +678,20 @@ describe("LEAVE (part 2): the guest's Leave closes the chat here at once, and th
         expect(f.posted.filter((p) => p.envelope.kind === 'group-line')).toHaveLength(0);
     });
 
+    it("a line of mine my server had when I left, then refused for its epoch: it says the group didn't take it, and never waits in the closed chat", async () => {
+        const f = await guestIn();
+        await syncGuestMail(f.io);
+        f.answerWith((i) => (i.envelope.kind === 'group-line' ? { state: 'queued' } : { state: 'sent' }));
+        const line = await sendGuestLine(f.io, ID, 'just before I go');
+        expect(line!.state).toBe('queued');
+        await leaveGuestChat(f.io, ID);
+        f.settle(line!.id, { state: 'refused', refused: 'epoch-stale' });
+        await syncGuestMail(f.io);
+        expect(f.chats[ID].lines[0]).toMatchObject({ id: line!.id, text: 'just before I go', state: 'failed', note: "The group didn't take this message." });
+        expect(f.chats[ID].refusedEpoch ?? null).toBeNull();
+        expect(f.posted.filter((p) => p.envelope.kind === 'group-line')).toHaveLength(1);
+    });
+
     it('while joining (my yes on its way): left here, and the leave goes behind the yes', async () => {
         const f = fake();
         f.held.push(inviteNotice('n-invite-leave'));

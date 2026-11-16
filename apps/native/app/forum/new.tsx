@@ -21,11 +21,14 @@ import { Alert } from '../../utils/keyboard-alert';
 import { ForumAttached, askForumTold, pickForumPhoto } from '../../components/forum/ForumBits';
 import { useForumStyles } from '../../components/forum/forum-style';
 import { FORUM_WORDS, NEW_TOPIC_WORDS, TOPIC_WORDS } from '../../components/forum/forum-words';
+import { useScreenKeyboardOffset } from '../../components/useScreenKeyboardOffset';
 
 export default function NewForumTopicScreen() {
     const params = useLocalSearchParams<{ section?: string; hours?: string }>();
     const styles = useForumStyles();
     const { colors } = useTheme();
+    // The screen's top in the window, for the KeyboardAvoidingView (an iPhone sheet starts ~50 pt down: utils/screen-keyboard-offset).
+    const screenKeyboard = useScreenKeyboardOffset();
     const [me, setMe] = useState<string | null>(null);
     const role = usePinRole(true, me);
     const staff = role === 'owner' || role === 'admin';
@@ -88,8 +91,8 @@ export default function NewForumTopicScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.page} testID="forum-new-topic">
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <SafeAreaView style={styles.page} testID="forum-new-topic" onLayout={screenKeyboard.onScreenLayout}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={screenKeyboard.keyboardVerticalOffset}>
                 <View style={styles.head}>
                     <Pressable accessibilityRole="button" accessibilityLabel={t(NEW_TOPIC_WORDS.cancel)} onPress={() => router.back()} style={styles.iconBtn}>
                         <MaterialCommunityIcons name="chevron-left" size={28} color={colors.text.body} />

@@ -49,6 +49,7 @@ import { ForumAttached, ForumMenu, ForumPhotos, ForumWords, askForumTold, pickFo
 import type { ForumDraft } from '../../utils/forum-kept';
 import { useForumStyles } from '../../components/forum/forum-style';
 import { LINK_WORDS, TOPIC_WORDS } from '../../components/forum/forum-words';
+import { useScreenKeyboardOffset } from '../../components/useScreenKeyboardOffset';
 
 type Menu = { kind: 'post'; post: ForumPost; confirm?: 'block' | 'remove' } | { kind: 'topic' } | null;
 
@@ -65,6 +66,8 @@ export default function ForumTopicScreen() {
     const styles = useForumStyles();
     const chatStyles = useStyles(makeChatStyles);
     const { colors } = useTheme();
+    // The screen's top in the window, for the KeyboardAvoidingView (an iPhone sheet starts ~50 pt down: utils/screen-keyboard-offset).
+    const screenKeyboard = useScreenKeyboardOffset();
     const insets = useSafeAreaInsets();
     const [me, setMe] = useState<string | null>(null);
     const [front, setFront] = useState<ForumFront | null>(null);
@@ -331,8 +334,8 @@ export default function ForumTopicScreen() {
     const following = topic?.follow === 'following';
     const topicTitle = topic ? (topic.pinned ? '📌 ' : '') + (topic.removed ? t(TOPIC_WORDS.removedTopic) : topic.title) : '';
     return (
-        <SafeAreaView style={styles.page} edges={['top']} testID="forum-topic">
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <SafeAreaView style={styles.page} edges={['top']} testID="forum-topic" onLayout={screenKeyboard.onScreenLayout}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={screenKeyboard.keyboardVerticalOffset}>
                 <View style={styles.head}>
                     <Pressable accessibilityRole="button" accessibilityLabel={t(TOPIC_WORDS.back)} testID="forum-back" onPress={() => leaveScreen(router, 'forum/[id]')} style={styles.iconBtn}>
                         <MaterialCommunityIcons name="chevron-left" size={28} color={colors.text.body} />

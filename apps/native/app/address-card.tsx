@@ -28,6 +28,7 @@ import { useTheme, useStyles } from './ThemeContext';
 import { doorOpen, myAddressCard, myHome, openChatFromCard, sendFromBox, setDoor } from '../utils/outside-mail';
 import { OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, outsideMessagesHere } from '../utils/outside-chat-live';
 import { FindByNameStep, FindMeSwitch } from '../components/FindByName';
+import { useScreenKeyboardOffset } from '../components/useScreenKeyboardOffset';
 
 /** Core's sentence, the web's too (@beanpool/core outside-devices.ts). */
 const LINES = { doorEachDevice: OUTSIDE_DOOR_EACH_DEVICE };
@@ -35,6 +36,8 @@ const LINES = { doorEachDevice: OUTSIDE_DOOR_EACH_DEVICE };
 export default function AddressCardScreen() {
     const params = useLocalSearchParams<{ mode?: string }>();
     const { colors } = useTheme();
+    // The screen's top in the window, for the KeyboardAvoidingView (an iPhone sheet starts ~50 pt down: utils/screen-keyboard-offset).
+    const screenKeyboard = useScreenKeyboardOffset();
     const [here, setHere] = useState<boolean | null>(null);
     const [mine, setMine] = useState<AddressCard | null>(null);
     const [open, setOpen] = useState<boolean | null>(null);
@@ -146,8 +149,8 @@ export default function AddressCardScreen() {
     }));
 
     return (
-        <SafeAreaView style={styles.safeArea} testID="address-card">
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <SafeAreaView style={styles.safeArea} testID="address-card" onLayout={screenKeyboard.onScreenLayout}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={screenKeyboard.keyboardVerticalOffset}>
                 <View style={styles.header}>
                     <Pressable style={styles.backBtn} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={t('Go back')}>
                         <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text.body} />

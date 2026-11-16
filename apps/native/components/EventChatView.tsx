@@ -45,6 +45,7 @@ import { ChatMessageRow } from './chat/ChatMessageRow';
 import { ChatComposer, type ChatComposerHandle } from './chat/ChatComposer';
 import { normaliseTappedUrl, t } from '@beanpool/core';
 import { signedRequestWords } from './signed-request-lines';
+import { useScreenKeyboardOffset } from './useScreenKeyboardOffset';
 
 interface Props {
     /** The event's post id, which is also the chat's conversation id. */
@@ -54,6 +55,8 @@ interface Props {
 export function EventChatView({ eventId }: Props) {
     const insets = useSafeAreaInsets();
     const { colors, theme } = useTheme();
+    // The screen's top in the window, for the KeyboardAvoidingView (an iPhone sheet starts ~50 pt down: utils/screen-keyboard-offset).
+    const screenKeyboard = useScreenKeyboardOffset();
     const styles = useStyles(makeStyles);
     const chat = useStyles(makeChatStyles);
     const { identity } = useIdentity();
@@ -240,6 +243,8 @@ export function EventChatView({ eventId }: Props) {
         <KeyboardAvoidingView
             style={[styles.container, { paddingTop: insets.top }]}
             behavior="padding"
+            keyboardVerticalOffset={screenKeyboard.keyboardVerticalOffset}
+            onLayout={screenKeyboard.onScreenLayout}
         >
             {header}
 

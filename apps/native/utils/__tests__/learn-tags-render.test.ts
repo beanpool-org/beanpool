@@ -230,7 +230,17 @@ describe('a page shows its tags; a tap opens Learn on a search for one', () => {
         expect(chips.map((c) => c.textContent)).toEqual(['#bulk waste', '#tip']);
         expect(chips[0].getAttribute('aria-label')).toBe('Search Learn for #bulk waste');
         await act(async () => { (chips[0] as HTMLElement).click(); });
-        expect(router.push).toHaveBeenCalledWith({ pathname: '/learn', params: { q: 'bulk waste' } });
+        // Encoded once more: expo-router's useLocalSearchParams decodes the params again (PostTagChips.tsx:47-48), as the Market's tap does.
+        expect(router.push).toHaveBeenCalledWith({ pathname: '/learn', params: { q: encodeURIComponent('bulk waste') } });
+    });
+
+    it('a tag holding a percent escape reaches Learn as that tag, not decoded into other words (#3224 review)', async () => {
+        h.pages = [page(['a%20b'])];
+        await show(createElement(KnowledgeDetail, { page: h.pages[0] }));
+        const chip = q('detail-tags-row')?.querySelector('button') as HTMLElement;
+        await act(async () => { chip.click(); });
+        const sent = (router.push as any).mock.calls.at(-1)[0].params.q as string;
+        expect(decodeURIComponent(sent)).toBe('a%20b');
     });
 
     it('a page with no tags draws no row', async () => {

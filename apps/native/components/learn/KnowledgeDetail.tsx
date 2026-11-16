@@ -235,7 +235,7 @@ export function KnowledgeDetail({ page: held }: { page: KnowledgePage }) {
                 {k.place ? <Text style={styles.where}>{t(LEARN_LINES.where, { place: k.place })}</Text> : null}
                 {/* Its own tags (Learn's tags): each opens Learn on a search for it, never the Market. */}
                 <PostTagChips tags={[]} freeTags={page.freeTags} freeTagLabel={(tag) => t(KNOWLEDGE_TAG_WORDS.searchFor, { tag })}
-                    onFreeTag={(tag) => router.push({ pathname: '/learn', params: { q: tag } } as any)} />
+                    onFreeTag={(tag) => router.push({ pathname: '/learn', params: { q: encodeURIComponent(tag) } } as any)} />
                 {photos.length > 0 ? <PhotoCarousel photos={photos} height={220} borderRadius={14} onOpen={(_i, uri) => setViewerUri(uri)} /> : null}
                 {sources.length > 0 ? (
                     <View style={{ gap: 8 }}>

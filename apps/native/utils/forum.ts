@@ -11,7 +11,7 @@
  *   without waiting (utils/blocklist.ts), so until the node has it, and in every kept copy, the phone leaves out their topics
  *   and posts here; a topic of theirs reads as gone, with the web's line.
  */
-import { FORUM_LIMITS, t, type ForumFollow, type ForumSectionStarts } from '@beanpool/core';
+import { FORUM_LIMITS, t, type ForumFollow, type ForumLink, type ForumLinkKind, type ForumSectionStarts } from '@beanpool/core';
 import { forumKept, signedRequestWithMethod } from './db';
 import { getBlockedUsers } from './blocklist';
 import { TOPIC_WORDS } from '../components/forum/forum-words';
@@ -19,12 +19,21 @@ import { loadIdentity } from './identity';
 import { anchorUrl, signedGet } from './node-post';
 import type { ForumDraft, ForumKeptStore } from './forum-kept';
 
-export interface ForumSection { id: string; starter: string | null; name: string | null; about: string | null; position: number; starts: ForumSectionStarts; listed: boolean; archived: boolean }
+export interface ForumSection {
+    id: string; starter: string | null; name: string | null; about: string | null; position: number; starts: ForumSectionStarts; listed: boolean; archived: boolean;
+    /** The group whose own section this is (slice F8): only its members and the moderators read it. */
+    group?: { id: string; name: string } | null;
+}
 export interface ForumWriter { publicKey: string; name: string }
 export interface ForumTopic {
     id: string; sectionId: string; title: string; writer: ForumWriter; place: string | null; lang: string | null; replyCount: number;
     lastActivityAt: string; createdAt: string; pinned: boolean; closed: string | null; removed: boolean; hidden: boolean;
     follow: ForumFollow | null; unread: boolean;
+    /**
+     * What the topic links (slice F9), in a topic's own read only, as the node answered it for this member: a shown one with what
+     * they may see, else a placeholder with its kind alone (@beanpool/core ForumLink). Drawn exactly as given, never filled in.
+     */
+    links?: ForumLink[];
 }
 export interface ForumPost {
     id: string; topicId: string; number: number; writer: ForumWriter; words: string; quotes: number | null; lang: string | null;
@@ -39,6 +48,8 @@ export interface ForumWaiting {
     writer: ForumWriter; createdAt: string;
 }
 export interface ForumList { topics: ForumTopic[]; next: number | null }
+/** One topic that links a thing (GET /api/forum/linked): only topics this member may read, newest activity first. */
+export interface ForumLinkedTopic { id: string; sectionId: string; title: string; replyCount: number; lastActivityAt: string }
 export interface ForumTopicPage { topic: ForumTopic; posts: ForumPost[]; next: number | null; lastRead: number }
 
 /** The five reasons a moderator's No gives, as the node takes them (engine/moderation-notices.ts normaliseRemovalReason). */
@@ -226,6 +237,15 @@ export const readForumTopic = async (topicId: string, upTo: number) =>
     (await call<{ lastRead: number }>('POST', `/api/forum/topics/${enc(topicId)}/read`, { upTo })).lastRead;
 export const closeForumTopic = async (topicId: string) => (await call<{ topic: ForumTopic }>('POST', `/api/forum/topics/${enc(topicId)}/close`, {})).topic;
 export const removeForumPost = (postId: string) => call('POST', `/api/forum/posts/${enc(postId)}/remove`, {});
+/**
+ * Links one of the member's groups, listings or an event to their own topic (slice F9), or with `on` false takes it off. The
+ * node answers with the topic; the screen reads it again, so a chip is only ever what the node says this member may see.
+ */
+export const linkForumTarget = (topicId: string, kind: ForumLinkKind, targetId: string, on = true) =>
+    call<{ topic: ForumTopic }>('POST', `/api/forum/topics/${enc(topicId)}/links`, on ? { kind, targetId } : { kind, targetId, on: false });
+/** The topics this member may read that link one thing ([] for a thing they can't see, so nothing says it exists). */
+export const forumTopicsLinking = async (kind: ForumLinkKind, id: string) =>
+    (await call<{ topics: ForumLinkedTopic[] }>('GET', `/api/forum/linked?kind=${enc(kind)}&id=${enc(id)}`)).topics;
 /** A report of a forum post (slice F2): about its writer; answered in Settings. */
 export const reportForumPost = (postId: string, reason: string) => call('POST', '/api/reports', { targetForumPostId: postId, reason });
 

@@ -81,13 +81,15 @@ interface SheetProps {
     onClose: () => void;
     onPickMute: (duration: '8h' | '1w' | 'always') => void;
     bottomInset: number;
+    /** The sheet has gone (iOS): the moment a row that opens another Modal may open it (utils/screen-presented.ts useAfterDismiss). */
+    onDismiss?: () => void;
 }
 
 /** A small sheet, not a popover: the rows are full-width 56dp targets at 320dp. */
-export function ChatMenuSheet({ styles, menuOpen, muteOpen, title, items, muteHint, onClose, onPickMute, bottomInset }: SheetProps) {
+export function ChatMenuSheet({ styles, menuOpen, muteOpen, title, items, muteHint, onClose, onPickMute, bottomInset, onDismiss }: SheetProps) {
     const { colors } = useTheme();
     return (
-        <Modal visible={menuOpen || muteOpen} transparent animationType="fade" onRequestClose={onClose}>
+        <Modal visible={menuOpen || muteOpen} transparent animationType="fade" onRequestClose={onClose} onDismiss={onDismiss}>
             <Pressable style={styles.menuBackdrop} onPress={onClose} accessibilityLabel={t('Close menu')}>
                 <View style={[styles.menuSheet, { paddingBottom: Math.max(bottomInset, 12) }]}>
                     <Text style={styles.menuTitle} numberOfLines={1}>{muteOpen ? t('Mute notifications') : title}</Text>

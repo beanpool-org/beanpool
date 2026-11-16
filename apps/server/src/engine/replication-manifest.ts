@@ -727,6 +727,7 @@ export const TABLES: Record<string, TableEntry> = {
     relay_mail: { kind: 'local', reason: "sealed items another community's server brought for a member here, held only until their device has them (engine/relay-mail.ts): never in a copy, so no standby or backup holds mail" },
     relay_mail_seen: { kind: 'local', reason: "the ids of the items other servers brought here, 7 days, against replays and for the caps (engine/relay-mail.ts): this server's own" },
     relay_mail_refused: { kind: 'local', reason: "the refusal a guest's group item was given here, kept as long as its id is spent, so a replay hears the same (engine/relay-mail.ts): this server's own" },
+    relay_mail_answered: { kind: 'local', reason: "the counter a guest's yes, no or leave was stamped with here, kept as long as its id is spent, so a replay hears the same (engine/relay-mail.ts): this server's own" },
     relay_mail_devices: { kind: 'local', reason: "each device that fetches a member's mail and when it last asked, so an item waits until every one has it (engine/relay-mail.ts, X2b): this server's own, never in a copy" },
     relay_mail_got: { kind: 'local', reason: "which of a member's devices has confirmed which item waiting here (engine/relay-mail.ts, X2b): goes with the item, never in a copy" },
     group_guest_outbox: { kind: 'local', reason: "what this server, hosting a group, has still to send its guests' homes, one signed request a home (engine/group-guests.ts): this server's own; the lines stay in the group's chat" },
@@ -978,6 +979,13 @@ export const NODE_CONFIG_BLOB_FIELDS: Record<string, SettingEntry> = {
         reason: 'the address list this server last signed, content and number (services/address-list.ts), carried in the take-over '
             + 'envelope so a promoted server numbers its first list after it',
         differsByDesign: "a take-over raises the list's epoch: the promoted server's first list is signed at the bundle's epoch + 1",
+    },
+    addressSpares: {
+        kind: 'takeover-bundle',
+        reason: "the owner's spares (Settings → Addresses → Spares, engine/own-addresses.ts addressSpares): standbys' addresses published in "
+            + 'the signed list apart from its addresses; carried in the take-over envelope (several-addresses S8, DESIGN-several-addresses-fable.md §6)',
+        differsByDesign: "a take-over moves the promoted standby's own spare from the spares to its confirmed addresses (services/takeover.ts "
+            + 'public-address step), so phones that find nothing listed answering prove it there',
     },
     addressListFloorOwed: {
         kind: 'per-server',

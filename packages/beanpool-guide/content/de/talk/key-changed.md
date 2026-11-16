@@ -1,84 +1,100 @@
 ---
 slug: key-changed
 title: Wenn ein Schlüssel im Chat wechselt
-summary: Warum ein Chat den Versand stoppt, wie du den Schlüsselcode prüfst und wann du fortfahren kannst.
+summary: Was die graue Zeile über einen geänderten Schlüssel bedeutet, wie du einen Schlüsselcode mit der Person abgleichst und was „Als verifiziert markieren“ bewirkt.
 related: messages, your-12-words, people
-source-hash: c6be30fdc4888113
+source-hash: d4dfaf863af532c6
 ---
 
 ## Was es bedeutet
 
-Jede Nachricht zwischen zwei Personen wird so verschlüsselt, dass nur das Telefon der anderen Person sie öffnen kann. Sie wird für deren **Schlüssel** verschlüsselt, nicht für deren Namen. Dein Telefon merkt sich, für welchen Schlüssel es deinen Chat verschlüsselt hat.
+Jede Nachricht zwischen zwei Personen wird so verschlüsselt, dass nur das Telefon der anderen Person sie öffnen kann. Sie wird für deren **Schlüssel** verschlüsselt, nicht für deren Namen. Deine Community listet auf, welcher Schlüssel zu der Person gehört, und dein Telefon merkt sich, für welchen Schlüssel es deinen Chat verschlüsselt hat.
 
-Wenn deine Community nun einen anderen Schlüssel für die Person nennt, hält dein Telefon inne und informiert dich, statt unbemerkt an den neuen Schlüssel zu senden. Oben im Chat siehst du **Der Schlüssel hinter „Ben“ hat sich geändert.** Das Eingabefeld ist ausgegraut und meldet, dass das Senden pausiert ist.
+Wenn deine Community einen neuen Schlüssel für die Person nennt, hängt das, was dein Telefon tut, von einer Sache ab: ob du die Person auf diesem Telefon als verifiziert markiert hast.
 
-Deine früheren Nachrichten mit der Person sind in der Regel weiterhin lesbar wie zuvor. Auf einem Telefon, das du gerade wiederhergestellt oder neu eingerichtet hast, steht bei Nachrichten vom neuen Schlüssel: **Mit dem neuen Schlüssel gesendet. Wird angezeigt, nachdem du fortfährst.**, bis du eine Entscheidung triffst.
+## Jemand, den du nicht als verifiziert markiert hast
 
-Dies gilt für die Telefon-App. Die Web-App speichert Schlüssel derzeit noch nicht.
+Der Chat geht mit dem neuen Schlüssel weiter. Dein Telefon schreibt eine graue Zeile in den Chat, zum Beispiel: **Der Schlüssel von Ben hat sich geändert. Meist heißt das, dass die Person auf einem neuen Telefon wieder in ihr Konto gekommen ist. Tippe, um den Schlüsselcode zu sehen.**
 
-## Warum das passieren kann
+Nichts wird pausiert, der Chat bekommt unter **Chat** keinen Hinweis, und deine früheren Nachrichten bleiben lesbar. Die Zeile soll dich informieren, nicht warnen. Tippe darauf, um den Schlüsselcode zu sehen.
 
-- **Die Person hat ein neues Telefon und einen neuen Schlüssel.** Das ist der häufigste Grund. Der alte Schlüssel ist weg, also hat sie einen neuen.
-- **Etwas stimmt nicht.** Der Server einer Community listet auf, wer an jedem Chat beteiligt ist. Ein Server, der deine Nachrichten mitlesen wollte, könnte den Schlüssel einer fremden Person hinter den Namen deines Freundes setzen. Der Name sieht richtig aus, aber der Schlüssel ist es nicht.
+## Warum sich ein Schlüssel ändern kann
 
-Dein Telefon kann diese Fälle nicht von alleine unterscheiden. Du kannst es – anhand des Schlüsselcodes.
+- **Die Person ist auf einem neuen Telefon wieder in ihr Konto gekommen.** Das ist der übliche Grund. Ein Admin hat ihr Konto auf das neue Telefon übertragen, daher hat sie einen neuen Schlüssel.
+- **Etwas stimmt nicht.** Der Server einer Community listet auf, wer an jedem Chat beteiligt ist. Ein Server, der deine Nachrichten mitlesen wollte, könnte den Schlüssel einer fremden Person hinter den Namen deines Freundes setzen. Der Name sieht richtig aus, der Schlüssel aber nicht.
 
-## Den Schlüsselcode mit der Person abgleichen
+Dein Telefon kann diese Fälle nicht von allein unterscheiden. Du kannst es – mit dem Schlüsselcode.
 
-- Das Banner zeigt einen Code an: 20 Ziffern in fünf Vierergruppen.
-- Bitte die Person, die **Einstellungen** zu öffnen, dann **Kontoschutz**, und dir **Mein Schlüsselcode** vorzulesen.
-- **Mein Schlüsselcode** gibt es nur in der Telefon-App. Nutzt die Person ausschließlich die Web-App, kann sie ihn dir noch nicht vorlesen: Tippe auf **Nicht jetzt**, bis sie die Telefon-App öffnen kann.
-- Gleiche den Code **persönlich oder in einem Telefon- oder Videoanruf** ab, bei dem du sicher bist, dass es die Person ist. Gleiche ihn nicht über eine Nachricht in BeanPool ab: Wenn der Schlüssel falsch ist, gilt das auch für jeden, der antwortet.
-- Stimmt jede Ziffer überein, setze das Häkchen bei **Ich habe mit Ben gesprochen: Der Schlüsselcode in ihren Einstellungen stimmt mit diesem überein** und tippe auf **Mit neuem Schlüssel fortfahren**.
+## Den Schlüsselcode einer Person prüfen
 
-Von da an gehen deine Nachrichten an den neuen Schlüssel. Das Banner und der Hinweis **Schlüssel geändert** am Chat im **Chat** verschwinden, und deine früheren Nachrichten bleiben lesbar.
+- Tippe im Chat oben auf **⋯** und dann auf **Schlüsselcode**. Ein Tippen auf die graue Zeile öffnet ihn ebenfalls.
+- Du siehst den Schlüsselcode der Person: 20 Ziffern in fünf Vierergruppen.
+- Bitte die Person, dir ihren Code unter **Mein Schlüsselcode** vorzulesen. In der Telefon-App steht er unter **Einstellungen**, bei **Kontoschutz**. In der Web-App steht er unter **Einstellungen**, bei **Konto & Identität**.
+- Prüfe ihn **persönlich oder in einem Telefon- oder Videoanruf**, bei dem du sicher bist, dass es die Person ist. Prüfe ihn nicht über eine Nachricht in BeanPool: Wenn der Schlüssel falsch ist, gilt das auch für jeden, der antwortet.
+- Stimmt jede Ziffer überein, ist dieser Chat wirklich mit der Person. Dann kannst du auf **Als verifiziert markieren** tippen.
 
 Der Code ist nicht geheim. Du kannst ihn bedenkenlos vorlesen.
 
-## Wenn der Code nicht übereinstimmt oder du ihn nicht prüfen kannst
+## Als verifiziert markieren
 
-Tippe auf **Nicht jetzt**. Es wird nichts gesendet und nichts geändert. Du kannst später zum Chat zurückkehren.
+**Als verifiziert markieren** sorgt dafür, dass dein Telefon dich fragt, bevor es für diese Person an einen neuen Schlüssel sendet. Der Schlüsselcode-Bildschirm zeigt dann **Verifiziert ✓**, und ebenso der obere Rand des Chats, neben **🔒 Ende-zu-Ende-verschlüsselt** unter dem Namen der Person.
 
-Ein pausierter Chat bleibt möglicherweise pausiert, bis du fortfährst. Es gibt keinen anderen Weg, darin weiterzuschreiben: Deine Community führt genau einen Chat für euch beide, sodass das Starten eines neuen Chats mit derselben Person denselben Chat öffnet.
+Die Markierung wird nur auf diesem Telefon gespeichert, für diesen Chat in dieser Community. Die Web-App kennt sie nicht, und das Zurücksetzen des Chat-Speichers der Community (siehe unten) entfernt sie.
+
+Um sie zurückzunehmen, öffne erneut **Schlüsselcode**, tippe auf **Verifizierung entfernen** und bestätige mit **Verifizierung entfernen**.
+
+## Wenn sich der Schlüssel einer Person ändert, die du als verifiziert markiert hast
+
+Dein Telefon hält an und fragt dich, statt an den neuen Schlüssel zu senden. Oben im Chat siehst du **Der Schlüssel hinter „Ben“ hat sich geändert.** Das Banner beginnt mit **Du hast Ben als verifiziert markiert, daher fragt dieses Telefon nach, bevor es an einen neuen Schlüssel sendet.** und zeigt den neuen Schlüsselcode.
+
+Das Eingabefeld ist ausgegraut, und darüber steht **Der Schlüssel hinter Ben hat sich geändert, daher ist das Senden pausiert.** Eine Nachricht vom neuen Schlüssel zeigt **Mit dem neuen Schlüssel gesendet. Wird angezeigt, nachdem du fortfährst.**, bis du dich entscheidest. Der Chat trägt unter **Chat** den Hinweis **Schlüssel geändert**.
+
+Prüfe den neuen Code mit der Person, wie oben beschrieben. Stimmt jede Ziffer überein, setze das Häkchen bei **Ich habe es mit Ben abgeglichen: Der Schlüsselcode in ihren Einstellungen stimmt mit diesem überein.** und tippe dann auf **Mit dem neuen Schlüssel fortfahren**. Von da an gehen deine Nachrichten an den neuen Schlüssel, Ben bleibt **Verifiziert ✓**, das Banner und der Hinweis verschwinden, und deine früheren Nachrichten bleiben lesbar.
+
+Stimmt der Code nicht überein oder kannst du ihn nicht prüfen, tippe auf **Nicht jetzt**. Es wird nichts gesendet und nichts geändert. Der Chat bleibt pausiert, bis du fortfährst: Deine Community führt genau einen Chat für euch beide, sodass ein neuer Chat mit derselben Person denselben Chat öffnet.
 
 Stimmt der Code nicht überein, fahre nicht fort. Informiere die Person und die Admins deiner Community: Möglicherweise versucht jemand, deine Nachrichten mitzulesen.
 
-## Wenn das Banner keinen Schlüssel zum Fortfahren anbietet
-
-Manchmal nennt die Community in einem Chat zwischen zwei Personen keinen einzelnen Schlüssel für die Person: Sie listet mehrere oder gar keinen auf. Dann gibt es keinen Schlüssel zum Fortfahren, das Banner weist darauf hin und bietet nur **Nicht jetzt** an. Es wird nichts gesendet. Sprich persönlich oder telefonisch mit der Person. Dein Telefon überprüft den Chat von selbst erneut, sobald sich die Liste der Community ändert, und ein neuer Chat mit derselben Person ist derselbe Chat.
-
-## Wenn das Banner meldet, dass dein Telefon den Chat von Anfang an überprüft
-
-Nachdem du dein Telefon aus deinen 12 Wörtern wiederhergestellt oder die App aktualisiert hast, prüft dein Telefon jeden Chat anhand seiner eigenen früheren Nachrichten. Kamen diese von einem anderen Schlüssel als dem, den deine Community jetzt für die Person angibt, beginnt das Banner mit: **Dieses Telefon überprüft diesen Chat von Anfang an, wie nach einer Wiederherstellung oder einem App-Update.** Gleiche den Code wie oben beschrieben mit der Person ab. Nachdem du den Chat-Speicher der Community zurückgesetzt hast, beginnt es stattdessen mit: **Der Chat-Speicher dieser Community wurde zurückgesetzt, daher überprüft dieses Telefon den Chat von Beginn an.**
-
-## Chat-Speicher
-
-Dein Telefon führt für jede Community einen kleinen Speicher: mit welchem Schlüssel jeder deiner Chats geführt wird und welche Chats privat sind. Er wird auf dem Telefon gespeichert, und der Server der Community kann einen Chat nicht von sich aus auf einen anderen Schlüssel übertragen: Das kannst nur du über das Banner. Er bleibt auf dem Telefon erhalten, wenn du dich abmeldest, sodass das Ab- und erneute Anmelden ihn nicht löscht. Das Telefon setzt ihn niemals von sich aus zurück.
-
-Du kannst ihn für eine Community zurücksetzen: Öffne die **Einstellungen**, tippe unter **Konto & Identität** auf **Chat-Speicher**, tippe neben der Community auf **Zurücksetzen**, lies die Warnung und tippe erneut auf **Zurücksetzen**. Die App verweist dich nur hierher, wenn sie meldet, dass sie diesen Speicher nicht lesen konnte und ein erneuter Versuch nicht geholfen hat.
-
-Nach einem Zurücksetzen prüft dein Telefon jeden Chat in dieser Community anhand der gespeicherten Nachrichten noch einmal von Anfang an. Ein Chat, dessen Nachrichten von einem anderen Schlüssel stammten als dem, den die Community jetzt angibt, zeigt das Banner erneut, beginnend mit: **Der Chat-Speicher dieser Community wurde zurückgesetzt, daher überprüft dieses Telefon den Chat von Beginn an.** Gleiche den Code wie oben beschrieben mit der Person ab.
-
-Zwei Dinge können sich nach einem Zurücksetzen ändern, und die Warnung weist vor deiner Bestätigung darauf hin: Ein Chat, der wegen eines geänderten Schlüssels pausiert war, kann sich mit dem neuen Schlüssel öffnen, und ein privater Chat, der aus dem Chat verschwunden war, kann als Gruppenchat zurückkehren, den die Community mitlesen kann. Prüfe vor dem Absenden den Schlüsselcode oder wer im Chat ist.
-
-Ein Zurücksetzen hilft nicht bei einem Chat, den dein Telefon keinem einzelnen Schlüssel zuordnen kann: Er wird erneut geprüft und stoppt wieder. Gleiche stattdessen den Code wie oben beschrieben mit der Person ab.
-
-Dies gilt für die Telefon-App. Die Web-App besitzt keinen Chat-Speicher.
-
-## Wenn das Banner meldet, dass dein Telefon den Chat keinem Schlüssel zuordnen kann
-
-Manchmal waren die früheren Nachrichten in einem Chat mit Schlüsseln verschlüsselt, die dein Telefon nicht einer einzelnen Person zuordnen kann. Über dem Eingabefeld steht dann: **Dieses Telefon kann diesen Chat keinem Schlüssel zuordnen, daher ist das Senden deaktiviert.** und das Banner zeigt den Code des Schlüssels, den deine Community jetzt für die Person listet.
-
-Einige Nachrichten werden möglicherweise weiterhin angezeigt. Sie stammen vielleicht nicht von der Person, deren Name über dem Chat steht: Die eigenen früheren Nachrichten dieser Person können diejenigen sein, bei denen steht: **Diese Nachricht konnte nicht verifiziert werden und wird daher nicht angezeigt.** Diese bleiben auch so, nachdem du fortfährst.
-
-Gleiche den Code wie oben beschrieben persönlich oder bei einem Anruf mit der Person ab. Stimmt er überein, setze das Häkchen und tippe auf **Mit neuem Schlüssel fortfahren**: Von da an gehen deine Nachrichten an diesen Schlüssel. Stimmt er nicht überein oder kannst du ihn nicht prüfen, tippe auf **Nicht jetzt**. Ein neuer Chat mit derselben Person ist derselbe Chat; es gibt also nichts anderes zu versuchen. Nennt die Community keinen einzelnen Schlüssel für die Person, bietet das Banner nur **Nicht jetzt** an, und dein Telefon prüft den Chat von selbst erneut, sobald sich die Liste der Community ändert.
-
-## Was dein Telefon prüfen kann und was nicht
-
-Dein Telefon überprüft einen Chat anhand der Nachrichten, die es bereits gespeichert hat. Ein wiederhergestelltes Telefon oder ein bestehendes Telefon beim Update wird nur von einem Server gesteuert, der den ältesten Teil des Chats in den gesendeten Daten zurückhält oder umgibt. Ein Telefon, das diesen ältesten Teil bereits gespeichert hatte, lässt sich durch nichts täuschen, was der Server nach dem Update sendet.
-
-Ein gerade wiederhergestelltes oder frisch aktualisiertes Telefon kann daher über den Schlüssel eines Chats getäuscht werden. Ein Banner kann das nicht ausschließen. **Bestätige einen geänderten Schlüssel persönlich** oder bei einem Anruf, bei dem du sicher bist, dass es die Person ist.
+Auf dem Schlüsselcode-Bildschirm beendet auch **Verifizierung entfernen** die Pause: Der Chat geht mit dem neuen Schlüssel weiter, ohne die Prüfung.
 
 ## Wenn die Community ein Datum angibt
 
-Wenn deine Community nachweisen kann, dass das Konto einen neuen Schlüssel erhalten hat, weist das Banner darauf hin, zum Beispiel: **Diese Community meldet, dass das Konto am 3. Okt. 2026 einen neuen Schlüssel erhalten hat.** Das hilft dir zu verstehen, was passiert ist, ersetzt aber nicht den Abgleich des Codes: Ein Server könnte dies ebenfalls behaupten.
+Wenn deine Community zeigen kann, dass das Konto einen neuen Schlüssel erhalten hat, sagt das Banner das, zum Beispiel: **Diese Community meldet, dass das Konto am 3. Okt. 2026 einen neuen Schlüssel erhalten hat.** Das hilft dir zu verstehen, was passiert ist, ersetzt aber nicht das Prüfen des Codes: Ein Server könnte das ebenfalls behaupten.
+
+## Wenn es keinen Schlüssel zum Fortfahren gibt
+
+Manchmal nennt die Community in einem Chat zwischen zwei Personen keinen einzelnen Schlüssel für die Person: Sie listet mehrere oder gar keinen auf. Dann gibt es niemanden, für den deine Nachrichten verschlüsselt werden könnten, ob du die Person als verifiziert markiert hast oder nicht. Das Banner weist darauf hin und bietet nur **Nicht jetzt** an, es wird nichts gesendet, und der Chat trägt unter **Chat** den Hinweis **Schlüssel geändert**. Der Schlüsselcode-Bildschirm zeigt **Diese Community führt keinen eindeutigen Schlüssel für Ben in diesem Chat auf, daher wird noch nicht gesendet.**
+
+Sprich persönlich oder telefonisch mit der Person. Dein Telefon prüft den Chat von selbst erneut, sobald sich die Liste der Community ändert, und ein neuer Chat mit derselben Person ist derselbe Chat.
+
+Konnte dein Telefon auch die früheren Nachrichten keinem einzelnen Schlüssel zuordnen, steht über dem Eingabefeld **Dieses Telefon kann diesen Chat keinem Schlüssel zuordnen, daher ist das Senden deaktiviert. Was du hier liest, stammt möglicherweise nicht von der Person.**, und der Schlüsselcode-Bildschirm hat keinen Code zum Anzeigen.
+
+## Nachdem du dein Telefon wiederhergestellt oder neu eingerichtet hast
+
+Dein Telefon prüft jeden Chat anhand der früheren Nachrichten, die es gespeichert hat. Stammten diese Nachrichten von einem älteren Schlüssel als dem, den deine Community jetzt nennt, geht der Chat mit dem genannten Schlüssel weiter, die früheren Nachrichten bleiben lesbar, und die graue Zeile erscheint einmal.
+
+Kann dein Telefon einige davon keinem Schlüssel zuordnen, geht der Chat trotzdem mit dem Schlüssel weiter, den deine Community nennt, ohne Zeile. Eine Nachricht, die es nicht öffnen konnte, zeigt **Diese Nachricht konnte nicht verifiziert werden und wird daher nicht angezeigt.** Das bleibt so.
+
+## Chat-Speicher
+
+Dein Telefon führt für jede Community einen kleinen Speicher: mit welchem Schlüssel jeder deiner Chats geführt wird, wen du als verifiziert markiert hast und welche Chats privat sind. Er liegt auf dem Telefon. Er bleibt auf dem Telefon, wenn du dich abmeldest, sodass Ab- und erneutes Anmelden ihn nicht löscht. Das Telefon setzt ihn nie von sich aus zurück.
+
+Du kannst ihn für eine Community zurücksetzen: Öffne **Einstellungen**, tippe unter **Konto & Identität** auf **Chat-Speicher**, tippe neben der Community auf **Zurücksetzen**, lies die Warnung und tippe erneut auf **Zurücksetzen**. Die App verweist dich nur hierher, wenn sie meldet, dass sie diesen Speicher nicht lesen konnte und ein erneuter Versuch nicht geholfen hat.
+
+Nach einem Zurücksetzen prüft dein Telefon jeden Chat in dieser Community noch einmal von Anfang an, anhand der Nachrichten, die es gespeichert hat, wie nach einer Wiederherstellung.
+
+Die Warnung sagt dir vor dem Bestätigen, was sich ändern kann. Ein Chat, der wegen eines geänderten Schlüssels pausiert war, kann sich mit dem neuen Schlüssel öffnen. Ein privater Chat, der aus Chat verschwunden war, kann als Gruppenchat zurückkehren, den die Community lesen kann. Personen, die du in dieser Community als verifiziert markiert hast, sind wieder nicht verifiziert. Prüfe vor dem Senden den Schlüsselcode oder wer im Chat ist.
+
+Dies gilt für die Telefon-App. Die Web-App hat keinen Chat-Speicher.
+
+## In der Web-App
+
+Die Web-App merkt sich keine Schlüssel. Bei jedem Senden verschlüsselt sie deine Nachricht für den einen Schlüssel, den deine Community für die Person nennt, und nennt sie mehrere oder keinen, wird deine Nachricht nicht gesendet. Daher zeigt sie keine graue Zeile und kein Banner, und sie hat kein **Als verifiziert markieren**: Eine Person, die du auf deinem Telefon als verifiziert markiert hast, löst in der Web-App keine Pause aus.
+
+Schlüsselcodes kannst du dort trotzdem lesen. **Mein Schlüsselcode** steht unter **Einstellungen**, bei **Konto & Identität**. In einem Chat zwischen zwei Personen hat das Menü **⋮** den Eintrag **Schlüsselcode**: Er zeigt den Code der Person und sagt, dass der Browser sich keine Schlüsselcodes merkt.
+
+## Was dein Telefon prüfen kann und was nicht
+
+Bei einer Person, die du nicht als verifiziert markiert hast, entscheidet die Liste deiner Community bei jeder Änderung über den Schlüssel, und dein Telefon informiert dich mit der grauen Zeile. Auf einem Telefon, das den Chat schon gespeichert hatte, hinterlässt ein geänderter Schlüssel immer die Zeile. Ein gerade wiederhergestelltes Telefon kann getäuscht werden: Ein Server, der die älteren Nachrichten zurückhält, hinterlässt keine Zeile.
+
+Die Zeile kann ein neues Telefon nicht von einem ausgetauschten Schlüssel unterscheiden. Das kann nur der Schlüsselcode, und nur **Als verifiziert markieren** bringt dein Telefon dazu, beim nächsten Mal anzuhalten. Wenn dir ein Chat wichtig ist, prüfe den Code persönlich oder bei einem Anruf, bei dem du sicher bist, dass es die Person ist, und markiere sie als verifiziert.

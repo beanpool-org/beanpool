@@ -24,7 +24,7 @@ In der Web-App ist dies der Reiter **Chat**. Er listet alle deine Chats auf, auc
 ## Einen Chat starten
 
 - Aus einem Profil: Öffne das Profil der Person und tippe auf **Nachricht**. Dort kannst du sie auch als Freund hinzufügen.
-- Aus dem **Chat**: Tippe auf die Stift-Schaltfläche und suche die Person nach Namen. In der weltweiten Gemeinschaft listet „Neue Nachricht“ die Personen auf, mit denen du gehandelt hast, sowie deine Freunde. Um andere zu finden, gib mindestens 2 Buchstaben ihres Namens ein.
+- Aus dem **Chat**: Tippe auf die Stift-Schaltfläche und suche die Person nach Namen. In der weltweiten Gemeinschaft listet „Neue Nachricht“ die Personen auf, mit denen du gehandelt hast, sowie deine Freunde. Um andere zu finden, gib mindestens 2 Buchstaben ihres Namens ein. Wie du jemandem schreibst, der zu einer anderen Community gehört, steht unter „Menschen aus anderen Communities“.
 - Aus der Mitgliederliste: **Chat**, dann **Personen**, und tippe auf 💬 neben dem Namen eines Mitglieds unter **Community** oder **Freunde**.
 - Aus einem Beitrag: Tippe auf **Nachricht** und den Namen der Person.
 

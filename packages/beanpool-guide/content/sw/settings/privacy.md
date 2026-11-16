@@ -2,7 +2,7 @@
 slug: privacy
 title: Faragha yako
 summary: Kile wengine wanachoweza kuona kukuhusu, na mipangilio inayodhibiti.
-related: your-profile, your-area, pin-locations, blocking, messages
+related: your-profile, your-area, pin-locations, blocking, messages, other-communities
 help: Kile wanachama wengine wanachoweza kuona kukuhusu, na swichi zinazoidhibiti.
 source-hash: 7a296a90b991050e
 ---
@@ -44,6 +44,7 @@ Wamiliki na wasimamizi wanaoendesha seva ya jumuiya yako bado wanaweza kuona kil
 - **Eneo lako** (kwenye jumuiya ya kimataifa): katika Mipangilio, chini ya **Eneo lako**, tazama eneo ulilotoa, takriban kilomita 10 kuzunguka mji au nambari mbili, au **Halijawekwa**. **Futa** huondoa hilo. Chini yake, **Uko takriban wapi?** huweka jipya kwa **Tumia mahali nilipo** au **Andika mji au mtaa**, na **Ghairi** (kwenye kivinjari, **← Rudi kwenye Mipangilio**) huliacha kama lilivyo. Ni eneo lililokadiriwa pekee linalotumwa. Wanachama wengine huona uko umbali gani, na kura ya maoni unayotengeneza huonyeshwa katika eneo lako. Bila moja, unaona orodha mpya zaidi duniani kote, na wanachama wa karibu hawataona kura ya maoni unayotengeneza kwenye orodha yao, ingawa bado wanaweza kuipata kwa kutafuta. Tazama "Eneo lako".
 - **Kifuli cha Programu:** huomba kufuli ya skrini ya simu yako (PIN yake, mchoro, nenosiri, alama ya kidole au uso) wakati programu inapofunguka, na unaporudi kwake baada ya sekunde 15 au zaidi ukiwa mbali. Kufuli hiyo hufunika skrini za programu na madirisha ibukizi. Kwenye iPhone pia hufunga ukurasa wa wavuti ambao programu iliufungua, kama vile Mipangilio ya jumuiya yako kutoka **Dhibiti**. Haiwezi kufunika ukurasa wa wavuti ambao programu iliufungua kwenye simu ya Android, ambao hufunguka nje ya programu, au paneli ya kushiriki kitu kwenye simu zote mbili: zifunge kabla ya kuweka simu yako chini. Mipangilio ya jumuiya yako, iliyofunguliwa kutoka **Dhibiti**, inakuondoa baada ya dakika 15 bila kutumika. Wakati Kifuli cha Programu kimewashwa, programu huwa tupu unapoondoka, na inarudi unaporudi. Inahitaji kufuli ya skrini kwenye simu: bila moja hakuna chochote cha kuuliza.
 - **Chaneli:** chochote unachoshiriki kwenye Mwenendo huonyeshwa pamoja na jina lako, kwa kila mtu katika jumuiya yako. Tazama "Kushiriki chaneli zako".
+- **Watu wa jumuiya nyingine:** hakuna mtu wa jumuiya nyingine anayeweza kukupata kwa jina lako isipokuwa uwashe **Watu wa jumuiya nyingine wanaweza kunipata kwa jina**, chini ya kadi yako ya anwani. Imezimwa hadi utakapoiwasha. Hata hivyo, lazima waandike jina lako kamili: hakuna anayeona orodha. Kadi na swichi zipo tu pale ambapo jumuiya yako inapokea ujumbe kutoka jumuiya nyingine. Tazama "Watu wa jumuiya nyingine".
 
 ## Nani mwingine anayeweza kuona vitu
 

@@ -3762,7 +3762,9 @@ export interface AppAddressesReport {
      * /api/node/addresses): the addresses members' phones follow and the main one, each in its one spelling; null when it
      * lists nothing (a server that knows none of its names, or whose names all wait for a route).
      */
-    list?: { main: string; addresses: string[] } | null;
+    list?: { main: string; addresses: string[]; spares?: string[] } | null;
+    /** The owner's spares (several-addresses §6, S8): standbys' addresses, published in the list apart from its addresses. */
+    spares?: string[];
 }
 
 /**
@@ -3820,6 +3822,24 @@ export async function makeMainAddress(nodeUrl: string, address: string, credenti
     const host = audienceOf(nodeUrl);
     const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/app-addresses/main', host ? { host } : undefined), {
         method: 'POST', headers: buildAdminHeaders(credential), body: JSON.stringify({ address, ...proofField(code) }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throwIfFreshProof(res.status, body);
+        throw new Error(statusSentence(res.status, body, `HTTP ${res.status}: ${res.statusText}`));
+    }
+    return body as AppAddressesReport;
+}
+
+/**
+ * A spare added or removed (design several-addresses §6, S8): a standby's own address, published in the signed list apart
+ * from the addresses. An owner's, with the owner's fresh proof (server requireFreshProof): a refusal that asks for it throws
+ * FreshProofRequiredError; any other refusal throws the server's words.
+ */
+export async function setAddressSpare(nodeUrl: string, action: 'add' | 'remove', address: string, credential?: string, code?: string): Promise<AppAddressesReport> {
+    const host = audienceOf(nodeUrl);
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/app-addresses/spares', host ? { host } : undefined), {
+        method: 'POST', headers: buildAdminHeaders(credential), body: JSON.stringify({ action, address, ...proofField(code) }),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {

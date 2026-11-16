@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Mga mensahe, mga mensaheng boses, ang forum, mga grupo at kanilang mga chat, mga tao at kaibigan, ang iyong mga pribadong contact, mga chat sa event, pag-mute, mga pagbanggit, at susing nabago.",
-        "sourceHash": "79e2bb34ba50acd7"
+        "text": "Mga mensahe, mga mensaheng boses, ang forum, mga grupo at kanilang mga chat, mga tao at kaibigan, ang iyong mga pribadong contact, mga tao mula sa ibang komunidad, mga chat sa event, pag-mute, mga pagbanggit, at susing nabago.",
+        "sourceHash": "b65b2bfc90637c9f"
       }
     },
     "pulse": {
@@ -430,8 +430,8 @@
         "sourceHash": "79c7dc48aa148094"
       },
       "summary": {
-        "text": "Bakit humihinto sa pagpapadala ang chat, paano susuriin ang key code sa kausap, at kailan magpapatuloy.",
-        "sourceHash": "c7a3e58ca019f963"
+        "text": "Ano ang ibig sabihin ng kulay-abong linya tungkol sa nagbagong key, paano susuriin ang key code sa kausap, at ano ang ginagawa ng Markahan bilang na-verify.",
+        "sourceHash": "d59b33d9c938fae5"
       }
     },
     "the-pulse": {
@@ -804,6 +804,20 @@
       "help": {
         "text": "Ang iyong mga pribadong contact. Ikaw lang ang makakabukas ng listahan. Magdala mula sa telepono o contacts file, magdagdag nang mano-mano, o mag-imbita.",
         "sourceHash": "783e4da3badc2f05"
+      }
+    },
+    "other-communities": {
+      "title": {
+        "text": "Mga tao mula sa ibang komunidad",
+        "sourceHash": "c533e8a22b0abbe0"
+      },
+      "summary": {
+        "text": "Magmensahe sa isang taong kabilang sa ibang komunidad. Ang address card mo, ang mga switch na nagbibigay-daan sa mga tao na maabot ka, ang paghahanap sa isang tao sa eksaktong pangalan niya, at kung ano ang iniingatan ng bawat komunidad.",
+        "sourceHash": "24c9f4e6e21e24a2"
+      },
+      "help": {
+        "text": "Ipakita ang address card mo, o hanapin ang tao sa eksaktong pangalan niya kung pumayag siya. Hiling ang una niyang mensahe: ikaw ang pipili kung tatanggapin.",
+        "sourceHash": "bd5e7fc4314d034a"
       }
     },
     "bills": {

@@ -31,7 +31,10 @@
  *  13  back from epoch-stale: a guest's refused epoch or line -> the roster follows to their home alone, with the current
  *      epoch (stale, or its record and their home's wraps); the epoch they make from it goes in, and so does the line they
  *      send again under the key they open from it; two refusals in one request -> one roster; 13f the same items brought
- *      again (their home never heard the answer) -> each hears the refusal it was given, never "received", nothing taken twice
+ *      again (their home never heard the answer) -> each hears the refusal it was given, never "received", nothing taken twice;
+ *      13g (G2 follow-ups) a yes, a no, a leave taken -> each answered with its counter, the yes's older than the roster that
+ *      follows; brought again -> the same counter; a yes from a guest in, a no or a leave from one out -> a new counter
+ *      (their roster again after the yes); a yes from a guest out -> none
  *  14  close the class: every kind a guest's home brings x a guest whose card says a member's name -> every notice it makes
  *      says "Ana · a.example · guest", never "Ana" alone
  *  15  each home on its own: while one home doesn't answer, another gets its line at once; a row queued during a send goes
@@ -734,6 +737,53 @@ async function main(): Promise<void> {
     const got13f = (r13f.body?.items ?? []).map((i: any) => i.refused ?? (i.received ? 'received' : '?')).join(', ');
     assert(r13f.status === 202 && got13f === 'epoch-stale, epoch-stale, received' && msgsAfter13f === msgs13f && outsOf('roster', t13f).filter((o) => o.body.group === S).length === 0,
         `13f. the same items brought again: each hears what it heard the first time (epoch-stale, epoch-stale, received; got ${got13f}), nothing taken twice (${msgs13f} -> ${msgsAfter13f}), no roster follows`);
+    // 13g. THE GUEST'S OWN WORD (G2 follow-ups, the order rule): a yes, a no and a leave that move where the guest stands are
+    // answered with the group's counter each was stamped with, newer than every counter before it and older than the
+    // roster that follows (so their home orders an invitation told again before the yes as older, and keeps the roster);
+    // the same item brought again hears the same counter (relay_mail_answered), never a bare "received"; one that agrees
+    // with where they stand already confirms it under a new counter, and a yes from a guest out carries none (round 2).
+    {
+        const P = createGroup({ name: 'Plot 7', joinPolicy: 'open', createdBy: ana.pk }).id;
+        const plotTo = `group:${P}`;
+        const [yesG, noG, leaveG] = [newId('Yuri'), newId('Nell'), newId('Lev')];
+        for (const g of [yesG, noG, leaveG]) await call('POST', ana, `/api/groups/${P}/guests`, { card: await cardOf(g, 'a.example') });
+        await settle();
+        const clock = () => db.prepare('SELECT seq FROM group_guest_clock WHERE group_id = ?').pluck().get(P) as number | undefined;
+        const seqOf = (r: Res) => r.body?.items?.[0]?.seq as unknown;
+        const before = clock() ?? 0;
+        const t13g = Date.now();
+        const yesItem = await item(yesG, 'a.example', plotTo, 'group-invite', yes);
+        const rYes = await bring([yesItem]);
+        const rosterSeq = outsOf('roster', t13g).filter((o) => o.body.group === P).map((o) => o.body.seq as number);
+        const rNo = await bring([await item(noG, 'a.example', plotTo, 'group-invite', JSON.stringify({ v: 1, answer: 'no' }))]);
+        await bring([await item(leaveG, 'a.example', plotTo, 'group-invite', yes)]);
+        const rLeave = await bring([await item(leaveG, 'a.example', plotTo, 'group-leave', JSON.stringify({ v: 1 }))]);
+        const rAgain = await bring([yesItem]);
+        const t13gConfirm = Date.now();
+        const rSecondYes = await bring([await item(yesG, 'a.example', plotTo, 'group-invite', yes)]);
+        const rosterAgain = outsOf('roster', t13gConfirm).filter((o) => o.body.group === P).map((o) => o.body.seq as number);
+        const rNoAgain = await bring([await item(noG, 'a.example', plotTo, 'group-invite', JSON.stringify({ v: 1, answer: 'no' }))]);
+        const rLeaveAgain = await bring([await item(leaveG, 'a.example', plotTo, 'group-leave', JSON.stringify({ v: 1 }))]);
+        const rYesOut = await bring([await item(noG, 'a.example', plotTo, 'group-invite', yes)]);
+        const sYes = seqOf(rYes), sNo = seqOf(rNo), sLeave = seqOf(rLeave);
+        const ints = [sYes, sNo, sLeave].every((s) => typeof s === 'number' && Number.isSafeInteger(s));
+        assert(ints && rYes.body.items[0].received === true && (sYes as number) > before && rosterSeq.length === 1 && rosterSeq[0] > (sYes as number)
+            && (sNo as number) > (sYes as number) && (sLeave as number) > (sNo as number) && stateOf(P, yesG) === 'in' && stateOf(P, noG) === 'left' && stateOf(P, leaveG) === 'left',
+            `13g. a yes, a no and a leave taken: each answered received with its counter, newer than the one before (${before} < ${sYes} < ${sNo} < ${sLeave}), the yes's older than the roster that follows (${JSON.stringify(rosterSeq)}); standing in, left, left (got ${stateOf(P, yesG)}, ${stateOf(P, noG)}, ${stateOf(P, leaveG)})`);
+        assert(rAgain.status === 202 && rAgain.body?.items?.[0]?.received === true && seqOf(rAgain) === sYes,
+            `13g. the yes brought again (its answer lost): the same counter (${sYes}; got ${JSON.stringify(rAgain.body?.items?.[0])})`);
+        // Round 2 (#3266): a word that agrees with where they stand confirms it under the next counter, so their home (one
+        // whose own take-over lost the first answer) ends where they stand; the yes from a guest in sends their roster
+        // again, newer than it. A yes from a guest out says nothing of where they stand: no counter.
+        const sSecond = seqOf(rSecondYes), sNoAgain = seqOf(rNoAgain), sLeaveAgain = seqOf(rLeaveAgain);
+        assert(rSecondYes.status === 202 && rSecondYes.body?.items?.[0]?.received === true && typeof sSecond === 'number' && sSecond > (sLeave as number)
+            && rosterAgain.length === 1 && rosterAgain[0] > sSecond && stateOf(P, yesG) === 'in',
+            `13g. a second yes from a guest in already confirms it: received with a new counter (${sLeave} < ${JSON.stringify(sSecond)}), their roster again after it (${JSON.stringify(rosterAgain)}), still in (got ${stateOf(P, yesG)})`);
+        assert(typeof sNoAgain === 'number' && sNoAgain > (sSecond as number) && typeof sLeaveAgain === 'number' && sLeaveAgain > sNoAgain
+            && stateOf(P, noG) === 'left' && stateOf(P, leaveG) === 'left'
+            && rYesOut.status === 202 && rYesOut.body?.items?.[0]?.received === true && seqOf(rYesOut) === undefined && stateOf(P, noG) === 'left',
+            `13g. a no and a leave from guests who left confirm it with a new counter each (${JSON.stringify(sNoAgain)}, ${JSON.stringify(sLeaveAgain)}); a yes from one who left moves nothing and carries none (got ${JSON.stringify(rYesOut.body?.items?.[0])}); still left, left`);
+    }
 
     // ── 14. Every notice a guest's action makes names them as a guest, with their community ─
     console.log('\n14. Every notice a guest\'s action can make shows their community, never their card\'s name alone');

@@ -17,7 +17,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { t } from '@beanpool/core';
 import { Alert } from '../../utils/keyboard-alert';
 import { useStyles, useTheme } from '../ThemeContext';
-import { dmKeyChangeStyleSpec, dmKeyCodeCopy } from '../../utils/dm-key-change';
+import { dmKeyChangeStyleSpec, dmKeyCodeCopy, dmKeyCodeShowsVerified, dmKeyCodeState } from '../../utils/dm-key-change';
 import { keyCodeOf, keyCodeSpoken } from '../../utils/key-code';
 import { getDmKeyCodeInfo, markDmPeerVerified, removeDmPeerVerification, type DmKeyCodeInfo } from '../../utils/db';
 import { DM_PINS_WORDS } from '../../utils/dm-peer-pins';
@@ -46,8 +46,10 @@ export default function DmKeyCodeScreen() {
     const copy = dmKeyCodeCopy(info?.name, !!info?.offersKey);
     const code = keyCodeOf(info?.peer);
     // One state under the code: a verified person's new key waiting at the top of the chat; another pause (no single key
-    // listed: nothing to mark while it lasts); verified; or not.
-    const state = !code ? 'none' : info?.offersKey ? 'paused' : info?.paused ? 'waiting' : info?.verified ? 'verified' : 'not-verified';
+    // listed: nothing to mark while it lasts, and one line says why sending waits); verified; or not. "Verified ✓" shows
+    // while the person is marked verified and no new key waits, as it does beside "🔒 End-to-end encrypted" in the chat.
+    const state = dmKeyCodeState(info, code);
+    const showsVerified = dmKeyCodeShowsVerified(info, code);
 
     const mark = async () => {
         if (!info?.peer || busy) return;
@@ -116,14 +118,13 @@ export default function DmKeyCodeScreen() {
                                 <Text style={styles.keyCodeBody}>{copy.markNote}</Text>
                             </>
                         )}
+                        {showsVerified && <Text style={styles.verifiedText}>{copy.verified}</Text>}
+                        {state === 'verified' && <Text style={styles.keyCodeBody}>{copy.verifiedNote}</Text>}
+                        {state === 'waiting' && <Text style={styles.keyCodeBody}>{copy.waiting}</Text>}
                         {info?.verified && state !== 'none' && (
-                            <>
-                                {state === 'verified' && <Text style={styles.verifiedText}>{copy.verified}</Text>}
-                                {state === 'verified' && <Text style={styles.keyCodeBody}>{copy.verifiedNote}</Text>}
-                                <Pressable style={styles.removeBtn} onPress={remove} disabled={busy} accessibilityRole="button" accessibilityState={{ disabled: busy }} accessibilityLabel={copy.remove}>
-                                    <Text style={styles.removeText}>{copy.remove}</Text>
-                                </Pressable>
-                            </>
+                            <Pressable style={styles.removeBtn} onPress={remove} disabled={busy} accessibilityRole="button" accessibilityState={{ disabled: busy }} accessibilityLabel={copy.remove}>
+                                <Text style={styles.removeText}>{copy.remove}</Text>
+                            </Pressable>
                         )}
                     </>
                 )}

@@ -46,6 +46,12 @@
  *                                                 bare number only while the community has no name (409 in words
  *                                                 otherwise). An owner's, with the owner's fresh proof; refused on a
  *                                                 standby (409 standby). Nothing else moves the main address once chosen.
+ *   POST /api/local/admin/app-addresses/spares   { action: 'add'|'remove', address, code? }: the owner's spares
+ *                                                 (node_config.addressSpares, design §6): a standby's own address, published
+ *                                                 in the signed list apart from the addresses, never accepted here as this
+ *                                                 community's. An owner's, with the owner's fresh proof; at most
+ *                                                 ADDRESS_SPARES_MAX; never one of this community's own addresses (409);
+ *                                                 refused on a standby (409 standby). The report lists them (`spares`).
  *   POST /api/local/admin/app-addresses/remove   { address, code? }: takes an owner-confirmed address off the list again,
  *                                                 an owner's, with the owner's fresh proof (admin-auth.ts
  *                                                 requireFreshProof); an own address that is also the community's address
@@ -59,12 +65,13 @@
 
 import Router from '@koa/router';
 import { getNodeConfig, isOwnPublicAddress, updateNodeConfig } from '../state-engine.js';
+import { ADDRESS_SPARES_MAX, addressOf, isListableAddress } from '@beanpool/core';
 import {
-    configuredAddresses, forgetOwnAddresses, isLostAddress, knowsItsNames, mainAddressRefusal, normalizeAddress,
-    ownerConfirmedAddresses, primaryAddress, setMainAddress, MAX_OWNER_ADDRESSES,
+    addressSpares, configuredAddresses, forgetOwnAddresses, isLostAddress, knowsItsNames, mainAddressRefusal, normalizeAddress,
+    ownerAddressEntries, ownerConfirmedAddresses, primaryAddress, setMainAddress, withoutOwnerAddress, MAX_OWNER_ADDRESSES,
 } from '../engine/own-addresses.js';
 import { tellMembersOfNewMain } from '../services/address-notice.js';
-import { currentAddressList } from '../services/address-list.js';
+import { currentAddressList, tickAddressList } from '../services/address-list.js';
 import { getNodeRole } from '../config/node-role.js';
 import { registrarNames } from '../engine/registrar-names.js';
 import { nameStandings } from '../services/registrar-name-watch.js';
@@ -85,6 +92,8 @@ const ADD_OWNER_ONLY = 'Only an owner of this community can add an address';
 const MAIN_OWNER_ONLY = 'Only an owner of this community can change its main address';
 /** A standby is not where the community lives until it takes over: its main address is its main server's. */
 const MAIN_ON_STANDBY = 'This server is a standby. The main address is chosen on the community\'s main server.';
+const SPARES_OWNER_ONLY = 'Only an owner of this community can change its spares';
+const SPARES_ON_STANDBY = 'This server is a standby. Spares are chosen on the community\'s main server.';
 
 /**
  * `pageHost` is the host Settings is open at (`?host=`): the only host offered with one tap (engine/address-offers.ts),
@@ -147,7 +156,8 @@ export function appAddressesReport(pageHost?: unknown) {
     const served = currentAddressList();
     return {
         primaryAddress: primary,
-        list: served.ok ? { main: served.fields.main, addresses: served.fields.addresses } : null,
+        list: served.ok ? { main: served.fields.main, addresses: served.fields.addresses, spares: served.fields.spares } : null,
+        spares: addressSpares(),
         formerApps: ownAddressesUsage(addresses.filter((a) => a.former).map((a) => a.address)),
         addresses,
         named: knowsItsNames(),
@@ -207,7 +217,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
                 return;
             }
             if (!(await requireFreshProof(ctx, bodyOf(ctx).code, `add ${address}`))) return;
-            updateNodeConfig({ ownerAddresses: [...current, address] });
+            updateNodeConfig({ ownerAddresses: [...ownerAddressEntries(), address] });
             forgetOwnAddresses();
             logger.security('AUTH', `App address confirmed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
         }
@@ -241,7 +251,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
         // the address added again later is not main again without Make main.
         const wasMain = normalizeAddress(getNodeConfig().mainAddress) === address;
         updateNodeConfig({
-            ownerAddresses: current.filter((a) => a !== address), ...(alsoPublic ? { publicAddress: null } : {}), ...(wasMain ? { mainAddress: null } : {}),
+            ownerAddresses: withoutOwnerAddress(ownerAddressEntries(), address), ...(alsoPublic ? { publicAddress: null } : {}), ...(wasMain ? { mainAddress: null } : {}),
         } as any);
         forgetOwnAddresses();
         logger.security('AUTH', `App address removed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
@@ -281,6 +291,60 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
             logger.security('AUTH', `Main address set in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address} (was ${before ?? 'none'})`);
             if (before) tellMembersOfNewMain(address);
         }
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = appAddressesReport(ctx.query.host);
+    });
+
+    // Spares (design several-addresses §6, slice S8; Marty's pick 6): where the community would go if this server were lost,
+    // a standby's own address, published in the signed list apart from its addresses. Phones go to one only when no listed
+    // address answers and it proves at a higher take-over count, so it is a door like an address: an owner's, with the
+    // owner's fresh proof, asked after the address is checked so a refused one spends no code. Refused on a standby (its
+    // spares are its main server's). The list's number goes up at once (tickAddressList).
+    router.post('/api/local/admin/app-addresses/spares', async (ctx) => {
+        if (!(await checkAdminAuth(ctx as any))) return;
+        if (!requireAdminRole(ctx, ['owner'], SPARES_OWNER_ONLY)) return;
+        if (getNodeRole() === 'backup') {
+            ctx.status = 409;
+            ctx.body = { code: 'standby', error: SPARES_ON_STANDBY };
+            return;
+        }
+        const body = bodyOf(ctx);
+        const action = body.action === 'remove' ? 'remove' : body.action === 'add' ? 'add' : null;
+        const address = typeof body.address === 'string' ? addressOf(body.address.trim()) : null;
+        if (!action || !address || !isListableAddress(address)) {
+            ctx.status = 400;
+            ctx.body = { error: 'Send { "action": "add" or "remove", "address": "standby.example.org" }: a web address or number, with no path.' };
+            return;
+        }
+        const current = addressSpares();
+        if (action === 'add') {
+            if (current.includes(address)) {
+                ctx.set('Cache-Control', 'no-store');
+                ctx.body = appAddressesReport(ctx.query.host);
+                return;
+            }
+            // Its host (core's audienceOf, the form a signature names), whatever its port: one of this community's own
+            // names at any port is never a spare.
+            const host = normalizeAddress(address);
+            if (configuredAddresses().some((a) => a.address === host)) {
+                ctx.status = 409;
+                ctx.body = { code: 'own_address', error: `${address} is already one of this community's addresses. A spare is another server's address: a standby's.` };
+                return;
+            }
+            if (current.length >= ADDRESS_SPARES_MAX) {
+                ctx.status = 409;
+                ctx.body = { code: 'spares_full', error: `This community already has ${ADDRESS_SPARES_MAX} spares. Remove one first.` };
+                return;
+            }
+        } else if (!current.includes(address)) {
+            ctx.status = 404;
+            ctx.body = { error: 'That address is not one of this community\'s spares.' };
+            return;
+        }
+        if (!(await requireFreshProof(ctx, body.code, `${action === 'add' ? 'add' : 'remove'} ${address} as a spare`))) return;
+        updateNodeConfig({ addressSpares: action === 'add' ? [...current, address] : current.filter((a) => a !== address) });
+        tickAddressList();
+        logger.security('AUTH', `Spare ${action === 'add' ? 'added' : 'removed'} in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
         ctx.set('Cache-Control', 'no-store');
         ctx.body = appAddressesReport(ctx.query.host);
     });

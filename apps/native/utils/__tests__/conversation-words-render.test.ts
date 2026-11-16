@@ -216,7 +216,7 @@ const OTHERS = [
 type Answers = Record<string, unknown>;
 function node(over: Answers = {}): (name: string, args: unknown[]) => Promise<unknown> | undefined {
     const answers: Answers = {
-        getConversation: DM_CONVERSATION, getMessages: DM_MESSAGES, getDealsBetween: DM_DEALS, getDmKeyChange: null, getKnownChatMute: null,
+        getConversation: DM_CONVERSATION, getMessages: DM_MESSAGES, getDealsBetween: DM_DEALS, getDmKeyChange: null, getDmKeyCodeInfo: null, getKnownChatMute: null,
         syncMessages: undefined, syncSingleConversation: undefined, markConversationRead: undefined,
         getDb: { getAllAsync: async () => [], getFirstAsync: async () => null, runAsync: async () => ({}) },
         getGroupChat: GROUP_CHAT, fetchGroupDetails: GROUP_DETAILS, markThreadReadOnNode: undefined,

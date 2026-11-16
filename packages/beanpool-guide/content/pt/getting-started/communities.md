@@ -71,7 +71,7 @@ Você também pode alternar nas **Configurações**, sob **Sistema**, depois em 
 
 Uma comunidade pode responder em mais de um endereço, e seus proprietários escolhem qual é o endereço principal.
 
-- **No celular, não há nada a fazer.** Seu celular verifica sozinho os endereços da sua comunidade e passa para o principal assim que ele responde com a própria chave da sua comunidade. Se o endereço que seu celular usa parar de responder, ele usa outro endereço da sua comunidade por enquanto e volta assim que o principal responder. O Início avisa em uma linha, uma única vez. Nada mais muda: suas mensagens e tudo o que seu celular guarda da comunidade continuam onde estão.
+- **No celular, não há nada a fazer.** Seu celular verifica sozinho os endereços da sua comunidade e passa para o principal assim que ele responde com a própria chave da sua comunidade. Se o endereço que seu celular usa parar de responder, ou não responder mais como a sua comunidade, ele usa outro endereço que tenha respondido com essa chave e volta assim que o principal responder. O Início avisa em uma linha, uma única vez. Se nenhum tiver respondido assim, ele fica onde está. Nada mais muda, nem suas mensagens.
 - **No app web,** seu login pertence ao endereço que você abriu, então o app web fica lá e continua funcionando. Uma linha discreta no topo mostra o endereço principal. Toque em **Abrir lá** para ir até ele e, depois, entre lá com **Vincular este navegador do seu celular**, ou com seu login ou suas 12 palavras.
 
 ## Esquecer uma comunidade neste celular

@@ -790,6 +790,13 @@ export interface NodeConfig {
      */
     addressList?: AddressListFields;
     /**
+     * The owner's spares (Settings → Addresses → Spares; design scratch/fable-design/DESIGN-several-addresses-fable.md §6):
+     * where the community would go if this server were lost, a standby's own address. Published in the signed list's
+     * `spares`, apart from its addresses; never one of this community's names (no signature for one is accepted here).
+     * Carried in the take-over envelope: the promoted standby lists its own spare as an address (services/takeover.ts).
+     */
+    addressSpares?: string[];
+    /**
      * Set when a restore onto a new machine numbered the list by one with this server's clock behind it
      * (services/address-list.ts renumberAddressListAfterSwap): the seq it fell back to. While it is set, the list is numbered
      * from the clock's floor every 10 minutes of it, content unchanged; it goes when the floor is 30 days past it (listNow).
@@ -9988,6 +9995,7 @@ export function getNodeConfig(): NodeConfig {
         ...(Array.isArray(config.registrarNames) ? { registrarNames: config.registrarNames } : {}),
         ...(typeof config.mainAddress === 'string' ? { mainAddress: config.mainAddress } : {}),
         ...(config.addressList && typeof config.addressList === 'object' ? { addressList: config.addressList } : {}),
+        ...(Array.isArray(config.addressSpares) ? { addressSpares: config.addressSpares.filter((a: unknown) => typeof a === 'string') } : {}),
         ...(Number.isSafeInteger(config.addressListFloorOwed) && config.addressListFloorOwed >= 0 ? { addressListFloorOwed: config.addressListFloorOwed } : {}),
     };
 
@@ -10027,6 +10035,7 @@ export function updateNodeConfig(update: Partial<NodeConfig>): NodeConfig {
     if ('registrarNames' in update) noteTakeoverInputsChanged('registrar names changed');
     if ('mainAddress' in update) noteTakeoverInputsChanged('main address changed');
     if ('addressList' in update) noteTakeoverInputsChanged('address list changed');
+    if ('addressSpares' in update) noteTakeoverInputsChanged('spares changed');
     return next;
 }
 

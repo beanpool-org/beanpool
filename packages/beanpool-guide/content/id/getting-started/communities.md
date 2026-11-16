@@ -71,7 +71,7 @@ Kamu juga dapat berpindah di **Pengaturan**, di bawah **Sistem**, lalu **Komunit
 
 Sebuah komunitas bisa menjawab di lebih dari satu alamat, dan pemiliknya memilih mana yang menjadi alamat utamanya.
 
-- **Di ponsel, kamu tidak perlu melakukan apa pun.** Ponselmu memeriksa alamat-alamat komunitasmu sendiri dan pindah ke alamat utama begitu alamat itu menjawab dengan kunci milik komunitasmu sendiri. Jika alamat yang dipakai ponselmu berhenti menjawab, ponselmu memakai alamat lain komunitasmu untuk sementara dan kembali begitu alamat utama menjawab. Beranda memberitahukannya dalam satu baris, sekali saja. Tidak ada yang lain berubah: pesan-pesanmu dan semua yang disimpan ponselmu untuk komunitas tetap di tempatnya.
+- **Di ponsel, kamu tidak perlu melakukan apa pun.** Ponselmu memeriksa alamat-alamat komunitasmu sendiri dan pindah ke alamat utama begitu alamat itu menjawab dengan kunci milik komunitasmu sendiri. Jika alamat yang dipakai ponselmu berhenti menjawab, atau tidak lagi menjawab sebagai komunitasmu, ponselmu memakai alamat lain yang sudah menjawab dengan kunci itu dan kembali begitu alamat utama menjawab. Beranda memberitahukannya dalam satu baris, sekali saja. Jika tidak ada yang menjawab seperti itu, ponselmu tetap di tempatnya. Tidak ada yang lain berubah, termasuk pesan-pesanmu.
 - **Di aplikasi web,** akun masukmu milik alamat yang kamu buka, jadi aplikasi web tetap di sana dan terus berfungsi. Sebuah baris tenang di bagian atas menyebutkan alamat utama. Ketuk **Buka di sana** untuk menuju ke sana, lalu masuk di sana dengan **Tautkan peramban ini dari ponsel Anda**, atau dengan akun masukmu atau 12 katamu.
 
 ## Melupakan komunitas di ponsel ini

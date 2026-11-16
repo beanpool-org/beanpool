@@ -7,8 +7,8 @@
  * main one (engine/own-addresses.ts addressListContent), signed with the server key, numbered `(epoch, seq)`:
  *   - `epoch` is the take-over count (services/identity-epoch.ts ownIdentityEpoch), so a take-over's list beats every list
  *     from before it, whatever its counter;
- *   - `seq` goes up whenever the content changes (an address added or removed, a new main, a port, the key or the
- *     community id), and never for no change. The content is compared with the last list signed, kept in node_config
+ *   - `seq` goes up whenever the content changes (an address added or removed, a new main, a port, a spare added or
+ *     removed, the key or the community id), and never for no change. The content is compared with the last list signed, kept in node_config
  *     `addressList`, at every read and on a timer (startAddressListWatch), so no writer has to remember to call. The new
  *     number is stored BEFORE anything is signed with it, so two lists with different content are never signed at one
  *     number by this server, a restart included.
@@ -234,7 +234,7 @@ function listNow(): ListNow {
     if (!content) {
         return { ok: false, why: 'no-address', message: 'This server knows none of its addresses yet, so it has no list to sign. Its owner confirms one in Settings → Addresses.' };
     }
-    const now = { peerId: identity.peerId, communityId, main: content.main, addresses: content.addresses, spares: [] as string[] };
+    const now = { peerId: identity.peerId, communityId, main: content.main, addresses: content.addresses, spares: content.spares };
     const config = getNodeConfig();
     const kept = readAddressListRecord(config.addressList);
     const epoch = listEpoch(kept);

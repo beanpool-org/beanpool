@@ -56,7 +56,11 @@
  *         where they stand with that group: an answer only to an invitation waiting, a line or an epoch only once in, and
  *         nothing more after a leave or an answer still waiting for that group. While their yes is queued they are `joining`,
  *         so the roster that follows it is taken; the link moves ONLY on the host's answer (moveLinkOn): a yes, no or leave
- *         the host took (a 2xx that doesn't refuse it) moves it to `in`, `declined` or `left`; one it refused, a 400/413,
+ *         the host took (a 2xx that doesn't refuse it) moves it to `in`, `declined` or `left`, ordered with the host's notices
+ *         by the counter the host's answer carries (the order rule: an answer no newer than the newest word applied moves
+ *         nothing, a newer one is applied from wherever the link stands and only then is the newest word, and one with no
+ *         counter moves nothing; a roster with a counter naming them, taken while their yes is queued, is the host's word
+ *         that they are in, and moves the link there); one it refused, a 400/413,
  *         or a day of no answer leaves it where it was (a yes not taken: the invitation still waiting, to answer again, and
  *         a roster taken meanwhile gone). Kept in group_guest_sent while
  *         the host hasn't taken it, for each host strictly oldest first (an epoch before the line under it), tried again
@@ -67,8 +71,9 @@
  * answered; the held notices and the sent items are this server's own (`local`), never in a copy, as the mailbox's are.
  * So the copy holds only states a promoted standby can settle from the copy alone (#3217 round 2, invariant D): `joining`
  * is never stored, it is read from this server's own queue (a yes still queued: standingOf). A link copied while a yes
- * waited reads `invited` after a take-over, and the member answers again (a host that took the first yes takes a second
- * as received). A standby takes no notice (it answers as the main server does and writes nothing), sends no member's item,
+ * waited reads `invited` after a take-over, and the member answers again (a host that took the first yes answers a second
+ * with a new counter that says they are in, and sends their roster again: engine/group-guests.ts confirmStanding). A
+ * standby takes no notice (it answers as the main server does and writes nothing), sends no member's item,
  * and its timer sweeps only this server's own tables: nothing it runs writes a copied row (setLink throws there,
  * moveLinkOn writes nothing). Its held lines and edits can't be kept up to date there (the host's takedowns go to the
  * server that took over), so it serves none and drops them, as it does at every role change (heldLinesStale, #3233 round 3).
@@ -141,6 +146,12 @@ function standingOf(member: string, host: string, groupId: string): Standing | n
     return row.state === 'invited' && row.yes ? 'joining' : row.state;
 }
 
+/** Whether a yes of `member`'s to that host's invitation for that group is still queued here, whatever the link says. */
+function yesQueued(member: string, host: string, groupId: string): boolean {
+    return !!db.prepare(`SELECT 1 FROM group_guest_sent WHERE sender_key = ? AND host = ? AND group_id = ? AND state = 'queued' AND answer = 'yes' LIMIT 1`)
+        .get(member, host, groupId);
+}
+
 /** Writes a link (a copied row): never on a standby (node-role.ts assertPlainTablesWritable). */
 function setLink(member: string, host: string, groupId: string, state: LinkState, now: number, roster?: { body: string | null }): void {
     assertPlainTablesWritable();
@@ -178,24 +189,38 @@ const STANDING_KINDS: ReadonlySet<GroupNoticeKind> = new Set(['invite', 'removed
 
 /**
  * THE ORDER RULE at the home (G2; the host's side is engine/group-guests.ts, "The order rule"): of the host's notices that
- * say where `member` stands with a group, only one with a counter newer than the newest this server took for them
- * (group_guest_order) changes anything; an older or repeated one, from either of the host's servers (the main one, the one
- * that took over, the first after a take-back), arriving in any order, after any outage, is dropped, a removal's drop of
- * the held lines included. So nothing undoes a newer invitation or removal, and a home keeps the newest roster. A notice
- * with no counter (a host from before the rule) is taken as before.
+ * say where `member` stands with a group, only one with a counter newer than the newest word this server APPLIED for them
+ * (group_guest_order: a notice, or the host's answer to their own word, recorded only where it changed or confirmed where
+ * they stand: takeNoticeFor, moveLinkOn) changes anything; an older or repeated one, from either of the host's servers
+ * (the main one, the one that took over, the first after a take-back), arriving in any order, after any outage, is
+ * dropped, a removal's drop of the held lines included. So nothing undoes a newer invitation or removal, a home keeps the
+ * newest roster, and a word that applied nothing never shadows an older one still to come. A notice with no counter (a
+ * host from before the rule) is taken as before.
  */
 function olderThanTaken(member: string, n: Notice): boolean {
-    if (n.seq === null || !STANDING_KINDS.has(n.kind)) return false;
-    const taken = db.prepare('SELECT seq FROM group_guest_order WHERE member = ? AND host = ? AND group_id = ?').pluck().get(member, n.host, n.group) as number | undefined;
-    return taken !== undefined && n.seq <= taken;
+    return n.seq !== null && STANDING_KINDS.has(n.kind) && seqOlderThanTaken(member, n.host, n.group, n.seq);
+}
+
+/**
+ * Whether `seq` is no newer than the newest word on where `member` stands with that group taken here: a notice's, or the
+ * host's answer to their own yes, no or leave (moveLinkOn: THE GUEST'S OWN WORD, engine/group-guests.ts).
+ */
+function seqOlderThanTaken(member: string, host: string, groupId: string, seq: number): boolean {
+    const taken = db.prepare('SELECT seq FROM group_guest_order WHERE member = ? AND host = ? AND group_id = ?').pluck().get(member, host, groupId) as number | undefined;
+    return taken !== undefined && seq <= taken;
 }
 
 /** The newest counter taken for `member` moves on to `n`'s (a copied row: never on a standby). */
 function noteTaken(member: string, n: Notice): void {
     if (n.seq === null || !STANDING_KINDS.has(n.kind)) return;
+    noteSeq(member, n.host, n.group, n.seq);
+}
+
+/** The newest counter taken for `member` with that group moves on to `seq` (a copied row: never on a standby). */
+function noteSeq(member: string, host: string, groupId: string, seq: number): void {
     assertPlainTablesWritable();
     db.prepare(`INSERT INTO group_guest_order (member, host, group_id, seq) VALUES (?, ?, ?, ?)
-                ON CONFLICT (member, host, group_id) DO UPDATE SET seq = MAX(seq, excluded.seq)`).run(member, n.host, n.group, n.seq);
+                ON CONFLICT (member, host, group_id) DO UPDATE SET seq = MAX(seq, excluded.seq)`).run(member, host, groupId, seq);
 }
 
 /** The lines a takedown names: `ids` (an account's many, engine/group-guests.ts queueTakedowns) or its one `id`. */
@@ -317,12 +342,15 @@ function replaceHeldWords(member: string, host: string, groupId: string, id: str
     }
 }
 
-/** One named guest: the notice held for them, or dropped (the file's header says when). True when held. */
+/**
+ * One named guest: the notice held for them, or dropped (the file's header says when). True when held. THE ORDER RULE: an
+ * older word on where they stand changes nothing; a newer one is recorded as the newest word (noteTaken) only where it is
+ * APPLIED, that is where it changes or confirms the state it names, held or not; one that applies nothing records nothing,
+ * so it never shadows an older word still to come (G2 follow-ups round 2: test-group-guests-home §18).
+ */
 function takeNoticeFor(member: string, n: Notice, now: number): boolean {
     if (!isNodeMember(member) || !readsAsMember(member)) return false;
-    // The order rule: an older word on where they stand changes nothing; a newer one is the newest taken, held or not.
     if (olderThanTaken(member, n)) return false;
-    noteTaken(member, n);
     const standing = standingOf(member, n.host, n.group);
     // Under a link they answered: a roster, a line, an edit or an epoch moves no link, so this is where they stand after it
     // too. A notice that moves the link names the allowance where it leaves them (holdFor), never this.
@@ -338,13 +366,17 @@ function takeNoticeFor(member: string, n: Notice, now: number): boolean {
             // invited again; or, if the invitation itself can't be held (too large, from someone they blocked, past an
             // allowance), out all the same: the newest word says they are no longer in.
             const reinvited = standing === 'in' && n.seq !== null;
-            if (state === 'invited' || (answered && !reinvited)) return false;
+            // Waiting or joining already: it confirms where they stand (invited), and moves nothing.
+            if (state === 'invited') { noteTaken(member, n); return false; }
+            if (answered && !reinvited) return false;
             const inviter = isObject(n.data.invitedBy) ? n.data.invitedBy.key : null;
             // Waiting: an invitation not yet answered (a yes queued is `joining`, not waiting, as it always was).
             const waiting = (host?: string) => sum(`SELECT COUNT(*) AS n FROM group_guest_links l WHERE l.member = ? AND l.state = 'invited' AND NOT ${YES_QUEUED('l')}${host ? ' AND l.host = ?' : ''}`,
                 member, ...(host ? [host] : []));
             const refused = body.length > GROUP_INVITE_MAX_CHARS || (typeof inviter === 'string' && KEY_HEX.test(inviter) && hasBlocked(member, inviter))
                 || waiting() >= GROUP_INVITES_WAITING || waiting(n.host) >= GROUP_INVITES_WAITING_PER_HOST || !mayHold(member, n.host, false, body.length);
+            // Applied when it leaves them invited, or (refused) takes them out; an invitation refused to someone out applies nothing.
+            if (reinvited || !refused) noteTaken(member, n);
             const out = reinvited && outOfGroup(member, n, now);
             if (refused) return out;
             setLink(member, n.host, n.group, 'invited', now, { body: null });
@@ -352,6 +384,9 @@ function takeNoticeFor(member: string, n: Notice, now: number): boolean {
             return holdFor(member, n, 'invite', body, false, now) || out;
         }
         case 'removed':
+            // Always applied: it takes them out, or confirms they are out (no link, declined, left, removed already), so an
+            // older invitation arriving after it never brings them back.
+            noteTaken(member, n);
             if (standing === 'invited') {
                 // The invitation withdrawn: no row is kept for a host they never answered; the notice counts as an invitation.
                 assertPlainTablesWritable();
@@ -362,11 +397,20 @@ function takeNoticeFor(member: string, n: Notice, now: number): boolean {
             setLink(member, n.host, n.group, 'removed', now, { body: null });
             // A removal leaves a link they answered (`removed`), and counts there.
             return holdFor(member, n, 'removed', body, true, now);
-        case 'roster':
-            if (!answered) return false;
+        case 'roster': {
+            // While their yes is still queued here (`joining`, or a removal came first: `removed` with the yes still queued),
+            // a roster with a counter that names them among the guests in is the host's newest word on where they stand
+            // (older and repeated ones never reach here: the order rule): the host took that yes, so they are in, and the
+            // link is too, whenever the host's answer to the yes lands (older: it moves nothing, moveLinkOn). Their yes
+            // queued is their word to join. One with no counter (a host from before the rule) moves no link.
+            const named = Array.isArray(n.data.guests) && n.data.guests.some((x) => isObject(x) && x.key === member);
+            const toIn = n.seq !== null && named && standing !== 'in' && yesQueued(member, n.host, n.group);
+            if (!answered && !toIn) return false;
+            noteTaken(member, n);
             // Kept whatever the caps say (one per group they answered): a phone that missed a held one still has the latest (step 1).
-            setLink(member, n.host, n.group, state!, now, { body });
+            setLink(member, n.host, n.group, toIn ? 'in' : state!, now, { body });
             return holdFor(member, n, 'roster', body, true, now);
+        }
         case 'edit': {
             if (!answered) return false;
             // An edit's new words: the older edit held for that line goes once this one is held, never before (replaceHeldWords).
@@ -627,26 +671,38 @@ function maySend(member: string, c: Checked): boolean {
 
 /**
  * Where the host's answer for one item moves `member`'s link: only a yes, a no or a leave move it, only when the host took
- * it (`taken`: a 2xx that doesn't refuse it), and only from where that item left it. A yes the host did not take (refused
+ * it (`taken`: a 2xx that doesn't refuse it), and only by its counter (below). A yes the host did not take (refused
  * in its answer, a 400/413, or a day of no answer) leaves the invitation waiting, so they can answer again, and drops the
- * roster taken while it was queued. Settling an item is this server's own business: on a standby (a demoted main server
- * with items still queued) it writes no link, which is its main server's copy (node-role.ts standbyWritesNothing).
+ * roster taken while it was queued. THE GUEST'S OWN WORD (the order rule, G2 follow-ups): the host's answer to a yes, no or
+ * leave that moved or confirmed where they stand carries the group's counter it was stamped with (`seq`, engine/group-guests.ts
+ * takeGuestItem), and it is ordered with the host's notices by it: no newer than the newest word applied here (the host
+ * removed or invited them again after it, and that came first), it moves nothing and records nothing; newer, it is APPLIED
+ * from wherever the link stands, the row written if a withdrawal took it meanwhile (a yes: `in`; a no: `declined`; a leave:
+ * `left`), and only then recorded as the newest word, so an invitation the host told again before it (a take-over's
+ * retellGroup), or one withdrawn and made again before it (test-group-guests-home §18), arriving after it, is older and
+ * never takes them anywhere else. An answer with no counter (a yes from a guest the host has out: it took nothing) moves
+ * nothing. Settling an item is this server's own business: on a standby (a demoted main server with items still queued) it
+ * writes no link, which is its main server's copy (node-role.ts standbyWritesNothing).
  */
-function moveLinkOn(member: string, kind: string, host: string, groupId: string, item: string | null, taken: boolean, now: number): void {
+function moveLinkOn(member: string, kind: string, host: string, groupId: string, item: string | null, taken: boolean, now: number, seq: number | null = null): void {
     if (standbyWritesNothing()) return;
     let payload = '';
     try { payload = item ? String((JSON.parse(item) as { payload?: unknown }).payload ?? '') : ''; } catch { /* no payload */ }
     const answer = kind === 'group-invite' ? answerOf(payload) : null;
-    const move = (from: LinkState[], to: LinkState) => db.prepare(`UPDATE group_guest_links SET state = ?, state_at = ?,
-            roster = CASE WHEN ? = 'in' THEN roster END, roster_at = CASE WHEN ? = 'in' THEN roster_at END
-        WHERE member = ? AND host = ? AND group_id = ? AND state IN (${from.map(() => '?').join(', ')})`).run(to, now, to, to, member, host, groupId, ...from);
-    if (answer === 'yes' && taken) move(['invited'], 'in');
-    else if (answer === 'yes') {
-        db.prepare(`UPDATE group_guest_links SET roster = NULL, roster_at = NULL WHERE member = ? AND host = ? AND group_id = ? AND state = 'invited'
-                    AND roster IS NOT NULL`).run(member, host, groupId);
-    } else if (answer === 'no' && taken) move(['invited'], 'declined');
-    // Out of the group: no line of it held for them is served after (the file's header, "held").
-    else if (kind === 'group-leave' && taken && move(['invited', 'in'], 'left').changes) dropHeldWords(member, host, groupId);
+    if (!taken) {
+        if (answer === 'yes') {
+            db.prepare(`UPDATE group_guest_links SET roster = NULL, roster_at = NULL WHERE member = ? AND host = ? AND group_id = ? AND state = 'invited'
+                        AND roster IS NOT NULL`).run(member, host, groupId);
+        }
+        return;
+    }
+    const to: LinkState | null = answer === 'yes' ? 'in' : answer === 'no' ? 'declined' : kind === 'group-leave' ? 'left' : null;
+    if (to === null || seq === null || seqOlderThanTaken(member, host, groupId, seq)) return;
+    // `in` keeps the roster held; out of the group, it goes, and no line of it held for them is served after (the file's
+    // header, "held").
+    setLink(member, host, groupId, to, now, to === 'in' ? undefined : { body: null });
+    noteSeq(member, host, groupId, seq);
+    if (to !== 'in') dropHeldWords(member, host, groupId);
 }
 
 /**
@@ -700,12 +756,13 @@ interface SentRow { sender_key: string; item_id: string; kind: string; host: str
 
 /**
  * Settles one queued row as the host answered it (`sent`, `refused` and why, or `failed`), and moves its sender's link on
- * that answer (moveLinkOn). A row no longer queued (settled meanwhile) is left as it is.
+ * that answer (moveLinkOn, with the counter the host's answer carried, `seq`). A row no longer queued (settled meanwhile) is
+ * left as it is.
  */
-function settleSent(r: SentRow, state: 'sent' | 'refused' | 'failed', refused: string | null, at: number): void {
+function settleSent(r: SentRow, state: 'sent' | 'refused' | 'failed', refused: string | null, at: number, seq: number | null = null): void {
     const changed = db.prepare(`UPDATE group_guest_sent SET state = ?, refused = ?, item = NULL, next_try_at = NULL, updated_at = ?
                                 WHERE sender_key = ? AND item_id = ? AND state = 'queued'`).run(state, refused, at, r.sender_key, r.item_id).changes;
-    if (changed) moveLinkOn(r.sender_key, r.kind, r.host, r.group_id, r.item, state === 'sent', at);
+    if (changed) moveLinkOn(r.sender_key, r.kind, r.host, r.group_id, r.item, state === 'sent', at, seq);
 }
 
 /** Every row queued for `host` (or for any host) since before `before` fails: the host never took it in GROUP_SENT_QUEUE_MS. */
@@ -727,13 +784,25 @@ function sendToHost(host: string): Promise<void> {
     return send;
 }
 
-/** The host's answer for the item at `index` of a request, read by place: its refusal, or null when received. */
-function refusedAt(answer: unknown, index: number, itemId: string, sent: number): string | null {
+/** The host's answer for the item at `index` of a request, read by place (each one's own, or null when it is not that item's). */
+function answerAt(answer: unknown, index: number, itemId: string, sent: number): { refused?: unknown; received?: unknown; seq?: unknown } | null {
     const all = (answer as { items?: unknown } | null | undefined)?.items;
     if (!Array.isArray(all) || all.length !== sent) return null;
-    const a = all[index] as { itemId?: unknown; refused?: unknown } | null;
-    if (a?.itemId !== itemId || typeof a.refused !== 'string') return null;
+    const a = all[index] as { itemId?: unknown; refused?: unknown; received?: unknown; seq?: unknown } | null;
+    return a?.itemId === itemId ? a : null;
+}
+
+/** The host's answer for the item at `index` of a request: its refusal, or null when received. */
+function refusedAt(answer: unknown, index: number, itemId: string, sent: number): string | null {
+    const a = answerAt(answer, index, itemId, sent);
+    if (!a || typeof a.refused !== 'string') return null;
     return /^[a-z-]{1,40}$/.test(a.refused) ? a.refused : 'refused';
+}
+
+/** The counter the host's answer for the item at `index` carries (received, a positive whole number), or null (moveLinkOn). */
+function seqAt(answer: unknown, index: number, itemId: string, sent: number): number | null {
+    const a = answerAt(answer, index, itemId, sent);
+    return a && a.received === true && typeof a.seq === 'number' && Number.isSafeInteger(a.seq) && a.seq > 0 ? a.seq : null;
 }
 
 /**
@@ -761,8 +830,9 @@ async function sendHostQueue(host: string): Promise<void> {
         if (status >= 200 && status < 300) {
             db.transaction(() => {
                 batch.forEach((r, i) => {
-                    const refused = refusedAt(body, i, (travelling[i] as { envelope: RelayEnvelope }).envelope.itemId, batch.length);
-                    settleSent(r, refused ? 'refused' : 'sent', refused, at);
+                    const itemId = (travelling[i] as { envelope: RelayEnvelope }).envelope.itemId;
+                    const refused = refusedAt(body, i, itemId, batch.length);
+                    settleSent(r, refused ? 'refused' : 'sent', refused, at, refused ? null : seqAt(body, i, itemId, batch.length));
                 });
                 db.prepare("UPDATE group_guest_sent SET attempts = 0 WHERE host = ? AND state = 'queued' AND attempts > 0").run(host);
             })();

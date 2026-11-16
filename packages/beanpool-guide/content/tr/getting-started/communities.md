@@ -71,7 +71,7 @@ Ayrıca **Ayarlar**'da **Sistem**, ardından **Kayıtlı topluluklar** altında 
 
 Bir topluluk birden fazla adreste yanıt verebilir ve hangisinin ana adresi olacağını sahipleri seçer.
 
-- **Telefonda yapmanız gereken bir şey yok.** Telefonunuz topluluğunuzun adreslerini kendiliğinden denetler ve ana adres topluluğunuzun kendi anahtarıyla yanıt verdiği anda ona geçer. Telefonunuzun kullandığı adres yanıt vermeyi bırakırsa, şimdilik topluluğunuzun başka bir adresini kullanır ve ana adres yeniden yanıt verdiğinde geri döner. Ana Sayfa bunu tek satırda, bir kez söyler. Başka hiçbir şey değişmez: mesajlarınız ve telefonunuzun topluluk için sakladığı her şey yerinde kalır.
+- **Telefonda yapmanız gereken bir şey yok.** Telefonunuz topluluğunuzun adreslerini kendiliğinden denetler ve ana adres topluluğunuzun kendi anahtarıyla yanıt verdiği anda ona geçer. Telefonunuzun kullandığı adres yanıt vermeyi bırakırsa ya da artık topluluğunuz olarak yanıt vermezse, o anahtarla yanıt vermiş başka bir adresi kullanır ve ana adres yeniden yanıt verdiğinde geri döner. Ana Sayfa bunu tek satırda, bir kez söyler. Hiçbiri böyle yanıt vermediyse, olduğu yerde kalır. Mesajlarınız dahil başka hiçbir şey değişmez.
 - **Web uygulamasında,** girişiniz açtığınız adrese aittir; bu yüzden web uygulaması orada kalır ve çalışmaya devam eder. Üstteki sade bir satır ana adresi söyler. Oraya gitmek için **Orada aç** seçeneğine dokunun, sonra orada **Bu tarayıcıyı telefonunuzdan bağlayın** ile ya da giriş yönteminizle veya 12 kelimenizle oturum açın.
 
 ## Bu telefonda bir topluluğu unutma

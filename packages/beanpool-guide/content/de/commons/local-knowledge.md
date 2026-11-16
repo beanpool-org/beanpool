@@ -2,8 +2,8 @@
 slug: local-knowledge
 title: Ortswissen
 summary: Lernen, das Regal deiner Community mit Wissenswertem: eine Seite finden, eine vorschlagen, sie aktuell halten und wie ein Eigentümer oder Admin jede einzelne prüft.
-related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants
-source-hash: dcdff2a323973b95
+related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants, gifts
+source-hash: 2705787026927df5
 ---
 
 ## Was es ist
@@ -45,6 +45,14 @@ Jede Seite endet mit derselben Zeile: „Ortswissen wird von Mitgliedern geschri
 ## Das hat geholfen
 
 Wenn dir eine Seite geholfen hat, tippe auf **👍 Das hat geholfen**. Tippe noch einmal, um es zurückzunehmen. Die Seite zeigt, wie vielen Mitgliedern sie geholfen hat, zum Beispiel **Geholfen: 12**, und nie, wem. Auf deiner eigenen Seite kannst du es nicht antippen.
+
+## Ortskundig
+
+Ein Mitglied, das 3 Seiten geschrieben hat, die jetzt in Lernen stehen und von denen jede mindestens 3 Mitgliedern geholfen hat, zeigt **🗺️ Ortskundig**: in der Zeile **Geschrieben von** seiner Seiten und in seinem Profil. Seiten, die mit einem KI-Assistenten zusammengestellt wurden, zählen nicht. Es verschwindet wieder, wenn seine Seiten verschwinden oder wenn Lernen ausgeschaltet wird. Es ist nur ein Dankeschön: Es bringt keine Bohnen und erlaubt niemandem, mehr zu tun.
+
+## Der Autorin oder dem Autor danken
+
+Tippe unter einer Seite, die jemand anderes geschrieben hat, auf die Schaltfläche mit dem Namen, zum Beispiel **🫘 Ada danken**. Sie öffnet das gewöhnliche Formular im Buch zum Senden von Bohnen, mit der Autorin oder dem Autor schon ausgewählt und einer Notiz wie **Danke für „Bus in die Stadt“** schon eingetragen. Ändere den Betrag oder die Notiz und sende es dann wie jedes Geschenk deiner eigenen Bohnen. Niemand sonst zahlt etwas. Die Schaltfläche erscheint nur, wo deine Community Bohnen nutzt, und nicht auf einer Seite, die mit einem KI-Assistenten zusammengestellt wurde. Siehe „Bohnen schenken“.
 
 ## Eine Seite vorschlagen
 

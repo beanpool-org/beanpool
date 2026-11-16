@@ -35,14 +35,20 @@ vi.mock('expo-secure-store', () => ({
 
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { openSeedFromSso } from '@beanpool/core';
+import { hexToBytes } from '@noble/hashes/utils.js';
+import { createRequire } from 'node:module';
+import { openSeedFromSso, signAddressList, signAddressProof, type AddressListFields } from '@beanpool/core';
+import { proofAt } from '../address-verify';
+import { resetCommunityIndexForTests } from '../community-index';
+import { resetCommunityRecordsForTests } from '../community-record';
 import { enrolSsoKeeper } from '../keeper-enrolment';
 import { vaultTicket } from '../vault';
 import {
-    communitiesForCopy, communitiesOnPhoneForCopy, copyListsCommunities, saveCommunitiesFromCopy, setCopyListsCommunities,
+    communitiesForCopy, communitiesOnPhoneForCopy, copyListsCommunities, RESTORE_PROVE_AT_ONCE, RESTORE_PROVE_CAP_MS, saveCommunitiesFromCopy,
+    setCopyListsCommunities,
 } from '../copy-communities';
 import { getSavedNodes } from '../nodes';
-import { SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { COMMUNITY_RECORDS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 import { installNetwork, fakeJwt, noVault, useVault, VAULT, type Network } from './fake-vault';
 
 const PHRASE = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
@@ -198,5 +204,112 @@ describe('a restore from a copy with the list', () => {
         for (const none of [null, undefined, []]) expect(await saveCommunitiesFromCopy(none)).toBe(0);
         expect(await getSavedNodes()).toEqual([]);
         expect(await saveCommunitiesFromCopy([null as any, { url: 7 } as any])).toBe(0);
+    });
+});
+
+// ── Several addresses S8: each community's key and up to three addresses, and a restore at whichever still answers ──
+
+describe('several addresses S8: the copy carries the key and addresses; a restore finds the community at whichever answers', () => {
+    const V = createRequire(import.meta.url)('@beanpool/core/vectors/address-list.json');
+    const KEY = { seed: hexToBytes(V.keys.community.seedHex), peerId: V.keys.community.peerId as string };
+    const OTHER_KEY = { seed: hexToBytes(V.keys.other.seedHex), peerId: V.keys.other.peerId as string };
+    const FIRST = '203.0.113.5';
+    const SECOND = '198.51.100.7';
+    const list = (): AddressListFields => ({ peerId: KEY.peerId, communityId: V.communityIds.community, epoch: 1, seq: 6, main: SECOND, addresses: [FIRST, SECOND, 'coop.example.org'], spares: [] });
+
+    /** Stand-in servers: who answers at each address, signing real proofs; any other address gives no answer. */
+    const proverWith = (who: Record<string, typeof KEY>) => {
+        let n = 0;
+        const get = async (url: string) => {
+            const u = new URL(url);
+            const key = who[u.host];
+            if (!key) return null;
+            const signed = { v: 1 as const, ...list(), peerId: key.peerId };
+            return { status: 200, body: await signAddressProof({ list: signed, for: u.searchParams.get('for')!, nonce: u.searchParams.get('nonce')!, ts: 1 }, (m) => ed25519.sign(m, key.seed)) };
+        };
+        return (address: string, peerId: string) => proofAt(address, peerId, { get, nonce: () => (++n).toString(16).padStart(32, '0') });
+    };
+    const fromCopy = { name: 'Riverside', url: `https://${FIRST}`, peerId: KEY.peerId, addresses: [FIRST, SECOND] };
+
+    it('the copy lists each community with its key and up to three addresses from its record, the one in use first', async () => {
+        const kept = await signAddressList(list(), (m) => ed25519.sign(m, KEY.seed));
+        mem.async.set('beanpool_anchor_url', `https://${SECOND}`);
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: `https://${SECOND}`, alias: 'Riverside' }, { url: 'https://hill.example' }]));
+        mem.async.set(COMMUNITY_RECORDS_STORE_KEY, JSON.stringify({ v: 1, records: [
+            { v: 1, id: `https://${FIRST}`, using: `https://${SECOND}`, peerId: KEY.peerId, communityId: V.communityIds.community, epoch: 1, list: kept, proved: {}, refused: {} },
+        ] }));
+        resetCommunityRecordsForTests();
+        resetCommunityIndexForTests();
+        expect(await communitiesOnPhoneForCopy()).toEqual([
+            { name: 'Riverside', url: `https://${SECOND}`, peerId: KEY.peerId, addresses: [SECOND, FIRST, 'coop.example.org'] },
+            { name: 'hill.example', url: 'https://hill.example' },
+        ]);
+    });
+
+    it('a restore with the first address dead finds the community at the second', async () => {
+        const added = await saveCommunitiesFromCopy([fromCopy], async () => {}, proverWith({ [SECOND]: KEY }));
+        expect(added).toBe(1);
+        expect((await getSavedNodes()).map((n) => [n.url, n.alias])).toEqual([[`https://${SECOND}`, 'Riverside']]);
+    });
+
+    it('the first address answering is kept; one answering with another key is never chosen; none answering saves the copy\'s address as before', async () => {
+        await saveCommunitiesFromCopy([fromCopy], async () => {}, proverWith({ [FIRST]: KEY, [SECOND]: KEY }));
+        expect((await getSavedNodes()).map((n) => n.url)).toEqual([`https://${FIRST}`]);
+        mem.async.clear();
+        await saveCommunitiesFromCopy([fromCopy], async () => {}, proverWith({ [SECOND]: OTHER_KEY }));
+        expect((await getSavedNodes()).map((n) => n.url)).toEqual([`https://${FIRST}`]);
+        mem.async.clear();
+        await saveCommunitiesFromCopy([fromCopy], async () => {}, proverWith({}));
+        expect((await getSavedNodes()).map((n) => n.url)).toEqual([`https://${FIRST}`]);
+    });
+
+    it('a community already saved at any of its addresses keeps its row: nothing is asked or added', async () => {
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: `https://${SECOND}`, alias: 'Mine' }]));
+        const prove = vi.fn(proverWith({ [SECOND]: KEY }));
+        expect(await saveCommunitiesFromCopy([fromCopy], async () => {}, prove)).toBe(0);
+        expect(prove).not.toHaveBeenCalled();
+        expect((await getSavedNodes()).map((n) => [n.url, n.alias])).toEqual([[`https://${SECOND}`, 'Mine']]);
+    });
+
+    // Round 2 of #3260 (the deciding review's non-blocking finding): the restore waits for this step, so it proves the
+    // communities at the same time, a few at once, each asking its addresses at once, and the whole step is capped.
+    describe('the restore proves at the same time, within the cap', () => {
+        /** A dead address: no answer until the phone's own 8-second wait gives up (address-verify.ts ASK_TIMEOUT_MS). */
+        const DEAD_MS = 8_000;
+        const dead = () => new Promise<{ kind: 'silent' }>((resolve) => setTimeout(() => resolve({ kind: 'silent' }), DEAD_MS));
+        const dying = (n: number) => Array.from({ length: n }, (_, i) => ({
+            name: `Dead ${i}`, url: `https://dead-${i}.example`, peerId: KEY.peerId, addresses: [`dead-${i}.example`, `dead-${i}b.example`, `dead-${i}c.example`],
+        }));
+        afterEach(() => { vi.useRealTimers(); });
+
+        it('20 dead communities with 3 addresses each: done within the cap (one at a time it was 8 minutes), each saved at the copy\'s address', async () => {
+            vi.useFakeTimers();
+            const prove = vi.fn((_a: string, _p: string) => dead());
+            const started = Date.now();
+            let doneAt: number | null = null;
+            const run = saveCommunitiesFromCopy(dying(20), async () => {}, prove).then((n) => { doneAt = Date.now(); return n; });
+            await vi.advanceTimersByTimeAsync(RESTORE_PROVE_CAP_MS);
+            expect(doneAt).not.toBeNull();
+            expect(doneAt! - started).toBeLessThanOrEqual(RESTORE_PROVE_CAP_MS);
+            expect(await run).toBe(20);
+            expect((await getSavedNodes()).map((n) => n.url)).toEqual(dying(20).map((c) => c.url));
+            // A few communities at once, each with its three addresses at once: never 60 asks in flight, never one at a time.
+            expect(prove.mock.calls.length).toBeGreaterThanOrEqual(RESTORE_PROVE_AT_ONCE * 3);
+            expect(prove.mock.calls.length).toBeLessThan(60);
+        });
+
+        it('a community that answers is saved where it answers, though the dead ones around it run into the cap', async () => {
+            vi.useFakeTimers();
+            const live = { name: 'Riverside', url: `https://${FIRST}`, peerId: KEY.peerId, addresses: [FIRST, SECOND] };
+            const real = proverWith({ [SECOND]: KEY });
+            const prove = (a: string, p: string) => (a === FIRST || a.startsWith('dead-') ? dead() : real(a, p));
+            const run = saveCommunitiesFromCopy([...dying(3), live, ...dying(20).slice(3)], async () => {}, prove);
+            await vi.advanceTimersByTimeAsync(RESTORE_PROVE_CAP_MS);
+            expect(await run).toBe(21);
+            const urls = (await getSavedNodes()).map((n) => n.url);
+            expect(urls).toContain(`https://${SECOND}`);
+            expect(urls).not.toContain(`https://${FIRST}`);
+            expect(urls.indexOf(`https://${SECOND}`)).toBe(3);
+        });
     });
 });

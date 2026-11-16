@@ -46,8 +46,8 @@
         "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
-        "text": "Messaggi, messaggi vocali, il forum, gruppi e relative chat, persone e amici, i tuoi contatti privati, chat di eventi, silenziare, menzioni e chiavi cambiate.",
-        "sourceHash": "79e2bb34ba50acd7"
+        "text": "Messaggi, messaggi vocali, il forum, gruppi e relative chat, persone e amici, i tuoi contatti privati, persone di altre comunità, chat di eventi, silenziare, menzioni e chiavi cambiate.",
+        "sourceHash": "b65b2bfc90637c9f"
       }
     },
     "pulse": {
@@ -430,8 +430,8 @@
         "sourceHash": "79c7dc48aa148094"
       },
       "summary": {
-        "text": "Perché una chat smette di inviare, come verificare il codice con l'altra persona e quando proseguire.",
-        "sourceHash": "c7a3e58ca019f963"
+        "text": "Cosa significa la riga grigia su una chiave cambiata, come verificare un codice chiave con la persona e a cosa serve Segna come verificato.",
+        "sourceHash": "d59b33d9c938fae5"
       }
     },
     "the-pulse": {
@@ -804,6 +804,20 @@
       "help": {
         "text": "I tuoi contatti privati. Solo tu puoi aprire l'elenco. Porta dentro le persone dal telefono o da un file di contatti, aggiungi qualcuno a mano o invitalo.",
         "sourceHash": "783e4da3badc2f05"
+      }
+    },
+    "other-communities": {
+      "title": {
+        "text": "Persone di altre comunità",
+        "sourceHash": "c533e8a22b0abbe0"
+      },
+      "summary": {
+        "text": "Scrivi a qualcuno che appartiene a un'altra comunità. La tua scheda indirizzo, gli interruttori che permettono di raggiungerti, trovare qualcuno con il suo nome esatto e cosa conserva ogni comunità.",
+        "sourceHash": "24c9f4e6e21e24a2"
+      },
+      "help": {
+        "text": "Mostra la tua scheda indirizzo, oppure trova qualcuno con il suo nome esatto se ha detto sì. Il suo primo messaggio è una richiesta: scegli tu se accettarla.",
+        "sourceHash": "bd5e7fc4314d034a"
       }
     },
     "bills": {

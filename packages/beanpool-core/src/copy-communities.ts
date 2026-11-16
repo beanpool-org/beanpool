@@ -5,8 +5,15 @@
  * list too, so a restore knows where to go.
  *
  * What the list is, deliberately and only: each community's name and address, at most {@link MAX_COPY_COMMUNITIES} of
- * them, in at most {@link MAX_COPY_COMMUNITIES_BYTES} bytes. Nothing else about the member (no name, no role, no
- * balance, no dates). It is packed here and sealed by keeper-crypto.ts in its own box inside the copy's `kdfParams`,
+ * them, in at most {@link MAX_COPY_COMMUNITIES_BYTES} bytes, and, when the phone knew them and they fit, the community's
+ * server key and up to {@link MAX_COPY_COMMUNITY_ADDRESSES} of its addresses (several addresses S8, design
+ * scratch/fable-design/DESIGN-several-addresses-fable.md §9 S8): a restore proves each address with the key and finds the
+ * community at whichever still answers. All of it public about the community; nothing else about the member (no name, no
+ * role, no balance, no dates).
+ *
+ * The packed form is a JSON array of `[url, name]`, each followed, when it carries them, by `{ "k": key, "a": [addresses] }`
+ * describing the entry before it. A reader from before S8 skips anything that is not a two-item array, so it still reads
+ * every community of a copy made now; a copy made before S8 has no such item. It is packed here and sealed by keeper-crypto.ts in its own box inside the copy's `kdfParams`,
  * under a key derived from the copy's own key: whoever can open the copy can read it, and nobody else. The vault and
  * the node store `kdfParams` without reading it.
  *
@@ -17,11 +24,21 @@
  * Pure: no crypto, no I/O. The phone and the browser both use it, so they keep and drop the same communities.
  */
 
+import { isListableAddress } from './address-list.js';
+import { ed25519KeyOfPeerId } from './owner-unlock.js';
+
 /** One community in the list: what it is called, and its address (`https://host` or `http://host:port`). */
 export interface CopyCommunity {
     name: string;
     url: string;
+    /** The community's server key (an Ed25519 libp2p PeerId), when the phone knew it: a restore proves an address with it. */
+    peerId?: string;
+    /** Up to {@link MAX_COPY_COMMUNITY_ADDRESSES} of its addresses (core's one spelling), the one in use first. */
+    addresses?: string[];
 }
+
+/** At most this many of a community's addresses ride with it. */
+export const MAX_COPY_COMMUNITY_ADDRESSES = 3;
 
 /** At most this many communities ride in a copy. More are left out, and the member is told how many. */
 export const MAX_COPY_COMMUNITIES = 20;
@@ -70,7 +87,23 @@ function sameAddress(url: string): string {
 }
 
 function encode(entries: readonly CopyCommunity[]): Uint8Array {
-    return new TextEncoder().encode(JSON.stringify(entries.map((c) => [c.url, c.name])));
+    const items: unknown[] = [];
+    for (const c of entries) {
+        items.push([c.url, c.name]);
+        if (c.peerId && c.addresses?.length) items.push({ k: c.peerId, a: c.addresses });
+    }
+    return new TextEncoder().encode(JSON.stringify(items));
+}
+
+/** The key and addresses an entry may carry (`peerId`, `addresses`), each checked, or none when either is not one. */
+function extrasOf(peerId: unknown, addresses: unknown): Pick<CopyCommunity, 'peerId' | 'addresses'> {
+    if (typeof peerId !== 'string' || !ed25519KeyOfPeerId(peerId) || !Array.isArray(addresses)) return {};
+    const kept: string[] = [];
+    for (const a of addresses) {
+        if (isListableAddress(a) && !kept.includes(a)) kept.push(a);
+        if (kept.length === MAX_COPY_COMMUNITY_ADDRESSES) break;
+    }
+    return kept.length ? { peerId, addresses: kept } : {};
 }
 
 /**
@@ -81,6 +114,7 @@ function encode(entries: readonly CopyCommunity[]): Uint8Array {
  */
 export function packCopyCommunities(list: readonly unknown[] | null | undefined): PackedCopyCommunities {
     const kept: CopyCommunity[] = [];
+    const extras: Pick<CopyCommunity, 'peerId' | 'addresses'>[] = [];
     let leftOut = 0;
     const seen = new Set<string>();
     for (const raw of list ?? []) {
@@ -94,6 +128,14 @@ export function packCopyCommunities(list: readonly unknown[] | null | undefined)
             continue;
         }
         kept.push(candidate);
+        extras.push(extrasOf(entry.peerId, entry.addresses));
+    }
+    // Then each kept community's key and addresses, in order, while they fit in what is left: they never cost a community
+    // its place (the communities kept and left out are exactly those of name and address alone).
+    for (let i = 0; i < kept.length; i++) {
+        if (!extras[i].peerId) continue;
+        const withThem = kept.map((c, j) => (j === i ? { ...c, ...extras[i] } : c));
+        if (encode(withThem).length <= MAX_COPY_COMMUNITIES_BYTES) kept[i] = withThem[i];
     }
     return { bytes: kept.length ? encode(kept) : new Uint8Array(0), kept, leftOut };
 }
@@ -109,13 +151,21 @@ export function unpackCopyCommunities(bytes: Uint8Array): CopyCommunity[] {
     if (!Array.isArray(parsed)) throw new Error('A copy\'s list of communities is not a list.');
     const out: CopyCommunity[] = [];
     const seen = new Set<string>();
+    // The entry an `{ k, a }` item right after it describes; none after anything else.
+    let last: CopyCommunity | null = null;
     for (const item of parsed) {
-        if (!Array.isArray(item) || item.length !== 2) continue;
+        const before = last;
+        last = null;
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+            if (before) Object.assign(before, extrasOf((item as { k?: unknown }).k, (item as { a?: unknown }).a));
+            continue;
+        }
+        if (!Array.isArray(item) || item.length !== 2 || out.length >= MAX_COPY_COMMUNITIES) continue;
         const url = copyCommunityUrl(item[0]);
         if (!url || seen.has(sameAddress(url))) continue;
         seen.add(sameAddress(url));
-        out.push({ url, name: copyCommunityName(item[1]) });
-        if (out.length >= MAX_COPY_COMMUNITIES) break;
+        last = { url, name: copyCommunityName(item[1]) };
+        out.push(last);
     }
     return out;
 }

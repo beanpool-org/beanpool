@@ -2,7 +2,7 @@
 slug: local-knowledge
 title: Local knowledge
 summary: Learn, your community's shelf of things worth knowing: finding a page, suggesting one, keeping it right, and how an owner or admin checks each one.
-related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants
+related: home, the-pulse, browsing-the-market, reporting, admins-ai-assistants, gifts
 ---
 
 ## What it is
@@ -44,6 +44,14 @@ Every page ends with the same line: "Local knowledge is written by members. Chec
 ## This helped
 
 If a page helped you, tap **👍 This helped**. Tap it again to take it back. The page shows how many members it helped, such as **Helped 12**, and never who. You can't tap it on your own page.
+
+## Local guide
+
+A member who wrote 3 pages that are in Learn now, each of which helped at least 3 members, shows **🗺️ Local guide**: on the **Written by** line of their pages, and on their profile. Pages put together with an AI assistant don't count. It goes again if their pages go, or if Learn is switched off. It is only a thank-you: it gives no Beans and lets nobody do anything more.
+
+## Thanking the writer
+
+Under a page someone else wrote, tap the button with their name, such as **🫘 Thank Ada**. It opens the Ledger's ordinary form for sending Beans, with the writer chosen and a note such as **Thanks for "Bus to town"** filled in. Change the amount or the note, then send it as any gift of your own Beans. Nobody else pays anything. The button shows only where your community uses Beans, and not on a page put together with an AI assistant. See "Sending a gift".
 
 ## Suggesting a page
 

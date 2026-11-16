@@ -71,7 +71,7 @@ También puedes cambiar en **Ajustes**, bajo **Sistema**, luego **Comunidades gu
 
 Una comunidad puede responder en más de una dirección, y sus propietarios eligen cuál es su dirección principal.
 
-- **En el teléfono, no tienes que hacer nada.** Tu teléfono comprueba por sí solo las direcciones de tu comunidad y pasa a la principal en cuanto esta responde con la propia clave de tu comunidad. Si la dirección que usa tu teléfono deja de responder, usa otra dirección de tu comunidad por ahora y vuelve en cuanto responde la principal. Inicio lo indica en una línea, una sola vez. Nada más cambia: tus mensajes y todo lo que tu teléfono guarda de la comunidad siguen donde están.
+- **En el teléfono, no tienes que hacer nada.** Tu teléfono comprueba por sí solo las direcciones de tu comunidad y pasa a la principal en cuanto esta responde con la propia clave de tu comunidad. Si la dirección que usa tu teléfono deja de responder, o ya no responde como tu comunidad, usa otra dirección que haya respondido con esa clave y vuelve en cuanto responde la principal. Inicio lo indica en una línea, una sola vez. Si ninguna lo ha hecho, se queda donde está. Nada más cambia, tampoco tus mensajes.
 - **En la app web,** tu inicio de sesión pertenece a la dirección que abriste, así que la app web se queda allí y sigue funcionando. Una línea discreta arriba indica la dirección principal. Toca **Ábrela allí** para ir a ella y, después, inicia sesión allí con **Vincula este navegador desde tu teléfono**, o con tu inicio de sesión o tus 12 palabras.
 
 ## Olvidar una comunidad en este teléfono

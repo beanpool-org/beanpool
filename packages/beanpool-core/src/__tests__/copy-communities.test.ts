@@ -198,3 +198,47 @@ describe('a community copy with the list', () => {
         expect(JSON.stringify(small.copy)).not.toContain('mullum');
     });
 });
+
+describe('several addresses S8: each community\'s key and up to three addresses ride with it', () => {
+    // A real Ed25519 PeerId (the address-list vectors' community key).
+    const PEER = '12D3KooWJ1TsijH7H5F74hfAD5XishQz3sxrmAtVY37GtNd9CqYf';
+    const withExtras = { name: 'Riverside', url: 'https://203.0.113.5', peerId: PEER, addresses: ['203.0.113.5', '198.51.100.7', 'coop.example.org', 'fourth.example.net'] };
+
+    it('round trip: the key and the first three addresses come back with the entry', () => {
+        const packed = packCopyCommunities([withExtras, { name: 'Hill', url: 'https://hill.example' }]);
+        expect(packed.kept[0]).toEqual({ name: 'Riverside', url: 'https://203.0.113.5', peerId: PEER, addresses: ['203.0.113.5', '198.51.100.7', 'coop.example.org'] });
+        expect(unpackCopyCommunities(packed.bytes)).toEqual(packed.kept);
+    });
+
+    it('a reader from before S8 (two-item arrays only) still reads every community of a copy made now', () => {
+        const packed = packCopyCommunities([withExtras, { name: 'Hill', url: 'https://hill.example' }]);
+        const items = JSON.parse(new TextDecoder().decode(packed.bytes)) as unknown[];
+        const oldRead = items.filter((i) => Array.isArray(i) && i.length === 2).map((i) => (i as string[])[0]);
+        expect(oldRead).toEqual(['https://203.0.113.5', 'https://hill.example']);
+    });
+
+    it('a key that is no PeerId, or addresses that are not addresses, ride as name and address alone', () => {
+        const packed = packCopyCommunities([
+            { ...withExtras, peerId: 'not-a-peer-id' },
+            { name: 'Hill', url: 'https://hill.example', peerId: PEER, addresses: ['localhost', 'https://x.example/path'] },
+        ]);
+        expect(packed.kept).toEqual([{ name: 'Riverside', url: 'https://203.0.113.5' }, { name: 'Hill', url: 'https://hill.example' }]);
+        // An `{ k, a }` item with nothing before it, or after another one, describes nothing.
+        const forged = new TextEncoder().encode(JSON.stringify([{ k: PEER, a: ['203.0.113.5'] }, ['https://hill.example', 'Hill'], { k: PEER, a: ['hill.example'] }, { k: PEER, a: ['203.0.113.9'] }]));
+        expect(unpackCopyCommunities(forged)).toEqual([{ url: 'https://hill.example', name: 'Hill', peerId: PEER, addresses: ['hill.example'] }]);
+    });
+
+    it('when the extras do not fit, the community still rides as before (name and address), and the count is unchanged', () => {
+        const many = Array.from({ length: MAX_COPY_COMMUNITIES }, (_, i) => ({
+            name: `Community ${i}`, url: `https://c${i}.example.org`, peerId: PEER,
+            addresses: [`c${i}.example.org`, `second-${i}.example.org`, `third-${i}.example.org`],
+        }));
+        const packed = packCopyCommunities(many);
+        expect(packed.kept).toHaveLength(MAX_COPY_COMMUNITIES);
+        expect(packed.leftOut).toBe(0);
+        expect(packed.bytes.length).toBeLessThanOrEqual(MAX_COPY_COMMUNITIES_BYTES);
+        expect(packed.kept[0].peerId).toBe(PEER);
+        expect(packed.kept.some((c) => c.peerId === undefined)).toBe(true);
+        expect(unpackCopyCommunities(packed.bytes)).toEqual(packed.kept);
+    });
+});

@@ -1273,7 +1273,7 @@ const NOT_A_REQUEST_FOR_ME = (column: string) => `(CASE WHEN json_valid(${column
 export async function getConversations(myPubkey: string) {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
-        SELECT c.id, c.name, c.post_id, c.type as convType, c.request as request,
+        SELECT c.id, c.name, c.post_id, c.type as convType, c.request as request, c.created_at as createdAt,
                COALESCE(p.title, c.post_title) as postTitle,
                COALESCE(
                    (SELECT mt2.status FROM marketplace_transactions mt2
@@ -1455,6 +1455,8 @@ export async function getConversations(myPubkey: string) {
             lastSysType: row.lastSysType,
             timestamp: row.timestamp ? new Date(row.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'New',
             rawTimestamp: row.timestamp || null,
+            // When the chat was made: where it sits in Talk while it has no line (utils/talk-list-order.ts).
+            createdAt: row.createdAt || null,
             unread: row.unreadCount || 0,
             // Escrow role metadata for "Action Required" section
             isPayer,

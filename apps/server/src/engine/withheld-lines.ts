@@ -332,6 +332,7 @@ export function pageWithOwnWithheld(conversationId: string, viewer: string | und
 interface ListedConversation {
     id: string;
     createdAt?: string;
+    lastMessageAt?: string | null;
     lastMsgType?: string | null;
     lastSysType?: string | null;
 }
@@ -371,7 +372,8 @@ export function listWithOwnWithheld<T extends ListedConversation>(viewer: string
     const entries = allConvs.map((c, place) => {
         const real = realLastLines.get(c.id) ?? null;
         const own = lastOwn.get(c.id);
-        if (own && (!real || own.at > real)) return { c: { ...c, lastMsgType: own.type, lastSysType: null } as T, at: own.at as string | null, place };
+        // The time the apps order the list by (lastMessageAt) is the line this order counts: their own withheld one when newer.
+        if (own && (!real || own.at > real)) return { c: { ...c, lastMsgType: own.type, lastSysType: null, lastMessageAt: own.at } as T, at: own.at as string | null, place };
         return { c, at: real, place };
     });
     // As the engine orders them: by the last line, newest first, then those with none, newest first; ties keep their place.

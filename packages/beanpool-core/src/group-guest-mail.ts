@@ -161,7 +161,9 @@ export async function leaveGuestChat(io: GuestMailIO, id: string): Promise<boole
 /**
  * My leave, posted (again) while my server hasn't answered it (GuestChat.leave `sending`): the kept item under its own id,
  * or a new one when one is due (the last failed) or the kept one is too old for my server to take. My server's answer
- * moves it on (applyGuestTicks). Refused for good by my server (I'm not asked or in there any more): nothing more goes.
+ * moves it on (applyGuestTicks). Refused for good by my server (I'm not asked or in there, or a leave of mine from another
+ * device already waits there): kept as `refused`, so nothing more goes and the chat stays left until my server lists me
+ * no more.
  */
 async function sendLeave(io: GuestMailIO, id: string): Promise<boolean> {
     const chat = (await io.load())[id];
@@ -184,7 +186,7 @@ async function sendLeave(io: GuestMailIO, id: string): Promise<boolean> {
         answered = await post(io, [it]);
     } catch (e) {
         if (!refusedForGood(e)) throw e;
-        await update(io, id, (c) => (c.leave?.itemId === itemId ? { ...c, leave: null } : null));
+        await update(io, id, (c) => (c.leave?.itemId === itemId ? { ...c, leave: { itemId, item: null, state: 'refused' } } : null));
         return true;
     }
     await applyAnswers(io, chat, 'group-leave', answered.filter((a) => a.itemId === itemId), io.now());

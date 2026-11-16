@@ -3,8 +3,8 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { makeGroupEpochRecord, openGroupEpochRecord, openGroupLine, sealGroupLine } from '../group-crypto.js';
-import { guestChatId, type GuestChats } from '../group-guest-chat.js';
-import { answerGuestInvitation, sendGuestLine, syncGuestMail, GUEST_CURSOR_META, type GuestMailIO } from '../group-guest-mail.js';
+import { guestChatId, guestClosedWords, type GuestChats } from '../group-guest-chat.js';
+import { answerGuestInvitation, leaveGuestChat, sendGuestLine, syncGuestMail, GUEST_CURSOR_META, type GuestMailIO } from '../group-guest-mail.js';
 import { relayEnvelopeVerifies, signRelayEnvelope, type RelayItem } from '../relay-envelope.js';
 
 // G2: the guest's round and sends against a fake of their own community's server (engine/group-guest-home.ts's routes):
@@ -62,7 +62,10 @@ function fake() {
                 if (last === 'no') continue;
                 listed.push({ host: h.host, group: h.group, state: last === 'yes' ? 'in' : 'invited', roster: null, rosterAt: null } as never);
             }
-            return { items: held.filter((h) => !confirmed.includes(h.id)), more: false, groups: listed, sent, sentMore: false };
+            // A leave the host took moves my link to `left`, which the home lists no more (moveLinkOn, part 2).
+            const leftThere = posted.some((p) => p.envelope.kind === 'group-leave' && rows.get(p.envelope.itemId)?.state === 'sent');
+            const shown = leftThere ? listed.filter((l) => !(l.host === HOST && l.group === GROUP)) : listed;
+            return { items: held.filter((h) => !confirmed.includes(h.id)), more: false, groups: shown, sent, sentMore: false };
         },
         post: async (path, body: any) => {
             if (path === '/api/mail/group/confirm') { confirmed.push(...body.ids); return { confirmed: body.ids.length }; }
@@ -530,5 +533,169 @@ describe('NOTICES (round 4): the round applies a takedown before it confirms it,
         expect(f.confirmed).not.toContain('n-later-kind');
         // The page with the takedown, then the same page again holding only what can't be applied yet: no third read.
         expect(gets).toBe(2);
+    });
+});
+
+describe("LEAVE (part 2): the guest's Leave closes the chat here at once, and the signed leave goes until the host has it", () => {
+    const leaves = (f: ReturnType<typeof fake>) => f.posted.filter((p) => p.envelope.kind === 'group-leave');
+    /** Gus in, his join epoch taken, one line of his sent; the chat open here. */
+    async function inChat() {
+        const f = await guestIn();
+        await syncGuestMail(f.io);
+        await sendGuestLine(f.io, ID, 'hello from Gus');
+        expect(f.chats[ID]).toMatchObject({ state: 'in' });
+        return f;
+    }
+    /** My server's answer to every send from now on fails as a request (can't be reached, or `status`), until the returned undo. */
+    function cutOff(f: ReturnType<typeof fake>, status?: number) {
+        const real = f.io.post;
+        f.io.post = async (path, body) => {
+            if (path === '/api/mail/send') throw Object.assign(new Error(status ? `HTTP ${status}` : 'network'), status ? { status } : {});
+            return real(path, body);
+        };
+        return () => { f.io.post = real; };
+    }
+
+    it('taken at once: the chat is left here, its keys gone; my leave is a relay item I signed to group:<id> at the host; nothing more goes after', async () => {
+        const f = await inChat();
+        expect(await leaveGuestChat(f.io, ID)).toBe(true);
+        const [leave] = leaves(f);
+        expect(leave.envelope).toMatchObject({ kind: 'group-leave', senderKey: gus.pk, senderHome: HOME, recipient: `group:${GROUP}`, recipientHome: HOST });
+        expect(JSON.parse(leave.payload)).toEqual({ v: 1 });
+        expect(relayEnvelopeVerifies(leave.envelope)).toBe(true);
+        expect(f.chats[ID]).toMatchObject({ state: 'left', keys: {}, held: [], ownEpoch: null, leave: null, why: null });
+        expect(guestClosedWords(f.chats[ID])).toBe('You left this chat.');
+        // The line shown stays; nothing more is sent or written from here.
+        expect(f.chats[ID].lines.map((l) => l.text)).toEqual(['hello from Gus']);
+        const before = f.posted.length;
+        await syncGuestMail(f.io);
+        await syncGuestMail(f.io);
+        expect(f.posted.length).toBe(before);
+        expect(await sendGuestLine(f.io, ID, 'too late')).toBeNull();
+        expect(f.chats[ID].state).toBe('left');
+    });
+
+    // (what my server answers my leave) -> the leave kept here, and the leaves posted at once. Then a round while my server
+    // still lists me in (with the roster): the chat stays left and never opens again; then the host takes it: nothing more.
+    const TABLE: Array<[string, (f: ReturnType<typeof fake>) => () => void, { kept: string | null; posts: number }]> = [
+        ['taken by the host', () => () => {}, { kept: null, posts: 1 }],
+        ['queued (the host not reached yet)', (f) => { f.answerWith((i) => (i.envelope.kind === 'group-leave' ? { state: 'queued' } : { state: 'sent' })); return () => {}; }, { kept: 'queued', posts: 1 }],
+        ["my server can't be reached", (f) => cutOff(f), { kept: 'sending', posts: 0 }],
+    ];
+    it.each(TABLE)('%s: left at once, left while my server still lists me in, one leave until the host has it', async (_name, setUp, want) => {
+        const f = await inChat();
+        const back = setUp(f);
+        expect(await leaveGuestChat(f.io, ID)).toBe(true);
+        expect(f.chats[ID].state).toBe('left');
+        expect(f.chats[ID].leave?.state ?? null).toBe(want.kept);
+        expect(leaves(f)).toHaveLength(want.posts);
+        back();
+        await syncGuestMail(f.io);
+        expect(f.chats[ID]).toMatchObject({ state: 'left', keys: {} });
+        // Nothing of the chat goes again: the join epoch and the one line are all that were ever posted.
+        expect(f.posted.filter((p) => p.envelope.kind === 'group-line' || p.envelope.kind === 'group-epoch')).toHaveLength(2);
+        // One leave, under one id (not reached before: the round posted the kept one).
+        expect(new Set(leaves(f).map((p) => p.envelope.itemId)).size).toBe(1);
+        for (const p of leaves(f)) f.settle(p.envelope.itemId, { state: 'sent' });
+        await syncGuestMail(f.io);
+        await syncGuestMail(f.io);
+        expect(f.chats[ID]).toMatchObject({ state: 'left', leave: null });
+        expect(new Set(leaves(f).map((p) => p.envelope.itemId)).size).toBe(1);
+    });
+
+    it('failed (a day with no answer from the host): a new leave goes under a new id at the next round, and is taken', async () => {
+        const f = await inChat();
+        f.answerWith((i) => (i.envelope.kind === 'group-leave' ? { state: 'queued' } : { state: 'sent' }));
+        await leaveGuestChat(f.io, ID);
+        const first = leaves(f)[0].envelope.itemId;
+        f.settle(first, { state: 'failed' });
+        f.answerWith(() => ({ state: 'sent' }));
+        await syncGuestMail(f.io);
+        const again = leaves(f);
+        expect(again).toHaveLength(2);
+        expect(again[1].envelope.itemId).not.toBe(first);
+        expect(relayEnvelopeVerifies(again[1].envelope)).toBe(true);
+        await syncGuestMail(f.io);
+        expect(f.chats[ID]).toMatchObject({ state: 'left', leave: null });
+        expect(leaves(f)).toHaveLength(2);
+    });
+
+    it('kept past what my server takes (7 days): a new one is signed under a new id', async () => {
+        const f = await inChat();
+        const back = cutOff(f);
+        await leaveGuestChat(f.io, ID);
+        const kept = f.chats[ID].leave!;
+        back();
+        const later = Date.parse('2026-11-23T10:00:00.000Z');
+        f.io.now = () => later;
+        await syncGuestMail(f.io);
+        const [posted] = leaves(f);
+        expect(posted.envelope.itemId).not.toBe(kept.itemId);
+        expect(posted.envelope.at).toBe(later);
+        expect(f.chats[ID].leave).toBeNull();
+    });
+
+    it('refused for good by my server (403: a leave of mine from another device already waits there): nothing more goes, the chat stays left while I am still listed in, until I am listed no more', async () => {
+        const f = await inChat();
+        const back = cutOff(f, 403);
+        expect(await leaveGuestChat(f.io, ID)).toBe(true);
+        expect(f.chats[ID]).toMatchObject({ state: 'left', leave: { state: 'refused', item: null } });
+        back();
+        const before = f.posted.length;
+        // My server still lists me in, with the roster: the chat never opens again, and nothing goes (no epoch, no leave).
+        await syncGuestMail(f.io);
+        await syncGuestMail(f.io);
+        expect(f.posted.length).toBe(before);
+        expect(f.chats[ID]).toMatchObject({ state: 'left', keys: {} });
+        // The other device's leave taken: my server lists me no more, and nothing is kept.
+        f.groups.length = 0;
+        f.held.length = 0;
+        await syncGuestMail(f.io);
+        expect(f.chats[ID]).toMatchObject({ state: 'left', leave: null });
+    });
+
+    it('a removal my server lists while my leave waits: the chat stays left (my own words), and the leave goes no more', async () => {
+        const f = await inChat();
+        f.answerWith((i) => (i.envelope.kind === 'group-leave' ? { state: 'queued' } : { state: 'sent' }));
+        await leaveGuestChat(f.io, ID);
+        f.groups[0] = { host: HOST, group: GROUP, state: 'removed', rosterAt: null, roster: null };
+        await syncGuestMail(f.io);
+        expect(f.chats[ID]).toMatchObject({ state: 'left', leave: null });
+        expect(guestClosedWords(f.chats[ID])).toBe('You left this chat.');
+    });
+
+    it('a line of mine still waiting when I leave never goes: it says it was not delivered', async () => {
+        const f = await guestIn();
+        // My join epoch queued: the line waits for its key.
+        f.answerWith((i) => (i.envelope.kind === 'group-epoch' ? { state: 'queued' } : { state: 'sent' }));
+        await syncGuestMail(f.io);
+        await sendGuestLine(f.io, ID, 'never sent');
+        expect(f.chats[ID].lines[0].state).toBe('waiting');
+        await leaveGuestChat(f.io, ID);
+        f.settle(f.posted.find((p) => p.envelope.kind === 'group-epoch')!.envelope.itemId, { state: 'sent' });
+        await syncGuestMail(f.io);
+        expect(f.chats[ID].lines[0]).toMatchObject({ text: 'never sent', state: 'failed', item: null });
+        expect(f.posted.filter((p) => p.envelope.kind === 'group-line')).toHaveLength(0);
+    });
+
+    it('while joining (my yes on its way): left here, and the leave goes behind the yes', async () => {
+        const f = fake();
+        f.held.push(inviteNotice('n-invite-leave'));
+        await syncGuestMail(f.io);
+        await answerGuestInvitation(f.io, ID, 'yes');
+        expect(f.chats[ID].state).toBe('joining');
+        expect(await leaveGuestChat(f.io, ID)).toBe(true);
+        expect(f.chats[ID].state).toBe('left');
+        expect(f.posted.map((p) => p.envelope.kind)).toEqual(['group-invite', 'group-leave']);
+    });
+
+    it.each(['invited', 'declined', 'left', 'removed'] as const)('nothing to leave when %s: false, nothing posted', async (state) => {
+        const f = fake();
+        f.held.push(inviteNotice('n-invite-none'));
+        await syncGuestMail(f.io);
+        await f.io.save({ [ID]: { ...f.chats[ID], state } });
+        expect(await leaveGuestChat(f.io, ID)).toBe(false);
+        expect(leaves(f)).toHaveLength(0);
+        expect(f.chats[ID].state).toBe(state);
     });
 });

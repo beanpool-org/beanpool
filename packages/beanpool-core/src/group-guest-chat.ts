@@ -176,11 +176,13 @@ export interface GuestChat {
 }
 
 /**
- * My leave (`group-leave`), from the moment I leave until my server says the host took it (the file's header, "Leaving"):
- * `sending` (posted with no answer yet, its signed item kept and posted again under the same id; `item` null when a new
- * one is due under `itemId`: the last one failed), then `queued` (my server has it, the host not reached yet).
+ * My leave (`group-leave`), from the moment I leave until my server says the host took it, or lists me no more (the file's
+ * header, "Leaving"): `sending` (posted with no answer yet, its signed item kept and posted again under the same id; `item`
+ * null when a new one is due under `itemId`: the last one failed), `queued` (my server has it, the host not reached yet),
+ * or `refused` (my server said no for good: I'm not asked or in there, or a leave of mine from another device already
+ * waits there; nothing more goes from here). While it is kept, my server listing me in never opens the chat again.
  */
-export interface GuestLeave { itemId: string; item: string | null; state: 'sending' | 'queued' }
+export interface GuestLeave { itemId: string; item: string | null; state: 'sending' | 'queued' | 'refused' }
 
 /**
  * An epoch made on this device, on its way to the host. Its key seals nothing until the host takes it: `sending` (posted,

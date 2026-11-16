@@ -273,10 +273,11 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
             ) : forum ? (
                 <div className="space-y-1" data-testid="reported-forum-post">
                     <p className="text-xs font-bold uppercase tracking-wider text-nature-500 m-0">
-                        {forum.number === 1 ? 'Forum topic' : 'Forum reply'}{forum.writerName ? ` by ${forum.writerName}` : ''}{forum.hidden ? ' · hidden while moderators look' : ''}{forum.removed ? ' · already down' : ''}
+                        {forum.number === 1 ? 'Forum topic' : 'Forum reply'}{forum.writerName ? ` by ${forum.writerName}` : ''}{forum.onHold ? ' · on hold' : forum.hidden ? ' · hidden while moderators look' : ''}{forum.removed ? ' · already down' : ''}
                     </p>
                     <p className="text-base font-bold text-white m-0">{forum.topicTitle || 'A removed topic'}</p>
                     {forum.words && <p className="text-sm text-nature-200 m-0 whitespace-pre-line">{forum.words}</p>}
+                    {isOpen && forum.onHold && <p className="text-sm font-semibold text-nature-100 m-0" data-testid="post-on-hold">{POST_ON_HOLD_WORDS}</p>}
                 </div>
             ) : hasPost ? (
                 <div className="space-y-1">

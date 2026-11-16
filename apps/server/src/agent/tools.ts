@@ -735,6 +735,11 @@ AGENT_TOOLS.push({
         if (kind === 'remove_reported' && kindOf === 'outside_message') {
             return { ok: false, error: 'That report is a complaint from another community about a message a member here sent there, not a post: there is nothing to remove.' };
         }
+        // A forum post's report (slice F2b): a dismissal and a removal each have their card's Approve (agent/suggestions.ts approveCall);
+        // a restore is a moderator's own act in the forum, which no assistant's word reaches (DESIGN-forums-fable.md §6).
+        if (kind === 'restore_post' && kindOf === 'forum_post') {
+            return { ok: false, error: 'That report is about a forum post: bringing one back is a moderator\'s own act in the app, and no suggestion can ask for it. Tell the member if you think it should come back.' };
+        }
         if (kind !== 'restore_post' && (r.status === 'reviewed' || r.status === 'actioned')) {
             return { ok: false, error: 'That report is already closed: there is nothing to suggest about it.' };
         }

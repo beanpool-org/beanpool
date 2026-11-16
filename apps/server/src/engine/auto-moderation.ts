@@ -184,7 +184,8 @@ export function standingParts(pubkey: string, now: number = Date.now(), opts: { 
 
 /**
  * Whether a moderator kept enough of what this member reported lately that their reports no longer count: listings and forum
- * posts alike (a forum post kept is one still up, nobody having removed it), each counted once.
+ * posts alike (a forum post kept is one still up, nobody having removed it), each counted once. A takedown on hold is kept by nobody,
+ * a listing's (removed_by_moderator_at) or a forum post's (taken_down_at, slice F2b): a report dismissed on one doesn't count.
  */
 function keptReportsTooMany(pubkey: string, now: number): boolean {
     const since = iso(now - AUTO_HIDE.keptReportsWindowDays * DAY_MS);
@@ -196,7 +197,7 @@ function keptReportsTooMany(pubkey: string, now: number): boolean {
           UNION
           SELECT DISTINCT 'forum:' || ar.target_forum_post_id FROM abuse_reports ar
            JOIN forum_posts fp ON fp.id = ar.target_forum_post_id
-          WHERE ar.reporter_pubkey = ? AND ar.status = 'reviewed' AND ar.updated_at > ? AND fp.removed_by IS NULL
+          WHERE ar.reporter_pubkey = ? AND ar.status = 'reviewed' AND ar.updated_at > ? AND fp.removed_by IS NULL AND fp.taken_down_at IS NULL
           LIMIT ?)`
     ).get(pubkey, since, pubkey, since, AUTO_HIDE.keptReportsToStopCounting) as { c: number };
     return row.c >= AUTO_HIDE.keptReportsToStopCounting;

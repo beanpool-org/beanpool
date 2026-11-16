@@ -7940,6 +7940,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         const outside = r.disclosure_kind === 'outside-line';
         const complaint = typeof r.reporter_pubkey === 'string' && r.reporter_pubkey.startsWith(COMPLAINT_REPORTER)
             ? { from: r.reporter_pubkey.slice(COMPLAINT_REPORTER.length) } : null;
+        const forumPost = r.target_forum_post_id ? reportedForumPost(r.target_forum_post_id) : null;
         return {
         // Who the report is about (reportSubjectOf, what actionReport acts on): on a Pulse item its owner, read from the
         // item, whatever post id the row carries; on a post its author, read from the post, never the key the reporter
@@ -7974,8 +7975,10 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         postRemoved: r.post_row_id ? (r.post_active !== 1 || r.post_status === 'cancelled') : null,
         // Hidden by reports, waiting for a moderator (G3): restore it or remove it.
         postHiddenByReports: r.post_row_id ? !!r.post_hidden_at : null,
-        // A takedown on hold: "kept" is no longer on offer, whatever a dismissal does.
-        postOnHold: r.post_row_id ? onHold({ active: r.post_active, status: r.post_status, hidden_by_reports_at: r.post_hidden_at, removed_by_moderator_at: r.post_removed_by_moderator_at }) : null,
+        // A takedown on hold: "kept" is no longer on offer, whatever a dismissal does. A forum post's too (slice F2b), so a card and the
+        // moderators' list read it the same way.
+        postOnHold: r.post_row_id ? onHold({ active: r.post_active, status: r.post_status, hidden_by_reports_at: r.post_hidden_at, removed_by_moderator_at: r.post_removed_by_moderator_at })
+            : forumPost ? forumPost.onHold : null,
         // Made by an owner's AI assistant (agent/owner-posts.ts): moderators see it; members never do.
         postMadeByAssistant: r.post_row_id ? (typeof r.post_created_via === 'string' && r.post_created_via.startsWith('assistant:')) : null,
         targetPulseItemId: r.target_pulse_item_id || undefined,
@@ -7998,7 +8001,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         fromAnotherCommunity: complaint,
         // A forum post's report (slice F2): the post with its topic's title, for Settings' list beside reported listings.
         ...(r.target_forum_post_id ? { targetForumPostId: r.target_forum_post_id as string } : {}),
-        forumPost: r.target_forum_post_id ? reportedForumPost(r.target_forum_post_id) : null,
+        forumPost,
         groupMessage: r.target_message_id && !r.disclosure_kind && !complaint
             ? {
                 groupId: r.gm_group_id ?? null,

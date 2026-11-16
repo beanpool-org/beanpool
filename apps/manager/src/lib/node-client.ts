@@ -264,6 +264,8 @@ export interface ReportedForumPost {
     writerName: string | null;
     hidden: boolean;
     removed: boolean;
+    /** An assistant's takedown on hold (slice F2b): a dismissal doesn't bring it back. An older server sends none. */
+    onHold?: boolean;
 }
 
 /**

@@ -9,10 +9,12 @@
  *     Add someone from another community.
  * React Native's host components are plain tags in react-dom, as the other render tests here do.
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { guestAccess, type GuestAccess, type GuestChat, type GuestScreen, type GuestViewer } from '@beanpool/core';
+import { applyGuestMail, guestAccess, type GuestAccess, type GuestChat, type GuestScreen, type GuestViewer } from '@beanpool/core';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -231,5 +233,36 @@ describe("the group's guests, under its members", () => {
         act(() => root.render(createElement(GroupGuestsList, { groupId: 'grp-tools', isConvenor: true }) as unknown as Parameters<Root['render']>[0]));
         await settle();
         expect(q('group-guests')).toBeNull();
+    });
+});
+
+describe("round 4 (#3246): each reason the host's code gives for a removal -> its own words; a line taken down is gone", () => {
+    // Read from the host's code: a reason it adds has no row in WORDS, and fails here.
+    const hostCode = readFileSync(resolve(__dirname, '../../../server/src/engine/group-guests.ts'), 'utf8');
+    const whys = [...new Set([...hostCode.matchAll(/queueToHome\([^;]*?'removed',\s*\{\s*why:\s*'([^']+)'/g)].map((m) => m[1]))];
+    const WORDS: Record<string, string> = {
+        removed: 'You were removed from this chat. Nothing more reaches you from it.',
+        'group-closed': 'This group was closed. Nothing more reaches you from it.',
+        closed: "This group's community turned off guests from other communities. Nothing more reaches you from it.",
+    };
+    const ctx = { me: ME, myEdPrivHex: '11'.repeat(32), blocked: () => false, now: 5 };
+    const page = (kind: string, data: unknown) => ({ items: [{ id: `n-${kind}`, host: 'riverside.example', group: 'grp-tools', kind, data, receivedAt: 5 }] });
+    it("the host's code is read where the test looks", () => expect(whys.length).toBeGreaterThanOrEqual(3));
+    it.each(whys)('the host says why %s: the closed chat says its own words', async (w) => {
+        const { chats, confirm } = applyGuestMail({ [ID]: chat('in') }, page('removed', { why: w }), ctx);
+        expect(confirm).toEqual(['n-removed']);
+        await openChat(chats[ID]);
+        expect(q('guest-chat-closed')?.textContent).toBe(WORDS[w]);
+    });
+    it('removed with no reason heard here: it says only that the chat is closed', async () => {
+        await openChat(chat('removed', { why: null }));
+        expect(q('guest-chat-closed')?.textContent).toBe('This chat is closed. Nothing more reaches you from it.');
+    });
+    it("a line taken down by a convenor: gone from the chat, the others stay, and the notice is confirmed", async () => {
+        const { chats, confirm } = applyGuestMail({ [ID]: chat('in') }, page('edit', { id: 'l2', action: 'removed', by: 'convenor' }), ctx);
+        expect(confirm).toEqual(['n-edit']);
+        await openChat(chats[ID]);
+        expect((host.textContent ?? '')).not.toContain('Hello from Eastside');
+        expect((host.textContent ?? '')).toContain('Welcome to the tools chat');
     });
 });

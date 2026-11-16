@@ -268,18 +268,19 @@ export function dmKeyChangeStyleSpec(colors: AppColors) {
 }
 
 /**
- * How tall the DM screen's key-changed card may be: the whole room above the paused box (walk of 17 Nov at 320 dp and
- * 1.3× text). The room is the column under the header as measured, less the box (everything under the thread: the
- * paused composer and any banner over it, with the nav bar's inset in its padding when the screen is edge-to-edge), the
- * deals bar and any keyboard still up. Nothing can be sent while the card is up, so the thread gives way to it: a card
- * that fits leaves the rest to the thread; one that does not fill the room and scrolls as the page, its cut edge on the
- * box, so the code, the tick and Continue are never in a small scroll inside the card (DmKeyChangedPane). The cap that
+ * How tall the DM screen's key-changed page may be: the card, then the bars between it and the thread (the deals strip,
+ * the listing's header, the release bar), scrolling as one (components/chat/DmKeyChangedPane). Its room is the column
+ * under the header as measured, less the box (everything under the thread: the paused composer and any banner over it,
+ * with the nav bar's inset in its padding when the screen is edge-to-edge) and any keyboard still up. The column holds
+ * nothing else (dm-key-pane-fit-render.test.ts reads [id].tsx), so no bar is left out of the sum to come off the box
+ * (deciding review of 6775428c, finding 1). Nothing can be sent while the card is up, so the thread gives way: a page that
+ * fits leaves the rest to the thread; one that does not fills the room and scrolls, its cut edge on the box. The cap that
  * kept a thread floor and 55% of the column (#1873 review, finding 7) left the card 219 dp on a 320 × 569 phone at 1.3×:
- * its title and part of its body, the rest in a scroll with no hint. Before the column is measured (the first frame),
- * 55% of the window less the box and the keyboard.
+ * its title and part of its body, the rest in a scroll with no hint (walk of 17 Nov). Before the column is measured (the
+ * first frame), 55% of the window less the box and the keyboard.
  */
-export function dmKeyBannerMaxHeight(m: { column: number; composer: number; deals: number; windowHeight: number; keyboard?: number }): number {
+export function dmKeyBannerMaxHeight(m: { column: number; composer: number; windowHeight: number; keyboard?: number }): number {
     const keyboard = Math.max(0, m.keyboard ?? 0);
     if (!(m.column > 0) || !(m.composer > 0)) return Math.max(0, Math.round(m.windowHeight * 0.55) - Math.max(0, m.composer) - keyboard);
-    return Math.max(0, Math.round(m.column - m.composer - Math.max(0, m.deals) - keyboard));
+    return Math.max(0, Math.round(m.column - m.composer - keyboard));
 }

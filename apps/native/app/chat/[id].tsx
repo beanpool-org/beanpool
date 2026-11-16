@@ -187,12 +187,12 @@ function ChatScreen({ id }: { id: string }) {
     // "Verified ✓" beside "🔒 End-to-end encrypted" (DESIGN-dm-key-signal-model §7 S2): while the member's mark holds and no
     // new key waits, exactly when the key code screen shows it.
     const [peerVerified, setPeerVerified] = useState(false);
-    // The banner's height comes from the column under the header as measured (utils/dm-key-change dmKeyBannerMaxHeight):
-    // the paused box is never cut, edge-to-edge too, and the card takes the room above it that it needs; the thread gives
-    // way while nothing can be sent (walk of 17 Nov at 320 dp and 1.3× text).
+    // The key card's page (the card, then the bars down to the thread) has the column under the header as measured, less
+    // the box and a keyboard still up (utils/dm-key-change dmKeyBannerMaxHeight): the paused box is never cut, edge-to-edge
+    // too, and the thread gives way while nothing can be sent (walk of 17 Nov at 320 dp and 1.3× text).
     const { height: windowHeight } = useWindowDimensions();
-    const [column, setColumn] = useState({ column: 0, composer: 0, deals: 0 });
-    const measured = (part: 'composer' | 'deals') => (e: { nativeEvent: { layout: { height: number } } }) => {
+    const [column, setColumn] = useState({ column: 0, composer: 0 });
+    const measured = (part: 'composer') => (e: { nativeEvent: { layout: { height: number } } }) => {
         const h = Math.round(e.nativeEvent.layout.height);
         setColumn((c) => (c[part] === h ? c : { ...c, [part]: h }));
     };
@@ -1599,28 +1599,26 @@ function ChatScreen({ id }: { id: string }) {
                 </Pressable>
             </View>
 
-            {/* The key behind this DM changed (utils/dm-peer-pins.ts): what changed, the new key's code, and the member's choice.
-                Keyed on the offered key, so a tick given for one code never carries over to another. It takes the room above
-                the paused box that it needs, up to all of it once the box (the composer with any banner over it), the deals
-                bar and a keyboard still up are taken out (dmKeyBannerMaxHeight): nothing can be sent meanwhile, so the thread
-                gives way, and a card taller than that scrolls as the page with its scroll bar shown and the keyboard put away
-                (DmKeyChangedPane; walk of 17 Nov at 320 dp and 1.3× text). Named from the key's member row, never the
-                conversation id. */}
-            {keyChange && (
-                <DmKeyChangedPane
-                    key={keyChange.offeredPeer ?? 'none'}
-                    maxHeight={dmKeyBannerMaxHeight({ ...column, deals: visibleDeals.length ? column.deals : 0, windowHeight, keyboard: keyboardHeight })}
-                    peerName={keyChange.name}
-                    change={keyChange}
-                    onContinue={handleContinueWithNewKey}
-                    onNotNow={() => leaveScreen(router, 'chat/[id]')}
-                />
-            )}
+            {/* Everything between the header and the thread: the deals strip, the listing's header and the release bar. While
+                the key behind this DM has changed (utils/dm-peer-pins.ts), the card (what changed, the new key's code, and the
+                member's choice) sits above them and they scroll with it as one page, in the room above the paused box once the
+                box (the composer with any banner over it) and a keyboard still up are taken out (dmKeyBannerMaxHeight): nothing
+                can be sent meanwhile, so the thread gives way. A page taller than that scrolls with its scroll bar shown, and a
+                keyboard up when the pause starts is put away, once (DmKeyChangedPane; walk of 17 Nov at 320 dp and 1.3× text;
+                deciding review of 6775428c). The column holds nothing else, so nothing new goes between this and the keyboard
+                view: it goes in here. Keyed on the offered key, so a tick given for one code never carries over to another.
+                Named from the key's member row, never the conversation id. */}
+            <DmKeyChangedPane
+                key={keyChange?.offeredPeer ?? 'none'}
+                card={keyChange ? { peerName: keyChange.name, change: keyChange, onContinue: handleContinueWithNewKey, onNotNow: () => leaveScreen(router, 'chat/[id]') } : null}
+                maxHeight={dmKeyBannerMaxHeight({ ...column, windowHeight, keyboard: keyboardHeight })}
+            >
 
             {/* Pinned active-deals strip — per-deal actions live here (one card per live deal),
-                always visible so a Release/Review is never buried in the conversation scroll. */}
+                always visible so a Release/Review is never buried in the conversation scroll. While the key card is up it
+                sits under the card in the page they scroll as, never in the thread (DmKeyChangedPane). */}
             {visibleDeals.length > 0 && (
-                <View style={styles.dealStrip} onLayout={measured('deals')}>
+                <View style={styles.dealStrip}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 12, paddingVertical: 10 }}>
                         {visibleDeals.map(d => (
                             <Pressable
@@ -1741,6 +1739,7 @@ function ChatScreen({ id }: { id: string }) {
                     </View>
                 </View>
             )}
+            </DmKeyChangedPane>
 
             <KeyboardAvoidingView
                 style={styles.keyboardView}

@@ -251,11 +251,11 @@ describe('the banner\'s words', () => {
 // new one (mutant M14 survived every test). A source pin on [id].tsx, and the behaviour of that keying.
 describe('the banner on the DM screen is keyed on the offered key', () => {
     beforeEach(() => { theme.colors = lightColors; });
-    it('[id].tsx renders it (in its pane) with key={keyChange.offeredPeer ?? \'none\'}', async () => {
+    it('[id].tsx renders it (in its pane) with key={keyChange?.offeredPeer ?? \'none\'}', async () => {
         const { readFileSync } = await import('node:fs');
         const { join } = await import('node:path');
         const src = readFileSync(join(process.cwd(), 'app', 'chat', '[id].tsx'), 'utf8');
-        expect(src).toMatch(/<DmKeyChangedPane\s+key=\{keyChange\.offeredPeer \?\? 'none'\}/);
+        expect(src).toMatch(/<DmKeyChangedPane\s+key=\{keyChange\?\.offeredPeer \?\? 'none'\}/);
     });
     it('a ticked banner whose offered key changes comes back unticked, and Continue does nothing until ticked again', async () => {
         const k2 = randomBytes(32).toString('hex');
@@ -290,17 +290,20 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         expect(src).toMatch(/notice=\{unplaced \? t\(DM_LOCK_WORDS\.unplaced\) : keyChangePending \? dmKeyChangedLine\(keyChange\?\.name\) : lockNotice \? chatLineWords\(lockNotice\) : (?:null\}|\()/); // the three security lines first, in this order; a message request's own words may only follow them
         expect(src).toMatch(/const canSendNow = \(\) => [^;]*!keyChangePending/);
         // The banner is named from the key's member row (getDmKeyChange), never the screen's id-fragment fallback.
-        expect(src).toMatch(/peerName=\{keyChange\.name\}/);
-        // The banner's cap is worked out from the measured column, the deals strip and the box (finding 7), never a share
-        // of the window alone. The column runs from the header's bottom to the keyboard view's bottom, both read in the
-        // screen's own frame, with the banner between them; the box is measured whole.
-        expect(src).toMatch(/maxHeight=\{dmKeyBannerMaxHeight\(\{ \.\.\.column, deals: visibleDeals\.length \? column\.deals : 0, windowHeight, keyboard: keyboardHeight \}\)\}/);
+        expect(src).toMatch(/card=\{keyChange \? \{ peerName: keyChange\.name, change: keyChange, /);
+        // The banner's cap is worked out from the measured column and the box (finding 7), never a share of the window
+        // alone. The column runs from the header's bottom to the keyboard view's bottom, both read in the screen's own
+        // frame, with the page (the card, then the deals strip, the listing's header and the release bar, scrolling as one)
+        // between them; the box is measured whole. Nothing else stands in the column (dm-key-pane-fit-render.test.ts), so
+        // there is no bar to measure (deciding review of 6775428c, finding 1).
+        expect(src).toMatch(/maxHeight=\{dmKeyBannerMaxHeight\(\{ \.\.\.column, windowHeight, keyboard: keyboardHeight \}\)\}/);
+        expect(src).toMatch(/const \[column, setColumn\] = useState\(\{ column: 0, composer: 0 \}\);/);
         // A keyboard already up when the pause starts comes off the banner's room (confirmation 2, finding 5).
         expect(src).toMatch(/const keyboardHeight = useKeyboardState\(s => \(s\.isVisible \? s\.height : 0\)\);/);
         expect(src).not.toMatch(/windowHeight \* 0\.55/);
         expect(src).toMatch(/if \(header > 0 && bottom > header\) setColumn\(\(c\) => \(c\.column === bottom - header \? c : \{ \.\.\.c, column: bottom - header \}\)\);/);
         const header = src.indexOf("<View style={styles.header} onLayout={measuredEdge('header')}>");
-        const banner = src.indexOf('{keyChange && (');
+        const banner = src.indexOf('<DmKeyChangedPane');
         const keyboardView = src.search(/<KeyboardAvoidingView\s+style=\{styles\.keyboardView\}\s+behavior="padding"\s+onLayout=\{measuredEdge\('bottom'\)\}\s*>/);
         expect(header).toBeGreaterThan(-1);
         expect(banner).toBeGreaterThan(header);
@@ -309,7 +312,8 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         // wrapper starting under the header left the box under the keyboard in every DM (1.2.61; chat-keyboard-tree.test.ts).
         expect(src).not.toMatch(/measured\('column'\)/);
         expect(src).not.toMatch(/<\/KeyboardAvoidingView>\s*<\/View>/);
-        expect(src).toMatch(/<View style=\{styles\.dealStrip\} onLayout=\{measured\('deals'\)\}>/);
+        expect(src).toMatch(/<View style=\{styles\.dealStrip\}>/);
+        expect(src).not.toMatch(/measured\('deals'\)/);
         // The box is everything under the thread, measured whole: the edit, about and reply banners over the composer too, so
         // the card's room never counts on space they take (the thread gives way while the card is up; walk of 17 Nov).
         expect(src).toMatch(/<View onLayout=\{measured\('composer'\)\}>\s*\{editingMessage && \(\s*<ChatEditBanner/);
@@ -366,20 +370,20 @@ describe('the card\'s room on a 320 × 533 phone and up (walk of 17 Nov)', () =>
             const windowHeight = p.edgeToEdge ? p.screen : p.screen - p.nav;
             const column = windowHeight - 24 - 64;
             const composer = composerAt[fontScale] + (p.edgeToEdge ? p.nav - 12 : 0);
-            for (const deals of [0, 72]) {
-                const banner = dmKeyBannerMaxHeight({ column, composer, deals, windowHeight });
-                expect(banner + deals + composer, `deals ${deals}`).toBe(column);
-            }
+            // The deals strip, the listing's header and the release bar scroll with the card in this room: they take
+            // nothing off the box (dm-key-pane-fit-render.test.ts).
+            const page = dmKeyBannerMaxHeight({ column, composer, windowHeight });
+            expect(page + composer).toBe(column);
         });
     }
     it('a window too short for the box gives the card what is left, never less than nothing: the box is never cut', () => {
-        expect(dmKeyBannerMaxHeight({ column: 200, composer: 145, deals: 0, windowHeight: 320 })).toBe(55);
-        expect(dmKeyBannerMaxHeight({ column: 120, composer: 145, deals: 0, windowHeight: 320 })).toBe(0);
+        expect(dmKeyBannerMaxHeight({ column: 200, composer: 145, windowHeight: 320 })).toBe(55);
+        expect(dmKeyBannerMaxHeight({ column: 120, composer: 145, windowHeight: 320 })).toBe(0);
     });
     it('before the column is measured (the first frame), 55% of the window less the box, never more', () => {
-        expect(dmKeyBannerMaxHeight({ column: 0, composer: 0, deals: 0, windowHeight: 485 })).toBe(267);
-        expect(dmKeyBannerMaxHeight({ column: 0, composer: 109, deals: 0, windowHeight: 485 })).toBe(158);
-        expect(dmKeyBannerMaxHeight({ column: 0, composer: 109, deals: 0, windowHeight: 485, keyboard: 300 })).toBe(0);
+        expect(dmKeyBannerMaxHeight({ column: 0, composer: 0, windowHeight: 485 })).toBe(267);
+        expect(dmKeyBannerMaxHeight({ column: 0, composer: 109, windowHeight: 485 })).toBe(158);
+        expect(dmKeyBannerMaxHeight({ column: 0, composer: 109, windowHeight: 485, keyboard: 300 })).toBe(0);
     });
     // #1872/#1873 confirmation 2, finding 5: Ana is typing when a sync makes the offer, so a 300-dp keyboard is already up
     // for the moment before the card puts it away (DmKeyChangedPane). The KeyboardAvoidingView pads the column by up to the
@@ -394,13 +398,11 @@ describe('the card\'s room on a 320 × 533 phone and up (walk of 17 Nov)', () =>
     for (const p of withKeyboard) for (const fontScale of [1, 1.2, 1.3] as const) {
         it(`${p.name} at ${fontScale}×, a 300-dp keyboard already up: the box sits above the keyboard, the card has what is left`, () => {
             const column = p.column[fontScale], composer = p.box[fontScale], keyboard = 300;
-            for (const deals of [0, 72]) {
-                const banner = dmKeyBannerMaxHeight({ column, composer, deals, windowHeight: column + 88, keyboard });
-                expect(banner + deals + composer + keyboard, `deals ${deals}`).toBe(column);
-            }
+            const page = dmKeyBannerMaxHeight({ column, composer, windowHeight: column + 88, keyboard });
+            expect(page + composer + keyboard).toBe(column);
             // With the keyboard down the card has the room as without one.
-            expect(dmKeyBannerMaxHeight({ column, composer, deals: 0, windowHeight: column + 88, keyboard: 0 }))
-                .toBe(dmKeyBannerMaxHeight({ column, composer, deals: 0, windowHeight: column + 88 }));
+            expect(dmKeyBannerMaxHeight({ column, composer, windowHeight: column + 88, keyboard: 0 }))
+                .toBe(dmKeyBannerMaxHeight({ column, composer, windowHeight: column + 88 }));
         });
     }
 });

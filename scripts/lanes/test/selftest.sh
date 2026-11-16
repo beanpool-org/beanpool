@@ -751,11 +751,11 @@ check "a long first build may push early"        brief_has brief-NOPR-CONTINUE "
 check "a run about to end pushes what it has"    brief_has brief-NOPR-CONTINUE "a run about to end must push what it has"
 check "the brief says it overrides the rules' one-push line" brief_has brief-NOPR-CONTINUE "this takes precedence over any one-push line in the rules below"
 check "locally only the one file or suite; the whole-app checks go to GitHub" eval 'brief_has brief-NOPR-CONTINUE "Locally run only the ONE test file or ONE suite" && brief_has brief-NOPR-CONTINUE "GitHub CI runs all of them on every push to a PR, drafts included"'
-check "a draft PR when there is none, on the lane's base" brief_has brief-NOPR-CONTINUE "open it as a DRAFT (gh pr create --draft --base main --head <branch>)"
+check "a draft PR when there is none, on the lane's repo and base" brief_has brief-NOPR-CONTINUE "open it as a DRAFT (gh pr create -R example/fake --draft --base main --head <branch>)"
 check "the wait names this library's ci-wait.sh, and it is there to run" eval 'brief_has brief-NOPR-CONTINUE "$LANE_DIR/ci-wait.sh <PR>" && [ -x "$LANE_DIR/ci-wait.sh" ]'
 check "... with every exit code it can give"     brief_has brief-NOPR-CONTINUE "exit 2 = pending, call it again; 0 = green; 1 = red, with the failing lines; 3 = the head moved"
 check "a whole-app check goes through this library's tsc-slot.sh, and it is there to run" eval 'brief_has brief-NOPR-CONTINUE "$LANE_DIR/tsc-slot.sh <command>" && [ -x "$LANE_DIR/tsc-slot.sh" ]'
-check "green, or only reds not caused here: preflight, then ready; never ready on a red it caused" eval 'brief_has brief-NOPR-CONTINUE "run bash scripts/lanes/preflight.sh, then gh pr ready <PR> if it is a draft" && brief_has brief-NOPR-CONTINUE "Never mark it ready while a red you caused stands"'
+check "green, or only reds not caused here: preflight, then ready; never ready on a red it caused" eval 'brief_has brief-NOPR-CONTINUE "run bash scripts/lanes/preflight.sh, then gh pr ready <PR> -R example/fake if it is a draft" && brief_has brief-NOPR-CONTINUE "Never mark it ready while a red you caused stands"'
 check "a red it did not cause is named, not chased" brief_has brief-NOPR-CONTINUE "name it in the PR body as 'red not caused here'"
 for r in "$LANE_AGY_RULES" "$LANE_CLAUDE_RULES"; do
   check "${r:t} sets the rule and its reason"    eval 'grep -qF "ONE PUSH PER FIX ROUND" "$r" && grep -qF "each push cancels and restarts" "$r"'

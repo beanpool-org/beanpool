@@ -52,7 +52,11 @@
  *      server; A then B after a take-over, its copy current / from before / its clock 10 minutes behind; a take-over and
  *      take-back between) x (arriving in the order made, reversed) -> what the two in the order made leave, the newest word
  *      on where the guest stands winning; 16b a counter that is no positive whole number: 400; 16c a withdrawn invitation
- *      never comes back; 16d a newer invitation to someone in that can't be held: out all the same; 16r a home restored
+ *      never comes back; 16d a newer invitation to someone in that can't be held: out all the same; 16o (G2 round 2) out of
+ *      the group however it comes (the host's removal, a newer invitation held, one refused so only its counter speaks,
+ *      their leave) x (held: line, edit with words, takedown) x (device: fetched it, not) -> each device told it is out
+ *      (but after its own leave), no words kept, a takedown still served to the device that did not fetch it; 16f every
+ *      branch that holds a notice -> the answered flag stored is the allowance it was checked against; 16r a home restored
  *      from an older snapshot: (line, edit, takedown, epoch, roster, removal,
  *      invitation held) x (a restore's notice, a roll-back's, an unreadable one) -> no line or edit is held after the boot
  *      (takedowns stay), and the boot wires it
@@ -1447,6 +1451,104 @@ async function main(): Promise<void> {
         const r = await notice('b.example', { v: 1, kind: 'invite', group: g, host: 'b.example', guests: [gus.pk], seq: t + 5, data: DATA.invite });
         assert(r.status === 202 && heldBefore && standing16(g) === 'out' && !lineHeld16(g, L),
             `16d. a newer invitation to someone in, past the invitations they may have waiting: out all the same, nothing of the group held (${standing16(g)}, L ${lineHeld16(g, L) ? 'held' : 'gone'})`);
+    }
+
+    // ── 16o. Out of the group, however it comes (G2 round 2, #3253 review: :339 and :344) ───────────
+    // A removal this server WORKS OUT (from a newer invitation to someone in, held or refused so only its counter speaks)
+    // does exactly what the host's own removal does: every device is told it is out (a `removed` notice, before the new
+    // invitation), held words go, and a held TAKEDOWN stays for the device that still shows the line. Their own leave drops
+    // the words and keeps the takedown too (their device sent it, so no notice). Each row: a member with two devices listed,
+    // one held notice of the group (a line, an edit with new words, a takedown) that the phone fetched and confirmed and the
+    // tablet did not; then the removal arrives; what each device is served next is pinned.
+    console.log('\n16o. Close the class: (how they go out: the host\'s removal, a newer invitation held, a newer invitation refused, their leave) x (held: line, edit with words, takedown) x (device: fetched it, not) -> what each device is served');
+    const ARRIVE16O = ["the host's removal", 'a newer invitation, held', 'a newer invitation that cannot be held (only its counter)', 'their leave taken'] as const;
+    const HELD16O = ['a line', 'an edit with new words', 'a takedown'] as const;
+    const DEV16O = ['phone (fetched it)', 'tablet (did not)'] as const;
+    type Arrive16o = (typeof ARRIVE16O)[number];
+    type Held16o = (typeof HELD16O)[number];
+    const LINK16O: Record<Arrive16o, string> = {
+        "the host's removal": 'removed', 'a newer invitation, held': 'invited', 'a newer invitation that cannot be held (only its counter)': 'removed', 'their leave taken': 'left',
+    };
+    /** What each device is served next, by (how they go out) and (what was held): the phone's, then the tablet's. */
+    const SERVED16O = (a: Arrive16o, h: Held16o): [string, string] => {
+        const out = a === 'their leave taken' ? '' : a === 'a newer invitation, held' ? 'removed(removed) invite' : 'removed(removed)';
+        const kept = h === 'a takedown' ? 'takedown' : '';
+        return [out || 'nothing', [kept, out].filter(Boolean).join(' ') || 'nothing'];
+    };
+    const served16o = (items: any[]) => items.map((i) => (i.kind === 'edit' ? (i.data?.action === 'removed' ? 'takedown' : 'edit') : i.kind === 'removed' ? `removed(${i.data?.why})` : i.kind)).join(' ') || 'nothing';
+    let r16o = 0;
+    for (const a of ARRIVE16O) for (const hk of HELD16O) {
+        const h = await held15(`o16-${++r16o}`);
+        // The held notice under test, alone: for an edit or a takedown, the line itself first reaches both devices (and goes).
+        if (hk !== 'a line') {
+            await h.confirm(h.phone);
+            await h.confirm(h.tablet);
+            await h.tell('edit', hk === 'a takedown' ? { id: h.id, action: 'removed', by: 'convenor' } : h.editOf(h.marks.edited));
+        }
+        const heldBefore = heldCount(h.who, 'b.example', h.g);
+        await h.confirm(h.phone);
+        const s = Date.now();
+        if (a === 'their leave taken') await send(h.who, [await item(h.who, 'group-leave', h.g, JSON.stringify({ v: 1 }))]);
+        else if (a === "the host's removal") await h.tell('removed', { why: 'removed' });
+        else {
+            const data = a === 'a newer invitation, held' ? DATA.invite : { ...(DATA.invite as object), name: 'x'.repeat(home.GROUP_INVITE_MAX_CHARS as number) };
+            await notice('b.example', { v: 1, kind: 'invite', group: h.g, host: 'b.example', guests: [h.who.pk], seq: s, data });
+        }
+        const carries = (b: string) => [h.marks.words, h.marks.photo, h.marks.edited].some((k) => b.includes(k));
+        const wordsKept = h.bodies().filter(carries).length;
+        const link = linkOf(h.who, 'b.example', h.g)?.state ?? 'none';
+        const got: [string, string] = [served16o(await h.itemsOn(h.phone)), served16o(await h.itemsOn(h.tablet))];
+        const want = SERVED16O(a, hk);
+        const setupOk = h.ok && heldBefore === 1;
+        DEV16O.forEach((d, i) => assert(setupOk && wordsKept === 0 && link === LINK16O[a] && got[i] === want[i],
+            `16o. ${a} x ${hk} x ${d}: the link ${LINK16O[a]}, no words kept, served: ${want[i]} (got ${got[i]}; link ${link}; words kept ${wordsKept}${setupOk ? '' : `; setup failed, held ${heldBefore}`})`));
+    }
+    assert(r16o === ARRIVE16O.length * HELD16O.length, `16o. the table has a row for every way out x every held notice (${r16o} rows, x ${DEV16O.length} devices)`);
+
+    // Each held notice is stored under the allowance it was checked against, worked out from where it leaves them (#3253
+    // :344): the allowance it counts in (and the trim of settleGroupMailFor) is the one that let it in.
+    console.log('\n16f. Close the class: every branch that holds a notice -> the answered flag stored with each, from where it leaves them');
+    const FLAG16F: Array<[string, string, string]> = [
+        ['a first invitation', 'none', 'invite:0'],
+        ['a newer invitation to someone in, held', 'in', 'removed:1 invite:0'],
+        ['a newer invitation to someone in, refused (only its counter)', 'in', 'removed:1'],
+        ["the host's removal of someone in", 'in', 'removed:1'],
+        ['an invitation withdrawn (a removal of someone invited)', 'invited', 'removed:0'],
+        ['a roster to someone in', 'in', 'roster:1'],
+        ['a line to someone in', 'in', 'line:1'],
+        ['an edit to someone in', 'in', 'edit:1'],
+        ['an epoch to someone in', 'in', 'epoch:1'],
+    ];
+    let r16f = 0;
+    for (const [branch, from, want] of FLAG16F) {
+        const who = addLocal(`F16-${++r16f}`);
+        const g = `g16f-${r16f}`;
+        if (from !== 'none') setLink(who, 'b.example', g, from);
+        const s = Date.now();
+        const tell = (kind: string, data: unknown, seq?: number) => notice('b.example', { v: 1, kind, group: g, host: 'b.example', guests: [who.pk], ...(seq ? { seq } : {}), data });
+        if (branch.includes('invitation') && !branch.includes('withdrawn')) {
+            await tell('invite', branch.includes('refused') ? { ...(DATA.invite as object), name: 'x'.repeat(home.GROUP_INVITE_MAX_CHARS as number) } : DATA.invite, s);
+        } else if (branch.includes('removal')) await tell('removed', { why: 'removed' }, s);
+        else {
+            const k = branch.split(' ')[1];
+            await tell(k, k === 'roster' ? { ...(DATA.roster as object), guests: [{ key: who.pk, home: 'a.example', name: 'F' }] } : DATA[k], k === 'roster' ? s : undefined);
+        }
+        const got = (db.prepare('SELECT kind, answered FROM group_guest_mail WHERE member = ? AND group_id = ? ORDER BY received_at, rowid').all(who.pk, g) as Array<{ kind: string; answered: number }>)
+            .map((r) => `${r.kind}:${r.answered}`).join(' ') || 'nothing';
+        assert(got === want, `16f. ${branch}: held as ${want} (got ${got})`);
+    }
+    // The consequence the flag had: the re-invitation now counts towards the invitations that host may have waiting.
+    {
+        const who = addLocal('F16-count');
+        const t = Date.now();
+        setLink(who, 'b.example', 'g16f-count-in', 'in');
+        await notice('b.example', { v: 1, kind: 'invite', group: 'g16f-count-in', host: 'b.example', guests: [who.pk], seq: t, data: DATA.invite });
+        for (let i = 1; i < (home.GROUP_INVITES_WAITING_PER_HOST as number); i++) {
+            await notice('b.example', { v: 1, kind: 'invite', group: `g16f-count-${i}`, host: 'b.example', guests: [who.pk], seq: t, data: DATA.invite });
+        }
+        const counted = (db.prepare("SELECT COUNT(*) FROM group_guest_mail WHERE member = ? AND host = 'b.example' AND answered = 0").pluck().get(who.pk) as number);
+        assert(counted === (home.GROUP_INVITES_WAITING_PER_HOST as number),
+            `16f. a re-invitation counts towards the ${home.GROUP_INVITES_WAITING_PER_HOST} invitations a host may have waiting (counted ${counted})`);
     }
 
     // ── 16r. A home restored from an older snapshot (G2) ──────────────────────────────────────

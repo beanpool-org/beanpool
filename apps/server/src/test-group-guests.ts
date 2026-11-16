@@ -1056,6 +1056,29 @@ async function main(): Promise<void> {
         && !keysTO.body?.roster?.includes(tx.pk),
         `18x. after a take-over, a no from a guest who is in is their leave: left, out of the key roster, and the other home gets the roster without them (got ${stateOf(TO, tx)}, ${rosterTO.map((o) => o.home)})`);
 
+    // An edit has its line's audience: a guest in now, who was not when the line was sealed, hears nothing of it.
+    const AU = createGroup({ name: 'Audience', joinPolicy: 'open', createdBy: ana.pk }).id;
+    const au1 = epochBy(ana, AU, 1, 'start', [ana]);
+    await call('POST', ana, `/api/groups/${AU}/keys/epoch`, { epoch: au1.record });
+    const oldLine = lineIn(ana, AU, au1.groupKey, 1);
+    await call('POST', ana, `/api/groups/${AU}/chat/message`, oldLine);
+    const late = newId('Late');
+    await call('POST', ana, `/api/groups/${AU}/guests`, { card: await cardOf(late, 'a.example') });
+    await bring([await item(late, 'a.example', `group:${AU}`, 'group-invite', yes)]);
+    const au2 = epochBy(ana, AU, 2, 'rotate', [ana, late]);
+    const au2Stored = await call('POST', ana, `/api/groups/${AU}/keys/epoch`, { epoch: au2.record });
+    const newLine = lineIn(ana, AU, au2.groupKey, 2);
+    await call('POST', ana, `/api/groups/${AU}/chat/message`, newLine);
+    await settle();
+    const tAU = Date.now();
+    await call('POST', ana, '/api/messages/edit', { messageId: oldLine.clientId, ...sealGroupLine('old, edited', { myEdPrivHex: ana.seedHex, groupKey: au1.groupKey, groupId: AU, epoch: 1, messageId: oldLine.clientId }), metadata: { epoch: 1 } });
+    await call('POST', ana, '/api/messages/delete', { messageId: oldLine.clientId });
+    await call('POST', ana, '/api/messages/edit', { messageId: newLine.clientId, ...sealGroupLine('new, edited', { myEdPrivHex: ana.seedHex, groupKey: au2.groupKey, groupId: AU, epoch: 2, messageId: newLine.clientId }), metadata: { epoch: 2 } });
+    await settle();
+    const editsAU = outsOf('edit', tAU).filter((o) => o.body.group === AU).map((o) => o.body.data.id);
+    assert(au2Stored.status === 201 && stateOf(AU, late) === 'in' && JSON.stringify(editsAU) === JSON.stringify([newLine.clientId]),
+        `18w. a guest in since epoch 2 hears of the edit of a line under epoch 2 only: not the edit or delete of one from epoch 1, before them (got ${JSON.stringify(editsAU)})`);
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ A guest from another community reads and writes one group\'s chat, through their own server, and nothing else.');

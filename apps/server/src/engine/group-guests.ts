@@ -518,7 +518,9 @@ export function fanOutGroupLine(groupId: string, messageId: string, author: stri
  * A line of the chat edited, or taken down (its author's delete, a convenor's removal: engine/group-thread.ts
  * broadcastGroupChatUpdate, as members hear it): one `edit` request to each home with guests in, the line's author's
  * included. An edit carries the line as members now read it (sealed again under the line's own epoch); a line taken down
- * carries only its id and who took it down, as its tombstone says (`author` or `convenor`), never its words.
+ * carries only its id and who took it down, as its tombstone says (`author` or `convenor`), never its words. An edit has
+ * its line's audience: only guests wrapped the line's epoch hear of it (as a member who joined since never does,
+ * group-thread.ts groupLineHearers), so a guest in now hears nothing of a line from before they were.
  */
 export function fanOutGroupLineChange(groupId: string, messageId: string): void {
     if (!groupGuestsOn()) return;
@@ -528,10 +530,16 @@ export function fanOutGroupLineChange(groupId: string, messageId: string): void 
         .get(messageId, groupId) as { id: string; author_pubkey: string; ciphertext: string; nonce: string; type: string; metadata: string | null; edited_at: string | null } | undefined;
     if (!row || row.type === 'system') return;
     const meta = parsePayload(row.metadata ?? '') ?? {};
+    const epoch = typeof meta.epoch === 'number' && Number.isSafeInteger(meta.epoch) ? meta.epoch : null;
+    if (epoch === null) return;
     const data = row.type === 'removed'
         ? { id: row.id, action: 'removed', by: meta.removedBy === row.author_pubkey ? 'author' : 'convenor' }
         : { id: row.id, action: 'edited', author: row.author_pubkey, ciphertext: row.ciphertext, nonce: row.nonce, metadata: meta, editedAt: row.edited_at };
-    for (const [home, keys] of homes) queueToHome(groupId, home, keys, 'edit', data);
+    const wrapped = db.prepare('SELECT 1 FROM group_key_wraps WHERE group_id = ? AND epoch = ? AND recipient_pubkey = ? AND rejected_at IS NULL');
+    for (const [home, keys] of homes) {
+        const heard = keys.filter((k) => wrapped.get(groupId, epoch, k));
+        if (heard.length) queueToHome(groupId, home, heard, 'edit', data);
+    }
     flushSoon();
 }
 

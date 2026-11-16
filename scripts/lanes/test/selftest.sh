@@ -773,7 +773,7 @@ check "the second brief's CONTINUE"              says_once "$FAKE_STATE/brief-NO
 check "a long first build may push early"        brief_has brief-NOPR-CONTINUE "first build may still push early"
 check "a run about to end pushes what it has"    brief_has brief-NOPR-CONTINUE "a run about to end must push what it has"
 check "the brief says it overrides the rules' one-push line" brief_has brief-NOPR-CONTINUE "this takes precedence over any one-push line in the rules below"
-check "locally only the one file or suite; the whole-app checks go to GitHub" eval 'brief_has brief-NOPR-CONTINUE "Locally run only the ONE test file or ONE suite" && brief_has brief-NOPR-CONTINUE "GitHub CI runs all of them on every push to a PR, drafts included"'
+check "locally only the one file or suite; the whole-app checks go to GitHub" eval 'brief_has brief-NOPR-CONTINUE "Locally run only the ONE test file or ONE suite" && brief_has brief-NOPR-CONTINUE "GitHub CI runs them on the PR: a draft gets a fast check" && brief_has brief-NOPR-CONTINUE "that starts the full run"'
 check "a draft PR when there is none, on the lane's repo and base" brief_has brief-NOPR-CONTINUE "open it as a DRAFT (gh pr create -R example/fake --draft --base main --head <branch>)"
 check "the wait names this library's ci-wait.sh, and it is there to run" eval 'brief_has brief-NOPR-CONTINUE "$LANE_DIR/ci-wait.sh <PR>" && [ -x "$LANE_DIR/ci-wait.sh" ]'
 check "... ALWAYS with the sha just pushed, \$(git rev-parse HEAD) left for the stage's shell (#3257 round 2)" eval 'brief_has brief-NOPR-CONTINUE "$LANE_DIR/ci-wait.sh <PR> \$(git rev-parse HEAD) (ALWAYS pass the sha you just pushed" && brief_has brief-NOPR-CONTINUE "push, and wait again with the new sha"'

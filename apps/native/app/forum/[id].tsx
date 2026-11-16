@@ -22,11 +22,12 @@
  *   is read again, so a chip is only ever the node's answer.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { leaveScreen } from '../../utils/leave-screen';
+import { useAfterDismiss } from '../../utils/screen-presented';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { FORUM_LIMITS, currentLanguage, forumSectionName, t, timeAgo } from '@beanpool/core';
@@ -72,6 +73,14 @@ export default function ForumTopicScreen() {
     const [menu, setMenu] = useState<Menu>(null);
     const [reporting, setReporting] = useState<ForumPost | null>(null);
     const [picking, setPicking] = useState(false);
+    // A ⋯ row that opens another Modal (the Link picker, Report): on iOS a Modal can't open while the menu is still closing
+    // (UIKit drops it; React Native never retries, utils/screen-presented.ts), so there it opens once the menu has gone.
+    const afterMenu = useAfterDismiss<() => void>((open) => open());
+    const closeMenuThen = (open: () => void) => {
+        setMenu(null);
+        if (Platform.OS === 'ios') afterMenu.hold(open);
+        else open();
+    };
     const [quote, setQuote] = useState<ForumPost | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -282,7 +291,7 @@ export default function ForumTopicScreen() {
             if (open && (topic.writer.publicKey === me || front?.moderator)) items.push([t(TOPIC_WORDS.close), () => void act(() => closeForumTopic(topic.id))]);
             // Only its writer links (the node refuses anyone else) and makes a Need of it (design §10.2, §10.4).
             if (topic.writer.publicKey === me && !topic.removed) {
-                items.push([t(LINK_WORDS.link), () => { setMenu(null); setPicking(true); }]);
+                items.push([t(LINK_WORDS.link), () => closeMenuThen(() => setPicking(true))]);
                 items.push([t(LINK_WORDS.makeNeed), () => {
                     setMenu(null);
                     handNeedSeed(needSeedFrom(topic.id, topic.title, opening?.words ?? ''));
@@ -312,7 +321,7 @@ export default function ForumTopicScreen() {
         const items: ForumMenuItem[] = [];
         if (open && !post.removed && post.words) items.push([t(TOPIC_WORDS.reply), () => { setQuote(post); setMenu(null); composer.current?.focus(); }]);
         if (post.words) items.push([t(TOPIC_WORDS.copy), () => { void Clipboard.setStringAsync(post.words).catch(() => {}); setMenu(null); }]);
-        if (!mine && !post.removed) items.push([t(TOPIC_WORDS.report), () => { setReporting(post); setMenu(null); }]);
+        if (!mine && !post.removed) items.push([t(TOPIC_WORDS.report), () => closeMenuThen(() => setReporting(post))]);
         if (!mine) items.push([t(TOPIC_WORDS.block, { name: name(post) }), () => setMenu({ ...m, confirm: 'block' }), true]);
         if (mine && !post.removed) items.push([t(TOPIC_WORDS.remove), () => setMenu({ ...m, confirm: 'remove' }), true]);
         items.push([t(TOPIC_WORDS.cancel), () => setMenu(null)]);
@@ -408,7 +417,8 @@ export default function ForumTopicScreen() {
                     </View>
                 )}
             </KeyboardAvoidingView>
-            <ForumMenu label={menu?.kind === 'post' ? t(TOPIC_WORDS.postMenu) : t(TOPIC_WORDS.topicMenu)} items={menu ? menuItems(menu) : null} onClose={() => setMenu(null)} />
+            <ForumMenu label={menu?.kind === 'post' ? t(TOPIC_WORDS.postMenu) : t(TOPIC_WORDS.topicMenu)} items={menu ? menuItems(menu) : null} onClose={() => setMenu(null)}
+                onDismiss={afterMenu.release} />
             <ForumLinkPicker open={picking && !!topic} me={me} linked={(topic?.links ?? []).flatMap((l) => (l.shown ? [l.id] : []))} onClose={() => setPicking(false)}
                 onPick={(kind, targetId, on) => { setPicking(false); if (topic) void act(() => linkForumTarget(topic.id, kind, targetId, on)); }} />
             <ReportMessageSheet isOpen={!!reporting} photo={false} title={t(TOPIC_WORDS.reportTitle)} note={t(TOPIC_WORDS.reportNote)} onClose={() => setReporting(null)}

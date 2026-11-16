@@ -163,7 +163,7 @@ const shown = (kind: ForumLink['kind'], id: string, title: string, over: Partial
 const hidden = (kind: ForumLink['kind']): ForumLink => ({ kind, shown: false });
 
 /**
- * The link-kind table: the web's rows (one per kind of thing a topic links, shown, then each as a placeholder) -> what the chip
+ * The link-kind table: one row per kind of thing a topic links (#3237's kinds), shown, then each as a placeholder -> what the chip
  * says, where a tap opens. A placeholder opens nothing and says its kind alone.
  */
 const TABLE: { name: string; link: ForumLink; words: string; opens: unknown }[] = [

@@ -31,7 +31,6 @@ import { reportAbuse, signedGet, signedRequestWithMethod } from '../../utils/db'
 // The page has a text field (the out-of-date note), so its alerts close the keyboard first (utils/keyboard-alert.ts).
 import { Alert } from '../../utils/keyboard-alert';
 import { useLearnMode } from '../../utils/use-learn-mode';
-import { useShowcaseMode } from '../../utils/use-reader-features';
 import { reportedAlertBody } from '../../utils/reportReasons';
 import { signedRequestWords } from '../signed-request-lines';
 import { LANGUAGE_NAMES } from '../../utils/language-choice';
@@ -90,7 +89,11 @@ export function KnowledgeMissing({ settled }: { settled: boolean }) {
     );
 }
 
-export function KnowledgeDetail({ page: held }: { page: KnowledgePage }) {
+/**
+ * `beansLive`: Beans are live for this member here (not off, not the worldwide preview), which the route reads
+ * (app/post/[id].tsx): only then is "🫘 Thank {name}" offered (K8).
+ */
+export function KnowledgeDetail({ page: held, beansLive = false }: { page: KnowledgePage; beansLive?: boolean }) {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { identity } = useIdentity();
@@ -114,7 +117,6 @@ export function KnowledgeDetail({ page: held }: { page: KnowledgePage }) {
     const acts = pageActions({ signedIn: !!identity?.publicKey, live, own, checks, outdated: !!page.knowledge?.outdatedAt });
     // Thank (K8, §2.10): where Beans are live for this member, on a page with a writer that isn't theirs and wasn't gathered with
     // the assistant. It opens the Ledger's Send form; whether they can send yet is the form's to say, in today's words.
-    const beansLive = useShowcaseMode('beans') === 'live';
     const thank = knowledgeThankOffered({ signedIn: !!identity?.publicKey, live, beansLive, own, gathered: !!page.knowledge?.gathered, writer: page.authorPublicKey });
     // The writer's Local guide badge (K8): only a signed read of the page by id says, worked out now (the copy never holds one).
     const [writerGuide, setWriterGuide] = useState(false);

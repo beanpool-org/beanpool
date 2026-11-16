@@ -16,6 +16,8 @@ export function ForumLabelRow({ myName }: { myName: string }) {
     const [mine, setMine] = useState<PhoneCommunity[]>([]);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    /** The address picked in this visit: its record may not know the community's server key yet. */
+    const [picked, setPicked] = useState<string | null>(null);
 
     useEffect(() => {
         let alive = true;
@@ -31,16 +33,18 @@ export function ForumLabelRow({ myName }: { myName: string }) {
         setError(null);
         const done = await setForumLabel(choice);
         setBusy(false);
-        if (done.ok) setState(done.state);
-        else setError(done.error);
+        if (!done.ok) { setError(done.error); return; }
+        setState(done.state);
+        setPicked(choice.show === 'community' ? choice.address : null);
     }
 
     const chosenKey = state.show === 'community' ? state.community?.key ?? null : null;
+    const isChosen = (c: PhoneCommunity) => !!chosenKey && (c.key === chosenKey || (!c.key && c.address === picked));
     // The community chosen when this phone doesn't keep it (picked on the web): shown, chosen, so the choice is never hidden.
-    const elsewhere = chosenKey && !mine.some((c) => c.key === chosenKey) ? state.community?.name ?? null : null;
+    const elsewhere = chosenKey && !mine.some(isChosen) ? state.community?.name ?? null : null;
     const options: Array<{ id: string; label: string; on: boolean; choice: ForumLabelChoice | null }> = [
         { id: 'none', label: t(FORUM_LABEL_WORDS.none), on: state.show === 'none', choice: { show: 'none' } },
-        ...mine.map((c) => ({ id: c.address, label: c.name, on: !!chosenKey && c.key === chosenKey, choice: { show: 'community' as const, address: c.address } })),
+        ...mine.map((c) => ({ id: c.address, label: c.name, on: isChosen(c), choice: { show: 'community' as const, address: c.address } })),
         ...(elsewhere ? [{ id: 'elsewhere', label: elsewhere, on: true, choice: null }] : []),
         { id: 'waiting', label: t(FORUM_LABEL_WORDS.waiting), on: state.show === 'waiting', choice: { show: 'waiting' } },
     ];

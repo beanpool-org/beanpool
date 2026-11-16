@@ -148,6 +148,14 @@ describe('what the forum already holds', () => {
         expect(forum.chosen).toEqual([]);
     });
 
+    it('a community whose server key this phone doesn\'t know yet: picked, it is the one ticked, never drawn twice', async () => {
+        forum.mine = [{ address: 'https://hillside.example', name: 'Hillside', key: null }];
+        await draw();
+        await tap(radios()[1]);
+        expect(forum.chosen).toEqual([{ show: 'community', address: 'https://hillside.example' }]);
+        expect(radios().map((r) => r.textContent)).toEqual(['Don’t show', '✓Hillside', 'I’m waiting to join one']);
+    });
+
     it('a note that ran out: chosen still, the design\'s words, no line', async () => {
         forum.state = { ...atHillside, label: null, why: 'expired' };
         await draw();

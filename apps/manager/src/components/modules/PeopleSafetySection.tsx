@@ -695,7 +695,8 @@ export function PeopleSafetySection({
                                             <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
                                                 {report.forumPost && !report.forumPost.removed && report.id && getOutcome(report) === 'open' && (
                                                     <>
-                                                        {report.forumPost.hidden && (
+                                                        {/* The node's answer for this person (`restorable`): a post on hold is an owner's or an admin's to put back. */}
+                                                        {report.restorable === true && (
                                                             <button
                                                                 onClick={() => void handleForumPost(report, 'restore')}
                                                                 disabled={removingReportId === report.id}

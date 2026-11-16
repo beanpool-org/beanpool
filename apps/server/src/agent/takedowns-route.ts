@@ -11,6 +11,9 @@
  *   the owner's fresh proof, as "Remove its posts" does, and never goes past a deal in escrow or an open Child safety report: nobody
  *   reads a post on that tap, so each of those is a person's, one at a time.
  * - Put back asks no more than that: it is the undo of a stolen token's day, and has to be one tap.
+ * - The forum's too (slice F2b, engine/forum-takedowns.ts): `forumTakedowns` lists them, one post a call, and Put back takes a forum
+ *   post's id as `postId` (state-engine putBackTakedowns puts back either kind, and both for a grant since a time). There is no
+ *   Remove now for one: a moderator removes it through its report, or the sweep does at 7 days.
  */
 import Router from '@koa/router';
 import type { RouteDeps } from '../routes/types.js';
@@ -18,6 +21,7 @@ import { requireAdminRole, requireFreshProof } from '../admin-auth.js';
 import { logger } from '../logger.js';
 import { putBackTakedowns } from '../state-engine.js';
 import { listTakedowns, removeTakedownNow, TAKEDOWN } from '../engine/agent-takedowns.js';
+import { listForumTakedowns } from '../engine/forum-takedowns.js';
 import { cleanMemberText } from './fence.js';
 
 const ROLE_ERROR = 'Only an owner or an admin of this node can see what AI assistants took down';
@@ -53,6 +57,10 @@ export function createTakedownRoutes(deps: RouteDeps): Router {
             takedowns: listTakedowns().map((t) => ({
                 ...t, grantName: cleanMemberText(t.grantName, 60), member: cleanMemberText(t.member ?? '', 60) || null, why: cleanMemberText(t.why, TAKEDOWN.whyMax),
                 posts: t.posts.map((p) => ({ ...p, title: cleanMemberText(p.title ?? '', 120) || null, author: cleanMemberText(p.author ?? '', 60) || null })),
+            })),
+            forumTakedowns: listForumTakedowns().map((t) => ({
+                ...t, grantName: cleanMemberText(t.grantName, 60), member: cleanMemberText(t.member ?? '', 60) || null, why: cleanMemberText(t.why, TAKEDOWN.whyMax),
+                post: { ...t.post, topicTitle: cleanMemberText(t.post.topicTitle ?? '', 120) || null, writer: cleanMemberText(t.post.writer ?? '', 60) || null },
             })),
         };
     });

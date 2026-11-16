@@ -447,11 +447,12 @@ export function undoBurstHide(cb: ModerationNoticeCallbacks, actionId: string, n
             touched.run(at, p.id);
             back.push({ id: p.id, author: p.author_status === 'pruned' ? null : p.author_pubkey, live: p.active === 1 && p.status !== 'cancelled' });
         }
-        // Its forum posts that still carry its stamp: shown again, unless reports would hide one now (the header).
+        // Its forum posts that still carry its stamp: shown again, unless reports would hide one now (the header). Not one an
+        // assistant took down since (engine/forum-takedowns.ts): that waits for a person, whose Put back weighs this undo then.
         const forumPosts = db.prepare(`SELECT fp.id, fp.topic_id, fp.number, fp.writer_pubkey, fp.removed_by, m.status AS author_status
                                          FROM burst_action_forum_posts bp JOIN forum_posts fp ON fp.id = bp.post_id
                                          LEFT JOIN members m ON m.public_key = fp.writer_pubkey
-                                        WHERE bp.action_id = ? AND fp.hidden_by_reports_at = ?`)
+                                        WHERE bp.action_id = ? AND fp.hidden_by_reports_at = ? AND (fp.taken_down_at IS NULL OR fp.removed_by IS NOT NULL)`)
             .all(actionId, action.at) as { id: string; topic_id: string; number: number; writer_pubkey: string; removed_by: string | null; author_status: string | null }[];
         const reportedForum = db.prepare(`SELECT 1 FROM abuse_reports WHERE target_forum_post_id = ? AND (status = 'pending' OR status IS NULL) LIMIT 1`);
         const showForum = db.prepare('UPDATE forum_posts SET hidden_by_reports_at = NULL WHERE id = ? AND hidden_by_reports_at = ?');

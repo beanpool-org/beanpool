@@ -795,7 +795,8 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
     it('Make main is not offered where it can only be refused: the server says so of the row', async () => {
         const row = (over: Record<string, unknown>) => ({ address: 'other.beanpool.org', source: 'registrar' as const, today: 0, busiestDay: 0, ...over }) as Parameters<typeof offersMakeMain>[0];
         expect(offersMakeMain(row({}), 'byron.beanpool.org')).toBe(true);
-        // A name with no route (paused, stopped, waiting), another key's name, a number beside a name: the server's word.
+        // A name with no route (paused, stopped, waiting), another key's name, a number beside a name: the server's word
+        // (mainAddressRefusal; another key's name while the record still says live since S6 round 2: test-address-list 6b).
         expect(offersMakeMain(row({ mainRefusal: 'other.beanpool.org has no route yet (waiting for approval, or paused). It can be made main once it is live.' }), 'byron.beanpool.org')).toBe(false);
         // Neither a former nor a lost name is on the list members' phones follow.
         expect(offersMakeMain(row({ former: true }), 'byron.beanpool.org')).toBe(false);

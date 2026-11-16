@@ -206,6 +206,40 @@ describe('Addresses S6: Make main, around the table', () => {
         expect(screen.queryByTestId('addresses-way-back')).not.toBeInTheDocument();
     });
 
+    // S6 round 2 (#3240's deciding review): the server refuses Make main on a name the address service says another community
+    // holds, while the record still says live (apps/server engine/own-addresses.ts mainAddressRefusal; test-address-list 6b,
+    // test-rename-main-name section 9). These are its words, as the report and /main both give them; the manager adds none.
+    const HELD_ELSEWHERE = (a: string) => `The address service says another community holds ${a}, so it can't be the main address: new members and invites sent there could reach that community instead.`;
+
+    it('a BeanPool name another community holds (the server\'s word on the row) offers no Make main and is no way back', async () => {
+        const heldElsewhere: AppAddress = {
+            ...ROW.beanpool,
+            standing: { state: 'at-risk', registrarSays: 'other', releasedOn: null, acceptedUntil: null, leadsHere: false, lostSince: null, why: null, checkedAt: '2026-11-16T06:00:00.000Z' },
+            mainRefusal: HELD_ELSEWHERE(ROW.beanpool.address),
+        };
+        expect(offersMakeMain(heldElsewhere, MAIN['own domain'].address)).toBe(false);
+        stubNode(reportOf('own domain', [heldElsewhere, ROW.domain]), () => [200, {}]);
+        render(<AddressesPanel activeNode={node} />);
+        await screen.findByTestId('address-row-riverside.beanpool.org');
+        expect(screen.queryByTestId('make-main-btn-riverside.beanpool.org')).not.toBeInTheDocument();
+        expect(screen.getByTestId('make-main-btn-coop.example.org')).toBeInTheDocument();
+        expect(screen.queryByTestId('addresses-way-back')).not.toBeInTheDocument();
+    });
+
+    it('the address service turned while the screen was open: the press shows the server\'s sentence as it is, never success', async () => {
+        const report = reportOf('own domain', [ROW.beanpool]);
+        const sentence = HELD_ELSEWHERE(ROW.beanpool.address);
+        const { posts } = stubNode(report, () => [409, { code: 'not_main_able', error: sentence }]);
+        render(<AddressesPanel activeNode={node} />);
+        fireEvent.click(await screen.findByTestId('make-main-btn-riverside.beanpool.org'));
+        fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Make main' }));
+        const message = await screen.findByTestId('addresses-action-message');
+        expect(message).toHaveTextContent(sentence);
+        expect(message).not.toHaveTextContent('is now the main address');
+        expect(posts).toEqual([{ path: '/api/local/admin/app-addresses/main', body: { address: 'riverside.beanpool.org' } }]);
+        expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+
     it('no way-back line under a BeanPool name main, or with no BeanPool name listed', async () => {
         stubNode(reportOf('a name', [ROW.beanpool]), () => [200, {}]);
         const { unmount } = render(<AddressesPanel activeNode={node} />);

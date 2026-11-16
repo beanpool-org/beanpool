@@ -109,7 +109,7 @@ export function appAddressesReport(pageHost?: unknown) {
         // Why Make main would be refused, in the words /main answers with (several-addresses S6): Settings offers Make main
         // only where this is absent, so a press that can only be refused is never offered. None for the main itself.
         // A standby refuses every Make main (its main is its main server's), so it says that of every row.
-        const mainRefusal = a.address === primary ? null : standby ? MAIN_ON_STANDBY : mainAddressRefusal(a.address);
+        const mainRefusal = a.address === primary ? null : standby ? MAIN_ON_STANDBY : mainAddressRefusal(a.address, standings);
         return {
             address: a.address, source: a.source, ...(a.former ? { former: true } : {}), today: u?.today ?? 0, busiestDay: u?.busiestDay ?? 0,
             ...(a.lost ? { lost: true, tried: { today: tried?.today ?? 0, busiestDay: tried?.busiestDay ?? 0 } } : {}),
@@ -246,7 +246,8 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
     });
 
     // Make main: where new members, invites, the directory and search engines are sent (design several-addresses §2.1). Any
-    // published address with a route, of any kind; a bare number only while the community has no name. An owner's, with
+    // published address with a route, of any kind; a bare number only while the community has no name; never a beanpool.org
+    // name the address service says another community, or no community, holds (mainAddressRefusal). An owner's, with
     // the owner's fresh proof; asked after the address is found, so a refused one spends no code. Every other address keeps
     // working. The members are told once, when the main address really moved.
     router.post('/api/local/admin/app-addresses/main', async (ctx) => {
@@ -264,7 +265,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Send { "address": "community.example.org" }: one of this community\'s addresses, with no path.' };
             return;
         }
-        const refused = mainAddressRefusal(address);
+        const refused = mainAddressRefusal(address, nameStandings());
         if (refused) {
             ctx.status = 409;
             ctx.body = { code: 'not_main_able', error: refused };

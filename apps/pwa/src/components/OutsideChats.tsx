@@ -8,11 +8,11 @@
  * reactions and, on a line of mine, Edit message and Delete message (X6: each a sealed item of its own, lib/outside-mail.ts
  * sendOutsideChange), as on the phone.
  */
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { OUTSIDE_LINE_TEXT_MAX, OUTSIDE_REACTIONS, OUTSIDE_WRITES_STAY_THERE, outsideLineShown, t, type OutsideChange, type OutsideChangeKind } from '@beanpool/core';
 import { blockUser } from '../lib/blocklist';
 import { ChatConfirmDialog } from './ChatConfirmDialog';
-import { draftKey, draftSent, useKeptDraft } from '../lib/chat-drafts';
+import { draftKey, draftSent, keepEdit, keptDraft, takeEdit, useKeptDraft } from '../lib/chat-drafts';
 import {
     OUTSIDE_CHATS_EVENT, OUTSIDE_SEND_MS, OutsideMailError, outsideContext, outsideErrorWords, ring, sendFromBox, sendOutsideChange, syncOutsideMailNow,
 } from '../lib/outside-mail';
@@ -115,18 +115,32 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
     const [chat, setChat] = useState<OutsideChat | null | undefined>(undefined);
     const [lines, setLines] = useState<OutsideLine[]>([]);
     const [text, setText] = useState('');
-    // Words left unsent here wait in the box while the page is open (lib/chat-drafts.ts): Back, or Chat in the menu, keeps them.
-    const boxKey = draftKey(me, 'outside', chatId);
-    useKeptDraft(boxKey, text, setText);
-    const [busy, setBusy] = useState(false);
-    const [note, setNote] = useState<string | null>(null);
-    // Changes to lines (X6): each person's newest edit, reaction and delete, kept here; the line tapped; a line of mine being edited.
+    // Changes to lines (X6): each person's newest edit, reaction and delete, kept here; the line tapped; the id of a line of mine
+    // being edited.
     const [changes, setChanges] = useState<OutsideChange[]>([]);
     const [picked, setPicked] = useState<string | null>(null);
-    const [editing, setEditing] = useState<OutsideLine | null>(null);
+    const [editing, setEditing] = useState<string | null>(null);
     const [deleting, setDeleting] = useState<OutsideLine | null>(null);
     // What was typed in the box when an edit began: set aside, and back in the box after Save or Cancel, never lost.
     const [typedAside, setTypedAside] = useState('');
+    // Words left unsent here wait in the box while the page is open (lib/chat-drafts.ts): Back, or Chat in the menu, keeps them.
+    // During an edit the box holds the line's words, so the draft kept is what was set aside, never the line's words (which a
+    // Send would post as a new line); the edit itself is kept beside it, and comes back with its Save and Cancel.
+    const boxKey = draftKey(me, 'outside', chatId);
+    useKeptDraft(boxKey, editing ? typedAside : text, setText);
+    const editNow = useRef<{ lineId: string; words: string } | null>(null);
+    editNow.current = editing ? { lineId: editing, words: text } : null;
+    useLayoutEffect(() => {
+        if (!boxKey) return;
+        // After useKeptDraft's own effect (declared before it), so the edit's words win the box over the draft.
+        const edit = takeEdit(boxKey);
+        setEditing(edit?.lineId ?? null);
+        setTypedAside(edit ? keptDraft(boxKey) : '');
+        if (edit) setText(edit.words);
+        return () => keepEdit(boxKey, editNow.current);
+    }, [boxKey]);
+    const [busy, setBusy] = useState(false);
+    const [note, setNote] = useState<string | null>(null);
     const alive = useRef(true);
     const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -174,7 +188,7 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
 
     const startEditing = (line: OutsideLine, words: string) => {
         if (!editing) setTypedAside(text);
-        setEditing(line);
+        setEditing(line.id);
         setText(words);
         setPicked(null);
     };
@@ -186,7 +200,7 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
         if (editing) {
             setBusy(true);
             try {
-                if (await change({ kind: 'dm-edit', lineId: editing.id, text: words }) && alive.current) stopEditing();
+                if (await change({ kind: 'dm-edit', lineId: editing, text: words }) && alive.current) stopEditing();
             } finally {
                 if (alive.current) setBusy(false);
             }
@@ -274,10 +288,11 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
                     <div role="log" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                         {lines.map((l) => {
                             const mine = l.author === me;
-                            const tick = mine ? stateWords(l.state) : null;
-                            const why = mine && l.state === 'failed' ? l.note : null;
                             // The line with its changes applied (X6): its writer's newest edit, each person's newest reaction, or deleted.
                             const shown = outsideLineShown(l, changes, me ?? '');
+                            // A deleted line has nothing left to deliver: no tick, no why.
+                            const tick = mine && !shown.deleted ? stateWords(l.state) : null;
+                            const why = mine && !shown.deleted && l.state === 'failed' ? l.note : null;
                             const canChange = chat.state === 'open' && !shown.deleted;
                             const myReaction = shown.reactions.find((r) => r.mine)?.emoji ?? null;
                             const toggle = () => { if (canChange) setPicked((p) => (p === l.id ? null : l.id)); };

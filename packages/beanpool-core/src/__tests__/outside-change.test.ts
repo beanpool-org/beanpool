@@ -8,7 +8,8 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import {
     OUTSIDE_CHANGE_KINDS, OUTSIDE_REACTIONS, OutsideLineNotVerifiedError, gateOutsideItem, openOutsideChange, openOutsideLine,
-    outsideChangeVerdict, outsideLineShown, sealOutsideChange, sealOutsideLine, type OutsideChange, type OutsideChangeKind,
+    outsideChangeOutcome, outsideChangesKept, outsideChangeVerdict, outsideLineReportedWords, outsideLineShown, outsideLineWords, sealOutsideChange,
+    sealOutsideLine, type OutsideChange, type OutsideChangeKind, type OutsideChangeState,
 } from '../outside-chat.js';
 import { relayConversationId, relayPayloadHash, signRelayEnvelope, type RelayEnvelope, type RelayItemKind } from '../relay-envelope.js';
 
@@ -157,5 +158,51 @@ describe('a line as shown', () => {
 
     it('a change to another line changes nothing here', () => {
         expect(outsideLineShown(line, [{ ...ch({ kind: 'dm-delete', author: ana.key, at: 1 }), lineId: uuid() }], ben.key).deleted).toBe(false);
+    });
+});
+
+describe('which changes a device keeps, and what an answer about mine means (round 2: one rule both apps take)', () => {
+    type Row = { at: number; itemId: string; state: OutsideChangeState };
+    const row = (at: number, state: OutsideChangeState): Row => ({ at, itemId: `${String(at).padStart(8, '0')}-0000-4000-8000-000000000000`, state });
+    const kept = (rows: Row[]) => outsideChangesKept(rows).map((r) => `${r.at}:${r.state ?? 'theirs'}`);
+
+    it('theirs: the newest only, an older one arriving changes nothing', () => {
+        expect(kept([row(1, null), row(3, null), row(2, null)])).toEqual(['3:theirs']);
+    });
+    it('mine: the newest that reached them, and each of mine still on its way that is newer; nothing older', () => {
+        expect(kept([row(1, 'sent'), row(2, 'sent'), row(3, 'queued'), row(4, 'sending')])).toEqual(['2:sent', '3:queued', '4:sending']);
+        expect(kept([row(1, 'sending'), row(2, 'sent')])).toEqual(['2:sent']);
+        expect(kept([row(1, 'sending'), row(2, 'queued')])).toEqual(['1:sending', '2:queued']);
+    });
+    it('my newest failing (taken out) falls back to what is left: the one that reached them, never the line as written', () => {
+        const left = [row(1, 'sent'), row(2, 'sending')].filter((r) => r.at !== 2);
+        expect(kept(left)).toEqual(['1:sent']);
+        const shownAfter = outsideLineShown({ id: LINE, author: ben.key, text: 'As written' },
+            [{ kind: 'dm-edit', itemId: left[0].itemId, lineId: LINE, author: ben.key, at: 1, text: 'First fix' }], ben.key);
+        expect(shownAfter).toMatchObject({ text: 'First fix', edited: true });
+    });
+    const answers: Array<[unknown, ReturnType<typeof outsideChangeOutcome>]> = [
+        ['queued', 'queued'], ['sent', 'sent'], ['delivered', 'sent'], ['expired', 'sent'], ['failed', 'failed'], ['sending', null], [undefined, null], ['nonsense', null],
+    ];
+    for (const [state, want] of answers) {
+        it(`an answer of ${String(state)}: ${String(want)}${state === 'expired' ? ' (a change is never receipted: expired means it reached them)' : ''}`, () => {
+            expect(outsideChangeOutcome(state)).toBe(want);
+        });
+    }
+});
+
+describe('a line in one string: the Chats list, a screen reader and a report read what the bubble shows', () => {
+    const line = { id: LINE, author: ana.key, text: 'hi' };
+    const edit = { kind: 'dm-edit' as const, itemId: uuid(), lineId: LINE, author: ana.key, at: 2, text: 'Something else' };
+    const del = { kind: 'dm-delete' as const, itemId: uuid(), lineId: LINE, author: ana.key, at: 3 };
+    it('as written, edited, deleted', () => {
+        expect(outsideLineWords(line, [], ben.key)).toBe('hi');
+        expect(outsideLineWords(line, [edit], ben.key)).toBe('Something else');
+        expect(outsideLineWords(line, [edit, del], ben.key)).toBe('This message was deleted');
+    });
+    it('a report: the edited words the member saw, never only the first ones; a delete landing meanwhile keeps the last seen', () => {
+        expect(outsideLineReportedWords(line, [], ben.key)).toBe('hi');
+        expect(outsideLineReportedWords(line, [edit], ben.key)).toBe('Something else');
+        expect(outsideLineReportedWords(line, [edit, del], ben.key)).toBe('Something else');
     });
 });

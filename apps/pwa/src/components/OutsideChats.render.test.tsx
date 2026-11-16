@@ -45,7 +45,7 @@ vi.mock('../lib/outside-mail', async (importOriginal) => {
 });
 
 import { outsideChatStore, clearOutsideChats } from '../lib/outside-chat-store';
-import { doorOpen, sendOutsideChange } from '../lib/outside-mail';
+import { doorOpen, sendFromBox, sendOutsideChange } from '../lib/outside-mail';
 import { AddressCardPanel } from './AddressCardPanel';
 import { OutsideChatThread, outsideRoundNow } from './OutsideChats';
 
@@ -199,6 +199,51 @@ describe('changes to lines (X6)', () => {
         fireEvent.click(await screen.findByTestId('outside-line-delete'));
         fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
         await waitFor(() => expect(sendOutsideChange).toHaveBeenLastCalledWith(here.ctx, chatId, { kind: 'dm-delete', lineId: mine }));
+    });
+
+    it('leaving in the middle of an edit: the edit comes back as the edit (Save sends it as one), and the words typed before it come back after; never a new line', async () => {
+        const { mine } = await openWithLines();
+        vi.mocked(sendFromBox).mockClear();
+        const first = render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+        fireEvent.change(await screen.findByTestId('outside-chat-input'), { target: { value: 'see you' } });
+        fireEvent.click(await screen.findByText('See you there'));
+        fireEvent.click(await screen.findByTestId('outside-line-edit'));
+        fireEvent.change(screen.getByTestId('outside-chat-input'), { target: { value: 'See you at 4' } });
+        // Back: the chat closes mid-edit.
+        first.unmount();
+        render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+        await waitFor(() => expect((screen.getByTestId('outside-chat-input') as HTMLTextAreaElement).value).toBe('See you at 4'));
+        expect(screen.getByTestId('outside-chat-send').textContent).toBe('Save');
+        expect(screen.getByTestId('outside-chat-edit-cancel')).toBeTruthy();
+        fireEvent.click(screen.getByTestId('outside-chat-send'));
+        await waitFor(() => expect(sendOutsideChange).toHaveBeenCalledWith(here.ctx, chatId, { kind: 'dm-edit', lineId: mine, text: 'See you at 4' }));
+        await waitFor(() => expect((screen.getByTestId('outside-chat-input') as HTMLTextAreaElement).value).toBe('see you'));
+        expect(screen.getByTestId('outside-chat-send').textContent).toBe('Send');
+        expect(sendFromBox).not.toHaveBeenCalled();
+    });
+
+    it('leaving mid-edit, back, then Cancel: the words typed before it, and the line\'s words are never the draft', async () => {
+        await openWithLines();
+        vi.mocked(sendFromBox).mockClear();
+        const first = render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+        fireEvent.change(await screen.findByTestId('outside-chat-input'), { target: { value: 'see you' } });
+        fireEvent.click(await screen.findByText('See you there'));
+        fireEvent.click(await screen.findByTestId('outside-line-edit'));
+        first.unmount();
+        render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+        fireEvent.click(await screen.findByTestId('outside-chat-edit-cancel'));
+        await waitFor(() => expect((screen.getByTestId('outside-chat-input') as HTMLTextAreaElement).value).toBe('see you'));
+        expect(screen.getByTestId('outside-chat-send').textContent).toBe('Send');
+        expect(sendOutsideChange).not.toHaveBeenCalled();
+        expect(sendFromBox).not.toHaveBeenCalled();
+    });
+
+    it('a deleted line of mine shows no tick: nothing is left to deliver', async () => {
+        const { mine, at } = await openWithLines();
+        await here.ctx.store.putChange(BEN.key, chatId, { kind: 'dm-delete', itemId: crypto.randomUUID(), lineId: mine, author: BEN.key, at: at + 9 });
+        render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+        expect((await screen.findAllByTestId('outside-line-deleted')).length).toBe(1);
+        expect(screen.queryByTestId('outside-line-state')).toBeNull();
     });
 
     it('a request\'s line, and a deleted one, offer nothing to tap', async () => {

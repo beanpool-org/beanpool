@@ -14,7 +14,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { OUTSIDE_LINE_TEXT_MAX, OUTSIDE_REACTIONS, OUTSIDE_WRITES_STAY_THERE, outsideLineShown, t, type OutsideChange, type OutsideChangeKind } from '@beanpool/core';
+import { OUTSIDE_LINE_TEXT_MAX, OUTSIDE_REACTIONS, OUTSIDE_WRITES_STAY_THERE, outsideLineShown, outsideLineWords, t, type OutsideChange, type OutsideChangeKind } from '@beanpool/core';
 import { Alert } from '../../utils/keyboard-alert';
 import { useTheme, useStyles } from '../ThemeContext';
 import { blockUser } from '../../utils/blocklist';
@@ -272,6 +272,8 @@ export default function OutsideChatScreen() {
                         renderItem={({ item }) => {
                             // The line with its changes applied (X6): its writer's newest edit, each person's newest reaction, or deleted.
                             const shown = outsideLineShown(item, changes, me ?? '');
+                            // The same rule in one string (core outsideLineWords): what the Chats list shows of it, and a screen reader says.
+                            const words = outsideLineWords(item, changes, me ?? '');
                             const mine = item.author === me;
                             const open = chat.state === 'open' && !shown.deleted;
                             const toggle = () => setPicked((p) => (p === item.id ? null : item.id));
@@ -323,7 +325,7 @@ export default function OutsideChatScreen() {
                                 // Tap a line of theirs for its reactions and Report message under it; the words stay selectable.
                                 return (
                                     <View>
-                                        <Pressable style={[styles.bubble, styles.theirs]} accessibilityLabel={[shown.deleted ? t('This message was deleted') : shown.text, edited].filter(Boolean).join('. ')}
+                                        <Pressable style={[styles.bubble, styles.theirs]} accessibilityLabel={[words, edited].filter(Boolean).join('. ')}
                                             testID="outside-line-theirs" onPress={toggle}>
                                             {body}
                                             {edited && <Text style={[styles.tick, { color: colors.text.secondary }]} testID="outside-line-edited">{edited}</Text>}
@@ -333,10 +335,10 @@ export default function OutsideChatScreen() {
                                     </View>
                                 );
                             }
-                            // Mine: its tick, and for a line my server refused, its words why.
-                            const tick = outsideLineStateWords(item.state);
-                            const why = item.state === 'failed' ? item.note : null;
-                            const said = [shown.deleted ? t('This message was deleted') : shown.text, edited, tick, why].filter(Boolean).join('. ');
+                            // Mine: its tick, and for a line my server refused, its words why; a deleted line has nothing left to deliver.
+                            const tick = shown.deleted ? null : outsideLineStateWords(item.state);
+                            const why = !shown.deleted && item.state === 'failed' ? item.note : null;
+                            const said = [words, edited, tick, why].filter(Boolean).join('. ');
                             return (
                                 <View>
                                     <Pressable style={[styles.bubble, styles.mine]} accessibilityLabel={said} testID="outside-line-mine" onPress={toggle}>

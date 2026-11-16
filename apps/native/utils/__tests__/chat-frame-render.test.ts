@@ -897,6 +897,15 @@ describe('an outside chat: changes to lines (X6)', () => {
         expect(byTest('outside-line-actions')).toHaveLength(0);
     });
 
+    it('a deleted line of mine shows no tick (nothing is left to deliver), and a screen reader hears what it shows', async () => {
+        outside.changes = [...outside.changes, { kind: 'dm-delete', itemId: 'cccccccc-0000-4000-8000-000000000005', lineId: MINE, author: 'me-key', at: now }];
+        await draw();
+        expect(byTest('outside-line-deleted').map((e) => e.textContent)).toEqual(['This message was deleted', 'This message was deleted']);
+        expect(byTest('outside-line-state')).toHaveLength(0);
+        expect(byTest('outside-line-mine')[0].getAttribute('aria-label')).toBe('This message was deleted');
+        expect(byTest('outside-line-theirs')[0].getAttribute('aria-label')).toBe('Bikes at 4. edited');
+    });
+
     it('a tap on my line: Edit message fills the box and its button reads Save, and saving sends the edit; Delete message asks first', async () => {
         await draw();
         const typing = byTest('outside-chat-input')[0] as HTMLInputElement;

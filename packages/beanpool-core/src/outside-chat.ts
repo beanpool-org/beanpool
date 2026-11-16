@@ -26,6 +26,7 @@ import { openDmLine, sealDmLine, type DmPayload } from './dm-crypto.js';
 import { isNodeHost, signatureBytesOf } from './node-request-signing.js';
 import { relayConversationId, type RelayEnvelope } from './relay-envelope.js';
 import { toBase64, utf8Bytes, type Signer } from './request-signing.js';
+import { t } from './words.js';
 
 /** First value of what a card's owner signs: this use's own name, so no other signature by the key can be taken for one. */
 export const ADDRESS_CARD_TAG = 'beanpool-address-card/1';
@@ -323,6 +324,38 @@ export function outsideChangeIsNewer(a: Pick<OutsideChange, 'at' | 'itemId'>, b:
     return a.at > b.at || (a.at === b.at && a.itemId > b.itemId);
 }
 
+/**
+ * Where a change a device keeps stands: theirs, applied (null); mine, not yet answered by my server (`sending`, kept with its
+ * signed item to send again), taken by my server (`queued`), or at their community (`sent`, as far as anything tells: a change
+ * has no receipt).
+ */
+export type OutsideChangeState = 'sending' | 'queued' | 'sent' | null;
+export type KeptOutsideChange = OutsideChange & { state: OutsideChangeState };
+
+/**
+ * What an answer about a change of mine means, whether my server's to a send or a tick from its outbox: still on its way, at
+ * their community, or never going. `expired` is a change sent and never receipted, which every change is: it reached them.
+ * Null: no answer at all (the item unknown, or not yet answered).
+ */
+export function outsideChangeOutcome(state: unknown): 'queued' | 'sent' | 'failed' | null {
+    if (state === 'queued') return 'queued';
+    if (state === 'sent' || state === 'delivered' || state === 'expired') return 'sent';
+    return state === 'failed' ? 'failed' : null;
+}
+
+/**
+ * Which of one person's changes of one kind to one line a device keeps, both apps (the phone's outside_changes, the web's
+ * changes document), after every write: the newest settled one (theirs, applied; or mine, at their community), and each of mine
+ * still on its way that is newer than it. A change of mine that fails is taken out, never kept, so the line falls back to the
+ * newest one left: the last that reached them, or an earlier one of mine still on its way; never the failed one, and never the
+ * line's first words while a change reached them.
+ */
+export function outsideChangesKept<T extends Pick<KeptOutsideChange, 'at' | 'itemId' | 'state'>>(rows: readonly T[]): T[] {
+    let settled: T | null = null;
+    for (const r of rows) if ((r.state === null || r.state === 'sent') && (!settled || outsideChangeIsNewer(r, settled))) settled = r;
+    return rows.filter((r) => r === settled || ((r.state === 'sending' || r.state === 'queued') && (!settled || outsideChangeIsNewer(r, settled))));
+}
+
 export type OutsideChangeVerdict = 'apply' | 'refuse' | 'drop';
 
 /**
@@ -377,6 +410,24 @@ export function outsideLineShown(line: { id: string; author: string; text: strin
         return { emoji: emoji as string, count: by.length, mine: by.some((c) => c.author === me) };
     }).filter((r) => r.count > 0);
     return { text: edit?.text ?? line.text, edited: !!edit, deleted: false, reactions };
+}
+
+/**
+ * A line in one string, from {@link outsideLineShown}: the words it shows, or that it was deleted. What each app's Chats list
+ * shows of the newest line, and a screen reader says of a bubble, so neither ever shows words the chat no longer does.
+ */
+export function outsideLineWords(line: { id: string; author: string; text: string }, changes: readonly OutsideChange[], me: string): string {
+    const shown = outsideLineShown(line, changes, me);
+    return shown.deleted ? t('This message was deleted') : shown.text;
+}
+
+/**
+ * The words a report of their line hands over (the phone's reportOutsideLine): the words it showed, its writer's newest edit
+ * applied, from {@link outsideLineShown}. A delete that lands while the report is being made changes nothing: the words are the
+ * ones the member last saw.
+ */
+export function outsideLineReportedWords(line: { id: string; author: string; text: string }, changes: readonly OutsideChange[], me: string): string {
+    return outsideLineShown(line, changes.filter((c) => c.kind !== 'dm-delete'), me).text;
 }
 
 /** A receipt's payload, as the mailbox reads one (`{"v":1,"items":[ids]}`): "my device has these". */

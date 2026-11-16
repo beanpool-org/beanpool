@@ -44,8 +44,8 @@
  * by itself), so the caller's deadline (outside-chat-live.ts) ends a stalled request, and the round with it.
  */
 import {
-    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, newDmMessageId, newOutsideDeviceId, openOutsideChange, openOutsideLine, outsideChangeVerdict,
-    outsideReceiptPayload, readRelayEnvelope, relayConversationId, relayEnvelopeVerifies, relayPayloadHash, sealOutsideChange, sealOutsideLine, nodeHomeOf,
+    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, isOutsideChangeKind, newDmMessageId, newOutsideDeviceId, openOutsideChange, openOutsideLine,
+    outsideChangeVerdict, outsideLineReportedWords, outsideLineShown, outsideReceiptPayload, readRelayEnvelope, relayConversationId, relayEnvelopeVerifies, relayPayloadHash, sealOutsideChange, sealOutsideLine, nodeHomeOf,
     audienceOf, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope, type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
 import { signAddressCardStatement, signRelayEnvelopeStatement } from './member-statements';
@@ -286,7 +286,9 @@ export async function reportOutsideLine(ctx: Pick<OutsideMailContext, 'nodeUrl' 
     let item: unknown = null;
     try { item = kept ? JSON.parse(kept.sealed) : null; } catch { /* not kept as it came */ }
     if (!kept || !item) throw new OutsideMailError(404, t('That did not go through. Please try again.'), 'not_kept');
-    await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/report', { item, reason, words: kept.text }, ctx.identity as BeanPoolIdentity, ctx.signal));
+    // The words the member saw (core's one rule, the bubble's): its writer's newest edit, never only the first words (X6).
+    const words = outsideLineReportedWords({ id: lineId, author: kept.author, text: kept.text }, await ctx.store.changes(kept.chatId), ctx.identity.publicKey);
+    await answerOf(await signedPost(ctx.nodeUrl, '/api/mail/report', { item, reason, words }, ctx.identity as BeanPoolIdentity, ctx.signal));
 }
 
 /**
@@ -320,16 +322,20 @@ export async function sendOutsideLine(ctx: OutsideMailContext, chatId: string, t
 
 /**
  * A change to a line of chat `chatId` (X6): an edit or a delete of a line of mine, or my reaction to any line ('' takes it
- * back). Applied here at once (kept with its signed item), then sent; one my server never answered goes again at the next
- * round. Throws OutsideMailError with my server's words when it refuses it for good, or "Not delivered" when it answers
- * the change failed at once: either way the change is then taken back here.
+ * back). Applied here at once (kept `sending` with its signed item), then sent; one my server never answered goes again at
+ * the next round. Throws OutsideMailError with my server's words when it refuses it for good, or "Not delivered" when it
+ * answers the change failed at once. A change that fails, now or in any later round (a resend refused or failed, ageing
+ * out, the switch read off, a tick from my server's outbox), is taken back (outside-chat-store.ts answerChange): the line
+ * reads as its last change that reached them. A delete stops whatever of its line has not left this phone (stopUnsentOf).
  */
 export async function sendOutsideChange(ctx: OutsideMailContext, chatId: string, c: { kind: OutsideChangeKind; lineId: string; text?: string; emoji?: string }): Promise<void> {
     const me = ctx.identity.publicKey;
     const chat = await ctx.store.chat(me, chatId);
     const line = await ctx.store.lineOf(c.lineId);
     if (!chat || chat.state !== 'open') throw new OutsideMailError(400, t('Accept the request first.'), 'not_accepted');
-    if (!line || line.chatId !== chatId || line.deleted || (c.kind !== 'dm-reaction' && line.author !== me)) {
+    // Deleted as the chat shows it: a delete of mine still on its way counts.
+    const deleted = !!line && outsideLineShown({ id: c.lineId, author: line.author, text: '' }, await ctx.store.changes(chatId), me).deleted;
+    if (!line || line.chatId !== chatId || deleted || (c.kind !== 'dm-reaction' && line.author !== me)) {
         throw new OutsideMailError(400, t('That did not go through. Please try again.'), 'not_yours');
     }
     const itemId = newDmMessageId();
@@ -338,15 +344,17 @@ export async function sendOutsideChange(ctx: OutsideMailContext, chatId: string,
     const envelope = await envelopeFor(ctx, { kind: c.kind, itemId, recipient: chat.peerKey, recipientHome: chat.peerHome, at }, payload);
     const change: OutsideChange = { kind: c.kind, itemId, lineId: c.lineId, author: me, at, ...(c.text !== undefined ? { text: c.text } : {}), ...(c.emoji !== undefined ? { emoji: c.emoji } : {}) };
     await ctx.store.putChange(chatId, change, JSON.stringify({ envelope, payload }));
+    if (c.kind === 'dm-delete') await ctx.store.stopUnsentOf(me, chatId, c.lineId);
+    let state: string | undefined;
     try {
-        const state = (await postItems(ctx, [{ envelope, payload }])).find((a) => a.itemId === itemId)?.state;
-        // Failed at once (the other community refused it inside its answer): it never reached them, so it is taken back here.
-        if (state === 'failed') { await ctx.store.dropChange(itemId); throw new OutsideMailError(400, t('Not delivered'), 'not_delivered'); }
-        if (state && STATES.includes(state as OutsideLineState)) await ctx.store.setMineState(itemId, state as OutsideLineState);
+        state = (await postItems(ctx, [{ envelope, payload }])).find((a) => a.itemId === itemId)?.state;
     } catch (e) {
-        if (refusedForGood(e)) await ctx.store.dropChange(itemId);
+        if (refusedForGood(e)) await ctx.store.answerChange(itemId, 'failed');
         throw e;
     }
+    if (state) await ctx.store.answerChange(itemId, state);
+    // Failed at once (the other community refused it inside its answer): it never reached them, and was taken back above.
+    if (state === 'failed') throw new OutsideMailError(400, t('Not delivered'), 'not_delivered');
 }
 
 /**
@@ -583,6 +591,8 @@ async function applyTicks(ctx: OutsideMailContext, ticks: any[], now: number): P
     for (const t of ticks) {
         if (typeof t?.itemId !== 'string' || !Number.isSafeInteger(t?.at)) continue;
         last = { at: t.at, itemId: t.itemId };
+        // A change of mine (X6): failed at their community, it is taken back here; at their community, it stays.
+        if (isOutsideChangeKind(t.kind)) { if (await ctx.store.answerChange(t.itemId, t.state)) applied++; continue; }
         if (t.kind !== 'dm-line' || !STATES.includes(t.state)) continue;
         if (await ctx.store.hasLine(t.itemId)) {
             await ctx.store.setMineState(t.itemId, t.state);

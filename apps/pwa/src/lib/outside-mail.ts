@@ -42,8 +42,8 @@
  * whenever it was kept for another address, so this browser never signs as a community it no longer talks to.
  */
 import {
-    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, audienceOf, gateOutsideItem, newDmMessageId, newOutsideDeviceId, nodeHomeOf,
-    openOutsideChange, openOutsideLine, outsideChangeVerdict, outsideReceiptPayload, readRelayEnvelope, relayConversationId, relayEnvelopeVerifies,
+    ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, audienceOf, gateOutsideItem, isOutsideChangeKind, newDmMessageId, newOutsideDeviceId,
+    nodeHomeOf, openOutsideChange, openOutsideLine, outsideChangeVerdict, outsideLineShown, outsideReceiptPayload, readRelayEnvelope, relayConversationId, relayEnvelopeVerifies,
     relayPayloadHash, sealOutsideChange, sealOutsideLine, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope,
     type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
@@ -333,9 +333,11 @@ export async function sendOutsideLine(ctx: OutsideMailContext, chatId: string, t
 
 /**
  * A change to a line of chat `chatId` (X6): an edit or a delete of a line of mine, or my reaction to any line ('' takes it
- * back). Applied here at once (kept with its signed item), then sent; one my server never answered goes again at the next
- * round. Throws OutsideMailError with my server's words when it refuses it for good, or "Not delivered" when it answers
- * the change failed at once: either way the change is then taken back here.
+ * back). Applied here at once (kept `sending` with its signed item), then sent; one my server never answered goes again at
+ * the next round. Throws OutsideMailError with my server's words when it refuses it for good, or "Not delivered" when it
+ * answers the change failed at once. A change that fails, now or in any later round (a resend refused or failed, ageing
+ * out, the switch read off, a tick from my server's outbox), is taken back (outside-chat-store.ts answerChange): the line
+ * reads as its last change that reached them. A delete stops whatever of its line has not left this browser (stopUnsentOf).
  * The phone's sendOutsideChange, the same rule.
  */
 export async function sendOutsideChange(ctx: OutsideMailContext, chatId: string, c: { kind: OutsideChangeKind; lineId: string; text?: string; emoji?: string }): Promise<void> {
@@ -343,7 +345,9 @@ export async function sendOutsideChange(ctx: OutsideMailContext, chatId: string,
     const chat = await ctx.store.chat(me, chatId);
     const line = await ctx.store.lineOf(me, chatId, c.lineId);
     if (!chat || chat.state !== 'open') throw new OutsideMailError(400, t('Accept the request first.'), 'not_accepted');
-    if (!line || line.chatId !== chatId || line.deleted || (c.kind !== 'dm-reaction' && line.author !== me)) {
+    // Deleted as the chat shows it: a delete of mine still on its way counts.
+    const deleted = !!line && outsideLineShown({ id: c.lineId, author: line.author, text: '' }, await ctx.store.changes(me, chatId), me).deleted;
+    if (!line || line.chatId !== chatId || deleted || (c.kind !== 'dm-reaction' && line.author !== me)) {
         throw new OutsideMailError(400, t('That did not go through. Please try again.'), 'not_yours');
     }
     const itemId = newDmMessageId();
@@ -352,15 +356,17 @@ export async function sendOutsideChange(ctx: OutsideMailContext, chatId: string,
     const envelope = await envelopeFor(ctx, { kind: c.kind, itemId, recipient: chat.peerKey, recipientHome: chat.peerHome, at }, payload);
     const change: OutsideChange = { kind: c.kind, itemId, lineId: c.lineId, author: me, at, ...(c.text !== undefined ? { text: c.text } : {}), ...(c.emoji !== undefined ? { emoji: c.emoji } : {}) };
     await ctx.store.putChange(me, chatId, change, JSON.stringify({ envelope, payload }));
+    if (c.kind === 'dm-delete') await ctx.store.stopUnsentOf(me, chatId, c.lineId);
+    let state: string | undefined;
     try {
-        const state = (await postItems(ctx, [{ envelope, payload }])).find((a) => a.itemId === itemId)?.state;
-        // Failed at once (the other community refused it inside its answer): it never reached them, so it is taken back here.
-        if (state === 'failed') { await ctx.store.dropChange(me, chatId, itemId); throw new OutsideMailError(400, t('Not delivered'), 'not_delivered'); }
-        if (state && STATES.includes(state as OutsideLineState)) await ctx.store.setMineState(me, chatId, itemId, state as OutsideLineState);
+        state = (await postItems(ctx, [{ envelope, payload }])).find((a) => a.itemId === itemId)?.state;
     } catch (e) {
-        if (refusedForGood(e)) await ctx.store.dropChange(me, chatId, itemId);
+        if (refusedForGood(e)) await ctx.store.answerChange(me, chatId, itemId, 'failed');
         throw e;
     }
+    if (state) await ctx.store.answerChange(me, chatId, itemId, state);
+    // Failed at once (the other community refused it inside its answer): it never reached them, and was taken back above.
+    if (state === 'failed') throw new OutsideMailError(400, t('Not delivered'), 'not_delivered');
 }
 
 /**
@@ -557,9 +563,11 @@ async function applyTicks(ctx: OutsideMailContext, ticks: any[], now: number): P
     for (const tick of ticks) {
         if (typeof tick?.itemId !== 'string' || !Number.isSafeInteger(tick?.at)) continue;
         last = { at: tick.at, itemId: tick.itemId };
-        if (tick.kind !== 'dm-line' || !STATES.includes(tick.state)) continue;
         if (typeof tick.recipient !== 'string' || !/^[0-9a-f]{64}$/.test(tick.recipient) || tick.recipient === me) continue;
         const chatId = relayConversationId(me, tick.recipient);
+        // A change of mine (X6): failed at their community, it is taken back here; at their community, it stays.
+        if (isOutsideChangeKind(tick.kind)) { if (await ctx.store.answerChange(me, chatId, tick.itemId, tick.state)) applied++; continue; }
+        if (tick.kind !== 'dm-line' || !STATES.includes(tick.state)) continue;
         if (await ctx.store.hasLine(me, chatId, tick.itemId)) {
             await ctx.store.setMineState(me, chatId, tick.itemId, tick.state);
             applied++;

@@ -3669,6 +3669,12 @@ export interface AppAddress {
     standing?: NameStanding;
     /** What a node found when it checked this address from outside. */
     reach?: AddressReach;
+    /**
+     * Why the server would refuse to make this address the main one, in its own words (apps/server engine/own-addresses.ts
+     * mainAddressRefusal: a former or lost name, a name with no route yet, a number beside a name, a home-network address
+     * beside one the Internet reaches); absent when it can be main. Make main is offered only where it is absent.
+     */
+    mainRefusal?: string;
 }
 
 /** apps/server services/registrar-name-watch.ts NameStanding. */
@@ -3744,6 +3750,12 @@ export interface AppAddressesReport {
      * members still to move. Absent from a server before 2026-09-28.
      */
     formerApps?: { today: number; busiestDay: number };
+    /**
+     * What the server's signed address list says now (apps/server engine/own-addresses.ts addressListContent, signed at
+     * /api/node/addresses): the addresses members' phones follow and the main one, each in its one spelling; null when it
+     * lists nothing (a server that knows none of its names, or whose names all wait for a route).
+     */
+    list?: { main: string; addresses: string[] } | null;
 }
 
 /**
@@ -3788,6 +3800,24 @@ export async function removeAppAddress(nodeUrl: string, address: string, credent
     if (!res.ok) {
         throwIfFreshProof(res.status, body);
         throw new Error(body?.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return body as AppAddressesReport;
+}
+
+/**
+ * Make main (design several-addresses §2.1): `address`, one of the community's listed addresses of any kind, becomes the main
+ * one. The one action that moves the main: adding an address never does. An owner's, with the owner's fresh proof (server
+ * requireFreshProof): a refusal that asks for it throws FreshProofRequiredError; any other refusal throws the server's words.
+ */
+export async function makeMainAddress(nodeUrl: string, address: string, credential?: string, code?: string): Promise<AppAddressesReport> {
+    const host = audienceOf(nodeUrl);
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/app-addresses/main', host ? { host } : undefined), {
+        method: 'POST', headers: buildAdminHeaders(credential), body: JSON.stringify({ address, ...proofField(code) }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throwIfFreshProof(res.status, body);
+        throw new Error(statusSentence(res.status, body, `HTTP ${res.status}: ${res.statusText}`));
     }
     return body as AppAddressesReport;
 }

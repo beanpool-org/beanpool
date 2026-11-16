@@ -66,7 +66,7 @@ vi.mock('../../components/chat/useChatPoll', async () => {
 });
 vi.mock('../../components/chat/useChatSoftInputMode', () => ({ useChatSoftInputMode: () => { } }));
 vi.mock('../../components/useYourGroups', () => ({
-    yourGroupsStore: { getState: () => ({ items: [] }), markRead: vi.fn(), setMute: vi.fn() },
+    yourGroupsStore: { getState: () => ({ items: [] }), markRead: vi.fn(), setMute: vi.fn(), noteSent: vi.fn() },
 }));
 vi.mock('../haptics', () => ({ hapticTick: vi.fn(), hapticSuccess: vi.fn(), hapticWarning: vi.fn() }));
 // The chat's pieces as plain tags: the list draws each item under its id; a bubble's row is its attachment slot and its words.

@@ -11,6 +11,10 @@
  * Slice K5: a fix shows "What changed" (its note), then only the parts its member changed, each as "Now" beside "Suggested"
  * (`changed`; the note alone says so), a part the page changed under since marked amber (`pageChanged`: Approve is refused
  * until "Edit first" chooses those words). Under the list, "Not checked for a year ({n})": information, never a count in the bell.
+ *
+ * Learn's tags (16 Nov 2026): a suggestion shows its tags under its place; a fix's changed tags are a part like its words, "Now"
+ * beside "Suggested" (`freeTagsChanged`, the node's apart from `changed`), marked amber when the page's own changed under it
+ * (`freeTagsPageChanged`); "Edit first" opens on them and sends them.
  */
 import { useEffect, useState } from 'react';
 import {
@@ -57,26 +61,40 @@ const partLabel = (part: KnowledgeFixPart) => ({
     sources: t('Sources'), lang: t('Language'),
 })[part];
 
+/** A page's tags as the checker reads them: each with its `#`, or "None" where there are none. */
+const tagsText = (tags: readonly string[] | undefined) => (tags && tags.length > 0 ? tags.map((tag) => `#${tag}`).join(' ') : t('None'));
+
+/** One changed part, "Now" beside "Suggested", amber when the page changed there since the fix was sent. */
+function FixPart({ id, label, moved, now, suggested }: { id: string; label: string; moved: boolean; now: string; suggested: string }) {
+    return (
+        <section data-testid={`learn-check-part-${id}`} className={PAGE_BOX}>
+            <h3 className={BOX_LABEL.muted}>{label}</h3>
+            {moved && <p data-testid="learn-check-moved" className="m-0 mb-1 text-sm font-bold text-bp-ink-warning">{t('▲ The page changed here since the fix was sent.')}</p>}
+            <p className={`m-0 text-xs font-bold ${MUTED}`}>{t('Now', undefined, 'To check: a part of a page of Local knowledge as it shows now, beside the fix')}</p>
+            <p dir="auto" className="m-0 mb-1 text-sm whitespace-pre-wrap break-words">{now}</p>
+            <p className={`m-0 text-xs font-bold ${MUTED}`}>{t('Suggested', undefined, 'To check: the same part as the fix would write it')}</p>
+            <p dir="auto" className="m-0 text-sm font-bold whitespace-pre-wrap break-words">{suggested}</p>
+        </section>
+    );
+}
+
 /** A fix's changed parts, each as "Now" (the page as it shows) beside "Suggested" (what Approve writes). */
 function FixParts({ d }: { d: KnowledgeDraftWhole }) {
     const changed = d.changed ?? [];
     const moved = new Set(d.pageChanged ?? []);
+    const tagsChanged = d.freeTagsChanged === true;
     // The page stopped showing (taken down, hidden): nothing to compare, and Approve is refused; "Not this one" answers it.
     if (!d.post) return <p data-testid="learn-check-page-gone" className={`m-0 text-sm ${MUTED}`}>{t("This page of Local knowledge isn't showing any more.")}</p>;
-    if (changed.length === 0) return <p data-testid="learn-check-note-alone" className={`m-0 text-sm ${MUTED}`}>{t('Only the note: no words changed.')}</p>;
+    if (changed.length === 0 && !tagsChanged) return <p data-testid="learn-check-note-alone" className={`m-0 text-sm ${MUTED}`}>{t('Only the note: no words changed.')}</p>;
     const now = d.post;
     return (
         <div data-testid="learn-check-parts" className="flex flex-col gap-2">
             {changed.map((part) => (
-                <section key={part} data-testid={`learn-check-part-${part}`} className={PAGE_BOX}>
-                    <h3 className={BOX_LABEL.muted}>{partLabel(part)}</h3>
-                    {moved.has(part) && <p data-testid="learn-check-moved" className="m-0 mb-1 text-sm font-bold text-bp-ink-warning">{t('▲ The page changed here since the fix was sent.')}</p>}
-                    <p className={`m-0 text-xs font-bold ${MUTED}`}>{t('Now', undefined, 'To check: a part of a page of Local knowledge as it shows now, beside the fix')}</p>
-                    <p dir="auto" className="m-0 mb-1 text-sm whitespace-pre-wrap break-words">{partText(part, now)}</p>
-                    <p className={`m-0 text-xs font-bold ${MUTED}`}>{t('Suggested', undefined, 'To check: the same part as the fix would write it')}</p>
-                    <p dir="auto" className="m-0 text-sm font-bold whitespace-pre-wrap break-words">{partText(part, d)}</p>
-                </section>
+                <FixPart key={part} id={part} label={partLabel(part)} moved={moved.has(part)} now={partText(part, now)} suggested={partText(part, d)} />
             ))}
+            {tagsChanged && (
+                <FixPart id="tags" label={t('Tags')} moved={d.freeTagsPageChanged === true} now={tagsText(now.freeTags)} suggested={tagsText(d.freeTags)} />
+            )}
         </div>
     );
 }
@@ -168,7 +186,8 @@ export function LearnCheckOne({ id, onAnswered, editing, onEditing, onEdited }: 
 
     if (editing) {
         return (
-            <LearnForm use="approve" keepPhotosOnly={!byAssistant} initial={{ title: d.title, body: d.body, topic: d.topic, place: d.place ?? '', sources: d.sources, photos: d.photos }}
+            <LearnForm use="approve" keepPhotosOnly={!byAssistant}
+                initial={{ title: d.title, body: d.body, topic: d.topic, place: d.place ?? '', sources: d.sources, photos: d.photos, freeTags: d.freeTags ?? [] }}
                 onEdited={onEdited} approvesFix={fix}
                 onSend={async (edits) => {
                     await approveLearnDraft(d.id, { edits, lang: d.lang, checkedSources: d.needsSourcesTicked, fix });
@@ -195,6 +214,12 @@ export function LearnCheckOne({ id, onAnswered, editing, onEditing, onEdited }: 
             {fix && <FixParts d={d} />}
             <div dir="auto" data-testid="learn-check-body" className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-nature-900 dark:text-nature-50">{d.body}</div>
             {d.place && <p dir="auto" className="m-0 text-sm font-bold text-nature-800 dark:text-nature-100 break-words">{t('Where: {place}', { place: d.place })}</p>}
+            {(d.freeTags?.length ?? 0) > 0 && (
+                <section data-testid="learn-check-tags" className={PAGE_BOX}>
+                    <h3 className={BOX_LABEL.muted}>{t('Tags')}</h3>
+                    <p dir="auto" className="m-0 text-sm break-words">{tagsText(d.freeTags)}</p>
+                </section>
+            )}
             {d.photos.length > 0 && (
                 <div className="flex flex-col gap-2">
                     {d.photos.map((src, i) => (src.startsWith('data:image/') ? <img key={i} src={src} alt="" className="w-full aspect-[4/3] object-cover rounded-xl" /> : null))}

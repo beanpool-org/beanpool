@@ -301,7 +301,8 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         expect(src).toMatch(/if \(header > 0 && bottom > header\) setColumn\(\(c\) => \(c\.column === bottom - header \? c : \{ \.\.\.c, column: bottom - header \}\)\);/);
         const header = src.indexOf("<View style={styles.header} onLayout={measuredEdge('header')}>");
         const banner = src.indexOf('{keyChange && (');
-        const keyboardView = src.search(/<KeyboardAvoidingView\s+style=\{styles\.keyboardView\}\s+behavior="padding"\s+onLayout=\{measuredEdge\('bottom'\)\}\s*>/);
+        // The keyboard view also takes the screen's top in the window (an iPhone sheet; composer-above-keyboard.test.ts).
+        const keyboardView = src.search(/<KeyboardAvoidingView\s+style=\{styles\.keyboardView\}\s+behavior="padding"\s+keyboardVerticalOffset=\{screenKeyboard\.keyboardVerticalOffset\}\s+onLayout=\{measuredEdge\('bottom'\)\}\s*>/);
         expect(header).toBeGreaterThan(-1);
         expect(banner).toBeGreaterThan(header);
         expect(keyboardView).toBeGreaterThan(banner);

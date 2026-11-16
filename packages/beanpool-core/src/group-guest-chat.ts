@@ -27,7 +27,7 @@
  *     never shown, never anyone's (the members' rule, line-display design §4). Its name, its label and whether it is mine
  *     all come from that key.
  *   - **Ids**: my line goes under one item id, and my server and the host each count an id once. A line refused
- *     `epoch-stale` is sealed again under a new id ({@link applyGuestTicks}); a line my server never answered goes again
+ *     `epoch-stale` is sealed again under a new id and a newer epoch ({@link applyGuestTicks}); a line my server never answered goes again
  *     under the same one (my server answers an id it has with that item's state).
  *   - **State**: what this device shows for an invitation or a chat follows what my server lists now. An invitation it no
  *     longer lists (answered on another device, withdrawn) is gone from here; a chat it no longer lists was left there.
@@ -464,7 +464,8 @@ function applyGuestLinks(chats: GuestChats, groups: unknown, ctx: GuestMailConte
  * joins the keys lines are sealed under; my server has it (`queued`), so it still waits; refused or failed, it goes and
  * another may be made. A tick for an epoch of mine that isn't the one on its way now is old news and changes nothing.
  * Each line's state moves on; a line refused for its epoch waits again under a NEW id from `newId` (my server and the
- * host each count the old one as used), to be sealed under the next epoch.
+ * host each count the old one as used), to be sealed under a newer epoch than the one refused, which is written down
+ * ({@link GuestChat.refusedEpoch}; the file's header, "Refusals").
  */
 export function applyGuestTicks(before: GuestChats, ticks: unknown, now: number, newId: () => string): { chats: GuestChats; changed: boolean } {
     const chats = structuredCloneChats(before);

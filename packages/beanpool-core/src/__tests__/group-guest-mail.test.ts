@@ -362,7 +362,7 @@ describe('round 3 (#3246): every write is made from the chats as they are at tha
         expect(f.chats[ID].lines.map((l) => [l.text, l.state])).toEqual([['hi', 'sent']]);
     });
 
-    // (write path: a send inside its await) x (a write landing then) -> both survive.
+    // (write path: a send inside its await) x (a write landing then) -> both are kept.
     const a1 = anasEpoch(1), a2 = anasEpoch(2);
     const ANA = '00000000-0000-4000-8000-0000000000a2';
     const paths: Record<string, { setup: () => Promise<ReturnType<typeof fake>>; at: 'sign' | 'post'; kind: string }> = {
@@ -370,17 +370,17 @@ describe('round 3 (#3246): every write is made from the chats as they are at tha
         'my line, being sealed': { setup: async () => { const f = await guestIn(a1.roster); await syncGuestMail(f.io); return f; }, at: 'sign', kind: 'group-line' },
         'my line, being posted': { setup: async () => { const f = await guestIn(a1.roster); await syncGuestMail(f.io); return f; }, at: 'post', kind: 'group-line' },
     };
-    const landing: Record<string, { land: (f: ReturnType<typeof fake>) => Promise<unknown>; survived: (f: ReturnType<typeof fake>) => void }> = {
+    const landing: Record<string, { land: (f: ReturnType<typeof fake>) => Promise<unknown>; kept: (f: ReturnType<typeof fake>) => void }> = {
         "a round's page: Ana's line, its notice confirmed": {
             land: async (f) => { anaLine(f, 'n-ana-2', ANA, 1, a1.key); await syncGuestMail(f.io); },
-            survived: (f) => {
+            kept: (f) => {
                 expect(f.confirmed).toContain('n-ana-2');
                 expect([...f.chats[ID].lines.map((l) => l.id), ...f.chats[ID].held.map((h) => h.id)]).toContain(ANA);
             },
         },
         'my new line': {
             land: (f) => sendGuestLine(f.io, ID, 'second'),
-            survived: (f) => expect(f.chats[ID].lines.map((l) => l.text)).toContain('second'),
+            kept: (f) => expect(f.chats[ID].lines.map((l) => l.text)).toContain('second'),
         },
         'a roster (the group renamed)': {
             land: async (f) => {
@@ -388,29 +388,29 @@ describe('round 3 (#3246): every write is made from the chats as they are at tha
                 f.groups[0] = { ...g, roster: { ...g.roster, name: 'Tools and seeds' } };
                 await syncGuestMail(f.io);
             },
-            survived: (f) => expect([f.chats[ID].name, f.chats[ID].roster?.name]).toEqual(['Tools and seeds', 'Tools and seeds']),
+            kept: (f) => expect([f.chats[ID].name, f.chats[ID].roster?.name]).toEqual(['Tools and seeds', 'Tools and seeds']),
         },
         "a round's page: Ana's epoch 2, its notice confirmed": {
             land: async (f) => {
                 f.held.push({ id: 'n-epoch-2', host: HOST, group: GROUP, kind: 'epoch', receivedAt: 3, data: { record: a2.roster.record, wraps: a2.roster.wraps } });
                 await syncGuestMail(f.io);
             },
-            survived: (f) => {
+            kept: (f) => {
                 expect(f.confirmed).toContain('n-epoch-2');
                 expect(f.chats[ID].keys['2']).toBe(b64(a2.key));
             },
         },
     };
     const rows = Object.keys(paths).flatMap((p) => Object.keys(landing).map((l) => [p, l] as [string, string]));
-    it.each(rows)('%s, while %s lands -> both survive', async (p, l) => {
+    it.each(rows)('%s, while %s lands -> both are kept', async (p, l) => {
         const path = paths[p];
         const f = await path.setup();
         pauseAt(f, path.at, path.kind, () => landing[l].land(f));
         await sendGuestLine(f.io, ID, 'mine');
-        landing[l].survived(f);
+        landing[l].kept(f);
         await syncGuestMail(f.io);
-        landing[l].survived(f);
-        // The send's own write survives too: my line is here and went once; never a second epoch of mine.
+        landing[l].kept(f);
+        // The send's own write is kept too: my line is here and went once; never a second epoch of mine.
         const mine = f.chats[ID].lines.filter((x) => x.author === gus.pk && x.text === 'mine');
         expect(mine.map((x) => x.state)).toEqual(['sent']);
         expect(kindOf(f, 'group-line').filter((i) => i.envelope.itemId === mine[0].id)).toHaveLength(1);

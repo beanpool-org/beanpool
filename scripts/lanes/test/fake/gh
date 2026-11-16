@@ -13,6 +13,10 @@
 #   $FAKE_STATE/run-<sha>  that commit's workflow run, one line per read, the last one sticks: queued in_progress success failure cancelled. No file: no run.
 #                          Several runs on the commit: comma-separated, newest first, as gh lists them up to --limit (its default is 20).
 #   $FAKE_STATE/files      the PR's changed files, one per line (no file: src/a.ts)
+#   $FAKE_STATE/checks     what `gh pr checks --json bucket` lists (ci-wait.sh reads it), one line per read, the last one sticks:
+#                          gh's buckets separated by spaces (pass fail pending skipping cancel), none (no checks yet: gh says so on
+#                          stderr and exits 1), or either of those +push (a push lands during that read). No file: pass. Like gh, it
+#                          exits 8 while a check is pending and 1 when one failed, with the list on stdout either way.
 # --jq filters run through real jq over GitHub's JSON shape (gh's own is gojq), so the library's filters are what gets tested.
 S=${FAKE_STATE:?}
 print -r -- "gh $*" >> "$S/gh.calls"
@@ -58,6 +62,12 @@ case "$1 $2" in
                 *isDraft*) print false;; *state*) print OPEN;; *headRefName*) print feat/x;;
                 *mergeable*) print MERGEABLE;; *title*) print "Fake title";;
               esac;;
+  "pr checks") [ "$(grep -c '^gh pr checks' "$S/gh.calls")" -gt 100 ] && { print -u2 "fake gh: runaway polling"; exit 1; }
+              st=$(pop "$S/checks" pass)
+              [[ "$st" == *+push ]] && { st=${st%+push}; push; }
+              [ "$st" = none ] && { print -u2 "no checks reported on the 'feat/x' branch"; exit 1; }
+              print -r -- ${=st} | tr ' ' '\n' | jq -R '{bucket: .}' | jq -s . | jq -r "$jqf"
+              case " $st " in *" pending "*) exit 8;; *" fail "*) exit 1;; esac;;
   "pr ready") ;;
   "pr edit")  [ "$FAKE_GH_LABEL_DOWN" = 1 ] && { print -u2 "HTTP 502: Bad Gateway"; exit 1; }
               print -r -- "https://github.com/example/fake/pull/$3";;   # the real one prints the URL, and gh_try reads empty as no answer

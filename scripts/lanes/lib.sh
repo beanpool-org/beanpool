@@ -99,9 +99,14 @@ LANE_CAPACITY_RE='No capacity available|UNAVAILABLE \(code 503\)'
 # A headless Claude run exits when the model stops replying. If its last words promise a later report, there is
 # no later — whatever it backgrounded is killed below and the gates judge what actually landed.
 LANE_PROMISE_RE="(I'll|I will|will) (send|post|report|update|share)|still running|when it finishes|once it finishes|in the background"
-# One push per fix round (Marty, 1 Nov 2026). ci.yml's concurrency group cancels a branch's run on every new push: 80 of 165 PR
-# runs were cancelled that way, and four runs at 14 jobs each want 56 against GitHub's 20. Every fix brief says this, in these words.
-LANE_ONE_PUSH="ONE PUSH THIS ROUND: commit locally as you go and push once, when this round's findings are done and the local checks pass, because each push cancels and restarts GitHub's run. A long first build may still push early so work is not lost, and a run about to end must push what it has."
+# CI first, at most 3 pushes for CI a round (Marty, 16 Nov 2026: "send more checks to GitHub CI; the Mac is overloaded"). 13 lanes
+# each ran whole-app type-checks at 1.5-3 GB and the Mac ran out of memory, so a stage runs only the one test file or suite it is
+# working on and GitHub runs the rest on the PR (drafts included). It replaces "push once" (Marty, 1 Nov 2026), and keeps its reason:
+# ci.yml's concurrency group cancels a branch's run on every new push (80 of 165 PR runs were cancelled that way), hence the cap.
+# A branch with no PR starts no run, so pushing before the PR costs nothing. Every CONTINUE, FIX and FIX-CI brief says this, in
+# these words. ci-wait.sh and tsc-slot.sh are named from THIS library's directory: a fix round on a branch cut before they existed
+# has neither in its own worktree.
+LANE_ONE_PUSH="CI FIRST, AT MOST 3 PUSHES FOR CI THIS ROUND (Marty, 16 Nov 2026: whole-app checks go to GitHub CI, the Mac was overloaded; this takes precedence over any one-push line in the rules below). Locally run only the ONE test file or ONE suite you are working on, never a whole-app tsc --noEmit, a whole vitest or jest run, many server suites or scripts/test-all.sh: GitHub CI runs all of them on every push to a PR, drafts included. A whole-app check you cannot avoid runs only through $LANE_DIR/tsc-slot.sh <command> (at most 3 at once on the machine). Commit locally as you go. When this round's work and its one local check are done, push; if the branch has no PR yet, open it as a DRAFT (gh pr create --draft --base $LANE_BASE --head <branch>). Then wait for CI in the foreground, call by call: $LANE_DIR/ci-wait.sh <PR> (about 9 minutes a call; exit 2 = pending, call it again; 0 = green; 1 = red, with the failing lines; 3 = the head moved or the PR could not be read, call it again). A red your change caused: fix it, run that one test locally, push, and wait again. At most 3 pushes for CI in this round, because each push cancels and restarts GitHub's run. A red in a test your change cannot reach: name it in the PR body as 'red not caused here' and do not chase it. Once green, or only reds not caused here: run bash scripts/lanes/preflight.sh, then gh pr ready <PR> if it is a draft, and end your turn. Never mark it ready while a red you caused stands: a draft cannot board the merge queue. A branch with no PR starts no run, so a long first build may still push early so work is not lost, and a run about to end must push what it has."
 
 typeset -ga LANE_HELD_LOCKS
 typeset -gA LANE_SEEN_PIDS

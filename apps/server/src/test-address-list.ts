@@ -203,13 +203,14 @@ async function specChild(spec: Spec): Promise<void> {
         const then = await al.signedAddressList();
         out.then = then.ok ? then.signed : then;
     }
+    // The clock-behind mark (address-list.ts renumberAddressListAfterSwap) as the database holds it, read before a roll-back
+    // (which closes the database).
+    out.owed = (se.getNodeConfig() as any).addressListFloorOwed ?? null;
     if (spec.rollBackTo) {
         const backup = await import('./routes/backup.js');
         await backup.rollBackTo(rp.resolveRestorePoint(spec.rollBackTo)!, spec.rollBackTo, null);
         out.notices = fs.readdirSync(dir).filter((f) => f.startsWith('restore-notice-')).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
     }
-    // The clock-behind mark (address-list.ts renumberAddressListAfterSwap), as the database holds it at the end.
-    out.owed = (se.getNodeConfig() as any).addressListFloorOwed ?? null;
     console.log(`RESULT ${JSON.stringify(out)}`);
     process.exit(0);
 }

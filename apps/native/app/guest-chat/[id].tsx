@@ -11,13 +11,14 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { GUEST_CHAT_WORDS, GUEST_LINE_TEXT_MAX, guestAccess, guestChatAuthorName, guestViewerOf, t, type GuestChat, type GuestLine } from '@beanpool/core';
+import {
+    GUEST_CHAT_WORDS, GUEST_LINE_TEXT_MAX, guestAccess, guestChatAuthorName, guestNameLine, guestViewerOf, t, type GuestChat, type GuestLine,
+} from '@beanpool/core';
 import { Alert } from '../../utils/keyboard-alert';
 import { useTheme, useStyles } from '../ThemeContext';
 import { outsideErrorWords } from '../../utils/outside-chat-live';
-import {
-    GUEST_CHATS_UPDATED, answerInvitation, guestClosedWords, guestLineStateWords, loadGuestChats, sendGuestLineNow, syncGuestMailNow,
-} from '../../utils/guest-chat-live';
+import { GUEST_CHATS_UPDATED, answerInvitation, loadGuestChats, sendGuestLineNow, syncGuestMailNow } from '../../utils/guest-chat-live';
+import { guestClosedWords, guestLineStateWords } from '../../utils/guest-chat-words';
 import { loadIdentity } from '../../utils/identity';
 
 const W = GUEST_CHAT_WORDS;
@@ -119,6 +120,9 @@ export default function GuestChatScreen() {
     const viewer = chat ? guestViewerOf(chat) : null;
     const canWrite = !!chat && chat.state === 'in' && viewer !== null && guestAccess(viewer, 'chat') === 'shown';
     const closed = chat ? guestClosedWords(chat) : null;
+    const names = chat?.roster && viewer !== null && guestAccess(viewer, 'roster') === 'shown'
+        ? [...chat.roster.members.map((m) => m.name), ...chat.roster.guests.map((g) => guestNameLine(g.name, g.home))].join(', ')
+        : null;
 
     return (
         <SafeAreaView style={styles.safeArea} testID="guest-chat">
@@ -131,6 +135,8 @@ export default function GuestChatScreen() {
                         <Text style={styles.name} numberOfLines={1}>{chat?.name || t('Group chat')}</Text>
                         {/* The whole community, never cut: a long one wraps. */}
                         {chat && <Text style={styles.from} testID="guest-chat-from">{chat.host}</Text>}
+                        {/* The names in the chat, as a guest may see them (core guestAccess 'roster'): members, then guests. */}
+                        {names && <Text style={styles.from} testID="guest-chat-names">{names}</Text>}
                     </View>
                 </View>
                 {!chat ? (

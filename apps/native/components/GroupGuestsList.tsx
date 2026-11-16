@@ -85,7 +85,7 @@ export function GroupGuestsList({ groupId, isConvenor, reloadKey = 0 }: Props) {
                     <MemberAvatar avatarUrl={null} pubkey={g.key} callsign={g.name} size={36} />
                     <View style={styles.info}>
                         <Text style={styles.name}>{guestNameLine(g.name, g.home)}</Text>
-                        <Text style={styles.line}>{t(g.state === 'in' ? W.guestIn : W.guestAsked)}</Text>
+                        <Text style={styles.line}>{g.state === 'in' ? t(W.guestIn) : t(W.guestAsked)}</Text>
                     </View>
                 </View>
             ))}

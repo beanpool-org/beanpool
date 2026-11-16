@@ -9,8 +9,8 @@
  */
 import { DeviceEventEmitter } from 'react-native';
 import {
-    GUEST_CHAT_WORDS, answerGuestInvitation, guestNameLine, newDmMessageId, readGuestChats, sendGuestLine, syncGuestMail, t, type AddressCard, type GuestChat,
-    type GuestChats, type GuestLine, type GuestLineState, type GuestMailIO,
+    answerGuestInvitation, guestNameLine, newDmMessageId, readGuestChats, sendGuestLine, syncGuestMail, type AddressCard, type GuestChats,
+    type GuestLine, type GuestMailIO,
 } from '@beanpool/core';
 import { outsideContext } from './outside-chat-live';
 import { OutsideMailError, answerOf, mailDevice, myHome, type OutsideMailContext } from './outside-mail';
@@ -25,29 +25,6 @@ export const GUEST_CHATS_UPDATED = 'guest_chats_updated';
 export const GUEST_ROUND_MS = 30_000;
 
 const chatsMeta = (me: string) => `guest-chats:${me}`;
-const W = GUEST_CHAT_WORDS;
-
-/** A line of mine, as its tick reads. */
-export function guestLineStateWords(state: GuestLineState | undefined): string | null {
-    switch (state) {
-        case 'waiting': return t(W.waiting);
-        case 'sending': return t('Sending…');
-        case 'queued': return t('Waiting for their community');
-        case 'sent': return t('Sent', undefined, 'a message');
-        case 'failed': return t('Not delivered');
-        default: return null;
-    }
-}
-
-/** Why a closed chat is closed, in the member's words. */
-export function guestClosedWords(chat: Pick<GuestChat, 'state' | 'why'>): string | null {
-    if (chat.state === 'removed') return t(chat.why === 'group-closed' ? W.closed : W.removed);
-    if (chat.state === 'left') return t(W.left);
-    if (chat.state === 'declined') return t(W.declined);
-    return null;
-}
-
-
 /** Core's IO for the community the phone is set to. */
 export function guestIO(ctx: OutsideMailContext): GuestMailIO {
     const identity = ctx.identity as BeanPoolIdentity;

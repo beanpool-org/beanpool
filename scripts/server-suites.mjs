@@ -656,6 +656,9 @@ export const SUITES = [
     // The worldwide forum for anyone on the web (slice F7): every public route x visitor, member, removed member x every post
     // state in one table, only the allowed fields, caching signed and unsigned, the index rules, a local community not found.
     'test-forum-public',
+    // Forum posts on an Ask to join (slice F11): the secret and the proof on the worldwide forum, at most three on a request,
+    // one table of post x count x the worldwide forum reachable, unreachable or slow, the secret kept nowhere, no server asked.
+    'test-knock-forum-links',
     'test-mcp-knowledge',
     'test-names-copy',
     'test-contact-copies',

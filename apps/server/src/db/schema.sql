@@ -1495,6 +1495,12 @@ CREATE INDEX IF NOT EXISTS idx_place_watches_cell ON place_watches(lat, lng);
 -- leaves the knock plain). The ticket itself is never stored. Only the members who answer read them, as one line under
 -- the request (the post's title as it is now and the sharer's name); never the applicant's status read, the card or the
 -- directory. Cleared with what the applicant sent once the knock is off the list. A re-key moves `via_sharer_pubkey`.
+-- `forum_posts` (forums F11, DESIGN-forums-fable.md §13): up to three of the applicant's posts on the worldwide forum, as a
+-- JSON list of { postId, topicId, number, proof } (no words: the admins' apps show only what the worldwide forum answers), or
+-- NULL. `proof` is made here when the knock is taken, from the key that signed it and the secret it carried (@beanpool/core
+-- forumPostProof); the secret is kept nowhere, and this server never calls the worldwide community. Only the members who
+-- answer read it (`forum` in the list); an admin's app compares
+-- each proof with the one the worldwide forum's public page shows. Cleared with what the applicant sent.
 CREATE TABLE IF NOT EXISTS join_requests (
     id TEXT PRIMARY KEY,
     pubkey TEXT NOT NULL,
@@ -1511,6 +1517,7 @@ CREATE TABLE IF NOT EXISTS join_requests (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     via_post_id TEXT,
     via_sharer_pubkey TEXT,
+    forum_posts TEXT CHECK (forum_posts IS NULL OR (json_valid(forum_posts) AND json_type(forum_posts) = 'array' AND length(forum_posts) <= 2000)),
     CHECK ((status = 'pending') = (decided_at IS NULL)),
     CHECK ((status = 'approved') = (invite_code IS NOT NULL))
 );
@@ -3364,7 +3371,12 @@ CREATE TABLE IF NOT EXISTS forum_members (
     updated_at     TEXT,
     -- When a moderator first OK'd a topic of theirs (slice F2, engine/forum-first-look.ts): known in this forum from then, so
     -- their topics go up at once and their links are links, whatever their new-account days say.
-    known_at       TEXT
+    known_at       TEXT,
+    -- The member's secret for the proof each public post of theirs carries (slice F11, engine/forum-ask-posts.ts; design §13):
+    -- 32 random bytes as 64 hex, made on a public forum by the main server when they are told the forum is public, or the
+    -- first time they ask for it. Only they read it (GET /api/forum/ask-posts); nobody without it can test a key against a
+    -- public post. A standby copies it, so it answers the same proofs. Moves with the member on a re-key; deleted with them.
+    proof_secret   TEXT CHECK (proof_secret IS NULL OR (length(proof_secret) = 64 AND proof_secret NOT GLOB '*[^0-9a-f]*'))
 );
 -- A first topic waiting for a moderator's look (slice F2, engine/forum-first-look.ts; design §5): a new member's topic where
 -- `forumFirstLook` is on. Not a topic: it lives here until a moderator says yes, so no list, read, search or copy of the

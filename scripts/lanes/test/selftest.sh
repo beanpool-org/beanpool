@@ -497,6 +497,20 @@ check "stopped at the no-run limit"              eval '[ "$(reads aaa1)" = 3 ] &
 decide
 check "Markdown plus code still needs a run"     eval '[ "$CLEAN:$(reviews)" = 0:0 ] && logged "no run started on bbb1"'
 
+scenario "38b. a PR that conflicts with main gets no run → held at once, not after the no-run limit (#3201 sat 15 polls)"
+LANE_GREEN_NONE_TRIES=15
+head_is aaa1; ci aaa1 none; print CONFLICTING > "$FAKE_STATE/mergeable"
+decide
+check "CLEAN=0, no stage ran"                    [ "$CLEAN:$(fixes):$(reviews)" = 0:0:0 ]
+check "one read of the head, then held"          [ "$(reads aaa1)" = 1 ]
+check "says why"                                 logged "LEFT FOR THE DIRECTOR, no deciding pass: it conflicts with main, so GitHub starts no run on aaa1 until the branch is synced"
+: > "$LOG"; head_is bbb1; ci bbb1 none none success; print UNKNOWN > "$FAKE_STATE/mergeable"
+decide
+check "UNKNOWN (GitHub still working it out after a push) is not a conflict: the wait goes on" eval '[ "$CLEAN:$(reviews):$(reads bbb1)" = 1:1:3 ] && not_logged "conflicts with"'
+: > "$LOG"; rm -f "$FAKE_STATE/claude.calls" "$FAKE_STATE/claude.runs"; head_is ccc1; ci ccc1 pending success; print CONFLICTING > "$FAKE_STATE/mergeable"
+decide
+check "a run already going is waited for: only 'no run' asks"  eval '[ "$CLEAN:$(reviews):$(reads ccc1)" = 1:1:2 ] && not_logged "conflicts with"'
+
 scenario "39. a finished run with no required check never reads as green; GitHub silent is not 'no run'"
 LANE_GREEN_TRIES=2
 head_is aaa1; ci aaa1 none; print success > "$FAKE_STATE/run-aaa1"
@@ -831,6 +845,15 @@ again; : > "$FAKE_STATE/head"
 decide
 check "GitHub gives no head before the pass: no review, held" eval '[ "$CLEAN:$(reviews)" = 0:0 ] && logged "LEFT FOR THE DIRECTOR, no deciding pass: GitHub did not give its head commit"'
 check "... and the slot is free again"           [ ! -e "$LANE_LOCK_DIR/decide.lock" ]
+
+scenario "56b. a Claude-built lane whose PR conflicts with main: the verdict comes back with that at once, not after the no-run limit"
+opus
+LANE_GREEN_NONE_TRIES=15
+head_is aaa1; ci aaa1 none; print CONFLICTING > "$FAKE_STATE/mergeable"
+decide
+check "CLEAN=0, one review, no fix stage"        [ "$CLEAN:$(reviews):$(fixes)" = 0:1:0 ]
+check "one read of the head"                     [ "$(reads aaa1)" = 1 ]
+check "one hold line, with the verdict and why no run" eval '[ "$(holds)" = 1 ] && held "CLEAN; CI no run on aaa1: it conflicts with main, and GitHub starts none until the branch is synced"'
 
 scenario "57. a Claude-built lane: a pass that did not really run is never clean, whatever GitHub says"
 opus

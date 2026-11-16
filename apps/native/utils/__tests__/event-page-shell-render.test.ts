@@ -310,22 +310,38 @@ describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, col
         expect(byId('event-counts')!.textContent).toBe('👥 3 going · 1 interested');
         expect(before(chosen, byId('event-counts')!)).toBe(true);
 
-        // The quiet row: the chat, Share, Add to calendar, in the neutral outline with the body's words.
+        // The quiet row: the chat, Share, Add to calendar. The chat in the brand ink's outline and words (Marty, 16 Nov 2026: "a
+        // slightly more obvious colour"), Share and Add to calendar in the neutral outline with the body's words.
         const row = byId('event-quiet-row')!;
-        const quiet = [buttonNamed('Open event chat')!, buttonNamed('Share this event')!, buttonNamed('Add this event to your calendar')!];
+        const quiet = [buttonNamed('Chat with people going')!, buttonNamed('Share this event')!, buttonNamed('Add this event to your calendar')!];
         const { abs } = screen();
         for (const b of quiet) {
             expect(b, 'a quiet button').toBeTruthy();
             expect(row.contains(b)).toBe(true);
-            expect(styleOf(b)).toMatchObject({ borderColor: colors.border.strong, backgroundColor: colors.surface.card, minHeight: 48, borderRadius: 12 });
-            expect(styleOf(b.querySelector('span')).color).toBe(colors.text.body);
+            expect(styleOf(b)).toMatchObject({ backgroundColor: colors.surface.card, minHeight: 48, borderRadius: 12 });
             expect(abs(b).height).toBeGreaterThanOrEqual(48);
             expect(abs(b).left + abs(b).width).toBeLessThanOrEqual(304.5);
         }
-        // The chat's words are a sentence: its own line, whole. Share and Add to calendar size to their labels and wrap by whole
-        // buttons, never cut: each label gets its natural width (yoga-dom-layout.ts's rule: 0.56 of the font size a character).
+        expect(styleOf(quiet[0])).toMatchObject({ borderColor: colors.brand.primary, flexDirection: 'row', alignItems: 'center', gap: 12 });
+        const [chatIcon, chatWords] = Array.from(quiet[0].querySelectorAll('span'));
+        expect(chatIcon.textContent).toBe('💬');
+        expect(chatWords.textContent).toBe('Chat with people going');
+        expect(styleOf(chatWords)).toMatchObject({ color: colors.brand.primary, fontSize: 16 });
+        // 12 dp between the icon and the words (it was one space), and the words after it.
+        expect(abs(chatWords).left - (abs(chatIcon).left + abs(chatIcon).width)).toBeGreaterThanOrEqual(11.5);
+        for (const b of quiet.slice(1)) {
+            expect(styleOf(b)).toMatchObject({ borderColor: colors.border.strong });
+            expect(styleOf(b.querySelector('span')).color).toBe(colors.text.body);
+        }
+        // The chat's words are a sentence: its own line, whole, wrapping onto a second line at this width and text size rather
+        // than cut. Share and Add to calendar size to their labels and wrap by whole buttons, never cut: each label gets its
+        // natural width (yoga-dom-layout.ts's rule: 0.56 of the font size a character).
         expect(abs(quiet[0]).width).toBeCloseTo(288, 0);
-        for (const b of quiet) {
+        const chatNatural = (chatWords.textContent ?? '').length * 16 * 1.3 * 0.56;
+        const chatLines = Math.max(1, Math.round(abs(chatWords).height / (21 * 1.3)));
+        expect(chatLines, 'the chat\'s words in at most two lines').toBeLessThanOrEqual(2);
+        expect(abs(chatWords).width * chatLines, `"${chatWords.textContent}" shown whole`).toBeGreaterThanOrEqual(chatNatural - 0.5);
+        for (const b of quiet.slice(1)) {
             const label = b.querySelector('span')!;
             const natural = (label.textContent ?? '').length * styleOf(label).fontSize * 1.3 * 0.56;
             expect(abs(label).width, `"${label.textContent}" shown whole`).toBeGreaterThanOrEqual(natural - 0.5);

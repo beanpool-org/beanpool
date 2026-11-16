@@ -11,8 +11,8 @@ Every event has its own chat. The host and everyone who has tapped **Going** can
 
 ## Opening it
 
-- Open the event and tap **Open event chat**.
-- Or find it in **Chat**, under **Groups**, marked 📅 **Event**. In the web app it is in the **Chat** tab, with your other chats.
+- Open the event and tap **Chat with people going**. When there are messages you have not read, the button says how many, such as **3 new**.
+- Once someone has written in it, it is also in **Chat**, under **Groups**, marked 📅 **Event**. In the web app it is in the **Chat** tab, with your other chats. Until then it is not in those lists: open it from the event.
 
 At the top, a pinned box shows the host's **Note for people who are going**, such as the exact address. Tap the event's name at the very top (in the web app, **View event**) to go back to the event.
 

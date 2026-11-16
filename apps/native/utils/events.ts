@@ -725,11 +725,18 @@ export function canOpenEventChat(post: any): boolean {
 }
 
 /**
- * The chat button's label. No number: "Open event chat (1)" showed the going count, which read as one unread
- * message in a chat that had none (events round 2, B3).
+ * The chat button's label (Marty, 16 Nov 2026: "it just doesn't seem to communicate the idea that you click there to chat"):
+ * a verb first, and who reads it, the host and the people going (the chat's own notice), as the web's lib/events.ts has it.
+ * No going count: "Open event chat (1)" showed it, which read as one unread message in a chat that had none (events round
+ * 2, B3); unread lines are eventChatNewLines.
  */
 export function eventChatEntryLabel(_post?: any): string {
-    return t('Open event chat');
+    return t('Chat with people going');
+}
+
+/** The chat button's count of lines the member hasn't read, from their "Your groups" list's unread count. */
+export function eventChatNewLines(n: number): string {
+    return tn(n, '{n} new', '{n} new');
 }
 
 /**

@@ -237,12 +237,13 @@ describe('the answer and the quiet row, from core\'s roles', () => {
         }
     });
 
-    it('the quiet row: the chat first for someone Going, then Share, then Add to calendar, each the neutral outline', () => {
+    it('the quiet row: the chat first for someone Going in the brand ink (Marty, 16 Nov 2026), then Share and Add to calendar in the neutral outline', () => {
         renderAt320(<EventDetail post={{ ...market, myRsvp: 'going', goingCount: 1 }} identity={identity} onOpenChat={() => {}} />);
         const row = screen.getByTestId('event-quiet-row');
         const items = within(row).getAllByRole('button');
         expect(items.map(b => b.getAttribute('data-testid'))).toEqual(['event-open-chat', 'event-share', 'event-add-to-calendar']);
-        for (const b of items) for (const c of PAGE_BUTTON.quiet.split(' ')) expect(b.className.split(/\s+/), `${b.textContent}: ${c}`).toContain(c);
+        for (const c of PAGE_BUTTON.chat.split(' ')) expect(items[0].className.split(/\s+/), `${items[0].textContent}: ${c}`).toContain(c);
+        for (const b of items.slice(1)) for (const c of PAGE_BUTTON.quiet.split(' ')) expect(b.className.split(/\s+/), `${b.textContent}: ${c}`).toContain(c);
         // The chat takes the row's first line whole; Share and the calendar are as wide as their words and wrap whole.
         expect(items[0].className.split(/\s+/)).toContain('basis-full');
         expect(items[1].className.split(/\s+/)).toEqual(expect.arrayContaining(['grow', 'basis-auto']));

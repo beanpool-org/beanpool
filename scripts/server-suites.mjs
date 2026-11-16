@@ -570,6 +570,7 @@ export const SUITES = [
     'test-enterprise-text',
     'test-event-chat',
     'test-event-chat-rsvp-fixes',
+    'test-event-chat-listing',
     'test-event-host-lets-in',
     'test-event-notify',
     'test-event-reminders',

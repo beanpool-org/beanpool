@@ -7,7 +7,8 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { fetchYourGroups } from '../utils/db';
 import { createYourGroupsStore } from '../utils/your-groups-store';
 
-export const yourGroupsStore = createYourGroupsStore(fetchYourGroups);
+// Read at each ask, not when this file loads: a screen that only reads the list (EventDetail's chat count) imports it too.
+export const yourGroupsStore = createYourGroupsStore(() => fetchYourGroups());
 
 let ownerKey: string | null = null;
 

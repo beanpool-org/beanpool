@@ -7,21 +7,29 @@
  * At any own address that is not the community's primary address, the web app shows one quiet line: "This community's
  * main address is now <address>. This address keeps working." (Fable design §5).
  *
+ * Either line names the main address only once the main has proved itself this community from this browser: this
+ * address's signed list, the main's own by the same key at a number not older, and a fresh proof for this browser's own
+ * question (several addresses S6, lib/main-address-proof.ts). Forged, replaced or older: no line.
+ *
  * At the top of the member's screen, the visitor lobby and the welcome page (App.tsx, GuestLobby.tsx), above the
  * mobile header: on the map that header floats over the page, so the banner sits over it rather than under it.
  */
 import { useEffect, useState } from 'react';
 import { t } from '@beanpool/core';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { getNodeApiUrl } from '../lib/api';
 import {
     dismissMainAddress,
     formerAddressNotice,
     isMainAddressDismissed,
     nonPrimaryAddressNotice,
+    provedNotice,
+    webAppAddress,
     webAppHost,
     type FormerAddressNotice,
     type MainAddressNotice,
 } from '../lib/former-address';
+import { hereListUrl, provedMainAddress } from '../lib/main-address-proof';
 
 export function FormerAddressBanner({ signedIn = false, isGuest = null }: { signedIn?: boolean; isGuest?: boolean | null }) {
     const [formerNotice, setFormerNotice] = useState<FormerAddressNotice | null>(null);
@@ -35,21 +43,24 @@ export function FormerAddressBanner({ signedIn = false, isGuest = null }: { sign
         // nothing here, and nothing that fails here, even at once, can take the page down with it.
         Promise.resolve()
             .then(() => communityInfoOnce())
-            .then((info) => {
+            .then(async (info) => {
                 if (cancelled) return;
                 const host = webAppHost();
-                const former = formerAddressNotice(info, host);
-                if (former) {
-                    setFormerNotice(former);
+                const kind = formerAddressNotice(info, host) ? 'former' : nonPrimaryAddressNotice(info, host) ? 'main' : null;
+                if (!kind || !host) return;
+                // The line names the main address only once it has proved itself this community from this browser
+                // (several addresses S6, lib/main-address-proof.ts): forged, replaced or older says nothing.
+                const verdict = await provedMainAddress(webAppAddress() ?? host, hereListUrl(getNodeApiUrl()));
+                const notice = provedNotice(kind, verdict);
+                if (cancelled || !notice) return;
+                if (kind === 'former') {
+                    setFormerNotice(notice);
                     return;
                 }
-                const main = nonPrimaryAddressNotice(info, host);
-                if (main) {
-                    if (isMainAddressDismissed(main.primaryAddress)) {
-                        setDismissed(true);
-                    }
-                    setMainNotice(main);
+                if (isMainAddressDismissed(notice.primaryAddress)) {
+                    setDismissed(true);
                 }
+                setMainNotice(notice);
             })
             .catch(() => {});
         return () => { cancelled = true; };

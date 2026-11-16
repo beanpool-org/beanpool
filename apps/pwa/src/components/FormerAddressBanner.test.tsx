@@ -8,9 +8,15 @@ import {
     nonPrimaryAddressNotice,
 } from '../lib/former-address';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { provedMainAddress, type MainAddressVerdict } from '../lib/main-address-proof';
 import type { CommunityInfo } from '../lib/api';
 
 vi.mock('../lib/visitor-lobby-gate', () => ({ communityInfoOnce: vi.fn() }));
+// The proof itself is lib/main-address-proof.test.ts's, with real signed lists; here it answers as each test says.
+vi.mock('../lib/main-address-proof', async (actual) => ({ ...(await actual<typeof import('../lib/main-address-proof')>()), provedMainAddress: vi.fn() }));
+
+/** What the main address proved, for the next render: by default, what the community's info says (it agrees with itself). */
+let proof: MainAddressVerdict | null = null;
 
 const base: CommunityInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0 };
 const moved = (over: Partial<CommunityInfo> = {}): CommunityInfo => ({
@@ -38,6 +44,11 @@ const openedAt = (host: string | null) => {
 async function renderBanner(info: CommunityInfo | Error, signedIn = false, isGuest: boolean | null = false) {
     if (info instanceof Error) vi.mocked(communityInfoOnce).mockRejectedValue(info);
     else vi.mocked(communityInfoOnce).mockResolvedValue(info);
+    vi.mocked(provedMainAddress).mockImplementation(async (here) => {
+        if (proof) return proof;
+        const main = info instanceof Error ? null : info.primaryAddress;
+        return main ? { ok: true, main, here, onList: !(info instanceof Error) && !!info.addresses?.includes(here) } : { ok: false, why: 'no-list-here' };
+    });
     const view = render(<FormerAddressBanner signedIn={signedIn} isGuest={isGuest} />);
     await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
     await new Promise((r) => setTimeout(r, 0));
@@ -143,6 +154,45 @@ describe('FormerAddressBanner', () => {
         vi.clearAllMocks();
         localStorage.clear();
         openedAt(null);
+        proof = null;
+    });
+
+    // Several addresses S6 (design §4, §7): the line names the main address only once it has proved itself this community
+    // from this browser: this address's signed list, the main's own by the same key at a number not older, and a fresh proof.
+    it.each([
+        ['forged', 'forged-here'], ['replaced (another key at the main)', 'other-key'], ['an older take-over count at the main', 'older'],
+        ['no proof from the main', 'no-proof'], ['a proof for another question', 'proof-refused'],
+    ] as const)('the main has not proved itself (%s): no line at a former address, nor at a non-main one', async (_name, why) => {
+        proof = { ok: false, why };
+        openedAt('oldname.beanpool.org');
+        const former = await renderBanner(moved());
+        expect(former.container.innerHTML).toBe('');
+        former.unmount();
+        openedAt('mullum.beanpool.org');
+        const other = await renderBanner(renamedFleet());
+        expect(other.container.innerHTML).toBe('');
+    });
+
+    it('the link names the main the proof names, never the unsigned primaryAddress', async () => {
+        openedAt('oldname.beanpool.org');
+        proof = { ok: true, main: 'coop.example.org', here: 'oldname.beanpool.org', onList: false };
+        await renderBanner(moved());
+        expect((await screen.findByTestId('former-address-banner')).textContent).toBe('This community has moved to coop.example.org. Open it there');
+        expect(screen.getByRole('link', { name: 'Open it there' }).getAttribute('href')).toBe('https://coop.example.org/');
+    });
+
+    it('the proof is asked for this page\'s own address, of this server\'s list where the page reaches it', async () => {
+        openedAt('mullum.beanpool.org');
+        await renderBanner(renamedFleet());
+        await screen.findByTestId('main-address-banner');
+        expect(provedMainAddress).toHaveBeenCalledWith('mullum.beanpool.org', 'https://mullum.beanpool.org/api/node/addresses');
+    });
+
+    it('at a non-main address the signed list does not name: no line, whatever the info says', async () => {
+        openedAt('mullum.beanpool.org');
+        proof = { ok: true, main: 'byron.beanpool.org', here: 'mullum.beanpool.org', onList: false };
+        const { container } = await renderBanner(renamedFleet());
+        expect(container.innerHTML).toBe('');
     });
 
     it('opened at a former address: says where the community lives now, with a plain link there, and never redirects', async () => {

@@ -270,6 +270,9 @@ export interface RestoreNoticeDeps {
     /** Every notice, a restore's or a roll-back's, readable or not (null): the database was swapped, so the signed address
      *  list's number is raised past it (services/address-list.ts renumberAddressListAfterSwap). Before the file goes. */
     renumber?: (notice: RestoreNotice | null) => void;
+    /** Every notice, readable or not: copies this server held for other servers' devices that the swapped database brought
+     *  back are dropped (engine/group-guest-home.ts heldLinesAfterSwap: hosts' takedowns since went to the database that went). */
+    swapped?: () => void;
 }
 
 /** Each notice a restore or roll-back left: the announcement and the log line, once. Returns how many. Never throws. */
@@ -290,6 +293,9 @@ export function deliverRestoreNotices(deps: RestoreNoticeDeps, dir = dataDir()):
         // raises it more. Any notice says the database was swapped, an unreadable one too.
         if (deps.renumber) {
             try { deps.renumber(notice && typeof notice === 'object' ? notice : null); } catch { /* never blocks the boot */ }
+        }
+        if (deps.swapped) {
+            try { deps.swapped(); } catch { /* never blocks the boot */ }
         }
         // Gone before it is announced: a crash between the two loses one announcement, never repeats one.
         try { fs.unlinkSync(path.join(dir, f)); } catch { /* already gone */ }

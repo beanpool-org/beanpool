@@ -33,7 +33,8 @@
  * 10. back: this server's attestation answering at a lost name restores it on the next round; a refused request asks for
  *     a round at once, and at most once in the rate limit.
  * 11. own release (decision D-B): Take offline, then 29 days on → 200; 30 days on, the registrar saying free → 421 (main:
- *     200); claiming it again → 200. Taken back inside the hold → 200 at 31 days. An older registrar (404) → 200.
+ *     200); claiming it again → 200, and the registrar is asked again at once, so Settings no longer calls it free (main:
+ *     free, at risk, until the next round). Taken back inside the hold → 200 at 31 days. An older registrar (404) → 200.
  * Node U (its only name is its registrar name):
  * 12. before it has a name it asks the registrar nothing; its live name is asked about every 6 hours. After the drop: uname → 421 (main: 200); random.example → 421,
  *     never accepted as an unconfigured node's; Settings says it knows its names and offers nothing; uname is no longer
@@ -714,8 +715,25 @@ async function main(): Promise<void> {
             const d30 = await rounds(P, 'tname', [NOW + 30 * DAY + MIN]);
             assert(d30[0]?.lost?.why === 'released', `30 days on, the registrar says free: lost, released by this community (${JSON.stringify(d30[0])})`);
             assert((await statusOf(P, host('tname'))) === 421, 'a request signed for tname.beanpool.org → 421 (main: 200)');
+            // The claim succeeds, so the address service now gives tname to this key; the watch's last word on it is `free`.
+            holderSays('tname', { held: 'you', state: 'live' });
+            const askedBefore = reg.holderCalls.get('tname') ?? 0;
             assert((await claim(pBase, P, 'tname')).status === 200 && (await statusOf(P, host('tname'))) === 200,
                 'claiming it again brings it back: 200');
+            // Right after the claim, not at the next round (up to 6 hours on for a current live name): the address service is
+            // asked again, and Settings neither calls tname free nor refuses Make main on that word (#3240 round-2 review).
+            const tnameRow = async () => {
+                const report = await call(pBase, 'GET', '/api/local/admin/app-addresses', pAdmin);
+                return (report.body?.addresses ?? []).find((a: any) => a.address === host('tname')) ?? null;
+            };
+            let row: any = null;
+            for (let i = 0; i < 60; i++) {
+                row = await tnameRow();
+                if (row && !row.standing) break;
+                await sleep(100);
+            }
+            assert(row && !row.standing && !/no community holds/.test(row.mainRefusal ?? '') && (reg.holderCalls.get('tname') ?? 0) > askedBefore,
+                `claimed again: the address service is asked at once, and Settings says nothing of free (${JSON.stringify({ standing: row?.standing ?? null, mainRefusal: row?.mainRefusal ?? null, asks: (reg.holderCalls.get('tname') ?? 0) - askedBefore })}; main: at-risk, free, Make main refused until the next round)`);
 
             // Taken back inside the hold: no timer.
             await claim(pBase, P, 'tback');

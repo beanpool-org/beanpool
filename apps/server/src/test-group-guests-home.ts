@@ -52,7 +52,8 @@
  *      server; A then B after a take-over, its copy current / from before / its clock 10 minutes behind; a take-over and
  *      take-back between) x (arriving in the order made, reversed) -> what the two in the order made leave, the newest word
  *      on where the guest stands winning; 16b a counter that is no positive whole number: 400; 16c a withdrawn invitation
- *      never comes back; 16r a home restored from an older snapshot: (line, edit, takedown, epoch, roster, removal,
+ *      never comes back; 16d a newer invitation to someone in that can't be held: out all the same; 16r a home restored
+ *      from an older snapshot: (line, edit, takedown, epoch, roster, removal,
  *      invitation held) x (a restore's notice, a roll-back's, an unreadable one) -> no line or edit is held after the boot
  *      (takedowns stay), and the boot wires it
  *
@@ -1428,6 +1429,24 @@ async function main(): Promise<void> {
         await notice('b.example', inv);
         assert(invited === 'invited' && gone && linkOf(gus, 'b.example', g) === undefined,
             `16c. an invitation withdrawn (no link kept), then the same invitation again: no invitation comes back (${invited} -> ${gone ? 'none' : 'kept'} -> ${linkOf(gus, 'b.example', g)?.state ?? 'none'})`);
+    }
+
+    // A newer invitation to someone in that can't be held (they have as many waiting from that host as it may have): out all
+    // the same, nothing of the group held for them, since the newest word says they are no longer in.
+    {
+        clear16();
+        const g = 'g16-full';
+        const t = Date.now();
+        for (let i = 0; i < (home.GROUP_INVITES_WAITING_PER_HOST as number); i++) {
+            await notice('b.example', { v: 1, kind: 'invite', group: `g16-full-w${i}`, host: 'b.example', guests: [gus.pk], seq: t, data: DATA.invite });
+        }
+        setLink(gus, 'b.example', g, 'in');
+        const L = 'l16-full';
+        await notice('b.example', { v: 1, kind: 'line', group: g, host: 'b.example', guests: [gus.pk], data: { ...(DATA.line as object), id: L } });
+        const heldBefore = lineHeld16(g, L);
+        const r = await notice('b.example', { v: 1, kind: 'invite', group: g, host: 'b.example', guests: [gus.pk], seq: t + 5, data: DATA.invite });
+        assert(r.status === 202 && heldBefore && standing16(g) === 'out' && !lineHeld16(g, L),
+            `16d. a newer invitation to someone in, past the invitations they may have waiting: out all the same, nothing of the group held (${standing16(g)}, L ${lineHeld16(g, L) ? 'held' : 'gone'})`);
     }
 
     // ── 16r. A home restored from an older snapshot (G2) ──────────────────────────────────────

@@ -325,17 +325,22 @@ function takeNoticeFor(member: string, n: Notice, now: number): boolean {
             // Once per host and group: waiting or joining already, a repeat holds nothing and moves nothing. In already: a
             // repeat too, unless it is newer than the newest word taken for them (the order rule): the host took them out
             // and asked again, and the removal never came here (it waited on a server that was taken over, or it is
-            // older and comes later). Then they are out, with nothing of the group held for them, and invited again.
+            // older and comes later). Then they are out, with nothing of the group held for them, and invited again; or, if
+            // the invitation itself can't be held (too large, from someone they blocked, past an allowance), out all the
+            // same: the newest word says they are no longer in.
             const reinvited = standing === 'in' && n.seq !== null;
-            if (state === 'invited' || (answered && !reinvited) || body.length > GROUP_INVITE_MAX_CHARS) return false;
+            if (state === 'invited' || (answered && !reinvited)) return false;
             const inviter = isObject(n.data.invitedBy) ? n.data.invitedBy.key : null;
-            if (typeof inviter === 'string' && KEY_HEX.test(inviter) && hasBlocked(member, inviter)) return false;
             // Waiting: an invitation not yet answered (a yes queued is `joining`, not waiting, as it always was).
             const waiting = (host?: string) => sum(`SELECT COUNT(*) AS n FROM group_guest_links l WHERE l.member = ? AND l.state = 'invited' AND NOT ${YES_QUEUED('l')}${host ? ' AND l.host = ?' : ''}`,
                 member, ...(host ? [host] : []));
-            if (waiting() >= GROUP_INVITES_WAITING || waiting(n.host) >= GROUP_INVITES_WAITING_PER_HOST) return false;
-            if (!mayHold(member, n.host, false, body.length)) return false;
+            const refused = body.length > GROUP_INVITE_MAX_CHARS || (typeof inviter === 'string' && KEY_HEX.test(inviter) && hasBlocked(member, inviter))
+                || waiting() >= GROUP_INVITES_WAITING || waiting(n.host) >= GROUP_INVITES_WAITING_PER_HOST || !mayHold(member, n.host, false, body.length);
             if (reinvited) dropHeldLines(member, n.host, n.group);
+            if (refused) {
+                if (reinvited) setLink(member, n.host, n.group, 'removed', now, { body: null });
+                return false;
+            }
             setLink(member, n.host, n.group, 'invited', now, { body: null });
             break;
         }
@@ -493,8 +498,8 @@ function heldLinesStale(): number {
  * A restore or a roll-back replaced this server's database before this start (services/restore-points.ts
  * deliverRestoreNotices, at the boot after it; G2, #3233 round 3's "not covered"): the held copies of hosts' lines it brought
  * back are from the backup's day, and the takedowns hosts sent since went to the database that is gone. So every held line
- * and edit goes, as at a role change (heldLinesStale): a device misses lines it never fetched, never a line taken down.
- * Invitations, rosters, epochs and removals stay. Never throws. How many went.
+ * and edit with new words goes, as at a role change (heldLinesStale): a device misses lines it never fetched, never a line
+ * taken down. Invitations, rosters, epochs, removals and takedowns stay. Never throws. How many went.
  */
 export function heldLinesAfterSwap(): number {
     try {

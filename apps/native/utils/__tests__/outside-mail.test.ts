@@ -1465,6 +1465,28 @@ describe('X6 round 2  what each side shows is one rule of the line, its newest d
             expect(await ctx.store.unsent(BEN.key)).toEqual([]);
         });
 
+        it('their delete stops my reaction to that line not yet sent: it never goes', async () => {
+            await ctx.store.openChat(BEN.key, anaChat(), { key: ANA.key, home: ANA_HOME, name: 'Ana' });
+            const item = await heldLine(ANA, 'Oops');
+            await syncOutsideMail(ctx);
+            const lineId = item.envelope.itemId;
+            server.sendFails = true;
+            await expect(sendOutsideChange(ctx, anaChat(), { kind: 'dm-reaction', lineId, emoji: '😂' })).rejects.toThrow();
+            const itemId = uuid();
+            const payload = sealOutsideChange({ kind: 'dm-delete', lineId, myEdPrivHex: ANA.seed, myKey: ANA.key, peerKey: BEN.key, itemId });
+            const envelope = await signRelayEnvelope({
+                kind: 'dm-delete', itemId, senderKey: ANA.key, senderHome: ANA_HOME, recipient: BEN.key, recipientHome: HOME, at: Date.now(), payloadHash: relayPayloadHash(payload),
+            }, ed25519Signer(Buffer.from(ANA.seed, 'hex')));
+            server.held.push({ kind: 'dm-delete', envelope, payload, bytes: payload.length, receivedAt: Date.now() });
+            // The round's own resend can't reach my server: the delete is applied first.
+            await syncOutsideMail(ctx);
+            server.sendFails = false;
+            expect(await ctx.store.unsent(BEN.key)).toEqual([]);
+            await syncOutsideMail(ctx);
+            expect(server.sent.filter((i) => i.envelope.kind === 'dm-reaction')).toEqual([]);
+            expect((await ctx.store.chats(BEN.key))[0].lastText).toBe('This message was deleted');
+        });
+
         it('and when that delete is refused for good: the line reads as written, Not delivered (it never went)', async () => {
             await ctx.store.openChat(BEN.key, anaChat(), { key: ANA.key, home: ANA_HOME, name: 'Ana' });
             server.sendFails = true;

@@ -45,8 +45,8 @@
  */
 import {
     ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, isOutsideChangeKind, newDmMessageId, newOutsideDeviceId, openOutsideChange, openOutsideLine,
-    outsideChangeVerdict, outsideLineReportedWords, outsideLineShown, outsideReceiptPayload, readRelayEnvelope, relayConversationId, relayEnvelopeVerifies, relayPayloadHash, sealOutsideChange, sealOutsideLine, nodeHomeOf,
-    audienceOf, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope, type RelayEnvelopeFields, type RelayItem,
+    outsideChangeVerdict, outsideLineReportedWords, outsideLineShown, outsideReceiptPayload, readRelayEnvelope, relayConversationId, relayEnvelopeVerifies,
+    relayPayloadHash, sealOutsideChange, sealOutsideLine, nodeHomeOf, audienceOf, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope, type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
 import { signAddressCardStatement, signRelayEnvelopeStatement } from './member-statements';
 import { signedGet, signedPost } from './node-post';
@@ -508,7 +508,12 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                     let change: OutsideChange | null = null;
                     try { change = openOutsideChange(h.payload, env, { key: me, edPrivHex: ctx.identity.privateKey }); } catch { /* not its sender's */ }
                     const judged = change && outsideChangeVerdict({ change, gate: verdict, chatId, line: await ctx.store.lineOf(change.lineId) });
-                    if (change && judged === 'apply') { await ctx.store.putChange(chatId, change); out.changes++; } else out.dropped++;
+                    if (change && judged === 'apply') {
+                        await ctx.store.putChange(chatId, change);
+                        // Their delete stops what of mine for that line has not left this phone (a reaction): it would change nothing there.
+                        if (change.kind === 'dm-delete') await ctx.store.stopUnsentOf(me, chatId, change.lineId);
+                        out.changes++;
+                    } else out.dropped++;
                     done.push(env.itemId);
                     continue;
                 }

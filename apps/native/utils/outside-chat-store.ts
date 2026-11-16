@@ -308,9 +308,9 @@ export function outsideChatStore(getDb: () => Promise<SqliteLike>) {
             await keepChanges(d, { chatId, lineId: c.lineId, author: c.author, kind: c.kind });
         },
         /**
-         * My delete of line `lineId` (X6) stops whatever of that line has not left this phone: the line itself, still `sending`,
-         * never goes (failed, its item gone, so its words never reach them; the delete goes after it, in case my server took it
-         * unanswered), nor my edits and reactions to it still `sending`.
+         * A delete of line `lineId` (X6), mine or its writer's, stops whatever of mine for that line has not left this phone:
+         * the line itself, mine and still `sending`, never goes (failed, its item gone, so its words never reach them; my delete
+         * goes after it, in case my server took it unanswered), nor my edits and reactions to it still `sending`.
          */
         async stopUnsentOf(me: string, chatId: string, lineId: string): Promise<void> {
             const d = await db();

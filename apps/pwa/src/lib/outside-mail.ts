@@ -43,8 +43,8 @@
  */
 import {
     ADDRESS_CARD_NAME_MAX, OUTSIDE_DEVICE_ID, addressCardName, audienceOf, gateOutsideItem, isOutsideChangeKind, newDmMessageId, newOutsideDeviceId,
-    nodeHomeOf, openOutsideChange, openOutsideLine, outsideChangeVerdict, outsideLineShown, outsideReceiptPayload, readRelayEnvelope, relayConversationId, relayEnvelopeVerifies,
-    relayPayloadHash, sealOutsideChange, sealOutsideLine, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope,
+    nodeHomeOf, openOutsideChange, openOutsideLine, outsideChangeVerdict, outsideLineShown, outsideReceiptPayload, readRelayEnvelope, relayConversationId,
+    relayEnvelopeVerifies, relayPayloadHash, sealOutsideChange, sealOutsideLine, t, type AddressCard, type OutsideChange, type OutsideChangeKind, type RelayEnvelope,
     type RelayEnvelopeFields, type RelayItem,
 } from '@beanpool/core';
 import { nodeAddress, signAddressCardFor, signedMailFetch, signRelayEnvelopeFor } from './api';
@@ -492,7 +492,12 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                     let change: OutsideChange | null = null;
                     try { change = openOutsideChange(h.payload, env, { key: me, edPrivHex: ctx.identity.privateKey }); } catch { /* not its sender's */ }
                     const judged = change && outsideChangeVerdict({ change, gate: verdict, chatId, line: await ctx.store.lineOf(me, chatId, change.lineId) });
-                    if (change && judged === 'apply') { await ctx.store.putChange(me, chatId, change); out.changes++; } else out.dropped++;
+                    if (change && judged === 'apply') {
+                        await ctx.store.putChange(me, chatId, change);
+                        // Their delete stops what of mine for that line has not left this browser (a reaction): it would change nothing there.
+                        if (change.kind === 'dm-delete') await ctx.store.stopUnsentOf(me, chatId, change.lineId);
+                        out.changes++;
+                    } else out.dropped++;
                     done.push(env.itemId);
                     continue;
                 }

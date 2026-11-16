@@ -358,9 +358,10 @@ export function outsideChatStore(community: string, holds: () => boolean = () =>
             return mine;
         },
         /**
-         * My delete of line `lineId` (X6) stops whatever of that line has not left this browser: the line itself, still
-         * `sending`, never goes (failed, its item gone, so its words never reach them; the delete goes after it, in case my
-         * server took it unanswered), nor my edits and reactions to it still `sending`. The phone's stopUnsentOf.
+         * A delete of line `lineId` (X6), mine or its writer's, stops whatever of mine for that line has not left this browser:
+         * the line itself, mine and still `sending`, never goes (failed, its item gone, so its words never reach them; my delete
+         * goes after it, in case my server took it unanswered), nor my edits and reactions to it still `sending`. The phone's
+         * stopUnsentOf.
          */
         async stopUnsentOf(me: string, chatId: string, lineId: string): Promise<void> {
             await change([linesKey(me, chatId), changesKey(me, chatId)], ([lines, changes]: [OutsideLine[] | undefined, Changes | undefined]) => {

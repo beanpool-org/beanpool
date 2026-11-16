@@ -2714,11 +2714,11 @@
     "many": "Все {count} за {n} бобов. По одному выходит {total}.",
     "other": "Все {count} за {n} боба. По одному выходит {total}."
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "one": "По одному {count} выходит на {n} боб. Цена за все должна быть ниже.",
-    "few": "По одному {count} выходит на {n} боба. Цена за все должна быть ниже.",
-    "many": "По одному {count} выходит на {n} бобов. Цена за все должна быть ниже.",
-    "other": "По одному {count} выходит на {n} боба. Цена за все должна быть ниже."
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "one": "По одному {count} выходит на {n} боб. Цена за все не может быть выше.",
+    "few": "По одному {count} выходит на {n} боба. Цена за все не может быть выше.",
+    "many": "По одному {count} выходит на {n} бобов. Цена за все не может быть выше.",
+    "other": "По одному {count} выходит на {n} боба. Цена за все не может быть выше."
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "one": "1.5% идёт сообществу. Вы получаете {n} боб за штуку.",

@@ -152,8 +152,14 @@ async function main(): Promise<void> {
         await refused(`Count ${JSON.stringify(bad)}`, { priceType: 'each', price_c: hc(300), unitsLeft: bad }, 'units_refused', said('units_refused'));
     }
     await refused('Lot for one', { priceType: 'each', price_c: hc(300), unitsLeft: 1, lot: { price_c: hc(200) } }, 'lot_needs_two', said('lot_needs_two'));
-    // Red if the rule becomes <= (a price for all equal to one by one would be shown as a deal that saves nothing).
-    await refused('Lot not less', { ...PANELS, lot: { price_c: hc(6000) } }, 'lot_not_less', said('lot_not_less', { count: 20, total_c: hc(6000) }));
+    // The same as one by one is allowed (Marty 16 Nov: "10 each or 10 for 100 should be okay, as long as it's not 10 for 120"):
+    // stored and said on the post; a hundredth more is refused with the total one by one. Red if the rule goes back to < (the
+    // same price refused), or stops refusing more.
+    const sameAll = await offer(rob, { title: 'Panels, the same for all', ...PANELS, lot: { price_c: hc(6000) } });
+    const sameRow = sameAll.status === 200 ? row(sameAll.body.post.id) : null;
+    assert(!!sameRow && sameRow.lot_price_c === hc(6000) && sameRow.lot_units === 20 && sameAll.body.post.lot?.price_c === hc(6000) && sameAll.body.post.lot?.units === 20,
+        `a price for all the same as one by one (20 × 300 = 6,000) is stored and said (${brief(sameAll)})`);
+    await refused('Lot more', { ...PANELS, lot: { price_c: hc(6000.01) } }, 'lot_not_less', said('lot_not_less', { count: 20, total_c: hc(6000) }));
     await refused('Free lot', { priceType: 'each', price_c: 0, unitsLeft: 20, lot: { price_c: hc(1) } }, 'lot_not_less', said('lot_not_less', { count: 20, total_c: 0 }));
     for (const bad of [{ price_c: 0 }, { price_c: 5.5 }, { price_c: '5500' }, 5500]) {
         await refused(`Lot ${JSON.stringify(bad)}`, { ...PANELS, lot: bad }, 'lot_price_refused', said('lot_price_refused'));
@@ -224,7 +230,7 @@ async function main(): Promise<void> {
         `sent back as it is and still for the 22 left: kept, no count seen needed (${brief(keptAsIs)})`);
     const lower = await edit(rob, robs, { price_c: hc(250) });
     assert(lower.status === 400 && lower.body?.code === 'lot_not_less' && row(robs).price_c === hc(300),
-        `the price for one lowered under the price for all (22 × 250 = 5,500 ≤ 6,000) is refused (${brief(lower)})`);
+        `the price for one lowered under the price for all (22 × 250 = 5,500 < 6,000) is refused (${brief(lower)})`);
     const withCount = await edit(rob, robs, { unitsLeft: 18, unitsLeftWas: 22, lot: { price_c: hc(5000) } });
     assert(withCount.status === 200 && row(robs).units_left === 18 && row(robs).lot_units === 18 && row(robs).lot_price_c === hc(5000),
         'a new count and a price for all in one edit: the price is for the new count');

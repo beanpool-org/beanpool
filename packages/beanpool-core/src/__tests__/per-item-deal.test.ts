@@ -33,6 +33,27 @@ describe('the box (§2.2): the lines, the total and what Confirm sends', () => {
         expect(b.canLess).toBe(false);
         expect(b.canMore).toBe(true);
     });
+    // (price for all, against 20 at 300 = 6,000 one by one) -> the saving line. A price for all the same as one by one is
+    // allowed (Marty 16 Nov) and is offered with no saving line: never "0 less than one by one" (red if the > 0 guard goes).
+    for (const [name, beans, saving] of [
+        ['saving > 0', 5500, '500 less than one by one'],
+        ['saving of a hundredth', 5999.99, '0.01 less than one by one'],
+        ['saving 0 (the same as one by one)', 6000, null],
+    ] as const) {
+        it(`the second choice at a price for all of ${beans}: ${name} -> ${saving ?? 'no saving line'}`, () => {
+            const b = box(panels(20, { units: 20, beans }));
+            expect(b.lot).toEqual({ label: `All 20 for ${formatHundredths(c(beans))} Beans`, saving });
+        });
+    }
+    it('all at the same price as one by one: chosen, it sends exactly that figure (expect_c), the one the node holds', () => {
+        const same = panels(10, { units: 10, beans: 100 }, 10);
+        const b = box(same, at('10'));
+        expect(b.option).toBe('lot');
+        expect(b.total).toBe('All 10 for 100 Beans');
+        expect(b.send).toEqual({ hours: 10, itemOption: 'lot', expect_c: c(100) });
+        expect(itemTakeUpOf(same, { n: 10, option: 'lot', expect_c: c(100) })).toEqual({ ok: true, take: { option: 'lot', n: 10, amount_c: c(100) } });
+        expect(itemStockRefusal(same, { option: 'lot', n: 10 })).toBeNull();
+    });
     it('3 of them: 3 × 300 = 900, and what Rob receives (red if the total or the fee is worked out apart from itemTotal)', () => {
         const b = box(panels(20), at('3'));
         expect(b.total).toBe('3 × 300 = 900 Beans');

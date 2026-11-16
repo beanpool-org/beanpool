@@ -2506,9 +2506,9 @@
     "one": "Todos os {count} por {n} feijão. Um a um somam {total}.",
     "other": "Todos os {count} por {n} feijões. Um a um somam {total}."
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "one": "Um a um, {count} somam {n} feijão. O preço por todos precisa ser menor.",
-    "other": "Um a um, {count} somam {n} feijões. O preço por todos precisa ser menor."
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "one": "Um a um, {count} somam {n} feijão. O preço por todos não pode ser maior.",
+    "other": "Um a um, {count} somam {n} feijões. O preço por todos não pode ser maior."
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "one": "1.5% vai para a comunidade. Você recebe {n} feijão por cada um.",

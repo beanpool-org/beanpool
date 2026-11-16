@@ -2714,11 +2714,11 @@
     "many": "Усі {count} за {n} бобів. Поодинці виходить {total}.",
     "other": "Усі {count} за {n} боба. Поодинці виходить {total}."
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "one": "Поодинці {count} виходить на {n} біб. Ціна за всі має бути нижчою.",
-    "few": "Поодинці {count} виходить на {n} боби. Ціна за всі має бути нижчою.",
-    "many": "Поодинці {count} виходить на {n} бобів. Ціна за всі має бути нижчою.",
-    "other": "Поодинці {count} виходить на {n} боба. Ціна за всі має бути нижчою."
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "one": "Поодинці {count} виходить на {n} біб. Ціна за всі не може бути вищою.",
+    "few": "Поодинці {count} виходить на {n} боби. Ціна за всі не може бути вищою.",
+    "many": "Поодинці {count} виходить на {n} бобів. Ціна за всі не може бути вищою.",
+    "other": "Поодинці {count} виходить на {n} боба. Ціна за всі не може бути вищою."
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "one": "1.5% іде спільноті. Ви отримуєте {n} біб за штуку.",

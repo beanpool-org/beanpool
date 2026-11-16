@@ -2506,9 +2506,9 @@
     "one": "همه {count} تا به {n} لوبیا. تکی روی هم {total} می‌شود.",
     "other": "همه {count} تا به {n} لوبیا. تکی روی هم {total} می‌شود."
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "one": "تکی، {count} تا می‌شود {n} لوبیا. قیمت همه باید کمتر باشد.",
-    "other": "تکی، {count} تا می‌شود {n} لوبیا. قیمت همه باید کمتر باشد."
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "one": "تکی، {count} تا می‌شود {n} لوبیا. قیمت همه نمی‌تواند بیشتر از این باشد.",
+    "other": "تکی، {count} تا می‌شود {n} لوبیا. قیمت همه نمی‌تواند بیشتر از این باشد."
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "one": "1.5% به جامعه می‌رسد. شما برای هر کدام {n} لوبیا دریافت می‌کنید.",

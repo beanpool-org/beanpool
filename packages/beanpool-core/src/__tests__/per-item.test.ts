@@ -66,9 +66,10 @@ describe('amounts: exact integers, the price for all only while it is on offer',
         // The largest: a million Beans each, 9,999 of them, exact.
         expect(itemsAmount(c(1_000_000), ITEM_COUNT_MAX)).toBe(c(1_000_000) * ITEM_COUNT_MAX);
     });
-    it('the saving is one by one less the price for all: 6,000 − 5,500 = 500', () => {
+    it('the saving is one by one less the price for all: 6,000 − 5,500 = 500, and 0 when they are the same', () => {
         expect(lotSaving(panels(20))).toBe(c(500));
         expect(lotSaving(panels(17))).toBeNull();
+        expect(lotSaving(panels(20, { units: 20, beans: 6000 }))).toBe(0);
     });
     it("the design's fee figures: 900 → 13.50 and 886.50; 5,500 → 82.50 and 5,417.50; 300 → 295.50 (red if the fee rounds twice)", () => {
         expect([feeOf(c(900)), sellerReceives(c(900))]).toEqual([c(13.5), c(886.5)]);
@@ -85,8 +86,9 @@ describe('the rules on the three columns, as they will be stored (create and edi
         // Bound to a number no longer left (17 now): kept, and it holds while it is less than 20 one by one.
         expect(itemColumnsRefusal(c(300), cols(17, c(5500), 20))).toBeNull();
     });
-    it('the price for all must be less than one by one (red if <= becomes <)', () => {
-        expect(itemColumnsRefusal(c(300), cols(20, c(6000), 20))).toEqual({ code: 'lot_not_less', count: 20, total_c: c(6000) });
+    it('the price for all must not be more than one by one; the same is allowed (Marty 16 Nov; red if <= becomes <)', () => {
+        expect(itemColumnsRefusal(c(300), cols(20, c(6000), 20))).toBeNull();
+        expect(itemColumnsRefusal(c(300), cols(20, c(6000.01), 20))).toEqual({ code: 'lot_not_less', count: 20, total_c: c(6000) });
         expect(itemColumnsRefusal(c(300), cols(20, c(5999.99), 20))).toBeNull();
         // The price for one lowered under a kept price for all: refused, never a lot that costs more than one by one.
         expect(itemColumnsRefusal(c(200), cols(20, c(5500), 20))?.code).toBe('lot_not_less');
@@ -131,7 +133,7 @@ describe('the words, in English', () => {
         expect(perItemLines.lessOneByOne(c(500))).toBe('500 less than one by one');
         expect(perItemLines.feeLine(c(300), c(5500))).toBe('1.5% goes to the community. You receive 295.50 Beans for each one, or 5,417.50 Beans for all of them.');
         expect(perItemLines.lotGood(20, c(5500), c(300))).toBe('All 20 for 5,500 Beans. One by one they come to 6,000.');
-        expect(perItemLines.lotNotLess(20, c(300))).toBe('One by one, 20 come to 6,000 Beans. A price for all of them has to be less.');
+        expect(perItemLines.lotMore(20, c(300))).toBe("One by one, 20 come to 6,000 Beans. A price for all of them can't be more than that.");
         expect(perItemLines.dealTitle('each', 3, 'Solar Panels')).toBe('3 × Solar Panels');
         expect(perItemLines.dealTitle('lot', 20, 'Solar Panels')).toBe('All 20 × Solar Panels');
         expect(perItemLines.pushTook('each', 'Dana', 3, 'Solar Panels', c(900))).toBe('Dana took 3 of "Solar Panels". 900 Beans are held in trust.');
@@ -152,7 +154,39 @@ describe('the words, in English', () => {
             expect(text.length).toBeGreaterThan(10);
             expect(text).not.toMatch(/[{}]/);
         }
-        expect(perItemRefusalText({ code: 'lot_not_less', count: 20, total_c: c(6000) }, en)).toBe('One by one, 20 come to 6,000 Beans. A price for all of them has to be less.');
+        expect(perItemRefusalText({ code: 'lot_not_less', count: 20, total_c: c(6000) }, en)).toBe("One by one, 20 come to 6,000 Beans. A price for all of them can't be more than that.");
+    });
+});
+
+describe('the price for all against one by one, over every case (Marty 16 Nov: "10 each or 10 for 100 should be okay, as long as it\'s not 10 for 120")', () => {
+    // (price for one, count, price for all) -> the refusal code, or null when it is taken. Below and equal are taken; above is
+    // refused with the count and the total one by one; a count of 1 has no price for all; a Free listing has none either.
+    const ROWS: readonly { name: string; price: number; count: number; lot: number; refused: string | null }[] = [
+        { name: '10 each, 10 for 90 (below)', price: 10, count: 10, lot: 90, refused: null },
+        { name: '10 each, 10 for 100 (equal)', price: 10, count: 10, lot: 100, refused: null },
+        { name: '10 each, 10 for 100.01 (a hundredth above)', price: 10, count: 10, lot: 100.01, refused: 'lot_not_less' },
+        { name: '10 each, 10 for 120 (above)', price: 10, count: 10, lot: 120, refused: 'lot_not_less' },
+        { name: '0.01 each, 2 for 0.02 (equal at the smallest)', price: 0.01, count: 2, lot: 0.02, refused: null },
+        { name: '300 each, 20 for 6,000 (equal)', price: 300, count: 20, lot: 6000, refused: null },
+        { name: 'count 1, a price for all below', price: 10, count: 1, lot: 5, refused: 'lot_needs_two' },
+        { name: 'count 1, a price for all equal', price: 10, count: 1, lot: 10, refused: 'lot_needs_two' },
+        { name: 'Free, any price for all', price: 0, count: 10, lot: 0.01, refused: 'lot_not_less' },
+    ];
+    for (const row of ROWS) {
+        it(`${row.name}: ${row.refused ?? 'taken'}`, () => {
+            const r = itemColumnsRefusal(c(row.price), { units_left: row.count, lot_price_c: c(row.lot), lot_units: row.count });
+            expect(r?.code ?? null).toBe(row.refused);
+            if (row.refused === 'lot_not_less') expect(r).toEqual({ code: 'lot_not_less', count: row.count, total_c: c(row.price * row.count) });
+        });
+    }
+    it('at the same price, the price for all is on offer, its total is that figure, and its saving is 0 (never "0 less")', () => {
+        const same: PerItemListing = { priceType: EACH, price_c: c(10), unitsLeft: 10, lot: { units: 10, price_c: c(100) } };
+        expect(lotOffered(same)).toBe(true);
+        expect(itemTotal(same, { option: 'lot' })).toBe(c(100));
+        expect(itemTotal(same, { option: 'each', n: 10 })).toBe(c(100));
+        expect(lotSaving(same)).toBe(0);
+        expect(itemTakeUpOf(same, { n: 10, option: 'lot', expect_c: c(100) })).toEqual({ ok: true, take: { option: 'lot', n: 10, amount_c: c(100) } });
+        expect(perItemCard(same)?.orAll).toBe('or all for 100 🫘');
     });
 });
 
@@ -243,7 +277,7 @@ describe('every sentence, in en/ru/fr/pt/es, with one and with many (§9 Core)',
         pushTook: (n) => `${perItemLines.pushTook('each', 'Dana', n, 'Panels', c(n))} ${perItemLines.pushTook('lot', 'Dana', n, 'Panels', c(n))}`,
         releaseOtherCount: (n) => perItemLines.releaseOtherCount(n), unitEach: () => perItemLines.unitEach(),
         priceForOne: () => perItemLines.priceForOne(), howManyHave: () => perItemLines.howManyHave(), orAllOfThemFor: () => perItemLines.orAllOfThemFor(),
-        lotEmpty: () => perItemLines.lotEmpty(), lotGood: (n) => perItemLines.lotGood(n, c(n), c(n)), lotNotLess: (n) => perItemLines.lotNotLess(n, c(1)),
+        lotEmpty: () => perItemLines.lotEmpty(), lotGood: (n) => perItemLines.lotGood(n, c(n), c(n)), lotMore: (n) => perItemLines.lotMore(n, c(1)),
         feeLine: (n) => `${perItemLines.feeLine(c(n), null)} ${perItemLines.feeLine(c(n), c(n))}`,
         howManyLeft: () => perItemLines.howManyLeft(), heldNotCounted: (n) => perItemLines.heldNotCounted(n),
         lotForOtherCount: (n) => perItemLines.lotForOtherCount(n + 3, n), unitsZero: () => perItemLines.unitsZero(),

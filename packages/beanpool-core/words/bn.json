@@ -2506,9 +2506,9 @@
     "one": "সব {count}টি {n}টি শিমে। একটা একটা করে মোট হয় {total}।",
     "other": "সব {count}টি {n}টি শিমে। একটা একটা করে মোট হয় {total}।"
   },
-  "One by one, {count} come to {n} Beans. A price for all of them has to be less.|One by one, {count} come to {n} Beans. A price for all of them has to be less.": {
-    "one": "একটা একটা করে {count}টির দাম {n}টি শিম। সবগুলোর দাম এর চেয়ে কম হতে হবে।",
-    "other": "একটা একটা করে {count}টির দাম {n}টি শিম। সবগুলোর দাম এর চেয়ে কম হতে হবে।"
+  "One by one, {count} come to {n} Beans. A price for all of them can't be more than that.|One by one, {count} come to {n} Beans. A price for all of them can't be more than that.": {
+    "one": "একটা একটা করে {count}টির দাম {n}টি শিম। সবগুলোর দাম এর চেয়ে বেশি হতে পারবে না।",
+    "other": "একটা একটা করে {count}টির দাম {n}টি শিম। সবগুলোর দাম এর চেয়ে বেশি হতে পারবে না।"
   },
   "1.5% goes to the community. You receive {n} Beans for each one.|1.5% goes to the community. You receive {n} Beans for each one.": {
     "one": "1.5% কমিউনিটিতে যায়। প্রতিটির জন্য আপনি পাবেন {n}টি শিম।",

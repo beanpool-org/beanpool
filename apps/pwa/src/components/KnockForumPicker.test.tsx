@@ -12,9 +12,11 @@
  * from the list (deleted since the form opened).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { FORUM_ASK_PICKER_WORDS, FORUM_ASK_POSTS_PATH, t } from '@beanpool/core';
 import { AskToJoin } from './AskToJoin';
+import { useForumAskPicks } from '../lib/forum-ask-picks';
+import { knockBody } from '../lib/knock';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { hearNodeVersionForTests, resetNodeVersionGateForTests } from '../lib/node-version-gate';
 
@@ -82,20 +84,24 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); localStorage.clear(); });
 
-describe('what the request sends, after taps on the picker', () => {
-    const rows: { taps: string[]; sends: string[] }[] = [];
+/** 0, 1, 3, 4 of Asha's own × another writer's post × a deleted one; what goes is only hers, in order, at most three. */
+function rows(): { taps: string[]; sends: string[] }[] {
+    const out: { taps: string[]; sends: string[] }[] = [];
     for (const n of [0, 1, 3, 4]) {
         for (const withOthers of [false, true]) {
             for (const withDeleted of [false, true]) {
-                rows.push({
+                out.push({
                     taps: [...(withOthers ? [OTHERS] : []), ...OWN.slice(0, n), ...(withDeleted ? [DELETED] : [])],
                     sends: OWN.slice(0, Math.min(n, 3)),
                 });
             }
         }
     }
+    return out;
+}
 
-    it.each(rows)('taps $taps -> sends $sends', async ({ taps, sends }) => {
+describe('what the request sends, after taps on the picker', () => {
+    it.each(rows())('taps $taps -> sends $sends', async ({ taps, sends }) => {
         await openForm();
         for (const id of taps) tap(id);
         const body = await send();
@@ -114,6 +120,19 @@ describe('what the request sends, after taps on the picker', () => {
         expect(body).toMatchObject({ message: 'I fix bikes.', callsign: 'Asha', toNode: 'riverside.example.org' });
         // The list was asked of this web app's own server, once, signed (never of the community asked).
         expect(asks().map((c) => c.url)).toEqual([`${OWN_SERVER}${FORUM_ASK_POSTS_PATH}`]);
+    });
+});
+
+describe('the send rule behind the form: picks that are not on the list never go', () => {
+    // The form has no row for another writer's post or a deleted one, and holds a fourth row back; here they are handed to the
+    // hook's toggle anyway (a stale tap): it refuses them a place, and the send rule (core forumAskSend) would drop them.
+    it.each(rows())('picks $taps -> sends $sends', async ({ taps, sends }) => {
+        const { result } = renderHook(() => useForumAskPicks(true, ASHA));
+        await waitFor(() => expect(result.current.offered).not.toBeNull());
+        for (const id of taps) act(() => result.current.toggle(id));
+        const body = knockBody({ callsign: 'Asha', message: 'Hi', forum: result.current.sendFor(ASHA.publicKey) }, 'riverside.example.org');
+        expect(body.forumPosts?.map((p) => p.postId) ?? []).toEqual(sends);
+        expect(result.current.sendFor('b'.repeat(64))).toBeNull();
     });
 });
 

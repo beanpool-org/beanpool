@@ -112,10 +112,13 @@ async function draw(formKey: string | null = 'riverside', identity: BeanPoolIden
     await settle();
 }
 const rowOf = (id: string) => host.querySelector(`[data-testid="picker-${id}"]`) as HTMLElement | null;
+/**
+ * A tap on the row; a post with no row (not on the list) is handed to the hook's toggle anyway, as a stale tap would: the
+ * hook refuses it a place, and the send rule (core forumAskSend through sendFor) would drop it, so the request never has it.
+ */
 async function tap(id: string) {
     const r = rowOf(id);
-    if (!r) return; // not on the list: nothing to tap
-    await act(async () => { r.click(); });
+    await act(async () => { if (r) r.click(); else picks!.toggle(id); });
 }
 const sent = () => knockBody({ callsign: 'Asha', message: 'I fix bikes.', forum: picks!.sendFor(ASHA.publicKey) }, 'riverside.example', null);
 

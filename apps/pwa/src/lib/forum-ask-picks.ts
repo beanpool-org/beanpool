@@ -73,7 +73,10 @@ export function useForumAskPicks(open: boolean, identity: BeanPoolIdentity | nul
         return () => { alive = false; };
         // Read once per open form and key: a new identity object for the same key reads nothing again.
     }, [open, identity?.publicKey]);
-    const toggle = useCallback((postId: string) => setPicked((p) => toggleForumAskPick(p, postId)), []);
+    // Only a post on the list can be picked: an id that isn't (another writer's, one gone, a stale tap) takes no place.
+    const toggle = useCallback((postId: string) => {
+        if (offered?.list.posts.some((p) => p.postId === postId)) setPicked((p) => toggleForumAskPick(p, postId));
+    }, [offered]);
     const sendFor = useCallback(
         (key: string) => (offered && offered.key === key ? forumAskSend(offered.list, picked) : null),
         [offered, picked],

@@ -684,8 +684,9 @@ async function main(): Promise<void> {
             const bRolled = runSpec(rbBehind, { clock: T0 + HOUR, owner: ['second.example.org'], rollBackTo: bBefore?.point });
             const bAfter = runSpec(rbBehind, { clock: behind, boot: true });
             const bP1 = bRolled?.signed as SignedAddressList, bPR = bAfter?.signed as SignedAddressList;
-            assert(bPR?.list && bP1?.list && bPR.list.seq === bP1.list.seq + 1 && compareAddressNumbers(bPR.list, bP1.list) === 1,
-                `with the clock far behind, a roll-back still outranks what was signed before it: the notice carries that number, and the boot goes one past it (${num(bP1)} → ${num(bPR)})`);
+            assert(bPR?.list && bP1?.list && bPR.list.seq === bP1.list.seq + 1 && compareAddressNumbers(bPR.list, bP1.list) === 1
+                && !/behind the address list's number/.test(bAfter?.output ?? ''),
+                `with the clock far behind, a roll-back still outranks what was signed before it: the notice carries that number, the boot goes one past it, and no clock warning (nothing can outrank it) (${num(bP1)} → ${num(bPR)})`);
             const freshBehind = path.join(work, 'fresh-behind');
             restoreOntoFreshMachine(lost, nightly, freshBehind);
             const fBehind = runSpec(freshBehind, { clock: behind, boot: true });

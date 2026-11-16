@@ -178,7 +178,9 @@ export function renumberAddressListAfterSwap(notice: { addressList?: unknown } |
         logger.info('SYS', `[Addresses] The database was restored or rolled back: the address list's number goes on at ${raised.epoch}.${raised.seq}, `
             + `past ${inPlace ? `${inPlace.epoch}.${inPlace.seq} in the database now in place` : 'nothing in the database now in place'}`
             + `${going ? ` and ${going.epoch}.${going.seq} signed before the swap` : ''}.`);
-        if (floor <= highest) {
+        // Only when nothing carried the number signed before the swap (a restore onto a new machine): with it, the list is past
+        // everything signed before whatever the clock says.
+        if (!going && floor <= highest) {
             logger.warn('SYS', `[Addresses] This server's clock reads ${new Date(clockNow()).toISOString()}, behind the address list's number, so the number `
                 + 'went on by one. If the clock is wrong, set it right: a list the lost server signed after its last backup may outrank this one until then.');
         }

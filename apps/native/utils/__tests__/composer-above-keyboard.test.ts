@@ -129,10 +129,11 @@ function wiring(screen: Screen) {
 }
 
 // A 390 × 844 iPhone (Rob's), a 320 × 568 small one; the keyboard with its QuickType strip; the page sheet's top
-// (status bar + 10). Heights in points; the bars as drawn at 1.3× text.
+// (status bar + 10), and the status bar a full-screen screen's SafeAreaView starts under. Heights in points; the bars as
+// drawn at 1.3× text.
 const PHONES = [
-    { name: '390 × 844', window: 844, keyboard: 336, sheetTop: 57 },
-    { name: '320 × 568', window: 568, keyboard: 253, sheetTop: 30 },
+    { name: '390 × 844', window: 844, keyboard: 336, sheetTop: 57, statusBar: 47 },
+    { name: '320 × 568', window: 568, keyboard: 253, sheetTop: 30, statusBar: 20 },
 ];
 const HEADER = 64;
 const BAR = 52;
@@ -205,7 +206,7 @@ describe('composer above the keyboard: every composer screen × card or iPhone s
         for (const phone of PHONES) {
             for (const presentation of ['card', 'sheet'] as const) {
                 // A full-screen screen starts under the status bar inside the SafeAreaView; a sheet starts below it.
-                const safeTop = presentation === 'card' ? 47 : 0;
+                const safeTop = presentation === 'card' ? phone.statusBar : 0;
                 for (const kb of [0, phone.keyboard]) {
                     for (const content of PAGES) {
                         for (const box of BOXES) {

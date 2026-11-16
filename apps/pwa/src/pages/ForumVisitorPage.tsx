@@ -20,6 +20,9 @@ import { FORUM_WORDS } from './ForumPage';
 
 const button = 'min-h-[44px] px-4 rounded-lg font-semibold';
 const quiet = { background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' } as const;
+/** The lobby draws on its patterned ground: the forum's words sit on the card surface, never on the pattern. */
+const sheet = 'flex flex-col gap-3 mx-3 my-3 px-4 py-3 rounded-2xl';
+const sheetStyle = { background: 'var(--bg-card)', border: '1px solid var(--border-primary)' } as const;
 
 /** The door, where a member's reply box or New topic would be. */
 function JoinDoor({ onJoin, topicId }: { onJoin: () => void; topicId?: string }) {
@@ -71,7 +74,7 @@ export function ForumVisitorPage({ topicId = null, onTopic, onJoin }: {
 
     const nameOf = (id: string) => { const s = sections.find((x) => x.id === id); return s ? forumSectionName(s) : ''; };
     return (
-        <div data-testid="forum-visitor" className="flex flex-col gap-3 px-4 py-3">
+        <div data-testid="forum-visitor" className={sheet} style={sheetStyle}>
             {sections.length > 0 && (
                 <select value={section ?? ''} onChange={(e) => { setList(null); setSection(e.target.value || null); }} aria-label={t(FORUM_WORDS.pickSection)} data-testid="forum-visitor-section"
                     className="min-w-0 min-h-[44px] rounded-lg px-2 text-[0.95rem]" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-input)' }}>
@@ -130,7 +133,7 @@ function VisitorTopic({ id, sections, onBack, onJoin }: { id: string; sections: 
     const member = t('A member');
     const quoted = (n: number | null) => (n ? page?.posts.find((p) => p.number === n) ?? null : null);
     return (
-        <div data-testid="forum-visitor-topic" className="flex flex-col gap-3 px-4 py-3 pb-6">
+        <div data-testid="forum-visitor-topic" className={`${sheet} pb-6`} style={sheetStyle}>
             <div className="flex items-center gap-1">
                 <button type="button" onClick={onBack} aria-label={t(TOPIC_WORDS.back)} data-testid="forum-visitor-back" className="min-w-[44px] min-h-[44px] text-xl" style={{ color: 'var(--text-primary)' }}>‹</button>
                 <span className="text-sm font-semibold truncate min-w-0 flex-1" style={{ color: 'var(--text-secondary)' }}>{section ? forumSectionName(section) : ''}</span>

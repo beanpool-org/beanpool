@@ -68,9 +68,9 @@ export interface SavedListStorage {
  * their own spelling rule. Nothing else writes the list to take a row off (utils/__tests__/saved-list-writes.test.ts);
  * the whole list goes only as an account leaves the phone, with every record (account-leaves-phone.ts forgetCommunities).
  *
- * A list that can't be read is left as it is, and `address`'s record still goes (the next app start makes it again from
- * a row still saved, the same record: community-record.ts). Throws when the list can't be written; the records go all
- * the same.
+ * A list that can't be read is left as it is, and `address`'s record still goes (a row still saved gets a record again at
+ * the next app start, as any saved row without one does: community-record.ts). Throws when the list can't be written;
+ * the records go all the same.
  */
 export async function takeOffSavedList(
     address: string,

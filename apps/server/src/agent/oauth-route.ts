@@ -40,7 +40,8 @@ import {
 } from '../settings-signin-pairing.js';
 import { cleanMemberText } from './fence.js';
 import { forgetAgentGrant } from './limits.js';
-import { aiAssistantsAllowed, logRefusal, MCP_PATH, nodeUrlFor } from './mcp-route.js';
+import { aiAssistantsAllowed, logRefusal, MCP_PATH, servedUrlFor } from './mcp-route.js';
+import { listedUrls } from '../engine/own-addresses.js';
 import {
     consentRequest, dropConsentRequest, exchangeCode, findClient, holdConsentRequest, isPendingRegistration, issueCode,
     markRegistrationOpened, OAUTH_SCOPE, redirectHost, refreshGrant, registerClient, revokeByToken, setConsentTicks, type OAuthGrantView, type TokenResult,
@@ -57,15 +58,24 @@ export const OAUTH_COOKIE_PATH = '/oauth/authorize';
 const POLL_MS = 25_000;
 const FORM_MAX_BYTES = 8 * 1024;
 
-/** The issuer, and the resource /mcp is: this node's public URL (or the host it was reached at, a LAN node). */
-export const issuerFor = (ctx: any): string => nodeUrlFor(ctx);
-export const resourceFor = (ctx: any): string => `${nodeUrlFor(ctx)}${MCP_PATH}`;
-export const resourceMetadataUrl = (ctx: any): string => `${nodeUrlFor(ctx)}/.well-known/oauth-protected-resource${MCP_PATH}`;
+/**
+ * The issuer, and the resource /mcp is: the listed address the request reached, else the main one (or the host it was
+ * reached at, a LAN node): mcp-route.ts servedUrlFor.
+ */
+export const issuerFor = (ctx: any): string => servedUrlFor(ctx);
+export const resourceFor = (ctx: any): string => `${servedUrlFor(ctx)}${MCP_PATH}`;
+export const resourceMetadataUrl = (ctx: any): string => `${servedUrlFor(ctx)}/.well-known/oauth-protected-resource${MCP_PATH}`;
 
-/** The resource an assistant may name: /mcp's URL, or the node's own (design §2: "resource indicator = the node's URL"). */
+/**
+ * The resource an assistant may name: /mcp's URL, or the node's own (design §2: "resource indicator = the node's URL"), at
+ * the address the request reached or at any other address on the list (own-addresses.ts listedUrls). An assistant
+ * connected while another address was main names that one at every refresh, as the MCP spec has a client do, and keeps
+ * working (several-addresses S1, review 4580901344). A grant still refreshes only for the resource it was approved for
+ * (agent/oauth.ts refreshGrant).
+ */
 function resourceAccepted(ctx: any, value: string): boolean {
     const v = value.replace(/\/+$/, '');
-    return v === resourceFor(ctx) || v === issuerFor(ctx);
+    return [servedUrlFor(ctx), ...listedUrls()].some((u) => v === u || v === `${u}${MCP_PATH}`);
 }
 
 function off(ctx: any): boolean {

@@ -584,15 +584,20 @@ async function main(): Promise<void> {
                 'and the held-back hosts are still held back');
         });
 
-        // ── 8. Confirming, as before ──
-        console.log('\n— 8. confirming works as before —');
+        // ── 8. Confirming: an owner's, with the owner's fresh proof (design several-addresses §7, decided pick 4) ──
+        console.log('\n— 8. confirming is an owner\'s, with fresh proof —');
         await section('8', async () => {
             const noAuth = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', {}, j({ address: 'home.example.org' }));
-            assert(noAuth.status === 401 || noAuth.status === 403, `confirming needs an owner or admin (${show(noAuth)})`);
-            const confirmed = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', adminPw, j({ address: 'https://Home.Example.org/settings' }));
+            assert(noAuth.status === 401 || noAuth.status === 403, `confirming needs an owner (${show(noAuth)})`);
+            // An automation token (no owner's fresh proof can come with one) adds no address any more.
+            const byToken = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', adminPw, j({ address: 'https://Home.Example.org/settings' }));
+            assert(byToken.status === 403 && !(await report()).addresses.some((a) => a.address === 'home.example.org'),
+                `an automation token no longer confirms an address, and nothing is added (${show(byToken)})`);
+            const ownerConfirm: Record<string, string> = await U.send('ownerPhoneSession', { owner: owner.pk });
+            const confirmed = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', ownerConfirm, j({ address: 'https://Home.Example.org/settings' }));
             assert(confirmed.status === 200 && confirmed.body?.addresses?.some((a: any) => a.address === 'home.example.org' && a.source === 'owner')
                 && !listedAnywhere(confirmed.body).includes('home.example.org'),
-                `one tap confirms home.example.org: it is on the address list as the owner's, and on neither offer list (${show(confirmed)})`);
+                `the owner, from the phone just unlocked, confirms home.example.org: it is on the address list as the owner's, and on neither offer list (${show(confirmed)})`);
             const own = await readAs(U, mia, 'home.example.org');
             const other = await readAs(U, mia, 'crowd.example.org');
             const mullum = await readAs(U, mia, 'mullum.beanpool.org');
@@ -659,11 +664,12 @@ async function main(): Promise<void> {
             const refused = await readAs(S, solo, 'solo.example');
             const late = offered(await soloReport('solo.example'), 'solo.example');
             assert(refused.status === 421 && late?.busiestDay === 1, `from the date the app is refused there, and Settings open at it still offers it with one tap (${refused.status}, ${j(late)})`);
-            const confirmed = await call(S, 'POST', '/api/local/admin/app-addresses/confirm?host=solo.example', sAdmin, j({ address: 'solo.example' }));
+            const soloPhone: Record<string, string> = await S.send('ownerPhoneSession', { owner: solo.pk });
+            const confirmed = await call(S, 'POST', '/api/local/admin/app-addresses/confirm?host=solo.example', soloPhone, j({ address: 'solo.example' }));
             const now = await readAs(S, solo, 'solo.example');
             assert(confirmed.status === 200 && confirmed.body?.named === true && confirmed.body?.addresses?.some((a: any) => a.address === 'solo.example' && a.source === 'owner')
                 && confirmed.body?.unconfirmed?.length === 0 && now.status === 200,
-                `one tap confirms it: S's name, and the owner's app is accepted there again (${show(confirmed)}; ${now.status})`);
+                `the owner confirms it from the phone just unlocked: S's name, and the owner's app is accepted there again (${show(confirmed)}; ${now.status})`);
             await stopNode(S);
         });
     } catch (e: any) {

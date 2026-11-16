@@ -2643,7 +2643,8 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('F8 the n
         expect(drawn).toBeLessThanOrEqual(room);
         expect(spec.qrBox.backgroundColor).toBe('#ffffff');
         expect(spec.camera.aspectRatio).toBe(1);
-        const modal = screen.slice(screen.indexOf('<Modal'), screen.indexOf('</Modal>'));
+        // The scanner is a LightBarModal (light status-bar icons over its black, components/LightBarModal.tsx).
+        const modal = screen.slice(screen.indexOf('<LightBarModal'), screen.indexOf('</LightBarModal>'));
         expect(modal).toContain('<CameraView');
         expect(modal).not.toMatch(/TextInput|KeyboardAwareScrollView|KeyboardProvider/);
         expect(spec.scanner.flex).toBe(1);

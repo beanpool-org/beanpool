@@ -125,6 +125,8 @@ export function nativeMock(said: Said) {
         FlatList, SectionList: FlatList,
         // A Modal that is up reports `onShow`, as React Native's does; iOS's refusals and dismissals are `modalControl`'s (above).
         Modal: modalStandIn,
+        // React Native's status-bar stack, which components/LightBarModal.tsx (the photo viewer) pushes on.
+        StatusBar: { pushStackEntry: () => ({}), popStackEntry: () => {} },
         Animated: { View: el('div'), Text: el('span'), FlatList, Value, add: () => new Value(0), multiply: () => new Value(0), timing: anim, spring: anim, loop: anim, sequence: anim, parallel: anim, event: () => () => {}, createAnimatedComponent: (c: unknown) => c },
         Easing: { inOut: () => () => 0, ease: () => 0, linear: () => 0, out: () => () => 0 },
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },

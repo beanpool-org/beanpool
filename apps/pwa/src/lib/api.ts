@@ -7,7 +7,7 @@ import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury, WaitingVoucherRow } from '@beanpool/core';
-import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, signInsToRefresh, t, type DmLineDisclosure, type KnockVia } from '@beanpool/core';
+import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockForum, readKnockVia, signInsToRefresh, t, type DmLineDisclosure, type KnockForum, type KnockVia } from '@beanpool/core';
 import { readGroupInvitations, type GroupInvitations } from '@beanpool/core';
 import { PULSE_KNOWLEDGE_WITH, type PulseKnowledgeCard } from '@beanpool/core';
 import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
@@ -915,6 +915,8 @@ export interface JoinRequest {
     createdAt: string;
     /** The listing shared outside it came after and who shared it (shared-listing door A3), or null. */
     via: KnockVia | null;
+    /** Up to three of their posts on the worldwide forum, each with its proof (forums F11), or null. */
+    forum: KnockForum | null;
 }
 
 export type JoinRequestsResult =
@@ -942,6 +944,7 @@ function readJoinRequest(raw: unknown): JoinRequest | null {
         fromNode: typeof k.fromNode === 'string' && k.fromNode ? k.fromNode : null,
         createdAt: typeof k.createdAt === 'string' ? k.createdAt : '',
         via: readKnockVia(k.via),
+        forum: readKnockForum(k.forum),
     };
 }
 

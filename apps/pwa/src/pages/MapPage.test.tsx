@@ -3114,6 +3114,87 @@ describe('sending a Need where Beans are off (review #1936 N3)', () => {
         expect(calls).toEqual([]);
     });
 
+    // Round 2 (#3252 finding 1): Make this a Need is a one-shot door. A table over the paths out of the topic's draft -> what
+    // the next listing posted from + is linked to. Every way the composer closes lets go of the topic; only the draft's own
+    // Need, posted from the composer that never closed, is linked.
+    describe('Make this a Need is one-shot: the paths out of the topic\'s draft x the next Offer from +', () => {
+        const draft = { type: 'need' as const, title: 'Seed swap ideas', description: 'Who has beans?', category: null, credits: null, priceType: null, repeatable: false, cashAlsoNeeded: false, forumTopicId: 'ft-7' };
+        async function pinAndPhoto(panel: HTMLElement) {
+            await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+            const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
+            const clicks = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+            await act(async () => { clicks.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
+            const approx = within(panel).queryByRole('button', { name: 'Approximate (~100m)' });
+            if (approx) await act(async () => { fireEvent.click(approx); });
+            await pickPhoto(panel);
+        }
+        type Path = { name: string; out: (panel: HTMLElement) => Promise<void>; linksDraft: boolean };
+        const PATHS: Path[] = [
+            { name: 'closed with ✕ (cancelled)', linksDraft: false, out: async (panel) => { await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Close new post' })); }); } },
+            {
+                name: 'posted as a Poll', linksDraft: false, out: async (panel) => {
+                    await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Poll' })); });
+                    fireEvent.change(within(panel).getByPlaceholderText('What should our community decide?'), { target: { value: 'Bigger compost bays?' } });
+                    fireEvent.change(within(panel).getByPlaceholderText('Option 1'), { target: { value: 'Yes' } });
+                    fireEvent.change(within(panel).getByPlaceholderText('Option 2'), { target: { value: 'No' } });
+                    await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Create Poll' })); });
+                },
+            },
+            {
+                name: 'posted as an Event', linksDraft: false, out: async (panel) => {
+                    await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Event' })); });
+                    fireEvent.change(within(panel).getByLabelText("What's happening"), { target: { value: 'Working bee' } });
+                    fireEvent.change(within(panel).getByLabelText('Starts'), { target: { value: '2030-09-28T09:00' } });
+                    fireEvent.change(within(panel).getByLabelText('Place name'), { target: { value: 'The hall' } });
+                    await pinAndPhoto(panel);
+                    await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Create Event' })); });
+                },
+            },
+            {
+                // Back and forth inside the open composer: still the topic's draft, so its Need is linked; the next one is not.
+                name: 'switched to Poll and back, then posted as the Need', linksDraft: true, out: async (panel) => {
+                    await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Poll' })); });
+                    await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🟠 Need' })); });
+                    await pinAndPhoto(panel);
+                    await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Post Need' })); });
+                },
+            },
+        ];
+        it.each(PATHS.map((p) => [p.name, p] as const))('%s', async (_name, path) => {
+            vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(info(false) as any);
+            vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
+            let made = 0;
+            const create = vi.spyOn(api, 'createMarketplacePost').mockImplementation(async () => ({ success: true, post: { id: `p${++made}` } }) as any);
+            const calls: unknown[][] = [];
+            forumLinks.link = async (...a) => { calls.push(a); return {}; };
+            window.alert = vi.fn();
+            const navigate = vi.fn();
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} onNavigate={navigate} />); });
+            let panel = await view!.findByTestId('map-new-post-panel');
+            await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+            await path.out(panel);
+            await waitFor(() => expect(view!.queryByTestId('map-new-post-panel')).toBeNull());
+            expect(calls).toEqual(path.linksDraft ? [['ft-7', 'listing', 'p1']] : []);
+            const before = create.mock.calls.length;
+            // Then the page's own + (tryOpenComposer; another tab's openNewPost lets go of the topic on its own): an Offer.
+            await act(async () => { fireEvent.click(view!.getByRole('button', { name: 'New Post' })); });
+            panel = await view!.findByTestId('map-new-post-panel');
+            await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+            await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🟢 Offer' })); });
+            fireEvent.change(within(panel).getByPlaceholderText('What do you need/offer?'), { target: { value: 'Spare jars' } });
+            fireEvent.change(within(panel).getByPlaceholderText('Describe what you need/offer...'), { target: { value: 'A box of them' } });
+            await pinAndPhoto(panel);
+            await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /^Post Offer/ })); });
+            await waitFor(() => expect(create.mock.calls.length).toBe(before + 1));
+            await waitFor(() => expect(view!.queryByTestId('map-new-post-panel')).toBeNull());
+            expect((create.mock.calls.at(-1)![0] as any).type).toBe('offer');
+            // The Offer is linked to nothing, and nobody is taken to the topic for it.
+            expect(calls).toEqual(path.linksDraft ? [['ft-7', 'listing', 'p1']] : []);
+            expect(navigate.mock.calls.filter((c) => c[0] === 'forum-topic')).toHaveLength(path.linksDraft ? 1 : 0);
+        });
+    });
+
     it('Beans on: a member the node calls blocked is asked for an Offer first, and nothing is sent', async () => {
         const { panel, create } = await fillNeed(true, true);
         const send = within(panel).getByRole('button', { name: '🟢 List an Offer first to post Needs' });

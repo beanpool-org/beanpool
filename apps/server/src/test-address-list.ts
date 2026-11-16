@@ -7,12 +7,14 @@
  *  1. S0's vectors: with the vectors' key, community and addresses, the server's list IS the frozen list, byte for byte and
  *     signature for signature, and its proof at the vectors' time IS the frozen proof. Every frozen question gets the frozen
  *     answer: a proof (verified by core, as a phone will), 400 or 421.
- *  2. The counter: `seq` goes up by exactly one for each kind of change (an own domain added and removed, the main moved and
- *     moved back, the operator's list, a hand-set name, a beanpool.org name going live, marked lost and cleared, a port, the
- *     server key, the community id), and never for no change (reads, the same list written again or in another order or
- *     spelling, a former or pending name, a loopback name, an unrelated setting). The timer numbers a change no read saw.
- *  3. Kept over a restart: a second process on the same data dir signs the same list at the same number, and numbers the
- *     next change after it.
+ *  2. The counter, on a clock held still: `seq` goes up for each kind of change, to one more or to the clock's floor (whole
+ *     seconds since 2026-01-01) when that is higher, so the first change jumps from the vectors' 14 to the floor and each
+ *     one after it is one more (an own domain added and removed, the main moved and moved back, the operator's list, a
+ *     hand-set name, a beanpool.org name going live, marked lost and cleared, a port, the server key, the community id),
+ *     and never for no change (reads, the same list written again or in another order or spelling, a former or pending
+ *     name, a loopback name, an unrelated setting). The timer numbers a change no read saw.
+ *  3. Kept over a restart: a first server numbers its first list at the floor; a second process on the same data dir signs
+ *     the same list at the same number, and numbers the next change after it (an hour later: at that hour's floor).
  *  4. A take-over raises the epoch: the list is signed at the new take-over count, beating every list from before it, a
  *     higher counter included; the take-over envelope carries the owner's main address and the list's number.
  *  5. The proof: 421 for every address off the list (a former name, a lost one, a removed one, loopback, another spelling,
@@ -22,7 +24,15 @@
  *     an IPv6 number, a home-network name, a name at a port) x (main, other, was main, removed, former, lost) -> listed or not,
  *     main or not, proved (200) or refused (421), the other address still proved, and what outside readers are told
  *     (mainPublicUrl: a home-network main tells them nothing, from #3222's round-2 review).
- *  7. The split-brain check asks EVERY listed address, at once: one address leading to a server with a higher take-over count
+ *  7. A restore or a roll-back never takes the number back (#3232 round 2, the deciding review's case), with real state.db
+ *     files and a process per boot: the nightly backup restored onto a fresh machine after the lost server signed a newer
+ *     list; the same after a past take-over, from a database-only backup (never a lower epoch); a roll-back through the real
+ *     rollBackTo (the notice carries the number signed before it); and a clock far behind (on the same machine the notice
+ *     still puts it past; on a fresh machine it falls back to the kept seq + 1 and the boot logs why).
+ *  8. The table: (restart, change, no change, restore, restore on a fresh machine, roll-back, take-over) taken two at a
+ *     time after a change since the backup -> every list signed is at or above every one signed before it, strictly above
+ *     each with other content; no bump for no change or a restart; a take-over's epoch above every epoch before it.
+ *  9. The split-brain check asks EVERY listed address, at once: one address leading to a server with a higher take-over count
  *     replaces this one, wherever it is in the list; once replaced, the server signs no list and no proof (503).
  *
  * Run: SERVER_SUITES_ONLY=test-address-list TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
@@ -83,12 +93,28 @@ function writeGenesis(dir: string, communityId: string): void {
     }));
 }
 
+// ── The clock the seq floor reads ─────────────────────────────────────────────────────────
+
+/** 2026-11-16 02:00 UTC: where the held clocks start. */
+const T0 = Date.UTC(2026, 10, 16, 2, 0, 0);
+const HOUR = 3_600_000;
+/** The floor at `ms`, worked out here (not read from the server): whole seconds since 2026-01-01, 0 before it. */
+const floorAt = (ms: number): number => Math.max(0, Math.floor((ms - Date.UTC(2026, 0, 1)) / 1000));
+
+/** Hold the server's floor clock at `ms` (the server before round 2 has no floor: nothing to hold). */
+async function holdClock(ms: number): Promise<void> {
+    const al: any = await import('./services/address-list.js');
+    al.addressListClockForTests?.(() => ms);
+}
+
 // ── The restart: a second process on one data dir (section 3) ─────────────────────────────
 
 async function child(step: string): Promise<void> {
+    if (step === 'spec') return specChild(JSON.parse(process.env.ADDRESS_TEST_SPEC!));
     const dir = process.env.BEANPOOL_DATA_DIR!;
     // This module's first lines clear BEANPOOL_ADDRESSES for the orchestrator; the restarted server has one address.
     process.env.BEANPOOL_ADDRESSES = 'coop.example.org';
+    await holdClock(Number(process.env.ADDRESS_TEST_CLOCK_MS));
     const se = await import('./state-engine.js');
     se.initStateEngine();
     const { forgetOwnAddresses } = await import('./engine/own-addresses.js');
@@ -114,16 +140,100 @@ async function child(step: string): Promise<void> {
     process.exit(0);
 }
 
-function runChild(dir: string, step: string): any {
+function runChild(dir: string, step: string, extraEnv: Record<string, string> = {}): any {
     const r = spawnSync(process.execPath, [...process.execArgv, SCRIPT, '--child', step], {
-        env: { ...process.env, BEANPOOL_DATA_DIR: dir, BEANPOOL_ADDRESSES: 'coop.example.org' }, encoding: 'utf8', timeout: 180_000,
+        env: { ...process.env, BEANPOOL_DATA_DIR: dir, BEANPOOL_ADDRESSES: 'coop.example.org', ...extraEnv }, encoding: 'utf8', timeout: 180_000,
     });
     const line = (r.stdout || '').split('\n').find((l) => l.startsWith('RESULT '));
     if (!line) {
         console.error(`child ${step} gave no result (exit ${r.status}):\n${(r.stdout || '').slice(-1500)}\n${(r.stderr || '').slice(-1500)}`);
         return null;
     }
-    return JSON.parse(line.slice('RESULT '.length));
+    return { ...JSON.parse(line.slice('RESULT '.length)), output: `${r.stdout || ''}\n${r.stderr || ''}` };
+}
+
+// ── A restore and a roll-back: one process per boot, real state.db files (section 7) ──────
+
+interface Spec {
+    /** The floor clock this process holds. */
+    clock: number;
+    /** The boot after a swap, wired as index.ts wires step 2.52: each notice delivered, before anything is signed. */
+    boot?: boolean;
+    /** The take-over count in local-config.json (a promoted server's). */
+    epoch?: number;
+    /** The owner's own domains before the first list is signed. */
+    owner?: string[];
+    /** After the first list: keep a restore point (the name is returned). */
+    point?: boolean;
+    /** After the first list: the owner's own domains change, and the list is signed again (`then`). */
+    then?: string[];
+    /** Last: roll back to this restore point through the real rollBackTo (routes/backup.ts), with no restart. */
+    rollBackTo?: string;
+}
+
+async function specChild(spec: Spec): Promise<void> {
+    const dir = process.env.BEANPOOL_DATA_DIR!;
+    process.env.BEANPOOL_ADDRESSES = 'coop.example.org';
+    await holdClock(spec.clock);
+    if (!fs.existsSync(path.join(dir, 'libp2p_key'))) await writeNodeKey(dir, V.keys.community.seedHex);
+    if (!fs.existsSync(path.join(dir, 'genesis.json'))) writeGenesis(dir, V.communityIds.community);
+    const se = await import('./state-engine.js');
+    se.initStateEngine();
+    const own = await import('./engine/own-addresses.js');
+    const al: any = await import('./services/address-list.js');
+    const rp = await import('./services/restore-points.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
+    const out: Record<string, unknown> = {};
+    if (spec.boot) {
+        const lo = await import('./services/lights-out.js');
+        out.delivered = rp.deliverRestoreNotices({ announce: () => {}, log: () => {}, remember: lo.noteRestoredCopy, renumber: al.renumberAddressListAfterSwap } as any);
+    }
+    if (spec.epoch !== undefined) updateLocalConfig({ identityEpoch: spec.epoch, identityEpochSince: '2026-11-01T00:00:00.000Z' });
+    if (spec.owner) {
+        se.updateNodeConfig({ ownerAddresses: spec.owner });
+        own.forgetOwnAddresses();
+    }
+    const first = await al.signedAddressList();
+    out.signed = first.ok ? first.signed : first;
+    if (spec.point) out.point = rp.takeRestorePoint('restore').name;
+    if (spec.then) {
+        se.updateNodeConfig({ ownerAddresses: spec.then });
+        own.forgetOwnAddresses();
+        const then = await al.signedAddressList();
+        out.then = then.ok ? then.signed : then;
+    }
+    if (spec.rollBackTo) {
+        const backup = await import('./routes/backup.js');
+        await backup.rollBackTo(rp.resolveRestorePoint(spec.rollBackTo)!, spec.rollBackTo, null);
+        out.notices = fs.readdirSync(dir).filter((f) => f.startsWith('restore-notice-')).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
+    }
+    console.log(`RESULT ${JSON.stringify(out)}`);
+    process.exit(0);
+}
+
+const runSpec = (dir: string, spec: Spec): any => runChild(dir, 'spec', { ADDRESS_TEST_SPEC: JSON.stringify(spec) });
+
+/** A copy of a stopped server's database (a backup's state.db): the file and its write-ahead log, as they are. */
+function copyDatabase(fromDir: string, toDir: string): void {
+    fs.mkdirSync(toDir, { recursive: true });
+    for (const f of ['state.db', 'state.db-wal', 'state.db-shm']) {
+        fs.rmSync(path.join(toDir, f), { force: true });
+        if (f !== 'state.db-shm' && fs.existsSync(path.join(fromDir, f))) fs.copyFileSync(path.join(fromDir, f), path.join(toDir, f));
+    }
+}
+
+/**
+ * A restore onto a fresh machine (routes/backup.ts restoreFromTar, by hand): the community's key and genesis, the
+ * backup's database, no local-config.json, and the notice the restore leaves. The fresh machine had signed nothing, so the
+ * notice carries no address list; a database-only backup carries no take-over count either (`epoch` 0).
+ */
+function restoreOntoFreshMachine(keysFrom: string, backup: string, fresh: string): void {
+    fs.mkdirSync(fresh, { recursive: true });
+    for (const f of ['libp2p_key', 'genesis.json']) fs.copyFileSync(path.join(keysFrom, f), path.join(fresh, f));
+    copyDatabase(backup, fresh);
+    const at = new Date().toISOString();
+    fs.writeFileSync(path.join(fresh, `restore-notice-${Date.now()}-${process.pid}.json`),
+        JSON.stringify({ kind: 'restore', at, madeAt: at, point: 'before-restore', by: 'owner', epoch: 0, addressList: null }) + '\n', { mode: 0o600 });
 }
 
 // ── The orchestrator ───────────────────────────────────────────────────────────────────────
@@ -144,6 +254,14 @@ async function main(): Promise<void> {
     const al = await import('./services/address-list.js');
     const ie = await import('./services/identity-epoch.js');
     const env = await import('./services/takeover-envelope.js');
+    const rp = await import('./services/restore-points.js');
+    const lo = await import('./services/lights-out.js');
+    const { getLocalConfig } = await import('./config/local-config.js');
+    // The floor clock, held still unless a section moves it: every bump is then exactly what `bumped` says.
+    let clock = T0;
+    const alAny: any = al;
+    alAny.addressListClockForTests?.(() => clock);
+    const bumped = (seq: number): number => Math.max(seq + 1, floorAt(clock));
 
     await initTls();
     se.initStateEngine();
@@ -158,7 +276,8 @@ async function main(): Promise<void> {
         pruneAuthAttempts(Date.now() + 120_000);
         resetGatewayRateLimit();
         return new Promise((resolve, reject) => {
-            const req = https.request({ host: '127.0.0.1', port, path: p, method: 'GET', headers, rejectUnauthorized: false }, (res) => {
+            // A connection of its own each time: section 7's processes take longer than the server keeps an idle one open.
+            const req = https.request({ host: '127.0.0.1', port, path: p, method: 'GET', headers, rejectUnauthorized: false, agent: false }, (res) => {
                 let raw = '';
                 res.on('data', (c) => { raw += c; });
                 res.on('end', () => {
@@ -233,7 +352,7 @@ async function main(): Promise<void> {
         assert(wrongQuestions.length === 0, `each of the ${V.questions.length} frozen questions gets the frozen answer: a proof core verifies, 400 bad_nonce or 421 not_listed${wrongQuestions.length ? ` — ${wrongQuestions.join(' | ')}` : ''}`);
 
         // ── 2. The counter ──
-        console.log('\n=== 2. The counter: one up for each kind of change, none for no change ===\n');
+        console.log('\n=== 2. The counter: up for each kind of change (one more, or the floor), none for no change ===\n');
         let prev = (await list()).body as SignedAddressList;
         assert(prev.list.seq === 14 && prev.list.epoch === 2, `it starts from the kept number (${prev.list.epoch}, ${prev.list.seq})`);
         const step = async (label: string, change: () => void | Promise<void>, bumps: boolean) => {
@@ -244,7 +363,7 @@ async function main(): Promise<void> {
             const got = a.body as SignedAddressList;
             const sameKey = got.list?.peerId === prev.list.peerId;
             const choice = chooseAddressList(got, { peerId: got.list?.peerId ?? PEER, kept: sameKey ? prev : null });
-            const want = bumps ? prev.list.seq + 1 : prev.list.seq;
+            const want = bumps ? bumped(prev.list.seq) : prev.list.seq;
             // What a phone holding the list before makes of it: the same list kept; a newer one taken; another key's is a first
             // list of another community; the same key with another community id is refused (core's chooseAddressList).
             const okChoice = !bumps ? choice.action === 'keep' && choice.why === 'same'
@@ -306,21 +425,23 @@ async function main(): Promise<void> {
         al.tickAddressList();
         const ticked = al.keptAddressList();
         const afterTick = (await list()).body as SignedAddressList;
-        assert(ticked?.seq === prev.list.seq + 1 && afterTick.list.seq === ticked.seq && afterTick.list.addresses.includes('third.example.org'),
+        assert(ticked?.seq === bumped(prev.list.seq) && afterTick.list.seq === ticked.seq && afterTick.list.addresses.includes('third.example.org'),
             `the timer's tick numbers a change no read saw (kept ${prev.list.seq} → ${ticked?.seq}), and the next read is that number (${afterTick.list.seq})`);
         prev = afterTick;
 
         // ── 3. Kept over a restart ──
         console.log('\n=== 3. Kept over a restart ===\n');
         const restartDir = fs.mkdtempSync(path.join(os.tmpdir(), 'address-list-restart-'));
-        const first = runChild(restartDir, 'first');
-        assert(first && first.before === null && first.first?.ok && first.first.signed.list.seq === 1 && first.changed?.signed.list.seq === 2,
-            `a first server numbers its first list 1 and its first change 2 (${show(first?.first?.signed?.list?.seq)}, ${show(first?.changed?.signed?.list?.seq)})`);
-        const again = runChild(restartDir, 'again');
-        assert(again && again.kept?.seq === 2 && show(again.again?.signed) === show(first?.changed?.signed) && show(again.again2) === show(again.again),
-            `started again on the same data dir, it signs the same list at the same number, signature and all (${show(again?.again?.signed?.list?.seq)})`);
-        assert(again && again.changed?.signed.list.seq === 3 && again.changed.signed.list.addresses.includes('third.example.org'),
-            `and numbers its next change after it: 3, never 1 again (${show(again?.changed?.signed?.list?.seq)})`);
+        const firstAt = T0 + HOUR;
+        const first = runChild(restartDir, 'first', { ADDRESS_TEST_CLOCK_MS: String(firstAt) });
+        const f1 = floorAt(firstAt);
+        assert(first && first.before === null && first.first?.ok && first.first.signed.list.seq === f1 && first.changed?.signed.list.seq === f1 + 1,
+            `a first server numbers its first list at the floor (${f1}) and its first change one more on the same clock (${show(first?.first?.signed?.list?.seq)}, ${show(first?.changed?.signed?.list?.seq)})`);
+        const again = runChild(restartDir, 'again', { ADDRESS_TEST_CLOCK_MS: String(firstAt + HOUR) });
+        assert(again && again.kept?.seq === f1 + 1 && show(again.again?.signed) === show(first?.changed?.signed) && show(again.again2) === show(again.again),
+            `started again on the same data dir an hour later, it signs the same list at the same number, signature and all: no bump for no change (${show(again?.again?.signed?.list?.seq)})`);
+        assert(again && again.changed?.signed.list.seq === floorAt(firstAt + HOUR) && again.changed.signed.list.addresses.includes('third.example.org'),
+            `and numbers its next change after it: that hour's floor, ${floorAt(firstAt + HOUR)} (${show(again?.changed?.signed?.list?.seq)})`);
         fs.rmSync(restartDir, { recursive: true, force: true });
 
         // ── 4. A take-over raises the epoch ──
@@ -499,8 +620,214 @@ async function main(): Promise<void> {
         assert(wrong.length === 0, `every kind × role gives the outcome in the table (${rows.length} rows)${wrong.length ? ` — wrong: ${wrong.join(' | ')}` : ''}`);
         assert(rows.length === KINDS.length * 5 + 1, `the table has every row: ${KINDS.length} kinds × main, other, was main, removed, former, and a lost beanpool.org name (${rows.length})`);
 
-        // ── 7. The split-brain check asks every listed address ──
-        console.log('\n=== 7. The split-brain check asks every listed address; once replaced, nothing is signed ===\n');
+        // ── 7. A restore or a roll-back never takes the number back ──
+        console.log('\n=== 7. A restore or a roll-back never takes the number back (real state.db files, a process per boot) ===\n');
+        const num = (s: SignedAddressList | undefined) => (s?.list ? `${s.list.epoch}.${s.list.seq}` : show(s));
+        const phoneTakes = (offered: SignedAddressList | undefined, held: SignedAddressList | undefined): string => {
+            if (!offered?.list || !held?.list) return 'nothing to compare';
+            const c = chooseAddressList(offered, { peerId: PEER, kept: held });
+            return `${c.action} ${(c as any).why}`;
+        };
+        const work = fs.mkdtempSync(path.join(os.tmpdir(), 'address-list-restore-'));
+        try {
+            // 7a. The deciding review's case: a list signed before the nightly backup, a newer one at noon, the server lost,
+            // the nightly file restored onto a fresh machine an hour later.
+            const lost = path.join(work, 'lost'), nightly = path.join(work, 'nightly'), fresh = path.join(work, 'fresh');
+            fs.mkdirSync(lost);
+            const night = runSpec(lost, { clock: T0 });
+            copyDatabase(lost, nightly);
+            const noon = runSpec(lost, { clock: T0 + 12 * HOUR, owner: ['second.example.org'] });
+            restoreOntoFreshMachine(lost, nightly, fresh);
+            const back = runSpec(fresh, { clock: T0 + 13 * HOUR, boot: true, then: ['third.example.org'] });
+            const L0 = night?.signed as SignedAddressList, L1 = noon?.signed as SignedAddressList;
+            const R1 = back?.signed as SignedAddressList, R2 = back?.then as SignedAddressList;
+            assert(L0?.list && L1?.list && compareAddressNumbers(L1.list, L0.list) === 1 && back?.delivered === 1,
+                `the lost server signed ${num(L0)} before the nightly backup and ${num(L1)} at noon; the restored server's boot delivered the notice (${back?.delivered})`);
+            assert(R1?.list && L1?.list && compareAddressNumbers(R1.list, L1.list) === 1 && phoneTakes(R1, L1) === 'replace newer',
+                `restored from the nightly file onto a fresh machine, its first list (${num(R1)}) outranks the newest the lost server signed (${num(L1)}), no address changed: a phone holding that one takes it (${phoneTakes(R1, L1)})`);
+            assert(R2?.list && R1?.list && L1?.list && compareAddressNumbers(R2.list, R1.list) === 1 && compareAddressNumbers(R2.list, L1.list) === 1 && phoneTakes(R2, R1) === 'replace newer',
+                `and the owner's next change (${num(R2)}) is above both, never the lost server's noon number with other content (${phoneTakes(R2, R1)})`);
+
+            // 7b. The same after a past take-over: the lost server was a promoted one (take-over count 1) and the backup is
+            // database-only, so neither the fresh local-config.json nor the notice says 1; the record restored does.
+            const lostB = path.join(work, 'lost-b'), nightlyB = path.join(work, 'nightly-b'), freshB = path.join(work, 'fresh-b');
+            fs.mkdirSync(lostB);
+            const nightB = runSpec(lostB, { clock: T0, epoch: 1 });
+            copyDatabase(lostB, nightlyB);
+            const noonB = runSpec(lostB, { clock: T0 + 12 * HOUR, owner: ['second.example.org'] });
+            restoreOntoFreshMachine(lostB, nightlyB, freshB);
+            const backB = runSpec(freshB, { clock: T0 + 13 * HOUR, boot: true, then: ['third.example.org'] });
+            const B1 = noonB?.signed as SignedAddressList, BR = backB?.signed as SignedAddressList, BR2 = backB?.then as SignedAddressList;
+            assert(nightB?.signed?.list?.epoch === 1 && B1?.list?.epoch === 1, `the promoted server signed at take-over count 1 (${num(nightB?.signed)}, ${num(B1)})`);
+            assert(BR?.list?.epoch === 1 && BR2?.list?.epoch === 1 && B1?.list && compareAddressNumbers(BR.list, B1.list) === 1 && phoneTakes(BR, B1) === 'replace newer',
+                `restored onto a fresh machine from a database-only backup, it signs at take-over count 1, never 0 (${num(BR)}, then ${num(BR2)}), above the lost server's ${num(B1)} (${phoneTakes(BR, B1)})`);
+
+            // 7c. A roll-back through the real rollBackTo: a point taken, a newer list, rolled back to the point.
+            const rb = path.join(work, 'roll-back');
+            fs.mkdirSync(rb);
+            const before = runSpec(rb, { clock: T0, point: true });
+            const rolled = runSpec(rb, { clock: T0 + HOUR, owner: ['second.example.org'], rollBackTo: before?.point });
+            const after = runSpec(rb, { clock: T0 + HOUR + 60_000, boot: true, then: ['third.example.org'] });
+            const P1 = rolled?.signed as SignedAddressList, PR = after?.signed as SignedAddressList, PR2 = after?.then as SignedAddressList;
+            const carried = rolled?.notices?.[0]?.addressList;
+            assert(before?.point && rolled?.notices?.length === 1 && rolled.notices[0].kind === 'roll-back' && P1?.list
+                && carried?.epoch === P1.list.epoch && carried?.seq === P1.list.seq,
+                `the real roll-back's notice carries the number signed before it (${show(carried ? { epoch: carried.epoch, seq: carried.seq } : carried)}; signed ${num(P1)})`);
+            assert(PR?.list && P1?.list && compareAddressNumbers(PR.list, P1.list) === 1 && phoneTakes(PR, P1) === 'replace newer' && PR2?.list && compareAddressNumbers(PR2.list, PR.list) === 1,
+                `rolled back to the point taken at ${num(before?.signed)}, its first list (${num(PR)}) outranks the one signed before the roll-back (${num(P1)}; ${phoneTakes(PR, P1)}), and its next change goes on above (${num(PR2)})`);
+
+            // 7d. A clock far behind (2025: the floor is 0).
+            const behind = Date.UTC(2025, 0, 1);
+            const rbBehind = path.join(work, 'roll-back-behind');
+            fs.mkdirSync(rbBehind);
+            const bBefore = runSpec(rbBehind, { clock: T0, point: true });
+            const bRolled = runSpec(rbBehind, { clock: T0 + HOUR, owner: ['second.example.org'], rollBackTo: bBefore?.point });
+            const bAfter = runSpec(rbBehind, { clock: behind, boot: true });
+            const bP1 = bRolled?.signed as SignedAddressList, bPR = bAfter?.signed as SignedAddressList;
+            assert(bPR?.list && bP1?.list && bPR.list.seq === bP1.list.seq + 1 && compareAddressNumbers(bPR.list, bP1.list) === 1,
+                `with the clock far behind, a roll-back still outranks what was signed before it: the notice carries that number, and the boot goes one past it (${num(bP1)} → ${num(bPR)})`);
+            const freshBehind = path.join(work, 'fresh-behind');
+            restoreOntoFreshMachine(lost, nightly, freshBehind);
+            const fBehind = runSpec(freshBehind, { clock: behind, boot: true });
+            const fR = fBehind?.signed as SignedAddressList;
+            assert(fR?.list && L0?.list && fR.list.seq === L0.list.seq + 1 && compareAddressNumbers(fR.list, L0.list) === 1
+                && /behind the address list's number/.test(fBehind?.output ?? ''),
+                `restored onto a fresh machine with the clock far behind, it falls back to the kept seq + 1 (${num(L0)} → ${num(fR)}), above all the backup kept, and the boot logs that the clock is behind `
+                + `(the module comment's limit: the lost server's noon list ${num(L1)} can outrank it until the clock is right)`);
+        } finally {
+            fs.rmSync(work, { recursive: true, force: true });
+        }
+
+        // ── 8. The table ──
+        console.log('\n=== 8. The table: restart, change, no change, restore, restore on a fresh machine, roll-back, take-over ===\n');
+        const EVENTS = ['restart', 'change', 'no change', 'restore', 'restore on a fresh machine', 'roll-back', 'take-over'] as const;
+        type Event = typeof EVENTS[number];
+        interface Snap {
+            node: { addressList: unknown; ownerAddresses: string[]; mainAddress: string | null };
+            local: { identityEpoch: number; identityEpochSince: string | null; restoredCopy: unknown };
+        }
+        const snap = (): Snap => {
+            const n = se.getNodeConfig() as any;
+            const c = getLocalConfig() as any;
+            return {
+                node: { addressList: n.addressList ?? null, ownerAddresses: [...(n.ownerAddresses ?? [])], mainAddress: n.mainAddress ?? null },
+                local: { identityEpoch: ie.ownIdentityEpoch().epoch, identityEpochSince: c.identityEpochSince ?? null, restoredCopy: c.restoredCopy ?? null },
+            };
+        };
+        const putNode = (s: Snap) => se.updateNodeConfig({ addressList: s.node.addressList, ownerAddresses: s.node.ownerAddresses, mainAddress: s.node.mainAddress } as any);
+        /** The notice a restore or a roll-back leaves, delivered as index.ts wires step 2.52. */
+        const deliver = (notice: Record<string, unknown>) => {
+            rp.leaveRestoreNotice({ at: new Date(clock).toISOString(), madeAt: null, point: 'table', by: 'owner', ...notice } as any);
+            return rp.deliverRestoreNotices({ announce: () => {}, log: () => {}, remember: lo.noteRestoredCopy, renumber: alAny.renumberAddressListAfterSwap } as any);
+        };
+        // `point`: a restore point on this machine, taken at the start. `backup`: the community's newest nightly backup, taken
+        // at the start and again after a take-over (the promoted server's own): restoring one made before a take-over onto a
+        // fresh machine takes the identity epoch itself back (identity-epoch.ts), the limit the PR names.
+        let point: Snap = snap();
+        let backup: Snap = snap();
+        const apply = (e: Event): void => {
+            clock += 60_000;
+            const owners = ((se.getNodeConfig() as any).ownerAddresses ?? []) as string[];
+            if (e === 'change') {
+                se.updateNodeConfig({ ownerAddresses: owners.includes('third.example.org') ? owners.filter((a) => a !== 'third.example.org') : [...owners, 'third.example.org'] });
+            } else if (e === 'no change') {
+                se.updateNodeConfig({ ownerAddresses: [...owners] });
+            } else if (e === 'restore') {
+                // On this machine: state.db goes back, local-config.json stays; the notice carries the list last signed.
+                const going = alAny.addressListForNotice?.() ?? null;
+                putNode(point);
+                deliver({ kind: 'restore', epoch: point.local.identityEpoch, addressList: going });
+            } else if (e === 'restore on a fresh machine') {
+                // The newest backup onto a machine with no local-config.json; database-only (no take-over count), and the
+                // fresh machine had signed nothing.
+                putNode(backup);
+                updateLocalConfig({ identityEpoch: 0, identityEpochSince: null, restoredCopy: null } as any);
+                deliver({ kind: 'restore', epoch: 0, addressList: null });
+            } else if (e === 'roll-back') {
+                // state.db and local-config.json both go back to the point's; the notice carries the list last signed.
+                const going = alAny.addressListForNotice?.() ?? null;
+                putNode(point);
+                updateLocalConfig({ identityEpoch: point.local.identityEpoch, identityEpochSince: point.local.identityEpochSince, restoredCopy: point.local.restoredCopy } as any);
+                deliver({ kind: 'roll-back', addressList: going });
+            } else if (e === 'take-over') {
+                // What the take-over's steps write (services/takeover.ts): `public-address` keeps the carried list through
+                // addressListAfterTakeover, `role` writes the keys' count + 1 (the keys carry local-config's count).
+                const carried = al.keptAddressList();
+                const keysEpoch = ie.ownIdentityEpoch().epoch;
+                if (carried) se.updateNodeConfig({ addressList: alAny.addressListAfterTakeover ? alAny.addressListAfterTakeover(carried, keysEpoch) : carried } as any);
+                updateLocalConfig({ identityEpoch: keysEpoch + 1, identityEpochSince: new Date(clock).toISOString() });
+            }
+            own.forgetOwnAddresses();
+        };
+        const contentOf = (l: SignedAddressList['list']) => show({ peerId: l.peerId, communityId: l.communityId, main: l.main, addresses: [...l.addresses].sort(), spares: [...l.spares].sort() });
+        /** A world of its own (no list kept, take-over count 0, never restored): a change since the backup, then `events`. */
+        const runWorld = async (events: Event[]): Promise<{ line: string; problems: string[] }> => {
+            reset({ env: 'coop.example.org', owner: ['second.example.org'], main: 'coop.example.org' });
+            se.updateNodeConfig({ addressList: null } as any);
+            updateLocalConfig({ identityEpoch: 0, identityEpochSince: null, restoredCopy: null } as any);
+            const history: { epoch: number; seq: number; content: string; after: string }[] = [];
+            const trail: string[] = [];
+            const problems: string[] = [];
+            const sign = async (after: string) => {
+                let r: Awaited<ReturnType<typeof list>>;
+                try {
+                    r = await list();
+                } catch (e: any) {
+                    problems.push(`${after}: the read failed (${e?.message || e})`);
+                    return;
+                }
+                const l = (r.body as SignedAddressList)?.list;
+                if (r.status !== 200 || !l) {
+                    problems.push(`${after}: no list (${r.status} ${show(r.body).slice(0, 120)})`);
+                    return;
+                }
+                const me = { epoch: l.epoch, seq: l.seq, content: contentOf(l), after };
+                for (const h of history) {
+                    const order = compareAddressNumbers(me, h);
+                    if (order < 0) problems.push(`${after} signed ${me.epoch}.${me.seq}, below ${h.epoch}.${h.seq} (signed after ${h.after})`);
+                    else if (order === 0 && h.content !== me.content) problems.push(`${after} signed ${me.epoch}.${me.seq} with other content than after ${h.after}`);
+                }
+                const last = history[history.length - 1];
+                if (last && (after === 'restart' || after === 'no change') && compareAddressNumbers(me, last) !== 0) {
+                    problems.push(`${after} moved the number (${last.epoch}.${last.seq} → ${me.epoch}.${me.seq})`);
+                }
+                if (after === 'take-over' && history.some((h) => h.epoch >= me.epoch)) {
+                    problems.push(`the take-over signed at epoch ${me.epoch}, not above every epoch before it (${Math.max(...history.map((h) => h.epoch))})`);
+                }
+                history.push(me);
+                trail.push(`${after} ${me.epoch}.${me.seq}`);
+            };
+            await sign('start');
+            point = snap();
+            backup = snap();
+            for (const e of ['change', ...events] as Event[]) {
+                apply(e);
+                await sign(e);
+                if (e === 'take-over') backup = snap();
+            }
+            return { line: trail.join(' → '), problems };
+        };
+        const tableRowsB: string[] = [];
+        const tableWrong: string[] = [];
+        const worlds: Event[][] = [];
+        for (const e1 of EVENTS) for (const e2 of EVENTS) worlds.push([e1, e2, 'change']);
+        // And the longer ones a pair cannot hold: a take-over after a restore onto a fresh machine that followed a take-over
+        // (the list's epoch is then above the keys'), a roll-back across a take-over and a take-over after it, the same
+        // backup restored twice, two roll-backs to one point.
+        worlds.push(['take-over', 'restore on a fresh machine', 'take-over', 'change'], ['take-over', 'roll-back', 'take-over', 'change'],
+            ['restore', 'restore', 'change'], ['roll-back', 'change', 'roll-back', 'change']);
+        for (const events of worlds) {
+            const w = await runWorld(events);
+            tableRowsB.push(`${events.join(', ')}: ${w.line}`);
+            if (w.problems.length) tableWrong.push(`${events.join(', ')}: ${w.problems.join('; ')}`);
+        }
+        console.log(`  ${tableRowsB.join('\n  ')}`);
+        assert(tableWrong.length === 0, `in each of the ${worlds.length} sequences every list is at or above every list signed before it and strictly above each with other content; `
+            + `a restart or no change keeps the number; a take-over's epoch is above every epoch before it${tableWrong.length ? ` — wrong: ${tableWrong.join(' | ')}` : ''}`);
+        assert(tableRowsB.length === EVENTS.length * EVENTS.length + 4, `the table has every pair (${EVENTS.length} × ${EVENTS.length}) and the 4 longer sequences (${tableRowsB.length})`);
+
+        // ── 9. The split-brain check asks every listed address ──
+        console.log('\n=== 9. The split-brain check asks every listed address; once replaced, nothing is signed ===\n');
         reset({ env: 'coop.example.org,riverside.example,203.0.113.5', owner: ['second.example.org'], main: 'coop.example.org' });
         const listedNow = ((await list()).body as SignedAddressList).list.addresses;
         process.env.BEANPOOL_TEST_IDENTITY_EPOCH_URL = 'https://127.0.0.1:9/test-epoch';

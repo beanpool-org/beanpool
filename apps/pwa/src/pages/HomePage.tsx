@@ -52,7 +52,7 @@ import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
 import { groupIdKey, lockedGroupsOrNull } from '../lib/group-hold';
 import { isKnownDmConversation } from '../lib/dm-guard';
 import { readChatSettings, homeChatPicked, createHomeBellSettle, HOME_BELL_SETTLE_MS } from '@beanpool/core';
-import { LEARN_HOME_WORDS, knowledgeToCheckLine, learnFigureCount, learnHomeLines, forumOn } from '@beanpool/core';
+import { LEARN_HOME_WORDS, knowledgeToCheckLine, learnFigureCount, learnHomeLines, forumOn, forumPublicOn } from '@beanpool/core';
 import type { ChatPickRow } from '../components/AddCardDialog';
 import { useCommunityInfo } from '../lib/features';
 import { onConversationRead } from '../lib/conversation-read';
@@ -2772,7 +2772,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 const knockName = (k: RememberedKnock) => k.name ?? knockCommunity(k)?.name ?? k.url.replace(/^https:\/\//, '');
                 return (
                     <HomeCard key={id} {...common}>
-                        {askedCommunity && identity && <AskedCommunity host={askedCommunity} identity={identity} asked={askedOpen} onAsked={handleAsked} onClose={() => onAskedCommunitySeen?.()} />}
+                        {askedCommunity && identity && <AskedCommunity host={askedCommunity} identity={identity} asked={askedOpen} onAsked={handleAsked} onClose={() => onAskedCommunitySeen?.()} forumPicker={forumPublicOn(answer?.features)} />}
                         <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="home-find-body">{findBody(f)}</p>
                         {more.map(cm => {
                             const facts = communityFacts(cm);
@@ -2788,7 +2788,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                                         : <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words">{text}</p>}
                                     {quiet && <p className="m-0 pb-1 text-xs italic text-nature-700 dark:text-nature-200 break-words" data-testid={`home-find-not-answering-${cm.key}`}>{quiet}</p>}
                                     {promised && <p dir="auto" className="m-0 pb-1 text-xs text-nature-700 dark:text-nature-200 break-words" data-testid={`home-find-promise-${cm.key}`}>{promised}</p>}
-                                    {identity && cm.url && <AskToJoin community={cm} identity={identity} asked={askedOpen(cm.url)} onAsked={handleAsked} testId={`home-find-ask-${cm.key}`} />}
+                                    {identity && cm.url && <AskToJoin community={cm} identity={identity} asked={askedOpen(cm.url)} onAsked={handleAsked} forumPicker={forumPublicOn(answer?.features)} testId={`home-find-ask-${cm.key}`} />}
                                 </Fragment>
                             );
                         })}
@@ -3573,7 +3573,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 {/* The community the member came to ask to join, where Home draws no Find card to hold it: Find is held on Home
                     only for a global member's first 30 days, and a member may take it off (PR #2551 review). */}
                 {askedCommunity && identity && answer && !shown.some(c => c.type === 'find') && (
-                    <AskedCommunity host={askedCommunity} identity={identity} asked={askedOpen} onAsked={handleAsked} onClose={() => onAskedCommunitySeen?.()} />
+                    <AskedCommunity host={askedCommunity} identity={identity} asked={askedOpen} onAsked={handleAsked} onClose={() => onAskedCommunitySeen?.()} forumPicker={forumPublicOn(answer?.features)} />
                 )}
                 {inArrange && (
                     <div data-testid="home-arrange-bar" className="sticky top-0 z-20 mb-3 pl-3 pr-1 py-1 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary shadow-sm">

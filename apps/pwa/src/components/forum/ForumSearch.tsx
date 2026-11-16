@@ -13,10 +13,13 @@
  * - **A door's search** (slice F9, `searchFor`) is asked once: the box tells the page it took it (`onSearchTaken`), and the page
  *   lets go of it, so coming back to the list draws the kept hits (or the member's own later search, or their ✕) and asks
  *   nothing. It is kept to the door's section, its later pages too.
+ * - **A search let go of while it is out is dropped** (#3264 review): ✕, or a section's door drawing a new box in this one's
+ *   place (ForumPage's key, after forgetForumSearch), and its answer neither shows nor hides the list. Only a let-go drops it
+ *   (lib/forum.ts forumSearchLetGo): a hit's topic opened meanwhile unmounts this box, and the answer is kept for the way back.
  */
 import { useEffect, useRef, useState } from 'react';
 import { forumSectionName, t, timeAgo, word } from '@beanpool/core';
-import { forgetForumSearch, keptSearch, searchForum, type ForumSearchAnswer, type ForumSearchHit, type ForumSection } from '../../lib/forum';
+import { forgetForumSearch, forumSearchLetGo, keptSearch, searchForum, type ForumSearchAnswer, type ForumSearchHit, type ForumSection } from '../../lib/forum';
 import { TOPIC_WORDS } from './ForumTopicView';
 
 /** A door's search (slice F9): its words, in its one section. */
@@ -60,13 +63,16 @@ export function ForumSearch({ sections, searchFor = null, onSearchTaken, onOpen,
         const section = door ? door.section : offset ? answer?.section ?? null : null;
         if (!q && !offset) box.current?.focus();
         if (!q || busy) return;
+        const asked = forumSearchLetGo();
         setBusy(true);
         setFailed(null);
         try {
             const out = await searchForum(q, offset, section);
+            if (asked !== forumSearchLetGo()) return;
             setAnswer(out);
             onShowing(true);
         } catch (e) {
+            if (asked !== forumSearchLetGo()) return;
             setFailed((e as Error)?.message || t(SEARCH_WORDS.failed));
         } finally {
             setBusy(false);

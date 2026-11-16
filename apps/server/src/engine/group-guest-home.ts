@@ -889,5 +889,16 @@ export function isGroupItem(item: unknown): boolean {
     return typeof kind === 'string' && GUEST_ITEM_KINDS.has(kind);
 }
 
+/**
+ * Whether `item` (as a member posts it) takes them out of a group elsewhere: their leave, or their no to its invitation. The
+ * host reads no words from either (group-guests.ts takeGuestItem: a leave's payload is never read, a no is its `answer`
+ * alone), so a muted member still sends them (routes/relay.ts). A yes lets them speak there, so it is not one.
+ */
+export function groupItemStepsAway(item: unknown): boolean {
+    const o = item as { envelope?: { kind?: unknown }; payload?: unknown } | null;
+    const kind = o?.envelope?.kind;
+    return kind === 'group-leave' || (kind === 'group-invite' && typeof o?.payload === 'string' && answerOf(o.payload) === 'no');
+}
+
 /** An item id as the mailbox spells one (the fetch's `sinceId`). */
 export const isGroupItemId = (id: unknown): id is string => typeof id === 'string' && ITEM_ID.test(id);

@@ -16,6 +16,10 @@
  *   3  close the class: every item a member sends a group elsewhere (yes, no, leave, line, line with a mention, epoch) x
  *      (invitation waiting, in, removed, never invited, standby) -> sent to the host once, signed, and where they stand
  *      moved; or refused, nothing stored, nothing sent
+ *  3m  close the class, a mute stops a member speaking, never stepping away (#3273 round 3): a muted member x every kind
+ *      POST /api/mail/send takes (group: leave, no, yes, line, epoch; direct: line, photo, edit, reaction, delete, receipt;
+ *      and mixed requests) -> a leave, a no, a delete or a receipt taken, sent and the link moved; anything said refused
+ *      403 moderation_muted, nothing stored or sent
  *   4  close the class, the epoch steps: the host's roster (epoch null / stale / not stale) -> kept; the device reads it;
  *      core's guestEpochStep -> a group-epoch over exactly the chat's keys, or the line again under the current epoch;
  *      the host's epoch-stale answer reaches the device
@@ -429,6 +433,75 @@ async function main(): Promise<void> {
     assert(ownGroup.status === 400 && ownGroup.body?.code === 'bad_item', `3y. a group item to this community's own server is refused (got ${ownGroup.status} ${ownGroup.body?.code})`);
     const asOther = await send(gia, [await item(gus, 'group-line', 'g3-2', payloadOf('line')[1])]);
     assert(asOther.status === 400 && asOther.body?.code === 'bad_item', `3x. Gia can't send Gus's item (got ${asOther.status} ${asOther.body?.code})`);
+
+    // ── 3m. A muted member steps away, and says nothing (#3273 round 3) ──────────────────────
+    console.log('\n3m. Close the class: a muted member x every kind the mailbox takes -> a step away taken, anything said refused 403 moderation_muted');
+    // THE INVARIANT: a mute stops a member SPEAKING, never STEPPING AWAY (engine/auto-moderation.ts "Auto-mute"; routes/relay.ts
+    // speaksIn). The auto-mute lasts until a moderator lifts it, so a leave refused for it never reached the host: the guest's
+    // device read "You left this chat." while the host kept them in and kept wrapping keys to them.
+    const { MUTED_UNTIL_LIFTED } = await import('./engine/auto-moderation.js');
+    const { RELAY_HANDLED_KINDS } = await import('./engine/relay-mail.js');
+    const moe = addLocal('Moe');
+    db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run(MUTED_UNTIL_LIFTED, moe.pk);
+    async function direct(from: Id, kind: RelayItemKind, payload: string) {
+        const envelope = await signRelayEnvelope({
+            kind, itemId: newItemId(), senderKey: from.pk, senderHome: 'a.example', recipient: ana.pk, recipientHome: 'b.example',
+            at: Date.now(), payloadHash: relayPayloadHash(payload),
+        }, signerOf(from.seed));
+        return { envelope, payload };
+    }
+    const outboxOf = (who: Id) => (db.prepare('SELECT COUNT(*) AS n FROM relay_outbox WHERE sender_key = ?').get(who.pk) as { n: number }).n;
+    // A direct item's payload is sealed: no server reads any of it, so what it holds is the same to the route.
+    const sealedish = JSON.stringify({ v: 1, c: 'c'.repeat(40), n: 'n'.repeat(32) });
+    const receiptOf = () => JSON.stringify({ v: 1, items: [newItemId()] });
+    const groupIt = async (k: string, g: string) => { const [kind, payload] = payloadOf(k); return item(moe, kind, g, payload); };
+    /** What Moe sends in one request (his link with that group first, for group items), and what happens: the link it moves him to, 'taken', or 'muted'. */
+    type MRow = { what: string; kinds: string[]; stand?: 'invited' | 'in'; build: (g: string) => Promise<Array<{ envelope: any; payload: string }>>; want: string };
+    const M_ROWS: MRow[] = [
+        { what: 'his leave, in', kinds: ['group-leave'], stand: 'in', build: async (g) => [await groupIt('leave', g)], want: 'left' },
+        { what: 'his leave, invited (joining)', kinds: ['group-leave'], stand: 'invited', build: async (g) => [await groupIt('leave', g)], want: 'left' },
+        { what: 'his no to an invitation', kinds: ['group-invite'], stand: 'invited', build: async (g) => [await groupIt('no', g)], want: 'declined' },
+        { what: 'his yes to an invitation (it lets him speak there)', kinds: ['group-invite'], stand: 'invited', build: async (g) => [await groupIt('yes', g)], want: 'muted' },
+        { what: 'a line', kinds: ['group-line'], stand: 'in', build: async (g) => [await groupIt('line', g)], want: 'muted' },
+        { what: 'a line with a mention', kinds: ['group-line'], stand: 'in', build: async (g) => [await groupIt('line-mention', g)], want: 'muted' },
+        { what: 'an epoch (only for his lines)', kinds: ['group-epoch'], stand: 'in', build: async (g) => [await groupIt('epoch', g)], want: 'muted' },
+        { what: 'his leave and a line, one request', kinds: ['group-leave', 'group-line'], stand: 'in', build: async (g) => [await groupIt('leave', g), await groupIt('line', g)], want: 'muted' },
+        { what: 'a direct line', kinds: ['dm-line'], build: async () => [await direct(moe, 'dm-line', sealedish)], want: 'muted' },
+        { what: 'a direct photo', kinds: ['dm-blob'], build: async () => [await direct(moe, 'dm-blob', sealedish)], want: 'muted' },
+        { what: 'an edit of his line', kinds: ['dm-edit'], build: async () => [await direct(moe, 'dm-edit', sealedish)], want: 'muted' },
+        { what: 'a reaction (sealed: no server can tell one added from one taken back)', kinds: ['dm-reaction'], build: async () => [await direct(moe, 'dm-reaction', sealedish)], want: 'muted' },
+        { what: 'a delete of his own line', kinds: ['dm-delete'], build: async () => [await direct(moe, 'dm-delete', sealedish)], want: 'taken' },
+        { what: 'a receipt', kinds: ['receipt'], build: async () => [await direct(moe, 'receipt', receiptOf())], want: 'taken' },
+        { what: 'a delete and a receipt, one request', kinds: ['dm-delete', 'receipt'], build: async () => [await direct(moe, 'dm-delete', sealedish), await direct(moe, 'receipt', receiptOf())], want: 'taken' },
+        { what: 'a delete and a line, one request', kinds: ['dm-delete', 'dm-line'], build: async () => [await direct(moe, 'dm-delete', sealedish), await direct(moe, 'dm-line', sealedish)], want: 'muted' },
+    ];
+    let rowM = 0;
+    for (const row of M_ROWS) {
+        const g = `g3m-${++rowM}`;
+        if (row.stand) setLink(moe, 'b.example', g, row.stand);
+        const linkBefore = JSON.stringify(linkOf(moe, 'b.example', g) ?? null);
+        const items = await row.build(g);
+        const ids = items.map((i) => i.envelope.itemId as string);
+        const outsBefore = outs.length, sentBefore = sentCount(), outboxBefore = outboxOf(moe);
+        const r = await send(moe, items);
+        const went = outs.slice(outsBefore).filter((o) => o.host === 'b.example' && o.path === '/api/relay/mail');
+        const wentIds: string[] = went.flatMap((o) => o.body.items.map((i: any) => i.envelope.itemId));
+        const link = linkOf(moe, 'b.example', g)?.state;
+        if (row.want === 'muted') {
+            assert(r.status === 403 && r.body?.code === 'moderation_muted' && went.length === 0 && sentCount() === sentBefore && outboxOf(moe) === outboxBefore
+                && JSON.stringify(linkOf(moe, 'b.example', g) ?? null) === linkBefore,
+                `3m. muted x ${row.what}: refused 403 moderation_muted, nothing stored or sent, where he stands unchanged (got ${r.status} ${r.body?.code}, ${went.length} sent)`);
+        } else {
+            const stored = row.stand ? sentCount() - sentBefore : outboxOf(moe) - outboxBefore;
+            assert(r.status === 200 && r.body?.items?.length === ids.length && stored === ids.length && wentIds.length === ids.length && ids.every((id) => wentIds.includes(id))
+                && went.every((o) => o.signed) && (row.want === 'taken' || link === row.want),
+                `3m. muted x ${row.what}: taken, sent once to b.example${row.want === 'taken' ? '' : `, and Moe is ${row.want}`} (got ${r.status} ${JSON.stringify(r.body)?.slice(0, 160)}, ${stored} stored, ${wentIds.length} sent, link ${link})`);
+        }
+    }
+    const coveredM = new Set(M_ROWS.flatMap((r) => r.kinds));
+    const mailKinds: string[] = [...hostSide.GUEST_ITEM_KINDS, ...RELAY_HANDLED_KINDS];
+    assert(mailKinds.every((k) => coveredM.has(k)) && [...coveredM].every((k) => mailKinds.includes(k)),
+        `3m. the table has rows for every kind POST /api/mail/send takes, and no other (${mailKinds.join(', ')}; rows: ${[...coveredM].join(', ')})`);
 
     // ── 4. The epoch steps ──────────────────────────────────────────────────────────────────
     console.log('\n4. Close the class: the roster\'s epoch (null / stale / not stale) -> kept, read, and what is sent');

@@ -235,7 +235,7 @@ const FILLED: readonly WordKey[] = [
     word('{host} did not answer ({status}).'),
     word('Could not reach {host}.'),
     // utils/settings-signin.ts.
-    word('This code is for {codeHost}. Your phone uses {currentHost}. Open Settings at {currentHost} and scan again, or move your phone first (Home card).'),
+    word('This code is for {codeHost}. Your phone uses {currentHost}. Open Settings at {currentHost} and scan again, or move your phone first.'),
     word('The node did not answer ({status}).'),
     word("You are not an owner, admin or moderator of {name}, so you can't open its Settings."),
     // utils/rekey-redeem.ts RekeyHeldError: an earlier re-key this phone still holds.

@@ -67,14 +67,12 @@ Suas outras comunidades funcionam como antes.
 
 Você também pode alternar nas **Configurações**, sob **Sistema**, depois em **Comunidades salvas**. Suas comunidades estão listadas ali. A que você está usando está marcada como ativa. Toque em **Alternar para esta comunidade** em outra para ir até ela.
 
-## Quando sua comunidade muda para um novo endereço
+## Se sua comunidade mudar de endereço
 
-Uma comunidade pode mudar para um novo endereço: por exemplo, do número do servidor dela (como 203.0.113.5) para um nome. No celular, o Início exibe um cartão no topo: **Esta comunidade também está em beans.example.org. Usar esse endereço a partir de agora?** Ele é exibido somente depois que seu celular confirmar com o servidor da comunidade que o novo endereço pertence à mesma comunidade.
+Uma comunidade pode responder em mais de um endereço, e seus proprietários escolhem qual é o endereço principal.
 
-- Toque em **Usar o novo endereço**. Seu celular se conecta ao novo endereço com tudo o que guardava para aquela comunidade, incluindo suas mensagens, e reabre a comunidade, da mesma forma que ao alternar.
-- Toque em **Agora não**, e o cartão perguntará novamente em 7 dias. Seu celular nunca muda sozinho.
-- Se o novo endereço responder como uma comunidade diferente, o aplicativo diz **Este celular fica onde está** e mantém o endereço atual. Se a verificação não puder ser feita, diz **Nada mudou. Tente novamente em instantes.**
-- Se o endereço antigo parou de responder antes de seu celular tomar conhecimento do novo, nada poderá informar ao celular para onde a comunidade foi. Peça o novo endereço aos proprietários dela, depois toque no feijão, em **Adicionar uma comunidade** e digite o endereço ali.
+- **No celular, não há nada a fazer.** Seu celular verifica sozinho os endereços da sua comunidade e passa para o principal assim que ele responde com a própria chave da sua comunidade. Se o endereço que seu celular usa parar de responder, ele usa outro endereço da sua comunidade por enquanto e volta assim que o principal responder. O Início avisa em uma linha, uma única vez. Nada mais muda: suas mensagens e tudo o que seu celular guarda da comunidade continuam onde estão.
+- **No app web,** seu login pertence ao endereço que você abriu, então o app web fica lá e continua funcionando. Uma linha discreta no topo mostra o endereço principal. Toque em **Abrir lá** para ir até ele e, depois, entre lá com **Vincular este navegador do seu celular**, ou com seu login ou suas 12 palavras.
 
 ## Esquecer uma comunidade neste celular
 

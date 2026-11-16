@@ -71,7 +71,7 @@ Ipinapakita lamang ng Home ang mga card na may sasabihin sa iyo, sa sarili mong 
 - **Palaguin ang iyong komunidad:** nagbibigay-daan sa iyo na mag-imbita ng mga bagong miyembro pagkatapos ng iyong unang Alok, kung saan naka-on ang mga imbitasyon. Wala sa pandaigdigang komunidad. Sa telepono, kung saan ang mga admin lamang ang nag-iimbita, ipinapakita lamang ito para sa may-ari o admin. Sa web app hindi ito lumalabas doon kahit kailan.
 - **Iyong komunidad:** ang huling card, na may pamagat na pangalan ng iyong komunidad (**Ang pandaigdigang komunidad** sa pandaigdigang komunidad). Ipinapakita nito ang bilang ng miyembro at mga transaksyon sa buwang ito; sa pandaigdigang komunidad, ang mga miyembro at kung gaano karaming komunidad ang nakalista. Mayroon itong **Magdagdag ng card** at **I-edit ang Home**. Nananatili ang card na ito sa ibaba at hindi maaaring ilipat o alisin.
 
-Sa telepono, kapag lumipat ang iyong komunidad sa bagong address, may card sa itaas ng lahat ng ito na nagtatanong kung gagamitin ito: tingnan ang "Kapag lumipat ang iyong komunidad sa bagong address" sa "Mahigit sa isang komunidad".
+Sa telepono, kapag kusang lumipat ang iyong telepono sa ibang address ng iyong komunidad, isang linya sa itaas ng lahat ng ito ang nagsasabi nito, minsan lang: tingnan ang "Kung babaguhin ng iyong komunidad ang address nito" sa "Mahigit sa isang komunidad".
 
 ## Ang "…" menu
 

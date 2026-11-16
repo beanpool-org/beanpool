@@ -67,14 +67,12 @@ Deine anderen Communitys funktionieren wie zuvor.
 
 Du kannst auch in den **Einstellungen** unter **System**, dann **Gespeicherte Communities** wechseln. Deine Communitys sind dort aufgelistet. Die gerade genutzte ist als aktiv markiert. Tippe bei einer anderen auf **Zu dieser Community wechseln**, um zu ihr zu wechseln.
 
-## Wenn deine Community an eine neue Adresse umzieht
+## Wenn deine Community ihre Adresse ändert
 
-Eine Community kann an eine neue Adresse umziehen: beispielsweise von der Nummer ihres Servers (wie etwa 203.0.113.5) zu einem Namen. Auf dem Telefon zeigt die Startseite dann ganz oben eine Karte an: **Diese Community ist auch unter beans.example.org erreichbar. Diese Adresse ab jetzt nutzen?** Sie erscheint erst, nachdem dein Telefon beim Server der Community überprüft hat, dass die neue Adresse dieselbe Community ist.
+Eine Community kann unter mehr als einer Adresse antworten, und ihre Eigentümer legen fest, welche ihre Hauptadresse ist.
 
-- Tippe auf **Neue Adresse verwenden**. Dein Telefon wechselt dorthin mit allem, was es für diese Community aufbewahrt, einschließlich deiner Nachrichten, und öffnet die Community erneut, genau wie beim Wechseln.
-- Tippe auf **Nicht jetzt**, und die Karte fragt in 7 Tagen erneut nach. Dein Telefon zieht niemals von selbst um.
-- Wenn die neue Adresse als andere Community antwortet, meldet die App: **Dieses Telefon bleibt wie es ist** und behält die bisherige Adresse. Kann die Überprüfung nicht durchgeführt werden, heißt es: **Es wurde nichts geändert. Bitte versuche es bald erneut.**
-- Wenn die alte Adresse nicht mehr antwortet, bevor dein Telefon von der neuen erfahren hat, kann nichts deinem Telefon mitteilen, wohin die Community gezogen ist. Frage ihre Eigentümer nach der neuen Adresse, tippe dann auf die Bohne, danach auf **Community hinzufügen** und gib sie dort ein.
+- **Auf dem Telefon musst du nichts tun.** Dein Telefon prüft die Adressen deiner Community von selbst und wechselt zur Hauptadresse, sobald diese mit dem eigenen Schlüssel deiner Community geantwortet hat. Antwortet die Adresse, die dein Telefon nutzt, nicht mehr, nutzt es vorerst eine andere Adresse deiner Community und kehrt zurück, sobald die Hauptadresse wieder antwortet. Die Startseite sagt das einmal in einer Zeile. Sonst ändert sich nichts: Deine Nachrichten und alles, was dein Telefon für die Community aufbewahrt, bleiben, wo sie sind.
+- **In der Web-App** gehört deine Anmeldung zu der Adresse, die du geöffnet hast. Darum bleibt die Web-App dort und funktioniert weiter. Eine unauffällige Zeile oben nennt die Hauptadresse. Tippe auf **Dort öffnen**, um dorthin zu gehen, und melde dich dort mit **Diesen Browser vom Telefon aus verknüpfen** an, oder mit deiner Anmeldung oder deinen 12 Wörtern.
 
 ## Eine Community auf diesem Telefon vergessen
 

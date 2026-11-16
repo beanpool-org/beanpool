@@ -67,14 +67,12 @@ Các cộng đồng khác của bạn vẫn hoạt động như trước.
 
 Bạn cũng có thể chuyển đổi trong **Cài đặt**, dưới mục **Hệ thống**, sau đó vào **Nâng cao / Hệ thống con**. Các cộng đồng của bạn được liệt kê tại đó. Cộng đồng bạn đang sử dụng được đánh dấu là đang hoạt động. Nhấn **Chuyển sang Thị trấn** trên một cộng đồng khác để chuyển sang đó.
 
-## Khi cộng đồng của bạn chuyển sang địa chỉ mới
+## Nếu cộng đồng của bạn đổi địa chỉ
 
-Một cộng đồng có thể chuyển sang một địa chỉ mới: ví dụ, từ số máy chủ của nó (chẳng hạn như 203.0.113.5) sang một tên miền. Trên điện thoại, Trang chủ sau đó sẽ hiển thị một thẻ ở trên cùng: **Cộng đồng này cũng có tại beans.example.org. Sử dụng địa chỉ đó từ bây giờ?** Thẻ chỉ hiển thị sau khi điện thoại của bạn đã kiểm tra với máy chủ của cộng đồng rằng địa chỉ mới thuộc về cùng một cộng đồng.
+Một cộng đồng có thể trả lời ở nhiều hơn một địa chỉ, và chủ sở hữu chọn địa chỉ nào là địa chỉ chính.
 
-- Nhấn **Dùng địa chỉ mới**. Điện thoại của bạn sẽ chuyển sang đó cùng với những gì nó lưu giữ cho cộng đồng đó, bao gồm cả tin nhắn của bạn, và mở lại cộng đồng, giống như khi bạn chuyển đổi.
-- Nhấn **Không phải bây giờ**, và thẻ sẽ hỏi lại sau 7 ngày. Điện thoại của bạn không bao giờ tự động chuyển đổi địa chỉ.
-- Nếu địa chỉ mới phản hồi là một cộng đồng khác, ứng dụng sẽ báo **Điện thoại này giữ nguyên vị trí**, và giữ nguyên địa chỉ hiện có. Nếu việc kiểm tra không thể thực hiện được, ứng dụng sẽ báo **Không có gì thay đổi. Hãy thử lại sau một lát.**
-- Nếu địa chỉ cũ ngừng phản hồi trước khi điện thoại của bạn nhận được thông tin về địa chỉ mới, không có cách nào cho điện thoại biết cộng đồng đã chuyển đi đâu. Hãy hỏi các chủ sở hữu của cộng đồng để biết địa chỉ mới, sau đó nhấn vào hạt đậu, chọn **Thêm một cộng đồng**, và nhập địa chỉ đó vào.
+- **Trên điện thoại, bạn không cần làm gì cả.** Điện thoại tự kiểm tra các địa chỉ của cộng đồng và chuyển sang địa chỉ chính ngay khi địa chỉ đó trả lời bằng chính khóa của cộng đồng bạn. Nếu địa chỉ điện thoại đang dùng ngừng trả lời, điện thoại tạm dùng một địa chỉ khác của cộng đồng và quay lại ngay khi địa chỉ chính trả lời. Trang chủ cho biết điều đó trong một dòng, một lần. Không có gì khác thay đổi: tin nhắn của bạn và mọi thứ điện thoại lưu cho cộng đồng vẫn ở nguyên chỗ.
+- **Trong ứng dụng web,** đăng nhập của bạn thuộc về địa chỉ bạn đã mở, nên ứng dụng web ở lại đó và vẫn hoạt động. Một dòng nhỏ ở trên cùng cho biết địa chỉ chính. Nhấn **Mở ở đó** để đến đó, rồi đăng nhập tại đó bằng **Liên kết trình duyệt này từ điện thoại của bạn**, hoặc bằng đăng nhập của bạn hay 12 từ của bạn.
 
 ## Quên một cộng đồng trên điện thoại này
 

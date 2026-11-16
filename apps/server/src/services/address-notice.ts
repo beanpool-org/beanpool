@@ -27,9 +27,10 @@ import { registrarHostOf } from '../engine/registrar-names.js';
 // The words layer in English (a node never writes in the device language: core words.test N11).
 const { t: tr } = wordsFor('en');
 
+/** The body is several-addresses §8 "Notice to members": members' phones follow the main address by themselves (S4). */
 const NOTICE = {
     title: word('This community has a new address'),
-    body: word('This community is also at {address}. The old address keeps working.'),
+    body: word("This community's main address is now {address}. Your app follows by itself. The old address keeps working."),
 };
 
 function setDue(host: string | null): void {
@@ -67,8 +68,8 @@ export function forgetAddressNotice(): void {
 
 /**
  * The owner made `address` the main one (routes/app-addresses.ts /main, design several-addresses §2.1), and it is where the
- * community lives now: the members are told once, now, as for a claim. The words stay the claim's until the notice slice
- * (S7) gives Make main its own.
+ * community lives now: the members are told once, now, in the same words as for a claim (§8: the main address is now
+ * that one, their app follows by itself, the old address keeps working).
  */
 export function tellMembersOfNewMain(address: string): void {
     setDue(address);

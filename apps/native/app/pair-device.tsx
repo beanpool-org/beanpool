@@ -432,7 +432,7 @@ export default function PairDeviceScreen() {
         if (target.appHost) {
             // The same words for global's code and any other (the design's QR words): the way through is Settings at the phone's own
             // server, or moving the phone first. For global's code the "Join the global community" button below is that move.
-            return t("This code is for {codeHost}. Your phone uses {currentHost}. Open Settings at {currentHost} and scan again, or move your phone first (Home card).", { codeHost: target.scannedHost, currentHost: target.appHost });
+            return t("This code is for {codeHost}. Your phone uses {currentHost}. Open Settings at {currentHost} and scan again, or move your phone first.", { codeHost: target.scannedHost, currentHost: target.appHost });
         }
         return global
             ? t('This code is from {host}, a server your phone doesn\'t use. Nothing was sent. Join the global community on this phone first, then scan again.', { host: target.scannedHost })

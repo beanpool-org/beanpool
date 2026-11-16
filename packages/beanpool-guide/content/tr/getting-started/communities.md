@@ -67,14 +67,12 @@ Diğer topluluklarınız eskisi gibi çalışır.
 
 Ayrıca **Ayarlar**'da **Sistem**, ardından **Kayıtlı topluluklar** altında geçiş yapabilirsiniz. Topluluklarınız orada listelenir. Kullandığınız topluluk etkin olarak işaretlenir. Başka birine geçmek için üzerindeki **Bu topluluğa geç** seçeneğine dokunun.
 
-## Topluluğunuz yeni bir adrese taşındığında
+## Topluluğunuz adresini değiştirirse
 
-Bir topluluk yeni bir adrese taşınabilir: örneğin sunucusunun numarasından (203.0.113.5 gibi) bir ada. Telefonda Ana Sayfa en üstte bir kart gösterir: **Bu topluluk artık beans.example.org adresinde de bulunuyor. Bundan sonra bu adres kullanılsın mı?** Yalnızca telefonunuz topluluğun sunucusuyla yeni adresin aynı topluluk olduğunu kontrol ettikten sonra gösterilir.
+Bir topluluk birden fazla adreste yanıt verebilir ve hangisinin ana adresi olacağını sahipleri seçer.
 
-- **Yeni adresi kullan**'a dokunun. Telefonunuz mesajlarınız dahil o topluluk için tuttuklarıyla birlikte oraya taşınır ve geçiş yaptığınızdaki gibi topluluğu tekrar açar.
-- **Şimdi değil**'e dokunun, kart 7 gün sonra tekrar sorar. Telefonunuz asla kendiliğinden taşınmaz.
-- Yeni adres farklı bir topluluk olarak yanıt verirse uygulama **Bu telefon olduğu yerde kalır** der ve sahip olduğu adresi korur. Kontrol yapılamıyorsa **Hiçbir şey değişmedi. Kısa bir süre sonra tekrar deneyin.** der.
-- Eski adres telefonunuz yenisini duymadan önce yanıt vermeyi durdurduysa hiçbir şey telefonunuza topluluğun nereye gittiğini söyleyemez. Sahiplerinden yeni adresi isteyin, ardından fasulyeye dokunun, sonra **Topluluk ekle**'ye dokunun ve oraya yazın.
+- **Telefonda yapmanız gereken bir şey yok.** Telefonunuz topluluğunuzun adreslerini kendiliğinden denetler ve ana adres topluluğunuzun kendi anahtarıyla yanıt verdiği anda ona geçer. Telefonunuzun kullandığı adres yanıt vermeyi bırakırsa, şimdilik topluluğunuzun başka bir adresini kullanır ve ana adres yeniden yanıt verdiğinde geri döner. Ana Sayfa bunu tek satırda, bir kez söyler. Başka hiçbir şey değişmez: mesajlarınız ve telefonunuzun topluluk için sakladığı her şey yerinde kalır.
+- **Web uygulamasında,** girişiniz açtığınız adrese aittir; bu yüzden web uygulaması orada kalır ve çalışmaya devam eder. Üstteki sade bir satır ana adresi söyler. Oraya gitmek için **Orada aç** seçeneğine dokunun, sonra orada **Bu tarayıcıyı telefonunuzdan bağlayın** ile ya da giriş yönteminizle veya 12 kelimenizle oturum açın.
 
 ## Bu telefonda bir topluluğu unutma
 

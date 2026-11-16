@@ -67,14 +67,12 @@ Gumagana ang iba mo pang mga komunidad tulad ng dati.
 
 Maaari ka ring lumipat sa **Mga Setting**, sa ilalim ng **System**, pagkatapos ay **Mga naka-save na komunidad**. Nakalista roon ang iyong mga komunidad. Ang ginagamit mo ay minarkahan bilang aktibo. I-tap ang **Switch to this community** sa isa pa upang lumipat dito.
 
-## Kapag lumipat ang iyong komunidad sa bagong address
+## Kung babaguhin ng iyong komunidad ang address nito
 
-Maaaring lumipat ang isang komunidad sa bagong address: halimbawa, mula sa numero ng server nito (tulad ng 203.0.113.5) patungo sa isang pangalan. Sa telepono, magpapakita ang Home ng card sa itaas: **This community is also at beans.example.org. Use that address from now on?** Lumalabas lamang ito pagkatapos suriin ng iyong telepono sa server ng komunidad na ang bagong address ay ang parehong komunidad.
+Maaaring sumagot ang isang komunidad sa higit sa isang address, at pinipili ng mga may-ari nito kung alin ang pangunahing address nito.
 
-- I-tap ang **Gamitin ang bagong address**. Lilipat ang iyong telepono roon kasama ang itinatago nito para sa komunidad na iyon, kasama ang iyong mga mensahe, at bubuksan muli ang komunidad, tulad ng kapag lumilipat ka.
-- I-tap ang **Huwag muna**, at magtatanong muli ang card sa loob ng 7 araw. Hindi kailanman kusang lilipat ang iyong telepono sa sarili nito.
-- Kung sumagot ang bagong address bilang ibang komunidad, sinasabi ng app ang **Mananatili ang teleponong ito kung nasaan ito**, at pinapanatili ang address na mayroon ito. Kung hindi magawa ang pagsusuri, sinasabi nito ang **Walang nagbago. Subukan muli mamaya.**
-- Kung huminto sa pagsagot ang lumang address bago marinig ng iyong telepono ang tungkol sa bago, walang makakapagsabi sa iyong telepono kung saan pumunta ang komunidad. Tanungin ang mga may-ari nito para sa bagong address, pagkatapos ay i-tap ang bean, pagkatapos ay **Magdagdag ng komunidad**, at itipa ito roon.
+- **Sa telepono, wala kang kailangang gawin.** Kusang sinusuri ng iyong telepono ang mga address ng iyong komunidad at lumilipat sa pangunahin kapag sumagot na ito gamit ang sariling key ng iyong komunidad. Kung tumigil sa pagsagot ang address na ginagamit ng iyong telepono, gagamit muna ito ng ibang address ng iyong komunidad at babalik kapag sumagot na ang pangunahin. Sinasabi ito ng Home sa isang linya, minsan lang. Wala nang ibang nagbabago: ang iyong mga mensahe at lahat ng itinatago ng iyong telepono para sa komunidad ay nananatili kung nasaan sila.
+- **Sa web app,** ang iyong sign-in ay para sa address na binuksan mo, kaya nananatili roon ang web app at patuloy itong gumagana. Isang tahimik na linya sa itaas ang nagsasabi ng pangunahing address. I-tap ang **Buksan doon** para pumunta roon, saka mag-sign in doon gamit ang **I-link ang browser na ito mula sa iyong telepono**, o ang iyong sign-in o ang iyong 12 salita.
 
 ## Pagkalimot sa isang komunidad sa teleponong ito
 

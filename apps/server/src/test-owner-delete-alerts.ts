@@ -335,7 +335,7 @@ async function main(): Promise<void> {
     const nDirect = lines('sec.address');
     assert(claimedDirect.status === 200 && nDirect.length === 1 && /address was changed, by an owner/.test(nDirect[0].detail) && (nDirect[0].high === true || nDirect[0].priority >= 4),
         `2c. a live direct name replaced: sec.address told once, high (${claimedDirect.status} ${JSON.stringify(nDirect.map((e) => e.detail))})`);
-    assert(told2aDirect.length === 1 && told2aDirect[0].body === 'This community is also at newvale.beanpool.org. The old address keeps working.',
+    assert(told2aDirect.length === 1 && told2aDirect[0].body === "This community's main address is now newvale.beanpool.org. Your app follows by itself. The old address keeps working.",
         `2c. and the members get the softer notice (${JSON.stringify(told2aDirect)})`);
     fresh();
     // A live name the record of names no longer calls live (written on it by a status answer) is no address to keep. The

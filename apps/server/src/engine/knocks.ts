@@ -84,6 +84,13 @@
  * author is told nothing. The applicant's status read, the card and the directory say nothing of it. It is cleared with
  * what the applicant sent, and a re-key moves the sharer's key with the rest of their rows.
  *
+ * ## Forum posts (forums F11, DESIGN-forums-fable.md §13)
+ *
+ * A knock may carry up to three of the applicant's posts on the worldwide forum and their secret (routes/knocks.ts reads them;
+ * engine/forum-ask-posts.ts makes each post's proof with the key that signed the knock). The row keeps the posts and the
+ * proofs (`forum_posts`), never the secret, and the members who answer read them as `forum`. Nothing here calls another
+ * server. Cleared with what the applicant sent.
+ *
  * ## What is kept, and for how long
  *
  * The members' list is the only thing that reads what an applicant sent (the name, message, picture and node), and it
@@ -145,6 +152,8 @@ import { deliverPushNotices, dispatchPushNotification } from '../state-engine.js
 import { logger } from '../logger.js';
 import { pushTtl } from '../services/web-push.js';
 import { dropAskerSubscriptionsOf, dropLapsedMemberBrowsers } from './web-push-subscriptions.js';
+import { knockForumOf } from './forum-ask-posts.js';
+import type { KnockForum } from '@beanpool/core';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -211,6 +220,7 @@ interface KnockRow {
     updated_at: string;
     via_post_id: string | null;
     via_sharer_pubkey: string | null;
+    forum_posts: string | null;
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -299,6 +309,8 @@ export interface KnockInput {
     address: string;
     /** The post and the member whose shared link it came with (peek-tickets.ts peekProvenance), or null for a plain knock. */
     via?: { postId: string; sharer: string } | null;
+    /** Its forum posts with their proofs, as `join_requests.forum_posts` keeps them (forum-ask-posts.ts knockForumPosts), or null. */
+    forumPosts?: string | null;
 }
 
 export type KnockOutcome =
@@ -367,18 +379,19 @@ export function submitKnock(input: KnockInput, now = Date.now()): KnockOutcome {
             const at = iso(now);
             const viaPost = input.via?.postId ?? null;
             const viaSharer = input.via ? input.via.sharer.toLowerCase() : null;
+            const forumPosts = input.forumPosts ?? null;
             if (standing.kind === 'lapsed') {
                 db.prepare(`UPDATE join_requests SET callsign = ?, message = ?, avatar = ?, from_node = ?, created_at = ?, ip_hash = ?, updated_at = ?,
-                                via_post_id = ?, via_sharer_pubkey = ?
+                                via_post_id = ?, via_sharer_pubkey = ?, forum_posts = ?
                             WHERE id = ? AND status = 'pending'`)
-                    .run(input.callsign, input.message, input.avatar, input.fromNode, at, ipHash, at, viaPost, viaSharer, standing.row.id);
+                    .run(input.callsign, input.message, input.avatar, input.fromNode, at, ipHash, at, viaPost, viaSharer, forumPosts, standing.row.id);
                 if (input.avatar) keepNewestPhotos(now);
                 return { ok: true, id: standing.row.id, reopened: true };
             }
             const id = crypto.randomUUID();
-            db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, avatar, from_node, status, created_at, ip_hash, updated_at, via_post_id, via_sharer_pubkey)
-                        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`)
-                .run(id, pubkey, input.callsign, input.message, input.avatar, input.fromNode, at, ipHash, at, viaPost, viaSharer);
+            db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, avatar, from_node, status, created_at, ip_hash, updated_at, via_post_id, via_sharer_pubkey, forum_posts)
+                        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`)
+                .run(id, pubkey, input.callsign, input.message, input.avatar, input.fromNode, at, ipHash, at, viaPost, viaSharer, forumPosts);
             if (input.avatar) keepNewestPhotos(now);
             return { ok: true, id, reopened: false };
         })();
@@ -485,6 +498,8 @@ export interface OpenKnock {
     createdAt: string;
     /** The listing it came after and the member who shared it outside ("Where it came from", above), or null. */
     via: { title: string; sharer: string } | null;
+    /** Up to three of their posts on the worldwide forum, each with the proof made of it ("Forum posts", above), or null. */
+    forum: KnockForum | null;
 }
 
 /**
@@ -513,6 +528,7 @@ export function listOpenKnocks(limit: number, offset: number, now = Date.now()):
         knocks: rows.map((r) => ({
             id: r.id, pubkey: r.pubkey, callsign: r.callsign, message: r.message, avatar: r.avatar, fromNode: r.from_node, createdAt: r.created_at,
             via: viaLine(r),
+            forum: knockForumOf(r.forum_posts),
         })),
         total,
     };
@@ -822,9 +838,9 @@ export function scrubKnocksOf(pubkey: string): void {
     // whose key it is.
     if (!isMemberKeySpelling(pubkey) && db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(pubkey)) return;
     db.prepare(`UPDATE join_requests SET callsign = 'Deleted Member', message = '', avatar = NULL, from_node = NULL,
-                    via_post_id = NULL, via_sharer_pubkey = NULL, updated_at = ?
+                    via_post_id = NULL, via_sharer_pubkey = NULL, forum_posts = NULL, updated_at = ?
                 WHERE pubkey = ? AND (callsign != 'Deleted Member' OR message != '' OR avatar IS NOT NULL OR from_node IS NOT NULL
-                    OR via_post_id IS NOT NULL OR via_sharer_pubkey IS NOT NULL)`)
+                    OR via_post_id IS NOT NULL OR via_sharer_pubkey IS NOT NULL OR forum_posts IS NOT NULL)`)
         .run(iso(Date.now()), pubkey.toLowerCase());
 }
 
@@ -857,7 +873,7 @@ export function moveKnocks(oldKey: string, newKey: string, at: string): void {
  * makes the invite in that member's name.
  */
 const UNREAD = `(callsign NOT IN ('', 'Deleted Member') OR message != '' OR avatar IS NOT NULL OR from_node IS NOT NULL
-    OR via_post_id IS NOT NULL OR via_sharer_pubkey IS NOT NULL OR (status = 'declined' AND decided_by IS NOT NULL))`;
+    OR via_post_id IS NOT NULL OR via_sharer_pubkey IS NOT NULL OR forum_posts IS NOT NULL OR (status = 'declined' AND decided_by IS NOT NULL))`;
 
 /**
  * The stamp for something taken off a row (by the tidy-up or the photo limit): later than the row's own stamp, even in
@@ -905,7 +921,7 @@ export function tidyKnocks(now = Date.now()): { cleared: number; deleted: number
         const unread = db.prepare(`SELECT id, updated_at FROM join_requests WHERE ${UNREAD} AND NOT (${LISTED})`)
             .all(openSince(now)) as { id: string; updated_at: string }[];
         const clear = db.prepare(`UPDATE join_requests SET callsign = '', message = '', avatar = NULL, from_node = NULL,
-                                      via_post_id = NULL, via_sharer_pubkey = NULL,
+                                      via_post_id = NULL, via_sharer_pubkey = NULL, forum_posts = NULL,
                                       decided_by = CASE WHEN status = 'approved' THEN decided_by END, updated_at = ?
                                   WHERE id = ?`);
         for (const row of unread) clear.run(laterStamp(row.updated_at, now), row.id);
@@ -972,13 +988,14 @@ export function mergeReplicatedKnocks(rows: unknown, invitesCopied = false): Kno
     if (!Array.isArray(rows) || rows.length === 0) return merge;
     const current = db.prepare('SELECT updated_at FROM join_requests WHERE id = ?');
     const deleted = db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'join_requests' AND row_key = ?");
-    const upsert = db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, avatar, from_node, status, created_at, decided_by, invite_code, decided_at, updated_at, via_post_id, via_sharer_pubkey)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    const upsert = db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, avatar, from_node, status, created_at, decided_by, invite_code, decided_at, updated_at, via_post_id, via_sharer_pubkey, forum_posts)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                ON CONFLICT(id) DO UPDATE SET
                                    pubkey = excluded.pubkey, callsign = excluded.callsign, message = excluded.message, avatar = excluded.avatar,
                                    from_node = excluded.from_node, status = excluded.status, created_at = excluded.created_at,
                                    decided_by = excluded.decided_by, invite_code = excluded.invite_code, decided_at = excluded.decided_at,
-                                   updated_at = excluded.updated_at, via_post_id = excluded.via_post_id, via_sharer_pubkey = excluded.via_sharer_pubkey`);
+                                   updated_at = excluded.updated_at, via_post_id = excluded.via_post_id, via_sharer_pubkey = excluded.via_sharer_pubkey,
+                                   forum_posts = excluded.forum_posts`);
     const memberExists = db.prepare('SELECT 1 FROM members WHERE public_key = ?');
     const makeInvite = db.prepare('INSERT OR IGNORE INTO invite_codes (code, created_by, created_at, intended_for) VALUES (?, ?, ?, ?)');
     const valid = (rows as unknown[]).filter((raw): raw is SyncJoinRequest => {
@@ -988,7 +1005,7 @@ export function mergeReplicatedKnocks(rows: unknown, invitesCopied = false): Kno
             && isNullableText(r.fromNode, 300) && typeof r.status === 'string' && STATUSES.has(r.status)
             && isText(r.createdAt, 40) && isNullableText(r.decidedBy, 128) && isNullableText(r.inviteCode, 64)
             && isNullableText(r.decidedAt, 40) && isText(r.updatedAt, 40)
-            && isNullableText(r.viaPostId, 100) && isNullableText(r.viaSharerPubkey, 128);
+            && isNullableText(r.viaPostId, 100) && isNullableText(r.viaSharerPubkey, 128) && isNullableText(r.forumPosts, 2_000);
         if (!ok) merge.invalid++;
         return ok;
     });
@@ -1006,7 +1023,8 @@ export function mergeReplicatedKnocks(rows: unknown, invitesCopied = false): Kno
             if (here && here.updated_at >= r.updatedAt) { merge.kept++; continue; }
             try {
                 upsert.run(r.id, r.pubkey, r.callsign, r.message, r.avatar ?? null, r.fromNode ?? null, r.status, r.createdAt,
-                    r.decidedBy ?? null, r.inviteCode ?? null, r.decidedAt ?? null, r.updatedAt, r.viaPostId ?? null, r.viaSharerPubkey ?? null);
+                    r.decidedBy ?? null, r.inviteCode ?? null, r.decidedAt ?? null, r.updatedAt, r.viaPostId ?? null, r.viaSharerPubkey ?? null,
+                    r.forumPosts ?? null);
                 merge.written++;
                 if (!invitesCopied && r.status === 'approved' && r.inviteCode && r.decidedBy && memberExists.get(r.decidedBy)) {
                     merge.invitesMade += makeInvite.run(r.inviteCode, r.decidedBy, r.decidedAt ?? r.updatedAt, r.pubkey).changes;

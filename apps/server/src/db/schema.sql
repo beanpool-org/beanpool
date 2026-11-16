@@ -1495,6 +1495,12 @@ CREATE INDEX IF NOT EXISTS idx_place_watches_cell ON place_watches(lat, lng);
 -- leaves the knock plain). The ticket itself is never stored. Only the members who answer read them, as one line under
 -- the request (the post's title as it is now and the sharer's name); never the applicant's status read, the card or the
 -- directory. Cleared with what the applicant sent once the knock is off the list. A re-key moves `via_sharer_pubkey`.
+-- `forum_posts` (forums F11, DESIGN-forums-fable.md §13): up to three of the applicant's posts on the worldwide forum, as a
+-- JSON list of { postId, topicId, number, proof } (no words: the admins' apps show only what the worldwide forum answers), or
+-- NULL. `proof` is made here when the knock is taken, from the key that signed it and the secret it carried (@beanpool/core
+-- forumPostProof); the secret is kept nowhere, and this server never calls the worldwide community. Only the members who
+-- answer read it (`forum` in the list); an admin's app compares
+-- each proof with the one the worldwide forum's public page shows. Cleared with what the applicant sent.
 CREATE TABLE IF NOT EXISTS join_requests (
     id TEXT PRIMARY KEY,
     pubkey TEXT NOT NULL,
@@ -1511,6 +1517,7 @@ CREATE TABLE IF NOT EXISTS join_requests (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     via_post_id TEXT,
     via_sharer_pubkey TEXT,
+    forum_posts TEXT CHECK (forum_posts IS NULL OR (json_valid(forum_posts) AND json_type(forum_posts) = 'array' AND length(forum_posts) <= 2000)),
     CHECK ((status = 'pending') = (decided_at IS NULL)),
     CHECK ((status = 'approved') = (invite_code IS NOT NULL))
 );
@@ -3223,7 +3230,10 @@ CREATE TABLE IF NOT EXISTS knowledge_drafts (
     result_post_id TEXT,
     created_at     TEXT NOT NULL,
     -- The replication watermark (a plain table): db.ts stamps every write.
-    updated_at     TEXT
+    updated_at     TEXT,
+    -- "Turn into a Learn page" (forum slice F9, DESIGN-forums-fable.md §10.3): the forum answer a member's suggestion came from,
+    -- their own, live when sent; NULL for any other. Approval links the page to that answer (engine/forum-learn.ts).
+    from_forum_post_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_knowledge_drafts_member ON knowledge_drafts (member_pubkey, created_at);
 CREATE INDEX IF NOT EXISTS idx_knowledge_drafts_state ON knowledge_drafts (state, created_at);
@@ -3364,7 +3374,12 @@ CREATE TABLE IF NOT EXISTS forum_members (
     updated_at     TEXT,
     -- When a moderator first OK'd a topic of theirs (slice F2, engine/forum-first-look.ts): known in this forum from then, so
     -- their topics go up at once and their links are links, whatever their new-account days say.
-    known_at       TEXT
+    known_at       TEXT,
+    -- The member's secret for the proof each public post of theirs carries (slice F11, engine/forum-ask-posts.ts; design §13):
+    -- 32 random bytes as 64 hex, made on a public forum by the main server when they are told the forum is public, or the
+    -- first time they ask for it. Only they read it (GET /api/forum/ask-posts); nobody without it can test a key against a
+    -- public post. A standby copies it, so it answers the same proofs. Moves with the member on a re-key; deleted with them.
+    proof_secret   TEXT CHECK (proof_secret IS NULL OR (length(proof_secret) = 64 AND proof_secret NOT GLOB '*[^0-9a-f]*'))
 );
 -- A first topic waiting for a moderator's look (slice F2, engine/forum-first-look.ts; design §5): a new member's topic where
 -- `forumFirstLook` is on. Not a topic: it lives here until a moderator says yes, so no list, read, search or copy of the
@@ -3439,6 +3454,9 @@ CREATE TABLE IF NOT EXISTS forum_links (
     target_id  TEXT NOT NULL CHECK (length(target_id) BETWEEN 1 AND 128),
     created_at TEXT NOT NULL,
     updated_at TEXT,
+    -- A Learn page made from an answer in the topic (slice F9, §10.3): that answer's id, so it reads "Now a Learn page"; written
+    -- only when the page is made, never a chip of the topic's writer and never counted in their 3. NULL for every chip.
+    post_id    TEXT,
     PRIMARY KEY (topic_id, kind, target_id)
 );
 -- The topics that link one thing (slice F9, GET /api/forum/linked): "Talked about in the forum" reads it on every listing page,
@@ -3980,13 +3998,13 @@ CREATE INDEX IF NOT EXISTS idx_peek_tickets_expires ON peek_tickets(expires_at);
 --
 -- relay_mail: an item another community's server brought for a member here, held sealed until the member's devices confirm
 -- they have it (relay_mail_got), then deleted; 30 days at most. `envelope` is the sender's signed relay envelope as it came (@beanpool/core
--- relay-envelope.ts); `payload` the sealed line or delete as it came. A blob's sealed bytes are a file of their own under
+-- relay-envelope.ts); `payload` the sealed line, delete, edit or reaction as it came (X6 added the last two kinds). A blob's sealed bytes are a file of their own under
 -- <data>/relay-mail/in/ (never in the image store, so never in a backup's objects), `payload` NULL. `bytes` counts the
 -- payload either way, for the caps.
 CREATE TABLE IF NOT EXISTS relay_mail (
     sender_key  TEXT NOT NULL CHECK (length(sender_key) = 64),
     item_id     TEXT NOT NULL CHECK (length(item_id) BETWEEN 8 AND 64),
-    kind        TEXT NOT NULL CHECK (kind IN ('dm-line', 'dm-blob', 'dm-delete')),
+    kind        TEXT NOT NULL CHECK (kind IN ('dm-line', 'dm-blob', 'dm-delete', 'dm-edit', 'dm-reaction')),
     recipient   TEXT NOT NULL CHECK (length(recipient) = 64),
     sender_home TEXT NOT NULL CHECK (length(sender_home) BETWEEN 1 AND 260),
     envelope    TEXT NOT NULL CHECK (length(envelope) <= 2000),
@@ -4044,7 +4062,7 @@ CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_at ON relay_mail_seen(seen_at);
 CREATE TABLE IF NOT EXISTS relay_outbox (
     sender_key     TEXT NOT NULL CHECK (length(sender_key) = 64),
     item_id        TEXT NOT NULL CHECK (length(item_id) BETWEEN 8 AND 64),
-    kind           TEXT NOT NULL CHECK (kind IN ('dm-line', 'dm-blob', 'dm-delete', 'receipt')),
+    kind           TEXT NOT NULL CHECK (kind IN ('dm-line', 'dm-blob', 'dm-delete', 'dm-edit', 'dm-reaction', 'receipt')),
     recipient      TEXT NOT NULL CHECK (length(recipient) = 64),
     recipient_home TEXT NOT NULL CHECK (length(recipient_home) BETWEEN 1 AND 260),
     state          TEXT NOT NULL CHECK (state IN ('queued', 'sent', 'delivered', 'failed', 'expired')),

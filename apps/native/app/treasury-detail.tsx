@@ -469,9 +469,11 @@ export default function TreasuryDetailScreen() {
 
     // Whole hundredths of a Bean, as the node sends every figure of the detail (`*_c`); a balance that isn't one counts 0.
     const balance = isHundredths(detail?.balance_c) ? detail.balance_c : 0;
-    // The name its members gave it, as written; the words only when there is none.
-    const name = detail?.name || nameParam || t('Community Enterprise');
-    const avatar = detail?.avatar || avatarParam;
+    // The name its members gave it, as written; the words only when there is none. The route's name and picture (from the card
+    // that opened this page; a link from outside the app can fill them too) stand in only until the node's read: once it is in,
+    // the page and its pledge form say only what the node says (review of #3243: no money screen names anyone from a route).
+    const name = (detail ? detail.name : nameParam) || t('Community Enterprise');
+    const avatar = detail ? detail.avatar : avatarParam;
 
     const mayBlock = !isEffectivePreview && !isKeeperOfThis && !!identity?.publicKey && !!treasuryKey;
     const handleBlockEnterprise = () => {

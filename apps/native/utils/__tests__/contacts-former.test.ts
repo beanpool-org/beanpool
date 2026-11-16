@@ -209,6 +209,30 @@ describe('the old 12 words open the old list and merge it into the new one', () 
         expect(p.files.size).toBe(0);
     });
 
+    it('"none kept" only when every community answered: silent or a server error at one, another keeping none, is no answer', async () => {
+        const oldMe = wordsAccount();
+        const me = person();
+        const [riverside, riverbend] = [new FakeCommunity(), new FakeCommunity()];
+        // The community in use keeps the copy (the Contacts notice is up for it); Riverbend keeps none.
+        riverside.former.set(me.publicKey, { copy: copyOf(oldMe, listOf(contact('Dee Walker'))), formerKey: oldMe.publicKey, keptUntil: '2027-11-15T00:00:00.000Z' });
+        const p = phone({ [RIVERSIDE]: riverside, [RIVERBEND]: riverbend }, RIVERSIDE);
+        riverside.silent = true;
+        expect(await openFormerWithWords(oldMe.words, me, p.deps)).toEqual({ kind: 'no_answer' });
+        riverside.silent = false;
+        riverside.broken = true;
+        expect(await openFormerWithWords(oldMe.words, me, p.deps)).toEqual({ kind: 'no_answer' });
+        // Another community silent while the community in use answers that it keeps none: still no answer about that one.
+        riverside.broken = false;
+        riverside.former.clear();
+        riverbend.silent = true;
+        expect(await openFormerWithWords(oldMe.words, me, p.deps)).toEqual({ kind: 'no_answer' });
+        // Every community answering, none keeping one: none.
+        riverbend.silent = false;
+        expect(await openFormerWithWords(oldMe.words, me, p.deps)).toEqual({ kind: 'none' });
+        expect(p.files.size).toBe(0);
+        // Mutation: `found.length === 0 → none` whatever `silent` holds gives { kind: 'none' } in the first three.
+    });
+
     it('"Delete it": a signed DELETE to each community holding an old copy, and nothing else', async () => {
         const oldMe = wordsAccount();
         const me = person();

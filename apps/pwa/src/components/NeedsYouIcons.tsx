@@ -77,7 +77,7 @@ export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: strin
  * forum-first-look.ts): a topic, and the first topics waiting for a moderator's look. The web has no page for either yet
  * (slice F4), so every one lands on the Chat tab's Forum side, as on the phone.
  */
-const FORUM_NOTICE_KINDS: ReadonlySet<string> = new Set(['forum.reply', 'forum.mention', 'forum.first-look', 'forum.first-look-answer']);
+const FORUM_NOTICE_KINDS: ReadonlySet<string> = new Set(['forum.reply', 'forum.mention', 'forum.first-look', 'forum.first-look-answer', 'forum.learn-ask']);
 
 /**
  * Where a tap on a notice lands in the web app: parity with the phone's push tap (apps/native utils/push-notice-check.ts

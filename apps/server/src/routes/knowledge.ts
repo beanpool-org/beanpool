@@ -9,7 +9,10 @@
  *        A row is what the row card draws (id, title, first line, topic, photo, checkedAt, helped, pinned, outdated), never
  *        the body: one page is read whole through GET /api/marketplace/posts?type=knowledge&id=…
  * An owner or admin (nodeRoleOf); anyone else 403 `admins_only`:
- *   POST /api/knowledge/posts                        { title, body, topic, place?, sources?, lang?, photos? } → 201 { post }
+ *   POST /api/knowledge/posts                        { title, body, topic, place?, sources?, lang?, photos?, fromForumPostId? } → 201 { post }
+ *        `fromForumPostId`: their own forum answer, turned (forum slice F9, engine/forum-learn.ts): the answer is linked to the
+ *        page (403 `not_your_answer`; 400 `not_an_answer`; 409 `answer_hidden`, `learn_waiting`, `already_learn`; 403
+ *        `group_section`; 404 for one they may not see)
  *   POST /api/knowledge/posts/:id/edit               { title, body, topic, place?, sources?, lang? } → { post }
  *   POST /api/knowledge/posts/:id/checked            "Still right" → { post }
  *   POST /api/knowledge/posts/:id/outdated/clear     → { post }
@@ -21,7 +24,8 @@
  * A page that isn't showing is 404 `not_found`.
  *
  * The waiting list (slice K3; engine/knowledge-drafts.ts). A member:
- *   POST /api/knowledge/drafts                       { title, body, topic, place?, sources?, lang?, photos? } → 201 { draft }
+ *   POST /api/knowledge/drafts                       { title, body, topic, place?, sources?, lang?, photos?, fromForumPostId? } → 201 { draft }
+ *        (`fromForumPostId`: their own forum answer, as above; approval links the page to it if the answer is still live)
  *        (409 `publish_instead` for an owner or admin; 429 `too_many_waiting`, `sent_enough_today`; a mute, a new account's
  *        limits and the photo budget as for posting)
  *        A fix (slice K5): { fixOf, note, title?, body?, topic?, place?, sources?, lang? } → 201 { draft }, the page's own
@@ -62,6 +66,8 @@ import {
     myKnowledgeDrafts, suggestKnowledge, withdrawKnowledgeDraft, type KnowledgeAnswer,
 } from '../engine/knowledge-drafts.js';
 import { keptNoticeDetails } from '../engine/kept-notices.js';
+import { ForumRefusal } from '../engine/forum.js';
+import { publishFromAnswer } from '../engine/forum-learn.js';
 import { KNOWLEDGE_DRAFT_WORDS, KNOWLEDGE_LIMITS, isKnowledgeTopic, word, wordsFor, type KnowledgeDraftMine, type KnowledgeToCheckList } from '@beanpool/core';
 import type { RouteDeps } from './types.js';
 
@@ -112,7 +118,8 @@ function writer(ctx: any): string | null {
 
 /** Runs a write, answering its refusal in the member's words: the engine's own, or a limit's (profile-feature-gate.ts). */
 function refused(ctx: any, e: unknown): void {
-    if (e instanceof KnowledgeRefusal) return answer(ctx, e.status, e.message, e.code);
+    // A forum answer's refusals ("Turn into a Learn page", engine/forum-learn.ts) answer the same way.
+    if (e instanceof KnowledgeRefusal || e instanceof ForumRefusal) return answer(ctx, e.status, e.message, e.code);
     if (respondProfileRefusal(ctx, e)) return;
     ctx.status = 400;
     ctx.body = { error: memberErrorText(e, word('Couldn’t save this page of Local knowledge.')) };
@@ -167,7 +174,8 @@ export function createKnowledgeRoutes(deps: RouteDeps): Router {
         try {
             // A new account's limits, as every post's (engine/probation.ts): its photos count.
             assertMayPost(key, Array.isArray(photos) ? photos.length : 0);
-            const post = publishKnowledge(send, key, body as any);
+            // From the owner's or admin's own forum answer (slice F9): the page and the answer's link, together.
+            const post = body.fromForumPostId !== undefined ? publishFromAnswer(send, key, body as any) : publishKnowledge(send, key, body as any);
             ctx.status = 201;
             ctx.body = { post };
         } catch (e) {

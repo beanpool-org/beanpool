@@ -453,6 +453,11 @@ export interface SyncJoinRequest {
      */
     viaPostId?: string | null;
     viaSharerPubkey?: string | null;
+    /**
+     * The applicant's posts on the worldwide forum and the proofs made of them (forums F11), as the JSON text the row keeps,
+     * or null; cleared with what the applicant sent. Absent from a main server older than them.
+     */
+    forumPosts?: string | null;
 }
 
 /**
@@ -1563,6 +1568,7 @@ function joinRequestOfRow(r: any): SyncJoinRequest {
         updatedAt: r.updated_at,
         viaPostId: r.via_post_id ?? null,
         viaSharerPubkey: r.via_sharer_pubkey ?? null,
+        forumPosts: r.forum_posts ?? null,
     };
 }
 

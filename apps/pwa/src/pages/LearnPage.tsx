@@ -19,13 +19,16 @@
  * Keeping it right (slice K5, §3.2 items 9-11, §3.5): on a page, "👍 This helped" and its count, "Something changed? Suggest a fix"
  * (the form with "What changed?" first; it waits for an owner or admin), and for the writer, an owner or an admin "Mark as out
  * of date" with a note; an owner or admin also "Edit", "Still right" and "Clear the mark" (lib/learn.ts learnPageActions). The
- * node's refusal is shown in its own words, never a success it didn't give. Still to come: pin, take down and Share; "Thank" (K8).
- * Report is the existing sheet, by post id.
+ * node's refusal is shown in its own words, never a success it didn't give. Still to come: pin, take down and Share.
+ * Recognition (slice K8, §2.10, §3.7): "🗺️ Local guide" on the writer's line where the node says so (a read by id), and
+ * "🫘 Thank {name}" where Beans are live (App passes `onThank`), which opens the Ledger's Send form with the writer and the note
+ * "Thanks for "{title}"" filled in. Report is the existing sheet, by post id.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TAG_WORDS, LEARN_HOME_WORDS, LOCAL_COMMUNITY_SHEET, formatCount, forumOn, isKnowledgeTopic, pinLive, t, tn, upperCase, type KnowledgeFront,
+    KNOWLEDGE_LIMITS, KNOWLEDGE_NAMES, KNOWLEDGE_TAG_WORDS, KNOWLEDGE_THANK, LEARN_HOME_WORDS, LOCAL_COMMUNITY_SHEET, LOCAL_GUIDE_WORDS, formatCount, forumOn, isKnowledgeTopic,
+    knowledgeThankNote, knowledgeThankOffered, pinLive, t, tn, upperCase, type KnowledgeFront,
     type KnowledgeRow, type KnowledgeTopicPage,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -76,7 +79,15 @@ interface Props {
     /** App's doors: `marketplace-search` for "Search the Market for …"; Home's Find card for the preview's "Communities near you". */
     onNavigate?: (tab: string, ctxId?: string) => void;
     onNearYou?: () => void;
+    /** "🫘 Thank {name}" (K8): the Ledger's Send form opened with the writer and the note. Passed only where Beans are live. */
+    onThank?: (send: LearnThank) => void;
 }
+
+/**
+ * What "Thank" hands the Ledger, in App's state (never the address): the writer's key and the note, each changeable there. No
+ * name: the Ledger names the recipient from this community's member list, by key (review of #3243).
+ */
+export interface LearnThank { to: string; note: string }
 
 interface View { topic: string | null; words: string; pageId: string | null; screen: Screen }
 
@@ -185,7 +196,7 @@ function Rows({ rows, onOpen }: { rows: KnowledgeRow[]; onOpen: (id: string) => 
     );
 }
 
-export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfile, onNavigate, onNearYou }: Props) {
+export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfile, onNavigate, onNearYou, onThank }: Props) {
     const { ready, mode } = useLearn();
     const preview = mode === 'preview';
     const open = ready && showsLearn(mode);
@@ -310,7 +321,7 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
     if (pageId) {
         return (
             <Shell>
-                <PageView id={pageId} preview={preview} identity={identity} samplePosts={samplePosts} onBack={closePage} onOpenProfile={onOpenProfile}
+                <PageView id={pageId} preview={preview} identity={identity} samplePosts={samplePosts} onBack={closePage} onOpenProfile={onOpenProfile} onThank={onThank}
                     onOpenTopic={forumHere && onNavigate ? (topicId) => onNavigate('forum-topic', topicId) : undefined}
                     onTag={(tag) => { setPageIsEntry(false); setView({ topic: null, words: tag, pageId: null, screen: 'list' }); }} />
             </Shell>
@@ -535,8 +546,9 @@ function TopicView({ topic, more, failed, onTopicAgain, moreFailed, moreLoading,
 
 // ── One page, whole ──────────────────────────────────────────────────────────────────────
 
-function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, onTag, onOpenTopic }: {
+function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, onTag, onThank, onOpenTopic }: {
     id: string; preview: boolean; identity: BeanPoolIdentity | null; samplePosts: () => LearnPost[]; onBack: () => void; onOpenProfile: (pubkey: string) => void;
+    onThank?: (send: LearnThank) => void;
     /** "From the forum": a topic that links this page opens there (forum slice F9); absent where the forum is off. */
     onOpenTopic?: (topicId: string) => void;
     /** A tag on the page tapped: Learn searches for it (Learn's tags). */
@@ -569,12 +581,17 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
 
     const header = <Header title={upperCase(t(KNOWLEDGE_NAMES.kind))} label onBack={onBack} />;
     /**
-     * The node's answer to an action redraws the page. Its answer never says whether this member tapped "This helped" (only a
-     * read of the page by id does), so the page keeps what it knew rather than reading a pressed tap as taken back.
+     * The node's answer to an action redraws the page. Its answer never says whether this member tapped "This helped", nor
+     * whether the writer is a Local guide (only a read of the page by id does), so the page keeps what it knew rather than
+     * reading a pressed tap as taken back or dropping the writer's badge.
      */
     const showAnswer = (next: LearnPost) => setState((prev) => {
-        const mine = prev && prev !== 'failed' ? prev.post?.knowledge.helpedByMe : undefined;
-        return { id, post: next.knowledge.helpedByMe === undefined && mine !== undefined ? { ...next, knowledge: { ...next.knowledge, helpedByMe: mine } } : next };
+        const was = prev && prev !== 'failed' ? prev.post?.knowledge : undefined;
+        const kept = {
+            ...(next.knowledge.helpedByMe === undefined && was?.helpedByMe !== undefined ? { helpedByMe: was.helpedByMe } : {}),
+            ...(next.knowledge.writerLocalGuide === undefined && was?.writerLocalGuide !== undefined ? { writerLocalGuide: was.writerLocalGuide } : {}),
+        };
+        return { id, post: Object.keys(kept).length ? { ...next, knowledge: { ...next.knowledge, ...kept } } : next };
     });
     /** One action: the node's answer redraws the page; its refusal is shown in its own words, and nothing else changes. */
     const act = async (go: () => Promise<unknown>, after?: () => void) => {
@@ -614,6 +631,7 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
     const writer = !preview && post.authorPublicKey !== '';
     const markedOn = k.outdatedAt ? new Date(k.outdatedAt).toLocaleDateString(shownLanguage(), { day: 'numeric', month: 'short', year: 'numeric' }) : '';
     const acts = learnPageActions({ signedIn: !!identity, preview, own, checks, outdated: !!k.outdatedAt });
+    const thank = knowledgeThankOffered({ signedIn: !!identity, live: !preview, beansLive: !!onThank, own, gathered: !!k.gathered, writer: post.authorPublicKey });
     const helpedN = helped?.n ?? k.helped ?? 0;
     const helpedMine = helped?.mine ?? !!k.helpedByMe;
     if (editing) {
@@ -715,9 +733,20 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
                         <button type="button" data-testid="learn-post-writer" onClick={() => onOpenProfile(post.authorPublicKey)}
                             className="flex items-center gap-3 w-full min-h-[48px] text-start bg-transparent border-0 cursor-pointer rounded-xl p-1 -ms-1 hover:bg-oat-50/50 dark:hover:bg-black/20">
                             <MemberAvatar avatarUrl={post.authorAvatarUrl} pubkey={post.authorPublicKey} callsign={post.authorCallsign} size={40} />
-                            <span className="min-w-0 font-bold text-base text-nature-950 dark:text-white break-words">{post.authorCallsign}</span>
+                            <span className="min-w-0 flex flex-col">
+                                <span className="font-bold text-base text-nature-950 dark:text-white break-words">{post.authorCallsign}</span>
+                                {k.writerLocalGuide === true && (
+                                    <span data-testid="learn-post-writer-guide" className="text-sm font-bold text-nature-800 dark:text-nature-100">{t(LOCAL_GUIDE_WORDS.line)}</span>
+                                )}
+                            </span>
                         </button>
                     </section>
+                )}
+                {thank && onThank && (
+                    <button type="button" data-testid="learn-post-thank" className={`${TOOL} self-start`}
+                        onClick={() => onThank({ to: post.authorPublicKey, note: knowledgeThankNote(post.title) })}>
+                        {t(KNOWLEDGE_THANK.button, { name: post.authorCallsign })}
+                    </button>
                 )}
                 <p className={`m-0 text-xs ${MUTED}`}>{t('Local knowledge is written by members. Check the source before you rely on it.')}</p>
                 {/* Keeping it right (K5): "This helped" and its count, then "Suggest a fix", then the writer's and admins' tools. */}

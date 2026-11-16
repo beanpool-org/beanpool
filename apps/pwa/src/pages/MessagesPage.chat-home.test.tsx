@@ -76,7 +76,7 @@ vi.mock('../lib/outside-mail', async (importOriginal) => {
     const real = await importOriginal<typeof import('../lib/outside-mail')>();
     const ctx = {
         nodeUrl: 'https://riverside.example', identity: { publicKey: 'member-ana', privateKey: 'k', callsign: 'Ana' },
-        store: { chat: async () => OUTSIDE, lines: async () => [], chats: async () => [OUTSIDE] },
+        store: { chat: async () => OUTSIDE, lines: async () => [], changes: async () => [], chats: async () => [OUTSIDE] },
         isBlocked: async () => false, holds: () => true,
     };
     return {

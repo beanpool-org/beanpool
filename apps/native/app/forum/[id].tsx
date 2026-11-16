@@ -17,13 +17,17 @@
  * - **Gone.** When the node says the topic isn't there for this member any more (`not_found`: on a read, on Send, or on a tap
  *   it refuses so, which a read again then confirms), the kept copy and the draft are dropped, nothing writes a draft for it
  *   again (not even leaving with words in the box), and the member is back on the list with one line saying so.
+ * - **Links** (slice F9 part 3, components/forum/ForumLinks.tsx): the chips under the opening words, exactly as the node answered
+ *   them for this member; the writer's ⋯ adds Link (the picker) and Make this a Need (utils/forum-need.ts). After a pick the topic
+ *   is read again, so a chip is only ever the node's answer.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { leaveScreen } from '../../utils/leave-screen';
+import { useAfterDismiss } from '../../utils/screen-presented';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { FORUM_LIMITS, currentLanguage, forumSectionName, t, timeAgo } from '@beanpool/core';
@@ -34,15 +38,17 @@ import { loadIdentity } from '../../utils/identity';
 import { reportedAlertBody } from '../../utils/reportReasons';
 import {
     closeForumTopic, followForumTopic, forgetForumTopic, getForumFront, getForumTopic, keepForumDraft, keptForumDraft, keptForumFront, keptForumTopic, markForumTold, noteForumBack,
-    readForumTopic, removeForumPost, replyInForum, reportForumPost, type ForumFront, type ForumPost, type ForumTopicPage,
+    linkForumTarget, readForumTopic, removeForumPost, replyInForum, reportForumPost, type ForumFront, type ForumPost, type ForumTopicPage,
 } from '../../utils/forum';
+import { handNeedSeed, needSeedFrom, takeNeedLinked } from '../../utils/forum-need';
+import { ForumLinkChips, ForumLinkPicker } from '../../components/forum/ForumLinks';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { makeChatStyles } from '../../components/chat/styles';
 import { ReportMessageSheet } from '../../components/ReportMessageSheet';
 import { ForumAttached, ForumMenu, ForumPhotos, ForumWords, askForumTold, pickForumPhoto, type ForumMenuItem } from '../../components/forum/ForumBits';
 import type { ForumDraft } from '../../utils/forum-kept';
 import { useForumStyles } from '../../components/forum/forum-style';
-import { TOPIC_WORDS } from '../../components/forum/forum-words';
+import { LINK_WORDS, TOPIC_WORDS } from '../../components/forum/forum-words';
 
 type Menu = { kind: 'post'; post: ForumPost; confirm?: 'block' | 'remove' } | { kind: 'topic' } | null;
 
@@ -66,6 +72,15 @@ export default function ForumTopicScreen() {
     const [failed, setFailed] = useState(false);
     const [menu, setMenu] = useState<Menu>(null);
     const [reporting, setReporting] = useState<ForumPost | null>(null);
+    const [picking, setPicking] = useState(false);
+    // A ⋯ row that opens another Modal (the Link picker, Report): on iOS a Modal can't open while the menu is still closing
+    // (UIKit drops it; React Native never retries, utils/screen-presented.ts), so there it opens once the menu has gone.
+    const afterMenu = useAfterDismiss<() => void>((open) => open());
+    const closeMenuThen = (open: () => void) => {
+        setMenu(null);
+        if (Platform.OS === 'ios') afterMenu.hold(open);
+        else open();
+    };
     const [quote, setQuote] = useState<ForumPost | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -133,6 +148,11 @@ export default function ForumTopicScreen() {
         });
         return () => { shown.current = false; };
     }, [topicId, readThrough, atPost]);
+
+    // Back from the Need form with a Need linked here (Make this a Need): read again, so its chip is the node's answer.
+    useFocusEffect(useCallback(() => {
+        if (takeNeedLinked(topicId)) void readThrough(0, lastOf(pageRef.current));
+    }, [topicId, readThrough]));
 
     // Leaving the topic with words or photos not posted keeps them as its draft (the parent's cleanup runs before the box's
     // handle is let go, so what is in the box is still readable here). Nothing is touched before the kept draft was read, nor
@@ -269,6 +289,15 @@ export default function ForumTopicScreen() {
                 () => void act(() => followForumTopic(topic.id, topic.follow === 'muted' ? null : 'muted')),
             ]];
             if (open && (topic.writer.publicKey === me || front?.moderator)) items.push([t(TOPIC_WORDS.close), () => void act(() => closeForumTopic(topic.id))]);
+            // Only its writer links (the node refuses anyone else) and makes a Need of it (design §10.2, §10.4).
+            if (topic.writer.publicKey === me && !topic.removed) {
+                items.push([t(LINK_WORDS.link), () => closeMenuThen(() => setPicking(true))]);
+                items.push([t(LINK_WORDS.makeNeed), () => {
+                    setMenu(null);
+                    handNeedSeed(needSeedFrom(topic.id, topic.title, opening?.words ?? ''));
+                    router.push({ pathname: '/new-listing', params: { newPost: 'need', fromTopic: topic.id } });
+                }]);
+            }
             items.push([t(TOPIC_WORDS.cancel), () => setMenu(null)]);
             return items;
         }
@@ -292,7 +321,7 @@ export default function ForumTopicScreen() {
         const items: ForumMenuItem[] = [];
         if (open && !post.removed && post.words) items.push([t(TOPIC_WORDS.reply), () => { setQuote(post); setMenu(null); composer.current?.focus(); }]);
         if (post.words) items.push([t(TOPIC_WORDS.copy), () => { void Clipboard.setStringAsync(post.words).catch(() => {}); setMenu(null); }]);
-        if (!mine && !post.removed) items.push([t(TOPIC_WORDS.report), () => { setReporting(post); setMenu(null); }]);
+        if (!mine && !post.removed) items.push([t(TOPIC_WORDS.report), () => closeMenuThen(() => setReporting(post))]);
         if (!mine) items.push([t(TOPIC_WORDS.block, { name: name(post) }), () => setMenu({ ...m, confirm: 'block' }), true]);
         if (mine && !post.removed) items.push([t(TOPIC_WORDS.remove), () => setMenu({ ...m, confirm: 'remove' }), true]);
         items.push([t(TOPIC_WORDS.cancel), () => setMenu(null)]);
@@ -335,6 +364,7 @@ export default function ForumTopicScreen() {
                             {topic.place ? <Text style={styles.muted}>📍 {topic.place}</Text> : null}
                             {opening && byline(opening)}
                             {opening && postBody(opening)}
+                            <ForumLinkChips links={topic.links} />
                         </View>
                     )}
                     {replies.map((post) => {
@@ -387,7 +417,10 @@ export default function ForumTopicScreen() {
                     </View>
                 )}
             </KeyboardAvoidingView>
-            <ForumMenu label={menu?.kind === 'post' ? t(TOPIC_WORDS.postMenu) : t(TOPIC_WORDS.topicMenu)} items={menu ? menuItems(menu) : null} onClose={() => setMenu(null)} />
+            <ForumMenu label={menu?.kind === 'post' ? t(TOPIC_WORDS.postMenu) : t(TOPIC_WORDS.topicMenu)} items={menu ? menuItems(menu) : null} onClose={() => setMenu(null)}
+                onDismiss={afterMenu.release} />
+            <ForumLinkPicker open={picking && !!topic} me={me} linked={(topic?.links ?? []).flatMap((l) => (l.shown ? [l.id] : []))} onClose={() => setPicking(false)}
+                onPick={(kind, targetId, on) => { setPicking(false); if (topic) void act(() => linkForumTarget(topic.id, kind, targetId, on)); }} />
             <ReportMessageSheet isOpen={!!reporting} photo={false} title={t(TOPIC_WORDS.reportTitle)} note={t(TOPIC_WORDS.reportNote)} onClose={() => setReporting(null)}
                 onSubmit={async (reason) => {
                     if (!reporting) return;

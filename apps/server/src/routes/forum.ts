@@ -66,6 +66,11 @@
  *        writer, an owner or an admin)
  *   GET  /api/forum/linked?kind&id          → { topics: [{ id, sectionId, title, replyCount, lastActivityAt }] }   the topics
  *        the signer may read that link one thing they may see, newest activity first, at most 10; for anything else []
+ *   POST /api/forum/posts/:id/learn-ask     → { asked: true }   "Ask {name} to make this a Learn page" (engine/forum-learn.ts):
+ *        an owner or admin (403 `admins_only`), of someone else's answer (409 `own_answer`) that could be turned now (400
+ *        `not_an_answer`; 409 `answer_hidden`, `learn_waiting`, `already_learn`; 403 `group_section`); 404 `learn_off` where
+ *        Learn is off. The writer gets one bell row (`forum.learn-ask`, no push) under the bell's rules; the answer is the same
+ *        whether or not a row went. A post's `learn` ({ id, title } | null) is "Now a Learn page", as the reader may see it.
  *
  * A section: { id, starter, name, about, position, starts, listed, archived, group: { id, name } | null } (starter's name:
  * @beanpool/core forumSectionName). A topic: { id, sectionId, title, writer: { publicKey, name }, place, lang, replyCount,
@@ -93,6 +98,7 @@ import {
     type MakeForumPoll,
 } from '../engine/forum.js';
 import { noteForumReader, tellForumReply, tellForumTopic } from '../engine/forum-notices.js';
+import { askForLearnPage } from '../engine/forum-learn.js';
 import { ForumSearchRefusal, FORUM_SEARCH_OFFSET_MAX, searchForum } from '../engine/forum-search.js';
 import { FORUM_LIMITS, word } from '@beanpool/core';
 import {
@@ -308,6 +314,8 @@ export function createForumRoutes(_deps: RouteDeps): Router {
         if (Array.isArray(ctx.query.kind) || Array.isArray(ctx.query.id)) return answer(ctx, 400, 'kind and id are one value each.', 'bad_request');
         read(ctx, (key) => forumTopicsLinking(key, ctx.query.kind, ctx.query.id));
     });
+    // "Ask {name} to make this a Learn page" (slice F9, engine/forum-learn.ts).
+    router.post('/api/forum/posts/:id/learn-ask', (ctx) => write(ctx, 200, (key) => askForLearnPage(forumNoticeCb(), key, ctx.params.id)));
     router.post('/api/forum/posts/:id/edit', (ctx) => write(ctx, 200, (key, body) => editForumPost(key, ctx.params.id, body)));
     router.post('/api/forum/posts/:id/remove', (ctx) => write(ctx, 200, (key) => { removeForumPost(key, ctx.params.id); return { ok: true }; }));
     router.post('/api/forum/sections', (ctx) => write(ctx, 201, (key, body) => ({ section: createForumSection(key, body) })));

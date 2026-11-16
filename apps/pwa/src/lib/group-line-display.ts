@@ -44,6 +44,8 @@ export interface DisplayRosterRow {
     memberPubkey: string;
     callsign?: string | null;
     formerKeys?: FormerKey[] | null;
+    /** A guest no longer in the chat whose name this browser kept (core group-guest-names.ts): named, with "no longer in this group". */
+    gone?: boolean;
 }
 
 /** A group line as the node served it (GET …/chat), the fields this rule reads. */
@@ -118,8 +120,9 @@ function unverifiedView(epoch: number | null): GroupLineView {
 /** Who a signer is, by the rule (§4 2a–2c). */
 export function nameSigner(signer: string, line: Pick<ServedGroupLine, 'authorPubkey' | 'authorCallsign'>, ctx: Pick<GroupLineDisplayContext, 'roster' | 'nodeNameOf' | 'successions' | 'walk'>):
     { name: string; nameHint: string | null; details: string | null } {
-    const row = ctx.roster.find((r) => r.memberPubkey === signer);
-    if (row) return { name: row.callsign || signer.slice(0, 8), nameHint: null, details: null };
+    // In today's roster first; a guest no longer in the chat only by the row this browser kept for them.
+    const row = ctx.roster.find((r) => r.memberPubkey === signer && !r.gone) ?? ctx.roster.find((r) => r.memberPubkey === signer);
+    if (row) return { name: row.callsign || signer.slice(0, 8), nameHint: row.gone ? GROUP_LINE_NOT_IN_GROUP : null, details: null };
     for (const r of ctx.roster) {
         const former = Array.isArray(r.formerKeys) ? r.formerKeys.find((f) => f?.pubkey === signer) : undefined;
         if (former && walked(r, signer, ctx)) {

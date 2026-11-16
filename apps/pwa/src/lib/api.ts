@@ -847,7 +847,7 @@ export async function signedCopyFetch(
  * `signal`, so its deadline ends a stalled request and the round with it.
  */
 export async function signedMailFetch(
-    method: 'GET' | 'POST', community: string, path: string, body: unknown, identity: BeanPoolIdentity, signal?: AbortSignal,
+    method: 'GET' | 'POST' | 'DELETE', community: string, path: string, body: unknown, identity: BeanPoolIdentity, signal?: AbortSignal,
 ): Promise<Response> {
     const bodyString = body === undefined ? '' : JSON.stringify(body);
     await refuseIfNodeTooOld(community, signal);

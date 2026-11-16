@@ -43,6 +43,7 @@ import {
     DM_REQUEST_PENDING_CODE,
 } from './dm-requests.js';
 import { DM_REQUESTS_LIMITED_CODE } from './request-limits.js';
+import { assertNotMuted } from './auto-moderation.js';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
 type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow', kind: PushNoticeKind) => void;
@@ -714,7 +715,9 @@ export function toggleMessageReaction(
         const held = reactionRefusal(own.conversation_id, authorPubkey);
         if (held) throw new MessagingError(held, 403, DM_REQUEST_PENDING_CODE);
         if (own.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_REACT_ERROR, 403);
-        const toggled = JSON.stringify(toggledReactions(own.metadata, authorPubkey, emoji).metadata);
+        const mine = toggledReactions(own.metadata, authorPubkey, emoji);
+        if (!mine.removed) assertNotMuted(authorPubkey); // as below: a take-back passes a mute
+        const toggled = JSON.stringify(mine.metadata);
         setWithheldLineMetadata(own.id, toggled);
         cb.broadcast({ type: 'message_reaction', conversationId: own.conversation_id, messageId, metadata: toggled, participants: eventParticipants(own.conversation_id, authorPubkey) }, [authorPubkey]);
         return { success: true, metadata: toggled };
@@ -775,6 +778,10 @@ export function toggleMessageReaction(
     const overlay = overlayOf(messageId, authorPubkey);
     const seen = overlay?.reaction ? withOwnReaction(row.metadata, authorPubkey, overlay.reaction) : row.metadata;
     const { metadata, removed } = toggledReactions(seen, authorPubkey, emoji);
+    // A reaction is up to 32 characters of anything, shown to everyone in the chat: a muted member (G3) adds or changes
+    // none. Taking their own back says nothing to anyone, so a mute never stops it (a mute stops a member speaking, never
+    // stepping away: routes/relay.ts speaksIn). Asked here, after every refusal above, where the toggle is known.
+    if (!removed) assertNotMuted(authorPubkey);
     const metadataStr = JSON.stringify(metadata);
     const keys = participants.map((p: any) => p.public_key as string);
     const toAuthorOnly = () => {

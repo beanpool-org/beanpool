@@ -557,6 +557,12 @@ export function initSchema() {
         try { db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column}`).run(); } catch { }
     }
 
+    // Born with the public forum's search-engine rule (slice F7, Q2): a topic moved out of "Introduce yourself" is never listed.
+    // One column, as schema.sql has it, 0 on every row that is there (SQLite gives a column added with a constant default that
+    // value at once): an addition, as F8's above; nothing is read, filled in or rewritten, and a topic still in that section is
+    // held by its section's starter. A file from before the forum finds no table; on a fresh install it finds its column.
+    try { db.prepare('ALTER TABLE forum_topics ADD COLUMN never_listed INTEGER NOT NULL DEFAULT 0 CHECK (never_listed IN (0, 1))').run(); } catch { }
+
     // Born with the community's name on its members' listings on the global community (list-on-global G5): one column on the
     // directory mirror's cache, as schema.sql has it, 1 (on) on every row that is there: SQLite gives a column added with a
     // constant default that value on every row at once, so nothing is read, filled in or rewritten, and the mirror's next run

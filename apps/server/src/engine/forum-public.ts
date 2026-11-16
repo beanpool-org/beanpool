@@ -2,8 +2,10 @@
  * The worldwide community's forum as anyone on the web reads it (slice F7; scratch/fable-design/DESIGN-forums-fable.md §4,
  * §5, §7, §15; Marty's answer to Q2, 14 Nov 2026). routes/forum-public.ts answers it as JSON and as plain HTML pages.
  *
- * - **Where.** Only where the forum is on and public (`forum` and `forumPublic`: the global community). Anywhere else every
- *   public read answers "not found", and nothing here stamps anything: a local community's forum is for its members.
+ * - **Where.** Only where the forum is on and public (`forum` and `forumPublic`: the global community), and not in a private
+ *   preview (config/private-preview.ts: it shows visitors nothing). Anywhere else every public read answers "not found",
+ *   robots.txt names no sitemap, and nothing here stamps anything: a local community's forum is for its members. What is
+ *   written during a preview goes public by the sweep once it ends (members were told it would: engine/forum.ts assertTold).
  * - **Public from.** A post's `public_from` is empty until its writer is known in this forum (engine/forum-moderation.ts
  *   forumNewness: a role, a first topic a moderator OK'd, or their new-account days over) and it is in a section every member
  *   reads (no group's, so never Builders). Stamped when a known writer posts, when a first look's OK makes a writer known, and
@@ -15,14 +17,17 @@
  * - **What an answer holds** is exactly @beanpool/core FORUM_PUBLIC_FIELDS: a writer is a name and the community label they
  *   switched on (slice F10), never a key, a picture, a profile, an area. No proof yet (slice F11 adds it).
  * - **Search engines** (Q2): a topic may be listed once its opening post has been public for 2 days and it is in a listed
- *   section; "Introduce yourself" and any section its owners mark unlisted never; a group's section is never public at all.
+ *   section; any section its owners mark unlisted never; a group's section is never public at all. "Introduce yourself" never,
+ *   by a mark no edit removes: the starter a section was made as, which a rename keeps (engine/forum.ts editForumSection, which
+ *   also refuses to list it), and `never_listed` on a topic moved out of it (moveForumTopic). `listed` alone is not trusted.
  *
  * Reads only, but for the stamp, which the main server alone writes (a standby gets it in its copy).
  */
-import { FORUM_LIMITS, FORUM_TIMES, type ForumWriterLabel } from '@beanpool/core';
+import { FORUM_LIMITS, FORUM_STARTER_SECTIONS, FORUM_TIMES, type ForumWriterLabel } from '@beanpool/core';
 import { getMember } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
+import { isPrivatePreview } from '../config/private-preview.js';
 import { getNodeRole } from './sync.js';
 import { knownWriters } from './forum-moderation.js';
 import { forumLabelsOf } from './membership-note.js';
@@ -31,11 +36,26 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
-/** Whether anyone on the web reads this community's forum: the forum on, and public (the global community). */
+/**
+ * Whether anyone on the web reads this community's forum: the forum on, and public (the global community), and no private
+ * preview, which shows visitors nothing (as the share page: engine/peek-tickets.ts outsideSharingOn). Every public page, the
+ * JSON, the photos, the sitemap, robots.txt's lines and the stamp ask this.
+ */
 export function forumPublicOn(): boolean {
     const s = getProfileSwitches();
-    return s.forum && s.forumPublic;
+    return s.forum && s.forumPublic && !isPrivatePreview();
 }
+
+/**
+ * The starter sections search engines never list (Q2: "never Introduce yourself"), by the starter each was made as. A section
+ * keeps its starter through a rename, so this holds whatever its owners call it.
+ */
+export const FORUM_NEVER_LISTED_STARTERS: readonly string[] = Object.freeze(FORUM_STARTER_SECTIONS.global.filter((s) => !s.listed).map((s) => s.id));
+/** Whether a section made as this starter is one search engines never list. */
+export const forumStarterNeverListed = (starter: string | null | undefined): boolean => !!starter && FORUM_NEVER_LISTED_STARTERS.includes(starter);
+/** SQL: the section (alias `s`) may be listed: marked listed, and not made as a starter that never is. Ids are core's constants. */
+const SECTION_MAY_BE_LISTED = (s: string) =>
+    `${s}.listed = 1 AND COALESCE(${s}.starter, '') NOT IN (${FORUM_NEVER_LISTED_STARTERS.map((id) => `'${id.replace(/'/g, "''")}'`).join(', ')})`;
 
 // ── Public from ─────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -109,6 +129,7 @@ interface SectionRow { id: string; starter: string | null; name: string | null; 
 interface TopicRow {
     id: string; section_id: string; title: string; writer_pubkey: string; place: string | null; lang: string | null; pinned_at: string | null;
     closed_by: string | null; created_at: string; public_replies: number; public_last: string | null; opening_public_from: string; listed: number; archived_at: string | null;
+    never_listed: number; section_starter: string | null;
 }
 interface PostRow { id: string; topic_id: string; number: number; writer_pubkey: string; words: string; public_quotes: number | null; created_at: string; edited_at: string | null; lang: string | null; photo_count: number }
 
@@ -119,17 +140,29 @@ function writersOf(keys: readonly string[]): (pk: string) => ForumPublicWriter {
 
 const SECTION_COLUMNS = `s.id, s.starter, s.name, s.about, s.position, s.listed, s.archived_at,
     (SELECT COUNT(*) FROM forum_topics t WHERE t.section_id = s.id AND ${PUBLIC_TOPIC('t')}) AS topic_count`;
-const sectionOut = (r: SectionRow): ForumPublicSection => ({ id: r.id, starter: r.starter, name: r.name, about: r.about, position: r.position, topicCount: r.topic_count });
+// A renamed starter keeps its starter in the row (Q2's mark) but reads as typed: `starter` null once it has a name, as before.
+const sectionOut = (r: SectionRow): ForumPublicSection => ({
+    id: r.id, starter: r.name === null ? r.starter : null, name: r.name, about: r.about, position: r.position, topicCount: r.topic_count,
+});
+/** Search engines may list a section's page: marked listed, not archived, and not made as a starter that never is. */
+const sectionIndexable = (r: { listed: number; starter: string | null; archived_at: string | null }): boolean =>
+    r.listed === 1 && !r.archived_at && !forumStarterNeverListed(r.starter);
 
-const TOPIC_COLUMNS = `t.id, t.section_id, t.title, t.writer_pubkey, t.place, t.lang, t.pinned_at, t.closed_by, t.created_at,
+const TOPIC_COLUMNS = `t.id, t.section_id, t.title, t.writer_pubkey, t.place, t.lang, t.pinned_at, t.closed_by, t.created_at, t.never_listed,
     (SELECT COUNT(*) FROM forum_posts r WHERE r.topic_id = t.id AND r.number > 1 AND ${PUBLIC_POST('r')}) AS public_replies,
     (SELECT MAX(r.created_at) FROM forum_posts r WHERE r.topic_id = t.id AND ${PUBLIC_POST('r')}) AS public_last,
     (SELECT o.public_from FROM forum_posts o WHERE o.topic_id = t.id AND o.number = 1) AS opening_public_from,
-    s.listed, s.archived_at`;
+    s.listed, s.archived_at, s.starter AS section_starter`;
 
-/** Search engines may list a topic (Q2): its section listed and not archived, its opening post public for 2 days. */
-export function forumTopicIndexable(r: { listed: number; archived_at: string | null; opening_public_from: string }, now = Date.now()): boolean {
-    return r.listed === 1 && !r.archived_at && now - Date.parse(r.opening_public_from) >= FORUM_TIMES.indexAfterDays * DAY_MS;
+/**
+ * Search engines may list a topic (Q2): its section may be listed (sectionIndexable), it was never moved out of one that never
+ * is, and its opening post has been public for 2 days.
+ */
+export function forumTopicIndexable(
+    r: { listed: number; archived_at: string | null; section_starter: string | null; never_listed: number; opening_public_from: string }, now = Date.now(),
+): boolean {
+    return sectionIndexable({ listed: r.listed, starter: r.section_starter, archived_at: r.archived_at }) && r.never_listed !== 1
+        && now - Date.parse(r.opening_public_from) >= FORUM_TIMES.indexAfterDays * DAY_MS;
 }
 
 const topicOut = (r: TopicRow, writer: (pk: string) => ForumPublicWriter, now: number): ForumPublicTopic => ({
@@ -160,7 +193,7 @@ export function publicForumSection(id: string, offset = 0, now = Date.now()):
     { section: ForumPublicSection; listed: boolean; topics: ForumPublicTopic[]; next: number | null } | null {
     const row = db.prepare(`SELECT ${SECTION_COLUMNS} FROM forum_sections s WHERE s.id = ? AND s.group_id IS NULL AND s.archived_at IS NULL`).get(id) as SectionRow | undefined;
     if (!row) return null;
-    return { section: sectionOut(row), listed: row.listed === 1, ...topicsWhere('t.section_id = @section', { section: id }, offset, now) };
+    return { section: sectionOut(row), listed: sectionIndexable(row), ...topicsWhere('t.section_id = @section', { section: id }, offset, now) };
 }
 
 /** A topic and its public posts in order, 30 after post number `after`; null for a topic nobody on the web may read. */
@@ -197,10 +230,11 @@ export function publicForumPhoto(postId: string, n: number): string | null {
 
 /** What the sitemap lists: every listed, open section, and every topic search engines may list now, newest first. */
 export function publicForumSitemap(now = Date.now()): { sections: { id: string }[]; topics: { id: string; lastActivityAt: string }[] } {
-    const sections = db.prepare(`SELECT id FROM forum_sections WHERE group_id IS NULL AND archived_at IS NULL AND listed = 1 ORDER BY position, created_at, id`).all() as { id: string }[];
+    const sections = db.prepare(`SELECT s.id FROM forum_sections s WHERE s.group_id IS NULL AND s.archived_at IS NULL AND ${SECTION_MAY_BE_LISTED('s')}
+        ORDER BY s.position, s.created_at, s.id`).all() as { id: string }[];
     const since = iso(now - FORUM_TIMES.indexAfterDays * DAY_MS);
     const topics = db.prepare(`SELECT t.id, t.last_activity_at AS lastActivityAt FROM forum_topics t JOIN forum_sections s ON s.id = t.section_id
-        WHERE ${LISTED_TOPIC('t')} AND s.listed = 1
+        WHERE ${LISTED_TOPIC('t')} AND ${SECTION_MAY_BE_LISTED('s')} AND t.never_listed = 0
           AND (SELECT o.public_from FROM forum_posts o WHERE o.topic_id = t.id AND o.number = 1) <= ?
         ORDER BY t.last_activity_at DESC, t.id ASC LIMIT 45000`).all(since) as { id: string; lastActivityAt: string }[];
     return { sections, topics };

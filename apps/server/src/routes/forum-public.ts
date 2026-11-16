@@ -1,8 +1,9 @@
 /**
  * The worldwide community's forum for anyone on the web (slice F7; scratch/fable-design/DESIGN-forums-fable.md §7, §15).
  * engine/forum-public.ts says what is public; forum-public-pages.ts draws the pages. Only where the forum is on and public
- * (`forum` and `forumPublic`: the global community); anywhere else every route here answers 404 (the /api ones `feature_off`,
- * routes/profile-feature-gate.ts) and robots.txt is left as it was.
+ * (`forum` and `forumPublic`: the global community), and not in a private preview (engine/forum-public.ts forumPublicOn);
+ * anywhere else every route here answers 404 (the /api ones `feature_off`, routes/profile-feature-gate.ts; a visitor in a
+ * preview meets its 403 `private_preview` first), never cacheable, and robots.txt is left as it was (no sitemap line).
  *
  * JSON, unsigned or signed, the same body for everyone (exactly @beanpool/core FORUM_PUBLIC_FIELDS for each section, topic,
  * post and writer):
@@ -162,7 +163,12 @@ export function createForumPublicRoutes(_deps: RouteDeps): Router {
     });
 
     router.get('/robots.txt', async (ctx, next) => {
-        if (!forumPublicOn()) return next();
+        // Not public here (or not now: a private preview): left as it was, but never kept by a shared cache, so the forum's
+        // lines are there at once when it is public again (`.txt` is an address Cloudflare caches by default).
+        if (!forumPublicOn()) {
+            ctx.set('Cache-Control', READER_CACHE_CONTROL);
+            return next();
+        }
         setReadCaching(ctx, true);
         ctx.type = 'text/plain';
         ctx.body = renderForumRobots(publicOrigin());

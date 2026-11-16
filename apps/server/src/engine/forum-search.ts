@@ -134,9 +134,16 @@ export function forumExcerpt(text: string, asked: ForumSearchWord[]): string {
  * The statement a search runs and its parameters: the words asked, then SEARCHABLE, newest first, a page from `offset`.
  * Exported for the test that reads its plan (no search walks forum_posts whole).
  */
-export function forumSearchQuery(asked: ForumSearchWord[], at: { reader: string; offset: number }): { sql: string; params: Record<string, unknown> } {
+export function forumSearchQuery(asked: ForumSearchWord[], at: { reader: string; offset: number; section?: string | null }): { sql: string; params: Record<string, unknown> } {
     const params: Record<string, unknown> = { reader: at.reader, limit: FORUM_SEARCH_PAGE + 1, offset: at.offset };
     const where: string[] = [];
+    // One section's posts only (slice F9: a door's search, "Start a community near you" searched for a town). SEARCHABLE
+    // still decides what the reader may find in it. The unary + keeps SQLite from driving the look from the section's topics
+    // (idx_forum_topics_section, then every post of each): the words' rowids stay the way in, as without a section.
+    if (at.section) {
+        where.push('+t.section_id = @section');
+        params.section = at.section;
+    }
     // Words of spaced scripts: one look in the index, every word in the same post.
     const spaced = asked.filter((w) => w.inside === null);
     if (spaced.length > 0) {
@@ -189,10 +196,10 @@ export function resetForumSearchBudget(): void {
 }
 
 /**
- * A member's search, newest first, FORUM_SEARCH_PAGE hits from `offset`. Refused with no word to look for (400), past
- * FORUM_SEARCH_CHARS_MAX characters (400), or past the day's searches (429, uncounted).
+ * A member's search, newest first, FORUM_SEARCH_PAGE hits from `offset`, in one section where `section` names it (slice F9).
+ * Refused with no word to look for (400), past FORUM_SEARCH_CHARS_MAX characters (400), or past the day's searches (429, uncounted).
  */
-export function searchForum(reader: string, query: unknown, offset: number, now = Date.now()): { hits: ForumSearchHit[]; next: number | null } {
+export function searchForum(reader: string, query: unknown, offset: number, now = Date.now(), section: string | null = null): { hits: ForumSearchHit[]; next: number | null } {
     if (typeof query !== 'string') throw new ForumRefusal(400, 'bad_request', FORUM_SEARCH_WORDS.noWords);
     if (Array.from(query.trim()).length > FORUM_SEARCH_CHARS_MAX) throw new ForumRefusal(400, 'too_long', tr('At most {n} characters.', { n: FORUM_SEARCH_CHARS_MAX }));
     const asked = forumSearchWords(query);
@@ -201,7 +208,7 @@ export function searchForum(reader: string, query: unknown, offset: number, now 
     if (spent) throw new ForumSearchRefusal(spent.body.error, spent.retryAfterSec);
     ensureForumStarters(now);
 
-    const { sql, params } = forumSearchQuery(asked, { reader, offset });
+    const { sql, params } = forumSearchQuery(asked, { reader, offset, section });
     const rows = db.prepare(sql).all(params) as
         { id: string; number: number; writer_pubkey: string; words: string; created_at: string; topic_id: string; section_id: string; title: string }[];
     const more = rows.length > FORUM_SEARCH_PAGE;

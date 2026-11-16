@@ -30,7 +30,8 @@
  *      table holds every path; the owners' switch is 16
  *  13  back from epoch-stale: a guest's refused epoch or line -> the roster follows to their home alone, with the current
  *      epoch (stale, or its record and their home's wraps); the epoch they make from it goes in, and so does the line they
- *      send again under the key they open from it; two refusals in one request -> one roster
+ *      send again under the key they open from it; two refusals in one request -> one roster; 13f the same items brought
+ *      again (their home never heard the answer) -> each hears the refusal it was given, never "received", nothing taken twice
  *  14  close the class: every kind a guest's home brings x a guest whose card says a member's name -> every notice it makes
  *      says "Ana · a.example · guest", never "Ana" alone
  *  15  each home on its own: while one home doesn't answer, another gets its line at once; a row queued during a send goes
@@ -57,6 +58,11 @@
  *      group closed, take-over, take-back, home blocked) x its age (fresh, a day, MAIL_HELD_DAYS, MAIL_HELD_DAYS and a day) -> it goes (naming only
  *      the guests it may still name, a line with its words now) or goes unsent; rows naming two guests go narrowed; the
  *      guard reads the kinds from the code (the send rule's list, the outbox's CHECK, every queueToHome) against the table
+ *  20  the order rule (G2): 20a the next counter; 20b an invitation, the roster, a takedown and a removal carry it, rising,
+ *      a line and an epoch none; 20c telling homes again: (the server that took over issued counters, a promoted standby,
+ *      nothing changed) x (an invitation waiting, removals and takedowns 2 and 32 days old, the roster) -> told again within
+ *      the time a home may hold what they drop, once; 20d a take-over and take-back end to end: the removal as queued, then
+ *      the invitation under a counter past both; 20e an account with 5,000 lines: one request per 500, inside a time budget
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests node scripts/run-server-suites.mjs
  */
@@ -708,7 +714,8 @@ async function main(): Promise<void> {
         && ep13.wraps.length > 0 && ep13.wraps.every((w: any) => homeGuests('a.example').includes(w.recipient)) && !!opened13 && Buffer.from(opened13).equals(Buffer.from(s4.groupKey)),
         `13c. her line under the epoch before: epoch-stale, and the roster follows with the current epoch and her home's wraps only; she opens its key (got ${JSON.stringify(r13c.body)}, ${JSON.stringify(ep13 && { current: ep13.current, stale: ep13.stale, wraps: ep13.wraps?.length })})`);
     const again13 = lineIn(gwen, S, opened13 ?? s4.groupKey, s4.record.epoch);
-    const r13d = await bring([await item(gwen, 'a.example', shedTo, 'group-line', JSON.stringify(again13))]);
+    const item13d = await item(gwen, 'a.example', shedTo, 'group-line', JSON.stringify(again13));
+    const r13d = await bring([item13d]);
     assert(r13d.body?.items?.[0]?.received === true && !!db.prepare('SELECT 1 FROM messages WHERE id = ?').get(again13.clientId), '13d. sent again under it, her line goes in');
     // Two items in one request, each with its own time from one reading of the clock.
     const t13e = Date.now();
@@ -717,6 +724,16 @@ async function main(): Promise<void> {
     const r13e = await bring([first13e, second13e]);
     assert(r13e.body?.items?.every((i: any) => i.refused === 'epoch-stale') && outsOf('roster', t13e).filter((o) => o.body.group === S).length === 1,
         `13e. two refused in one request: one roster follows, not two (got ${outsOf('roster', t13e).filter((o) => o.body.group === S).length})`);
+    // Her home never heard those answers and brings the same items again (G2 round 2, #3246 round 2 note: a home settles a
+    // received item `sent`, so a refused epoch would read as taken): each hears the refusal it was given, the line taken
+    // before still hears received, nothing is taken twice, and no second roster follows.
+    const t13f = Date.now();
+    const msgs13f = (db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(S) as { n: number }).n;
+    const r13f = await bring([first13e, second13e, item13d]);
+    const msgsAfter13f = (db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(S) as { n: number }).n;
+    const got13f = (r13f.body?.items ?? []).map((i: any) => i.refused ?? (i.received ? 'received' : '?')).join(', ');
+    assert(r13f.status === 202 && got13f === 'epoch-stale, epoch-stale, received' && msgsAfter13f === msgs13f && outsOf('roster', t13f).filter((o) => o.body.group === S).length === 0,
+        `13f. the same items brought again: each hears what it heard the first time (epoch-stale, epoch-stale, received; got ${got13f}), nothing taken twice (${msgs13f} -> ${msgsAfter13f}), no roster follows`);
 
     // ── 14. Every notice a guest's action makes names them as a guest, with their community ─
     console.log('\n14. Every notice a guest\'s action can make shows their community, never their card\'s name alone');
@@ -1457,21 +1474,28 @@ async function main(): Promise<void> {
     assert(d19 === TA19.length * DOWN19.length && Object.keys(AWAY19).length === TA19.length, `19dz. the table has a row for every take-away and every outage (${d19} rows)`);
 
     // The table: a row takes away exactly when it is a line's takedown or a removal; each take-away is kept at least as long as
-    // a home may hold what it takes away (MAIL_HELD_DAYS), and each row that adds a day, no longer.
+    // a home may hold what it takes away (MAIL_HELD_DAYS), and each row that adds a day, no longer. An invitation (G2) adds,
+    // and is kept as long as a take-away: its guest stays invited until they answer, and a removal queued before it is kept
+    // that long, so a home down for more than a day got the removal and lost the invitation (guests-g2-must-include.md).
     const KINDS19: Array<[string, Record<string, unknown>]> = [
         ['invite', { name: 'g' }], ['roster', { name: 'g' }], ['line', { id: 'l' }], ['edit', { id: 'l', action: 'edited' }], ['epoch', { record: {} }],
         ['edit', { id: 'l', action: 'removed', by: 'author' }], ['removed', { why: 'removed' }], ['removed', { why: 'closed' }], ['removed', { why: 'group-closed' }],
+        ['edit', { ids: ['l', 'm'], action: 'removed', by: 'author' }],
     ];
     for (const [kind, data] of KINDS19) {
         const away = kind === 'removed' || (kind === 'edit' && data.action === 'removed');
-        const label = `${kind}${data.action ? ` ${data.action}` : data.why ? ` (${data.why})` : ''}`;
+        const long = away || kind === 'invite';
+        const label = `${kind}${data.ids ? ' of many lines' : ''}${data.action ? ` ${data.action}` : data.why ? ` (${data.why})` : ''}`;
         const kept = typeof guests?.guestRowKeptMs === 'function' ? guests.guestRowKeptMs(kind, data) as number : NaN;
         const says = typeof guests?.takesAway === 'function' ? guests.takesAway(kind, data) as boolean : null;
-        assert(says === away && (away ? kept >= HELD19 : kept === QUEUE_MS),
-            `19d. table: ${label} ${away ? `takes away: kept ${kept / DAY19} days, at least the ${HELD_DAYS19} a home may hold what it takes away` : `adds: kept ${kept / DAY19} day(s), no longer than ${QUEUE_MS / DAY19}`} (takesAway says ${says})`);
+        assert(says === away && (long ? kept >= HELD19 : kept === QUEUE_MS),
+            `19d. table: ${label} ${away ? `takes away: kept ${kept / DAY19} days, at least the ${HELD_DAYS19} a home may hold what it takes away`
+                : long ? `adds, an invitation: kept ${kept / DAY19} days, at least the ${HELD_DAYS19} a removal before it is kept`
+                : `adds: kept ${kept / DAY19} day(s), no longer than ${QUEUE_MS / DAY19}`} (takesAway says ${says})`);
     }
 
-    // No over-retention: each row that adds, queued while its home is down, goes unsent once a day old, and none is left.
+    // No over-retention: each row that adds, queued while its home is down, goes unsent once a day old, and none is left;
+    // an invitation (G2) is kept, and goes once its home answers.
     {
         const { g, m, key, ok } = await row19('Adds aged');
         const sent = lineIn(m, g, key, 1);
@@ -1494,12 +1518,16 @@ async function main(): Promise<void> {
             await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
             await settle();
         } finally { refusing.delete('a.example'); }
-        for (const kind of ['edit', 'epoch', 'invite', 'line', 'roster']) {
+        for (const kind of ['edit', 'epoch', 'line', 'roster']) {
             const went = outs.filter((o, i) => i >= nAdd && o.home === 'a.example' && o.body?.group === g && o.body.kind === kind).length;
             const left = rowsOf19(g).filter((r) => r.kind === kind).length;
             assert(ok && kinds === 'edit epoch invite line roster' && went === 0 && left === 0,
-                `19d. no over-retention: ${({ edit: 'an edit with new words', epoch: 'an epoch', invite: 'an invitation', line: 'a line', roster: 'a roster' } as Record<string, string>)[kind]} queued while its home is down goes unsent once 25 hours old (${went}), none left (${left})${kinds === 'edit epoch invite line roster' ? '' : `, setup queued ${kinds}`}`);
+                `19d. no over-retention: ${({ edit: 'an edit with new words', epoch: 'an epoch', line: 'a line', roster: 'a roster' } as Record<string, string>)[kind]} queued while its home is down goes unsent once 25 hours old (${went}), none left (${left})${kinds === 'edit epoch invite line roster' ? '' : `, setup queued ${kinds}`}`);
         }
+        const invites = outs.filter((o, i) => i >= nAdd && o.home === 'a.example' && o.body?.group === g && o.body.kind === 'invite').length;
+        const invitesLeft = rowsOf19(g).filter((r) => r.kind === 'invite').length;
+        assert(ok && kinds === 'edit epoch invite line roster' && invites === 1 && invitesLeft === 0,
+            `19d. an invitation queued while its home is down, 25 hours old, is kept and goes once its home answers (went ${invites}, left ${invitesLeft})`);
     }
 
     // ── 19f. The send rule (#3233 round 5): every row x every change after it was queued x its age ──
@@ -1541,11 +1569,14 @@ async function main(): Promise<void> {
         invite:             cols19f(GO,  GO,          GO,         DROP,         DROP,          GO,                 DROP,      DROP,        WAIT,     GO,       DROP),
         removal:            cols19f(GO,  GO,          GO,         GO,           DROP,          GO,                 GO,        GO,          WAIT,     GO,       DROP),
     };
-    /** A row that takes away is kept MAIL_HELD_DAYS and a day, one that adds a day; past it, it goes unsent (a standby keeps it). */
+    /**
+     * A row that takes away, or an invitation (G2), is kept MAIL_HELD_DAYS and a day, one that adds a day; past it, it goes
+     * unsent (a standby keeps it).
+     */
     const want19f = (r: Row19f, ch: Ch19f, age: number): string => {
         const fresh = FRESH19F[r][ch];
         if (fresh === WAIT || fresh === DROP) return fresh;
-        const kept = r === 'edit (takedown)' || r === 'removal' ? HELD19 + QUEUE_MS : QUEUE_MS;
+        const kept = r === 'edit (takedown)' || r === 'removal' || r === 'invite' ? HELD19 + QUEUE_MS : QUEUE_MS;
         return age >= kept ? DROP : fresh;
     };
     /** One group for a row: X from a.example in (invited only, for an invitation), the row queued while a.example refuses. */
@@ -1727,6 +1758,184 @@ async function main(): Promise<void> {
             `19fz. every kind has its send rule in words (none for ${noRule.join(' ') || 'no kind'})`);
         assert(listed.length > 0 && notInTable.length === 0 && f19 === ROWS19F.length * CH19F.length * AGES19F.length,
             `19fz. the table has rows for every kind (missing ${notInTable.join(' ') || 'none'}) x every change x every age (${f19} rows)`);
+    }
+
+    // ── 20. The order rule (G2): a counter on every word of where a guest stands; homes told again; an account's many lines ──
+    console.log('\n20. The order rule (G2): the counter, telling homes again after a take-over, a take-back end to end, and an account with years of lines');
+    refusing.delete('a.example');
+    const T20 = 1_800_000_000_000;
+    const NEXT20: Array<[string, number | null, number]> = [
+        ['no counter yet: the clock', null, T20], ['the last behind the clock (from a copy before): the clock', T20 - 5000, T20],
+        ['the last ahead of the clock (the other server\'s clock ahead, or two in one millisecond): one past it', T20 + 5000, T20 + 5001],
+        ['the last at the clock: one past it', T20, T20 + 1],
+    ];
+    for (const [label, last, want] of NEXT20) {
+        const got = typeof guests?.nextGuestSeq === 'function' ? guests.nextGuestSeq(last, T20) : null;
+        assert(got === want, `20a. the next counter, ${label} (got ${got})`);
+    }
+    const clockOf20 = (g: string) => db.prepare('SELECT seq FROM group_guest_clock WHERE group_id = ?').pluck().get(g) as number | undefined;
+    const toldOf20 = (g: string) => db.prepare('SELECT seq FROM group_guest_told WHERE group_id = ?').pluck().get(g) as number | undefined;
+    const sentTo20 = (g: string, from: number) => outs.slice(from).filter((o) => o.home === 'a.example' && o.body?.group === g).map((o) => o.body);
+    const same20 = (a: unknown, b: unknown[]) => JSON.stringify(a) === JSON.stringify([...b].sort());
+
+    // 20b. What carries the counter: every word of where a guest stands (an invitation, the roster, a removal) and a line's
+    // takedown, rising in the order sent; a line, an edit's new words and an epoch carry none.
+    {
+        const nB = outs.length;
+        const c = await row19('Order counters');
+        const posted = lineIn(c.m, c.g, c.key, 1);
+        await call('POST', c.m, `/api/groups/${c.g}/chat/message`, posted);
+        await settle();
+        await call('POST', c.m, '/api/messages/delete', { messageId: posted.clientId });
+        await settle();
+        try { guests.removeGroupGuest(c.g, ana.pk, c.x.pk); } catch { /* counted below */ }
+        await settle();
+        const sent = sentTo20(c.g, nB);
+        const stands = (b: any) => b.kind === 'invite' || b.kind === 'roster' || b.kind === 'removed' || (b.kind === 'edit' && b.data?.action === 'removed');
+        const ordered = sent.filter(stands);
+        const seqs = ordered.map((b) => b.seq);
+        const rising = seqs.every((s, i) => Number.isSafeInteger(s) && s > 0 && (i === 0 || s > seqs[i - 1]));
+        const kinds = [...new Set(ordered.map((b) => (b.kind === 'edit' ? 'takedown' : b.kind)))].sort().join(' ');
+        const bare = sent.filter((b) => !stands(b));
+        assert(c.ok && kinds === 'invite removed roster takedown' && rising,
+            `20b. an invitation, the roster, a line's takedown and a removal each carry the group's counter, rising in the order sent (${ordered.map((b) => `${b.kind}:${b.seq ?? 'none'}`).join(' ')})`);
+        assert(c.ok && bare.length >= 2 && bare.every((b) => b.seq === undefined) && bare.some((b) => b.kind === 'line') && bare.some((b) => b.kind === 'epoch'),
+            `20b. a line and an epoch carry none (${bare.map((b) => `${b.kind}:${b.seq ?? 'none'}`).join(' ')})`);
+        assert(seqs.length > 0 && clockOf20(c.g) === seqs[seqs.length - 1] && toldOf20(c.g) === clockOf20(c.g),
+            `20b. the group's counter (a copied table) is the last one sent, and this server's own record says it issued it (${clockOf20(c.g)}, ${toldOf20(c.g)})`);
+    }
+
+    // 20c. Telling homes again: (the server that took over issued counters, which its copy carries / a promoted standby, which
+    // has no record of its own / nothing changed, as at a restart of the main server) x (what stands on this server: an
+    // invitation still waiting, a removal 2 days ago and one 32 days ago, a line taken down 2 days ago and one 32 days ago,
+    // a guest in) -> told again under new counters, or not: within the time a home may hold what a take-away drops, never past it.
+    const SC20 = ['the server that took over issued counters (its copy carries them)', 'a promoted standby, with no record of its own', 'nothing changed (a restart of the main server)'] as const;
+    const ITEMS20 = ['the invitation still waiting', 'the removal 2 days ago', 'the removal 32 days ago', 'the line taken down 2 days ago', 'the line taken down 32 days ago', 'the roster'] as const;
+    const RETOLD20: Record<(typeof ITEMS20)[number], boolean> = {
+        'the invitation still waiting': true, 'the removal 2 days ago': true, 'the removal 32 days ago': false,
+        'the line taken down 2 days ago': true, 'the line taken down 32 days ago': false, 'the roster': true,
+    };
+    const iso20 = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
+    let c20 = 0;
+    for (const sc of SC20) {
+        const n = ++c20;
+        const s = await row19(`Retell ${n}`);
+        const inv = newId(`I-retell-${n}`), r2 = newId(`R2-retell-${n}`), r32 = newId(`R32-retell-${n}`);
+        const invited = await call('POST', ana, `/api/groups/${s.g}/guests`, { card: await cardOf(inv, 'a.example') });
+        const putGuest = db.prepare(`INSERT INTO group_guests (group_id, guest_key, home, name, state, invited_by, invited_at, state_at) VALUES (?, ?, 'a.example', ?, 'removed', ?, ?, ?)`);
+        putGuest.run(s.g, r2.pk, 'Rita', ana.pk, iso20(3 * DAY19), iso20(2 * DAY19));
+        putGuest.run(s.g, r32.pk, 'Rory', ana.pk, iso20(40 * DAY19), iso20(32 * DAY19));
+        const putDown = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, 'eA==', 'plaintext-v1', 'removed', ?, ?)`);
+        const l2 = crypto.randomUUID(), l32 = crypto.randomUUID();
+        putDown.run(l2, s.g, s.m.pk, JSON.stringify({ epoch: 1, removed: true, removedBy: s.m.pk, removedAt: iso20(2 * DAY19) }), iso20(3 * DAY19));
+        putDown.run(l32, s.g, s.m.pk, JSON.stringify({ epoch: 1, removed: true, removedBy: s.m.pk, removedAt: iso20(32 * DAY19) }), iso20(33 * DAY19));
+        await settle();
+        if (sc === SC20[0]) db.prepare('UPDATE group_guest_clock SET seq = seq + 1000 WHERE group_id = ?').run(s.g);
+        if (sc === SC20[1]) db.prepare('DELETE FROM group_guest_told WHERE group_id = ?').run(s.g);
+        const copy = clockOf20(s.g) ?? 0;
+        const nR = outs.length;
+        await guests.flushGuestOutbox();
+        await settle();
+        const sent = sentTo20(s.g, nR);
+        const names = (b: any, id: string) => b.data?.id === id || (Array.isArray(b.data?.ids) && b.data.ids.includes(id));
+        const fresh = (b: any) => Number.isSafeInteger(b.seq) && b.seq > copy;
+        const got: Record<(typeof ITEMS20)[number], boolean> = {
+            'the invitation still waiting': sent.some((b) => b.kind === 'invite' && same20(b.guests, [inv.pk]) && fresh(b)),
+            'the removal 2 days ago': sent.some((b) => b.kind === 'removed' && b.guests.includes(r2.pk) && fresh(b)),
+            'the removal 32 days ago': sent.some((b) => b.kind === 'removed' && b.guests.includes(r32.pk)),
+            'the line taken down 2 days ago': sent.some((b) => b.kind === 'edit' && b.data?.action === 'removed' && names(b, l2) && same20(b.guests, [s.x.pk]) && fresh(b)),
+            'the line taken down 32 days ago': sent.some((b) => b.kind === 'edit' && names(b, l32)),
+            'the roster': sent.some((b) => b.kind === 'roster' && same20(b.guests, [s.x.pk]) && fresh(b)),
+        };
+        const retell = sc !== SC20[2];
+        for (const it of ITEMS20) {
+            const want = retell && RETOLD20[it];
+            assert(s.ok && invited.status < 300 && got[it] === want, `20c. ${sc} x ${it}: ${want ? 'told again, under a new counter' : 'not told again'} (got ${got[it] ? 'told' : 'not told'})`);
+        }
+        const nAgain = outs.length;
+        await guests.flushGuestOutbox();
+        await settle();
+        assert(toldOf20(s.g) === clockOf20(s.g) && sentTo20(s.g, nAgain).length === 0,
+            `20c. ${sc}: this server's record caught up with the counter (${toldOf20(s.g)} / ${clockOf20(s.g)}), and the next flush tells nothing again (${sentTo20(s.g, nAgain).length})`);
+    }
+
+    // 20d. A take-over and a take-back, end to end (#3233 round 5's measured case, under the order rule): this server queues X's
+    // removal while X's home is down; the server that took over invites X again (its copy reaches this server: X invited,
+    // its counter past the removal's), and its own invitation row never comes here. Taken back, this server sends the removal
+    // (X isn't in) and then the invitation, told again under a counter past both: X's home ends with the invitation,
+    // whichever order the two reach it in (test-group-guests-home §16).
+    {
+        const t = await row19('Order take-back');
+        refusing.add('a.example');
+        try { guests.removeGroupGuest(t.g, ana.pk, t.x.pk); } catch { /* counted below */ }
+        await settle();
+        const removal = rowsOf19(t.g).find((r) => r.kind === 'removed');
+        const s1 = removal ? JSON.parse(removal.body).seq as number : NaN;
+        setNodeRole('backup');
+        try {
+            db.prepare("UPDATE group_guests SET state = 'invited', state_at = ? WHERE group_id = ? AND guest_key = ?").run(new Date().toISOString(), t.g, t.x.pk);
+            db.prepare('UPDATE group_guest_clock SET seq = ? WHERE group_id = ?').run(s1 + 10, t.g);
+        } finally { setNodeRole('primary'); }
+        refusing.delete('a.example');
+        const nT = outs.length;
+        await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+        await settle();
+        const sent = sentTo20(t.g, nT);
+        const line = sent.map((b) => `${b.kind}(${same20(b.guests, [t.x.pk]) ? 'X' : 'others'})`).join(' ');
+        const inv = sent.find((b) => b.kind === 'invite');
+        assert(t.ok && line === 'removed(X) invite(X)' && sent[0]?.seq === s1 && inv?.seq > s1 + 10,
+            `20d. taken back: X's removal goes as queued, then X's invitation, told again under a counter past both (sent ${line}; counters ${sent.map((b) => b.seq).join(' ')}, the copy's ${s1 + 10})`);
+    }
+
+    // 20e. An account with years of lines (#3233 round 2 note): 5,000 lines in a group with a guest, the last 500 still queued
+    // for the guest's home, which is down. Deleting the account takes every line down in one read of the queue and one
+    // request per TAKEDOWN_IDS_MAX lines to that home, never one a line. The time budget is a ratio to a baseline measured in
+    // the same run, in the same loop (scripts/flake-patterns.mjs fixed-ms-bound): a tenth of the lines with a tenth queued.
+    // One rule for many lines grows with the lines (about 10 times); one request a line, each reading the queue, grows with
+    // the lines times the queue (about 100 times: 22,182 ms on main against 127 ms here).
+    const RATIO20 = 30;
+    const purges20: Array<{ n: number; ms: number }> = [];
+    for (const [N, QUEUED] of [[500, 50], [5000, 500]] as const) {
+        const p = await row19(`Order purge ${N}`);
+        refusing.add('a.example');
+        const ids: string[] = [];
+        const put = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, 'group-xc20p-v1:n', 'text', ?, ?)`);
+        const base = Date.now();
+        db.transaction(() => {
+            for (let i = 0; i < N; i++) {
+                const id = crypto.randomUUID();
+                ids.push(id);
+                put.run(id, p.g, p.m.pk, crypto.randomBytes(48).toString('base64'), JSON.stringify({ epoch: 1 }), new Date(base - (N - i) * 60_000).toISOString());
+            }
+        })();
+        db.transaction(() => { for (const id of ids.slice(-QUEUED)) guests.fanOutGroupLine(p.g, id, p.m.pk); })();
+        await settle();
+        const queuedLines = rowsOf19(p.g).filter((r) => r.kind === 'line').length;
+        const t0 = performance.now();
+        let purged: { ok: boolean } | null = null;
+        try { purged = purgeMemberSelf(p.m.pk); } catch { purged = null; }
+        purges20.push({ n: N, ms: performance.now() - t0 });
+        const rows = rowsOf19(p.g);
+        const takedowns = rows.filter((r) => r.kind === 'edit').map((r) => JSON.parse(r.body));
+        const named = takedowns.flatMap((b) => (Array.isArray(b.data?.ids) ? b.data.ids : [b.data?.id]));
+        const want = Math.ceil(N / (guests?.TAKEDOWN_IDS_MAX ?? 1));
+        const each = takedowns.every((b) => same20(b.guests, [p.x.pk]) && Number.isSafeInteger(b.seq) && b.data.action === 'removed' && b.data.by === 'author' && !('ciphertext' in b.data));
+        assert(p.ok && purged?.ok === true && queuedLines === QUEUED && rows.filter((r) => r.kind === 'line').length === 0,
+            `20e. an account with ${N} lines deleted: none of the ${QUEUED} still queued goes (queued ${queuedLines}, left ${rows.filter((r) => r.kind === 'line').length})`);
+        assert(takedowns.length === want && named.length === N && new Set(named).size === N && ids.every((id) => named.includes(id)) && each,
+            `20e. its ${N} lines go to the guest's home in ${want} request(s) of at most ${guests?.TAKEDOWN_IDS_MAX} ids, each line named once, by its author, words none (got ${takedowns.length} requests naming ${named.length})`);
+        refusing.delete('a.example');
+        const nP = outs.length;
+        await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+        await settle();
+        const went = sentTo20(p.g, nP).filter((b) => b.kind === 'edit').length;
+        assert(went === want && rowsOf19(p.g).length === 0, `20e. ${N} lines: once the home answers, the ${want} request(s) go and nothing is left (went ${went}, left ${rowsOf19(p.g).length})`);
+    }
+    {
+        const [small, big] = purges20;
+        const ratio = big.ms / Math.max(small.ms, 1);
+        assert(purges20.length === 2 && ratio <= RATIO20,
+            `20e. the ${big.n}-line deletion takes at most ${RATIO20} times the ${small.n}-line one in this run: it grows with the lines, not with the lines times the queue (${Math.round(big.ms)} ms against ${Math.round(small.ms)} ms, ${ratio.toFixed(1)} times)`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

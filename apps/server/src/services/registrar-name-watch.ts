@@ -54,8 +54,9 @@
  * former name, or a latest status that doesn't hold it for this key: none, released, revoked, …, unless the registrar's
  * own latest answer is that this key holds it in a state that holds a name, and no status or rename was written on the
  * name after that answer); every 6 hours for the rest (the registrar
- * alone is asked then, and only `other` leads further), so a node whose admin never opens Settings still learns. Only on the main server, and only when the record has a name: a node that never had a registrar name
- * asks nothing.
+ * alone is asked then, and only `other` leads further), so a node whose admin never opens Settings still learns. A claim,
+ * or a live answer stored, that gives this key a name the registrar last called `free` asks again at once (recheckGiven).
+ * Only on the main server, and only when the record has a name: a node that never had a registrar name asks nothing.
  *
  * What it can't catch (§3.6): a new holder that relays this server's own asks back to it, so it sees its own key,
  * while answering everyone else with its own. Keeping a name while this server's key answers there is the rule.
@@ -74,7 +75,7 @@ import { noteSecurityEvent, NAME_ALERT_WORDS } from './security-signal.js';
 import { forgetOwnAddresses } from '../engine/own-addresses.js';
 import { setLostAddressRefusedHandler } from '../engine/member-signature.js';
 import {
-    HOLDING_STATUSES, registrarNames, setRegistrarNameLost, type RegistrarName, type RegistrarNameLost,
+    HOLDING_STATUSES, registrarNames, setRegistrarNameGivenHandler, setRegistrarNameLost, type RegistrarName, type RegistrarNameLost,
 } from '../engine/registrar-names.js';
 import { askNameHolder, attestMessage, DEFAULT_PROTO, nodePubkeyHex, PROTOCOLS, type Proto } from './registrar-client.js';
 
@@ -93,6 +94,8 @@ const EDGE_TIMEOUT_MS = 10_000;
 const SELF_TIMEOUT_MS = 5_000;
 /** At most one round per name this often from refused requests. */
 const RECHECK_EVERY_MS = 5 * 60_000;
+/** At most one round per name this often from claims and stored answers (recheckGiven). */
+const GIVEN_EVERY_MS = 60_000;
 const TICK_MS = 60_000;
 /** After identity and the servers are up. */
 const FIRST_TICK_MS = 30_000;
@@ -628,6 +631,27 @@ export function resetNameRecheckLimitForTests(): void {
     recheckedAt.clear();
 }
 
+// ── A name given back ───────────────────────────────────────────────────────────────────────
+
+const givenAt = new Map<string, number>();
+
+/**
+ * A claim, or a live answer stored, just gave `host` to this key (engine/registrar-names.ts). When the registrar's
+ * latest word the watch kept on it is `free`, ask again now: that word would stand until the name's next round, up to
+ * QUIET_EVERY_MS away for a current live name, and meanwhile Settings shows the name at risk and Make main refuses it
+ * (own-addresses.ts mainAddressRefusal; #3240's round-2 review). Any other word stays: `other` is already asked about
+ * every 5 minutes, and `you` or none leaves Settings nothing wrong to say. At most every GIVEN_EVERY_MS per name.
+ */
+function recheckGiven(host: string): void {
+    if (getNodeRole() !== 'primary') return;
+    if (readWatches()[host]?.registrar !== 'free') return;
+    const now = Date.now();
+    if (now - (givenAt.get(host) ?? -Infinity) < GIVEN_EVERY_MS) return;
+    if (givenAt.size >= 200) givenAt.clear(); // at most 50 names, each given back rarely
+    givenAt.set(host, now);
+    void checkRegistrarName(host).catch((e: any) => logger.warn('AUTH', `[Names] re-check of ${host} after it was given back failed: ${e?.message || e}`));
+}
+
 // ── The watch ───────────────────────────────────────────────────────────────────────────────
 
 let firstTick: ReturnType<typeof setTimeout> | null = null;
@@ -638,12 +662,13 @@ let ticking = false;
  * Start watching. Called on every node: each tick asks whether this is the main server, so a standby does nothing and
  * a promoted one starts on its own. `loopbackOrigin`: where this server's own /api/attest answers over loopback (the
  * plain-HTTP listener, which serves /api as the tunnel reaches it). `timer: false` (tests): only the refused-request
- * re-checks, and rounds on demand.
+ * re-checks, the re-asks after a claim (recheckGiven), and rounds on demand.
  */
 export function startRegistrarNameWatch(opts: { loopbackOrigin: string | null; timer?: boolean }): void {
     stopRegistrarNameWatch();
     loopbackOrigin = opts.loopbackOrigin;
     setLostAddressRefusedHandler(recheckRefused);
+    setRegistrarNameGivenHandler(recheckGiven);
     if (opts.timer === false) return;
     const tick = async () => {
         if (ticking) return;
@@ -668,6 +693,7 @@ export function stopRegistrarNameWatch(): void {
     firstTick = null;
     timer = null;
     setLostAddressRefusedHandler(null);
+    setRegistrarNameGivenHandler(null);
 }
 
 // ── Settings ────────────────────────────────────────────────────────────────────────────────

@@ -68,7 +68,7 @@ import {
 } from '../lib/live-posts';
 import { dealAmountFor, eventCopyOf, aboutOfPost, chatAboutDrafts, feeOf, formatHundredths, isHundredths, parseHundredths } from '@beanpool/core';
 // A price for each one: the price box's lines (slice P2; its own lines so a parallel slice's edits to the import above do not meet these).
-import { perItemCard } from '@beanpool/core';
+import { forumOn, perItemCard } from '@beanpool/core';
 import { LISTING_AFTER_JOIN_WORDS } from '@beanpool/core';
 import { BeansText } from '../components/BeansText';
 import {
@@ -108,6 +108,7 @@ import { getProfileStatus, type ProfileStatus } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
 import { ListingCopyFooter } from '../components/ListingCopyFooter';
+import { ForumLinkedTopics, LINK_WORDS } from '../components/forum/ForumLinks';
 import { shareInterests } from '../lib/home-interests';
 import { accountEpochHolds } from '../lib/account-epoch';
 import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
@@ -495,6 +496,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     }, []);
 
     const communityInfo = useCommunityInfo();
+    // "Talked about in the forum" (forum slice F9): the topics that link the listing open, for a member where the forum is on.
+    const forumHere = forumOn(communityInfo?.features) && !visitor && !!onNavigate;
     const featuresPins = (communityInfo?.features as { pins?: boolean } | undefined)?.pins === true;
     // Bills (DESIGN-getting-paid-fable §4): only where the node says they are on; a node that says nothing has none.
     const billsOn = (communityInfo?.features as { bills?: boolean } | undefined)?.bills === true;
@@ -1747,6 +1750,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onChange={(p) => { setSelectedPost(p); setYourEventsKey(k => k + 1); refresh().catch(() => {}); }}
                         onCancelled={(p) => { if (p) setSelectedPost(p); setYourEventsKey(k => k + 1); refresh().catch(() => {}); }}
                     />
+                    {forumHere && <div className="mt-4"><ForumLinkedTopics kind="event" id={selectedPost.id} heading={t(LINK_WORDS.talkedAbout)} onOpenTopic={(id) => onNavigate?.('forum-topic', id)} /></div>}
                 </div>
             );
         }
@@ -3725,6 +3729,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             </p>
                         )}
                         <PostTagChips tags={selectedPost.tags} freeTags={selectedPost.freeTags} onPick={openTag} onPickFree={openFree} />
+                        {forumHere && <ForumLinkedTopics kind="listing" id={selectedPost.id} heading={t(LINK_WORDS.talkedAbout)} onOpenTopic={(id) => onNavigate?.('forum-topic', id)} />}
 
                         {/* 11. Posted by: components/AuthorCard.tsx, the one box an event's "Hosted by" is too, with the listing's bio,
                             contact line and shop inside it. */}

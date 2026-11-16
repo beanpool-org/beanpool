@@ -3,6 +3,7 @@ import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, circleKnockLine, circleKnockR
 import { setCircleStarting } from '../lib/api';
 import { circleIntents, knockForCircle, readCircleAsk, setCircleIntent, type CircleAsk } from '../lib/circle-intent';
 import type { BeanPoolIdentity } from '../lib/identity';
+import { LINK_WORDS } from './forum/ForumLinks';
 
 const ROW = 'w-full min-h-[44px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-transparent text-sm font-bold text-nature-900 dark:text-white cursor-pointer break-words disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
 /** Ask to join, as AskToJoin draws it. */
@@ -15,7 +16,7 @@ const CARD = 'my-2 p-3 rounded-xl border border-nature-300 dark:border-nature-70
  * group's sheet. "Remind me to join when it starts" is this browser's own wish (lib/circle-intent.ts). Once a community has
  * retired the circle: what started, how long the chat stays, and Ask to join, the one tap that sends anything to it.
  */
-export function PlaceCircleCard({ id, circle, identity, closed, onAsked, onStart, onChange }: {
+export function PlaceCircleCard({ id, circle, identity, closed, onAsked, onStart, onTalk, onChange }: {
     id: string;
     circle: CircleCard;
     identity?: BeanPoolIdentity | null;
@@ -25,6 +26,8 @@ export function PlaceCircleCard({ id, circle, identity, closed, onAsked, onStart
     onAsked?: () => void;
     /** Opens Start a community. Left out, the row isn't drawn: a button must do something. */
     onStart?: () => void;
+    /** "Talk about it in the forum ›" (forum slice F9): its "Start a community near you" section. Left out where the forum is off. */
+    onTalk?: () => void;
     onChange?: (card: CircleCard) => void;
 }) {
     const myPubkey = identity?.publicKey ?? null;
@@ -126,6 +129,7 @@ export function PlaceCircleCard({ id, circle, identity, closed, onAsked, onStart
                         {joinAsked ? t(PLACE_CIRCLE_WORDS.joinWhenStartsOn) : t(PLACE_CIRCLE_WORDS.joinWhenStarts)}
                     </button>
                 )}
+                {onTalk && <button type="button" className={ROW} onClick={onTalk} data-testid="circle-forum">{t(LINK_WORDS.circleTalk)}</button>}
             </div>
             {note && <p role="status" className="m-0 mt-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="circle-note">{note}</p>}
         </div>

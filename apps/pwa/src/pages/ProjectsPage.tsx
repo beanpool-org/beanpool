@@ -1323,6 +1323,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 identity={identity}
                 onMembershipChanged={() => fetchGroups()}
                 onStartCommunity={() => { setSelectedGroupForDetail(null); setShowStartCommunity(true); }}
+                onNavigate={onNavigate}
                 onPostToGroup={(group) => {
                     setSelectedGroupForDetail(null);
                     onNavigate?.('map-post', group.id);

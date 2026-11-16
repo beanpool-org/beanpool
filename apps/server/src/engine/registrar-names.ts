@@ -222,6 +222,16 @@ export function liveRegistrarName(config: NodeConfig = getNodeConfig()): string 
     return anyLive?.address ?? null;
 }
 
+let givenHandler: ((host: string) => void) | null = null;
+/**
+ * services/registrar-name-watch.ts: told of the name each claim, or each live answer stored, gives this key, once the
+ * record holds it. The watch's evidence is kept apart from the record, so a word it heard before (`free`) would
+ * otherwise stand until that name's next round (#3240's round-2 review). Set once, by the watch; null stops it.
+ */
+export function setRegistrarNameGivenHandler(fn: ((host: string) => void) | null): void {
+    givenHandler = fn;
+}
+
 /**
  * The one writer of the record. Called with every registrar answer the node acts on, BEFORE the caller changes the
  * stored `publicAddress` (the name stored until now is recorded first, so the answer can only add to it). Never
@@ -244,6 +254,7 @@ export function recordRegistrarAnswer(answer: unknown, use: RegistrarAnswerUse, 
         e.formerSince = at;
     };
 
+    let given: string | null = null;
     if (use === 'stored' || use === 'claim') {
         if (host) {
             let entry = find(host);
@@ -272,6 +283,7 @@ export function recordRegistrarAnswer(answer: unknown, use: RegistrarAnswerUse, 
                 entry.renamedByUsAt = null;
                 // The registrar gave it to this key: it counts here again, whatever marked it lost.
                 entry.lost = null;
+                given = entry.address;
             }
         }
     } else if (use === 'status') {
@@ -303,6 +315,13 @@ export function recordRegistrarAnswer(answer: unknown, use: RegistrarAnswerUse, 
     if (JSON.stringify(list) !== before) {
         updateNodeConfig({ registrarNames: list });
         version++;
+    }
+    if (given && givenHandler) {
+        try {
+            givenHandler(given);
+        } catch (e: any) {
+            logger.warn('AUTH', `Registrar names: telling the name watch of ${given} failed: ${e?.message || e}`);
+        }
     }
     return list;
 }

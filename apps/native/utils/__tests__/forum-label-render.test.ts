@@ -71,10 +71,10 @@ async function draw(): Promise<void> {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
-    await act(async () => { root!.render(createElement(ForumLabelRow, { myName: 'Ana' })); });
+    await act(async () => { root!.render(createElement(ForumLabelRow, { myName: 'Ana' }) as unknown as Parameters<Root['render']>[0]); });
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 }
-const radios = () => [...host.querySelectorAll('[role="radio"]')] as HTMLElement[];
+const radios = () => Array.from(host.querySelectorAll('[role="radio"]')) as HTMLElement[];
 const chosenText = () => radios().filter((r) => r.getAttribute('aria-checked') === 'true').map((r) => r.textContent);
 async function tap(el: Element | undefined): Promise<void> {
     await act(async () => { (el as HTMLElement).click(); });

@@ -100,6 +100,7 @@ export function appAddressesReport(pageHost?: unknown) {
     const reaches = addressReaches();
     const stopped = namesStoppedByProject();
     const primary = primaryAddress();
+    const standby = getNodeRole() === 'backup';
     const addresses = configuredAddresses().map((a) => {
         const u = count('own', a.address);
         const tried = a.lost ? count('lost', a.address) : undefined;
@@ -107,7 +108,8 @@ export function appAddressesReport(pageHost?: unknown) {
         const reach = reaches.get(a.address);
         // Why Make main would be refused, in the words /main answers with (several-addresses S6): Settings offers Make main
         // only where this is absent, so a press that can only be refused is never offered. None for the main itself.
-        const mainRefusal = a.address === primary ? null : mainAddressRefusal(a.address);
+        // A standby refuses every Make main (its main is its main server's), so it says that of every row.
+        const mainRefusal = a.address === primary ? null : standby ? MAIN_ON_STANDBY : mainAddressRefusal(a.address);
         return {
             address: a.address, source: a.source, ...(a.former ? { former: true } : {}), today: u?.today ?? 0, busiestDay: u?.busiestDay ?? 0,
             ...(a.lost ? { lost: true, tried: { today: tried?.today ?? 0, busiestDay: tried?.busiestDay ?? 0 } } : {}),

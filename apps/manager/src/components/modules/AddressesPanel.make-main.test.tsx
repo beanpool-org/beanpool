@@ -193,6 +193,19 @@ describe('Addresses S6: Make main, around the table', () => {
         expect(await screen.findByTestId('addresses-way-back')).toHaveTextContent('Keep riverside.beanpool.org as well: it is the way back if the domain ever lapses.');
     });
 
+    it('a BeanPool name with no route yet is no way back: the line names one that works, or none', async () => {
+        const waiting = { ...ROW.beanpool, address: 'waiting.beanpool.org', mainRefusal: 'waiting.beanpool.org has no route yet (waiting for approval, or paused). It can be made main once it is live.' };
+        stubNode(reportOf('own domain', [waiting, ROW.beanpool]), () => [200, {}]);
+        const { unmount } = render(<AddressesPanel activeNode={node} />);
+        expect(await screen.findByTestId('addresses-way-back')).toHaveTextContent('Keep riverside.beanpool.org as well');
+        unmount();
+        vi.restoreAllMocks();
+        stubNode(reportOf('own domain', [waiting]), () => [200, {}]);
+        render(<AddressesPanel activeNode={node} />);
+        await screen.findByTestId('address-row-waiting.beanpool.org');
+        expect(screen.queryByTestId('addresses-way-back')).not.toBeInTheDocument();
+    });
+
     it('no way-back line under a BeanPool name main, or with no BeanPool name listed', async () => {
         stubNode(reportOf('a name', [ROW.beanpool]), () => [200, {}]);
         const { unmount } = render(<AddressesPanel activeNode={node} />);

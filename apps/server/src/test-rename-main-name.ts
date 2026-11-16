@@ -1101,6 +1101,18 @@ async function main(): Promise<void> {
             }
         }
         console.log(rows.join('\n'));
+
+        // On a standby every Make main is refused (409 standby), so Settings' report says so of every row but the main, and
+        // Settings offers none (several-addresses S6). An address already listed adds nothing and answers the report.
+        setNodeRole('backup');
+        try {
+            const r = await post(ADD, phone(), { address: DOMAIN });
+            const others = (r.json?.addresses ?? []).filter((a: any) => a.address !== r.json?.primaryAddress);
+            assert(r.status === 200 && others.length > 0 && others.every((a: any) => /standby/i.test(a.mainRefusal ?? '')),
+                `(9) on a standby the report says of every row that Make main is its main server's (${r.status} ${show(others.map((a: any) => [a.address, a.mainRefusal]))})`);
+        } finally {
+            setNodeRole('primary');
+        }
     }
 
     // ── 10 ──

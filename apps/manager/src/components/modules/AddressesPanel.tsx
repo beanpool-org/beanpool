@@ -160,12 +160,13 @@ export function offersMakeMain(a: AppAddress, primary: string | null | undefined
 }
 
 /**
- * Under an own-domain main, the BeanPool name the community still lists: the way back if the domain ever lapses (design
- * several-addresses §5, §8). Null under a BeanPool name or a number, or with no BeanPool name listed.
+ * Under an own-domain main, the BeanPool name the community still lists and could make main again: the way back if the
+ * domain ever lapses (design several-addresses §5, §8). Only a name that works is a way back, so never a former or lost name
+ * nor one the server says can't be main (no route yet: waiting, paused, stopped). Null under a BeanPool name or a number.
  */
 export function wayBackName(addresses: AppAddress[] | undefined, primary: string | null | undefined): string | null {
     if (!primary || isBeanPoolName(primary) || isIpAddress(primary)) return null;
-    return (addresses ?? []).find((a) => isBeanPoolName(a.address) && !a.former && !a.lost && a.address !== primary)?.address ?? null;
+    return (addresses ?? []).find((a) => isBeanPoolName(a.address) && a.address !== primary && !a.former && !a.lost && !a.mainRefusal)?.address ?? null;
 }
 
 /** A name as typed or pasted (a whole host, capitals, spaces): the label the claim takes. */

@@ -21,7 +21,7 @@ import { ReportModal } from '../components/ReportModal';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { marked, readsOwn, useFeatureMode } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, freePriceWords } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_GUIDE_WORDS, freePriceWords, isLocalGuide } from '@beanpool/core';
 import { tierWords } from '../lib/trust-tier';
 import { Sentence } from '../components/Sentence';
 import { InvitedByCard } from '../components/InvitedByCard';
@@ -53,7 +53,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const beansMarked = marked(beansMode);
     // Who invited them, and whom they brought in (I3), from the trust profile the server tailors to this reader. Beans-gated as
     // the phone's trust panel is (its inviter line sits there): where Beans are off, neither app draws it.
-    const [invite, setInvite] = useState<{ vouchedInBy: any; broughtIn?: number; voucherButton?: unknown; for: string } | null>(null);
+    const [invite, setInvite] = useState<{ vouchedInBy: any; broughtIn?: number; voucherButton?: unknown; badges?: unknown; for: string } | null>(null);
     const [profile, setProfile] = useState<MemberProfile | null>(null);
     const [viewerProfile, setViewerProfile] = useState<MemberProfile | null>(null);
     const [showQuizModal, setShowQuizModal] = useState(false);
@@ -241,7 +241,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
         setInvite(null);
         if (beansMode !== 'live') return;
         getTrustProfile(pubkey)
-            .then((tp: any) => { if (!cancelled && tp) setInvite({ vouchedInBy: tp.vouchedInBy ?? null, broughtIn: tp.broughtIn, voucherButton: tp.voucherButton, for: pubkey }); })
+            .then((tp: any) => { if (!cancelled && tp) setInvite({ vouchedInBy: tp.vouchedInBy ?? null, broughtIn: tp.broughtIn, voucherButton: tp.voucherButton, badges: tp.badges, for: pubkey }); })
             .catch(() => null);
         return () => { cancelled = true; };
     }, [pubkey, beansMode]);
@@ -398,6 +398,12 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     {profile?.joinedAt && (
                         <div className="text-xs text-nature-500 dark:text-nature-400 font-semibold mt-2">
                             {t('📅 Joined {date}', { date: formatDate(new Date(profile.joinedAt), 'month-year', { width: 'long' }) })}
+                        </div>
+                    )}
+                    {/* The Local guide badge (Learn K8): the trust profile's `badges`, this key's own answer only. Gates nothing. */}
+                    {invite?.for === pubkey && isLocalGuide(invite.badges) && (
+                        <div data-testid="profile-local-guide" className="text-sm text-nature-800 dark:text-nature-100 font-bold mt-2">
+                            {t(LOCAL_GUIDE_WORDS.line)}
                         </div>
                     )}
 

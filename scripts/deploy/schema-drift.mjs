@@ -350,7 +350,7 @@ export function checkDrift(Database, db, build) {
         const freshTables = tablesOf(fresh);
         const hereTables = tablesOf(db);
         const results = [];
-        for (const [key, f] of [...freshTables].sort((a, b) => a[0].localeCompare(b[0]))) {
+        for (const [key, f] of [...freshTables].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))) {
             const h = hereTables.get(key);
             if (!h) continue;
             const kind = build.kinds[key] ?? 'not in the manifest';

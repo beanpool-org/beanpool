@@ -504,14 +504,16 @@ export function initSchema() {
     if (gate.kind === 'fresh') db.transaction(() => { db.exec(schemaSql); writeSchemaStamp(db, getVersion()); })();
 
     // ── The schema steps born since 1.4.0 ─────────────────────────────────────────────────────────────────────────────
-    // The gate opens a file 1.4.0 or later last started (db/schema-gate.ts). These bring one from 1.4.1 to this release's
-    // shape, and do nothing on a file that has it. Before the schema.sql exec, which may index their columns: CREATE INDEX
-    // on a missing column stops the whole exec (test-schema-upgrade-fresh-shape.ts holds every column schema.sql names to
-    // that). (The steps born between 1.2.36 and 1.4.0, the hundredths step among them, were log rows CUT2, B10 and B11,
-    // removed once every kept node had started 1.4.0. The four born with per-item prices in 1.4.1, posts.units_left,
+    // The gate opens a file 1.4.1 or later last started (db/schema-gate.ts MINIMUM_RELEASE). These bring one from 1.4.1 to
+    // this release's shape, and do nothing on a file that has it. Before the schema.sql exec, which may index their columns:
+    // CREATE INDEX on a missing column stops the whole exec (test-schema-upgrade-fresh-shape.ts holds every column schema.sql
+    // names to that). (The steps born between 1.2.36 and 1.4.0, the hundredths step among them, were log rows CUT2, B10 and
+    // B11, removed once every kept node had started 1.4.0. The four born with per-item prices in 1.4.1, posts.units_left,
     // lot_price_c and lot_units and marketplace_transactions.item_option, were log rows PERITEM-S1 to S4, removed once every
-    // kept node had started 1.4.1, whose file has them from schema.sql. A file 1.4.0 last started lacks those four, and the
-    // gate, which reads no release number, does not refuse it.)
+    // kept node had started 1.4.1, whose file has them from schema.sql; the gate's minimum rose to 1.4.1 with them, so a
+    // file 1.4.0 last started, which lacks those four, is refused before anything here runs.) K1's step below was born in
+    // 1.4.1 too and stays: an addition, not conversion code, with no log row; it finds its columns on every file the gate
+    // opens.
 
     // Born with Local knowledge (slice K1; DESIGN-local-knowledge-fable.md §4.1, §4.4): seven columns on posts, empty on every
     // row that is there (knowledge_helped takes its default, 0). Additions, not conversion code (Marty's pick 6, 11 Nov

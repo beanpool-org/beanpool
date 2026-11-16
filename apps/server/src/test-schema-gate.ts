@@ -6,8 +6,11 @@
  *  2. A second boot of it is a boot: still stamped, the release written again.
  *  3. A database a kept node last started on 1.4.1 (__fixtures__/schema-v1.4.1.sql, stamped as 1.4.1 stamped it, with rows;
  *     kept-node-test-fixture.ts) boots, is stamped with this release, keeps its rows, and has exactly the tables, columns,
- *     indexes and triggers a fresh install has. (A file 1.4.0 last started is not held to that any more: per-item prices'
- *     boot steps, log rows PERITEM-S1 to S4, went once every kept node had started 1.4.1.)
+ *     indexes and triggers a fresh install has.
+ *  3c. A database a node last started on 1.4.0 (__fixtures__/schema-v1.4.0.sql, stamped as 1.4.0 stamped it, with rows;
+ *     without per-item prices' four columns, whose boot steps, log rows PERITEM-S1 to S4, went once every kept node had
+ *     started 1.4.1) is refused in §1's words naming 1.4.1, and the file is byte for byte as it was; the node's first step
+ *     refuses it the same way.
  *  3b. A database a node last started on 1.2.36 (__fixtures__/schema-v1.2.36.sql, user_version 4, with rows), which 1.4.0
  *     opened and stamped (log row CUT1, removed), is refused in §1's words, and the file is byte for byte as it was.
  *  4. A database last started on 1.2.18 (__fixtures__/schema-v1.2.18.sql) is refused in §1's words, and the file is byte
@@ -15,7 +18,11 @@
  *  5. The 1.2.36 file without its one 1.2.36 object (so a 1.2.35 one) is refused as well.
  *  6. A file a newer release stamped (user_version 6) is refused, in its own words, and left as it was.
  *  7. user_version 5 with no schema_release row is not a stamp: refused, left as it was.
- *  8. A file stamped by another release opens, and the stamp then names this one.
+ *  8. A file stamped by another release (1.4.1 or later) opens, and the stamp then names this one; one stamped 1.4.0 is
+ *     refused.
+ *  9. A node opens the file it stamped itself, whatever its version says: a fresh install by a node whose version
+ *     resolved to '0.0.0' (version.ts), or to a release below the minimum, boots again on it; and how the gate reads a
+ *     stamp's release, part by part.
  */
 import Database from 'better-sqlite3';
 import crypto from 'node:crypto';
@@ -23,8 +30,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assert, bootInto, columns, tmp, runSchemaSuite } from './schema-upgrade-test-harness.js';
-import { REFUSED_TOO_OLD, SCHEMA_STAMP, SCHEMA_RELEASE_KEY, refusedTooNew } from './db/schema-gate.js';
-import { KEPT_NODE_RELEASE, makeKeptNodeDatabase } from './kept-node-test-fixture.js';
+import { MINIMUM_RELEASE, REFUSED_TOO_OLD, SCHEMA_STAMP, SCHEMA_RELEASE_KEY, olderThanMinimum, refusedTooNew } from './db/schema-gate.js';
+import { KEPT_NODE_RELEASE, TOO_OLD_RELEASE, makeKeptNodeDatabase, makeTooOldDatabase } from './kept-node-test-fixture.js';
 import { getVersion } from './version.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -62,12 +69,15 @@ function oldDatabase(name: string, schemaSql: string, userVersion: number, rows?
     return dir;
 }
 
-/** A data dir holding a database a kept node last started on 1.4.1 (kept-node-test-fixture.ts), in WAL, closed. */
-function keptNodeDatabase(name: string, rows?: (d: Database.Database) => void): string {
+/**
+ * A data dir holding a database a kept node last started on 1.4.1 (kept-node-test-fixture.ts), in WAL, closed; or, with
+ * `make` makeTooOldDatabase, one a node last started on 1.4.0.
+ */
+function keptNodeDatabase(name: string, rows?: (d: Database.Database) => void, make = makeKeptNodeDatabase): string {
     const dir = tmp(name);
     const d = new Database(stateDb(dir));
     d.pragma('journal_mode = WAL');
-    makeKeptNodeDatabase(d);
+    make(d);
     rows?.(d);
     d.close();
     return dir;
@@ -221,14 +231,46 @@ runSchemaSuite("the database's stamp and the gate at open", '⭐️ Schema gate 
             "the node's first step (index.ts main) refuses it the same way, and leaves it byte for byte as it was");
     }
 
+    // ── 3c. A 1.4.0 database is refused, untouched ───────────────────────────────────────────────────────────────
+    // 1.4.1 opened a file 1.4.0 last started and added per-item prices' four columns (PERITEM-S1..S4). Every kept node has
+    // started 1.4.1 and those steps went, so the gate's minimum rose to 1.4.1: opened, such a file would start a node whose
+    // every listing and deal read fails on a column it lacks.
+    console.log(`\n--- 3c. A database a node last started on ${TOO_OLD_RELEASE} ---`);
+    const dir140 = keptNodeDatabase('gate-1.4.0', (d) => {
+        d.prepare(`INSERT INTO members (public_key, callsign) VALUES (?, 'Castle')`).run(memberKey);
+        d.prepare(`INSERT INTO accounts (public_key, balance_c) VALUES (?, 1250)`).run(memberKey);
+        d.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey) VALUES ('p1', 'offer', 'food', 'Eggs', 'A dozen', 400, ?)`).run(memberKey);
+    }, makeTooOldDatabase);
+    {
+        const before = stampOf(dir140);
+        const d = new Database(stateDb(dir140), { readonly: true });
+        const perItem = [...columns(d, 'posts'), ...columns(d, 'marketplace_transactions')]
+            .filter((c) => ['units_left', 'lot_price_c', 'lot_units', 'item_option'].includes(c));
+        d.close();
+        assert(before.userVersion === SCHEMA_STAMP && before.release === TOO_OLD_RELEASE && perItem.length === 0,
+            `setup: the file is stamped as ${TOO_OLD_RELEASE} stamped it, without the four per-item columns (user_version ${before.userVersion}, schema_release ${before.release}, ${perItem.join(', ') || 'none'})`);
+    }
+    expectRefused(dir140, REFUSED_TOO_OLD, `the ${TOO_OLD_RELEASE} database`);
+    {
+        const before = sha256(stateDb(dir140));
+        const first = bootInto(dir140, {}, `
+            import { refuseUnopenableDatabase } from ${JSON.stringify(path.join(HERE, 'db', 'db.ts'))};
+            refuseUnopenableDatabase();
+            console.log('BOOT_OK');
+        `);
+        assert(!first.ok && first.output.includes(REFUSED_TOO_OLD) && sha256(stateDb(dir140)) === before,
+            "the node's first step (index.ts main) refuses it the same way, and leaves it byte for byte as it was");
+    }
+
     // ── 4. A 1.2.18 database is refused, untouched ───────────────────────────────────────────────────────────────
     console.log('\n--- 4. A database last started on 1.2.18 ---');
     const dir1218 = oldDatabase('gate-1.2.18', FIXTURE_1_2_18, 3, (d) => {
         d.prepare(`INSERT INTO members (public_key, callsign) VALUES (?, 'Old')`).run(memberKey);
     });
     expectRefused(dir1218, REFUSED_TOO_OLD, 'the 1.2.18 database');
-    assert(REFUSED_TOO_OLD.includes('older than 1.4.0') && REFUSED_TOO_OLD.includes('ghcr.io/beanpool-org/beanpool-node:1.4.0')
-        && REFUSED_TOO_OLD.endsWith('Nothing was changed.'), 'the words name the minimum, the image to start once, and that nothing changed');
+    assert(MINIMUM_RELEASE === '1.4.1' && REFUSED_TOO_OLD.includes('older than 1.4.1. This version opens databases from 1.4.1 on.')
+        && REFUSED_TOO_OLD.includes('ghcr.io/beanpool-org/beanpool-node:1.4.1,')
+        && REFUSED_TOO_OLD.endsWith('Nothing was changed.'), 'the words name the minimum (1.4.1), the image to start once, and that nothing changed');
     {
         const before = sha256(stateDb(dir1218));
         const first = bootInto(dir1218, {}, `
@@ -257,13 +299,45 @@ runSchemaSuite("the database's stamp and the gate at open", '⭐️ Schema gate 
     { const d = new Database(stateDb(halfDir)); d.pragma('journal_mode = WAL'); d.prepare('DELETE FROM node_config WHERE key = ?').run(SCHEMA_RELEASE_KEY); d.close(); }
     expectRefused(halfDir, REFUSED_TOO_OLD, 'user_version 5 without its release');
 
-    // ── 8. Another release's stamp opens, and names this one after ───────────────────────────────────────────────
+    // ── 8. Another release's stamp opens, and names this one after; a 1.4.0 stamp is refused ────────────────────────
     console.log('\n--- 8. A database another release stamped ---');
-    const otherDir = copyOf(freshDir, 'gate-other');
-    { const d = new Database(stateDb(otherDir)); d.pragma('journal_mode = WAL'); d.prepare('UPDATE node_config SET value = ? WHERE key = ?').run('1.4.0-previous', SCHEMA_RELEASE_KEY); d.close(); }
+    const restamped = (name: string, release: string): string => {
+        const dir = copyOf(freshDir, name);
+        const d = new Database(stateDb(dir)); d.pragma('journal_mode = WAL'); d.prepare('UPDATE node_config SET value = ? WHERE key = ?').run(release, SCHEMA_RELEASE_KEY); d.close();
+        return dir;
+    };
+    const otherDir = restamped('gate-other', `${MINIMUM_RELEASE}-previous`);
     const other = bootInto(otherDir);
-    assert(other.ok, "a database another release stamped boots");
+    assert(other.ok, `a database another release (${MINIMUM_RELEASE}-previous) stamped boots`);
     assert(stampOf(otherDir).release === RELEASE, `its stamp then names this release (${RELEASE})`);
+    // The stamp alone decides: this file has every column a fresh install has, and is refused all the same, as 1.4.0 named it.
+    const stamp140Dir = restamped('gate-stamp-1.4.0', '1.4.0');
+    expectRefused(stamp140Dir, REFUSED_TOO_OLD, 'a file stamped 1.4.0');
 
-    for (const dir of [freshDir, dir141, dir1236, dir1218, dir1235, newerDir, halfDir, otherDir]) fs.rmSync(dir, { recursive: true, force: true });
+    // ── 9. A node opens the file it stamped itself, whatever its version says ─────────────────────────────────────
+    console.log("\n--- 9. A node's own stamp, and how a stamp's release is read ---");
+    for (const own of ['0.0.0', '1.0.0']) {
+        const dir = tmp(`gate-own-${own}`);
+        const first = bootInto(dir, { APP_VERSION: own });
+        const second = first.ok ? bootInto(dir, { APP_VERSION: own }) : first;
+        assert(first.ok && second.ok && stampOf(dir).release === own,
+            `a fresh install by a node whose version is ${own} boots, and boots again on the file it stamped (${second.ok ? `stamp ${stampOf(dir).release}` : second.output.slice(-300)})`);
+        if (own === '0.0.0') {
+            // '0.0.0' names no release (version.ts: none resolved), so this release opens it too, and stamps it with its own.
+            const next = bootInto(dir);
+            assert(next.ok && stampOf(dir).release === RELEASE, `a file stamped 0.0.0 opens on this release, and is stamped ${RELEASE} (${next.ok ? 'booted' : next.output.slice(-300)})`);
+        }
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+    const reads: [string, string, boolean][] = [
+        ['1.4.0', '9.9.9', true], ['1.4.0-previous', '9.9.9', true], ['v1.4.0', '9.9.9', true], ['1.3.99', '9.9.9', true], ['0.9.0', '9.9.9', true],
+        ['1.4.1', '9.9.9', false], ['1.4.1-previous', '9.9.9', false], ['1.4.2', '9.9.9', false], ['1.4.10', '9.9.9', false], ['1.5.0', '9.9.9', false], ['2.0.0', '9.9.9', false],
+        ['0.0.0', '9.9.9', false], ['dev', '9.9.9', false], ['', '9.9.9', false], ['1.4', '9.9.9', false],
+        ['1.4.0', '1.4.0', false],
+    ];
+    for (const [release, own, older] of reads) {
+        assert(olderThanMinimum(release, own) === older, `stamp '${release}' on a node whose version is ${own}: ${older ? 'older than the minimum, refused' : 'opens'}`);
+    }
+
+    for (const dir of [freshDir, dir141, dir140, dir1236, dir1218, dir1235, newerDir, halfDir, otherDir, stamp140Dir]) fs.rmSync(dir, { recursive: true, force: true });
 });

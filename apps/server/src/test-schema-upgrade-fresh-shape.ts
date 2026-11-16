@@ -9,8 +9,8 @@
  *
  * Every kept node's file is one it last started on 1.4.1 or later (test-schema-gate.ts boots __fixtures__/schema-v1.4.1.sql,
  * stamped as 1.4.1 stamped it, to a fresh install's exact shape). The upgrades checked here are the steps db.ts runs before
- * the schema.sql exec, on that file (kept-node-test-fixture.ts). (The gate, db/schema-gate.ts, reads no release number and
- * still opens a file 1.4.0 last started; per-item prices' steps for it, log rows PERITEM-S1 to S4, are gone.)
+ * the schema.sql exec, on that file (kept-node-test-fixture.ts). (Per-item prices' steps for a file 1.4.0 last started, log
+ * rows PERITEM-S1 to S4, are gone, and the gate, db/schema-gate.ts, refuses such a file: its minimum is 1.4.1.)
  *
  *  1. A fresh install, for the shape everything else is compared against.
  *  5. No late-added column may be referenced by schema.sql (static), and every column added before the exec is declared.

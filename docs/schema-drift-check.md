@@ -39,11 +39,15 @@ already had those tables under the old CHECK, so the new build's writes would ha
   thing in the loop's body: `for (const column of ['…', …])` with `` `ALTER TABLE <table> ADD COLUMN ${column}` ``, and
   `for (const [table, column] of [['<table>', '…'], …])` with `` `ALTER TABLE ${table} ADD COLUMN ${column}` ``.
   A step inside a comment is not a step.
-- Any other `ALTER` in db.ts makes the table it names "can't prove". That includes two steps sharing one `try`, a step
-  behind an `if`, an `else`, a `? :` or `&&`, a `catch` with something in it, a step inside a function or a callback, a
-  template with `${…}`, `db.exec`, the statement held in a variable, and a loop of any other shape or whose list holds
-  anything but quoted text. If the ALTER names no table, every table is "can't prove". So does a `return` before the
-  exec, or a `db` that `initSchema` declares itself, for every table a step names. A "can't prove" table is never `OK`,
+- Any other `ALTER` in db.ts that adds or drops a column (`ALTER TABLE <table> ADD …` or `… DROP …`) makes that
+  table "can't prove". That includes two steps sharing one `try`, a step behind an `if`, an `else`, a `? :` or `&&`, a
+  `catch` with something in it, a step inside a function or a callback, a template with `${…}`, `db.exec`, the
+  statement held in a variable, and a loop of any other shape or whose list holds anything but quoted text. Any other
+  `ALTER` makes every table "can't prove", because it can change a table other than the one it names: a table rename
+  (`ALTER TABLE t_new RENAME TO t` changes `t`, not `t_new`), a column rename (SQLite also rewrites every other
+  table's `REFERENCES` to that column), a quoted or `main.` name, an ALTER with no table name, and any form the check
+  doesn't parse. A `return` before the exec, or a `db` that `initSchema` declares itself, makes every table a step
+  names "can't prove". A "can't prove" table is never `OK`,
   even when it already has `schema.sql`'s shape, and no steps are run for it, because what the boot does to it isn't
   known. An `ALTER` in `initSchema` after the exec, outside a function, runs after `schema.sql` and is not a step.
 - It reads each table's kind from `apps/server/src/engine/replication-manifest.ts`.
@@ -102,7 +106,14 @@ a refused step is never `OK`, even when `schema.sql` doesn't name that step's co
 a function only the server has), the bracket says so and the line stays a drift line, because nothing was proved. The
 same goes for `can't prove its boot: …`, which means db.ts has an `ALTER` on the table that isn't written as a step
 the check reads. That line is never `OK`, even when nothing else differs. Rewrite the step in db.ts in one of the read
-shapes above before you deploy. Don't widen the check to read the other shape.
+shapes above before you deploy. Don't widen the check to read the other shape. Two cases need something else. Both
+fail closed:
+
+- The word `ALTER` in a string in db.ts, such as a log message `'never alter this'`, counts as an ALTER that names
+  no table. Every table on every node then reads "can't prove" and the check exits 1. Rephrase the string.
+- An `ALTER` outside `initSchema`, such as a helper that runs after `schema.sql`, makes its table never `OK` (every
+  table, for a form other than ADD or DROP). The check can't tell when the helper runs. Move the statement into
+  `initSchema` in one of the read shapes, or accept that line and check that table by hand.
 
 The first line names the database and the first 12 characters of the `schema.sql` sha256 it compared against. The last
 line counts the tables it compared, how many drift, how many the deploy will create, and how many it skipped because

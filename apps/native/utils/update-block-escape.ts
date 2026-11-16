@@ -25,6 +25,7 @@ import { communityName } from './community-name';
 import { communitySwitched } from './community-switch';
 import { assertPlainNodeAddress, plainOriginOf } from './node-url';
 import { takeOffSavedList } from './nodes';
+import { sameCommunityRecord } from './community-index';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
 import { clearPendingProfileChange } from './pending-profile-sync';
 
@@ -171,13 +172,7 @@ async function forgetCommunity(here: string, storage: Pick<Storage, 'getItem' | 
     // No community on the phone: the update screen's block comes down (utils/community-switch.ts).
     communitySwitched();
     const hereAddress = plainOriginOf(here);
-    const isHere = (url: unknown) => plainOriginOf(url) === hereAddress;
-    try {
-        // Its record goes with its row (nodes.ts takeOffSavedList).
-        await takeOffSavedList(here, isHere, storage);
-    } catch (e) {
-        console.warn('[Update] The community left could not be taken off the saved list', e);
-    }
+    const isHere = (url: unknown) => plainOriginOf(url) === hereAddress || sameCommunityRecord(url, here);
     try {
         const parsed: unknown = JSON.parse((await storage.getItem(GUEST_NODES_STORE_KEY)) ?? '[]');
         if (Array.isArray(parsed) && parsed.some(isHere)) {
@@ -190,6 +185,12 @@ async function forgetCommunity(here: string, storage: Pick<Storage, 'getItem' | 
         await clearPendingProfileChange(here, undefined, storage);
     } catch (e) {
         console.warn('[Update] The profile change waiting for the community left could not be removed', e);
+    }
+    try {
+        // Last, its record with its row (nodes.ts takeOffSavedList): the profile change above is kept under that record.
+        await takeOffSavedList(here, isHere, storage);
+    } catch (e) {
+        console.warn('[Update] The community left could not be taken off the saved list', e);
     }
 }
 

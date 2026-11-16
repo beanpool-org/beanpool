@@ -381,6 +381,10 @@ async function main(): Promise<void> {
         // Decisions and the three safety switches.
         tally.check('decisions.value is the Decisions gate', S.decisions.value === features.decisions && S.decisions.value === featureOn('decisions'), label);
         tally.check('decisions.configured', S.decisions.configured === cfg.decisions && S.decisions.source === owned('decisions') && S.decisions.lock === null, label);
+        // Local knowledge (Learn): an owners' setting now, no longer a kind-only switch; features.knowledge is there only while on.
+        tally.check('knowledge.value is features.knowledge', S.knowledge.value === eff.knowledge && (features.knowledge === true) === eff.knowledge, label);
+        tally.check('knowledge.configured', S.knowledge.configured === cfg.knowledge && S.knowledge.source === owned('knowledge') && S.knowledge.lock === null
+            && !sh.kindOnly.some((k) => k.id === 'knowledge'), label);
         for (const [key, sw] of [['probation', 'probation'], ['autoHide', 'autoHideReports'], ['autoMute', 'autoMute']] as const) {
             const s = S[key];
             tally.check(`${key}.value is features.${sw}`, s.value === features[sw] && s.configured === cfg[sw] && s.source === owned(sw) && s.lock === null, label);

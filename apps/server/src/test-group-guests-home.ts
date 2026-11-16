@@ -7,9 +7,10 @@
  * BEANPOOL_SSRF_TEST_HOOK=1); what the node sends a host reaches the suite through the transport hook. No other server is
  * contacted.
  *
- *   1  close the class: every notice a host brings (invite, roster, line, line with a mention, epoch, removal, edit) x
- *      (the host the guest answered, a host nobody answered, a blocked host, a removed guest, a key that is no member
- *      here, a standby) -> held for the guest or dropped, the answer always the same 202 (400 for a kind that is no notice)
+ *   1  close the class: every notice a host brings (invite, roster, line, line with a mention, epoch, removal, edit, a
+ *      line taken down) x (the host the guest answered, a host nobody answered, a blocked host, a removed guest, a key
+ *      that is no member here, a standby) -> held for the guest or dropped, the answer always the same 202 (400 for a kind
+ *      that is no notice)
  *   2  nothing reaches a device that isn't that guest's: one notice naming two guests -> each holds only their own wrap;
  *      each one's device reads only theirs; a member not named gets nothing
  *   3  close the class: every item a member sends a group elsewhere (yes, no, leave, line, line with a mention, epoch) x
@@ -36,6 +37,17 @@
  *  11  close the class, invariant C: (the host's fan-out, a member's sends) x (success then failure, failure alone, mixed
  *      batches with and without a 2xx, a 2xx refusing in its answer, failure then success) -> the next due time; any 2xx
  *      starts the steps over, and another host's step is untouched
+ *  14  close the class, a complaint about a member's line as a guest (G1b part 2: the host's moderators had it reported,
+ *      and it tells this server): (a line the host took, still queued, refused by the host, failed, another member's id,
+ *      a direct line's id) x (signed by the group's host, by another server) -> filed once here as "from another
+ *      community" (never naming who reported it), or the one 422 every drop gets; a repeat is the same 202
+ *  15  close the class, takedowns (#3233 round 2): (author delete, edited then deleted, convenor removal, account deleted,
+ *      group closed) x (held with no device having it, one device having it, every device having it) -> no copy of the
+ *      line's words or photo is served or kept, and each device is served the tombstone; 15e: (edit while held, twice,
+ *      after one device has it, after every device has it) -> each device is served only the newest words; 15w: out of
+ *      the group (leave taken, removed, the switch, group closed) -> nothing of it held is served; 15v: a host blocked
+ *      since: its takedown still drops what it brought; 15d: nothing held past MAIL_HELD_DAYS is served, swept yet or not
+ *      (the host offers a takedown that long and a day more)
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests-home node scripts/run-server-suites.mjs
  */
@@ -88,7 +100,7 @@ async function main(): Promise<void> {
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { __useNodeKeyFetchForTests, NODE_SIGNED_PATHS } = await import('./engine/node-signature.js');
     const { __useRelayTransportForTests } = await import('./engine/relay-outbox.js');
-    const { addConnector } = await import('./connector-manager.js');
+    const { addConnector, removeConnector } = await import('./connector-manager.js');
     const { noteMailDevice } = await import('./engine/relay-mail.js');
     const { TABLES } = await import('./engine/replication-manifest.js');
     const { RELAY_MAIL_TABLES } = await import('./engine/relay-mail-tables.js');
@@ -200,9 +212,9 @@ async function main(): Promise<void> {
     }
     let seq = 0;
     const newItemId = () => `ggh-${String(++seq).padStart(4, '0')}-${crypto.randomBytes(6).toString('hex')}`;
-    async function item(from: Id, kind: RelayItemKind, group: string, payload: string, host = 'b.example') {
+    async function item(from: Id, kind: RelayItemKind, group: string, payload: string, host = 'b.example', itemId = newItemId()) {
         const envelope = await signRelayEnvelope({
-            kind, itemId: newItemId(), senderKey: from.pk, senderHome: 'a.example', recipient: `group:${group}`, recipientHome: host,
+            kind, itemId, senderKey: from.pk, senderHome: 'a.example', recipient: `group:${group}`, recipientHome: host,
             at: Date.now(), payloadHash: relayPayloadHash(payload),
         }, signerOf(from.seed));
         return { envelope, payload };
@@ -227,9 +239,10 @@ async function main(): Promise<void> {
         'line-mention': { id: 'm-2', author: ana.pk, ciphertext: 'c', nonce: 'group-xc20p-v1:n', type: 'text', metadata: { mentions: [gus.pk] }, timestamp: new Date().toISOString() },
         epoch: { record, wraps: [wrap(gus), wrap(gia)] },
         removed: { why: 'removed' },
-        edit: { id: 'm-1', ciphertext: 'c2' },
+        edit: { id: 'm-1', action: 'edited', author: ana.pk, ciphertext: 'c2', nonce: 'group-xc20p-v1:n2', metadata: { epoch: 1, sender: ana.pk }, editedAt: new Date().toISOString() },
+        'line-taken-down': { id: 'm-1', action: 'removed', by: 'convenor' },
     };
-    const kindOfRow = (k: string) => (k === 'line-mention' ? 'line' : k);
+    const kindOfRow = (k: string) => (k === 'line-mention' ? 'line' : k === 'line-taken-down' ? 'edit' : k);
     const noticeOf = (k: string, host: string, g: string, guests: string[]) => ({ v: 1, kind: kindOfRow(k), group: g, host, guests, data: DATA[k] });
 
     if (!home) {
@@ -253,10 +266,10 @@ async function main(): Promise<void> {
 
     // ── 1. Every notice x where the guest stands ────────────────────────────────────────────
     console.log('\n1. Close the class: every notice a host brings x where the guest stands -> held or dropped, answered alike');
-    const KINDS = ['invite', 'roster', 'line', 'line-mention', 'epoch', 'removed', 'edit'] as const;
+    const KINDS = ['invite', 'roster', 'line', 'line-mention', 'epoch', 'removed', 'edit', 'line-taken-down'] as const;
     type Standing = 'answered host' | 'unknown host' | 'blocked host' | 'removed guest' | 'no member here' | 'standby';
     const STANDINGS: Standing[] = ['answered host', 'unknown host', 'blocked host', 'removed guest', 'no member here', 'standby'];
-    /** Whether the notice is held for the guest: [kind][standing]. 'edit' is no notice (item 3 splits off): 400 everywhere. */
+    /** Whether the notice is held for the guest: [kind][standing]. An edit, and a line taken down, are held as a line is (G1b part 2). */
     const HELD: Record<string, Record<Standing, boolean>> = {
         invite:         { 'answered host': false, 'unknown host': true,  'blocked host': false, 'removed guest': true,  'no member here': false, standby: false },
         roster:         { 'answered host': true,  'unknown host': false, 'blocked host': false, 'removed guest': false, 'no member here': false, standby: false },
@@ -264,7 +277,8 @@ async function main(): Promise<void> {
         'line-mention': { 'answered host': true,  'unknown host': false, 'blocked host': false, 'removed guest': false, 'no member here': false, standby: false },
         epoch:          { 'answered host': true,  'unknown host': false, 'blocked host': false, 'removed guest': false, 'no member here': false, standby: false },
         removed:        { 'answered host': true,  'unknown host': false, 'blocked host': false, 'removed guest': false, 'no member here': false, standby: false },
-        edit:           { 'answered host': false, 'unknown host': false, 'blocked host': false, 'removed guest': false, 'no member here': false, standby: false },
+        edit:           { 'answered host': true,  'unknown host': false, 'blocked host': false, 'removed guest': false, 'no member here': false, standby: false },
+        'line-taken-down': { 'answered host': true, 'unknown host': false, 'blocked host': false, 'removed guest': false, 'no member here': false, standby: false },
     };
     let rowN = 0;
     for (const k of KINDS) {
@@ -280,7 +294,7 @@ async function main(): Promise<void> {
             if (s === 'standby') setNodeRole('primary');
             const held = heldCount(who, host, g) === 1;
             const link = linkOf(who, host, g);
-            const wantStatus = k === 'edit' ? 400 : 202;
+            const wantStatus: number = 202;
             const answerOk = r.status === wantStatus && (wantStatus === 400 ? r.body?.code === 'bad_notice' : r.body?.received === true);
             const linkOk = !HELD[k][s] ? JSON.stringify(link ?? null) === linkBefore
                 : k === 'invite' ? link?.state === 'invited' : k === 'removed' ? link?.state === 'removed' && link.roster === null
@@ -293,6 +307,10 @@ async function main(): Promise<void> {
         `1z. the table has a row for every notice kind and every standing (${rowN} rows)`);
     const notSigner = await notice('b.example', noticeOf('line', 'b.example', 'g1-x', [gus.pk]), { origin: 'd.example' });
     assert(notSigner.status === 400 && notSigner.body?.code === 'wrong_host', `1y. a notice naming a host that is not its signer: 400 wrong_host (got ${notSigner.status} ${notSigner.body?.code})`);
+    setLink(gus, 'b.example', 'g1-k', 'in');
+    const noKind = await notice('b.example', { v: 1, kind: 'reaction', group: 'g1-k', host: 'b.example', guests: [gus.pk], data: { id: 'm-1' } });
+    assert(noKind.status === 400 && noKind.body?.code === 'bad_notice' && heldCount(gus, 'b.example', 'g1-k') === 0,
+        `1x. a kind that is no notice: 400 bad_notice, nothing held (got ${noKind.status} ${noKind.body?.code})`);
 
     // ── 2. Only that guest's ────────────────────────────────────────────────────────────────
     console.log('\n2. Nothing reaches a device that isn\'t that guest\'s');
@@ -496,8 +514,9 @@ async function main(): Promise<void> {
                 const rowAt = (i: number) => (i === 0 ? t0 : t0 + Math.floor(i * outage * MIN / n) + 30_000);
                 const queue = (i: number, t: number) => {
                     if (side === 'host fan-out') {
+                        // A line's takedown: the one kind that goes whatever this server holds (a line once down stays down: the send rule, #3233 round 5).
                         db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)')
-                            .run(crypto.randomUUID(), 'g7', far, 'line', JSON.stringify({ v: 1, kind: 'line', group: 'g7', host: 'a.example', guests: [gus.pk], data: { i } }), t, t);
+                            .run(crypto.randomUUID(), 'g7', far, 'edit', JSON.stringify({ v: 1, kind: 'edit', group: 'g7', host: 'a.example', guests: [gus.pk], data: { id: `l7-${i}`, action: 'removed', by: 'author', i } }), t, t);
                     } else {
                         db.prepare(`INSERT INTO group_guest_sent (sender_key, item_id, kind, host, group_id, state, item, attempts, next_try_at, created_at, updated_at)
                                     VALUES (?, ?, 'group-line', ?, 'g7', 'queued', ?, 0, ?, ?, ?)`)
@@ -750,8 +769,9 @@ async function main(): Promise<void> {
             const t = simNow;
             const queue11 = (h: string, i: number, attempts: number, nextTry: number, created: number) => {
                 if (side === 'host fan-out') {
+                    // A line's takedown: the one kind that goes whatever this server holds (a line once down stays down: the send rule, #3233 round 5).
                     db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-                        .run(crypto.randomUUID(), 'g11', h, 'line', JSON.stringify({ v: 1, kind: 'line', group: 'g11', host: 'a.example', guests: [gus.pk], data: { i } }), attempts, nextTry, created);
+                        .run(crypto.randomUUID(), 'g11', h, 'edit', JSON.stringify({ v: 1, kind: 'edit', group: 'g11', host: 'a.example', guests: [gus.pk], data: { id: `l11-${i}`, action: 'removed', by: 'author', i } }), attempts, nextTry, created);
                 } else {
                     const id = `c11-${row11}-${h[0]}-${String(i).padStart(3, '0')}`;
                     // Each row larger than half a request, so each goes in a request of its own.
@@ -958,8 +978,9 @@ async function main(): Promise<void> {
         flushGuestOutbox: {
             seed: async () => {
                 const id = crypto.randomUUID(), g = `g13-flush-${++n13}`, t = Date.now();
+                // A line's takedown: the one kind that goes whatever this server holds (a line once down stays down: the send rule, #3233 round 5).
                 db.prepare('INSERT INTO group_guest_outbox (id, group_id, home, kind, body, attempts, next_try_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)')
-                    .run(id, g, 'q.example', 'line', JSON.stringify({ v: 1, kind: 'line', group: g, host: 'a.example', guests: [gus.pk], data: {} }), t, t);
+                    .run(id, g, 'q.example', 'edit', JSON.stringify({ v: 1, kind: 'edit', group: g, host: 'a.example', guests: [gus.pk], data: { id: `l13-${n13}`, action: 'removed', by: 'author' } }), t, t);
                 return { who: gus, g, extra: id };
             },
             run: (t) => hostSide.flushGuestOutbox(t),
@@ -1011,6 +1032,289 @@ async function main(): Promise<void> {
                 assert(did, `13. ${name} x main: the job does its work (so the standby's row above can fail; copied tables changed: ${changed.join(', ') || 'none'})`);
             }
         }
+    }
+
+    // ── 14. A complaint about a member's line as a guest ────────────────────────────────────
+    console.log('\n14. Close the class: a complaint from a group\'s host about a member\'s line there -> filed here, or the one 422');
+    /** A server brings a complaint to a.example, in a request it signed (engine/relay-complaint.ts). */
+    async function complain(origin: string, c: Record<string, unknown>): Promise<Res> {
+        const k = hostKey[origin];
+        const body = JSON.stringify({ complaint: { v: 1, id: crypto.randomUUID(), reason: 'spam or scam', words: 'what the line said', at: Date.now(), ...c } });
+        const headers = await buildNodeRequestHeaders({ method: 'POST', url: 'https://a.example/api/relay/complaint', body, origin, keyHex: k.pk, sign: signerOf(k.seed) });
+        const res = await suiteFetch(`${BASE}/api/relay/complaint`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body });
+        let parsed: any = null;
+        try { parsed = await res.json(); } catch { /* none */ }
+        return { status: res.status, body: parsed };
+    }
+    const filedFrom = (origin: string, itemId: string) => db.prepare('SELECT target_pubkey, reporter_pubkey, disclosure FROM abuse_reports WHERE reporter_pubkey = ? AND target_message_id = ?')
+        .all(`community:${origin}`, itemId) as Array<{ target_pubkey: string; reporter_pubkey: string; disclosure: string }>;
+    const G14 = 'g14';
+    setLink(gus, 'b.example', G14, 'in');
+    setLink(gia, 'b.example', G14, 'in');
+    const lineItem = (who: Id) => {
+        const id = crypto.randomUUID();
+        return item(who, 'group-line', G14, JSON.stringify({ v: 1, ciphertext: 'c', nonce: 'group-xc20p-v1:n', metadata: { epoch: 1 }, clientId: id }), 'b.example', id);
+    };
+    // Gus's lines in each state the host's answer leaves them in.
+    const taken = await lineItem(gus);
+    const sTaken = await send(gus, [taken]);
+    const refusedItem = await lineItem(gus);
+    refuseIds.set(refusedItem.envelope.itemId, 'group-refused');
+    const sRefused = await send(gus, [refusedItem]);
+    const failedItem = await lineItem(gus);
+    script.set('b.example', ['400']);
+    const sFailed = await send(gus, [failedItem]);
+    const giaItem = await lineItem(gia);
+    const sGia = await send(gia, [giaItem]);
+    // Last, and b.example stays down through the table: any send to it would take the whole queue.
+    const queuedItem = await lineItem(gus);
+    failing.add('b.example');
+    const sQueued = await send(gus, [queuedItem]);
+    const stateOfItem = (it: { envelope: { itemId: string } }) => db.prepare('SELECT state FROM group_guest_sent WHERE item_id = ?').pluck().get(it.envelope.itemId);
+    const setup14 = sTaken.status === 200 && sRefused.status === 200 && sFailed.status === 200 && sQueued.status === 200 && sGia.status === 200
+        && stateOfItem(taken) === 'sent' && stateOfItem(refusedItem) === 'refused' && stateOfItem(failedItem) === 'failed' && stateOfItem(queuedItem) === 'queued' && stateOfItem(giaItem) === 'sent';
+    assert(setup14, `14a. Gus's lines to b.example: one taken, one refused, one failed, one still queued; Gia's taken (got ${[taken, refusedItem, failedItem, queuedItem, giaItem].map(stateOfItem).join(', ')})`);
+    type Line14 = 'taken' | 'still queued' | 'refused' | 'failed' | "another member's id" | 'no such line';
+    const LINES14: Array<[Line14, () => { member: string; itemId: string }]> = [
+        ['taken', () => ({ member: gus.pk, itemId: taken.envelope.itemId })],
+        ['still queued', () => ({ member: gus.pk, itemId: queuedItem.envelope.itemId })],
+        ['refused', () => ({ member: gus.pk, itemId: refusedItem.envelope.itemId })],
+        ['failed', () => ({ member: gus.pk, itemId: failedItem.envelope.itemId })],
+        ["another member's id", () => ({ member: gus.pk, itemId: giaItem.envelope.itemId })],
+        ['no such line', () => ({ member: gus.pk, itemId: crypto.randomUUID() })],
+    ];
+    const SIGNERS14 = ['b.example', 'd.example'] as const;
+    /** Filed here: only the line the group's host took, complained of by that host. */
+    const FILED14: Record<Line14, Record<(typeof SIGNERS14)[number], boolean>> = {
+        taken: { 'b.example': true, 'd.example': false },
+        'still queued': { 'b.example': false, 'd.example': false },
+        refused: { 'b.example': false, 'd.example': false },
+        failed: { 'b.example': false, 'd.example': false },
+        "another member's id": { 'b.example': false, 'd.example': false },
+        'no such line': { 'b.example': false, 'd.example': false },
+    };
+    let rows14 = 0;
+    for (const [line, of] of LINES14) for (const signer of SIGNERS14) {
+        rows14++;
+        const c = of();
+        const r = await complain(signer, c);
+        const rows = filedFrom(signer, c.itemId);
+        const want = FILED14[line][signer];
+        const ok = want
+            ? r.status === 202 && r.body?.received === true && rows.length === 1 && rows[0].target_pubkey === gus.pk
+                && JSON.parse(rows[0].disclosure).kind === 'relay-complaint' && JSON.parse(rows[0].disclosure).from === signer
+            : r.status === 422 && r.body?.code === 'not_taken' && rows.length === 0;
+        assert(ok, `14. ${line} x signed by ${signer}: ${want ? 'filed once here, 202' : '422 not_taken, nothing filed'} (got ${r.status} ${r.body?.code ?? ''}, ${rows.length} filed)`);
+    }
+    assert(rows14 === LINES14.length * SIGNERS14.length && Object.keys(FILED14).length === LINES14.length, `14z. the table has a row for every line and every signer (${rows14} rows)`);
+    const again14 = await complain('b.example', { member: gus.pk, itemId: taken.envelope.itemId });
+    assert(again14.status === 202 && filedFrom('b.example', taken.envelope.itemId).length === 1, `14y. the same complaint again: 202, still one report (got ${again14.status})`);
+    failing.delete('b.example');
+
+    // ── 15. A takedown reaches every copy held here ─────────────────────────────────────────
+    console.log('\n15. Close the class: every takedown x where the held copy is -> no words or photo served or kept, the tombstone served');
+    const TK15 = ['author delete', 'edited, then author delete', 'convenor removal', 'account deleted', 'group closed'] as const;
+    const CS15 = ['held, no device has it', 'one device has it, another not', 'every device has it'] as const;
+    type Tk15 = (typeof TK15)[number];
+    /** The tombstone each device is served after the takedown, whatever the copy state. */
+    const TOMB15: Record<Tk15, string> = {
+        'author delete': 'removed:author', 'edited, then author delete': 'removed:author', 'convenor removal': 'removed:convenor',
+        'account deleted': 'removed:author', 'group closed': 'group-closed',
+    };
+    /** A member here in a group at b.example, two devices listed, and a photo line of Ana's held for them. */
+    async function held15(label: string) {
+        const who = addLocal(label);
+        const g = `g15-${label}`;
+        setLink(who, 'b.example', g, 'in');
+        const phone = device(), tablet = device();
+        await fetchGroup(who, phone);
+        await fetchGroup(who, tablet);
+        const id = crypto.randomUUID();
+        const mark = (k: string) => `${k}-${label}-${crypto.randomBytes(6).toString('hex')}`;
+        const marks = { words: mark('words'), photo: mark('photo'), edited: mark('edited'), edited2: mark('edited2') };
+        const line = { id, author: ana.pk, ciphertext: marks.words, nonce: 'group-xc20p-v1:n', type: 'image', metadata: { epoch: 1 }, timestamp: new Date().toISOString(),
+            attachment: { data: `${marks.photo}${'x'.repeat(2000)}`, nonce: 'n', mime: 'image/jpeg' } };
+        const r = await notice('b.example', { v: 1, kind: 'line', group: g, host: 'b.example', guests: [who.pk], data: line });
+        const tell = (kind: string, data: Record<string, unknown>) => notice('b.example', { v: 1, kind, group: g, host: 'b.example', guests: [who.pk], data });
+        const editOf = (ciphertext: string) => ({ id, action: 'edited', author: ana.pk, ciphertext, nonce: 'group-xc20p-v1:e', metadata: { epoch: 1, sender: ana.pk }, editedAt: new Date().toISOString() });
+        const itemsOn = async (dev: string) => ((await fetchGroup(who, dev)).body?.items ?? []).filter((i: any) => i.group === g);
+        const confirm = async (dev: string) => call('POST', who, '/api/mail/group/confirm', { ids: (await itemsOn(dev)).map((i: any) => i.id), device: dev });
+        const bodies = () => db.prepare('SELECT body FROM group_guest_mail WHERE member = ?').pluck().all(who.pk) as string[];
+        return { who, g, id, phone, tablet, marks, ok: r.status === 202 && heldCount(who, 'b.example', g) === 1, tell, editOf, itemsOn, confirm, bodies };
+    }
+    let r15 = 0;
+    for (const tk of TK15) for (const cs of CS15) {
+        const n15 = ++r15;
+        const h = await held15(`t15-${n15}`);
+        if (cs !== 'held, no device has it') await h.confirm(h.phone);
+        if (cs === 'every device has it') await h.confirm(h.tablet);
+        const heldBefore = heldCount(h.who, 'b.example', h.g);
+        // The takedown as the host sends it (engine/group-guests.ts: queueLineChange; takeDownLinesOf, by the author; closeGroupGuests).
+        if (tk === 'edited, then author delete') await h.tell('edit', h.editOf(h.marks.edited));
+        if (tk === 'group closed') await h.tell('removed', { why: 'group-closed' });
+        else await h.tell('edit', { id: h.id, action: 'removed', by: tk === 'convenor removal' ? 'convenor' : 'author' });
+        const carries = (s: string) => [h.marks.words, h.marks.photo, h.marks.edited].some((k) => s.includes(k));
+        const kept = h.bodies().filter(carries).length;
+        const onPhone = await h.itemsOn(h.phone), onTablet = await h.itemsOn(h.tablet);
+        const served = [...onPhone, ...onTablet].filter((i: any) => carries(JSON.stringify(i.data))).length;
+        const tombOf = (items: any[]) => {
+            const t = items.filter((i) => (i.kind === 'edit' && i.data?.id === h.id) || i.kind === 'removed');
+            return !t.length ? 'none' : t.length > 1 ? `${t.length} items` : t[0].kind === 'removed' ? (t[0].data.why === 'group-closed' ? 'group-closed' : `removed ${t[0].data.why}`)
+                : t[0].data.action === 'removed' ? `removed:${t[0].data.by}` : `edit ${t[0].data.action}`;
+        };
+        const gotTomb = tombOf(onPhone) === tombOf(onTablet) ? tombOf(onPhone) : `phone ${tombOf(onPhone)}, tablet ${tombOf(onTablet)}`;
+        const setupOk = h.ok && heldBefore === (cs === 'every device has it' ? 0 : 1);
+        assert(setupOk && kept === 0 && served === 0 && gotTomb === TOMB15[tk],
+            `15. ${tk} x ${cs}: no words or photo served (${served}) or kept (${kept}), each device served the tombstone ${TOMB15[tk]} (got ${gotTomb}${setupOk ? '' : ', setup failed'})`);
+    }
+    assert(r15 === TK15.length * CS15.length && Object.keys(TOMB15).length === TK15.length, `15z. the table has a row for every takedown and every copy state (${r15} rows)`);
+
+    // Edits: each device is served only the newest words.
+    const ES15 = ['edit while held', 'edit twice while held', 'edit after one device has it', 'edit after every device has it'] as const;
+    const WORDS15: Record<(typeof ES15)[number], string> = {
+        'edit while held': 'phone: line(newest) edit(newest); tablet: line(newest) edit(newest)',
+        'edit twice while held': 'phone: line(newest) edit(newest); tablet: line(newest) edit(newest)',
+        'edit after one device has it': 'phone: edit(newest); tablet: line(newest) edit(newest)',
+        'edit after every device has it': 'phone: edit(newest); tablet: edit(newest)',
+    };
+    let e15 = 0;
+    for (const es of ES15) {
+        const h = await held15(`e15-${++e15}`);
+        if (es === 'edit after one device has it' || es === 'edit after every device has it') await h.confirm(h.phone);
+        if (es === 'edit after every device has it') await h.confirm(h.tablet);
+        const edits = es === 'edit twice while held' ? [h.marks.edited, h.marks.edited2] : [h.marks.edited];
+        for (const c of edits) await h.tell('edit', h.editOf(c));
+        const newest = edits[edits.length - 1];
+        const which = (c: unknown) => (c === newest ? 'newest' : c === h.marks.words ? 'first words' : c === h.marks.edited ? 'older edit' : 'other');
+        const words = (items: any[]) => items.map((i) => `${i.kind}(${which(i.data?.ciphertext)})`).join(' ');
+        const got = `phone: ${words(await h.itemsOn(h.phone))}; tablet: ${words(await h.itemsOn(h.tablet))}`;
+        const keptOld = h.bodies().filter((b) => b.includes(h.marks.words) || (newest !== h.marks.edited && b.includes(h.marks.edited))).length;
+        assert(h.ok && keptOld === 0 && got === WORDS15[es], `15e. ${es}: each device is served only the newest words: ${WORDS15[es]} (got ${got}; older words kept ${keptOld})`);
+    }
+
+    // Out of the group: nothing of it held is served after, so a takedown later has no copy here to miss.
+    const OUT15 = ['their leave taken', 'removed by a convenor', "removed by the owners' switch", 'group closed'] as const;
+    for (const out of OUT15) {
+        const h = await held15(`o15-${OUT15.indexOf(out) + 1}`);
+        if (out === 'their leave taken') await send(h.who, [await item(h.who, 'group-leave', h.g, JSON.stringify({ v: 1 }))]);
+        else await h.tell('removed', { why: out === 'removed by a convenor' ? 'removed' : out === 'group closed' ? 'group-closed' : 'closed' });
+        const carries = (s: string) => s.includes(h.marks.words) || s.includes(h.marks.photo);
+        const served = (await h.itemsOn(h.tablet)).filter((i: any) => carries(JSON.stringify(i.data))).length;
+        const state = linkOf(h.who, 'b.example', h.g)?.state;
+        assert(h.ok && state === (out === 'their leave taken' ? 'left' : 'removed') && served === 0 && h.bodies().filter(carries).length === 0,
+            `15w. ${out}: the link ${state}, and no line of the group held for them is served (${served}) or kept`);
+    }
+
+    // A host the owners blocked since: its takedown still drops what it brought, and nothing new is held from it.
+    const hb = await held15('b15');
+    addConnector('b.example:4001', 'blocked', 'Blocked', 'https://b.example', false);
+    await hb.tell('edit', { id: hb.id, action: 'removed', by: 'convenor' });
+    const blockedKept = hb.bodies().filter((b) => b.includes(hb.marks.words) || b.includes(hb.marks.photo)).length;
+    const blockedHeld = heldCount(hb.who, 'b.example', hb.g);
+    removeConnector('b.example:4001');
+    assert(hb.ok && blockedKept === 0 && blockedHeld === 0,
+        `15v. a host blocked since its line was held: its takedown drops the line, and holds nothing (kept ${blockedKept}, held ${blockedHeld})`);
+
+    // ── 15c. The copy rule (#3233 round 3): a takedown x the copy state of this server ───────
+    // group_guest_mail is this server's own (`local`): a standby keeps it through every copy, and the host's takedowns go to
+    // the server that took over, or reach a standby that answers 202 and takes nothing. A held line is served only while this
+    // server has been main since it was held: nothing of it is served or kept after a take-over and a take-back.
+    console.log('\n15c. Close the class: every takedown x this server\'s copy state -> no words or photo served or kept');
+    const COPY15 = ['stays main', 'a standby when the takedown came, then promoted', 'started as a standby (no role change here), its sweep ran, then promoted'] as const;
+    const heldRows15 = (who: Id) => db.prepare('SELECT * FROM group_guest_mail WHERE member = ?').all(who.pk) as Array<Record<string, unknown>>;
+    const putBack15 = (rows: Array<Record<string, unknown>>) => {
+        for (const r of rows) {
+            db.prepare(`INSERT OR IGNORE INTO group_guest_mail (${Object.keys(r).join(', ')}) VALUES (${Object.keys(r).map(() => '?').join(', ')})`).run(...Object.values(r));
+        }
+    };
+    let c15 = 0;
+    for (const tk of TK15) for (const cp of COPY15) {
+        const n = ++c15;
+        const h = await held15(`c15-${n}`);
+        await h.confirm(h.phone);
+        const carries = (s: string) => [h.marks.words, h.marks.photo, h.marks.edited].some((k) => s.includes(k));
+        const takedown = async () => {
+            if (tk === 'edited, then author delete') await h.tell('edit', h.editOf(h.marks.edited));
+            if (tk === 'group closed') return h.tell('removed', { why: 'group-closed' });
+            return h.tell('edit', { id: h.id, action: 'removed', by: tk === 'convenor removal' ? 'convenor' : 'author' });
+        };
+        let servedOnStandby = 0, keptAfterSweep = 0, answer = 0;
+        if (cp === 'stays main') {
+            answer = (await takedown()).status;
+        } else if (cp === 'a standby when the takedown came, then promoted') {
+            setNodeRole('backup');
+            try { answer = (await takedown()).status; } finally { setNodeRole('primary'); }
+        } else {
+            // A server that started as a standby with these held (its own table, kept through the copy): no role change in
+            // this process, so the rows are put back as the standby's start finds them.
+            const rows = heldRows15(h.who);
+            setNodeRole('backup');
+            try {
+                putBack15(rows);
+                answer = 202;     // the takedown went to the server that took over
+                servedOnStandby = (await h.itemsOn(h.tablet)).filter((i: any) => carries(JSON.stringify(i.data))).length;
+                home.sweepGroupGuestMail(Date.now());
+                keptAfterSweep = h.bodies().filter(carries).length;
+            } finally { setNodeRole('primary'); }
+        }
+        const kept = h.bodies().filter(carries).length;
+        const served = (await h.itemsOn(h.tablet)).filter((i: any) => carries(JSON.stringify(i.data))).length;
+        assert(h.ok && answer === 202 && served === 0 && kept === 0 && servedOnStandby === 0 && keptAfterSweep === 0,
+            `15c. ${tk} x ${cp}: no words or photo served to the device that hadn't fetched it (${served}${cp.startsWith('started') ? `; on the standby ${servedOnStandby}` : ''}) or kept (${kept}${cp.startsWith('started') ? `; after the standby's sweep ${keptAfterSweep}` : ''})${h.ok ? '' : ', setup failed'}`);
+    }
+    assert(c15 === TK15.length * COPY15.length, `15cz. the table has a row for every takedown and every copy state (${c15} rows)`);
+    // No over-blocking: a line held after the promotion is served; a standby round trip keeps the invitations, rosters, epochs.
+    const p15 = await held15('c15-promoted');
+    setNodeRole('backup');
+    setNodeRole('primary');
+    const line15c = { id: crypto.randomUUID(), author: ana.pk, ciphertext: `after-promotion-${crypto.randomBytes(6).toString('hex')}`, nonce: 'group-xc20p-v1:n', type: 'text', metadata: { epoch: 1 }, timestamp: new Date().toISOString() };
+    const tookAfter = await p15.tell('line', line15c);
+    const servedAfter = (await p15.itemsOn(p15.tablet)).filter((i: any) => i.kind === 'line' && i.data?.ciphertext === line15c.ciphertext).length;
+    const epochKept = await (async () => {
+        const who = addLocal('c15-epoch'), g = 'g15-c15-epoch';
+        setLink(who, 'b.example', g, 'in');
+        await notice('b.example', { v: 1, kind: 'epoch', group: g, host: 'b.example', guests: [who.pk], data: DATA.epoch });
+        setNodeRole('backup');
+        home.sweepGroupGuestMail(Date.now());
+        setNodeRole('primary');
+        return heldCount(who, 'b.example', g);
+    })();
+    assert(p15.ok && tookAfter.status === 202 && servedAfter === 1 && epochKept === 1,
+        `15c. no over-blocking: a line held after a take-back is served (${servedAfter}), and an epoch held before it is kept (${epochKept})`);
+
+    // An edit refused (the host's allowance full): the older edit held stays, so a device that has the line keeps its words.
+    const f15 = await held15('c15-full');
+    await f15.confirm(f15.phone);
+    await f15.confirm(f15.tablet);
+    await f15.tell('edit', f15.editOf(f15.marks.edited));
+    await f15.confirm(f15.phone);
+    const later = Date.now() + 24 * 60 * MIN;
+    const fill = db.prepare('INSERT INTO group_guest_mail (id, member, host, group_id, kind, body, bytes, answered, received_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)');
+    db.transaction(() => { for (let i = 0; i < HOST_ITEMS; i++) fill.run(crypto.randomUUID(), f15.who.pk, 'b.example', 'g15-c15-filler', 'epoch', '{}', 2, later + i); })();
+    const refusedEdit = await f15.tell('edit', f15.editOf(f15.marks.edited2));
+    const onTablet15 = (await f15.itemsOn(f15.tablet)).map((i: any) => `${i.kind}(${i.data?.ciphertext === f15.marks.edited ? 'older edit' : i.data?.ciphertext === f15.marks.edited2 ? 'newest' : 'other'})`).join(' ');
+    db.prepare("DELETE FROM group_guest_mail WHERE member = ? AND group_id = 'g15-c15-filler'").run(f15.who.pk);
+    assert(f15.ok && refusedEdit.status === 202 && onTablet15 === 'edit(older edit)',
+        `15c. an edit not held (the host's allowance full): the tablet, which has the line, is served the older edit's words, not left on the first (got ${onTablet15 || 'nothing'})`);
+
+    // 15d (#3233 round 4). Nothing held past MAIL_HELD_DAYS is served, swept yet or not (a server off for a month, back before
+    // its first sweep): the host offers a takedown that long and a day more (group-guests.ts guestRowKeptMs), so whatever is
+    // still served here can still be taken down.
+    const { MAIL_HELD_DAYS: HELD15 } = await import('./engine/relay-mail.js');
+    const DAY15 = 24 * 60 * MIN;
+    const AGE15: Array<[string, number, number]> = [
+        [`${HELD15 - 1} days`, (HELD15 - 1) * DAY15, 1],
+        [`${HELD15} days less a minute`, HELD15 * DAY15 - MIN, 1],
+        [`${HELD15} days and a minute, not swept yet`, HELD15 * DAY15 + MIN, 0],
+    ];
+    let a15 = 0;
+    for (const [label, age, expected] of AGE15) {
+        const h = await held15(`d15-${++a15}`);
+        db.prepare('UPDATE group_guest_mail SET received_at = ? WHERE member = ?').run(Date.now() - age, h.who.pk);
+        const served = (await h.itemsOn(h.phone)).filter((i: any) => i.kind === 'line' && i.data?.id === h.id).length;
+        const stillHeld = heldCount(h.who, 'b.example', h.g);
+        assert(h.ok && served === expected && stillHeld === 1,
+            `15d. a line held ${label}: served ${served} (expected ${expected}), still held here until the sweep (${stillHeld})`);
     }
 
     console.log(`\n${passed}/${run} passed`);

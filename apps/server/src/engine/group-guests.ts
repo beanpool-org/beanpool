@@ -13,19 +13,40 @@
  *   in    their home brings their signed items to POST /api/relay/mail (engine/relay-mail.ts), addressed `group:<id>` here.
  *         Each passed core's envelope checks there first (its form, the home rule, for here, its payload, the signature), so
  *         a guest's line with a bad envelope is refused before it reaches this file. Then (takeGuestItem):
- *           group-invite  their answer to an invitation: `{"v":1,"answer":"yes"}` goes `in`, `"no"` goes `left`
+ *           group-invite  their answer to an invitation: `{"v":1,"answer":"yes"}` goes `in`, `"no"` goes `left`;
+ *                         a no from a guest already `in` is their leave (their home showed the invitation again after a
+ *                         take-over or a day of lost answers, and they said no: #3217 round 3), a yes from one `in` received
  *           group-leave   they leave: `left`
  *           group-line    a sealed line, as a member posts one (engine/group-thread.ts postGroupThreadMessage), under the
- *                         current epoch: stored as theirs, then fanned out
+ *                         current epoch: stored as theirs, UNDER ITS ITEM'S ID (a payload naming another id is refused), so
+ *                         a report of it names the one item their home sent (group-chat-report.ts, relay-complaint.ts),
+ *                         then fanned out
  *           group-epoch   a key epoch they made (on joining, or a rotation): stored as a member's is (engine/group-keys.ts)
- *         An item from anyone who is not that group's guest in that state, from another home than the one invited, or with
- *         the owners' switch off is dropped and answered as received, as the mailbox drops (nothing tells a server who is in
- *         a group here). An in-guest's line refused for its epoch answers `epoch-stale`, any other refusal of theirs
+ *         An item from anyone who is not that group's guest in that state, from another home than the one invited, from a
+ *         home the owners blocked (connector-manager.ts isServerBlocked), to a group its members closed, or with the owners'
+ *         switch off is dropped and answered as received, as the mailbox drops (nothing tells a server who is in a group
+ *         here). An in-guest's line refused for its epoch answers `epoch-stale`, any other refusal of theirs
  *         `group-refused`: they are in the group, so that tells them nothing new.
  *   out   this server tells each guest's home in a request it signs (engine/node-key.ts), to POST /api/relay/group there
- *         (GROUP_GUEST_PATH), queued in group_guest_outbox and tried again with backoff for a day. ONE request per community
+ *         (GROUP_GUEST_PATH), queued in group_guest_outbox and tried again with backoff for a day; a row that only takes
+ *         away (a line's takedown, a removal) for as long as the home may still hold what it takes away, MAIL_HELD_DAYS
+ *         and a day (guestRowKeptMs), and it goes even with the switch off or the group closed. ONE request per community
  *         for each thing told, naming the guests there in it, never one per guest: an invitation, the roster at every
- *         change of it, each new line, each new epoch (with only that home's guests' wraps), a removal. Each home is sent
+ *         change of it, each new line, each line edited or taken down (`edit`: its author's edit or delete, a convenor's
+ *         removal), each new epoch (with only that home's guests' wraps), a removal. Never to a home the owners blocked
+ *         (cross-chat design §4.2 "Caps"): nothing is queued for it, and what was queued before the block is dropped
+ *         unsent. TAKEDOWNS (queueLineChange): a line taken down (its author's delete, a convenor's removal, its author's
+ *         account deleted: takeDownLinesOf) withdraws every copy of it still queued here, its line and its edits, for
+ *         every home, whoever is a guest now; a group closed withdraws every line of it still queued (closeGroupGuests);
+ *         an edit rewrites the words of the line still queued and withdraws an older edit, so only the newest words go.
+ *         A send reads each row as it is when its turn comes (sendToHome), so a row withdrawn or rewritten meanwhile goes
+ *         as the table says; the one row already on the wire is followed by the takedown or edit, queued behind it. THE
+ *         SEND RULE (SEND_RULES, #3233 round 5): what changed while a row waited, here or on the server that took over
+ *         (whose writes this server's copy carries), is checked as its turn comes, one rule for each kind, and a row goes
+ *         only while what it says is still true here, naming only the guests it may still name: a line or an edit's new
+ *         words while the line stands, to guests still in, with its words now; a takedown always; a removal naming only
+ *         the guests not in here now; an invitation to guests still invited; a roster while it is still the chat's; an
+ *         epoch while it is still this group's, to guests still in. Each home is sent
  *         to on its own (flushGuestOutbox): one that doesn't answer holds up no other, and a row queued while its home is
  *         being sent to goes as soon as that send ends. QUEUE ORDER: for each home, rows go out strictly oldest first,
  *         always (an invitation, a removal and a roster carry no time, so the home can't put them back in order). A new
@@ -56,7 +77,11 @@
  * stale, or opens the current key from the wraps and sends the line again under it.
  *
  * **Caps** (design §4.2): GROUP_GUESTS_MAX invited or in a group; GUEST_MEDIA_BYTES_DAY of photos and voice a day for each
- * guest at this server (members keep their own budget).
+ * guest at this server (members keep their own budget); no invitation to, and no fan-out to, a server the owners blocked.
+ *
+ * **A group its members close** (state-engine.ts closeGroupByVote, the one writer of group_closures) takes its guests out
+ * in the same transaction (closeGroupGuests): every guest invited or in is `removed` and their home told (`why:
+ * 'group-closed'`), so the home's link goes `removed` too. A closed group takes no invitation and nothing from a guest.
  *
  * **The owners' switch** (`groupGuests`, config/node-profile.ts; guests ride the mailbox, so `outsideMessages` too). Off:
  * no invitation is made or taken and nothing from a guest goes in; every guest invited or in is removed and their home
@@ -70,14 +95,17 @@ import crypto from 'node:crypto';
 import { addressCardVerifies, word, type RelayItem } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
-import { getNodeRole } from '../config/node-role.js';
-import { isNodeMember, postGuestGroupLine } from '../state-engine.js';
+import { getNodeRole, STANDBY_WRITE_MESSAGE } from '../config/node-role.js';
+import { GROUP_CLOSED, groupClosedAt, isNodeMember, postGuestGroupLine } from '../state-engine.js';
+import { isServerBlocked } from '../connector-manager.js';
 import { callsignOf, groupChatRole, loadGroupForThread } from './group-thread.js';
 import { GroupKeyError, currentGroupEpoch, groupKeyRoster, markGroupEpochStale, storeGroupEpoch } from './group-keys.js';
 import { isOwnNodeHome, ownNodeHome } from './node-key.js';
 import { forwardSigned } from './relay-outbox.js';
 import { getImageStore } from '../storage/image-store.js';
 import { attachmentDataOf } from '../storage/image-columns.js';
+import { blankedWithAccount } from './message-tombstone.js';
+import { MAIL_HELD_DAYS } from './relay-mail.js';
 import { logger } from '../logger.js';
 
 const DAY_MS = 24 * 60 * 60_000;
@@ -87,9 +115,31 @@ export const GROUP_GUESTS_MAX = 30;
 export const GUEST_MEDIA_BYTES_DAY = 20 * 1024 * 1024;
 /** Where a guest's home takes what a group hosted elsewhere tells it (engine/node-signature.ts NODE_SIGNED_PATHS there). */
 export const GROUP_GUEST_PATH = '/api/relay/group';
-/** The waits between tries of a request to a guest's home, and how long it is tried before it goes. */
+/** The waits between tries of a request to a guest's home, and how long a row that adds is tried before it goes. */
 export const GUEST_FANOUT_BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 2 * 60 * 60_000] as const;
 export const GUEST_FANOUT_QUEUE_MS = DAY_MS;
+
+/**
+ * Whether a row only TAKES AWAY what its home holds: a line's takedown (`edit`, `action: 'removed'`), or a guest's
+ * `removed` (any reason: a convenor's Remove, the owners' switch, the group closed), which drops every line of that group
+ * held for them there. Every other row adds: a line, an edit's new words, a roster, an invitation, an epoch.
+ */
+export function takesAway(kind: string, data: unknown): boolean {
+    return kind === 'removed' || (kind === 'edit' && (data as { action?: unknown } | null | undefined)?.action === 'removed');
+}
+
+/**
+ * How long a row is kept here and tried (#3233 round 4). A row that adds: GUEST_FANOUT_QUEUE_MS, then it goes unsent. A row
+ * that takes away: for as long as its home may still hold what it takes away, never shorter. The home holds a line, words
+ * and sealed photo or voice, until each device has it or MAIL_HELD_DAYS pass (group-guest-home.ts: its sweep drops it, and
+ * its fetch serves nothing older), and only a take-away drops it sooner; so a home down for a weekend, or a month, still
+ * hears it when it comes back. Plus GUEST_FANOUT_QUEUE_MS on top: a line on the wire as it was taken down lands at the home
+ * just after the takedown was queued, and the home counts its days by its own clock. Read when called, never at load:
+ * relay-mail.ts imports this file.
+ */
+export function guestRowKeptMs(kind: string, data: unknown): number {
+    return takesAway(kind, data) ? MAIL_HELD_DAYS * DAY_MS + GUEST_FANOUT_QUEUE_MS : GUEST_FANOUT_QUEUE_MS;
+}
 
 /**
  * After a failed try at `at` of a queue whose oldest row has used `attempts` steps and was due at `dueAt`: the steps and
@@ -134,6 +184,7 @@ export const GUEST_CARD_ERROR = word("That address card can't be read, or it was
 export const GUEST_CONVENOR_ERROR = word('Only a convenor can invite or remove guests.');
 export const GUEST_NOT_FOUND_ERROR = word('That person is not a guest in this group.');
 export const GUEST_NO_HOME_ERROR = word("This community's server knows none of its own names yet, so it can't reach another community.");
+export const GUEST_SERVER_BLOCKED_ERROR = word("This community's owners have blocked that person's community.");
 
 export class GroupGuestError extends Error {
     constructor(readonly status: 400 | 403 | 404 | 409 | 503, readonly code: string, message: string) {
@@ -197,9 +248,13 @@ export function listGroupGuests(groupId: string, viewer: string): GuestView[] {
  */
 export function inviteGroupGuest(groupId: string, actor: string, card: unknown): GuestView {
     if (!groupGuestsOn()) throw new GroupGuestError(403, 'guests_off', GUESTS_OFF_ERROR);
+    // group_guests is a copied table: a standby writes none of it, and tells no home (queueToHome).
+    if (getNodeRole() === 'backup') throw new GroupGuestError(503, 'standby', STANDBY_WRITE_MESSAGE);
     assertConvenor(groupId, actor);
     if (!addressCardVerifies(card)) throw new GroupGuestError(400, 'bad_card', GUEST_CARD_ERROR);
     if (isOwnNodeHome(card.home) || isNodeMember(card.key)) throw new GroupGuestError(400, 'is_member', GUEST_IS_MEMBER_ERROR);
+    if (isServerBlocked(card.home)) throw new GroupGuestError(403, 'server_blocked', GUEST_SERVER_BLOCKED_ERROR);
+    if (groupClosedAt(groupId)) throw new GroupGuestError(403, 'group_closed', GROUP_CLOSED);
     if (!ownNodeHome()) throw new GroupGuestError(503, 'no_home', GUEST_NO_HOME_ERROR);
     const view = db.transaction((): GuestView => {
         const had = guestRow(groupId, card.key);
@@ -225,6 +280,7 @@ export function inviteGroupGuest(groupId: string, actor: string, card: unknown):
  * the roster, so the epoch goes stale; their home is told (a removal naming them), and the other guests' homes the roster.
  */
 export function removeGroupGuest(groupId: string, actor: string, key: string): GuestView {
+    if (getNodeRole() === 'backup') throw new GroupGuestError(503, 'standby', STANDBY_WRITE_MESSAGE);
     assertConvenor(groupId, actor);
     const view = db.transaction((): GuestView => {
         const row = guestRow(groupId, key);
@@ -267,6 +323,32 @@ export function closeGuestsIfSwitchedOff(): number {
     return rows.length;
 }
 
+/**
+ * A group its members closed (state-engine.ts closeGroupByVote, inside its transaction): every guest invited or in is
+ * `removed`, and each home told in one request naming its guests there (`why: 'group-closed'`), so the home's link goes
+ * `removed` as at a convenor's Remove. The row stays, as every guest row does (a state moves); nothing more goes to or comes
+ * from them (takeGuestItem drops what a closed group's guest brings, inviteGroupGuest refuses), and no line of the group
+ * still queued here goes; a takedown still queued does (it only takes away). How many were removed.
+ */
+export function closeGroupGuests(groupId: string): number {
+    // Its lines go from its guests too: no copy still queued here goes, to any home, a guest's who left before included (the
+    // homes of those removed now drop what they hold of it at the removal: group-guest-home.ts dropHeldLines). A line's
+    // takedown still queued stays and goes (takesAway): a home whose guests aren't removed now gets no removal to drop it.
+    const withdraw = db.prepare('DELETE FROM group_guest_outbox WHERE id = ?');
+    for (const q of db.prepare("SELECT id, kind, body FROM group_guest_outbox WHERE group_id = ? AND kind IN ('line', 'edit')").all(groupId) as Array<{ id: string; kind: string; body: string }>) {
+        if (!takesAway(q.kind, noticeOf(q.body)?.data)) withdraw.run(q.id);
+    }
+    const rows = db.prepare("SELECT * FROM group_guests WHERE group_id = ? AND state IN ('invited', 'in')").all(groupId) as GuestRow[];
+    const byHome = new Map<string, string[]>();
+    for (const r of rows) {
+        setState(groupId, r.guest_key, 'removed');
+        byHome.set(r.home, [...(byHome.get(r.home) ?? []), r.guest_key]);
+    }
+    for (const [home, keys] of byHome) queueToHome(groupId, home, keys, 'removed', { why: 'group-closed' });
+    if (rows.length) flushSoon();
+    return rows.length;
+}
+
 // ── What a guest's home brings ─────────────────────────────────────────────────────────────
 
 /** What takeGuestItem answers for one item: null (received, said of everything else) or a refusal an in-guest may hear. */
@@ -298,15 +380,20 @@ export function takeGuestItem(item: RelayItem, now = Date.now()): GuestItemRefus
     if (!GUEST_ITEM_KINDS.has(env.kind) || !env.recipient.startsWith('group:') || !groupGuestsOn()) return null;
     const groupId = env.recipient.slice('group:'.length);
     const row = guestRow(groupId, env.senderKey);
-    if (!row || row.home !== env.senderHome) return null;
+    if (!row || row.home !== env.senderHome || isServerBlocked(row.home)) return null;
     try {
         loadGroupForThread(groupId);
     } catch {
         return null;
     }
+    if (groupClosedAt(groupId)) return null;
     const payload = parsePayload(item.payload);
     if (env.kind === 'group-invite') {
-        if (row.state !== 'invited' || payload?.v !== 1 || (payload.answer !== 'yes' && payload.answer !== 'no')) return null;
+        if (payload?.v !== 1 || (payload.answer !== 'yes' && payload.answer !== 'no')) return null;
+        // A no from a guest who is in: their home showed the invitation again (a take-over, or a day of lost answers) and
+        // they said no, so the home has them `declined`: taken as their leave, never kept in a roster they can't leave.
+        if (row.state === 'in' && payload.answer === 'no') return takeGuestLeave(groupId, row);
+        if (row.state !== 'invited') return null;
         // Their yes puts them in the roster: markGroupEpochStale sends it to every guest's home, theirs too (queueGroupRoster).
         db.transaction(() => {
             setState(groupId, row.guest_key, payload.answer === 'yes' ? 'in' : 'left');
@@ -317,12 +404,7 @@ export function takeGuestItem(item: RelayItem, now = Date.now()): GuestItemRefus
     }
     if (env.kind === 'group-leave') {
         if (row.state !== 'in' && row.state !== 'invited') return null;
-        db.transaction(() => {
-            setState(groupId, row.guest_key, 'left');
-            if (row.state === 'in') markGroupEpochStale(groupId);
-        })();
-        flushSoon();
-        return null;
+        return takeGuestLeave(groupId, row);
     }
     if (row.state !== 'in') return null;
     if (!payload) return 'group-refused';
@@ -331,11 +413,13 @@ export function takeGuestItem(item: RelayItem, now = Date.now()): GuestItemRefus
         const att = payload.attachment as { data?: unknown } | undefined;
         const bytes = att && typeof att.data === 'string' ? Buffer.byteLength(att.data, 'base64') : 0;
         if (bytes > 0 && guestMediaBytesToday(row.guest_key, now) + bytes > GUEST_MEDIA_BYTES_DAY) return 'group-refused';
+        // Stored under its item's id: the one id their home's record of it has (relay-complaint.ts receiveComplaint).
+        if (payload.clientId !== undefined && payload.clientId !== env.itemId) return 'group-refused';
         try {
             postGuestGroupLine(groupId, row.guest_key, {
                 ciphertext: payload.ciphertext as string, nonce: payload.nonce as string, metadata: payload.metadata,
                 type: payload.type, attachment: payload.attachment,
-            }, typeof payload.clientId === 'string' ? payload.clientId : undefined);
+            }, env.itemId);
         } catch (e) {
             refusal = e instanceof GroupKeyError && EPOCH_CODES.has(e.code) ? 'epoch-stale' : 'group-refused';
         }
@@ -355,9 +439,25 @@ export function takeGuestItem(item: RelayItem, now = Date.now()): GuestItemRefus
     return refusal;
 }
 
+/** A guest leaves (their leave, or a no once in): `left`; out of the roster when they were in, so the epoch goes stale. */
+function takeGuestLeave(groupId: string, row: GuestRow): null {
+    db.transaction(() => {
+        setState(groupId, row.guest_key, 'left');
+        if (row.state === 'in') markGroupEpochStale(groupId);
+    })();
+    flushSoon();
+    return null;
+}
+
 // ── What this server tells the guests' homes ───────────────────────────────────────────────
 
-type NoticeKind = 'invite' | 'roster' | 'line' | 'epoch' | 'removed';
+/**
+ * Every kind of row this server queues for a guest's home (group_guest_outbox.kind, its CHECK): the send rule is keyed by it
+ * (SEND_RULES), so a kind added here without its rule doesn't type-check, and test-group-guests §19f reads this list, the
+ * table's CHECK and every kind queueToHome is called with, and fails on a kind its table has no rows for.
+ */
+export const GUEST_NOTICE_KINDS = ['invite', 'roster', 'line', 'edit', 'epoch', 'removed'] as const;
+type NoticeKind = (typeof GUEST_NOTICE_KINDS)[number];
 
 /**
  * One request's body to one home: what it is, the group here, and the guests there it is for. It goes at the back of that
@@ -370,7 +470,7 @@ type NoticeKind = 'invite' | 'roster' | 'line' | 'epoch' | 'removed';
  */
 function queueToHome(groupId: string, home: string, guests: string[], kind: NoticeKind, data: unknown): void {
     const host = ownNodeHome();
-    if (!host || !guests.length || getNodeRole() === 'backup') return;
+    if (!host || !guests.length || getNodeRole() === 'backup' || isServerBlocked(home)) return;
     const body = JSON.stringify({ v: 1, kind, group: groupId, host, guests: [...guests].sort(), data });
     if (kind === 'roster') db.prepare("DELETE FROM group_guest_outbox WHERE group_id = ? AND home = ? AND kind = 'roster'").run(groupId, home);
     const now = Date.now();
@@ -454,7 +554,8 @@ export function fanOutGroupLine(groupId: string, messageId: string, author: stri
     if (!homes.size) return;
     const row = db.prepare('SELECT id, author_pubkey, ciphertext, nonce, type, metadata, timestamp FROM messages WHERE id = ? AND conversation_id = ?')
         .get(messageId, groupId) as { id: string; author_pubkey: string; ciphertext: string; nonce: string; type: string; metadata: string | null; timestamp: string } | undefined;
-    if (!row) return;
+    // Taken down before its turn came (the fan-out runs after the post's answer): its takedown said all there is to say.
+    if (!row || row.type === 'removed') return;
     const att = db.prepare('SELECT * FROM message_attachments WHERE message_id = ?').get(messageId) as any;
     const attachment = att ? { data: attachmentDataOf(att, getImageStore()), nonce: att.nonce, mime: att.mime } : undefined;
     const data = {
@@ -463,6 +564,102 @@ export function fanOutGroupLine(groupId: string, messageId: string, author: stri
     };
     for (const [home, keys] of homes) queueToHome(groupId, home, keys, 'line', data);
     flushSoon();
+}
+
+/**
+ * A line of the chat edited, or taken down (its author's delete, a convenor's removal: engine/group-thread.ts
+ * broadcastGroupChatUpdate, as members hear it): one `edit` request to each home with guests in, the line's author's
+ * included. An edit carries the line as members now read it (sealed again under the line's own epoch); a line taken down
+ * carries only its id and who took it down, as its tombstone says (`author` or `convenor`), never its words. An edit has
+ * its line's audience: only guests wrapped the line's epoch hear of it (as a member who joined since never does,
+ * group-thread.ts groupLineHearers), so a guest in now hears nothing of a line from before they were. Before either, every
+ * copy of the line still queued here is withdrawn or rewritten (queueLineChange).
+ */
+export function fanOutGroupLineChange(groupId: string, messageId: string): void {
+    if (queueLineChange(groupId, messageId)) flushSoon();
+}
+
+/**
+ * A member deleted their account (state-engine.ts purgeMemberSelf, inside its transaction, after message-tombstone.ts
+ * blankMessagesOf): each line of theirs it blanked, in a group that has had guests, is taken down for the guests as their
+ * own delete is (queueLineChange: its copies still queued here go, and each home with guests in who were wrapped its epoch
+ * is told, `by: 'author'`). A line already down before keeps the takedown it had. How many lines it took down.
+ */
+export function takeDownLinesOf(author: string): number {
+    // Read by blankedWithAccount, which never throws: a row's metadata that is no JSON must not fail the account's deletion.
+    const lines = (db.prepare(`SELECT id, conversation_id, metadata FROM messages WHERE author_pubkey = ? AND type = 'removed'
+                               AND conversation_id IN (SELECT DISTINCT group_id FROM group_guests)`)
+        .all(author) as Array<{ id: string; conversation_id: string; metadata: string | null }>).filter((l) => blankedWithAccount(l.metadata));
+    let told = false;
+    for (const l of lines) told = queueLineChange(l.conversation_id, l.id) || told;
+    if (told) flushSoon();
+    return lines.length;
+}
+
+/** A line's row, as a copy of it reads its words. */
+interface LineWords { type: string; ciphertext: string; nonce: string; metadata: string | null; edited_at: string | null }
+
+/** A line's words as members read them now: what every copy of it still queued carries (queueLineChange, copyOfLine). */
+function wordsNow(line: LineWords): { ciphertext: string; nonce: string; metadata: Record<string, unknown>; editedAt: string | null } {
+    return { ciphertext: line.ciphertext, nonce: line.nonce, metadata: parsePayload(line.metadata ?? '') ?? {}, editedAt: line.edited_at };
+}
+
+/** The rows still queued here, for any home, that carry line `id` of a group (a line and its edits name it as data.id). */
+function queuedCopiesOf(groupId: string, id: string, kind: 'line' | 'edit'): Array<{ id: string; kind: string; body: string }> {
+    return db.prepare("SELECT id, kind, body FROM group_guest_outbox WHERE group_id = ? AND kind = ? AND json_extract(body, '$.data.id') = ?")
+        .all(groupId, kind, id) as Array<{ id: string; kind: string; body: string }>;
+}
+
+/**
+ * THE TAKEDOWN RULE, in one place (#3233 round 2): what a change of a line says reaches every copy of it still queued here
+ * before anything is told. Taken down: every queued copy of the line and of its edits, for EVERY home, whoever is a guest
+ * now and whatever the switch says, is withdrawn, so its words and its sealed photo or voice never leave. Edited: the line
+ * still queued is rewritten with the newest words and an older edit still queued is withdrawn, so only the newest words
+ * go. A send reads each row when its turn comes (sendToHome), so it sends what this leaves; the one row already on the wire
+ * is followed by the change, queued behind it. Then the `edit` request to each home (fanOutGroupLineChange says who hears);
+ * a takedown whatever the switch says, and kept for as long as the home may hold the line (guestRowKeptMs, #3233 round 4).
+ * True when a request was queued.
+ */
+function queueLineChange(groupId: string, messageId: string): boolean {
+    const row = db.prepare('SELECT id, author_pubkey, ciphertext, nonce, type, metadata, edited_at FROM messages WHERE id = ? AND conversation_id = ?')
+        .get(messageId, groupId) as { id: string; author_pubkey: string; ciphertext: string; nonce: string; type: string; metadata: string | null; edited_at: string | null } | undefined;
+    if (!row || row.type === 'system') return false;
+    const meta = parsePayload(row.metadata ?? '') ?? {};
+    const removed = row.type === 'removed';
+    const withdraw = db.prepare('DELETE FROM group_guest_outbox WHERE id = ?');
+    if (removed) {
+        // Every copy that carries the line goes; a takedown already queued for it stays (it only takes away: takesAway).
+        for (const q of [...queuedCopiesOf(groupId, row.id, 'line'), ...queuedCopiesOf(groupId, row.id, 'edit')]) {
+            if (!takesAway(q.kind, noticeOf(q.body)?.data)) withdraw.run(q.id);
+        }
+    } else {
+        for (const q of queuedCopiesOf(groupId, row.id, 'edit')) withdraw.run(q.id);
+        const rewrite = db.prepare('UPDATE group_guest_outbox SET body = ? WHERE id = ?');
+        for (const q of queuedCopiesOf(groupId, row.id, 'line')) {
+            const body = JSON.parse(q.body) as { data: Record<string, unknown> };
+            body.data = { ...body.data, ...wordsNow(row) };
+            rewrite.run(JSON.stringify(body), q.id);
+        }
+    }
+    // A takedown is told whatever the switch says (it only takes away: takesAway): switched off and on again before the
+    // minute's timer removes the guests (closeGuestsIfSwitchedOff), their homes still hold the line and hear of nothing else.
+    if (!groupGuestsOn() && !removed) return false;
+    const homes = guestHomes(groupId);
+    if (!homes.size) return false;
+    const epoch = typeof meta.epoch === 'number' && Number.isSafeInteger(meta.epoch) ? meta.epoch : null;
+    if (epoch === null) return false;
+    const data = removed
+        ? { id: row.id, action: 'removed', by: meta.removedBy === row.author_pubkey ? 'author' : 'convenor' }
+        : { id: row.id, action: 'edited', author: row.author_pubkey, ciphertext: row.ciphertext, nonce: row.nonce, metadata: meta, editedAt: row.edited_at };
+    const wrapped = db.prepare('SELECT 1 FROM group_key_wraps WHERE group_id = ? AND epoch = ? AND recipient_pubkey = ? AND rejected_at IS NULL');
+    let queued = false;
+    for (const [home, keys] of homes) {
+        const heard = keys.filter((k) => wrapped.get(groupId, epoch, k));
+        if (!heard.length) continue;
+        queueToHome(groupId, home, heard, 'edit', data);
+        queued = true;
+    }
+    return queued;
 }
 
 /**
@@ -486,7 +683,128 @@ function flushSoon(): void {
     });
 }
 
-interface OutboxRow { id: string; kind: NoticeKind; body: string; attempts: number; next_try_at: number; created_at: number }
+interface OutboxRow { id: string; group_id: string; home: string; kind: NoticeKind; attempts: number; next_try_at: number; created_at: number }
+/** A queued row's body, as queueToHome wrote it: the guests it names and what it says. */
+interface Notice { guests?: unknown; data?: Record<string, unknown> }
+
+/** A queued row's body read back, or null when it is no JSON object (such a row never goes). */
+function noticeOf(body: string): Notice | null {
+    try {
+        const n = JSON.parse(body) as unknown;
+        return n && typeof n === 'object' && !Array.isArray(n) ? n as Notice : null;
+    } catch { return null; }
+}
+
+/** Where a guest a queued row names stands here now, or null when they are no guest of the group from that row's home. */
+function standingHere(groupId: string, home: string, key: string): GuestState | null {
+    const g = guestRow(groupId, key);
+    return g && g.home === home ? g.state : null;
+}
+
+/** The notice naming only `keep` of the guests it named: the same notice when that is all of them, null when it is none. */
+function narrowed(notice: Notice, named: readonly string[], keep: readonly string[]): Notice | null {
+    if (!keep.length) return null;
+    return keep.length === named.length ? notice : { ...notice, guests: [...keep] };
+}
+
+/**
+ * A copy of a line (a `line` row, or an `edit` with new words) as it may still go: while the line stands in this server's
+ * chat now (a standby's copy carries the tombstone the main server wrote) and its group is open, to the guests it names who
+ * are still in from that home, carrying the line's words as members read them now (edited on the server that took over,
+ * the newest words go, as an edit here rewrites a queued copy: queueLineChange).
+ */
+function copyOfLine(r: OutboxRow, notice: Notice, named: readonly string[]): Notice | null {
+    const data = notice.data ?? {};
+    if (groupClosedAt(r.group_id)) return null;
+    const line = db.prepare('SELECT type, ciphertext, nonce, metadata, edited_at FROM messages WHERE id = ? AND conversation_id = ?').get(data.id, r.group_id) as LineWords | undefined;
+    if (!line || line.type === 'removed' || line.type === 'system') return null;
+    const out = narrowed(notice, named, named.filter((k) => standingHere(r.group_id, r.home, k) === 'in'));
+    if (!out || (data.ciphertext === line.ciphertext && data.nonce === line.nonce)) return out;
+    return { ...out, data: { ...data, ...wordsNow(line) } };
+}
+
+type SendRule = (r: OutboxRow, notice: Notice, named: readonly string[]) => Notice | null;
+
+/**
+ * THE SEND RULE (#3233 round 5), one for each kind: a row waits here for its home while what it says may change, here or on
+ * the server that took over (whose writes this server's copy carries), so as its turn comes it is checked again against
+ * this server's state AT THAT MOMENT and goes only while what it says is still true. It answers the notice to send (naming
+ * only the guests it may still name, a copy of a line with the line's words now) or null: the row goes unsent. Before it,
+ * for every kind (bodyToSend): no row once guestRowKeptMs old, nothing to a home the owners blocked (cross-chat design
+ * §4.2, take-aways included), and with guests switched off only what takes away.
+ */
+const SEND_RULES: Record<NoticeKind, { says: string; check: SendRule }> = {
+    line: {
+        says: "while the line stands here and its group is open, to the guests it names who are still in, with the line's words now",
+        check: copyOfLine,
+    },
+    edit: {
+        says: "a takedown always (a line once down stays down); new words as a line goes: while the line stands here and its group is open, to the guests it names who are still in, with the line's words now",
+        check: (r, n, named) => (n.data?.action === 'removed' ? n : n.data?.action === 'edited' ? copyOfLine(r, n, named) : null),
+    },
+    removed: {
+        // On one server a guest can't be in again while a removal of theirs is still queued for that home: their new
+        // invitation queues behind it, so their yes comes only after the home has it. In here now, they joined again
+        // through the server that took over, and their home must keep them (#3233 round 5).
+        says: 'naming only the guests it names who are not in here now from that home (invited again and in, here or on the server that took over, their home keeps them)',
+        check: (r, n, named) => narrowed(n, named, named.filter((k) => standingHere(r.group_id, r.home, k) !== 'in')),
+    },
+    invite: {
+        says: 'while its group is open, to the guests it names who are still invited here from that home',
+        check: (r, n, named) => (groupClosedAt(r.group_id) ? null : narrowed(n, named, named.filter((k) => standingHere(r.group_id, r.home, k) === 'invited'))),
+    },
+    roster: {
+        // A change here queues the newer roster and withdraws this one (queueToHome); one the server that took over made
+        // sent its own. Which of two servers' rosters a home keeps is the written G2 gate (guests-g2-must-include.md).
+        says: "while its group is open, the guests it names are the guests in from that home now, and the keys it lists are the chat's keys now",
+        check: (r, n, named) => {
+            if (groupClosedAt(r.group_id)) return null;
+            const fromHome = guestsIn(r.group_id).filter((g) => g.home === r.home).map((g) => g.guest_key);
+            const d = n.data ?? {};
+            const listed = [...(Array.isArray(d.members) ? d.members : []), ...(Array.isArray(d.guests) ? d.guests : [])]
+                .map((e) => (e as { key?: unknown } | null)?.key).filter((k): k is string => typeof k === 'string').sort();
+            return [...named].sort().join(',') === fromHome.sort().join(',') && listed.join(',') === groupKeyRoster(r.group_id).join(',') ? n : null;
+        },
+    },
+    epoch: {
+        says: "while its group is open and it is still this group's epoch of that number here, to the guests it names who are still in, with only their wraps",
+        check: (r, n, named) => {
+            const d = n.data ?? {};
+            const record = (d.record ?? null) as { epoch?: unknown; sig?: unknown } | null;
+            if (groupClosedAt(r.group_id)) return null;
+            const sig = db.prepare('SELECT sig FROM group_key_epochs WHERE group_id = ? AND epoch = ?').pluck().get(r.group_id, record?.epoch ?? null) as string | undefined;
+            if (sig === undefined || sig !== record?.sig) return null;
+            const keep = named.filter((k) => standingHere(r.group_id, r.home, k) === 'in');
+            const out = narrowed(n, named, keep);
+            if (!out || out === n) return out;
+            const wraps = (Array.isArray(d.wraps) ? d.wraps : []).filter((w) => keep.includes((w as { recipient?: string } | null)?.recipient ?? ''));
+            return { ...out, data: { ...d, wraps } };
+        },
+    },
+};
+
+/** Each kind's send rule in words (test-group-guests §19f: every kind has one, and rows in its table). */
+export const GUEST_ROW_RULES: Readonly<Record<NoticeKind, string>> = Object.fromEntries(
+    GUEST_NOTICE_KINDS.map((k) => [k, SEND_RULES[k].says]),
+) as Record<NoticeKind, string>;
+
+/**
+ * A queued row as its turn comes: the body to send, or null when it goes unsent. No row once guestRowKeptMs old (a row that
+ * adds once GUEST_FANOUT_QUEUE_MS old, so a server promoted days later sends nothing stale; one that only takes away for as
+ * long as its home may still hold what it takes away, #3233 round 4); nothing to a home the owners blocked; with guests
+ * switched off, only what takes away; then the kind's own rule (SEND_RULES). A kind with no rule never goes.
+ */
+function bodyToSend(r: OutboxRow, body: string, at: number, on: boolean, blocked: boolean): string | null {
+    const notice = noticeOf(body);
+    if (!notice || blocked) return null;
+    const data = notice.data ?? {};
+    if (at - r.created_at >= guestRowKeptMs(r.kind, data)) return null;
+    if (!on && !takesAway(r.kind, data)) return null;
+    if (!(GUEST_NOTICE_KINDS as readonly string[]).includes(r.kind)) return null;
+    const named = Array.isArray(notice.guests) ? notice.guests.filter((k): k is string => typeof k === 'string') : [];
+    const out = SEND_RULES[r.kind].check(r, notice, named);
+    return out === null ? null : out === notice ? body : JSON.stringify(out);
+}
 
 /** Each home being sent to now, and that send: one at a time for a home, every home on its own. */
 const sendingTo = new Map<string, Promise<number>>();
@@ -518,29 +836,41 @@ export async function flushGuestOutbox(now = Date.now()): Promise<number> {
  * new row never leaves before an older one waiting, and once the home takes one, every row behind it goes in the same
  * send, so none waits out a backoff its home has ended. A 2xx, or an answer that says it will never be taken (400, 404,
  * 413), and the row goes; anything else and ALL the home's rows wait one backoff, by time (nextFanoutTry: the step moves on
- * only when the oldest row's wait has passed), until GUEST_FANOUT_QUEUE_MS, then a row goes. A 2xx starts the steps over.
- * With guests switched off, only removals go.
+ * only when the oldest row's wait has passed), until the row is guestRowKeptMs old, then it goes: a row that adds after
+ * GUEST_FANOUT_QUEUE_MS, a row that only takes away (takesAway) once its home can hold nothing it takes away. A 2xx starts
+ * the steps over. Each row is checked again as its turn comes (bodyToSend, SEND_RULES): with guests switched off only the
+ * rows that take away go, to a home the owners blocked nothing goes, and a row goes only while what it says is still true
+ * here, naming only the guests it may still name; otherwise it goes unsent. Made a standby meanwhile, the send stops.
  */
 async function sendToHome(home: string): Promise<number> {
     let handled = 0;
     const url = `https://${home}${GROUP_GUEST_PATH}`;
     const drop = db.prepare('DELETE FROM group_guest_outbox WHERE id = ?');
     for (;;) {
-        const queue = db.prepare('SELECT id, kind, body, attempts, next_try_at, created_at FROM group_guest_outbox WHERE home = ? ORDER BY created_at, rowid LIMIT 64')
+        const queue = db.prepare('SELECT id, group_id, home, kind, attempts, next_try_at, created_at FROM group_guest_outbox WHERE home = ? ORDER BY created_at, rowid LIMIT 64')
             .all(home) as OutboxRow[];
         if (!queue.length) return handled;
         const on = groupGuestsOn();
-        const still = db.prepare('SELECT 1 FROM group_guest_outbox WHERE id = ?');
+        const blocked = isServerBlocked(home);
+        const bodyNow = db.prepare('SELECT body FROM group_guest_outbox WHERE id = ?').pluck();
         for (const r of queue) {
-            // A row withdrawn while this send ran (a newer roster replaced it, or it aged out) never goes.
-            if (!still.get(r.id)) continue;
+            // Made a standby while this send ran: nothing more goes from here (its rows wait, and a promotion checks them again).
+            if (getNodeRole() === 'backup') return handled;
+            // Each row as it reads when its turn comes: one withdrawn while this send ran (a newer roster replaced it, a
+            // takedown withdrew it, it aged out) never goes, and one an edit rewrote goes with the newest words (queueLineChange).
+            const body = bodyNow.get(r.id) as string | undefined;
+            if (body === undefined) continue;
             handled++;
-            if (!on && r.kind !== 'removed') { drop.run(r.id); continue; }
-            const status = await forwardSigned(url, r.body);
+            // The send rule, as this server stands now: what goes (perhaps naming fewer guests, a line with its words now),
+            // or nothing, and the row goes unsent. A failed try keeps the row as queued, checked again at its next turn.
+            const notice = noticeOf(body);
+            const send = bodyToSend(r, body, fanoutNow(), on, blocked);
+            if (send === null || !notice) { drop.run(r.id); continue; }
+            const status = await forwardSigned(url, send);
             const at = fanoutNow();
             const taken = status >= 200 && status < 300;
             const final = taken || status === 400 || status === 404 || status === 413;
-            if (final || at - r.created_at >= GUEST_FANOUT_QUEUE_MS) {
+            if (final || at - r.created_at >= guestRowKeptMs(r.kind, notice.data)) {
                 drop.run(r.id);
                 if (taken) db.prepare('UPDATE group_guest_outbox SET attempts = 0 WHERE home = ? AND attempts > 0').run(home);
                 else logger.warn('SYS', `Group guests: ${home} did not take a notice (status ${status}); it is not tried again.`);
@@ -550,8 +880,12 @@ async function sendToHome(home: string): Promise<number> {
             // from the table now, not from `queue`: a 2xx earlier in this send started the steps over (#3217 round 2).
             const step = db.prepare('SELECT attempts, next_try_at FROM group_guest_outbox WHERE id = ?').get(r.id) as { attempts: number; next_try_at: number } | undefined;
             const next = nextFanoutTry(step?.attempts ?? r.attempts, step?.next_try_at ?? r.next_try_at, at);
+            // The home's rows past the age each is kept (guestRowKeptMs) go: one that adds after a day, one that takes away
+            // only once the home can hold nothing it takes away.
+            const old = db.prepare('SELECT id, kind, body, created_at FROM group_guest_outbox WHERE home = ? AND created_at <= ?')
+                .all(home, at - GUEST_FANOUT_QUEUE_MS) as Array<{ id: string; kind: string; body: string; created_at: number }>;
             db.transaction(() => {
-                db.prepare('DELETE FROM group_guest_outbox WHERE home = ? AND created_at <= ?').run(home, at - GUEST_FANOUT_QUEUE_MS);
+                for (const o of old) if (at - o.created_at >= guestRowKeptMs(o.kind, noticeOf(o.body)?.data)) drop.run(o.id);
                 db.prepare('UPDATE group_guest_outbox SET attempts = ?, next_try_at = ? WHERE home = ?').run(next.attempts, next.nextTryAt, home);
             })();
             return handled;

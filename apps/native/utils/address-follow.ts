@@ -1,41 +1,18 @@
 /**
- * Following a community to where it lives now (scratch/global-node/DESIGN-https-anywhere-fable.md §3, D4; slice S3).
+ * Who a community is, by its signed statement (GET /api/node/identity-epoch), and what the phone first verified at each of
+ * its addresses (COMMUNITY_IDENTITY_KEY). The follow card that lived here (DESIGN-https-anywhere-fable.md §3, D4) went in
+ * addresses S4 (scratch/fable-design/DESIGN-several-addresses-fable.md §9): the phone now follows by itself, by the
+ * community's signed list and a fresh proof from each address (utils/address-verify.ts), and nothing is copied.
  *
- * A phone keeps one address for its community (`beanpool_anchor_url`), and every request it signs is bound to that
- * address's host. When the community says it lives somewhere else now (`primaryAddress` in GET /api/community/info, one
- * of its own `addresses`: a name taken after a start at the server's number, or a new name), the phone offers to move:
- * one card on Home (components/AddressFollowCard.tsx), "This community is also at beans.example.org. Use that address
- * from now on?". Never silently: nothing here writes the phone's community but acceptAddressFollow, which runs only when
- * the member taps. "Not now" asks again in 7 days.
- *
- * Only to the same community. Every node serves a statement of who it is, signed with its node key (GET
- * /api/node/identity-epoch, apps/server services/identity-epoch.ts: its PeerId, its community id and how many take-overs
- * it has had). The phone checks each statement's signature against the key its PeerId names, and offers the move only
- * when the new address names the same PeerId and community as the phone's own community does, and is not an older server
- * of it (a lower take-over count: a replaced main server started again). An address that leads to another server, one
- * that doesn't answer, or an answer that isn't signed so, offers nothing. The statement is public, so this tells a wrong
- * or stale address from the community's own; it is not a proof that whoever answers holds the key.
- *
- * What the phone first verified at its own address is kept (COMMUNITY_IDENTITY_KEY, per address), from the first time it
- * reads its community there (keepCommunityIdentity, from the tab strip's read at each app start and switch,
- * app/(tabs)/_layout.tsx), before any move is on offer, and is what a new address is checked against from then on: so a
- * community whose number has stopped answering can still be followed to a name the phone had heard of, and a number or a
- * name that later answers as some other community (a server's number given to someone else, a name granted again)
- * offers nothing. That holds from the phone's first read at that address: a phone that first reads it after it went to
- * someone else has nothing older, and keeps what answers then. A number the phone never heard another address for can't
- * be followed: the member types the new address or scans a new QR.
- *
- * It costs Home nothing while there is nothing to follow (Home lands with one request): the community's addresses come
- * from the phone's own copy of its profile, which the hourly profile read keeps (utils/node-profile.ts), and the two
- * servers are asked only for a move to offer, at most once an hour for the same one (after five minutes when either
- * gave no answer). Keeping who the community is costs one more read, once per address, and none once kept.
+ * Every node serves a statement of who it is, signed with its node key: its PeerId, its community id and how many
+ * take-overs it has had (apps/server services/identity-epoch.ts). The statement is public, so it tells a wrong or stale
+ * address from the community's own; it is not a proof that whoever answers holds the key. What the phone first read at its
+ * own address is kept (keepCommunityIdentity, from the tab strip's read at each app start and switch), and is what the hall
+ * door checks the hall laptop against (utils/hall.ts, with a fresh nonce on top) and what address-verify.ts takes as the
+ * community's key before any list is kept.
  *
  * Never from an http address (whoever is in the middle of a home network could name both the address and the identity),
- * never from the worldwide community (the app knows it by its one address, utils/global-node-url.ts), never from a name
- * to a number (a name survives a change of server and a number doesn't, D3), and only to an address communityOrigin
- * takes (https, a host name or a public IPv4 address). The move is the existing switch (utils/reconnect.ts switchPhoneTo:
- * the community's own database, the address, then communitySwitched), so the host signatures are bound to changes only
- * there; it carries the community's copy and what guards its chats to the new address first (utils/community-copy-carry.ts).
+ * and never from the worldwide community (the app knows it by its one address, utils/global-node-url.ts).
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -44,26 +21,15 @@ import { audienceOf, ed25519KeyOfPeerId, t } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { GLOBAL_NODE_URL } from './global-node-url';
 import { isPlainNodeAddress, plainOriginOf } from './node-url';
-import { carryPendingProfileChange } from './pending-profile-sync';
-import { carryAlertsOff } from './push-alerts-off';
-import type { CopyCarry } from './community-copy-carry';
-import type { NodeProfile } from './node-profile';
-import type { SavedNode } from './nodes';
 
 /** Where a node serves its signed statement (apps/server services/identity-epoch.ts IDENTITY_EPOCH_PATH). */
 export const IDENTITY_STATEMENT_PATH = '/api/node/identity-epoch';
 /** What the node key signs in front of the statement (apps/server services/identity-epoch.ts DOMAIN). */
 const STATEMENT_DOMAIN = 'beanpool-identity-epoch-v1\n';
-/** "Not now" asks again after this long. */
-export const FOLLOW_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
-/** `{ [the address followed from]: { to, until } }`: the offers declined, until when. */
-export const FOLLOW_SNOOZE_KEY = 'beanpool_address_follow_snooze';
 /** `{ [an address, as an origin]: CommunityIdentity }`: who this phone first verified each of its communities' addresses to be. */
 export const COMMUNITY_IDENTITY_KEY = 'beanpool_community_identity';
 const STATEMENT_TIMEOUT_MS = 8_000;
-/** How long an offer's check is reused before Home asks the two servers again. */
-const VERDICT_TTL_MS = 60 * 60 * 1000;
-/** The same for a check that got no answer (a name whose DNS is still on its way, a server down a moment). */
+/** A statement that got no answer is asked again after this long (a name whose DNS is still on its way, a server down a moment). */
 const UNREACHABLE_TTL_MS = 5 * 60 * 1000;
 const MAX_KEPT = 50;
 
@@ -75,48 +41,18 @@ export interface CommunityIdentity {
     epoch: number;
 }
 
-export interface AddressFollowOffer {
-    /** The phone's community's address now, as an origin. */
-    from: string;
-    /** Where the community says it lives now, as an origin. */
-    to: string;
-    /** `to`'s host (and port), for the card's sentence. */
-    host: string;
-}
-
 /** A server's number as a host (communityOrigin takes only a public one). */
 export const IPV4_HOST = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
 /**
- * The phone's community address as an origin a move may start from: plain, https, not the worldwide community's. The
- * fallback card (utils/address-fallback.ts) starts from the same addresses.
+ * The phone's community address as an origin that may be verified and followed (utils/address-verify.ts): plain, https,
+ * not the worldwide community's.
  */
 export function followableOrigin(anchor: string | null | undefined): string | null {
     const from = anchor && isPlainNodeAddress(anchor.trim()) ? plainOriginOf(anchor.trim()) : null;
     if (!from || !from.startsWith('https://')) return null;
     const here = audienceOf(from);
     return here && here !== audienceOf(GLOBAL_NODE_URL) ? from : null;
-}
-
-/**
- * The move to offer, from the phone's community address and what that community last said of its own addresses, or null.
- * Pure: no network, no storage. Null unless `primaryAddress` is one of `addresses`, the phone's address is https and not
- * the worldwide community's, the new one is an address communityOrigin takes on another host, and it isn't a number
- * replacing a name.
- */
-export function followCandidate(
-    anchor: string | null | undefined, profile: Pick<NodeProfile, 'addresses' | 'primaryAddress'> | null | undefined,
-): AddressFollowOffer | null {
-    const primary = profile?.primaryAddress;
-    if (!primary || !profile?.addresses?.includes(primary)) return null;
-    const from = followableOrigin(anchor);
-    const here = from ? audienceOf(from) : null;
-    if (!from || !here) return null;
-    const to = communityOrigin(`https://${primary}`);
-    const there = to && isPlainNodeAddress(to) ? audienceOf(to) : null;
-    if (!to || !there || there === here) return null;
-    if (IPV4_HOST.test(there) && !IPV4_HOST.test(here)) return null;
-    return { from, to, host: to.slice('https://'.length) };
 }
 
 function base64Bytes(b64: string): Uint8Array {
@@ -164,26 +100,6 @@ export function sameCommunity(here: CommunityIdentity, there: CommunityIdentity)
     return sameIdentity(here, there) && there.epoch >= here.epoch;
 }
 
-export interface AddressFollowDeps {
-    /** The phone's community address, as stored. */
-    anchor(): Promise<string | null>;
-    /** What the phone knows of `url`'s community: its own copy, never asked here (the hourly profile read keeps it). */
-    profile(url: string): Promise<NodeProfile | null>;
-    /** The signed statement at `origin`, verified, or null (no answer, or not one). */
-    statement(origin: string): Promise<CommunityIdentity | null>;
-    now(): number;
-    /**
-     * Make `url` the phone's community, its copy and what guards its chats carried from `carryFrom`'s first
-     * (utils/reconnect.ts switchPhoneTo, utils/community-copy-carry.ts). Resolves what the carry did.
-     */
-    switchTo(url: string, carryFrom: string): Promise<CopyCarry | null | void>;
-    savedNodes(): Promise<SavedNode[]>;
-    addSavedNode(url: string, alias?: string, currencyType?: 'text' | 'image', currencyValue?: string): Promise<void>;
-    removeSavedNode(url: string): Promise<void>;
-    isGuestNode(url: string): Promise<boolean>;
-    markGuestNode(url: string): Promise<void>;
-}
-
 /** GET `origin`'s statement, verified. Null for no answer in 8 s, an error answer, or anything that isn't a signed statement. */
 export async function fetchIdentityStatement(origin: string, fetchImpl: typeof fetch = fetch): Promise<CommunityIdentity | null> {
     const controller = new AbortController();
@@ -199,31 +115,6 @@ export async function fetchIdentityStatement(origin: string, fetchImpl: typeof f
     } finally {
         clearTimeout(timer);
     }
-}
-
-async function defaultDeps(): Promise<AddressFollowDeps> {
-    const [profiles, nodes, { switchPhoneTo }, { anchorUrl }] = await Promise.all([
-        import('./node-profile'), import('./nodes'), import('./reconnect'), import('./node-post'),
-    ]);
-    return {
-        anchor: anchorUrl,
-        profile: profiles.getCachedNodeProfile,
-        statement: (origin) => fetchIdentityStatement(origin),
-        now: () => Date.now(),
-        switchTo: switchPhoneTo,
-        savedNodes: nodes.getSavedNodes,
-        addSavedNode: nodes.addSavedNode,
-        removeSavedNode: nodes.removeSavedNode,
-        isGuestNode: nodes.isGuestNode,
-        markGuestNode: nodes.markGuestNode,
-    };
-}
-
-export async function depsWith(injected?: Partial<AddressFollowDeps>): Promise<AddressFollowDeps> {
-    const keys: (keyof AddressFollowDeps)[] = [
-        'anchor', 'profile', 'statement', 'now', 'switchTo', 'savedNodes', 'addSavedNode', 'removeSavedNode', 'isGuestNode', 'markGuestNode',
-    ];
-    return keys.every(k => injected?.[k]) ? injected as AddressFollowDeps : { ...(await defaultDeps()), ...injected };
 }
 
 export async function readMap<T>(key: string): Promise<Record<string, T>> {
@@ -273,59 +164,25 @@ export async function keptCommunityIdentity(origin: string): Promise<CommunityId
     }
 }
 
-export type FollowCheck = 'same' | 'not-same' | 'unreachable';
-
-/**
- * Whether `offer.to` is the community the phone has at `offer.from`. The phone's community is what it first verified at
- * that address, kept; its statement now must still match that (else the address answers as another community now, and
- * nothing is offered), and raises the kept take-over count. With nothing kept, its statement now is kept. 'unreachable'
- * when the community's identity isn't known or the new address gave no signed statement.
- */
-async function checkFollow(offer: AddressFollowOffer, deps: AddressFollowDeps): Promise<FollowCheck> {
-    const [now, there] = await Promise.all([deps.statement(offer.from), deps.statement(offer.to)]);
-    const kept = readKeptIdentity((await readMap<CommunityIdentity>(COMMUNITY_IDENTITY_KEY))[offer.from]);
-    if (now && kept && !sameIdentity(kept, now)) return 'not-same';
-    const here = now ? { ...now, epoch: Math.max(now.epoch, kept?.epoch ?? 0) } : kept;
-    if (!here) return 'unreachable';
-    if (now && (!kept || here.epoch !== kept.epoch)) await writeEntry(COMMUNITY_IDENTITY_KEY, offer.from, here);
-    if (!there) return 'unreachable';
-    return sameCommunity(here, there) ? 'same' : 'not-same';
-}
-
-/** Offers checked this run: `from to` → the answer and when (VERDICT_TTL_MS, or UNREACHABLE_TTL_MS for 'unreachable'). */
-const checked = new Map<string, { verdict: FollowCheck; at: number }>();
 /** Addresses whose statement gave no answer this run when there was nothing kept for them, and when (UNREACHABLE_TTL_MS). */
 const unanswered = new Map<string, number>();
 
-/** Forget this run's checks (tests). */
+/** Forget this run's asks (tests). */
 export function forgetFollowChecks(): void {
-    checked.clear();
     unanswered.clear();
-}
-
-/** Told when a check's answer for a move differs from the last one (onFollowOfferChanged). */
-const changeListeners = new Set<() => void>();
-
-/**
- * Call `listener` whenever a check of a move comes out other than the one before it: the follow card asks again (from the
- * check just made, so nothing more is asked of the network). The fallback card's check (utils/address-fallback.ts) asks
- * this one too and stands aside when it finds a move to offer, so the follow card must show what that check found, not
- * only what it found itself when Home came into view. Returns the unsubscribe.
- */
-export function onFollowOfferChanged(listener: () => void): () => void {
-    changeListeners.add(listener);
-    return () => { changeListeners.delete(listener); };
 }
 
 /**
  * Keep who the phone's community is at `url` (its signed statement there, verified), the first time the phone reads its
- * community at that address: the tab strip's read, at each app start and switch (app/(tabs)/_layout.tsx). So a move
- * later on offer is checked against the community from before it, not against whoever answers at that address on the
- * day one first is (review of #2138). One read, once per address: none once something is kept, and after no answer
- * none for five minutes. Only for an address a move may start from (followableOrigin). Never throws.
+ * community at that address: the tab strip's read, at each app start and switch (app/(tabs)/_layout.tsx). So the hall door
+ * and the first verify of the address (address-verify.ts) check against the community from before, not against whoever
+ * answers at that address on the day one first is (review of #2138). One read, once per address: none once something is
+ * kept, and after no answer none for five minutes. Only for an address that may be followed (followableOrigin). Never
+ * throws.
  */
 export async function keepCommunityIdentity(
-    url: string | null | undefined, injected?: Partial<Pick<AddressFollowDeps, 'statement' | 'now'>>,
+    url: string | null | undefined,
+    injected?: { statement?: (origin: string) => Promise<CommunityIdentity | null>; now?: () => number },
 ): Promise<void> {
     try {
         const from = followableOrigin(url);
@@ -338,117 +195,11 @@ export async function keepCommunityIdentity(
         const identity = await (injected?.statement ?? ((origin: string) => fetchIdentityStatement(origin)))(from);
         if (!identity) { unanswered.set(from, now()); return; }
         unanswered.delete(from);
-        // A check of a move that ran meanwhile kept one first: that one stays.
+        // One kept meanwhile (another read) stays.
         if (!(await kept())) await writeEntry(COMMUNITY_IDENTITY_KEY, from, identity);
     } catch {
         // Not kept: asked again at the next read.
     }
-}
-
-/** The offer declined until a time still ahead, for this same new address. */
-async function snoozed(offer: AddressFollowOffer, now: number): Promise<boolean> {
-    const s = (await readMap<{ to?: unknown; until?: unknown }>(FOLLOW_SNOOZE_KEY))[offer.from];
-    return !!s && s.to === offer.to && typeof s.until === 'number' && s.until > now;
-}
-
-/**
- * The card's question, or null: the phone's community lives somewhere else now, the member hasn't said "Not now" to it in
- * the last 7 days, and it is checked to be the same community. Writes nothing but what the phone verified of its own
- * community (above): never the community's address.
- *
- * `opts`, the fallback card's ask (utils/address-fallback.ts) while the phone's own address isn't answering: a 'same'
- * checked before `sameSince` (when its run of failed tries began), or `sameWithin` ms ago or more, is checked again first.
- * An hour-old 'same' says nothing of whether the new address answers now, and that card stands aside only for a move that
- * can be made (review of 533de50e). Neither shortens a check that offered nothing.
- */
-export async function addressFollowOffer(
-    injected?: Partial<AddressFollowDeps>, opts?: { sameSince?: number; sameWithin?: number },
-): Promise<AddressFollowOffer | null> {
-    const deps = await depsWith(injected);
-    const anchor = await deps.anchor().catch(() => null);
-    if (!anchor || !followableOrigin(anchor)) return null;
-    const offer = followCandidate(anchor, await deps.profile(anchor).catch(() => null));
-    if (!offer || await snoozed(offer, deps.now())) return null;
-    const id = `${offer.from} ${offer.to}`;
-    const memo = checked.get(id);
-    const ttl = memo?.verdict === 'unreachable' ? UNREACHABLE_TTL_MS : VERDICT_TTL_MS;
-    const age = memo ? deps.now() - memo.at : -1;
-    const stale = !memo || age < 0 || age >= ttl || (memo.verdict === 'same' && (
-        (opts?.sameSince !== undefined && memo.at < opts.sameSince) || (opts?.sameWithin !== undefined && age >= opts.sameWithin)));
-    let verdict = stale ? null : memo.verdict;
-    if (!verdict) {
-        verdict = await checkFollow(offer, deps);
-        checked.set(id, { verdict, at: deps.now() });
-        if (verdict !== memo?.verdict) for (const l of [...changeListeners]) l();
-    }
-    return verdict === 'same' ? offer : null;
-}
-
-/** "Not now": the same offer is not made again for 7 days. A different new address is a new offer. */
-export async function snoozeAddressFollow(offer: AddressFollowOffer, injected?: Partial<AddressFollowDeps>): Promise<void> {
-    const deps = await depsWith(injected);
-    await writeEntry(FOLLOW_SNOOZE_KEY, offer.from, { to: offer.to, until: deps.now() + FOLLOW_SNOOZE_MS });
-}
-
-/** What the member's "Use the new address" did. Only 'moved' and 'moved-kept-both' moved anything. */
-export type FollowResult =
-    /** The phone's community is `offer.to` now, its copy and what guards its chats carried there with it. */
-    | 'moved'
-    /**
-     * The phone's community is `offer.to` now, with the copy the phone already had under that address: nothing was
-     * carried over it, and the old address's copy stays on the phone (utils/community-copy-carry.ts, logged there).
-     */
-    | 'moved-kept-both'
-    /** The new address isn't the same community (checked again just now): nothing moved. */
-    | 'not-same'
-    /** The check couldn't be made: nothing moved, and the card stays. */
-    | 'unreachable'
-    /** The phone isn't on `offer.from` any more (switched meanwhile): nothing moved. */
-    | 'gone';
-
-/**
- * The member chose the new address. Checked again first (the card may have waited), then: a guest visit's mark goes with
- * it (else the app takes the guest for a mistyped address, utils/nodes.ts), the phone switches through switchPhoneTo
- * (which announces the switch), carrying the community's copy with its DM pins, DM guard list, group chats' highest epochs
- * and sync cursors to the new address's name before the address is written (utils/community-copy-carry.ts: else the
- * pins would be seeded again from what the node lists then, review of #2138), a profile change waiting to reach the
- * community moves with it (pending-profile-sync.ts: the old row's removal would otherwise clear it), the saved list's row
- * moves to the new address with its name, and "Not now" is forgotten.
- */
-export async function acceptAddressFollow(offer: AddressFollowOffer, injected?: Partial<AddressFollowDeps>): Promise<FollowResult> {
-    const deps = await depsWith(injected);
-    const anchor = await deps.anchor().catch(() => null);
-    if (followableOrigin(anchor) !== offer.from || !anchor) return 'gone';
-    // The offer by the same rules as when it was made, never a move the card was handed some other way.
-    const again = followCandidate(anchor, { addresses: [offer.host], primaryAddress: offer.host });
-    if (!again || again.to !== offer.to) return 'not-same';
-    const verdict = await checkFollow(offer, deps);
-    checked.delete(`${offer.from} ${offer.to}`);
-    if (verdict !== 'same') return verdict;
-    const moved = await moveCommunity(offer, anchor, deps);
-    await writeEntry(FOLLOW_SNOOZE_KEY, offer.from, undefined);
-    return moved;
-}
-
-/**
- * The move itself, once the new address is checked to be the same community: the follow card's and the fallback card's
- * (utils/address-fallback.ts), so both carry the same things. `anchor` is the phone's community address as stored (at
- * `offer.from`). A guest visit's mark goes first, then the switch, the profile change waiting, alerts turned off, and
- * the saved list's row with its name.
- */
-export async function moveCommunity(
-    offer: Pick<AddressFollowOffer, 'from' | 'to'>, anchor: string, deps: AddressFollowDeps,
-): Promise<'moved' | 'moved-kept-both'> {
-    const saved = (await deps.savedNodes().catch(() => [] as SavedNode[])).find(n => isPlainNodeAddress(n.url) && plainOriginOf(n.url) === offer.from);
-    if (await deps.isGuestNode(anchor).catch(() => false)) await deps.markGuestNode(offer.to);
-    const carried = await deps.switchTo(offer.to, offer.from);
-    await carryPendingProfileChange(offer.from, offer.to);
-    // The same community: alerts turned off stay off. No DELETE at the old address, which may be this same node and would
-    // take the row the new address needs (utils/account-leaves-phone.ts `forgetCommunityPush` is for one that goes).
-    await carryAlertsOff(offer.from, offer.to);
-    await deps.addSavedNode(offer.to, saved?.alias, saved?.currencyType, saved?.currencyValue).catch(() => {});
-    if (saved) await deps.removeSavedNode(saved.url).catch(() => {});
-    return carried === 'kept-both' ? 'moved-kept-both' : 'moved';
 }
 
 /**

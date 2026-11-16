@@ -316,9 +316,10 @@ async function main(): Promise<void> {
         // answers, the one answer with "http" in it. A takedown needs a post to take, and a tick: test-mcp-takedown.ts. Listing them
         // needs the tick too, which this grant hasn't: test-mcp-takedown-author.ts sweeps that answer for keys, names and why.
         // Local knowledge K6 (test-mcp-knowledge.ts): a page to read, a well-formed draft to file and one to take back; and a page's
-        // source address is the one "http" knowledge_get answers, fenced, as my_posts' join link is.
+        // source address is the one "http" knowledge_get answers, fenced, as my_posts' join link is. The forum's two (slice F2b) need
+        // the tick too: test-mcp-takedown.ts section 11 sweeps the waiting list's answer for keys.
         const NEEDS_ITS_POST = ['update_post', 'remove_post', 'close_poll', 'poll_results', 'take_down', 'take_down_many', 'takedowns_list',
-            'knowledge_get', 'knowledge_draft', 'knowledge_draft_withdraw'];
+            'knowledge_get', 'knowledge_draft', 'knowledge_draft_withdraw', 'forum_take_down', 'forum_first_looks'];
         for (const t of AGENT_TOOLS.filter(x => x.name !== 'take_backup' && !x.name.startsWith('create_') && !NEEDS_ITS_POST.includes(x.name) && x.name !== 'photo_upload_link')) {
             // suggest_action (S4) files one card on r1: swept like every answer; it changes no report. remove_all_i_made (S2),
             // said out loud, answers that it removed nothing: this assistant made nothing.

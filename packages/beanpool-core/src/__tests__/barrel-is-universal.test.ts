@@ -116,8 +116,46 @@ function nodeImportsIn(source: string): string[] {
     });
 }
 
+/** A module's code with its comments taken out (a comment may name `Buffer.compare`; only code counts). */
+function codeOf(source: string): string {
+    return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
+}
+
+/**
+ * Uses of the global `Buffer` in a module that does not import it. A browser has no `Buffer`, and neither has Hermes on
+ * the phone, so such a use passes every vitest run (Node has one) and throws "Buffer is not defined" in both apps. WALK 3
+ * (16 Nov 2026): group-guest-chat.ts did exactly that, and every guest round in the web app stopped when the roster came.
+ */
+function globalBufferUses(source: string): number {
+    const code = codeOf(source);
+    if (/import\s*\{[^}]*\bBuffer\b[^}]*\}\s*from\s*['"]buffer['"]/.test(code)) return 0;
+    return (code.match(/(?<![.\w$])Buffer\s*[.(]/g) ?? []).length;
+}
+
 describe('the @beanpool/core barrel stays bundleable by Metro', () => {
     const graph = barrelModuleGraph();
+
+    it('uses no global Buffer: every module that uses one imports it from `buffer`', () => {
+        const offenders: string[] = [];
+        for (const [file, source] of graph) {
+            const n = globalBufferUses(source);
+            if (n > 0) offenders.push(`${file.slice(SRC_DIR.length + 1)} uses the global Buffer ${n} time(s)`);
+        }
+        expect(offenders).toEqual([]);
+        // The walk reaches the module the walk found it in.
+        expect([...graph.keys()].some((f) => f.endsWith('group-guest-chat.ts'))).toBe(true);
+    });
+
+    it('detects a global Buffer when there is one (the guard bites)', () => {
+        // The two lines group-guest-chat.ts shipped with, and the import that makes them fine.
+        const shipped = "function b64(bytes) {\n    return Buffer.from(bytes).toString('base64');\n}\nconst u = new Uint8Array(Buffer.from(s, 'base64'));";
+        expect(globalBufferUses(shipped)).toBe(2);
+        expect(globalBufferUses(`import { Buffer } from 'buffer';\n${shipped}`)).toBe(0);
+        expect(globalBufferUses("import { sha256 } from '@noble/hashes/sha2.js';\nconst b = Buffer.alloc(4);")).toBe(1);
+        // Named in a comment, or as part of another name: not a use.
+        expect(globalBufferUses('// Compared by hand rather than through `Buffer.compare`.\nconst x = 1;')).toBe(0);
+        expect(globalBufferUses('/* Buffer.from(x) */ const y = ArrayBuffer.isView(z); const w = myBuffer.from;')).toBe(0);
+    });
 
     it('reaches the modules it re-exports', () => {
         // A sanity check on the walk itself: if the graph came back tiny, the assertion below

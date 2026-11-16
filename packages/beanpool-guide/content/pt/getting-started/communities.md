@@ -67,19 +67,12 @@ Suas outras comunidades funcionam como antes.
 
 Você também pode alternar nas **Configurações**, sob **Sistema**, depois em **Comunidades salvas**. Suas comunidades estão listadas ali. A que você está usando está marcada como ativa. Toque em **Alternar para esta comunidade** em outra para ir até ela.
 
-## Quando sua comunidade muda para um novo endereço
+## Se sua comunidade mudar de endereço
 
-Uma comunidade pode responder em mais de um endereço: o número do servidor dela (como 203.0.113.5), um nome beanpool.org ou o próprio domínio. Um deles é o endereço principal. Os proprietários escolhem qual.
+Uma comunidade pode responder em mais de um endereço, e seus proprietários escolhem qual é o endereço principal.
 
-No celular, você não precisa fazer nada. Seu celular verifica sozinho os endereços da sua comunidade, quando você abre o app e mais ou menos uma vez por hora, e só passa para outro endereço depois que ele responder com a própria chave da sua comunidade. Então:
-
-- **Quando os proprietários escolhem um novo endereço principal**, seu celular passa para ele sozinho, normalmente em até um dia, com tudo o que guarda para aquela comunidade, incluindo suas mensagens. O Início mostra uma linha uma única vez, como **Riverside agora está em beans.example.org. Este celular passa a usar esse endereço. Nada mais mudou.**
-- **Quando o endereço que seu celular usa para de responder** por cerca de cinco minutos, ou não responde quando você abre o app, seu celular passa para o endereço principal, ou para outro endereço da comunidade que responda. O Início diz, por exemplo, **riverside.beanpool.org não está respondendo. Por enquanto, este celular usa beans.example.org.** Quando o endereço principal volta a responder, seu celular volta para ele sozinho.
-- **Quando o endereço que seu celular usa não responde mais como a sua comunidade**, seu celular passa na hora para o endereço principal, ou para outro endereço que tenha respondido com a própria chave da sua comunidade, e avisa no Início: **riverside.beanpool.org não responde mais como Riverside. Este celular agora usa beans.example.org.** Se nenhum outro endereço tiver respondido assim, seu celular fica no endereço que usa, e o Início não diz nada. Seu celular nunca passa para um endereço que responde com outra chave.
-- Sozinho, seu celular só passa para endereços da própria lista da comunidade.
-- Se o endereço antigo parou de responder antes de seu celular saber de outro, nada poderá informar ao celular para onde a comunidade foi. Peça o novo endereço aos proprietários dela, depois toque no feijão, em **Adicionar uma comunidade** e digite o endereço ali.
-
-No app web, o login de um navegador pertence a um endereço, então ele fica onde está. Num endereço ao qual a comunidade ainda responde, uma linha discreta no topo mostra onde está agora o endereço principal: **O endereço principal desta comunidade agora é ‹endereço›. Este endereço continua funcionando.** Ela só aparece depois que o endereço principal responder ao seu navegador com a própria chave da comunidade. Você pode abri-lo ali e entrar restaurando sua conta ou vinculando o navegador a partir do celular.
+- **No celular, não há nada a fazer.** Seu celular verifica sozinho os endereços da sua comunidade e passa para o principal assim que ele responde com a própria chave da sua comunidade. Se o endereço que seu celular usa parar de responder, ou não responder mais como a sua comunidade, ele usa outro endereço que tenha respondido com essa chave e volta assim que o principal responder. O Início avisa em uma linha, uma única vez. Se nenhum tiver respondido assim, ele fica onde está. Nada mais muda, nem suas mensagens.
+- **No app web,** seu login pertence ao endereço que você abriu, então o app web fica lá e continua funcionando. Uma linha discreta no topo mostra o endereço principal. Toque em **Abrir lá** para ir até ele e, depois, entre lá com **Vincular este navegador do seu celular**, ou com seu login ou suas 12 palavras.
 
 ## Esquecer uma comunidade neste celular
 

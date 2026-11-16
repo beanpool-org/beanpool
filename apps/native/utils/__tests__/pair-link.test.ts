@@ -347,7 +347,7 @@ describe('a refused server: join it on this phone first, through its own door, t
         expect(refusal).toContain('const global = refusalJoin(target) !== null;');
         // With a community of its own on the phone: the design's words, the same for global's code and any other (global's also has
         // the "Join the global community" button below, from refusalJoin).
-        expect(refusal).toContain("return t(\"This code is for {codeHost}. Your phone uses {currentHost}. Open Settings at {currentHost} and scan again, or move your phone first (Home card).\", { codeHost: target.scannedHost, currentHost: target.appHost });");
+        expect(refusal).toContain("return t(\"This code is for {codeHost}. Your phone uses {currentHost}. Open Settings at {currentHost} and scan again, or move your phone first.\", { codeHost: target.scannedHost, currentHost: target.appHost });");
         expect(refusal).not.toContain('Open BeanPool at {own}');
         // Without one.
         expect(refusal).toContain("? t('This code is from {host}, a server your phone doesn\\'t use. Nothing was sent. Join the global community on this phone first, then scan again.', { host: target.scannedHost })");

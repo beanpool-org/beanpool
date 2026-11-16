@@ -67,19 +67,12 @@ Komunitasmu yang lain berfungsi seperti sebelumnya.
 
 Kamu juga dapat berpindah di **Pengaturan**, di bawah **Sistem**, lalu **Komunitas tersimpan**. Komunitasmu dicantumkan di sana. Komunitas yang sedang kamu gunakan ditandai sebagai aktif. Ketuk **Beralih ke komunitas ini** pada komunitas lain untuk berpindah ke sana.
 
-## Ketika komunitasmu berpindah ke alamat baru
+## Jika komunitasmu mengganti alamatnya
 
-Suatu komunitas bisa menjawab di lebih dari satu alamat: nomor servernya (seperti 203.0.113.5), sebuah nama beanpool.org, atau domainnya sendiri. Salah satunya adalah alamat utamanya. Pemiliknya yang memilih.
+Sebuah komunitas bisa menjawab di lebih dari satu alamat, dan pemiliknya memilih mana yang menjadi alamat utamanya.
 
-Di ponsel, kamu tidak perlu melakukan apa pun. Ponselmu memeriksa sendiri alamat-alamat komunitasmu, saat aplikasi dibuka dan kira-kira sekali sejam, dan baru pindah ke alamat lain setelah alamat itu menjawab dengan kunci milik komunitasmu sendiri. Lalu:
-
-- **Ketika pemilik memilih alamat utama baru**, ponselmu pindah ke sana sendiri, biasanya dalam sehari, bersama apa yang disimpannya untuk komunitas itu, termasuk pesan-pesanmu. Beranda menampilkan satu baris, sekali saja, seperti **Riverside sekarang ada di beans.example.org. Ponsel ini memakainya mulai sekarang. Tidak ada hal lain yang berubah.**
-- **Ketika alamat yang dipakai ponselmu berhenti menjawab** selama sekitar lima menit, atau tidak menjawab saat kamu membuka aplikasi, ponselmu pindah ke alamat utama, atau ke alamat lain komunitas itu yang menjawab. Beranda bertuliskan, misalnya, **riverside.beanpool.org tidak menjawab. Ponsel ini memakai beans.example.org untuk sementara.** Begitu alamat utama menjawab lagi, ponselmu kembali ke sana sendiri.
-- **Ketika alamat yang dipakai ponselmu tidak lagi menjawab sebagai komunitasmu**, ponselmu langsung pindah ke alamat utama, atau ke alamat lain yang sudah menjawab dengan kunci milik komunitasmu sendiri, dan memberi tahu di Beranda: **riverside.beanpool.org tidak lagi menjawab sebagai Riverside. Ponsel ini sekarang memakai beans.example.org.** Jika tidak ada alamat lain yang menjawab seperti itu, ponselmu tetap di alamat yang dipakainya, dan Beranda tidak menampilkan apa pun. Ponselmu tidak pernah pindah ke alamat yang menjawab dengan kunci lain.
-- Dengan sendirinya, ponselmu hanya pindah ke alamat yang ada di daftar milik komunitas itu sendiri.
-- Jika alamat lama berhenti menjawab sebelum ponselmu mengetahui alamat lain, tidak ada yang dapat memberi tahu ponselmu ke mana komunitas itu berpindah. Tanyakan alamat baru kepada pemiliknya, lalu ketuk ikon kacang, lalu **Tambah komunitas**, dan ketikkan alamatnya di sana.
-
-Di aplikasi web, proses masuk di sebuah browser terikat pada satu alamat, jadi browser tetap di alamat itu. Di alamat yang masih dijawab komunitas itu, satu baris kecil di bagian atas memberi tahu di mana alamat utamanya sekarang: **Alamat utama komunitas ini sekarang adalah ‹alamat›. Alamat ini tetap berfungsi.** Baris itu hanya muncul setelah alamat utama menjawab browsermu dengan kunci milik komunitas itu sendiri. Kamu bisa membukanya di sana, lalu masuk dengan memulihkan akunmu atau menautkan browsermu dari ponselmu.
+- **Di ponsel, kamu tidak perlu melakukan apa pun.** Ponselmu memeriksa alamat-alamat komunitasmu sendiri dan pindah ke alamat utama begitu alamat itu menjawab dengan kunci milik komunitasmu sendiri. Jika alamat yang dipakai ponselmu berhenti menjawab, atau tidak lagi menjawab sebagai komunitasmu, ponselmu memakai alamat lain yang sudah menjawab dengan kunci itu dan kembali begitu alamat utama menjawab. Beranda memberitahukannya dalam satu baris, sekali saja. Jika tidak ada yang menjawab seperti itu, ponselmu tetap di tempatnya. Tidak ada yang lain berubah, termasuk pesan-pesanmu.
+- **Di aplikasi web,** akun masukmu milik alamat yang kamu buka, jadi aplikasi web tetap di sana dan terus berfungsi. Sebuah baris tenang di bagian atas menyebutkan alamat utama. Ketuk **Buka di sana** untuk menuju ke sana, lalu masuk di sana dengan **Tautkan peramban ini dari ponsel Anda**, atau dengan akun masukmu atau 12 katamu.
 
 ## Melupakan komunitas di ponsel ini
 

@@ -20,6 +20,11 @@
  *      scratch/fable-design/DESIGN-several-addresses-fable.md §6): an own domain the owner made main on the main server is
  *      the promoted server's main, and its signed list is the same key's at take-over count 1, which a phone holding the
  *      main server's list takes as newer.
+ *   7. Spares (several addresses S8, design §6): the owner names three standbys' addresses as spares on the main server,
+ *      one a number at a port (the envelope is sealed again). The promoted standby lists the two that are its own addresses
+ *      as addresses, the ported one spelled with its port (round 2 of #3260), keeps the other as a spare, and accepts
+ *      requests signed for its own; a phone holding the main server's list proves each of its own spares and goes there
+ *      (core takeSpare).
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-takeover-keeps-app-addresses.ts
  */
@@ -87,6 +92,26 @@ async function child(): Promise<void> {
             const res = await fetch(`${await ownHttps()}/api/node/addresses`);
             const list = await res.json().catch(() => null);
             return { status: res.status, list, envelopeId: (await flushTakeoverChecks()).envelopeId };
+        },
+        // The owner's spares, and the signed list that names them (read first: a new list number seals the envelope again).
+        spares: async (a: { spares: string[] }) => {
+            const se = await import('./state-engine.js');
+            const { flushTakeoverChecks } = await import('./services/takeover-envelope.js');
+            se.updateNodeConfig({ addressSpares: a.spares });
+            const res = await fetch(`${await ownHttps()}/api/node/addresses`);
+            const list = { status: res.status, body: await res.json().catch(() => null) };
+            return { list, envelopeId: (await flushTakeoverChecks()).envelopeId };
+        },
+        // The standby's own address, which it goes by before any take-over (confirmed on it, as an owner of it would).
+        'own-address': async (a: { addresses: string[] }) => {
+            const se = await import('./state-engine.js');
+            se.updateNodeConfig({ ownerAddresses: a.addresses });
+            return true;
+        },
+        // A phone's proof question to this node for `address` (core addressProofUrl's path), answered over its real HTTPS server.
+        prove: async (a: { address: string; nonce: string }) => {
+            const res = await fetch(`${await ownHttps()}/api/node/proof?for=${encodeURIComponent(a.address)}&nonce=${a.nonce}`);
+            return { status: res.status, body: await res.json().catch(() => null) };
         },
         list: async () => {
             const res = await fetch(`${await ownHttps()}/api/node/addresses`);
@@ -182,8 +207,15 @@ async function main(): Promise<void> {
         assert(Array.isArray(standbyOwn) && standbyOwn.length === 0, `the standby itself knows none of the main server's names (${JSON.stringify(standbyOwn)})`);
 
         console.log('\n— 3. a second address confirmed on the main server —');
-        const later = await main.send('confirm-address', { address: 'later-confirmed.test' });
-        assert(later.envelopeId && later.envelopeId !== made.envelopeId, 'confirming an address re-seals the take-over envelope');
+        await main.send('confirm-address', { address: 'later-confirmed.test' });
+        const later = await main.send('spares', { spares: ['standby-own.test', '198.51.100.7:8443', 'another-standby.test'] });
+        assert(later.envelopeId && later.envelopeId !== made.envelopeId, 'confirming an address and naming spares re-seal the take-over envelope');
+        // What a member's phone keeps from the main server: its signed list, with the spares (one of them at a port).
+        const heldList = later.list;
+        assert(heldList.status === 200 && JSON.stringify(heldList.body?.list?.spares) === JSON.stringify(['198.51.100.7:8443', 'another-standby.test', 'standby-own.test']),
+            `the main server's signed list names the three spares, one at a port (${JSON.stringify(heldList.body?.list?.spares)})`);
+        // The standby goes by a name and by a number at a port (round 2 of #3260: a ported spare must be taken too).
+        await standby.send('own-address', { addresses: ['standby-own.test', '198.51.100.7:8443'] });
         const pull2 = await standby.send('pull');
         assert(pull2.envelope === 'stored' && pull2.held.at(-1) === later.envelopeId, 'and the standby holds the newer copy');
 
@@ -223,6 +255,25 @@ async function main(): Promise<void> {
             `at take-over count 1, its counter going on from the main server's (${made.list.list.epoch}.${made.list.list.seq} → ${pl?.epoch}.${pl?.seq})`);
         const choice = core.chooseAddressList(promoted.body, { peerId: made.list.list.peerId, kept: made.list });
         assert(choice.action === 'replace' && choice.why === 'newer', `a phone holding the main server's list takes the promoted server's as newer (${choice.action} ${(choice as any).why})`);
+
+        console.log('\n— 7. the promoted standby lists its own spares —');
+        assert(pl.addresses.includes('standby-own.test') && pl.addresses.includes('198.51.100.7:8443') && JSON.stringify(pl.spares) === JSON.stringify(['another-standby.test']),
+            `its own spares are among its addresses now, the one at a port spelled with its port, and the other stays a spare (${JSON.stringify(pl.addresses)} / ${JSON.stringify(pl.spares)})`);
+        const atSpare = await standby.send('bound', { ownerSeedHex, hosts: ['standby-own.test', '198.51.100.7', 'another-standby.test'] });
+        assert(atSpare['standby-own.test'].status === 200 && atSpare['198.51.100.7'].status === 200 && atSpare['another-standby.test'].status === 421,
+            `a request signed for its own spares is accepted, one for the other spare is not (${atSpare['standby-own.test'].status}, ${atSpare['198.51.100.7'].status}, ${atSpare['another-standby.test'].status})`);
+        // A phone holding the main server's list, with nothing listed answering, goes to the spare at its port (core takeSpare).
+        for (const spare of ['standby-own.test', '198.51.100.7:8443']) {
+            const nonce = core.newAddressProofNonce();
+            const asked = await standby.send('prove', { address: spare, nonce });
+            const verdict = asked.status === 200 ? core.verifyAddressProof(asked.body, { peerId: pl.peerId, for: spare, nonce }) : null;
+            const offered = core.chooseAddressList(promoted.body, { peerId: pl.peerId, kept: heldList.body });
+            const taken = verdict?.ok === true && offered.action === 'replace' && core.takeSpare({
+                listedAnswers: false, epoch: heldList.body.list.epoch, spare,
+                answer: { proof: { kind: 'proved', epoch: verdict.epoch, seq: verdict.seq }, list: offered.signed.list },
+            });
+            assert(taken, `a phone holding the main server's list proves ${spare} and goes there (proof ${asked.status} ${JSON.stringify(verdict)}, list ${offered.action})`);
+        }
 
         console.log(`\n${testsPassed}/${testsRun} checks passed.`);
     } catch (e: any) {

@@ -28,7 +28,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
 import {
     buildAdminHeaders, checkAppAddresses, getAppAddresses, getTlsStatus, makeMainAddress,
-    removeAppAddress, resolveNodeApiUrl, setOwnAddress,
+    removeAppAddress, resolveNodeApiUrl, setAddressSpare, setOwnAddress,
     type AppAddress, type AppAddressesReport,
 } from '../../lib/node-client';
 import { proofField, t, timeAgo, tn } from '../../lib/fresh-proof';
@@ -208,6 +208,8 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'to
     const [domainInput, setDomainInput] = useState('');
     const [formError, setFormError] = useState<string | null>(null);
     const [submittingAdd, setSubmittingAdd] = useState(false);
+    // Spares (several-addresses §6, S8): the address typed to add.
+    const [spareInput, setSpareInput] = useState('');
 
     // Fresh proof
     const proof = useFreshProof();
@@ -221,6 +223,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'to
     const modeLabelId = useId();
     const ipInputId = useId();
     const domainInputId = useId();
+    const spareInputId = useId();
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -281,6 +284,33 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'to
             setActionMessage({ text: e instanceof Error ? e.message : t('Check failed'), type: 'error' });
         } finally {
             setChecking(false);
+        }
+    };
+
+    // A spare added (the question first: it is a door, as an address is) or removed, with the owner's fresh proof. Any refusal
+    // says the server's words, never success.
+    const handleSpare = async (action: 'add' | 'remove', address: string, code?: string) => {
+        setActionMessage(null);
+        const typed = address.trim();
+        if (!typed) return;
+        if (action === 'add' && code === undefined) {
+            const yes = await ask({
+                title: t(W.spareAdd), body: t(W.spareAddQuestion, { address: typed }), confirmLabel: t(W.addConfirm), cancelLabel: t(W.cancel),
+            });
+            if (!yes) return;
+        }
+        setBusy(`spare:${typed}`);
+        try {
+            await setAddressSpare(activeNode.url, action, typed, cred, code);
+            proof.close();
+            if (action === 'add') setSpareInput('');
+            setActionMessage({ text: action === 'add' ? t(W.spareAdded, { address: typed }) : t(W.spareRemoved, { address: typed }), type: 'success' });
+            await afterChange();
+        } catch (e: unknown) {
+            if (proof.checkError(e, (c) => handleSpare(action, typed, c), code)) return;
+            setActionMessage({ text: e instanceof Error ? e.message : t('Could not change spares'), type: 'error' });
+        } finally {
+            setBusy(null);
         }
     };
 
@@ -1055,6 +1085,59 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'to
                             {t(W.secondWayInNudge)}
                         </p>
                     </div>
+                )}
+            </div>
+
+            {/* Spares (several-addresses §6, §8, S8): where the community would go if this server were lost. */}
+            <div data-testid="addresses-spares" className="bg-nature-900/60 border border-nature-800 rounded-2xl p-4 space-y-3">
+                <h4 className="m-0 text-sm font-bold text-nature-100">{t(W.sparesTitle)}</h4>
+                <p className="m-0 text-xs text-nature-300 leading-relaxed">{t(W.sparesExplain)}</p>
+                {(report?.spares ?? []).length === 0 ? (
+                    <p className="m-0 text-xs text-nature-400">{t(W.sparesNone)}</p>
+                ) : (
+                    <ul className="m-0 p-0 list-none space-y-2">
+                        {(report?.spares ?? []).map((s) => (
+                            <li key={s} data-testid="addresses-spare-row" className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="font-mono text-xs text-nature-100 [overflow-wrap:anywhere] min-w-0">{s}</span>
+                                {isOwner && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSpare('remove', s)}
+                                        disabled={busy !== null}
+                                        aria-label={t('Remove {address}', { address: s })}
+                                        className="px-3 py-2 rounded-xl border border-nature-700 text-xs font-semibold text-nature-200 hover:bg-nature-800 disabled:opacity-50 min-h-[44px]"
+                                    >
+                                        {t(W.spareRemove)}
+                                    </button>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+                {isOwner && (
+                    <form
+                        className="flex flex-wrap items-end gap-2"
+                        onSubmit={(e) => { e.preventDefault(); void handleSpare('add', spareInput); }}
+                    >
+                        <label htmlFor={spareInputId} className="sr-only">{t(W.spareAdd)}</label>
+                        <input
+                            id={spareInputId}
+                            type="text"
+                            autoComplete="off"
+                            spellCheck={false}
+                            value={spareInput}
+                            onChange={(e) => setSpareInput(e.target.value)}
+                            placeholder={t('e.g. standby.example.org')}
+                            className="bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-terra-500 min-h-[44px] flex-1 min-w-0 max-w-md"
+                        />
+                        <button
+                            type="submit"
+                            disabled={busy !== null || !spareInput.trim()}
+                            className="px-4 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-semibold text-bp-cta-on disabled:opacity-50 min-h-[44px]"
+                        >
+                            {t(W.spareAdd)}
+                        </button>
+                    </form>
                 )}
             </div>
 

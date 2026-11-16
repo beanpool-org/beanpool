@@ -67,19 +67,12 @@ Diğer topluluklarınız eskisi gibi çalışır.
 
 Ayrıca **Ayarlar**'da **Sistem**, ardından **Kayıtlı topluluklar** altında geçiş yapabilirsiniz. Topluluklarınız orada listelenir. Kullandığınız topluluk etkin olarak işaretlenir. Başka birine geçmek için üzerindeki **Bu topluluğa geç** seçeneğine dokunun.
 
-## Topluluğunuz yeni bir adrese taşındığında
+## Topluluğunuz adresini değiştirirse
 
-Bir topluluk birden fazla adreste yanıt verebilir: sunucusunun numarası (203.0.113.5 gibi), bir beanpool.org adı ya da kendi alan adı. Bunlardan biri ana adresidir. Hangisi olduğunu sahipleri seçer.
+Bir topluluk birden fazla adreste yanıt verebilir ve hangisinin ana adresi olacağını sahipleri seçer.
 
-Telefonda hiçbir şey yapmanız gerekmez. Telefonunuz topluluğunuzun adreslerini uygulamayı açtığınızda ve yaklaşık saatte bir kendiliğinden kontrol eder ve başka bir adrese ancak o adres topluluğunuzun kendi anahtarıyla yanıt verdikten sonra geçer. Sonra:
-
-- **Sahipler yeni bir ana adres seçtiğinde**, telefonunuz genellikle bir gün içinde, mesajlarınız dahil o topluluk için tuttuklarıyla birlikte kendiliğinden oraya taşınır. Ana Sayfa bir kez şöyle bir satır gösterir: **Riverside artık beans.example.org adresinde. Bu telefon bundan sonra bu adresi kullanır. Başka hiçbir şey değişmedi.**
-- **Telefonunuzun kullandığı adres yanıt vermeyi bıraktığında**, yani yaklaşık beş dakika boyunca ya da uygulamayı açtığınızda yanıt vermediğinde, telefonunuz ana adrese ya da topluluğun yanıt veren başka bir adresine geçer. Ana Sayfa örneğin şunu söyler: **riverside.beanpool.org yanıt vermiyor. Bu telefon şimdilik beans.example.org adresini kullanıyor.** Ana adres yeniden yanıt verdiğinde telefonunuz kendiliğinden ona döner.
-- **Telefonunuzun kullandığı adres artık topluluğunuz olarak yanıt vermediğinde**, telefonunuz hemen ana adrese ya da topluluğunuzun kendi anahtarıyla yanıt vermiş başka bir adrese geçer ve bunu Ana Sayfa'da söyler: **riverside.beanpool.org artık Riverside olarak yanıt vermiyor. Bu telefon artık beans.example.org adresini kullanıyor.** Başka hiçbir adres bu şekilde yanıt vermediyse telefonunuz kullandığı adreste kalır ve Ana Sayfa bir şey söylemez. Telefonunuz başka bir anahtarla yanıt veren bir adrese asla geçmez.
-- Telefonunuz kendiliğinden yalnızca topluluğun kendi listesindeki bir adrese geçer.
-- Eski adres, telefonunuz başka bir adresi duymadan önce yanıt vermeyi durdurduysa hiçbir şey telefonunuza topluluğun nereye gittiğini söyleyemez. Sahiplerinden yeni adresi isteyin, ardından fasulyeye dokunun, sonra **Topluluk ekle**'ye dokunun ve oraya yazın.
-
-Web uygulamasında bir tarayıcının oturumu tek bir adrese aittir, bu yüzden olduğu yerde kalır. Topluluğun hâlâ yanıt verdiği bir adreste, en üstteki sade bir satır ana adresinin şimdi nerede olduğunu söyler: **Bu topluluğun ana adresi artık ‹adres›. Bu adres çalışmaya devam ediyor.** Bu satır ancak ana adres tarayıcınıza topluluğun kendi anahtarıyla yanıt verdikten sonra görünür. Topluluğu orada açabilir ve hesabınızı geri yükleyerek ya da tarayıcınızı telefonunuzdan bağlayarak oturum açabilirsiniz.
+- **Telefonda yapmanız gereken bir şey yok.** Telefonunuz topluluğunuzun adreslerini kendiliğinden denetler ve ana adres topluluğunuzun kendi anahtarıyla yanıt verdiği anda ona geçer. Telefonunuzun kullandığı adres yanıt vermeyi bırakırsa ya da artık topluluğunuz olarak yanıt vermezse, o anahtarla yanıt vermiş başka bir adresi kullanır ve ana adres yeniden yanıt verdiğinde geri döner. Ana Sayfa bunu tek satırda, bir kez söyler. Hiçbiri böyle yanıt vermediyse, olduğu yerde kalır. Mesajlarınız dahil başka hiçbir şey değişmez.
+- **Web uygulamasında,** girişiniz açtığınız adrese aittir; bu yüzden web uygulaması orada kalır ve çalışmaya devam eder. Üstteki sade bir satır ana adresi söyler. Oraya gitmek için **Orada aç** seçeneğine dokunun, sonra orada **Bu tarayıcıyı telefonunuzdan bağlayın** ile ya da giriş yönteminizle veya 12 kelimenizle oturum açın.
 
 ## Bu telefonda bir topluluğu unutma
 

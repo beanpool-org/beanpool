@@ -67,19 +67,12 @@ Các cộng đồng khác của bạn vẫn hoạt động như trước.
 
 Bạn cũng có thể chuyển đổi trong **Cài đặt**, dưới mục **Hệ thống**, sau đó vào **Nâng cao / Hệ thống con**. Các cộng đồng của bạn được liệt kê tại đó. Cộng đồng bạn đang sử dụng được đánh dấu là đang hoạt động. Nhấn **Chuyển sang Thị trấn** trên một cộng đồng khác để chuyển sang đó.
 
-## Khi cộng đồng của bạn chuyển sang địa chỉ mới
+## Nếu cộng đồng của bạn đổi địa chỉ
 
-Một cộng đồng có thể phản hồi ở nhiều hơn một địa chỉ: số máy chủ của nó (chẳng hạn như 203.0.113.5), một tên beanpool.org, hoặc tên miền riêng của nó. Một trong số đó là địa chỉ chính. Các chủ sở hữu chọn địa chỉ nào.
+Một cộng đồng có thể trả lời ở nhiều hơn một địa chỉ, và chủ sở hữu chọn địa chỉ nào là địa chỉ chính.
 
-Trên điện thoại, bạn không cần làm gì cả. Điện thoại của bạn tự kiểm tra các địa chỉ của cộng đồng, khi bạn mở ứng dụng và khoảng mỗi giờ một lần, và chỉ chuyển sang một địa chỉ khác sau khi địa chỉ đó đã phản hồi bằng chính khóa của cộng đồng bạn. Sau đó:
-
-- **Khi các chủ sở hữu chọn một địa chỉ chính mới**, điện thoại của bạn tự chuyển sang đó, thường trong vòng một ngày, cùng với những gì nó lưu giữ cho cộng đồng đó, bao gồm cả tin nhắn của bạn. Trang chủ hiển thị một dòng, một lần, chẳng hạn **Riverside giờ ở địa chỉ beans.example.org. Điện thoại này dùng địa chỉ đó từ bây giờ. Không có gì khác thay đổi.**
-- **Khi địa chỉ mà điện thoại của bạn đang dùng ngừng phản hồi** trong khoảng năm phút, hoặc không phản hồi khi bạn mở ứng dụng, điện thoại của bạn chuyển sang địa chỉ chính, hoặc sang một địa chỉ khác của cộng đồng đang phản hồi. Ví dụ, Trang chủ sẽ ghi **riverside.beanpool.org không phản hồi. Điện thoại này tạm dùng beans.example.org.** Khi địa chỉ chính phản hồi trở lại, điện thoại của bạn tự quay về đó.
-- **Khi địa chỉ mà điện thoại của bạn đang dùng không còn phản hồi với tư cách cộng đồng của bạn**, điện thoại của bạn chuyển ngay sang địa chỉ chính, hoặc sang một địa chỉ khác đã phản hồi bằng chính khóa của cộng đồng bạn, và báo trên Trang chủ: **riverside.beanpool.org không còn phản hồi dưới tên Riverside. Điện thoại này giờ dùng beans.example.org.** Nếu không có địa chỉ nào khác phản hồi như vậy, điện thoại của bạn ở lại địa chỉ đang dùng, và Trang chủ không báo gì. Điện thoại của bạn không bao giờ chuyển sang một địa chỉ phản hồi bằng khóa khác.
-- Điện thoại của bạn chỉ tự chuyển sang những địa chỉ có trong danh sách riêng của cộng đồng.
-- Nếu địa chỉ cũ ngừng phản hồi trước khi điện thoại của bạn biết đến bất kỳ địa chỉ nào khác, không có cách nào cho điện thoại biết cộng đồng đã chuyển đi đâu. Hãy hỏi các chủ sở hữu của cộng đồng để biết địa chỉ mới, sau đó nhấn vào hạt đậu, chọn **Thêm một cộng đồng**, và nhập địa chỉ đó vào.
-
-Trong ứng dụng web, việc đăng nhập của một trình duyệt gắn với một địa chỉ, nên trình duyệt vẫn ở nguyên địa chỉ đó. Tại một địa chỉ mà cộng đồng vẫn phản hồi, một dòng nhỏ ở trên cùng cho bạn biết địa chỉ chính của cộng đồng giờ ở đâu: **Địa chỉ chính của cộng đồng này hiện là ‹địa chỉ›. Địa chỉ này vẫn tiếp tục hoạt động.** Dòng này chỉ hiện sau khi địa chỉ chính đã phản hồi trình duyệt của bạn bằng chính khóa của cộng đồng. Bạn có thể mở địa chỉ đó, rồi đăng nhập bằng cách khôi phục tài khoản hoặc liên kết trình duyệt từ điện thoại của bạn.
+- **Trên điện thoại, bạn không cần làm gì cả.** Điện thoại tự kiểm tra các địa chỉ của cộng đồng và chuyển sang địa chỉ chính ngay khi địa chỉ đó trả lời bằng chính khóa của cộng đồng bạn. Nếu địa chỉ điện thoại đang dùng ngừng trả lời, hoặc không còn trả lời với tư cách cộng đồng của bạn, điện thoại dùng một địa chỉ khác đã trả lời bằng khóa đó và quay lại ngay khi địa chỉ chính trả lời. Trang chủ cho biết điều đó trong một dòng, một lần. Nếu không có địa chỉ nào trả lời như vậy, điện thoại ở nguyên chỗ. Không có gì khác thay đổi, kể cả tin nhắn của bạn.
+- **Trong ứng dụng web,** đăng nhập của bạn thuộc về địa chỉ bạn đã mở, nên ứng dụng web ở lại đó và vẫn hoạt động. Một dòng nhỏ ở trên cùng cho biết địa chỉ chính. Nhấn **Mở ở đó** để đến đó, rồi đăng nhập tại đó bằng **Liên kết trình duyệt này từ điện thoại của bạn**, hoặc bằng đăng nhập của bạn hay 12 từ của bạn.
 
 ## Quên một cộng đồng trên điện thoại này
 

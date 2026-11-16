@@ -64,7 +64,7 @@ export function scanProblemMessage(r: Exclude<ScanResult, { kind: 'ok' }>): { ti
         case 'wrong-node':
             return {
                 title: 'A different community',
-                message: `This code is for ${r.scannedHost}. Your phone uses ${r.appHost}. Open Settings at ${r.appHost} and scan again, or move your phone first (Home card).`,
+                message: `This code is for ${r.scannedHost}. Your phone uses ${r.appHost}. Open Settings at ${r.appHost} and scan again, or move your phone first.`,
             };
         case 'no-node':
             return { title: 'Not connected', message: 'Connect to your community first.' };

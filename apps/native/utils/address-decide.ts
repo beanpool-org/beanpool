@@ -24,6 +24,14 @@ Per address, this round:
  *     again"); else keep;
  *   - keep with addresses dropped this round is `drop`: the phone stays, and those addresses are refused.
  * One address answering with another key is dropped alone; the rest stay one community (Marty's pick 3).
+ *
+ * Spares (§6 'Spares', slice S8; Marty's pick 6): a standby's own address the owner named in the list's `spares`, apart from
+ * its addresses. A spare is nothing until needed: a standby that has not taken over has no key to prove with. So the phone
+ * asks a spare only when no listed address answers as the community (everything listed was asked this round, none proved,
+ * nowhere to go), and takes it ({@link takeSpare}) only when it proves with the community's key at a take-over count
+ * HIGHER than the one the phone holds, and the list it serves (the community's key and id, newer than the one kept) names
+ * it as an address. Unproved, another key, or a count equal or lower: never taken, and never refused either (a standby may
+ * take over an hour later).
  */
 
 /**
@@ -119,3 +127,9 @@ export function decideAddress(s: AddressSituation): AddressDecision {
     if (mainOk) return out('follow', s.main, s.mainSeen === s.main ? null : 'followed');
     return keep();
 }
+
+/**
+ * What a spare said this round, and whether the phone goes there: core's one decision (@beanpool/core address-list.ts
+ * takeSpare), so the server's take-over table runs exactly what the phone runs (the file's comment, "Spares").
+ */
+export { takeSpare, type SpareAnswer } from '@beanpool/core';

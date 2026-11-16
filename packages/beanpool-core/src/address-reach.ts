@@ -145,6 +145,15 @@ export const ADDRESS_SCREEN_WORDS = {
     cancel: word('Cancel'),
     /** Under an own-domain main: the BeanPool name stays as the way back. */
     wayBack: word('Keep {address} as well: it is the way back if the domain ever lapses.'),
+    /** Spares (several-addresses §6, §8, slice S8): a standby's own address, published with the addresses. */
+    sparesTitle: word('Spares'),
+    sparesExplain: word('Where this community would go if this server were lost. It is published with the addresses.'),
+    sparesNone: word('No spares yet.'),
+    spareAdd: word('Add a spare'),
+    spareAddQuestion: word("Members' phones go to {address} only when none of this community's addresses answers, and only once a standby there has taken over and proves it is this community. Anyone can see it. Only add a standby you control."),
+    spareAdded: word('{address} is a spare now.'),
+    spareRemove: word('Remove spare'),
+    spareRemoved: word('{address} is no longer a spare.'),
     /** What members' phones follow: the server's signed list, as it stands. */
     followLine: wordn("Members' phones follow this list: {n} address, main {address}.", "Members' phones follow this list: {n} addresses, main {address}."),
 } as const;

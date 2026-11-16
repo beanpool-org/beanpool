@@ -31,6 +31,10 @@
  * first contact is trusted today (§3.2). From then on every list must be that key's (core chooseAddressList), and an
  * older list or number is never taken (§7).
  *
+ * Spares (S8, §6): when everything listed was asked and none answers as the community, with nowhere listed to go, the kept
+ * list's spares are asked too, and one is taken only when it proves with the key at a take-over count above the one held
+ * and serves the newer list that names it (address-decide.ts takeSpare). The move is the same move as any other.
+ *
  * What it does: utils/address-decide.ts decides; here it is written. Proved and refused addresses and the highest count go
  * into the record; a move writes `using`, then the phone's address (reconnect.ts switchPhoneTo, no carry: the file is the
  * same), then the saved rows follow to it (nodes.ts followSavedRow, last: a copy opened during the move saves the old
@@ -51,7 +55,9 @@ import {
     addressListUrl, addressOf, addressProofUrl, chooseAddressList, compareAddressNumbers, readAddressList, verifyAddressProof,
     type SignedAddressList,
 } from '@beanpool/core';
-import { decideAddress, PROOF_FRESH_MS, type AddressAnswer, type AddressLineKind } from './address-decide';
+import {
+    decideAddress, PROOF_FRESH_MS, takeSpare, type AddressAnswer, type AddressDecision, type AddressLineKind, type SpareAnswer,
+} from './address-decide';
 import { followableOrigin, keptIdentityAt } from './address-follow';
 import { addressSpelling, communityKeyOf, communityRecordOf, recordHolds, type CommunityRecord } from './community-index';
 import { changeCommunityRecords, communityRecordsReady } from './community-record';
@@ -283,7 +289,7 @@ async function round(atOpen: boolean, injected?: Partial<VerifyDeps>, newestList
     const silentDue = !!silent && (silent.due === true || now - silent.since >= SILENT_DUE_MS);
 
     const listed = kept?.list.addresses ?? [];
-    const main = kept?.list.main ?? null;
+    let main = kept?.list.main ?? null;
     const epochHeld = record.epoch ?? 0;
     const askAll = answers[usingAddress].kind === 'other-key' || silentDue || (!!kept && !listed.includes(usingAddress));
     // The once-a-day ask on the main: the address proved longest ago (off the main, the main is asked at each round).
@@ -318,10 +324,45 @@ async function round(atOpen: boolean, injected?: Partial<VerifyDeps>, newestList
         const a = addressOf(origin);
         if (a) proved[a] = p;
     }
-    const decision = decideAddress({
+    let decision: AddressDecision = decideAddress({
         using: usingAddress, main, listed, mainSeen: record.mainSeen ? addressOf(record.mainSeen) : null, epoch: epochHeld,
         proved, answers, silentDue, now,
     });
+
+    // Spares (address-decide.ts, "Spares"; design §6, slice S8): asked only when everything listed was asked this round, none
+    // answered as the community and there is nowhere listed to go. Taken only at a count above the one held, by the newer
+    // list's word (takeSpare). A spare that doesn't prove is never refused: a standby may take over an hour later.
+    const listedAnswers = !askAll || decision.to !== null
+        || Object.values(answers).some((a) => a.kind === 'proved' && a.epoch >= decision.epoch);
+    const spares = kept && !listedAnswers ? kept.list.spares.filter((s) => {
+        if (s === usingAddress) return false;
+        const holder = communityRecordOf(originOf(s));
+        return !holder || holder.id === record.id; // another record's address is that record's: records never cross
+    }) : [];
+    if (spares.length) {
+        const heldEpoch = Math.max(epochHeld, decision.epoch);
+        const said = await Promise.all(spares.map(async (spare) => {
+            const proof = await prove(spare, peerId!, deps);
+            let signed: SignedAddressList | null = null;
+            if (proof.kind === 'proved' && proof.epoch > heldEpoch) {
+                const offered = await deps.get(addressListUrl(spare)).catch(() => null);
+                const choice = offered?.status === 200 && !offered.unparsed ? chooseAddressList(offered.body, { peerId: peerId!, kept, communityId }) : null;
+                if (choice?.action === 'replace') signed = choice.signed;
+            }
+            const answer: SpareAnswer = { proof, list: signed ? signed.list : null };
+            return { spare, signed, answer };
+        }));
+        const taken = said.find((x) => takeSpare({ listedAnswers, epoch: heldEpoch, spare: x.spare, answer: x.answer }));
+        if (taken && taken.signed && taken.answer.proof.kind === 'proved') {
+            console.log(`[addresses] No listed address of ${from} answers as the community; the spare ${taken.spare} proves at take-over count ${taken.answer.proof.epoch}`);
+            kept = taken.signed;
+            main = kept.list.main;
+            decision = {
+                action: 'switch', to: taken.spare, epoch: taken.answer.proof.epoch, drop: decision.drop,
+                proved: [...decision.proved, taken.spare], line: answers[usingAddress].kind === 'silent' ? 'not-answering' : 'left',
+            };
+        }
+    }
 
     // From here each step removes or writes, and they run under the one move lock (community-move-lock.ts), which the
     // member's own switch holds from before it closes the copy until the new address is written: a switch started but not

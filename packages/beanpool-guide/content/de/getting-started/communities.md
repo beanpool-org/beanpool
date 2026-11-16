@@ -67,19 +67,12 @@ Deine anderen Communitys funktionieren wie zuvor.
 
 Du kannst auch in den **Einstellungen** unter **System**, dann **Gespeicherte Communities** wechseln. Deine Communitys sind dort aufgelistet. Die gerade genutzte ist als aktiv markiert. Tippe bei einer anderen auf **Zu dieser Community wechseln**, um zu ihr zu wechseln.
 
-## Wenn deine Community an eine neue Adresse umzieht
+## Wenn deine Community ihre Adresse ändert
 
-Eine Community kann unter mehr als einer Adresse antworten: unter der Nummer ihres Servers (wie etwa 203.0.113.5), einem beanpool.org-Namen oder ihrer eigenen Domain. Eine davon ist ihre Hauptadresse. Welche, entscheiden ihre Eigentümer.
+Eine Community kann unter mehr als einer Adresse antworten, und ihre Eigentümer legen fest, welche ihre Hauptadresse ist.
 
-Auf dem Telefon musst du nichts tun. Dein Telefon prüft die Adressen deiner Community von selbst, wenn du die App öffnest und etwa einmal pro Stunde, und wechselt erst dann zu einer anderen Adresse, wenn sie mit dem eigenen Schlüssel deiner Community geantwortet hat. Dann gilt:
-
-- **Wenn die Eigentümer eine neue Hauptadresse wählen**, zieht dein Telefon von selbst dorthin um, meist innerhalb eines Tages, mit allem, was es für diese Community aufbewahrt, einschließlich deiner Nachrichten. Die Startseite zeigt einmal eine Zeile, zum Beispiel **Riverside ist jetzt unter beans.example.org zu finden. Dieses Telefon nutzt ab jetzt diese Adresse. Sonst hat sich nichts geändert.**
-- **Wenn die Adresse, die dein Telefon nutzt, nicht mehr antwortet**, etwa fünf Minuten lang, oder nicht antwortet, wenn du die App öffnest, wechselt dein Telefon zur Hauptadresse oder zu einer anderen Adresse der Community, die antwortet. Die Startseite sagt dann zum Beispiel **riverside.beanpool.org antwortet nicht. Dieses Telefon nutzt vorerst beans.example.org.** Sobald die Hauptadresse wieder antwortet, kehrt dein Telefon von selbst dorthin zurück.
-- **Wenn die Adresse, die dein Telefon nutzt, nicht mehr als deine Community antwortet**, wechselt dein Telefon sofort zur Hauptadresse oder zu einer anderen Adresse, die mit dem eigenen Schlüssel deiner Community geantwortet hat, und sagt es auf der Startseite: **riverside.beanpool.org antwortet nicht mehr als Riverside. Dieses Telefon nutzt jetzt beans.example.org.** Hat keine andere Adresse so geantwortet, bleibt dein Telefon bei der Adresse, die es nutzt, und die Startseite sagt nichts. Zu einer Adresse, die mit einem anderen Schlüssel antwortet, wechselt dein Telefon nie.
-- Von selbst wechselt dein Telefon nur zu Adressen, die auf der eigenen Liste der Community stehen.
-- Wenn die alte Adresse nicht mehr antwortet, bevor dein Telefon von einer anderen erfahren hat, kann nichts deinem Telefon mitteilen, wohin die Community gezogen ist. Frage ihre Eigentümer nach der neuen Adresse, tippe dann auf die Bohne, danach auf **Community hinzufügen** und gib sie dort ein.
-
-In der Web-App gehört die Anmeldung eines Browsers zu einer Adresse, also bleibt sie, wo sie ist. Unter einer Adresse, unter der die Community noch antwortet, sagt dir eine unauffällige Zeile oben, wo ihre Hauptadresse jetzt ist: **Die Hauptadresse dieser Gemeinschaft ist jetzt ‹Adresse›. Diese Adresse funktioniert weiterhin.** Sie erscheint erst, wenn die Hauptadresse deinem Browser mit dem eigenen Schlüssel der Community geantwortet hat. Du kannst sie dort öffnen und dich anmelden, indem du dein Konto wiederherstellst oder deinen Browser von deinem Telefon aus verknüpfst.
+- **Auf dem Telefon musst du nichts tun.** Dein Telefon prüft die Adressen deiner Community von selbst und wechselt zur Hauptadresse, sobald diese mit dem eigenen Schlüssel deiner Community geantwortet hat. Antwortet die Adresse, die dein Telefon nutzt, nicht mehr oder nicht mehr als deine Community, nutzt es eine andere Adresse, die mit diesem Schlüssel geantwortet hat, und kehrt zurück, sobald die Hauptadresse wieder antwortet. Die Startseite sagt das einmal in einer Zeile. Hat keine so geantwortet, bleibt es, wo es ist. Sonst ändert sich nichts, auch nicht an deinen Nachrichten.
+- **In der Web-App** gehört deine Anmeldung zu der Adresse, die du geöffnet hast. Darum bleibt die Web-App dort und funktioniert weiter. Eine unauffällige Zeile oben nennt die Hauptadresse. Tippe auf **Dort öffnen**, um dorthin zu gehen, und melde dich dort mit **Diesen Browser vom Telefon aus verknüpfen** an, oder mit deiner Anmeldung oder deinen 12 Wörtern.
 
 ## Eine Community auf diesem Telefon vergessen
 

@@ -87,19 +87,12 @@ A small number beside a community shows how many unread messages wait there, as 
 
 You can also switch in **Settings**, under **System**, then **Saved communities**. Your communities are listed there. The one you are using is marked as active. Tap **Switch to this community** on another one to move to it.
 
-## When your community moves to a new address
+## If your community changes its address
 
-A community can answer at more than one address: its server's number (such as 203.0.113.5), a beanpool.org name, or its own domain. One of them is its main address. Its owners choose which.
+A community can answer at more than one address, and its owners choose which one is its main address.
 
-On the phone, you don't need to do anything. Your phone checks your community's addresses by itself, when the app opens and about once an hour, and moves to another address only after it has answered with your community's own key. Then:
-
-- **When the owners choose a new main address**, your phone moves there by itself, usually within a day, with what it keeps for that community, your messages included. Home shows one line once, such as **Riverside now lives at beans.example.org. This phone uses it from now on. Nothing else changed.**
-- **When the address your phone uses stops answering** for about five minutes, or doesn't answer when you open the app, your phone moves to the main address, or to another address of the community that answers. Home says, for example, **riverside.beanpool.org isn't answering. This phone uses beans.example.org for now.** Once the main address answers again, your phone goes back to it by itself.
-- **When the address your phone uses no longer answers as your community**, your phone moves at once to the main address, or to another address that has answered with your community's own key, and says so on Home: **riverside.beanpool.org no longer answers as Riverside. This phone now uses beans.example.org.** If no other address has answered that way, your phone stays on the address it uses, and Home says nothing. Your phone never moves to an address that answers with another key.
-- Your phone only ever moves by itself to an address on the community's own list.
-- If the old address stopped answering before your phone heard of any other, nothing can tell your phone where the community went. Ask its owners for the new address, then tap the bean, then **Add a community**, and type it there.
-
-In the web app, a browser's sign-in belongs to one address, so it stays where it is. At an address the community still answers to, a quiet line at the top tells you where its main address is now: **This community's main address is now ‹address›. This address keeps working.** It shows only once the main address has answered your browser with the community's own key. You can open it there, and sign in by restoring your account or linking your browser from your phone.
+- **On the phone, there is nothing to do.** Your phone checks your community's addresses by itself and moves to the main one once it has answered with your community's own key. If the address your phone uses stops answering, or no longer answers as your community, it uses another that has answered with that key, and goes back once the main one answers. Home says so in one line, once. If none has, it stays. Nothing else changes, your messages included.
+- **In the web app,** your sign-in belongs to the address you opened, so the web app stays there and keeps working. A quiet line at the top names the main address. Tap **Open it there** to go to it, then sign in there with **Link this browser from your phone**, or with your sign-in or your 12 words.
 
 ## Forgetting a community on this phone
 

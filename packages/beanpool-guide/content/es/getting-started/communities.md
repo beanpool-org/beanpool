@@ -67,19 +67,12 @@ Tus otras comunidades funcionan como antes.
 
 También puedes cambiar en **Ajustes**, bajo **Sistema**, luego **Comunidades guardadas**. Tus comunidades están listadas allí. La que estás usando está marcada como activa. Toca **Cambiar a esta comunidad** en otra para pasar a ella.
 
-## Cuando tu comunidad se muda a una nueva dirección
+## Si tu comunidad cambia de dirección
 
-Una comunidad puede responder en más de una dirección: el número de su servidor (como 203.0.113.5), un nombre de beanpool.org o su propio dominio. Una de ellas es su dirección principal. Sus propietarios eligen cuál.
+Una comunidad puede responder en más de una dirección, y sus propietarios eligen cuál es su dirección principal.
 
-En el teléfono, no tienes que hacer nada. Tu teléfono comprueba por sí solo las direcciones de tu comunidad, al abrir la app y más o menos una vez por hora, y solo pasa a otra dirección después de que haya respondido con la clave propia de tu comunidad. Entonces:
-
-- **Cuando los propietarios eligen una nueva dirección principal**, tu teléfono se traslada allí por sí solo, normalmente en menos de un día, con lo que conserva para esa comunidad, incluidos tus mensajes. Inicio muestra una línea una sola vez, como **Riverside ahora está en beans.example.org. Este teléfono la usa a partir de ahora. Nada más cambió.**
-- **Cuando la dirección que usa tu teléfono deja de responder** durante unos cinco minutos, o no responde cuando abres la app, tu teléfono pasa a la dirección principal, o a otra dirección de la comunidad que responda. Inicio dice, por ejemplo, **riverside.beanpool.org no responde. Por ahora este teléfono usa beans.example.org.** Cuando la dirección principal vuelve a responder, tu teléfono regresa a ella por sí solo.
-- **Cuando la dirección que usa tu teléfono ya no responde como tu comunidad**, tu teléfono pasa de inmediato a la dirección principal, o a otra dirección que haya respondido con la clave propia de tu comunidad, y lo dice en Inicio: **riverside.beanpool.org ya no responde como Riverside. Este teléfono ahora usa beans.example.org.** Si ninguna otra dirección ha respondido así, tu teléfono se queda en la dirección que usa, e Inicio no dice nada. Tu teléfono nunca pasa a una dirección que responde con otra clave.
-- Por sí solo, tu teléfono solo pasa a direcciones de la propia lista de la comunidad.
-- Si la dirección anterior dejó de responder antes de que tu teléfono supiera de otra, nada puede decirle a tu teléfono a dónde fue la comunidad. Pide a sus propietarios la nueva dirección, luego toca el frijol, luego **Añadir una comunidad** y escríbela allí.
-
-En la aplicación web, el inicio de sesión de un navegador pertenece a una dirección, así que se queda donde está. En una dirección a la que la comunidad todavía responde, una línea discreta en la parte superior te dice dónde está ahora su dirección principal: **La dirección principal de esta comunidad ahora es ‹dirección›. Esta dirección sigue funcionando.** Solo aparece cuando la dirección principal ya ha respondido a tu navegador con la clave propia de la comunidad. Puedes abrirla allí e iniciar sesión restaurando tu cuenta o vinculando tu navegador desde tu teléfono.
+- **En el teléfono, no tienes que hacer nada.** Tu teléfono comprueba por sí solo las direcciones de tu comunidad y pasa a la principal en cuanto esta responde con la propia clave de tu comunidad. Si la dirección que usa tu teléfono deja de responder, o ya no responde como tu comunidad, usa otra dirección que haya respondido con esa clave y vuelve en cuanto responde la principal. Inicio lo indica en una línea, una sola vez. Si ninguna lo ha hecho, se queda donde está. Nada más cambia, tampoco tus mensajes.
+- **En la app web,** tu inicio de sesión pertenece a la dirección que abriste, así que la app web se queda allí y sigue funcionando. Una línea discreta arriba indica la dirección principal. Toca **Ábrela allí** para ir a ella y, después, inicia sesión allí con **Vincula este navegador desde tu teléfono**, o con tu inicio de sesión o tus 12 palabras.
 
 ## Olvidar una comunidad en este teléfono
 

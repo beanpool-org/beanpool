@@ -67,19 +67,12 @@ Le altre tue comunità funzionano come prima.
 
 Puoi anche cambiare comunità in **Impostazioni**, sotto **Sistema**, poi **Comunità salvate**. Le tue comunità sono elencate lì. Quella che stai usando è contrassegnata come attiva. Tocca **Passa a questa comunità** su un'altra per spostarti su di essa.
 
-## Quando la tua comunità si sposta a un nuovo indirizzo
+## Se la tua comunità cambia indirizzo
 
-Una comunità può rispondere a più di un indirizzo: l'indirizzo IP del suo server (come 203.0.113.5), un nome beanpool.org o un suo dominio. Uno di questi è il suo indirizzo principale. Sono i suoi proprietari a scegliere quale.
+Una comunità può rispondere a più di un indirizzo, e i suoi proprietari scelgono quale sia il suo indirizzo principale.
 
-Sul telefono, non devi fare nulla. Il telefono controlla da solo gli indirizzi della tua comunità, quando apri l'app e circa una volta all'ora, e passa a un altro indirizzo solo dopo che ha risposto con la chiave della tua comunità. Poi:
-
-- **Quando i proprietari scelgono un nuovo indirizzo principale**, il telefono si sposta lì da solo, di solito entro un giorno, con tutto ciò che conserva per quella comunità, inclusi i tuoi messaggi. La Home mostra una riga una sola volta, come **Riverside ora si trova su beans.example.org. Questo telefono lo usa da ora in poi. Nient'altro è cambiato.**
-- **Quando l'indirizzo che usa il telefono smette di rispondere** per circa cinque minuti, o non risponde quando apri l'app, il telefono passa all'indirizzo principale, o a un altro indirizzo della comunità che risponde. La Home dice, per esempio, **riverside.beanpool.org non risponde. Per ora questo telefono usa beans.example.org.** Quando l'indirizzo principale risponde di nuovo, il telefono ci torna da solo.
-- **Quando l'indirizzo che usa il telefono non risponde più come la tua comunità**, il telefono passa subito all'indirizzo principale, o a un altro indirizzo che ha risposto con la chiave della tua comunità, e lo dice nella Home: **riverside.beanpool.org non risponde più come Riverside. Ora questo telefono usa beans.example.org.** Se nessun altro indirizzo ha risposto così, il telefono resta sull'indirizzo che usa, e la Home non dice nulla. Il telefono non passa mai a un indirizzo che risponde con un'altra chiave.
-- Da solo, il telefono passa solo a indirizzi presenti nell'elenco della comunità stessa.
-- Se il vecchio indirizzo ha smesso di rispondere prima che il telefono venisse a conoscenza di un altro, nulla può comunicare al telefono dove si è trasferita la comunità. Chiedi ai suoi proprietari il nuovo indirizzo, poi tocca il fagiolo, seleziona **Aggiungi una comunità** e digitalo lì.
-
-Nell'app web, l'accesso di un browser appartiene a un solo indirizzo, quindi resta dov'è. A un indirizzo a cui la comunità risponde ancora, una riga discreta in alto ti dice dove si trova ora il suo indirizzo principale: **L'indirizzo principale di questa comunità ora è ‹indirizzo›. Questo indirizzo continua a funzionare.** Compare solo dopo che l'indirizzo principale ha risposto al tuo browser con la chiave della comunità. Puoi aprirlo lì, e accedere ripristinando il tuo account o collegando il browser dal telefono.
+- **Sul telefono non devi fare nulla.** Il tuo telefono controlla da solo gli indirizzi della tua comunità e passa a quello principale appena ha risposto con la chiave della tua comunità. Se l'indirizzo che usa il tuo telefono smette di rispondere, o non risponde più come la tua comunità, ne usa un altro che ha risposto con quella chiave e torna indietro appena il principale risponde. La Home lo dice in una riga, una volta sola. Se nessuno l'ha fatto, resta dov'è. Nient'altro cambia, nemmeno i tuoi messaggi.
+- **Nell'app web,** il tuo accesso appartiene all'indirizzo che hai aperto, quindi l'app web resta lì e continua a funzionare. Una riga discreta in alto indica l'indirizzo principale. Tocca **Aprila lì** per andarci, poi accedi lì con **Collega questo browser dal tuo telefono**, oppure con il tuo accesso o le tue 12 parole.
 
 ## Dimenticare una comunità su questo telefono
 

@@ -67,19 +67,12 @@ Vos autres communautés fonctionnent comme avant.
 
 Vous pouvez également basculer dans les **Paramètres**, sous **Système**, puis **Communautés enregistrées**. Vos communautés y sont listées. Celle que vous utilisez est marquée comme active. Touchez **Basculer vers cette communauté** sur une autre pour y basculer.
 
-## Lorsque votre communauté déménage vers une nouvelle adresse
+## Si votre communauté change d'adresse
 
-Une communauté peut répondre à plus d'une adresse : le numéro de son serveur (comme 203.0.113.5), un nom en beanpool.org ou son propre nom de domaine. L'une d'elles est son adresse principale. Ses propriétaires choisissent laquelle.
+Une communauté peut répondre à plus d'une adresse, et ses propriétaires choisissent laquelle est son adresse principale.
 
-Sur le téléphone, vous n'avez rien à faire. Votre téléphone vérifie de lui-même les adresses de votre communauté, à l'ouverture de l'application et environ une fois par heure, et ne passe à une autre adresse qu'après qu'elle a répondu avec la clé propre à votre communauté. Ensuite :
-
-- **Lorsque les propriétaires choisissent une nouvelle adresse principale**, votre téléphone y bascule de lui-même, en général dans la journée, avec ce qu'il conserve pour cette communauté, vos messages inclus. L'Accueil affiche une ligne une seule fois, par exemple **Riverside se trouve maintenant à beans.example.org. Ce téléphone l’utilise désormais. Rien d’autre n’a changé.**
-- **Lorsque l'adresse qu'utilise votre téléphone cesse de répondre** pendant environ cinq minutes, ou ne répond pas quand vous ouvrez l'application, votre téléphone passe à l'adresse principale, ou à une autre adresse de la communauté qui répond. L'Accueil indique par exemple **riverside.beanpool.org ne répond pas. Ce téléphone utilise beans.example.org pour l’instant.** Dès que l'adresse principale répond de nouveau, votre téléphone y revient de lui-même.
-- **Lorsque l'adresse qu'utilise votre téléphone ne répond plus en tant que votre communauté**, votre téléphone passe aussitôt à l'adresse principale, ou à une autre adresse qui a répondu avec la clé propre à votre communauté, et l'indique sur l'Accueil : **riverside.beanpool.org ne répond plus en tant que Riverside. Ce téléphone utilise maintenant beans.example.org.** Si aucune autre adresse n'a répondu ainsi, votre téléphone reste sur l'adresse qu'il utilise, et l'Accueil n'indique rien. Votre téléphone ne passe jamais à une adresse qui répond avec une autre clé.
-- De lui-même, votre téléphone ne passe qu'à des adresses de la liste propre à la communauté.
-- Si l'ancienne adresse a cessé de répondre avant que votre téléphone n'ait connaissance d'une autre, rien ne peut indiquer à votre téléphone où est allée la communauté. Demandez la nouvelle adresse à ses propriétaires, puis touchez le haricot, puis **Ajouter une communauté**, et saisissez-la ici.
-
-Dans l'application web, la connexion d'un navigateur appartient à une seule adresse : elle reste donc où elle est. À une adresse à laquelle la communauté répond encore, une ligne discrète en haut vous indique où se trouve maintenant son adresse principale : **L'adresse principale de cette communauté est désormais ‹adresse›. Cette adresse continue de fonctionner.** Elle ne s'affiche qu'une fois que l'adresse principale a répondu à votre navigateur avec la clé propre à la communauté. Vous pouvez l'ouvrir là-bas, et vous connecter en restaurant votre compte ou en liant votre navigateur depuis votre téléphone.
+- **Sur le téléphone, vous n'avez rien à faire.** Votre téléphone vérifie de lui-même les adresses de votre communauté et passe à l'adresse principale dès qu'elle a répondu avec la clé propre à votre communauté. Si l'adresse qu'utilise votre téléphone cesse de répondre, ou ne répond plus en tant que votre communauté, il utilise une autre adresse qui a répondu avec cette clé et revient dès que l'adresse principale répond. L'Accueil le signale en une ligne, une seule fois. Si aucune ne l'a fait, il reste où il est. Rien d'autre ne change, vos messages non plus.
+- **Dans l'application web,** votre connexion appartient à l'adresse que vous avez ouverte : l'application web reste donc là et continue de fonctionner. Une ligne discrète en haut indique l'adresse principale. Touchez **L'ouvrir là-bas** pour y aller, puis connectez-vous là-bas avec **Lier ce navigateur depuis votre téléphone**, ou avec votre connexion ou vos 12 mots.
 
 ## Oublier une communauté sur ce téléphone
 

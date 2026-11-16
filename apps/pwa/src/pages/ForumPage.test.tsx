@@ -8,7 +8,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Call = { method: string; path: string; body?: any };
-const node = vi.hoisted(() => ({ calls: [] as Call[], answer: null as null | ((c: Call) => unknown), role: 'member' as string | null, linkables: { groups: [] as any[], listings: [] as any[], events: [] as any[] } }));
+const node = vi.hoisted(() => ({ calls: [] as Call[], answer: null as null | ((c: Call) => unknown), role: 'member' as string | null, linkables: { groups: [] as any[], listings: [] as any[], events: [] as any[], hosted: [] as any[] } }));
 vi.mock('../lib/api', async (orig) => ({
     ...(await orig<typeof import('../lib/api')>()),
     request: vi.fn(async (method: string, path: string, body?: unknown) => {
@@ -22,13 +22,15 @@ vi.mock('../lib/api', async (orig) => ({
     myNodeRoleOnce: vi.fn(async () => node.role),
     // What the Link sheet lists (slice F9): the member's groups, listings and events, as those reads answer them.
     getYourGroups: vi.fn(async () => ({ items: node.linkables.groups })),
-    getMarketplacePosts: vi.fn(async () => node.linkables.listings),
+    // Events are opt-in on the node: the hosted read asks for them by name (types: 'event'), the listings read never sees one.
+    getMarketplacePosts: vi.fn(async (f?: { types?: string }) => (f?.types === 'event' ? node.linkables.hosted ?? [] : node.linkables.listings)),
     getMyEvents: vi.fn(async () => node.linkables.events),
 }));
 vi.mock('../lib/blocklist', () => ({ blockUser: vi.fn(async () => true) }));
 
-import { ForumPage } from './ForumPage';
-import { forgetForum, keptTopic } from '../lib/forum';
+import { useState } from 'react';
+import { ForumPage, type ForumDoor } from './ForumPage';
+import { forgetForum, keptTopic, searchForum } from '../lib/forum';
 import { blockUser } from '../lib/blocklist';
 
 const ME = 'me-key';
@@ -574,7 +576,7 @@ describe('links (slice F9)', () => {
     const shownLink = (kind: string, id: string, title: string, over: Record<string, unknown> = {}) => ({ kind, shown: true, id, title, photo: null, listingType: null, startAt: null, byWriter: false, ...over });
     const mine = (over: Record<string, unknown> = {}) => { state.topics[0] = { ...state.topics[0], writer: { publicKey: ME, name: 'Me' }, ...over }; };
     const menu = async () => { fireEvent.click(screen.getByTestId('forum-topic-menu')); return screen.findByTestId('forum-menu'); };
-    beforeEach(() => { node.linkables = { groups: [], listings: [], events: [] }; });
+    beforeEach(() => { node.linkables = { groups: [], listings: [], events: [], hosted: [] }; });
 
     it('the chips under the opening words are the node\'s answer: a shown link opens its thing, a placeholder says its kind and opens nothing', async () => {
         state.topics[0] = { ...state.topics[0], links: [shownLink('group', 'g-1', 'Garden Crew'), { kind: 'listing', shown: false }, shownLink('listing', 'n-1', 'Seed swap', { listingType: 'need', byWriter: true })] };
@@ -685,7 +687,123 @@ describe('links (slice F9)', () => {
         expect(await screen.findByTestId('forum-topic-title')).toHaveTextContent('Seed swap ideas');
         rerender(<ForumPage me={ME} door={{ starter: 'start-community', q: 'Riverside' }} />);
         await waitFor(() => expect((screen.getByTestId('forum-section-pick') as HTMLSelectElement).value).toBe('s-start'));
-        await waitFor(() => expect(node.calls.some((c) => c.path === '/api/forum/search?q=Riverside')).toBe(true));
+        // Kept to the section it names (round 2, #3252 finding 4): the town's posts in "Start a community near you" alone.
+        await waitFor(() => expect(node.calls.some((c) => c.path === '/api/forum/search?q=Riverside&section=s-start')).toBe(true));
+        expect(node.calls.some((c) => c.path === '/api/forum/search?q=Riverside')).toBe(false);
         expect(screen.getByTestId('forum-search-box')).toHaveValue('Riverside');
+    });
+});
+
+/**
+ * Round 2 (#3252 findings 3 and 4): every door into the forum is one-shot and lands exactly where it names. A table over the
+ * doors (the town search, a circle's row, a group's Topics row, a topic) x the paths after it (used, back from a topic, the
+ * member's own search or ✕ first, the Chats side and back), each from a forum where the member had searched before.
+ * The harness holds the door as App does and lets go of it when the Forum says it took it; "side" mounts the Forum afresh.
+ */
+describe('doors are one-shot and land where they name (round 2)', () => {
+    const START = { id: 's-start', starter: 'start-community', name: null, about: null, position: 2, starts: 'members', listed: true, archived: false };
+    function Harness({ initial, taken }: { initial: ForumDoor; taken: () => void }) {
+        const [door, setDoor] = useState<ForumDoor | null>(initial);
+        const [shown, setShown] = useState(true);
+        return (
+            <>
+                <button type="button" data-testid="h-side" onClick={() => setShown((v) => !v)}>side</button>
+                {shown && <ForumPage me={ME} door={door} onDoorTaken={() => { taken(); setDoor(null); }} />}
+            </>
+        );
+    }
+    const DOORS: { name: string; door: ForumDoor; section?: string; town?: string }[] = [
+        { name: 'the Find card\'s town search', door: { starter: 'start-community', q: 'Riverside' }, section: 's-start', town: 'Riverside' },
+        { name: 'a circle\'s Talk about it row', door: { starter: 'start-community', q: '' }, section: 's-start' },
+        { name: 'a group\'s Topics row', door: { section: 's-news' }, section: 's-news' },
+        { name: 'a topic\'s door', door: { topic: 'ft-1' } },
+    ];
+    const PATHS = ['used', 'back from a topic', 'the member\'s own search, or ✕, first', 'the Chats side and back'] as const;
+    const townAsks = () => node.calls.filter((c) => c.path.startsWith('/api/forum/search?q=Riverside')).length;
+    const pick = () => (screen.getByTestId('forum-section-pick') as HTMLSelectElement).value;
+    const side = () => { fireEvent.click(screen.getByTestId('h-side')); fireEvent.click(screen.getByTestId('h-side')); };
+
+    beforeEach(async () => {
+        state.front = front({ sections: [...SECTIONS, START] });
+        searched = (q) => ({ hits: [hit(2, `${q} by the river`)], next: null });
+        // An earlier search of the member's, kept for the page's life: its hits would show in the list's place.
+        await searchForum('beans');
+        node.calls.length = 0;
+    });
+
+    it.each(DOORS.flatMap((d) => PATHS.map((path) => [d.name, path, d] as const)))('%s, %s', async (_name, path, d) => {
+        const taken = vi.fn();
+        render(<Harness initial={d.door} taken={taken} />);
+        // Used: it lands where it names, the kept search gone from over it.
+        if (!d.section) {
+            expect(await screen.findByTestId('forum-topic-title')).toHaveTextContent('Seed swap ideas');
+        } else {
+            await waitFor(() => expect(pick()).toBe(d.section));
+            if (d.town) {
+                expect(await screen.findAllByTestId('forum-search-hit')).toHaveLength(1);
+                expect(screen.getByTestId('forum-search-box')).toHaveValue(d.town);
+                expect(sent('GET', `/api/forum/search?q=${d.town}&section=${d.section}`)).toHaveLength(1);
+            } else {
+                expect(await screen.findAllByTestId('forum-topic-row')).toHaveLength(2);
+                expect(screen.queryByTestId('forum-search-hit')).toBeNull();
+                expect(screen.getByTestId('forum-search-box')).toHaveValue('');
+            }
+        }
+        expect(node.calls.some((c) => c.path.includes('q=beans'))).toBe(false);
+        expect(taken).toHaveBeenCalledTimes(1);
+        if (path === 'used') return;
+
+        if (path === 'back from a topic') {
+            if (d.section) {
+                fireEvent.click((await screen.findAllByTestId(d.town ? 'forum-search-hit' : 'forum-topic-row'))[0]);
+                await screen.findByTestId('forum-topic-title');
+            }
+            fireEvent.click(screen.getByTestId('forum-back'));
+            // Back on the list: the door's hits drawn from the kept copy (asked once), else the section's topics.
+            if (d.town) expect(await screen.findAllByTestId('forum-search-hit')).toHaveLength(1);
+            else expect(await screen.findAllByTestId('forum-topic-row')).toHaveLength(2);
+            if (d.section) expect(pick()).toBe(d.section);
+        } else if (path === 'the member\'s own search, or ✕, first') {
+            if (!d.section) { fireEvent.click(screen.getByTestId('forum-back')); await screen.findAllByTestId('forum-topic-row'); }
+            if (d.town) {
+                // ✕, a topic from the list, back: the list the member chose, not the town's hits again.
+                fireEvent.click(screen.getByRole('button', { name: 'Clear the search' }));
+                fireEvent.click((await screen.findAllByTestId('forum-topic-row'))[0]);
+                await screen.findByTestId('forum-topic-title');
+                fireEvent.click(screen.getByTestId('forum-back'));
+                expect(await screen.findAllByTestId('forum-topic-row')).toHaveLength(2);
+                expect(screen.queryByTestId('forum-search-hit')).toBeNull();
+            }
+            // Their own search, a hit, back: their hits, not the door's.
+            fireEvent.change(screen.getByTestId('forum-search-box'), { target: { value: 'garden' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+            fireEvent.click((await screen.findAllByTestId('forum-search-hit'))[0]);
+            await screen.findByTestId('forum-topic-title');
+            fireEvent.click(screen.getByTestId('forum-back'));
+            expect(await screen.findAllByTestId('forum-search-hit')).toHaveLength(1);
+            expect(screen.getByTestId('forum-search-box')).toHaveValue('garden');
+            expect(sent('GET', '/api/forum/search?q=garden')).toHaveLength(1);
+        } else {
+            side();
+            // Mounted afresh with the door let go of: the list, nothing opened or asked again.
+            await screen.findByTestId('forum-page');
+            expect(screen.queryByTestId('forum-topic-title')).toBeNull();
+            expect(taken).toHaveBeenCalledTimes(1);
+        }
+        expect(townAsks()).toBe(d.town ? 1 : 0);
+    });
+
+    it('a door still waiting for the front is dropped by the member\'s own move: a section picked first asks nothing', async () => {
+        state.front = null as any;
+        let answerFront: (f: unknown) => void = () => {};
+        const later = new Promise((r) => { answerFront = r; });
+        node.answer = (c) => (c.path === '/api/forum' ? later : standIn(c));
+        render(<ForumPage me={ME} door={{ starter: 'start-community', q: 'Riverside' }} />);
+        await screen.findAllByTestId('forum-topic-row');
+        fireEvent.change(screen.getByTestId('forum-section-pick'), { target: { value: '' } });
+        await act(async () => { answerFront(front({ sections: [...SECTIONS, START] })); await later; });
+        await screen.findByRole('option', { name: 'General' });
+        expect(pick()).toBe('');
+        expect(townAsks()).toBe(0);
     });
 });

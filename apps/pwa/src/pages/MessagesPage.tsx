@@ -38,7 +38,7 @@ import { dmLineIsOld, dmOldLineRunStarts, DM_OLD_LINES_WORDS } from '@beanpool/c
 // Old chat's photos and cards: conversion code, log row OLDCHAT, remove after 12 Dec 2026 (core, as the phone opens them).
 import { chatAboutOfOldLine } from '@beanpool/core';
 import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
-import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, DmNotLockedError, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
+import { dmKeyContext, dmListedPeer, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, DmNotLockedError, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
 import { chatAboutDrafts, chatAboutOfLine, hasChatAbout, metadataWithAbout, sealChatAbout, type ChatAbout, formatHundredths, isHundredths } from '@beanpool/core';
 import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, startedDm, GROUP_HOLD_STARTED_DM_TEXT, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
 import { encodePlaintext } from '../lib/e2e-crypto';
@@ -75,6 +75,7 @@ import { reportDmLine, reportRequestAndBlock } from '../lib/dm-line-report';
 import { ChatConfirmDialog } from '../components/ChatConfirmDialog';
 import { ChatDealStrip } from '../components/ChatDealStrip';
 import { ChatMenuModal } from '../components/ChatMenuModal';
+import { DmChatMenu } from '../components/DmChatMenu';
 import { ContactsPage } from './ContactsPage';
 import { ContactsInfo, contactsHoverLine } from '../components/ContactsInfo';
 import { clearContactsRestored, openContacts, useContacts } from '../lib/contacts-store';
@@ -2428,6 +2429,20 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             ? (activeConv.participants?.find(p => p !== identity.publicKey) || '')
             : '';
         const isPeerBlocked = peerPubkey ? isUserBlocked(peerPubkey) : false;
+        // A DM's ⋮ (DESIGN-dm-key-signal-model §5, S3): its one item, Key code, reads the listed key's digits, so it is there
+        // in every DM, the one whose other side is unknown too (it says there is no code yet).
+        const dmMenuButton = activeConv.type === 'dm' ? (
+            <button
+                type="button"
+                data-testid="dm-chat-menu-toggle"
+                onClick={() => setChatMenuOpen(true)}
+                aria-label={t('Chat menu')}
+                aria-haspopup="dialog"
+                style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '1.25rem', minWidth: '44px', minHeight: '44px', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+                ⋮
+            </button>
+        ) : null;
         const inRequest = requestMode !== 'none';
         // Voice messages (V4, the phone's rules): in a DM both have accepted and a locked group's chat this member may write in,
         // where the community takes voice lines; never in a request, an event's or an enterprise's chat, or while editing.
@@ -2655,7 +2670,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 <span>{isPeerBlocked ? '🛡️' : '🚫'}</span>
                                 <span>{isPeerBlocked ? t('Unblock') : t('Block', undefined, 'button: block a member')}</span>
                             </button>
+                            {dmMenuButton}
                         </div>
+                    )}
+                    {activeConv.type === 'dm' && !peerPubkey && (
+                        <div className="flex items-center ml-auto">{dmMenuButton}</div>
                     )}
                 </div>
 
@@ -4038,6 +4057,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         onPickMute={handleSetMute}
                         onSearch={() => setChatSearch('')}
                         onGroupInfo={() => onNavigate?.('group', groupIdKey(activeConv.id))}
+                    />
+                )}
+                {activeConv.type === 'dm' && (
+                    <DmChatMenu
+                        isOpen={chatMenuOpen}
+                        peerName={peerNameFor(activeConv)}
+                        peerKey={dmListedPeer(activeConv, identity.publicKey)}
+                        onClose={() => setChatMenuOpen(false)}
                     />
                 )}
                 {/* A chat photo opened full screen (parity gap 4). */}

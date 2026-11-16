@@ -595,12 +595,12 @@ async function main(): Promise<void> {
     const far = newId('Far');
     registerVisitor(far.pk, 'Far', 'https://far.example.org');
     await call('POST', ann, '/api/blocks', { targetPubkey: far.pk });
-    // As federation-protocol.ts relays a DM: open, then send.
+    // The engine calls the deleted peer relay made (X7; no route makes them now): open, then send.
     const farConv = attempt(() => createConversation('dm', [far.pk, ann.pk], far.pk));
     let farLine: any = null;
     try { farLine = sendMessage(farConv!.id, far.pk, lockedDm().ciphertext, lockedDm().nonce); } catch (e: any) { console.error(`  (threw: ${e?.message})`); }
     assert(!!farLine?.id && inMessages([farLine.id]) === 0 && !(await listOf(ann))?.conversations?.some((c: any) => c.id === farConv?.id),
-        `a relayed line from someone Ann blocked is answered as stored, and reaches her not at all (${farLine?.id})`);
+        `a line by the engine calls, from someone Ann blocked, is answered as stored, and reaches her not at all (${farLine?.id})`);
 
     // ── 10. a standby's copy, and a prune ───────────────────────────────────────────────────────
     console.log("── 10. a standby's copy, and a prune ──");

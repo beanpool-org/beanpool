@@ -14,6 +14,12 @@ GitHub's merge queue is the only gate to `main` (Marty, 1 Nov 2026: "drop the Ma
 
 `scripts/check-ci-shards.test.mjs` fails on any edit that undoes the trigger or the ruleset.
 
+## Drafts: a fast check, then the full run
+
+A **draft** pull request gets only the fast check (Marty, 17 Nov 2026): `Draft check types`, `Draft check guards` and `Draft check tests`, three jobs planned from the PR's diff by `scripts/lanes/preflight-plan.mjs --draft` (turbo build, lint and typecheck of the packages the diff reaches; the "checks" shard's guards and words; the tests the changed files call for). Its run is titled `Draft check: <PR title>`. A draft check is never red for time alone: no part plans past 300 s (`DRAFT_PART_SECS`, a quarter of the job's 1200 s limit), and the tests part keeps to 200 s, taking the server suites the diff changes shortest first and naming the rest in its log as left to the full run (#3280's review: #3054's diff planned 4850 s of suites, so the draft was red on every push). The full run starts when the PR is **marked ready** (`ready_for_review`) and on every push after that; the merge queue's run is the full run, as before.
+
+A draft can never satisfy the required check. On a draft the shards and the aggregate are skipped, and GitHub reports a job skipped by its `if:` as a check a required check accepts as passing, so the aggregate's name is an expression that gives **Run BeanPool Test-All Pipeline** only when the job runs. GitHub lists a skipped job under its name's expression text, unevaluated (measured on #3280: `(github.event_name != 'pull_request' || ...) && 'Run BeanPool Test-All Pipeline' || 'Full run waits for ready (draft)'`), and required checks match the exact name, so no check named **Run BeanPool Test-All Pipeline** exists on a draft's run. After `gh pr ready` the PR has no required check until the full run's aggregate reports, so it cannot be queued. The lane tools read it the same way: `ci-wait.sh` calls a draft green on its fast check and a ready PR green only on the required check; `pr-state.mjs` marks a ready PR's `Draft check` rows superseded; `lib.sh` skips a draft's run when it looks for the newest full run.
+
 ## The numbers
 
 | Setting | Value | Why |

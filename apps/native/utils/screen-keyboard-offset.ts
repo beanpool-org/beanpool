@@ -5,9 +5,10 @@
  * react-native-keyboard-controller's KeyboardAvoidingView (1.20.7) pads by
  *   frame.y + frame.height − (windowHeight − keyboardHeight − keyboardVerticalOffset)
  * with `frame` read from onLayout, in its PARENT's frame. That is right only when the screen starts at the window's top.
- * On an iPhone a screen can be presented as a page sheet: post/[id] and public-profile are sheets, and native-stack
+ * On an iPhone a screen can be presented as a page sheet: post/[id] and public-profile are sheets, native-stack
  * presents any route without a presentation of its own that is pushed after a sheet as a sheet too
- * (@react-navigation/native-stack getModalRouteKeys). So a DM opened from a listing starts some 50 pt down the window,
+ * (@react-navigation/native-stack getModalRouteKeys), and an RN Modal with presentationStyle="pageSheet" (New Event,
+ * New Poll) is one as well. So a DM opened from a listing starts some 50 pt down the window,
  * and the padding came up short by exactly that: the keyboard covered the message box with the About bar sitting on the
  * keyboard (Rob, iPhone, 17 Nov).
  *

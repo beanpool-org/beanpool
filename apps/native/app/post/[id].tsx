@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Keyboa
 import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useKeepCaretVisible } from '../../components/useKeepCaretVisible';
+import { useScreenKeyboardOffset } from '../../components/useScreenKeyboardOffset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, ErrorBoundary } from 'expo-router';
 import { leaveScreen } from '../../utils/leave-screen';
@@ -569,6 +570,9 @@ function PostDetailModal() {
     const [eachRefusal, setEachRefusal] = useState<string | null>(null);
     // Keeps the field being typed in (the edit form, the rating comment, the reply box) above the keyboard.
     const { scrollRef: scrollViewRef, scrollProps: keepCaretVisible } = useKeepCaretVisible();
+    // This page is always an iPhone page sheet (sheetOptions in app/_layout.tsx), which starts below the window's top: the
+    // keyboard view below needs that much offset, or it lifts the page short by the sheet's top (utils/screen-keyboard-offset.ts).
+    const screenKeyboard = useScreenKeyboardOffset();
     // The style box (components/market-card-shell.ts): the card's chips, the page's boxes and buttons, as the event page draws them.
     const shell = useCardShell();
     // The photo frame is 4:3 of the column (the screen less the page's 16 a side); the carousel needs the number.
@@ -1691,7 +1695,7 @@ function PostDetailModal() {
     const termsNoteClamped = !termsNoteOpen && termsNoteLines >= 6;
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={[styles.container, { paddingTop: insets.top }]} onLayout={screenKeyboard.onScreenLayout}>
             {/* Header */}
             <View style={styles.header}>
                 <Pressable accessibilityRole="button" onPress={goBack} style={styles.backButton}>
@@ -1715,9 +1719,11 @@ function PostDetailModal() {
                 </View>
             </View>
 
-            {/* No keyboardVerticalOffset: this screen draws its own header (no navigation header), and keyboard-controller
-                already measures this view's frame, so an offset only adds that many dp of blank space above the keyboard. */}
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+            {/* keyboard-controller pads by this view's frame in its parent less the keyboard's top in the WINDOW. This page is an
+                iPhone page sheet, which starts below the window's top, so the screen's top in the window is the offset (0 on a
+                full-screen page and on Android). Without it the lift came up short by the sheet's top, and the caret-follow kept
+                the reply box inside a viewport that reached under the keyboard. */}
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={screenKeyboard.keyboardVerticalOffset}>
             <ScrollView ref={scrollViewRef} {...keepCaretVisible} contentContainerStyle={[styles.scroll, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 60 : 60 }]} keyboardShouldPersistTaps="handled">
                 {/*
                   * The page's parts in DESIGN-detail-pages-fable.md §2.1's order, as DESIGN-detail-pages-frame-fable.md §1.7 and §3 amend it,

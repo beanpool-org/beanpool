@@ -123,18 +123,78 @@ export function shardProblems(ciText, testAllText) {
     return problems;
 }
 
+// ── drafts (Marty, 17 Nov 2026): a DRAFT pull request runs jobs.draft, the fast check, and nothing else ──
+/** The one condition the full jobs may carry: every event but a draft pull request. */
+export const NOT_DRAFT = "github.event_name != 'pull_request' || !github.event.pull_request.draft";
+/** The draft job's condition: a draft pull request only. */
+export const DRAFT_ONLY = "github.event_name == 'pull_request' && github.event.pull_request.draft";
+/** The aggregate's name: the required check's on every event but a draft, another on a draft (whose skipped job would pass it). */
+export const REQUIRED_NAME_LINE = `\${{ (${NOT_DRAFT}) && '${REQUIRED_CHECK}' || 'Full run waits for ready (draft)' }}`;
+
+/**
+ * A GitHub Actions expression, the part ci.yml uses, evaluated for one event: github.event_name, github.event.pull_request.draft,
+ * github.event.pull_request.title, string literals, == != && || ! ( ), always() and format(). Anything else throws, so a new
+ * condition the table below does not know about fails the test instead of reading as true. `${{ }}` around it is optional.
+ */
+export function evalExpr(expr, { event, draft = false, title = 'A PR' }) {
+    const src = expr.trim().replace(/^\$\{\{\s*([\s\S]*?)\s*\}\}$/, '$1');
+    const ctx = { 'github.event_name': event, 'github.event.pull_request.draft': event === 'pull_request' ? draft : null,
+        'github.event.pull_request.title': event === 'pull_request' ? title : null };
+    const toks = src.match(/'(?:[^']|'')*'|[A-Za-z_][\w.-]*\(?|==|!=|&&|\|\||[!(),]|\S/g) || [];
+    let i = 0;
+    const peek = () => toks[i];
+    const take = (t) => { if (t !== undefined && toks[i] !== t) throw new Error(`expected ${t} at ${toks[i]} in ${src}`); return toks[i++]; };
+    // GitHub's && and || return an operand, as JavaScript's do; == compares loosely, strings case-insensitively.
+    const eq = (a, b) => (typeof a === 'string' && typeof b === 'string' ? a.toLowerCase() === b.toLowerCase() : a === b);
+    const or = () => { let v = and(); while (peek() === '||') { take(); const r = and(); v = v || r; } return v; };
+    const and = () => { let v = cmp(); while (peek() === '&&') { take(); const r = cmp(); v = v && r; } return v; };
+    const cmp = () => { let v = un(); while (peek() === '==' || peek() === '!=') { const op = take(); const r = un(); v = op === '==' ? eq(v, r) : !eq(v, r); } return v; };
+    const un = () => (peek() === '!' ? (take(), !un()) : atom());
+    const atom = () => {
+        const t = take();
+        if (t === '(') { const v = or(); take(')'); return v; }
+        if (/^'/.test(t)) return t.slice(1, -1).replace(/''/g, "'");
+        if (t === 'always(') { take(')'); return true; }
+        if (t === 'format(') {
+            const args = [or()];
+            while (peek() === ',') { take(); args.push(or()); }
+            take(')');
+            return String(args[0]).replace(/\{(\d+)\}/g, (_, k) => String(args[Number(k) + 1] ?? ''));
+        }
+        if (Object.hasOwn(ctx, t)) return ctx[t];
+        throw new Error(`evalExpr does not know "${t}" in ${src}: teach it, and the table test, what it means`);
+    };
+    const v = or();
+    if (i !== toks.length) throw new Error(`unexpected ${toks[i]} in ${src}`);
+    return v;
+}
+
+/** A job's `if:` and `name:` lines (the job's own, four spaces in), raw. */
+const jobKey = (ciText, id, key) => new RegExp(`^ {4}${key}: (.*)$`, 'm').exec(jobText(ciText, id))?.[1]?.trim();
+
 /** Every way the required check's name is wrong: not on the aggregate job, on another job, or the aggregate not gating every shard. */
 export function requiredCheckProblems(ciText, otherWorkflowTexts = []) {
     const problems = [];
     const job = jobText(ciText, 'test-all');
-    if (!new RegExp(`^ {4}name: ${REQUIRED_CHECK}\\s*$`, 'm').test(job)) problems.push(`jobs.test-all is not named "${REQUIRED_CHECK}", the ruleset's required check`);
+    if (jobKey(ciText, 'test-all', 'name') !== REQUIRED_NAME_LINE) {
+        problems.push(`jobs.test-all is not named "${REQUIRED_CHECK}" (on a draft, "Full run waits for ready (draft)"): name: ${REQUIRED_NAME_LINE}`);
+    }
     if (!/^ {4}needs: \[?\s*shard\s*\]?\s*$/m.test(job)) problems.push('jobs.test-all does not need the shard job');
-    if (!/^ {4}if: always\(\)\s*$/m.test(job)) problems.push('jobs.test-all has no `if: always()`: with a red shard it would be skipped, and a skipped required check passes');
+    if (jobKey(ciText, 'test-all', 'if') !== `always() && (${NOT_DRAFT})`) {
+        problems.push(`jobs.test-all is not \`if: always() && (${NOT_DRAFT})\`: with a red shard it would be skipped, and a skipped required check passes`);
+    }
     if (!/\[ "\$SHARDS" = success \]/.test(job)) problems.push('jobs.test-all does not fail unless every shard succeeded');
+    // The required name, written out or inside an expression: on exactly one line of every workflow, the aggregate's.
     const named = [ciText, ...otherWorkflowTexts].flatMap((t) => [...t.matchAll(/^ +name: (.*)$/gm)].map((m) => m[1].trim().replace(/^['"]|['"]$/g, '')))
-        .filter((n) => n === REQUIRED_CHECK);
+        .filter((n) => n.includes(REQUIRED_CHECK));
     if (named.length !== 1) problems.push(`${named.length} jobs or steps are named "${REQUIRED_CHECK}": exactly one, the aggregate, may be`);
     return problems;
+}
+
+/** ci.yml with one edit, which must apply: a mutation test whose edit no longer matches would pass on the unedited file. */
+function edited(from, to) {
+    assert.ok(CI.includes(from), `the edit no longer applies to ci.yml (changed?): ${from}`);
+    return CI.replace(from, to);
 }
 
 const otherWorkflows = () => readdirSync(WORKFLOWS).filter((f) => /\.ya?ml$/.test(f) && f !== 'ci.yml').map((f) => readFileSync(join(WORKFLOWS, f), 'utf8'));
@@ -194,7 +254,9 @@ export function trainBranchProblems(ciText, otherWorkflowTexts = []) {
     if (!dispatch) problems.push('ci.yml has no workflow_dispatch: a train branch could not be started');
     else if (dispatch.length > 1) problems.push('ci.yml\'s workflow_dispatch takes inputs: a train\'s dispatch passes none');
     const shard = jobText(ciText, 'shard');
-    if (/^ {4}if:/m.test(shard)) problems.push('jobs.shard has an `if:`: the whole matrix must run on a dispatch of a train branch');
+    // One `if:`, the draft's: true on every event but a draft pull request, so a dispatch runs the whole matrix.
+    const ifs = [...shard.matchAll(/^ {4}if: (.*)$/gm)].map((m) => m[1].trim());
+    if (ifs.length && (ifs.length > 1 || ifs[0] !== NOT_DRAFT)) problems.push(`jobs.shard has an \`if:\` other than \`${NOT_DRAFT}\`: the whole matrix must run on a dispatch of a train branch`);
     if (/^\s*environment:/m.test(ciText)) problems.push('ci.yml names an environment: a dispatch of a train branch must reach no deploy');
     if (/\bsecrets\./.test(ciText)) problems.push('ci.yml reads a secret: a dispatch of a train branch must reach no deploy');
     if (!/^permissions:\n {2}contents: read\s*$/m.test(ciText)) problems.push('ci.yml\'s token is not read-only');
@@ -223,9 +285,17 @@ export function mergeQueueTriggerProblems(ciText) {
     if (group?.some((l) => /paths/.test(l))) problems.push('merge_group has a paths filter: a queue entry could go without the check');
     if (!on.pull_request) problems.push('ci.yml has no pull_request trigger: a PR would have no check to enter the queue with');
     else if (on.pull_request.some((l) => /paths|branches/.test(l))) problems.push('pull_request is filtered: a PR left without a run can never get the required check, and there is no --admin to merge it with');
+    else {
+        // A draft's run is the fast check alone, so marking it ready must start the full run, and every push after that too.
+        const types = (/^ {4}types: \[(.*)\]\s*$/.exec(on.pull_request.find((l) => /^ {4}types:/.test(l)) || '')?.[1] || '').split(/\s*,\s*/);
+        const want = ['opened', 'synchronize', 'reopened', 'ready_for_review'];
+        if (want.some((t) => !types.includes(t))) problems.push(`pull_request types are not ${want.join(', ')}: a draft marked ready would get no full run, so never the required check`);
+    }
     if (!/^ {2}cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}\s*$/m.test(ciText)) problems.push('cancel-in-progress is not for pull requests alone: a queue entry\'s run must never be cancelled by another');
-    for (const job of ['shard', 'test-all']) {
-        if (/^ {4}if: (?!always\(\)\s*$)/m.test(jobText(ciText, job))) problems.push(`jobs.${job} has an \`if:\`: the whole matrix must run for a queue entry`);
+    // Each may skip a draft pull request (it runs jobs.draft), and nothing else: both conditions are true on merge_group.
+    for (const [job, only] of [['shard', NOT_DRAFT], ['test-all', `always() && (${NOT_DRAFT})`]]) {
+        const ifs = [...jobText(ciText, job).matchAll(/^ {4}if: (.*)$/gm)].map((m) => m[1].trim());
+        if (ifs.length > 1 || (ifs.length && ifs[0] !== only)) problems.push(`jobs.${job} has an \`if:\` other than \`${only}\`: the whole matrix must run for a queue entry`);
     }
     if (/^ {8}if: .*event_name == 'pull_request'/m.test(ciText)) problems.push('a step runs only on a pull request: a queue entry would go without it');
     if (!/^ {8}if: matrix\.compare_main && github\.event_name != 'push'\s*$/m.test(ciText)) problems.push('the step "Fetch origin/main" does not run on every event but a push: a queue entry would compare with nothing');
@@ -363,10 +433,74 @@ test('the queue starts the whole matrix, every PR gets the required check, and e
     says(CI.replace(GROUP, '  merge_group:\n'), /not limited to types/);
     says(CI.replace(GROUP, `${GROUP}    paths: ['**']\n`), /merge_group has a paths filter/);
     says(CI.replace('  pull_request:\n', "  pull_request:\n    paths:\n      - '!**/*.md'\n"), /pull_request is filtered/);
+    says(edited('types: [opened, synchronize, reopened, ready_for_review]', 'types: [opened, synchronize, reopened]'), /a draft marked ready would get no full run/);
+    says(edited('    types: [opened, synchronize, reopened, ready_for_review]\n', ''), /a draft marked ready would get no full run/);
     says(CI.replace("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", 'cancel-in-progress: true'), /cancel-in-progress is not for pull requests alone/);
     says(CI.replace('    name: Test-All shard ${{ matrix.name }}\n', "    name: Test-All shard ${{ matrix.name }}\n    if: github.event_name == 'pull_request'\n"), /jobs\.shard has an `if:`/);
     says(CI.replace("if: matrix.compare_main && github.event_name != 'push'", "if: matrix.compare_main && github.event_name == 'pull_request'"), /a step runs only on a pull request/);
-    assert.match(requiredCheckProblems(CI.replace('    if: always()\n', "    if: github.event_name == 'pull_request'\n")).join('\n'), /no `if: always\(\)`/);
+    assert.match(requiredCheckProblems(edited(`    if: always() && (${NOT_DRAFT})\n`, "    if: github.event_name == 'pull_request'\n")).join('\n'), /is not `if: always\(\) && /);
+    says(edited(`    if: always() && (${NOT_DRAFT})\n`, "    if: always() && github.event_name != 'pull_request'\n"), /jobs\.test-all has an `if:` other than/);
+    says(edited(`    if: ${NOT_DRAFT}\n`, "    if: github.event_name != 'merge_group'\n"), /jobs\.shard has an `if:` other than/);
+});
+
+// A DRAFT's run is the fast check alone (Marty, 17 Nov 2026). The table is every event ci.yml starts on, with and without a draft,
+// and what runs: the full matrix, the aggregate and the name its check carries, the draft check, and the run's title. Paths are
+// not a column of their own because no trigger reads them (asserted below): what a path changes is what the draft check RUNS,
+// which scripts/lanes/preflight.test.mjs tables.
+test('event x draft -> which jobs run, the name the required job reports, and the run title (the conditions evaluated)', () => {
+    const ifOf = (job) => jobKey(CI, job, 'if');
+    for (const job of ['shard', 'test-all', 'draft']) assert.ok(ifOf(job), `jobs.${job} has an if:`);
+    const runName = /^run-name: "(.*)"$/m.exec(CI)?.[1];
+    assert.ok(runName, 'ci.yml has a run-name, quoted');
+    // YAML: an unquoted value with ": " in it is a nested mapping, and GitHub refuses the whole file (a run with no jobs on every
+    // push: this PR's first push, run 43962846570). An expression with a colon in a string, such as the run-name's, is quoted.
+    const bare = [...CI.matchAll(/^ *(?:- )?[\w-]+: (\$\{\{.*)$/gm)].map((m) => m[1]).filter((v) => /: /.test(v));
+    assert.deepEqual(bare, [], 'an unquoted expression value with ": " in it');
+    const ALL = 'Full run waits for ready (draft)';
+    const TABLE = [
+        // event               draft  shard  test-all  its check's name   draft job  run title ('' = GitHub's own)
+        ['pull_request',       true,  false, false,    ALL,               true,      'Draft check: A PR'],
+        ['pull_request',       false, true,  true,     REQUIRED_CHECK,    false,     ''],
+        ['merge_group',        false, true,  true,     REQUIRED_CHECK,    false,     ''],
+        ['push',               false, true,  true,     REQUIRED_CHECK,    false,     ''],
+        ['workflow_dispatch',  false, true,  true,     REQUIRED_CHECK,    false,     ''],
+    ];
+    for (const [event, draft, shard, agg, name, fast, title] of TABLE) {
+        const c = { event, draft }, row = `${event}${draft ? ' (draft)' : ''}`;
+        assert.equal(Boolean(evalExpr(ifOf('shard'), c)), shard, `${row}: the shards ${shard ? 'run' : 'are skipped'}`);
+        assert.equal(Boolean(evalExpr(ifOf('test-all'), c)), agg, `${row}: the aggregate ${agg ? 'runs' : 'is skipped'}`);
+        assert.equal(evalExpr(jobKey(CI, 'test-all', 'name'), c), name, `${row}: the aggregate's check is named "${name}"`);
+        assert.equal(Boolean(evalExpr(ifOf('draft'), c)), fast, `${row}: the draft check ${fast ? 'runs' : 'is skipped'}`);
+        assert.equal(evalExpr(runName, c), title, `${row}: the run's title`);
+    }
+    // A skipped job reports success to a required check, so the one skipped where the required check is wanted must not carry it.
+    assert.notEqual(evalExpr(jobKey(CI, 'test-all', 'name'), { event: 'pull_request', draft: true }), REQUIRED_CHECK);
+    // GitHub lists a SKIPPED job under its name's expression text, unevaluated (measured on #3280's draft run: the check was
+    // "(github.event_name != 'pull_request' || ...) && 'Run BeanPool Test-All Pipeline' || ..."): not the exact name either.
+    const raw = jobKey(CI, 'test-all', 'name');
+    assert.notEqual(raw, REQUIRED_CHECK);
+    assert.notEqual(raw.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), REQUIRED_CHECK);
+    // No trigger reads paths: every PR gets a run, whatever it touches.
+    assert.ok(!Object.values(triggersOf(CI)).flat().some((l) => /\bpaths/.test(l)), 'a trigger filters by path');
+    // The evaluator knows only what it is taught: a condition it cannot read fails here, never reads as true.
+    assert.throws(() => evalExpr("github.ref == 'refs/heads/main'", { event: 'push' }), /does not know "github\.ref"/);
+    assert.equal(evalExpr("!(github.event_name == 'pull_request') && 'x' || 'y'", { event: 'push' }), 'x');
+});
+
+test('the draft check\'s names are the ones ci-wait.sh, pr-state.mjs, lib.sh and the planner read', async () => {
+    const { DRAFT_PARTS } = await import('./lanes/preflight-plan.mjs');
+    const { FAST_CHECK } = await import('./lanes/pr-state.mjs');
+    const job = jobText(CI, 'draft');
+    assert.equal(jobKey(CI, 'draft', 'name'), 'Draft check ${{ matrix.part }}');
+    assert.equal(FAST_CHECK, 'Draft check');
+    assert.match(readFileSync(join(ROOT, 'scripts/lanes/ci-wait.sh'), 'utf8'), /^FAST='Draft check'$/m);
+    assert.match(readFileSync(join(ROOT, 'scripts/lanes/lib.sh'), 'utf8'), /startswith\("Draft check: "\)/);
+    assert.match(/^run-name: (.*)$/m.exec(CI)[1], /format\('Draft check: \{0\}'/);
+    assert.deepEqual(/^ {8}part: \[(.*)\]\s*$/m.exec(job)?.[1].split(/\s*,\s*/), DRAFT_PARTS);
+    assert.match(job, /bash scripts\/lanes\/preflight\.sh --draft \$\{\{ matrix\.part \}\} --base "origin\/\$BASE"/);
+    // It decides nothing: never the required check's name, and the aggregate does not wait for it.
+    assert.ok(!job.includes(REQUIRED_CHECK));
+    assert.doesNotMatch(jobText(CI, 'test-all'), /needs: .*draft/);
 });
 
 test('the ruleset in the repository is the gate, and each edit that would undo the gate fails', () => {
@@ -532,9 +666,10 @@ test('each edit the check exists to catch fails it', () => {
     assert.notEqual(moved, CI);
     assert.match(shardProblems(moved, TEST_ALL).join('\n'), /website_status waits for website_contrast_light/);
     // The aggregate renamed, a second job given the name, or the aggregate no longer always()/gating.
-    assert.match(requiredCheckProblems(CI.replace(`    name: ${REQUIRED_CHECK}\n`, '    name: Test-All\n')).join('\n'), /jobs.test-all is not named/);
+    assert.match(requiredCheckProblems(edited(`    name: ${REQUIRED_NAME_LINE}\n`, '    name: Test-All\n')).join('\n'), /jobs.test-all is not named/);
+    assert.match(requiredCheckProblems(edited(`    name: ${REQUIRED_NAME_LINE}\n`, `    name: ${REQUIRED_CHECK}\n`)).join('\n'), /jobs.test-all is not named/, 'the plain name: a draft would carry it, skipped');
     assert.match(requiredCheckProblems(CI.replace('Test-All shard ${{ matrix.name }}', REQUIRED_CHECK)).join('\n'), /2 jobs or steps are named/);
     assert.match(requiredCheckProblems(CI, [`jobs:\n  x:\n    name: ${REQUIRED_CHECK}\n`]).join('\n'), /2 jobs or steps are named/);
-    assert.match(requiredCheckProblems(CI.replace('    if: always()\n', '')).join('\n'), /no `if: always\(\)`/);
+    assert.match(requiredCheckProblems(edited(`    if: always() && (${NOT_DRAFT})\n`, '')).join('\n'), /is not `if: always\(\) && /);
     assert.match(requiredCheckProblems(CI.replace('    needs: shard\n', '')).join('\n'), /does not need the shard job/);
 });

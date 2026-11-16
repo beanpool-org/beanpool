@@ -22,7 +22,11 @@
 #                          gh's buckets separated by spaces (pass fail pending skipping cancel), none (no checks yet: gh says so on
 #                          stderr and exits 1), or either of those +push (a push lands during that read). No file: pass. Like gh, it
 #                          exits 8 while a check is pending and 1 when one failed, with the list on stdout either way.
+#                          A bucket may name its check, bucket@Check_name with underscores for spaces (pass@Draft_check_types);
+#                          a bare bucket is the required check's, "Run BeanPool Test-All Pipeline".
 #   $FAKE_STATE/checks-<sha>  the same, for the checks GitHub lists while the PR's head is <sha>; when there is none, checks is read.
+#   $FAKE_STATE/draft      what `gh pr view --json isDraft` says, one line per read, the last one sticks (no file: false)
+#   run-<sha> rows may be draft-<state>: a draft PR's fast run, titled "Draft check: <PR title>" as ci.yml's run-name makes it.
 # --jq filters run through real jq over GitHub's JSON shape (gh's own is gojq), so the library's filters are what gets tested.
 S=${FAKE_STATE:?}
 print -r -- "gh $*" >> "$S/gh.calls"
@@ -70,7 +74,7 @@ case "$1 $2" in
                     if (( n > 0 )); then print -r -- "$((n - 1)) $sha" > "$S/lands"; else print -r -- "$sha" > "$S/head"; rm -f "$S/lands"; fi
                   fi
                   cat "$S/head" 2>/dev/null || print fakehead;;
-                *isDraft*) print false;; *state*) print OPEN;; *headRefName*) print feat/x;;
+                *isDraft*) pop "$S/draft" false;; *state*) print OPEN;; *headRefName*) print feat/x;;
                 *mergeable*)
                   [ -e "$S/mergeable-down" ] && { print -u2 "HTTP 502: Bad Gateway"; exit 1; }
                   if [ -e "$S/mergeable" ]; then m=$(pop "$S/mergeable" ''); else m=MERGEABLE; fi
@@ -83,7 +87,10 @@ case "$1 $2" in
               st=$(pop "$cf" pass)
               [[ "$st" == *+push ]] && { st=${st%+push}; push; }
               [ "$st" = none ] && { print -u2 "no checks reported on the 'feat/x' branch"; exit 1; }
-              print -r -- ${=st} | tr ' ' '\n' | jq -R '{bucket: .}' | jq -s . | jq -r "$jqf"
+              # bucket@Check_name (underscores for spaces) names a check; a bare bucket is the required check's.
+              print -r -- ${=st} | tr ' ' '\n' \
+                | jq -R 'split("@") | {bucket: .[0], name: ((.[1] // "Run_BeanPool_Test-All_Pipeline") | gsub("_"; " "))}' \
+                | jq -s . | jq -r "$jqf"
               case " $st " in *" pending "*) exit 8;; *" fail "*) exit 1;; esac;;
   "pr ready") ;;
   "pr edit")  [ "$FAKE_GH_LABEL_DOWN" = 1 ] && { print -u2 "HTTP 502: Bad Gateway"; exit 1; }
@@ -93,9 +100,11 @@ case "$1 $2" in
                 [ "$FAKE_GH_RUNS_DOWN" = 1 ] && { print -u2 "HTTP 502: Bad Gateway"; exit 1; }
                 sha=${args[$args[(i)--commit]+1]}; limit=${args[$args[(i)--limit]+1]:-20}; rows=(${(s:,:)$(pop "$S/run-$sha" '')})
                 for r in $rows[1,$limit]; do
+                  # draft-<state>: a draft PR's fast run, which ci.yml titles "Draft check: <PR title>".
+                  t="Fake title"; [[ "$r" == draft-* ]] && { r=${r#draft-}; t="Draft check: Fake title"; }
                   case "$r" in
-                    queued|in_progress) print -r -- "{\"status\":\"$r\",\"conclusion\":\"\"}";;
-                    *)                  print -r -- "{\"status\":\"completed\",\"conclusion\":\"$r\"}";;
+                    queued|in_progress) print -r -- "{\"status\":\"$r\",\"conclusion\":\"\",\"displayTitle\":\"$t\"}";;
+                    *)                  print -r -- "{\"status\":\"completed\",\"conclusion\":\"$r\",\"displayTitle\":\"$t\"}";;
                   esac
                 done | jq -s . | jq -r "$jqf"
               else print -r -- "${FAKE_GH_RUN:-completed success}"; fi;;

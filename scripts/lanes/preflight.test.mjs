@@ -9,7 +9,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { readChecksShard, readTestTimeout, parseDiff, planSteps, gitRepo, namedPaths, REPO_ROOT, VITEST_PACKAGES, GUARD_TESTS,
-  PLAN_SECS, MAX_EXTRA } from './preflight-plan.mjs';
+  PLAN_SECS, MAX_EXTRA, planDraft, DRAFT_TURBO_CHECKS, DRAFT_PLAN_SECS, DRAFT_PARTS, DRAFT_PART_SECS, DRAFT_SERVER_JOBS,
+  UNKNOWN_RUN_SECS, serverRunsEst, manifestRuns, ROUTE_LINE, TABLE_LINE } from './preflight-plan.mjs';
 
 const RUNNER = path.join(REPO_ROOT, 'scripts/lanes/preflight.sh');
 const real = gitRepo();
@@ -300,6 +301,10 @@ test('a guide page adds no step (its tests take 5 min: CI runs them); a script r
 
 // ── the runner ──
 
+// The runner's defaults are under test: no PREFLIGHT_* setting from the shell that runs these tests (a preflight step, or
+// ci.yml's draft job, which sets PREFLIGHT_HARD_SECS) reaches it unless a test passes it. Nor CI's TEST_ALL_LOG_DIR: a red
+// test step's log would land in the run's uploaded logs.
+const ENV = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('PREFLIGHT_') && k !== 'TEST_ALL_LOG_DIR'));
 const made = [];
 after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 function tmpdir() { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-test-')); made.push(d); return d; }
@@ -313,7 +318,7 @@ function planFile(dir, rows) {
 function run(planPath, env = {}, runner = RUNNER, args = []) {
   const r = spawnSync('bash', [runner, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, TMPDIR: path.dirname(planPath), PREFLIGHT_PLAN_FILE: planPath,
+    env: { ...ENV, TMPDIR: path.dirname(planPath), PREFLIGHT_PLAN_FILE: planPath,
       PREFLIGHT_LOCK: path.join(path.dirname(planPath), 'no-lock-here'), ...env },
   });
   return { rc: r.status, out: r.stdout + r.stderr };
@@ -474,7 +479,7 @@ test('the step waits while the lock is held and runs once it is gone', async () 
   const d = tmpdir();
   const lock = path.join(d, 'heavy-test.lock');
   fs.mkdirSync(lock);
-  const child = spawn('bash', [RUNNER], { env: { ...process.env, PREFLIGHT_PLAN_FILE: planFile(d, [['one', 'first', `touch ${d}/ran`]]),
+  const child = spawn('bash', [RUNNER], { env: { ...ENV, PREFLIGHT_PLAN_FILE: planFile(d, [['one', 'first', `touch ${d}/ran`]]),
     PREFLIGHT_LOCK: lock, PREFLIGHT_LOCK_WAIT_SECS: '30', PREFLIGHT_LOCK_POLL_SECS: '1' } });
   let out = '';
   child.stdout.on('data', b => { out += b; });
@@ -485,4 +490,256 @@ test('the step waits while the lock is held and runs once it is gone', async () 
   assert.equal(rc, 0, out);
   assert.match(out, /waiting: the heavy-test lock is held/);
   assert.ok(fs.existsSync(`${d}/ran`));
+});
+
+// ── the draft check: a draft PR's fast CI check, one part per job (ci.yml jobs.draft; Marty, 17 Nov 2026) ──
+
+const MB = 'abc1234def';
+const draftPlan = (part, files, opts = {}) => planDraft(part, parseDiff(diff(files)), real, { mergeBase: MB, ...opts });
+
+test('draft table: each part x the paths a diff touches -> the steps it runs', () => {
+  const ROUTE = "router.get('/api/x', h);";
+  const TABLE = [
+    // part      files touched                                              steps                          a command must have
+    ['types',  { 'apps/native/app/x.tsx': 'x' },                            ['turbo'],                     `--filter='...[${MB}]'`],
+    ['types',  { 'packages/beanpool-core/src/x.ts': 'x' },                  ['turbo'],                     `--filter='...[${MB}]'`],
+    ['types',  { 'apps/pwa/src/a.tsx': 'x', 'package.json': 'x' },          ['turbo'],                     'pnpm turbo run build lint typecheck --continue'],
+    ['types',  { 'pnpm-lock.yaml': 'x' },                                   ['turbo'],                     'pnpm turbo run build lint typecheck --continue'],
+    ['types',  { 'scripts/lanes/preflight-plan.mjs': 'x', 'scripts/lanes/preflight.sh': 'x' }, ['scripts-syntax'], 'node --check scripts/lanes/preflight-plan.mjs && bash -n scripts/lanes/preflight.sh'],
+    ['types',  { 'scripts/lanes/lib.sh': 'x' },                             ['scripts-syntax'],            '{ ! command -v zsh >/dev/null || zsh -n scripts/lanes/lib.sh; }'],
+    // The quick step first, turbo last: no step waits behind the long one for the clock.
+    ['types',  { 'apps/pwa/src/a.tsx': 'x', 'scripts/lanes/preflight.sh': 'x' }, ['scripts-syntax', 'turbo'], 'bash -n scripts/lanes/preflight.sh'],
+    ['types',  { 'docs/merge-gate.md': 'x' },                               ['none'],                      'true'],
+    ['guards', { 'docs/merge-gate.md': 'x' },                               ['guards', 'words'],           'bash scripts/test-all.sh'],
+    ['guards', { 'apps/native/app/x.tsx': 'x' },                            ['guards', 'words'],           'node scripts/words/words.mjs check'],
+    ['tests',  { 'docs/merge-gate.md': 'x' },                               ['none'],                      'true'],
+    ['tests',  { 'apps/server/src/routes/x.ts': ROUTE },                    ['server:test-guest-view', 'server:test-health-cors'], 'SERVER_SUITES_ONLY=test-guest-view'],
+    ['tests',  { 'apps/server/src/test-guest-view.ts': 'x' },               ['server:changed'],            'SERVER_SUITES_ONLY=test-guest-view'],
+    ['tests',  { 'apps/server/src/test-not-registered-here.ts': 'x' },      ['none'],                      'true'],
+    ['tests',  { 'apps/pwa/src/darkModeHover.ts': 'x' },                    ['vitest:@beanpool/pwa'],      'src/darkModeHover.test.ts'],
+  ];
+  for (const [part, files, want, cmd] of TABLE) {
+    const steps = draftPlan(part, files);
+    const label = `${part} ${Object.keys(files).join(' ')}`;
+    assert.deepEqual(names(steps), want, label);
+    assert.ok(steps.some(s => s.cmd.includes(cmd)), `${label}: a step runs ${cmd}\n${steps.map(s => s.cmd).join('\n')}`);
+    for (const s of steps) assert.ok(Number.isInteger(s.est) && s.why, `${label}: ${s.name} has an estimate and a why`);
+  }
+});
+
+test('draft types: the packages a diff reaches are named, with their dependents; a package dir needs its package.json', () => {
+  const t = step(draftPlan('types', { 'apps/native/app/x.tsx': 'x', 'apps/pwa/src/a.ts': 'x' }), 'turbo');
+  assert.match(t.why, /^apps\/native, apps\/pwa and every package that depends on them$/);
+  assert.deepEqual(names(draftPlan('types', { 'apps/not-a-package/x.ts': 'x' })), ['none']);
+  assert.throws(() => planDraft('types', new Map(), real, {}), /needs the merge base/);
+  assert.throws(() => draftPlan('everything', {}), /--draft takes types, guards, tests/);
+});
+
+test('draft guards: the checks shard read from ci.yml, less build, lint and typecheck (the types part runs those narrowed)', () => {
+  const shard = readChecksShard(real.ciYml).split(' ');
+  const g = step(draftPlan('guards', {}), 'guards');
+  const ran = g.cmd.match(/^TEST_ALL_ONLY='([^']*)' bash scripts\/test-all\.sh$/)[1].split(' ');
+  assert.deepEqual(ran, shard.filter(c => !DRAFT_TURBO_CHECKS.includes(c)));
+  assert.deepEqual(DRAFT_TURBO_CHECKS.filter(c => shard.includes(c)), DRAFT_TURBO_CHECKS, 'build, lint and typecheck are still in the shard');
+  for (const guard of ['no_node_names', 'native_dark_contrast', 'no_google_fonts', 'words', 'workflows']) assert.ok(ran.includes(guard), guard);
+});
+
+test('draft tests: the budget is the draft\'s (PREFLIGHT_DRAFT_PLAN_SECS), and the two whole-tree steps are the guards part\'s', () => {
+  const big = Object.fromEntries(real.tests('apps/native').slice(0, 400).map(t => [t.replace(/\.test\.(tsx?|jsx?)$/, '.$1'), 'x']));
+  // No per-package cap here, so the time budget is what binds.
+  const steps = draftPlan('tests', big, { maxExtra: 10000 });
+  assert.ok(!names(steps).includes('checks') && !names(steps).includes('words'));
+  const est = steps.reduce((k, s) => k + s.est, 0);
+  assert.ok(est <= DRAFT_PLAN_SECS, `estimate ${est} s within the draft budget ${DRAFT_PLAN_SECS} s`);
+  assert.ok(steps.some(s => s.left > 0), 'what did not fit is left to the full run, and counted');
+  assert.match(step(steps, 'vitest:beanpool-pillar').why, new RegExp(`left to the full run \\(past 10000 a package or the draft's ${DRAFT_PLAN_SECS} s budget\\): \\d+ `));
+  const wider = draftPlan('tests', big, { maxExtra: 10000, planSecs: 400 }).reduce((k, s) => k + s.est, 0);
+  assert.ok(wider > est, 'a bigger budget plans more');
+});
+
+// ── a draft check is never red for time alone (Opus review of #3280: #3054's diff planned server:changed 4850 s, past the
+// draft job's PREFLIGHT_HARD_SECS=1200, so preflight exited 75 on every push) ──
+
+// Three real merges whose changed suites planned past 1200 s before the budget (main's last 600 merges, 17 Nov): each one's
+// touched paths, and which had a route or a table line (scripts/lanes/test/fixtures/preflight/big-merges.json).
+const BIG = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'scripts/lanes/test/fixtures/preflight/big-merges.json'), 'utf8'));
+const A_ROUTE = "router.get('/api/x', h);", A_TABLE = 'CREATE TABLE x (v TEXT)';
+assert.ok(ROUTE_LINE.test(A_ROUTE) && TABLE_LINE.test(A_TABLE));
+const merged = key => new Map(BIG[key].files.map(f => [f,
+  [...(BIG[key].route.includes(f) ? [A_ROUTE] : []), ...(BIG[key].table.includes(f) ? [A_TABLE] : []), '']]));
+const RUNS = manifestRuns();
+const DURATIONS = JSON.parse(real.read('scripts/server-suite-durations.json'));
+/** The registered server suites a touched map changes (the draft's tests part's candidates). */
+const changedSuites = touched => [...new Set([...touched.keys()].map(f => (/^apps\/server\/src\/(test-[\w-]+)\.ts$/.exec(f) || [])[1])
+  .filter(n => n && real.exists(`apps/server/src/${n}.ts`) && RUNS.some(r => r.name === n)))];
+/** The suites server:changed runs, and those its why names as left to the full run. */
+function serverSplit(steps) {
+  const s = step(steps, 'server:changed');
+  if (!s) return { ran: [], left: [] };
+  const only = s.cmd === 'true' ? '' : s.cmd.match(/^SERVER_SUITES_ONLY=('[^']*'|\S+) /)[1].replace(/'/g, '');
+  const left = (s.why.match(/; left to the full run \(past the draft's \d+ s budget\), \d+: (.*)$/) || ['', ''])[1];
+  return { ran: only.split(' ').filter(Boolean), left: left.split(', ').filter(Boolean) };
+}
+
+test('draft budget table: every part of every draft plans within DRAFT_PART_SECS, the tests part within DRAFT_PLAN_SECS', () => {
+  const tracked = spawnSync('git', ['ls-files'], { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 1 << 28 }).stdout.split('\n');
+  const scripts = tracked.filter(f => /\.(m?js|cjs|sh)$/.test(f) && !/^(apps|packages|workers)\/[^/]+\//.test(f));
+  const allSuites = new Map([...new Set(RUNS.map(r => r.name))].map(n => [`apps/server/src/${n}.ts`, ['']]));
+  const ROWS = [
+    // label                                                           touched                                   changed suites
+    ['an empty diff',                                                  new Map(),                                'none'],
+    ['every registered server suite, with a route and a table (generated)', new Map([...allSuites,
+      ['apps/server/src/routes/forum.ts', [A_ROUTE]], ['apps/server/src/db/schema.sql', [A_TABLE]]]),          'shortest run, rest named'],
+    ['3152d378 #3054 (real)',                                          merged('3152d378 #3054'),                 'shortest run, rest named'],
+    ['ac05e75b #3055 (real)',                                          merged('ac05e75b #3055'),                 'shortest run, rest named'],
+    // Its ~150 changed web and phone test files and the table suites take the 200 s first (17 Nov: no suite fits).
+    ['8fa35ae0 #3033 (real)',                                          merged('8fa35ae0 #3033'),                 'budgeted'],
+    ['every script in the tree (scripts-syntax, script-tests)',        new Map(scripts.map(f => [f, ['']])),     'none'],
+    ['all of these at once, and package.json', new Map([...allSuites, ...Object.keys(BIG).flatMap(k => [...merged(k)]),
+      ...scripts.map(f => [f, ['']]), ['package.json', ['']]]),                                                  'budgeted'],
+  ];
+  assert.deepEqual(ROWS.filter(r => r[0].endsWith('(real)')).map(r => r[0].replace(' (real)', '')), Object.keys(BIG));
+  assert.ok(scripts.length > 100, `${scripts.length} scripts`);
+  for (const [label, touched, suites] of ROWS) {
+    for (const part of DRAFT_PARTS) {
+      const steps = planDraft(part, touched, real, { mergeBase: MB });
+      const at = `${label}, ${part}: ${steps.map(s => `${s.name} ${s.est}`).join(', ')}`;
+      assert.ok(total(steps) <= DRAFT_PART_SECS, `${at}: ${total(steps)} s past DRAFT_PART_SECS ${DRAFT_PART_SECS}`);
+      if (part === 'tests') assert.ok(total(steps) <= DRAFT_PLAN_SECS, `${at}: past DRAFT_PLAN_SECS ${DRAFT_PLAN_SECS}`);
+      for (const s of steps) assert.ok(Number.isInteger(s.est) && s.est >= 0 && s.why && s.cmd, `${at}: ${s.name} has an estimate, a why, a command`);
+      if (part !== 'tests') continue;
+      // Every changed suite runs (here or in a route or table step) or is named as left to the full run: none dropped silently.
+      const want = changedSuites(touched);
+      const { ran, left } = serverSplit(steps);
+      const elsewhere = want.filter(n => step(steps, `server:${n}`));
+      assert.deepEqual([...ran, ...left, ...elsewhere].sort(), [...want].sort(), `${at}: every changed suite ran or was named`);
+      if (suites === 'none') { assert.equal(want.length, 0, at); continue; }
+      // These rows exercise the budget: run whole, their suites alone would plan past it (#3054's 4850 s, before).
+      const alone = serverRunsEst(RUNS.filter(r => want.includes(r.name) && !elsewhere.includes(r.name)), DURATIONS);
+      assert.ok(alone > DRAFT_PLAN_SECS && left.length > 0, `${at}: the suites alone plan ${alone} s, so some are left`);
+      // 'budgeted': how many run depends on what the vitest steps took first; 'shortest run' rows have no vitest step.
+      if (suites === 'shortest run, rest named') {
+        assert.ok(!steps.some(s => s.name.startsWith('vitest:')), `${at}: no vitest step takes the budget first`);
+        assert.ok(ran.length > 0, `${at}: the shortest still run`);
+      }
+      if (!ran.length) assert.match(step(steps, 'server:changed').why, /^no server suite this diff changes fits; left to the full run/, at);
+      else {
+        const longest = Math.max(...ran.map(n => serverRunsEst(RUNS.filter(r => r.name === n), DURATIONS)));
+        const shortestLeft = Math.min(...left.map(n => serverRunsEst(RUNS.filter(r => r.name === n), DURATIONS)));
+        assert.ok(longest <= shortestLeft, `${at}: shortest first (ran up to ${longest} s, left from ${shortestLeft} s)`);
+      }
+    }
+  }
+});
+
+test('the changed suites\' estimate is run-server-suites.mjs\'s own order: two at a time, longest first, serial runs alone after', () => {
+  const r = (id, serial = false) => ({ id, name: id, serial });
+  const d = { a: 100, b: 60, c: 50, d: 30, s: 20 };
+  assert.equal(DRAFT_SERVER_JOBS, 2);
+  const TABLE = [
+    // runs                         seconds: the runner's 10 s start, then the busier of the two workers, then the serial runs
+    [[],                            10],
+    [[r('a')],                      10 + 100],
+    [[r('b'), r('c')],              10 + 60], //       side by side
+    [[r('a'), r('b'), r('c')],      10 + 110], //      a | b then c
+    [[r('c'), r('d'), r('s', true)], 10 + 50 + 20], // the serial run after the pool, alone
+    [[r('new')],                    10 + UNKNOWN_RUN_SECS], // the snapshot lacks it
+  ];
+  for (const [runs, want] of TABLE) assert.equal(serverRunsEst(runs, d), want, runs.map(x => x.id).join(' '));
+  // On every registered run, honest both ways: at least half the pooled time and the longest run, at most Graham's bound for
+  // two workers (half the pooled time plus half the longest), each plus the serial runs.
+  const secs = x => DURATIONS[x.id] ?? UNKNOWN_RUN_SECS;
+  const pooled = RUNS.filter(x => !x.serial).map(secs), serial = RUNS.filter(x => x.serial).map(secs).reduce((k, v) => k + v, 0);
+  const sum = pooled.reduce((k, v) => k + v, 0), max = Math.max(...pooled);
+  const est = serverRunsEst(RUNS, DURATIONS);
+  assert.ok(est >= 10 + Math.max(sum / 2, max) + serial && est <= Math.ceil(10 + (sum + max) / 2 + serial), `${est} s for ${RUNS.length} runs`);
+  // A suite's variants are its runs: SERVER_SUITES_ONLY=<suite> runs them all, so its estimate counts them all.
+  const hrc = RUNS.filter(x => x.name === 'test-heavy-read-cap');
+  assert.ok(hrc.length >= 2 && hrc.some(x => x.id !== x.name), 'test-heavy-read-cap has variants in the manifest');
+  assert.ok(RUNS.some(x => x.serial), 'the manifest has serial runs');
+});
+
+test('draft tests: the changed suites go shortest first while the part stays inside its budget; the rest are named, left to the full run', () => {
+  const durations = { 'test-a': 5, 'test-b': 50, 'test-c': 100, 'test-d': 300 };
+  const repo = { ...real, exists: f => /^apps\/server\/src\/test-[a-d]\.ts$/.test(f) || real.exists(f),
+    read: f => (f === 'scripts/server-suite-durations.json' ? JSON.stringify(durations) : real.read(f)),
+    serverRuns: () => Object.keys(durations).map(n => ({ id: n, name: n, serial: false })) };
+  const files = Object.fromEntries('abcd'.split('').map(x => [`apps/server/src/test-${x}.ts`, 'x']));
+  const plan3 = (extra, planSecs) => planDraft('tests', parseDiff(diff({ ...files, ...extra })), repo, { mergeBase: MB, planSecs });
+  const roomy = plan3({}, 200);
+  assert.equal(step(roomy, 'server:changed').cmd, "SERVER_SUITES_ONLY='test-a test-b test-c' TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs");
+  assert.equal(step(roomy, 'server:changed').est, 10 + 100, 'c | b then a');
+  assert.match(step(roomy, 'server:changed').why, /test-a, test-b, test-c; left to the full run \(past the draft's 200 s budget\), 1: test-d$/);
+  // A route takes its two suites' 53 s first.
+  const tight = plan3({ 'apps/server/src/routes/x.ts': A_ROUTE }, 100);
+  assert.deepEqual(serverSplit(tight), { ran: ['test-a'], left: ['test-b', 'test-c', 'test-d'] });
+  assert.ok(total(tight) <= 100, `${total(tight)} s`);
+  // None fits: the step runs nothing and says so.
+  const none = plan3({ 'apps/server/src/routes/x.ts': A_ROUTE }, 55);
+  assert.deepEqual([step(none, 'server:changed').cmd, step(none, 'server:changed').est], ['true', 0]);
+  assert.match(step(none, 'server:changed').why, /^no server suite this diff changes fits; left to the full run \(past the draft's 55 s budget\), 4: test-a, test-b, test-c, test-d$/);
+  // A suite a route step runs already is not run twice.
+  const guest = planDraft('tests', parseDiff(diff({ 'apps/server/src/routes/x.ts': A_ROUTE, 'apps/server/src/test-guest-view.ts': 'x' })), real, { mergeBase: MB });
+  assert.deepEqual(names(guest), ['server:test-guest-view', 'server:test-health-cors']);
+});
+
+test('draft tests: the changed suites take budget from the vitest pins, importers and scanners, never a changed vitest test', () => {
+  const tests = real.tests('apps/native').slice(0, 12);
+  const vitestOnly = Object.fromEntries([...tests.map(t => [t, 'x']), ...tests.map(t => [t.replace(/__tests__\/|\.test/g, ''), 'x'])]);
+  const suites = Object.fromEntries([...new Set(RUNS.filter(r => !r.serial).map(r => r.name))].slice(0, 60).map(n => [`apps/server/src/${n}.ts`, 'x']));
+  const counts = steps => steps.filter(s => s.name.startsWith('vitest:')).map(s => `${s.name}: ${s.why.match(/\d+ guards, \d+ changed tests/)[0]}`);
+  const without = planDraft('tests', parseDiff(diff(vitestOnly)), real, { mergeBase: MB });
+  const withSuites = planDraft('tests', parseDiff(diff({ ...vitestOnly, ...suites })), real, { mergeBase: MB });
+  assert.deepEqual(counts(withSuites), counts(without));
+  assert.ok(serverSplit(withSuites).ran.length > 0, 'some suites ran');
+  const extras = steps => steps.filter(s => s.name.startsWith('vitest:')).reduce((k, s) => k + s.files, 0);
+  assert.ok(extras(withSuites) < extras(without), `the suites took the pins' room: ${extras(withSuites)} files against ${extras(without)}`);
+});
+
+test('a draft check stopped by the clock is not the branch\'s red: its advice is the PR body and the full run, never "run it again"', () => {
+  const r = run(planFile(tmpdir(), [['one', '1', 'first', 'true'], ['long', '900', 'too long', 'true']]),
+    { PREFLIGHT_HARD_SECS: '600' }, RUNNER, ['--draft', 'tests']);
+  assert.equal(r.rc, 75, r.out);
+  assert.match(r.out, /NOT RUN \(step 2 \(long, about 900s\) would end past 600s/);
+  assert.match(r.out, /Not a pass, and not this branch's red: this part planned 901s of steps against 600s, so the machine ran slow\. Say so in the PR body as 'red not caused here' and go on; the full run at ready runs every step\./);
+  assert.doesNotMatch(r.out, /run preflight\.sh again/);
+  const lane = run(planFile(tmpdir(), [['long', '900', 'too long', 'true']]), { PREFLIGHT_HARD_SECS: '600' });
+  assert.equal(lane.rc, 75, lane.out);
+  assert.match(lane.out, /Not a pass: run preflight\.sh again/);
+});
+
+test('a red step\'s log is copied to $TEST_ALL_LOG_DIR/preflight, which ci.yml\'s draft job uploads; the draft\'s advice is to push', () => {
+  const d = tmpdir();
+  const logs = path.join(d, 'test-all-logs');
+  const r = run(planFile(d, [['bad', 'fails', 'echo the-red-reason; exit 1']]), { TEST_ALL_LOG_DIR: logs }, RUNNER, ['--draft', 'guards']);
+  assert.equal(r.rc, 1, r.out);
+  assert.match(fs.readFileSync(path.join(logs, 'preflight', '1-bad.log'), 'utf8'), /the-red-reason/);
+  assert.match(r.out, /Fix every red this branch caused and push; a red this branch cannot reach goes in the PR body as 'red not caused here'\. logs copied to .*\/test-all-logs\/preflight \(on GitHub: the run's draft-check-logs-guards artifact\)/);
+  const lane = run(planFile(tmpdir(), [['bad', 'fails', 'exit 1']]));
+  assert.match(lane.out, /Fix every red this branch caused, then run it again; logs kept in /);
+});
+
+test('the runner heads a red step\'s lines "Failure Details", where pr-state.mjs reads a red job\'s lines', () => {
+  const d = tmpdir();
+  const r = run(planFile(d, [['bad', 'fails', 'echo "✗ the thing broke"; exit 1']]));
+  assert.equal(r.rc, 1, r.out);
+  assert.match(r.out, /^──── Failure Details ────\n\n━━━ 1-bad \(whole log: .*\) ━━━$/m);
+  const green = run(planFile(tmpdir(), [['one', 'first', 'true']]));
+  assert.doesNotMatch(green.out, /Failure Details/);
+});
+
+test('--draft passes the part to the planner: an unknown part is no plan (exit 2), nothing run', () => {
+  const r = spawnSync('bash', [RUNNER, '--draft', 'everything', '--plan'], { encoding: 'utf8', env: ENV });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stdout + r.stderr, /--draft takes types, guards, tests/);
+  const ok = spawnSync('bash', [RUNNER, '--draft', 'guards', '--plan'], { encoding: 'utf8', env: ENV });
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  assert.match(ok.stdout, /^guards +120s/m);
+});
+
+test('a step runs without the runner\'s own PREFLIGHT_* settings (a step that runs preflight again gets its defaults)', () => {
+  const d = tmpdir();
+  const r = run(planFile(d, [['env', 'prints them', `env | grep '^PREFLIGHT_' > ${d}/seen; true`]]), { PREFLIGHT_HARD_SECS: '1200' });
+  assert.equal(r.rc, 0, r.out);
+  assert.equal(fs.readFileSync(`${d}/seen`, 'utf8'), '', 'no PREFLIGHT_ setting reached the step');
 });

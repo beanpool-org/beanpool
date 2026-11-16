@@ -31,7 +31,7 @@ vi.mock('react-native', () => {
         return createElement(tag, attrs, children);
     };
     return {
-        Platform: { OS: 'android', select: (o: any) => o.android ?? o.default },
+        Platform: { OS: 'android', select: (o: any) => o.android ?? o.default }, useWindowDimensions: () => ({ width: 390, height: 844, scale: 2, fontScale: 1 }),
         View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: () => null,
         Modal: ({ children, visible }: any) => (visible ? createElement('div', null, children) : null),
         ActivityIndicator: () => null,

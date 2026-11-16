@@ -211,6 +211,22 @@ describe('the lobby: the tab where the forum is public, and the door that lands 
         await waitFor(() => expect(taken).toHaveBeenCalled());
     });
 
+    it("Forum chosen in the menu: its list, from a topic and from another tab (as a member's Chat in the menu, #3223)", async () => {
+        stubForum('topics');
+        render(<GuestLobby info={info(GLOBAL)} onComplete={vi.fn()} linkedForum={{ topic: 'ft-3' }} />);
+        expect(await screen.findByTestId('forum-visitor-title')).toHaveTextContent('Seed swap ideas');
+        const tab = (name: string) => Array.from(screen.getByTestId('lobby-bottom-nav').querySelectorAll('button')).find((b) => b.textContent?.includes(name))!;
+        fireEvent.click(tab('Forum'));
+        expect(await screen.findAllByTestId('forum-visitor-topic-row')).toHaveLength(4);
+        expect(screen.queryByTestId('forum-visitor-title')).toBeNull();
+        fireEvent.click(screen.getAllByTestId('forum-visitor-topic-row')[1]);
+        expect(await screen.findByTestId('forum-visitor-title')).toHaveTextContent('A tool library in a shed');
+        fireEvent.click(tab('Home'));
+        fireEvent.click(tab('Forum'));
+        expect(await screen.findAllByTestId('forum-visitor-topic-row')).toHaveLength(4);
+        expect(screen.queryByTestId('forum-visitor-title')).toBeNull();
+    });
+
     it('/app?forum=1 opens the list; a door address that is not a topic id opens nothing', async () => {
         expect(forumDoorOfSearch('?forum=1')).toEqual({ topic: null });
         expect(forumDoorOfSearch('?forumTopic=../api/me')).toBeNull();

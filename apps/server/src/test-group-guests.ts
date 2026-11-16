@@ -43,7 +43,14 @@
  *  19  close the class, takedowns (#3233 round 2): (author delete, edited then deleted, convenor removal, account deleted,
  *      group closed) x (queued while the home is in backoff, in a send behind a row on the wire, already sent, queued
  *      for a guest who left since) -> no copy of the line's words or photo goes or is kept here, and the tombstone goes
- *      to a guest still in; 19e: (edit while queued, twice, while in a send, after it went) -> only the newest words go
+ *      to a guest still in; 19e: (edit while queued, twice, while in a send, after it went) -> only the newest words go;
+ *      19c: the copy rule x (stays main, a standby at the takedown then promoted, promoted a day later)
+ *  19d close the class, take-aways (#3233 round 4): (author delete, convenor removal, account deleted, guest removed by a
+ *      convenor, group closed, a takedown then the group closed, a takedown then the owners' switch off, a takedown while
+ *      the switch is off and on again before the minute's timer) x (home down an
+ *      hour, 25 hours, MAIL_HELD_DAYS - 1, MAIL_HELD_DAYS and 12 hours, MAIL_HELD_DAYS + 1 and a minute) -> the home
+ *      gets every take-away when it comes back while it may still hold what it takes away; the table: each take-away kept
+ *      at least MAIL_HELD_DAYS, each row that adds a day; and every row that adds goes unsent once a day old
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests node scripts/run-server-suites.mjs
  */
@@ -1162,16 +1169,18 @@ async function main(): Promise<void> {
             if (cs === 'in a send, behind a row on the wire') await sleep(30);
             else await settle();
         }
-        const tTake = Date.now();
+        // What went after the takedown, by its place in `outs`, not its time (a send settle() waited for can share its millisecond).
+        const nTake = outs.length;
         if (tk === 'author delete' || tk === 'edited, then author delete') await call('POST', m, '/api/messages/delete', { messageId: id });
         if (tk === 'convenor removal') await call('POST', ana, `/api/groups/${g}/chat/remove`, { messageId: id });
         if (tk === 'account deleted') purgeMemberSelf(m.pk);
         if (tk === 'group closed') closeGroupByVote(g, `test-close-19-${n19}`);
         const kept = outbox19().filter(carries).length;
         await answerAgain();
-        const toA = outs.filter((o) => o.home === 'a.example' && o.body?.group === g);
-        const wordsOut = toA.filter((o) => o.at >= (cs === 'already sent' ? tTake : t0) && carries(JSON.stringify(o.body))).length;
-        const tomb = toA.filter((o) => o.at >= tTake && ((o.body.kind === 'edit' && o.body.data?.id === id) || o.body.kind === 'removed'));
+        const toA = (from: Out[]) => from.filter((o) => o.home === 'a.example' && o.body?.group === g);
+        const afterTake = toA(outs.slice(nTake));
+        const wordsOut = (cs === 'already sent' ? afterTake : toA(outs).filter((o) => o.at >= t0)).filter((o) => carries(JSON.stringify(o.body))).length;
+        const tomb = afterTake.filter((o) => (o.body.kind === 'edit' && o.body.data?.id === id) || o.body.kind === 'removed');
         const t = tomb[0]?.body;
         const gotTomb = !tomb.length ? 'none' : tomb.length > 1 ? `${tomb.length} tombstones`
             : t.kind === 'removed' ? (t.data.why === 'group-closed' && JSON.stringify(t.guests) === JSON.stringify([x.pk]) ? 'group-closed' : `removed ${t.data.why}`)
@@ -1220,12 +1229,14 @@ async function main(): Promise<void> {
         const posted = await call('POST', m, `/api/groups/${g}/chat/message`, { ...w[0], metadata: { epoch: 1 }, clientId: id });
         await settle();
         if (es === 'edit while in a send, behind a row on the wire') await holdOnTheWire();
-        const tEdit = Date.now();
+        // What went after the edit, by its place in `outs`, not its time: the line settle() waited for can land in the same
+        // millisecond settle() returns, and an `at >= now` window would count it as after.
+        const nEdit = outs.length;
         let edited = true;
         for (const s of edits) edited = (await call('POST', m, '/api/messages/edit', { messageId: id, ...s, metadata: { epoch: 1 } })).status === 200 && edited;
         const waiting = outbox19().filter((b) => b.includes(id)).map((b) => `${JSON.parse(b).kind}(${which(JSON.parse(b).data.ciphertext)})`).join(' ');
         await answerAgain();
-        const got = outs.filter((o) => o.home === 'a.example' && o.body?.group === g && o.body.data?.id === id && o.at >= (es === 'edit after it went' ? tEdit : 0))
+        const got = outs.filter((o, i) => o.home === 'a.example' && o.body?.group === g && o.body.data?.id === id && i >= (es === 'edit after it went' ? nEdit : 0))
             .map((o) => `${o.body.kind}(${which(o.body.data.ciphertext)})`).join(' ');
         const waitingOk = es === 'edit after it went' ? waiting === 'edit(newest)' || waiting === '' : !waiting.includes('words');
         assert(ok && posted.status === 201 && edited && waitingOk && got === WORDS19[es],
@@ -1342,6 +1353,142 @@ async function main(): Promise<void> {
         const tombs = toA.filter((o) => o.body.kind === 'edit' && o.body.data?.id === line2.clientId && o.body.data.action === 'removed').length;
         assert(ok && queued.length === 2 && lines === 0 && tombs === 1 && rowsOf19(g).length === 0,
             `19c. a day in the queue: the line that still stands goes unsent (${lines}), the takedown still goes (${tombs}), nothing is left (${rowsOf19(g).length})`);
+    }
+
+    // ── 19d. A take-away outlasts what the home may hold (#3233 round 4) ────────────────────
+    // The guest's home keeps a line it took, words and sealed photo, until each device has it or MAIL_HELD_DAYS pass, and
+    // only a take-away (a line's takedown, the guest's removal) drops it sooner. So a take-away is offered for as long as
+    // the home may still hold what it takes away, through a home down for an hour, a weekend or a month; a row that adds
+    // still goes after a day.
+    console.log('\n19d. Close the class: every take-away x how long its home was down -> the home gets it when it comes back, while it may hold what it takes away');
+    const { MAIL_HELD_DAYS: HELD_DAYS19 } = await import('./engine/relay-mail.js');
+    const DAY19 = 24 * 60 * 60_000;
+    const HELD19 = HELD_DAYS19 * DAY19;
+    const TA19 = ['author delete', 'convenor removal', 'account deleted', 'guest removed by a convenor', 'group closed',
+        'author delete, then group closed', 'author delete, then the owners switch guests off',
+        'author delete while the switch is off, on again before the timer'] as const;
+    type Ta19 = (typeof TA19)[number];
+    /** What the home gets of the take-aways once back: a line's takedown (by whom) or the guest's removal (why), in order. */
+    const AWAY19: Record<Ta19, string> = {
+        'author delete': 'takedown:author',
+        'convenor removal': 'takedown:convenor',
+        'account deleted': 'takedown:author',
+        'guest removed by a convenor': 'removal:removed',
+        'group closed': 'removal:group-closed',
+        'author delete, then group closed': 'takedown:author removal:group-closed',
+        'author delete, then the owners switch guests off': 'takedown:author removal:closed',
+        'author delete while the switch is off, on again before the timer': 'takedown:author',
+    };
+    /**
+     * How long the home was down after the take-away (its rows that old at the try that fails, then the home answers), and
+     * whether the home must still get it: up to MAIL_HELD_DAYS it may hold the line, and a day more is the margin
+     * (guestRowKeptMs: a line on the wire at the takedown, the home's own clock). Past both, the home holds and serves
+     * nothing that old (test-group-guests-home 15d), and the row has gone here.
+     */
+    const DOWN19: Array<[string, number, boolean]> = [
+        ['an hour', 60 * 60_000, true],
+        ['25 hours', 25 * 60 * 60_000, true],
+        [`${HELD_DAYS19 - 1} days`, HELD19 - DAY19, true],
+        [`${HELD_DAYS19} days and 12 hours`, HELD19 + DAY19 / 2, true],
+        [`${HELD_DAYS19 + 1} days and a minute`, HELD19 + DAY19 + 60_000, false],
+    ];
+    const switchTo19 = (on: boolean) => applyShapeChanges({ actor: olive.pk, actorRole: 'owner' }, { changes: { groupGuests: on } });
+    let d19 = 0;
+    for (const ta of TA19) for (const [down, age, reaches] of DOWN19) {
+        const n = ++d19;
+        const { g, m, x, key, ok } = await row19(`Away ${n}`);
+        const id = crypto.randomUUID();
+        const base = { myEdPrivHex: m.seedHex, groupKey: key, groupId: g, epoch: 1, messageId: id };
+        const words = sealGroupLine(`away row ${n}'s caption`, base);
+        const photo = sealGroupLine(`data:image/jpeg;base64,${crypto.randomBytes(2000).toString('base64')}`, { ...base, part: 'attachment' });
+        const posted = await call('POST', m, `/api/groups/${g}/chat/message`, {
+            type: 'image', ...words, metadata: { epoch: 1 }, attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' }, clientId: id,
+        });
+        await settle();
+        // The home took the line (it holds it for the guest's devices), then goes down; the take-away's first try fails.
+        const lineWent = outs.filter((o) => o.home === 'a.example' && o.body?.kind === 'line' && o.body.data?.id === id).length;
+        refusing.add('a.example');
+        const nTake = outs.length;
+        let off = false, queued = 0, keptThroughTry = 0;
+        try {
+            if (ta.includes('while the switch is off')) { switchTo19(false); off = true; }
+            if (ta.startsWith('author delete')) await call('POST', m, '/api/messages/delete', { messageId: id });
+            if (ta.includes('on again before the timer')) { await settle(); switchTo19(true); off = false; }
+            if (ta === 'convenor removal') await call('POST', ana, `/api/groups/${g}/chat/remove`, { messageId: id });
+            if (ta === 'account deleted') purgeMemberSelf(m.pk);
+            if (ta === 'guest removed by a convenor') await call('DELETE', ana, `/api/groups/${g}/guests/${x.pk}`);
+            if (ta.endsWith('group closed')) closeGroupByVote(g, `test-close-19d-${n}`);
+            if (ta.endsWith('switch guests off')) { switchTo19(false); off = true; guests.closeGuestsIfSwitchedOff(); }
+            await settle();
+            queued = rowsOf19(g).length;
+            // Down for `age`: the try then fails (the backoff's sweep runs at it), and then the home answers.
+            db.prepare('UPDATE group_guest_outbox SET created_at = created_at - ?, next_try_at = ? WHERE group_id = ?').run(age, Date.now(), g);
+            await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+            keptThroughTry = rowsOf19(g).length;
+            refusing.delete('a.example');
+            await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+            await settle();
+        } finally {
+            refusing.delete('a.example');
+            if (off) switchTo19(true);
+        }
+        const onlyX = (o: Out) => JSON.stringify(o.body.guests) === JSON.stringify([x.pk]);
+        const got = outs.filter((o, i) => i >= nTake && o.home === 'a.example' && o.body?.group === g
+            && (o.body.kind === 'removed' || (o.body.kind === 'edit' && o.body.data?.action === 'removed')))
+            .map((o) => o.body.kind === 'removed' ? `removal:${o.body.data?.why}${onlyX(o) ? '' : '(other guests)'}`
+                : `takedown:${o.body.data.by}${o.body.data.id === id && onlyX(o) && !('ciphertext' in o.body.data) ? '' : '(another line)'}`)
+            .join(' ') || 'none';
+        const want = reaches ? AWAY19[ta] : 'none';
+        const left = rowsOf19(g).length;
+        assert(ok && posted.status === 201 && lineWent === 1 && queued >= 1 && got === want && left === 0,
+            `19d. ${ta} x home down ${down}: ${reaches ? `it gets ${want} when it comes back` : 'past what it may hold: none, and the row has gone'} (got ${got}; kept through the failed try ${keptThroughTry} of ${queued}; left here ${left})${ok && lineWent === 1 ? '' : ', setup failed'}`);
+    }
+    assert(d19 === TA19.length * DOWN19.length && Object.keys(AWAY19).length === TA19.length, `19dz. the table has a row for every take-away and every outage (${d19} rows)`);
+
+    // The table: a row takes away exactly when it is a line's takedown or a removal; each take-away is kept at least as long as
+    // a home may hold what it takes away (MAIL_HELD_DAYS), and each row that adds a day, no longer.
+    const KINDS19: Array<[string, Record<string, unknown>]> = [
+        ['invite', { name: 'g' }], ['roster', { name: 'g' }], ['line', { id: 'l' }], ['edit', { id: 'l', action: 'edited' }], ['epoch', { record: {} }],
+        ['edit', { id: 'l', action: 'removed', by: 'author' }], ['removed', { why: 'removed' }], ['removed', { why: 'closed' }], ['removed', { why: 'group-closed' }],
+    ];
+    for (const [kind, data] of KINDS19) {
+        const away = kind === 'removed' || (kind === 'edit' && data.action === 'removed');
+        const label = `${kind}${data.action ? ` ${data.action}` : data.why ? ` (${data.why})` : ''}`;
+        const kept = typeof guests?.guestRowKeptMs === 'function' ? guests.guestRowKeptMs(kind, data) as number : NaN;
+        const says = typeof guests?.takesAway === 'function' ? guests.takesAway(kind, data) as boolean : null;
+        assert(says === away && (away ? kept >= HELD19 : kept === QUEUE_MS),
+            `19d. table: ${label} ${away ? `takes away: kept ${kept / DAY19} days, at least the ${HELD_DAYS19} a home may hold what it takes away` : `adds: kept ${kept / DAY19} day(s), no longer than ${QUEUE_MS / DAY19}`} (takesAway says ${says})`);
+    }
+
+    // No over-retention: each row that adds, queued while its home is down, goes unsent once a day old, and none is left.
+    {
+        const { g, m, key, ok } = await row19('Adds aged');
+        const sent = lineIn(m, g, key, 1);
+        await call('POST', m, `/api/groups/${g}/chat/message`, sent);
+        await settle();
+        refusing.add('a.example');
+        const nAdd = outs.length;
+        let kinds = '';
+        try {
+            await call('POST', m, '/api/messages/edit', { messageId: sent.clientId, ...sealGroupLine('new words', { myEdPrivHex: m.seedHex, groupKey: key, groupId: g, epoch: 1, messageId: sent.clientId }), metadata: { epoch: 1 } });
+            await call('POST', m, `/api/groups/${g}/chat/message`, lineIn(m, g, key, 1));
+            guests.queueGroupRoster(g);
+            guests.fanOutGroupEpoch(g, 1);
+            await call('POST', ana, `/api/groups/${g}/guests`, { card: await cardOf(newId('Y-adds'), 'a.example') });
+            await settle();
+            kinds = rowsOf19(g).map((r) => r.kind).sort().join(' ');
+            db.prepare('UPDATE group_guest_outbox SET created_at = created_at - ?, next_try_at = ? WHERE group_id = ?').run(25 * 60 * 60_000, Date.now(), g);
+            await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+            refusing.delete('a.example');
+            await guests.flushGuestOutbox(Date.now() + 10 * 60_000);
+            await settle();
+        } finally { refusing.delete('a.example'); }
+        for (const kind of ['edit', 'epoch', 'invite', 'line', 'roster']) {
+            const went = outs.filter((o, i) => i >= nAdd && o.home === 'a.example' && o.body?.group === g && o.body.kind === kind).length;
+            const left = rowsOf19(g).filter((r) => r.kind === kind).length;
+            assert(ok && kinds === 'edit epoch invite line roster' && went === 0 && left === 0,
+                `19d. no over-retention: ${({ edit: 'an edit with new words', epoch: 'an epoch', invite: 'an invitation', line: 'a line', roster: 'a roster' } as Record<string, string>)[kind]} queued while its home is down goes unsent once 25 hours old (${went}), none left (${left})${kinds === 'edit epoch invite line roster' ? '' : `, setup queued ${kinds}`}`);
+        }
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

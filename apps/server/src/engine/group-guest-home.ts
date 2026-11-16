@@ -31,7 +31,8 @@
  *   held  each notice is held for that member's devices (group_guest_mail), with ONLY that member's own wrap in an epoch
  *         or a roster: nothing reaches a device that isn't that guest's. Each device (the mailbox's list of them,
  *         relay_mail_devices) fetches what it has not confirmed (`GET /api/mail/group?device=`) and confirms it
- *         (`POST /api/mail/group/confirm`); a notice goes once every device listed has it, or after MAIL_HELD_DAYS.
+ *         (`POST /api/mail/group/confirm`); a notice goes once every device listed has it, or after MAIL_HELD_DAYS, and
+ *         none held longer is served, swept yet or not: the host offers its takedowns that long and a day more.
  *         TAKEDOWNS (applyToHeldCopies, #3233 round 2): what the host says of a line reaches every copy of it held here
  *         before anything else, whatever the member stands now, whatever the switch, from a host the owners blocked since
  *         too (it only takes away what that host brought): a line taken down (`edit`, `action: 'removed'`) drops the held
@@ -349,10 +350,12 @@ export function heldGroupMailFor(member: string, device: string, since = 0, sinc
     items: HeldGroupNotice[]; more: boolean; groups: GroupLinkView[]; sent: GroupSentTick[]; sentMore: boolean;
 } {
     // A standby serves no copy of a line (the copy rule, heldLinesStale): what it holds can't be kept up to date there.
-    const rows = db.prepare(`SELECT id, host, group_id, kind, body, received_at FROM group_guest_mail m WHERE member = ?
+    // Nothing held past MAIL_HELD_DAYS is served, swept yet or not (a server off for a month, back before its first sweep):
+    // the host offers a take-away that long and a day more (group-guests.ts guestRowKeptMs), never shorter (#3233 round 4).
+    const rows = db.prepare(`SELECT id, host, group_id, kind, body, received_at FROM group_guest_mail m WHERE member = ? AND received_at >= ?
                                AND NOT EXISTS (SELECT 1 FROM group_guest_mail_got g WHERE g.member = m.member AND g.mail_id = m.id AND g.device = ?)
                                ${getNodeRole() === 'backup' ? "AND kind NOT IN ('line', 'edit')" : ''}
-                             ORDER BY received_at, rowid LIMIT ?`).all(member, device, MAIL_FETCH_PAGE + 1) as Array<{
+                             ORDER BY received_at, rowid LIMIT ?`).all(member, Date.now() - MAIL_HELD_DAYS * DAY_MS, device, MAIL_FETCH_PAGE + 1) as Array<{
         id: string; host: string; group_id: string; kind: GroupNoticeKind; body: string; received_at: number;
     }>;
     const links = db.prepare(`SELECT l.*, ${YES_QUEUED('l')} AS yes FROM group_guest_links l WHERE l.member = ? AND l.state IN ('invited', 'in', 'removed')

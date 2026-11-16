@@ -46,7 +46,8 @@
  *      line's words or photo is served or kept, and each device is served the tombstone; 15e: (edit while held, twice,
  *      after one device has it, after every device has it) -> each device is served only the newest words; 15w: out of
  *      the group (leave taken, removed, the switch, group closed) -> nothing of it held is served; 15v: a host blocked
- *      since: its takedown still drops what it brought
+ *      since: its takedown still drops what it brought; 15d: nothing held past MAIL_HELD_DAYS is served, swept yet or not
+ *      (the host offers a takedown that long and a day more)
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests-home node scripts/run-server-suites.mjs
  */
@@ -1295,6 +1296,26 @@ async function main(): Promise<void> {
     db.prepare("DELETE FROM group_guest_mail WHERE member = ? AND group_id = 'g15-c15-filler'").run(f15.who.pk);
     assert(f15.ok && refusedEdit.status === 202 && onTablet15 === 'edit(older edit)',
         `15c. an edit not held (the host's allowance full): the tablet, which has the line, is served the older edit's words, not left on the first (got ${onTablet15 || 'nothing'})`);
+
+    // 15d (#3233 round 4). Nothing held past MAIL_HELD_DAYS is served, swept yet or not (a server off for a month, back before
+    // its first sweep): the host offers a takedown that long and a day more (group-guests.ts guestRowKeptMs), so whatever is
+    // still served here can still be taken down.
+    const { MAIL_HELD_DAYS: HELD15 } = await import('./engine/relay-mail.js');
+    const DAY15 = 24 * 60 * MIN;
+    const AGE15: Array<[string, number, number]> = [
+        [`${HELD15 - 1} days`, (HELD15 - 1) * DAY15, 1],
+        [`${HELD15} days less a minute`, HELD15 * DAY15 - MIN, 1],
+        [`${HELD15} days and a minute, not swept yet`, HELD15 * DAY15 + MIN, 0],
+    ];
+    let a15 = 0;
+    for (const [label, age, expected] of AGE15) {
+        const h = await held15(`d15-${++a15}`);
+        db.prepare('UPDATE group_guest_mail SET received_at = ? WHERE member = ?').run(Date.now() - age, h.who.pk);
+        const served = (await h.itemsOn(h.phone)).filter((i: any) => i.kind === 'line' && i.data?.id === h.id).length;
+        const stillHeld = heldCount(h.who, 'b.example', h.g);
+        assert(h.ok && served === expected && stillHeld === 1,
+            `15d. a line held ${label}: served ${served} (expected ${expected}), still held here until the sweep (${stillHeld})`);
+    }
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

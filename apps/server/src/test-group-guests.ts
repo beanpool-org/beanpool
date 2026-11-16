@@ -37,6 +37,11 @@
  *      (their roster again after the yes); a yes from a guest out -> none
  *  14  close the class: every kind a guest's home brings x a guest whose card says a member's name -> every notice it makes
  *      says "Ana · a.example · guest", never "Ana" alone
+ *  14b what members read of a guest's line (WALK 3 phone): the chat, the Groups list, a report, a removed guest's line
+ *  14c close the class (#3275): every author of a group line (a member, a member also on the guest list, a guest in, left,
+ *      removed, invited again, a guest of another group, a key nobody knows) x every place this server serves its name (the
+ *      chat's read, the Groups list, Home's Groups and chat cards, a report opened, the report queue, the owner's
+ *      assistant, a convenor's removal) -> a member's name, the guest line, or that place's own stand-in
  *  15  each home on its own: while one home doesn't answer, another gets its line at once; a row queued during a send goes
  *      when that send ends; a home that refuses costs one try for all its rows, which wait, then go
  *  16  close the class: every timer job https-server.ts runs from group-guests x (standby, main server) -> a standby returns

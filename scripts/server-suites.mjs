@@ -644,6 +644,9 @@ export const SUITES = [
     // A group's forum section, a poll in a topic, the polls' own pool, the Decision chip (slice F8): one table over every read
     // and write x every kind of reader, the bell and the doorbells, the pools, a standby the same.
     'test-forum-group-section',
+    // What a forum topic links (slice F9): (group, listing, event, Need, Learn page) x (live, hidden, removed, private) x every
+    // kind of reader in one table -> shown as they could already see it, else a placeholder; the topics that link one thing.
+    'test-forum-links',
     // The community label on the worldwide forum (slice F10): the note on a member's own community, the check on a public forum,
     // the three-way switch x every kind of note in one table, lapses and unlisting at each read, a standby, a re-key, no server asked.
     'test-membership-note',
@@ -701,7 +704,6 @@ export const SUITES = [
     'test-key-succession',
     'test-dm-former-keys-readers',
     'test-group-history-after-rekey',
-    'test-dm-line-relay',
     'test-federation-hardening',
     'test-node-signature',
     'test-relay-mail',

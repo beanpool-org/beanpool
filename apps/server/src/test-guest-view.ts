@@ -1375,6 +1375,8 @@ async function main(): Promise<void> {
             'GET /api/forum/search',
             // A poll in a topic and the Decision chip (slice F8).
             'POST /api/forum/topics/:id/poll', 'POST /api/forum/topics/:id/decision',
+            // Links (slice F9): a topic's writer links a group, a listing, an event or a Learn page; the topics that link one thing.
+            'POST /api/forum/topics/:id/links', 'GET /api/forum/linked',
             // The community label (slice F10, routes/membership-note.ts): a member's note from their own community, and what they
             // show on a public forum; all signed, the member the signer.
             'GET /api/membership/note', 'GET /api/forum/label', 'POST /api/forum/label',

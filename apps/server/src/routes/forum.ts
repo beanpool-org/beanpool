@@ -56,11 +56,20 @@
  *        the polls' own routes; a group's section's is the group's poll
  *   POST /api/forum/topics/:id/decision     { decisionId: id | null } → { topic }   its writer or an owner or admin (403
  *        `not_yours`); 404 `decision_not_found`; 404 `decisions_off` where Decisions are off
+ * Links (slice F9, engine/forum-links.ts): a link never shows its reader anything they could not already see.
+ *   POST /api/forum/topics/:id/links        { kind: 'group' | 'listing' | 'event' | 'learn', targetId, on? } → { topic }
+ *        the topic's writer links one of their groups, one of their listings (Make this a Need), an event or a Learn page
+ *        they may open (403 `not_yours`, `not_yours_to_link`; 404 `link_not_found` for one they may not see, as for an id
+ *        nobody has; 409 `topic_links` past three a topic, the Decision chip's included); `on: false` takes one off (its
+ *        writer, an owner or an admin)
+ *   GET  /api/forum/linked?kind&id          → { topics: [{ id, sectionId, title, replyCount, lastActivityAt }] }   the topics
+ *        the signer may read that link one thing they may see, newest activity first, at most 10; for anything else []
  *
  * A section: { id, starter, name, about, position, starts, listed, archived, group: { id, name } | null } (starter's name:
  * @beanpool/core forumSectionName). A topic: { id, sectionId, title, writer: { publicKey, name }, place, lang, replyCount,
- * lastActivityAt, createdAt, pinned, closed, removed, hidden, follow, unread, pollId, decision: { id, title, status } | null }
- * (`pollId` only to a reader who may see that poll). A post: { id, topicId, number, writer, words, quotes, lang, createdAt, editedAt,
+ * lastActivityAt, createdAt, pinned, closed, removed, hidden, follow, unread, pollId, decision: { id, title, status } | null, links? }
+ * (`pollId` only to a reader who may see that poll; `links` in a topic's own read, never a list row: each { kind, shown: true,
+ * id, title, photo, listingType, startAt, byWriter } as the reader may see it, else { kind, shown: false }). A post: { id, topicId, number, writer, words, quotes, lang, createdAt, editedAt,
  * removed, photos, hidden, linksOn } (a removed one's words are empty and its photos 0; so are a hidden one's, but to its
  * writer and the moderators; `linksOn` false: a new writer's links are plain text). The front adds { moderator,
  * firstLooksWaiting, firstTopicWaits, linksOn } for the signer.
@@ -78,7 +87,7 @@ import { memberErrorText } from './member-error-text.js';
 import { parseDataUrl } from '../storage/image-columns.js';
 import {
     ForumRefusal, addForumPoll, closeForumTopic, createForumSection, editForumPost, editForumSection, followTopic, forumFront, forumListTag, forumPhoto, forumTopic,
-    forumTopicSection, forumTopics, linkForumDecision, markForumTold, moveForumTopic, pinForumTopic, readTopic, removeForumPost, replyInForum, startForumTopic,
+    forumTopicSection, forumTopics, forumTopicsLinking, linkForumDecision, linkForumTarget, markForumTold, moveForumTopic, pinForumTopic, readTopic, removeForumPost, replyInForum, startForumTopic,
     type MakeForumPoll,
 } from '../engine/forum.js';
 import { noteForumReader, tellForumReply, tellForumTopic } from '../engine/forum-notices.js';
@@ -288,6 +297,12 @@ export function createForumRoutes(_deps: RouteDeps): Router {
     // A poll in a topic and the Decision chip (slice F8).
     router.post('/api/forum/topics/:id/poll', (ctx) => write(ctx, 201, (key, body) => addForumPoll(key, ctx.params.id, body.title, makeForumPoll(key, body))));
     router.post('/api/forum/topics/:id/decision', (ctx) => write(ctx, 200, (key, body) => ({ topic: linkForumDecision(key, ctx.params.id, body.decisionId) })));
+    // Links (slice F9).
+    router.post('/api/forum/topics/:id/links', (ctx) => write(ctx, 200, (key, body) => ({ topic: linkForumTarget(key, ctx.params.id, body) })));
+    router.get('/api/forum/linked', (ctx) => {
+        if (Array.isArray(ctx.query.kind) || Array.isArray(ctx.query.id)) return answer(ctx, 400, 'kind and id are one value each.', 'bad_request');
+        read(ctx, (key) => forumTopicsLinking(key, ctx.query.kind, ctx.query.id));
+    });
     router.post('/api/forum/posts/:id/edit', (ctx) => write(ctx, 200, (key, body) => editForumPost(key, ctx.params.id, body)));
     router.post('/api/forum/posts/:id/remove', (ctx) => write(ctx, 200, (key) => { removeForumPost(key, ctx.params.id); return { ok: true }; }));
     router.post('/api/forum/sections', (ctx) => write(ctx, 201, (key, body) => ({ section: createForumSection(key, body) })));

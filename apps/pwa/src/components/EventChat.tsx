@@ -28,7 +28,7 @@ import { sendRouteOf, GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../l
 import { blankedWithAccount } from '../lib/chat-tombstone';
 import { eventChatWaitingText, eventChatSystemText, isWaitingForHost } from '../lib/events';
 import { useGrowingComposer } from '../lib/use-growing-composer';
-import { draftKey, useKeptDraft } from '../lib/chat-drafts';
+import { draftKey, draftSent, useKeptDraft } from '../lib/chat-drafts';
 
 /**
  * Messages are stored base64 `plaintext-v1`: node-readable by design, not end-to-end encrypted. A removed one is the
@@ -84,7 +84,8 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
     const draftRef = useRef<HTMLTextAreaElement | null>(null);
     useGrowingComposer(draftRef);
     // Words left unsent here wait in the box while the page is open (lib/chat-drafts.ts): Back, or Chat in the menu, keeps them.
-    useKeptDraft(draftKey(identity?.publicKey, 'event', postId), draft, setDraft);
+    const boxKey = draftKey(identity?.publicKey, 'event', postId);
+    useKeptDraft(boxKey, draft, setDraft);
 
     const load = useCallback(async () => {
         try {
@@ -148,6 +149,8 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
     const submitDraft = async () => {
         const text = draft.trim();
         if (!text || posting) return;
+        // This chat's key, taken now: the member may have left it when the answer lands (lib/chat-drafts.ts draftSent).
+        const sentFrom = boxKey;
         setPosting(true);
         setPostError(null);
         try {
@@ -159,7 +162,8 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                 return;
             }
             await postEventChatMessage(postId, text);
-            setDraft('');
+            // The words went: not this chat's draft any more, wherever the member is now; a box showing another chat is left be.
+            draftSent(sentFrom, text);
             setImageNotice(null);
             await load();
         } catch (err: any) {

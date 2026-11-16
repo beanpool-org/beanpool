@@ -24,7 +24,7 @@ import {
 import { blockUser } from '../../lib/blocklist';
 import { useCoversScreen } from '../../lib/screen-cover';
 import { useGrowingComposer } from '../../lib/use-growing-composer';
-import { draftKey, useKeptDraft } from '../../lib/chat-drafts';
+import { draftKey, draftSent, useKeptDraft } from '../../lib/chat-drafts';
 import { ReportModal } from '../ReportModal';
 import { ForumPhotoAttach, ForumPhotos, ForumToldSheet, ForumWords } from './ForumBits';
 
@@ -86,7 +86,10 @@ export function ForumTopicView({ topicId, at, front, me, onBack, onTold, onGone,
     const [reporting, setReporting] = useState<ForumPost | null>(null);
     const [words, setWords] = useState('');
     // A reply left unsent waits in the box while the page is open (lib/chat-drafts.ts): ‹, or Chat in the menu, keeps it.
-    useKeptDraft(draftKey(me, 'forum', topicId), words, setWords);
+    const boxKey = draftKey(me, 'forum', topicId);
+    useKeptDraft(boxKey, words, setWords);
+    const topicShown = useRef(topicId);
+    topicShown.current = topicId;
     const [photos, setPhotos] = useState<string[]>([]);
     const [quote, setQuote] = useState<ForumPost | null>(null);
     const [busy, setBusy] = useState(false);
@@ -153,17 +156,23 @@ export function ForumTopicView({ topicId, at, front, me, onBack, onTold, onGone,
         if (front?.public && !front.told && !told) { setTelling(true); return; }
         setBusy(true);
         setError(null);
+        // This topic's key and the words, taken now: the member may have left the topic when the answer lands (lib/chat-drafts.ts).
+        const sentFrom = boxKey;
+        const sent = words.trim();
         let mine: ForumPost;
         try {
-            mine = await replyInForum(topic.id, { words: words.trim(), quotes: quote?.number ?? null, lang: currentLanguage(), photos });
+            mine = await replyInForum(topic.id, { words: sent, quotes: quote?.number ?? null, lang: currentLanguage(), photos });
         } catch (e) {
             setError((e as Error)?.message || t('Couldn’t save this in the forum.'));
             setBusy(false);
             return;
         }
-        setWords('');
-        setPhotos([]);
-        setQuote(null);
+        // The reply went: not this topic's draft any more, wherever the member is now (a topic shown since is left be).
+        draftSent(sentFrom, sent);
+        if (topicShown.current === topic.id) {
+            setPhotos([]);
+            setQuote(null);
+        }
         // On from the last post drawn, through their own reply: it shows where it went, and nothing read is lost.
         await readThrough(lastOf(page), mine.number);
         setBusy(false);

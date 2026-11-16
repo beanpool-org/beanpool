@@ -203,7 +203,7 @@ const node = { lines: new Map<string, { id: string }>(), tries: [] as Array<{ me
 
 function standIn(): void {
     const answers: Record<string, unknown> = {
-        getConversation: ACCEPTED, getMessages: [], getDealsBetween: [], getDmKeyChange: null, getKnownChatMute: null,
+        getConversation: ACCEPTED, getMessages: [], getDealsBetween: [], getDmKeyChange: null, getDmKeyCodeInfo: null, getKnownChatMute: null,
         markConversationRead: undefined, syncSingleConversation: true,
         getDb: { getAllAsync: async () => [], getFirstAsync: async () => null, runAsync: async () => ({}) },
         sendVoiceMessage: async (_conv: string, _voice: unknown, _meta: unknown, opts: { messageId?: string; signal?: AbortSignal } = {}) => {

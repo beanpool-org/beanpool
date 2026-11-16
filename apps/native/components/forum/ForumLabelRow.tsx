@@ -48,15 +48,19 @@ export function ForumLabelRow({ myName }: { myName: string }) {
 
     return (
         <View style={[styles.card, { margin: 12 }]} testID="settings-forum-label">
-            <Text style={styles.rowTitle}>🏷️ {t(FORUM_LABEL_WORDS.title)}</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Text style={styles.rowTitle} aria-hidden={true} importantForAccessibility="no">🏷️</Text>
+                <Text style={[styles.rowTitle, { flex: 1 }]}>{t(FORUM_LABEL_WORDS.title)}</Text>
+            </View>
             <Text style={styles.muted}>{t(FORUM_LABEL_WORDS.hint)}</Text>
             <View accessibilityRole="radiogroup" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                 {options.map((o) => (
                     <Pressable key={o.id} accessibilityRole="radio" accessibilityState={{ checked: o.on, disabled: busy }} disabled={busy}
                         testID={`forum-label-${o.id === 'none' || o.id === 'waiting' ? o.id : 'community'}`}
                         onPress={() => { if (o.choice && !o.on) void choose(o.choice); }}
-                        style={[styles.chip, o.on && styles.chipOn, { minHeight: 48, maxWidth: '100%' }]}>
-                        <Text style={o.on ? styles.chipTextOn : styles.chipText}>{o.on ? `✓ ${o.label}` : o.label}</Text>
+                        style={[styles.chip, o.on && styles.chipOn, { minHeight: 48, maxWidth: '100%', flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+                        {o.on && <Text style={styles.chipTextOn} aria-hidden={true} importantForAccessibility="no">✓</Text>}
+                        <Text style={[o.on ? styles.chipTextOn : styles.chipText, { flexShrink: 1 }]}>{o.label}</Text>
                     </Pressable>
                 ))}
             </View>

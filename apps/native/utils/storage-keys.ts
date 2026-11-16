@@ -103,12 +103,32 @@ export function blockedUsersStoreKey(publicKey: string): string {
 
 /**
  * Which of one account's blocks this phone has put on each community's own list for it (utils/blocklist.ts `syncBlocks`):
- * an object, community address → `{ on, sent, waitUntil? }`. Kept with {@link blockedUsersStoreKey}, the list it
+ * an object, community address → `{ on, sent, asked, waitUntil? }`. Kept with {@link blockedUsersStoreKey}, the list it
  * describes, when the account leaves the phone, so the same account restored here still takes off a community's list
  * the blocks it lifted; never read for another account.
  */
 export function communityBlocksStoreKey(publicKey: string): string {
     return `beanpool_community_blocks:${publicKey.toLowerCase()}`;
+}
+
+/**
+ * The keys one blocked person is known by on one account's block list, as the community's answers said (utils/blocklist.ts
+ * `reconcile`: every change's answer and every read): an object, a key a re-key put in place of others → those others. One person, one block: an
+ * unblock of any of their keys lifts them all, and Settings shows them once. Kept with {@link blockedUsersStoreKey}, the
+ * list it describes, when the account leaves the phone; never read for another account.
+ */
+export function blockedKeyChainsStoreKey(publicKey: string): string {
+    return `beanpool_blocked_key_chains:${publicKey.toLowerCase()}`;
+}
+
+/**
+ * The blocks and unblocks one account made on this phone, in the order it made them (utils/blocklist.ts): an object,
+ * `{ next, of }`, each key the member blocked or unblocked → its latest change and that change's place in the order. The
+ * list {@link blockedUsersStoreKey} is what these say, person by person, as the community names their keys. Kept with
+ * that list when the account leaves the phone; never read for another account.
+ */
+export function blockChangesStoreKey(publicKey: string): string {
+    return `beanpool_block_changes:${publicKey.toLowerCase()}`;
 }
 
 /** Every {@link messageRequestsStoreKey} key starts with this. */

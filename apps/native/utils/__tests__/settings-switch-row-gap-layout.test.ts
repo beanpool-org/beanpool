@@ -154,7 +154,7 @@ vi.mock('../db', () => ({
     removeFriendOnNode: async () => {},
     closeDB: async () => {}, initDB: async () => {}, clearDB: async () => {}, redeemInvite: async () => {}, syncMessages: async () => {},
 }));
-vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], unblockUser: async () => {}, clearBlocklist: async () => {}, BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
+vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], getBlockedPeople: async () => [], unblockUser: async () => {}, clearBlocklist: async () => {}, BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
 vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({}) }));
 vi.mock('../node-post', async (importOriginal) => {
     const { PURGE_NO_ANSWER, PURGE_TIMEOUT_MS } = await importOriginal<typeof import('../node-post')>();

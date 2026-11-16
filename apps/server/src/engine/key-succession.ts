@@ -59,6 +59,71 @@ export function rekeyedFromOf(pubkey: string): { pubkey: string; at: string; att
 }
 
 /**
+ * The key `key`'s member holds here now: `key` itself, or the key completed re-keys moved it to, followed forward
+ * (attested or not, as rekeyedFromChains follows them back), at most KEY_SUCCESSION_MAX links; a loop stops. A block or an
+ * unblock of a key a re-key replaced acts on the member as they are now (member-blocks.ts), as the re-key's own move of
+ * the blocks did: a phone's copy of the list may still name the old key (apps/native utils/blocklist.ts).
+ */
+export function rekeyedToNow(key: string): string {
+    const next = db.prepare(`SELECT rekeyed_to FROM invalidated_keys WHERE public_key = ? AND reason = 'rekeyed' AND rekeyed_to IS NOT NULL`);
+    const seen = new Set<string>([key]);
+    let at = key;
+    for (let hop = 0; hop < KEY_SUCCESSION_MAX; hop++) {
+        const to = (next.get(at) as { rekeyed_to: string } | undefined)?.rekeyed_to;
+        if (!to || seen.has(to)) break;
+        seen.add(to);
+        at = to;
+    }
+    return at;
+}
+
+/**
+ * For each of `keys`, every key a completed re-key replaced with it, followed back through earlier re-keys (attested or
+ * not: an admin's re-key of a lost phone is never attested until its member confirms it), newest first, at most
+ * KEY_SUCCESSION_MAX. GET /api/blocks names them for the keys on the signer's list: a re-key moved the community's row of
+ * a block to the new key (member-blocks.ts moveBlocks), and a phone that keeps its own copy of the list learns from this
+ * that a key it blocked is now this one, so the block holds there too. Only keys with any; one read of the re-key rows.
+ */
+export function rekeyedFromChains(keys: readonly string[]): Record<string, string[]> {
+    const out: Record<string, string[]> = {};
+    if (keys.length === 0) return out;
+    const rows = db.prepare(`SELECT public_key, rekeyed_to FROM invalidated_keys
+                             WHERE reason = 'rekeyed' AND rekeyed_to IS NOT NULL ORDER BY invalidated_at DESC`).all() as { public_key: string; rekeyed_to: string }[];
+    const bySuccessor = new Map<string, string[]>();
+    for (const r of rows) bySuccessor.set(r.rekeyed_to, [...(bySuccessor.get(r.rekeyed_to) ?? []), r.public_key]);
+    for (const key of keys) {
+        const chain: string[] = [];
+        const seen = new Set<string>([key]);
+        let frontier = [key];
+        while (frontier.length > 0 && chain.length < KEY_SUCCESSION_MAX) {
+            const next: string[] = [];
+            for (const k of frontier) {
+                for (const former of bySuccessor.get(k) ?? []) {
+                    if (seen.has(former) || chain.length >= KEY_SUCCESSION_MAX) continue;
+                    seen.add(former);
+                    chain.push(former);
+                    next.push(former);
+                }
+            }
+            frontier = next;
+        }
+        if (chain.length > 0) out[key] = chain;
+    }
+    return out;
+}
+
+/**
+ * Every key the member `key` names is known by here: the key they hold now first (rekeyedToNow), then each key a completed
+ * re-key replaced with it (rekeyedFromChains). A block is of a person (member-blocks.ts): a change of one leaves one row
+ * for them, under their key now, and its answer names them by all of these, so a phone's own copy of the list knows the
+ * person it changed even when they are no longer on the list (apps/native utils/blocklist.ts).
+ */
+export function personKeysOf(key: string): string[] {
+    const now = rekeyedToNow(key);
+    return [now, ...(rekeyedFromChains([now])[now] ?? [])];
+}
+
+/**
  * Every member's served chain of former keys, read once (a roster names many members): from each key back through
  * `rekeyed_to`, attested rows only, newest first, at most KEY_SUCCESSION_MAX. The walk stops at the first row with no
  * statement: a chain broken there could not be followed past it by any app (core walkKeySuccession).

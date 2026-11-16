@@ -87,10 +87,12 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
     if (existing) {
         db.prepare("UPDATE members SET invited_by = 'genesis', invite_code = 'genesis' WHERE public_key = ?").run(adminPublicKey);
         if (adminPublicKey !== 'SYSTEM') {
-            db.prepare(
+            const made = db.prepare(
                 `INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by)
                  VALUES (?, 'owner', 'genesis')`
-            ).run(adminPublicKey);
+            ).run(adminPublicKey).changes > 0;
+            // A role the directory names now: a phone's delta read carries the row, as a grant's does (node-roles.ts noteRoleChanged).
+            if (made) db.prepare('UPDATE members SET profile_updated_at = ? WHERE public_key = ?').run(new Date().toISOString(), adminPublicKey);
             // The genesis owner vouches by the role from now, as one grantNodeRole made (engine/vouchers.ts; never throws).
             vouchingAfterRoleChange(adminPublicKey, 'genesis');
         }

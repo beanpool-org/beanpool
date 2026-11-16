@@ -294,18 +294,24 @@ function takeItem(origin: string, item: RelayItem, now: number): GuestItemRefusa
         return null;
     }
     if (forGroupHere(env)) {
+        let refused: GuestItemRefusal | null;
         try {
-            const refused = takeGuestItem(item, now);
-            // Kept as long as the id is spent, so the same item brought again hears the same (receiveRelayItems).
-            if (refused) {
-                db.prepare(`INSERT INTO relay_mail_refused (sender_key, item_id, sender_home, refused, seen_at) VALUES (?, ?, ?, ?, ?)
-                            ON CONFLICT (sender_key, item_id) DO NOTHING`).run(env.senderKey, env.itemId, origin, refused, now);
-            }
-            return refused;
+            refused = takeGuestItem(item, now);
         } catch (e) {
             logger.warn('SYS', `Mail from another community: a guest's group item could not be taken (${e instanceof Error ? e.message.slice(0, 120) : String(e)}).`);
             return null;
         }
+        // Kept as long as the id is spent, so the same item brought again hears the same (receiveRelayItems). Keeping it
+        // never changes this answer: a write that fails is logged, and a replay then hears "received", as before.
+        if (refused) {
+            try {
+                db.prepare(`INSERT INTO relay_mail_refused (sender_key, item_id, sender_home, refused, seen_at) VALUES (?, ?, ?, ?, ?)
+                            ON CONFLICT (sender_key, item_id) DO NOTHING`).run(env.senderKey, env.itemId, origin, refused, now);
+            } catch (e) {
+                logger.warn('SYS', `Mail from another community: a guest item's refusal could not be kept for a replay (${e instanceof Error ? e.message.slice(0, 120) : String(e)}).`);
+            }
+        }
+        return refused;
     }
     holdItem(item, now);
     return null;

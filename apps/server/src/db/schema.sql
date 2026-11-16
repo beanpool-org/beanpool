@@ -4060,7 +4060,7 @@ CREATE TABLE IF NOT EXISTS relay_mail_refused (
     sender_key  TEXT NOT NULL CHECK (length(sender_key) = 64),
     item_id     TEXT NOT NULL CHECK (length(item_id) BETWEEN 1 AND 64),
     sender_home TEXT NOT NULL CHECK (length(sender_home) BETWEEN 1 AND 260),
-    refused     TEXT NOT NULL CHECK (refused IN ('epoch-stale', 'group-refused')),
+    refused     TEXT NOT NULL CHECK (length(refused) BETWEEN 1 AND 40),
     seen_at     INTEGER NOT NULL,
     PRIMARY KEY (sender_key, item_id)
 );

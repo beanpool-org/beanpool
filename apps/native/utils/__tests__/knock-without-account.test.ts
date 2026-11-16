@@ -337,7 +337,7 @@ describe('the root guard (auth-return.ts setupRedirect)', () => {
         expect(read).toBeGreaterThan(-1);
         expect(toWelcome).toBeGreaterThan(read);
         // Everything that switches the community or redeems comes after: a phone with a community still gets them.
-        for (const later of ["t('Switch Nodes?')", "t('Switch & Join')", 'redeemInvite(parsedCode', "AsyncStorage.setItem('beanpool_anchor_url', targetOrigin)"]) {
+        for (const later of ["t('Switch Nodes?')", "t('Switch & Join')", 'redeemInvite(parsedCode', 'switchPhoneTo(targetOrigin)']) {
             expect(case2.indexOf(later), later).toBeGreaterThan(toWelcome);
         }
         // The invite step gets the link's invite and its community, as for a phone with no account.

@@ -22,17 +22,10 @@ export interface CommunityMoveHeld {
 const HELD: CommunityMoveHeld = Object.freeze({ held: true as const });
 
 let tail: Promise<void> = Promise.resolve();
-let holders = 0;
 
 /** `task` runs once every move started before it has finished, and no other starts until it has. Its result, or its throw. */
 export function whileCommunityMoves<T>(task: (held: CommunityMoveHeld) => Promise<T>): Promise<T> {
-    holders++;
     const run = tail.then(() => task(HELD));
-    tail = run.then(() => undefined, () => undefined).finally(() => { holders--; });
+    tail = run.then(() => undefined, () => undefined);
     return run;
-}
-
-/** Whether a move holds the lock or waits for it. */
-export function communityMoveUnderWay(): boolean {
-    return holders > 0;
 }

@@ -13,7 +13,7 @@ import { forgetSyncCursors, requestSync } from '../services/pillar-sync';
 import { startWebSocketSync, stopWebSocketSync } from '../services/ws-client';
 import { askOtherCommunitiesNow, registerPushInPickedLanguage, retryPushRegistrations, setupNotificationResponseHandler, showBadgeSum } from '../services/push-notifications';
 import { registerWhenNotificationsAllowed } from '../utils/notification-permission';
-import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../utils/db';
+import { initDB, clearDB, redeemInvite, pushProfileToServer } from '../utils/db';
 import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
 import { parseRekeyLink } from '../utils/rekey-redeem';
 import { shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
@@ -57,6 +57,9 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { appVersionHeaderValue } from '../utils/force-update';
 import ForceUpdateBlock from '../components/ForceUpdateBlock';
 import { communitySwitched } from '../utils/community-switch';
+import { linkLanding } from '../utils/community-index';
+import { communityRecordsReady } from '../utils/community-record';
+import { switchPhoneTo } from '../utils/reconnect';
 import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
 import { loadPendingCommunityRestore } from '../utils/community-recovery';
@@ -497,7 +500,11 @@ function RootLayoutNav() {
                 return;
             }
 
-            const targetOrigin = extractedNodeOrigin || current;
+            // Any address of a community the phone has opens that community, at the address the phone uses for it (addresses
+            // S5, §3.6): the community in front is no "switch", and another kept one gets no second row.
+            await communityRecordsReady();
+            const landing = extractedNodeOrigin ? linkLanding(extractedNodeOrigin, current) : null;
+            const targetOrigin = landing?.kind === 'in-use' ? current : landing?.kind === 'kept' ? landing.using : (extractedNodeOrigin || current);
             if (!targetOrigin) return;
 
             if (current !== targetOrigin) {
@@ -511,11 +518,9 @@ function RootLayoutNav() {
                             {
                                 text: t('Switch & Join'),
                                 onPress: () => {
-                                    closeDB()
-                                        .then(() => AsyncStorage.setItem('beanpool_anchor_url', targetOrigin))
-                                        .then(() => initDB())
-                                        // The update screen's block was the community left's (utils/community-switch.ts).
-                                        .then(() => { communitySwitched(); })
+                                    // The one switch (reconnect.ts switchPhoneTo: the move lock, the record, the copy, the
+                                    // address, and the update screen's block, which was the community left's).
+                                    switchPhoneTo(targetOrigin)
                                         .then(async () => {
                                             if (!isComponentMounted.current) return;
                                             

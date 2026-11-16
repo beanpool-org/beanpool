@@ -30,6 +30,8 @@ import { findLineWords } from '../components/find-community-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { askNotificationPermissionOnAction } from '../utils/notification-permission';
 import { DoorRuleLine } from '../components/DoorRuleLine';
+import { linkLanding } from '../utils/community-index';
+import { communityRecordsReady } from '../utils/community-record';
 
 export { ErrorBoundary };
 
@@ -144,8 +146,9 @@ export default function CommunityCardScreen() {
     useEffect(() => {
         if (!origin || !identity) return;
         let alive = true;
-        AsyncStorage.getItem('beanpool_anchor_url')
-            .then(anchor => { if (alive) setMemberHere(communityOrigin(anchor) === origin); })
+        // Any address of the community in front is it (addresses S5, §3.6: its signed list, kept in its record).
+        Promise.all([AsyncStorage.getItem('beanpool_anchor_url'), communityRecordsReady()])
+            .then(([anchor]) => { if (alive) setMemberHere(linkLanding(origin, anchor).kind === 'in-use'); })
             .catch(() => {});
         // One after the other: each forgets what has aged out of the same store.
         cancelledKnocks(identity.publicKey)

@@ -34,7 +34,7 @@
 import { addressOf, t } from '@beanpool/core';
 import { plainOriginOf } from './node-url';
 import { GLOBAL_NODE_URL } from './global-node-url';
-import { communityRecordOf, sameCommunityRecord, type CommunityRecord } from './community-index';
+import { communityRecordNaming, communityRecordOf, recordHolds, type CommunityRecord } from './community-index';
 import type { AddressAnswer } from './address-decide';
 
 export interface PairingQr {
@@ -206,7 +206,10 @@ export function scanProofRefusal(target: { kind: 'replaced' | 'not-answering'; s
 export function isAppCommunity(target: TransferTarget | undefined, appNodeUrl: string | null): boolean {
     if (target?.kind !== 'ok') return false;
     const own = knownOrigin(appNodeUrl);
-    return target.nodeUrl === own || (!!own && sameCommunityRecord(target.nodeUrl, own));
+    if (target.nodeUrl === own) return true;
+    // A listed address the phone hasn't proved yet is its community's too (the list names it; the scan proved it).
+    const record = own ? communityRecordNaming(target.nodeUrl) : null;
+    return !!record && recordHolds(record, own!);
 }
 
 /** Every address the screen sends to for one pairing: built from the matched saved origin and the session id only. */

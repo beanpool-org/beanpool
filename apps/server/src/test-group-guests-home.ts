@@ -62,6 +62,10 @@
  *      from an older snapshot: (line, edit, takedown, epoch, roster, removal,
  *      invitation held) x (a restore's notice, a roll-back's, an unreadable one) -> no line or edit is held after the boot
  *      (takedowns stay), and the boot wires it
+ *  17  close the class, THE INVARIANT (G2 follow-ups): (an invitation, the same told again after a take-over, the host's
+ *      answers to a yes, a no and a leave, each with its counter, a roster, a removal, an invitation again) x (every
+ *      arrival order the transports allow) x (a device's stale tab: a page read halfway, applied after the end one) ->
+ *      the same final state at the home and on the device, for every order
  *
  * Run: SERVER_SUITES_ONLY=test-group-guests-home node scripts/run-server-suites.mjs
  */
@@ -76,7 +80,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
-    NODE_KEY_VALIDITY_MS, NODE_REQUEST_HEADER, buildNodeRequestHeaders, dmPublicKeyOf, groupEpochCoversExactly, guestEpochStep, makeGroupEpochRecord,
+    NODE_KEY_VALIDITY_MS, NODE_REQUEST_HEADER, applyGuestMail, buildNodeRequestHeaders, dmPublicKeyOf, groupEpochCoversExactly, guestChatId, guestEpochStep, makeGroupEpochRecord,
     makeGuestEpoch, nodeRequestSignatureVerifies, openGuestEpochKey, parseNodeRequestHeader, readGuestRoster, readNodeKeyDocument, relayEnvelopeVerifies,
     relayPayloadHash, sealGroupLine, signNodeKeyDocument, signRelayEnvelope, verifyGroupEpochRecord, type GroupEpochRecord, type RelayItemKind,
 } from '@beanpool/core';
@@ -176,6 +180,7 @@ async function main(): Promise<void> {
     const triesTo = new Map<string, number>();
     const failing = new Set<string>();
     const refuseIds = new Map<string, string>();       // item id -> the refusal b.example answers for it
+    const answerSeq = new Map<string, number>();       // item id -> the counter b.example's answer carries (the guest's own word, section 17)
     /** Each server's next answers, one a try, in order: '2xx', 'refused' (a 2xx refusing every item), a status, or 'timeout'. */
     const script = new Map<string, string[]>();
     __useRelayTransportForTests(async (url, init) => {
@@ -191,7 +196,8 @@ async function main(): Promise<void> {
         if (scripted && scripted !== '2xx' && scripted !== 'refused') return { status: Number(scripted), body: { error: 'no' } };
         if (u.pathname === '/api/relay/mail') {
             return { status: 202, body: { items: body.items.map((i: any) => (scripted === 'refused' || refuseIds.has(i.envelope.itemId)
-                ? { itemId: i.envelope.itemId, refused: refuseIds.get(i.envelope.itemId) ?? 'group-refused' } : { itemId: i.envelope.itemId, received: true })) } };
+                ? { itemId: i.envelope.itemId, refused: refuseIds.get(i.envelope.itemId) ?? 'group-refused' }
+                : { itemId: i.envelope.itemId, received: true, ...(answerSeq.has(i.envelope.itemId) ? { seq: answerSeq.get(i.envelope.itemId) } : {}) })) } };
         }
         return { status: 202, body: { received: true } };
     });
@@ -1600,6 +1606,99 @@ async function main(): Promise<void> {
     const indexSrc = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'index.ts'), 'utf8');
     assert(/startRestoreNoticeWatch\(\{[\s\S]*?swapped:\s*heldLinesAfterSwap[\s\S]*?\}\);/.test(indexSrc),
         '16r. the boot hands the restore notices the drop of held lines (index.ts startRestoreNoticeWatch: swapped: heldLinesAfterSwap)');
+
+    // ── 17. Where a guest stands: the newest word by counter, at the home and on each device (G2 follow-ups) ─────────
+    // THE INVARIANT: at the home and on each device, where a guest stands is decided by the newest word by counter, never by
+    // arrival order or by a stale page. Words: the host's invitation, the same invitation told again by the server that
+    // took over (retellGroup), the roster, a removal, an invitation again, and the host's ANSWERS to the guest's own yes, no
+    // and leave (each with the counter it was stamped with: the order rule, THE GUEST'S OWN WORD); and a page with links,
+    // fetched by two tabs of one device. Each history's counters are issued as the host's servers issue them, in the
+    // order made (after a take-over by B, its copy current and its clock 10 minutes behind). Each row is one arrival order
+    // the transports allow (the first invitation first: the guest answers it, their yes or no queued at once while the host
+    // is out of reach; each server's own outbox oldest first; the guest's own items oldest first), then the device's two
+    // tabs: one fetched halfway, one at the end; the end page applied first, the halfway one after it (stale). The final
+    // state at the home and on the device is the same for every order: the one each history pins.
+    console.log('\n17. Close the class, the newest word wins: (invitation, the same told again after a take-over, yes, no, leave, roster, removal, invitation again) x (every arrival order the transports allow) x (a stale tab) -> the same final state at the home and on the device');
+    type W17 = 'invite' | 'retold' | 'yes' | 'no' | 'leave' | 'roster' | 'removal' | 'invite again';
+    interface H17 { name: string; words: W17[]; before: Array<[W17, W17]>; home: string; device: string }
+    const H17S: H17[] = [
+        { name: 'a yes after a take-over told the invitation again', words: ['invite', 'retold', 'yes', 'roster'], before: [['retold', 'roster']], home: 'in, roster R', device: 'in, roster R' },
+        { name: 'removed and invited again after the yes', words: ['invite', 'yes', 'roster', 'removal', 'invite again'], before: [], home: 'invited', device: 'invited' },
+        { name: 'a leave after the yes, the invitation told again before it', words: ['invite', 'retold', 'yes', 'roster', 'leave'], before: [['retold', 'roster'], ['yes', 'leave']], home: 'left', device: 'none' },
+        { name: 'a no after a take-over told the invitation again', words: ['invite', 'retold', 'no'], before: [], home: 'declined', device: 'none' },
+    ];
+    /** Every order of `rest` in which nothing arrives before what `before` says must come first. */
+    const orders17 = (rest: W17[], before: Array<[W17, W17]>): W17[][] => {
+        if (rest.length <= 1) return [rest];
+        const out: W17[][] = [];
+        for (const w of rest) {
+            if (before.some(([a, b]) => b === w && rest.includes(a))) continue;
+            for (const tail of orders17(rest.filter((x) => x !== w), before)) out.push([w, ...tail]);
+        }
+        return out;
+    };
+    const chat17 = (chats: Record<string, any>, g: string) => {
+        const c = chats[guestChatId('b.example', g)];
+        return c ? `${c.state}${c.roster ? `, roster ${c.roster.name}` : ''}` : 'none';
+    };
+    let r17 = 0;
+    const want17 = H17S.reduce((n, h) => n + orders17(h.words.slice(1), h.before).length, 0);
+    for (const h of H17S) {
+        for (const order of orders17(h.words.slice(1), h.before)) {
+            const n17 = ++r17;
+            clear16();
+            db.prepare('DELETE FROM group_guest_sent WHERE sender_key = ?').run(gus.pk);
+            const g = `g17-${n17}`;
+            const t = Date.now();
+            const seqs = new Map<W17, number>();
+            let last: number | null = null;
+            h.words.forEach((w, i) => {
+                const behind = h.words.includes('retold') && i > 0 ? 10 * MIN : 0;
+                last = next16 ? next16(last, t + (i + 1) * 1000 - behind) : i + 1;
+                seqs.set(w, last);
+            });
+            const hostWord = (w: W17) => ({
+                v: 1, kind: w === 'removal' ? 'removed' : w === 'roster' ? 'roster' : 'invite', group: g, host: 'b.example', guests: [gus.pk], seq: seqs.get(w),
+                data: w === 'removal' ? { why: 'removed' } : w === 'roster' ? { ...(DATA.roster as object), name: 'R' } : DATA.invite,
+            });
+            const own = async (w: 'yes' | 'no' | 'leave') => {
+                const it = await item(gus, w === 'leave' ? 'group-leave' : 'group-invite', g, w === 'leave' ? '{"v":1}' : JSON.stringify({ v: 1, answer: w }));
+                answerSeq.set(it.envelope.itemId, seqs.get(w)!);
+                return it;
+            };
+            const steps: string[] = [];
+            const dev = device();
+            steps.push(`invite ${(await notice('b.example', hostWord('invite'))).status}`);
+            // Their yes or no, queued at once while the host is out of reach: its answer lands where the order puts it.
+            const answer = h.words.includes('yes') ? 'yes' : h.words.includes('no') ? 'no' : null;
+            if (answer) {
+                failing.add('b.example');
+                const r = await send(gus, [await own(answer)]);
+                failing.delete('b.example');
+                steps.push(`${answer} ${r.status} ${r.body?.items?.[0]?.state}`);
+            }
+            let halfway: Res | null = null;
+            for (const [i, w] of order.entries()) {
+                resetGatewayRateLimit();
+                if (w === 'yes' || w === 'no') steps.push(`${w} answered ${await home.retryGroupSent(Date.now() + 10 * MIN)}`);
+                else if (w === 'leave') { const r = await send(gus, [await own('leave')]); steps.push(`leave ${r.status} ${r.body?.items?.[0]?.state}`); }
+                else steps.push(`${w} ${(await notice('b.example', hostWord(w))).status}`);
+                if (i + 1 === Math.ceil(order.length / 2)) halfway = await fetchGroup(gus, dev);
+            }
+            const end = await fetchGroup(gus, dev);
+            const link = linkOf(gus, 'b.example', g);
+            const queued = db.prepare("SELECT COUNT(*) FROM group_guest_sent WHERE sender_key = ? AND group_id = ? AND state = 'queued'").pluck().get(gus.pk, g) as number;
+            const homeGot = `${link?.state ?? 'none'}${link?.roster ? `, roster ${JSON.parse(link.roster).name}` : ''}${queued ? ', an item still queued' : ''}`;
+            // The device: the end page applied, then the halfway one (another tab's, read before it) after it.
+            const ctx17 = (seen: number | null) => ({ me: gus.pk, myEdPrivHex: gus.seedHex, blocked: () => false, now: Date.now(), linksSeen: seen });
+            const alone = applyGuestMail({}, end.body ?? {}, ctx17(null));
+            const both = applyGuestMail(alone.chats, halfway?.body ?? {}, ctx17(end.body?.linksAt ?? null));
+            const devAlone = chat17(alone.chats, g), devGot = chat17(both.chats, g);
+            assert(homeGot === h.home && devAlone === h.device && devGot === h.device && both.confirm.length === 0,
+                `17. ${h.name} x arriving ${order.join(', ')}: home ${h.home}, device ${h.device}, the stale tab moving nothing (got home ${homeGot}; device ${devAlone}, after the stale tab ${devGot}, it confirmed ${both.confirm.length}; ${steps.join('; ')})`);
+        }
+    }
+    assert(r17 === want17 && r17 >= 30, `17z. the table has a row for every history x every arrival order the transports allow (${r17} rows)`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

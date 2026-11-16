@@ -39,9 +39,12 @@
  * held past MAIL_HELD_DAYS. A replay dies on its sender and id (relay_mail_seen, MAIL_SEEN_MS),
  * and an item older than MAIL_ITEM_MAX_AGE_MS by its sender's clock, or dated more than MAIL_ITEM_MAX_AHEAD_MS ahead, is
  * stale, so none outlives the ids kept against it. A guest's group item refused here keeps its refusal as long as its id
- * (relay_mail_refused), and its server bringing it again hears that refusal, never "received" (G2 round 2).
+ * (relay_mail_refused), and its server bringing it again hears that refusal, never "received" (G2 round 2). A guest's yes, no
+ * or leave that moved where they stand is answered `received` with the group's counter it was stamped with (the order rule,
+ * engine/group-guests.ts), kept as long as its id too (relay_mail_answered), so a replay hears the same counter.
  *
- * **Never copied.** The five tables are `local` (engine/replication-manifest.ts), and every snapshot and backup file is
+ * **Never copied.** The mailbox's tables are `local` (engine/replication-manifest.ts; the list is relay-mail-tables.ts
+ * RELAY_MAIL_TABLES), and every snapshot and backup file is
  * made without them (forgetRelayMailInCopy, from services/address-retention.ts). The files are never in the image store.
  */
 import fs from 'node:fs';
@@ -56,7 +59,7 @@ import { WRITER_LIMITS } from '../config/writer-limits.js';
 import { isNodeMember, readsAsMember } from '../state-engine.js';
 import { hasBlocked } from './member-blocks.js';
 import { isOwnNodeHome } from './node-key.js';
-import { GUEST_ITEM_KINDS, guestItemMaxChars, takeGuestItem, type GuestItemRefusal } from './group-guests.js';
+import { GUEST_ITEM_KINDS, guestItemMaxChars, takeGuestItem, type GuestItemRefusal, type GuestItemTaken } from './group-guests.js';
 import { assertFolderFloorSpace, StorageNearlyFullError } from './photo-upload-budget.js';
 import { logger } from '../logger.js';
 
@@ -174,7 +177,8 @@ export function removeRelayBlob(file: string): void {
 
 // ── Receiving ───────────────────────────────────────────────────────────────────────────────
 
-export type ReceivedItem = { itemId: string | null; received: true } | { itemId: string | null; refused: RelayItemDrop | 'stale' | GuestItemRefusal };
+/** `seq`: on a guest's yes, no or leave that moved where they stand in a group here, the counter it was stamped with (takeGuestItem). */
+export type ReceivedItem = { itemId: string | null; received: true; seq?: number } | { itemId: string | null; refused: RelayItemDrop | 'stale' | GuestItemRefusal };
 
 export type ReceiveAnswer =
     | { status: 202; body: { items: ReceivedItem[] } }
@@ -270,30 +274,38 @@ export function receiveRelayItems(origin: string, items: unknown, now = Date.now
     }
 
     // Each new item, then nothing more said: how many were held is no one's to read in the answer, nor in the log. A guest
-    // who is in a group here hears why their own line was refused (engine/group-guests.ts); nobody else hears anything.
+    // who is in a group here hears why their own line was refused, and the counter their own yes, no or leave was stamped
+    // with (engine/group-guests.ts); nobody else hears anything.
+    const answerOf = (item: RelayItem, said: GuestItemRefusal | GuestItemTaken): ReceivedItem => (typeof said === 'string'
+        ? { itemId: item.envelope.itemId, refused: said } : { itemId: item.envelope.itemId, received: true, seq: said.seq });
     for (const item of newItems) {
-        const refused = takeItem(origin, item, now);
-        if (!refused) continue;
+        const said = takeItem(origin, item, now);
+        if (!said) continue;
         const at = answerAt.get(`${item.envelope.senderKey}\n${item.envelope.itemId}`);
-        if (at !== undefined) answers[at] = { itemId: item.envelope.itemId, refused };
+        if (at !== undefined) answers[at] = answerOf(item, said);
     }
-    // A guest's group item brought again by the server that brought it first (it never heard the answer): the refusal it
-    // was given then, never "received", which its home would settle `sent` (relay_mail_refused). Nothing is taken again.
+    // A guest's group item brought again by the server that brought it first (it never heard the answer): what it was told
+    // then, never a bare "received": the refusal (relay_mail_refused), which its home would otherwise settle `sent`, or the
+    // counter its yes, no or leave was stamped with (relay_mail_answered). Nothing is taken again.
     const keptRefusal = db.prepare('SELECT refused FROM relay_mail_refused WHERE sender_key = ? AND item_id = ? AND sender_home = ?').pluck();
+    const keptSeq = db.prepare('SELECT seq FROM relay_mail_answered WHERE sender_key = ? AND item_id = ? AND sender_home = ?').pluck();
     for (const item of fresh) {
         if (newItems.includes(item) || !forGroupHere(item.envelope)) continue;
-        const refused = keptRefusal.get(item.envelope.senderKey, item.envelope.itemId, origin) as GuestItemRefusal | undefined;
-        const at = answerAt.get(`${item.envelope.senderKey}\n${item.envelope.itemId}`);
-        if (refused && at !== undefined) answers[at] = { itemId: item.envelope.itemId, refused };
+        const { senderKey, itemId } = item.envelope;
+        const refused = keptRefusal.get(senderKey, itemId, origin) as GuestItemRefusal | undefined;
+        const seq = refused ? undefined : keptSeq.get(senderKey, itemId, origin) as number | undefined;
+        const at = answerAt.get(`${senderKey}\n${itemId}`);
+        if (at !== undefined && (refused || seq !== undefined)) answers[at] = answerOf(item, refused ?? { seq: seq! });
     }
     return { status: 202, body: { items: answers } };
 }
 
 /**
  * One new item: its id spent, then held, applied (a receipt, a guest's group item) or dropped. Null, said of all of them,
- * or the refusal a guest in a group here hears of their own item (engine/group-guests.ts takeGuestItem).
+ * or what a guest in a group here hears of their own item: its refusal, or the counter their yes, no or leave was stamped
+ * with (engine/group-guests.ts takeGuestItem).
  */
-function takeItem(origin: string, item: RelayItem, now: number): GuestItemRefusal | null {
+function takeItem(origin: string, item: RelayItem, now: number): GuestItemRefusal | GuestItemTaken | null {
     const env = item.envelope;
     const spent = db.prepare('INSERT INTO relay_mail_seen (sender_key, item_id, sender_home, seen_at) VALUES (?, ?, ?, ?) ON CONFLICT (sender_key, item_id) DO NOTHING')
         .run(env.senderKey, env.itemId, origin, now).changes === 1;
@@ -303,24 +315,29 @@ function takeItem(origin: string, item: RelayItem, now: number): GuestItemRefusa
         return null;
     }
     if (forGroupHere(env)) {
-        let refused: GuestItemRefusal | null;
+        let said: GuestItemRefusal | GuestItemTaken | null;
         try {
-            refused = takeGuestItem(item, now);
+            said = takeGuestItem(item, now);
         } catch (e) {
             logger.warn('SYS', `Mail from another community: a guest's group item could not be taken (${e instanceof Error ? e.message.slice(0, 120) : String(e)}).`);
             return null;
         }
         // Kept as long as the id is spent, so the same item brought again hears the same (receiveRelayItems). Keeping it
         // never changes this answer: a write that fails is logged, and a replay then hears "received", as before.
-        if (refused) {
+        if (said) {
             try {
-                db.prepare(`INSERT INTO relay_mail_refused (sender_key, item_id, sender_home, refused, seen_at) VALUES (?, ?, ?, ?, ?)
-                            ON CONFLICT (sender_key, item_id) DO NOTHING`).run(env.senderKey, env.itemId, origin, refused, now);
+                if (typeof said === 'string') {
+                    db.prepare(`INSERT INTO relay_mail_refused (sender_key, item_id, sender_home, refused, seen_at) VALUES (?, ?, ?, ?, ?)
+                                ON CONFLICT (sender_key, item_id) DO NOTHING`).run(env.senderKey, env.itemId, origin, said, now);
+                } else {
+                    db.prepare(`INSERT INTO relay_mail_answered (sender_key, item_id, sender_home, seq, seen_at) VALUES (?, ?, ?, ?, ?)
+                                ON CONFLICT (sender_key, item_id) DO NOTHING`).run(env.senderKey, env.itemId, origin, said.seq, now);
+                }
             } catch (e) {
-                logger.warn('SYS', `Mail from another community: a guest item's refusal could not be kept for a replay (${e instanceof Error ? e.message.slice(0, 120) : String(e)}).`);
+                logger.warn('SYS', `Mail from another community: what a guest item was told could not be kept for a replay (${e instanceof Error ? e.message.slice(0, 120) : String(e)}).`);
             }
         }
-        return refused;
+        return said;
     }
     holdItem(item, now);
     return null;
@@ -576,5 +593,6 @@ export function sweepRelayMail(now = Date.now()): { expired: number; gone: numbe
                 AND m.item_id = relay_mail_got.item_id)`).run();
     const seen = db.prepare('DELETE FROM relay_mail_seen WHERE seen_at < ?').run(now - MAIL_SEEN_MS).changes;
     db.prepare('DELETE FROM relay_mail_refused WHERE seen_at < ?').run(now - MAIL_SEEN_MS);
+    db.prepare('DELETE FROM relay_mail_answered WHERE seen_at < ?').run(now - MAIL_SEEN_MS);
     return { expired, gone, seen, devices };
 }

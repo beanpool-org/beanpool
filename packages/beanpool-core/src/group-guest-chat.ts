@@ -31,6 +31,12 @@
  *     under the same one (my server answers an id it has with that item's state).
  *   - **State**: what this device shows for an invitation or a chat follows what my server lists now. An invitation it no
  *     longer lists (answered on another device, withdrawn) is gone from here; a chat it no longer lists was left there.
+ *     "Now" is the newest page this device applied (G2 follow-ups, TWO TABS): each page says when my server read its list
+ *     (`linksAt`, strictly later than any page before), and a page read before the newest one applied here (another tab
+ *     or window of this device fetched after it and wrote first) is STALE: it moves nothing at all, neither by its
+ *     `groups` nor by its notices or ticks, and confirms nothing ({@link guestPageStale}; applyGuestMail). Everything in
+ *     it is either in the newer page or was confirmed by whoever applied it, so nothing is lost; and nothing it says
+ *     (an invitation not listed yet, a removal before the invitation that followed it) undoes a newer word.
  *   - **Epochs**: my line is sealed only under an epoch the host has taken: one it sent (a roster, an epoch notice), or my
  *     own once my server says the host took it ({@link GuestOwnEpoch}). While my own is queued or refused, the line waits.
  *
@@ -289,9 +295,32 @@ export function guestViewerOf(chat: Pick<GuestChat, 'state'>): GuestViewer | nul
 
 // ── Reading the server's page ───────────────────────────────────────────────────────────────
 
+/**
+ * How far behind the newest page applied a page may be and still be a stale one from another tab (the file's header,
+ * "State"): two tabs' fetches are a round apart at most (each app ends a round at 30 s). A page further behind than this
+ * is from my server after its clock went back (a restart after a clock correction): it is read, and the newest page
+ * applied is that one from then on, so the device never stops reading its server.
+ */
+export const GUEST_PAGE_STALE_MS = 10 * 60_000;
+
+/**
+ * Whether a page whose list my server read at `linksAt` is STALE on this device (the file's header, "State": TWO TABS):
+ * read before the newest page this device applied (`seen`), by no more than GUEST_PAGE_STALE_MS. A page with no `linksAt`
+ * (a server from before it), or with none applied yet, never is.
+ */
+export function guestPageStale(linksAt: unknown, seen: number | null | undefined): boolean {
+    if (typeof linksAt !== 'number' || !Number.isSafeInteger(linksAt) || typeof seen !== 'number' || !Number.isSafeInteger(seen)) return false;
+    return linksAt < seen && seen - linksAt <= GUEST_PAGE_STALE_MS;
+}
+
 export interface GuestMailContext {
     /** My key. */
     me: string;
+    /**
+     * The `linksAt` of the newest page this device applied for this account (the file's header, "State": TWO TABS), or
+     * null/absent when it has applied none with one.
+     */
+    linksSeen?: number | null;
     /** My private key, hex: opens my wraps. */
     myEdPrivHex: string;
     /** Whether this account blocked a key. */
@@ -471,12 +500,14 @@ function takeRoster(chat: GuestChat, roster: GuestRoster, ctx: GuestMailContext)
  * says I stand with each group. Returns the chats (a new object; the old is untouched) and the notice ids to confirm:
  * every one applied, taken or dropped by the gate's rule; never one the gate left waiting (a kind, or an edit's change,
  * this device can't apply: it comes again; the file's header, "Notices"). The caller confirms only after the chats are
- * written.
+ * written. A STALE page (read before the newest page applied here, `ctx.linksSeen`: the file's header, "State") changes
+ * nothing and confirms nothing (`stale`), and its ticks are not to be applied either.
  */
-export function applyGuestMail(before: GuestChats, page: { items?: unknown; groups?: unknown }, ctx: GuestMailContext): { chats: GuestChats; confirm: string[]; changed: boolean } {
+export function applyGuestMail(before: GuestChats, page: { items?: unknown; groups?: unknown; linksAt?: unknown }, ctx: GuestMailContext): { chats: GuestChats; confirm: string[]; changed: boolean; stale: boolean } {
     const chats: GuestChats = structuredCloneChats(before);
     const confirm: string[] = [];
     let changed = false;
+    if (guestPageStale(page.linksAt, ctx.linksSeen)) return { chats, confirm, changed, stale: true };
     const items = Array.isArray(page.items) ? page.items as GuestNotice[] : [];
     for (const n of items) {
         if (!isObject(n) || typeof n.id !== 'string') continue;
@@ -530,7 +561,7 @@ export function applyGuestMail(before: GuestChats, page: { items?: unknown; grou
         openWhatCan(c);
     }
     changed = applyGuestLinks(chats, page.groups, ctx) || changed;
-    return { chats, confirm, changed };
+    return { chats, confirm, changed, stale: false };
 }
 
 /**

@@ -48,6 +48,6 @@ You can report a message, as in any chat. See "Reporting a problem" and "Blockin
 
 ## What each community keeps
 
-Neither community keeps a copy of these chats. Each message is kept only on the phone or browser that gets it. A chat says **Kept on this phone only. Your community keeps no copy.** So a new phone, or one set up from your 12 words, doesn't have your earlier messages in these chats.
+Neither community keeps a copy of these chats. Each message is kept only on the phone or browser that gets it. On the phone, a chat says **Kept on this phone only. Your community keeps no copy.** So a new phone, or one set up from your 12 words, doesn't have your earlier messages in these chats.
 
 Each message is locked on the phone or browser that sends it, for the one person it is written to: neither community can read it. The two communities see that a message passed between you, and when, as your community does for a message inside it.

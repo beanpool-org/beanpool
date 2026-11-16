@@ -4,14 +4,14 @@ title: Menschen aus anderen Communities
 summary: Jemandem schreiben, der zu einer anderen Community gehört. Deine Adresskarte, die Schalter, über die man dich erreichen kann, jemanden über den genauen Namen finden und was jede Community aufbewahrt.
 related: messages, contacts, blocking, privacy, communities
 help: Zeige deine Adresskarte oder finde jemanden über den genauen Namen, wenn er Ja gesagt hat. Seine erste Nachricht ist eine Anfrage: Du wählst, ob du annimmst.
-source-hash: 25876e70036e5da9
+source-hash: 10e6343765465d89
 ---
 
 ## Was es ist
 
 Du kannst jemandem schreiben, der zu einer anderen BeanPool-Community gehört, ohne ihr beizutreten. Deren Community und deine reichen die Nachrichten zwischen euch weiter. Deine erste Nachricht ist eine Nachrichtenanfrage: Die Person entscheidet, ob sie sie annimmt, wie bei einem Mitglied deiner eigenen Community.
 
-Das geht nur, wenn beide Communities Nachrichten aus anderen Communities annehmen. Das entscheiden ihre Eigentümer. Wo deine es nicht tut, steht auf dem Bildschirm **Diese Community nimmt keine Nachrichten aus anderen Communities an.**
+Das geht nur, wenn beide Communities Nachrichten aus anderen Communities annehmen. Das entscheiden ihre Eigentümer. Wo deine es nicht tut, zeigt die App weder eine Adresskarte noch den Eintrag **Jemand aus einer anderen Community**.
 
 ## Deine Adresskarte
 
@@ -32,12 +32,12 @@ Dann bekommt jemand aus einer anderen Community, der deinen genauen Namen eingib
 
 Tippe im **Chat** auf **Neue Nachricht** (die Stift-Schaltfläche; in der Web-App **✉️ Neue Direktnachricht**), dann auf **Jemand aus einer anderen Community**.
 
-- **Mit ihrer Karte:** Tippe auf **Karte scannen** und richte die Kamera auf den QR-Code ihrer Karte, oder füge den Link, den die Person dir geschickt hat, unter **Kartenlink einfügen** ein, und tippe dann auf **Karte lesen**.
+- **Mit ihrer Karte:** Tippe auf **Karte scannen** und richte die Kamera auf den QR-Code ihrer Karte, oder füge den Link, den die Person dir geschickt hat, unter **Kartenlink einfügen** ein, und tippe dann auf **Karte lesen**. In der Web-App gibt es **Karte scannen** nur, wo der Browser einen QR-Code lesen kann.
 - **Mit ihrem Namen:** Gib unter **Jemand aus einer anderen Community** die Adresse in **Adresse ihrer Community** ein, dann den Namen in **Der genaue Name**, und tippe auf **Finden**. Nur wer Ja gesagt hat, kann gefunden werden.
 - Wenn niemand unter diesem Namen antwortet oder die Person nicht Ja gesagt hat, siehst du dieselbe Zeile: **Unter diesem Namen nimmt hier niemand Nachrichten an.** Sie sagt nie, was davon zutrifft.
 - Du kannst 10 Namen pro Tag nachschlagen. Ein Name hat bis zu 60 Zeichen.
 
-Ihre Karte zeigt ihren Namen und ihre Community. Wenn ihre Community den Namen nicht bestätigen kann, steht das neben der Community: **Name hier nicht bestätigt**. Schreibe in das Feld **Deine erste Nachricht** und tippe dann auf **Nachrichtenanfrage senden**.
+Ihre Karte zeigt ihren Namen und ihre Community. Ein Name aus einer anderen Community ist ihre eigene Angabe und wird hier nie geprüft. Darum steht neben der Community immer **Name hier nicht bestätigt**, auf der Karte und in eurem Chat. Schreibe in das Feld **Deine erste Nachricht** und tippe dann auf **Nachrichtenanfrage senden**.
 
 Der Chat erscheint in deiner Liste der Chats, mit ihrer Community unter ihrem Namen. Bis ihre Community die Nachricht hat, steht bei deiner Nachricht **Wartet auf ihre Community**.
 

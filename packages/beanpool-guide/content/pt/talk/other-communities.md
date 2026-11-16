@@ -4,14 +4,14 @@ title: Pessoas de outras comunidades
 summary: Envie mensagens para alguém que pertence a outra comunidade. Seu cartão de endereço, os interruptores que permitem que as pessoas falem com você, como encontrar alguém pelo nome exato e o que cada comunidade guarda.
 related: messages, contacts, blocking, privacy, communities
 help: Mostre seu cartão de endereço, ou encontre alguém pelo nome exato, se a pessoa disse sim. A primeira mensagem dela é um pedido: você escolhe se aceita.
-source-hash: 25876e70036e5da9
+source-hash: 10e6343765465d89
 ---
 
 ## O que é
 
 Você pode escrever para alguém que pertence a outra comunidade BeanPool, sem entrar nela. A comunidade da pessoa e a sua passam as mensagens entre vocês. Sua primeira mensagem é um pedido de mensagem: a pessoa escolhe se aceita, como acontece com um membro da sua própria comunidade.
 
-Só funciona quando as duas comunidades recebem mensagens de outras comunidades. Quem decide são os proprietários delas. Quando a sua não recebe, a tela diz **Esta comunidade não recebe mensagens de outras comunidades.**
+Só funciona quando as duas comunidades recebem mensagens de outras comunidades. Quem decide são os proprietários delas. Quando a sua não recebe, o app não mostra o cartão de endereço nem **Alguém de outra comunidade**.
 
 ## Seu cartão de endereço
 
@@ -32,12 +32,12 @@ Então, alguém de outra comunidade que digitar seu nome exato, como você o usa
 
 Em **Bate-papo**, abra **Nova mensagem** (o botão de lápis; no app web, **✉️ Nova mensagem direta**) e depois **Alguém de outra comunidade**.
 
-- **O cartão da pessoa:** toque em **Escanear um cartão** e aponte a câmera para o código QR do cartão dela, ou cole o link que ela enviou em **Colar o link de um cartão** e depois toque em **Ler o cartão**.
+- **O cartão da pessoa:** toque em **Escanear um cartão** e aponte a câmera para o código QR do cartão dela, ou cole o link que ela enviou em **Colar o link de um cartão** e depois toque em **Ler o cartão**. No app web, **Escanear um cartão** só aparece onde o navegador consegue ler um código QR.
 - **O nome da pessoa:** em **Alguém de outra comunidade**, digite **Endereço da comunidade da pessoa**, depois **Nome exato da pessoa**, e toque em **Buscar**. Só podem ser encontradas as pessoas que disseram sim.
 - Se ninguém tiver esse nome, ou se a pessoa não disse sim, você vê a mesma linha: **Ninguém com esse nome recebe mensagens aqui.** Ela nunca diz qual dos dois.
 - Você pode procurar 10 nomes por dia. Um nome tem no máximo 60 caracteres.
 
-O cartão mostra o nome da pessoa e a comunidade dela. Se a comunidade dela não puder confirmar o nome, isso aparece ao lado da comunidade: **nome não confirmado aqui**. Escreva **Sua primeira mensagem** e toque em **Enviar pedido de mensagem**.
+O cartão mostra o nome da pessoa e a comunidade dela. Um nome vindo de outra comunidade é o que a própria pessoa diz, e nunca é verificado aqui, por isso ao lado da comunidade sempre aparece **nome não confirmado aqui**, no cartão e na sua conversa com ela. Escreva **Sua primeira mensagem** e toque em **Enviar pedido de mensagem**.
 
 A conversa aparece na sua lista de conversas, com a comunidade da pessoa abaixo do nome dela. Até a comunidade dela receber, sua mensagem diz **Aguardando a comunidade da pessoa**.
 

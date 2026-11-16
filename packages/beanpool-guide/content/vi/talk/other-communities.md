@@ -4,14 +4,14 @@ title: Người ở cộng đồng khác
 summary: Nhắn tin cho một người thuộc cộng đồng khác. Thẻ địa chỉ của bạn, các công tắc cho phép người khác liên lạc với bạn, tìm một người theo đúng tên của họ, và mỗi cộng đồng lưu giữ những gì.
 related: messages, contacts, blocking, privacy, communities
 help: Cho xem thẻ địa chỉ của bạn, hoặc tìm một người theo đúng tên nếu họ đã đồng ý. Tin nhắn đầu tiên của họ là một yêu cầu: bạn chọn có chấp nhận hay không.
-source-hash: 25876e70036e5da9
+source-hash: 10e6343765465d89
 ---
 
 ## Đó là gì
 
 Bạn có thể viết cho một người thuộc cộng đồng BeanPool khác mà không cần tham gia cộng đồng đó. Cộng đồng của họ và cộng đồng của bạn chuyển tin nhắn qua lại giữa hai bạn. Tin nhắn đầu tiên của bạn là một yêu cầu nhắn tin: họ chọn có chấp nhận hay không, giống như với một thành viên trong cộng đồng của bạn.
 
-Tính năng này chỉ hoạt động khi cả hai cộng đồng đều nhận tin nhắn từ các cộng đồng khác. Chủ sở hữu của mỗi cộng đồng quyết định. Nếu cộng đồng của bạn không nhận, màn hình sẽ ghi **Cộng đồng này không nhận tin nhắn từ các cộng đồng khác.**
+Tính năng này chỉ hoạt động khi cả hai cộng đồng đều nhận tin nhắn từ các cộng đồng khác. Chủ sở hữu của mỗi cộng đồng quyết định. Nếu cộng đồng của bạn không nhận, ứng dụng không hiện thẻ địa chỉ và cũng không có **Một người ở cộng đồng khác**.
 
 ## Thẻ địa chỉ của bạn
 
@@ -32,12 +32,12 @@ Sau đó, một người ở cộng đồng khác gõ đúng tên của bạn, n
 
 Trong **Chat**, mở **Tin nhắn mới** (nút hình cây bút; trong ứng dụng web là **✉️ Tin nhắn trực tiếp mới**), rồi **Một người ở cộng đồng khác**.
 
-- **Thẻ của họ:** nhấn **Quét thẻ** và hướng camera vào mã QR trên thẻ của họ, hoặc dán liên kết họ gửi cho bạn vào ô **Dán liên kết thẻ**, rồi nhấn **Đọc thẻ**.
+- **Thẻ của họ:** nhấn **Quét thẻ** và hướng camera vào mã QR trên thẻ của họ, hoặc dán liên kết họ gửi cho bạn vào ô **Dán liên kết thẻ**, rồi nhấn **Đọc thẻ**. Trong ứng dụng web, **Quét thẻ** chỉ hiện ở nơi trình duyệt đọc được mã QR.
 - **Tên của họ:** dưới **Một người ở cộng đồng khác**, nhập **Địa chỉ cộng đồng của họ**, rồi **Tên chính xác của họ**, và nhấn **Tìm**. Chỉ những người đã đồng ý mới có thể được tìm thấy.
 - Nếu không có ai mang tên đó, hoặc người đó chưa đồng ý, bạn sẽ thấy cùng một dòng: **Không có ai mang tên đó nhận tin nhắn ở đây.** Dòng này không bao giờ cho biết là trường hợp nào.
 - Bạn có thể tra 10 tên mỗi ngày. Một tên dài tối đa 60 ký tự.
 
-Thẻ của họ hiển thị tên và cộng đồng của họ. Nếu cộng đồng của họ không thể xác nhận tên, bên cạnh tên cộng đồng sẽ ghi: **tên chưa được xác nhận ở đây**. Viết **Tin nhắn đầu tiên của bạn**, rồi nhấn **Gửi yêu cầu nhắn tin**.
+Thẻ của họ hiển thị tên và cộng đồng của họ. Tên đến từ cộng đồng khác là do chính họ tự nói, và không bao giờ được kiểm tra ở đây, nên bên cạnh tên cộng đồng luôn ghi **tên chưa được xác nhận ở đây**, trên thẻ và trong cuộc trò chuyện của bạn với họ. Viết **Tin nhắn đầu tiên của bạn**, rồi nhấn **Gửi yêu cầu nhắn tin**.
 
 Cuộc trò chuyện hiện trong danh sách chat của bạn, với cộng đồng của họ ở dưới tên họ. Cho đến khi cộng đồng của họ nhận được, tin nhắn của bạn ghi **Đang chờ cộng đồng của họ**.
 

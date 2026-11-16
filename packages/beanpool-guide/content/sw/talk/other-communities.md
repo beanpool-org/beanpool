@@ -4,14 +4,14 @@ title: Watu wa jumuiya nyingine
 summary: Mtumie ujumbe mtu aliye wa jumuiya nyingine. Kadi yako ya anwani, swichi zinazowawezesha watu kukufikia, kumpata mtu kwa jina lake kamili, na kile kila jumuiya inachohifadhi.
 related: messages, contacts, blocking, privacy, communities
 help: Onyesha kadi yako ya anwani, au mtafute mtu kwa jina lake kamili ikiwa amekubali. Ujumbe wake wa kwanza ni ombi: wewe ndiye unayechagua kama utaukubali.
-source-hash: 25876e70036e5da9
+source-hash: 10e6343765465d89
 ---
 
 ## Ni nini
 
 Unaweza kumwandikia mtu aliye wa jumuiya nyingine ya BeanPool, bila kujiunga nayo. Jumuiya yake na yako hupitisha jumbe kati yenu. Ujumbe wako wa kwanza ni ombi la ujumbe: yeye ndiye anayechagua kama atalikubali, kama ilivyo kwa mwanachama wa jumuiya yako mwenyewe.
 
-Inafanya kazi tu pale jumuiya zote mbili zinapopokea ujumbe kutoka jumuiya nyingine. Wamiliki wao ndio huamua. Pale ambapo yako haipokei, skrini inasema **Jumuiya hii haipokei ujumbe kutoka jumuiya nyingine.**
+Inafanya kazi tu pale jumuiya zote mbili zinapopokea ujumbe kutoka jumuiya nyingine. Wamiliki wao ndio huamua. Pale ambapo yako haipokei, programu haionyeshi kadi ya anwani wala **Mtu wa jumuiya nyingine**.
 
 ## Kadi yako ya anwani
 
@@ -32,12 +32,12 @@ Kisha mtu wa jumuiya nyingine anayeandika jina lako kamili, kama unavyolitumia h
 
 Katika **Gumzo**, fungua **Ujumbe Mpya** (kitufe cha penseli; kwenye programu ya wavuti **✉️ Ujumbe Mpya wa Moja kwa Moja**), kisha **Mtu wa jumuiya nyingine**.
 
-- **Kadi yake:** gusa **Changanua kadi** na uelekeze kamera kwenye msimbo wa QR wa kadi yake, au bandika kiungo alichokutumia chini ya **Bandika kiungo cha kadi**, kisha gusa **Soma kadi**.
+- **Kadi yake:** gusa **Changanua kadi** na uelekeze kamera kwenye msimbo wa QR wa kadi yake, au bandika kiungo alichokutumia chini ya **Bandika kiungo cha kadi**, kisha gusa **Soma kadi**. Kwenye programu ya wavuti, **Changanua kadi** huonekana tu pale ambapo kivinjari kinaweza kusoma msimbo wa QR.
 - **Jina lake:** chini ya **Mtu wa jumuiya nyingine**, andika **Anwani ya jumuiya yake**, kisha **Jina lake kamili**, na uguse **Tafuta**. Ni watu waliokubali pekee wanaoweza kupatikana.
 - Ikiwa hakuna mtu mwenye jina hilo, au hajakubali, unaona mstari uleule: **Hakuna mtu mwenye jina hilo anayepokea ujumbe hapa.** Kamwe hausemi ni lipi.
 - Unaweza kutafuta majina 10 kwa siku. Jina lina hadi herufi 60.
 
-Kadi yake inaonyesha jina lake na jumuiya yake. Ikiwa jumuiya yake haiwezi kuthibitisha jina, inasema hivyo kando ya jumuiya: **jina halijathibitishwa hapa**. Andika **Ujumbe wako wa kwanza**, kisha gusa **Tuma ombi la ujumbe**.
+Kadi yake inaonyesha jina lake na jumuiya yake. Jina kutoka jumuiya nyingine ni neno lake mwenyewe, na halikaguliwi hapa kamwe, kwa hiyo kando ya jumuiya daima inasema **jina halijathibitishwa hapa**, kwenye kadi na kwenye gumzo lenu. Andika **Ujumbe wako wa kwanza**, kisha gusa **Tuma ombi la ujumbe**.
 
 Gumzo linaonekana kwenye orodha yako ya gumzo, likiwa na jumuiya yake chini ya jina lake. Hadi jumuiya yake itakapoupokea, ujumbe wako unasema **Inasubiri jumuiya yake**.
 

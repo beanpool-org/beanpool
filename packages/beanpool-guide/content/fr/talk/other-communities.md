@@ -4,14 +4,14 @@ title: Personnes d'autres communautés
 summary: Écrire à quelqu'un qui appartient à une autre communauté. Votre carte d'adresse, les interrupteurs qui permettent de vous joindre, trouver quelqu'un par son nom exact, et ce que garde chaque communauté.
 related: messages, contacts, blocking, privacy, communities
 help: Montrez votre carte d'adresse, ou trouvez quelqu'un par son nom exact s'il a dit oui. Son premier message est une demande : à vous de l'accepter ou non.
-source-hash: 25876e70036e5da9
+source-hash: 10e6343765465d89
 ---
 
 ## Ce que c'est
 
 Vous pouvez écrire à quelqu'un qui appartient à une autre communauté BeanPool, sans la rejoindre. Sa communauté et la vôtre se transmettent les messages entre vous. Votre premier message est une demande de message : la personne choisit de l'accepter ou non, comme pour un membre de votre propre communauté.
 
-Cela ne fonctionne que là où les deux communautés reçoivent des messages d'autres communautés. Leurs propriétaires en décident. Là où la vôtre ne le fait pas, l'écran indique **Cette communauté ne reçoit pas de messages d’autres communautés.**
+Cela ne fonctionne que là où les deux communautés reçoivent des messages d'autres communautés. Leurs propriétaires en décident. Là où la vôtre ne le fait pas, l'application n'affiche ni carte d'adresse ni **Quelqu’un d’une autre communauté**.
 
 ## Votre carte d'adresse
 
@@ -32,12 +32,12 @@ Ensuite, quelqu'un d'une autre communauté qui tape votre nom exact, tel que vou
 
 Dans **Chat**, ouvrez **Nouveau message** (le bouton du crayon ; dans l'application web, **✉️ Nouveau message direct**), puis **Quelqu’un d’une autre communauté**.
 
-- **Sa carte :** touchez **Scanner une carte** et pointez l'appareil photo vers le code QR de sa carte, ou collez le lien que la personne vous a envoyé sous **Coller le lien d'une carte**, puis touchez **Lire la carte**.
+- **Sa carte :** touchez **Scanner une carte** et pointez l'appareil photo vers le code QR de sa carte, ou collez le lien que la personne vous a envoyé sous **Coller le lien d'une carte**, puis touchez **Lire la carte**. Dans l'application web, **Scanner une carte** n'apparaît que si le navigateur sait lire un code QR.
 - **Son nom :** sous **Quelqu’un d’une autre communauté**, tapez **Adresse de sa communauté**, puis **Son nom exact**, et touchez **Rechercher**. Seules les personnes qui ont dit oui peuvent être trouvées.
 - Si personne ne porte ce nom, ou si la personne n'a pas dit oui, vous voyez la même ligne : **Personne de ce nom ne reçoit de messages ici.** Elle ne dit jamais lequel des deux.
 - Vous pouvez chercher 10 noms par jour. Un nom compte au plus 60 caractères.
 
-Sa carte indique son nom et sa communauté. Si sa communauté ne peut pas confirmer le nom, elle l'indique à côté de la communauté : **nom non confirmé ici**. Écrivez **Votre premier message**, puis touchez **Envoyer une demande de message**.
+Sa carte indique son nom et sa communauté. Un nom venu d'une autre communauté est celui que la personne se donne, et il n'est jamais vérifié ici : c'est pourquoi, à côté de la communauté, il est toujours écrit **nom non confirmé ici**, sur la carte et dans votre discussion avec elle. Écrivez **Votre premier message**, puis touchez **Envoyer une demande de message**.
 
 La discussion apparaît dans votre liste de discussions, avec sa communauté sous son nom. Tant que sa communauté ne l'a pas reçu, votre message indique **En attente de sa communauté**.
 

@@ -4,14 +4,14 @@ title: Mga tao mula sa ibang komunidad
 summary: Magmensahe sa isang taong kabilang sa ibang komunidad. Ang address card mo, ang mga switch na nagbibigay-daan sa mga tao na maabot ka, ang paghahanap sa isang tao sa eksaktong pangalan niya, at kung ano ang iniingatan ng bawat komunidad.
 related: messages, contacts, blocking, privacy, communities
 help: Ipakita ang address card mo, o hanapin ang tao sa eksaktong pangalan niya kung pumayag siya. Hiling ang una niyang mensahe: ikaw ang pipili kung tatanggapin.
-source-hash: 25876e70036e5da9
+source-hash: 10e6343765465d89
 ---
 
 ## Ano ito
 
 Maaari kang sumulat sa isang taong kabilang sa ibang komunidad ng BeanPool, nang hindi sumasali roon. Ang komunidad niya at ang komunidad mo ang nagpapasa ng mga mensahe sa pagitan ninyo. Ang unang mensahe mo ay isang hiling na magmensahe: siya ang pipili kung tatanggapin ito, tulad ng sa isang miyembro ng sarili mong komunidad.
 
-Gumagana lamang ito kung parehong tumatanggap ang dalawang komunidad ng mensahe mula sa ibang komunidad. Ang mga may-ari nila ang nagpapasya. Kung hindi tumatanggap ang komunidad mo, sinasabi ng screen ang **Hindi tumatanggap ang komunidad na ito ng mensahe mula sa ibang komunidad.**
+Gumagana lamang ito kung parehong tumatanggap ang dalawang komunidad ng mensahe mula sa ibang komunidad. Ang mga may-ari nila ang nagpapasya. Kung hindi tumatanggap ang komunidad mo, walang address card at walang **Isang tao sa ibang komunidad** sa app.
 
 ## Ang address card mo
 
@@ -32,12 +32,12 @@ Pagkatapos, ang taong nasa ibang komunidad na nagta-type ng eksaktong pangalan m
 
 Sa **Usapan**, buksan ang **Bagong Mensahe** (ang button na lapis; sa web app, **✉️ Bagong DM**), pagkatapos ay **Isang tao sa ibang komunidad**.
 
-- **Ang card niya:** i-tap ang **I-scan ang card** at itutok ang camera sa QR code ng card niya, o i-paste ang link na ipinadala niya sa ilalim ng **I-paste ang link ng card**, pagkatapos ay i-tap ang **Basahin ang card**.
+- **Ang card niya:** i-tap ang **I-scan ang card** at itutok ang camera sa QR code ng card niya, o i-paste ang link na ipinadala niya sa ilalim ng **I-paste ang link ng card**, pagkatapos ay i-tap ang **Basahin ang card**. Sa web app, lumalabas lamang ang **I-scan ang card** kung kaya ng browser na basahin ang QR code.
 - **Ang pangalan niya:** sa ilalim ng **Isang tao sa ibang komunidad**, i-type ang **Address ng komunidad nila**, pagkatapos ay **Eksaktong pangalan nila**, at i-tap ang **Hanapin**. Ang mga pumayag lamang ang mahahanap.
 - Kung walang may ganoong pangalan, o hindi pa siya pumapayag, iisang linya ang makikita mo: **Walang sinumang may ganoong pangalan ang tumatanggap ng mensahe rito.** Hindi nito kailanman sinasabi kung alin.
 - Maaari kang maghanap ng 10 pangalan bawat araw. Hanggang 60 character ang isang pangalan.
 
-Ipinapakita ng card niya ang pangalan niya at ang komunidad niya. Kung hindi makumpirma ng komunidad niya ang pangalan, sinasabi ito sa tabi ng komunidad: **hindi nakumpirma rito ang pangalan**. Isulat ang **Ang unang mensahe mo**, pagkatapos ay i-tap ang **Ipadala ang hiling na magmensahe**.
+Ipinapakita ng card niya ang pangalan niya at ang komunidad niya. Ang pangalan mula sa ibang komunidad ay sariling salita niya at hindi kailanman sinusuri rito, kaya sa tabi ng komunidad ay laging nakasulat ang **hindi nakumpirma rito ang pangalan**, sa card at sa usapan ninyo. Isulat ang **Ang unang mensahe mo**, pagkatapos ay i-tap ang **Ipadala ang hiling na magmensahe**.
 
 Lumalabas ang usapan sa listahan ng mga chat mo, na may komunidad niya sa ilalim ng pangalan niya. Hangga't hindi pa ito natatanggap ng komunidad niya, sinasabi ng mensahe mo ang **Naghihintay sa komunidad nila**.
 

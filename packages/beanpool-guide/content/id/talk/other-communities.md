@@ -4,14 +4,14 @@ title: Orang dari komunitas lain
 summary: Kirim pesan ke seseorang yang menjadi anggota komunitas lain. Kartu alamatmu, sakelar yang membuat orang bisa menghubungimu, menemukan seseorang lewat nama persisnya, dan apa yang disimpan tiap komunitas.
 related: messages, contacts, blocking, privacy, communities
 help: Tunjukkan kartu alamatmu, atau cari orang lewat nama persisnya jika mereka setuju. Pesan pertamanya berupa permintaan: kamu memilih menerimanya atau tidak.
-source-hash: 25876e70036e5da9
+source-hash: 10e6343765465d89
 ---
 
 ## Apa itu
 
 Kamu bisa menulis kepada seseorang yang menjadi anggota komunitas BeanPool lain, tanpa bergabung ke sana. Komunitas mereka dan komunitasmu meneruskan pesan di antara kalian. Pesan pertamamu adalah permintaan pesan: mereka yang memilih apakah akan menerimanya, sama seperti dengan anggota komunitasmu sendiri.
 
-Ini hanya berfungsi jika kedua komunitas menerima pesan dari komunitas lain. Pemiliknya yang memutuskan. Jika komunitasmu tidak menerimanya, layar bertuliskan **Komunitas ini tidak menerima pesan dari komunitas lain.**
+Ini hanya berfungsi jika kedua komunitas menerima pesan dari komunitas lain. Pemiliknya yang memutuskan. Jika komunitasmu tidak menerimanya, aplikasi tidak menampilkan kartu alamat maupun **Seseorang di komunitas lain**.
 
 ## Kartu alamatmu
 
@@ -32,12 +32,12 @@ Setelah itu, seseorang di komunitas lain yang mengetik nama persismu, seperti ya
 
 Di **Obrolan**, buka **Pesan Baru** (tombol pensil; di aplikasi web **✉️ DM Baru**), lalu **Seseorang di komunitas lain**.
 
-- **Kartu mereka:** ketuk **Pindai kartu** dan arahkan kamera ke kode QR di kartu mereka, atau tempel tautan yang mereka kirim di bawah **Tempel tautan kartu**, lalu ketuk **Baca kartunya**.
+- **Kartu mereka:** ketuk **Pindai kartu** dan arahkan kamera ke kode QR di kartu mereka, atau tempel tautan yang mereka kirim di bawah **Tempel tautan kartu**, lalu ketuk **Baca kartunya**. Di aplikasi web, **Pindai kartu** hanya muncul jika browser bisa membaca kode QR.
 - **Nama mereka:** di bawah **Seseorang di komunitas lain**, isi **Alamat komunitasnya**, lalu **Nama persisnya**, dan ketuk **Cari**. Hanya orang yang sudah setuju yang bisa ditemukan.
 - Jika tidak ada yang bernama itu, atau orangnya belum setuju, kamu melihat baris yang sama: **Tidak ada orang dengan nama itu yang menerima pesan di sini.** Baris itu tidak pernah menyebutkan yang mana.
 - Kamu bisa mencari 10 nama sehari. Sebuah nama paling panjang 60 karakter.
 
-Kartu mereka menampilkan nama dan komunitas mereka. Jika komunitas mereka tidak bisa memastikan nama itu, hal itu tertulis di samping nama komunitasnya: **nama belum dikonfirmasi di sini**. Tulis **Pesan pertamamu**, lalu ketuk **Kirim permintaan pesan**.
+Kartu mereka menampilkan nama dan komunitas mereka. Nama dari komunitas lain adalah pengakuan mereka sendiri dan tidak pernah diperiksa di sini, jadi di samping nama komunitasnya selalu tertulis **nama belum dikonfirmasi di sini**, di kartu dan di obrolanmu dengan mereka. Tulis **Pesan pertamamu**, lalu ketuk **Kirim permintaan pesan**.
 
 Obrolan itu muncul di daftar obrolanmu, dengan komunitas mereka di bawah nama mereka. Sampai komunitas mereka menerimanya, pesanmu bertuliskan **Menunggu komunitas mereka**.
 

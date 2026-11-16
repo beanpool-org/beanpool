@@ -4,14 +4,14 @@ title: Persone di altre comunità
 summary: Scrivi a qualcuno che appartiene a un'altra comunità. La tua scheda indirizzo, gli interruttori che permettono di raggiungerti, trovare qualcuno con il suo nome esatto e cosa conserva ogni comunità.
 related: messages, contacts, blocking, privacy, communities
 help: Mostra la tua scheda indirizzo, oppure trova qualcuno con il suo nome esatto se ha detto sì. Il suo primo messaggio è una richiesta: scegli tu se accettarla.
-source-hash: 25876e70036e5da9
+source-hash: 10e6343765465d89
 ---
 
 ## Che cos'è
 
 Puoi scrivere a qualcuno che appartiene a un'altra comunità BeanPool, senza unirti a essa. La sua comunità e la tua si passano i messaggi tra voi. Il tuo primo messaggio è una richiesta di messaggio: l'altra persona sceglie se accettarla, come per un membro della tua comunità.
 
-Funziona solo dove entrambe le comunità ricevono messaggi da altre comunità. Lo decidono i loro proprietari. Dove la tua non li riceve, lo schermo dice **Questa comunità non riceve messaggi da altre comunità.**
+Funziona solo dove entrambe le comunità ricevono messaggi da altre comunità. Lo decidono i loro proprietari. Dove la tua non li riceve, l'app non mostra né la scheda indirizzo né **Qualcuno di un'altra comunità**.
 
 ## La tua scheda indirizzo
 
@@ -32,12 +32,12 @@ A quel punto, chi in un'altra comunità digita il tuo nome esatto, come lo usi q
 
 In **Chat**, apri **Nuovo messaggio** (il pulsante con la matita; nell'app web **✉️ Nuovo messaggio diretto**), poi **Qualcuno di un'altra comunità**.
 
-- **La sua scheda:** tocca **Scansiona una scheda** e inquadra con la fotocamera il codice QR della sua scheda, oppure incolla il link che ti ha inviato sotto **Incolla il link di una scheda**, poi tocca **Leggi la scheda**.
+- **La sua scheda:** tocca **Scansiona una scheda** e inquadra con la fotocamera il codice QR della sua scheda, oppure incolla il link che ti ha inviato sotto **Incolla il link di una scheda**, poi tocca **Leggi la scheda**. Nell'app web, **Scansiona una scheda** compare solo dove il browser sa leggere un codice QR.
 - **Il suo nome:** sotto **Qualcuno di un'altra comunità**, digita **Indirizzo della sua comunità**, poi **Il suo nome esatto**, e tocca **Cerca**. Si possono trovare solo le persone che hanno detto sì.
 - Se nessuno risponde a quel nome, o se la persona non ha detto sì, vedi la stessa riga: **Nessuno con quel nome riceve messaggi qui.** Non dice mai quale dei due casi.
 - Puoi cercare 10 nomi al giorno. Un nome è lungo al massimo 60 caratteri.
 
-La sua scheda mostra il suo nome e la sua comunità. Se la sua comunità non può confermare il nome, lo dice accanto alla comunità: **nome non confermato qui**. Scrivi **Il tuo primo messaggio**, poi tocca **Invia richiesta di messaggio**.
+La sua scheda mostra il suo nome e la sua comunità. Un nome che arriva da un'altra comunità è quello che la persona dichiara, e qui non viene mai controllato: per questo accanto alla comunità c'è sempre scritto **nome non confermato qui**, sulla scheda e nella vostra chat. Scrivi **Il tuo primo messaggio**, poi tocca **Invia richiesta di messaggio**.
 
 La chat compare nel tuo elenco di chat, con la sua comunità sotto il suo nome. Finché la sua comunità non l'ha ricevuto, il tuo messaggio dice **In attesa della sua comunità**.
 

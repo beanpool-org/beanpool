@@ -4,14 +4,14 @@ title: Personas de otras comunidades
 summary: Escribe a alguien que pertenece a otra comunidad. Tu tarjeta de dirección, los interruptores que permiten que te escriban, encontrar a alguien por su nombre exacto y lo que guarda cada comunidad.
 related: messages, contacts, blocking, privacy, communities
 help: Muestra tu tarjeta de dirección, o encuentra a alguien por su nombre exacto si dijo que sí. Su primer mensaje es una solicitud: tú eliges si aceptarla.
-source-hash: 25876e70036e5da9
+source-hash: 10e6343765465d89
 ---
 
 ## Qué es
 
 Puedes escribir a alguien que pertenece a otra comunidad de BeanPool, sin unirte a ella. Su comunidad y la tuya se pasan los mensajes entre ustedes. Tu primer mensaje es una solicitud de mensaje: la otra persona elige si aceptarla, igual que con un miembro de tu propia comunidad.
 
-Solo funciona donde las dos comunidades reciben mensajes de otras comunidades. Lo deciden sus propietarios. Donde la tuya no los recibe, la pantalla dice **Esta comunidad no recibe mensajes de otras comunidades.**
+Solo funciona donde las dos comunidades reciben mensajes de otras comunidades. Lo deciden sus propietarios. Donde la tuya no los recibe, la aplicación no muestra ni la tarjeta de dirección ni **Alguien de otra comunidad**.
 
 ## Tu tarjeta de dirección
 
@@ -32,12 +32,12 @@ Entonces, alguien de otra comunidad que escriba tu nombre exacto, tal como lo us
 
 En **Chat**, abre **Nuevo mensaje** (el botón del lápiz; en la aplicación web, **✉️ Nuevo mensaje directo**), luego **Alguien de otra comunidad**.
 
-- **Su tarjeta:** toca **Escanear una tarjeta** y apunta la cámara al código QR de su tarjeta, o pega el enlace que te envió en **Pegar el enlace de una tarjeta**, y luego toca **Leer la tarjeta**.
+- **Su tarjeta:** toca **Escanear una tarjeta** y apunta la cámara al código QR de su tarjeta, o pega el enlace que te envió en **Pegar el enlace de una tarjeta**, y luego toca **Leer la tarjeta**. En la aplicación web, **Escanear una tarjeta** solo aparece donde el navegador puede leer un código QR.
 - **Su nombre:** en **Alguien de otra comunidad**, escribe **Dirección de su comunidad**, luego **Su nombre exacto**, y toca **Buscar**. Solo se puede encontrar a quienes dijeron que sí.
 - Si nadie responde a ese nombre, o esa persona no dijo que sí, ves la misma línea: **Nadie con ese nombre recibe mensajes aquí.** Nunca dice cuál de las dos cosas pasó.
 - Puedes buscar 10 nombres al día. Un nombre tiene como máximo 60 caracteres.
 
-Su tarjeta muestra su nombre y su comunidad. Si su comunidad no puede confirmar el nombre, lo dice junto a la comunidad: **nombre no confirmado aquí**. Escribe **Tu primer mensaje** y luego toca **Enviar solicitud de mensaje**.
+Su tarjeta muestra su nombre y su comunidad. Un nombre de otra comunidad es lo que esa persona dice de sí misma, y aquí nunca se comprueba, así que junto a la comunidad siempre dice **nombre no confirmado aquí**, en la tarjeta y en tu chat con esa persona. Escribe **Tu primer mensaje** y luego toca **Enviar solicitud de mensaje**.
 
 El chat aparece en tu lista de chats, con su comunidad debajo de su nombre. Hasta que su comunidad lo recibe, tu mensaje dice **Esperando a su comunidad**.
 

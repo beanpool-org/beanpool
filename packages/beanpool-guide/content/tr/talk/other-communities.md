@@ -4,14 +4,14 @@ title: Diğer topluluklardaki kişiler
 summary: Başka bir topluluğa ait birine mesaj gönderin. Adres kartınız, insanların size ulaşmasını sağlayan anahtarlar, birini tam adıyla bulmak ve her topluluğun neleri sakladığı.
 related: messages, contacts, blocking, privacy, communities
 help: Adres kartınızı gösterin ya da buna izin verdiyse birini tam adıyla bulun. Size gelen ilk mesaj bir istektir: kabul edip etmeyeceğinizi siz seçersiniz.
-source-hash: 25876e70036e5da9
+source-hash: 10e6343765465d89
 ---
 
 ## Nedir
 
 Başka bir BeanPool topluluğuna ait birine, o topluluğa katılmadan yazabilirsiniz. Mesajları onun topluluğu ile sizinki aranızda iletir. İlk mesajınız bir mesaj isteğidir: kendi topluluğunuzdan bir üyede olduğu gibi, kabul edip etmeyeceğini o seçer.
 
-Bu yalnızca iki topluluğun da diğer topluluklardan mesaj aldığı yerde çalışır. Buna sahipleri karar verir. Sizinkinin almadığı yerde ekranda şu yazar: **Bu topluluk diğer topluluklardan mesaj almıyor.**
+Bu yalnızca iki topluluğun da diğer topluluklardan mesaj aldığı yerde çalışır. Buna sahipleri karar verir. Sizinkinin almadığı yerde uygulama ne adres kartı ne de **Başka bir topluluktan biri** seçeneğini gösterir.
 
 ## Adres kartınız
 
@@ -32,12 +32,12 @@ Bundan sonra başka bir topluluktan biri adınızı burada kullandığınız şe
 
 **Sohbet**'te **Yeni Mesaj**'ı (kalem düğmesi; web uygulamasında **✉️ Yeni Doğrudan Mesaj**), ardından **Başka bir topluluktan biri** seçeneğini açın.
 
-- **Onun kartı:** **Kart tara**'ya dokunup kamerayı kartındaki QR koduna tutun ya da size gönderdiği bağlantıyı **Kart bağlantısını yapıştır** altına yapıştırın, sonra **Kartı oku**'ya dokunun.
+- **Onun kartı:** **Kart tara**'ya dokunup kamerayı kartındaki QR koduna tutun ya da size gönderdiği bağlantıyı **Kart bağlantısını yapıştır** altına yapıştırın, sonra **Kartı oku**'ya dokunun. Web uygulamasında **Kart tara** yalnızca tarayıcının QR kodu okuyabildiği yerde görünür.
 - **Onun adı:** **Başka bir topluluktan biri** altında **Topluluğunun adresi** alanına, ardından **Tam adı** alanına yazın ve **Bul**'a dokunun. Yalnızca evet diyen kişiler bulunabilir.
 - O adla kimse yoksa ya da kişi evet dememişse aynı satırı görürsünüz: **Burada bu adla mesaj alan kimse yok.** Hangisi olduğunu asla söylemez.
 - Günde 10 ad arayabilirsiniz. Bir ad en fazla 60 karakterdir.
 
-Kartında adı ve topluluğu görünür. Topluluğu adı doğrulayamazsa bunu topluluğun yanında belirtir: **ad burada doğrulanmadı**. **İlk mesajınız** alanına yazın, sonra **Mesaj isteği gönder**'e dokunun.
+Kartında adı ve topluluğu görünür. Başka bir topluluktan gelen ad, kişinin kendi söylediğidir ve burada hiçbir zaman kontrol edilmez. Bu yüzden hem kartta hem de onunla sohbetinizde topluluğun yanında her zaman **ad burada doğrulanmadı** yazar. **İlk mesajınız** alanına yazın, sonra **Mesaj isteği gönder**'e dokunun.
 
 Sohbet, sohbet listenizde adının altında topluluğuyla görünür. Onun topluluğu mesajı alana kadar mesajınızda **Topluluğunu bekliyor** yazar.
 

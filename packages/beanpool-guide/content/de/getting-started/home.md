@@ -71,7 +71,7 @@ Die Startseite zeigt nur jene Karten, die dir etwas mitzuteilen haben, in deiner
 - **Lass deine Community wachsen:** Lässt dich nach deinem ersten Angebot neue Mitglieder einladen, sofern Einladungen aktiviert sind. Nicht in der globalen Community. Auf dem Smartphone, wo nur die Admins einladen, wird sie nur für Eigentümer oder Admins angezeigt. In der Web-App wird sie dort überhaupt nicht angezeigt.
 - **Deine Community:** Die letzte Karte, betitelt mit dem Namen deiner Community (**Die weltweite Community** in der globalen Community). Sie zeigt die Mitgliederzahl und die Transaktionen in diesem Monat; in der globalen Community die Mitglieder und wie viele Communities gelistet sind. Sie bietet **Karte hinzufügen** und **Startseite bearbeiten**. Diese Karte bleibt ganz unten und kann weder verschoben noch entfernt werden.
 
-Auf dem Smartphone zeigt eine Zeile über all diesen einmal an, wenn dein Telefon von selbst zu einer anderen Adresse deiner Community gewechselt ist: siehe „Wenn deine Community an eine neue Adresse umzieht“ in „Mehrere Communitys“.
+Auf dem Smartphone zeigt eine Zeile über all diesen einmal an, wenn dein Telefon von selbst zu einer anderen Adresse deiner Community gewechselt ist (aber nicht, wenn es zur Hauptadresse zurückkehrt): siehe „Wenn deine Community an eine neue Adresse umzieht“ in „Mehrere Communitys“.
 
 ## Das „…“-Menü
 

@@ -492,16 +492,16 @@ export function forumTopics(reader: string, opts: { sectionId?: string; offset: 
     return { topics: page.map((r) => topicOut(r, reader, writer)), next: more ? opts.offset + FORUM_LIMITS.topicsPerPage : null };
 }
 
-/**
- * A topic the reader may see: not gone, not by someone they blocked, not hidden from them (its opening post hidden), not in a
- * group's section they are not in (slice F8). `hiddenOk`: a writer's own post in it is still theirs to edit or remove while it
- * is hidden (ownPost). `anySection`: the writer of a post there may still remove it after leaving the group (removeForumPost).
- */
 /** A topic `reader` may read (visibleTopic), for engine/forum-learn.ts: a 404 as for a topic nobody has, else its row. */
 export function readableForumTopic(reader: string, id: string): { id: string; section_id: string; writer_pubkey: string } {
     return visibleTopic(reader, id);
 }
 
+/**
+ * A topic the reader may see: not gone, not by someone they blocked, not hidden from them (its opening post hidden), not in a
+ * group's section they are not in (slice F8). `hiddenOk`: a writer's own post in it is still theirs to edit or remove while it
+ * is hidden (ownPost). `anySection`: the writer of a post there may still remove it after leaving the group (removeForumPost).
+ */
 function visibleTopic(reader: string, id: string, opts: { hiddenOk?: boolean; anySection?: boolean } = {}): TopicRow {
     const row = db.prepare(`SELECT t.* FROM forum_topics t WHERE t.id = @id AND COALESCE(t.closed_by, '') != 'removed'
         AND ${NOT_BLOCKED('t.writer_pubkey')} AND ${NOT_HIDDEN_TO_READER} ${opts.anySection ? '' : `AND ${sectionReadSql('t.section_id', '@reader')}`}`)
@@ -797,8 +797,9 @@ const othersReplied = (topic: TopicRow) =>
  */
 function blankTopic(topic: TopicRow, at: string, by: 'writer' | 'moderator' = 'writer'): void {
     const gone = !othersReplied(topic);
-    // Its links were its writer's, under the opening words that go (slice F9): they go too, with tombstones.
-    deletePlainRows('forum_links', FORUM_TARGET_LINKS_WHERE, topic.id);
+    // Its links were its writer's, under the opening words that go (slice F9): they go too, with tombstones. A Learn page made
+    // from someone else's answer (`post_id`, engine/forum-learn.ts) is that answer's, and stays while the answer does.
+    deletePlainRows('forum_links', gone ? FORUM_TARGET_LINKS_WHERE : `${FORUM_TARGET_LINKS_WHERE} AND post_id IS NULL`, topic.id);
     db.prepare(`UPDATE forum_topics SET title = '', place = NULL, pinned_at = CASE WHEN ? THEN NULL ELSE pinned_at END,
         closed_at = COALESCE(closed_at, ?), closed_by = CASE WHEN ? THEN 'removed' ELSE COALESCE(closed_by, ?) END WHERE id = ?`)
         .run(gone ? 1 : 0, at, gone ? 1 : 0, by, topic.id);

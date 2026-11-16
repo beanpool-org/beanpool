@@ -266,6 +266,11 @@ async function main(): Promise<void> {
     const pageGone = await call(nan, 'GET', `/api/forum/topics/${a.topicId}`);
     db.prepare('UPDATE posts SET active = 1 WHERE id = ?').run(page);
     assert(pageGone.body?.posts?.find((p: any) => p.id === a.postId)?.learn === null && !pageGone.text.includes(page), '2. a page that stopped showing: none either');
+    // Tom removes his topic: with Wes's answer in it, it stays blanked; the page is Wes's answer's, not Tom's chip, and stays.
+    require_((await call(tom, 'POST', `/api/forum/posts/${opening}/remove`)).status === 200, 'Tom removes his topic');
+    const afterTom = await call(nan, 'GET', `/api/forum/topics/${a.topicId}`);
+    assert(afterTom.status === 200 && afterTom.body?.posts?.find((p: any) => p.id === a.postId)?.learn?.id === page,
+        `2. the topic's writer removing it leaves the answer "Now a Learn page" (${show(afterTom)})`);
     // Someone's suggestion naming another's answer is refused before anything is written.
     const b = await answerBy(wes, general);
     const nanTurns = await call(nan, 'POST', '/api/knowledge/drafts', { fromForumPostId: b.postId, title: b.title, body: b.words, topic: 'local-services' });

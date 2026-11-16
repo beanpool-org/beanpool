@@ -27,6 +27,7 @@ import {
     Alert,
 } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import { StatusBar } from 'expo-status-bar';
 import { router, ErrorBoundary, useLocalSearchParams, useNavigation } from 'expo-router';
 import { leaveScreen } from '../utils/leave-screen';
 import { claimRouteFor, parseClaimLink } from '../utils/claim-link';
@@ -738,6 +739,8 @@ export default function PairDeviceScreen() {
 
     return (
         <View style={styles.container}>
+            {/* The camera's black under the status bar in every theme: light icons while it shows (the root layout's bar, by theme, is for the page; status-bar-every-screen.test.ts). */}
+            <StatusBar style="light" />
             <View style={styles.header}>
                 <Pressable
                     style={styles.closeBtn}

@@ -1,6 +1,6 @@
 import { Tabs, ErrorBoundary } from 'expo-router';
 export { ErrorBoundary };
-import { StatusBar } from 'expo-status-bar';
+import { ScreenStatusBar } from '../../components/ScreenStatusBar';
 import { GlobalHeader, HEADER_ROW_HEIGHT } from '../../components/GlobalHeader';
 import { View, Text, Platform, DeviceEventEmitter, AppState, type AppStateStatus } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -360,8 +360,10 @@ export default function TabLayout() {
     return (
         <View style={{ flex: 1 }}>
             {/* Tab screens always sit under the dark-green vine header, so the status-bar
-                text must be light regardless of the app's light/dark theme. */}
-            <StatusBar style="light" />
+                text must be light regardless of the app's light/dark theme. Only while the tabs
+                can be seen: a screen opened over them that sets no bar of its own reads the root
+                layout's, by theme, not this one (components/ScreenStatusBar.tsx; WALK 3 phone). */}
+            <ScreenStatusBar style="light" />
             {/* EXPERIMENT (feat/top-tabs): tab bar moved to the top, UNDER the brand band.
                 A top tab bar renders before the screen container, so a per-screen `header`
                 would land above the tabs. Rendering GlobalHeader here instead keeps the

@@ -9,7 +9,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, FlatList, DeviceEventEmitter } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -28,7 +27,7 @@ const POLL_MS = 15_000;
 
 export default function GuestChatScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
-    const { colors, theme } = useTheme();
+    const { colors } = useTheme();
     const [me, setMe] = useState<string | null>(null);
     const [chat, setChat] = useState<GuestChat | null | undefined>(undefined);
     const [text, setText] = useState('');
@@ -127,10 +126,6 @@ export default function GuestChatScreen() {
 
     return (
         <SafeAreaView style={styles.safeArea} testID="guest-chat">
-            {/* Its own, as the DM and group chats have (chat/[id].tsx, group/[id].tsx): opened from the Chats list, it would
-                otherwise keep the tabs' light bar, made for their dark header, and in Light the clock and icons sit white on a
-                light page (WALK 3 phone, 17 Nov 2026). */}
-            <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <KeyboardAvoidingView style={styles.container} behavior="padding">
                 <View style={styles.header}>
                     <Pressable style={styles.backBtn} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={t('Go back')}>

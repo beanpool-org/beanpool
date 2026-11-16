@@ -59,16 +59,10 @@ vi.mock('react-native-safe-area-context', async () => {
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 const route = vi.hoisted(() => ({ id: '' }));
 vi.mock('expo-router', () => ({ router: { back: vi.fn(), push: vi.fn() }, useLocalSearchParams: () => ({ id: route.id }), useFocusEffect: () => {} }));
-const themeNow = vi.hoisted(() => ({ theme: 'light' as 'light' | 'dark' }));
 vi.mock('../../app/ThemeContext', async () => {
-    const { lightColors, darkColors } = await import('../../constants/colors');
-    const ctx = () => ({ theme: themeNow.theme, colors: themeNow.theme === 'dark' ? darkColors : lightColors });
-    return { useTheme: () => ctx(), useStyles: (make: (c: ReturnType<typeof ctx>) => unknown) => make(ctx()) };
-});
-// The bar's style, read where the test looks: the screen's own status bar (WALK 3 phone, 17 Nov 2026).
-vi.mock('expo-status-bar', async () => {
-    const { createElement: h } = await import('react');
-    return { StatusBar: (p: { style?: string }) => h('span', { 'data-testid': 'status-bar', 'data-style': p.style ?? '' }) };
+    const { lightColors } = await import('../../constants/colors');
+    const ctx = { theme: 'light', colors: lightColors };
+    return { useTheme: () => ctx, useStyles: (make: (c: typeof ctx) => unknown) => make(ctx) };
 });
 vi.mock('../../components/MemberAvatar', async () => {
     const { createElement: h } = await import('react');
@@ -108,7 +102,6 @@ afterEach(() => {
     live.chats = {};
     live.guests = [];
     live.on = true;
-    themeNow.theme = 'light';
 });
 
 const settle = async () => { for (let i = 0; i < 6; i++) await act(async () => { await Promise.resolve(); }); };
@@ -221,25 +214,6 @@ describe("the guest's chat at 320 dp with text at 1.3x", () => {
         await openChat(chat('declined'));
         expect(q('guest-chat-closed')?.textContent).toBe('You declined this invitation.');
     });
-});
-
-describe("the guest's chat sets its own status bar", () => {
-    // Opened from the Chats list, a screen with no bar of its own keeps the tabs' light one (made for their dark header):
-    // in Light, a white clock and white icons on a light page (WALK 3 phone, API 26, 17 Nov 2026). Like chat/[id].tsx and
-    // group/[id].tsx, the guest's chat sets dark icons on Light and light icons on the dark themes, in every state it draws.
-    const states: Array<[string, GuestChat | null]> = [
-        ['in', chat('in')], ['invited', chat('invited', { lines: [] })], ['removed', chat('removed', { why: 'removed' })], ['not on this phone', null],
-    ];
-    for (const [theme, want] of [['light', 'dark'], ['dark', 'light']] as const) {
-        for (const [label, c] of states) {
-            it(`${theme}, ${label}: the bar is ${want}`, async () => {
-                themeNow.theme = theme;
-                await openChat(c);
-                const bars = Array.from(host.querySelectorAll('[data-testid="status-bar"]')).map((e) => e.getAttribute('data-style'));
-                expect(bars).toEqual([want]);
-            });
-        }
-    }
 });
 
 describe("the group's guests, under its members", () => {

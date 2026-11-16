@@ -1016,7 +1016,7 @@ describe("MessagesPage: the list goes by each chat's newest line, the member's o
         fireEvent.change(box, { target: { value: 'Bringing gloves' } });
         await act(async () => { fireEvent.keyDown(box, { key: 'Enter' }); });
         await waitFor(() => expect(postEventChatMessage).toHaveBeenCalledWith(EVENT_ID, 'Bringing gloves'));
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to chats' }));
         await screen.findByTestId('chat-list');
         // The community's list (this test's node) still knows no line of hers: the move is this tab's own, at once.
         await waitFor(() => expect(rowNames()).toEqual(['Working bee', 'Bob']));

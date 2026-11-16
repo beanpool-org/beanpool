@@ -14,6 +14,10 @@
  *   notice, a profile's Message), and the bell's and Home's rows that name no conversation (a message request, the unread
  *   messages, your groups). A tap on the tab itself is not a way in from elsewhere: it leaves the side the member picked.
  *   The forum's notices are the one way in that shows the Forum (`openForum`, slice F5), as on the phone.
+ * - **Chat chosen in the menu while Chat shows** (`homeNonce`, Marty 16 Nov: "clicking on chat in menu should take you back to
+ *   the main chat menu - not just need the tiny back arrow"): the side the member picked, at its top. On Chats, MessagesPage
+ *   closes whatever is open over the list; on the Forum, ForumPage goes back from a topic, a new topic or the first looks to
+ *   its topic list. The phone's tab tap does the same (app/(tabs)/chats.tsx).
  */
 import { useEffect, useState, type ComponentProps } from 'react';
 import { chatSides, chatSideShown, t, type ChatSide, type ChatSideEntry } from '@beanpool/core';
@@ -57,7 +61,7 @@ export function ChatFrameSwitch({ sides, side, onChange }: {
     );
 }
 
-export function ChatTabPage({ navNonce, openForum, onForumOpened, ...props }: ComponentProps<typeof MessagesPage> & {
+export function ChatTabPage({ navNonce, openForum, onForumOpened, homeNonce, ...props }: ComponentProps<typeof MessagesPage> & {
     /** Changes at every arrival at the tab from elsewhere (App's navigateToTab), with a conversation or without one. */
     navNonce?: number;
     /** The arrival was for the Forum (a forum notice, slice F5): the Forum side, once; {@link onForumOpened} then clears it. */
@@ -82,13 +86,13 @@ export function ChatTabPage({ navNonce, openForum, onForumOpened, ...props }: Co
         <>
             <div data-testid="chat-side-chats-page" style={{ display: side === 'chats' ? 'contents' : 'none' }}>
                 {/* Only while Chats shows: the Forum side draws its own, so the page never holds two. */}
-                <MessagesPage {...props} frame={side === 'chats' ? frame : undefined} />
+                <MessagesPage {...props} homeNonce={homeNonce} frame={side === 'chats' ? frame : undefined} />
             </div>
             {side === 'forum' && (
                 // MessagesPage's list padding and width, so the switch stays where it was.
                 <div className="p-4 md:p-6 max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full">
                     {frame}
-                    <ForumPage me={props.identity.publicKey} onOpenProfile={props.onOpenProfile} />
+                    <ForumPage me={props.identity.publicKey} onOpenProfile={props.onOpenProfile} homeNonce={homeNonce} />
                 </div>
             )}
         </>

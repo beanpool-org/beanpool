@@ -214,7 +214,7 @@ describe('web DM chat header', () => {
             />
         );
 
-        await screen.findByRole('button', { name: 'Back to messages' });
+        await screen.findByRole('button', { name: 'Back to chats' });
 
         const headerBtn = screen.getByRole('button', { name: "Kofi, see Kofi's profile" });
         expect(headerBtn).toBeInTheDocument();
@@ -252,7 +252,7 @@ describe('web DM chat header', () => {
             />
         );
 
-        await screen.findByRole('button', { name: 'Back to messages' });
+        await screen.findByRole('button', { name: 'Back to chats' });
 
         const headerBtn = screen.getByRole('button', { name: "Damo's Enterprise, see Damo's Enterprise's profile" });
         expect(headerBtn).toBeInTheDocument();
@@ -288,7 +288,7 @@ describe('web DM chat header', () => {
             />
         );
 
-        await screen.findByRole('button', { name: 'Back to messages' });
+        await screen.findByRole('button', { name: 'Back to chats' });
         const headerBtn = screen.getByRole('button', { name: "Kofi, see Kofi's profile" });
 
         expect(headerBtn.tagName).toBe('BUTTON');
@@ -309,7 +309,7 @@ describe('web DM chat header', () => {
             />
         );
 
-        await screen.findByRole('button', { name: 'Back to messages' });
+        await screen.findByRole('button', { name: 'Back to chats' });
 
         const header = screen.getByRole('button', { name: 'Garden crew, group info' });
         expect(header).toHaveAttribute('data-testid', 'chat-owner-header');
@@ -329,7 +329,7 @@ describe('web DM chat header', () => {
             />
         );
 
-        await screen.findByRole('button', { name: 'Back to messages' });
+        await screen.findByRole('button', { name: 'Back to chats' });
 
         expect(screen.queryByRole('button', { name: /profile/i })).toBeNull();
         expect(screen.queryByTestId('dm-header-profile')).toBeNull();

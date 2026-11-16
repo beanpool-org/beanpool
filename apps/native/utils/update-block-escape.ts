@@ -24,6 +24,7 @@ import type { BeanPoolIdentity } from './identity';
 import { communityName } from './community-name';
 import { communitySwitched } from './community-switch';
 import { assertPlainNodeAddress, plainOriginOf } from './node-url';
+import { takeOffSavedList } from './nodes';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
 import { clearPendingProfileChange } from './pending-profile-sync';
 
@@ -155,8 +156,8 @@ async function defaultLeaveDeps(): Promise<LeaveDeps> {
 
 /**
  * A phone with no account (a join never finished: the block can land on Welcome's invite join) and no other community:
- * `here` comes off it, its cached copy, its list entry, its guest marker and any profile change waiting to reach it
- * (pending-profile-sync.ts), and the phone is set to none. Then the
+ * `here` comes off it, its cached copy, its list entry with its record (nodes.ts takeOffSavedList), its guest marker and
+ * any profile change waiting to reach it (pending-profile-sync.ts), and the phone is set to none. Then the
  * update screen has nothing to hold, and Welcome takes another invite. Its own storage only.
  */
 async function forgetCommunity(here: string, storage: Pick<Storage, 'getItem' | 'setItem'> & { removeItem(key: string): Promise<void> } = AsyncStorage): Promise<void> {
@@ -171,15 +172,19 @@ async function forgetCommunity(here: string, storage: Pick<Storage, 'getItem' | 
     communitySwitched();
     const hereAddress = plainOriginOf(here);
     const isHere = (url: unknown) => plainOriginOf(url) === hereAddress;
-    for (const [key, entryUrl] of [[SAVED_NODES_STORE_KEY, (n: unknown) => (n && typeof n === 'object' ? (n as { url?: unknown }).url : n)], [GUEST_NODES_STORE_KEY, (n: unknown) => n]] as const) {
-        try {
-            const parsed: unknown = JSON.parse((await storage.getItem(key)) ?? '[]');
-            if (Array.isArray(parsed) && parsed.some((n) => isHere(entryUrl(n)))) {
-                await storage.setItem(key, JSON.stringify(parsed.filter((n) => !isHere(entryUrl(n)))));
-            }
-        } catch (e) {
-            console.warn('[Update] The community left could not be taken off a list', e);
+    try {
+        // Its record goes with its row (nodes.ts takeOffSavedList).
+        await takeOffSavedList(here, isHere, storage);
+    } catch (e) {
+        console.warn('[Update] The community left could not be taken off the saved list', e);
+    }
+    try {
+        const parsed: unknown = JSON.parse((await storage.getItem(GUEST_NODES_STORE_KEY)) ?? '[]');
+        if (Array.isArray(parsed) && parsed.some(isHere)) {
+            await storage.setItem(GUEST_NODES_STORE_KEY, JSON.stringify(parsed.filter((n) => !isHere(n))));
         }
+    } catch (e) {
+        console.warn('[Update] The community left could not be taken off the guest markers', e);
     }
     try {
         await clearPendingProfileChange(here, undefined, storage);

@@ -89,6 +89,7 @@ import { bundledGroupEmblem, dealMoves, dealStep, dealsNeedingMe, formatDate, it
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn, useCommunityInfo } from '../lib/features';
 import { useGrowingComposer } from '../lib/use-growing-composer';
+import { draftKey, draftSent, keepDraft, useKeptDraft } from '../lib/chat-drafts';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -186,6 +187,12 @@ interface Props {
     onOpenProfile?: (pubkey: string) => void;
     /** The Chat tab's Chats · Forum switch (pages/ChatTabPage.tsx, slice T0), drawn at the top of the list only. */
     frame?: ReactNode;
+    /**
+     * Changes each time the member chooses Chat in the menu while Chat already shows (App's chatHomeNonce): the list again,
+     * whatever was open over it (a chat, an outside chat, the address cards, Message requests, New DM, Contacts), with the
+     * filter chip the member picked. A chat's unsent words wait in its box for the next time it opens (lib/chat-drafts.ts).
+     */
+    homeNonce?: number;
 }
 
 // ⚡ Bolt: O(1) Map lookup helper for transaction seller resolution in system messages
@@ -274,7 +281,7 @@ function GroupChatImageBubble({ photoKey, open, onOpen }: { photoKey: string; op
 /** A tab flicked back and forth asks global at most this often (the phone's ASK_EVERY_MS, apps/native utils/global-requests.ts). */
 const ASK_GLOBAL_EVERY_MS = 5 * 60 * 1000;
 
-export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate, onOpenProfile, frame }: Props) {
+export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate, onOpenProfile, frame, homeNonce }: Props) {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     // The message requests waiting for this member (lib/dm-requests.ts), as the node lists them apart from their chats;
     // null where the community has requests off (its list has no `requests`).
@@ -339,6 +346,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const outsideRequests = outsideChats.filter((c) => c.state === 'request');
     // A way in that names a conversation (a notice, a profile's Message) is never held behind an outside chat or the cards.
     useEffect(() => { if (openConversationId) { setOpenOutside(null); setShowCard(false); } }, [openConversationId]);
+    // Chat chosen in the menu while Chat shows (homeNonce): back to the list. Counted, so a chat a way in was still finding
+    // when the member chose Chat (the effect below, after its reads) does not open over the list they asked for.
+    const homeSeenRef = useRef(homeNonce);
+    const homeCountRef = useRef(0);
     const [activeTab, setActiveTab] = useState<ConversationTab>('all');
     // Requests turned off while the member is on them: the pill goes, so the list goes back to All, never to no chip.
     useEffect(() => { if (!requests && !onGlobal && !outsideRequests.length && activeTab === 'requests') setActiveTab('all'); }, [requests, onGlobal, outsideRequests.length, activeTab]);
@@ -769,27 +780,33 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         };
     }, []);
 
-    // A chat opened: its box starts empty, in the commit that draws it (a layout effect). Emptied from the effect below, which
-    // React 19 runs in a later task, it threw away words already typed into the new chat's box (CI, 14 Nov; the voice test
-    // "words typed the moment the chat shows"). A prefill (below) still lands after it.
-    const openChatId = activeConv?.id ?? null;
-    useLayoutEffect(() => {
-        if (openChatId) setDraft('');
-    }, [openChatId]);
+    // A chat opened: its box starts with the words left unsent in it while this page is open, or empty, in the commit that
+    // draws it (a layout effect, lib/chat-drafts.ts). Emptied from the effect below, which React 19 runs in a later task, it
+    // threw away words already typed into the new chat's box (CI, 14 Nov; the voice test "words typed the moment the chat
+    // shows"). A prefill (below) still lands after it. Leaving the chat (its back arrow, Chat in the menu, another chat
+    // opened) keeps what the box holds for it, unless it holds an edit of a line already sent. An event chat has its own box.
+    /** The key a chat's words are kept under (an event chat's box is EventChat's own). */
+    const chatBoxKey = (conv: Conversation | null) => (!conv || conv.type === 'event_thread' ? null : draftKey(identity.publicKey, 'chat', conv.id));
+    useKeptDraft(chatBoxKey(activeConv), editingMessage ? '' : draft, setDraft);
+    // Each time a chat opens (or the list shows) counts on: an edit's or a photo's answer that lands later touches the box, the
+    // reply under way and the line above the box only while that same opening shows (the words that went: draftSent).
+    const openingRef = useRef(0);
 
     useEffect(() => {
         activeConvIdRef.current = activeConv?.id ?? null;
+        openingRef.current += 1;
         setChatMute(null);
         setChatMenuOpen(false);
         setMuteDialogOpen(false);
         setConfirmDeleteMsg(null);
         setConfirmRemoveMsg(null);
+        // After the box's draft was kept (a layout effect), so an edit under way is never kept as a draft.
+        setReplyToMessage(null);
+        setEditingMessage(null);
         if (activeConv) {
             messageRequestIdRef.current++;
             setGroupChat(null);
             setChatSearch(null);
-            setReplyToMessage(null);
-            setEditingMessage(null);
             setActiveEmojiPickerId(null);
             // The box was emptied in the layout effect above, before anyone could type in it.
             // The initial load happens in startPolling() below; calling it here as well fired two
@@ -970,9 +987,23 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         } catch { /* offline */ }
     }
 
+    useEffect(() => {
+        if (homeNonce === homeSeenRef.current) return;
+        homeSeenRef.current = homeNonce;
+        homeCountRef.current += 1;
+        setActiveConv(null);
+        setOpenOutside(null);
+        setShowCard(false);
+        setShowNewDm(false);
+        setShowContacts(null);
+        setActiveTab((tab) => (tab === 'requests' ? 'all' : tab));
+        void loadConversations();
+    }, [homeNonce]);
+
     // Auto-open conversation when navigating from Market "Message" button or profile chat
     useEffect(() => {
         if (!openConversationId) return;
+        const homeAtStart = homeCountRef.current;
         loadConversations().then(() => {
             // Find the conversation and open it
             getConversations(identity.publicKey).then(async result => {
@@ -1030,9 +1061,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         };
                     } catch { /* not an event chat this member may open */ }
                 }
-                if (conv) {
-                    setActiveConv(conv);
+                if (conv && homeCountRef.current === homeAtStart) {
                     const prefill = consumeChatPrefill(conv.id, conv.participants);
+                    // The words a way in brings win over the words kept for that chat, and are its draft from now: kept before the
+                    // chat opens, so the box's restore (useKeptDraft) puts them there and not the older words.
+                    const key = chatBoxKey(conv);
+                    if (prefill && key) keepDraft(key, prefill);
+                    setActiveConv(conv);
                     if (prefill) {
                         setDraft(prefill);
                         setTimeout(() => draftRef.current?.focus(), 100);
@@ -1392,7 +1427,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      * this browser has seen it locked (the sticky lock); readable only to a node from before locked chats, from a browser
      * that never saw this group locked; otherwise refused with a sentence, the words kept in the composer.
      */
-    async function editInGroup(conv: Conversation, wasEditing: ApiMessage): Promise<void> {
+    async function editInGroup(conv: Conversation, wasEditing: ApiMessage, opening: number): Promise<void> {
         const check = await groupSendCheck(conv);
         if (!check) return;
         const { plan, chat, chatErr } = check;
@@ -1409,10 +1444,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 throw e;
             }
         }
-        setDraft('');
-        setReplyToMessage(null);
-        setEditingMessage(null);
-        setChatRefusal(null);
+        // The edit went. Its words were never kept as a draft (useKeptDraft keeps nothing while an edit is under way); the box is
+        // emptied only while the same opening of this chat shows, never another chat's, nor this one's opened again since.
+        if (openingRef.current === opening) {
+            setDraft('');
+            setReplyToMessage(null);
+            setEditingMessage(null);
+            setChatRefusal(null);
+        }
         await loadMessages(conv.id);
     }
 
@@ -1579,7 +1618,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      * again on a 409 (lib/group-chat-lines.ts sendSealedGroupLine). Only ever sealed: a node from before locked chats gets
      * none (§2.6). Every refusal is said above the box, the picture kept; not optimistic, as a DM photo isn't.
      */
-    async function sendPhotoInGroup(conv: Conversation, file: File, caption: string, clientId: string): Promise<boolean> {
+    async function sendPhotoInGroup(conv: Conversation, file: File, caption: string, clientId: string, opening: number): Promise<boolean> {
         setSending(true);
         try {
             const check = await groupSendCheck(conv);
@@ -1596,13 +1635,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 if (saidGroupRefusal(e, conv.id, check.chat, check.chatErr)) return false;
                 throw e;
             }
+            // The line went: its chat goes to the top of the list wherever the member is now. The reply it answered goes with
+            // it, only while the same opening shows (never another chat's reply under way).
             movedByMyLine(conv.id);
-            setReplyToMessage(null);
-            setChatRefusal(null);
+            if (openingRef.current === opening) {
+                setReplyToMessage(null);
+                setChatRefusal(null);
+            }
             await loadMessages(conv.id);
             return true;
         } catch (err: any) {
-            setChatRefusal(nodeRefusal(err)?.message ?? (err?.message || t('Failed to send image')));
+            if (openingRef.current === opening) setChatRefusal(nodeRefusal(err)?.message ?? (err?.message || t('Failed to send image')));
             return false;
         } finally {
             setSending(false);
@@ -1631,21 +1674,24 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
         const wasEditing = editingMessage;
         if (wasEditing) {
+            // This opening of the chat, taken now: the answer may land after the member has left it (openingRef).
+            const opening = openingRef.current;
+            const conv = activeConv;
             setSending(true);
             try {
                 if (activeConv.type === 'group_thread') {
-                    await editInGroup(activeConv, wasEditing);
+                    await editInGroup(activeConv, wasEditing, opening);
                     return;
                 }
                 // A group seen locked here, whatever the node now calls it, is sealed as a group's line or refused; with the
                 // lock store unreadable, only a DM this browser knows goes on (lib/group-hold.ts).
                 const route = await sendRouteOf(identity.publicKey, activeConv.id);
                 if (route === 'group') {
-                    await editInGroup({ ...activeConv, type: 'group_thread' }, wasEditing);
+                    await editInGroup({ ...activeConv, type: 'group_thread' }, wasEditing, opening);
                     return;
                 }
                 if (route === 'refuse') {
-                    setChatRefusal(GROUP_HOLD_UNREAD_TEXT);
+                    sayRefusal(conv.id, GROUP_HOLD_UNREAD_TEXT);
                     return;
                 }
                 const line: DmLineSeal = {
@@ -1666,16 +1712,22 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
                 try {
                     await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce);
-                    setEditingMessage(null);
-                    setDraft('');
-                    setChatRefusal(null);
-                    await loadMessages(activeConv.id);
+                    // Emptied only while the same opening of this chat shows (as editInGroup's).
+                    if (openingRef.current === opening) {
+                        setEditingMessage(null);
+                        setDraft('');
+                        setChatRefusal(null);
+                    }
+                    await loadMessages(conv.id);
                 } catch (err: any) {
-                    setMessages(prevMessages);
+                    // This chat's lines as they were, never over another chat's.
+                    if (openingRef.current === opening) setMessages(prevMessages);
                     throw err;
                 }
             } catch (err: any) {
-                if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(activeConv)));
+                // An edit that didn't go keeps its words in the box; why is said only where it was written.
+                if (openingRef.current !== opening) return;
+                if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(conv)));
                 else showChatError(err, t('Failed to edit message'));
             } finally {
                 setSending(false);
@@ -1706,11 +1758,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      */
     async function handleSendImage(file: File, caption = '', clientId?: string): Promise<boolean> {
         if (!activeConv) return false;
+        // This opening of the chat, taken now: the answer may land after the member has left it (openingRef).
+        const opening = openingRef.current;
         // A group's chat, and a group seen locked here whatever the node now calls it (lib/group-hold.ts): sealed as the
         // group's photo under its keyring's epoch or not sent, never DM-sealed to whoever the node lists. An unreadable lock
         // store sends none to a conversation this browser doesn't know as a DM.
         const route = activeConv.type === 'group_thread' ? 'group' : await sendRouteOf(identity.publicKey, activeConv.id);
-        if (route === 'group') return sendPhotoInGroup({ ...activeConv, type: 'group_thread' }, file, caption, clientId ?? newDmMessageId());
+        if (route === 'group') return sendPhotoInGroup({ ...activeConv, type: 'group_thread' }, file, caption, clientId ?? newDmMessageId(), opening);
         if (route === 'refuse') { setChatRefusal(GROUP_HOLD_UNREAD_TEXT); return false; }
         // An event's or an enterprise's chat: the node reads it by design, so it takes no photo (design §4).
         if (activeConv.type !== 'dm') { setChatRefusal(NODE_READABLE_NO_PHOTOS_TEXT); return false; }
@@ -1731,11 +1785,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 { data: encImg.ciphertext, nonce: encImg.nonce, mime: 'image/jpeg' }, metadata, messageId);
             ownLineTaken(activeConv.id);
             movedByMyLine(activeConv.id);
-            setReplyToMessage(null);
-            setChatRefusal(null);
+            if (openingRef.current === opening) {
+                setReplyToMessage(null);
+                setChatRefusal(null);
+            }
             await loadMessages(activeConv.id);
             return true;
         } catch (err: any) {
+            if (openingRef.current !== opening) return false;
             if (isDmNotLocked(err)) setChatRefusal(dmNotLockedLine(peerNameFor(activeConv)));
             else showChatError(err, t('Failed to send image'));
             return false;
@@ -1884,10 +1941,20 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     /** Send the previewed picture, carrying whatever is in the composer as its caption. */
     async function sendPendingImage() {
         if (!pendingImage || sending) return;
-        const sent = await handleSendImage(pendingImage.file, draft.trim(), pendingImage.clientId);
+        // The photo, its caption and the chat's key, taken now: the upload may land after the member has left the chat.
+        const photo = pendingImage;
+        const caption = draft.trim();
+        const sentFrom = chatBoxKey(activeConv);
+        const sent = await handleSendImage(photo.file, caption, photo.clientId);
         if (!sent) return;
-        clearPendingImage();
-        setDraft('');   // a normal send clears the draft; so does this one
+        // That photo leaves the preview, never one picked since (another chat's, or this one's opened again).
+        setPendingImage(prev => {
+            if (prev?.clientId !== photo.clientId) return prev;
+            if (prev.previewUrl) { try { URL.revokeObjectURL(prev.previewUrl); } catch {} }
+            return null;
+        });
+        // A normal send clears the draft; so does this one, by the key taken at Send (lib/chat-drafts.ts draftSent).
+        draftSent(sentFrom, caption);
     }
 
     /** A paste only becomes ours when it is carrying a picture. */
@@ -2413,18 +2480,23 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-primary)',
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 'min(100%, 10rem)', flex: '1 1 auto' }}>
+                        {/* Its own 44 x 44 target (a click anywhere in the square goes back), the arrow centred in it; the chat's
+                            unsent words wait in its box (useKeptDraft above), an edit and a reply under way are let go. */}
                         <button
+                            type="button"
+                            data-testid="chat-back"
                             onClick={() => {
                                 setActiveConv(null);
-                                setEditingMessage(null);
-                                setReplyToMessage(null);
-                                setDraft('');
                                 loadConversations();
                             }}
-                            aria-label={t('Back to messages')}
-                            style={{ background: 'none', border: 'none', color: 'var(--bp-accent-fill)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, minWidth: '44px', minHeight: '44px' }}
+                            aria-label={t('Back to chats')}
+                            style={{
+                                background: 'none', border: 'none', color: 'var(--bp-accent-fill)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit',
+                                flexShrink: 0, width: '44px', height: '44px', minWidth: '44px', minHeight: '44px', padding: 0,
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px',
+                            }}
                         >
-                            ←
+                            <span aria-hidden="true">←</span>
                         </button>
                         {(() => {
                             // The phone's header (GroupChatView openOwner): a group's chat opens its group info, an

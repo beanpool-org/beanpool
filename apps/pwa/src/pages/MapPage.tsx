@@ -1507,7 +1507,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             const fromTopic = draftTopicRef.current;
             draftTopicRef.current = null;
             if (fromTopic && made?.post?.id) {
-                const linked = await linkForumThing(fromTopic, 'listing', made.post.id).then(() => true, (e) => { showPostError(e, t('Your Need is posted, but it couldn’t be linked to the topic.')); return false; });
+                // Said aloud, not in the composer's refusal row: the composer closes below, and that row closes with it.
+                const linked = await linkForumThing(fromTopic, 'listing', made.post.id).then(() => true, () => { alert(t('Your Need is posted, but it couldn’t be linked to the topic.')); return false; });
                 if (linked) afterPost = () => onNavigate?.('forum-topic', fromTopic);
             }
             setAlsoOnGlobal(false);

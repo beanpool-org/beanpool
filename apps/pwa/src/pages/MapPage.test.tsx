@@ -3054,6 +3054,35 @@ describe('sending a Need where Beans are off (review #1936 N3)', () => {
         expect(navigate).not.toHaveBeenCalledWith('marketplace', 'deals_active');
     });
 
+    // Self-check (F9 part 2): a refused link went to the composer's refusal row, which closes with the composer: said nowhere.
+    it('Make this a Need whose link the node refuses: the Need stays posted, the member is told so, and lands on the Market', async () => {
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(info(false) as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'n1' } } as any);
+        forumLinks.link = async () => { throw Object.assign(new Error('A topic can link at most 3 things. Take one off first.'), { status: 409, code: 'topic_links' }); };
+        const said = vi.fn();
+        window.alert = said;
+        const navigate = vi.fn();
+        const draft = { type: 'need' as const, title: 'Seed swap ideas', description: 'Who has beans to swap?', category: null, credits: null, priceType: null, repeatable: false, cashAlsoNeeded: false, forumTopicId: 'ft-7' };
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} onNavigate={navigate} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+        const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
+        const clicks = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+        await act(async () => { clicks.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
+        const approx = within(panel).queryByRole('button', { name: 'Approximate (~100m)' });
+        if (approx) await act(async () => { fireEvent.click(approx); });
+        await pickPhoto(panel);
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Post Need' })); });
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(said).toHaveBeenCalledWith('Your Need is posted, but it couldn’t be linked to the topic.'));
+        await waitFor(() => expect(navigate).toHaveBeenCalledWith('marketplace', 'deals_active'));
+        expect(navigate).not.toHaveBeenCalledWith('forum-topic', 'ft-7');
+        expect(view!.queryByTestId('map-new-post-panel')).toBeNull();
+    });
+
     it('a Need posted the usual way after a topic\'s form was closed unposted links nothing', async () => {
         vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(info(false) as any);
         vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);

@@ -29,6 +29,12 @@
  *   8. A stolen token's day undone in one call; an injected report's text changes nothing beyond one logged takedown.
  *   9. The record: an ADMIN line, an AGENT line, the owners' daily count and the sec.agent alert; `why` in no log line.
  *  10. The ledger audit is the same after as before: no Bean moved.
+ *  11. The forum (F2b, DESIGN-forums-fable.md §6 and §21): one table, (owner's assistant ticked / not ticked / admin's ticked / not
+ *      ticked / a member's token) x (take down a topic, take down a reply, put back, read the waiting list, OK a first look) x (this
+ *      community, the global profile, a group's section, already removed), each allowed or refused, every refusal one shape with
+ *      nothing changed. Then: hidden at once from members, its report closed but a Child safety one, its writer and reporter told;
+ *      a report dismissed in the hold changes nothing; an admin's one at a time; Settings lists it; a person's Put back, a
+ *      moderator's restore, and a stolen day's undo restore it; final at 7 days; the owners' daily limit; the waiting list fenced.
  *
  * Run: SERVER_SUITES_ONLY=test-mcp-takedown TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -1370,7 +1376,7 @@ async function main(): Promise<void> {
         const looked = structured(await fo.callTool({ name: 'forum_first_looks', arguments: { include_text: true } }));
         const oneLook = (looked?.waiting ?? []).find((w: any) => w.id === readRows.own);
         assert(oneLook?.title?.untrusted === true && oneLook?.words?.untrusted === true && oneLook?.writer?.untrusted === true && typeof looked?._notice === 'string'
-            && !JSON.stringify(looked).includes(mia.pub) && looked?.returned === looked?.waiting?.length, `the waiting list comes back fenced, with no key (${JSON.stringify(oneLook).slice(0, 160)})`);
+            && !/[0-9a-f]{64}/i.test(JSON.stringify(looked)) && looked?.returned === looked?.waiting?.length, `the waiting list comes back fenced, with no key (${JSON.stringify(oneLook).slice(0, 160)})`);
         const bare = structured(await fo.callTool({ name: 'forum_first_looks', arguments: {} }));
         assert((bare?.waiting ?? []).every((w: any) => w.title === undefined && w.words === undefined) && bare?.waiting?.length === looked?.waiting?.length, 'without include_text, ids and times only');
         assert(db.prepare("SELECT state FROM forum_waiting WHERE id = ?").pluck().get(readRows.own) === 'waiting', 'what the waiting words asked for did not happen');

@@ -169,4 +169,37 @@ describe('Taken down by assistants', () => {
         await waitFor(() => expect(calls).toHaveLength(1));
         expect((await screen.findByRole('status')).textContent).toBe('Removed: 1 post. 1 post stayed hidden: a deal in escrow, or a Child safety report still open.');
     });
+
+    // Slice F2b: a forum topic or reply an assistant took down, one a call, with Put back by its forum post's id, and no Remove now.
+    const FORUM = {
+        id: 'f1', grantId: 'g2', grantName: 'Forum sweeper', member: 'Olive', at: '2026-11-01T10:00:00.000Z', reasonLabel: 'spam or a scam',
+        why: '<b>forum</b> spam', finalAfter: '2026-11-08T10:00:00.000Z',
+        post: { id: 'fp-1', topicTitle: 'Cheap watches in the forum', kind: 'topic', writer: 'Sam', state: 'hidden', childSafetyOpen: true },
+    };
+
+    it('lists forum takedowns on their own, with no listing taken down, and puts one back by its forum post id', async () => {
+        const calls = serve({ canActOnMany: false, takedowns: [], forumTakedowns: [FORUM, { ...FORUM, id: 'f2', post: { ...FORUM.post, id: 'fp-2', kind: 'reply', state: 'put_back', childSafetyOpen: false } }] }, { back: ['fp-1'], stillHidden: [], gone: 0 });
+        render(<AssistantTakedownsPanel activeNode={NODE} />);
+        expect(await screen.findByText('In the forum')).toBeTruthy();
+        const lines = screen.getAllByTestId('agent-forum-takedown');
+        expect(lines).toHaveLength(2);
+        expect(lines[0].textContent).toContain('The topic by Sam');
+        expect(lines[0].textContent).toContain('Hidden: a Child safety report is open');
+        expect(lines[1].textContent).toContain('A reply in it by Sam');
+        expect(lines[1].textContent).toContain('Put back');
+        expect(screen.getAllByTestId('agent-forum-takedown-why')[0].querySelector('b')).toBeNull();
+        expect(screen.queryByTestId('agent-takedown-remove')).toBeNull();
+        expect(screen.getAllByTestId('agent-forum-takedown-put-back')).toHaveLength(1);
+        fireEvent.click(screen.getByTestId('agent-forum-takedown-put-back'));
+        await waitFor(() => expect(calls).toHaveLength(1));
+        expect(calls[0].url).toMatch(/\/api\/local\/admin\/agent\/takedowns\/put-back$/);
+        expect(calls[0].body).toEqual({ postId: 'fp-1' });
+    });
+
+    it('an older server, with no forum list, draws as before', async () => {
+        serve({ canActOnMany: true, takedowns: [CALL] });
+        render(<AssistantTakedownsPanel activeNode={NODE} />);
+        expect(await screen.findByText(/Spam sweeper: 3 posts, spam or a scam/)).toBeTruthy();
+        expect(screen.queryByText('In the forum')).toBeNull();
+    });
 });

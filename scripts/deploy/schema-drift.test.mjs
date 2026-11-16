@@ -604,6 +604,10 @@ const B = 'db.prepare("ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT \'\'").r
 const COLUMNS = "['a TEXT', \"b TEXT NOT NULL DEFAULT ''\"]";
 const LOOP = 'try { db.prepare(`ALTER TABLE t ADD COLUMN ${column}`).run(); } catch { }';
 const UNSET = 'process.env.SCHEMA_DRIFT_FIXTURE_UNSET';
+/** The two steps a read shape reads, in order. */
+const AB = [{ table: 't', def: 'a TEXT' }, { table: 't', def: "b TEXT NOT NULL DEFAULT ''" }];
+/** A rebuild, the form db.ts used for a table change before cutover N1: its CREATE text has drifted from schema.sql's (no b). */
+const REBUILD = "try { db.exec('CREATE TABLE t_new (id TEXT PRIMARY KEY, a TEXT); INSERT INTO t_new (id, a) SELECT id, a FROM t; DROP TABLE t; ALTER TABLE t_new RENAME TO t;'); } catch { }";
 const SHAPES = [
     // Read: the boot runs each step, on its own, in this order.
     { shape: 'a literal step each, alone in an empty try', code: `try { ${A}; } catch { }\n    try { ${B}; } catch { }` },
@@ -628,6 +632,8 @@ const SHAPES = [
     { shape: 'the statement in a variable', unread: ['t'], misses: [], code: `try { ${A}; } catch { }\n    const sql = "ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT ''";\n    try { db.prepare(sql).run(); } catch { }` },
     { shape: 'a finally', unread: ['t'], misses: [], code: `try { ${A}; } catch { }\n    try { ${B}; } catch { } finally { }` },
     { shape: 'a return before the steps', unread: ['t', 't'], steps: [], misses: [], code: `if (${UNSET}) return;\n    try { ${A}; } catch { }\n    try { ${B}; } catch { }` },
+    // Round 5: a table rename names t_new and changes t. It names no table the check may trust (null): every table.
+    { shape: 'a rebuild after the steps (… ALTER TABLE t_new RENAME TO t)', unread: [null], steps: AB, misses: ['has a and b', 'has a', 'neither'], code: `try { ${A}; } catch { }\n    try { ${B}; } catch { }\n    ${REBUILD}` },
 ];
 
 /** main() in this process: its table lines and its exit code. */
@@ -646,9 +652,8 @@ test("each shape x what the table holds: the read shapes read OK as a real boot 
         const boot = `\nexport function initSchema() {\n    ${s.code}\n    db.exec(schemaSql);\n    ${s.after ?? ''}\n}\n`;
         const read = bootSteps(boot);
         assert.deepEqual(read.unread, s.unread ?? [], s.shape);
-        // A read shape's two steps; a can't-prove shape's `a` alone in its own try (unless `steps` says none is read).
-        const both = [{ table: 't', def: 'a TEXT' }, { table: 't', def: "b TEXT NOT NULL DEFAULT ''" }];
-        assert.deepEqual(read.steps, s.steps ?? (s.unread ? both.slice(0, 1) : both), s.shape);
+        // A read shape's two steps; a can't-prove shape's `a` alone in its own try (unless `steps` says what is read).
+        assert.deepEqual(read.steps, s.steps ?? (s.unread ? AB.slice(0, 1) : AB), s.shape);
         for (const st of SHAPE_STATES) {
             const what = `${s.shape}, t ${st.state}`;
             const f = fixture(`${st.old}; INSERT INTO t (id) VALUES ('t1');`, { schema: SHAPE_SCHEMA, manifest: ORDER_MANIFEST, boot });
@@ -673,6 +678,82 @@ test("each shape x what the table holds: the read shapes read OK as a real boot 
             } finally {
                 rmSync(f.dir, { recursive: true, force: true });
             }
+        }
+    }
+});
+
+// An ALTER the check doesn't read as a step names a table only in the forms that change that one table alone: ADD [COLUMN]
+// and DROP [COLUMN]. A table rename changes the table it names after TO; a column rename rewrites other tables' REFERENCES
+// to the column (SQLite does, whatever foreign_keys says); a form not parsed may do either. Each reads as null: every table
+// can't prove. Before round 5 the reader took the first name after ALTER TABLE, and each case below read OK, exit 0.
+test("an unread ALTER names its table only for ADD and DROP; a rename or any form not parsed makes every table can't prove, each against a real boot", () => {
+    const wrap = (code) => `export function initSchema() {\n    ${code}\n    db.exec(schemaSql);\n}\n`;
+    const exec = (sql) => `try { db.exec('${sql}'); } catch { }`;
+    for (const [code, unread] of [
+        [exec('ALTER TABLE t ADD COLUMN z TEXT'), ['t']],
+        [exec('ALTER TABLE t ADD z TEXT'), ['t']],
+        [exec('ALTER TABLE t DROP COLUMN z'), ['t']],
+        [exec('alter table T drop z'), ['t']],
+        [exec('ALTER TABLE t RENAME TO u'), [null]],
+        [exec('ALTER TABLE t_new RENAME TO t'), [null]],
+        [exec('ALTER TABLE t RENAME COLUMN a TO b'), [null]],
+        [exec('ALTER TABLE t RENAME a TO b'), [null]],
+        [exec('ALTER TABLE "t" ADD COLUMN z TEXT'), [null]],
+        [exec('ALTER TABLE main.t ADD COLUMN z TEXT'), [null]],
+        [exec('ALTER TABLE t /* why */ ADD COLUMN z TEXT'), [null]],
+        [exec('ALTER TABLE t ADD COLUMN z TEXT; ALTER TABLE u RENAME TO t'), ['t', null]],
+        ["console.log('never alter this');", [null]],
+    ]) assert.deepEqual(bootSteps(wrap(code)), { steps: [], unread, found: true }, code);
+
+    const manifest = (...tables) => `export const TABLES: Record<string, TableEntry> = {\n${tables.map((t) => `    ${t}: { kind: 'local', reason: 'this server only' },\n`).join('')}};\n`;
+    const cases = [
+        {
+            name: 'a table renamed to the name schema.sql now gives it, which the node lacks',
+            schema: `CREATE TABLE IF NOT EXISTS k (id TEXT PRIMARY KEY); ${SHAPE_SCHEMA}`,
+            old: "CREATE TABLE k (id TEXT PRIMARY KEY); CREATE TABLE u (id TEXT PRIMARY KEY); INSERT INTO k VALUES ('k1'); INSERT INTO u VALUES ('u1');",
+            manifest: manifest('k', 't'),
+            code: "try { db.prepare('ALTER TABLE u RENAME TO t').run(); } catch { }",
+            steps: [],
+            changed: 't',
+            lines: [`DRIFT-HAS-ROWS k rows=1 local (${cantProve(1)}): nothing else differs`],
+        },
+        {
+            name: "a rebuild after t's steps, its CREATE text short of schema.sql's",
+            schema: SHAPE_SCHEMA,
+            old: "CREATE TABLE t (id TEXT PRIMARY KEY); INSERT INTO t VALUES ('t1');",
+            manifest: manifest('t'),
+            code: `try { ${A}; } catch { }\n    try { ${B}; } catch { }\n    ${REBUILD}`,
+            steps: AB,
+            changed: 't',
+            lines: [`DRIFT-HAS-ROWS t rows=1 local (${cantProve(1)}): columns only in schema.sql: a, b`],
+        },
+        {
+            name: "a column rename on a table schema.sql doesn't make rewrites c's REFERENCES to it",
+            schema: 'CREATE TABLE IF NOT EXISTS c (id TEXT PRIMARY KEY, pa TEXT REFERENCES p(a));',
+            old: "CREATE TABLE p (id TEXT PRIMARY KEY, a TEXT UNIQUE); CREATE TABLE c (id TEXT PRIMARY KEY, pa TEXT REFERENCES p(a)); INSERT INTO p VALUES ('p1', 'x'); INSERT INTO c VALUES ('c1', 'x');",
+            manifest: manifest('c'),
+            code: "try { db.exec('ALTER TABLE p RENAME COLUMN a TO b'); } catch { }",
+            steps: [],
+            changed: 'c',
+            lines: [`DRIFT-HAS-ROWS c rows=1 local (${cantProve(1)}): nothing else differs`],
+        },
+    ];
+    for (const c of cases) {
+        const boot = wrap(c.code);
+        assert.deepEqual(bootSteps(boot), { steps: c.steps, unread: [null], found: true }, c.name);
+        const f = fixture(c.old, { schema: c.schema, manifest: c.manifest, boot });
+        try {
+            const r = checkLines(f.args);
+            assert.deepEqual(r.lines, c.lines, c.name);
+            assert.equal(r.code, 1, c.name);
+            // A real boot of the case's own code leaves the table it changed short of schema.sql's shape: an OK was a lie.
+            const freshDb = new Database(':memory:');
+            freshDb.exec(c.schema);
+            const fresh = tableShape(freshDb, c.changed);
+            freshDb.close();
+            assert.notDeepEqual(shapeDiffs(bootFixture(boot, f.db, c.changed).shape, fresh), [], c.name);
+        } finally {
+            rmSync(f.dir, { recursive: true, force: true });
         }
     }
 });

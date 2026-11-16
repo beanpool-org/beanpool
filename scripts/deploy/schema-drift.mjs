@@ -35,8 +35,9 @@
  * exec (initSchema's ALTER TABLE ... ADD COLUMN) counts as there only when the step, run on a copy of the table with its
  * rows, in the order the boot runs the steps, takes: the line names it. A step those rows refuse is named with SQLite's
  * reason, its column reads as missing, and the table is never OK. A step is read only in the shapes bootSteps proves run
- * on their own (db.ts parsed with TypeScript's parser); a table any other ALTER in db.ts names is never OK ("can't prove"),
- * whatever it reads as, and no replay runs on it.
+ * on their own (db.ts parsed with TypeScript's parser); a table any other ALTER in db.ts adds or drops a column of is never
+ * OK ("can't prove"), whatever it reads as, and no replay runs on it; any other ALTER (a rename, a form not parsed) makes
+ * every table can't prove.
  *
  * Exit 0 only when every table compared is OK (proved against the rows that are there); 1 on any drift, a boot step
  * refused, or a table it could not prove; 2 when it could not run.
@@ -301,11 +302,14 @@ const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
  * `steps` are in the order the boot runs them: the statements' order, a loop's in the loop's order at the loop's place. The
  * order counts: a step can name a column a later one adds, or add a column an earlier one added (the first stands).
  *
- * `unread` names the table of every other ALTER in db.ts (null where it names none, or a name that may run on into a
- * `${…}` or a `+`): two steps sharing a try, a step behind an if, an else, a ternary or `&&`, a non-empty catch, inside a
- * function or a callback (a function declared after the exec too: it hoists), a template, db.exec, a variable, a loop in
- * any other shape, and each item of a loop's list that isn't its literals. What the boot does with those isn't known, so
- * the table they name (every table, for a null) is never OK and no replay runs on it. A `return` before the exec (a step
+ * `unread` names the table of every other ALTER in db.ts, where it is `ALTER TABLE <table> ADD|DROP …`, the forms that
+ * change that one table alone; any other ALTER is null (every table): a table rename (`ALTER TABLE t_new RENAME TO t`
+ * changes t, not t_new), a column rename (it rewrites other tables' REFERENCES to the column), a form not parsed, a
+ * name that may run on into a `${…}` or a `+`, and the word ALTER in any string. The shapes: two steps sharing a try, a
+ * step behind an if, an else, a ternary or `&&`, a non-empty catch, inside a function or a callback (a function declared
+ * after the exec too: it hoists), a template, db.exec, a variable, a loop in any other shape, and each item of a loop's
+ * list that isn't its literals. What the boot does with those isn't known, so the table they name (every table, for a
+ * null) is never OK and no replay runs on it. A `return` before the exec (a step
  * may never run) or a `db` initSchema declares itself (a step may not reach the node's database) moves every step there.
  * An ALTER in initSchema after the exec, outside a function, runs after schema.sql and is no step. Comments are not code,
  * so a step in one is nothing. A db.ts the parser finds a syntax error in reads as having no initSchema (`found: false`).
@@ -405,10 +409,12 @@ export function bootSteps(dbTs) {
             const alters = [...n.text.matchAll(/\bALTER\b/gi)];
             if (alters.length > 0 && counted(n)) {
                 for (const m of alters) {
-                    const rest = n.text.slice(m.index);
-                    const name = /^ALTER\s+TABLE\s+([A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_$.])/i.exec(rest);
-                    // A name that ends where the text does may run on into a `${…}` or a `+`: it names no table for sure.
-                    unread.push(name && name[0].length < rest.length ? name[1].toLowerCase() : null);
+                    // A table only for the forms that change that table alone: ADD [COLUMN] and DROP [COLUMN]. Anything
+                    // else is null (every table): a table rename changes the table it names after TO, a column rename
+                    // rewrites other tables' REFERENCES to the column, and a form not parsed here may do either. A name
+                    // that runs on into a `${…}` or a `+` (no space before ADD or DROP) is null too.
+                    const one = /^ALTER\s+TABLE\s+([A-Za-z_][A-Za-z0-9_]*)\s+(?:ADD|DROP)\b/i.exec(n.text.slice(m.index));
+                    unread.push(one ? one[1].toLowerCase() : null);
                 }
             }
         }
@@ -639,7 +645,7 @@ export function main(argv, out = console.log, err = console.error) {
     }
     out(`schema-drift: ${opts.db} against schema.sql ${build.schemaSha}, read-only`);
     if (build.bootUnread !== 0) {
-        out(`schema-drift: note: ${build.bootUnread < 0 ? "db.ts's initSchema was not found; a column a boot step adds reads as drift here" : `${build.bootUnread} ALTER in db.ts not written as a step the check reads; a table it names (every table, where it names none) can't be proved and is never OK`}`);
+        out(`schema-drift: note: ${build.bootUnread < 0 ? "db.ts's initSchema was not found; a column a boot step adds reads as drift here" : `${build.bootUnread} ALTER in db.ts not written as a step the check reads; the table it adds or drops a column of (every table, for any other form: a rename, one not parsed) can't be proved and is never OK`}`);
     }
     for (const r of result.results) out(formatResult(r));
     const drift = result.results.filter((r) => r.status !== 'OK').length;

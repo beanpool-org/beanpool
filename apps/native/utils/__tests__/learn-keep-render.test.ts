@@ -76,6 +76,9 @@ vi.mock('../../components/learn/useLearnWriter', () => ({
     forgetLearnRole: vi.fn(async () => {}),
 }));
 vi.mock('../post-photo', () => ({ askForPostPhoto: vi.fn() }));
+// The form's Tags field (Learn's tags) is the Market's picker, whose icons and sheet need a device: it stands in here, and
+// learn-tags-render.test.ts and tag-picker-sheet-render.test.ts hold it.
+vi.mock('../../components/TagPicker', () => ({ TagPicker: () => null }));
 vi.mock('../db', () => ({
     getKnowledgePost: vi.fn(async (id: string) => h.pages.find((p) => p.id === id) ?? null),
     signedGet: vi.fn(async () => {
@@ -319,6 +322,8 @@ describe('the form as "Suggest a fix" and as "Edit" (§3.5)', () => {
         expect(h.sent).toEqual([{ method: 'POST', path: '/api/knowledge/posts/tip/edit', body: {
             title: 'How the tip works now', body: 'Sort it first.', topic: 'local-services', place: 'Manse Road',
             sources: [{ url: 'https://council.example/tip', label: 'Council tip page' }], lang: 'es',
+            // Learn's tags: an edit sends the page's whole list, as its words ([] takes them off), none here.
+            freeTags: [],
         } }]);
         expect(router.back).toHaveBeenCalled();
     });
@@ -336,7 +341,7 @@ describe('the form as "Suggest a fix" and as "Edit" (§3.5)', () => {
         expect(fixBody(p, formOfPage(p), ' Gone ')).toEqual({ fixOf: 'tip', note: 'Gone' });
         expect(fixBody(p, { ...formOfPage(p), title: ` ${p.title} `, topic: 'emergencies', place: '', sources: [] }, 'x'))
             .toEqual({ fixOf: 'tip', note: 'x', topic: 'emergencies', place: '', sources: [] });
-        expect(editBody(p, { ...formOfPage(p), place: '', sources: [] })).toEqual({ title: p.title, body: p.description, topic: 'local-services', place: '', sources: [] });
+        expect(editBody(p, { ...formOfPage(p), place: '', sources: [] })).toEqual({ title: p.title, body: p.description, topic: 'local-services', place: '', sources: [], freeTags: [] });
     });
 });
 
@@ -359,6 +364,8 @@ describe('what a fix or an edit sends: the member\'s changes to the page the for
         edit: { method: 'POST', path: '/api/knowledge/posts/tip/edit', body: {
             title: 'Tip hours (winter)', body: 'Sort it first.', topic: 'local-services', place: 'Manse Road',
             sources: [{ url: 'https://council.example/tip', label: 'Council tip page' }],
+            // Learn's tags: an edit sends the page's whole list (none here); a fix sends them only when changed.
+            freeTags: [],
         } },
     };
     const TABLE: Array<['fix' | 'edit', Arrival]> = [
@@ -404,7 +411,7 @@ describe('what a fix or an edit sends: the member\'s changes to the page the for
         await click('learn-new-send');
         expect(h.sent).toEqual([{ method: 'POST', path: '/api/knowledge/posts/tip/edit', body: {
             title: 'Tip hours (winter)', body: 'Open daily 8-5.', topic: 'local-services', place: 'Old Road',
-            sources: [{ url: 'https://council.example/tip', label: 'Council tip page' }], lang: 'fr',
+            sources: [{ url: 'https://council.example/tip', label: 'Council tip page' }], lang: 'fr', freeTags: [],
         } }]);
     });
 

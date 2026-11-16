@@ -655,3 +655,48 @@ describe('"Did you mean …?": a word that is a library label in another languag
         });
     }
 });
+
+describe("freeOnly: the member's own tags alone (Learn's pages, which carry no library ids)", () => {
+    const held = { freeTags: [] as string[], libraryAsked: 0, communityAsked: 0 };
+    function Learn({ freeTags }: { freeTags: string[] }) {
+        const [now, setNow] = useState(freeTags);
+        held.freeTags = now;
+        return createElement(TagPicker, {
+            freeOnly: true, onChange: () => { throw new Error('no library tag in a free-only field'); }, freeTags: now, onFreeTagsChange: setNow,
+            hints: ['Tags help people find this page in Learn. Everyone can see them.'],
+            communityTags: async () => { held.communityAsked++; return []; },
+            libraryTagFor: async () => { held.libraryAsked++; return null; },
+        });
+    }
+    const field = () => host.querySelector('input[aria-label="Type a tag"]') as HTMLInputElement | null;
+    async function typeTag(value: string) {
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field(), value);
+            field()!.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+    }
+    const enter = () => act(async () => { field()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+
+    it("a library label typed is the member's own word; no library row, suggestion, category or community tag is offered", async () => {
+        Object.assign(held, { freeTags: [], libraryAsked: 0, communityAsked: 0 });
+        await act(async () => { root.render(createElement(Learn, { freeTags: [] }) as any); });
+        await press(addButton(), '+ Add');
+        expect(field()?.getAttribute('placeholder')).toBe('Type a tag');
+        expect(sheet()!.textContent).toContain('Tags help people find this page in Learn. Everyone can see them.');
+        expect(sheet()!.textContent).not.toContain('Tags are public with your listing');
+        await typeTag('Lemons');
+        await act(async () => { await new Promise((r) => setTimeout(r, 900)); });
+        expect(host.querySelector('[data-testid="tag-picker-did-you-mean"]')).toBeNull();
+        expect(sheet()!.textContent).not.toContain('Search results');
+        await enter();
+        expect(held.freeTags).toEqual(['lemons']);
+        expect(held.libraryAsked).toBe(0);
+        expect(held.communityAsked).toBe(0);
+    });
+
+    it('opens on the tags held, and each comes off by its chip', async () => {
+        await act(async () => { root.render(createElement(Learn, { freeTags: ['tip', 'bulk waste'] }) as any); });
+        await press(host.querySelector('[aria-label="Remove #tip"]'), 'Remove #tip');
+        expect(held.freeTags).toEqual(['bulk waste']);
+    });
+});

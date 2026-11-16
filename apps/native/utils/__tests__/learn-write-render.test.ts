@@ -70,6 +70,9 @@ vi.mock('../../components/learn/useLearnWriter', () => ({
     forgetLearnRole: vi.fn(async () => {}),
 }));
 vi.mock('../post-photo', () => ({ askForPostPhoto: (add: (p: string) => void) => add('data:image/jpeg;base64,AAAA') }));
+// The form's Tags field (Learn's tags) is the Market's picker, whose icons and sheet need a device: it stands in here, and
+// learn-tags-render.test.ts and tag-picker-sheet-render.test.ts hold it.
+vi.mock('../../components/TagPicker', () => ({ TagPicker: () => null }));
 vi.mock('../db', () => ({
     getKnowledgePosts: vi.fn(async () => h.pages),
     signedGet: vi.fn(async () => { throw new Error('offline'); }),

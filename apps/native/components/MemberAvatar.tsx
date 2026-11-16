@@ -12,7 +12,8 @@
  * - Optional tap-to-enlarge (opt-in via `enlargeable`)
  */
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
+import { LightBarModal } from './LightBarModal';
 import { Image } from 'expo-image';
 import { avatarUri } from '../utils/image-processing';
 import { anchorUrl, getCachedAnchorUrl } from '../utils/node-post';
@@ -156,7 +157,7 @@ function MemberAvatarBase({
                 {smallEl}
             </Pressable>
             {viewerOpen && (
-                <Modal visible transparent animationType="fade" onRequestClose={() => setViewerOpen(false)}>
+                <LightBarModal visible transparent animationType="fade" onRequestClose={() => setViewerOpen(false)}>
                     <Pressable style={styles.viewerBackdrop} onPress={() => setViewerOpen(false)} accessibilityRole="button" accessibilityLabel={t('Close photo')}>
                         {imageSource ? (
                             <Image
@@ -177,7 +178,7 @@ function MemberAvatarBase({
                         <Text style={styles.viewerCallsign}>{callsign}</Text>
                         <Text style={styles.viewerHint}>{t('Tap anywhere to close')}</Text>
                     </Pressable>
-                </Modal>
+                </LightBarModal>
             )}
         </>
     );

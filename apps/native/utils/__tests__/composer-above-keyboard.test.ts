@@ -19,6 +19,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import ts from 'typescript';
 import { keyboardViewPadding, screenKeyboardOffset } from '../screen-keyboard-offset';
+import { dmKeyBannerMaxHeight } from '../dm-key-change';
 
 const NATIVE = path.join(__dirname, '..', '..');
 
@@ -186,6 +187,68 @@ describe('composer above the keyboard: every composer screen × card or iPhone s
             }
         });
     }
+
+    // The DM since #3278: under the header its column holds the key card's page (components/chat/DmKeyChangedPane: the
+    // card, then the deals strip, the listing's header and the release bar) and then the KeyboardAvoidingView (the thread,
+    // the box measured whole), held by dm-key-pane-fit-render.test.ts's source check. So the view's frame in its parent
+    // starts under the page, not under the header, and the page's room is dmKeyBannerMaxHeight: the column (the header's
+    // bottom to the view's bottom, both read in the screen's own frame, so a sheet's top is not in it) less the box and a
+    // keyboard still up. The two meet here: with the sheet's offset the view pads by the keyboard exactly, the very
+    // keyboard the room takes off, so the box sits on the keyboard and the page fills the rest. No double lift (the
+    // padding is never the keyboard plus the sheet's top) and no cut box (the view always holds the box under the page).
+    describe('app/chat/[id].tsx with the key card\'s page above the keyboard view: the box on the keyboard and the card\'s room, card or sheet', () => {
+        const dm = wiring(SCREENS[0]);
+        // The page's content: nothing; one bar; the card with its bars, which fits a tall phone; a page taller than any room.
+        const PAGES = [0, BAR, 360, 2000];
+        // The box measured whole: the composer alone, and with the About bar over it.
+        const BOXES = [COMPOSER, COMPOSER + BAR];
+        for (const phone of PHONES) {
+            for (const presentation of ['card', 'sheet'] as const) {
+                // A full-screen screen starts under the status bar inside the SafeAreaView; a sheet starts below it.
+                const safeTop = presentation === 'card' ? 47 : 0;
+                for (const kb of [0, phone.keyboard]) {
+                    for (const content of PAGES) {
+                        for (const box of BOXES) {
+                            it(`${phone.name}, ${presentation}, keyboard ${kb ? 'up' : 'down'}, page ${content}, box ${box}: the box sits on the keyboard, the page has the rest`, () => {
+                                expect(dm.passesMeasuredOffset && dm.measured).toBe(true);
+                                const screenTop = presentation === 'sheet' ? phone.sheetTop : 0;
+                                const screenHeight = phone.window - screenTop;
+                                const offset = screenKeyboardOffset({ os: 'ios', windowHeight: phone.window, screenHeight });
+                                const headerBottom = safeTop + HEADER;
+                                const column = screenHeight - headerBottom;
+                                const room = dmKeyBannerMaxHeight({ column, composer: box, windowHeight: phone.window, keyboard: kb });
+                                const page = Math.min(content, room);
+                                const frameY = headerBottom + page;
+                                const frameHeight = screenHeight - frameY;
+                                const padding = keyboardViewPadding({ frameY, frameHeight, windowHeight: phone.window, keyboardHeight: kb, keyboardVerticalOffset: offset });
+                                // The view pads by the keyboard, no more and no less, wherever the page ends.
+                                expect(padding, 'the padding is the keyboard').toBe(kb);
+                                const boxBottom = screenTop + frameY + frameHeight - padding;
+                                expect(boxBottom, 'the box sits on the keyboard (the window\'s bottom with none)').toBe(phone.window - kb);
+                                // The view holds the whole box under the page: the thread has what is left, never less than nothing.
+                                const thread = frameHeight - padding - box;
+                                expect(thread, 'the box is never cut').toBeGreaterThanOrEqual(0);
+                                if (content > room) {
+                                    // A page taller than its room fills it down to the box: the thread gives way, no strip of it left.
+                                    expect(page).toBe(room);
+                                    expect(thread).toBe(0);
+                                    expect(screenTop + headerBottom + page, 'the page\'s cut edge is the box\'s top').toBe(boxBottom - box);
+                                } else {
+                                    expect(thread).toBe(room - content);
+                                }
+                                // Without the sheet's offset the view came up short by the sheet's top, and the room's keyboard
+                                // and the padding's no longer agreed: the box went under the keyboard (Rob, 17 Nov).
+                                if (presentation === 'sheet' && kb > 0) {
+                                    const short = keyboardViewPadding({ frameY, frameHeight, windowHeight: phone.window, keyboardHeight: kb, keyboardVerticalOffset: 0 });
+                                    expect(kb - short).toBe(phone.sheetTop);
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    });
 
     it('the offset is the sheet top on an iPhone, 0 when the screen fills the window, and 0 on Android', () => {
         expect(screenKeyboardOffset({ os: 'ios', windowHeight: 844, screenHeight: 787 })).toBe(57);

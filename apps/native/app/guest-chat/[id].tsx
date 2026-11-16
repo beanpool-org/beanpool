@@ -15,9 +15,10 @@ import {
     GUEST_CHAT_WORDS, GUEST_LINE_TEXT_MAX, guestAccess, guestChatAuthorName, guestNameLine, guestViewerOf, t, type GuestChat, type GuestLine,
 } from '@beanpool/core';
 import { Alert } from '../../utils/keyboard-alert';
+import { isAtBottom, shouldFollowNewMessages } from '../../utils/chat-actions';
 import { useTheme, useStyles } from '../ThemeContext';
 import { outsideErrorWords } from '../../utils/outside-chat-live';
-import { GUEST_CHATS_UPDATED, answerInvitation, loadGuestChats, sendGuestLineNow, syncGuestMailNow } from '../../utils/guest-chat-live';
+import { GUEST_CHATS_UPDATED, answerInvitation, leaveGuestChatNow, loadGuestChats, sendGuestLineNow, syncGuestMailNow } from '../../utils/guest-chat-live';
 import { guestClosedWords, guestLineStateWords } from '../../utils/guest-chat-words';
 import { loadIdentity } from '../../utils/identity';
 import { useScreenKeyboardOffset } from '../../components/useScreenKeyboardOffset';
@@ -36,6 +37,18 @@ export default function GuestChatScreen() {
     const [text, setText] = useState('');
     const [busy, setBusy] = useState(false);
     const listRef = useRef<FlatList<GuestLine>>(null);
+    // The list is inverted, as every chat's is (components/chat/ChatMessageList): the newest line rests at the bottom, above
+    // the box, from the first frame, and stays there as the box grows or the keyboard opens. A line that arrives follows
+    // the thread down only while the newest one was on screen; my own send always does (shouldFollowNewMessages).
+    const atBottomRef = useRef(true);
+    const lineCountRef = useRef<number | null>(null);
+    const toNewest = useCallback(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }), []);
+    useEffect(() => {
+        const n = chat?.lines.length ?? 0;
+        const before = lineCountRef.current;
+        lineCountRef.current = n;
+        if (before !== null && shouldFollowNewMessages({ grew: n > before, isBackgroundPoll: true, atBottom: atBottomRef.current })) toNewest();
+    }, [chat?.lines.length, toNewest]);
 
     const load = useCallback(async () => {
         const identity = await loadIdentity().catch(() => null);
@@ -64,6 +77,8 @@ export default function GuestChatScreen() {
             const kept = await sendGuestLineNow(chat.id, words);
             // The box empties once the line is kept here (shown at once); words typed meanwhile stay.
             if (kept) setText((now) => (now.trim() === words ? '' : now));
+            atBottomRef.current = true;
+            toNewest();
         } catch (e) {
             Alert.alert(outsideErrorWords(e));
         } finally {
@@ -87,6 +102,28 @@ export default function GuestChatScreen() {
         }
     };
 
+    /** Leave, asked first: the chat closes here at once (core leaveGuestChat), and my leave goes. */
+    const leave = () => {
+        if (!chat || busy) return;
+        Alert.alert(t(W.leaveAsk), t(W.leaveWhat), [
+            { text: t('Cancel'), style: 'cancel' },
+            {
+                text: t(W.leaveYes), style: 'destructive',
+                onPress: async () => {
+                    setBusy(true);
+                    try {
+                        await leaveGuestChatNow(chat.id);
+                    } catch (e) {
+                        Alert.alert(outsideErrorWords(e, false));
+                    } finally {
+                        setBusy(false);
+                        void load();
+                    }
+                },
+            },
+        ]);
+    };
+
     const styles = useStyles(({ colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.page },
         container: { flex: 1 },
@@ -98,7 +135,8 @@ export default function GuestChatScreen() {
         banner: { margin: 12, padding: 12, borderRadius: 12, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, gap: 6 },
         bannerText: { fontSize: 13, lineHeight: 18, color: colors.text.secondary },
         bannerStrong: { fontSize: 13, lineHeight: 18, color: colors.text.body, fontWeight: '600' },
-        list: { paddingHorizontal: 12, paddingBottom: 12 },
+        // Inverted: paddingTop is the room under the newest line, above the box; paddingBottom above the banner.
+        list: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4 },
         author: { fontSize: 12, fontWeight: '700', color: colors.text.secondary, marginTop: 6, marginLeft: 4 },
         bubble: { maxWidth: '85%', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, marginVertical: 3 },
         mine: { alignSelf: 'flex-end', backgroundColor: colors.accent.fill },
@@ -117,12 +155,17 @@ export default function GuestChatScreen() {
         input: { flex: 1, minHeight: 44, maxHeight: 140, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: colors.text.body, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default },
         sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent.fill },
         note: { padding: 16, fontSize: 14, lineHeight: 20, color: colors.text.secondary, textAlign: 'center' },
+        leaveBtn: { minHeight: 44, minWidth: 44, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+        leaveText: { color: colors.text.body, fontWeight: '700', fontSize: 14 },
     }));
 
     if (chat === undefined) return <SafeAreaView style={styles.safeArea} />;
     const viewer = chat ? guestViewerOf(chat) : null;
     const canWrite = !!chat && chat.state === 'in' && viewer !== null && guestAccess(viewer, 'chat') === 'shown';
+    // Leave while joining or in; once out there is nothing to leave.
+    const canLeave = !!chat && (chat.state === 'in' || chat.state === 'joining');
     const closed = chat ? guestClosedWords(chat) : null;
+    const newestFirst = chat ? [...chat.lines].reverse() : [];
     const names = chat?.roster && viewer !== null && guestAccess(viewer, 'roster') === 'shown'
         ? [...chat.roster.members.map((m) => m.name), ...chat.roster.guests.map((g) => guestNameLine(g.name, g.home))].join(', ')
         : null;
@@ -141,6 +184,13 @@ export default function GuestChatScreen() {
                         {/* The names in the chat, as a guest may see them (core guestAccess 'roster'): members, then guests. */}
                         {names && <Text style={styles.from} testID="guest-chat-names">{names}</Text>}
                     </View>
+                    {/* Leave, while joining or in: asked first. Always in view, whatever the chat has scrolled to. */}
+                    {canLeave && (
+                        <Pressable style={[styles.leaveBtn, busy && { opacity: 0.6 }]} disabled={busy} onPress={leave} accessibilityRole="button"
+                            accessibilityLabel={t(W.leave)} testID="guest-chat-leave">
+                            <Text style={styles.leaveText}>{t(W.leaveYes)}</Text>
+                        </Pressable>
+                    )}
                 </View>
                 {!chat ? (
                     <Text style={styles.note}>{t('This chat is not on this phone.')}</Text>
@@ -162,12 +212,16 @@ export default function GuestChatScreen() {
                 ) : (
                     <FlatList
                         ref={listRef}
-                        data={chat.lines}
+                        testID="guest-chat-lines"
+                        data={newestFirst}
+                        inverted
                         keyExtractor={(l) => l.id}
                         contentContainerStyle={styles.list}
                         keyboardShouldPersistTaps="handled"
-                        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-                        ListHeaderComponent={(
+                        onScroll={(e) => { atBottomRef.current = isAtBottom(e.nativeEvent.contentOffset.y); }}
+                        scrollEventThrottle={100}
+                        // Inverted: the footer is what renders at the visual top, above the oldest line.
+                        ListFooterComponent={(
                             <View style={styles.banner} testID="guest-chat-banner">
                                 <Text style={styles.bannerStrong}>{t(W.youAreGuest)}</Text>
                                 <Text style={styles.bannerText}>{t(W.keptHere)}</Text>
@@ -178,7 +232,8 @@ export default function GuestChatScreen() {
                         )}
                         renderItem={({ item, index }) => {
                             if (item.author !== me) {
-                                const prev = chat.lines[index - 1];
+                                // The line before this one in time: the next one down the newest-first data.
+                                const prev = newestFirst[index + 1];
                                 const who = guestChatAuthorName(chat, item.author);
                                 return (
                                     <View>

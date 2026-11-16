@@ -10,8 +10,9 @@ import { View, Text, Pressable, StyleSheet, TextInput } from 'react-native';
 import { GUEST_CHAT_WORDS, addressCardFromText, guestAccess, guestNameLine, t } from '@beanpool/core';
 import { useStyles, useTheme } from '../app/ThemeContext';
 import { MemberAvatar } from './MemberAvatar';
-import { fetchGroupGuests, inviteGroupGuest, type GroupGuest } from '../utils/guest-chat-live';
+import { fetchGroupGuests, inviteGroupGuest, removeGroupGuest, type GroupGuest } from '../utils/guest-chat-live';
 import { outsideErrorWords } from '../utils/outside-chat-live';
+import { Alert } from '../utils/keyboard-alert';
 
 const W = GUEST_CHAT_WORDS;
 
@@ -58,6 +59,31 @@ export function GroupGuestsList({ groupId, isConvenor, reloadKey = 0 }: Props) {
         }
     };
 
+    /** A convenor's Remove (the host refuses anyone else), asked first: the host takes them out (an invitation withdrawn) and tells their community. */
+    const remove = (g: GroupGuest) => {
+        if (busy) return;
+        const name = guestNameLine(g.name, g.home);
+        Alert.alert(t(W.removeAsk, { name }), g.state === 'invited' ? t(W.removeWhatAsked) : t(W.removeWhatIn), [
+            { text: t('Cancel'), style: 'cancel' },
+            {
+                text: t(W.remove), style: 'destructive',
+                onPress: async () => {
+                    setBusy(true);
+                    setNote(null);
+                    try {
+                        await removeGroupGuest(groupId, g.key);
+                        setNote(t(W.removedNote));
+                        await load();
+                    } catch (e) {
+                        setNote(outsideErrorWords(e, false));
+                    } finally {
+                        setBusy(false);
+                    }
+                },
+            },
+        ]);
+    };
+
     const styles = useStyles(({ colors }) => StyleSheet.create({
         title: { fontSize: 12, fontWeight: '800', color: colors.text.secondary, letterSpacing: 0.5, marginTop: 16, marginBottom: 6 },
         row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border.default },
@@ -71,6 +97,7 @@ export function GroupGuestsList({ groupId, isConvenor, reloadKey = 0 }: Props) {
         actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
         action: { flexGrow: 1, minWidth: 110, minHeight: 48, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card },
         note: { fontSize: 13, lineHeight: 18, color: colors.text.body, marginTop: 8 },
+        removeBtn: { minHeight: 44, minWidth: 44, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10, marginLeft: 8 },
     }));
 
     if (!on && guests.length === 0) return null;
@@ -87,6 +114,12 @@ export function GroupGuestsList({ groupId, isConvenor, reloadKey = 0 }: Props) {
                         <Text style={styles.name}>{guestNameLine(g.name, g.home)}</Text>
                         <Text style={styles.line}>{g.state === 'in' ? t(W.guestIn) : t(W.guestAsked)}</Text>
                     </View>
+                    {isConvenor && (g.state === 'in' || g.state === 'invited') && (
+                        <Pressable style={[styles.removeBtn, busy && { opacity: 0.6 }]} disabled={busy} onPress={() => remove(g)} accessibilityRole="button"
+                            accessibilityLabel={t(W.removeLabel, { name: guestNameLine(g.name, g.home) })} testID="group-guest-remove">
+                            <Text style={styles.addText}>{t(W.remove)}</Text>
+                        </Pressable>
+                    )}
                 </View>
             ))}
             {mayInvite && !adding && (

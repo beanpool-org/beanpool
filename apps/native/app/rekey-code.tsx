@@ -15,7 +15,8 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { LightBarModal } from '../components/LightBarModal';
 import { Alert } from '../utils/keyboard-alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -617,7 +618,7 @@ export default function RekeyCodeScreen() {
             <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                 {body}
             </KeyboardAwareScrollView>
-            <Modal visible={scanning} animationType="slide" onRequestClose={() => setScanning(false)}>
+            <LightBarModal visible={scanning} animationType="slide" onRequestClose={() => setScanning(false)}>
                 <View style={styles.scanWrap}>
                     <CameraView style={StyleSheet.absoluteFillObject} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={onScanned} />
                     <Text style={styles.scanHint}>{t('Point the camera at the QR code on your admin’s screen.')}</Text>
@@ -625,7 +626,7 @@ export default function RekeyCodeScreen() {
                         <MaterialCommunityIcons name="close" size={24} color="#fff" />
                     </Pressable>
                 </View>
-            </Modal>
+            </LightBarModal>
         </SafeAreaView>
     );
 }

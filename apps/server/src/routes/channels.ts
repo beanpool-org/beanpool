@@ -202,8 +202,13 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
             ctx.body = { error: word('Signed request required') };
             return;
         }
-        if (respondIfMuted(ctx, actor)) return;
         const { category, syndicateToNode, isPrimaryVideo, autopublish } = (ctx as any).requestBody || {};
+        // Turning its reach off (into this community's Pulse, or posting by itself) and nothing else says nothing to anyone, so a
+        // mute never stops it, as it never stops deleting the channel: a mute stops a member speaking, never stepping away.
+        const offOrNone = (v: unknown) => v === undefined || v === false;
+        const onlyOff = category === undefined && isPrimaryVideo === undefined && offOrNone(syndicateToNode) && offOrNone(autopublish)
+            && (syndicateToNode === false || autopublish === false);
+        if (!onlyOff && respondIfMuted(ctx, actor)) return;
         try {
             const channel = updateChannel(actor, ctx.params.id, {
                 category, syndicateToNode, isPrimaryVideo, autopublish,

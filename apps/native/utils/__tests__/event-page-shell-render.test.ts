@@ -56,6 +56,8 @@ vi.mock('react-native', () => {
         Image: el('img'),
         ActivityIndicator: () => createElement('i', { 'data-spinner': 'true' }),
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
+        // React Native's status-bar stack, which components/LightBarModal.tsx (the photo viewer) pushes on.
+        StatusBar: { pushStackEntry: () => ({}), popStackEntry: () => {} },
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: absolute, absoluteFillObject: absolute, flatten: (s: unknown) => flat(s) },
         Alert: { alert: () => {} },
         Share: { share: async () => ({}) },

@@ -6,7 +6,8 @@
  * - **Only the global community's.** `features.forumPublic` (with `features.forum`) is present only where anyone on the web
  *   may read the forum. A local community's forum is for its members: a visitor there gets no tab and no card.
  * - **What a visitor reads** is the node's public answer and nothing else, unsigned: the fields of `FORUM_PUBLIC_FIELDS`
- *   (forum.ts). A name and words, never a picture of a person, a key or a profile.
+ *   (forum.ts). A name and words, never a picture of a person, a key or a profile. A writer's name is drawn as the members'
+ *   forum draws it, with core forum-label.ts forumWriterLine.
  * - **Never a wall, never a false empty.** The tab is there whatever the answer; where the reply box would be, a door (Join to
  *   reply). The card shows the three newest topics, or, while the forum has none public (or can't be reached), the members'
  *   guide's "How BeanPool works", which every app carries: never an empty card, and never "nothing here" for an answer that
@@ -15,8 +16,7 @@
  * Pure and universal (bundled for the phone).
  */
 import { forumOn } from './forum.js';
-import { forumWriterNameLine, type ForumWriterLabel } from './membership-note.js';
-import { nameLine } from './name-line.js';
+import type { ForumWriterLabel } from './membership-note.js';
 import { word } from './words.js';
 
 /**
@@ -88,14 +88,6 @@ export function visitorForumShows(
 /** The three newest topics of a public list (by when each was started). */
 export function newestPublicTopics(topics: readonly ForumPublicTopic[], n = 3): ForumPublicTopic[] {
     return topics.slice().sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, n);
-}
-
-/**
- * A writer's line on a public page, as the members' forum says it (core nameLine): their name, and the label they switched
- * on ("Asha · Riverside", "Asha · waiting to join"). `fallback` where the answer has no name.
- */
-export function publicWriterLine(writer: ForumPublicWriter | null | undefined, fallback: string): string {
-    return nameLine(forumWriterNameLine({ name: writer?.name?.trim() || fallback, label: writer?.community ?? null }));
 }
 
 /** The first line of an opening post, for a card: up to `max` characters, cut at a word, with "…" when cut. */

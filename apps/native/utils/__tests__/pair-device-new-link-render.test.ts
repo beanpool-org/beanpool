@@ -54,6 +54,7 @@ vi.mock('expo-router', async () => {
     };
 });
 vi.mock('expo-haptics', () => ({ notificationAsync: async () => {}, NotificationFeedbackType: { Success: 's', Error: 'e' } }));
+vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 vi.mock('expo-camera', async () => {
     const { createElement: h } = await import('react');
     return {

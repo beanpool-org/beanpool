@@ -52,6 +52,8 @@ vi.mock('react-native', () => {
         View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), TouchableOpacity: el('button'),
         ActivityIndicator: () => createElement('span', { 'data-spinner': 'true' }),
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
+        // React Native's status-bar stack, which components/LightBarModal.tsx (the photo viewer) pushes on.
+        StatusBar: { pushStackEntry: () => ({}), popStackEntry: () => {} },
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: absolute, absoluteFillObject: absolute, flatten: (s: unknown) => flat(s) },
         Alert: {
             alert: (title: string, body?: string, buttons?: Array<{ text?: string }>) => {

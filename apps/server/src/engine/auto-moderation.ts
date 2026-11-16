@@ -51,7 +51,10 @@
  *
  * A member whose posts a moderator removed 3 times within 30 days (listings and forum posts together) gets `members.moderation_muted_until` set to
  * MUTED_UNTIL_LIFTED (far future: until a moderator lifts it). While muted they can't post, edit a post, or send
- * or start a message (403 `moderation_muted`); they can still read, edit their profile and leave. Lifting writes
+ * or start a message (403 `moderation_muted`); they can still read, edit their profile and leave. A mute stops a member
+ * SPEAKING, never STEPPING AWAY: leaving (a group here, or one elsewhere: routes/relay.ts speaksIn), saying no, withdrawing,
+ * pausing, closing, deleting or taking back their own, blocking, and turning something of theirs off are never refused for
+ * it (test-group-guests-home §3m, test-global-moderation 7b). Lifting writes
  * the time of the lift over it, so the value is: NULL never muted, in the future muted, in the past lifted then;
  * only removals after a lift count towards the next mute. The stale-post prune is tidying, not a takedown, and is
  * never counted (`posts.removed_by_moderator_at` is written by the one-post removals only).

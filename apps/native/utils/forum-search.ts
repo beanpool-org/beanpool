@@ -7,9 +7,10 @@
  * member's 100 searches a day: the node refuses past them with 429 `searches_per_day`, in the member's language. Nothing is
  * kept on the phone: a search is asked when the member presses Search, and its hits live as long as the screen does.
  */
+import type { ForumWriterLabel } from '@beanpool/core';
 import { signedRequestWithMethod } from './db';
 
-export interface ForumSearchWriter { publicKey: string; name: string }
+export interface ForumSearchWriter { publicKey: string; name: string; label?: ForumWriterLabel | null }
 /** A hit: the post, its topic's title ('' for a topic its writer removed, its replies kept), its words around the find. */
 export interface ForumSearchHit {
     topicId: string; sectionId: string; title: string; postId: string; number: number; writer: ForumSearchWriter; createdAt: string; excerpt: string;

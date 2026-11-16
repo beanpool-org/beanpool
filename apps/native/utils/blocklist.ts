@@ -599,13 +599,19 @@ const MINUTE_MS = 60 * 1000;
 
 /**
  * What this phone knows of one community's list for one account: `on`, the keys on the community's last answer of people
- * this phone put there or blocks ({@link reconcile}); `sent`, keys sent since whose answer never came, which it may hold. After a refusal asking again
- * won't soon change: `waitUntil`, when it may be asked anything again (it has no block list, or refused a removal);
- * `addsWaitUntil`, when it may be sent blocks again (it refused one), while unblocks still go.
+ * this phone put there or blocks ({@link reconcile}); `sent`, keys sent since whose answer never came, which it may hold;
+ * `asked`, the keys of those people the community has answered about: on its list, named by it as a key a re-key replaced
+ * with one of that person's, or sent to it and answered, taken or not (a list takes only the keys it has a row for). A
+ * re-key is one community's own, so a key the phone learned at another community is one this community may not know:
+ * the person counts as held here only once this community has answered about every key the phone knows them by
+ * ({@link heldAt}). After a refusal asking again won't soon change: `waitUntil`, when it may be asked anything again (it
+ * has no block list, or refused a removal); `addsWaitUntil`, when it may be sent blocks again (it refused one), while
+ * unblocks still go.
  */
 interface BlocksAt {
     on: string[];
     sent: string[];
+    asked: string[];
     waitUntil?: number;
     addsWaitUntil?: number;
 }
@@ -634,7 +640,8 @@ let syncWhenRoom: ReturnType<typeof setTimeout> | null = null;
 /**
  * Brings the block list the community the phone is set to keeps for the account on the phone (routes/blocks.ts) in line
  * with the member's changes, person by person ({@link planChange}): each person the member blocks whom the community's
- * last answer didn't show it holds is sent, and each this phone put there whom the member no longer blocks is taken off.
+ * answers don't show it holds is sent, by every key the phone knows them by (a re-key is one community's own: the
+ * community says which of them it has), and each this phone put there whom the member no longer blocks is taken off.
  * Each answer is taken before the next change is planned ({@link reconcile}): it names the person's keys, so two keys
  * the phone hadn't known were one person take the member's later change, as the community would have taken the changes
  * in their order. A person this phone never sent (a block made only in the web app) is never touched; one it sent comes
@@ -715,7 +722,7 @@ interface PlannedChange {
 
 async function recordOf(owner: string, community: string): Promise<{ record: Record<string, BlocksAt>; at: BlocksAt }> {
     const record = parseCommunityBlocks(await AsyncStorage.getItem(communityBlocksStoreKey(owner)));
-    return { record, at: record[community] ?? { on: [], sent: [] } };
+    return { record, at: record[community] ?? { on: [], sent: [], asked: [] } };
 }
 
 async function saveRecord(owner: string, record: Record<string, BlocksAt>, community: string, at: BlocksAt): Promise<void> {
@@ -736,20 +743,35 @@ function peopleOf(keys: readonly string[], chains: KeyChains): Set<string>[] {
     return people;
 }
 
-/** The key a person holds now, as far as the phone knows: one of theirs no re-key replaced, on the list if one is. */
-function keyNow(person: ReadonlySet<string>, blocks: Blocks): string | undefined {
+/**
+ * Every key of a person, the ones no re-key replaced first (the key they hold now, as far as the phone knows), those on the
+ * list before the rest. All go to a community that doesn't hold them yet: the phone learns a re-key at any community, and
+ * the person may still hold a replaced key at another (review of #3268, round 4: sent only the newest, a community that
+ * never saw the re-key took a key nobody there signs with, and never the one they hold there).
+ */
+function keysNowFirst(person: ReadonlySet<string>, blocks: Blocks): string[] {
     const replaced = new Set(Object.values(blocks.chains).flat());
-    const keys = [...blocks.list.filter(k => person.has(k)), ...person];
-    return keys.find(k => !replaced.has(k)) ?? keys[0];
+    const keys = [...new Set([...blocks.list.filter(k => person.has(k)), ...person])];
+    return [...keys.filter(k => !replaced.has(k)), ...keys.filter(k => replaced.has(k))];
+}
+
+/**
+ * Whether the community holds the person, as its answers show: one of their keys is on its list, and it has answered
+ * about every key the phone knows them by (`asked`). So a key the phone learned at another community goes here too, and
+ * this community's answer says which it has.
+ */
+function heldAt(at: BlocksAt, person: ReadonlySet<string>): boolean {
+    return at.on.some(k => person.has(k)) && [...person].every(k => at.on.includes(k) || at.asked.includes(k));
 }
 
 /**
  * The next change `community`'s list needs to say what the phone's does, person by person: first an unblock of a person
  * the member no longer blocks, by a key this phone put there (or sent, its answer lost); then a block of each person the
- * member blocks whom the community's last answer didn't show it holds. Several blocks go first in one request (the
- * community takes only keys it has a row for), and each it didn't take on its own. Null when nothing is left, or the
- * community is waited for. A block about to go is written down first: one whose answer never comes may be on the list,
- * and an unblock takes it off.
+ * member blocks whom the community's answers don't show it holds ({@link heldAt}), by every key the phone knows them by.
+ * Several keys go first in one request (the community takes only keys it has a row for, each as the key its member holds
+ * there now, one row per person), and each it didn't take on its own, while it holds none of that person's. Null when
+ * nothing is left, or the community is waited for. A block about to go is written down first: one whose answer never
+ * comes may be on the list, and an unblock takes it off.
  */
 async function planChange(owner: string, community: string, tried: Set<string>): Promise<PlannedChange | null> {
     const blocks = await readBlocks(owner);
@@ -775,9 +797,9 @@ async function planChange(owner: string, community: string, tried: Set<string>):
         }
     }
     if (!change && at.addsWaitUntil === undefined) {
-        const adds = people.filter(p => blocked(p) && !at.on.some(k => p.has(k)))
-            .map(p => keyNow(p, blocks))
-            .filter((k): k is string => !!k && MEMBER_KEY.test(k) && k !== owner);
+        const adds = people.filter(p => blocked(p) && !heldAt(at, p))
+            .flatMap(p => keysNowFirst(p, blocks))
+            .filter(k => MEMBER_KEY.test(k) && k !== owner);
         const together = adds.filter(k => !tried.has(`together ${k}`) && !tried.has(`alone ${k}`)).slice(0, COMMUNITY_BLOCKS_MAX);
         const alone = adds.find(k => !tried.has(`alone ${k}`));
         if (together.length > 1) {
@@ -848,6 +870,14 @@ function reconcile(owner: string, blocks: Blocks, at: BlocksAt, answer: ListAnsw
     const ours = new Set([...at.on, ...at.sent, ...sentNow, ...shown]);
     at.on = answer.keys.filter(k => [...personKeys(k, blocks.chains)].some(p => ours.has(p)));
     at.sent = [];
+    // What it has answered about: this answer's keys just sent (taken or not), those on its list, the keys it names as
+    // replaced by one there, and the person a block was of; and what it answered before about a person still on its list.
+    // A person it no longer lists starts again: what it said of a key they were known by before an unblock says nothing
+    // of the person now. Kept only for the people the phone still has a stake in.
+    const onList = (k: string) => [...personKeys(k, blocks.chains)].some(p => at.on.includes(p));
+    const named = [...sentNow, ...at.on, ...at.on.flatMap(k => answer.formerKeys[k] ?? []), ...(sentNow.length > 0 ? answer.person ?? [] : [])];
+    const people = new Set([...stake, ...shown].flatMap(k => [...personKeys(k, blocks.chains)]));
+    at.asked = [...new Set([...at.asked.filter(onList), ...named])].filter(k => people.has(k));
 }
 
 /**
@@ -1014,6 +1044,7 @@ function roomForARequest(): boolean {
 function keepsNone(at: BlocksAt): void {
     at.sent = [...new Set([...at.on, ...at.sent])];
     at.on = [];
+    at.asked = [];
 }
 
 /**
@@ -1077,7 +1108,7 @@ function parseCommunityBlocks(raw: string | null): Record<string, BlocksAt> {
         const out: Record<string, BlocksAt> = {};
         for (const [community, value] of Object.entries(parsed as Record<string, Partial<BlocksAt> | null>)) {
             if (!value || typeof value !== 'object') continue;
-            out[community] = { on: keysIn(value.on), sent: keysIn(value.sent) };
+            out[community] = { on: keysIn(value.on), sent: keysIn(value.sent), asked: keysIn(value.asked) };
             if (typeof value.waitUntil === 'number') out[community].waitUntil = value.waitUntil;
             if (typeof value.addsWaitUntil === 'number') out[community].addsWaitUntil = value.addsWaitUntil;
         }

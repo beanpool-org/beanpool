@@ -103,7 +103,7 @@ export function blockedUsersStoreKey(publicKey: string): string {
 
 /**
  * Which of one account's blocks this phone has put on each community's own list for it (utils/blocklist.ts `syncBlocks`):
- * an object, community address → `{ on, sent, waitUntil? }`. Kept with {@link blockedUsersStoreKey}, the list it
+ * an object, community address → `{ on, sent, asked, waitUntil? }`. Kept with {@link blockedUsersStoreKey}, the list it
  * describes, when the account leaves the phone, so the same account restored here still takes off a community's list
  * the blocks it lifted; never read for another account.
  */

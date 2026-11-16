@@ -169,7 +169,7 @@ case_ "11. every state → one bounded call, an exit code and a line that names 
 H=aaa11111aaaa OLD=aaa00000aaaa NEW=bbb11111bbbb
 again_h="call ci-wait.sh 42 $H again"
 second='If the next call says no checks yet too, no run is coming: stop and say so in the PR'
-conflict='no pull_request run starts until the branch is synced. Merge origin/main, push, and call ci-wait.sh 42 $(git rev-parse HEAD) once more; if it conflicts again, stop and say so in the PR'
+conflict='no pull_request run starts until the branch is synced. Run git fetch origin && git merge origin/main, push, and call ci-wait.sh 42 $(git rev-parse HEAD) once more; if it conflicts again, stop and say so in the PR'
 row(){ # LABEL EXIT LINE SECS SETUP [SHA] — SETUP runs in a fresh fake state where the head is $H; SECS is the call's time.
   # Rows that should end at once get 30 s, rows that end PENDING 0 s: no row may take 10 s.
   local label=$1 rc=$2 line=$3 secs=$4 setup=$5 sha=${6-$H} s0
@@ -183,7 +183,7 @@ p=$FAKE_STATE
 row "no checks + CONFLICTING"                     4 "CONFLICTING with main on aaa11111: $conflict" 30 \
   'print none > $p/checks; print CONFLICTING > $p/mergeable'
 check "... one read of the checks and one of the conflict: no waiting for a run that cannot start" eval '[ "$(calls mergeable)" = 1 ] && [ "$(calls "pr checks")" = 1 ]'
-row "no checks + CONFLICTING, base not main"      4 "CONFLICTING with release on aaa11111: no pull_request run starts until the branch is synced. Merge origin/release," 30 \
+row "no checks + CONFLICTING, base not main"      4 "CONFLICTING with release on aaa11111: no pull_request run starts until the branch is synced. Run git fetch origin && git merge origin/release," 30 \
   'print none > $p/checks; print CONFLICTING > $p/mergeable; print release > $p/base'
 row "no checks + UNKNOWN, then CONFLICTING within the call" 4 "CONFLICTING with main on aaa11111" 30 \
   'print none > $p/checks; print -l UNKNOWN UNKNOWN CONFLICTING > $p/mergeable'

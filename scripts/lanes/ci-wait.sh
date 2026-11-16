@@ -20,7 +20,7 @@
 # Every exit is bounded (one call, ~9 minutes) and its line says what it saw and what to do next. Exit:
 # 0 GREEN; 1 RED (failing lines printed); 2 PENDING: checks still running, no checks yet (with the PR's mergeable state), or GitHub
 # not showing the sha yet (call again with the same sha; the line says when a second one in a row means no run is coming);
-# 3 head moved / unreadable / bad call; 4 CONFLICTING with the base: merge origin/<base>, push, and wait once more with the new sha.
+# 3 head moved / unreadable / bad call; 4 CONFLICTING with the base: git fetch origin, merge origin/<base>, push, and wait once more with the new sha.
 #
 # Settings: LANE_GH_REPO (default: this checkout's origin, read as lib.sh reads it); LANE_CI_WAIT_SECS (530), the length of one
 # call; LANE_CI_WAIT_POLL_SECS (45), the poll of the checks; LANE_CI_WAIT_HEAD_POLL_SECS (10), the poll while GitHub has not shown
@@ -66,7 +66,7 @@ while :; do
   case "$s" in
     "") base=${base:-<its base>}
         [ "$m" = CONFLICTING ] && {
-          echo "CONFLICTING with $base on ${head:0:8}: no pull_request run starts until the branch is synced. Merge origin/$base, push, and call ci-wait.sh $PR \$(git rev-parse HEAD) once more; if it conflicts again, stop and say so in the PR"; exit 4; }
+          echo "CONFLICTING with $base on ${head:0:8}: no pull_request run starts until the branch is synced. Run git fetch origin && git merge origin/$base, push, and call ci-wait.sh $PR \$(git rev-parse HEAD) once more; if it conflicts again, stop and say so in the PR"; exit 4; }
         case "$m" in
           MERGEABLE) why="it merges with $base, but no run has listed a check yet";;
           UNKNOWN)   why="GitHub is still working out whether it merges with $base";;

@@ -504,3 +504,31 @@ describe('round 3 (#3246): a refused epoch is written on the chat; nothing goes 
         expect(f.chats[ID].lines.map((l) => [l.id, l.state])).toEqual([[after[0].envelope.itemId, 'sent']]);
     });
 });
+
+describe('NOTICES (round 4): the round applies a takedown before it confirms it, and never confirms what it cannot apply', () => {
+    it("a convenor's takedown of a line shown here: gone from the stored chats, then confirmed; a kind this phone can't apply is never confirmed, and the round doesn't read the same page again for it", async () => {
+        const LINE = '00000000-0000-4000-8000-000000000777';
+        const e = anasEpoch(2);
+        const f = await guestIn(e.roster);
+        const sealed = sealGroupLine('to be taken down', { myEdPrivHex: ana.seedHex, groupKey: e.key, groupId: GROUP, epoch: 2, messageId: LINE });
+        f.held.push({
+            id: 'n-line-td', host: HOST, group: GROUP, kind: 'line', receivedAt: 3,
+            data: { id: LINE, author: ana.pk, ciphertext: sealed.ciphertext, nonce: sealed.nonce, type: 'text', metadata: { epoch: 2, sender: ana.pk }, timestamp: '2026-11-16T09:30:00.000Z' },
+        });
+        await syncGuestMail(f.io);
+        expect(f.chats[ID].lines.map((l) => l.text)).toEqual(['to be taken down']);
+        f.held.push({ id: 'n-takedown', host: HOST, group: GROUP, kind: 'edit', data: { id: LINE, action: 'removed', by: 'convenor' }, receivedAt: 4 });
+        f.held.push({ id: 'n-later-kind', host: HOST, group: GROUP, kind: 'poll', data: { id: LINE }, receivedAt: 5 });
+        // My server says there is more each time, as it would with a full page.
+        let gets = 0;
+        const get = f.io.get;
+        f.io.get = async (path) => { gets++; return { ...(await get(path) as object), more: true }; };
+        await syncGuestMail(f.io);
+        expect(f.chats[ID].lines).toEqual([]);
+        expect(JSON.stringify(f.chats)).not.toContain(LINE);
+        expect(f.confirmed).toContain('n-takedown');
+        expect(f.confirmed).not.toContain('n-later-kind');
+        // The page with the takedown, then the same page again holding only what can't be applied yet: no third read.
+        expect(gets).toBe(2);
+    });
+});

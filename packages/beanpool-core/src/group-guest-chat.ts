@@ -91,6 +91,8 @@ export interface GuestChat {
     held: GuestHeldLine[];
     /** Why the chat closed, when the host said: removed by a convenor, or the group closed. */
     why: 'removed' | 'group-closed' | null;
+    /** The notice that brought this invitation: the same one fetched again (its confirm lost) never opens it again. */
+    inviteId?: string;
     updatedAt: number;
 }
 
@@ -170,6 +172,11 @@ const ACCESS: Record<GuestViewer, Record<GuestScreen, GuestAccess>> = {
 /** What `viewer` sees of `screen` (the table above; both apps draw from it). */
 export function guestAccess(viewer: GuestViewer, screen: GuestScreen): GuestAccess {
     return ACCESS[viewer][screen];
+}
+
+/** Whether a guest chat is listed among the chats: joining, in, or closed (removed, left); an invitation waits behind Message requests, a decline is gone. */
+export function guestChatListed(chat: Pick<GuestChat, 'state'>): boolean {
+    return chat.state === 'joining' || chat.state === 'in' || chat.state === 'left' || chat.state === 'removed';
 }
 
 /** The viewer a guest chat's own state makes of me: a guest while joining or in, removed once out; an invitation is no chat yet (null). */
@@ -289,6 +296,8 @@ export function applyGuestMail(before: GuestChats, page: { items?: unknown; grou
         if (typeof n.host !== 'string' || typeof n.group !== 'string') continue;
         const id = guestChatId(n.host, n.group);
         const chat = chats[id];
+        // An invitation fetched again because its confirm was lost is the one already answered here, never a new one.
+        if (n.kind === 'invite' && chat?.inviteId === n.id) continue;
         const verdict = gateGuestNotice(chat, n.kind, n.data, ctx.blocked);
         if (verdict === 'drop') continue;
         changed = true;
@@ -297,7 +306,7 @@ export function applyGuestMail(before: GuestChats, page: { items?: unknown; grou
             const fresh = newChat(n.host, n.group, ctx.now);
             // A new invitation after a leave or a removal starts a new chat: nothing of the old one carries over.
             chats[id] = {
-                ...fresh, name: data.name.slice(0, 120),
+                ...fresh, name: data.name.slice(0, 120), inviteId: n.id,
                 invitedBy: { key: data.invitedBy.key, name: typeof data.invitedBy.name === 'string' ? data.invitedBy.name.slice(0, 60) : '' },
             };
             continue;
@@ -352,6 +361,9 @@ function applyGuestLinks(chats: GuestChats, groups: unknown, ctx: GuestMailConte
             chat = chats[id] = newChat(l.host, l.group, ctx.now);
             changed = true;
         }
+        // My no (or leave) stands while my server still lists the invitation: the host hasn't taken it yet, and it never
+        // comes back as one. A new invitation comes as its own notice.
+        if ((chat.state === 'declined' || chat.state === 'left') && (state === 'invited' || state === 'joining')) continue;
         if (chat.state !== state && !(chat.state === 'joining' && state === 'invited' && chat.updatedAt > ctx.now - 60_000)) {
             // `joining` here and `invited` there: my yes not taken yet. Kept a minute (the send in flight), then the server's word.
             if (state === 'removed') { chat.keys = {}; chat.held = []; chat.why = chat.why ?? 'removed'; }
@@ -386,6 +398,8 @@ export function applyGuestTicks(before: GuestChats, ticks: unknown, now: number)
             : tk.refused || tk.state === 'refused' ? 'failed'
             : tk.state === 'queued' ? 'queued' : tk.state === 'sent' ? 'sent' : tk.state === 'failed' ? 'failed' : null;
         if (!next || next === line.state) continue;
+        // Refused for its epoch: the next epoch may be made, whether or not a tick for my last one ever came.
+        if (next === 'waiting') chat.epochSent = null;
         line.state = next;
         line.item = next === 'waiting' ? null : line.item;
         line.note = next === 'failed' ? (tk.refused ? t(GUEST_CHAT_WORDS.refused) : t(GUEST_CHAT_WORDS.notReached)) : null;

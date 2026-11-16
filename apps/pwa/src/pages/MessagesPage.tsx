@@ -21,6 +21,7 @@ import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPrevie
 import { OutsideChatRow, OutsideChatThread, OutsideRequestCard, outsideRoundNow } from '../components/OutsideChats';
 import { GuestChatRow, GuestChatThread, GuestInvitationCard, guestChatAsListed, useGuestChats } from '../components/GuestChats';
 import { guestRowsKnown } from '../lib/guest-chat-live';
+import { guestChatListed } from '@beanpool/core';
 import { AddressCardPanel } from '../components/AddressCardPanel';
 import { OUTSIDE_CHATS_EVENT, chatsShown, outsideContext } from '../lib/outside-mail';
 import type { OutsideChat } from '../lib/outside-chat-store';
@@ -1132,9 +1133,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             try {
                 const active = (await getGroupMembers(convId)).filter((r) => r.status === 'active');
                 roster = active.map((r) => ({ memberPubkey: r.memberPubkey, callsign: r.callsign ?? null, formerKeys: (r as { formerKeys?: DisplayRosterRow['formerKeys'] }).formerKeys ?? null }));
-                // Guests from other communities in the chat (G2), named by core's guest line, never as members.
-                roster = [...roster, ...guestRowsKnown(convId)];
-                ring.noteShownRoster(active.map((r) => r.memberPubkey));
+                // Guests from other communities in the chat (G2), named by core's guest line, never as members; shown to every
+                // member under the members, so a key may go to them (lib/group-chat-keys.ts).
+                const guests = guestRowsKnown(convId);
+                roster = [...roster, ...guests];
+                ring.noteShownRoster([...active.map((r) => r.memberPubkey), ...guests.map((g) => g.memberPubkey)]);
             } catch { /* names fall back to the node's; nothing is wrapped until the list reads */ }
         }
         let thread: OpenedGroupThread | null = null;
@@ -4071,7 +4074,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const guestIds = new Set(guestChats.map((c) => c.id));
     const outsideShown = [
         ...(activeTab === 'all' || activeTab === 'direct' ? outsideChats.filter((c) => c.state === 'open') : []),
-        ...(activeTab === 'all' ? guestChats.filter((c) => c.state !== 'invited').map(guestChatAsListed) : []),
+        ...(activeTab === 'all' ? guestChats.filter(guestChatListed).map(guestChatAsListed) : []),
     ];
     // When a person joined, on a request card, where this page holds their card.
     const joinedWordsOf = (pubkey: string): string | null => {

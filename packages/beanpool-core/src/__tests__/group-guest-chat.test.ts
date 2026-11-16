@@ -4,7 +4,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { makeGroupEpochRecord, openGroupLine, sealGroupLine } from '../group-crypto.js';
 import {
-    applyGuestMail, applyGuestTicks, gateGuestNotice, guestAccess, guestChatAuthorName, guestChatId, guestEpochDue, guestLinePayload,
+    applyGuestMail, applyGuestTicks, gateGuestNotice, guestAccess, guestChatAuthorName, guestChatId, guestChatListed, guestEpochDue, guestLinePayload,
     guestSealEpoch, guestViewerOf, makeGuestEpochFor, readGuestChats,
     type GuestAccess, type GuestChat, type GuestChats, type GuestScreen, type GuestViewer,
 } from '../group-guest-chat.js';
@@ -213,6 +213,32 @@ describe('a server page applied to the chats', () => {
         expect(applyGuestMail({}, { groups: [{ host: HOST, group: GROUP, state: 'removed', roster: null, rosterAt: null }] }, ctx()).chats).toEqual({});
     });
 
+    it("my no stands while my server still lists the invitation (the host hasn't taken it yet): it never comes back as one", () => {
+        for (const mine of ['declined', 'left'] as const) {
+            const before = chatWith(mine);
+            for (const theirs of ['invited', 'joining']) {
+                const { chats } = applyGuestMail(before, { groups: [{ host: HOST, group: GROUP, state: theirs, roster: null, rosterAt: null }] }, ctx());
+                expect(chats[ID].state, `${mine} / ${theirs}`).toBe(mine);
+            }
+        }
+    });
+
+    it('the same invitation fetched again (its confirm lost) never reopens it after my no', () => {
+        const inv = invite();
+        const first = applyGuestMail({}, { items: [inv] }, ctx()).chats;
+        first[ID].state = 'declined';
+        const again = applyGuestMail(first, { items: [inv] }, ctx());
+        expect(again.chats[ID].state).toBe('declined');
+        expect(again.confirm).toEqual([inv.id]);
+        // A new invitation (a new notice) opens one again.
+        expect(applyGuestMail(first, { items: [invite()] }, ctx()).chats[ID].state).toBe('invited');
+    });
+
+    it('only chats are listed among the chats: joining, in, and closed ones (removed, left); never an invitation or a decline', () => {
+        const states = ['invited', 'joining', 'in', 'declined', 'left', 'removed'] as const;
+        expect(states.filter((s) => guestChatListed({ state: s }))).toEqual(['joining', 'in', 'left', 'removed']);
+    });
+
     it('chats read back from storage; anything that is not one is left out', () => {
         const chats = chatWith('in');
         expect(readGuestChats(JSON.stringify(chats))).toEqual(chats);
@@ -239,6 +265,13 @@ describe("what became of my lines (my server's ticks)", () => {
         expect(chats[ID].lines[0].state).toBe(want);
         if (want === 'waiting') expect(chats[ID].lines[0].item).toBeNull();
         if (want === 'failed') expect(chats[ID].lines[0].note).toBeTruthy();
+    });
+    it('a line refused for its epoch lets the next epoch be made, even when no tick for my epoch ever came', () => {
+        const chats = withMine('sending');
+        chats[ID].epochSent = 4;
+        const out = applyGuestTicks(chats, tick('refused', 'epoch-stale'), NOW).chats[ID];
+        expect(out.lines[0].state).toBe('waiting');
+        expect(out.epochSent).toBeNull();
     });
     it('a refused epoch can be made again', () => {
         const chats = chatWith('in');

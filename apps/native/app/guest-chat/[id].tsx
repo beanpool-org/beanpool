@@ -180,7 +180,7 @@ export default function GuestChatScreen() {
                                 return (
                                     <View>
                                         {prev?.author !== item.author && <Text style={styles.author} testID="guest-line-author">{who}</Text>}
-                                        <View style={[styles.bubble, styles.theirs]} accessibilityLabel={`${who}: ${item.text}`} testID="guest-line-theirs">
+                                        <View style={[styles.bubble, styles.theirs]} accessibilityLabel={t('{who}: {text}', { who, text: item.text })} testID="guest-line-theirs">
                                             <Text style={styles.theirsText} selectable>{item.text}</Text>
                                         </View>
                                     </View>

@@ -42,7 +42,7 @@ import { OUTSIDE_CHATS_UPDATED, outsideContext, syncOutsideMailNow } from '../..
 import { chatsShown } from '../../utils/outside-mail';
 import type { OutsideChat } from '../../utils/outside-chat-store';
 import { GUEST_CHATS_UPDATED, loadGuestChats, syncGuestMailNow } from '../../utils/guest-chat-live';
-import type { GuestChat } from '@beanpool/core';
+import { guestChatListed, type GuestChat } from '@beanpool/core';
 import { ForumPane } from '../../components/forum/ForumPane';
 import { ContactsInfoSheet } from '../../components/ContactsInfoSheet';
 import { useContactsRecord } from '../../utils/use-contacts';
@@ -378,7 +378,7 @@ export default function ChatsScreen() {
         let list = [...conversations, ...outsideChats.filter((c) => c.state === 'open').map((c) => ({
             id: c.id, outside: true, peer: c.peerName ?? '', peerPubkey: c.peerKey, outsideHome: c.peerHome,
             lastMessage: c.lastText ?? '', rawTimestamp: new Date(c.lastAt ?? c.updatedAt).toISOString(), unread: 0,
-        })), ...guestChats.filter((c) => c.state !== 'invited').map((c) => {
+        })), ...guestChats.filter(guestChatListed).map((c) => {
             const last = c.lines[c.lines.length - 1];
             return {
                 id: c.id, outside: true, guest: true, peer: c.name, peerPubkey: c.id, outsideHome: c.host,

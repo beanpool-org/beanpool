@@ -126,12 +126,20 @@ async function sendDue(io: GuestMailIO, id: string): Promise<boolean> {
     const step = guestEpochDue(chat, io.me);
     if (step) {
         const made = makeGuestEpochFor(chat, step, io.me, io.myEdPrivHex, io.now());
-        // Kept before it goes: the key the epoch carries is the one my next line is sealed under.
+        // Kept before it goes: the key the epoch carries is the one my next line is sealed under. Not taken (refused, or the
+        // request failed): the key goes and the next round may make the epoch again.
         await update(io, id, () => made.chat);
-        const answered = await post(io, [await item(io, chat, 'group-epoch', io.newId(), made.payload)]);
+        const undo = () => update(io, id, (c) => ({ ...c, epochSent: null, keys: dropKey(c.keys, step.epoch) }));
+        let answered: Array<{ itemId: string; state: string; refused?: string }>;
+        try {
+            answered = await post(io, [await item(io, chat, 'group-epoch', io.newId(), made.payload)]);
+        } catch (e) {
+            await undo();
+            throw e;
+        }
         changed = true;
         if (answered.some((a) => a.refused)) {
-            await update(io, id, (c) => ({ ...c, epochSent: null, keys: dropKey(c.keys, step.epoch) }));
+            await undo();
             return changed;
         }
         chat = (await io.load())[id]!;

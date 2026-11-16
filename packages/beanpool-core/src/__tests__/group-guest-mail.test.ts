@@ -105,6 +105,28 @@ describe("the guest's round and sends", () => {
         expect(openGroupLine(payload, { groupId: GROUP, epoch: 2, senderPubHex: gus.pk, messageId: line!.id }, key).text).toBe('hello, tools group');
     });
 
+    it('an epoch my server never took (the request failed) is made again at the next round, so a waiting line is not stuck', async () => {
+        const f = fake();
+        f.held.push({ id: 'n-invite-4', host: HOST, group: GROUP, kind: 'invite', data: { name: 'Tools', invitedBy: { key: ana.pk, name: 'Ana' } }, receivedAt: 1 });
+        await syncGuestMail(f.io);
+        await answerGuestInvitation(f.io, ID, 'yes');
+        f.groups.push({ host: HOST, group: GROUP, state: 'in', rosterAt: 2, roster: {
+            name: 'Tools', members: [{ key: ana.pk, name: 'Ana' }], guests: [{ key: gus.pk, home: HOME, name: 'Gus' }], epoch: { current: 1, stale: true },
+        } });
+        const realPost = f.io.post;
+        f.io.post = async (path, body: any) => {
+            if (path === '/api/mail/send' && body.items.some((i: RelayItem) => i.envelope.kind === 'group-epoch')) throw new Error('network');
+            return realPost(path, body);
+        };
+        await expect(syncGuestMail(f.io)).rejects.toThrow('network');
+        expect(f.chats[ID].epochSent).toBeNull();
+        expect(f.chats[ID].keys).toEqual({});
+        f.io.post = realPost;
+        await syncGuestMail(f.io);
+        expect(f.posted.filter((p) => p.envelope.kind === 'group-epoch')).toHaveLength(1);
+        expect(f.chats[ID].epochSent).toBe(2);
+    });
+
     it('no answers to an invitation that is not waiting; a no declines it', async () => {
         const f = fake();
         await answerGuestInvitation(f.io, ID, 'yes');

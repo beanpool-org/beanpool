@@ -155,6 +155,13 @@ export interface NodeFeatures {
      */
     forum?: boolean;
     /**
+     * Anyone may read this community's forum (the worldwide one; apps/server config/node-profile.ts, slice F7; core
+     * forumPublicOn): a visitor there gets the Forum tab in Chat's place, "From the forum" on Home, and the public pages'
+     * "Open in the app" (utils/forum-public.ts, utils/forum-link.ts). The node says it only where its forum is on and
+     * public, never in a private preview. A node that doesn't say keeps its forum for its members.
+     */
+    forumPublic?: boolean;
+    /**
      * This node sends the forum's notices and takes the member's Forum switch (`notify_forum`; apps/server
      * engine/forum-notices.ts, slice F5; core forumNoticesOn): Settings → Notifications shows that switch only then. A node
      * that doesn't say (no forum, or from before F5) sends none and refuses the key.
@@ -180,7 +187,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
-    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forum', 'forumNotices', 'outsideMessages', 'bills',
+    'askedPush', 'knowledge', 'perItem', 'voiceLines', 'forum', 'forumPublic', 'forumNotices', 'outsideMessages', 'bills',
 ];
 
 export interface NodeProfile {

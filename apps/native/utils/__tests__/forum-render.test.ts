@@ -53,10 +53,20 @@ vi.mock('react-native', () => {
 });
 // `under`: whether a screen sits under the topic (opened from the list: yes; opened first by a forum link on a cold start: no).
 const nav = vi.hoisted(() => ({ pushed: [] as unknown[], back: 0, under: true, params: { id: 't1' } as Record<string, string> }));
+// A screen focused again (the member came back to the tab, a screen on top of it closed): `refocus()` runs each focus effect
+// again, as expo-router does, its last undo first.
+const focus = vi.hoisted(() => new Set<() => void>());
 vi.mock('expo-router', () => ({
     router: { push: (to: unknown) => { nav.pushed.push(to); }, back: () => { nav.back += 1; }, replace: (to: unknown) => { nav.pushed.push(to); }, canGoBack: () => nav.under },
     useLocalSearchParams: () => nav.params,
-    useFocusEffect: (effect: () => void | (() => void)) => { useEffect(() => effect(), [effect]); },
+    useFocusEffect: (effect: () => void | (() => void)) => {
+        useEffect(() => {
+            let undo = effect();
+            const again = () => { if (typeof undo === 'function') undo(); undo = effect(); };
+            focus.add(again);
+            return () => { focus.delete(again); if (typeof undo === 'function') undo(); };
+        }, [effect]);
+    },
 }));
 const look = vi.hoisted(() => ({ colors: null as any, theme: 'dark' as string }));
 vi.mock('../../app/ThemeContext', () => ({
@@ -242,6 +252,8 @@ function expectHoldsSmall(host: HTMLElement) {
 
 beforeEach(() => {
     document.body.innerHTML = '';
+    // An earlier case's screens are never focused again (their roots are left, not unmounted).
+    focus.clear();
     nav.pushed = [];
     nav.back = 0;
     nav.under = true;
@@ -407,6 +419,38 @@ describe.each(LOOKS)('the forum list\'s search in %s (%s)', (_name, set) => {
         // ✕ gives the list back.
         await press(byId(host, 'forum-search-clear'));
         expect(allById(host, 'forum-topic-row')).toHaveLength(3);
+    });
+
+    // The web's one-shot doors (#3252 review 3 and 4), on the phone: the Forum side stays drawn under a topic, a group's chat and
+    // its sheet, so coming back finds the search as the member left it, asked again never (each is one of their 100 a day); but a
+    // group's "Topics ›" (utils/forum-open.ts) lands on that section, the box empty, never under the old hits.
+    it('coming back keeps the hits and asks nothing again; a group\'s "Topics ›" door lands on its section with the search gone', async () => {
+        const { searchForum } = await import('../forum-search');
+        const { getForumTopics } = await import('../forum');
+        const { openForumAt } = await import('../forum-open');
+        const refocus = async () => { await act(async () => { focus.forEach((again) => again()); }); await act(async () => {}); };
+        node.search = { hits: [{ topicId: 't2', sectionId: 'skills', title: 'Seed swap ideas', postId: 'p7', number: 7, writer: writer(ANA, 'Asha'), createdAt: at(2), excerpt: '…swap seeds in spring…' }], next: null };
+        const host = await render(set, ForumPane);
+        await typeIn(byId(host, 'forum-search-box'), 'swap seeds');
+        await press(byId(host, 'forum-search-go'));
+        await press(byId(host, 'forum-search-hit'));
+        expect(vi.mocked(searchForum)).toHaveBeenCalledTimes(1);
+        // Back from the topic: the same hits, no second search.
+        await refocus();
+        expect(allById(host, 'forum-search-hit')).toHaveLength(1);
+        expect(allById(host, 'forum-topic-row')).toHaveLength(0);
+        expect(vi.mocked(searchForum)).toHaveBeenCalledTimes(1);
+        // Then, from the topic's group: its sheet's "Topics ›".
+        openForumAt('skills');
+        await refocus();
+        expect(vi.mocked(getForumTopics).mock.calls.at(-1)).toEqual(['skills', 0]);
+        const on = Array.from(byId(host, 'forum-section-pick').querySelectorAll('[data-role="button"]')).find((b) => b.getAttribute('aria-selected') === 'true');
+        expect(words(on ?? null)).toBe('Skills & how-to');
+        expect(allById(host, 'forum-search-hit')).toHaveLength(0);
+        expect(allById(host, 'forum-topic-row')).toHaveLength(3);
+        expect((byId(host, 'forum-search-box') as HTMLInputElement).value).toBe('');
+        expect(byId(host, 'forum-search-clear')).toBeNull();
+        expect(vi.mocked(searchForum)).toHaveBeenCalledTimes(1);
     });
 });
 

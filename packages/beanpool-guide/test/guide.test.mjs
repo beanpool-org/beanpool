@@ -1306,6 +1306,29 @@ test("the claim path (operator path S5): every page names both phone routes, and
     }
 });
 
+// A paused community (#3258 review, pre-existing): pausing is an everyday change on the server (config/core-settings.ts
+// isCoreChange: pausing, and un-pausing to the door it had, ask no proof), so the manager keeps it out of Core settings: the
+// Who can join row there picks one of the two doors (a core change, under the lock) and shows a paused community's door with
+// "paused now"; Pause new members, under People & Safety → Invites & QR, pauses and takes new members again with no unlock.
+const MANAGER_MODULES = path.resolve(CONTENT_DIR, '..', '..', '..', 'apps', 'manager', 'src', 'components', 'modules');
+test("a paused community (members-and-invites.md): the manual says what the manager's two rows do, the door locked and the pause not", () => {
+    const page = fs.readFileSync(path.join(OPERATORS_DIR, 'people', 'members-and-invites.md'), 'utf8');
+    const core = fs.readFileSync(path.join(MANAGER_MODULES, 'CommunityShapeSection.tsx'), 'utf8');
+    const everyday = fs.readFileSync(path.join(MANAGER_MODULES, 'EverydayRuleRows.tsx'), 'utf8');
+    const people = fs.readFileSync(path.join(MANAGER_MODULES, 'PeopleSafetySection.tsx'), 'utf8');
+    // What the screens draw, so the words below are pinned to them.
+    assert.ok(core.includes("t('{door} · paused now')"), 'Core settings shows a paused community\'s door with "paused now"');
+    assert.ok(core.includes('{DOOR_PRESETS.map((p) =>') && !core.includes('joinRadioTitle'), 'Core settings\' Who can join offers the two doors, no Paused choice');
+    assert.ok(everyday.includes("name={t('Pause new members')}") && people.includes('title="Taking new members"'), 'Pause new members is a row of Taking new members');
+    const para = page.split('\n').find(l => l.startsWith('**While no new members are being taken**'));
+    assert.ok(para, 'the page says what a paused community looks like');
+    assert.ok(!para.includes('**Paused: nobody new for now**'), 'no Paused choice is marked on the Who can join row: it has none');
+    assert.ok(para.includes('paused now'), 'Who can join shows the door with "paused now"');
+    assert.ok(para.includes('**Pause new members**') && para.includes('**People & Safety → Invites & QR**') && para.includes('no unlocking'),
+        'new members are taken again with Pause new members under Invites & QR, which needs no unlocking');
+    assert.ok(para.includes('**Unlock to change**'), 'picking the other door is a core change: Unlock to change first');
+});
+
 test('the one "what next" after claiming (operator path S6): Then lists the four in order, Settings Home\'s Action Required, and no two-factor to switch on', () => {
     const page = fs.readFileSync(path.join(OPERATORS_DIR, 'setup', 'first-time-setup.md'), 'utf8');
     const then = page.slice(page.indexOf('## Then'));

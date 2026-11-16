@@ -3952,13 +3952,13 @@ CREATE INDEX IF NOT EXISTS idx_peek_tickets_expires ON peek_tickets(expires_at);
 --
 -- relay_mail: an item another community's server brought for a member here, held sealed until the member's devices confirm
 -- they have it (relay_mail_got), then deleted; 30 days at most. `envelope` is the sender's signed relay envelope as it came (@beanpool/core
--- relay-envelope.ts); `payload` the sealed line or delete as it came. A blob's sealed bytes are a file of their own under
+-- relay-envelope.ts); `payload` the sealed line, delete, edit or reaction as it came (X6 added the last two kinds). A blob's sealed bytes are a file of their own under
 -- <data>/relay-mail/in/ (never in the image store, so never in a backup's objects), `payload` NULL. `bytes` counts the
 -- payload either way, for the caps.
 CREATE TABLE IF NOT EXISTS relay_mail (
     sender_key  TEXT NOT NULL CHECK (length(sender_key) = 64),
     item_id     TEXT NOT NULL CHECK (length(item_id) BETWEEN 8 AND 64),
-    kind        TEXT NOT NULL CHECK (kind IN ('dm-line', 'dm-blob', 'dm-delete')),
+    kind        TEXT NOT NULL CHECK (kind IN ('dm-line', 'dm-blob', 'dm-delete', 'dm-edit', 'dm-reaction')),
     recipient   TEXT NOT NULL CHECK (length(recipient) = 64),
     sender_home TEXT NOT NULL CHECK (length(sender_home) BETWEEN 1 AND 260),
     envelope    TEXT NOT NULL CHECK (length(envelope) <= 2000),
@@ -4016,7 +4016,7 @@ CREATE INDEX IF NOT EXISTS idx_relay_mail_seen_at ON relay_mail_seen(seen_at);
 CREATE TABLE IF NOT EXISTS relay_outbox (
     sender_key     TEXT NOT NULL CHECK (length(sender_key) = 64),
     item_id        TEXT NOT NULL CHECK (length(item_id) BETWEEN 8 AND 64),
-    kind           TEXT NOT NULL CHECK (kind IN ('dm-line', 'dm-blob', 'dm-delete', 'receipt')),
+    kind           TEXT NOT NULL CHECK (kind IN ('dm-line', 'dm-blob', 'dm-delete', 'dm-edit', 'dm-reaction', 'receipt')),
     recipient      TEXT NOT NULL CHECK (length(recipient) = 64),
     recipient_home TEXT NOT NULL CHECK (length(recipient_home) BETWEEN 1 AND 260),
     state          TEXT NOT NULL CHECK (state IN ('queued', 'sent', 'delivered', 'failed', 'expired')),

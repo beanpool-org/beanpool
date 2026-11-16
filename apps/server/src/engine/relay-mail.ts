@@ -4,12 +4,14 @@
  * DESIGN-forums-messaging-joint-fable.md §3.1). The sending side is engine/relay-outbox.ts; the routes, routes/relay.ts.
  *
  * Another community's server brings items for members here in a request it signed (engine/node-signature.ts, X1):
- * `POST /api/relay/mail { items: RelayItem[] }`. Four kinds are this slice's:
+ * `POST /api/relay/mail { items: RelayItem[] }`. The direct kinds:
  *
- *   dm-line    a sealed direct line           held for its recipient until their devices confirm it, then deleted
- *   dm-blob    a sealed photo or voice part   held the same way, its bytes a file of its own (<data>/relay-mail/in/)
- *   dm-delete  a sealed "delete for everyone" held the same way: each of the recipient's devices applies it
- *   receipt    "my device has these"          never held: the outbox row of each item it names goes `delivered`
+ *   dm-line      a sealed direct line           held for its recipient until their devices confirm it, then deleted
+ *   dm-blob      a sealed photo or voice part   held the same way, its bytes a file of its own (<data>/relay-mail/in/)
+ *   dm-delete    a sealed "delete for everyone" held the same way: each of the recipient's devices applies it
+ *   dm-edit      a sealed edit of a line        held the same way (X6); which line, and the words, only the devices read
+ *   dm-reaction  a sealed reaction to a line    held the same way (X6); which emoji, or none, only the devices read
+ *   receipt      "my device has these"          never held: the outbox row of each item it names goes `delivered`
  *
  * A guest's items for a group hosted here (`group-invite`, `group-leave`, `group-line`, `group-epoch` to `group:<id>`) go to
  * engine/group-guests.ts once their envelopes pass the same checks (slice G1). Every other kind (another group item, a call
@@ -60,15 +62,21 @@ import { logger } from '../logger.js';
 
 /** The path another community's server brings items to (engine/node-signature.ts NODE_SIGNED_PATHS). */
 export const RELAY_MAIL_PATH = '/api/relay/mail';
-/** The kinds this slice handles; every other kind is answered 202 and dropped. */
-export const RELAY_HANDLED_KINDS: readonly RelayItemKind[] = ['dm-line', 'dm-blob', 'dm-delete', 'receipt'];
-/** The kinds held for a member until their device has them. */
-const HELD_KINDS: ReadonlySet<string> = new Set(['dm-line', 'dm-blob', 'dm-delete']);
+/** The kinds this mailbox handles; every other kind is answered 202 and dropped. */
+export const RELAY_HANDLED_KINDS: readonly RelayItemKind[] = ['dm-line', 'dm-blob', 'dm-delete', 'dm-edit', 'dm-reaction', 'receipt'];
+/**
+ * The kinds held for a member until their device has them. A change to a line (a delete, an edit, a reaction: X6) is held as
+ * a line is: the server can't tell which line it names, nor whether its maker may make it; each device judges that
+ * (@beanpool/core outsideChangeVerdict), and a blocked sender's never waits here.
+ */
+const HELD_KINDS: ReadonlySet<string> = new Set(['dm-line', 'dm-blob', 'dm-delete', 'dm-edit', 'dm-reaction']);
 /** The most items one request carries, either way, and the most blobs among them (one: the request cap is 2 MB). */
 export const RELAY_ITEMS_PER_REQUEST = 16;
 export const RELAY_BLOBS_PER_REQUEST = 1;
-/** A line or a delete, in characters as it travels: a direct line's own limit (config/writer-limits.ts dmLineChars). */
+/** A line, a delete or an edit, in characters as it travels: a direct line's own limit (config/writer-limits.ts dmLineChars). */
 export const RELAY_LINE_MAX_CHARS = WRITER_LIMITS.dmLineChars;
+/** A reaction, sealed: one emoji (or none) and the line's id, with the seal and signature around them. */
+export const RELAY_REACTION_MAX_CHARS = 4 * 1024;
 /**
  * A blob, in characters as it travels: room over the largest sealed part a chat line carries today, a voice message's
  * 1,150,000 characters (@beanpool/core VOICE_SEALED_MAX_BYTES; a photo's is 786,432, config/writer-limits.ts
@@ -85,7 +93,8 @@ export const RELAY_RECEIPT_MAX_CHARS = 4 * 1024;
  */
 export function relayPayloadMaxChars(kind: string): number | null {
     if (kind === 'dm-blob') return RELAY_BLOB_MAX_CHARS;
-    if (kind === 'dm-line' || kind === 'dm-delete') return RELAY_LINE_MAX_CHARS;
+    if (kind === 'dm-line' || kind === 'dm-delete' || kind === 'dm-edit') return RELAY_LINE_MAX_CHARS;
+    if (kind === 'dm-reaction') return RELAY_REACTION_MAX_CHARS;
     if (kind === 'receipt') return RELAY_RECEIPT_MAX_CHARS;
     return guestItemMaxChars(kind);
 }

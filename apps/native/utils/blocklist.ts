@@ -155,11 +155,8 @@ function personKeys(key: string, chains: KeyChains): Set<string> {
     return keys;
 }
 
-/**
- * `list` with each person on it once, under the key they hold now: the one of theirs on the list no re-key replaced. For
- * tests too (blocks-reach-community.test.ts), and {@link getBlockedPeople}.
- */
-export function onePerPerson(list: readonly string[], chains: KeyChains): string[] {
+/** `list` with each person on it once, under the key they hold now: the one of theirs on the list no re-key replaced. */
+function onePerPerson(list: readonly string[], chains: KeyChains): string[] {
     const replaced = new Set(Object.values(chains).flat());
     const seen = new Set<string>();
     const people: string[] = [];

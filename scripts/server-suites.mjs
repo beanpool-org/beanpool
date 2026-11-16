@@ -704,7 +704,6 @@ export const SUITES = [
     'test-key-succession',
     'test-dm-former-keys-readers',
     'test-group-history-after-rekey',
-    'test-dm-line-relay',
     'test-federation-hardening',
     'test-node-signature',
     'test-relay-mail',

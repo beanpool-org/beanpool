@@ -114,7 +114,10 @@ import { copyCheckForPreview } from './standby-copy-record.js';
 import { startTunnelForTakeover } from './tunnel-connector.js';
 import { parseRegistrarNames } from '../engine/registrar-names.js';
 import { addressListAfterTakeover, readAddressListRecord } from './address-list.js';
-import { BEANPOOL_ZONE, isLoopbackHost } from '../engine/own-addresses.js';
+import {
+    addressListContent, BEANPOOL_ZONE, forgetOwnAddresses, isLoopbackHost, normalizeAddress, ownerConfirmedAddresses, publishedAddresses,
+} from '../engine/own-addresses.js';
+import { addressOf } from '@beanpool/core';
 import {
     getReplacedInfo, forgetSyncEpochHeaderValue, newerTakeoverAnswering, type NewerTakeover, type ReplacedInfo,
 } from './identity-epoch.js';
@@ -982,15 +985,30 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
             const main = 'mainAddress' in bundle ? (typeof bundle.mainAddress === 'string' ? bundle.mainAddress : null) : undefined;
             const carried = 'addressList' in bundle ? readAddressListRecord(bundle.addressList) : null;
             const list = carried ? addressListAfterTakeover(carried, bundleEpoch(bundle)) : null;
+            // The owner's spares (several addresses S8, design §6): a spare that is this standby's own address (one it went by
+            // before this step) is now where the community lives, so it joins the confirmed addresses and the signed list names
+            // it: phones that find nothing listed answering prove it at this higher take-over count and go there. The rest stay
+            // spares. Computed from the bundle and this server's own names, so running the step again keeps the same.
+            const carriedSpares = Array.isArray(bundle.addressSpares) ? bundle.addressSpares.filter((a) => typeof a === 'string') : null;
+            const ownBefore = new Set<string>([...(addressListContent()?.addresses ?? []), ...publishedAddresses()]);
+            const ownSpares = (carriedSpares ?? []).filter((s) => {
+                const a = addressOf(s);
+                return !!a && (ownBefore.has(a) || ownBefore.has(normalizeAddress(a.replace(/:\d+$/, '')) ?? ''));
+            });
+            const ownSpareHosts = ownSpares.map((s) => normalizeAddress(s.replace(/:\d+$/, ''))).filter((h): h is string => !!h);
+            const ownedNow = owned || ownSpareHosts.length ? [...new Set([...(owned ?? ownerConfirmedAddresses()), ...ownSpareHosts])] : null;
             updateNodeConfig({
-                publicAddress: pa ?? null, ...(owned ? { ownerAddresses: owned } : {}), ...(names ? { registrarNames: names } : {}),
+                publicAddress: pa ?? null, ...(ownedNow ? { ownerAddresses: ownedNow } : {}), ...(names ? { registrarNames: names } : {}),
                 ...(main !== undefined ? { mainAddress: main } : {}), ...(list ? { addressList: list } : {}),
+                ...(carriedSpares ? { addressSpares: carriedSpares.filter((s) => !ownSpares.includes(s)) } : {}),
             } as any);
+            forgetOwnAddresses();
             j.result.publicAddress = pa ? (pa.hostname || pa.name || null) : null;
             j.result.tunnel = plan.tunnel;
             const extra = (owned && owned.length ? `; confirmed app address(es) ${owned.join(', ')}` : '')
                 + (names && names.length ? `; registrar name(s) ${names.map((n) => n.role === 'former' ? `${n.address} (former)` : n.address).join(', ')}` : '')
-                + (main ? `; main address ${main}` : '') + (carried && list ? `; address list number ${carried.epoch}.${carried.seq}, going on at epoch ${list.epoch}` : '');
+                + (main ? `; main address ${main}` : '') + (carried && list ? `; address list number ${carried.epoch}.${carried.seq}, going on at epoch ${list.epoch}` : '')
+                + (ownSpares.length ? `; this server's own spare(s) ${ownSpares.join(', ')} now listed as address(es)` : '');
             return (pa ? `${pa.hostname || pa.name}; ${plan.tunnel.message}` : 'no web address from the registrar') + extra;
         }
         case 'profile': {
@@ -1158,7 +1176,7 @@ const UNDO_ROW_KEYS: readonly string[] = [
 /** The profile's switch overrides (config/node-profile.ts): rows named `nodeProfile.<switch>`. */
 const PROFILE_OVERRIDE_PREFIX = `${NODE_PROFILE_KEY}.`;
 /** Fields of the `node_config` row the steps write: the web address and its names, and the community's directory choices. */
-const UNDO_NODE_CONFIG_FIELDS: readonly string[] = ['publicAddress', 'ownerAddresses', 'registrarNames', 'mainAddress', 'addressList', ...COMMUNITY_DIRECTORY_FIELDS];
+const UNDO_NODE_CONFIG_FIELDS: readonly string[] = ['publicAddress', 'ownerAddresses', 'registrarNames', 'mainAddress', 'addressList', 'addressSpares', ...COMMUNITY_DIRECTORY_FIELDS];
 /** local-config.json fields the steps write, through `role` and `pull-config`. Nothing else in the file is touched. */
 const UNDO_LOCAL_CONFIG_FIELDS: readonly string[] = [
     'recoveryCode', 'recoveryCodeLastId', 'recoveryCodeUsed', ...COMMUNITY_LOCAL_CONFIG_FIELDS,

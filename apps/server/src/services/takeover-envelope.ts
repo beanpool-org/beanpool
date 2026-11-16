@@ -126,6 +126,9 @@ export interface TakeoverBundle {
     /** node_config.addressList: the address list this server last signed, content and number (services/address-list.ts), so a
      *  promoted server numbers its first list after it, at this epoch + 1. Null before the first list. */
     addressList?: unknown;
+    /** node_config.addressSpares: the owner's spares (engine/own-addresses.ts addressSpares, design several-addresses §6), so
+     *  the promoted server lists its own spare as an address and keeps the rest as spares. Absent before spares existed. */
+    addressSpares?: string[];
     /** The public record of the current code, so the new main server can keep sealing to it. */
     recoveryCode: RecoveryCodeRecord | null;
     /** How many take-overs this identity has been through (services/identity-epoch.ts). A take-over writes this + 1.
@@ -220,7 +223,7 @@ function readRegistrarNames(): unknown[] {
 }
 
 /** One field of the stored node_config object, as stored (null when absent or unreadable). */
-function readNodeConfigField(field: 'mainAddress' | 'addressList'): unknown {
+function readNodeConfigField(field: 'mainAddress' | 'addressList' | 'addressSpares'): unknown {
     const row = db.prepare("SELECT value FROM node_config WHERE key = 'node_config'").get() as { value?: string } | undefined;
     if (!row?.value) return null;
     try {
@@ -249,6 +252,7 @@ function buildBundle(files: TakeoverBundle['files']): TakeoverBundle {
         registrarNames: readRegistrarNames(),
         mainAddress: mainAddressOf(readNodeConfigField('mainAddress')),
         addressList: readNodeConfigField('addressList'),
+        addressSpares: ((s) => (Array.isArray(s) ? s.filter((a): a is string => typeof a === 'string') : []))(readNodeConfigField('addressSpares')),
         recoveryCode: config.recoveryCode ?? null,
         identityEpoch: Number.isSafeInteger(config.identityEpoch) && config.identityEpoch > 0 ? config.identityEpoch : 0,
         nodeProfile: readProfileRecord(),

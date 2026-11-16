@@ -429,6 +429,18 @@ async function main(): Promise<void> {
         await step('the key back', async () => { await writeNodeKey(dataDir, V.keys.community.seedHex); }, true);
         await step('another community id', () => { writeGenesis(dataDir, V.communityIds.other); }, true);
         await step('the community id back', () => { writeGenesis(dataDir, COMMUNITY); }, true);
+        // Spares (S8, design §6): the owner's standby addresses, in the list's `spares` apart from its addresses.
+        await step("a spare named (a standby's own address)", () => { se.updateNodeConfig({ addressSpares: ['standby.example.net'] }); }, true);
+        assert(show(prev.list.spares) === show(['standby.example.net']) && !prev.list.addresses.includes('standby.example.net'),
+            `the spare is in the list's spares, not its addresses (${show(prev.list.spares)} / ${show(prev.list.addresses)})`);
+        const spareProof = await proved('standby.example.net');
+        assert(spareProof.status === 421, `a spare is never proved by this server: 421 (${spareProof.status})`);
+        assert(!own.configuredAddresses().some((a) => a.address === 'standby.example.net'), 'a spare is never one of this community\'s own names (no signature for it is accepted here)');
+        await step('the same spare in another spelling', () => { se.updateNodeConfig({ addressSpares: ['Standby.Example.Net.'] }); }, false);
+        await step('a spare that is also one of the addresses (never a spare)', () => { se.updateNodeConfig({ addressSpares: ['standby.example.net', '203.0.113.5'] }); }, false);
+        await step('a second spare, at a port', () => { se.updateNodeConfig({ addressSpares: ['standby.example.net', '198.51.100.7:8443'] }); }, true);
+        assert(show(prev.list.spares) === show(['198.51.100.7:8443', 'standby.example.net']), `two spares, in their one spelling and order (${show(prev.list.spares)})`);
+        await step('the spares removed', () => { se.updateNodeConfig({ addressSpares: [] }); }, true);
         // The timer: a change no read saw is numbered by the tick, and the next read is that number, not one more.
         se.updateNodeConfig({ ownerAddresses: ['second.example.org', 'third.example.org'] });
         own.forgetOwnAddresses();

@@ -61,7 +61,7 @@
  */
 
 import { domainToASCII } from 'node:url';
-import { ADDRESS_LIST_MAX, addressOf, isListableAddress } from '@beanpool/core';
+import { ADDRESS_LIST_MAX, ADDRESS_SPARES_MAX, addressOf, isListableAddress } from '@beanpool/core';
 import { getNodeConfig, resolvePublicNodeUrl, updateNodeConfig, PUBLIC_URL_RULES } from '../state-engine.js';
 import { HOLDING_STATUSES, registrarNames, registrarNamesVersion } from './registrar-names.js';
 import { isCertifiableHost, isIpLiteral, isLocalNetworkHost, isLoopbackHost, normalizeAddress, preferredAddress, reachableFromInternet } from './host-kinds.js';
@@ -365,7 +365,7 @@ let warnedListFull = '';
  * same spelling. A home-network main stays main here: the list is what a phone on that network follows. Null when there is
  * nothing to list (a node that knows none of its names, or whose names all wait for a route).
  */
-export function addressListContent(): { main: string; addresses: string[] } | null {
+export function addressListContent(): { main: string; addresses: string[]; spares: string[] } | null {
     const ported = portedUrls();
     const spell = (host: string): string | null => {
         const a = addressOf(ported.get(host) ?? `https://${host}`);
@@ -386,7 +386,29 @@ export function addressListContent(): { main: string; addresses: string[] } | nu
         logger.warn('SYS', `[Addresses] This community has ${hosts.length} addresses; its signed list names the main one and `
             + `${ADDRESS_LIST_MAX - 1} others, so members' phones follow only those. Remove the addresses no longer used.`);
     }
-    return { main: spell(main)!, addresses: listed.sort(byCodeUnit) };
+    // The owner's spares (addressSpares), apart from the addresses: one that is also an address now (a standby that took
+    // over lists its own) is an address, not a spare.
+    const spares = addressSpares().filter((s) => !listed.includes(s));
+    return { main: spell(main)!, addresses: listed.sort(byCodeUnit), spares };
+}
+
+/**
+ * The owner's spares (node_config `addressSpares`, Settings → Addresses → Spares; design scratch/fable-design/
+ * DESIGN-several-addresses-fable.md §6): where the community would go if this server were lost, a standby's own address,
+ * each in core's one spelling (`host`, or `host:port`), none loopback, none twice, at most ADDRESS_SPARES_MAX, in code-unit
+ * order. Published in the signed list apart from its addresses. Never one of this community's names: a phone asks a
+ * spare only when no listed address answers, and takes it only at a higher take-over count (a standby that took over).
+ */
+export function addressSpares(): string[] {
+    const stored = getNodeConfig().addressSpares;
+    if (!Array.isArray(stored)) return [];
+    const out: string[] = [];
+    for (const s of stored) {
+        const a = typeof s === 'string' ? addressOf(s) : null;
+        if (a && isListableAddress(a) && !out.includes(a)) out.push(a);
+        if (out.length === ADDRESS_SPARES_MAX) break;
+    }
+    return out.sort(byCodeUnit);
 }
 
 /**

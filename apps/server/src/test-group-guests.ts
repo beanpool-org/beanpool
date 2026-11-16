@@ -776,6 +776,57 @@ async function main(): Promise<void> {
     const kindsCovered = [...(guests?.GUEST_ITEM_KINDS ?? [])].every((k: string) => noticeRows.some((r) => r.kind === k));
     assert(kindsCovered && noticeRows.some((r) => r.want), '14z. the table covers every kind a guest\'s home brings, and the lines make notices');
 
+    // ── 14b. What members read of a guest's line ────────────────────────────────────────────
+    // WALK 3 phone (17 Nov 2026): a guest's line was served under the first 8 characters of their key, so the members'
+    // Groups list read "2b3be71a: 🔒 Message", and once the guest left or was removed the chat named their lines
+    // "2b3be71a · no longer in this group" (a phone names a signer outside its roster by the name the node serves).
+    console.log('\n14b. Every place a guest\'s line is served to members names it by the guest line, while they are in and after they go');
+    const { groupLineAuthorName } = await import('./engine/group-thread.js');
+    const { openReportedGroupLine } = await import('./engine/group-chat-report.js');
+    // The member Ana writes first, then the guest whose card says "Ana": the guest's line is the chat's last.
+    const anaPosted14b = await call('POST', ana, `/api/groups/${S}/chat/message`, lineIn(ana, S, curKey, curEpoch));
+    const fakeLine = lineIn(fakeAna, S, curKey, curEpoch);
+    await bring([await item(fakeAna, 'a.example', shedTo, 'group-line', JSON.stringify(fakeLine))]);
+    await settle();
+    const fakeName = 'Ana · a.example · guest';
+    const chat14b = await call('GET', jo, `/api/groups/${S}/chat`);
+    const fakeLines = ((chat14b.body?.messages ?? []) as any[]).filter((m) => m.authorPubkey === fakeAna.pk);
+    assert(chat14b.status === 200 && fakeLines.length >= 3 && fakeLines.every((m) => m.authorCallsign === fakeName),
+        `14b-1. the chat as a member reads it: every line of the guest whose card says "Ana" is "${fakeName}" (got ${chat14b.status}, ${JSON.stringify(fakeLines.map((m) => m.authorCallsign))})`);
+    const memberLines = ((chat14b.body?.messages ?? []) as any[]).filter((m) => m.authorPubkey === ana.pk);
+    assert(anaPosted14b.status === 201 && memberLines.length > 0 && memberLines.every((m) => m.authorCallsign === 'Ana'),
+        `14b-2. and the member Ana's own lines stay "Ana" (got ${anaPosted14b.status}, ${JSON.stringify(memberLines.map((m) => m.authorCallsign))})`);
+    const yours14b = await call('GET', jo, '/api/your-groups');
+    const shedRow = ((yours14b.body?.items ?? []) as any[]).find((i) => i.conversationId === S || i.id === S);
+    assert(shedRow?.lastMessage?.id === fakeLine.clientId && shedRow.lastMessage.authorCallsign === fakeName,
+        `14b-3. the members' Groups list: the chat's last line is "${fakeName}"'s, never a short key (got ${JSON.stringify({ id: shedRow?.lastMessage?.id === fakeLine.clientId, who: shedRow?.lastMessage?.authorCallsign })})`);
+    const mk14b = Buffer.from(groupMessageKey(curKey, fakeLine.clientId)).toString('base64');
+    const filed14b = await call('POST', jo, `/api/groups/${S}/chat/report`, { messageId: fakeLine.clientId, reason: 'Spam or scam', disclosure: { epoch: curEpoch, mk: mk14b } });
+    await settle();
+    const report14b = db.prepare('SELECT id FROM abuse_reports WHERE reporter_pubkey = ? AND target_message_id = ?').get(jo.pk, fakeLine.clientId) as { id: string } | undefined;
+    const seen14b = report14b ? await openReportedGroupLine(report14b.id) : null;
+    assert(filed14b.status === 200 && seen14b?.authorCallsign === fakeName,
+        `14b-4. the line as the moderators open a report of it: "${fakeName}" (got ${filed14b.status}, ${JSON.stringify(seen14b?.authorCallsign)})`);
+    // After they go: Gus (a.example) wrote in the first group in 4b, and the owners' switch removed him in 9b.
+    const gusRead = await call('GET', ana, `/api/groups/${G}/chat`);
+    const gusServed = ((gusRead.body?.messages ?? []) as any[]).find((m) => m.id === gusId);
+    assert(stateOf(G, gus) === 'removed' && gusServed?.authorCallsign === 'Gus · a.example · guest',
+        `14b-5. a removed guest's line keeps their guest line, so a phone shows "Gus · a.example · guest · no longer in this group", never a short key (got ${stateOf(G, gus)}, ${JSON.stringify(gusServed?.authorCallsign)})`);
+    // Every way the name is asked for, one rule: a member by their name; a guest of this group in any state by the guest
+    // line; a stranger, the system, or a guest of another group: none (the reader shows a short key).
+    const nameRows: Array<[string, string, string, string | null, string | null]> = [
+        ['a member', S, ana.pk, 'Ana', 'Ana'],
+        ['a guest in', S, fakeAna.pk, null, fakeName],
+        ['a guest who left', S, oz.pk, null, 'Oz · c.example · guest'],
+        ['a removed guest', G, gus.pk, null, 'Gus · a.example · guest'],
+        ['a member key that is also a guest elsewhere: the member name wins', S, fakeAna.pk, 'Ana (member)', 'Ana (member)'],
+        ['a guest of another group', S, gus.pk, null, null],
+        ['a stranger', S, stray.pk, null, null],
+        ['the system', S, 'SYSTEM', null, null],
+    ];
+    const nameMisses = nameRows.filter(([, g, k, member, want]) => groupLineAuthorName(g, k, member) !== want).map(([label]) => label);
+    assert(stateOf(S, oz) === 'left' && nameMisses.length === 0, `14b-6. groupLineAuthorName, one rule for every caller (misses: ${nameMisses.join(', ') || 'none'})`);
+
     // ── 15. Each home on its own ────────────────────────────────────────────────────────────
     console.log('\n15. One community that doesn\'t answer holds up no other; a row queued during a send goes when it ends');
     let openC: () => void = () => {};

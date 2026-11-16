@@ -56,6 +56,20 @@ export function guestLineName(groupId: string, key: string): string | null {
     return g ? nameLine({ kind: 'guest', name: nameLine({ kind: 'community', name: g.name, community: g.home }) }) : null;
 }
 
+/**
+ * The name a line in a group's chat is served under: a member here by their name; else a guest of this group (invited, in,
+ * left or removed: their line stays) by core's guest line (guestLineName); else none, and the reader shows a short key.
+ * Every place that serves a group line names its author here: the chat's read, a new line, a retried line, a changed line,
+ * the chats list's last line (your-groups.ts) and a reported line as the moderators open it (group-chat-report.ts). WALK 3 phone (17 Nov 2026): a guest's line was served under "2b3be71a",
+ * so the members' Groups list read "2b3be71a: 🔒 Message", and once the guest left, the chat named their lines
+ * "2b3be71a · no longer in this group" (the phone names a signer outside its roster by the name the node serves).
+ */
+export function groupLineAuthorName(groupId: string, authorPubkey: string, memberCallsign: string | null | undefined): string | null {
+    if (memberCallsign) return memberCallsign;
+    if (!authorPubkey || authorPubkey === 'SYSTEM') return null;
+    return guestLineName(groupId, authorPubkey);
+}
+
 export const GROUP_THREAD_TYPE = 'group_thread';
 /** What a live chat update is about, beside a plain new message (chat parity, 2026-09-23). */
 export type GroupChatAction = 'removed' | 'edited';
@@ -366,7 +380,10 @@ export function getGroupThreadMessages(groupId: string, viewer: string, limit = 
         ORDER BY m.timestamp DESC, m.rowid DESC
         LIMIT ? OFFSET ?
     `).all(groupId, fromEpoch, fromEpoch, limit, offset) as any[];
-    return rows.reverse().map(r => ({ ...toThreadMessage(r, groupId, removedMarkerFor(r)), systemType: r.system_type || undefined }) as any);
+    return rows.reverse().map(r => ({
+        ...toThreadMessage({ ...r, author_callsign: groupLineAuthorName(groupId, r.author_pubkey, r.author_callsign) }, groupId, removedMarkerFor(r)),
+        systemType: r.system_type || undefined,
+    }) as any);
 }
 
 /** The chat as one member sees it. Anyone who is not an active member of the group is refused. */
@@ -530,7 +547,7 @@ export function postGroupThreadMessage(
         if (existing) {
             if (existing.author_pubkey === authorPubkey && existing.conversation_id === groupId) {
                 const sender = getMember(db, authorPubkey) as any;
-                return toThreadMessage({ ...existing, author_callsign: sender?.callsign, author_avatar: sender?.avatar_url }, groupId, GROUP_THREAD_REMOVED_TEXT);
+                return toThreadMessage({ ...existing, author_callsign: groupLineAuthorName(groupId, authorPubkey, sender?.callsign), author_avatar: sender?.avatar_url }, groupId, GROUP_THREAD_REMOVED_TEXT);
             }
             throw Object.assign(new Error('Message id already exists'), { code: 'ID_CONFLICT' });
         }
@@ -575,7 +592,7 @@ export function postGroupThreadMessage(
 
     const sender = getMember(db, authorPubkey) as any;
     const msg = toThreadMessage({
-        id: msgId, author_pubkey: authorPubkey, author_callsign: sender?.callsign, author_avatar: sender?.avatar_url,
+        id: msgId, author_pubkey: authorPubkey, author_callsign: groupLineAuthorName(groupId, authorPubkey, sender?.callsign), author_avatar: sender?.avatar_url,
         ciphertext, nonce, type, metadata: metadata ?? undefined, timestamp,
     }, groupId, GROUP_THREAD_REMOVED_TEXT);
 
@@ -703,7 +720,7 @@ export function removedMarkerFor(row: { author_pubkey?: string | null; metadata?
 export function groupChatMessageOf(row: any, groupId: string): EventThreadMessage {
     const author = getMember(db, row.author_pubkey) as any;
     return toThreadMessage(
-        { ...row, author_callsign: author?.callsign, author_avatar: author?.avatar_url },
+        { ...row, author_callsign: groupLineAuthorName(groupId, row.author_pubkey, author?.callsign), author_avatar: author?.avatar_url },
         groupId,
         removedMarkerFor(row),
     );

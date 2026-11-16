@@ -9,7 +9,7 @@
 
 import { db } from '../db/db.js';
 import { COUNTS_AS_UNREAD_SQL, isEventHost, preparedShape } from '@beanpool/engine';
-import { ensureGroupThread, syncGroupThreadMembership, GROUP_CHAT_WIPED_TEXT, GROUP_THREAD_REMOVED_TEXT } from './group-thread.js';
+import { ensureGroupThread, groupLineAuthorName, syncGroupThreadMembership, GROUP_CHAT_WIPED_TEXT, GROUP_THREAD_REMOVED_TEXT } from './group-thread.js';
 import {
     ensureEnterpriseThread, isKeeperOfEnterprise, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly,
     ensureKeeperReadCursor, getKeeperReadCursor,
@@ -140,7 +140,8 @@ function lastMessageOf(conversationId: string, removedText: string, authorDelete
     return {
         id: r.id,
         authorPubkey: r.author_pubkey,
-        authorCallsign: r.author_pubkey === 'SYSTEM' ? null : (r.callsign || r.author_pubkey?.slice(0, 8) || null),
+        // A guest of the group by core's guest line, as the chat serves their lines (group-thread.ts groupLineAuthorName).
+        authorCallsign: r.author_pubkey === 'SYSTEM' ? null : (groupLineAuthorName(conversationId, r.author_pubkey, r.callsign) || r.author_pubkey?.slice(0, 8) || null),
         type: r.type,
         systemType: r.system_type || null,
         text: previewText(r, removedText, authorDeleteText),

@@ -9,7 +9,7 @@ source-hash: 7669768827172c66
 
 ## Ce qu'est un groupe
 
-Un groupe est un espace destiné à quelques personnes plutôt qu'à l'ensemble de la communauté : votre rue, une équipe de jardinage, une chorale, une guilde. Chaque groupe possède sa propre discussion. Certains groupes détiennent des haricots : un projet ou une entreprise (voir « Entreprises »). Les autres (un cercle social, un groupe de travail, une guilde) n'en détiennent aucun. Faire partie d'un groupe ne modifie ni votre confiance ni votre droit de vote général.
+Un groupe est un espace destiné à quelques personnes plutôt qu'à l'ensemble de la communauté : votre rue, une équipe de jardinage, une chorale, une guilde. Chaque groupe possède sa propre discussion. Certains groupes détiennent des haricots : un projet ou une entreprise (voir « Projets et entreprises »). Les autres (un cercle social, un groupe de travail, une guilde) n'en détiennent aucun. Faire partie d'un groupe ne modifie ni votre confiance ni votre droit de vote général.
 
 Les personnes qui veillent sur un groupe de discussion sont ses **coordinateurs** ; l'un d'eux est le **coordinateur principal**. Ils ne détiennent aucun haricot.
 
@@ -34,12 +34,12 @@ Dans la communauté globale, l'application crée elle-même un type de groupe : 
 - Chaque groupe a une image : celle de son type est déjà choisie, et elle suit la **Catégorie** jusqu'à ce que vous en choisissiez une vous-même. Pour en prendre une autre, touchez **Choisir une autre**. Sur le téléphone, cela propose votre appareil photo, vos photos et les images prêtes à l'emploi. Dans l'application web, cela affiche les images prêtes à l'emploi, et **Choisir une photo** permet d'en choisir une parmi les vôtres.
 - Donnez-lui un **Nom du groupe**, jusqu'à 60 caractères, et si vous le souhaitez, un champ **Objectif / Description**, jusqu'à 300 caractères : l'utilité du groupe et à qui il s'adresse.
 - Choisissez une **Catégorie** : **Cercle social**, **Général**, **Groupe de travail** ou **Guilde**. **Cercle social** est sélectionné d'office.
-- Choisissez une **Règle d'adhésion** : **Ouvert**, **Demander à rejoindre** ou **Sur invitation seulement**.
+- Choisissez une **Politique d'adhésion** : **Ouvert**, **Demander à rejoindre** ou **Sur invitation seulement**.
 - Touchez **Créer le groupe**. Vous en devenez le **coordinateur principal**. Sur le téléphone, l'application vous amène directement dans la discussion du nouveau groupe.
 
 Vous pouvez créer jusqu'à 5 groupes par tranche de 24 heures. Un propriétaire ou un administrateur peut en créer autant que le permet le réglage **Owner and admin limit** des propriétaires (100, sauf si un propriétaire le modifie).
 
-Des haricots sont en jeu ? Créez plutôt un projet ou une entreprise : touchez **Lancer quelque chose** (sur le téléphone, le bouton rond **+**) dans **Communs**, puis choisissez **Projet** ou **Entreprise** (ou passez par le lien en bas du formulaire de groupe, **Lancer un projet ou une entreprise →**). Voir « Entreprises ».
+Des haricots sont en jeu ? Créez plutôt un projet ou une entreprise : touchez **Lancer quelque chose** (sur le téléphone, le bouton rond **+**) dans **Communs**, puis choisissez **Projet** ou **Entreprise** (ou passez par le lien en bas du formulaire de groupe, **Lancer un projet ou une entreprise →**). Voir « Projets et entreprises ».
 
 ## Inviter des personnes
 
@@ -55,7 +55,7 @@ Si vous retirez une invitation puis invitez de nouveau la même personne, elle n
 ## La discussion du groupe
 
 - Sur le téléphone, touchez le nom du groupe en haut de la discussion pour voir la fiche du groupe : ses membres, **Quitter le groupe**, et pour les coordinateurs, **Outils de coordination**. Dans l'application web, touchez le nom du groupe en haut de sa discussion, ou ouvrez le groupe depuis **Communs**, sous **Groupes**.
-- Le menu **⋮** propose **Inviter des personnes** (coordinateurs), **Mettre en sourdine les notifications** (ou **Réactiver les notifications**), **Rechercher dans cette discussion**, **Confirmer le nouveau téléphone** et **Infos du groupe**. La recherche s'exécute sur votre téléphone, et non sur le serveur de votre communauté.
+- Le menu **⋮** propose **Inviter des personnes** (coordinateurs), **Mettre en sourdine** (ou **Réactiver les notifications**), **Rechercher dans cette discussion**, **Confirmer le nouveau téléphone** et **Infos du groupe**. La recherche s'exécute sur votre téléphone, et non sur le serveur de votre communauté.
 - Les arrivées, départs et changements de rôles apparaissent dans la discussion sous la forme de petites lignes grises.
 - Écrivez **@** suivi du nom d'un membre pour l'alerter. Voir « Mentions ».
 - Le message le plus récent s'affiche juste au-dessus du champ de saisie, et y reste quand le clavier apparaît. Faites défiler vers le haut pour lire l'historique ; un nouveau message entrant patiente sans vous faire descendre brutalement.
@@ -81,7 +81,7 @@ La discussion d'un groupe fonctionne exactement comme un échange individuel. To
 - **Retirer**, pour les coordinateurs, sur le message de n'importe qui d'autre. L'application demande confirmation une fois, puis le message affiche **Supprimé par un coordinateur**. Votre propre message relève de **Supprimer**, et non de **Retirer**.
 - **Signaler** (un drapeau), sur le message de n'importe qui d'autre. Choisissez un motif, ajoutez quelques mots si vous le souhaitez, et touchez **Envoyer le signalement**. Les modérateurs de votre communauté reçoivent ce seul message, avec sa photo s'il en a une, et qui l'a envoyé, et rien d'autre de la discussion. Voir « Signaler un problème ».
 
-Deux messages consécutifs ou plus supprimés par leurs auteurs apparaissent sur une seule ligne, comme **3 messages ont été supprimés**. Deux ou plusieurs retirés par un coordinateur apparaissent sous la forme **3 messages supprimés par un coordinateur**.
+Deux messages consécutifs ou plus supprimés par leurs auteurs apparaissent sur une seule ligne, comme **3 messages ont été supprimés**. Deux ou plusieurs retirés par un coordinateur apparaissent sous la forme **3 messages retirés par un modérateur**.
 
 Sous votre propre message : une horloge pendant l'envoi, une coche dès que le serveur du groupe l'a reçu, ou **! non distribué** s'il n'a pas pu partir — touchez-le pour **Renvoyer** ou **Ignorer**, ou dans l'application web utilisez **Réessayer** ou **Ignorer** sur le message. Il n'y a pas de double coche bleue dans un groupe : un groupe n'a pas un lecteur unique.
 
@@ -166,7 +166,7 @@ Seul le **coordinateur principal** peut retirer un coordinateur ou lui retirer s
 
 **Personne ne peut destituer le coordinateur principal, ni lui retirer sa fonction.** Ni un autre coordinateur, ni un administrateur de la communauté. En dehors d'une transmission volontaire par le responsable lui-même, seul un vote du groupe peut désigner un nouveau coordinateur principal. Voir « Votes au sein d'un groupe ».
 
-**Transmettre la coordination principale.** Le responsable peut passer la main. Sur le téléphone, touchez **Transmettre** dans les **Outils de coordination**, ou l'icône de bouclier à côté du nom d'un membre. Dans l'application web, touchez **Désigner comme principal** à côté de son nom. Choisissez un autre coordinateur ou un membre — un membre devient coordinateur en même temps. Un observateur ne peut pas devenir responsable ; nommez-le d'abord membre ou coordinateur. Une fois l'opération effectuée, vous ne pouvez plus reprendre la main unilatéralement.
+**Transmettre la coordination principale.** Le responsable peut passer la main. Sur le téléphone, touchez **Transmettre** dans les **Outils de coordination**, ou l'icône de bouclier à côté du nom d'un membre. Dans l'application web, touchez **Nommer principal** à côté de son nom. Choisissez un autre coordinateur ou un membre — un membre devient coordinateur en même temps. Un observateur ne peut pas devenir responsable ; nommez-le d'abord membre ou coordinateur. Une fois l'opération effectuée, vous ne pouvez plus reprendre la main unilatéralement.
 
 **Quitter le groupe en tant que responsable.** Transmettez d'abord la coordination principale ; le téléphone vous le propose lorsque vous touchez **Quitter le groupe**, et l'application web vous le demande expressément. S'il n'y a personne d'autre dans le groupe, vous pouvez simplement partir.
 
@@ -180,7 +180,7 @@ Le groupe continue de fonctionner entre-temps. Ses membres continuent de discute
 
 Ceux qui votent sont les **autres coordinateurs** du groupe — ou ses **membres**, lorsqu'aucun autre coordinateur n'avait été nommé coordinateur au jour de la dernière activité du responsable. Quiconque a rejoint le groupe, ou a été nommé coordinateur après ce jour-là, ne participe pas au vote. Toute personne habilitée à voter peut toucher **Proposer** à côté d'un nom dans ce volet, y compris le sien ; proposer équivaut à un vote Oui de sa part. Chaque votant voit alors **Oui** et **Non**. Une confirmation vous est demandée, car un vote est irréversible, et vous ne voyez que les totaux — jamais qui a voté dans quel sens. Le scrutin dure 14 jours et est adopté si plus de la moitié des votants répondent Oui. En cas d'adoption, l'ancien responsable reste coordinateur si les autres coordinateurs ont voté, et devient simple membre si ce sont les membres qui ont voté. Si le responsable inactif réapparaît et effectue une action dans l'application, le scrutin se clôture immédiatement. Sur le téléphone, avec les notifications autorisées, le simple fait d'ouvrir l'application compte comme activité. Tant que le compte du responsable est suspendu, aucune de ses actions ne compte. Les observateurs voient le panneau mais ne votent pas, pas plus que le responsable inactif.
 
-Le détail complet des règles figure dans « Décisions », sous « Coordinateur principal inactif ».
+Le détail complet des règles figure dans « Règles et décisions », sous « Coordinateur principal inactif ».
 
 **Pendant qu'un groupe vote sur un nouveau responsable.** Qu'il s'agisse de ce scrutin ou de l'un des scrutins internes au groupe décrits ci-dessous, aucun coordinateur ne peut retirer la personne pressentie pour devenir responsable, ni réduire son rôle, tant que le vote n'est pas clos. L'application le formule clairement dans ses propres termes. Cette personne peut toujours partir d'elle-même, et un vote du groupe peut toujours la retirer.
 
@@ -206,7 +206,7 @@ Donnez-lui un titre et indiquez-en le motif, puis touchez **Ouvrir le vote**. Un
 
 **Ce que vous voyez.** Tant qu'un scrutin est ouvert, chacun voit combien de membres ont voté, mais pas leur choix. Les scores Oui et Non apparaissent à la clôture. Un vote exprimé ne peut plus être modifié. Personne ne voit qui a voté quoi. Toutefois, dans un groupe très restreint, le résultat et la participation peuvent le laisser deviner : si trois personnes votent et que le score final est 3–0, chacun sait comment les autres ont voté.
 
-**Notification.** Chaque personne inscrite sur le scrutin, à l'exception de son auteur, reçoit une notification lors de son ouverture, sauf si elle a mis la discussion du groupe en sourdine ou désactivé les notifications de discussion. Elle ne cite aucun nom ni aucun groupe : elle indique **Un vote s'est ouvert dans l'un de vos groupes.** Touchez-la et le groupe s'ouvre sur ses **Décisions**. Sur l'Accueil, un vote ouvert auquel vous n'avez pas encore répondu apparaît sous **Requiert votre attention** et ouvre également le groupe.
+**Notification.** Chaque personne inscrite sur le scrutin, à l'exception de son auteur, reçoit une notification lors de son ouverture, sauf si elle a mis la discussion du groupe en sourdine ou désactivé les notifications de discussion. Elle ne cite aucun nom ni aucun groupe : elle indique **Un vote ouvert dans l'un de vos groupes.** Touchez-la et le groupe s'ouvre sur ses **Décisions**. Sur l'Accueil, un vote ouvert auquel vous n'avez pas encore répondu apparaît sous **Attend votre action** et ouvre également le groupe.
 
 **Mouvements de membres.** Quelqu'un qui quitte le groupe pendant un vote quitte également le scrutin, et son vote s'en trouve retiré. Une personne qu'un coordinateur retire ou rétrograde au rang d'observateur pendant un vote reste inscrite sur ce scrutin : elle conserve son vote déjà émis, et peut toujours voter si elle ne l'avait pas encore fait. Retirer des membres ne permet donc jamais d'influencer un vote. S'il reste moins de deux personnes inscrites, le vote prend fin sans conclusion.
 

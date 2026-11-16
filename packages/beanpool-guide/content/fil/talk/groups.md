@@ -32,7 +32,7 @@ Sa pandaigdigang komunidad, ang app mismo ang gumagawa ng isang uri ng grupo: is
 - Sa telepono, sa **Usapan**, sa ilalim ng **Mga Grupo**, i-tap ang **Bagong grupo**. O i-tap ang **+** sa **Komun**, pagkatapos ay **Magsimula ng bago** at piliin ang **Grupo sa usapan**. Parehong binubuksan ng dalawa ang form na **Gumawa ng Grupo**.
 - Sa web app, buksan ang **Komun**, pagkatapos ay **Mga Grupo**, at i-tap ang **Magsimula ng isang bagay** at piliin ang **Grupo sa usapan**. Mananatili ka sa **Komun** pagkatapos. Upang mag-imbita ng mga tao, buksan ang grupo at i-tap ang **Mag-imbita ng mga tao**. Maaari mo ring buksan ang **Usapan**, i-tap ang **Mga Grupo**, pagkatapos ay **Bagong grupo**: dadalhin ka niyon nang diretso sa chat ng bagong grupo.
 - May larawan ang bawat grupo: napili na ang para sa uri nito, at sumusunod ito sa **Kategorya** hanggang pumili ka mismo ng isa. Para pumili ng iba, i-tap ang **Pumili ng iba**. Sa telepono, iniaalok nito ang iyong camera, ang iyong mga larawan at ang mga handang larawan. Sa web app, ipinapakita nito ang mga handang larawan, at pumipili ang **Pumili ng larawan** ng isa sa sarili mong mga larawan.
-- Bigyan ito ng **Pangalan ng Grupo**, hanggang 60 character, at, kung gusto mo, ng **Layunin / Deskripsyon**, hanggang 300: para saan ang grupo at para kanino ito.
+- Bigyan ito ng **Pangalan ng Grupo**, hanggang 60 character, at, kung gusto mo, ng **Layunin / Paglalarawan**, hanggang 300: para saan ang grupo at para kanino ito.
 - Pumili ng **Kategorya**: **Social Circle**, **Pangkalahatan**, **Working Group** o **Guild**. **Social Circle** ang pinili para sa iyo.
 - Pumili ng **Patakaran sa Pagsali**: **Bukas**, **Humiling na Sumali** o **Imbitasyon Lamang**.
 - I-tap ang **Gumawa ng Grupo**. Ikaw ang magiging **punong tagapag-ugnay** nito. Sa telepono, dadalhin ka agad ng app sa chat ng bagong grupo.
@@ -43,7 +43,7 @@ May kinalaman ba sa Munggo? Magsimula ng proyekto o negosyo sa halip: i-tap ang 
 
 ## Pag-imbita ng mga tao
 
-Maaari kang mag-imbita ng mga tao sa telepono at sa web app. Sa telepono, nagtatanong ang chat ng bagong grupo ng **Sino ang nais mong imbitahan?**
+Maaari kang mag-imbita ng mga tao sa telepono at sa web app. Sa telepono, nagtatanong ang chat ng bagong grupo ng **Sino ang gusto mong imbitahan?**
 
 - I-tap ang **Mag-imbita ng mga tao**, lagyan ng tsek ang mga taong gusto mo, at i-tap ang button sa ibaba (halimbawa **Mag-imbita ng 2 tao**). May lumalabas na maikling simula ng susi sa ilalim ng pangalan ng bawat tao para makilala mo ang mga taong magkapareho ang pangalan.
 - O i-tap ang **Huwag muna** upang laktawan ito.
@@ -55,12 +55,12 @@ Kung babawiin mo ang isang imbitasyon at iimbitahan muli ang parehong tao, wala 
 ## Ang chat ng grupo
 
 - Sa telepono, i-tap ang pangalan ng grupo sa itaas ng chat upang makita ang grupo: ang mga miyembro nito, **Umalis sa Grupo**, at para sa mga tagapag-ugnay, **Mga Tool ng Tagapag-ugnay**. Sa web app, i-tap ang pangalan ng grupo sa itaas ng chat nito, o buksan ang grupo mula sa **Komun**, sa ilalim ng **Mga Grupo**.
-- Ang menu na **⋮** ay mayroong **Mag-imbita ng mga tao** (mga tagapag-ugnay), **I-mute ang mga notipikasyon** (o **I-unmute**), **Maghanap sa chat na ito**, **Kumpirmahin ang bagong telepono**, at **Impormasyon ng grupo**. Tumatakbo ang paghahanap sa iyong telepono, hindi sa server ng iyong komunidad.
+- Ang menu na **⋮** ay mayroong **Mag-imbita ng mga tao** (mga tagapag-ugnay), **I-mute ang mga abiso** (o **I-unmute**), **Maghanap sa chat na ito**, **Kumpirmahin ang bagong telepono**, at **Impormasyon ng grupo**. Tumatakbo ang paghahanap sa iyong telepono, hindi sa server ng iyong komunidad.
 - Ang mga pagsali, pag-alis, at pagpapalit ng tungkulin ay ipinapakita sa chat bilang maliliit na kulay-abong linya.
 - Sumulat ng **@** at ang pangalan ng isang tao upang alertuhan sila. Tingnan ang "Mga Pagbanggit".
 - Ang pinakabagong mensahe ay nasa itaas lamang ng kahon ng mensahe, at nananatili roon kapag bumukas ang keyboard. Mag-scroll pataas upang basahin ang mga nauna; ang isang bagong mensaheng dumarating ay maghihintay sa iyo sa halip na hilahin ka pababa.
 
-Naka-encrypt nang end-to-end ang chat ng isang grupo: ang mga miyembro lamang ng grupo ang makakabasa nito, hindi ang mga taong nagpapatakbo ng server ng iyong komunidad. Sa itaas ng kahon ng mensahe sinasabi nitong ito ay **Naka-encrypt nang end-to-end**. Nakikita pa rin ng server ng iyong komunidad kung sino ang sumulat, kailan, sino ang na-mention, aling mensahe ang sinasagot ng bawat linya, ang mga reaksyon ng emoji, at kung aling mga linya ang larawan at gaano kalaki ang bawat isa.
+Naka-encrypt nang end-to-end ang chat ng isang grupo: ang mga miyembro lamang ng grupo ang makakabasa nito, hindi ang mga taong nagpapatakbo ng server ng iyong komunidad. Sa itaas ng kahon ng mensahe sinasabi nitong ito ay **End-to-end encrypted**. Nakikita pa rin ng server ng iyong komunidad kung sino ang sumulat, kailan, sino ang na-mention, aling mensahe ang sinasagot ng bawat linya, ang mga reaksyon ng emoji, at kung aling mga linya ang larawan at gaano kalaki ang bawat isa.
 
 - Makikita mo lamang ang chat mula sa araw na sumali ka. Walang nakasulat bago noon ang ipinapakita, at hindi kailanman hawak ng iyong telepono ang susi para rito. Nakikita mo pa rin ang mga kulay-abong linya mula noon, ngunit walang salita o larawan ninuman.
 - Kapag may inalis, o umalis, ang grupo ay gumagawa ng bagong susi. Sa isang grupong may 10 o higit pa, sinasabi ng chat na **Sine-secure ang chat para sa {n} tao…** habang ginagawa ito ng iyong telepono.
@@ -74,14 +74,14 @@ Sa web app ang iyong mga group chat ay nasa **Usapan**, na minarkahang 👥. Maa
 
 Ang chat ng isang grupo ay gumagana nang eksakto tulad ng isang chat sa isang tao. I-tap ang isang mensahe at may lilitaw na maliliit na bilog na button sa tabi nito:
 
-- Ang **Tumugon** ay nagko-quote nito sa itaas ng susunod mong isusulat. I-tap ang quote upang lumukso pabalik sa sinasagot nito.
+- Ang **Sumagot** ay nagko-quote nito sa itaas ng susunod mong isusulat. I-tap ang quote upang lumukso pabalik sa sinasagot nito.
 - Binubuksan ng **Mag-react** ang pitong emoji. Isa para sa bawat isa; i-tap ito muli upang bawiin. Ipinapakita ang mga reaksyon bilang isang badge sa ilalim ng mensahe.
 - **I-edit**, sa sarili mong mga mensahe, sa loob ng 15 minuto. Ipinapakita ng mensahe pagkatapos ang **na-edit**. Hindi maaaring i-edit ang mga larawan.
 - **Burahin**, sa sarili mong mga mensahe, anumang oras. Nagtatanong ito ng **Burahin para sa lahat?** nang isang beses, at ang mensahe ay mababasang **Binura ang mensaheng ito** sa lahat sa grupo.
 - **Alisin**, para sa mga tagapag-ugnay, sa mensahe ng sinumang iba pa. Nagtatanong ito nang isang beses, at ang mensahe ay mababasang **Inalis ng convenor**. Ang sarili mong mensahe ay isang **Burahin**, hindi isang **Alisin**.
 - **I-report** (isang bandila), sa mensahe ng sinumang iba. Pumili ng dahilan, magdagdag ng ilang salita kung gusto mo, at i-tap ang **Isumite ang ulat**. Matatanggap ng mga moderator ng iyong komunidad ang isang mensaheng iyon, kasama ang larawan nito kung mayroon, at kung sino ang nagpadala, at wala nang iba pa sa chat. Tingnan ang "Pag-ulat ng problema".
 
-Ang dalawa o higit pang mensahe na magkakasunod na binura ng kanilang mga may-akda ay ipinapakita bilang isang linya, tulad ng **3 mensahe ang binura**. Ang dalawa o higit pa na inalis ng isang tagapag-ugnay ay ipinapakita bilang **3 mensahe ang inalis ng tagapag-ugnay**.
+Ang dalawa o higit pang mensahe na magkakasunod na binura ng kanilang mga may-akda ay ipinapakita bilang isang linya, tulad ng **3 mensahe ang binura**. Ang dalawa o higit pa na inalis ng isang tagapag-ugnay ay ipinapakita bilang **3 mensahe ang inalis ng convenor**.
 
 Sa ilalim ng sarili mong mensahe: isang orasan habang ipinapadala ito, isang tsek kapag nasa server na ng grupo, o **! hindi naihatid** kung hindi ito maipadala — i-tap iyon upang **Ipadala Muli** o **Ibalewala** ito, o sa web app gamitin ang **Subukan ulit** o **Ibalewala** sa mensahe. Walang asul na dobleng tsek sa isang grupo: ang grupo ay walang iisang mambabasa.
 
@@ -146,7 +146,7 @@ Sa web, buksan ang grupo sa **Komun**, sa ilalim ng **Mga Grupo**, at i-tap ang 
 
 ## Mga tagapag-ugnay at ang punong tagapag-ugnay
 
-Ang isang tagapag-ugnay ang nag-aalaga sa grupo. Sinumang gumawa nito ang **punong tagapag-ugnay** nito, at pinapangalanan sila ng card ng grupo, bilang **Punong tagapag-ugnay: Ali**. Sa listahan ng mga miyembro ang kanilang hilera ay minarkahang **PUNO**.
+Ang isang tagapag-ugnay ang nag-aalaga sa grupo. Sinumang gumawa nito ang **punong tagapag-ugnay** nito, at pinapangalanan sila ng card ng grupo, bilang **Punong tagapag-ugnay: Ali**. Sa listahan ng mga miyembro ang kanilang hilera ay minarkahang **PINUNO**.
 
 Maaaring palitan ng sinumang tagapag-ugnay ang larawan ng grupo: buksan ang grupo (sa telepono, **Impormasyon ng grupo** sa menu na **⋮** ng chat nito) at i-tap ang **Palitan ang larawan** (sa web app, mayroon ding **Pumili ng larawan**). Laging may larawan ang isang grupo; maaari itong palitan, hindi kailanman alisin.
 
@@ -178,9 +178,9 @@ Nagpapatuloy ang grupo samantala. Ang mga miyembro nito ay patuloy na nagcha-cha
 
 **Kapag naging tahimik ang pinuno.** Pagkalipas ng 30 araw na walang aktibidad mula sa pinuno, ang grupo ay may pangalawang paraan upang magboto ng bagong pinuno. (Maaari ring bumoto ang mga miyembro nito para sa isang bagong pinuno anumang oras, maliban sa pandaigdigang komunidad: tingnan ang "Mga boto sa isang grupo".) Buksan ang grupo at tumingin sa itaas lamang ng **Listahan**: lilitaw ang isang panel doon na nagpapangalan sa pinuno at kung gaano katagal silang nawala. Walang ipinapakita habang aktibo ang pinuno ng isang grupo — bukod sa isang linya na nagsasabi kung paano nagtapos ang huling botohan, na nananatili sa loob ng dalawang linggo pagkatapos itong magsara.
 
-Ang bumoboto ay ang **iba pang mga tagapag-ugnay** ng grupo — o ang mga **miyembro** nito, kapag wala sa iba pang mga tagapag-ugnay ang ginawang tagapag-ugnay sa araw na huling naging aktibo ang pinuno. Sinumang sumali sa grupo, o ginawang tagapag-ugnay, pagkatapos ng araw na iyon ay walang bahagi sa botohan. Sinuman sa mga bumoboto ay maaaring mag-tap ng **Ipanukala** sa tabi ng isang pangalan sa panel na iyon, kabilang ang sarili nila; ang pagpapanukala ay ibinibilang bilang Oo ng taong iyon. Lahat ng makakaboto ay makakakita pagkatapos ng **Oo** at **Hindi**. Hihilingin sa iyo na kumpirmahin, dahil hindi mababago ang isang boto, at ang mga kabuuan lamang ang makikita mo kailanman — hindi kung sino ang bumoto sa alinmang paraan. Tumatakbo ang botohan nang 14 na araw at pumapasa kapag mahigit sa kalahati ng mga sumagot ang nagsabi ng Oo. Kung pumasa ito, ang dating pinuno ay mananatiling tagapag-ugnay kapag ang ibang mga tagapag-ugnay ang bumoto, at magiging miyembro kapag ang mga miyembro ang bumoto. Kung ang tahimik na pinuno ay bumalik at gumawa ng anuman sa app, agad na magsasara ang botohan. Sa telepono, kapag pinapayagan ang mga notipikasyon, ang pagbubukas lamang ng app ay ibinibilang na. Habang suspendido ang account ng pinuno, walang anuman sa ginagawa nila ang ibibilang. Makikita ng mga tagamasid ang panel ngunit wala silang boto, at wala rin ang tahimik na pinuno.
+Ang bumoboto ay ang **iba pang mga tagapag-ugnay** ng grupo — o ang mga **miyembro** nito, kapag wala sa iba pang mga tagapag-ugnay ang ginawang tagapag-ugnay sa araw na huling naging aktibo ang pinuno. Sinumang sumali sa grupo, o ginawang tagapag-ugnay, pagkatapos ng araw na iyon ay walang bahagi sa botohan. Sinuman sa mga bumoboto ay maaaring mag-tap ng **Magpanukala** sa tabi ng isang pangalan sa panel na iyon, kabilang ang sarili nila; ang pagpapanukala ay ibinibilang bilang Oo ng taong iyon. Lahat ng makakaboto ay makakakita pagkatapos ng **Oo** at **Hindi**. Hihilingin sa iyo na kumpirmahin, dahil hindi mababago ang isang boto, at ang mga kabuuan lamang ang makikita mo kailanman — hindi kung sino ang bumoto sa alinmang paraan. Tumatakbo ang botohan nang 14 na araw at pumapasa kapag mahigit sa kalahati ng mga sumagot ang nagsabi ng Oo. Kung pumasa ito, ang dating pinuno ay mananatiling tagapag-ugnay kapag ang ibang mga tagapag-ugnay ang bumoto, at magiging miyembro kapag ang mga miyembro ang bumoto. Kung ang tahimik na pinuno ay bumalik at gumawa ng anuman sa app, agad na magsasara ang botohan. Sa telepono, kapag pinapayagan ang mga notipikasyon, ang pagbubukas lamang ng app ay ibinibilang na. Habang suspendido ang account ng pinuno, walang anuman sa ginagawa nila ang ibibilang. Makikita ng mga tagamasid ang panel ngunit wala silang boto, at wala rin ang tahimik na pinuno.
 
-Ang buong mga patakaran ay nasa "Mga patakaran at paano gumagana ang mga desisyon", sa ilalim ng "Isang tahimik na punong tagapag-ugnay".
+Ang buong mga patakaran ay nasa "Mga tuntunin at mga desisyon", sa ilalim ng "Isang tahimik na punong tagapag-ugnay".
 
 **Habang bumoboto ang grupo sa isang bagong pinuno.** Maging ang botong ito o isa sa sariling mga boto ng grupo sa ibaba, walang tagapag-ugnay ang maaaring mag-alis sa taong maaari nitong gawing pinuno, o magbaba ng kanilang tungkulin, hanggang sa magsara ang botohan. Sinasabi ito ng app sa sarili nitong mga salita. Maaari pa rin silang umalis nang kusa, at maaari pa rin silang alisin ng isang boto ng grupo.
 
@@ -194,7 +194,7 @@ I-tap ang **Magpanukala ng botohan** at piliin kung ano ang dapat mangyari:
 
 - **Pumili ng bagong punong tagapag-ugnay**: sinuman sa grupo maliban sa isang tagamasid, kasama ang iyong sarili.
 - **Gawing tagapag-ugnay ang isang tao**, o **Gawing miyembro ang isang tagapag-ugnay**. Ang isang boto ay hindi kailanman nagpapalit ng tungkulin ng pinuno; upang palitan ang pinuno, bumoto para sa bago.
-- **Mag-alis ng tao** mula sa grupo. Hindi ang pinuno, at hindi ang iyong sarili: para umalis, lumabas sa grupo.
+- **Mag-alis ng isang tao** mula sa grupo. Hindi ang pinuno, at hindi ang iyong sarili: para umalis, lumabas sa grupo.
 - **Baguhin kung sino ang maaaring sumali**: bukas sa lahat, humihiling ang mga tao at pinapapasok sila ng tagapag-ugnay, o sa pamamagitan lamang ng imbitasyon.
 - **Isara ang grupo.** Mananatili ang chat nito upang mabasa, ngunit hindi na ito tatanggap ng mga bagong mensahe, post, o miyembro, at magtatapos ang iba pa nitong bukas na botohan. Bababa ang mga post nito mula sa Merkado.
 
@@ -206,7 +206,7 @@ Bigyan ito ng pamagat at sabihin kung bakit, pagkatapos ay i-tap ang **Buksan an
 
 **Kung ano ang nakikita mo.** Habang bukas ang isang botohan, nakikita ng lahat kung ilan na ang bumoto, hindi kung paano. Lumalabas ang Oo at Hindi kapag nagsara na ito. Hindi mababago ang isang boto kapag naibigay na. Walang nakakakita kung sino ang bumoto kung paano. Gayunpaman, sa isang napakaliit na grupo, maaaring maipakita ito ng resulta at kung sino ang bumoto: kung tatlong tao ang parehong bumoto at nagtapos ito sa 3–0, alam ng lahat kung paano bumoto ang bawat isa.
 
-**Pagsasabi sa iyo.** Bawat isa sa botohan maliban sa taong nagpanukala nito ay nakakatanggap ng isang notipikasyon kapag nagbukas ito, maliban kung ini-mute nila ang chat ng grupo o ini-off ang mga notipikasyon ng chat. Hindi ito nagpapangalan ng tao at walang grupo: sinasabi nito ang **Nagbukas ang isang botohan sa isa sa iyong mga grupo.** I-tap ito at magbubukas ang grupo sa **Mga Desisyon** nito. Sa Home, ang isang bukas na botohan na hindi mo pa naiboboto ay lumalabas sa ilalim ng **Kailangan ka** at nagbubukas din ng grupo.
+**Pagsasabi sa iyo.** Bawat isa sa botohan maliban sa taong nagpanukala nito ay nakakatanggap ng isang notipikasyon kapag nagbukas ito, maliban kung ini-mute nila ang chat ng grupo o ini-off ang mga notipikasyon ng chat. Hindi ito nagpapangalan ng tao at walang grupo: sinasabi nito ang **May binuksang botohan sa isa sa mga grupo mo.** I-tap ito at magbubukas ang grupo sa **Mga Desisyon** nito. Sa Home, ang isang bukas na botohan na hindi mo pa naiboboto ay lumalabas sa ilalim ng **Kailangan ka** at nagbubukas din ng grupo.
 
 **Kapag may dumarating at umaalis.** Ang isang taong aalis sa grupo sa panahon ng isang botohan ay aalis sa botohan, at kasamang aalis ang kanilang boto. Ang isang taong inalis ng isang tagapag-ugnay, o ginawang tagamasid, sa panahon ng isang botohan ay mananatili rito: pinapanatili nila ang botong ibinigay nila, at maaari pa ring bumoto kung hindi pa sila nakakaboto. Ang pag-alis ng mga tao ay hindi kailanman paraan upang maimpluwensyahan ang isang botohan. Kung mas kaunti sa dalawang tao ang naiwan dito, magtatapos ang botohan nang walang sagot.
 

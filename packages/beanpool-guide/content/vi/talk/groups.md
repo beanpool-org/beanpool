@@ -9,7 +9,7 @@ source-hash: 7669768827172c66
 
 ## Nhóm là gì
 
-Nhóm là một nơi dành cho một số người thay vì tất cả mọi người: con phố của bạn, một đội làm vườn, một đội hợp xướng, một hội nghề. Mỗi nhóm đều có cuộc trò chuyện riêng. Một số nhóm nắm giữ Đậu: một dự án hoặc một doanh nghiệp (xem "Dự án và doanh nghiệp"). Những nhóm khác (nhóm giao lưu, nhóm làm việc, hội nghề) không nắm giữ Đậu. Việc ở trong một nhóm không làm thay đổi mức độ tin cậy hoặc lá phiếu của bạn.
+Nhóm là một nơi dành cho một số người thay vì tất cả mọi người: con phố của bạn, một đội làm vườn, một đội hợp xướng, một hội nghề. Mỗi nhóm đều có cuộc trò chuyện riêng. Một số nhóm nắm giữ Đậu: một dự án hoặc một doanh nghiệp (xem "Dự án và sáng kiến chung"). Những nhóm khác (nhóm giao lưu, nhóm làm việc, hội nghề) không nắm giữ Đậu. Việc ở trong một nhóm không làm thay đổi mức độ tin cậy hoặc lá phiếu của bạn.
 
 Những người trông coi một nhóm trò chuyện là các **điều hành viên**; một trong số họ là **trưởng ban điều hành**. Họ không nắm giữ Đậu.
 
@@ -21,7 +21,7 @@ Nhấn **Chat**, sau đó chọn **Nhóm**. Mọi nhóm bạn tham gia đều đ
 - Nhấn vào một nhóm để mở cuộc trò chuyện của nhóm đó. Thao tác này sẽ đánh dấu nhóm là đã đọc.
 - Kéo danh sách xuống để làm mới.
 
-Trên điện thoại, **Commons** hiển thị **Của bạn** ở đầu mục **Nhóm**: các doanh nghiệp và dự án bạn quản lý được xếp trước (kèm nút **Manage** để điều hành chúng), sau đó là các nhóm bạn tham gia, mở ra cùng các cuộc trò chuyện đó.
+Trên điện thoại, **Commons** hiển thị **Của bạn** ở đầu mục **Nhóm**: các doanh nghiệp và dự án bạn quản lý được xếp trước (kèm nút **Quản lý** để điều hành chúng), sau đó là các nhóm bạn tham gia, mở ra cùng các cuộc trò chuyện đó.
 
 ## Nhóm khu vực
 
@@ -103,24 +103,24 @@ Khi tài khoản của bạn chuyển sang một điện thoại mới với m�
 
 - **Tôi có điện thoại cũ hoặc 12 từ cũ**: nhập 12 từ cũ của bạn trên điện thoại mới, và các tin nhắn trước đây sẽ được mở khóa. Điện thoại cũ của bạn hiển thị **Tài khoản này đã chuyển sang điện thoại mới**, với một nút để hiển thị các từ đó sau màn hình khóa của nó. Đó là các từ của riêng bạn: chỉ nhập chúng vào điện thoại mới của chính bạn, không bao giờ nhập vào điện thoại do người khác đưa ra.
 - **Nhờ một thành viên trong nhóm xác nhận điện thoại này**: điện thoại mới của bạn hiển thị một mã. Hãy gặp trực tiếp một thành viên trong nhóm; họ mở menu cuộc trò chuyện của nhóm, nhấn **Xác nhận điện thoại mới** và quét mã đó. Điện thoại của họ sẽ chuyển giao cho điện thoại của bạn các khóa trước đây mà nó nắm giữ cho các nhóm chung giữa hai người.
-- **Giữ chúng bị khóa**: không có gì thay đổi. Các tin nhắn của chính bạn từ thời điểm đó sẽ hiển thị dưới tên bạn, không có nội dung chữ.
+- **Tiếp tục khóa**: không có gì thay đổi. Các tin nhắn của chính bạn từ thời điểm đó sẽ hiển thị dưới tên bạn, không có nội dung chữ.
 
 **Khi bạn xác nhận điện thoại mới của người khác**, điện thoại của bạn sẽ kiểm tra mã đối chiếu với những gì nó ghi nhớ về khóa cũ của người đó. Chỉ xác nhận điện thoại mới cho người bạn đã từng trò chuyện trong nhóm đó trước đây, trên chiếc điện thoại này, và chỉ khi điện thoại nằm trong tay của chính họ: bất kỳ ai cầm chiếc điện thoại đó đều có thể đọc các tin nhắn trước đây mà bạn đọc được. Nếu điện thoại của bạn báo **Đừng tiếp tục; hãy báo cho chủ sở hữu**, hãy dừng lại. Điều đó có nghĩa là những gì điện thoại của bạn thấy trước đây không khớp với những gì máy chủ thông báo lúc này. Nó cũng thông báo điều đó, vĩnh viễn, về một người đã đổi tên sau khi điện thoại của bạn từng thấy họ: đối với một chiếc điện thoại, một cái tên mới trên khóa của họ trông giống hệt như tên của một người lạ được đặt vào đó, vì vậy một chiếc điện thoại đã thấy cả hai tên không bao giờ có thể xác nhận trực tiếp họ được nữa. Bản thân 12 từ cũ của họ vẫn hoạt động, và một thành viên có điện thoại chỉ từng thấy tên mới cũng có thể xác nhận được. Một chiếc điện thoại vừa được khôi phục từ 12 từ, hoặc chưa từng mở nhóm đó, đã thấy quá ít để kiểm tra: nó sẽ báo rằng nó chưa từng biết khóa cũ của họ, hoặc nó có thể tin những gì máy chủ nói. Hãy để một thành viên đã từng trò chuyện với họ xác nhận thay thế.
 
-Khi kết thúc, điện thoại của bạn cho biết điều gì đã xảy ra: **Hoàn tất** chỉ khi nó đã chuyển giao mọi khóa, **Đã bàn giao 3 trên 5** khi máy chủ từ chối một số khóa. Khi máy chủ thông báo điện thoại mới của họ đã giữ một số khóa, điện thoại của bạn sẽ ghi **cộng đồng thông báo** như vậy, vì nó không thể nhìn vào bên trong điện thoại kia: nếu điện thoại mới vẫn không thể đọc được các tin nhắn đó, hãy báo cho chủ sở hữu.
+Khi kết thúc, điện thoại của bạn cho biết điều gì đã xảy ra: **Xong** chỉ khi nó đã chuyển giao mọi khóa, **Đã bàn giao 3 trên 5** khi máy chủ từ chối một số khóa. Khi máy chủ thông báo điện thoại mới của họ đã giữ một số khóa, điện thoại của bạn sẽ ghi **cộng đồng thông báo** như vậy, vì nó không thể nhìn vào bên trong điện thoại kia: nếu điện thoại mới vẫn không thể đọc được các tin nhắn đó, hãy báo cho chủ sở hữu.
 
 ## Tham gia một nhóm
 
-Trong **Commons**, dưới mục **Nhóm**, các nhóm bạn tham gia được xếp trước dưới **Của bạn**. Bên dưới, danh sách hiển thị những gì bạn có thể tham gia, với một tiêu đề cho biết nội dung đang hiển thị (chẳng hạn **Các nhóm, dự án và doanh nghiệp ở đây**, thay đổi theo các thẻ **Tất cả**, **Dự án**, **Doanh nghiệp** và **Chat groups**). Mỗi nhóm hiển thị phần đầu của phần mô tả. Mở một nhóm để đọc toàn bộ mô tả, sau đó:
+Trong **Commons**, dưới mục **Nhóm**, các nhóm bạn tham gia được xếp trước dưới **Của bạn**. Bên dưới, danh sách hiển thị những gì bạn có thể tham gia, với một tiêu đề cho biết nội dung đang hiển thị (chẳng hạn **Các nhóm, dự án và doanh nghiệp ở đây**, thay đổi theo các thẻ **Tất cả**, **Dự án**, **Doanh nghiệp** và **Nhóm chat**). Mỗi nhóm hiển thị phần đầu của phần mô tả. Mở một nhóm để đọc toàn bộ mô tả, sau đó:
 
 - **Tham gia nhóm** nếu nhóm mở cho bất kỳ ai;
 - **Yêu cầu tham gia** nếu điều hành viên là người phê duyệt thành viên. Bạn sẽ thấy **Yêu cầu đang chờ phê duyệt** cho đến khi họ duyệt.
 
-Trên điện thoại, một nhóm bạn đã yêu cầu tham gia sẽ không nằm trong danh sách nào cho đến khi điều hành viên cho bạn vào. Trên web, nhóm đó vẫn ở trong danh sách và được đánh dấu **Chờ xử lý**.
+Trên điện thoại, một nhóm bạn đã yêu cầu tham gia sẽ không nằm trong danh sách nào cho đến khi điều hành viên cho bạn vào. Trên web, nhóm đó vẫn ở trong danh sách và được đánh dấu **Đang chờ**.
 
 Một nhóm **Chỉ theo lời mời** sẽ bị ẩn khỏi tất cả những ai không ở trong nhóm hoặc không được mời vào nhóm.
 
-Trên điện thoại, một cộng đồng địa phương không có Đậu và không có Quyết định sẽ không có tab **Commons**. Ở đó, hãy nhấn **Chat**, sau đó chọn **Nhóm**, rồi chọn **Tìm nhóm**: thao tác này mở cùng danh sách đó. Trước khi bạn ở trong bất kỳ nhóm nào, liên kết sẽ là **Tìm một nhóm để tham gia**. Nếu Quyết định được bật, tab **Commons** vẫn còn cho Quyết định và các nhóm. Cộng đồng toàn cầu có tab **Commons**: các nhóm của nó nằm ở đó, bên dưới một ví dụ từ một cộng đồng địa phương (xem "Đậu và cộng đồng toàn cầu").
+Trên điện thoại, một cộng đồng địa phương không có Đậu và không có Quyết định sẽ không có tab **Commons**. Ở đó, hãy nhấn **Chat**, sau đó chọn **Nhóm**, rồi chọn **Tìm nhóm**: thao tác này mở cùng danh sách đó. Trước khi bạn ở trong bất kỳ nhóm nào, liên kết sẽ là **Tìm nhóm để tham gia**. Nếu Quyết định được bật, tab **Commons** vẫn còn cho Quyết định và các nhóm. Cộng đồng toàn cầu có tab **Commons**: các nhóm của nó nằm ở đó, bên dưới một ví dụ từ một cộng đồng địa phương (xem "Đậu và cộng đồng toàn cầu").
 
 Nếu một điều hành viên đã gỡ bạn khỏi một nhóm, bạn không thể tự mình tham gia lại nhóm đó.
 
@@ -135,7 +135,7 @@ Một nhóm bạn được mời tham gia cũng hiển thị trong **Commons**, 
 - Nhấn **Tham gia nhóm**. Bạn sẽ vào thẳng cuộc trò chuyện của nhóm.
 - Nhấn **Không phải bây giờ** để quyết định sau. Lời mời vẫn còn đó.
 - Nhấn **Từ chối lời mời** để từ chối. Ứng dụng sẽ hỏi lại một lần nữa, sau đó lời mời sẽ biến mất, kể cả khỏi **Cần bạn xử lý**. Người đã mời bạn có thể mời bạn lại.
-- Nếu thông báo ghi **Lời mời này không còn mở nữa**, lời mời đã bị thu hồi. Hãy nhờ người đã mời bạn gửi lại lời mời.
+- Nếu thông báo ghi **Lời mời này không còn hiệu lực**, lời mời đã bị thu hồi. Hãy nhờ người đã mời bạn gửi lại lời mời.
 - Nếu thông báo ghi **Không thể mở nhóm này**, điện thoại của bạn không thể kết nối tới máy chủ cộng đồng. Nhấn **Thử lại**.
 
 Trong ứng dụng web, nhấn vào dòng trong **Cần bạn** trên Trang chủ, hoặc nhóm được đánh dấu **ĐÃ ĐƯỢC MỜI** trong **Commons**, dưới mục **Nhóm**, rồi nhấn **Chấp nhận lời mời**. Bạn tham gia nhóm và ở lại trang của nhóm. Để từ chối, nhấn **Từ chối lời mời** bên dưới.
@@ -178,7 +178,7 @@ Nhóm vẫn tiếp tục hoạt động trong thời gian đó. Các thành viê
 
 **Khi trưởng ban im lặng không hoạt động.** Sau 30 ngày không có hoạt động nào từ trưởng ban, nhóm có cách thứ hai để bỏ phiếu bầu một trưởng ban mới. (Các thành viên của nhóm cũng có thể bỏ phiếu bầu một trưởng ban mới bất cứ lúc nào, trừ trên cộng đồng toàn cầu: xem "Bỏ phiếu trong nhóm".) Mở nhóm và nhìn ngay phía trên danh sách thành viên: một bảng sẽ xuất hiện ở đó nêu tên trưởng ban và họ đã vắng mặt bao lâu. Không có gì hiển thị trong khi trưởng ban của nhóm đang hoạt động — ngoại trừ một dòng cho biết cuộc bỏ phiếu gần nhất đã kết thúc như thế nào, dòng này lưu lại trong hai tuần sau khi đóng.
 
-Những người bỏ phiếu là các **điều hành viên khác** của nhóm — hoặc các **thành viên** của nhóm, khi không có điều hành viên nào khác được chỉ định làm điều hành viên trước ngày trưởng ban hoạt động gần nhất. Bất kỳ ai tham gia nhóm, hoặc được chỉ định làm điều hành viên, sau ngày đó đều không có phần trong cuộc bỏ phiếu. Bất kỳ ai trong số những người bỏ phiếu đều có thể nhấn **Đề xuất** bên cạnh một cái tên trong bảng đó, bao gồm cả tên của chính họ; việc đề xuất được tính là lá phiếu Đồng ý của người đó. Tất cả những người có quyền bỏ phiếu sau đó sẽ thấy các nút **Đồng ý** và **Không đồng ý**. Bạn được yêu cầu xác nhận, vì một lá phiếu không thể thay đổi, và bạn chỉ thấy số liệu tổng — không bao giờ thấy ai đã bỏ phiếu theo cách nào. Cuộc bỏ phiếu kéo dài trong 14 ngày và được thông qua khi hơn một nửa số người trả lời chọn Đồng ý. Nếu được thông qua, trưởng ban cũ vẫn là điều hành viên khi các điều hành viên khác đã bỏ phiếu, và trở thành thành viên khi các thành viên đã bỏ phiếu. Nếu người trưởng ban im lặng quay trở lại và thực hiện bất kỳ việc gì trong ứng dụng, cuộc bỏ phiếu sẽ đóng lại ngay lập tức. Trên điện thoại, khi thông báo được cho phép, chỉ cần mở ứng dụng là đã được tính. Trong khi tài khoản của trưởng ban bị đình chỉ, không việc gì họ làm được tính. Các quan sát viên có thể nhìn thấy bảng nhưng không có quyền bỏ phiếu, và người trưởng ban im lặng cũng vậy.
+Những người bỏ phiếu là các **điều hành viên khác** của nhóm — hoặc các **thành viên** của nhóm, khi không có điều hành viên nào khác được chỉ định làm điều hành viên trước ngày trưởng ban hoạt động gần nhất. Bất kỳ ai tham gia nhóm, hoặc được chỉ định làm điều hành viên, sau ngày đó đều không có phần trong cuộc bỏ phiếu. Bất kỳ ai trong số những người bỏ phiếu đều có thể nhấn **Đề xuất** bên cạnh một cái tên trong bảng đó, bao gồm cả tên của chính họ; việc đề xuất được tính là lá phiếu Đồng ý của người đó. Tất cả những người có quyền bỏ phiếu sau đó sẽ thấy các nút **Có** và **Không**. Bạn được yêu cầu xác nhận, vì một lá phiếu không thể thay đổi, và bạn chỉ thấy số liệu tổng — không bao giờ thấy ai đã bỏ phiếu theo cách nào. Cuộc bỏ phiếu kéo dài trong 14 ngày và được thông qua khi hơn một nửa số người trả lời chọn Đồng ý. Nếu được thông qua, trưởng ban cũ vẫn là điều hành viên khi các điều hành viên khác đã bỏ phiếu, và trở thành thành viên khi các thành viên đã bỏ phiếu. Nếu người trưởng ban im lặng quay trở lại và thực hiện bất kỳ việc gì trong ứng dụng, cuộc bỏ phiếu sẽ đóng lại ngay lập tức. Trên điện thoại, khi thông báo được cho phép, chỉ cần mở ứng dụng là đã được tính. Trong khi tài khoản của trưởng ban bị đình chỉ, không việc gì họ làm được tính. Các quan sát viên có thể nhìn thấy bảng nhưng không có quyền bỏ phiếu, và người trưởng ban im lặng cũng vậy.
 
 Toàn bộ quy tắc có trong "Quy tắc và cách quyết định vận hành", dưới mục "Một trưởng ban điều hành im lặng".
 
@@ -206,7 +206,7 @@ Nhấn **Đề xuất một cuộc biểu quyết** và chọn những gì nên 
 
 **Những gì bạn nhìn thấy.** Trong khi một cuộc bỏ phiếu đang mở, mọi người đều thấy bao nhiêu người đã bỏ phiếu, chứ không thấy bỏ phiếu như thế nào. Các nút Đồng ý và Không đồng ý hiển thị sau khi cuộc bỏ phiếu kết thúc. Một lá phiếu không thể thay đổi sau khi đã bỏ. Không ai thấy ai đã bỏ phiếu như thế nào. Tuy nhiên, trong một nhóm rất nhỏ, kết quả và danh sách người đã bỏ phiếu có thể để lộ điều đó: nếu ba người cùng bỏ phiếu và kết quả là 3–0, mọi người đều biết ai đã bỏ phiếu thế nào.
 
-**Được thông báo.** Mọi người trong danh sách bỏ phiếu trừ người đề xuất đều nhận được một thông báo khi cuộc bỏ phiếu mở ra, trừ khi họ đã tắt thông báo cuộc trò chuyện của nhóm hoặc tắt thông báo trò chuyện. Thông báo không nêu tên người hay tên nhóm: nó ghi **Một cuộc bỏ phiếu đã mở trong một nhóm của bạn.** Nhấn vào thông báo và nhóm sẽ mở tại mục **Quyết định**. Trên Trang chủ, một cuộc bỏ phiếu đang mở mà bạn chưa bỏ phiếu sẽ hiển thị dưới mục **Cần bạn xử lý** và cũng sẽ mở nhóm.
+**Được thông báo.** Mọi người trong danh sách bỏ phiếu trừ người đề xuất đều nhận được một thông báo khi cuộc bỏ phiếu mở ra, trừ khi họ đã tắt thông báo cuộc trò chuyện của nhóm hoặc tắt thông báo trò chuyện. Thông báo không nêu tên người hay tên nhóm: nó ghi **Một cuộc biểu quyết đã mở trong một trong các nhóm của bạn.** Nhấn vào thông báo và nhóm sẽ mở tại mục **Quyết định**. Trên Trang chủ, một cuộc bỏ phiếu đang mở mà bạn chưa bỏ phiếu sẽ hiển thị dưới mục **Cần bạn xử lý** và cũng sẽ mở nhóm.
 
 **Khi mọi người đến và đi.** Người rời nhóm trong khi cuộc bỏ phiếu đang diễn ra sẽ rời khỏi cuộc bỏ phiếu, và lá phiếu của họ sẽ đi theo họ. Người bị điều hành viên gỡ bỏ, hoặc bị chuyển thành quan sát viên, trong khi cuộc bỏ phiếu diễn ra vẫn ở lại trong cuộc bỏ phiếu: họ giữ lá phiếu họ đã bỏ, và vẫn có thể bỏ phiếu nếu họ chưa bỏ. Việc gỡ bỏ người không bao giờ là cách để làm xoay chuyển một cuộc bỏ phiếu. Nếu còn lại ít hơn hai người trong danh sách, cuộc bỏ phiếu sẽ kết thúc mà không có kết quả.
 

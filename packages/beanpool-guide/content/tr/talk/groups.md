@@ -35,7 +35,7 @@ Küresel toplulukta uygulama bir tür grubu kendiliğinden oluşturur: aynı yer
 - En fazla 60 karakterden oluşan bir **Grup Adı** ve isterseniz 300 karaktere kadar bir **Amaç / Açıklama** verin: grubun ne için ve kimin için olduğu.
 - Bir **Kategori** seçin: **Sosyal Çevre**, **Genel**, **Çalışma Grubu** veya **Lonca**. Sizin için **Sosyal Çevre** seçilidir.
 - Bir **Katılma İlkesi** seçin: **Açık**, **Katılma İsteği** veya **Yalnızca Davetle**.
-- **Grup Oluştur** seçeneğine dokunun. Grubun **baş koordinatörü** olursunuz. Telefonda uygulama sizi doğrudan yeni grubun sohbetine götürür.
+- **Grup Oluştur** seçeneğine dokunun. Grubun **baş koordinatör** olursunuz. Telefonda uygulama sizi doğrudan yeni grubun sohbetine götürür.
 
 Herhangi bir 24 saat içinde en fazla 5 grup başlatabilirsiniz. Bir sahip veya yönetici, sahiplerin belirlediği **Owner and admin limit** ne kadarına izin veriyorsa o kadar grup başlatabilir (bir sahip değiştirmedikçe 100).
 
@@ -66,7 +66,7 @@ Bir grubun sohbeti uçtan uca şifrelidir: topluluğunuzun sunucusunu işleten k
 - Biri çıkarıldığında veya ayrıldığında grup yeni bir anahtar oluşturur. 10 veya daha fazla kişilik bir grupta, telefonunuz anahtarı oluştururken sohbette **Sohbet N kişi için güvenli hale getiriliyor…** yazar.
 - Kilitlenemeyen bir mesaj gönderilmez. **! iletilmedi** gösterilir ve mesaj kutusunun üzerindeki bir satır nedenini belirtebilir. **Yeniden gönder** veya **Vazgeç** için üzerine dokunun; web uygulamasında mesajın üzerindeki **Yeniden deneyin** veya **Vazgeç** seçeneğini kullanın.
 - Bir üye tarafından yazıldığı doğrulanamayan bir mesaj **Doğrulanmamış** olarak, kimseye ait olmadan **Bu mesaj doğrulanamadı.** ifadesiyle görünür. Anahtarı henüz telefonunuza ulaşmamış bir mesajda **Bu mesajın anahtarı bekleniyor.** yazar.
-- Topluluğunuzun sunucusu eskiyse ve grup sohbetlerini henüz kilitleyemiyorsa, sohbet sunucunun bunu okuyabileceğini ve sunucu güncellendiğinde kilitleneceğini söyler. Güncellendiğinde, grubun sunucunun okuyabildiği önceki mesajları kaldırılır ve sohbette bir satır bunu belirtir. Önceki her mesajda **Bu sohbet kilitlendiğinde önceki bir mesaj kaldırıldı** yazar ve art arda gelen birkaç mesaj tek bir satır olarak gösterilir, örneğin **Bu sohbet kilitlendiğinde 11 önceki mesaj kaldırıldı**.
+- Topluluğunuzun sunucusu eskiyse ve grup sohbetlerini henüz kilitleyemiyorsa, sohbet sunucunun bunu okuyabileceğini ve sunucu güncellendiğinde kilitleneceğini söyler. Güncellendiğinde, grubun sunucunun okuyabildiği önceki mesajları kaldırılır ve sohbette bir satır bunu belirtir. Önceki her mesajda **Bu sohbet kilitlendiğinde önceki bir mesaj kaldırıldı** yazar ve art arda gelen birkaç mesaj tek bir satır olarak gösterilir, örneğin **Bu sohbet kilitlendiğinde önceki 11 mesaj kaldırıldı**.
 
 Web uygulamasında grup sohbetleriniz 👥 ile işaretlenmiş olarak **Sohbet** bölümündedir. Telefonda olduğu gibi uçtan uca şifreli olarak orada okuyabilir ve yazabilirsiniz: yanıtlayabilir, tepki verebilir, 15 dakika boyunca düzenleyebilir, silebilir, kaldırabilir, bildirimleri sessize alabilir, sohbette arama yapabilir ve başkasının mesajını bildirebilirsiniz (altındaki **Bildir** ile). Grubu açmak için sohbetinin üst kısmındaki grup adına dokunun; bir koordinatör oradan insanları davet edebilir. Bir girişimin sohbeti şifrelenmez: bkz. "Mesajlar".
 
@@ -81,7 +81,7 @@ Grup sohbeti tam olarak bir kişiyle yapılan sohbet gibi çalışır. Bir mesaj
 - Başkasının mesajında koordinatörler için **Kaldır**. Bir kez sorar ve mesaj daha sonra **Bir koordinatör tarafından kaldırıldı** olarak görünür. Kendi mesajınız **Kaldır** değil, **Sil** işlemidir.
 - Başka herhangi birinin mesajında **Bildir** (bir bayrak). Bir neden seçin, isterseniz birkaç sözcük ekleyin ve **Bildirimi gönder**'e dokunun. Topluluğunuzun moderatörleri yalnızca o mesajı (varsa fotoğrafıyla birlikte) ve onu kimin gönderdiğini alır; sohbetten başka hiçbir şey almaz. Bkz. "Sorun bildirme".
 
-Yazarlarının sildiği art arda iki veya daha fazla mesaj tek bir satır olarak gösterilir, örneğin **3 mesaj silindi**. Bir koordinatörün kaldırdığı iki veya daha fazlası **Bir koordinatör tarafından kaldırılan 3 mesaj** olarak gösterilir.
+Yazarlarının sildiği art arda iki veya daha fazla mesaj tek bir satır olarak gösterilir, örneğin **3 mesaj silindi**. Bir koordinatörün kaldırdığı iki veya daha fazlası **Bir koordinatör tarafından 3 mesaj kaldırıldı** olarak gösterilir.
 
 Kendi mesajınızın altında: gönderilirken bir saat, grubun sunucusuna ulaştığında bir onay işareti veya gönderilemediyse **! iletilmedi** — **Yeniden gönder** veya **Vazgeç** için buna dokunun ya da web uygulamasında mesajın üzerindeki **Yeniden deneyin** veya **Vazgeç** seçeneğini kullanın. Bir grupta mavi çift onay işareti yoktur: bir grubun tek bir okuyucusu yoktur.
 
@@ -93,7 +93,7 @@ Grup sohbetinde bir anlaşma başlatılamaz: anlaşmalar iki kişi arasındaki s
 
 Bir **gözlemci** sohbeti okuyabilir ancak içine yazamaz, tepki veremez veya yanıtlayamaz. Bir mesajı bildirebilir.
 
-Yanıt, tepkiler, düzenleme ve silme için topluluğunuzun sunucusunun güncel olması gerekir. Yalnızca sizinki güncel değilse uygulama **Bu toplulukta henüz mevcut değil** der — bu durum sunucuyla ilgilenen kişiye iletilmeye değerdir.
+Yanıt, tepkiler, düzenleme ve silme için topluluğunuzun sunucusunun güncel olması gerekir. Yalnızca sizinki güncel değilse uygulama **Bu toplulukta henüz kullanılamıyor** der — bu durum sunucuyla ilgilenen kişiye iletilmeye değerdir.
 
 Sunucunun geri çevirdiği başka her şeyi sunucu kendi sözleriyle geri çevirir ve uygulama size o satır yerine bu sözleri gösterir. "Kaldırılan bir mesaj düzenlenemez", siz yazarken bir koordinatörün onu kaldırdığı anlamına gelir, sunucunuzun geride kaldığı anlamına gelmez.
 
@@ -135,7 +135,7 @@ Davet edildiğiniz bir grup ayrıca **Ortak** içinde, **Gruplar** altında **DA
 - **Gruba katıl** seçeneğine dokunun. Sohbetine geçersiniz.
 - Daha sonra karar vermek için **Şimdi değil** seçeneğine dokunun. Davet kalır.
 - Hayır demek için **Daveti reddet**'e dokunun. Uygulama bir kez daha sorar, ardından davet **Sana ihtiyacı var** içinden de kaldırılır. Sizi davet eden kişi sizi yeniden davet edebilir.
-- **Bu davet artık açık değil** yazıyorsa geri çekilmiştir. Sizi davet eden kişiden tekrar davet etmesini isteyin.
+- **Bu davet artık geçerli değil** yazıyorsa geri çekilmiştir. Sizi davet eden kişiden tekrar davet etmesini isteyin.
 - **Bu grup açılamadı** yazıyorsa telefonunuz topluluğunuzun sunucusuna ulaşamamıştır. **Tekrar dene** seçeneğine dokunun.
 
 Web uygulamasında Ana Sayfa'daki **Sana ihtiyacı var** içindeki satıra veya **Ortak** içinde, **Gruplar** altında **DAVET EDİLDİ** olarak işaretlenmiş gruba dokunun ve **Daveti kabul et** seçeneğine dokunun. Gruba katılırsınız ve grubun sayfasında kalırsınız. Hayır demek için onun altındaki **Daveti reddet**'e dokunun.
@@ -146,7 +146,7 @@ Web'de grubu **Ortak** içinde, **Gruplar** altında açın ve **Şuraya ilan ve
 
 ## Koordinatörler ve baş koordinatör
 
-Bir koordinatör grupla ilgilenir. Grubu kim oluşturduysa onun **baş koordinatörü**dür ve grubun kartında adı **Baş koordinatör: Ali** şeklinde belirtilir. Üye listesinde satırları **LİDER** olarak işaretlenir.
+Bir koordinatör grupla ilgilenir. Grubu kim oluşturduysa onun **baş koordinatör**dür ve grubun kartında adı **Baş koordinatör: Ali** şeklinde belirtilir. Üye listesinde satırları **LİDER** olarak işaretlenir.
 
 Herhangi bir koordinatör grubun resmini değiştirebilir: grubu açın (telefonda, sohbetinin **⋮** menüsündeki **Grup bilgisi**) ve **Resmi değiştir**'e dokunun (web uygulamasında ayrıca **Fotoğraf seç**). Bir grubun her zaman bir resmi olur; değiştirilebilir, asla kaldırılamaz.
 
@@ -198,7 +198,7 @@ Küresel toplulukta bir grubun kendine ait oylamaları ve **Bir oylama öner** s
 - **Kimin katılabileceğini değiştir**: herkese açık, insanlar katılım ister ve bir koordinatör onları içeri alır veya yalnızca davetle.
 - **Grubu kapat.** Sohbeti okunmak üzere kalır ancak yeni mesaj, ilan veya üye kabul etmez ve diğer açık oylamaları sona erer. İlanları Pazar'dan kaldırılır.
 
-Bir başlık verin ve nedenini belirtin, ardından **Oylamayı başlat** seçeneğine dokunun. Bir oylama asla Fasulye taşımaz: bir grup hiç Fasulye tutmaz. Topluluktaki kimsenin konumunu da değiştiremez; bunun için bir topluluk Kararı gerekir.
+Bir başlık verin ve nedenini belirtin, ardından **Oylamayı aç** seçeneğine dokunun. Bir oylama asla Fasulye taşımaz: bir grup hiç Fasulye tutmaz. Topluluktaki kimsenin konumunu da değiştiremez; bunun için bir topluluk Kararı gerekir.
 
 **Kimler oy kullanır.** Oylama açıldığında grubun üyesi veya koordinatörü olan herkes; lider ve öneren kişi dahil. Gözlemciler izler: oyları görürler ancak Evet veya Hayır hakları yoktur. Bir oylama açıldıktan sonra katılan biri oylamada yer almaz. Tek kişilik bir grubun birlikte oy kullanacak kimsesi yoktur, bu nedenle o zaman **Bir oylama öner** düğmesi bulunmaz. Bir grupta aynı anda kendinize ait bir açık oylamaya sahip olabilirsiniz.
 
@@ -206,11 +206,11 @@ Bir başlık verin ve nedenini belirtin, ardından **Oylamayı başlat** seçene
 
 **Gördükleriniz.** Bir oylama açıkken herkes kaç kişinin oy kullandığını görür, nasıl oy kullandığını değil. Evet ve Hayır kapandıktan sonra gösterilir. Kullanılan bir oy değiştirilemez. Kimse kimin nasıl oy kullandığını görmez. Çok küçük bir grupta ise sonuç ve kimin oy kullandığı bunu gösterebilir: üç kişi de oy kullanır ve 3–0 biterse herkes kimin nasıl oy kullandığını bilir.
 
-**Haber verilmesi.** Oylamadaki herkes (öneren kişi hariç), grubun sohbetini sessize almadılarsa veya sohbet bildirimlerini kapatmadılarsa açıldığında bir bildirim alır. Hiçbir kişinin ve hiçbir grubun adını vermez: **Gruplarınızdan birinde bir oylama başladı.** yazar. Üzerine dokunun ve grup **Kararlar** bölümünde açılır. Ana Sayfa'da henüz kullanmadığınız açık bir oylama **Sana ihtiyacı var** altında görünür ve o da grubu açar.
+**Haber verilmesi.** Oylamadaki herkes (öneren kişi hariç), grubun sohbetini sessize almadılarsa veya sohbet bildirimlerini kapatmadılarsa açıldığında bir bildirim alır. Hiçbir kişinin ve hiçbir grubun adını vermez: **Gruplarından birinde bir oylama açıldı.** yazar. Üzerine dokunun ve grup **Kararlar** bölümünde açılır. Ana Sayfa'da henüz kullanmadığınız açık bir oylama **Sana ihtiyacı var** altında görünür ve o da grubu açar.
 
 **Gelenler ve gidenler.** Bir oylama sırasında gruptan ayrılan biri oylamadan ayrılır ve oyu onunla birlikte gider. Bir koordinatörün oylama sırasında çıkardığı veya gözlemci yaptığı biri oylamada kalır: kullandığı oyu korur ve henüz kullanmadıysa yine de oy kullanabilir. İnsanları çıkarmak hiçbir zaman bir oylamayı yönlendirmenin yolu değildir. Oylamada ikiden az kişi kalırsa oylama bir yanıta ulaşmadan sona erer.
 
-**Kapatılmış bir grup** sayfasında **Kapalı** yazar ve "Grup üyelerinin oylamasıyla kapatıldı. Sohbeti okunmak üzere duruyor." satırı yer alır. Sohbeti, oylamaları ve içinde kimlerin olduğu okunmak üzere orada kalır; yeni hiçbir şey eklenemez.
+**Kapatılmış bir grup** sayfasında **Kapandı** yazar ve "Grup üyelerinin oylamasıyla kapatıldı. Sohbeti okunmak üzere duruyor." satırı yer alır. Sohbeti, oylamaları ve içinde kimlerin olduğu okunmak üzere orada kalır; yeni hiçbir şey eklenemez.
 
 ## Çok yakında
 

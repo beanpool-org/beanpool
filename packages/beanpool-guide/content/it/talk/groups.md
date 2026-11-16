@@ -34,7 +34,7 @@ Nella comunità globale, l'app crea da sola un tipo di gruppo: una **place circl
 - Ogni gruppo ha un'immagine: quella del suo tipo è già scelta, e segue la **Categoria** finché non ne scegli una tu. Per sceglierne un'altra, tocca **Scegline un'altra**. Sul telefono offre la fotocamera, le tue foto e le immagini già pronte. Nella web app mostra le immagini già pronte, e **Scegli una foto** ne sceglie una delle tue.
 - Assegna un **Nome gruppo**, fino a 60 caratteri e, se vuoi, uno **Scopo / Descrizione**, fino a 300: a cosa serve il gruppo e a chi si rivolge.
 - Scegli una **Categoria**: **Cerchia sociale**, **Generale**, **Gruppo di lavoro** o **Gilda**. Viene preselezionata **Cerchia sociale**.
-- Scegli una **Politica di adesione**: **Aperto**, **Richiedi di unirti** o **Solo su invito**.
+- Scegli una **Politica di accesso**: **Aperto**, **Chiedi di unirti** o **Solo su invito**.
 - Tocca **Crea gruppo**. Ne diventerai il **coordinatore principale**. Sul telefono, l'app ti porta direttamente nella chat del nuovo gruppo.
 
 Puoi creare fino a 5 gruppi in un arco di 24 ore. Un proprietario o un amministratore può crearne quanti ne consente l'impostazione **Owner and admin limit** dei proprietari (100, a meno che un proprietario non la modifichi).
@@ -43,7 +43,7 @@ Ci sono fagioli di mezzo? Avvia invece un progetto o un'impresa: tocca **Avvia q
 
 ## Invitare persone
 
-Puoi invitare persone sia dal telefono sia dalla web app. Sul telefono, la chat di un nuovo gruppo chiede **Chi vuoi invitare?**
+Puoi invitare persone sia dal telefono sia dalla web app. Sul telefono, la chat di un nuovo gruppo chiede **Chi desideri invitare?**
 
 - Tocca **Invita persone**, spunta le persone desiderate e tocca il pulsante in fondo (ad esempio **Invita 2 persone**). Sotto il nome di ogni persona compare un breve prefisso della sua chiave, così puoi distinguere le persone con lo stesso nome.
 - Oppure tocca **Non ora** per saltare questo passaggio.
@@ -54,19 +54,19 @@ Se ritiri un invito e inviti di nuovo la stessa persona, entro un'ora non riceve
 
 ## La chat del gruppo
 
-- Sul telefono, tocca il nome del gruppo in cima alla chat per visualizzare il gruppo: i suoi membri, **Lascia il gruppo**, e per i coordinatori, **Strumenti di coordinamento**. Nella web app, tocca il nome del gruppo in cima alla sua chat, oppure apri il gruppo da **Beni Comuni**, sotto **Gruppi**.
-- Il menu **⋮** offre **Invita persone** (coordinatori), **Disattiva notifiche** (o **Attiva notifiche**), **Cerca in questa chat**, **Conferma nuovo telefono** e **Informazioni gruppo**. La ricerca viene eseguita sul tuo telefono, non sul server della tua comunità.
+- Sul telefono, tocca il nome del gruppo in cima alla chat per visualizzare il gruppo: i suoi membri, **Esci dal gruppo**, e per i coordinatori, **Strumenti di coordinamento**. Nella web app, tocca il nome del gruppo in cima alla sua chat, oppure apri il gruppo da **Beni Comuni**, sotto **Gruppi**.
+- Il menu **⋮** offre **Invita persone** (coordinatori), **Silenzia notifiche** (o **Riattiva notifiche**), **Cerca in questa chat**, **Conferma nuovo telefono** e **Info del gruppo**. La ricerca viene eseguita sul tuo telefono, non sul server della tua comunità.
 - Ingressi, uscite e cambi di ruolo compaiono nella chat come piccole righe grigie.
 - Scrivi **@** seguito dal nome di qualcuno per inviargli un avviso. Vedi "Menzioni".
 - Il messaggio più recente si trova subito sopra la casella del testo e vi rimane quando si apre la tastiera. Scorri verso l'alto per rileggere i messaggi precedenti; l'arrivo di un nuovo messaggio aspetterà la tua lettura senza trascinarti verso il basso.
 
-La chat di un gruppo è crittografata end-to-end: solo i membri del gruppo possono leggerla, non i gestori del server della tua comunità. Sopra la casella di testo viene indicato che è **Crittografato end-to-end**. Il server della tua comunità vede comunque chi ha scritto, quando, chi è stato menzionato, a quale messaggio risponde ciascuna riga, le reazioni emoji, e quali righe sono foto e quanto è grande ciascuna.
+La chat di un gruppo è crittografata end-to-end: solo i membri del gruppo possono leggerla, non i gestori del server della tua comunità. Sopra la casella di testo viene indicato che è **Crittografia end-to-end**. Il server della tua comunità vede comunque chi ha scritto, quando, chi è stato menzionato, a quale messaggio risponde ciascuna riga, le reazioni emoji, e quali righe sono foto e quanto è grande ciascuna.
 
 - Vedi la chat solo a partire dal giorno in cui ti sei unito. Nulla di ciò che è stato scritto prima viene mostrato, e il tuo telefono non possiede mai la relativa chiave. Vedi comunque le righe grigie precedenti, ma non il testo né le foto di nessuno.
 - Quando qualcuno viene rimosso, o esce, il gruppo crea una nuova chiave. In un gruppo di 10 o più persone la chat indica **Protezione della chat per N persone…** mentre il tuo telefono la genera.
 - Un messaggio che non può essere protetto non viene inviato. Riporta **! non recapitato**, e una riga sopra la casella di testo può spiegarne il motivo. Toccala per fare **Invia di nuovo** o **Scarta**; nella web app, usa **Riprova** o **Scarta** sul messaggio.
 - Un messaggio che non risulta verificato come scritto da un membro viene mostrato come **Non verificato**, senza autore, con **Impossibile verificare questo messaggio.** Un messaggio la cui chiave non ha ancora raggiunto il tuo telefono riporta **In attesa della chiave per questo messaggio.**
-- Se il server della tua comunità è meno recente e non può ancora proteggere le chat di gruppo, la chat segnala che il server può leggerla e che verrà protetta una volta aggiornato il server. Quando viene aggiornato, i messaggi precedenti del gruppo, leggibili dal server, vengono rimossi e una riga nella chat lo comunica. Ciascun messaggio precedente indicherà quindi **Un messaggio precedente è stato rimosso quando questa chat è stata protetta**, e più messaggi consecutivi compaiono come un'unica riga, ad esempio **11 messaggi precedenti rimossi quando questa chat è stata protetta**.
+- Se il server della tua comunità è meno recente e non può ancora proteggere le chat di gruppo, la chat segnala che il server può leggerla e che verrà protetta una volta aggiornato il server. Quando viene aggiornato, i messaggi precedenti del gruppo, leggibili dal server, vengono rimossi e una riga nella chat lo comunica. Ciascun messaggio precedente indicherà quindi **Un messaggio precedente è stato rimosso quando questa chat è stata bloccata**, e più messaggi consecutivi compaiono come un'unica riga, ad esempio **11 messaggi precedenti rimossi quando questa chat è stata bloccata**.
 
 Nella web app le tue chat di gruppo si trovano in **Chat**, contrassegnate con 👥. Lì puoi leggere e scrivere con crittografia end-to-end come sul telefono: rispondere, reagire, modificare per 15 minuti, eliminare, rimuovere, disattivare le notifiche, cercare nella chat e segnalare il messaggio di qualcuno (**Segnala**, sotto il messaggio). Tocca il nome del gruppo in cima alla sua chat per aprire il gruppo; un coordinatore può invitare persone da lì. La chat di un'impresa non è crittografata: vedi "Messaggi".
 
@@ -114,7 +114,7 @@ Alla fine il telefono comunica l'esito: **Fatto** solo se ha trasferito ogni chi
 In **Beni comuni**, sotto **Gruppi**, i gruppi di cui fai parte vengono per primi, sotto **I tuoi**. Più in basso, l'elenco mostra quelli a cui potresti unirti, con un titolo che indica cosa viene mostrato (ad esempio **Gruppi, progetti e imprese qui**, che cambia con i pulsanti **Tutti**, **Progetti**, **Imprese** e **Gruppi di chat**). Ciascuno mostra l'inizio della propria descrizione. Apri un gruppo per leggerla interamente, poi:
 
 - **Unisciti al gruppo** se è aperto a chiunque;
-- **Richiedi di unirti** se un coordinatore approva i membri. Vedrai **Richiesta in attesa di approvazione** finché non lo fa.
+- **Chiedi di unirti** se un coordinatore approva i membri. Vedrai **Richiesta in attesa di approvazione** finché non lo fa.
 
 Sul telefono, un gruppo a cui hai chiesto di unirti non compare in nessuno dei due elenchi finché un coordinatore non ti accoglie. Sul web rimane nell'elenco contrassegnato con **In attesa**.
 
@@ -166,9 +166,9 @@ Solo il **coordinatore principale** può rimuovere un coordinatore o revocare il
 
 **Nessuno può rimuovere il coordinatore principale o togliergli la guida.** Né un altro coordinatore, né un amministratore della comunità. A parte la cessione volontaria della guida, solo una votazione del gruppo può scegliere una nuova guida. Vedi "Votazioni in un gruppo".
 
-**Passare la guida.** Chi guida può trasferirla. Sul telefono, tocca **Cedi** in **Strumenti di coordinamento**, oppure il pulsante con lo scudo accanto al nome di qualcuno. Nella web app, tocca **Rendi coordinatore principale** accanto al suo nome. Scegli un altro coordinatore o un membro — un membro diventa coordinatore contestualmente. Un osservatore non può diventare guida; promuovilo prima a membro o coordinatore. Una volta completata l'operazione, non potrai riprenderti la guida.
+**Passare la guida.** Chi guida può trasferirla. Sul telefono, tocca **Cedi** in **Strumenti di coordinamento**, oppure il pulsante con lo scudo accanto al nome di qualcuno. Nella web app, tocca **Rendi principale** accanto al suo nome. Scegli un altro coordinatore o un membro — un membro diventa coordinatore contestualmente. Un osservatore non può diventare guida; promuovilo prima a membro o coordinatore. Una volta completata l'operazione, non potrai riprenderti la guida.
 
-**Uscire come guida.** Cedi prima la guida; il telefono te lo propone quando tocchi **Lascia il gruppo**, e la web app te lo richiede. Se non c'è nessun altro nel gruppo, puoi semplicemente uscire.
+**Uscire come guida.** Cedi prima la guida; il telefono te lo propone quando tocchi **Esci dal gruppo**, e la web app te lo richiede. Se non c'è nessun altro nel gruppo, puoi semplicemente uscire.
 
 L'ultimo coordinatore non può dimettersi o uscire finché qualcun altro fa parte del gruppo.
 
@@ -180,7 +180,7 @@ Nel frattempo il gruppo prosegue. I membri continuano a chattare e pubblicare, e
 
 A votare sono gli **altri coordinatori** del gruppo — oppure i suoi **membri**, qualora nessuno degli altri coordinatori sia stato nominato tale prima del giorno dell'ultima attività della guida. Chiunque si sia unito al gruppo, o sia stato nominato coordinatore, dopo quel giorno non prende parte alla votazione. Chiunque tra gli aventi diritto di voto può toccare **Proponi** accanto a un nome in quel pannello, incluso il proprio; avanzare la proposta conta come il proprio voto Favorevole. Tutti gli aventi diritto vedono quindi **Sì** e **No**. Ti viene chiesta una conferma, poiché il voto non può essere modificato, e vengono mostrati sempre e solo i totali — mai come ciascuno abbia votato. La votazione dura 14 giorni e viene approvata quando più della metà di coloro che rispondono vota Sì. Se viene approvata, la vecchia guida rimane coordinatore se hanno votato gli altri coordinatori, e diventa membro se hanno votato i membri. Se la guida inattiva torna e compie una qualsiasi azione nell'app, la votazione si chiude immediatamente. Sul telefono, con le notifiche abilitate, è sufficiente aprire l'app per essere conteggiati come attivi. Finché l'account della guida è sospeso, nessuna sua azione viene conteggiata. Gli osservatori possono vedere il pannello ma non hanno diritto di voto, e lo stesso vale per la guida inattiva.
 
-Le regole complete sono descritte in "Le regole e come funzionano le decisioni", sotto "Un coordinatore principale inattivo".
+Le regole complete sono descritte in "Regole e decisioni", sotto "Un coordinatore principale inattivo".
 
 **Mentre il gruppo vota su una nuova guida.** Che si tratti di questa votazione o di una delle votazioni interne del gruppo descritte sotto, nessun coordinatore può rimuovere la persona candidata alla guida, né retrocederne il ruolo, finché la votazione non si chiude. L'app lo segnala chiaramente. La persona può comunque uscire autonomamente dal gruppo, e una votazione del gruppo può comunque rimuoverla.
 
@@ -195,7 +195,7 @@ Tocca **Proponi una votazione** e scegli cosa deve accadere:
 - **Scegli un nuovo coordinatore principale**: chiunque nel gruppo tranne un osservatore, te stesso incluso.
 - **Rendi qualcuno un coordinatore**, o **Rendi un coordinatore un membro**. Una votazione non cambia mai il ruolo della guida; per cambiare guida, vota per una nuova guida.
 - **Rimuovi qualcuno** dal gruppo. Non la guida e non te stesso: per andartene, lascia il gruppo.
-- **Modifica chi può partecipare**: aperto a chiunque, le persone chiedono e un coordinatore le accoglie, oppure solo su invito.
+- **Modifica chi può unirsi**: aperto a chiunque, le persone chiedono e un coordinatore le accoglie, oppure solo su invito.
 - **Chiudi il gruppo.** La sua chat rimane leggibile, ma non accetta nuovi messaggi, post o membri, e le sue altre votazioni aperte terminano. I suoi annunci vengono rimossi dal Mercato.
 
 Assegna un titolo e spiega il motivo, poi tocca **Apri la votazione**. Una votazione non sposta mai fagioli: un gruppo non ne detiene alcuno. Né può modificare la posizione di qualcuno nella comunità complessiva; per questo serve una Decisione della comunità.
@@ -206,7 +206,7 @@ Assegna un titolo e spiega il motivo, poi tocca **Apri la votazione**. Una votaz
 
 **Cosa vedi.** Finché una votazione è aperta, tutti vedono quanti hanno votato, non come hanno votato. Sì e No compaiono una volta chiusa la votazione. Il voto non può essere modificato dopo essere stato espresso. Nessuno vede come hanno votato i singoli. In un gruppo molto piccolo, tuttavia, il risultato e chi ha votato possono renderlo evidente: se tre persone votano tutte e finisce 3–0, tutti sanno come ha votato ciascuno.
 
-**Ricevere la notifica.** Tutti gli aventi diritto al voto, tranne chi ha proposto la votazione, ricevono una notifica all'apertura, a meno che non abbiano disattivato l'audio della chat del gruppo o disattivato le notifiche delle chat. Non indica alcuna persona né alcun gruppo: recita **Si è aperta una votazione in uno dei tuoi gruppi.** Toccala e il gruppo si aprirà sulle sue **Decisioni**. Nella schermata Home, una votazione aperta in cui non hai ancora espresso il voto compare sotto **Richiede la tua attenzione** e apre anch'essa il gruppo.
+**Ricevere la notifica.** Tutti gli aventi diritto al voto, tranne chi ha proposto la votazione, ricevono una notifica all'apertura, a meno che non abbiano disattivato l'audio della chat del gruppo o disattivato le notifiche delle chat. Non indica alcuna persona né alcun gruppo: recita **Un voto aperto in uno dei tuoi gruppi.** Toccala e il gruppo si aprirà sulle sue **Decisioni**. Nella schermata Home, una votazione aperta in cui non hai ancora espresso il voto compare sotto **Richiede il tuo intervento** e apre anch'essa il gruppo.
 
 **Quando le persone entrano ed escono.** Chi lascia il gruppo durante una votazione esce dalla votazione e il suo voto viene rimosso. Chi viene rimosso da un coordinatore, o reso osservatore durante una votazione, rimane in essa: conserva il voto espresso e può ancora votare se non l'ha fatto. Rimuovere persone non è mai un modo per alterare l'esito di una votazione. Se rimangono meno di due persone, la votazione si conclude senza un esito.
 

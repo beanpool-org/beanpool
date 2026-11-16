@@ -60,13 +60,13 @@ Wenn du eine Einladung zurückziehst und dieselbe Person erneut einlädst, bekom
 - Schreibe **@** und den Namen von jemandem, um die Person zu benachrichtigen. Siehe „Erwähnungen (@Name)“.
 - Die neueste Nachricht befindet sich direkt über dem Eingabefeld und bleibt dort, wenn sich die Tastatur öffnet. Scrolle nach oben, um zurückzulesen; eine neu eintreffende Nachricht wartet dann auf dich, statt dich nach unten zu ziehen.
 
-Der Chat einer Gruppe ist Ende-zu-Ende verschlüsselt: Nur die Mitglieder der Gruppe können ihn lesen, nicht die Betreiber des Servers deiner Community. Über dem Eingabefeld steht **Ende-zu-Ende verschlüsselt**. Der Server deiner Community sieht weiterhin, wer wann geschrieben hat, wer erwähnt wurde, auf welche Nachricht geantwortet wurde, die Emoji-Reaktionen sowie welche Zeilen Fotos sind und wie groß jedes davon ist.
+Der Chat einer Gruppe ist Ende-zu-Ende verschlüsselt: Nur die Mitglieder der Gruppe können ihn lesen, nicht die Betreiber des Servers deiner Community. Über dem Eingabefeld steht **Ende-zu-Ende-verschlüsselt**. Der Server deiner Community sieht weiterhin, wer wann geschrieben hat, wer erwähnt wurde, auf welche Nachricht geantwortet wurde, die Emoji-Reaktionen sowie welche Zeilen Fotos sind und wie groß jedes davon ist.
 
 - Du siehst den Chat erst ab dem Tag deines Beitritts. Vorher Geschriebenes wird nicht angezeigt, und dein Telefon besitzt niemals den Schlüssel dazu. Du siehst die grauen Zeilen von früher, aber niemandes Worte oder Fotos.
 - Wenn jemand entfernt wird oder austritt, erstellt die Gruppe einen neuen Schlüssel. In einer Gruppe ab 10 Personen meldet der Chat: **Chat für N Personen wird gesichert…**, während dein Telefon ihn erstellt.
 - Eine Nachricht, die nicht verschlüsselt werden kann, wird nicht gesendet. Sie zeigt **! nicht zugestellt**, und eine Zeile über dem Eingabefeld kann den Grund nennen. Tippe darauf, um sie **Erneut senden** oder **Verwerfen**; in der Web-App nutzt du **Erneut versuchen** oder **Verwerfen** an der Nachricht.
-- Eine Nachricht, die sich nicht als von einem Mitglied verfasst bestätigt, erscheint als **Unbestätigt** ohne Zuordnung, mit dem Hinweis: **Diese Nachricht konnte nicht verifiziert werden.** Eine Nachricht, deren Schlüssel dein Telefon noch nicht erreicht hat, zeigt: **Warten auf den Schlüssel zu dieser Nachricht.**
-- Wenn der Server deiner Community älter ist und Gruppenchats noch nicht verschlüsseln kann, meldet der Chat, dass der Server mitlesen kann und dass er verschlüsselt wird, sobald der Server aktualisiert wird. Nach der Aktualisierung werden frühere Nachrichten, die der Server lesen konnte, entfernt, worauf eine Zeile im Chat hinweist. Jede frühere Nachricht lautet dann **Eine frühere Nachricht wurde entfernt, als dieser Chat verschlüsselt wurde**, und mehrere hintereinander erscheinen als eine Zeile, etwa **11 frühere Nachrichten entfernt, als dieser Chat verschlüsselt wurde**.
+- Eine Nachricht, die sich nicht als von einem Mitglied verfasst bestätigt, erscheint als **Unverifiziert** ohne Zuordnung, mit dem Hinweis: **Diese Nachricht konnte nicht verifiziert werden.** Eine Nachricht, deren Schlüssel dein Telefon noch nicht erreicht hat, zeigt: **Warten auf den Schlüssel zu dieser Nachricht.**
+- Wenn der Server deiner Community älter ist und Gruppenchats noch nicht verschlüsseln kann, meldet der Chat, dass der Server mitlesen kann und dass er verschlüsselt wird, sobald der Server aktualisiert wird. Nach der Aktualisierung werden frühere Nachrichten, die der Server lesen konnte, entfernt, worauf eine Zeile im Chat hinweist. Jede frühere Nachricht lautet dann **Eine frühere Nachricht wurde entfernt, als dieser Chat gesperrt wurde**, und mehrere hintereinander erscheinen als eine Zeile, etwa **11 frühere Nachrichten entfernt, als dieser Chat gesperrt wurde**.
 
 In der Web-App befinden sich deine Gruppenchats unter **Chat**, gekennzeichnet mit 👥. Du kannst dort Ende-zu-Ende verschlüsselt wie auf dem Telefon lesen und schreiben: antworten, reagieren, 15 Minuten lang bearbeiten, löschen, entfernen, Benachrichtigungen stummschalten, den Chat durchsuchen und die Nachricht einer anderen Person melden (**Melden**, darunter). Klicke oben im Chat auf den Gruppennamen, um die Gruppe zu öffnen; Koordinatoren können von dort aus Personen einladen. Der Chat eines Betriebs ist nicht verschlüsselt: Siehe „Nachrichten“.
 
@@ -81,7 +81,7 @@ Der Chat einer Gruppe funktioniert genau wie ein Chat mit einer einzelnen Person
 - **Entfernen**, für Koordinatoren, bei jeder fremden Nachricht. Es erfolgt eine einmalige Nachfrage, und die Nachricht lautet danach: **Von einem Koordinator entfernt**. Eine eigene Nachricht wird über **Löschen** gelöscht, nicht über **Entfernen**.
 - **Melden** (eine Fahne), bei der Nachricht einer anderen Person. Wähle einen Grund, füge auf Wunsch ein paar Worte hinzu und tippe auf **Meldung absenden**. Die Moderatoren deiner Community erhalten nur diese eine Nachricht, mit ihrem Foto, falls sie eines hat, und wer sie gesendet hat, sonst nichts aus dem Chat. Siehe „Ein Problem melden“.
 
-Zwei oder mehr aufeinanderfolgende Nachrichten, die ihre Verfasser gelöscht haben, erscheinen als eine Zeile, wie etwa **3 Nachrichten wurden gelöscht**. Zwei oder mehr von einem Koordinator entfernte Nachrichten erscheinen als **3 Nachrichten von einem Koordinator entfernt**.
+Zwei oder mehr aufeinanderfolgende Nachrichten, die ihre Verfasser gelöscht haben, erscheinen als eine Zeile, wie etwa **3 Nachrichten wurden gelöscht**. Zwei oder mehr von einem Koordinator entfernte Nachrichten erscheinen als **3 Nachrichten von einem Moderator entfernt**.
 
 Unter deiner eigenen Nachricht: eine Uhr, während sie gesendet wird, ein Haken, sobald der Server der Gruppe sie erhalten hat, oder **! nicht zugestellt**, falls sie nicht gesendet werden konnte — tippe darauf, um sie **Erneut senden** oder **Verwerfen**, oder nutze in der Web-App **Erneut versuchen** oder **Verwerfen** an der Nachricht. In einer Gruppe gibt es keine blauen Doppelhaken: Eine Gruppe hat keinen einzelnen Leser.
 
@@ -114,13 +114,13 @@ Am Ende zeigt dein Telefon an, was geschehen ist: **Fertig** nur dann, wenn es j
 Im **Gemeingut** unter **Gruppen** stehen die Gruppen, in denen du bist, ganz oben unter **Deine**. Darunter zeigt die Liste, wo du beitreten könntest, mit einer Überschrift, die nennt, was angezeigt wird (zum Beispiel **Gruppen, Projekte und Betriebe hier**; sie ändert sich mit den Chips **Alle**, **Projekte**, **Betriebe** und **Chatgruppen**). Jede Gruppe zeigt den Beginn ihrer Beschreibung. Öffne eine Gruppe, um alles zu lesen, und wähle dann:
 
 - **Gruppe beitreten**, wenn sie für alle offen ist;
-- **Beitritt anfragen**, wenn ein Koordinator Mitglieder bestätigt. Bis zur Bestätigung siehst du **Anfrage wartet auf Genehmigung**.
+- **Beitritt anfragen**, wenn ein Koordinator Mitglieder bestätigt. Bis zur Bestätigung siehst du **Anfrage wartet auf Bestätigung**.
 
 Auf dem Telefon befindet sich eine angefragte Gruppe in keiner der Listen, bis ein Koordinator dich hereinlässt. Im Web bleibt sie in der Liste mit der Kennzeichnung **Ausstehend**.
 
 Eine Gruppe **Nur auf Einladung** ist für alle unsichtbar, die weder Mitglied noch eingeladen sind.
 
-Auf dem Telefon hat eine lokale Community ohne Bohnen und ohne Beschlüsse keinen **Gemeingut**-Reiter. Tippe dort auf **Chat**, dann auf **Gruppen** und anschließend auf **Gruppen finden**: Dies öffnet dieselbe Liste. Bevor du in einer Gruppe bist, lautet der Link **Eine Gruppe zum Beitreten finden**. Wenn Beschlüsse eingeschaltet sind, bleibt der **Gemeingut**-Reiter für Beschlüsse und Gruppen. Die globale Gemeinschaft besitzt den **Gemeingut**-Reiter: Ihre Gruppen befinden sich dort unter einem Beispiel aus einer lokalen Community (siehe „Bohnen & globale Community“).
+Auf dem Telefon hat eine lokale Community ohne Bohnen und ohne Beschlüsse keinen **Gemeingut**-Reiter. Tippe dort auf **Chat**, dann auf **Gruppen** und anschließend auf **Gruppen finden**: Dies öffnet dieselbe Liste. Bevor du in einer Gruppe bist, lautet der Link **Finde eine Gruppe zum Beitreten**. Wenn Beschlüsse eingeschaltet sind, bleibt der **Gemeingut**-Reiter für Beschlüsse und Gruppen. Die globale Gemeinschaft besitzt den **Gemeingut**-Reiter: Ihre Gruppen befinden sich dort unter einem Beispiel aus einer lokalen Community (siehe „Bohnen & globale Community“).
 
 Wenn ein Koordinator dich aus einer Gruppe entfernt hat, kannst du ihr nicht mehr selbstständig beitreten.
 
@@ -136,7 +136,7 @@ Eine Gruppe, zu der du eingeladen wurdest, erscheint auch im **Gemeingut** unter
 - Tippe auf **Nicht jetzt**, um später zu entscheiden. Die Einladung bleibt bestehen.
 - Tippe auf **Einladung ablehnen**, um abzulehnen. Die App fragt noch einmal nach, dann verschwindet die Einladung, auch aus **Braucht dich**. Wer dich eingeladen hat, kann dich erneut einladen.
 - Steht dort **Diese Einladung ist nicht mehr gültig**, wurde sie zurückgezogen. Bitte die einladende Person um eine erneute Einladung.
-- Steht dort **Diese Gruppe konnte nicht geöffnet werden**, konnte dein Telefon den Server deiner Community nicht erreichen. Tippe auf **Erneut versuchen**.
+- Steht dort **Gruppe konnte nicht geöffnet werden**, konnte dein Telefon den Server deiner Community nicht erreichen. Tippe auf **Erneut versuchen**.
 
 Tippe in der Web-App auf die Zeile in **Braucht dich** auf der Startseite oder auf die mit **EINGELADEN** markierte Gruppe im **Gemeingut** unter **Gruppen**, und klicke auf **Einladung annehmen**. Du trittst ihr bei und bleibst auf der Gruppenseite. Um abzulehnen, tippe darunter auf **Einladung ablehnen**.
 
@@ -186,7 +186,7 @@ Die vollständigen Regeln stehen unter „Regeln und Entscheidungen“ im Abschn
 
 ## Abstimmungen in einer Gruppe
 
-Die Mitglieder einer Gruppe können gemeinsam über gruppeneigene Angelegenheiten abstimmen. Öffne die Gruppe (auf dem Telefon tippe oben im Chat auf ihren Namen; im Web öffne sie im **Gemeingut** unter **Gruppen**): Ihre Abstimmungen stehen unter **Beschlüsse** weit oben auf der Seite. Nur die Personen in der Gruppe können sie sehen.
+Die Mitglieder einer Gruppe können gemeinsam über gruppeneigene Angelegenheiten abstimmen. Öffne die Gruppe (auf dem Telefon tippe oben im Chat auf ihren Namen; im Web öffne sie im **Gemeingut** unter **Gruppen**): Ihre Abstimmungen stehen unter **Entscheidungen** weit oben auf der Seite. Nur die Personen in der Gruppe können sie sehen.
 
 In der globalen Gemeinschaft hat eine Gruppe keine eigenen Abstimmungen und kein **Abstimmung vorschlagen**; dort funktioniert ausschließlich die Abstimmung bei inaktiver Leitung.
 
@@ -206,7 +206,7 @@ Gib dem Vorschlag einen Titel, begründe ihn und tippe auf **Abstimmung eröffne
 
 **Was du siehst.** Während eine Abstimmung läuft, sehen alle, wie viele Personen abgestimmt haben, nicht wie. Ja und Nein werden nach Abschluss angezeigt. Eine einmal abgegebene Stimme kann nicht mehr geändert werden. Niemand sieht, wer wie gestimmt hat. In einer sehr kleinen Gruppe können das Gesamtergebnis und die Teilnehmerzahl dies jedoch verraten: Wenn drei Personen abstimmen und es 3:0 ausgeht, weiß jeder, wie die anderen gestimmt haben.
 
-**Benachrichtigung.** Alle Stimmberechtigten mit Ausnahme der vorschlagenden Person erhalten beim Start eine Benachrichtigung, sofern sie den Chat der Gruppe nicht stummgeschaltet oder Chat-Benachrichtigungen deaktiviert haben. Sie nennt weder Person noch Gruppe: Sie lautet **In einer deiner Gruppen wurde eine Abstimmung eröffnet.** Tippe darauf, und die Gruppe öffnet sich bei ihren **Beschlüsse**. Auf der Startseite erscheint eine offene Abstimmung, an der du noch nicht teilgenommen hast, unter **Braucht dich** und öffnet ebenfalls die Gruppe.
+**Benachrichtigung.** Alle Stimmberechtigten mit Ausnahme der vorschlagenden Person erhalten beim Start eine Benachrichtigung, sofern sie den Chat der Gruppe nicht stummgeschaltet oder Chat-Benachrichtigungen deaktiviert haben. Sie nennt weder Person noch Gruppe: Sie lautet **In einer deiner Gruppen wurde eine Abstimmung eröffnet.** Tippe darauf, und die Gruppe öffnet sich bei ihren **Entscheidungen**. Auf der Startseite erscheint eine offene Abstimmung, an der du noch nicht teilgenommen hast, unter **Braucht dich** und öffnet ebenfalls die Gruppe.
 
 **Wenn Personen beitreten oder austreten.** Verlässt jemand während einer Abstimmung die Gruppe, scheidet die Person aus der Abstimmung aus, und ihre Stimme erlischt. Wird jemand während einer Abstimmung von einem Koordinator entfernt oder zum Beobachter gemacht, bleibt die Person stimmberechtigt: Ihre abgegebene Stimme bleibt erhalten, und sie kann noch abstimmen, falls noch nicht geschehen. Das Entfernen von Personen ist niemals ein Weg, eine Abstimmung zu kippen. Bleiben weniger als zwei Personen übrig, endet die Abstimmung ergebnislos.
 

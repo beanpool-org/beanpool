@@ -43,7 +43,7 @@ Maharagwe yakihusika? Anzisha mradi au biashara ya kijamii badala yake: gusa **A
 
 ## Kualika watu
 
-Unaweza kualika watu kwenye simu na kwenye programu ya wavuti. Kwenye simu, gumzo la kikundi kipya linauliza **Je, ungependa kumwalika nani?**
+Unaweza kualika watu kwenye simu na kwenye programu ya wavuti. Kwenye simu, gumzo la kikundi kipya linauliza **Unataka kumwalika nani?**
 
 - Gusa **Waalike watu**, weka alama ya vema kwa watu unaowataka, na uguse kitufe kilicho chini (kwa mfano **Alika watu 2**). Mwanzo mfupi wa ufunguo huonekana chini ya jina la kila mtu ili uweze kutofautisha watu wenye jina moja.
 - Au gusa **Si sasa** ili kuruka.
@@ -54,13 +54,13 @@ Ukiondoa mwaliko na kumwalika mtu huyohuyo tena, hapati arifa ya pili ndani ya s
 
 ## Gumzo la kikundi
 
-- Kwenye simu, gusa jina la kikundi juu ya gumzo ili kuona kikundi: wanachama wake, **Ondoka Kwenye Kikundi**, na kwa waratibu, **Zana za Mratibu**. Kwenye programu ya wavuti, gusa jina la kikundi juu ya gumzo lake, au fungua kikundi kutoka **Hazina ya Pamoja**, chini ya **Vikundi**.
+- Kwenye simu, gusa jina la kikundi juu ya gumzo ili kuona kikundi: wanachama wake, **Ondoka Kwenye Kikundi**, na kwa waratibu, **Zana za Mratibu**. Kwenye programu ya wavuti, gusa jina la kikundi juu ya gumzo lake, au fungua kikundi kutoka **Pamoja**, chini ya **Vikundi**.
 - Menyu ya **⋮** ina **Alika watu** (waratibu), **Nyamazisha arifa** (au **Acha Kunyamazisha**), **Tafuta katika gumzo hili**, **Thibitisha simu mpya** na **Taarifa za kikundi**. Utafutaji unaendeshwa kwenye simu yako, si kwenye seva ya jumuiya yako.
 - Kujiunga, kuondoka na mabadiliko ya majukumu huonekana kwenye gumzo kama mistari midogo ya kijivu.
 - Andika **@** na jina la mtu ili kumtahadharisha. Tazama "Kutaja (@jina)".
 - Ujumbe mpya zaidi unakaa juu kidogo ya kisanduku cha ujumbe, na unabaki hapo kibodi inapofunguka. Sogeza juu ili kusoma yaliyopita; ujumbe mpya unaoingia basi unakusubiri badala ya kukuvuta chini.
 
-Gumzo la kikundi limelindwa kwa njia fiche kutoka mwisho hadi mwisho: ni wanachama wa kikundi pekee wanaoweza kulisoma, si watu wanaoendesha seva ya jumuiya yako. Juu ya kisanduku cha ujumbe inasema **Mwisho-hadi-mwisho umesimbwa kwa njia fiche**. Seva ya jumuiya yako bado inaona nani aliyeandika, lini, nani aliyetajwa, ujumbe gani ambao kila mstari unajibu, maoni ya emoji, na mistari ipi ni picha na kila moja ina ukubwa gani.
+Gumzo la kikundi limelindwa kwa njia fiche kutoka mwisho hadi mwisho: ni wanachama wa kikundi pekee wanaoweza kulisoma, si watu wanaoendesha seva ya jumuiya yako. Juu ya kisanduku cha ujumbe inasema **Imesimbwa mwanzo hadi mwisho**. Seva ya jumuiya yako bado inaona nani aliyeandika, lini, nani aliyetajwa, ujumbe gani ambao kila mstari unajibu, maoni ya emoji, na mistari ipi ni picha na kila moja ina ukubwa gani.
 
 - Unaona gumzo kuanzia siku uliyojiunga pekee. Hakuna kilichoandikwa kabla kinachoonyeshwa, na simu yako haishikilii ufunguo wake kamwe. Bado unaona mistari ya kijivu ya awali, lakini si maneno wala picha za mtu yeyote.
 - Mtu anapoondolewa, au anapoondoka, kikundi hutengeneza ufunguo mpya. Katika kikundi cha watu 10 au zaidi gumzo linasema **Kuweka gumzo salama kwa ajili ya watu N…** wakati simu yako inapotengeneza.
@@ -75,9 +75,9 @@ Kwenye programu ya wavuti gumzo zako za kikundi zipo katika **Gumzo**, zikiwa zi
 Gumzo la kikundi hufanya kazi sawa kabisa na gumzo na mtu mmoja. Gusa ujumbe na vitufe vidogo vya duara vitaonekana kando yake:
 
 - **Jibu** hulinukuu juu ya kile utakachoandika baadaye. Gusa nukuu ili kurudi kwenye kile inachojibu.
-- **Hisia** hufungua emoji saba. Moja kwa kila mtu; iguse tena ili kuiondoa. Hisia huonekana kama beji chini ya ujumbe.
+- **Itikia** hufungua emoji saba. Moja kwa kila mtu; iguse tena ili kuiondoa. Hisia huonekana kama beji chini ya ujumbe.
 - **Hariri**, kwenye jumbe zako mwenyewe, kwa dakika 15. Ujumbe basi huonyesha **imehaririwa**. Picha haziwezi kuhaririwa.
-- **Futa**, kwenye jumbe zako mwenyewe, wakati wowote. Huuliza **Ungependa kufuta kwa kila mtu?** mara moja, na ujumbe basi unasomeka **Ujumbe huu ulifutwa** kwa kila mtu katika kikundi.
+- **Futa**, kwenye jumbe zako mwenyewe, wakati wowote. Huuliza **Futa kwa kila mtu?** mara moja, na ujumbe basi unasomeka **Ujumbe huu ulifutwa** kwa kila mtu katika kikundi.
 - **Ondoa**, kwa waratibu, kwenye ujumbe wa mtu mwingine yeyote. Huuliza mara moja, na ujumbe basi unasomeka **Umeondolewa na mratibu**. Ujumbe wako mwenyewe ni **Futa**, si **Ondoa**.
 - **Ripoti** (bendera), kwenye ujumbe wa mtu mwingine yeyote. Chagua sababu, ongeza maneno machache ukipenda, na uguse **Wasilisha ripoti**. Wasimamizi wa jumuiya yako wanapata ujumbe huo mmoja, pamoja na picha yake ikiwa ina picha, na aliyeutuma, na hakuna kingine kwenye gumzo. Tazama "Kuripoti tatizo".
 
@@ -101,9 +101,9 @@ Kitu kingine chochote ambacho seva inakataa, inakataa kwa maneno yake yenyewe, n
 
 Akaunti yako inapohamia kwenye simu mpya ikiwa na ufunguo mpya, jumbe za kikundi za hapo awali zilifungwa kwa ufunguo wa simu yako ya zamani. Katika gumzo la kila kikundi, mstari unasomeka **🔒 Jumbe N za kabla ya kubadilisha simu. Fungua →**. Liguse:
 
-- **Nina simu yangu ya zamani au maneno 12 ya zamani**: andika maneno yako 12 ya zamani kwenye simu mpya, na jumbe za awali zitafunguka. Simu yako ya zamani inaonyesha **Akaunti hii ilihamia kwenye simu mpya**, ikiwa na kitufe cha kuonyesha maneno hayo nyuma ya kufuli yake. Ni maneno yako mwenyewe: yaandike kwenye simu yako mpya pekee, kamwe usiandike kwenye simu ambayo mtu mwingine anakunyoshea.
+- **Nina simu yangu ya zamani au maneno yangu 12 ya zamani**: andika maneno yako 12 ya zamani kwenye simu mpya, na jumbe za awali zitafunguka. Simu yako ya zamani inaonyesha **Akaunti hii imehamia kwenye simu mpya**, ikiwa na kitufe cha kuonyesha maneno hayo nyuma ya kufuli yake. Ni maneno yako mwenyewe: yaandike kwenye simu yako mpya pekee, kamwe usiandike kwenye simu ambayo mtu mwingine anakunyoshea.
 - **Mwombe mwanachama wa kikundi athibitishe simu hii**: simu yako mpya inaonyesha msimbo. Kutana na mwanachama wa kikundi ana kwa ana; wanafungua menyu ya gumzo la kikundi, wanagusa **Thibitisha simu mpya** na kuuchanganua. Simu yao inaikabidhi yako funguo za awali inazoshikilia kwa ajili ya vikundi mnavyoshiriki.
-- **Ziache zikiwa zimefungwa**: hakuna kinachobadilika. Jumbe zako mwenyewe za wakati huo zitaonekana chini ya jina lako, bila maneno yake.
+- **Zibaki zimefungwa**: hakuna kinachobadilika. Jumbe zako mwenyewe za wakati huo zitaonekana chini ya jina lako, bila maneno yake.
 
 **Unapothibitisha simu mpya ya mtu mwingine**, simu yako hukagua msimbo huo kulingana na kile inachokumbuka cha ufunguo wa zamani wa mtu huyo. Thibitisha simu mpya kwa mtu ambaye umepiga naye gumzo katika kikundi hicho hapo awali pekee, kwenye simu hii, na tu ukiwa na simu mikononi mwao: yeyote anayeishika anaweza kusoma jumbe za awali unazoweza kuzisoma. Ikiwa simu yako inasema **Usiendelee; mjulishe mmiliki**, simama. Inamaanisha kile ambacho simu yako iliona hapo awali hakilingani na kile ambacho seva inasema sasa. Pia inasema hivyo, kabisa, kuhusu mtu aliyebadilisha jina lake baada ya simu yako kuwaona: kwa simu, jina jipya kwenye ufunguo wao linaonekana kama jina la mgeni lililowekwa hapo, kwa hivyo simu iliyoona majina yote mawili haiwezi kuwathibitisha tena ana kwa ana. Maneno yao ya zamani 12 bado yanafanya kazi, na vivyo hivyo mwanachama ambaye simu yake iliona jina jipya pekee. Simu iliyorejeshwa hivi karibuni kutoka kwa maneno yake 12, au ambayo haikuwahi kufungua kikundi hicho, imeona kidogo mno kiasi cha kutoweza kukagua: inasema haikuwahi kuujua ufunguo wao wa zamani, au inaweza kuamini kile ambacho seva inasema. Mruhusu mwanachama ambaye amekuwa akipiga nao gumzo athibitishe badala yake.
 
@@ -114,7 +114,7 @@ Mwishoni simu yako inasema kile kilichotokea: **Imekamilika** tu pale ilipokabid
 Katika **Mali za Pamoja**, chini ya **Vikundi**, vikundi ulimo viko kwanza chini ya **Yako**. Chini yake, orodha inaonyesha unachoweza kujiunga nacho, pamoja na kichwa kinachotaja kinachoonyeshwa (kama **Vikundi, miradi na biashara za hapa**, kinachobadilika pamoja na vitufe vidogo **Zote**, **Miradi**, **Mashirika** na **Vikundi vya gumzo**). Kila kimoja huonyesha mwanzo wa maelezo yake. Fungua kikundi ili kusoma yote, kisha:
 
 - **Jiunge na Kikundi** ikiwa kiko wazi kwa mtu yeyote;
-- **Omba Kujiunga** ikiwa mratibu anaidhinisha wanachama. Unaona **Ombi Linasubiri Kuidhinishwa** hadi watakapofanya hivyo.
+- **Omba Kujiunga** ikiwa mratibu anaidhinisha wanachama. Unaona **Ombi Linasubiri Uidhinisho** hadi watakapofanya hivyo.
 
 Kwenye simu, kikundi ulichoomba kujiunga hakimo katika orodha yoyote hadi mratibu akuruhusu kuingia. Kwenye wavuti kinabaki kwenye orodha kikiwa kimetiwa alama ya **Inasubiri**.
 
@@ -142,11 +142,11 @@ Kwenye programu ya wavuti, gusa mstari katika **Inakuhitaji** kwenye Nyumbani, a
 
 ## Kuchapisha kwenye kikundi
 
-Kwenye wavuti, fungua kikundi katika **Hazina ya Pamoja**, chini ya **Vikundi**, na uguse **Chapisha kwa** na jina lake. Programu ya simu haiwezi kuchapisha kwenye kikundi ambacho tayari umo ndani yake bado. Wanachama wa kikundi pekee ndio wanaoona chapisho hilo. Linaonyeshwa Sokoni likiwa na kufuli na jina la kikundi.
+Kwenye wavuti, fungua kikundi katika **Pamoja**, chini ya **Vikundi**, na uguse **Chapisha kwa** na jina lake. Programu ya simu haiwezi kuchapisha kwenye kikundi ambacho tayari umo ndani yake bado. Wanachama wa kikundi pekee ndio wanaoona chapisho hilo. Linaonyeshwa Sokoni likiwa na kufuli na jina la kikundi.
 
 ## Waratibu na mratibu mkuu
 
-Mratibu huangalia kikundi. Yeyote aliyekiunda ndiye **mratibu mkuu** wake, na kadi ya kikundi inawataja, kama **Mratibu mkuu: Ali**. Katika orodha ya wanachama mstari wao umetiwa alama ya **KIONGOZI**.
+Mratibu huangalia kikundi. Yeyote aliyekiunda ndiye **mratibu mkuu** wake, na kadi ya kikundi inawataja, kama **Mratibu mkuu: Ali**. Katika orodha ya wanachama mstari wao umetiwa alama ya **MKUU**.
 
 Mratibu yeyote anaweza kubadilisha picha ya kikundi: fungua kikundi (kwenye simu, **Taarifa za kikundi** katika menyu ya **⋮** ya gumzo lake) na uguse **Badilisha picha** (kwenye programu ya wavuti, pia **Chagua picha**). Kikundi daima huwa na picha; inaweza kubadilishwa, kamwe haiondolewi.
 
@@ -157,12 +157,12 @@ Katika **Zana za Mratibu**, mratibu yeyote anaweza:
 
 Kando ya jina katika **Orodha ya Wanachama**, mratibu yeyote anaweza:
 
-- kubadilisha jukumu la mwanachama au mwangalizi (**Jukumu** kwenye simu, orodha kunjuzi kwenye programu ya wavuti), ikiwa ni pamoja na kumfanya kuwa mratibu;
+- kubadilisha jukumu la mwanachama au mwangalizi (**Wajibu** kwenye simu, orodha kunjuzi kwenye programu ya wavuti), ikiwa ni pamoja na kumfanya kuwa mratibu;
 - kumwondoa mwanachama au mwangalizi (**✕**).
 
 Mratibu huondoa chapisho kutoka kwenye chapisho lenyewe, na ujumbe katika gumzo. Jina la kikundi na maelezo hayawezi kubadilishwa katika programu bado.
 
-Ni **mratibu mkuu** pekee anayeweza kumwondoa mratibu, au kumwondolea mtu jukumu la mratibu. Kando ya mstari ambao huwezi kuufanyia kazi, hakuna **Jukumu** au **✕** inayoonyeshwa kabisa — hiyo ni programu inayokuambia si kazi yako kufanya.
+Ni **mratibu mkuu** pekee anayeweza kumwondoa mratibu, au kumwondolea mtu jukumu la mratibu. Kando ya mstari ambao huwezi kuufanyia kazi, hakuna **Wajibu** au **✕** inayoonyeshwa kabisa — hiyo ni programu inayokuambia si kazi yako kufanya.
 
 **Hakuna anayeweza kumwondoa mratibu mkuu, au kumnyang'anya uongozi mkuu.** Si mratibu mwingine, na si msimamizi wa jumuiya. Mbali na kiongozi kukabidhi, ni kura ya kikundi pekee inayoweza kuchagua kiongozi mkuu mpya. Tazama "Kura katika kikundi".
 
@@ -186,7 +186,7 @@ Sheria kamili ziko katika "Sheria na jinsi maamuzi hufanywa", chini ya "Mwezesha
 
 ## Kura katika kikundi
 
-Wanachama wa kikundi wanaweza kupiga kura pamoja kuhusu mambo ya kikundi chenyewe. Fungua kikundi (kwenye simu, gusa jina lake juu ya gumzo lake; kwenye wavuti, kifungue katika **Hazina ya Pamoja**, chini ya **Vikundi**): kura zake ziko chini ya **Maamuzi**, juu kwenye ukurasa. Watu walio katika kikundi pekee ndio wanaoziona.
+Wanachama wa kikundi wanaweza kupiga kura pamoja kuhusu mambo ya kikundi chenyewe. Fungua kikundi (kwenye simu, gusa jina lake juu ya gumzo lake; kwenye wavuti, kifungue katika **Pamoja**, chini ya **Vikundi**): kura zake ziko chini ya **Maamuzi**, juu kwenye ukurasa. Watu walio katika kikundi pekee ndio wanaoziona.
 
 Kwenye jumuiya ya kimataifa kikundi hakina kura zake chenyewe na hakina **Pendekeza kura**; kura ya kiongozi mkuu asiye amilifu pekee ndiyo inayofanya kazi huko.
 
@@ -194,8 +194,8 @@ Gusa **Pendekeza kura** na uchague nini kinapaswa kutokea:
 
 - **Chagua mratibu mkuu mpya**: mtu yeyote katika kikundi isipokuwa mwangalizi, wewe mwenyewe ukiwemo.
 - **Mteue mtu kuwa mratibu**, au **Mteue mratibu kuwa mwanachama**. Kura haibadilishi kamwe jukumu la kiongozi mkuu; ili kubadilisha kiongozi mkuu, piga kura ya kumpata mpya.
-- **Mwondoe mtu** kutoka kwenye kikundi. Si kiongozi mkuu, na si wewe mwenyewe: ili kwenda, ondoka kwenye kikundi.
-- **Badilisha nani anayeweza kujiunga**: wazi kwa mtu yeyote, watu huomba na mratibu huwaruhusu kuingia, au kwa mwaliko tu.
+- **Ondoa mtu** kutoka kwenye kikundi. Si kiongozi mkuu, na si wewe mwenyewe: ili kwenda, ondoka kwenye kikundi.
+- **Badilisha anayeweza kujiunga**: wazi kwa mtu yeyote, watu huomba na mratibu huwaruhusu kuingia, au kwa mwaliko tu.
 - **Funga kikundi.** Gumzo lake linabaki kusomwa, lakini halipokei jumbe mpya, machapisho au wanachama, na kura zake zingine zilizo wazi zinamalizika. Machapisho yake yanaondolewa Sokoni.
 
 Kipe kichwa na useme kwa nini, kisha uguse **Fungua kura**. Kura kamwe haihamishi Maharagwe: kikundi hakishikilii yoyote. Wala haiwezi kubadilisha hadhi ya mtu yeyote katika jumuiya; hilo linahitaji Uamuzi wa jumuiya.

@@ -15,7 +15,7 @@ Kila tukio lina gumzo lake lenyewe. Mwenyeji na kila mtu aliyegusa **Ninahudhuri
 - Fungua tukio na uguse **Piga gumzo na wanaohudhuria**. Kukiwa na jumbe ambazo hujazisoma, kitufe kinaonyesha ni ngapi, kwa mfano **3 mpya**.
 - Mara mtu anapoandika ndani yake, linapatikana pia katika **Gumzo**, chini ya **Vikundi**, likiwa limetiwa alama ya 📅 **Tukio**. Kwenye programu ya wavuti lipo katika kichupo cha **Gumzo**, pamoja na gumzo zako zingine. Hadi wakati huo halipo kwenye orodha hizo: lifungue kutoka kwenye tukio.
 
-Juu kabisa, kisanduku kilichobandikwa huonyesha **Dokezo kwa watu wanaohudhuria** la mwenyeji, kama vile anwani kamili. Gusa jina la tukio juu kabisa (kwenye programu ya wavuti, **Tazama tukio**) ili kurudi kwenye tukio.
+Juu kabisa, kisanduku kilichobandikwa huonyesha **Dokezo kwa watu wanaokwenda** la mwenyeji, kama vile anwani kamili. Gusa jina la tukio juu kabisa (kwenye programu ya wavuti, **Tazama tukio**) ili kurudi kwenye tukio.
 
 ## Kuandika
 

@@ -24,6 +24,6 @@ Escribe en **Enviar un mensaje a todos los asistentes…** y toca el botón de e
 ## Información útil
 
 - Los chats de eventos no están cifrados de extremo a extremo. El anfitrión, todos los que asisten (donde el anfitrión da acceso, a quienes el anfitrión ha dado acceso) y las personas que gestionan el servidor de tu comunidad pueden leerlos. El chat lo indica encima del cuadro de mensajes. Como el servidor puede leer el chat, no se pueden enviar fotos en un chat de evento.
-- El anfitrión puede eliminar cualquier mensaje. Tócalo y luego selecciona **Eliminar**. A continuación dice «eliminado por el anfitrión».
+- El anfitrión puede eliminar cualquier mensaje. Tócalo y luego selecciona **Quitar**. A continuación dice «eliminado por el anfitrión».
 - Un chat de evento no tiene respuestas, ni reacciones, ni edición ni la opción de eliminar tu propio mensaje —a diferencia de un chat con una persona o un chat grupal. Pide al anfitrión que elimine algo de lo que te arrepientas. Si eliminas tu cuenta, cada mensaje que hayas escrito aquí muestra **Este mensaje fue eliminado**.
 - Cuando el evento termina o se cancela, el chat pasa a ser de solo lectura. El chat de un evento repetitivo permanece abierto entre fechas: hasta su última fecha si el anfitrión configuró un **Hasta**, y hasta que el anfitrión cancele el evento si no lo hizo. Treinta días después de finalizar, desaparece.

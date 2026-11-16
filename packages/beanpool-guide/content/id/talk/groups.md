@@ -21,7 +21,7 @@ Ketuk **Obrolan**, lalu **Grup**. Setiap grup tempat kamu bergabung tercantum di
 - Ketuk grup untuk membuka obrolannya. Tindakan itu menandainya telah dibaca.
 - Tarik daftar ke bawah untuk menyegarkannya.
 
-Di ponsel, **Sarana Bersama** menampilkan **Milikmu** di bagian atas **Grup**: usaha dan proyek yang kamu kelola lebih dulu (dengan tombol **Manage** untuk menjalankannya), lalu grup tempat kamu bergabung, yang membuka obrolan yang sama.
+Di ponsel, **Sarana Bersama** menampilkan **Milikmu** di bagian atas **Grup**: usaha dan proyek yang kamu kelola lebih dulu (dengan tombol **Kelola** untuk menjalankannya), lalu grup tempat kamu bergabung, yang membuka obrolan yang sama.
 
 ## Lingkaran setempat
 
@@ -66,7 +66,7 @@ Obrolan grup dienkripsi dari ujung ke ujung: hanya anggota grup yang dapat memba
 - Ketika seseorang dikeluarkan, atau keluar, grup membuat kunci baru. Dalam grup beranggotakan 10 orang atau lebih, obrolan bertuliskan **Mengamankan obrolan untuk N orang…** saat ponselmu membuatnya.
 - Pesan yang tidak dapat dikunci tidak akan dikirim. Pesan menampilkan **! tidak terkirim**, dan sebuah baris di atas kotak pesan dapat menjelaskan alasannya. Ketuk pesan untuk **Kirim ulang** atau **Buang**; di aplikasi web, gunakan **Coba lagi** atau **Buang** pada pesan tersebut.
 - Pesan yang tidak terverifikasi ditulis oleh seorang anggota ditampilkan sebagai **Belum diverifikasi**, bukan milik siapa pun, dengan **Pesan ini tidak dapat diverifikasi.**. Pesan yang kuncinya belum sampai di ponselmu bertuliskan **Menunggu kunci untuk pesan ini.**.
-- Jika server komunitasmu lebih lama dan belum dapat mengunci obrolan grup, obrolan menyatakan bahwa server dapat membacanya, dan akan dikunci begitu server diperbarui. Ketika server diperbarui, pesan-pesan sebelumnya dari grup, yang dapat dibaca server, akan dihapus, dan sebuah baris di obrolan menyatakan hal itu. Setiap pesan sebelumnya kemudian bertuliskan **Pesan sebelumnya telah dihapus saat obrolan ini dikunci**, dan beberapa pesan berturut-turut ditampilkan sebagai satu baris, seperti **11 pesan sebelumnya dihapus saat obrolan ini dikunci**.
+- Jika server komunitasmu lebih lama dan belum dapat mengunci obrolan grup, obrolan menyatakan bahwa server dapat membacanya, dan akan dikunci begitu server diperbarui. Ketika server diperbarui, pesan-pesan sebelumnya dari grup, yang dapat dibaca server, akan dihapus, dan sebuah baris di obrolan menyatakan hal itu. Setiap pesan sebelumnya kemudian bertuliskan **Pesan sebelumnya dihapus saat obrolan ini dikunci**, dan beberapa pesan berturut-turut ditampilkan sebagai satu baris, seperti **11 pesan sebelumnya dihapus saat obrolan ini dikunci**.
 
 Di aplikasi web obrolan grupmu berada di **Obrolan**, bertanda 👥. Kamu dapat membaca dan menulis di sana, terenkripsi dari ujung ke ujung seperti di ponsel: balas, reaksi, edit selama 15 menit, hapus, hapus oleh pengelola, bisukan pemberitahuan, cari di obrolan, dan laporkan pesan seseorang (**Laporkan**, di bawahnya). Ketuk nama grup di bagian atas obrolannya untuk membuka grup; seorang koordinator dapat mengundang orang dari sana. Obrolan usaha tidak dienkripsi: lihat "Pesan".
 
@@ -101,7 +101,7 @@ Hal lain yang ditolak server, ditolak dengan kata-katanya sendiri, dan aplikasi 
 
 Ketika akunmu berpindah ke ponsel baru dengan kunci baru, pesan grup dari masa sebelumnya terkunci pada kunci ponsel lamamu. Di setiap obrolan grup, sebuah baris bertuliskan **🔒 N pesan dari sebelum kamu mengganti ponsel. Buka kunci →**. Ketuk baris tersebut:
 
-- **Saya memiliki ponsel lama atau 12 kata lama**: ketik 12 kata lamamu di ponsel baru, dan pesan-pesan sebelumnya akan terbuka kuncinya. Ponsel lamamu menampilkan **Akun ini telah dipindahkan ke ponsel baru**, dengan tombol untuk menampilkan kata-kata tersebut di balik kuncinya. Itu adalah kata-katamu sendiri: ketikkan hanya ke dalam ponsel barumu sendiri, jangan pernah ke dalam ponsel yang dipegang orang lain.
+- **Saya membawa ponsel lama atau 12 kata lama**: ketik 12 kata lamamu di ponsel baru, dan pesan-pesan sebelumnya akan terbuka kuncinya. Ponsel lamamu menampilkan **Akun ini telah dipindahkan ke ponsel baru**, dengan tombol untuk menampilkan kata-kata tersebut di balik kuncinya. Itu adalah kata-katamu sendiri: ketikkan hanya ke dalam ponsel barumu sendiri, jangan pernah ke dalam ponsel yang dipegang orang lain.
 - **Minta anggota grup untuk mengonfirmasi ponsel ini**: ponsel barumu menampilkan sebuah kode. Temui seorang anggota grup secara langsung; mereka membuka menu obrolan grup, mengetuk **Konfirmasi ponsel baru**, dan memindainya. Ponsel mereka menyerahkan kunci-kunci sebelumnya yang disimpannya untuk grup yang kalian ikuti bersama ke ponselmu.
 - **Biarkan tetap terkunci**: tidak ada yang berubah. Pesanmu sendiri dari waktu itu muncul di bawah namamu, tanpa kata-katanya.
 
@@ -111,12 +111,12 @@ Pada akhirnya ponselmu memberitahukan apa yang terjadi: **Selesai** hanya ketika
 
 ## Bergabung dengan grup
 
-Di **Sarana Bersama**, di bawah **Grup**, grup tempat kamu bergabung ada paling atas di bawah **Milikmu**. Di bawahnya, daftar menampilkan apa yang bisa kamu ikuti, dengan judul yang menyebut apa yang ditampilkan (misalnya **Grup, proyek, dan usaha di sini**, yang berubah sesuai chip **Semua**, **Proyek**, **Usaha**, dan **Chat groups**). Masing-masing menampilkan awal dari deskripsinya. Buka grup untuk membaca seluruh isinya, lalu:
+Di **Sarana Bersama**, di bawah **Grup**, grup tempat kamu bergabung ada paling atas di bawah **Milikmu**. Di bawahnya, daftar menampilkan apa yang bisa kamu ikuti, dengan judul yang menyebut apa yang ditampilkan (misalnya **Grup, proyek, dan usaha di sini**, yang berubah sesuai chip **Semua**, **Proyek**, **Usaha**, dan **Grup obrolan**). Masing-masing menampilkan awal dari deskripsinya. Buka grup untuk membaca seluruh isinya, lalu:
 
-- **Gabung ke Grup** jika terbuka untuk siapa saja;
+- **Gabung Grup** jika terbuka untuk siapa saja;
 - **Minta Bergabung** jika seorang koordinator menyetujui anggota. Kamu melihat **Permintaan Menunggu Persetujuan** sampai mereka menyetujuinya.
 
-Di ponsel, grup yang kamu minta untuk bergabung tidak ada di kedua daftar sampai seorang koordinator mengizinkanmu masuk. Di web grup tersebut tetap ada di daftar bertanda **Tertunda**.
+Di ponsel, grup yang kamu minta untuk bergabung tidak ada di kedua daftar sampai seorang koordinator mengizinkanmu masuk. Di web grup tersebut tetap ada di daftar bertanda **Menunggu**.
 
 Grup **Khusus Undangan** disembunyikan dari setiap orang yang tidak berada di dalamnya atau tidak diundang ke dalamnya.
 
@@ -135,8 +135,8 @@ Grup tempat kamu diundang juga muncul di **Sarana Bersama**, di bawah **Grup**, 
 - Ketuk **Gabung ke grup**. Kamu akan masuk ke obrolannya.
 - Ketuk **Nanti saja** untuk memutuskan nanti. Undangan tetap ada.
 - Ketuk **Tolak undangan** untuk menolak. Aplikasi akan bertanya sekali lagi, lalu undangan itu hilang, juga dari **Membutuhkanmu**. Siapa pun yang mengundangmu dapat mengundangmu lagi.
-- Jika tertulis **Undangan ini sudah tidak dibuka**, undangan tersebut telah ditarik. Minta siapa pun yang mengundangmu untuk mengundangmu lagi.
-- Jika tertulis **Tidak dapat membuka obrolan ini**, ponselmu tidak dapat menjangkau server komunitasmu. Ketuk **Coba lagi**.
+- Jika tertulis **Undangan ini sudah tidak terbuka**, undangan tersebut telah ditarik. Minta siapa pun yang mengundangmu untuk mengundangmu lagi.
+- Jika tertulis **Tidak dapat membuka grup ini**, ponselmu tidak dapat menjangkau server komunitasmu. Ketuk **Coba lagi**.
 
 Di aplikasi web, ketuk baris di **Membutuhkanmu** di Beranda, atau grup bertanda **DIUNDANG** di **Sarana Bersama**, di bawah **Grup**, lalu ketuk **Terima undangan**. Kamu bergabung dan tetap berada di halaman grup. Untuk menolak, ketuk **Tolak undangan** di bawahnya.
 
@@ -194,7 +194,7 @@ Ketuk **Usulkan pemungutan suara** dan pilih apa yang seharusnya terjadi:
 
 - **Pilih koordinator utama baru**: siapa pun di dalam grup selain pengamat, termasuk dirimu sendiri.
 - **Jadikan seseorang koordinator**, atau **Jadikan koordinator sebagai anggota**. Pemungutan suara tidak pernah mengubah peran koordinator utama; untuk mengubah koordinator utama, pilihlah koordinator utama baru.
-- **Keluarkan seseorang** dari grup. Bukan koordinator utama, dan bukan dirimu sendiri: untuk pergi, keluarlah dari grup.
+- **Hapus seseorang** dari grup. Bukan koordinator utama, dan bukan dirimu sendiri: untuk pergi, keluarlah dari grup.
 - **Ubah siapa yang dapat bergabung**: terbuka untuk siapa saja, orang meminta dan koordinator mengizinkan mereka masuk, atau hanya dengan undangan.
 - **Tutup grup.** Obrolannya tetap ada untuk dibaca, tetapi tidak menerima pesan baru, postingan, atau anggota baru, dan pemungutan suara terbuka lainnya akan berakhir. Postingannya diturunkan dari Pasar.
 
@@ -206,7 +206,7 @@ Beri judul dan jelaskan alasannya, lalu ketuk **Buka pemungutan suara**. Pemungu
 
 **Apa yang kamu lihat.** Saat pemungutan suara terbuka, semua orang melihat berapa banyak yang telah memilih, bukan pilihannya. Ya dan Tidak ditampilkan setelah ditutup. Suara tidak dapat diubah setelah diberikan. Tidak ada yang melihat siapa memilih apa. Namun, dalam grup yang sangat kecil, hasil dan siapa yang telah memilih dapat memperlihatkannya: jika tiga orang semuanya memilih dan berakhir 3–0, semua orang tahu bagaimana setiap orang memilih.
 
-**Pemberitahuan.** Setiap orang yang terdaftar dalam pemungutan suara kecuali orang yang mengusulkannya mendapatkan satu notifikasi saat pemungutan suara dibuka, kecuali mereka membisukan obrolan grup atau mematikan notifikasi obrolan. Notifikasi tersebut tidak menyebutkan nama orang dan nama grup: notifikasi bertuliskan **Pemungutan suara dibuka di salah satu grupmu.**. Ketuk notifikasi dan grup akan terbuka pada **Keputusan** miliknya. Di Beranda, pemungutan suara terbuka yang belum kamu ikuti muncul di bawah **Perlu tindakan Anda** dan juga membuka grup tersebut.
+**Pemberitahuan.** Setiap orang yang terdaftar dalam pemungutan suara kecuali orang yang mengusulkannya mendapatkan satu notifikasi saat pemungutan suara dibuka, kecuali mereka membisukan obrolan grup atau mematikan notifikasi obrolan. Notifikasi tersebut tidak menyebutkan nama orang dan nama grup: notifikasi bertuliskan **Sebuah pemungutan suara dibuka di salah satu grupmu.**. Ketuk notifikasi dan grup akan terbuka pada **Keputusan** miliknya. Di Beranda, pemungutan suara terbuka yang belum kamu ikuti muncul di bawah **Perlu tindakan Anda** dan juga membuka grup tersebut.
 
 **Saat orang datang dan pergi.** Seseorang yang keluar dari grup selama pemungutan suara berlangsung akan keluar dari pemungutan suara, dan suaranya ikut pergi bersama mereka. Seseorang yang dikeluarkan oleh koordinator, atau dijadikan pengamat, selama pemungutan suara berlangsung tetap terdaftar: mereka mempertahankan suara yang telah mereka berikan, dan masih dapat memilih jika belum. Mengeluarkan orang tidak pernah menjadi cara untuk memengaruhi hasil pemungutan suara. Jika kurang dari dua orang tersisa di dalamnya, pemungutan suara berakhir tanpa hasil.
 

@@ -55,7 +55,7 @@ Si retiras una invitación y vuelves a invitar a la misma persona, no recibe una
 ## El chat del grupo
 
 - En el teléfono, toca el nombre del grupo en la parte superior del chat para ver el grupo: sus miembros, **Salir del grupo** y, para los coordinadores, **Herramientas de coordinación**. En la aplicación web, toca el nombre del grupo en la parte superior de su chat o abre el grupo desde **Bienes comunes**, en **Grupos**.
-- El menú **⋮** contiene **Invitar a personas** (coordinadores), **Silenciar notificaciones** (o **Reactivar sonido**), **Buscar en este chat**, **Confirmar teléfono nuevo** e **Información del grupo**. La búsqueda se ejecuta en tu teléfono, no en el servidor de tu comunidad.
+- El menú **⋮** contiene **Invitar personas** (coordinadores), **Silenciar notificaciones** (o **Reactivar sonido**), **Buscar en este chat**, **Confirmar nuevo teléfono** e **Información del grupo**. La búsqueda se ejecuta en tu teléfono, no en el servidor de tu comunidad.
 - Las incorporaciones, salidas y cambios de rol se muestran en el chat como pequeñas líneas grises.
 - Escribe **@** y el nombre de alguien para avisarle. Consulta «Menciones».
 - El mensaje más reciente se sitúa justo encima del cuadro de mensajes y permanece allí cuando se abre el teclado. Desplázate hacia arriba para leer hacia atrás; un mensaje nuevo que llegue entonces te espera en lugar de desplazarte hacia abajo.
@@ -65,8 +65,8 @@ El chat de un grupo está cifrado de extremo a extremo: solo los miembros del gr
 - Ves el chat solo a partir del día en que te uniste. Nada de lo escrito antes se muestra, y tu teléfono nunca guarda la clave correspondiente. Aún ves las líneas grises de antes, pero no el texto ni las fotos de nadie.
 - Cuando alguien es eliminado o se marcha, el grupo genera una clave nueva. En un grupo de 10 o más personas, el chat dice **Protegiendo el chat para N personas…** mientras tu teléfono la genera.
 - Un mensaje que no se pueda cifrar no se envía. Muestra **! no entregado**, y una línea sobre el cuadro de mensajes puede explicar el motivo. Tócalo para **Reenviar** o **Descartar**; en la aplicación web, usa **Reintentar** o **Descartar** en el mensaje.
-- Un mensaje que no se pueda verificar como escrito por un miembro se muestra como **No verificado**, como de nadie, con **Este mensaje no se pudo verificar.** Un mensaje cuya clave aún no haya llegado a tu teléfono dice **Esperando la clave de este mensaje.**
-- Si el servidor de tu comunidad es anterior y aún no puede cifrar los chats de grupo, el chat indica que el servidor puede leerlo y que se cifrará una vez que el servidor se actualice. Cuando se actualice, los mensajes anteriores del grupo, que el servidor podía leer, se eliminarán y una línea en el chat así lo indicará. Cada mensaje anterior dirá entonces **Se eliminó un mensaje anterior al bloquearse este chat**, y varios seguidos se mostrarán como una sola línea, como **11 mensajes anteriores eliminados al bloquearse este chat**.
+- Un mensaje que no se pueda verificar como escrito por un miembro se muestra como **Sin verificar**, como de nadie, con **Este mensaje no se pudo verificar.** Un mensaje cuya clave aún no haya llegado a tu teléfono dice **Esperando la clave de este mensaje.**
+- Si el servidor de tu comunidad es anterior y aún no puede cifrar los chats de grupo, el chat indica que el servidor puede leerlo y que se cifrará una vez que el servidor se actualice. Cuando se actualice, los mensajes anteriores del grupo, que el servidor podía leer, se eliminarán y una línea en el chat así lo indicará. Cada mensaje anterior dirá entonces **Se eliminó un mensaje anterior al bloquearse este chat**, y varios seguidos se mostrarán como una sola línea, como **Se eliminaron 11 mensajes anteriores al bloquearse este chat**.
 
 En la aplicación web tus chats de grupo están en **Chat**, marcados con 👥. Puedes leer y escribir allí, con cifrado de extremo a extremo igual que en el teléfono: responder, reaccionar, editar durante 15 minutos, eliminar, quitar, silenciar notificaciones, buscar en el chat y reportar el mensaje de alguien (**Reportar**, debajo del mensaje). Toca el nombre del grupo en la parte superior de su chat para abrir el grupo; un coordinador puede invitar personas desde allí. El chat de un emprendimiento no está cifrado: consulta «Mensajes».
 
@@ -81,7 +81,7 @@ El chat de un grupo funciona exactamente como un chat con una persona. Toca un m
 - **Quitar**, para los coordinadores, en el mensaje de cualquier otra persona. Pregunta una vez, y el mensaje pasa a decir **Eliminado por un coordinador**. Tu propio mensaje es un **Eliminar**, no un **Quitar**.
 - **Denunciar** (una bandera), en el mensaje de cualquier otra persona. Elige un motivo, agrega unas palabras si quieres y toca **Enviar reporte**. Los moderadores de tu comunidad reciben ese único mensaje, con su foto si la tiene, y quién lo envió, y nada más del chat. Consulta «Reportar un problema».
 
-Dos o más mensajes seguidos que sus autores eliminaron se muestran como una sola línea, como **3 mensajes fueron eliminados**. Dos o más que un coordinador quitó se muestran como **3 mensajes eliminados por un coordinador**.
+Dos o más mensajes seguidos que sus autores eliminaron se muestran como una sola línea, como **Se eliminaron 3 mensajes**. Dos o más que un coordinador quitó se muestran como **3 mensajes eliminados por un coordinador**.
 
 Debajo de tu propio mensaje: un reloj mientras se envía, una marca de verificación una vez que el servidor del grupo lo recibe, o **! no entregado** si no se pudo enviar —tócalo para **Reenviar** o **Descartar**, o en la aplicación web usa **Reintentar** o **Descartar** en el mensaje. No hay marcas de verificación dobles azules en un grupo: un grupo no tiene un único lector.
 
@@ -102,8 +102,8 @@ Cualquier otra cosa que el servidor rechace, lo hace con sus propias palabras, y
 Cuando tu cuenta se traslada a un nuevo teléfono con una clave nueva, los mensajes grupales anteriores quedaron bloqueados con la clave de tu teléfono anterior. En el chat de cada grupo, una fila indica **🔒 N mensajes de antes de que cambiaras de teléfono. Desbloquear →**. Tócala:
 
 - **Tengo mi teléfono anterior o mis 12 palabras anteriores**: escribe tus 12 palabras anteriores en el teléfono nuevo y los mensajes anteriores se desbloquean. Tu teléfono anterior muestra **Esta cuenta se trasladó a un nuevo teléfono**, con un botón para mostrar esas palabras tras su bloqueo. Son tus propias palabras: escríbelas solo en tu propio teléfono nuevo, nunca en un teléfono que otra persona te extienda.
-- **Pedir a un miembro del grupo que confirme este teléfono**: tu teléfono nuevo muestra un código. Reúnete con un miembro del grupo en persona; este abre el menú del chat del grupo, toca **Confirmar teléfono nuevo** y lo escanea. Su teléfono le entrega al tuyo las claves anteriores que conserva para los grupos que comparten.
-- **Mantenerlos bloqueados**: nada cambia. Tus propios mensajes de ese período se muestran bajo tu nombre, sin su texto.
+- **Pide a un miembro del grupo que confirme este teléfono**: tu teléfono nuevo muestra un código. Reúnete con un miembro del grupo en persona; este abre el menú del chat del grupo, toca **Confirmar nuevo teléfono** y lo escanea. Su teléfono le entrega al tuyo las claves anteriores que conserva para los grupos que comparten.
+- **Mantenerlos protegidos**: nada cambia. Tus propios mensajes de ese período se muestran bajo tu nombre, sin su texto.
 
 **Cuando confirmas el nuevo teléfono de otra persona**, tu teléfono comprueba el código con lo que recuerda de la clave anterior de esa persona. Confirma un teléfono nuevo únicamente para alguien con quien hayas chateado en ese grupo antes, en este teléfono, y solo con el teléfono en sus manos: quien lo tenga puede leer los mensajes anteriores que tú puedes leer. Si tu teléfono dice **No continúes; avísale a un propietario**, detente. Significa que lo que tu teléfono vio antes no coincide con lo que el servidor indica ahora. También dice eso, definitivamente, sobre alguien que cambió de nombre después de que tu teléfono lo hubiera visto: para un teléfono, un nombre nuevo en su clave parece el nombre de un extraño colocado allí, por lo que un teléfono que vio ambos nombres nunca puede volver a confirmarlo en persona. Sus propias 12 palabras anteriores siguen funcionando, y también puede hacerlo un miembro cuyo teléfono solo haya visto el nuevo nombre. Un teléfono que acaba de ser restaurado a partir de sus 12 palabras, o que nunca abrió ese grupo, ha visto muy poco para comprobarlo: dice que nunca conoció su clave anterior, o puede creer lo que dice el servidor. Deja que confirme en su lugar un miembro que haya estado chateando con él.
 
@@ -120,7 +120,7 @@ En el teléfono, un grupo al que solicitaste unirte no está en ninguna de las l
 
 Un grupo **Solo por invitación** está oculto para todos los que no forman parte de él ni han sido invitados a él.
 
-En el teléfono, una comunidad local sin frijoles y sin Decisiones no tiene pestaña **Bienes comunes**. Allí, toca **Chat**, luego **Grupos**, luego **Buscar grupos**: abre la misma lista. Antes de que estés en algún grupo, el enlace es **Buscar un grupo para unirse**. Si las Decisiones están activadas, la pestaña **Bienes comunes** se mantiene para las Decisiones y los grupos. La comunidad global tiene la pestaña **Bienes comunes**: sus grupos están allí, debajo de un ejemplo de una comunidad local (consulta «Frijoles y la comunidad global»).
+En el teléfono, una comunidad local sin frijoles y sin Decisiones no tiene pestaña **Bienes comunes**. Allí, toca **Chat**, luego **Grupos**, luego **Buscar grupos**: abre la misma lista. Antes de que estés en algún grupo, el enlace es **Buscar un grupo para unirte**. Si las Decisiones están activadas, la pestaña **Bienes comunes** se mantiene para las Decisiones y los grupos. La comunidad global tiene la pestaña **Bienes comunes**: sus grupos están allí, debajo de un ejemplo de una comunidad local (consulta «Frijoles y la comunidad global»).
 
 Si un coordinador te eliminó de un grupo, no puedes unirte de nuevo por ti mismo.
 
@@ -132,10 +132,10 @@ Cuando alguien te invita a un grupo, tu teléfono recibe una notificación, «Te
 
 Un grupo al que te invitan también se muestra en **Bienes comunes**, en **Grupos**, marcado como **INVITADO**. En el teléfono, en una comunidad sin pestaña **Bienes comunes**, se encuentra en **Buscar grupos** en **Chat**. Tócalo para ver la invitación: quién te invitó, qué es el grupo, quién está en él (para un grupo solo por invitación, cuántos) y quién puede leer su chat. En el teléfono:
 
-- Toca **Unirse al grupo**. Entras a su chat.
+- Toca **Unirme al grupo**. Entras a su chat.
 - Toca **Ahora no** para decidir después. La invitación se conserva.
 - Toca **Rechazar invitación** para decir que no. La app pregunta una vez más y luego la invitación desaparece, también de **Te necesita**. Quien te invitó puede volver a invitarte.
-- Si dice **Esta invitación ya no está disponible**, fue retirada. Pide a quien te invitó que vuelva a invitarte.
+- Si dice **Esta invitación ya no está abierta**, fue retirada. Pide a quien te invitó que vuelva a invitarte.
 - Si dice **No se pudo abrir este grupo**, tu teléfono no pudo conectarse al servidor de tu comunidad. Toca **Intentar de nuevo**.
 
 En la aplicación web, toca la línea en **Te necesita** en Inicio, o el grupo marcado como **INVITACIÓN** en **Bienes comunes**, en **Grupos**, y toca **Aceptar invitación**. Te unes a él y permaneces en la página del grupo. Para decir que no, toca **Rechazar invitación** debajo.
@@ -166,7 +166,7 @@ Solo el **coordinador principal** puede eliminar a un coordinador o quitarle el 
 
 **Nadie puede eliminar al coordinador principal ni quitarle el liderazgo.** Ni otro coordinador, ni un administrador de la comunidad. Aparte de que el líder lo traspase, solo una votación del grupo puede elegir a un nuevo líder. Consulta «Votaciones en un grupo».
 
-**Traspasar el liderazgo.** El líder puede transferirlo. En el teléfono, toca **Traspasar** en **Herramientas de coordinación**, o el botón de escudo junto al nombre de alguien. En la aplicación web, toca **Nombrar líder** junto a su nombre. Elige a otro coordinador, o a un miembro —un miembro se convierte en coordinador al mismo tiempo. Un observador no puede ser el líder; conviértelo primero en miembro o coordinador. Una vez hecho esto, no puedes recuperar el liderazgo.
+**Traspasar el liderazgo.** El líder puede transferirlo. En el teléfono, toca **Delegar** en **Herramientas de coordinación**, o el botón de escudo junto al nombre de alguien. En la aplicación web, toca **Hacer principal** junto a su nombre. Elige a otro coordinador, o a un miembro —un miembro se convierte en coordinador al mismo tiempo. Un observador no puede ser el líder; conviértelo primero en miembro o coordinador. Una vez hecho esto, no puedes recuperar el liderazgo.
 
 **Salir siendo el líder.** Traspasa el liderazgo primero; el teléfono te ofrece esa opción cuando tocas **Salir del grupo**, y la aplicación web te indica que lo hagas. Si no hay nadie más en el grupo, simplemente puedes salir.
 
@@ -180,7 +180,7 @@ El grupo continúa mientras tanto. Sus miembros siguen chateando y publicando, y
 
 Quienes votan son los **demás coordinadores** del grupo —o sus **miembros**, cuando ninguno de los demás coordinadores había sido nombrado coordinador para el día en que el líder estuvo activo por última vez. Cualquiera que se haya unido al grupo, o que haya sido nombrado coordinador, después de ese día no participa en la votación. Cualquiera de los que votan puede tocar **Proponer** junto a un nombre en ese panel, incluido el suyo propio; proponer cuenta como el Sí de esa persona. Todos los que pueden votar ven entonces **Sí** y **No**. Se te pide que confirmes, porque un voto no se puede cambiar, y solo ves los totales —nunca quién votó en qué sentido. La votación dura 14 días y se aprueba cuando más de la mitad de los que responden dicen Sí. Si se aprueba, el líder anterior sigue siendo coordinador cuando votaron los demás coordinadores, y pasa a ser miembro cuando votaron los miembros. Si el líder ausente regresa y realiza cualquier acción en la app, la votación se cierra de inmediato. En el teléfono, con las notificaciones permitidas, basta con abrir la app para que cuente. Mientras la cuenta del líder esté suspendida, nada de lo que haga cuenta. Los observadores pueden ver el panel pero no tienen voto, y tampoco lo tiene el líder ausente.
 
-Las reglas completas están en «Las reglas y cómo funcionan las decisiones», en «Un coordinador principal ausente».
+Las reglas completas están en «Reglas y cómo decidir», en «Un coordinador principal ausente».
 
 **Mientras el grupo vota por un nuevo líder.** Ya sea esta votación o una de las votaciones propias del grupo que figuran más abajo, ningún coordinador puede eliminar a la persona a la que se podría nombrar líder, ni degradar su rol, hasta que la votación se cierre. La app lo indica con sus propias palabras. Aún pueden salir por sí mismos, y una votación del grupo todavía puede eliminarlos.
 
@@ -194,7 +194,7 @@ Toca **Proponer una votación** y elige qué debería ocurrir:
 
 - **Elegir a un nuevo coordinador principal**: cualquier persona del grupo excepto un observador, incluido tú mismo.
 - **Nombrar a alguien coordinador**, o **Pasar a un coordinador a miembro**. Una votación nunca cambia el rol del líder; para cambiar al líder, vota por uno nuevo.
-- **Eliminar a alguien** del grupo. No al líder ni a ti mismo: para marcharte, sal del grupo.
+- **Remover a alguien** del grupo. No al líder ni a ti mismo: para marcharte, sal del grupo.
 - **Cambiar quién puede unirse**: abierto a cualquiera, la gente lo solicita y un coordinador la acepta, o solo por invitación.
 - **Cerrar el grupo.** Su chat permanece en modo lectura, pero no acepta nuevos mensajes, publicaciones ni miembros, y sus demás votaciones abiertas terminan. Sus publicaciones se retiran del Mercado.
 
